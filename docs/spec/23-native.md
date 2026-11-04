@@ -459,6 +459,31 @@ fn main()
     print(t)
 ```
 
+**native.bce.13** — A counted loop over `j` whose body sets an accumulator
+`s` to a value from before the loop, runs a counted loop over `k` that only
+adds a term to `s` (`s += t`), and then pushes `s` to a list made empty just
+before the `j` loop and used nowhere else, may run with the `k` loop outside
+and the `j` loop inside, adding each term to the list's element `j`, where a
+guard before the loops proves that no index in the term is out of bounds and,
+for `int`, that no operation overflows (native.bce.12). Each element adds the
+same terms in the same order, so the list is the same. Otherwise the loops
+run as written. *(ADR 0941)*
+
+```ail rules=native.bce.13
+fn main()
+    a := [[1.0, 2.0], [3.0, 4.0]]
+    mut c := List[List[float]]()
+    for i in 0..2
+        mut row := List[float]()
+        for j in 0..2
+            mut s := 0.0
+            for k in 0..2
+                s += a[i][k] * a[k][j]
+            row.push(s)
+        c.push(row)
+    print(c[1][1])
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the

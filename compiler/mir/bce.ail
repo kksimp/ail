@@ -623,15 +623,15 @@ fn data_lists(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo) Map[int
             elif int_rows(f.vals[x]) != 1
                 continue
             if not tried.contains(r)
-                tried[r] = data_loop(f, defs, loops, lp, r) >= 0
+                tried[r] = data_loop(f, defs, loops, lp, r, 2) >= 0
             if tried[r]
                 out[x] = r
     out
 
-## The outermost loop at least two levels around `lp` with `r` defined before
-## it, in which no call, `set` or `push` can change `r` or its rows (the
-## scans and row floors the guards add are not counted), else -1.
-fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int) int
+## The outermost loop at least `least` levels around `lp` with `r` defined
+## before it, in which no call, `set` or `push` can change `r` or its rows
+## (the scans and row floors the guards add are not counted), else -1.
+fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int, least int) int
     mut best := -1
     for k in 0..loops.len()
         o := loops[k]
@@ -644,7 +644,7 @@ fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int) i
         for q in loops
             if q.header != lp.header and q.member[lp.header] and o.member[q.header]
                 levels += 1
-        if levels < 2
+        if levels < least
             continue
         mut marks := [false for _ in 0..f.vals.len()]
         for blk in o.blocks
@@ -939,7 +939,7 @@ fn version(
         # Elements the nest only reads are within +-DATA, from one scan per
         # list before the loop the list doesn't change in (native.bce.12).
         for r in pr.scanned
-            pre := loops[data_loop(f, defs, loops, lp, r)].pre
+            pre := loops[data_loop(f, defs, loops, lp, r, 2)].pre
             fkey := "abs|{r}|{pre}"
             mut m := -1
             if kn := floors.get(fkey)

@@ -1,0 +1,573 @@
+## Interchange of reduction nests (native.bce.13, ADR 0941). The nest
+##
+##     for j in lj..nj
+##         mut s := s0
+##         for k in lk..nk
+##             s += t(j, k)          # `t` reads lists the nest doesn't change
+##         row.push(s)
+##
+## walks a row of `b` down a column when `t` is `a[i][k] * b[k][j]`. Run with
+## `k` outside and `j` inside, it walks `b[k]` along its row, which the cache
+## and the vector unit want:
+##
+##     row gets nj - lj copies of s0
+##     for k in lk..nk
+##         for j in lj..nj
+##             row[base + j - lj] += t(j, k)
+##
+## Each element still adds its terms in the order `k` gives them, so an `int`
+## or `float` result is the same bit for bit. Only the order of the checks
+## changes, so the nest is versioned: guard blocks prove, once before it, that
+## no check in it can fail (every index in bounds, and with data-range scans,
+## native.bce.12, no `int` arithmetic overflowing), and the original nest runs
+## when they don't hold, trapping where it did.
+
+## The pass on one function: at most a few nests, one at a time.
+pub fn interchange(f Func) Func
+    if opt_off("interchange") or f.name.starts_with("rt.")
+        return f
+    mut g := f
+    mut tries := 0
+    while tries < 4
+        tries += 1
+        next := swap_next(g) else break
+        g = next
+    g
+
+fn swap_next(f Func) Func?
+    loops := find_loops(f)
+    defs := defs_of(f)
+    for jl in loops
+        if nest := nest_of(f, defs, loops, jl)
+            if out := swapped(f, defs, loops, nest)
+                return out
+    none
+
+## A nest that has the shape above.
+struct Nest
+    jl LoopInfo
+    kl LoopInfo
+    cj Counted
+    ck Counted
+    ## The k loop's preheader, body and exit blocks.
+    pre int
+    body int
+    exit int
+    ## The accumulator: its index in the k header, start, the update and its term.
+    si int
+    s0 int
+    upd int
+    term int
+    ## The list pushed to, and the push's name.
+    row int
+    push str
+    ty Ty
+
+fn nest_of(f Func, defs List[Def], loops List[LoopInfo], jl LoopInfo) Nest?
+    cj := counted(f, defs, jl)?
+    if cj.q >= 0 or cj.step >= 0 or jl.exits != 1 or jl.blocks.len() != 5
+        return none
+    if const_of(f, defs, cj.lo) == none
+        return none
+    # The one loop inside.
+    mut kk := -1
+    for k in 0..loops.len()
+        if loops[k].header != jl.header and jl.member[loops[k].header]
+            if kk >= 0
+                return none
+            kk = k
+    if kk < 0
+        return none
+    kl := loops[kk]
+    ck := counted(f, defs, kl)?
+    if ck.q >= 0 or ck.step >= 0 or kl.blocks.len() != 2 or kl.latches.len() != 1
+        return none
+    if const_of(f, defs, ck.lo) == none
+        return none
+    if jl.member[defs[ck.bound].block] or jl.member[defs[cj.bound].block]
+        return none
+    body := ck.body
+    if kl.latches[0] != body or kl.pre != cj.body or not jl.member[kl.pre]
+        return none
+    pre := kl.pre
+    for i in f.blocks[pre].insts
+        if i.op != "const" and i.op != "fconst"
+            return none
+    kh := f.blocks[kl.header]
+    if kh.params.len() != 2 or kh.insts.len() != 1
+        return none
+    si := 1 - ck.k
+    s := kh.params[si]
+    ty := f.vals[s]
+    if ty != Ty.Int and ty != Ty.Float
+        return none
+    s0 := f.blocks[pre].term.args[0][si]
+    if jl.member[defs[s0].block] and const_of(f, defs, s0) == none
+        return none
+    # The exit takes `s` and pushes it, then steps `j`.
+    ex := ck.exit
+    xa := kh.term.args[ck.exit_edge]
+    if xa.len() != 1 or xa[0] != s or f.blocks[ex].params.len() != 1
+        return none
+    if jl.latches.len() != 1 or jl.latches[0] != ex or f.blocks[ex].term.kind != "jump"
+        return none
+    sout := f.blocks[ex].params[0]
+    mut row := -1
+    mut push := ""
+    for i in f.blocks[ex].insts
+        if i.op == "const"
+            continue
+        if i.op == "call" and (i.name == "rt.list_push" or i.name == "rt.list_pushf")
+            if row >= 0 or i.argc() != 2 or i.arg(1) != sout
+                return none
+            row = i.arg(0)
+            push = i.name
+            continue
+        if i.op == "add" and i.arg(0) == cj.p
+            continue
+        return none
+    if row < 0 or jl.member[defs[row].block] or not row_is_fresh(f, defs, jl, row)
+        return none
+    if (ty == Ty.Int) != (push == "rt.list_push")
+        return none
+    # Nothing after the nest reads `j`.
+    for a in f.blocks[jl.header].term.args[cj.exit_edge]
+        if jl.member[defs[a].block]
+            return none
+    # The body: `s` used once, by the update the path back passes.
+    bt := f.blocks[body].term
+    if bt.kind != "jump"
+        return none
+    snext := bt.args[0][si]
+    mut upd := -1
+    for k in 0..f.blocks[body].insts.len()
+        i := f.blocks[body].insts[k]
+        if i.operands().contains(s)
+            if upd >= 0 or i.dst != snext
+                return none
+            if i.op != (if ty == Ty.Int then "add" else "fadd")
+                return none
+            if i.arg(0) == i.arg(1)
+                return none
+            upd = k
+    if upd < 0 or row_used(f, jl, row, ex)
+        return none
+    Nest(
+        jl: jl,
+        kl: kl,
+        cj: cj,
+        ck: ck,
+        pre: pre,
+        body: body,
+        exit: ex,
+        si: si,
+        s0: s0,
+        upd: upd,
+        term: bt.args[0][ck.k],
+        row: row,
+        push: push,
+        ty: ty,
+    )
+
+## Whether `row` is made by `rt.list_new` in the j loop's preheader and is not
+## used there after: no other name can hold it.
+fn row_is_fresh(f Func, defs List[Def], jl LoopInfo, row int) bool
+    d := defs[row]
+    if d.block != jl.pre or d.at < 0
+        return false
+    i := f.blocks[d.block].insts[d.at]
+    if i.op != "call" or i.name != "rt.list_new"
+        return false
+    for k in d.at + 1..f.blocks[d.block].insts.len()
+        if f.blocks[d.block].insts[k].operands().contains(row)
+            return false
+    not f.blocks[d.block].term.uses().contains(row)
+
+## Whether the nest uses `row` anywhere but in the exit's push.
+fn row_used(f Func, jl LoopInfo, row int, ex int) bool
+    for b in jl.blocks
+        for i in f.blocks[b].insts
+            if b == ex and i.op == "call" and i.arg(0) == row
+                continue
+            if i.operands().contains(row)
+                return true
+        if f.blocks[b].term.uses().contains(row)
+            return true
+    false
+
+## An index's range in the nest, from its kind.
+struct Ix
+    ## `k`, `j`, `fixed` (a value from before the nest) or `const`.
+    kind str
+    ## The value, or the number for `const`.
+    v int
+
+## A span of `int` values; `ok` false when unknown or too large.
+struct Sp
+    ok bool
+    lo int
+    hi int
+
+## The float operations a body may have.
+FLOAT_OPS := ["fconst", "fadd", "fsub", "fmul", "fdiv", "fneg", "itof"]
+
+## Magnitudes the spans stay within (2^62 - 1).
+SP_BIG := 4611686018427387903
+
+fn sp(lo int, hi int) Sp
+    Sp(ok: lo >= 0 - SP_BIG and hi <= SP_BIG, lo: lo, hi: hi)
+
+fn sp_none() Sp
+    Sp(ok: false, lo: 0, hi: 0)
+
+fn sp_mag(a Sp) int
+    l := if a.lo < 0 then 0 - a.lo else a.lo
+    h := if a.hi < 0 then 0 - a.hi else a.hi
+    if l > h then l else h
+
+fn sp_mul(a Sp, b Sp) Sp
+    m := sp_mag(a)
+    n := sp_mag(b)
+    if m != 0 and n > SP_BIG / m
+        return sp_none()
+    ps := [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi]
+    mut lo := ps[0]
+    mut hi := ps[0]
+    for p in ps
+        if p < lo
+            lo = p
+        if p > hi
+            hi = p
+    sp(lo, hi)
+
+## What the guard has to test, gathered from the body.
+struct Plan
+    ## Lists from before the nest: (list, index kind, index value).
+    lists List[int]
+    kinds List[str]
+    idxs List[int]
+    ## Rows: the list of lists, and the index into the row.
+    rows List[int]
+    rkinds List[str]
+    ridxs List[int]
+    ## `int`s from before the nest the arithmetic reads (within +-LIMIT).
+    held List[int]
+    ## Lists whose elements must be within +-DATA, and the trip limit of k.
+    scans List[int]
+    trip int
+
+fn ix_of(f Func, defs List[Def], n Nest, v int) Ix?
+    if v == n.ck.p
+        return Ix(kind: "k", v: v)
+    if v == n.cj.p
+        return Ix(kind: "j", v: v)
+    if c := const_of(f, defs, v)
+        if c >= 0
+            return Ix(kind: "const", v: c)
+        return none
+    if not n.jl.member[defs[v].block] and f.vals[v] == Ty.Int
+        return Ix(kind: "fixed", v: v)
+    none
+
+## What the guard must prove for the nest, or `none` when the body has
+## anything else.
+fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
+    mut p := Plan(
+        lists: [],
+        kinds: [],
+        idxs: [],
+        rows: [],
+        rkinds: [],
+        ridxs: [],
+        held: [],
+        scans: [],
+        trip: 0,
+    )
+    mut spans := Map[int, Sp]()
+    lk := const_of(f, defs, n.ck.lo) else return none
+    lj := const_of(f, defs, n.cj.lo) else return none
+    spans[n.ck.p] = sp(lk, LIMIT - 1)
+    spans[n.cj.p] = sp(lj, LIMIT - 1)
+    blk := f.blocks[n.body]
+    s := f.blocks[n.kl.header].params[n.si]
+    mut t := -1
+    for k in 0..blk.insts.len()
+        i := blk.insts[k]
+        if k == n.upd
+            t = if i.arg(0) == s then i.arg(1) else i.arg(0)
+            continue
+        if i.dst == n.term
+            continue
+        if i.op == "const"
+            spans[i.dst] = sp(i.imm, i.imm)
+        elif FLOAT_OPS.contains(i.op)
+            # Floats don't trap; their order in each element is kept.
+            continue
+        elif i.op == "get"
+            x := i.arg(0)
+            ix := ix_of(f, defs, n, i.arg(1))?
+            if not n.jl.member[defs[x].block]
+                p.lists.push(x)
+                p.kinds.push(ix.kind)
+                p.idxs.push(ix.v)
+                if f.vals[i.dst] == Ty.Int
+                    # An element: within +-DATA once scanned before the loop
+                    # around the nest that doesn't change it.
+                    if int_rows(f.vals[x]) != 1 or data_loop(f, defs, loops, n.jl, x, 1) < 0
+                        return none
+                    if not p.scans.contains(x)
+                        p.scans.push(x)
+                    spans[i.dst] = sp(0 - DATA, DATA)
+            else
+                # A row of a list from before the nest.
+                rd := inst_of(f, defs, x)?
+                if defs[x].block != n.body or rd.op != "get" or n.jl.member[defs[rd.arg(0)].block]
+                    return none
+                pl := rd.arg(0)
+                p.rows.push(pl)
+                p.rkinds.push(ix.kind)
+                p.ridxs.push(ix.v)
+                if f.vals[i.dst] == Ty.Int
+                    if int_rows(f.vals[pl]) != 2 or data_loop(f, defs, loops, n.jl, pl, 1) < 0
+                        return none
+                    if not p.scans.contains(pl)
+                        p.scans.push(pl)
+                    spans[i.dst] = sp(0 - DATA, DATA)
+                elif f.vals[i.dst] != Ty.Float
+                    return none
+        elif i.op == "add" or i.op == "sub" or i.op == "mul" or i.op == "neg"
+            if f.vals[i.dst] != Ty.Int
+                return none
+            a := arg_sp(f, defs, n, i.arg(0), spans, mut p)
+            b := if i.op == "neg" then sp(0, 0) else arg_sp(f, defs, n, i.arg(1), spans, mut p)
+            if not a.ok or not b.ok
+                return none
+            mut r := sp_mul(a, b)
+            if i.op == "add"
+                r = sp(a.lo + b.lo, a.hi + b.hi)
+            elif i.op == "sub"
+                r = sp(a.lo - b.hi, a.hi - b.lo)
+            elif i.op == "neg"
+                r = sp(0 - a.hi, 0 - a.lo)
+            if not r.ok
+                return none
+            spans[i.dst] = r
+        else
+            return none
+    if t < 0
+        return none
+    if n.ty == Ty.Int
+        # The accumulator after at most `trip` passes, from its start.
+        ts := arg_sp(f, defs, n, t, spans, mut p)
+        st := arg_sp(f, defs, n, n.s0, spans, mut p)
+        if not ts.ok or not st.ok
+            return none
+        m := if sp_mag(ts) > 0 then sp_mag(ts) else 1
+        mut trip := (SP_BIG - LIMIT) / m
+        if trip > LIMIT
+            trip = LIMIT
+        if sp_mag(st) > LIMIT or trip < 1
+            return none
+        p.trip = trip
+    p
+
+## The span of an operand: computed in the body, a constant, or an `int` from
+## before the nest, which the guard keeps within +-LIMIT.
+fn arg_sp(f Func, defs List[Def], n Nest, v int, spans Map[int, Sp], mut p Plan) Sp
+    if s := spans.get(v)
+        return s
+    if c := const_of(f, defs, v)
+        return sp(c, c)
+    if not n.jl.member[defs[v].block] and f.vals[v] == Ty.Int
+        if not p.held.contains(v)
+            p.held.push(v)
+        return sp(0 - LIMIT, LIMIT)
+    sp_none()
+
+## The guard and the swapped nest; the original nest runs when a test fails.
+fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
+    p := plan_of(f, defs, loops, n)?
+    nb := f.blocks.len()
+    pre_args := f.blocks[n.jl.pre].term.args[0]
+    mut gd := Guard(
+        f: f,
+        blocks: [],
+        cur: [],
+        base: nb,
+        slow: n.jl.header,
+        slow_args: pre_args,
+        lens: Map[int, int](),
+        zero: -1,
+        ranged: Set[int](),
+        nonneg: Set[int](),
+    )
+    nk := n.ck.bound
+    nj := n.cj.bound
+    # Both bounds within +-LIMIT, so the induction values stay below LIMIT.
+    gd.within(nk)
+    gd.within(nj)
+    if p.trip > 0 and p.trip < LIMIT
+        gd.check(gd.emit("le", [nk, gd.konst(p.trip)], Ty.Bool))
+    for v in p.held
+        gd.within(v)
+    for k in 0..p.lists.len()
+        len := gd.len_of(p.lists[k])
+        span_below(mut gd, n, p.kinds[k], p.idxs[k], len)
+    mut floors := Map[int, int]()
+    for k in 0..p.rows.len()
+        pl := p.rows[k]
+        if not floors.contains(pl)
+            m := gd.value(Ty.Int)
+            mut fc := inst(m, "call", [pl])
+            fc.name = "rt.list_rows_min"
+            gd.cur.push(fc)
+            floors[pl] = m
+        span_below(mut gd, n, p.rkinds[k], p.ridxs[k], floors[pl])
+    # The scans, once before the loop around the nest that leaves the list as it is.
+    mut scan_pre := List[int]()
+    mut scan_insts := List[Inst]()
+    for x in p.scans
+        o := data_loop(f, defs, loops, n.jl, x, 1)
+        dv := gd.value(Ty.Int)
+        mut dk := inst(dv, "const", [])
+        dk.imm = int_rows(f.vals[x])
+        m := gd.value(Ty.Int)
+        mut fc := inst(m, "call", [x, dv])
+        fc.name = "rt.datarange_absmax"
+        scan_pre.push(loops[o].pre)
+        scan_insts.push(dk)
+        scan_pre.push(loops[o].pre)
+        scan_insts.push(fc)
+        gd.check(gd.emit("le", [m, gd.konst(DATA)], Ty.Bool))
+    # The fast path: fill the row, then the swapped nest.
+    lj := n.cj.lo
+    lk0 := const_of(f, defs, n.ck.lo) else 0
+    lk := gd.konst(lk0)
+    one := gd.konst(1)
+    base := gd.emit("len", [n.row], Ty.Int)
+    off := gd.emit("sub", [base, lj], Ty.Int)
+    fill_h := nb + gd.blocks.len() + 1
+    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(fill_h, [lj])))
+    gd.cur = []
+    fill_b := fill_h + 1
+    k_pre := fill_h + 2
+    k_h := fill_h + 3
+    k_b := fill_h + 4
+    j_h := fill_h + 5
+    j_b := fill_h + 6
+    k_l := fill_h + 7
+    mut vm0 := Map[int, int]()
+    z := gd.value(Ty.Int)
+    zc := gd.emit("lt", [z, nj], Ty.Bool)
+    gd.blocks.push(Block(params: [z], insts: gd.cur, term: Term(
+        kind: "branch",
+        cond: zc,
+        targets: [fill_b, k_pre],
+        args: [[], []],
+        value: -1,
+    )))
+    gd.cur = []
+    mut s0 := n.s0
+    if n.jl.member[defs[n.s0].block]
+        # A constant the nest made (`mut s := 0`).
+        s0 = outside(f, defs, n, mut gd, mut vm0, n.s0)?
+    mut ps := inst(-1, "call", [n.row, s0])
+    ps.name = n.push
+    gd.cur.push(ps)
+    z1 := gd.emit("add", [z, one], Ty.Int)
+    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(fill_h, [z1])))
+    gd.cur = []
+    gd.blocks.push(Block(params: [], insts: [], term: jump_to(k_h, [lk])))
+    # k loop.
+    kv := gd.value(Ty.Int)
+    kc := gd.emit("lt", [kv, nk], Ty.Bool)
+    jx := f.blocks[n.jl.header].term
+    gd.blocks.push(Block(params: [kv], insts: gd.cur, term: Term(
+        kind: "branch",
+        cond: kc,
+        targets: [k_b, n.cj.exit],
+        args: [[], jx.args[n.cj.exit_edge]],
+        value: -1,
+    )))
+    gd.cur = []
+    gd.blocks.push(Block(params: [], insts: [], term: jump_to(j_h, [lj])))
+    # j loop: the body with `k` and `j` renamed and no checks, then the element.
+    jv := gd.value(Ty.Int)
+    jc := gd.emit("lt", [jv, nj], Ty.Bool)
+    gd.blocks.push(Block(params: [jv], insts: gd.cur, term: Term(
+        kind: "branch",
+        cond: jc,
+        targets: [j_b, k_l],
+        args: [[], []],
+        value: -1,
+    )))
+    gd.cur = []
+    mut vm := Map[int, int]()
+    vm[n.ck.p] = kv
+    vm[n.cj.p] = jv
+    blk := f.blocks[n.body]
+    s := f.blocks[n.kl.header].params[n.si]
+    mut t := -1
+    for k in 0..blk.insts.len()
+        i := blk.insts[k]
+        if k == n.upd
+            t = if i.arg(0) == s then i.arg(1) else i.arg(0)
+            continue
+        if i.dst == n.term
+            continue
+        mut r := i
+        r.site = -1
+        mut args := List[int]()
+        for a in i.operands()
+            args.push(outside(f, defs, n, mut gd, mut vm, a)?)
+        r = r.with_args(args)
+        if i.dst >= 0
+            r.dst = gd.value(f.vals[i.dst])
+            vm[i.dst] = r.dst
+        gd.cur.push(r)
+    at := gd.emit("add", [off, jv], Ty.Int)
+    old := gd.emit("get", [n.row, at], n.ty)
+    tv := outside(f, defs, n, mut gd, mut vm, t)?
+    sum := gd.emit(if n.ty == Ty.Int then "add" else "fadd", [old, tv], n.ty)
+    gd.cur.push(inst(-1, "set", [n.row, at, sum]))
+    j1 := gd.emit("add", [jv, one], Ty.Int)
+    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(j_h, [j1])))
+    gd.cur = []
+    k1 := gd.emit("add", [kv, one], Ty.Int)
+    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(k_h, [k1])))
+    gd.cur = []
+    mut g := gd.f
+    for k in 0..scan_pre.len()
+        g.blocks[scan_pre[k]].insts.push(scan_insts[k])
+    g.blocks[n.jl.pre].term = jump_to(nb, [])
+    for b in gd.blocks
+        g.blocks.push(b)
+    g
+
+## Operand `v` in the swapped body: renamed if the body made it, a fresh
+## constant if the nest made it, else itself (from before the nest).
+fn outside(f Func, defs List[Def], n Nest, mut gd Guard, mut vm Map[int, int], v int) int?
+    if to := vm.get(v)
+        return to
+    if not n.jl.member[defs[v].block]
+        return v
+    i := inst_of(f, defs, v)?
+    if i.op != "const" and i.op != "fconst"
+        return none
+    mut c := i
+    c.dst = gd.value(f.vals[v])
+    gd.cur.push(c)
+    vm[v] = c.dst
+    c.dst
+
+## The guard's test that index kind `kind` (value `v`) stays below `len`
+## over the nest: `k` below its bound, `j` below its bound, a fixed value or
+## a constant.
+fn span_below(mut gd Guard, n Nest, kind str, v int, len int)
+    match kind
+        "k" => gd.check(gd.emit("le", [n.ck.bound, len], Ty.Bool))
+        "j" => gd.check(gd.emit("le", [n.cj.bound, len], Ty.Bool))
+        "const" => gd.check(gd.emit("lt", [gd.konst(v), len], Ty.Bool))
+        _ =>
+            gd.non_negative(v)
+            gd.check(gd.emit("lt", [v, len], Ty.Bool))
