@@ -484,6 +484,28 @@ fn main()
     print(c[1][1])
 ```
 
+**native.vec.1** — In a nest swapped under native.bce.13 whose term is
+`x * y`, with `y` the element `j` of a list and nothing else depending on
+`j`, the inner loop may be one call of a vector kernel per `k` that computes
+`row[base + j] + x * y` for every `j` with the same rounding, operand order
+and result as the loop (for `int`, where the guard keeps `x` within +-2^31
+and `y` within +-2^20). *(ADR 0942)*
+
+```ail rules=native.vec.1
+fn main()
+    a := [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    mut c := List[List[int]]()
+    for i in 0..3
+        mut row := []
+        for j in 0..3
+            mut s := 0
+            for k in 0..3
+                s += a[i][k] * a[k][j]
+            row.push(s)
+        c.push(row)
+    print(c[2][2])
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the

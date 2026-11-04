@@ -629,6 +629,17 @@ pub fn Asm.vcvtpd2dq(mut self, dst int, src int)
 pub fn Asm.vpmovsxdq(mut self, dst int, src int)
     vex256_rr(1, 2, 37, dst, 0, src)
 
+## `vpaddq dst, a, b`, `vpmuldq dst, a, b` (the signed low 32 bits of each
+## lane multiplied to 64) and `vpbroadcastq dst, xmm` on ymm registers.
+pub fn Asm.vpaddq_rrr(mut self, dst int, a int, b int)
+    vex256_rr(1, 1, 212, dst, a, b)
+
+pub fn Asm.vpmuldq_rrr(mut self, dst int, a int, b int)
+    vex256_rr(1, 2, 40, dst, a, b)
+
+pub fn Asm.vpbroadcastq(mut self, dst int, src int)
+    vex256_rr(1, 2, 89, dst, 0, src)
+
 ## `vpaddq dst, a, [m]` and `vpsllq dst, src, imm` on ymm registers.
 pub fn Asm.vpaddq_rrm(mut self, dst int, a int, m Mem)
     vex256_rm(1, 1, 212, dst, a, m)

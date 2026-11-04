@@ -255,6 +255,8 @@ struct Plan
     ## Lists whose elements must be within +-DATA, and the trip limit of k.
     scans List[int]
     trip int
+    ## The spans of the body's `int`s.
+    spans Map[int, Sp]
 
 fn ix_of(f Func, defs List[Def], n Nest, v int) Ix?
     if v == n.ck.p
@@ -282,6 +284,7 @@ fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
         held: [],
         scans: [],
         trip: 0,
+        spans: Map[int, Sp](),
     )
     mut spans := Map[int, Sp]()
     lk := const_of(f, defs, n.ck.lo) else return none
@@ -369,6 +372,7 @@ fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
         if sp_mag(st) > LIMIT or trip < 1
             return none
         p.trip = trip
+    p.spans = spans
     p
 
 ## The span of an operand: computed in the body, a constant, or an `int` from
@@ -440,12 +444,19 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
         scan_insts.push(fc)
         gd.check(gd.emit("le", [m, gd.konst(DATA)], Ty.Bool))
     # The fast path: fill the row, then the swapped nest.
+    ax := axpy_of(f, defs, n, p)
+    if ax.ok
+        # The kernel takes a count: not negative (else the loops as written).
+        gd.check(gd.emit("ge", [nj, n.cj.lo], Ty.Bool))
     lj := n.cj.lo
     lk0 := const_of(f, defs, n.ck.lo) else 0
     lk := gd.konst(lk0)
     one := gd.konst(1)
     base := gd.emit("len", [n.row], Ty.Int)
     off := gd.emit("sub", [base, lj], Ty.Int)
+    eight := gd.konst(8)
+    cnt := gd.emit("sub", [nj, lj], Ty.Int)
+    lj8 := gd.emit("mul", [lj, eight], Ty.Int)
     fill_h := nb + gd.blocks.len() + 1
     gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(fill_h, [lj])))
     gd.cur = []
@@ -455,7 +466,7 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
     k_b := fill_h + 4
     j_h := fill_h + 5
     j_b := fill_h + 6
-    k_l := fill_h + 7
+    k_l := if ax.ok then fill_h + 5 else fill_h + 7
     mut vm0 := Map[int, int]()
     z := gd.value(Ty.Int)
     zc := gd.emit("lt", [z, nj], Ty.Bool)
@@ -477,7 +488,11 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
     z1 := gd.emit("add", [z, one], Ty.Int)
     gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(fill_h, [z1])))
     gd.cur = []
-    gd.blocks.push(Block(params: [], insts: [], term: jump_to(k_h, [lk])))
+    # The row's elements from `base` on, once the row has all of them.
+    cdata := gd.emit("data", [n.row], Ty.Int)
+    cptr := gd.emit("add", [cdata, gd.emit("mul", [base, eight], Ty.Int)], Ty.Int)
+    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(k_h, [lk])))
+    gd.cur = []
     # k loop.
     kv := gd.value(Ty.Int)
     kc := gd.emit("lt", [kv, nk], Ty.Bool)
@@ -490,52 +505,61 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
         value: -1,
     )))
     gd.cur = []
-    gd.blocks.push(Block(params: [], insts: [], term: jump_to(j_h, [lj])))
-    # j loop: the body with `k` and `j` renamed and no checks, then the element.
-    jv := gd.value(Ty.Int)
-    jc := gd.emit("lt", [jv, nj], Ty.Bool)
-    gd.blocks.push(Block(params: [jv], insts: gd.cur, term: Term(
-        kind: "branch",
-        cond: jc,
-        targets: [j_b, k_l],
-        args: [[], []],
-        value: -1,
-    )))
-    gd.cur = []
     mut vm := Map[int, int]()
     vm[n.ck.p] = kv
-    vm[n.cj.p] = jv
     blk := f.blocks[n.body]
     s := f.blocks[n.kl.header].params[n.si]
-    mut t := -1
-    for k in 0..blk.insts.len()
-        i := blk.insts[k]
-        if k == n.upd
-            t = if i.arg(0) == s then i.arg(1) else i.arg(0)
-            continue
-        if i.dst == n.term
-            continue
-        mut r := i
-        r.site = -1
-        mut args := List[int]()
-        for a in i.operands()
-            args.push(outside(f, defs, n, mut gd, mut vm, a)?)
-        r = r.with_args(args)
-        if i.dst >= 0
-            r.dst = gd.value(f.vals[i.dst])
-            vm[i.dst] = r.dst
-        gd.cur.push(r)
-    at := gd.emit("add", [off, jv], Ty.Int)
-    old := gd.emit("get", [n.row, at], n.ty)
-    tv := outside(f, defs, n, mut gd, mut vm, t)?
-    sum := gd.emit(if n.ty == Ty.Int then "add" else "fadd", [old, tv], n.ty)
-    gd.cur.push(inst(-1, "set", [n.row, at, sum]))
-    j1 := gd.emit("add", [jv, one], Ty.Int)
-    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(j_h, [j1])))
-    gd.cur = []
-    k1 := gd.emit("add", [kv, one], Ty.Int)
-    gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(k_h, [k1])))
-    gd.cur = []
+    if ax.ok
+        # One kernel call per `k` (native.vec.1): what doesn't depend on `j`
+        # is computed here, once.
+        for k in 0..blk.insts.len()
+            i := blk.insts[k]
+            if k == n.upd or i.dst == n.term or i.dst == ax.y or i.dst == ax.t
+                continue
+            clone_into(f, defs, n, mut gd, mut vm, i)?
+        lv := outside(f, defs, n, mut gd, mut vm, ax.list)?
+        xv := outside(f, defs, n, mut gd, mut vm, ax.x)?
+        bp := gd.emit("add", [gd.emit("data", [lv], Ty.Int), lj8], Ty.Int)
+        mut kc2 := inst(-1, "call", [cptr, bp, cnt, xv, n.row])
+        kc2.name = if n.ty == Ty.Int then "rt.vec_axpyi" else "rt.vec_axpyf"
+        gd.cur.push(kc2)
+        k1 := gd.emit("add", [kv, one], Ty.Int)
+        gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(k_h, [k1])))
+        gd.cur = []
+    else
+        gd.blocks.push(Block(params: [], insts: [], term: jump_to(j_h, [lj])))
+        # j loop: the body with `k` and `j` renamed and no checks, then the element.
+        jv := gd.value(Ty.Int)
+        jc := gd.emit("lt", [jv, nj], Ty.Bool)
+        gd.blocks.push(Block(params: [jv], insts: gd.cur, term: Term(
+            kind: "branch",
+            cond: jc,
+            targets: [j_b, k_l],
+            args: [[], []],
+            value: -1,
+        )))
+        gd.cur = []
+        vm[n.cj.p] = jv
+        mut t := -1
+        for k in 0..blk.insts.len()
+            i := blk.insts[k]
+            if k == n.upd
+                t = if i.arg(0) == s then i.arg(1) else i.arg(0)
+                continue
+            if i.dst == n.term
+                continue
+            clone_into(f, defs, n, mut gd, mut vm, i)?
+        at := gd.emit("add", [off, jv], Ty.Int)
+        old := gd.emit("get", [n.row, at], n.ty)
+        tv := outside(f, defs, n, mut gd, mut vm, t)?
+        sum := gd.emit(if n.ty == Ty.Int then "add" else "fadd", [old, tv], n.ty)
+        gd.cur.push(inst(-1, "set", [n.row, at, sum]))
+        j1 := gd.emit("add", [jv, one], Ty.Int)
+        gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(j_h, [j1])))
+        gd.cur = []
+        k1 := gd.emit("add", [kv, one], Ty.Int)
+        gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(k_h, [k1])))
+        gd.cur = []
     mut g := gd.f
     for k in 0..scan_pre.len()
         g.blocks[scan_pre[k]].insts.push(scan_insts[k])
@@ -543,6 +567,90 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
     for b in gd.blocks
         g.blocks.push(b)
     g
+
+## Copy body instruction `i` into the guard's current block without its
+## check, its operands renamed.
+fn clone_into(f Func, defs List[Def], n Nest, mut gd Guard, mut vm Map[int, int], i Inst) bool?
+    mut r := i
+    r.site = -1
+    mut args := List[int]()
+    for a in i.operands()
+        args.push(outside(f, defs, n, mut gd, mut vm, a)?)
+    r = r.with_args(args)
+    if i.dst >= 0
+        r.dst = gd.value(f.vals[i.dst])
+        vm[i.dst] = r.dst
+    gd.cur.push(r)
+    true
+
+## The axpy shape of a body (native.vec.1): the term is `x * y` with `y` the
+## element `j` of a list that doesn't depend on `j`, `y` used only there, and
+## everything else not depending on `j`. For `int`, `x` within +-2^31 (the
+## kernels multiply 32-bit halves; `y` is within +-DATA).
+struct Axpy
+    ok bool
+    t int
+    x int
+    y int
+    list int
+
+fn no_axpy() Axpy
+    Axpy(ok: false, t: -1, x: -1, y: -1, list: -1)
+
+fn axpy_of(f Func, defs List[Def], n Nest, p Plan) Axpy
+    if opt_off("vec")
+        return no_axpy()
+    blk := f.blocks[n.body]
+    s := f.blocks[n.kl.header].params[n.si]
+    u := blk.insts[n.upd]
+    t := if u.arg(0) == s then u.arg(1) else u.arg(0)
+    ti := inst_of(f, defs, t) else return no_axpy()
+    if defs[t].block != n.body or ti.op != (if n.ty == Ty.Int then "mul" else "fmul")
+        return no_axpy()
+    # Which body values depend on `j`.
+    mut onj := Set[int]()
+    onj.add(n.cj.p)
+    for i in blk.insts
+        if i.dst < 0
+            continue
+        for a in i.operands()
+            if onj.contains(a)
+                onj.add(i.dst)
+    for k in 0..2
+        y := ti.arg(k)
+        x := ti.arg(1 - k)
+        if onj.contains(x) or not onj.contains(y)
+            continue
+        yi := inst_of(f, defs, y) else continue
+        if defs[y].block != n.body or yi.op != "get" or yi.arg(1) != n.cj.p or onj.contains(yi.arg(0))
+            continue
+        # Only `y` and `t` may depend on `j`, and `y` is used only by `t`.
+        mut alone := true
+        for i in blk.insts
+            if i.dst >= 0 and onj.contains(i.dst) and i.dst != y and i.dst != t and i.dst != u.dst
+                alone = false
+            if i.dst != t and i.operands().contains(y)
+                alone = false
+        if not alone
+            continue
+        if n.ty == Ty.Int
+            mut small := false
+            if xs := p.spans.get(x)
+                small = xs.ok and sp_mag(xs) < 2147483648
+            elif c := const_of(f, defs, x)
+                small = c > 0 - 2147483648 and c < 2147483648
+            else
+                # From before the nest: the guard keeps it within +-LIMIT.
+                small = p.held.contains(x)
+            if not small
+                continue
+        else
+            # The float kernel computes `x * y` and `s + t` in that order, so
+            # a NaN keeps the operand it would have had (bit-identical).
+            if k != 1 or u.arg(0) != s
+                continue
+        return Axpy(ok: true, t: t, x: x, y: y, list: yi.arg(0))
+    no_axpy()
 
 ## Operand `v` in the swapped body: renamed if the body made it, a fresh
 ## constant if the nest made it, else itself (from before the nest).
