@@ -51,12 +51,12 @@ the in-order test chooses (native.match.1).
 
 ## Measured
 
-First run (ail-linux, 870d0571 against main d40e5092, no caps on the copies):
-vm 3863 → 2958 ms (gcc -O2 1671, Python 122593); with `AIL_OPT_OFF=switch`
-4033, with `AIL_OPT_OFF=taildup` 3328; the rest flat. The stage-2 compiler
-went 8.7 → 18.3 MB with this and ADR 0940 together; the caps above came after. To be filled from the runner (ADR 0890 protocol): vm, lzr and the perfbench
-set against gcc -O2 and Python on ail-linux and the Mac, and the stage-2
-compiler's size and build time.
+ail-linux (i5-7500T), best of 5, 358d4894 against main 84416e3b: vm 3866 →
+2990 ms (-23%; gcc -O2 1671, Python 122556); with `AIL_OPT_OFF=switch` 4052,
+so the tree alone was no better than main here; lzr, regex_scan and the
+perfbench ten flat within 1-2 ms. The table and the copies add about 3% to
+the stage-3 compiler (9.18 MB with ADR 0940 off; the copies are capped after
+a first run that had none). Mac: see the PR.
 
 ## Rejected alternatives
 

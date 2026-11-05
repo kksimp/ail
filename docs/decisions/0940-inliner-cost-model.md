@@ -48,18 +48,17 @@ the stage-3 compiler grew 8.89 → 16.0 MB (9.18 MB with `AIL_OPT_OFF=wide`):
 small callers-of-others copied at hundreds of sites. Hence `WIDE_LIMIT` 12
 (about the cost of the call and its moves) and `CALLER_GROWTH` 200.
 
+Third run (358d4894 against main 84416e3b, limits 12 and 200): `lzr` 4193 →
+3860 ms (-8%), vm and the perfbench ten flat; the stage-3 compiler 8.89 →
+12.05 MB (+36%, with ADR 0939's tables), against 9.18 MB with
+`AIL_OPT_OFF=wide`. The size is the cost of copies at many call sites and
+their call-table rows; it buys the lzr gain and is reported for review.
+
 ## Deferred
 
 Cloning a function for a constant argument (`tree(base, 6, v)`) is left for a
 follow-up, measured on its own: it needs a specialisation cache and a size
 cap that this change does not.
-
-## Measured
-
-To be filled from the runner (ADR 0890 protocol): lzr, nbody and the perfbench
-set against gcc -O2 and Python on ail-linux and the Mac, and the stage-2
-compiler's size and build time, which pass 1a of ADR 0890 showed this kind of
-change can cost.
 
 ## Rejected alternatives
 
