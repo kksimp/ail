@@ -37,8 +37,17 @@ Nothing a program can observe changes: iteration is insertion order
 
 ## Result
 
-Measured on ail-linux and the Mac through the runner (ADR 0890 protocol);
-see the PR and [status](../status.md).
+ail-linux, wordfreq 10M words (`tools/perfbench`), min of 7, outputs equal:
+
+| | base | this ADR | C (gcc -O2) | Python |
+|---|---:|---:|---:|---:|
+| time | 0.27 s | 0.22 s | 0.15 s | 2.50 s |
+| instructions | 1.649G | 1.452G | | |
+
+The first version (16 slots by `address >> 4`, a helper call per lookup)
+missed most lookups and ran 9% more instructions; the slot from the
+multiplied address and the hit written out in `map_find` fixed both.
+Stage-2 self-build 26.2 s to 26.6 s (noise range).
 
 ## Rejected alternatives
 

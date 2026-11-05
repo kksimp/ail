@@ -56,10 +56,10 @@ pub fn inline_module(mut out Module)
         if f.name.starts_with("rt.")
             f = forwarded(f)
         else
-            f = forwarded(hoist_headers(hoist_slots(fill_loops(
+            f = forwarded(hoist_headers(fill_loops(
                 kept_lengths(bce(mark_nonneg(f), reserve, grow_only), reserve and grow_only),
                 fills and not opt_off("fill"),
-            ))))
+            )))
             if not opt_off("fold")
                 fold_addresses(mut f)
         if not opt_off("fold")

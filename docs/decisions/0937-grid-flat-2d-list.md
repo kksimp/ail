@@ -45,8 +45,22 @@ both ways (files in the PR description):
 | life step | 153.2 | 134.2 | -12.4% |
 
 The language card grows by one sentence (7078 to 7147 tokens of 8000); the
-quick reference pays for its line with trims (ADR 0817). Speed: see the PR
-and [status](../status.md).
+quick reference pays for its line with trims (ADR 0817).
+
+Speed (ail-linux, min of 7; same algorithm both ways, outputs equal):
+
+| Program | `List[List[int]]` | `Grid[int]` | C (gcc -O2) | Python |
+|---|---:|---:|---:|---:|
+| matmul 600 (ijk) | 0.40 s | 0.80 s | 0.24 s | 17.97 s |
+| LCS 3000 | 0.09 s | 0.20 s | | |
+
+A grid is 2x slower than nested lists today: bounds-check elimination
+(ADR 0577) removes the nested lists' checks in counted loops, and nothing yet
+removes the two `bounds` checks of `g[i, j]` (matmul: 34 instructions per
+inner iteration against 12). Hoisting the grid's slot loads out of the loop
+was tried and measured no change (7.39G to 7.40G instructions) at +6%
+self-build time, so it was dropped. The win waits on versioning the loop
+against `rows` and `cols` (speed-edges P2).
 
 ## Rejected alternatives
 
@@ -73,3 +87,4 @@ and [status](../status.md).
   breaks no memory rule (every index is still checked), only the shape.
 - Proven-parallel loops (ADR 0911) don't take `g[i, j]` writes yet; the
   data-range work (P2, P3) can extend them.
+- Until P2, a grid is the shorter way to write 2-D code, not the faster one.
