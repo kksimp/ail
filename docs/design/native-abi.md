@@ -555,7 +555,7 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
   word idle workers sleep on, live, blocked and idle counts, the target, and
   the task each worker runs.
 - **Atomic cell:** 8 bytes, heap kind 11.
-- **Allocation under threads ([ADR 0943](../decisions/0943-per-thread-allocation-caches.md)):** once the pool exists each thread slot has an allocation cache (heap state word 16 points at them, 1536 bytes each, laid out like the state block's per-class words: free-list heads, bump page, end, dirty flag, plus a three-word mark stack at words 8-10). The fast path reads the running thread's cache (its slot from the stack pointer: workers' stacks lie in `STACKS`) with the same instructions it uses on one thread, and no lock. `alloc_slow` refills a class under `ALLOC_LOCK`: about 4 KiB of the shared free list, else the shared page being filled, else a new page, and counts it toward the next collection then. A collection empties every cache first (`tb_flush`, clearing the headers of blocks not yet handed out). With `AIL_GC_VERIFY` every allocation stays on the shared, locked path.
+- **Allocation under threads ([ADR 0943](../decisions/0943-per-thread-allocation-caches.md)):** once the pool exists each thread slot has an allocation cache (heap state word 280 points at them, 1536 bytes each, laid out like the state block's per-class words: free-list heads, bump page, end, dirty flag, plus a three-word mark stack at words 8-10). The fast path reads the running thread's cache (its slot from the stack pointer: workers' stacks lie in `STACKS`) with the same instructions it uses on one thread, and no lock. `alloc_slow` refills a class under `ALLOC_LOCK`: about 4 KiB of the shared free list, else the shared page being filled, else a new page, and counts it toward the next collection then. A collection empties every cache first (`tb_flush`, clearing the headers of blocks not yet handed out). With `AIL_GC_VERIFY` every allocation stays on the shared, locked path.
 - **Channel record** (`chan.ail`, heap kind 13; a `Channel[str]` is its
   address): 0 lock word, 1 capacity, 2 count, 3 head, 4 closed, 5 ring
   pointer (string pointers), 6 source (nonzero for a channel fed from outside:
@@ -588,7 +588,7 @@ not. As built, a threaded program works like this:
    pool's `seq` word). Each marker moves a share of the shared mark stack to
    its own, scans from it, and gives half back while the shared stack is
    empty. Marking ends when the shared stack is empty and no marker holds work
-   (heap state words 17-20: lock, busy, done, joined). The collector sets
+   (heap state words 281-284: lock, busy, done, joined). The collector sets
    `GC_REQ` back to 1 and waits until every helper has left before it sweeps.
 5. `gc_start_world` clears `GC_REQ` and wakes the parked threads.
    `notask.ail` stubs all of it.

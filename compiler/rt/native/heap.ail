@@ -31,8 +31,9 @@ H_REGS := 14
 ## thread's cache instead (`H_TBLK`, ADR 0943) and this word is 0.
 H_FASTLIM := 24
 ## The threads' allocation caches, one `TB_SIZE` block per thread slot, made
-## by `pool` (ADR 0943). Words 17-20 are the parallel marker's (`gc_par.ail`).
-H_TBLK := 16
+## by `pool` (ADR 0943). Words 281-284 are the parallel marker's
+## (`gc_par.ail`). Words 14-23 are taken: the collector saves registers there.
+H_TBLK := 280
 H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112

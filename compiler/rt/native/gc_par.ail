@@ -10,10 +10,10 @@
 ## work. The collector starts and ends the phase (`gc_par_mark`, task.ail).
 
 # Words of the heap state block.
-H_MLOCK := 17
-H_MBUSY := 18
-H_MDONE := 19
-H_MIN := 20
+H_MLOCK := 281
+H_MBUSY := 282
+H_MDONE := 283
+H_MIN := 284
 
 ## Entries of a helper's own mark stack.
 GCP_LCAP := 32768

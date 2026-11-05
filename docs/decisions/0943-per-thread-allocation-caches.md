@@ -22,7 +22,7 @@ workers) per allocation for the rest of the run.
 1. Each thread slot (main thread 0, worker `k` at `k + 1`) has an allocation
    cache of 1536 bytes, laid out like the heap state block's per-class words
    (`H_ALLOCD`, `H_FASTLIM`, free-list heads, bump page and end, dirty flag).
-   Heap state word 16 points at the caches, made by `pool` before the second
+   Heap state word 280 points at the caches, made by `pool` before the second
    thread starts.
 2. With threads, the fast path in `alloc_z` and `alloc_raw` reads the running
    thread's cache instead of the state block and runs the same instructions,
