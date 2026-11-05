@@ -49,9 +49,12 @@ safe code runs during the phase.
 
 ## Measured
 
-Pending: collection pause and total time on ail-linux and the Mac through the
-runner, with the pool active and with `AIL_PARALLEL=0`, on a heap of a few
-hundred MB (Clove max mode, `tests/native/run/gc_par_cache.ail` scaled up).
+`tools/perfbench/alloc/gc_heap.ail` (about 300 MB live, eight workers
+churning), d0a5d418 against main 78955b4c, min of 7, together with ADR 0943:
+Mac 6.176 s → 1.089 s, ail-linux 0.15x. GC correctness: the
+`gc_par_cache` and `task_gc` goldens pass on both machines built normally,
+with `AIL_PARALLEL=0` and with `AIL_THREADS=1`, each with and without
+`AIL_GC_VERIFY=1`; self-host reaches its fixed point.
 
 ## Rejected alternatives
 
