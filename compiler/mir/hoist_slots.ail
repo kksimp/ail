@@ -59,7 +59,9 @@ fn slots_in(g0 Func, lp LoopInfo) Func
         insts := g.blocks[b].insts
         for i in insts
             obj := if i.op == "load" then i.arg(0) else -1
-            if obj < 0 or not is_struct_ty(g.vals[obj]) or lp.member[defs[obj].block]
+            if obj < 0
+                or not is_struct_ty(g.vals[obj])
+                or lp.member[defs[obj].block]
                 or touched.contains(g.vals[obj].name())
                 out.push(i)
                 continue
