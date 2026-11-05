@@ -758,3 +758,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0942](0942-user-loop-vector-kernels.md) | Native: vector kernels for swapped reduction nests (ADR 0845 stage 3, first step) *(delegated)* | Accepted | 2026-11-04 |
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
+| [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed | 2026-11-05 |
