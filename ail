@@ -417,6 +417,16 @@ if [ "${1:-}" = mcp ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
 fi
 
+# `ail lsp` (ADR 0966): the compiler's semantic API as a language server on stdio, tools/ailsp/ailsp.ail.
+if [ "${1:-}" = lsp ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailsp/ailsp.ail" "${@:2}"
+fi
+
+# `ail sanitize` (ADR 0967): the schedule sanitizer, tools/ailsan/ailsan.ail.
+if [ "${1:-}" = sanitize ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailsan/ailsan.ail" "${@:2}"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"

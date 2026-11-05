@@ -1,0 +1,100 @@
+## `ail sanitize` in AIL (ADR 0967, san.*): the schedule sanitizer.
+##   ail sanitize [--seeds N] [--tests] [--timeout MS] [--json] FILE [ARGS...]
+## Runs FILE once on the fixed schedule (conc.sched.3) and under N random schedules (conc.sched.1,
+## seeds 1..N), and reports every schedule whose exit status or output differs from the fixed run
+## (san.sched.1), with the seed that replays it. It adds no analysis of its own and no runtime
+## code: a program with a data race in `unsafe` code, or a missing join, shows up as a result that
+## depends on the schedule. With `--tests` it runs `ail test` instead of `ail run`.
+
+USAGE := "usage: ail sanitize [--seeds N] [--tests] [--timeout MS] [--json] FILE [ARGS...]"
+
+struct Run
+    status int
+    out str
+    err str
+
+struct Opts
+    seeds int
+    tests bool
+    timeout int
+    json bool
+    file str
+    rest List[str]
+
+fn quote(s str) str
+    Json.Str(s).to_text()
+
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+## One run: `schedule` is `fixed` or `random:SEED`. A command that can't start or times out is
+## status 124 with the reason as its error text.
+fn run_once(o Opts, schedule str) Run
+    mut args := [if o.tests then "test" else "run", "--schedule={schedule}", o.file]
+    args.extend(o.rest)
+    r := proc.run(ail_path(), args, none, o.timeout) else err
+        return Run(status: 124, out: "", err: "can't run: {err.message}")
+    Run(status: r.status, out: r.out, err: r.err)
+
+## What differs between the fixed run and `r`, or "" when nothing does (san.sched.1).
+fn differs(base Run, r Run) str
+    if r.status != base.status
+        return "exit status {r.status}, the fixed schedule gave {base.status}"
+    if r.out != base.out
+        return "output differs from the fixed schedule"
+    ""
+
+fn finding(o Opts, seed int, why str, r Run) str
+    replay := "ail run --schedule=random:{seed} {o.file}"
+    if o.json
+        return "\{\"api\":1,\"severity\":\"warning\",\"rule\":\"san.sched.1\",\"file\":{quote(o.file)},\"seed\":{seed},\"message\":{quote(why)},\"replay\":{quote(replay)}}"
+    "{o.file}: warning[san.sched.1]: schedule seed {seed}: {why}\n  replay: {replay}"
+
+fn parse(args List[str]) Opts?
+    mut o := Opts(seeds: 8, tests: false, timeout: 60000, json: false, file: "", rest: [])
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        if o.file != ""
+            o.rest.push(a)
+        else
+            match a
+                "--seeds" =>
+                    i += 1
+                    if i >= args.len()
+                        return none
+                    o.seeds = args[i].to_int() else return none
+                "--timeout" =>
+                    i += 1
+                    if i >= args.len()
+                        return none
+                    o.timeout = args[i].to_int() else return none
+                "--tests" => o.tests = true
+                "--json" => o.json = true
+                _ =>
+                    if a.starts_with("--")
+                        return none
+                    o.file = a
+        i += 1
+    if o.file == "" or o.seeds < 1
+        return none
+    o
+
+fn main() !
+    o := parse(env.args()) else
+        io.eprint(USAGE)
+        io.exit(2)
+    base := run_once(o, "fixed")
+    mut found := 0
+    for seed in 1..o.seeds + 1
+        r := run_once(o, "random:{seed}")
+        why := differs(base, r)
+        if why != ""
+            found += 1
+            print(finding(o, seed, why, r))
+    if o.json
+        print("\{\"summary\":true,\"seeds\":{o.seeds},\"schedule_dependent\":{found}}")
+    else
+        print("{o.seeds} schedules, {found} differ from the fixed schedule")
+    if found > 0
+        io.exit(1)

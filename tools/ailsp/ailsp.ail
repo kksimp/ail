@@ -1,0 +1,396 @@
+## `ail lsp` in AIL (ADR 0966, lsp.*): the compiler's semantic API as a Language Server on stdio.
+##   ail lsp
+## It adds no analysis of its own. Each request runs the matching `ail` command (`check --json`,
+## `api --type`, `api --refs`, `api --outline`) and reshapes the JSON into LSP; the rule id of a
+## diagnostic is its LSP `code`, so `ail explain RULE` answers it (lsp.diag.1).
+
+## LSP SymbolKind of an outline kind (lsp.sym.1).
+fn symbol_kind(kind str) int
+    match kind
+        "fn" => 12
+        "method" => 6
+        "struct" => 23
+        "enum" => 10
+        "trait" => 11
+        "impl" => 5
+        "const" => 14
+        "field" => 8
+        "variant" => 22
+        _ => 13
+
+struct Server
+    ## Open buffers: path to text (lsp.sync.1).
+    bufs Map[str, str]
+    ## `shutdown` was requested (lsp.proto.2).
+    down bool
+    ## The `ail` command.
+    ail str
+
+## ---- JSON helpers
+
+fn member(key str, value Json) JsonMember
+    JsonMember(key: key, value: value)
+
+fn obj(members List[JsonMember]) Json
+    Json.Obj(members)
+
+fn num(i int) Json
+    Json.Num(i.to_float())
+
+## ---- framing (lsp.proto.1)
+
+## Write one message: the header counts the body plus the newline `print` adds.
+fn send(body Json)
+    text := body.to_text()
+    print("Content-Length: {text.byte_len() + 1}\r\n\r\n{text}")
+
+fn reply(id Json, result Json)
+    send(obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("result", result)]))
+
+fn failure(id Json, code int, message str)
+    err := obj([member("code", num(code)), member("message", Json.Str(message))])
+    send(obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("error", err)]))
+
+fn notify(method str, params Json)
+    send(obj([
+        member("jsonrpc", Json.Str("2.0")),
+        member("method", Json.Str(method)),
+        member("params", params),
+    ]))
+
+## `s` cut after `n` bytes: the part inside and the rest.
+fn split_bytes(s str, n int)(str, str)
+    mut used := 0
+    mut at := 0
+    for c in s.chars()
+        w := "{c}".byte_len()
+        if used + w > n
+            break
+        used += w
+        at += 1
+    (s.slice(0, at), s.slice(at, s.len()))
+
+## Standard input has no read-exactly-N call, so a body is read as a line: it ends where its
+## byte count says, and what follows is the next header line, kept in `carry`.
+struct Frames
+    carry str
+
+fn Frames.line(mut self) str?
+    if self.carry != ""
+        l := self.carry
+        self.carry = ""
+        return l
+    io.read_line()
+
+## The next message's body, or none at the end of input.
+fn Frames.next(mut self) str?
+    mut size := -1
+    while true
+        l := self.line() else return none
+        if l.trim() == ""
+            if size >= 0
+                break
+            continue
+        low := l.to_lower()
+        if low.starts_with("content-length:")
+            size = (l.slice(15, l.len()).trim().to_int() else -1)
+    if size < 0
+        return none
+    mut body := ""
+    while body.byte_len() < size
+        l := io.read_line() else break
+        body = if body == "" then l else "{body}\n{l}"
+    cut := split_bytes(body, size)
+    self.carry = cut.1
+    cut.0
+
+## ---- paths and URIs
+
+fn unescape(s str) str
+    mut out := ""
+    cs := s.chars()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == '%' and i + 2 < cs.len()
+            code := "{cs[i + 1]}{cs[i + 2]}".to_upper()
+            mut d := ""
+            match code
+                "20" => d = " "
+                "23" => d = "#"
+                "25" => d = "%"
+                "28" => d = "("
+                "29" => d = ")"
+                "2B" => d = "+"
+                "2C" => d = ","
+                "3A" => d = ":"
+                "40" => d = "@"
+                "5B" => d = "["
+                "5D" => d = "]"
+                _ => d = ""
+            if d != ""
+                out = "{out}{d}"
+                i += 3
+                continue
+        out = "{out}{c}"
+        i += 1
+    out
+
+fn uri_path(uri str) str
+    p := uri.strip_prefix("file://") else uri
+    unescape(p)
+
+fn path_uri(path str) str
+    "file://{path.replace("%", "%25").replace(" ", "%20").replace("#", "%23")}"
+
+fn base_name(path str) str
+    parts := path.split("/")
+    parts[parts.len() - 1]
+
+fn dir_name(path str) str
+    i := path.rfind("/") else return "."
+    if i == 0
+        return "/"
+    path.slice(0, i)
+
+## ---- running the compiler
+
+## The scratch directory holding a copy of `dir`'s `.ail` files with the open buffers laid over
+## them, so a command sees unsaved text (lsp.sync.2).
+fn Server.shadow(self, dir str) str
+    tmp := env.get("TMPDIR") else "/tmp"
+    flat := dir.replace("/", "_").replace(":", "_").replace(" ", "_")
+    sh := "{tmp}/ailsp/{flat}"
+    fs.make_dir(sh) else err
+        io.eprint("ail lsp: can't make {sh}: {err.message}")
+        return dir
+    for name in (fs.list_dir(dir) else [])
+        if name.ends_with(".ail")
+            text := fs.read_text("{dir}/{base_name(name)}") else ""
+            fs.write_text("{sh}/{base_name(name)}", text) else err
+                io.eprint("ail lsp: {err.message}")
+    for p in self.bufs.keys()
+        if dir_name(p) == dir
+            fs.write_text("{sh}/{base_name(p)}", self.bufs[p] else "") else err
+                io.eprint("ail lsp: {err.message}")
+    sh
+
+## The path to hand a command for `path`: itself when it is not open and unsaved-changed.
+fn Server.work(self, path str) str
+    text := self.bufs.get(path) else return path
+    disk := fs.read_text(path) else ""
+    if text == disk
+        return path
+    dir := dir_name(path)
+    "{self.shadow(dir)}/{base_name(path)}"
+
+fn Server.run(self, args List[str]) Output?
+    proc.run(self.ail, args) else err
+        io.eprint("ail lsp: can't run {self.ail}: {err.message}")
+        return none
+
+## A position query (`api --type|--refs FILE LINE COL`) as JSON, or none when it has no answer.
+fn Server.query(self, flag str, path str, line int, col int) Json?
+    ran := self.run(["api", flag, self.work(path), "{line + 1}", "{col + 1}"]) else return none
+    if ran.status != 0
+        return none
+    doc := parse_json(ran.out) else err
+        io.eprint("ail lsp: {err.message}")
+        return none
+    doc
+
+## ---- documents
+
+fn doc_path(params Json) str
+    td := params.get("textDocument") else obj([])
+    uri_path(td.text("uri", ""))
+
+fn pos_of(params Json)(int, int)
+    p := params.get("position") else obj([])
+    (p.int("line") else 0, p.int("character") else 0)
+
+fn range_json(line int, col int, end_line int, end_col int) Json
+    obj([
+        member("start", obj([member("line", num(line)), member("character", num(col))])),
+        member("end", obj([member("line", num(end_line)), member("character", num(end_col))])),
+    ])
+
+## lsp.diag.1: the diagnostics of one file, as `ail check --json` reports them.
+fn Server.diagnostics(self, path str) Json
+    work := self.work(path)
+    ran := self.run(["check", "--json", work]) else return Json.Arr([])
+    mut out := List[Json]()
+    mine := base_name(path)
+    for l in "{ran.out}\n{ran.err}".split("\n")
+        t := l.trim()
+        if not t.starts_with("\{")
+            continue
+        d := parse_json(t) else err
+            continue
+        if base_name(d.text("file", "")) != mine
+            continue
+        line := (d.int("line") else 1) - 1
+        col := (d.int("col") else 1) - 1
+        end_line := (d.int("end_line") else line + 1) - 1
+        end_col := (d.int("end_col") else col + 2) - 1
+        mut message := d.text("message", "")
+        help := d.text("help", "")
+        if help != ""
+            message = "{message}\nhelp: {help}"
+        out.push(obj([
+            member("range", range_json(line, col, end_line, end_col)),
+            member("severity", num(if d.text("severity", "error") == "warning" then 2 else 1)),
+            member("code", Json.Str(d.text("rule", ""))),
+            member("source", Json.Str("ail")),
+            member("message", Json.Str(message)),
+        ]))
+    Json.Arr(out)
+
+fn Server.publish(self, path str)
+    notify("textDocument/publishDiagnostics", obj([
+        member("uri", Json.Str(path_uri(path))),
+        member("diagnostics", self.diagnostics(path)),
+    ]))
+
+## lsp.hover.1: the type under the cursor and, for a call, the callee's signature and doc.
+fn Server.hover(self, params Json) Json
+    path := doc_path(params)
+    at := pos_of(params)
+    ans := self.query("--type", path, at.0, at.1) else return Json.Null
+    mut text := "```ail\n{ans.text("type", "")}\n```"
+    callee := ans.get("callee") else Json.Null
+    sig := callee.text("signature", "")
+    if sig != ""
+        text = "{text}\n\n```ail\n{sig}\n```"
+    doc := callee.text("doc", "")
+    if doc != ""
+        text = "{text}\n\n{doc}"
+    obj([member("contents", obj([member("kind", Json.Str("markdown")), member("value", Json.Str(text))]))])
+
+## A reference of `api --refs` as an LSP Location. Files under the scratch directory map back.
+fn Server.location(self, path str, r Json) Json
+    mut file := r.text("file", path)
+    if file.contains("/ailsp/")
+        file = "{dir_name(path)}/{base_name(file)}"
+    line := (r.int("line") else 1) - 1
+    col := (r.int("col") else 1) - 1
+    obj([
+        member("uri", Json.Str(path_uri(file))),
+        member("range", range_json(line, col, line, col + 1)),
+    ])
+
+fn Server.refs(self, params Json, only_def bool) Json
+    path := doc_path(params)
+    at := pos_of(params)
+    ans := self.query("--refs", path, at.0, at.1) else return Json.Null
+    mut out := List[Json]()
+    for r in (ans.arr("refs") else [])
+        if only_def and not r.flag("def", false)
+            continue
+        out.push(self.location(path, r))
+    Json.Arr(out)
+
+## lsp.sym.1: the outline as nested DocumentSymbols; any list member of an item whose entries
+## have a `kind` and a `line` (fields, variants, methods) is its children.
+fn symbol_json(it Json) Json
+    name := it.text("name", "")
+    line := (it.int("line") else 1) - 1
+    col := (it.int("col") else 1) - 1
+    r := range_json(line, col, line, col + name.len())
+    mut kids := List[Json]()
+    match it
+        Obj(ms) =>
+            for m in ms
+                match m.value
+                    Arr(xs) =>
+                        for x in xs
+                            if x.get("kind") != none and x.get("line") != none
+                                kids.push(symbol_json(x))
+                    _ => continue
+        _ => continue
+    mut members := [
+        member("name", Json.Str(if name == "" then it.text("kind", "?") else name)),
+        member("detail", Json.Str(it.text("signature", ""))),
+        member("kind", num(symbol_kind(it.text("kind", "")))),
+        member("range", r),
+        member("selectionRange", r),
+    ]
+    if kids.len() > 0
+        members.push(member("children", Json.Arr(kids)))
+    obj(members)
+
+fn Server.symbols(self, params Json) Json
+    path := doc_path(params)
+    ran := self.run(["api", "--outline", self.work(path)]) else return Json.Arr([])
+    if ran.status != 0
+        return Json.Arr([])
+    doc := parse_json(ran.out) else err
+        return Json.Arr([])
+    Json.Arr([symbol_json(it) for it in (doc.arr("items") else [])])
+
+## ---- requests
+
+fn Server.initialize(self, id Json)
+    sync := obj([
+        member("openClose", Json.Bool(true)),
+        member("change", num(1)),
+        member("save", Json.Bool(true)),
+    ])
+    caps := obj([
+        member("textDocumentSync", sync),
+        member("hoverProvider", Json.Bool(true)),
+        member("definitionProvider", Json.Bool(true)),
+        member("referencesProvider", Json.Bool(true)),
+        member("documentSymbolProvider", Json.Bool(true)),
+    ])
+    info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
+    reply(id, obj([member("capabilities", caps), member("serverInfo", info)]))
+
+## One message (lsp.proto.2: requests are answered, notifications are not; an unknown request is
+## error -32601, an unknown notification is ignored).
+fn Server.handle(mut self, req Json)
+    method := req.text("method", "")
+    params := req.get("params") else obj([])
+    id := req.get("id") else
+        match method
+            "textDocument/didOpen" =>
+                td := params.get("textDocument") else obj([])
+                path := uri_path(td.text("uri", ""))
+                self.bufs.insert(path, td.text("text", ""))
+                self.publish(path)
+            "textDocument/didChange" =>
+                path := doc_path(params)
+                for c in (params.arr("contentChanges") else [])
+                    self.bufs.insert(path, c.text("text", ""))
+            "textDocument/didSave" =>
+                self.publish(doc_path(params))
+            "textDocument/didClose" =>
+                path := doc_path(params)
+                self.bufs.remove(path)
+                notify("textDocument/publishDiagnostics", obj([
+                    member("uri", Json.Str(path_uri(path))),
+                    member("diagnostics", Json.Arr([])),
+                ]))
+            "exit" => io.exit(if self.down then 0 else 1)
+            _ => return
+        return
+    match method
+        "initialize" => self.initialize(id)
+        "shutdown" =>
+            self.down = true
+            reply(id, Json.Null)
+        "textDocument/hover" => reply(id, self.hover(params))
+        "textDocument/definition" => reply(id, self.refs(params, true))
+        "textDocument/references" => reply(id, self.refs(params, false))
+        "textDocument/documentSymbol" => reply(id, self.symbols(params))
+        _ => failure(id, -32601, "unknown method {method}")
+
+fn main() !
+    mut s := Server(bufs: Map[str, str](), down: false, ail: env.get("AIL") else "./ail")
+    mut frames := Frames(carry: "")
+    while true
+        body := frames.next() else break
+        req := parse_json(body) else err
+            failure(Json.Null, -32700, err.message)
+            continue
+        s.handle(req)

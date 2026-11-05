@@ -758,3 +758,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0942](0942-user-loop-vector-kernels.md) | Native: vector kernels for swapped reduction nests (ADR 0845 stage 3, first step) *(delegated)* | Accepted | 2026-11-04 |
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
+| [0966](0966-ail-lsp-language-server.md) | `ail lsp`: the semantic API as a language server on stdio *(delegated)* | Accepted | 2026-11-05 |
+| [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
