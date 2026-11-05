@@ -561,7 +561,7 @@ fn main()
 **native.inline.1** — A call may be replaced by a copy of the callee's body
 when the callee is not on a cycle of the call graph, is not `main` or part of
 the runtime, has no loop, and makes no indirect call: a callee called from one place up to
-200 instructions, any other up to 30, with each caller grown by at most 400
+200 instructions, any other up to 12, with each caller grown by at most 200
 instructions this way, besides the leaf functions of ADR 0391. A function
 that nothing calls or names after this is left out of the executable. A trap
 in, or below, a copied body reports the callee's frame and every frame it was

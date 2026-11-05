@@ -22,10 +22,10 @@ never reach the callee's bounds checks.
    runtime function, with no indirect call, no primitive that reads its frame
    or starts a thread, no jump to its entry and no loop. One called from a single
    place (and whose address is not taken) qualifies up to `SINGLE_LIMIT` 200
-   instructions; any other up to `WIDE_LIMIT` 30.
+   instructions; any other up to `WIDE_LIMIT` 12.
 2. **Per-caller budget.** Inlining goes on to the copied calls too (bounded
    by the 64-call budget); copies of candidates may grow one caller by at
-   most `CALLER_GROWTH` 400 instructions. Leaves are not counted.
+   most `CALLER_GROWTH` 200 instructions. Leaves are not counted.
 3. **Frames.** A call copied in keeps its site with a link to the call it was
    inlined at; `mark_recursion` turns such a site into a `frame` site instead
    of clearing it, which the generators give call-table rows and no stack
@@ -41,6 +41,12 @@ With loops allowed in the callee, `matmul` went 5 → 10 ms and `spectralnorm`
 3 → 5 ms (both back to main with `AIL_OPT_OFF=wide`), `lzr` 4191 → 4115 ms,
 the rest flat. A function with a loop is therefore never a candidate: the call
 costs little beside its loop, and the copy lost the loop's facts in the caller.
+
+Second run (6eb13dff against main d555d685, limits 30 and 400, no loops):
+`lzr` 4187 → 3838 ms (gcc -O2 2257), the regressions gone, the rest flat; but
+the stage-3 compiler grew 8.89 → 16.0 MB (9.18 MB with `AIL_OPT_OFF=wide`):
+small callers-of-others copied at hundreds of sites. Hence `WIDE_LIMIT` 12
+(about the cost of the call and its moves) and `CALLER_GROWTH` 200.
 
 ## Deferred
 

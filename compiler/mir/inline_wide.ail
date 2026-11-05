@@ -13,10 +13,10 @@
 SINGLE_LIMIT := 200
 
 ## Any other function that calls others goes inline up to this many.
-WIDE_LIMIT := 30
+WIDE_LIMIT := 12
 
 ## How many instructions one caller may grow by through these copies.
-CALLER_GROWTH := 400
+CALLER_GROWTH := 200
 
 ## The functions that may go inline although they call others, by name, with
 ## their instruction counts.

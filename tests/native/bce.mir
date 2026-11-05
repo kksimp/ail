@@ -32,15 +32,6 @@ fn total(v0:xs List[int], v1:n int) int
     v21 int = add v15:i, v20
     jump b6(v21, v19)
 
-fn node(v0:left List[int]) int
-  b0(v0:left List[int]):
-    v1:n int = len v0:left
-    v3 int = const -1
-    call rt.list_push(v0:left, v3)
-    v4 int = const 7
-    set v0:left, v1:n, v4
-    return v1:n
-
 fn main() unit
   b0:
     v0 int = const 3
@@ -60,26 +51,30 @@ fn main() unit
     v19 int = add v16:s, v18 !s8
     v21 int = add v14:i, v1
     jump b1(v21, v19)
-  b3(v31:s int):
-    call rt.out_int(v31:s)
+  b3(v36:s int):
+    call rt.out_int(v36:s)
     call rt.out_nl()
     v8:l List[int] = call rt.list_new(v12:s)
-    v9 int = call node(v8:l)
-    call rt.out_int(v9)
+    v23:n int = len v8:l
+    v25 int = const -1
+    call rt.list_push(v8:l, v25)
+    v26 int = const 7
+    set v8:l, v23:n, v26
+    call rt.out_int(v23:n)
     call rt.out_nl()
     return
   b4:
-    v22 int = len v4
-    v23 bool = le v0, v22
-    branch v23, b5(), b1(v12:s, v12:s)
+    v27 int = len v4
+    v28 bool = le v0, v27
+    branch v28, b5(), b1(v12:s, v12:s)
   b5:
-    v24 int = data v4
+    v29 int = data v4
     jump b6(v12:s, v12:s)
-  b6(v25:i int, v26:s int):
-    v27 bool = lt v25:i, v0
-    branch v27, b7(), b3(v26:s)
+  b6(v30:i int, v31:s int):
+    v32 bool = lt v30:i, v0
+    branch v32, b7(), b3(v31:s)
   b7:
-    v28 int = ldx v24, v25:i *8
-    v29 int = add v26:s, v28 !s8
-    v30 int = add v25:i, v1
-    jump b6(v30, v29)
+    v33 int = ldx v29, v30:i *8
+    v34 int = add v31:s, v33 !s8
+    v35 int = add v30:i, v1
+    jump b6(v35, v34)
