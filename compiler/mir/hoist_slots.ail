@@ -107,5 +107,18 @@ fn slots_in(g0 Func, lp LoopInfo) Func
             lists += 1
     r := hoist_in(g, lp, cand, defs_of(g))
     if (env.get("AIL_SLOTS_DEBUG") else "") != ""
+        dd := defs_of(g)
+        for v in hoisted.values()
+            if not cand[v]
+                continue
+            mut uses := List[str]()
+            for b in lp.blocks
+                for i in g.blocks[b].insts
+                    for k in 0..i.argc()
+                        if i.arg(k) == v
+                            uses.push("b{b}:{i.op}#{k}")
+                if g.blocks[b].term.uses().contains(v)
+                    uses.push("b{b}:term")
+            io.eprint("  list v{v} def b{dd[v].block} member {lp.member[dd[v].block]} blocks {lp.blocks.len()} uses {uses.join(" ")}")
         io.eprint("slots {g.name} b{lp.header}: {hoisted.len()} slots, {lists} lists, pre {g.blocks[lp.pre].insts.len()} -> {r.blocks[lp.pre].insts.len()}")
     r
