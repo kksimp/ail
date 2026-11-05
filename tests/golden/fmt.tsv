@@ -734,8 +734,8 @@ fmt plain std/bigint/bigint.ail	c61bbdf1193ba68c	0	752865387c764edd
 fmt long std/bigint/bigint.ail	c61bbdf1193ba68c	0	bd94220b2400855d
 fmt plain std/csv/csv.ail	df7697bae73c0d4d	0	216138a37d3c301f
 fmt long std/csv/csv.ail	df7697bae73c0d4d	0	c764dba038db07d9
-fmt plain std/gfx/gfx.ail	3b2ce2c7a3b1fd15	0	d5fecff131b81add
-fmt long std/gfx/gfx.ail	3b2ce2c7a3b1fd15	0	f5e7e809253a34b3
+fmt plain std/gfx/gfx.ail	2c2ab1c3f4666491	0	e7e69f5f053a76b5
+fmt long std/gfx/gfx.ail	2c2ab1c3f4666491	0	d786731585ea066d
 fmt plain std/log/log.ail	c50a775489ea48a2	0	98988d88493b2ef4
 fmt long std/log/log.ail	c50a775489ea48a2	0	b0aabec556e940a0
 fmt plain std/net/http.ail	8bf8240641547169	0	8a8c4938eb161373
@@ -1838,8 +1838,8 @@ fmt plain tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	231927c13a56ad30
 fmt long tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	c2115ad2887463f9
 fmt plain tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d3dbd56a91c0ac72
 fmt long tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ebea676f06d88486
-fmt plain tests/cases/std_gfx_script.ail	a3006851a21f8b07	0	ec5a59afa8ed8f4b
-fmt long tests/cases/std_gfx_script.ail	a3006851a21f8b07	0	6544a3aa697281e1
+fmt plain tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	5dc1d4d328b6b424
+fmt long tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	21cb7f6d322662c7
 fmt plain tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	61f20e87d3a52c6f
 fmt long tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	7a431ea241a4250a
 fmt plain tests/cases/std_hash_bytes.ail	11349941efd64c57	0	c1115f935c808982
