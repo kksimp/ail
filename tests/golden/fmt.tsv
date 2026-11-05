@@ -4162,6 +4162,10 @@ fmt plain tools/agentbench/tasks/ledger/seed/ail/src/main.ail	9c9b5441b4551b78	0
 fmt long tools/agentbench/tasks/ledger/seed/ail/src/main.ail	9c9b5441b4551b78	0	7d101a395f350877
 fmt plain tools/ailmcp/ailmcp.ail	588f6b1fe6aefdcd	0	2f77c02ed058f646
 fmt long tools/ailmcp/ailmcp.ail	588f6b1fe6aefdcd	0	397eba5b4d774c30
+fmt plain tools/ailsan/ailsan.ail	6e5936b6a4826ec3	0	9762e4f574ee7d58
+fmt long tools/ailsan/ailsan.ail	6e5936b6a4826ec3	0	73095f441aad2e88
+fmt plain tools/ailsp/ailsp.ail	220b579c3d8d0d1d	0	635dc3b2427d2184
+fmt long tools/ailsp/ailsp.ail	220b579c3d8d0d1d	0	78ab6b39f5f41615
 fmt plain tools/ailtask/ailtask.ail	2887566d7f85949a	0	6eb3c379fca067e7
 fmt long tools/ailtask/ailtask.ail	2887566d7f85949a	0	6925a2715a61c298
 fmt plain tools/ailtest/ailtest.ail	81df6cea2610f642	0	c3cf06826e38ac13
