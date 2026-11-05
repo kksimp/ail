@@ -94,6 +94,7 @@ struct Gen
 pub fn generate(m mir.Module) codegen.Image
     mut img := codegen.new_image()
     img.globals = m.globals_used()
+    img.files = m.files
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     sites := ref codegen.Sites(list: m.sites)

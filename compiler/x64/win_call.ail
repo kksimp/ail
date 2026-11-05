@@ -51,6 +51,7 @@ fn Gen.libsys_call(mut self, i mir.Inst)
 ## no runtime start-up or exit (`rt.init`, `rt.exit`), which use Linux system calls.
 pub fn generate_windows(m mir.Module) codegen.Image
     mut img := codegen.new_image()
+    img.files = m.files
     img.globals = m.globals_used()
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])

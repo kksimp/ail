@@ -55,7 +55,13 @@ fn symbols(mut out List[u8], img codegen.Image, text_addr int, text_off int)
         put(mut syms, size, 8)
         strtab.extend(codegen.utf8(name))
         strtab.push(0.to_u8())
-    shstr := codegen.utf8("\0.text\0.symtab\0.strtab\0.shstrtab\0")
+    dbg := debug_sections(img, text_addr)
+    mut shnames := "\0.text\0.symtab\0.strtab\0.shstrtab\0"
+    mut name_at := List[int]()
+    for d in dbg
+        name_at.push(codegen.utf8(shnames).len())
+        shnames = "{shnames}{d.name}\0"
+    shstr := codegen.utf8(shnames)
     while out.len() % 8 != 0
         out.push(0.to_u8())
     sym_off := out.len()
@@ -64,6 +70,10 @@ fn symbols(mut out List[u8], img codegen.Image, text_addr int, text_off int)
     out.extend(strtab)
     sh_off := out.len()
     out.extend(shstr)
+    mut dbg_off := List[int]()
+    for d in dbg
+        dbg_off.push(out.len())
+        out.extend(d.data)
     while out.len() % 8 != 0
         out.push(0.to_u8())
     headers := out.len()
@@ -73,9 +83,11 @@ fn symbols(mut out List[u8], img codegen.Image, text_addr int, text_off int)
     elf_section(mut out, 7, 2, 0, 0, sym_off, syms.len(), 3, 1, 8, 24)
     elf_section(mut out, 15, 3, 0, 0, str_off, strtab.len(), 0, 0, 1, 0)
     elf_section(mut out, 23, 3, 0, 0, sh_off, shstr.len(), 0, 0, 1, 0)
+    for k in 0..dbg.len()
+        elf_section(mut out, name_at[k], 1, 0, 0, dbg_off[k], dbg[k].data.len(), 0, 0, 1, 0)
     patch(mut out, 40, headers, 8)
     patch(mut out, 58, 64, 2)
-    patch(mut out, 60, 5, 2)
+    patch(mut out, 60, 5 + dbg.len(), 2)
     patch(mut out, 62, 4, 2)
 
 fn elf_section(

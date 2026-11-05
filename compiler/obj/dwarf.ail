@@ -1,0 +1,189 @@
+## DWARF 4 debug sections for the ELF writer (debug.dwarf.1): a compile unit,
+## one subprogram per function, and a line table. gdb and lldb read them for
+## `break NAME`, `break FILE:LINE` and backtraces with `FILE:LINE`.
+##
+## Stage 1 draws the line table from the call table the code generators
+## already keep (ADR 0641, `Image.calls`): a row for every user call, at the
+## call instruction's last byte, so a frame's `pc - 1` lookup lands on it.
+## Statements that are not calls have no row yet. Frames are found from the
+## frame pointer every function keeps, so there is no `.debug_frame`.
+use codegen
+use mir
+
+## A section's name and its bytes.
+pub struct DebugSec
+    pub name str
+    pub data List[u8]
+
+## The unsigned LEB128 encoding of `v` (0 or more).
+fn uleb(mut out List[u8], v int)
+    mut rest := v
+    while true
+        low := rest.bit_and(127)
+        rest = rest.shr(7)
+        if rest == 0
+            out.push(low.to_u8())
+            return
+        out.push(low.bit_or(128).to_u8())
+
+## The signed LEB128 encoding of `v`.
+fn sleb(mut out List[u8], v int)
+    mut rest := v
+    while true
+        low := rest.bit_and(127)
+        rest = rest.shr(7)
+        sign := low.bit_and(64) != 0
+        if (rest == 0 and not sign) or (rest == -1 and sign)
+            out.push(low.to_u8())
+            return
+        out.push(low.bit_or(128).to_u8())
+
+## A NUL-terminated string.
+fn cstring(mut out List[u8], s str)
+    out.extend(codegen.utf8(s))
+    out.push(0.to_u8())
+
+## The functions to describe: name, offset in the code, size.
+struct Span
+    name str
+    at int
+    size int
+
+fn spans(img codegen.Image) List[Span]
+    names := img.funcs.keys().sorted(by: |n| img.funcs[n])
+    mut out := List[Span]()
+    for k in 0..names.len()
+        name := names[k]
+        if name == "trace.tab"
+            continue
+        at := img.funcs[name]
+        size := if k + 1 < names.len() then img.funcs[names[k + 1]] - at else img.code.len() - at
+        if size > 0
+            out.push(Span(name: name, at: at, size: size))
+    out
+
+## `.debug_abbrev`, `.debug_info` and `.debug_line` for code at `text_addr`.
+pub fn debug_sections(img codegen.Image, text_addr int) List[DebugSec]
+    [
+        DebugSec(name: ".debug_abbrev", data: abbrev()),
+        DebugSec(name: ".debug_info", data: info(img, text_addr)),
+        DebugSec(name: ".debug_line", data: line(img, text_addr)),
+    ]
+
+fn abbrev() List[u8]
+    mut b := List[u8]()
+    # 1: compile unit, with children: producer, language, name, low_pc,
+    # high_pc (a length), stmt_list.
+    uleb(mut b, 1)
+    uleb(mut b, 17)
+    b.push(1.to_u8())
+    for pair in [[37, 8], [19, 5], [3, 8], [17, 1], [18, 7], [16, 23]]
+        uleb(mut b, pair[0])
+        uleb(mut b, pair[1])
+    uleb(mut b, 0)
+    uleb(mut b, 0)
+    # 2: subprogram, no children: name, low_pc, high_pc, external.
+    uleb(mut b, 2)
+    uleb(mut b, 46)
+    b.push(0.to_u8())
+    for pair in [[3, 8], [17, 1], [18, 7], [63, 25]]
+        uleb(mut b, pair[0])
+        uleb(mut b, pair[1])
+    uleb(mut b, 0)
+    uleb(mut b, 0)
+    uleb(mut b, 0)
+    b
+
+fn info(img codegen.Image, text_addr int) List[u8]
+    mut body := List[u8]()
+    put(mut body, 4, 2)
+    put(mut body, 0, 4)
+    body.push(8.to_u8())
+    uleb(mut body, 1)
+    cstring(mut body, "AIL")
+    # DW_LANG_C99: the closest language the debuggers evaluate expressions in.
+    put(mut body, 12, 2)
+    cstring(mut body, if img.files.len() > 0 then img.files[0] else "ail")
+    put(mut body, text_addr, 8)
+    put(mut body, img.code.len(), 8)
+    put(mut body, 0, 4)
+    for s in spans(img)
+        uleb(mut body, 2)
+        cstring(mut body, s.name)
+        put(mut body, text_addr + s.at, 8)
+        put(mut body, s.size, 8)
+    uleb(mut body, 0)
+    mut out := List[u8]()
+    put(mut out, body.len(), 4)
+    out.extend(body)
+    out
+
+fn line(img codegen.Image, text_addr int) List[u8]
+    mut hdr := List[u8]()
+    # minimum instruction length, maximum operations, default is_stmt,
+    # line base -5, line range 14, opcode base 13.
+    for x in [1, 1, 1, 251, 14, 13]
+        hdr.push(x.to_u8())
+    for x in [0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1]
+        hdr.push(x.to_u8())
+    # No include directories; the files are numbered from 1.
+    hdr.push(0.to_u8())
+    for f in img.files
+        cstring(mut hdr, f)
+        uleb(mut hdr, 0)
+        uleb(mut hdr, 0)
+        uleb(mut hdr, 0)
+    hdr.push(0.to_u8())
+    mut prog := List[u8]()
+    # DW_LNE_set_address at the start of the code.
+    prog.push(0.to_u8())
+    uleb(mut prog, 9)
+    prog.push(2.to_u8())
+    put(mut prog, text_addr, 8)
+    mut addr := 0
+    mut file := 1
+    mut ln := 1
+    mut col := 0
+    mut emitted := false
+    for c in img.calls
+        l := mir.call_line(c.pos)
+        f := mir.call_file(c.pos) + 1
+        at := c.off - 1
+        if l == 0 or f > img.files.len() or at < addr or (at == addr and emitted)
+            continue
+        # DW_LNS_advance_pc
+        prog.push(2.to_u8())
+        uleb(mut prog, at - addr)
+        addr = at
+        if f != file
+            # DW_LNS_set_file
+            prog.push(4.to_u8())
+            uleb(mut prog, f)
+            file = f
+        if l != ln
+            # DW_LNS_advance_line
+            prog.push(3.to_u8())
+            sleb(mut prog, l - ln)
+            ln = l
+        cc := mir.call_col(c.pos)
+        if cc != col
+            # DW_LNS_set_column
+            prog.push(5.to_u8())
+            uleb(mut prog, cc)
+            col = cc
+        # DW_LNS_copy
+        prog.push(1.to_u8())
+        emitted = true
+    prog.push(2.to_u8())
+    uleb(mut prog, img.code.len() - addr)
+    # DW_LNE_end_sequence
+    prog.push(0.to_u8())
+    uleb(mut prog, 1)
+    prog.push(1.to_u8())
+    mut out := List[u8]()
+    put(mut out, 2 + 4 + hdr.len() + prog.len(), 4)
+    put(mut out, 4, 2)
+    put(mut out, hdr.len(), 4)
+    out.extend(hdr)
+    out.extend(prog)
+    out

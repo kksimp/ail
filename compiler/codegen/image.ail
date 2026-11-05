@@ -35,6 +35,8 @@ pub struct Image
     ## The libSystem symbols the code calls (`import_call`, native-abi.md
     ## §11), in the order of their pointer slots, which follow the globals.
     pub imports List[str]
+    ## The module's source files, for the debug line table (debug.dwarf.1).
+    pub files List[str]
 
 pub fn new_image() Image
     Image(
@@ -47,6 +49,7 @@ pub fn new_image() Image
         entry: 0,
         calls: [],
         imports: [],
+        files: [],
     )
 
 ## A string object (native-abi.md §2) in the read-only data, once per symbol.
