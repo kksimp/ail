@@ -82,6 +82,13 @@ event type is shared.
 
 ## Plan (smallest first)
 
+Scope from the integrator (2026-11-05): the GPU lane is SPIR-V/MSL backend with
+**compute first** (offload `par` and tensor work), then rendering; Metal
+first, then Vulkan and DX. Steps 4 (shader functions and compute) is
+therefore built before step 2's rendering batches; step 1 (frame loop,
+surface, key-up, vsync, no JSON on the hot path) still goes first because
+it is small and unblocks games.
+
 1. **Mac frame loop and surface.** Host: `keyup`, `repeat`, vsync tick via
    `CADisplayLink` / `CVDisplayLink`, a surface view backed by a shared
    buffer shown through a `CALayer` (zero copy where the layer can wrap the
