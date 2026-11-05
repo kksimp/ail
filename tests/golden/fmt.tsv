@@ -80,8 +80,8 @@ fmt plain compiler/check/handles.ail	a934f144d4cc822d	0	8e968507b3315fe3
 fmt long compiler/check/handles.ail	a934f144d4cc822d	0	46447b4841cd1b2f
 fmt plain compiler/check/moves.ail	e3d206735aaf87e6	0	e2263ae16f17f768
 fmt long compiler/check/moves.ail	e3d206735aaf87e6	0	117a12b699790a63
-fmt plain compiler/check/names.ail	c5382c048fc6b9bd	0	c46a6e6a01ee049c
-fmt long compiler/check/names.ail	c5382c048fc6b9bd	0	7f9b6e6eae854481
+fmt plain compiler/check/names.ail	f6c2fe16333352c0	0	f8f2aaf837823f0a
+fmt long compiler/check/names.ail	f6c2fe16333352c0	0	6b52c787a9454002
 fmt plain compiler/check/net.ail	110659230abb183c	0	7f42f40186ae8e0a
 fmt long compiler/check/net.ail	110659230abb183c	0	ed6c00362fa2c6ce
 fmt plain compiler/check/observe.ail	069de32265be4e83	0	31678d9c4f045420
@@ -158,8 +158,8 @@ fmt plain compiler/load/help.ail	49e14cd55185f04a	0	6ff89c6f3018a840
 fmt long compiler/load/help.ail	49e14cd55185f04a	0	cd8e7b06683d933b
 fmt plain compiler/load/implicit.ail	d3a0090c7e19bc26	0	925262d490f16bfe
 fmt long compiler/load/implicit.ail	d3a0090c7e19bc26	0	45d503185e604827
-fmt plain compiler/load/load.ail	c2549e111e42acb2	0	c11b1840d161ed75
-fmt long compiler/load/load.ail	c2549e111e42acb2	0	1a4b1bae469c440b
+fmt plain compiler/load/load.ail	f02885d084d9c8a3	0	1da599fb641f3c7e
+fmt long compiler/load/load.ail	f02885d084d9c8a3	0	9880b8e4c44e6884
 fmt plain compiler/load/report.ail	262751774702b0b9	0	a9e8afdfd49bde6d
 fmt long compiler/load/report.ail	262751774702b0b9	0	2fa4be9cd88b608d
 fmt plain compiler/load/resolve.ail	71be0edcc7f45d55	0	8677ee371b18569a
@@ -220,8 +220,8 @@ fmt plain compiler/mir/lower_enum.ail	570b8269118bbe5e	0	e7ecee5771fa08cd
 fmt long compiler/mir/lower_enum.ail	570b8269118bbe5e	0	e424ef2a91ffdc21
 fmt plain compiler/mir/lower_eqx.ail	043899e5075c1650	0	a755cbd30beba1ac
 fmt long compiler/mir/lower_eqx.ail	043899e5075c1650	0	9cb5d326fb61ee65
-fmt plain compiler/mir/lower_err.ail	9208c1573450e6de	0	cc50e88243fda0b8
-fmt long compiler/mir/lower_err.ail	9208c1573450e6de	0	ef3b0ad402d2bdb3
+fmt plain compiler/mir/lower_err.ail	4c2d0aa30eddf7b8	0	0e8a03c0d6d54029
+fmt long compiler/mir/lower_err.ail	4c2d0aa30eddf7b8	0	32f7581e040ad1a0
 fmt plain compiler/mir/lower_excl.ail	97ed2f386d5892cd	0	5d6d8904a3e189b1
 fmt long compiler/mir/lower_excl.ail	97ed2f386d5892cd	0	dc4731a57cf86222
 fmt plain compiler/mir/lower_f32.ail	86b001bf579cabe9	0	725987ac35244913
@@ -280,8 +280,8 @@ fmt plain compiler/mir/lower_matchtree.ail	07b123dd98f4c0ab	0	95c1d6ea34f5c6d4
 fmt long compiler/mir/lower_matchtree.ail	07b123dd98f4c0ab	0	b8aca444c64cf2af
 fmt plain compiler/mir/lower_mem.ail	688666122d412ecd	0	11be50e3a3d44383
 fmt long compiler/mir/lower_mem.ail	688666122d412ecd	0	fa9e92fe7152f202
-fmt plain compiler/mir/lower_mod.ail	d509988cf1a0c84e	0	1096224034d8e3f7
-fmt long compiler/mir/lower_mod.ail	d509988cf1a0c84e	0	5fc7ff1298d00bfd
+fmt plain compiler/mir/lower_mod.ail	49046749ef8c25f1	0	1d0b46fa66f77bcd
+fmt long compiler/mir/lower_mod.ail	49046749ef8c25f1	0	b9c651591ccc3725
 fmt plain compiler/mir/lower_move.ail	44903330591ff0f6	0	34965001ff3f46eb
 fmt long compiler/mir/lower_move.ail	44903330591ff0f6	0	57e3838447230843
 fmt plain compiler/mir/lower_net.ail	5e7d96e1abe905b6	0	ed24a9e11bf66497
@@ -732,6 +732,8 @@ fmt plain std/attach/attach.ail	296c2b438965a408	0	5ffca9415be562df
 fmt long std/attach/attach.ail	296c2b438965a408	0	2b5dbc236272b4da
 fmt plain std/attach/serve.ail	a76f230ea07e28df	0	f40107b106c027ff
 fmt long std/attach/serve.ail	a76f230ea07e28df	0	caa40d0680b307b6
+fmt plain std/audio/audio.ail	13669a166471892b	0	383f4ea4b1d875c0
+fmt long std/audio/audio.ail	13669a166471892b	0	5acd10e7c6943463
 fmt plain std/bigint/bigint.ail	c61bbdf1193ba68c	0	752865387c764edd
 fmt long std/bigint/bigint.ail	c61bbdf1193ba68c	0	bd94220b2400855d
 fmt plain std/csv/csv.ail	df7697bae73c0d4d	0	216138a37d3c301f
@@ -1808,6 +1810,8 @@ fmt plain tests/cases/std_args_derive.ail	aab21e766972b97d	0	6676303c2e7e7ea2
 fmt long tests/cases/std_args_derive.ail	aab21e766972b97d	0	42068c932e5be831
 fmt plain tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	77c1a63f43b7a515
 fmt long tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	d853b5ff47caa3cf
+fmt plain tests/cases/std_audio.ail	1adc4c48d1a052c3	0	3cee5c5483e92444
+fmt long tests/cases/std_audio.ail	1adc4c48d1a052c3	0	6d8400aa6a48bdd1
 fmt plain tests/cases/std_bigint.ail	187f79195f741f01	0	cf7a0f5cdf6a9959
 fmt long tests/cases/std_bigint.ail	187f79195f741f01	0	432d108163beb95b
 fmt plain tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	0	6b80a756210ea37d
