@@ -31,11 +31,7 @@ use ast
             for it in items
                 t := expr(it, Ty.Int, true)
                 if not accepts(Ty.Int, t)
-                    err(
-                        "type.grid.3",
-                        expr_pos(it),
-                        "a grid index must be `int`, found {show(t)}",
-                    )
+                    err("type.grid.3", expr_pos(it), "a grid index must be `int`, found {show(t)}")
         _ =>
             expr(index, none, true)
             err_help(
