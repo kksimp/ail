@@ -77,6 +77,17 @@ fn slots_in(g0 Func, lp LoopInfo) Func
         g.blocks[b].insts = out
     if hoisted.len() == 0
         return g
+    # Copies of a slot's value are that value too (lowering copies a field
+    # before indexing it).
+    mut grew := true
+    while grew
+        grew = false
+        for b in lp.blocks
+            for i in g.blocks[b].insts
+                if i.op == "copy" and i.dst >= 0 and not sub.contains(i.dst)
+                    if v := sub.get(i.arg(0))
+                        sub[i.dst] = v
+                        grew = true
     # The loop's own uses read the hoisted value, so `hoist_in` sees it.
     for b in lp.blocks
         mut out := List[Inst]()
