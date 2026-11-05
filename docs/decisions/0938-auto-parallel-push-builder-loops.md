@@ -14,8 +14,8 @@ ADR 0911 runs a proven loop on the pool only when it writes list elements and
 
 ```ail fragment
 mut out := List[int]()
-for i in 0..n
-    out.push(f(i))
+for i in 0..10
+    out.push(i * 2)
 ```
 
 `push` writes all of `out`, so the checker called the loop sequential
