@@ -54,6 +54,9 @@ Speed (ail-linux, min of 7; same algorithm both ways, outputs equal):
 | matmul 600 (ijk) | 0.40 s | 0.80 s | 0.24 s | 17.97 s |
 | LCS 3000 | 0.09 s | 0.20 s | | |
 
+On the Mac: matmul 600 list 0.155 s, grid 0.313 s, C 0.084 s; LCS 3000
+list 0.032 s, grid 0.061 s.
+
 A grid is 2x slower than nested lists today: bounds-check elimination
 (ADR 0577) removes the nested lists' checks in counted loops, and nothing yet
 removes the two `bounds` checks of `g[i, j]` (matmul: 34 instructions per

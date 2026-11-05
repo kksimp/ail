@@ -44,6 +44,9 @@ ail-linux, wordfreq 10M words (`tools/perfbench`), min of 7, outputs equal:
 | time | 0.27 s | 0.22 s | 0.15 s | 2.50 s |
 | instructions | 1.649G | 1.452G | | |
 
+On the Mac (Apple Silicon, same build and protocol): base 0.097 s, this ADR
+0.062 s, C 0.150 s.
+
 The first version (16 slots by `address >> 4`, a helper call per lookup)
 missed most lookups and ran 9% more instructions; the slot from the
 multiplied address and the hit written out in `map_find` fixed both.
