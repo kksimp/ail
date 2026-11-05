@@ -464,6 +464,28 @@ pub fn Asm.vcvtn2(mut self, d int, n int)
 pub fn Asm.vcvtl2(mut self, d int, n int)
     word(1315010560 + n * 32 + d)
 
+## Integer NEON for `rt.vec_axpyi` (ADR 0942): `xtn vd.2s, vn.2d` and
+## `xtn2 vd.4s, vn.2d` (the low 32 bits of each lane), `smull vd.2d, vn.2s,
+## vm.2s` and `smull2 vd.2d, vn.4s, vm.4s` (signed 32 by 32 to 64),
+## `add vd.2d, vn.2d, vm.2d`, and `dup vd.4s, wn`.
+pub fn Asm.vxtn(mut self, d int, n int)
+    word(245442560 + n * 32 + d)
+
+pub fn Asm.vxtn2(mut self, d int, n int)
+    word(1319184384 + n * 32 + d)
+
+pub fn Asm.vsmull(mut self, d int, n int, m int)
+    word(rrr(245415936, d, n, m))
+
+pub fn Asm.vsmull2(mut self, d int, n int, m int)
+    word(rrr(1319157760, d, n, m))
+
+pub fn Asm.vadd2d(mut self, d int, n int, m int)
+    word(rrr(1323336704, d, n, m))
+
+pub fn Asm.vdup4w(mut self, d int, n int)
+    word(1308888064 + n * 32 + d)
+
 ## `dup vd.4s, vn.s[0]`.
 pub fn Asm.vdup4(mut self, d int, n int)
     word(1308886016 + n * 32 + d)

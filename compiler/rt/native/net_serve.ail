@@ -528,7 +528,7 @@ fn serve_idle_scan(h int, out int)
 ## Wait up to `ms` for any of the `n` poll entries at `pf`.
 fn serve_poll(pf int, n int, ms int) int
     if not det_on()
-        return serve_poll_raw(pf, n, ms)
+        return serve_poll_blocked(pf, n, ms)
     # On a deterministic schedule the others run between polls (see `net_wait`).
     deadline := if ms < 0 then -1 else time_mono_ms() + ms
     while true
@@ -543,6 +543,19 @@ fn serve_poll(pf int, n int, ms int) int
         if r2 != 0
             return r2
     0
+
+## `serve_poll_raw` on a pool worker, counted as blocked (native.task.2, see
+## `net_poll_blocked`): `accept` polls in slices, so a task queued while the
+## worker is between slices gets its thread at the next one.
+fn serve_poll_blocked(pf int, n int, ms int) int
+    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
+        return serve_poll_raw(pf, n, ms)
+    wait_enter()
+    s := blocked_enter()
+    r := serve_poll_raw(pf, n, ms)
+    blocked_leave(s)
+    wait_leave()
+    r
 
 fn serve_poll_raw(pf int, n int, ms int) int
     if target() == 3

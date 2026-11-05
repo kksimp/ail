@@ -14,6 +14,12 @@ fn blocked_enter() int
 fn blocked_leave(s int)
     return
 
+fn wait_enter()
+    return
+
+fn wait_leave()
+    return
+
 fn gc_park()
     return
 
