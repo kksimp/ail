@@ -16,12 +16,12 @@ fn is_struct_ty(t Ty) bool
 pub fn hoist_slots(f Func) Func
     if opt_off("hoist") or opt_off("slots") or f.name.starts_with("rt.")
         return f
-    mut any := false
+    mut seen := false
     for blk in f.blocks
         for i in blk.insts
             if i.op == "load" and is_struct_ty(f.vals[i.arg(0)])
-                any = true
-    if not any
+                seen = true
+    if not seen
         return f
     loops := find_loops(f)
     mut g := f
