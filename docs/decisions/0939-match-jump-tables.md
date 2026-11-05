@@ -57,7 +57,12 @@ change alone): vm 3866 → 2963 ms (-23%; gcc -O2 1671, Python 122556); with
 `AIL_OPT_OFF=switch` as well 4052, so the tree alone was no better than main
 here; lzr, regex_scan and the perfbench ten flat within 1-2 ms. The stage-3
 compiler goes 8.89 → 9.18 MB (+3%; the copies are capped after a first run
-that had none). Mac: see the PR.
+that had none).
+
+Mac (Apple Silicon), ec591fcf against main 38a9628: vm 1699 → 1340 ms (-21%;
+clang/gcc -O2 1244, Python 59094); `AIL_OPT_OFF=switch` 1680, `taildup` 1565;
+the rest flat. The stage-3 compiler 9.54 → 9.82 MB (+2.9%), its self-build
+12.45 → 12.70 s (+2%).
 
 ## Rejected alternatives
 
