@@ -599,3 +599,431 @@ fn hash_hmac_sha384(key str, s str) str
 
 fn hash_hmac_sha512(key str, s str) str
     hash_hmac_wide(key, s, true)
+
+# ---- SHA-1, MD5 and SHA-3 (std.hash.6, ADR 0959). Not for new security uses:
+# SHA-1 and MD5 are broken for collisions and exist for formats and protocols. ----
+
+fn hash_rotl32(x int, n int) int
+    x.shl(n).bit_or(x.shr(32 - n)).bit_and(M32)
+
+fn hash_rotl64(x int, n int) int
+    if n == 0
+        return x
+    x.shl(n).bit_or(hash_lsr(x, 64 - n))
+
+## The little-endian word of `w` bytes at `p`.
+fn hash_le(p int, w int) int
+    mut v := 0
+    mut i := w - 1
+    while i >= 0
+        v = v.shl(8).bit_or(load8(p + i))
+        i -= 1
+    v
+
+## The `w`-byte little-endian bytes of `v` at `p`.
+fn hash_put_le(p int, v int, w int)
+    mut i := 0
+    while i < w
+        store8(p + i, v.shr(8 * i).bit_and(255))
+        i += 1
+
+## One 64-byte SHA-1 block at `blk` into the five words at `h`.
+fn hash_sha1_block(h int, blk int, w int)
+    mut t := 0
+    while t < 16
+        store64(w + 8 * t, hash_be(blk + 4 * t, 4))
+        t += 1
+    while t < 80
+        x := load64(w + 8 * (t - 3)).bit_xor(load64(w + 8 * (t - 8))).bit_xor(load64(w + 8 * (t - 14))).bit_xor(load64(w + 8 * (t - 16)))
+        store64(w + 8 * t, hash_rotl32(x, 1))
+        t += 1
+    mut a := load64(h)
+    mut b := load64(h + 8)
+    mut c := load64(h + 16)
+    mut d := load64(h + 24)
+    mut e := load64(h + 32)
+    t = 0
+    while t < 80
+        mut f := 0
+        mut k := 0
+        if t < 20
+            f = b.bit_and(c).bit_or(b.bit_not().bit_and(M32).bit_and(d))
+            k = 1518500249
+        elif t < 40
+            f = b.bit_xor(c).bit_xor(d)
+            k = 1859775393
+        elif t < 60
+            f = b.bit_and(c).bit_or(b.bit_and(d)).bit_or(c.bit_and(d))
+            k = 2400959708
+        else
+            f = b.bit_xor(c).bit_xor(d)
+            k = 3395469782
+        tmp := (hash_rotl32(a, 5) + f + e + k + load64(w + 8 * t)).bit_and(M32)
+        e = d
+        d = c
+        c = hash_rotl32(b, 30)
+        b = a
+        a = tmp
+        t += 1
+    store64(h, (load64(h) + a).bit_and(M32))
+    store64(h + 8, (load64(h + 8) + b).bit_and(M32))
+    store64(h + 16, (load64(h + 16) + c).bit_and(M32))
+    store64(h + 24, (load64(h + 24) + d).bit_and(M32))
+    store64(h + 32, (load64(h + 32) + e).bit_and(M32))
+
+## std.hash.6: SHA-1 (FIPS 180-4) as lower-case hex.
+fn hash_sha1(s str) str
+    a := str_addr(s)
+    src := a + 16
+    n := load64(a)
+    h := alloc(40, KIND_BYTES)
+    store64(h, 1732584193)
+    store64(h + 8, 4023233417)
+    store64(h + 16, 2562383102)
+    store64(h + 24, 271733878)
+    store64(h + 32, 3285377520)
+    w := alloc(640, KIND_BYTES)
+    full := n - n % 64
+    mut off := 0
+    while off < full
+        hash_sha1_block(h, src + off, w)
+        off += 64
+    rest := n - full
+    blocks := if rest < 56 then 1 else 2
+    tail := hash_zeros(128)
+    copy_bytes(tail, src + full, rest)
+    store8(tail + rest, 128)
+    hash_put_be(tail + 64 * blocks - 8, n * 8, 8)
+    hash_sha1_block(h, tail, w)
+    if blocks == 2
+        hash_sha1_block(h, tail + 64, w)
+    out := alloc(20, KIND_BYTES)
+    mut i := 0
+    while i < 5
+        hash_put_be(out + 4 * i, load64(h + 8 * i), 4)
+        i += 1
+    hash_hex(out, 20)
+
+## One 64-byte MD5 block at `blk` into the four words at `h` (RFC 1321).
+fn hash_md5_block(h int, blk int, k List[int], sh List[int])
+    mut a := load64(h)
+    mut b := load64(h + 8)
+    mut c := load64(h + 16)
+    mut d := load64(h + 24)
+    mut i := 0
+    while i < 64
+        mut f := 0
+        mut g := 0
+        if i < 16
+            f = b.bit_and(c).bit_or(b.bit_not().bit_and(M32).bit_and(d))
+            g = i
+        elif i < 32
+            f = d.bit_and(b).bit_or(d.bit_not().bit_and(M32).bit_and(c))
+            g = (5 * i + 1) % 16
+        elif i < 48
+            f = b.bit_xor(c).bit_xor(d)
+            g = (3 * i + 5) % 16
+        else
+            f = c.bit_xor(b.bit_or(d.bit_not().bit_and(M32)))
+            g = (7 * i) % 16
+        sum := (a + f + k[i] + hash_le(blk + 4 * g, 4)).bit_and(M32)
+        a = d
+        d = c
+        c = b
+        b = (b + hash_rotl32(sum, sh[i])).bit_and(M32)
+        i += 1
+    store64(h, (load64(h) + a).bit_and(M32))
+    store64(h + 8, (load64(h + 8) + b).bit_and(M32))
+    store64(h + 16, (load64(h + 16) + c).bit_and(M32))
+    store64(h + 24, (load64(h + 24) + d).bit_and(M32))
+
+## std.hash.6: MD5 (RFC 1321) as lower-case hex.
+fn hash_md5(s str) str
+    k := [
+        3614090360,
+        3905402710,
+        606105819,
+        3250441966,
+        4118548399,
+        1200080426,
+        2821735955,
+        4249261313,
+        1770035416,
+        2336552879,
+        4294925233,
+        2304563134,
+        1804603682,
+        4254626195,
+        2792965006,
+        1236535329,
+        4129170786,
+        3225465664,
+        643717713,
+        3921069994,
+        3593408605,
+        38016083,
+        3634488961,
+        3889429448,
+        568446438,
+        3275163606,
+        4107603335,
+        1163531501,
+        2850285829,
+        4243563512,
+        1735328473,
+        2368359562,
+        4294588738,
+        2272392833,
+        1839030562,
+        4259657740,
+        2763975236,
+        1272893353,
+        4139469664,
+        3200236656,
+        681279174,
+        3936430074,
+        3572445317,
+        76029189,
+        3654602809,
+        3873151461,
+        530742520,
+        3299628645,
+        4096336452,
+        1126891415,
+        2878612391,
+        4237533241,
+        1700485571,
+        2399980690,
+        4293915773,
+        2240044497,
+        1873313359,
+        4264355552,
+        2734768916,
+        1309151649,
+        4149444226,
+        3174756917,
+        718787259,
+        3951481745,
+    ]
+    sh := [
+        7,
+        12,
+        17,
+        22,
+        7,
+        12,
+        17,
+        22,
+        7,
+        12,
+        17,
+        22,
+        7,
+        12,
+        17,
+        22,
+        5,
+        9,
+        14,
+        20,
+        5,
+        9,
+        14,
+        20,
+        5,
+        9,
+        14,
+        20,
+        5,
+        9,
+        14,
+        20,
+        4,
+        11,
+        16,
+        23,
+        4,
+        11,
+        16,
+        23,
+        4,
+        11,
+        16,
+        23,
+        4,
+        11,
+        16,
+        23,
+        6,
+        10,
+        15,
+        21,
+        6,
+        10,
+        15,
+        21,
+        6,
+        10,
+        15,
+        21,
+        6,
+        10,
+        15,
+        21,
+    ]
+    a := str_addr(s)
+    src := a + 16
+    n := load64(a)
+    h := alloc(32, KIND_BYTES)
+    store64(h, 1732584193)
+    store64(h + 8, 4023233417)
+    store64(h + 16, 2562383102)
+    store64(h + 24, 271733878)
+    full := n - n % 64
+    mut off := 0
+    while off < full
+        hash_md5_block(h, src + off, k, sh)
+        off += 64
+    rest := n - full
+    blocks := if rest < 56 then 1 else 2
+    tail := hash_zeros(128)
+    copy_bytes(tail, src + full, rest)
+    store8(tail + rest, 128)
+    hash_put_le(tail + 64 * blocks - 8, n * 8, 8)
+    hash_md5_block(h, tail, k, sh)
+    if blocks == 2
+        hash_md5_block(h, tail + 64, k, sh)
+    out := alloc(16, KIND_BYTES)
+    mut i := 0
+    while i < 4
+        hash_put_le(out + 4 * i, load64(h + 8 * i), 4)
+        i += 1
+    hash_hex(out, 16)
+
+## Keccak-f[1600] on the 25 lanes at `st` (FIPS 202); `b` is 200 bytes of scratch.
+fn hash_keccak_f(st int, b int, rc List[int], rot List[int])
+    mut r := 0
+    while r < 24
+        mut x := 0
+        while x < 5
+            c0 := load64(st + 8 * x).bit_xor(load64(st + 8 * (x + 5))).bit_xor(load64(st + 8 * (x + 10))).bit_xor(load64(st + 8 * (x + 15))).bit_xor(load64(st + 8 * (x + 20)))
+            store64(b + 8 * x, c0)
+            x += 1
+        x = 0
+        while x < 5
+            d := load64(b + 8 * ((x + 4) % 5)).bit_xor(hash_rotl64(load64(b + 8 * ((x + 1) % 5)), 1))
+            mut y := 0
+            while y < 25
+                store64(st + 8 * (x + y), load64(st + 8 * (x + y)).bit_xor(d))
+                y += 5
+            x += 1
+        # rho and pi into the scratch lanes 5..29
+        mut y := 0
+        while y < 5
+            x = 0
+            while x < 5
+                v := hash_rotl64(load64(st + 8 * (x + 5 * y)), rot[x + 5 * y])
+                store64(b + 40 + 8 * (y + 5 * ((2 * x + 3 * y) % 5)), v)
+                x += 1
+            y += 1
+        # chi
+        y = 0
+        while y < 5
+            x = 0
+            while x < 5
+                p := load64(b + 40 + 8 * (x + 5 * y))
+                q := load64(b + 40 + 8 * ((x + 1) % 5 + 5 * y))
+                s := load64(b + 40 + 8 * ((x + 2) % 5 + 5 * y))
+                store64(st + 8 * (x + 5 * y), p.bit_xor(q.bit_not().bit_and(s)))
+                x += 1
+            y += 1
+        store64(st, load64(st).bit_xor(rc[r]))
+        r += 1
+
+## SHA-3 with rate `rate` bytes and an `hl`-byte digest, as lower-case hex.
+fn hash_sha3(s str, rate int, hl int) str
+    rc := [
+        1,
+        32898,
+        -9223372036854742902,
+        -9223372034707259392,
+        32907,
+        2147483649,
+        -9223372034707259263,
+        -9223372036854743031,
+        138,
+        136,
+        2147516425,
+        2147483658,
+        2147516555,
+        -9223372036854775669,
+        -9223372036854742903,
+        -9223372036854743037,
+        -9223372036854743038,
+        -9223372036854775680,
+        32778,
+        -9223372034707292150,
+        -9223372034707259263,
+        -9223372036854742912,
+        2147483649,
+        -9223372034707259384,
+    ]
+    rot := [
+        0,
+        1,
+        62,
+        28,
+        27,
+        36,
+        44,
+        6,
+        55,
+        20,
+        3,
+        10,
+        43,
+        25,
+        39,
+        41,
+        45,
+        15,
+        21,
+        8,
+        18,
+        2,
+        61,
+        56,
+        14,
+    ]
+    a := str_addr(s)
+    src := a + 16
+    n := load64(a)
+    st := hash_zeros(200)
+    b := alloc(240, KIND_BYTES)
+    full := n - n % rate
+    mut off := 0
+    while off < full
+        mut i := 0
+        while i < rate / 8
+            store64(st + 8 * i, load64(st + 8 * i).bit_xor(load64(src + off + 8 * i)))
+            i += 1
+        hash_keccak_f(st, b, rc, rot)
+        off += rate
+    rest := n - full
+    tail := hash_zeros(rate)
+    copy_bytes(tail, src + full, rest)
+    store8(tail + rest, load8(tail + rest).bit_xor(6))
+    store8(tail + rate - 1, load8(tail + rate - 1).bit_xor(128))
+    mut j := 0
+    while j < rate / 8
+        store64(st + 8 * j, load64(st + 8 * j).bit_xor(load64(tail + 8 * j)))
+        j += 1
+    hash_keccak_f(st, b, rc, rot)
+    hash_hex(st, hl)
+
+## std.hash.6: SHA3-256 and SHA3-512 (FIPS 202).
+fn hash_sha3_256(s str) str
+    hash_sha3(s, 136, 32)
+
+fn hash_sha3_512(s str) str
+    hash_sha3(s, 72, 64)
