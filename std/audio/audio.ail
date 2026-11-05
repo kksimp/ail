@@ -1,4 +1,4 @@
-## std.audio clips (spec std.audio.1-9, draft): sound as plain data. A clip is
+## std.audio clips (spec std.audio.1-7, draft): sound as plain data. A clip is
 ## interleaved float samples in -1.0..1.0 with a sample rate and a channel
 ## count. Everything here is pure; devices (playback, capture) come from
 ## `std.audio.device`, which needs a host program and is not written yet.
