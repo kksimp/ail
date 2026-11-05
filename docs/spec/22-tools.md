@@ -775,7 +775,7 @@ checks of `unsafe.ptr.4-6` and `unsafe.mem.2` already trap, so they need no sani
 
 **san.sched.2** — The exit status is 0 when no run differs, 1 when one does, 2 for bad arguments. A run that can't start or exceeds `--timeout` (default 60000 ms) has status 124.
 
-```ail tool=sanitize rules=san.sched.1,san.sched.2
+```ail tool=sanitize,FILE expect=schedules rules=san.sched.1,san.sched.2
 fn main()
     print(1)
 ```
