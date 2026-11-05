@@ -27,8 +27,8 @@ H_NOFIT := 13
 H_REUSED := 12
 H_REGS := 14
 ## The limit the allocation fast path tests against: `H_THRESH` while the
-## process has one thread. Once it has threads the fast path uses the running
-## thread's cache instead (`H_TBLK`, ADR 0943) and this word is 0.
+## process has one thread. Once it has threads this word is 0, and the fast
+## path falls to the running thread's cache (`H_TBLK`, ADR 0943).
 H_FASTLIM := 24
 ## The threads' allocation caches, one `TB_SIZE` block per thread slot, made
 ## by `pool` (ADR 0943). Words 281-284 are the parallel marker's
@@ -48,13 +48,10 @@ PAGE := 16448
 MAX_SMALL := 8192
 MIN_THRESH := 33554432
 ## A thread's allocation cache: words laid out as the state block's
-## `H_ALLOCD`, `H_FASTLIM`, `H_HEADS`, `H_BUMP`, `H_BEND`, `H_DIRTY` (and
+## `H_HEADS`, `H_BUMP`, `H_BEND`, `H_DIRTY` (and
 ## `H_MARKS` for its mark stack), so the fast path reads either one. 24 cache
 ## lines, so two threads' caches never share one.
 TB_SIZE := 1536
-## The fast-path limit of a thread's cache: its blocks were counted when the
-## cache was filled.
-TB_NOLIMIT := 4611686018427387904
 ## About this many bytes of a class's shared free list move to a thread's
 ## cache at a time.
 TB_TAKE := 4096
@@ -291,9 +288,7 @@ fn alloc_raw(n int, kind int) int
     if n <= 232 and load64(global(LIM_TICK)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
-        mut m := load64(global(HEAP))
-        if load64(global(MULTI)) != 0
-            m = heap_tb(m)
+        m := load64(global(HEAP))
         a := load64(m + 8 * H_ALLOCD) + csz
         if a <= load64(m + 8 * H_FASTLIM)
             s := m + idx.shl(3)
@@ -309,6 +304,21 @@ fn alloc_raw(n int, kind int) int
                 store64(m + 8 * H_ALLOCD, a)
                 store64(c, kind + n.shl(16))
                 return c + 8
+        elif load64(global(MULTI)) != 0
+            # With threads `H_FASTLIM` is 0 and the thread's cache serves;
+            # its blocks were counted when it was filled (ADR 0943). One
+            # thread pays nothing for this branch.
+            t := heap_tb(m) + idx.shl(3)
+            b := load64(t + 8 * H_HEADS)
+            if b != 0
+                store64(t + 8 * H_HEADS, load64(b + 8))
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(t + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+                store64(t + 8 * H_BUMP, c + csz)
+                store64(c, kind + n.shl(16))
+                return c + 8
     alloc_slow(n, kind, 0)
 
 ## The common case, a small object served from a free list or the page being
@@ -319,9 +329,7 @@ fn alloc_z(n int, kind int, zero int) int
     if n <= 232 and load64(global(LIM_TICK)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
-        mut m := load64(global(HEAP))
-        if load64(global(MULTI)) != 0
-            m = heap_tb(m)
+        m := load64(global(HEAP))
         a := load64(m + 8 * H_ALLOCD) + csz
         if a <= load64(m + 8 * H_FASTLIM)
             # This class's slots, 8 bytes apart in each table.
@@ -339,6 +347,22 @@ fn alloc_z(n int, kind int, zero int) int
                 store64(s + 8 * H_BUMP, c + csz)
                 store64(m + 8 * H_ALLOCD, a)
                 if zero != 0 and load64(s + 8 * H_DIRTY) != 0
+                    zero_words(c + 8, csz - 8)
+                store64(c, kind + n.shl(16))
+                return c + 8
+        elif load64(global(MULTI)) != 0
+            t := heap_tb(m) + idx.shl(3)
+            b := load64(t + 8 * H_HEADS)
+            if b != 0
+                store64(t + 8 * H_HEADS, load64(b + 8))
+                if zero != 0
+                    zero_words(b + 8, csz - 8)
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(t + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+                store64(t + 8 * H_BUMP, c + csz)
+                if zero != 0 and load64(t + 8 * H_DIRTY) != 0
                     zero_words(c + 8, csz - 8)
                 store64(c, kind + n.shl(16))
                 return c + 8
@@ -416,14 +440,12 @@ fn heap_tb(m int) int
     load64(m + 8 * H_TBLK) + k * TB_SIZE
 
 ## Make the caches, before the process gets its second thread (`pool`).
-## AIL_GC_VERIFY keeps every allocation on the counted, locked path.
+## With AIL_GC_VERIFY they stay empty (`alloc_slow` never fills them), so
+## every allocation takes the counted, locked path.
 fn tb_init()
     t := sys_mmap((MAXW + 1) * TB_SIZE)
     if t < 0
         fail(1, 0, 0)
-    lim := if hs(26) == 0 then TB_NOLIMIT else 0
-    for k in 0..MAXW + 1
-        store64(t + k * TB_SIZE + 8 * H_FASTLIM, lim)
     hset(H_TBLK, t)
     hset(H_FASTLIM, 0)
 
