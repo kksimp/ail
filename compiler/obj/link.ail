@@ -7,14 +7,14 @@ use codegen
 pub fn link(img codegen.Image, code int, data int, bss int) List[u8]
     mut out := img.code
     for r in img.relocs
-        patch(mut out, r, address(img, r.sym, code, data, bss), code + r.at)
+        link_reloc(mut out, r, address(img, r.sym, code, data, bss), code + r.at)
     out
 
 ## Patch relocation `r` in `out`: `to` is the symbol's address and `pc` the
 ## address of the patched word, in the same address space (an RVA works for
 ## a PE image, whose base is page aligned). Shared by every object writer
 ## (ADR 0968).
-pub fn patch(mut out List[u8], r codegen.Reloc, to int, pc int)
+pub fn link_reloc(mut out List[u8], r codegen.Reloc, to int, pc int)
     mut w := read32(out, r.at)
     match r.kind
         "rel32" => w = to + signed32(w) - (pc + 4 + r.tail)
