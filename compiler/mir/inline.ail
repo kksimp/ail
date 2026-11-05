@@ -27,7 +27,6 @@ pub fn inline_module(mut out Module)
     for f in out.funcs
         if wide.sizes.contains(f.name)
             bodies[f.name] = f
-    mut left := wide_allowance(out)
     reserve := by_name.contains("rt.list_reserve")
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
@@ -38,7 +37,7 @@ pub fn inline_module(mut out Module)
             expand_allocating(mut out)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
-        budget := expand_wide(mut f, leaves, wide, bodies, mut out.sites, mut left)
+        budget := expand_wide(mut f, leaves, wide, bodies, mut out.sites)
         unrolled := unroll_self(mut f, mut out.sites)
         mut scalar := false
         if not f.name.starts_with("rt.") and not opt_off("sroa")

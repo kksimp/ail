@@ -3,11 +3,12 @@
 ## call graph, within a size budget. A function with one call in the whole
 ## program goes inline there up to `SINGLE_LIMIT` instructions when that
 ## call is inside a loop of the caller (a hot site): the copy replaces the
-## only use, and the function is dropped. Any other goes up to `WIDE_LIMIT`,
-## also only at a hot site. A call made once (`size()` at the top of `main`)
-## gains nothing copied, and measured slower (collatz, sieve +7%).
-## Those copies may grow a caller by at most its own size (2x) and
-## `CALLER_GROWTH`, and the program by at most `PROGRAM_GROWTH` percent. A
+## only use, and the function is dropped. A call made once (`size()` at the
+## top of `main`) gains nothing copied, and measured slower (collatz, sieve
+## +7%). Any other goes up to `WIDE_LIMIT` at any call, and those copies may
+## grow a caller by at most `CALLER_GROWTH`. Copying those only at hot sites,
+## with a cap on the program's growth, kept a smaller compiler but lost most
+## of the speed (lzr -2.6% against -8.3%, wordfreq 0 against -17%). A
 ## function on a cycle of the call graph never goes (its body could copy
 ## itself without end), nor one with a loop (measured slower copied). The
 ## calls a copy brings with it keep the frames they stand for (trace.frame.2).
@@ -21,9 +22,6 @@ WIDE_LIMIT := 12
 
 ## How many instructions one caller may grow by through these copies.
 CALLER_GROWTH := 200
-
-## How much, in percent of its instructions, the program may grow by them.
-PROGRAM_GROWTH := 10
 
 ## The candidates: each one's instruction count, and those called from one
 ## place (whose copy replaces the call).
@@ -65,14 +63,6 @@ pub fn wide_candidates(m Module, leaves Set[str]) Wide
                 out.single.add(f.name)
     out
 
-## The instructions the program may grow by through wide copies.
-pub fn wide_allowance(m Module) int
-    mut n := 0
-    for f in m.funcs
-        for blk in f.blocks
-            n += blk.insts.len()
-    n * PROGRAM_GROWTH / 100
-
 ## A function's instruction count, or -1 when it may not be copied: the
 ## runtime's own functions and `main`, an indirect call, a primitive that
 ## reads its own frame or makes a thread, a jump back to its entry, or a loop.
@@ -98,23 +88,19 @@ fn frame_prim(name str) bool
         _ => false
 
 ## Inline the calls of `f` that name a function in `leaves`, or in `wide`
-## under the cost model, at a hot call (in a loop of `f`): the one call of a
-## single-call function, written in `f` itself, or any other while `f` may
-## still grow and `left`, the program's allowance, lasts. At most `INLINE_BUDGET` calls;
-## returns the call budget left.
+## under the cost model: the one call of a single-call function, written in
+## `f` itself at a hot call (in a loop of `f`), or any other call while `f`
+## may still grow. At most `INLINE_BUDGET` calls; returns the call budget
+## left.
 fn expand_wide(
     mut f Func,
     leaves Set[str],
     wide Wide,
     bodies Map[str, Func],
     mut sites List[Site],
-    mut left int,
 ) int
     mut budget := INLINE_BUDGET
-    mut size := 0
-    for blk in f.blocks
-        size += blk.insts.len()
-    mut room := CALLER_GROWTH.min(size)
+    mut room := CALLER_GROWTH
     mut hot := [false for _ in 0..f.blocks.len()]
     if calls_wide(f, wide)
         for lp in find_loops(f)
@@ -125,7 +111,7 @@ fn expand_wide(
     while changed and budget > 0
         changed = false
         for b in 0..f.blocks.len()
-            at := first_wide_call(f.blocks[b], leaves, wide, f.name, room.min(left), hot[b], sites)
+            at := first_wide_call(f.blocks[b], leaves, wide, f.name, room, hot[b], sites)
             if at >= 0
                 name := f.blocks[b].insts[at].name
                 before := f.blocks.len()
@@ -136,20 +122,19 @@ fn expand_wide(
                 if n := wide.sizes.get(name)
                     if not wide.single.contains(name)
                         room -= n
-                        left -= n
                 budget -= 1
                 changed = true
                 break
     budget
 
-## Whether `f` calls a candidate, which only a hot site takes (finding the
-## loops costs a dominator tree, so only then).
+## Whether `f` calls a single-call candidate, which only a hot site takes
+## (finding the loops costs a dominator tree, so only then).
 fn calls_wide(f Func, wide Wide) bool
     if f.name.starts_with("rt.")
         return false
     for blk in f.blocks
         for i in blk.insts
-            if i.op == "call" and wide.sizes.contains(i.name)
+            if i.op == "call" and wide.single.contains(i.name)
                 return true
     false
 
@@ -173,7 +158,7 @@ fn first_wide_call(
                 written := i.site < 0 or sites[i.site].from < 0
                 if wide.single.contains(i.name) and written and hot
                     return k
-                if hot and n <= WIDE_LIMIT and n <= room
+                if n <= WIDE_LIMIT and n <= room
                     return k
     -1
 
