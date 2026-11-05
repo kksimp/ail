@@ -305,10 +305,27 @@ fn alloc_raw(n int, kind int) int
                 store64(c, kind + n.shl(16))
                 return c + 8
         elif load64(global(MULTI)) != 0
-            # With threads `H_FASTLIM` is 0 and the thread's cache serves
-            # (ADR 0943). A call whose result is returned at once keeps no
-            # value live across it, so one thread saves no registers for it.
-            return tb_fast(n, kind, 0)
+            # With threads `H_FASTLIM` is 0 and the running thread's cache
+            # serves, with no lock and no counting (ADR 0943). The slot is
+            # worked out here, with no call, so neither path holds values
+            # across one; Windows finds it from the thread id (`tb_fast`).
+            if target() == 3
+                return tb_fast(n, kind, 0)
+            d := sp() - load64(global(STACKS))
+            mut k := 0
+            if d >= 0 and d < MAXW * STACK_SZ
+                k = d.shr(23) + 1
+            t := load64(m + 8 * H_TBLK) + k * TB_SIZE + idx.shl(3)
+            b := load64(t + 8 * H_HEADS)
+            if b != 0
+                store64(t + 8 * H_HEADS, load64(b + 8))
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(t + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+                store64(t + 8 * H_BUMP, c + csz)
+                store64(c, kind + n.shl(16))
+                return c + 8
     alloc_slow(n, kind, 0)
 
 ## The common case, a small object served from a free list or the page being
@@ -341,7 +358,31 @@ fn alloc_z(n int, kind int, zero int) int
                 store64(c, kind + n.shl(16))
                 return c + 8
         elif load64(global(MULTI)) != 0
-            return tb_fast(n, kind, zero)
+            # With threads `H_FASTLIM` is 0 and the running thread's cache
+            # serves, with no lock and no counting (ADR 0943). The slot is
+            # worked out here, with no call, so neither path holds values
+            # across one; Windows finds it from the thread id (`tb_fast`).
+            if target() == 3
+                return tb_fast(n, kind, zero)
+            d := sp() - load64(global(STACKS))
+            mut k := 0
+            if d >= 0 and d < MAXW * STACK_SZ
+                k = d.shr(23) + 1
+            t := load64(m + 8 * H_TBLK) + k * TB_SIZE + idx.shl(3)
+            b := load64(t + 8 * H_HEADS)
+            if b != 0
+                store64(t + 8 * H_HEADS, load64(b + 8))
+                if zero != 0
+                    zero_words(b + 8, csz - 8)
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(t + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+                store64(t + 8 * H_BUMP, c + csz)
+                if zero != 0 and load64(t + 8 * H_DIRTY) != 0
+                    zero_words(c + 8, csz - 8)
+                store64(c, kind + n.shl(16))
+                return c + 8
     alloc_slow(n, kind, zero)
 
 ## `alloc_z` for everything the fast path does not take: large objects, a
@@ -415,9 +456,9 @@ fn heap_tb(m int) int
             k = d.shr(23) + 1
     load64(m + 8 * H_TBLK) + k * TB_SIZE
 
-## The fast path with threads: a block from the running thread's cache, with
-## no lock and no counting (its blocks were counted when it was filled), or
-## `alloc_slow` to refill it. `n` is at most 232.
+## The threaded fast path on Windows, where the slot comes from the thread id
+## (`heap_tb`): a block from the running thread's cache, or `alloc_slow` to
+## refill it. `n` is at most 232.
 fn tb_fast(n int, kind int, zero int) int
     idx := (n + 23).shr(4)
     csz := idx.shl(4)
