@@ -763,6 +763,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
 | [0945](0945-vector-escape-loops.md) | Native: vector kernel for escape-time loops, mandelbrot-style (ADR 0845 stage 2) *(delegated)* | Accepted | 2026-11-05 |
+| [0946](0946-adaptive-thread-pool.md) | Native: a pool sized to every core (up to 64), and each region uses the workers its work repays *(delegated)* | Accepted | 2026-11-05 |
 | [0949](0949-std-audio.md) | std.audio: sound as data, devices through a host program *(delegated)* | Accepted | 2026-11-05 |
 | [0954](0954-const-generics.md) | Const generics: `int` parameters on types and functions (`struct Vec[T, N int]`), by monomorphisation *(delegated)* | Proposed | 2026-11-05 |
 | [0955](0955-custom-hash-names-fields.md) | Custom hashing: `impl Hash` names the fields that take part (amends 0133, resolves OQ-042) | Accepted | 2026-11-05 |

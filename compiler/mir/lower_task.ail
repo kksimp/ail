@@ -619,7 +619,7 @@ fn Lower.lower_par_for(
         key := lookup(plan.accs[a]) else continue
         at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
         prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
-    grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi], Ty.Int)
+    grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi, weight], Ty.Int)
     waited := call("rt.par_wait", [grp], Ty.Bool)
     if plan.atomic
         broke := new_block()

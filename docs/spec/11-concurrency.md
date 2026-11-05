@@ -526,8 +526,9 @@ captured list, a field of `self`, and so on), prints
 when the program is built, and `ail check` warns the same way. The result is the sequential one. A loop the compiler chose
 says nothing. *(ADR 0911)*
 
-**conc.par.9** — The pool has one thread per hardware thread, at most 8,
-unless the environment variable `AIL_THREADS` sets the number. With one
+**conc.par.9** — The pool has at most one thread per hardware thread, up to 64,
+unless the environment variable `AIL_THREADS` sets the number. A region
+uses only as many of them as its work repays (`conc.par.17`). With one
 thread, or under `--deterministic`, every loop and task runs as if there
 were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
 how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
@@ -544,6 +545,16 @@ in such a run has a second copy for the calls made in order, which never forks; 
 traps are the same. `AIL_PARALLEL=0` and
 `--deterministic` run the calls one after the other. `ail effects --parallel` lists the runs
 that qualify. *(ADR 0914)*
+
+**conc.par.17** — The native pool is sized to the machine, not to a fixed
+number: up to 64 threads, one per hardware thread. A parallel loop or tensor
+kernel uses one worker per 65536 operations of its work (the cost model of
+`conc.par.14`), at least 2 and at most the pool's size, split into four
+chunks per worker, so a loop that scales runs on 16 cores rather than 8 and a
+small one stays on few. `AIL_THREADS` still sets the pool's size. With
+`AIL_PAR_LOG` set, each region prints `par: N iterations of about W operations
+-> K of T workers, C chunks (conc.par.17)` on standard error. Results never
+depend on the number of workers (`conc.par.1`). *(ADR 0946)*
 
 **conc.par.16** — A loop *builds* an outer list `out` when the only mention of
 `out` in its body is one statement `out.push(e)` at the top of the body (not
