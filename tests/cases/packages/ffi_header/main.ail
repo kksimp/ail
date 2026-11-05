@@ -1,0 +1,12 @@
+use std.mem
+
+use c "mylib.h" as lib
+
+fn main()
+    unsafe
+        p := mem.cstr("1234 apples")
+        print(lib.abs(-5))
+        print(lib.hypot(3.0, 4.0))
+        print(lib.toupper(97))
+        print(lib.atoi(p))
+        mem.free(p)

@@ -1,0 +1,4 @@
+use c "no_such_header_xyz.h" as lib
+
+fn main()
+    print("hi")

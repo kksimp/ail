@@ -2,17 +2,28 @@
 
 Chapter key: `ffi`
 
-> **Status:** Drafted (partial). Specified and implemented in the bootstrap
-> interpreter: `extern c fn` declarations, the type mapping, loading, and
-> calls on Linux and macOS. Specified, not built: `use c "header.h"`
-> (`ffi.decl.1`). Not yet specified: callbacks, exporting AIL functions to C,
+> **Status:** Drafted (partial). Specified and implemented: `extern c fn`
+> declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926), the
+> type mapping, loading, and calls on Linux, macOS and Windows. Not yet specified: callbacks, exporting AIL functions to C,
 > structs by value, variadic functions, and header search configuration.
 
 ## Declarations
 
 **ffi.decl.1** — `use c "header.h" as name` makes the C declarations of
 `header.h` available under `name`. The header is parsed by the
-implementation's own C header parser. *(ADR 0103)*
+implementation's own C header parser. *(ADR 0103, ADR 0926)*
+
+The header is found beside the file that imports it, else in the system's
+include directories; a header that is not found is error `ffi.decl.1`. Only
+the header's own text is read: `#include` is not followed and no `#if` or
+macro is evaluated. Each function prototype whose types `ffi.decl.3` allows
+becomes `extern c fn name(...)` under `name`, with `char` as `u8` behind a
+pointer and `i8` otherwise, `int` as `i32`, `long` as `i64` (`i32` on
+Windows), `double` as `float`, `float` as `f32`, `size_t` as `u64`, and any
+pointer to a type that is not a scalar as `*u8`. A prototype the FFI cannot
+carry (variadic, a struct by value, a function-pointer parameter, too many
+register arguments) is left out, and using its name is the ordinary
+`mod.use.2` error. Calling a declaration is unsafe (`ffi.call.1`).
 
 **ffi.decl.2** — `extern c fn name(params) Result` declares one C function;
 `extern c "lib" fn name(params) Result` names the library it lives in. The
@@ -236,10 +247,26 @@ fn main()
         print(GetTickCount())
 ```
 
-```ail skip=bootstrap rules=ffi.decl.1
-use c "stdlib.h" as libc
+```c
+/* mylib.h */
+int abs(int x);
+int toupper(int c);
+double hypot(double a, double b);
+int printf(const char *format, ...);   /* left out: variadic */
+```
+
+```ail tool=run,DIR pkg=ffi_header expect=5.0 rules=ffi.decl.1
+use c "mylib.h" as lib
 
 fn main()
     unsafe
-        print(libc.abs(-5))
+        print(lib.abs(-5))
+        print(lib.hypot(3.0, 4.0))
+```
+
+```ail tool=check,DIR pkg=ffi_header_missing status=2 expect=ffi.decl.1 rules=ffi.decl.1
+use c "no_such_header.h" as lib
+
+fn main()
+    print("hi")
 ```

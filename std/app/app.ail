@@ -1,4 +1,4 @@
-## std.app (spec std.app.1-12, ADR 0838): an app is a struct that
+## std.app (spec std.app.1-19, ADR 0838): an app is a struct that
 ## implements `App`. `view` returns a tree of `Node`s, `update` receives an
 ## `Event`. A host program draws the tree with native controls and sends events
 ## back over standard input and output as JSON lines (std.app.8-10). Without a
@@ -29,6 +29,8 @@ pub enum Op
     ## `R, G, B, A` bytes in standard base64; the host keeps the image under
     ## `id`, so an empty `data` draws the image already sent under that `id`.
     Bitmap(x float, y float, w float, h float, id str, pw int, ph int, data str)
+    ## A rectangle filled with opacity `alpha`, 0 to 1 (std.app.19).
+    Shade(x float, y float, w float, h float, color int, alpha float)
     ## Limits later steps to a rectangle, until the matching `Unclip`.
     Clip(x float, y float, w float, h float)
     Unclip
@@ -120,6 +122,15 @@ impl ToJson for Op
                     member("ph", Json.Num(ph.to_float())),
                     member("data", txt(data)),
                 ])
+            Shade(x, y, w, h, color, alpha) =>
+                tagged("Shade", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("w", num(w)),
+                    member("h", num(h)),
+                    member("color", Json.Num(color.to_float())),
+                    member("alpha", num(alpha)),
+                ])
             Clip(x, y, w, h) =>
                 tagged("Clip", [
                     member("x", num(x)),
@@ -161,7 +172,7 @@ impl ToJson for Node
             ])
 
 ## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
-## `click`, `scroll`, `key`, `resize`, `close` or `external` (std.app.14); the other
+## `click`, `scroll`, `key`, `resize`, `close`, `external` (std.app.14), `move`, `leave` (std.app.16) or `popup` (std.app.18); the other
 ## fields are zero or empty when they don't apply.
 pub struct Event
     pub kind str
@@ -183,6 +194,8 @@ pub struct Event
     pub alt bool
     pub shift bool
     pub meta bool
+    ## For `click`: 1, 2 or 3 (std.app.17); 0 for other kinds.
+    pub clicks int
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono` or `sans`.
@@ -192,6 +205,34 @@ pub struct Measure
     pub size float
     pub bold bool
     pub italic bool
+
+## A native menu the app asks for at a point of a canvas (std.app.18).
+pub struct Popup
+    pub id str
+    pub x float
+    pub y float
+    pub items List[str]
+
+## Progress of a long job (std.app.15): `total` is 0 when unknown.
+pub struct Progress
+    pub done int
+    pub total int
+    pub note str
+
+## A `progress` event from `source`, for `Inbox.post` (std.app.15).
+pub fn progress(source str, p Progress) Event
+    external(source, "progress|{p.done}|{p.total}|{p.note}")
+
+## The progress an event carries, or `none` for any other event (std.app.15).
+pub fn progress_of(ev Event) Progress?
+    if ev.kind != "external" or not ev.text.starts_with("progress|")
+        return none
+    parts := ev.text.split("|", 4)
+    if parts.len() < 4
+        return none
+    done := parts[1].to_int()?
+    total := parts[2].to_int()?
+    Progress(done: done, total: total, note: parts[3])
 
 ## Why an app couldn't run (std.app.9): `no_host`, `start`, `version` or
 ## `host_exited`.
@@ -264,6 +305,7 @@ pub fn event(kind str) Event
         dy: 0.0,
         cell_w: 0.0,
         cell_h: 0.0,
+        clicks: 0,
         ctrl: false,
         alt: false,
         shift: false,
@@ -329,6 +371,12 @@ pub trait App
     ## The widths of `runs`, in points, as the host measured them.
     fn measured(mut self, runs List[Measure], widths List[float])
         return
+    ## Whether the app wants `move` and `leave` events from canvases (std.app.16).
+    fn hover(self) bool
+        false
+    ## A native menu to show; the host answers with a `popup` event (std.app.18).
+    fn popup(self) Popup?
+        none
 
 fn indent(depth int) str
     "  ".repeat(depth)
@@ -377,6 +425,7 @@ fn op_text(op Op) str
         Stroke(x1, y1, x2, y2, color, width) => "stroke {x1},{y1} {x2},{y2} {width}"
         Pic(x, y, w, h, src) => "pic {x},{y} {w}x{h} {src}"
         Bitmap(x, y, w, h, id, pw, ph, _) => "bitmap {x},{y} {w}x{h} {id} {pw}x{ph}"
+        Shade(x, y, w, h, color, alpha) => "shade {x},{y} {w}x{h} {color.to_hex()} {alpha}"
         Clip(x, y, w, h) => "clip {x},{y} {w}x{h}"
         Unclip => "unclip"
 
@@ -402,13 +451,15 @@ pub fn event_from_json(j Json) Event
         alt: j.flag("alt", false),
         shift: j.flag("shift", false),
         meta: j.flag("meta", false),
+        clicks: (j.num("clicks") else 0.0).to_int(),
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.
 pub fn frame[T App](a T) str
     title := a.title().to_json().to_text()
     focus := a.focus().to_json().to_text()
-    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus},\"tree\":{a.view().to_json().to_text()}}"
+    hov := if a.hover() then ",\"hover\":true" else ""
+    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus}{hov},\"tree\":{a.view().to_json().to_text()}}"
 
 ## Feeds each event to `a` in order, with no host (std.app.11), and returns
 ## the outline after each one: a test of `update` and `view`.
@@ -465,6 +516,7 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
     mut c := proc.start(cmd, args) else err
         return AppError(kind: "start", message: "{err}")
     mut sent := frame(a)
+    mut shown := a.popup()
     c.stdin.send("{sent}\n")
     hello := c.out.recv() else return gone(move c)
     j := parse_json(hello) else return mismatch(move c, hello)
@@ -504,6 +556,12 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
                 break
             a.measured(want, widths)
             rounds += 1
+        # std.app.18: show a menu once per change of the app's request.
+        want_menu := a.popup()
+        if want_menu != shown
+            if m := want_menu
+                c.stdin.send("{popup_line(m)}\n")
+            shown = want_menu
         now := frame(a)
         if now != sent
             c.stdin.send("{now}\n")
@@ -539,6 +597,18 @@ fn measure_line(runs List[Measure]) str
         for r in runs
     ]
     "\{\"v\":1,\"t\":\"measure\",\"runs\":{Json.Arr(items).to_text()}}"
+
+## The request for a native menu (std.app.18).
+fn popup_line(p Popup) str
+    j := Json.Obj([
+        member("v", num(1.0)),
+        member("t", txt("popup")),
+        member("id", txt(p.id)),
+        member("x", num(p.x)),
+        member("y", num(p.y)),
+        member("items", Json.Arr([txt(i) for i in p.items])),
+    ])
+    j.to_text()
 
 fn gone(move c proc.Child) ! AppError
     status := proc.kill(move c)

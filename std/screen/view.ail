@@ -18,13 +18,23 @@ fn text_w(s str, size float) float
     s.chars().len().to_float() * size * 0.6
 
 ## The items of canvas ops `ops`, moved by (`ox`, `oy`), in paint order
-## (std.screen.12): fills are `box`, strings `text`, pictures and bitmaps
+## (std.screen.12): fills and shades are `box`, strings `text`, pictures and bitmaps
 ## `image`, strokes `line`.
 pub fn of_ops(ops List[app.Op], ox float, oy float) List[screen.Item]
     mut out := List[screen.Item]()
     for op in ops
         match op
             Fill(x, y, w, h, c) => out.push(screen.item(
+                2000000 + hash("{x}{y}{w}{h}"),
+                "box",
+                "",
+                c,
+                ox + x,
+                oy + y,
+                w,
+                h,
+            ))
+            Shade(x, y, w, h, c, _) => out.push(screen.item(
                 2000000 + hash("{x}{y}{w}{h}"),
                 "box",
                 "",

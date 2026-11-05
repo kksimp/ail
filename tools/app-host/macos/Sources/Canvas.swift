@@ -46,7 +46,10 @@ struct CanvasRep: NSViewRepresentable {
 }
 
 final class CanvasView: NSView {
-    var canvasId = ""
+    /// Canvases by id, so a `popup` (std.app.18) finds the view to show its menu in.
+    static var registry: [String: CanvasView] = [:]
+    var canvasId = "" { didSet { CanvasView.registry[canvasId] = self } }
+    private var lastMove = Date.distantPast
     var ops: [Op] = []
     private var reported = CGSize.zero
 
@@ -101,6 +104,10 @@ final class CanvasView: NSView {
                     NSColor.quaternaryLabelColor.setFill()
                     r.fill()
                 }
+            case let .shade(x, y, w, h, c, a):
+                // std.app.19: a fill with opacity `a`, clamped to 0...1.
+                color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1))).setFill()
+                NSRect(x: x, y: y, width: w, height: h).fill(using: .sourceOver)
             case let .clip(x, y, w, h):
                 g.saveGState()
                 g.clip(to: CGRect(x: x, y: y, width: w, height: h))
@@ -129,7 +136,27 @@ final class CanvasView: NSView {
         f["x"] = p.x
         f["y"] = p.y
         f["text"] = button
+        f["clicks"] = min(max(e.clickCount, 1), 3)
         Outbox.shared.send("click", f)
+    }
+
+    // std.app.16: pointer position, at most once per 16 ms, only while the program asks.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with e: NSEvent) {
+        guard Hover.enabled, Date().timeIntervalSince(lastMove) >= 0.016 else { return }
+        lastMove = Date()
+        let p = convert(e.locationInWindow, from: nil)
+        Outbox.shared.send("move", ["id": canvasId, "x": p.x, "y": p.y])
+    }
+
+    override func mouseExited(with e: NSEvent) {
+        if Hover.enabled { Outbox.shared.send("leave", ["id": canvasId]) }
     }
 
     override func scrollWheel(with e: NSEvent) {
