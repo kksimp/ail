@@ -114,7 +114,16 @@ pub fn next_input(prev Input, events List[app.Event]) Input
                 buttons = 1
         elif ev.kind == "scroll"
             wheel = wheel + ev.dy
-    Input(held, went_down, went_up, typed, x, y, buttons, wheel)
+    Input(
+        down: held,
+        pressed: went_down,
+        released: went_up,
+        text: typed,
+        x: x,
+        y: y,
+        buttons: buttons,
+        wheel: wheel,
+    )
 
 ## One command as a line of text (std.gfx.5).
 pub fn cmd_text(c Cmd) str
