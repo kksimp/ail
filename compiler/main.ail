@@ -27,6 +27,7 @@ use api
 use ast
 use attachcli
 use budget
+use cheader
 use check
 use doc
 use edit
@@ -545,6 +546,14 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             if parts.len() == 0
                 continue
             imp := parts.join(".")
+            if cheader.is_use(parts)
+                # `use c "header.h" as name` (ffi.decl.1, ADR 0926): the module is written from the header.
+                if loaded.contains(imp)
+                    continue
+                loaded.add(imp)
+                if text := cheader.module_for(cheader.header_of(imp), cheader.dir_of(srcs[k].path))
+                    srcs.push(parse_text(imp, "<{imp}>", text))
+                continue
             if parts[0] == "std"
                 if loaded.contains(imp)
                     continue
@@ -584,7 +593,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
         for ui in 0..srcs[i].prog.uses.len()
             u := srcs[i].prog.uses[ui]
             parts := [x.name for x in u.path]
-            if parts.len() == 0 or parts[0] == "std"
+            if parts.len() == 0 or parts[0] == "std" or cheader.is_use(parts)
                 continue
             t := packages.target(srcs[i].module, parts)
             if t.module == parts.join(".") or t.undeclared
@@ -673,7 +682,10 @@ fn proven_loop_keys(file str, std str) Set[str]
 ## `ail build` makes before it adds the embedded prelude.
 fn mentions_prelude(srcs List[mir.Source]) bool
     for s in srcs
-        if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
+        if s.text.contains("json")
+            or s.text.contains("Json")
+            or s.text.contains("Default")
+            or s.text.contains("Grid")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
         if s.text.contains("@derive")

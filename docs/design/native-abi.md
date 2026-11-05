@@ -148,7 +148,13 @@ it holds (a generated `copy.T` function); fields change in place.
 +64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
 +72  u64  lastkey the last key found or added
 +80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
++88  u64  misskey the last key a probe missed (ADR 0936)
++96  u64  misshash its hash, reused by the insert that follows
++104 ptr  kcache  `str` keys only: 32 entry addresses, slot by key object address
 ```
+
+A `str`-keyed table is 360 bytes, others 104. A key cache slot counts only
+when its entry still holds that very string object (ADR 0936).
 
 The entry array is in insertion order, which is iteration order
 (type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
@@ -541,7 +547,7 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
   `ldar`, `stlr`, `swpal`, `ldaddal`, `casal` (LSE). Always sequentially
   consistent.
 - **Globals** 16–24: `TASKS` (the pool block), `MULTI` (1 once the pool
-  exists: `alloc` then takes `ALLOC_LOCK`), `ALLOC_LOCK`, `OUT_LOCK`,
+  exists: `alloc` then uses the thread's cache and takes `ALLOC_LOCK` only to refill it), `ALLOC_LOCK`, `OUT_LOCK`,
   `OUT_OWNER` and `OUT_DEPTH` (the reentrant output lock), `STACKS`. The image
   has 72 slots (64–71 are unused scratch slots, which `tests/native/driver/mem_write_read` writes).
 - **Task record** (8-byte words): 0 state (0 queued or running, 2 done,
@@ -555,7 +561,7 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
   word idle workers sleep on, live, blocked and idle counts, the target, and
   the task each worker runs.
 - **Atomic cell:** 8 bytes, heap kind 11.
-- **Allocation fast path under threads:** the fast path tests against heap state word 24 (`H_FASTLIM`), which equals the collection threshold while there is one thread and is 0 once the pool exists, so every allocation then takes the locked path with no extra test.
+- **Allocation under threads ([ADR 0943](../decisions/0943-per-thread-allocation-caches.md)):** once the pool exists each thread slot has an allocation cache (heap state word 280 points at them, 1536 bytes each, laid out like the state block's per-class words: free-list heads, bump page, end, dirty flag, plus a three-word mark stack at words 8-10). `H_FASTLIM` is 0 then, so the fast path's limit test fails into a second branch that serves the running thread's cache (its slot from the stack pointer: workers' stacks lie in `STACKS`) with no lock and no counting; one thread never reaches that branch. `alloc_slow` refills a class under `ALLOC_LOCK`: about 4 KiB of the shared free list, else the shared page being filled, else a new page, and counts it toward the next collection then. A collection empties every cache first (`tb_flush`, clearing the headers of blocks not yet handed out). With `AIL_GC_VERIFY` every allocation stays on the shared, locked path.
 - **Channel record** (`chan.ail`, heap kind 13; a `Channel[str]` is its
   address): 0 lock word, 1 capacity, 2 count, 3 head, 4 closed, 5 ring
   pointer (string pointers), 6 source (nonzero for a channel fed from outside:
@@ -567,9 +573,10 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
 every other thread is at a call; a worker in a loop that never allocates is
 not. As built, a threaded program works like this:
 
-1. Once the pool exists (`MULTI`), the allocator's fast path is off and
-   `alloc_slow` runs under `ALLOC_LOCK`. A collection starts inside it, so the
-   collector holds the lock and no other thread can allocate.
+1. Once the pool exists (`MULTI`), each thread allocates from its own cache
+   and `alloc_slow` refills it under `ALLOC_LOCK`. A collection starts inside
+   it, so the collector holds the lock and no other thread can refill; the
+   others are parked, never inside the fast path, since it has no safe point.
 2. `gc_stop_world` sets `GC_REQ` and waits until every other live thread has
    published a stack pointer (`P_PARK`). A thread publishes at each safe point:
    before any futex sleep (`futex_wait`, which saves the callee-saved registers
@@ -581,7 +588,15 @@ not. As built, a threaded program works like this:
    `STACKS`), the pool block (queued and running task records), each thread's
    text builder, and the globals. A thread that computes without reaching the
    runtime delays a collection, nothing else.
-4. `gc_start_world` clears `GC_REQ` and wakes the parked threads.
+4. On a heap of 32 MB or more the parked threads help mark
+   ([ADR 0944](../decisions/0944-parallel-gc-marking.md), `gc_par.ail`): the
+   collector sets `GC_REQ` to 2 and wakes them (idle workers through the
+   pool's `seq` word). Each marker moves a share of the shared mark stack to
+   its own, scans from it, and gives half back while the shared stack is
+   empty. Marking ends when the shared stack is empty and no marker holds work
+   (heap state words 281-284: lock, busy, done, joined). The collector sets
+   `GC_REQ` back to 1 and waits until every helper has left before it sweeps.
+5. `gc_start_world` clears `GC_REQ` and wakes the parked threads.
    `notask.ail` stubs all of it.
 
 Heap kinds: 11 (`KIND_ATOMIC`, no pointers) is an atomic cell; 12 is a task

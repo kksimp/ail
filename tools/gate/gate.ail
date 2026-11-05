@@ -638,7 +638,7 @@ fn Gate.cli_effects(mut self, tmp str)
         red("effects --parallel", "{p.out}{p.err}")
     pj := native_run(["effects", "--parallel", "--json", "examples/parallel.ail"]) else return
     if not pj.out.starts_with("\{\"ail_api\":1,\"loops\":[\{\"at\":\"examples/parallel.ail:32:5\"")
-        or pj.out.count("\"verdict\":\"parallel\"") != 2
+        or pj.out.count("\"verdict\":\"parallel\"") != 3
         red("effects --parallel --json", pj.out)
     # error_paths.rs, on cases/err_paths_ok.ail
     case := "tests/cases/err_paths_ok.ail"

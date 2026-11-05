@@ -1306,6 +1306,9 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             uniq_replace(key)
             write_var(key, cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
+            if g := grid_place(recv, index, ipos)
+                lower_assign_body(g, op, value, pos)
+                return
             if assign_after_rhs(target, op, value, pos)
                 return
             l := lower_value(recv, none) else return
