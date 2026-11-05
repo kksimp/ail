@@ -4,7 +4,7 @@ tests: 6 (`ail test` lists them)
 
 ## (root) (62 items)
 
-## a64 (80 items)
+## a64 (81 items)
 
 ## api (217 items)
 
@@ -38,7 +38,7 @@ tests: 6 (`ail test` lists them)
 
 ## mir (598 items)
 
-## obj (65 items)
+## obj (66 items)
 
 ## pkg (44 items)
 

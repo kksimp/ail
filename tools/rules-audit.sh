@@ -77,6 +77,7 @@ emitted = {}  # rule -> set of files that emit it as a literal
 sources = ([root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rglob("*.ail")) + list((root / "std").rglob("*.ail"))
            + list((root / "tools" / "ailtest").rglob("*.ail")) + list((root / "tools" / "ailtask").rglob("*.ail"))
            + list((root / "tools" / "ailmcp").rglob("*.ail"))
+           + list((root / "tools" / "ailsp").rglob("*.ail")) + list((root / "tools" / "ailsan").rglob("*.ail"))
            + list((root / "tools" / "verify").rglob("*.ail")) + list((root / "tools" / "shrink").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))

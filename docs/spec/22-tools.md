@@ -735,6 +735,51 @@ fn main()
     print(1)
 ```
 
+## Language server
+
+`ail lsp` serves the semantic API to any editor as a Language Server
+([ADR 0966](../decisions/0966-ail-lsp-language-server.md)). It runs the matching
+`ail` commands and reshapes their JSON; it has no analysis of its own.
+
+**lsp.proto.1** — The server speaks LSP 3.17 over standard input and output with `Content-Length` framing. It answers `initialize` with the capabilities `textDocumentSync` (open, close, full-text change, save), `hoverProvider`, `definitionProvider`, `referencesProvider` and `documentSymbolProvider`.
+
+**lsp.proto.2** — A request is answered; a notification is not. An unknown request is error -32601, text that isn't JSON is error -32700, an unknown notification is ignored. `shutdown` then `exit` ends the process with status 0, `exit` alone with status 1.
+
+**lsp.sync.1** — The server keeps the text of each open document. A change replaces the whole text.
+
+**lsp.sync.2** — A command sees unsaved text: when an open document differs from the file on disk, the server copies the `.ail` files of its directory to a scratch directory under the temporary directory, lays every open buffer of that directory over them, and runs the command there. Packages with subdirectories see the saved text of files outside the directory.
+
+**lsp.diag.1** — On open and on save the server publishes the diagnostics of `ail check --json` for that document. The rule id is the diagnostic's `code`, the source is `ail`, an error is severity 1 and a warning severity 2, and a `help` is appended to the message. Closing a document publishes an empty list.
+
+**lsp.hover.1** — Hover is `ail api --type`: the type under the cursor, then for a call the callee's signature and doc comment, as Markdown.
+
+**lsp.def.1** — Definition is the `def` entry of `ail api --refs`; references are all its entries. A use through a module resolves to the declaring file.
+
+**lsp.sym.1** — Document symbols are the `ail api --outline` items, nested: fields, variants and methods are children. `fn` is Function, `method` Method, `struct` Struct, `enum` Enum, `trait` Interface, `impl` Namespace, `const` Constant, `field` Field, `variant` EnumMember.
+
+**lsp.pos.1** — Positions are zero-based lines and characters; a character is one Unicode scalar (equal to a UTF-16 unit below U+10000).
+
+```ail tool=lsp rules=lsp.proto.1,lsp.proto.2,lsp.sync.1,lsp.sync.2,lsp.diag.1,lsp.hover.1,lsp.def.1,lsp.sym.1,lsp.pos.1
+fn main()
+    print(1)
+```
+
+## Sanitizers
+
+`ail sanitize` finds results that depend on the task schedule
+([ADR 0967](../decisions/0967-sanitizers.md)). Safe code cannot race (`conc.race.1`);
+a schedule-dependent result points at `unsafe` or FFI code, or at a missing `wait`. The memory
+checks of `unsafe.ptr.4-6` and `unsafe.mem.2` already trap, so they need no sanitizer mode.
+
+**san.sched.1** — `ail sanitize [--seeds N] [--tests] [--timeout MS] [--json] FILE [ARGS...]` runs `ail run FILE` (with `--tests`, `ail test FILE`) once with `--schedule=fixed` and then with `--schedule=random:SEED` for each seed 1 to N (default 8). A run whose exit status or standard output differs from the fixed run is a finding: a warning with the rule `san.sched.1`, the seed and the command that replays it. With `--json` each finding is one line `{"api":1,"severity":"warning","rule":"san.sched.1","file":...,"seed":...,"message":...,"replay":...}`, then a summary line with `seeds` and `schedule_dependent`.
+
+**san.sched.2** — The exit status is 0 when no run differs, 1 when one does, 2 for bad arguments. A run that can't start or exceeds `--timeout` (default 60000 ms) has status 124.
+
+```ail tool=sanitize,FILE expect=schedules rules=san.sched.1,san.sched.2
+fn main()
+    print(1)
+```
+
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
