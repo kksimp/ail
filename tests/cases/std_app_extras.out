@@ -1,0 +1,7 @@
+3/10 a|b
+true
+canvas #pad 0.0x0.0 ops=1
+  shade 0.0,0.0 4.0x4.0 0 0.5
+true
+2
+true

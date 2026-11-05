@@ -26,9 +26,14 @@ H_MARKN := 10
 H_NOFIT := 13
 H_REUSED := 12
 H_REGS := 14
-## The limit the allocation fast path tests against: `H_THRESH`, or 0 once the
-## process has threads, so every allocation takes the locked path (ADR 0599).
+## The limit the allocation fast path tests against: `H_THRESH` while the
+## process has one thread. Once it has threads this word is 0, and the fast
+## path falls to the running thread's cache (`H_TBLK`, ADR 0943).
 H_FASTLIM := 24
+## The threads' allocation caches, one `TB_SIZE` block per thread slot, made
+## by `pool` (ADR 0943). Words 281-284 are the parallel marker's
+## (`gc_par.ail`). Words 14-23 are taken: the collector saves registers there.
+H_TBLK := 280
 H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112
@@ -42,6 +47,14 @@ H_COMMIT := 300
 PAGE := 16448
 MAX_SMALL := 8192
 MIN_THRESH := 33554432
+## A thread's allocation cache: words laid out as the state block's
+## `H_HEADS`, `H_BUMP`, `H_BEND`, `H_DIRTY` (and
+## `H_MARKS` for its mark stack), so the fast path reads either one. 24 cache
+## lines, so two threads' caches never share one.
+TB_SIZE := 1536
+## About this many bytes of a class's shared free list move to a thread's
+## cache at a time.
+TB_TAKE := 4096
 
 # Page table tags (low byte): 0 free, 1 small page (bits 8-15 class, 16-31
 # block size, 32-63 reciprocal),
@@ -291,11 +304,34 @@ fn alloc_raw(n int, kind int) int
                 store64(m + 8 * H_ALLOCD, a)
                 store64(c, kind + n.shl(16))
                 return c + 8
+        elif load64(global(MULTI)) != 0
+            # With threads `H_FASTLIM` is 0 and the running thread's cache
+            # serves, with no lock and no counting (ADR 0943). The slot is
+            # worked out here, with no call, so neither path holds values
+            # across one; Windows finds it from the thread id (`tb_fast`).
+            if target() == 3
+                return tb_fast(n, kind, 0)
+            d := sp() - load64(global(STACKS))
+            mut k := 0
+            if d >= 0 and d < MAXW * STACK_SZ
+                k = d.shr(23) + 1
+            t := load64(m + 8 * H_TBLK) + k * TB_SIZE + idx.shl(3)
+            b := load64(t + 8 * H_HEADS)
+            if b != 0
+                store64(t + 8 * H_HEADS, load64(b + 8))
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(t + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+                store64(t + 8 * H_BUMP, c + csz)
+                store64(c, kind + n.shl(16))
+                return c + 8
     alloc_slow(n, kind, 0)
 
 ## The common case, a small object served from a free list or the page being
 ## filled while no collection or time check is due, is straight-line code
-## with no calls; everything else is `alloc_slow`.
+## with no calls; everything else is `alloc_slow`. With threads, the lists
+## and the page are the running thread's own (ADR 0943), so no lock is taken.
 fn alloc_z(n int, kind int, zero int) int
     if n <= 232 and load64(global(LIM_TICK)) == 0
         idx := (n + 23).shr(4)
@@ -321,18 +357,48 @@ fn alloc_z(n int, kind int, zero int) int
                     zero_words(c + 8, csz - 8)
                 store64(c, kind + n.shl(16))
                 return c + 8
+        elif load64(global(MULTI)) != 0
+            # With threads `H_FASTLIM` is 0 and the running thread's cache
+            # serves, with no lock and no counting (ADR 0943). The slot is
+            # worked out here, with no call, so neither path holds values
+            # across one; Windows finds it from the thread id (`tb_fast`).
+            if target() == 3
+                return tb_fast(n, kind, zero)
+            d := sp() - load64(global(STACKS))
+            mut k := 0
+            if d >= 0 and d < MAXW * STACK_SZ
+                k = d.shr(23) + 1
+            t := load64(m + 8 * H_TBLK) + k * TB_SIZE + idx.shl(3)
+            b := load64(t + 8 * H_HEADS)
+            if b != 0
+                store64(t + 8 * H_HEADS, load64(b + 8))
+                if zero != 0
+                    zero_words(b + 8, csz - 8)
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(t + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+                store64(t + 8 * H_BUMP, c + csz)
+                if zero != 0 and load64(t + 8 * H_DIRTY) != 0
+                    zero_words(c + 8, csz - 8)
+                store64(c, kind + n.shl(16))
+                return c + 8
     alloc_slow(n, kind, zero)
 
 ## `alloc_z` for everything the fast path does not take: large objects, a
 ## class with no block ready, a collection or time check due.
 fn alloc_slow(n int, kind int, zero int) int
-    # With threads, the heap's state is guarded by one lock; the fast path
-    # above is only for a single thread (ADR 0599).
+    # With threads, the shared heap state is guarded by one lock; each thread
+    # refills its own cache under it (ADR 0599, ADR 0943).
     if load64(global(MULTI)) == 0
         return alloc_locked(n, kind, zero)
     lock(global(ALLOC_LOCK))
     atomic_store(global(ALLOC_OWNER), thread_id())
-    p := alloc_locked(n, kind, zero)
+    mut p := 0
+    if (n + 23) / 16 * 16 > MAX_SMALL or hs(26) != 0
+        p = alloc_locked(n, kind, zero)
+    else
+        p = tb_alloc(n, kind, zero)
     atomic_store(global(ALLOC_OWNER), 0)
     unlock(global(ALLOC_LOCK))
     p
@@ -374,3 +440,148 @@ fn alloc_locked(n int, kind int, zero int) int
             zero_words(b + 8, csz - 8)
     store64(b, kind + n * 65536)
     b + 8
+
+# ---- per-thread caches (ADR 0943) ----
+
+## The running thread's allocation cache: slot 0 the main thread, `k + 1`
+## worker `k` (as `thread_slot`, computed here without a call on Linux and
+## macOS: a worker's stack lies in the `STACKS` region, `STACK_SZ` = 2^23).
+fn heap_tb(m int) int
+    mut k := 0
+    if target() == 3
+        k = win_worker_index() + 1
+    else
+        d := sp() - load64(global(STACKS))
+        if d >= 0 and d < MAXW * STACK_SZ
+            k = d.shr(23) + 1
+    load64(m + 8 * H_TBLK) + k * TB_SIZE
+
+## The threaded fast path on Windows, where the slot comes from the thread id
+## (`heap_tb`): a block from the running thread's cache, or `alloc_slow` to
+## refill it. `n` is at most 232.
+fn tb_fast(n int, kind int, zero int) int
+    idx := (n + 23).shr(4)
+    csz := idx.shl(4)
+    t := heap_tb(load64(global(HEAP))) + idx.shl(3)
+    b := load64(t + 8 * H_HEADS)
+    if b != 0
+        store64(t + 8 * H_HEADS, load64(b + 8))
+        if zero != 0
+            zero_words(b + 8, csz - 8)
+        store64(b, kind + n.shl(16))
+        return b + 8
+    c := load64(t + 8 * H_BUMP)
+    if c != 0 and c + csz <= load64(t + 8 * H_BEND)
+        store64(t + 8 * H_BUMP, c + csz)
+        if zero != 0 and load64(t + 8 * H_DIRTY) != 0
+            zero_words(c + 8, csz - 8)
+        store64(c, kind + n.shl(16))
+        return c + 8
+    alloc_slow(n, kind, zero)
+
+## Make the caches, before the process gets its second thread (`pool`).
+## With AIL_GC_VERIFY they stay empty (`alloc_slow` never fills them), so
+## every allocation takes the counted, locked path.
+fn tb_init()
+    t := sys_mmap((MAXW + 1) * TB_SIZE)
+    if t < 0
+        fail(1, 0, 0)
+    hset(H_TBLK, t)
+    hset(H_FASTLIM, 0)
+
+## A small object from this thread's cache, refilled first when the class has
+## nothing ready; the caller holds the allocation lock.
+fn tb_alloc(n int, kind int, zero int) int
+    tick := load64(global(LIM_TICK))
+    if tick != 0
+        limits_tick(tick)
+    idx := class_of((n + 23) / 16 * 16)
+    csz := class_size(idx)
+    m := heap_state()
+    s := heap_tb(m) + 8 * idx
+    # A refill may collect, which empties every cache: look again after it.
+    while not tb_ready(s, csz)
+        tb_refill(m, s, idx, csz)
+    mut b := load64(s + 8 * H_HEADS)
+    if b != 0
+        store64(s + 8 * H_HEADS, load64(b + 8))
+        if zero != 0
+            zero_words(b + 8, csz - 8)
+    else
+        b = load64(s + 8 * H_BUMP)
+        store64(s + 8 * H_BUMP, b + csz)
+        if zero != 0 and load64(s + 8 * H_DIRTY) != 0
+            zero_words(b + 8, csz - 8)
+    store64(b, kind + n * 65536)
+    b + 8
+
+## Whether the cache's class words at `s` hold a block of `csz` bytes.
+fn tb_ready(s int, csz int) bool
+    if load64(s + 8 * H_HEADS) != 0
+        return true
+    b := load64(s + 8 * H_BUMP)
+    b != 0 and b + csz <= load64(s + 8 * H_BEND)
+
+## Give class `idx` of the cache whose class words are at `s` some blocks: a
+## run of the shared free list, else the shared page being filled, else a new
+## page. The blocks are counted toward the next collection as they move.
+fn tb_refill(m int, s int, idx int, csz int)
+    g := m + 8 * idx
+    head := load64(g + 8 * H_HEADS)
+    if head != 0
+        want := if csz < TB_TAKE then TB_TAKE / csz else 1
+        mut last := head
+        mut next := load64(head + 8)
+        mut k := 1
+        while k < want and next != 0
+            last = next
+            next = load64(next + 8)
+            k += 1
+        store64(g + 8 * H_HEADS, next)
+        store64(last + 8, 0)
+        store64(s + 8 * H_HEADS, head)
+        heap_account(k * csz)
+        return
+    gb := load64(g + 8 * H_BUMP)
+    ge := load64(g + 8 * H_BEND)
+    if gb != 0 and gb + csz <= ge
+        store64(g + 8 * H_BUMP, 0)
+        store64(g + 8 * H_BEND, 0)
+        store64(s + 8 * H_DIRTY, load64(g + 8 * H_DIRTY))
+        store64(s + 8 * H_BUMP, gb)
+        store64(s + 8 * H_BEND, ge)
+        heap_account(ge - gb)
+        return
+    b := heap_pages(1, 0)
+    first := (b - hs(H_BASE)) / PAGE
+    store64(
+        hs(H_PAGES) + 8 * first,
+        1 + idx * 256 + csz * 65536 + (4294967296 / csz + 1) * 4294967296,
+    )
+    store64(s + 8 * H_DIRTY, hs(H_REUSED))
+    store64(s + 8 * H_BUMP, b)
+    store64(s + 8 * H_BEND, b + PAGE / csz * csz)
+    heap_account(PAGE / csz * csz)
+
+## Before a collection marks (the world is stopped): every cache's blocks go
+## back to the heap. A block not yet handed out from a cache's page may hold
+## an old object's words, so its header is cleared; the sweep then chains it
+## with the other free blocks, and blocks on a cache's free list already have
+## a zero header.
+fn tb_flush()
+    if load64(global(MULTI)) == 0
+        return
+    t := hs(H_TBLK)
+    for k in 0..MAXW + 1
+        for c in 1..37
+            s := t + k * TB_SIZE + 8 * c
+            mut b := load64(s + 8 * H_BUMP)
+            e := load64(s + 8 * H_BEND)
+            if b != 0
+                csz := class_size(c)
+                while b < e
+                    store64(b, 0)
+                    b += csz
+            store64(s + 8 * H_HEADS, 0)
+            store64(s + 8 * H_BUMP, 0)
+            store64(s + 8 * H_BEND, 0)

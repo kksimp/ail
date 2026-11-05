@@ -311,7 +311,7 @@ subset yet (lane 174), so there is no native column; the runner reports it as
 
 ```
 $ ail effects --parallel examples/parallel.ail
-examples/parallel.ail:32:5 fn:main for _: sequential (conc.par.2: writes `rows`, which outlives the iteration at examples/parallel.ail:33:9)
+examples/parallel.ail:32:5 fn:main for _: parallel (conc.par.16: pushes one element per iteration to `rows`)
 examples/parallel.ail:34:5 fn:main for y: parallel (conc.par.3: writes only `rows[y]`)
 examples/parallel.ail:36:9 fn:main for x: sequential (conc.par.2: writes `line`, which outlives the iteration at examples/parallel.ail:39:13)
 examples/parallel.ail:41:5 fn:main for row: sequential (conc.par.2: has effect `io` via print)

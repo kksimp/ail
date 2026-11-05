@@ -1285,3 +1285,240 @@ fn str_float_opt(s str) int
     if parse_ok()
         return boxf(x)
     0
+
+# ---- fs.volume, fs.read_range, fs.trash (std.fs.24-26, ADRs 0928 and 0929) ----
+
+## Fail a call that has no arm on this target: kind `other`.
+fn os_unsupported(path str, at str)
+    os_fail_kind(K_OTHER)
+    os_error(path, K_OTHER, at)
+
+## `fs.volume(path)` (std.fs.24): an `fs.Volume` of `total` and `free` bytes.
+## `statfs`: Linux `f_bsize` at 8, `f_blocks` 16, `f_bavail` 32; macOS
+## `statfs64` (syscall 345) `f_bsize` (32 bits) at 0, `f_blocks` 8, `f_bavail` 24.
+## The Windows arm (GetDiskFreeSpaceExW) is not written yet: kind `other`.
+fn fs_volume(path str, at str) int
+    if target() == 3
+        os_unsupported(path, at)
+        return 0
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return 0
+    buf := os_scratch(OS_TMP)
+    mac := target() == 2
+    r := syscall(if mac then 345 else os_pick(137, 43, 0), p, buf, 0, 0, 0, 0)
+    if r < 0
+        os_fail_errno(r)
+        os_error(path, os_kind(), at)
+        return 0
+    bsize := if mac then load64(buf).bit_and(4294967295) else load64(buf + 8)
+    blocks := load64(buf + (if mac then 8 else 16))
+    avail := load64(buf + (if mac then 24 else 32))
+    v := obj_new(16, 4)
+    store64(v, blocks * bsize)
+    store64(v + 8, avail * bsize)
+    os_succeed()
+    v
+
+## `fs.read_range(path, offset, len)` (std.fs.25): up to `len` bytes from
+## `offset`; fewer at the end of the file, none past it.
+fn fs_read_range(path str, off int, len int, at str) str
+    if off < 0 or len < 0
+        flush()
+        out_str("trap[std.fs.25]: negative offset or length\n")
+        flush_to(2)
+        sys_exit(1)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return ""
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        os_error(path, os_kind(), at)
+        return ""
+    # Never allocate more than the file can give; a directory reports a huge
+    # size, and its read fails below with `is_dir`.
+    mut want := len
+    st := os_scratch(OS_TMP)
+    if os_fstat(fd, st) >= 0
+        size := load64(st + os_pick(48, 48, 72))
+        if size >= 0 and size < 1099511627776
+            want = if off >= size then 0 else (if len < size - off then len else size - off)
+    if want > 1073741824
+        want = 1073741824
+    mut s := str_new(want + 1, 0)
+    mut n := 0
+    mut r := 0
+    if want > 0 or off == 0
+        r = os_lseek(fd, off, 0)
+    while r >= 0 and n < want
+        r = os_read(fd, s + 16 + n, want - n)
+        if r == -4
+            r = 0
+            continue
+        if r <= 0
+            break
+        n += r
+    os_close(fd)
+    if r < 0
+        os_fail_errno(r)
+        os_error(path, os_kind(), at)
+        return ""
+    store64(s, n)
+    store64(s + 8, n)
+    os_succeed()
+    str_at(s)
+
+## The decimal digits of `n` (not negative), added to the string builder.
+fn os_sb_dec(n int, width int)
+    mut digits := 1
+    mut t := n / 10
+    while t > 0
+        digits += 1
+        t = t / 10
+    mut z := width - digits
+    while z > 0
+        sb_byte(48)
+        z -= 1
+    mut div := 1
+    for i in 1..digits
+        div = div * 10
+    while div > 0
+        sb_byte(48 + n / div % 10)
+        div = div / 10
+
+## The trash-info text of freedesktop.org: `Path` percent-encoded, then the
+## deletion time in UTC.
+fn os_trashinfo(abs str) str
+    sb_reset()
+    sb_text("[Trash Info]\nPath=")
+    n := abs.len()
+    for i in 0..n
+        b := load8(str_addr(abs) + 16 + i)
+        keep := (b >= 48 and b <= 57)
+            or (b >= 65 and b <= 90)
+            or (b >= 97 and b <= 122)
+            or b == 47
+            or b == 45
+            or b == 46
+            or b == 95
+            or b == 126
+        if keep
+            sb_byte(b)
+        else
+            sb_byte(37)
+            h := b / 16
+            l := b % 16
+            sb_byte(if h < 10 then 48 + h else 55 + h)
+            sb_byte(if l < 10 then 48 + l else 55 + l)
+    # Civil date from days since 1970 (Howard Hinnant's algorithm).
+    secs := time_now_ms() / 1000
+    days := secs / 86400
+    rem := secs % 86400
+    z := days + 719468
+    era := z / 146097
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d := doy - (153 * mp + 2) / 5 + 1
+    m := if mp < 10 then mp + 3 else mp - 9
+    y := yoe + era * 400 + (if m <= 2 then 1 else 0)
+    sb_text("\nDeletionDate=")
+    os_sb_dec(y, 4)
+    sb_byte(45)
+    os_sb_dec(m, 2)
+    sb_byte(45)
+    os_sb_dec(d, 2)
+    sb_byte(84)
+    os_sb_dec(rem / 3600, 2)
+    sb_byte(58)
+    os_sb_dec(rem % 3600 / 60, 2)
+    sb_byte(58)
+    os_sb_dec(rem % 60, 2)
+    sb_byte(10)
+    sb_str()
+
+## `name` or `name N` (N from 2) inside `dir`: the first that is free, with
+## `info` (when non-empty) free as `<that>.trashinfo` too.
+fn os_trash_name(dir str, info str, name str) str
+    mut n := 1
+    while n < 100000
+        sb_reset()
+        sb_text(name)
+        if n > 1
+            sb_byte(32)
+            os_sb_dec(n, 1)
+        leaf := sb_str()
+        full := path_join(dir, leaf)
+        a := os_cstr(OS_PATH_A, full)
+        mut taken := a != 0 and os_access(a) == 0
+        if not taken and info.len() > 0
+            sb_reset()
+            sb_text(leaf)
+            sb_text(".trashinfo")
+            b := os_cstr(OS_PATH_B, path_join(info, sb_str()))
+            taken = b != 0 and os_access(b) == 0
+        if not taken
+            return leaf
+        n += 1
+    name
+
+## `fs.trash(path)` (std.fs.26): move `path` into the user's trash, never
+## copying. macOS: `~/.Trash`. Linux: `$XDG_DATA_HOME/Trash` (default
+## `~/.local/share/Trash`) with a `.trashinfo`. A trash on another volume
+## makes the rename fail with kind `other`. Windows has no arm yet.
+fn os_fs_trash(path str)
+    if target() == 3
+        os_fail_kind(K_OTHER)
+        return
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0 or os_access(p) < 0
+        os_fail_kind(K_NOT_FOUND)
+        return
+    home := os_env_home()
+    if not os_ok()
+        os_fail_kind(K_OTHER)
+        return
+    mac := target() == 2
+    mut files := path_join(home, ".Trash")
+    mut info := ""
+    if not mac
+        xdg := os_env_get("XDG_DATA_HOME")
+        data := if os_ok() and xdg.len() > 0 then xdg else path_join(home, ".local/share")
+        files = path_join(path_join(data, "Trash"), "files")
+        info = path_join(path_join(data, "Trash"), "info")
+    os_fs_make_dir(files)
+    if not os_ok()
+        return
+    if info.len() > 0
+        os_fs_make_dir(info)
+        if not os_ok()
+            return
+    leaf := os_trash_name(files, info, path_base(path))
+    dest := path_join(files, leaf)
+    if info.len() == 0
+        os_fs_rename(path, dest)
+        return
+    abs := if str_starts_with(path, "/") then path else path_join(env_cwd(), path)
+    sb_reset()
+    sb_text(leaf)
+    sb_text(".trashinfo")
+    meta := path_join(info, sb_str())
+    os_fs_write_text(meta, os_trashinfo(abs))
+    if not os_ok()
+        return
+    os_fs_rename(path, dest)
+    if not os_ok()
+        k := os_kind()
+        os_fs_remove(meta)
+        os_fail_kind(k)
+
+fn fs_trash(path str, at str)
+    os_fs_trash(path)
+    if not os_ok()
+        os_error(path, os_kind(), at)

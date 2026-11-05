@@ -1,0 +1,37 @@
+# ADR 0943, ADR 0944: after a parallel loop starts the pool, each thread
+# allocates from its own cache, and a heap over 32 MB is marked by the parked
+# threads too. A large structure on the main thread stays alive across the
+# collections the workers set off; the main thread allocates after the loop.
+fn build(seed int, n int) List[List[int]]
+    mut rows := List[List[int]]()
+    for i in 0..n
+        mut r := List[int]()
+        for j in 0..8
+            r.push(seed * 1000 + i * 8 + j)
+        rows.push(r)
+    rows
+
+fn sum(rows List[List[int]]) int
+    mut t := 0
+    for r in rows
+        for x in r
+            t += x
+    t
+
+fn churn(seed int, rounds int) int
+    keep := build(seed, 2000)
+    mut total := 0
+    for r in 0..rounds
+        tmp := build(seed + r, 50)
+        total += tmp[49][7] - tmp[0][0]
+    total + sum(keep)
+
+fn main()
+    big := build(1, 300000)
+    mut sums := [0 for _ in 0..16]
+    par for i in 0..16
+        sums[i] = churn(i + 2, 6000)
+    print(sums)
+    after := build(2, 1000)
+    print(sum(big))
+    print(sum(after))

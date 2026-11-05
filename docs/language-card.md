@@ -394,6 +394,9 @@ Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
 `for x in xs` gives a copy of each element. To change the elements
 themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1`.
 
+Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
+`Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
+
 ## Maps and sets
 
 ```ail skip=context

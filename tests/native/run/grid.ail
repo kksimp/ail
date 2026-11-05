@@ -1,0 +1,54 @@
+# `Grid[T]` (type.grid.1-6, ADR 0937): a flat 2-D list. Building, `g[i, j]`
+# reads and writes, `op=`, rows, copies, grids in structs and parameters.
+
+struct Board
+    cells Grid[bool]
+    turns int
+
+fn Board.mark(mut self, i int, j int)
+    cells[i, j] = true
+    turns += 1
+
+fn total(g Grid[int]) int
+    mut s := 0
+    for i in 0..g.rows
+        for j in 0..g.cols
+            s += g[i, j]
+    s
+
+fn bump(mut g Grid[int], by int)
+    for i in 0..g.rows
+        for j in 0..g.cols
+            g[i, j] += by
+
+fn main()
+    mut g := Grid.fill(3, 4, 0)
+    for i in 0..3
+        for j in 0..4
+            g[i, j] = i * 10 + j
+    print("{g.rows} {g.cols} {g[2, 3]} {g[1, 0]}")
+    print(g.row(1))
+    g[0, 0] += 5
+    g[0, 1] *= 7
+    print(g.to_list())
+    print(total(g))
+    mut h := g
+    bump(mut h, 100)
+    print("{g[2, 2]} {h[2, 2]} {total(h)}")
+    p := Grid.from([[1, 2], [3, 4], [5, 6]])
+    print("{p.rows}x{p.cols} {p[2, 1]} {p == Grid.from([[1, 2], [3, 4], [5, 6]])}")
+    mut b := Board(cells: Grid.fill(2, 2, false), turns: 0)
+    b.mark(1, 0)
+    b.mark(0, 1)
+    print("{b.cells.to_list()} {b.turns}")
+    names := Grid.fill(1, 2, "x")
+    print(names[0, 1].len())
+    mut dp := Grid.fill(5, 5, 0)
+    for i in 0..5
+        dp[i, 0] = 1
+        dp[0, i] = 1
+    for i in 1..5
+        for j in 1..5
+            dp[i, j] = dp[i - 1, j] + dp[i, j - 1]
+    print(dp[4, 4])
+    print(g.cells.len())

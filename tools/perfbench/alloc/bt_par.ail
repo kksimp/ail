@@ -1,0 +1,52 @@
+# binarytrees (../programs/binarytrees.ail) after one small parallel loop:
+# from then on the process has threads, so this measures allocation on the
+# main thread once the pool exists (ADR 0943).
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn warm(i int) int
+    mut xs := List[int]()
+    for k in 0..100
+        xs.push(k * i)
+    xs[99]
+
+fn make(mut left List[int], mut right List[int], depth int) int
+    node := left.len()
+    left.push(-1)
+    right.push(-1)
+    if depth > 0
+        l := make(mut left, mut right, depth - 1)
+        r := make(mut left, mut right, depth - 1)
+        left[node] = l
+        right[node] = r
+    node
+
+fn check(left List[int], right List[int], node int) int
+    if left[node] < 0
+        return 1
+    1 + check(left, right, left[node]) + check(left, right, right[node])
+
+fn main()
+    mut w := [0 for _ in 0..4]
+    par for i in 0..4
+        w[i] = warm(i)
+    max_depth := size(14)
+    min_depth := 4
+    mut d := min_depth
+    while d <= max_depth
+        mut iters := 1
+        for _ in 0..max_depth - d + min_depth
+            iters *= 2
+        mut total := 0
+        for _ in 0..iters
+            mut left := List[int]()
+            mut right := List[int]()
+            root := make(mut left, mut right, d)
+            total += check(left, right, root)
+        print("{iters} trees of depth {d} check: {total}")
+        d += 2
+    print(w[3])

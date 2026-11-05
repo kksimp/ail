@@ -1,0 +1,35 @@
+## What takes the space: `fs.scan` (std.fs.23) lists a tree once with the
+## length, allocated size and inode of each entry. A file with more than one
+## hard link is counted once, by its device and inode.
+fn main()
+    root := "/tmp/ail_scan_usage"
+    fs.make_dir("{root}/logs") else return
+    fs.write_text("{root}/big.txt", "x".repeat(5000)) else return
+    fs.write_text("{root}/logs/a.log", "a".repeat(300)) else return
+    fs.write_text("{root}/logs/b.log", "b".repeat(200)) else return
+    s := fs.scan(root, true) else err
+        print("scan failed: {err.kind} {err.path}")
+        return
+    mut files := 0
+    mut total := 0
+    mut biggest := ""
+    mut most := 0
+    mut seen := Set[str]()
+    for e in s.entries
+        if e.is_dir or e.is_link
+            continue
+        key := "{e.device}:{e.inode}"
+        if not seen.add(key)
+            continue
+        files += 1
+        total += e.size
+        if e.size > most
+            most = e.size
+            biggest = e.path.strip_prefix(root) else e.path
+    print("{files} files, {total} bytes, {s.skipped.len()} skipped")
+    print("biggest: {biggest} ({most} bytes)")
+    fs.remove("{root}/logs/a.log") else return
+    fs.remove("{root}/logs/b.log") else return
+    fs.remove("{root}/logs") else return
+    fs.remove("{root}/big.txt") else return
+    fs.remove(root) else return
