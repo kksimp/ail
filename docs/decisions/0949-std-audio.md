@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.audio.1-9](../spec/std-audio.md)
-- **Builds on:** [ADR 0838](0838-std-app-native-windows.md) (host-program pattern), [ADR 0009](0009-custom-tooling-by-default.md)
+- **Builds on:** [ADR 0838](0838-std-app-native-windows.md) (host-program pattern), [ADR 0009](0009-custom-tooling-policy.md)
 
 ## Context
 
