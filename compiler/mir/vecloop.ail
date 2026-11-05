@@ -293,13 +293,13 @@ fn slice_op(i Inst) bool
         "fconst" | "const" | "itof" | "fadd" | "fsub" | "fmul" | "fdiv" => i.site < 0
         _ => false
 
-fn nv(mut g Func, t Ty) int
+fn esc_val(mut g Func, t Ty) int
     g.vals.push(t)
     g.names.push("")
     g.vals.len() - 1
 
 fn konst_i(mut g Func, mut out List[Inst], t Ty, n int) int
-    v := nv(mut g, t)
+    v := esc_val(mut g, t)
     mut i := inst(v, "const", [])
     i.imm = n
     out.push(i)
@@ -329,13 +329,13 @@ fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) F
     # The guard: `n <= ESC_LIMIT`.
     mut gi := List[Inst]()
     lim := konst_i(mut g, mut gi, Ty.Int, ESC_LIMIT)
-    okv := nv(mut g, Ty.Bool)
+    okv := esc_val(mut g, Ty.Bool)
     gi.push(inst(okv, "le", [e.bound, lim]))
     gblock := Block(params: [], insts: gi, term: branch_on(okv, g1, g2))
     # Fast: room for `n` rounded up to 4, the vector path on.
     mut i1 := List[Inst]()
     three := konst_i(mut g, mut i1, Ty.Int, 3)
-    cap1 := nv(mut g, Ty.Int)
+    cap1 := esc_val(mut g, Ty.Int)
     i1.push(inst(cap1, "add", [e.bound, three]))
     yes := konst_i(mut g, mut i1, Ty.Bool, 1)
     b1 := Block(params: [], insts: i1, term: jump_to(jb, [cap1, yes]))
@@ -345,16 +345,16 @@ fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) F
     no := konst_i(mut g, mut i2, Ty.Bool, 0)
     b2 := Block(params: [], insts: i2, term: jump_to(jb, [four, no]))
     # Join: the buffers, then the vector path or the loop.
-    capv := nv(mut g, Ty.Int)
-    fastv := nv(mut g, Ty.Bool)
+    capv := esc_val(mut g, Ty.Int)
+    fastv := esc_val(mut g, Ty.Bool)
     mut ji := List[Inst]()
-    crb := nv(mut g, Ty.List(Ty.Int))
+    crb := esc_val(mut g, Ty.List(Ty.Int))
     ji.push(call_to(crb, "rt.list_new", [capv]))
-    kbuf := nv(mut g, Ty.List(Ty.Int))
+    kbuf := esc_val(mut g, Ty.List(Ty.Int))
     ji.push(call_to(kbuf, "rt.list_new", [capv]))
-    crd := nv(mut g, Ty.Int)
+    crd := esc_val(mut g, Ty.Int)
     ji.push(inst(crd, "data", [crb]))
-    kd := nv(mut g, Ty.Int)
+    kd := esc_val(mut g, Ty.Int)
     ji.push(inst(kd, "data", [kbuf]))
     jblock := Block(params: [capv, fastv], insts: ji, term: Term(
         kind: "branch",
@@ -365,9 +365,9 @@ fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) F
     ))
     ablock0 := Block(params: [], insts: [], term: jump_to(ah, [e.lo]))
     # The `cr` loop.
-    xa := nv(mut g, Ty.Int)
+    xa := esc_val(mut g, Ty.Int)
     mut hi := List[Inst]()
-    ca := nv(mut g, Ty.Bool)
+    ca := esc_val(mut g, Ty.Bool)
     hi.push(inst(ca, "lt", [xa, e.bound]))
     hblock := Block(params: [xa], insts: hi, term: branch_on(ca, ab, kb))
     mut vm := Map[int, int]()
@@ -383,20 +383,20 @@ fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) F
             else
                 args.push(a)
         r = r.with_args(args)
-        r.dst = nv(mut g, f.vals[i.dst])
+        r.dst = esc_val(mut g, f.vals[i.dst])
         vm[i.dst] = r.dst
         bi.push(r)
     mut stc := inst(-1, "stx", [crd, xa, vm[e.cr]])
     stc.imm = 8
     bi.push(stc)
     onev := konst_i(mut g, mut bi, Ty.Int, 1)
-    xn := nv(mut g, Ty.Int)
+    xn := esc_val(mut g, Ty.Int)
     bi.push(inst(xn, "add", [xa, onev]))
     bblock := Block(params: [], insts: bi, term: jump_to(ah, [xn]))
     # The kernel call.
     mut ki := List[Inst]()
     mxv := konst_i(mut g, mut ki, Ty.Int, e.steps)
-    thrv := nv(mut g, Ty.Float)
+    thrv := esc_val(mut g, Ty.Float)
     mut tc := inst(thrv, "fconst", [])
     thr0 := fconst_of(f, defs, e.thr) else 4.0
     tc.fimm = thr0
@@ -406,21 +406,21 @@ fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) F
     pblock2 := Block(params: [], insts: [], term: jump_to(e.xh, pre_args))
     # The pixel taking its count from the buffer.
     mut pi := List[Inst]()
-    dk := nv(mut g, Ty.Int)
+    dk := esc_val(mut g, Ty.Int)
     pi.push(inst(dk, "data", [kbuf]))
-    kk := nv(mut g, Ty.Int)
+    kk := esc_val(mut g, Ty.Int)
     mut ld := inst(kk, "ldx", [dk, e.x])
     ld.imm = 8
     pi.push(ld)
     # The exit takes the count: from the loop's two exits and from here.
-    kp := nv(mut g, Ty.Int)
+    kp := esc_val(mut g, Ty.Int)
     pblock := Block(params: [], insts: pi, term: jump_to(e.leave, [kk]))
     # Reads of `k` and of the limit outside the escape loop.
     mut rep := [v for v in 0..g.vals.len()]
     rep[e.k] = kp
     mut remade := -1
     if e.mx_in_header
-        remade = nv(mut g, Ty.Int)
+        remade = esc_val(mut g, Ty.Int)
         rep = [v for v in 0..g.vals.len()]
         rep[e.k] = kp
         rep[e.mx] = remade
