@@ -106,12 +106,15 @@ fn nest_of(f Func, defs List[Def], loops List[LoopInfo], jl LoopInfo) Nest?
         return none
     # The exit takes `s` and pushes it, then steps `j`.
     ex := ck.exit
+    # The exit gets `s` as its parameter, or reads the header's `s` itself.
     xa := kh.term.args[ck.exit_edge]
-    if xa.len() != 1 or xa[0] != s or f.blocks[ex].params.len() != 1
+    mut sout := s
+    if xa.len() == 1 and xa[0] == s and f.blocks[ex].params.len() == 1
+        sout = f.blocks[ex].params[0]
+    elif xa.len() != 0 or f.blocks[ex].params.len() != 0
         return none
     if jl.latches.len() != 1 or jl.latches[0] != ex or f.blocks[ex].term.kind != "jump"
         return none
-    sout := f.blocks[ex].params[0]
     mut row := -1
     mut push := ""
     for i in f.blocks[ex].insts
