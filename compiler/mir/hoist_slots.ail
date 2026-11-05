@@ -1,0 +1,93 @@
+## Loop-invariant struct slots (ADR 0937). `g[i, j]` on a grid reads
+## `g.rows`, `g.cols` and `g.cells` at every access, and `p.x` in a loop reads
+## the slot every iteration. When a loop stores into no struct of that type and
+## calls nothing outside the runtime with one (a `mut` argument could change
+## it), the slots of a struct defined before the loop can't change in it, so
+## the loop reads each slot once, in its preheader. A list read this way is
+## then hoisted like a parameter list (`hoist_in`, native.bce.11): its length
+## and element pointer once, `bounds` and `ldx`/`stx` per access.
+
+fn is_struct_ty(t Ty) bool
+    match t
+        Struct(_) => true
+        _ => false
+
+## The pass on one function.
+pub fn hoist_slots(f Func) Func
+    if opt_off("hoist") or opt_off("slots") or f.name.starts_with("rt.")
+        return f
+    mut any := false
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "load" and is_struct_ty(f.vals[i.arg(0)])
+                any = true
+    if not any
+        return f
+    loops := find_loops(f)
+    mut g := f
+    # The outermost loops first, so a slot leaves every loop it can.
+    for lp in loops.sorted(by: |l| 0 - l.blocks.len())
+        if lp.pre < 0 or g.blocks[lp.pre].term.kind != "jump"
+            continue
+        if g.blocks[lp.pre].term.targets[0] != lp.header
+            continue
+        g = slots_in(g, lp)
+    g
+
+fn slots_in(g0 Func, lp LoopInfo) Func
+    mut g := g0
+    if lp.blocks.len() > MAX_BLOCKS
+        return g
+    # The struct types the loop may change.
+    mut touched := Set[str]()
+    for b in lp.blocks
+        for i in g.blocks[b].insts
+            if i.op == "store"
+                touched.add(g.vals[i.arg(0)].name())
+            elif i.op == "call"
+                if not i.name.starts_with("rt.")
+                    return g
+                for k in 0..i.argc()
+                    t := g.vals[i.arg(k)]
+                    if is_struct_ty(t)
+                        touched.add(t.name())
+    defs := defs_of(g)
+    mut hoisted := Map[str, int]()
+    mut sub := Map[int, int]()
+    for b in lp.blocks
+        mut out := List[Inst]()
+        insts := g.blocks[b].insts
+        for i in insts
+            obj := if i.op == "load" then i.arg(0) else -1
+            if obj < 0 or not is_struct_ty(g.vals[obj]) or lp.member[defs[obj].block]
+                or touched.contains(g.vals[obj].name())
+                out.push(i)
+                continue
+            key := "{obj}:{i.imm}"
+            if not hoisted.contains(key)
+                v := new_val(mut g, g.vals[i.dst])
+                mut ld := inst(v, "load", [obj])
+                ld.imm = i.imm
+                g.blocks[lp.pre].insts.push(ld)
+                hoisted[key] = v
+            sub[i.dst] = hoisted[key]
+            out.push(inst(i.dst, "copy", [hoisted[key]]))
+        g.blocks[b].insts = out
+    if hoisted.len() == 0
+        return g
+    # The loop's own uses read the hoisted value, so `hoist_in` sees it.
+    for b in lp.blocks
+        mut out := List[Inst]()
+        for i in g.blocks[b].insts
+            mut r := i
+            if i.op != "copy" or not sub.contains(i.dst)
+                for k in 0..i.argc()
+                    if v := sub.get(i.arg(k))
+                        r = r.with_arg(k, v)
+            out.push(r)
+        g.blocks[b].insts = out
+    mut cand := [false for _ in 0..g.vals.len()]
+    for v in hoisted.values()
+        if is_list(g.vals[v])
+            cand[v] = true
+    hoist_in(g, lp, cand, defs_of(g))
