@@ -28,11 +28,13 @@ one missing combination.
 
 ## Test platform (ADR 0925)
 
-Before any release the `native`, `examples` and `run` suites must be green on
-real Windows ARM64 or an emulator. ail-win is x64 and cannot run ARM64 PE.
-Planned: a Windows 11 ARM64 VM (UTM or Parallels) on the designer's Apple
-Silicon Mac. **Not yet approved or built.** The target is not released, and
-`ail build` marks it experimental, until that platform is green.
+**Unverified (Kaleb, 2026-11-05).** There is no Windows ARM64 hardware, and
+no VM will be set up (no space). ail-win is x64 and cannot run ARM64 PE. So
+the target is compile-only: `ail build --target aarch64-windows` writes a PE
+that has never run. It is experimental and unreleased, and no release may list
+it until the `native`, `examples` and `run` suites are green on real Windows
+ARM64 or an emulator (ADR 0925). A Windows 11 ARM64 VM on the designer's Apple
+Silicon Mac is the cheapest route if space appears.
 
 ## Rejected alternatives
 
