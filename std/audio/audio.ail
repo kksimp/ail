@@ -186,3 +186,22 @@ pub fn encode_wav(c Clip) bytes
         v := (clamp1(s) * 32767.0).round().to_int()
         put16(mut out, if v < 0 then v + 65536 else v)
     bytes.from_list(out)
+
+## `c` as raw little-endian 16-bit PCM, no header (std.audio.8).
+pub fn to_pcm16(c Clip) bytes
+    mut out := List[u8]()
+    for s in c.samples
+        v := (clamp1(s) * 32767.0).round().to_int()
+        put16(mut out, if v < 0 then v + 65536 else v)
+    bytes.from_list(out)
+
+## A clip from raw little-endian 16-bit PCM (std.audio.8).
+pub fn from_pcm16(b bytes, rate int, channels int) Clip
+    mut out := List[float]()
+    mut i := 0
+    while i + 2 <= b.len()
+        v := u16le(b, i)
+        s := if v >= 32768 then v - 65536 else v
+        out.push(s.to_float() / 32768.0)
+        i += 2
+    Clip(rate: rate, channels: channels, samples: out)
