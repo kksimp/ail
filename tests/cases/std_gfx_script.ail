@@ -18,11 +18,8 @@ impl gfx.Game for Player
 
 fn main()
     mut p := Player(x: 0.0, moving: false)
-    lines := gfx.script(mut p, 32, 16, 0.5, [
-        [app.key("right")],
-        [],
-        [gfx.key_up("right")],
-    ])
+    steps := [[app.key("right")], [], [gfx.key_up("right")]]
+    lines := gfx.script(mut p, 32, 16, 0.5, steps)
     for l in lines
         print(l)
     i := gfx.next_input(gfx.idle(), [app.key("a")])

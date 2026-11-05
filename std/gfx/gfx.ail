@@ -102,7 +102,7 @@ pub fn next_input(prev Input, events List[app.Event]) Input
                 down.push(ev.text)
                 pressed.push(ev.text)
             if ev.text.chars().len() == 1 and not ev.ctrl and not ev.meta
-                typed = typed + ev.text
+                typed = "{typed}{ev.text}"
         elif ev.kind == "keyup"
             if down.contains(ev.text)
                 down = without(down, ev.text)

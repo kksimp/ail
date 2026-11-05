@@ -926,6 +926,7 @@ SHOWN_STD_AIL := [
     "std.args.",
     "std.bigint.",
     "std.csv.",
+    "std.gfx.",
     "std.log.",
     "std.net.http.",
     "std.screen.",

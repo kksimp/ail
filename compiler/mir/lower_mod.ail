@@ -32,6 +32,7 @@ pub STD_AIL := [
     "std.attach",
     "std.attach.serve",
     "std.csv",
+    "std.gfx",
     "std.log",
     "std.net.http",
     "std.screen",
