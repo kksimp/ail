@@ -3634,12 +3634,12 @@ api --pretty tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	7686c523c3073900
 api --symbols tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	78292cdb09957304
 api --tokens tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	c6f8d1c74d305c4d
 api --ast tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	bbb93f6c7751dbbb
-api  tests/cases/std_audio.ail	1adc4c48d1a052c3	0	482c57b658dc635e
-api --text tests/cases/std_audio.ail	1adc4c48d1a052c3	0	a6c2969a2b75fe69
-api --pretty tests/cases/std_audio.ail	1adc4c48d1a052c3	0	5a4d084da1c3cd91
-api --symbols tests/cases/std_audio.ail	1adc4c48d1a052c3	0	25f8ec53c2ae47bc
-api --tokens tests/cases/std_audio.ail	1adc4c48d1a052c3	0	5e8459c001b5a658
-api --ast tests/cases/std_audio.ail	1adc4c48d1a052c3	0	66fabd051762a0a5
+api  tests/cases/std_audio.ail	2223a1a859aa64f9	0	482c57b658dc635e
+api --text tests/cases/std_audio.ail	2223a1a859aa64f9	0	a6c2969a2b75fe69
+api --pretty tests/cases/std_audio.ail	2223a1a859aa64f9	0	5a4d084da1c3cd91
+api --symbols tests/cases/std_audio.ail	2223a1a859aa64f9	0	ea02b76fa097b1e4
+api --tokens tests/cases/std_audio.ail	2223a1a859aa64f9	0	0ee926f024d2ffeb
+api --ast tests/cases/std_audio.ail	2223a1a859aa64f9	0	2f6c52856965dfbc
 api  tests/cases/std_bigint.ail	187f79195f741f01	0	46c1bebd6ae176ca
 api --text tests/cases/std_bigint.ail	187f79195f741f01	0	1950bb0e5dcef6ba
 api --pretty tests/cases/std_bigint.ail	187f79195f741f01	0	64d009d0a950d3bc
@@ -6206,10 +6206,10 @@ api --diff  tests/cases/std_args.ail tests/cases/std_args_derive.ail	bee7fed82e7
 api --diff --json tests/cases/std_args.ail tests/cases/std_args_derive.ail	bee7fed82e7fc8d5	0	e7a8123fd1050b63
 api --diff  tests/cases/std_args_derive.ail tests/cases/std_args_errors.ail	20c14474fac3f140	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_args_derive.ail tests/cases/std_args_errors.ail	20c14474fac3f140	0	f448fce87bbcc8b0
-api --diff  tests/cases/std_args_errors.ail tests/cases/std_audio.ail	bd1435d004eb4301	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_args_errors.ail tests/cases/std_audio.ail	bd1435d004eb4301	0	ecf5878c630ba6ad
-api --diff  tests/cases/std_audio.ail tests/cases/std_bigint.ail	08acc65ae699c479	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_audio.ail tests/cases/std_bigint.ail	08acc65ae699c479	0	06180265f080eede
+api --diff  tests/cases/std_args_errors.ail tests/cases/std_audio.ail	f2bf68090e42aef0	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_args_errors.ail tests/cases/std_audio.ail	f2bf68090e42aef0	0	ecf5878c630ba6ad
+api --diff  tests/cases/std_audio.ail tests/cases/std_bigint.ail	8a4616763d96502c	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_audio.ail tests/cases/std_bigint.ail	8a4616763d96502c	0	06180265f080eede
 api --diff  tests/cases/std_bigint.ail tests/cases/std_bytes_wrong_types.ail	9e571a35f4fa6ae9	2	b22100c5debfc3a6
 api --diff --json tests/cases/std_bigint.ail tests/cases/std_bytes_wrong_types.ail	9e571a35f4fa6ae9	2	b22100c5debfc3a6
 api --diff  tests/cases/std_bytes_wrong_types.ail tests/cases/std_compress.ail	f82c6534c8faa7a2	2	b22100c5debfc3a6

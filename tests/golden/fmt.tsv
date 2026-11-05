@@ -1810,8 +1810,8 @@ fmt plain tests/cases/std_args_derive.ail	aab21e766972b97d	0	6676303c2e7e7ea2
 fmt long tests/cases/std_args_derive.ail	aab21e766972b97d	0	42068c932e5be831
 fmt plain tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	77c1a63f43b7a515
 fmt long tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	d853b5ff47caa3cf
-fmt plain tests/cases/std_audio.ail	1adc4c48d1a052c3	0	3cee5c5483e92444
-fmt long tests/cases/std_audio.ail	1adc4c48d1a052c3	0	6d8400aa6a48bdd1
+fmt plain tests/cases/std_audio.ail	2223a1a859aa64f9	0	abb55e5009070438
+fmt long tests/cases/std_audio.ail	2223a1a859aa64f9	0	b90d539092f4733d
 fmt plain tests/cases/std_bigint.ail	187f79195f741f01	0	cf7a0f5cdf6a9959
 fmt long tests/cases/std_bigint.ail	187f79195f741f01	0	432d108163beb95b
 fmt plain tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	0	6b80a756210ea37d
