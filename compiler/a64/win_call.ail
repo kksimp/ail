@@ -1,0 +1,23 @@
+## Windows on ARM64 (ADR 0968): the entry. The loader calls the entry as a C
+## function, with no argc and argv on the stack. Imports (`libsys.NAME`) go
+## through the PE address table like the other targets' (`gen_call`): the
+## argument registers are AAPCS64's, there is no shadow space.
+
+## The Windows entry, after `x29` is cleared: two zero words stand for an
+## empty `argv` and the `envp` after it (their address is above every frame of
+## the program, so it is also the stack top the collector scans up to), then
+## `rt.init(0, &argv)`, `main`, and `ExitProcess(result)` through its import
+## slot. `rt.exit` is not called: it flushes, then ends in `ExitProcess` too.
+pub fn Asm.windows_entry(mut self)
+    alu_ri("sub", SP, SP, 16)
+    mov_ri(S0, 0)
+    str(S0, SP, 0)
+    str(S0, SP, 8)
+    mov_ri(0, 0)
+    mov_rr(1, SP)
+    bl("rt.init")
+    bl("main")
+    adr_sym(S0, "imp:ExitProcess")
+    ldr(S0, S0, 0)
+    blr(S0)
+    brk()
