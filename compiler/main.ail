@@ -187,7 +187,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
@@ -205,6 +205,8 @@ fn fwd(p str) str
 fn host_target() str
     # Windows sets `OS`; it has no `uname`.
     if (env.get("OS") else "") == "Windows_NT"
+        if (env.get("PROCESSOR_ARCHITECTURE") else "").to_lower() == "arm64"
+            return "aarch64-windows"
         return "x86_64-windows"
     out := proc.run("uname", ["-sm"]) else
         return "x86_64-linux"
@@ -485,6 +487,7 @@ fn executable_list(m mir.Module, path str, target str) List[u8]
         "x86_64-linux" => obj.elf(x64.generate(m), obj.X86_64)
         "aarch64-linux" => obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)
         "x86_64-windows" => obj.pe_image(x64.generate_windows(m))
+        "aarch64-windows" => obj.pe_image_for(a64.generate(m, a64.WINDOWS), obj.PE_ARM64)
         "aarch64-macos" =>
             name := path.split("/").last() else path
             obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))

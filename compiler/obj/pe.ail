@@ -9,6 +9,8 @@
 use codegen
 
 PE_MACHINE := 34404
+## IMAGE_FILE_MACHINE_ARM64 (aarch64-windows, ADR 0968).
+pub PE_ARM64 := 43620
 PE_BASE := 5368709120
 PE_SECTION_ALIGN := 4096
 PE_FILE_ALIGN := 512
@@ -33,7 +35,7 @@ struct PeImports
 
 ## A PE32+ executable for `img` that imports `dlls`. The entry point is
 ## `img.entry` in the code. Every relocation resolves here.
-pub fn pe(img codegen.Image, dlls List[PeDll]) List[u8]
+pub fn pe(img codegen.Image, dlls List[PeDll], machine int) List[u8]
     code_rva := PE_SECTION_ALIGN
     rdata := align_up(code_rva + img.code.len(), PE_SECTION_ALIGN)
     idata := align_up(rdata + img.data.len(), PE_SECTION_ALIGN)
@@ -53,7 +55,7 @@ pub fn pe(img codegen.Image, dlls List[PeDll]) List[u8]
     pe_pad(mut out, 128)
     # The PE signature and the COFF header: no symbols, no line numbers.
     out.extend(bytes_of([80, 69, 0, 0]))
-    put(mut out, PE_MACHINE, 2)
+    put(mut out, machine, 2)
     put(mut out, 4, 2)
     put(mut out, 0, 4)
     put(mut out, 0, 4)
@@ -214,6 +216,11 @@ fn pe_imports(dlls List[PeDll], base int) PeImports
 ## relocations: each distinct name gets one address-table slot, grouped under
 ## the DLL that `pe_dll_of` names for it (ADR 0598).
 pub fn pe_image(img codegen.Image) List[u8]
+    pe_image_for(img, PE_MACHINE)
+
+## `pe_image` for `machine`: `PE_ARM64` for the ARM64 backend, whose
+## relocations are `b26`, `adrp` and `add12` (ADR 0968).
+pub fn pe_image_for(img codegen.Image, machine int) List[u8]
     mut names := List[str]()
     for r in img.relocs
         if r.sym.starts_with("imp:")
@@ -228,7 +235,7 @@ pub fn pe_image(img codegen.Image) List[u8]
                 funcs.push(name)
         if funcs.len() > 0
             dlls.push(PeDll(name: dll, funcs: funcs))
-    pe(img, dlls)
+    pe(img, dlls, machine)
 
 ## The DLL that exports `name`. kernel32 is the default; the socket and random
 ## calls are named here (ADR 0598).
@@ -268,14 +275,7 @@ PE_DLLS := ["KERNEL32.dll", "WS2_32.dll", "bcryptprimitives.dll", "crypt32.dll",
 fn pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int) List[u8]
     mut out := img.code
     for r in img.relocs
-        if r.kind != "rel32"
-            unreachable("unknown relocation {r.kind}")
-        to := pe_address(img, slots, code_rva, rdata, bss, r.sym)
-        pc := code_rva + r.at
-        mut w := pe_read32(out, r.at)
-        w = to + pe_signed32(w) - (pc + 4 + r.tail)
-        for i in 0..4
-            out[r.at + i] = w.shr(8 * i).bit_and(255).to_u8()
+        patch(mut out, r, pe_address(img, slots, code_rva, rdata, bss, r.sym), code_rva + r.at)
     out
 
 ## The RVA of a relocation's symbol.
@@ -292,15 +292,6 @@ fn pe_address(img codegen.Image, slots Map[str, int], code_rva int, rdata int, b
 fn pe_pad(mut out List[u8], n int)
     while out.len() < n
         out.push(0.to_u8())
-
-fn pe_read32(bytes List[u8], at int) int
-    mut v := 0
-    for i in 0..4
-        v = v.bit_or(bytes[at + i].to_int().shl(8 * i))
-    v
-
-fn pe_signed32(v int) int
-    if v >= 2147483648 then v - 4294967296 else v
 
 ## A sample program for the writer's test (`ail run compiler pe-sample`):
 ## it writes a line to standard output with kernel32's `GetStdHandle` and
