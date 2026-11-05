@@ -35,14 +35,15 @@ PCM, interleaved, clamped; `from_pcm16(b, rate, channels) Clip` is the reverse.
 
 **std.audio.9** — `use std.audio.device` plays and records through a host
 program that owns the platform's audio API, as `std.app` does (ADR 0838), so no
-AIL code runs on an audio callback. `open() proc.Child ! DeviceError` starts the
+AIL code runs on an audio callback. `open() proc.Child ! DeviceError` (or `open_at(cmd)` with a given program) starts the
 host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
 `tools/audio-host/macos/run.sh`) and waits for its `ready` line;
 `play(mut d, clip)` blocks until the clip has played; `close(move d)` stops the
 host. `DeviceError` has `kind` (`no_host`, `start`, `version`, `host_exited`,
 `device`, `protocol`) and `message`. The host speaks one text line per message:
 `play RATE CH BASE64`, `rec MS RATE CH`, then `done`, `data RATE CH BASE64` or
-`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio).
+`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio). Elsewhere `open` fails with kind `no_host`
+and a message naming this rule; it never crashes.
 
 **std.audio.10** — `record(mut d, ms, rate, channels) Clip ! DeviceError` records
 from the default input. The clip has the rate and channels the device gave,
@@ -106,6 +107,19 @@ fn main() !
     pcm := audio.to_pcm16(heard)
     print(audio.frames(audio.from_pcm16(pcm, heard.rate, heard.channels)) == audio.frames(heard))
     device.close(move d)
+```
+
+```ail rules=std.audio.8,std.audio.9
+use std.audio
+use std.audio.device
+
+fn main() !
+    t := audio.tone(440.0, 20, 8000, 0.5)
+    print(audio.to_pcm16(t).len())
+    c := device.open_at("/nonexistent/ail-audio-host") else err
+        print(err.kind)
+        return
+    device.close(move c)
 ```
 
 ## Open for Fable
