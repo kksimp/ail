@@ -647,3 +647,7 @@ pub fn Asm.vaddp_d(mut self, d int, n int)
 
 pub fn Asm.vfcvtzs2d(mut self, d int, n int)
     word(1323415552 + n * 32 + d)
+
+## `bif vd, vn, vm`: the bits of `vn` where `vm` is zero, else `vd`'s own.
+pub fn Asm.vbif(mut self, d int, n int, m int)
+    word(rrr(1860180992,d,n,m))

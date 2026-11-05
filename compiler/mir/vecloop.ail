@@ -332,16 +332,16 @@ fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) F
     okv := esc_val(mut g, Ty.Bool)
     gi.push(inst(okv, "le", [e.bound, lim]))
     gblock := Block(params: [], insts: gi, term: branch_on(okv, g1, g2))
-    # Fast: room for `n` rounded up to 4, the vector path on.
+    # Fast: room for `n` rounded up to 8, the vector path on.
     mut i1 := List[Inst]()
-    three := konst_i(mut g, mut i1, Ty.Int, 3)
+    three := konst_i(mut g, mut i1, Ty.Int, 7)
     cap1 := esc_val(mut g, Ty.Int)
     i1.push(inst(cap1, "add", [e.bound, three]))
     yes := konst_i(mut g, mut i1, Ty.Bool, 1)
     b1 := Block(params: [], insts: i1, term: jump_to(jb, [cap1, yes]))
     # Else: tiny buffers, the vector path off.
     mut i2 := List[Inst]()
-    four := konst_i(mut g, mut i2, Ty.Int, 4)
+    four := konst_i(mut g, mut i2, Ty.Int, 8)
     no := konst_i(mut g, mut i2, Ty.Bool, 0)
     b2 := Block(params: [], insts: i2, term: jump_to(jb, [four, no]))
     # Join: the buffers, then the vector path or the loop.

@@ -26,9 +26,10 @@ fn vec_axpyf(c int, b int, n int, x float, keep List[int])
 ## `cr[i]` is the real part of point `i`, `ci` the shared imaginary part. Point
 ## `i` starts at `z = 0`; `out[i]` is the number of steps `k < max` taken before
 ## `zr * zr + zi * zi > thr` (never, for a NaN), the loop's own operations in
-## its own order, no fused multiply-add. The kernels run four points (two on
-## ARM64) a pass under a lane mask, so they may read and write up to three
-## elements past `n`: the caller's buffers have room for `n` rounded up to 4.
+## its own order, no fused multiply-add. The kernels run eight points a pass (two groups of
+## four on x86-64, four of two on ARM64, so the float latencies overlap), so they
+## may read and write up to seven elements past `n`: the caller's buffers have
+## room for `n` rounded up to 8.
 fn vec_escape(cr int, out int, n int, max int, ci float, thr float, keep List[int])
     for i in 0..n
         mut zr := 0.0
