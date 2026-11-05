@@ -1,6 +1,6 @@
-# Systems ABI and no-GC mode (lane 6 of the replace-C plan)
+# Systems ABI: exports, libraries, callbacks, layout (lane 6 of the replace-C plan)
 
-Status: proposal, 2026-11-05. No ADR or OQ numbers yet (Fable allocates them).
+Status: proposal, 2026-11-05 (rescoped by the designer: no no-GC, no 32-bit).
 Goal (Kaleb): AIL can replace C, C++ and Rust, so it must ship libraries C can
 call, call C back, run without the collector, and drop to assembly. Everything
 stays AI-first: one rule ID per behaviour, `ail explain` text for each error,
@@ -23,7 +23,7 @@ Each slice is one PR, native-only, with a run program and `.out` golden.
 - `pub export c fn name(a i32) i32` (Fable's syntax, mirrors `extern c fn`; an optional `"c_name"` after `c` renames the symbol): a top-level fn whose params and result obey `ffi.decl.3`. It is emitted with the C ABI (System V, AAPCS64, Windows x64 later) under that exact symbol.
 - `ail build FILE --lib static|shared [--header OUT.h]`: static = `.a` (ar of one object), shared = `.so` / `.dylib` / `.dll`. `--header` writes a C header from the exports, so the C side never hand-writes prototypes (AI-first: one source of truth).
 - The ELF writer gains defined dynamic symbols (real DT_HASH or DT_GNU_HASH, `.dynsym` with STB_GLOBAL), Mach-O gets an export trie, PE an export directory. Today's "defines no symbols" hash goes away.
-- Entry: an exported fn called from C runs `rt` init lazily on first call (heap, tasks) unless the library is built `--no-gc` (S4). A trap inside an export aborts the process with the usual trap text; it never unwinds into C. Rule: `ffi.export.*`.
+- Entry: an exported fn called from C runs `rt` init lazily on first call (heap, tasks). A trap inside an export aborts the process with the usual trap text; it never unwinds into C. Rule: `ffi.export.*`.
 - Checker errors with `ail explain`: non-C-compatible type in an export, duplicate symbol, `mut` parameter, generic export.
 
 ### S2. Callbacks
@@ -38,37 +38,20 @@ Each slice is one PR, native-only, with a run program and `.out` golden.
 - `use c "header.h"` then also imports structs, enums and `#define` integer consts (today they are left out).
 - Variadics: `extern c fn printf(fmt *u8, ...)` with an explicit call-site type list, `printf(fmt, i32: 3, float: 1.5)`, so the checker still sees every argument's C type. Needed to replace C wholesale; lowest priority in this slice.
 
-### S4. `--no-gc` (freestanding-capable)
+### Out of scope (Kaleb, 2026-11-05)
 
-- `ail build FILE --no-gc` (or manifest `runtime none|gc`). The program is checked with `no_gc` as an effect-style capability: any construct that needs a collected object (`List`, `Map`, `str` growth, closures that capture, `ref T`, tasks, `defer` is fine) is a compile error naming the construct and the fix: use `std.mem` blocks, fixed arrays `[N]T`, slices over caller memory, or an `Arena`.
-- Memory in this mode: `mem.alloc/free`, a stack-only `Buf[T, N]`, and `std.arena` (bump allocator over a caller or OS block, freed as a whole). All three are plain runtime code with no collector.
-- Runtime layers split into `core` (traps, ints, floats, mem, hw), `heap` (GC, lists, maps, strings), `os` (files, net, tasks). `--no-gc` links only `core` plus what the program names, so a no-GC executable has no allocator beyond `mem`. Measured goal: hello-world in a few KiB.
-- The checker enforces it, not the runtime: errors carry rule IDs `nogc.*` and `ail explain nogc.N` shows the replacement.
-- Open choice (needs Kaleb): hard error versus warning-and-fallback for GC use. Recommendation: hard error; a library that silently links a collector defeats the point.
+- No no-GC mode and no freestanding targets: AIL stays garbage-collected. Raw memory comes from `std.mem` and arenas under scoped unsafe (ADRs 0820, 0835).
+- No 32-bit targets and no WASM (ADR 0007 stands).
+- No inline assembly beyond the typed `hw.x64.*` / `hw.a64.*` intrinsics (OQ-137 option a); `asm fn` is not built.
 
-### S5. Freestanding targets
+## Order and sizing
 
-- Targets `x86_64-none` and `aarch64-none` (already on the ADR 0820 held list): no libc, no OS, entry symbol named by `@entry`, `@interrupt fn` for handlers, a linker script option, panic handler `@panic fn(msg str)` (no unwinding, no heap).
-- Requires S4. Output: flat binary or ELF with chosen load address.
+S1 (about 800 lines: parser, checker, symbol table, ELF/Mach-O writers, header emitter), then S3, then S2 (needs S1). S1 ships on Linux and macOS first; Windows export (PE export directory, Win64 ABI) follows once the Windows release gate is green. ADRs: S1 0950, S2 0951, S3 0952; 0953-0955 are returned to Fable.
 
-### S6. Inline assembly
-
-- OQ-137 recommends intrinsics only. For the replace-C goal this is not enough for kernels and crypto. Proposal: land `hw.x64.*` / `hw.a64.*` intrinsics first, then `asm fn` (option c): whole functions in text assembly, fixed to the native ABI, assembled by the in-house assemblers, opaque to the optimiser, and one per target (`@asm("x86_64")`). An `asm { }` block with register constraints stays rejected: constraint languages are where agents fail.
-- Needs Kaleb's confirmation because it changes OQ-137's recommendation.
-
-## Suggested order and sizing
-
-S1 (about 800 lines: checker attr, symbol table, ELF/Mach-O writers, header emitter), S4 (checker capability, runtime split, the largest), S3, S2, S5, S6. S1 and S4 are independent and can run as two PRs in parallel; S2 needs S1, S5 needs S4.
+Position-independent output is the hard part of S1: shared libraries need PIC code and relocations, while `elf.ail` links against fixed addresses today (`link(img, BASE+...)`). The static library (`.a`) comes first for that reason; `--lib shared` follows once the codegen can emit PIC.
 
 ## Rejected alternatives
 
 - Generating C and calling a C compiler: breaks ADR 0010 (no external backend).
 - Closures as C callbacks: hides a GC root behind a raw pointer.
-- A `nogc` runtime flag with silent fallback: a library would link the collector anyway.
-- Copying Rust's `#[no_std]` crate split: AIL has no registry (Kaleb), so the split is of the runtime, not of std crates.
-
-## Questions for the designer
-
-1. S4: hard error on GC use in `--no-gc` (recommended) or warning?
-2. S6: allow `asm fn` (changes OQ-137's recommendation)?
-3. Windows x64 export/callback ABI in S1, or after the Windows release gate?
+- No-GC mode, freestanding targets and `asm fn`: declined by the designer (2026-11-05).
