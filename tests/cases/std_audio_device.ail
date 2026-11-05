@@ -10,6 +10,17 @@ fn main() !
     print(audio.frames(back))
     d := audio.peak(back) - audio.peak(t)
     print(d < 0.001 and d > -0.001)
+    missing()
+    p := device.host_path() else err
+        ""
+    print(p.len() >= 0)
+    h := device.open() else err
+        print("open checked")
+        return
+    device.close(move h)
+    print("open checked")
+
+fn missing()
     c := device.open_at("/nonexistent/ail-audio-host") else err
         print(err.kind)
         return
