@@ -3730,12 +3730,12 @@ api --pretty tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	b888ab8b0c379c40
 api --symbols tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ddb257ef288ddbe5
 api --tokens tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d6fa5e387a22d55d
 api --ast tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	cf76fa7a689c1f42
-api  tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	7bf09146bca48a61
-api --text tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	e77e7841cd0c20e3
-api --pretty tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	4523d433bccd3ace
-api --symbols tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	21884e7201b72d05
-api --tokens tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	69b0bf79e1175968
-api --ast tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	50a0334c87eb0661
+api  tests/cases/std_hash.ail	6b78ffa6b144942d	0	2250b7d0d24aca99
+api --text tests/cases/std_hash.ail	6b78ffa6b144942d	0	c3bc86620415bac4
+api --pretty tests/cases/std_hash.ail	6b78ffa6b144942d	0	3f53ba6b0b87d85a
+api --symbols tests/cases/std_hash.ail	6b78ffa6b144942d	0	42bece0ce39a2fb0
+api --tokens tests/cases/std_hash.ail	6b78ffa6b144942d	0	a56a5a872bb3afcc
+api --ast tests/cases/std_hash.ail	6b78ffa6b144942d	0	713d8507eabe894e
 api  tests/cases/std_hash_bytes.ail	11349941efd64c57	0	8cfd7c6145371682
 api --text tests/cases/std_hash_bytes.ail	11349941efd64c57	0	bf0031d20d7a7de6
 api --pretty tests/cases/std_hash_bytes.ail	11349941efd64c57	0	bc947309f4bfe98b
@@ -6238,10 +6238,10 @@ api --diff  tests/cases/std_fs.ail tests/cases/std_fs_missing.ail	65b705f47f2de0
 api --diff --json tests/cases/std_fs.ail tests/cases/std_fs_missing.ail	65b705f47f2de083	0	50914cd21d7a2239
 api --diff  tests/cases/std_fs_missing.ail tests/cases/std_fs_walk.ail	0568c10d5c660a4b	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_fs_missing.ail tests/cases/std_fs_walk.ail	0568c10d5c660a4b	0	1dc25a32d13e4c47
-api --diff  tests/cases/std_fs_walk.ail tests/cases/std_hash.ail	aefb3dfa1a11bbe4	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_fs_walk.ail tests/cases/std_hash.ail	aefb3dfa1a11bbe4	0	9226bde503088326
-api --diff  tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	af1091b45c010284	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	af1091b45c010284	0	c06b73c420040b30
+api --diff  tests/cases/std_fs_walk.ail tests/cases/std_hash.ail	58ed30e5296c3b9d	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_fs_walk.ail tests/cases/std_hash.ail	58ed30e5296c3b9d	0	9226bde503088326
+api --diff  tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c4124	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c4124	0	c06b73c420040b30
 api --diff  tests/cases/std_hash_bytes.ail tests/cases/std_implicit.ail	9b88f3470ed30efb	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_hash_bytes.ail tests/cases/std_implicit.ail	9b88f3470ed30efb	0	17f855a5ed0aafab
 api --diff  tests/cases/std_implicit.ail tests/cases/std_implicit_hidden.ail	cc40724b412eb04c	2	ffc96a4e1ad7ed5b
