@@ -50,7 +50,7 @@ struct Esc
     bound int
     x int
     lo int
-    ## The escape loop: header, the three blocks it owns, and the exit block.
+    ## The escape loop: header, the exit test, the block that leaves, the step block, and the exit block.
     eh int
     eb int
     leave int
@@ -108,7 +108,7 @@ fn escape_of(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo) Esc?
     bxt := f.blocks[bx].term
     if bxt.kind != "jump" or bxt.targets[0] != el.header or el.pre != bx
         return none
-    if el.latches.len() != 1 or el.exits != 2 or el.blocks.len() != 4
+    if el.latches.len() != 1 or el.exits != 2 or el.blocks.len() != 3
         return none
     # The header: `k < MAX`.
     eh := el.header
@@ -159,7 +159,7 @@ fn escape_of(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo) Esc?
     ob := f.blocks[out_b]
     if ob.insts.len() != 0 or ob.term.kind != "jump" or ob.term.targets[0] != leave
         return none
-    if ob.term.args[0].len() != 0 or not el.member[out_b]
+    if ob.term.args[0].len() != 0 or el.member[out_b]
         return none
     # The step block.
     sb := f.blocks[step_b]
@@ -205,10 +205,10 @@ fn escape_of(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo) Esc?
     z1 := fconst_of(f, defs, sargs[2])?
     if z0 != 0.0 or z1 != 0.0
         return none
-    # The escape loop's blocks are these four; the exit is entered from the
+    # The escape loop's blocks are these three (the escape block leaves it); the exit is entered from the
     # header and the escape block only, and takes no parameters yet.
     for b in el.blocks
-        if b != eh and b != stay and b != out_b and b != step_b
+        if b != eh and b != stay and b != step_b
             return none
     if f.blocks[leave].params.len() != 0
         return none
