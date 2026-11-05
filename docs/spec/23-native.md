@@ -213,6 +213,11 @@ holds a lock for one statement, so lines from different tasks don't mix.
 On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
 0599–0601)*
 
+**native.task.2** — A pool worker asleep in a blocking network wait
+(`accept`, a read, a write or a connect) stops counting as running, as in
+`wait` and channel waits, so a task queued meanwhile gets a thread even when
+`AIL_THREADS` is 1, and the collector may scan the sleeper. *(ADR 0599)*
+
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
