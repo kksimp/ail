@@ -783,3 +783,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
 | [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
+| [0947](0947-native-dwarf-debug-info.md) | Native: DWARF debug info (line table, subprograms) in every ELF executable, stage 1 *(delegated)* | Accepted | 2026-11-05 |
+| [0948](0948-ail-profile-sampling-profiler.md) | `ail profile`: a signal-driven sampling profiler with JSON output *(delegated)* | Proposed | 2026-11-05 |
