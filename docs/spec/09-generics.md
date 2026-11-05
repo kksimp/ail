@@ -337,7 +337,7 @@ fn main()
 ## Const generics (proposed)
 
 > **Status:** Proposed, not implemented. Design and rejected alternatives:
-> [const-generics.md](../design/const-generics.md). The ADR number is pending.
+> [const-generics.md](../design/const-generics.md). [ADR 0954](../decisions/0954-const-generics.md).
 
 **gen.const.1** — A type parameter list MAY declare const parameters as a name
 followed by a type: `struct Vec[T, N int]`. Only `int` is allowed.

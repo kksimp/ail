@@ -1,6 +1,6 @@
 # Const generics (proposed)
 
-Status: proposed by lane H (language gaps); ADR number pending from the integrator. Gap 11 of `/mnt/project-files/gaps/replace-c-cpp-rust-gaps-2026-11-05.md`. Spec 09 lists const generics as "not yet designed"; ADR 0090 defers fixed arrays and SIMD vectors to them.
+Status: proposed by lane H (language gaps); [ADR 0954](../decisions/0954-const-generics.md). Gap 11 of `/mnt/project-files/gaps/replace-c-cpp-rust-gaps-2026-11-05.md`. Spec 09 lists const generics as "not yet designed"; ADR 0090 defers fixed arrays and SIMD vectors to them.
 
 ## Why
 
