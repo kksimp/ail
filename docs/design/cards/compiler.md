@@ -16,7 +16,7 @@ tests: 6 (`ail test` lists them)
 
 ## cheader (30 items)
 
-## check (362 items)
+## check (366 items)
 
 ## codegen (55 items)
 
@@ -36,7 +36,7 @@ tests: 6 (`ail test` lists them)
 
 ## load (103 items)
 
-## mir (538 items)
+## mir (544 items)
 
 ## obj (65 items)
 

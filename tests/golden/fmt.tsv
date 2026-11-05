@@ -86,8 +86,8 @@ fmt plain compiler/check/observe.ail	069de32265be4e83	0	31678d9c4f045420
 fmt long compiler/check/observe.ail	069de32265be4e83	0	44779de3c971c052
 fmt plain compiler/check/ownership.ail	8c13623c358f1a91	0	5223c91a2e0b1a07
 fmt long compiler/check/ownership.ail	8c13623c358f1a91	0	77ceab3ac93a327a
-fmt plain compiler/check/parallel.ail	710c53544efd730b	0	97479f8b6c00c9a1
-fmt long compiler/check/parallel.ail	710c53544efd730b	0	daaadbc9ece67b0e
+fmt plain compiler/check/parallel.ail	50dfa5de068ff279	0	787ce749d6832af5
+fmt long compiler/check/parallel.ail	50dfa5de068ff279	0	98cec8f02e87005e
 fmt plain compiler/check/regex_method.ail	afabf74f000ff70a	0	a43d0cb72be5b7e2
 fmt long compiler/check/regex_method.ail	afabf74f000ff70a	0	0e953da0b5744641
 fmt plain compiler/check/relate.ail	dfafa04d095d575f	0	8de1c14d9026dd49
@@ -186,6 +186,8 @@ fmt plain compiler/mir/lower_anon.ail	a2120038abadab57	0	7ac26680e97c8d37
 fmt long compiler/mir/lower_anon.ail	a2120038abadab57	0	2d1539885fd4c3d9
 fmt plain compiler/mir/lower_aorder.ail	5e25d0ba0f15ae8c	0	8e4feee744393966
 fmt long compiler/mir/lower_aorder.ail	5e25d0ba0f15ae8c	0	f9eb79f138515c21
+fmt plain compiler/mir/lower_build.ail	b2e0f1d6f15d8fc6	0	6021ae3c31285e99
+fmt long compiler/mir/lower_build.ail	b2e0f1d6f15d8fc6	0	da32128e2ec4e670
 fmt plain compiler/mir/lower_bytes.ail	d158328b2b4cc0d4	0	5ae42331e59189a0
 fmt long compiler/mir/lower_bytes.ail	d158328b2b4cc0d4	0	02c7adacc113d041
 fmt plain compiler/mir/lower_cell.ail	a3e3def2a0c6883a	0	9db72b10cf989b7f
@@ -198,8 +200,8 @@ fmt plain compiler/mir/lower_closure.ail	0f61f60ac1ed98f4	0	70c1b9717f0ea827
 fmt long compiler/mir/lower_closure.ail	0f61f60ac1ed98f4	0	65822514bbec0d2c
 fmt plain compiler/mir/lower_cmp.ail	33805f56fba1b450	0	2af1d55541731915
 fmt long compiler/mir/lower_cmp.ail	33805f56fba1b450	0	bd2cea091799f927
-fmt plain compiler/mir/lower_comp.ail	5aec5449ecf0a0c7	0	f5e679aba9893d2f
-fmt long compiler/mir/lower_comp.ail	5aec5449ecf0a0c7	0	e9ca9c8510b37a37
+fmt plain compiler/mir/lower_comp.ail	ea219a31d92a8fb5	0	b7b3add80416cef7
+fmt long compiler/mir/lower_comp.ail	ea219a31d92a8fb5	0	292a084361d834c7
 fmt plain compiler/mir/lower_const.ail	84955cfe35aa80d5	0	85ae0859a96986cc
 fmt long compiler/mir/lower_const.ail	84955cfe35aa80d5	0	191f694698565b2d
 fmt plain compiler/mir/lower_contract.ail	b2952b4b1a5ed3dd	0	b765b71e735fd035
@@ -302,8 +304,8 @@ fmt plain compiler/mir/lower_struct.ail	723942c5994df871	0	7a11a03d7238b10a
 fmt long compiler/mir/lower_struct.ail	723942c5994df871	0	48e35af2816e901f
 fmt plain compiler/mir/lower_sync.ail	0a95603e717fa848	0	8c7296633dd51558
 fmt long compiler/mir/lower_sync.ail	0a95603e717fa848	0	2727a44fcd73718b
-fmt plain compiler/mir/lower_task.ail	73bc2ee2ed7ef380	0	2ae1158cf3601be6
-fmt long compiler/mir/lower_task.ail	73bc2ee2ed7ef380	0	c5d9f5892465eb43
+fmt plain compiler/mir/lower_task.ail	dfcbe9f34ffd2b10	0	a29a34aa941308c1
+fmt long compiler/mir/lower_task.ail	dfcbe9f34ffd2b10	0	8222e88d7afda5b1
 fmt plain compiler/mir/lower_tensor.ail	6d768225b5658394	0	3df625aa5c9c5860
 fmt long compiler/mir/lower_tensor.ail	6d768225b5658394	0	71bcae407b1bfec4
 fmt plain compiler/mir/lower_tensor_fuse.ail	38b189e6f38e389b	0	f6f6cdabde89fcb3
@@ -462,8 +464,8 @@ fmt plain compiler/rt/native/sort.ail	e1ef11d712a12ed7	0	a132e4a40cfb2637
 fmt long compiler/rt/native/sort.ail	e1ef11d712a12ed7	0	7852d5e3c5625608
 fmt plain compiler/rt/native/str.ail	0df0cbfda1bdd53a	0	7981656cf3a35eae
 fmt long compiler/rt/native/str.ail	0df0cbfda1bdd53a	0	b505df09738ae4a1
-fmt plain compiler/rt/native/task.ail	9afdea31c66eaf34	0	5427171d7b4afea4
-fmt long compiler/rt/native/task.ail	9afdea31c66eaf34	0	92c99731fbbc1a92
+fmt plain compiler/rt/native/task.ail	170060f00ee649be	0	07c7121faa56100b
+fmt long compiler/rt/native/task.ail	170060f00ee649be	0	528336f6b4c62dcc
 fmt plain compiler/rt/native/tensor.ail	dfd90e3aa23d6bac	0	6fc7333ee4a14a78
 fmt long compiler/rt/native/tensor.ail	dfd90e3aa23d6bac	0	e44a1acc3fa88948
 fmt plain compiler/rt/native/tensor_fuse.ail	65360e8c5201e6c9	0	666325e181b2d3ec
@@ -3576,6 +3578,10 @@ fmt plain tests/native/run/os_stdin_lossy.ail	40f8884cdc6854d1	0	5c41f41832d7915
 fmt long tests/native/run/os_stdin_lossy.ail	40f8884cdc6854d1	0	1ebb3b647171fdfe
 fmt plain tests/native/run/par_basic.ail	6b20564dfe682fff	0	17caabad9078ae26
 fmt long tests/native/run/par_basic.ail	6b20564dfe682fff	0	75a1de8424fea4ec
+fmt plain tests/native/run/par_build.ail	35afa13d54e6db75	0	f1f90c3898a17998
+fmt long tests/native/run/par_build.ail	35afa13d54e6db75	0	b59439a48fa4a1c6
+fmt plain tests/native/run/par_build_trap.ail	cc02e6c869404f45	0	c5f88be2684837c5
+fmt long tests/native/run/par_build_trap.ail	cc02e6c869404f45	0	1f59d7e6e19e4126
 fmt plain tests/native/run/par_overflow.ail	d4b7aca513eafa40	0	97e20b45fa031780
 fmt long tests/native/run/par_overflow.ail	d4b7aca513eafa40	0	6c5c53abcbc1bb50
 fmt plain tests/native/run/par_sums.ail	9762fa95b18226c1	0	38f841c4800e1cbc
@@ -4142,8 +4148,8 @@ fmt plain tools/fuzz/suite.ail	05b76ba4ee034148	0	f18f8ac7c06e99e1
 fmt long tools/fuzz/suite.ail	05b76ba4ee034148	0	506bd9a8943a6e3c
 fmt plain tools/gate/asm.ail	6ccb1b476c70a792	0	a7b2e0cb83aad36a
 fmt long tools/gate/asm.ail	6ccb1b476c70a792	0	fe69c8228658d7a1
-fmt plain tools/gate/gate.ail	823ee30e74539c77	0	6fb7734b1bd81b65
-fmt long tools/gate/gate.ail	823ee30e74539c77	0	ed0c9e76509b3def
+fmt plain tools/gate/gate.ail	3716ce9a8e476b02	0	597c82f1c2237304
+fmt long tools/gate/gate.ail	3716ce9a8e476b02	0	f9c8b81dc4144811
 fmt plain tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	cefff86c796ed587
 fmt long tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	7e124b641dbf1cab
 fmt plain tools/gate/goldens.ail	33c251dd83e47eac	0	9f0e88b90b7ded6c
