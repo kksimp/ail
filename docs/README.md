@@ -21,6 +21,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | [design/](design/) | Non-normative design notes and analyses |
 
 Design notes:
+- [design/kernel-poc.md](design/kernel-poc.md): proposal for a kernel in AIL with the GC kept
 - [design/feasibility.md](design/feasibility.md): is AIL achievable, and what
   token-efficiency and performance levels are realistic?
 - [design/performance-beyond-c.md](design/performance-beyond-c.md): research
