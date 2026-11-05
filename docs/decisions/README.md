@@ -759,4 +759,3 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
 | [0939](0939-match-jump-tables.md) | Native: `match` through a jump table, with the dispatch repeated in each arm *(delegated)* | Accepted | 2026-11-04 |
-| [0940](0940-inliner-cost-model.md) | Native: inlining functions that call others, by a call-graph cost model *(delegated)* | Accepted | 2026-11-04 |

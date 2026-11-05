@@ -51,12 +51,13 @@ the in-order test chooses (native.match.1).
 
 ## Measured
 
-ail-linux (i5-7500T), best of 5, 358d4894 against main 84416e3b: vm 3866 →
-2990 ms (-23%; gcc -O2 1671, Python 122556); with `AIL_OPT_OFF=switch` 4052,
-so the tree alone was no better than main here; lzr, regex_scan and the
-perfbench ten flat within 1-2 ms. The table and the copies add about 3% to
-the stage-3 compiler (9.18 MB with ADR 0940 off; the copies are capped after
-a first run that had none). Mac: see the PR.
+ail-linux (i5-7500T), best of 5, 358d4894 against main 84416e3b, with the
+inliner change measured beside it turned off (`AIL_OPT_OFF=wide`, so this
+change alone): vm 3866 → 2963 ms (-23%; gcc -O2 1671, Python 122556); with
+`AIL_OPT_OFF=switch` as well 4052, so the tree alone was no better than main
+here; lzr, regex_scan and the perfbench ten flat within 1-2 ms. The stage-3
+compiler goes 8.89 → 9.18 MB (+3%; the copies are capped after a first run
+that had none). Mac: see the PR.
 
 ## Rejected alternatives
 
