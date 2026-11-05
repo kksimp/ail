@@ -4,8 +4,8 @@ use std.net
 
 fn worker(srv net.Server) !
     while true
-        _ := srv.accept() else err
-            print("worker stops: {err.kind}")
+        _ := srv.accept() else
+            print("worker stops")
             return
 
 fn square(n int) int

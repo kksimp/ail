@@ -583,7 +583,7 @@ fn Run.threads_one(mut self, runner str)
     if b.status != 0
         red("tests/native/threads1/server_wait.ail", "`ail build` failed:\n{b.err}")
         return
-    got := sh("AIL_THREADS=1 timeout 30 {runner} {exe}")
+    got := sh("AIL_THREADS=1 perl -e 'alarm 30; exec @ARGV' {runner} {exe}")
     if got.status != 0 or got.out != slurp("tests/native/threads1/server_wait.out")
         red("AIL_THREADS=1 server task", "exit {got.status}, output differs or hung")
 
