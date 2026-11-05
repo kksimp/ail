@@ -749,3 +749,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0931](0931-std-app-canvas-hover.md) | `std.app` canvas hover events | Accepted | 2026-11-04 |
 | [0932](0932-std-app-click-count-and-menus.md) | `std.app` click count and context menus | Accepted | 2026-11-04 |
 | [0933](0933-std-app-alpha-fill.md) | `std.app` translucent fills | Accepted | 2026-11-04 |
+| [0938](0938-auto-parallel-push-builder-loops.md) | Run push-builder loops on the pool: one push per iteration, chunks joined in order *(delegated)* | Accepted | 2026-11-04 |
