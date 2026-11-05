@@ -11,7 +11,7 @@ fn main()
         print("scan failed: {err.kind} {err.path}")
         return
     mut files := 0
-    mut bytes := 0
+    mut total := 0
     mut biggest := ""
     mut most := 0
     mut seen := Set[str]()
@@ -22,11 +22,11 @@ fn main()
         if not seen.add(key)
             continue
         files += 1
-        bytes += e.size
+        total += e.size
         if e.size > most
             most = e.size
             biggest = e.path.strip_prefix(root) else e.path
-    print("{files} files, {bytes} bytes, {s.skipped.len()} skipped")
+    print("{files} files, {total} bytes, {s.skipped.len()} skipped")
     print("biggest: {biggest} ({most} bytes)")
     fs.remove("{root}/logs/a.log") else return
     fs.remove("{root}/logs/b.log") else return
