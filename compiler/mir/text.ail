@@ -58,5 +58,8 @@ fn term_text(f Func, t Term) str
         "branch" =>
             yes := "b{t.targets[0]}({vals_text(f, t.args[0])})"
             "branch {val(f, t.cond)}, {yes}, b{t.targets[1]}({vals_text(f, t.args[1])})"
+        "switch" =>
+            cases := ["b{t.targets[k]}({vals_text(f, t.args[k])})" for k in 0..t.targets.len()]
+            "switch {val(f, t.cond)}, [{cases.join(", ")}]"
         "return" => if t.value < 0 then "return" else "return {val(f, t.value)}"
         _ => t.kind
