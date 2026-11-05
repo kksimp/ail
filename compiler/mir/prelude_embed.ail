@@ -716,7 +716,9 @@ fn json_read(type_text str, src str, dest str, path str, indent str, depth int) 
         mut out := ["{indent}{a} := {src}.need_arr() {fail}"]
         out.push("{indent}if {a}.len() != {parts.len()}\n{deeper}return JsonError(-1, \"expected {parts.len()} elements, found \{{a}.len()}\").under(\"{path}\")\n")
         for i in 0..parts.len()
-            out.push(json_read(parts[i], "{a}[{i}]", "{dest}_{i}", "{path}[{i}]", indent, depth + 1)?)
+            out.push(
+                json_read(parts[i], "{a}[{i}]", "{dest}_{i}", "{path}[{i}]", indent, depth + 1)?,
+            )
         names := ["{dest}_{i}" for i in 0..parts.len()]
         out.push("{indent}{dest} := ({names.join(", ")})\n")
         return out.join("")
@@ -765,6 +767,7 @@ fn json_optional(inner str, src str, dest str, path str, indent str, depth int) 
     deeper := "{indent}    "
     body := json_read(inner, x, y, path, deeper, depth + 1)?
     "{indent}mut {l} := List[{inner}]()\n{indent}if {x} := {src}\n{body}{deeper}{l}.push({y})\n{indent}{dest} := {l}.first()\n"
+
 ## @module default
 ## A type with a default value, `T.default()` (trait.assoc.1, ADR 0350).
 ## `impl Default for T` with no functions derives it for a struct whose
@@ -805,7 +808,9 @@ fn derive_default(t TypeInfo) str ! DeriveError
 fn default_of(type_text str) str
     if type_text.ends_with("?")
         return "none"
-    if type_text.starts_with("List[") or type_text.starts_with("Map[") or type_text.starts_with("Set[")
+    if type_text.starts_with("List[")
+        or type_text.starts_with("Map[")
+        or type_text.starts_with("Set[")
         return "{type_text}()"
     match type_text
         "int" => "0"
@@ -928,14 +933,6 @@ fn Grid.from(xs List[List[T]]) Self
             unreachable("type.grid.1: the rows of a grid must have the same length")
         cells.extend(x)
     Grid(rows: xs.len(), cols: c, cells: cells)
-
-## Where `g[i, j]` is in `cells` (type.grid.3): -1 for a column outside
-## `0..cols`, so that the list index traps; a row outside `0..rows` is outside
-## `cells` already.
-fn Grid.flat(self, i int, j int) int
-    if j < 0 or j >= cols
-        return -1
-    i * cols + j
 
 ## Row `i` as a list (type.grid.4).
 fn Grid.row(self, i int) List[T]

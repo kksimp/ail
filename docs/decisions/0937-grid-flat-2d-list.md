@@ -25,9 +25,9 @@ but holds numbers only and has no element assignment.
 2. **`g[i, j]`.** The parser reads `x[a, b]` as `x[(a, b)]` (an `Index` of a
    tuple literal; no new syntax node). The checker types it as the element on
    a `Grid` (type.grid.3) and as a tuple key elsewhere (type.grid.6). Native
-   lowering (`lower_grid.ail`) rewrites it to `g.cells[g.flat(i, j)]`, where
-   `flat` returns -1 for a column outside the grid, so the list's bounds check
-   traps every index outside it and `flat` stays a leaf the inliner takes.
+   lowering (`lower_grid.ail`) checks `i` against `rows` and `j` against
+   `cols` with the `bounds` instruction (type.coll.4), so `i * cols + j`
+   can't overflow, then reads `g.cells` at that index.
    Reads, `=`, `op=` and the assignment-order rule (ADR 0131) are the list
    element's.
 3. **Size fields are read-only** (type.grid.2): assigning `rows`, `cols` or
@@ -60,8 +60,10 @@ and [status](../status.md).
   to `cells`.
 - **Extending `std.tensor`**: numbers only, needs `use std.tensor`, and its
   value is immutable.
-- **Checking the row in `flat` too:** a row outside the grid already gives an
-  index outside `cells`; one compare saved per access.
+- **`g.cells[g.flat(i, j)]` with a prelude `flat` method** (the first
+  version): measured 3.1x the instructions of nested lists on matmul 600
+  (8.27G against 2.64G on ail-linux), since the generic method call stayed a
+  call; the checks are now emitted inline.
 
 ## Consequences
 

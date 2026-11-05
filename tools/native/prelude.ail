@@ -930,14 +930,6 @@ fn Grid.from(xs List[List[T]]) Self
         cells.extend(x)
     Grid(rows: xs.len(), cols: c, cells: cells)
 
-## Where `g[i, j]` is in `cells` (type.grid.3): -1 for a column outside
-## `0..cols`, so that the list index traps; a row outside `0..rows` is outside
-## `cells` already.
-fn Grid.flat(self, i int, j int) int
-    if j < 0 or j >= cols
-        return -1
-    i * cols + j
-
 ## Row `i` as a list (type.grid.4).
 fn Grid.row(self, i int) List[T]
     cells[i * cols..(i + 1) * cols]

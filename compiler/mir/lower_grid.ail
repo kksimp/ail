@@ -1,6 +1,5 @@
-## `g[i, j]` on the prelude's `Grid[T]` (type.grid.3, ADR 0937). It is
-## `g.cells[g.flat(i, j)]`: `flat` gives -1 for a column outside the grid, so
-## the list's own bounds check traps for every index outside it, and the rest
+## `g[i, j]` on the prelude's `Grid[T]` (type.grid.3, ADR 0937): the element
+## `i * cols + j` of `g.cells` after a bounds check of each index, and the rest
 ## (reads, `=`, `op=`, copies, the optimiser's passes) is a list element's.
 use ast
 
@@ -18,8 +17,11 @@ fn plain_place(e ast.Expr) bool
         Member(r, _, _) => plain_place(r)
         _ => false
 
-## `g.cells[g.flat(i, j)]` for `g[i, j]` when `recv` is a grid; `none` when
-## it isn't one.
+## `g.cells[~k]` for `g[i, j]` when `recv` is a grid, with `~k` a hidden
+## variable holding `i * g.cols + j`, computed now behind two bounds checks
+## (`i` against `rows`, `j` against `cols`; type.grid.3), so the product can't
+## overflow and the element access is a plain list element's. `none` when
+## `recv` isn't a grid.
 fn Lower.grid_place(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) ast.Expr?
     items := match index
         TupleLit(xs, _) => xs
@@ -27,20 +29,28 @@ fn Lower.grid_place(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) ast.Ex
     if items.len() != 2 or not is_grid_ty(recv_ty(recv)?)
         return none
     if not plain_place(recv)
-        problem(
-            pos,
-            "`g[i, j]` on a grid that isn't a variable or a field isn't in the native subset yet",
-        )
+        problem(pos, "`g[i, j]` on a grid that isn't a variable or a field isn't in the native subset yet")
         return none
-    args := [
-        ast.Arg(label: none, mutable: false, moved: false, value: items[0], param: none),
-        ast.Arg(label: none, mutable: false, moved: false, value: items[1], param: none),
-    ]
+    i := lower_value(items[0], Ty.Int)?
+    j := lower_value(items[1], Ty.Int)?
+    rows := lower_value(ast.Expr.Member(recv: recv, name: "rows", name_pos: pos), Ty.Int)?
+    cols := lower_value(ast.Expr.Member(recv: recv, name: "cols", name_pos: pos), Ty.Int)?
+    grid_bound(i.id, rows.id, pos)
+    grid_bound(j.id, cols.id, pos)
+    at := op("add", [op("mul", [i.id, cols.id], Ty.Int), j.id], Ty.Int)
+    name := "~g{nvars}"
+    declare(name, Ty.Int, at)
     ast.Expr.Index(
         recv: ast.Expr.Member(recv: recv, name: "cells", name_pos: pos),
-        index: ast.Expr.Method(recv: recv, name: "flat", name_pos: pos, args: args),
+        index: ast.Expr.Name(name: name, pos: pos),
         pos: pos,
     )
+
+## Trap (type.coll.4) unless `0 <= x < n`.
+fn Lower.grid_bound(mut self, x int, n int, pos ast.Pos)
+    mut b := inst(-1, "bounds", [x, n])
+    b.site = bounds_site(pos)
+    emit_void(b)
 
 ## The type of `x[...]` where `x` is a `t`: a grid's element, else a list's.
 fn Lower.index_ty(self, t Ty) Ty?
