@@ -150,10 +150,10 @@ it holds (a generated `copy.T` function); fields change in place.
 +80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
 +88  u64  misskey the last key a probe missed (ADR 0936)
 +96  u64  misshash its hash, reused by the insert that follows
-+104 ptr  kcache  `str` keys only: 16 entry addresses, slot by key object address
++104 ptr  kcache  `str` keys only: 32 entry addresses, slot by key object address
 ```
 
-A `str`-keyed table is 232 bytes, others 104. A key cache slot counts only
+A `str`-keyed table is 360 bytes, others 104. A key cache slot counts only
 when its entry still holds that very string object (ADR 0936).
 
 The entry array is in insertion order, which is iteration order

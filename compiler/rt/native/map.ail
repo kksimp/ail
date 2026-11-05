@@ -18,12 +18,12 @@
 ##   +72 lastkey, +80 laste: the last key found or added and its entry (0: none)
 ##   +88 misskey, +96 misshash: the last key a probe missed and its hash, so
 ##       the insert that follows does not hash it again (ADR 0936)
-##   +104 str keys only: 16 words, entry addresses by key object (ADR 0936)
+##   +104 str keys only: 32 words, entry addresses by key object (ADR 0936)
 ## The index has twice the array's capacity, so it is at most half full.
 
 MAP_BYTES := 104
 ## A `str`-keyed table also holds the key cache.
-MAP_BYTES_STR := 232
+MAP_BYTES_STR := 360
 MAP_KCACHE := 104
 
 ## The table object's size for key kind `kind`.
@@ -261,7 +261,7 @@ fn map_key_eq(kind int, a int, b int) bool
 ## Fresh tables of capacity `ecap` (a power of two); `used` is not changed.
 fn map_tables(m int, ecap int)
     if load64(m + 32) == 1
-        map_zero(m + MAP_KCACHE, 16)
+        map_zero(m + MAP_KCACHE, 32)
     store64(m + 16, ecap)
     store64(m + 24, ecap * 2 - 1)
     store64(m + 40, map_alloc(ecap * 24, 3))
@@ -292,29 +292,28 @@ fn map_find(m int, k int) int
         return load64(m + 80)
     kind := load64(m + 32)
     if kind == 1
-        return map_find_str(m, k)
+        # The key cache (ADR 0936), written out here so that the hit makes no
+        # call once `map_find` is inlined into the caller.
+        e := load64(m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31))
+        if e != 0 and load64(e + 8) == k
+            store64(m + 72, k)
+            store64(m + 80, e)
+            return e
+        return map_probe(m, k, map_hash_str(k))
     if kind > 15
         return map_probe(m, k, map_hash(kind, k))
     map_probe(m, k, map_hash_int(k))
 
-## The key cache slot of string object `k` (an address, 8 mod 16).
+## The key cache slot of string object `k` (ADR 0936): the top five bits of
+## the address times an odd constant (`map_find` and `map_probe` write it
+## out). A program looks up the same string objects again and again
+## (literals, the words of a vocabulary, names held in a tree), so a key
+## object's entry is remembered and found without hashing its bytes. A slot is
+## trusted only when its entry holds this very object: the entry keeps the
+## object alive, so no other string can have its address, and strings never
+## change. A removal clears the entry's key; a rebuild or copy clears the cache.
 fn map_kslot(m int, k int) int
-    m + MAP_KCACHE + 8 * k.shr(4).bit_xor(k.shr(9)).bit_and(15)
-
-## `map_find` for `str` keys (ADR 0936). A program looks up the same string
-## objects again and again (literals, the words of a vocabulary, names held in
-## a tree), so a key object's entry is remembered in a 16-slot cache and found
-## without hashing its bytes. A slot is trusted only when its entry holds this
-## very object: the entry keeps the object alive, so no other string can have
-## its address, and strings never change. A removal clears the entry's key, and
-## a rebuild or copy clears the cache.
-fn map_find_str(m int, k int) int
-    e := load64(map_kslot(m, k))
-    if e != 0 and load64(e + 8) == k
-        store64(m + 72, k)
-        store64(m + 80, e)
-        return e
-    map_probe(m, k, map_hash_str(k))
+    m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31)
 
 ## The probe of `map_find`, apart from the hash so that only `m` and `k` live
 ## across the hash call. A hit in the first slot, the usual case, makes no
@@ -329,7 +328,10 @@ fn map_probe(m int, k int, h int) int
         return 0
     e := load64(m + 40) + 24 * (s - 1)
     if load64(e) == h and load64(e + 8) == k
-        map_found(m, k, e)
+        store64(m + 72, k)
+        store64(m + 80, e)
+        if load64(m + 32) == 1
+            store64(m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31), e)
         return e
     map_probe_from(m, k, h, j)
 
@@ -506,7 +508,7 @@ fn map_copy(m int) int
     copy_bytes(n, m, obj)
     store64(n + 80, 0)
     if obj == MAP_BYTES_STR
-        map_zero(n + MAP_KCACHE, 16)
+        map_zero(n + MAP_KCACHE, 32)
     used := load64(m + 8)
     ents := map_alloc(load64(m + 16) * 24, 3)
     copy_bytes(ents, load64(m + 40), 24 * used)

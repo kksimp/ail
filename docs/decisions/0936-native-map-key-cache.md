@@ -18,8 +18,8 @@ once in `map_append`.
 
 ## Decision
 
-1. **A key cache per `str`-keyed table.** The table object grows to 232
-   bytes and holds 16 entry addresses at +104, slot chosen by the key
+1. **A key cache per `str`-keyed table.** The table object grows to 360
+   bytes and holds 32 entry addresses at +104, slot chosen by the key
    object's address. `rt.map_find` on `str` keys reads the slot first; a
    slot counts only when its entry's key is that very object, which needs no
    hash and no byte compare. The entry keeps the object alive, so no other
