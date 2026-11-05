@@ -5,7 +5,7 @@ Chapter key: `gen`
 > **Status:** Drafted (partial). Specified: bracket syntax (`gram.generic.1`),
 > generic types, constraints, methods on generic types, inference, anonymous
 > generic parameters, and the compilation-strategy freedom. Not yet designed:
-> variance, const generics, and methods for one instantiation only. Because
+> variance, const generics (proposed, see below), and methods for one instantiation only. Because
 > user code can't declare such methods, `xs.sum()` (`List[int]` and
 > `List[float]` only) is a built-in special case (`type.coll.12`, ADR 0136).
 > `Hash` is now a usable bound (`trait.auto.5`, ADR 0133).
@@ -333,3 +333,23 @@ fn main()
     # observable behaviour is the same program output shown in the examples above.
     print("instances")
 ```
+
+## Const generics (proposed)
+
+> **Status:** Proposed, not implemented. Design and rejected alternatives:
+> [const-generics.md](../design/const-generics.md). The ADR number is pending.
+
+**gen.const.1** — A type parameter list MAY declare const parameters as a name
+followed by a type: `struct Vec[T, N int]`. Only `int` is allowed.
+
+**gen.const.2** — A const argument MUST be an int literal or a module constant.
+An expression such as `N + 1` is an error naming this rule.
+
+**gen.const.3** — Inside the declaration a const parameter is a compile-time
+`int` value, usable in expressions and in the arguments of other types.
+
+**gen.const.4** — Inference unifies const arguments. Two uses of one parameter
+with different values are a type error that names both values.
+
+**gen.const.5** — A generic with const parameters compiles by monomorphisation,
+one instance per distinct argument list (ADR 0536).
