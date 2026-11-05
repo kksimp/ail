@@ -924,6 +924,7 @@ fn Lower.display_call(mut self, v Val) int?
 SHOWN_STD_AIL := [
     "std.app.",
     "std.args.",
+    "std.audio.",
     "std.bigint.",
     "std.csv.",
     "std.log.",
