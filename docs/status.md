@@ -62,6 +62,8 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native code generation (ADR 0816): parameters stay in their arrival registers (no swap moves at entry); wordfreq 254.6M → 240.9M instructions, binarytrees 412.2M → 399.5M, fannkuch 284.6M → 274.8M.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
 - Time zones (ADR 0924, decided): AIL will ship the IANA tz database so zones answer the same on every OS, Windows included; not yet implemented.
+- Data-range guards and interchange (ADR 0941, native.bce.12-13): a scan of the lists a nest only reads bounds their elements, so the nest's overflow checks go, and `for j: s := s0; for k: s += t; row.push(s)` runs as k outside, j inside, behind a guard; bit-identical for `int` and `float`.
+- Vector axpy kernels (ADR 0942, native.vec.1): the swapped nest's inner loop is one AVX2 or NEON kernel call per `k`; matmul-1400 on ail-linux 11.35 s → 1.95 s (gcc -O2 6.82 s).
 - Windows releases (ADR 0925): the gate stays Unix-shaped; `native`, `examples` and `run` must be green on ail-win before each release.
 - Struct scalar replacement (ADR 0923, native.sroa.1): a struct that never leaves its function has no object, and constructors that only build their result are inlined; raytrace N=4000 9.7 s → 3.6 s on ail-linux (gcc -O2 1.75 s).
 - Native list reuse (ADR 0824, native.reuse.1): a list made in a loop that nothing keeps past the iteration is one list the preheader makes and each iteration empties; fannkuch 252M → 160M instructions, binarytrees 334M → 256M.
