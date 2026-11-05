@@ -562,7 +562,8 @@ fn par_worth(lo int, hi int, work int, auto int) bool
         return false
     t := load64(pool() + P_TARGET)
     n := hi - lo
-    if n < 2
+    # conc.par.9: with one thread the loop runs as if there were no pool.
+    if n < 2 or t < 2
         return false
     # conc.par.14: heavy iterations (`PAR_HEAVY` operations each) repay the
     # pool even when there are fewer than twice as many as workers.
