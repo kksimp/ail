@@ -760,3 +760,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
 | [0945](0945-vector-escape-loops.md) | Native: vector kernel for escape-time loops, mandelbrot-style (ADR 0845 stage 2) *(delegated)* | Accepted | 2026-11-05 |
 | [0949](0949-std-audio.md) | std.audio: sound as data, devices through a host program *(delegated)* | Accepted | 2026-11-05 |
+| [0959](0959-std-crypto.md) | std.hash and std.crypto: in-house, constant-time, vector-checked primitives; HMAC-SHA-384/512 first *(delegated)* | Accepted | 2026-11-05 |

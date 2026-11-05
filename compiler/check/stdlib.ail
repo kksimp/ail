@@ -41,7 +41,17 @@ STD_FUNCTIONS := [
         "write_bytes",
         "write_text",
     ],
-    ["hash", "crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
+    [
+        "hash",
+        "crc32",
+        "hash64",
+        "hmac_sha256",
+        "hmac_sha384",
+        "hmac_sha512",
+        "sha256",
+        "sha384",
+        "sha512",
+    ],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_line"],
@@ -492,7 +502,7 @@ fn other_name(module str, n str) str
 ## `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
 fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
     rule := if module == "hash" then "std.hash.1" else "std.compress.1"
-    want := if f == "hmac_sha256" then 2 else 1
+    want := if f.starts_with("hmac_") then 2 else 1
     if args.len() != want
         args_only(args)
         err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
