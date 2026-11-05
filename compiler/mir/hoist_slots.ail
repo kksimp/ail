@@ -89,7 +89,12 @@ fn slots_in(g0 Func, lp LoopInfo) Func
             out.push(r)
         g.blocks[b].insts = out
     mut cand := [false for _ in 0..g.vals.len()]
+    mut lists := 0
     for v in hoisted.values()
         if is_list(g.vals[v])
             cand[v] = true
-    hoist_in(g, lp, cand, defs_of(g))
+            lists += 1
+    r := hoist_in(g, lp, cand, defs_of(g))
+    if (env.get("AIL_SLOTS_DEBUG") else "") != ""
+        io.eprint("slots {g.name} b{lp.header}: {hoisted.len()} slots, {lists} lists, pre {g.blocks[lp.pre].insts.len()} -> {r.blocks[lp.pre].insts.len()}")
+    r
