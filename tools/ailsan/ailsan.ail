@@ -33,7 +33,7 @@ fn run_once(o Opts, schedule str) Run
     mut args := [if o.tests then "test" else "run", "--schedule={schedule}", o.file]
     args.extend(o.rest)
     r := proc.run(ail_path(), args, none, o.timeout) else err
-        return Run(status: 124, out: "", err: "can't run: {err.message}")
+        return Run(status: 124, out: "", err: "can't run: {err.kind}")
     Run(status: r.status, out: r.out, err: r.err)
 
 ## What differs between the fixed run and `r`, or "" when nothing does (san.sched.1).
