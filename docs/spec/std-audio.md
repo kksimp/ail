@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Draft, no ADR yet (Fable allocates the number). Part 1 (clips,
+> **Status:** Draft (ADR 0949). Part 1 (clips,
 > mixing, WAV) is written in AIL in `std/audio/audio.ail` and tested by
 > `tests/cases/std_audio.ail`. Part 2 (devices) is specified here and not built.
 
@@ -52,6 +52,6 @@ candidates for the auto-parallel pass.
 
 ## Open for Fable
 
-ADR number; MP3/OGG/FLAC decoders (FLAC first, lossless and simple, then
+MP3/OGG/FLAC decoders (FLAC first, lossless and simple, then
 Vorbis, then MP3); spatial audio; f32 sample storage for tokens and speed
 once `List[f32]` is native-fast.
