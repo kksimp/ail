@@ -30,12 +30,12 @@ PCM; other chunks are skipped; 32-bit float is refused for now.
 
 ## Devices (specified, not built)
 
-**std.audio.8** — `std.audio.device`: `play(clip) Handle`, `Handle.stop()`,
+**Planned (part 2, no rule ID yet):** `std.audio.device`: `play(clip) Handle`, `Handle.stop()`,
 `Handle.wait()`, `open_output(rate, channels) Out` with `write(clip)`, and
 `open_input(rate, channels) In` with `read(ms) Clip`. A `Handle` is unique and
 must be waited, as tasks are (ADRs 0095-0096). Effect: `audio`.
 
-**std.audio.9** — Backends follow `std.app` (ADR 0838): a small host program per
+**Planned (part 2, no rule ID yet):** backends follow `std.app` (ADR 0838): a small host program per
 platform owns the real-time audio thread and exchanges PCM with AIL over its
 stdin and stdout, so no AIL code runs on an audio callback. Hosts: macOS
 (CoreAudio, AudioQueue/AUHAL, first), Windows (WASAPI shared mode, event
@@ -49,6 +49,42 @@ candidates for the auto-parallel pass.
 - Callbacks from the audio thread into AIL: break `ffi.decl.3` and risk GC pauses in real time.
 - Linking SDL, miniaudio or PortAudio: custom tooling by default (ADR 0009).
 - Integer sample clips: float keeps mixing and DSP simple; WAV encode converts.
+
+## Examples
+
+```ail rules=std.audio.1,std.audio.2,std.audio.3,std.audio.4,std.audio.5,std.audio.6,std.audio.7
+use std.audio
+
+fn main() !
+    t := audio.tone(440.0, 100, 8000, 0.5)
+    print(audio.frames(t))
+    print(audio.duration_ms(t))
+    print(audio.peak(t) > 0.49 and audio.peak(t) <= 0.5)
+    s := audio.silence(8000, 1, 50)
+    print(audio.frames(s))
+    m := audio.mix(t, s)?
+    print(audio.frames(m))
+    print(audio.frames(audio.concat(t, s)?))
+    print(audio.frames(audio.resample(t, 16000)))
+    st := audio.Clip(rate: 8000, channels: 2, samples: [0.5, -0.5, 1.0, 0.0])
+    print(audio.to_mono(st).samples)
+    w := audio.encode_wav(t)
+    print(w.len())
+    back := audio.decode_wav(w)?
+    print(back.rate)
+    print(back.channels)
+    print(audio.frames(back))
+    d := audio.peak(back) - audio.peak(t)
+    print(d < 0.001 and d > -0.001)
+    bad := audio.decode_wav(b"nope") else err
+        print("error: {err}")
+        t
+    print(audio.frames(bad))
+    odd := audio.concat(t, st) else err
+        print("error: {err}")
+        t
+    print(audio.frames(odd))
+```
 
 ## Open for Fable
 
