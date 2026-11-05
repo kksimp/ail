@@ -1180,6 +1180,24 @@ fn main()
     print(dp.row(2))        # [1, 3, 6]
 ```
 
+```ail error=type.grid.2
+fn main()
+    mut g := Grid.fill(2, 2, 0)
+    g.rows = 3                  # error: a grid's size fields are never assigned
+```
+
+```ail rules=type.grid.5,type.grid.6
+fn main()
+    g := Grid.fill(2, 2, 0)
+    mut h := g
+    h[0, 0] = 9
+    print(g[0, 0])          # 0: `h := g` copied the grid
+    print(g == Grid.fill(2, 2, 0))   # true
+    mut m := Map[(int, int), str]()
+    m[1, 2] = "x"
+    print(m[1, 2])          # x: the same as m[(1, 2)]
+```
+
 ## Examples
 
 Each block below is a conformance example (ADR 0002). Its `rules=` list names
