@@ -1,0 +1,33 @@
+## std.gfx.3-6: key-down, key-up and a frame dump, with no window.
+use std.app
+use std.gfx
+
+struct Player
+    x float
+    moving bool
+
+impl gfx.Game for Player
+    fn update(mut self, input gfx.Input, dt float)
+        if gfx.down(input, "right")
+            x += 10.0 * dt
+        self.moving = gfx.down(input, "right")
+
+    fn draw(self, mut f gfx.Frame)
+        gfx.clear(mut f, 0)
+        gfx.rect(mut f, self.x, 5.0, 4.0, 4.0, 16711680)
+
+fn main()
+    mut p := Player(x: 0.0, moving: false)
+    lines := gfx.script(mut p, 32, 16, 0.5, [
+        [app.key("right")],
+        [],
+        [gfx.key_up("right")],
+    ])
+    for l in lines
+        print(l)
+    i := gfx.next_input(gfx.idle(), [app.key("a")])
+    print(gfx.pressed(i, "a"))
+    j := gfx.next_input(i, [])
+    print("{gfx.pressed(j, "a")} {gfx.down(j, "a")}")
+    k := gfx.next_input(j, [gfx.key_up("right")])
+    print(gfx.released(k, "a"))
