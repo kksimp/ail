@@ -749,6 +749,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0931](0931-std-app-canvas-hover.md) | `std.app` canvas hover events | Accepted | 2026-11-04 |
 | [0932](0932-std-app-click-count-and-menus.md) | `std.app` click count and context menus | Accepted | 2026-11-04 |
 | [0933](0933-std-app-alpha-fill.md) | `std.app` translucent fills | Accepted | 2026-11-04 |
+| [0934](0934-promote-struct-fields-in-loops.md) | Native: struct fields kept in registers across loops: measured no gain, not merged *(delegated)* | Rejected | 2026-11-05 |
+| [0935](0935-split-live-ranges-at-loops.md) | Native: live-range splitting at call-free loops: measured no gain, not merged *(delegated)* | Rejected | 2026-11-05 |
 | [0936](0936-native-map-key-cache.md) | Native string-keyed maps cache keys by object, and an insert reuses the missed probe's hash *(delegated)* | Accepted | 2026-11-04 |
 | [0937](0937-grid-flat-2d-list.md) | `Grid[T]`: a flat 2-D list in the prelude, indexed `g[i, j]` *(delegated)* | Accepted | 2026-11-04 |
 | [0938](0938-auto-parallel-push-builder-loops.md) | Run push-builder loops on the pool: one push per iteration, chunks joined in order *(delegated)* | Accepted | 2026-11-04 |
