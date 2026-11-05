@@ -29,7 +29,10 @@ fn Lower.grid_place(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) ast.Ex
     if items.len() != 2 or not is_grid_ty(recv_ty(recv)?)
         return none
     if not plain_place(recv)
-        problem(pos, "`g[i, j]` on a grid that isn't a variable or a field isn't in the native subset yet")
+        problem(
+            pos,
+            "`g[i, j]` on a grid that isn't a variable or a field isn't in the native subset yet",
+        )
         return none
     i := lower_value(items[0], Ty.Int)?
     j := lower_value(items[1], Ty.Int)?
