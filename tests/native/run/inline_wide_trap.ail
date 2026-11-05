@@ -1,0 +1,16 @@
+# A function called from one place goes inline although it calls another
+# (native.inline.1); a trap below the copy still lists every frame
+# (trace.frame.2): pick, then total, then main.
+fn pick(xs List[int], i int) int
+    xs[i]
+
+fn total(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += pick(xs, i)
+    s
+
+fn main()
+    xs := [1, 2, 3]
+    print(total(xs, 3))
+    print(total(xs, 5))
