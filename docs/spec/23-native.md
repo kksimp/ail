@@ -560,7 +560,7 @@ fn main()
 
 **native.inline.1** — A call may be replaced by a copy of the callee's body
 when the callee is not on a cycle of the call graph, is not `main` or part of
-the runtime, and makes no indirect call: a callee called from one place up to
+the runtime, has no loop, and makes no indirect call: a callee called from one place up to
 200 instructions, any other up to 30, with each caller grown by at most 400
 instructions this way, besides the leaf functions of ADR 0391. A function
 that nothing calls or names after this is left out of the executable. A trap
@@ -568,14 +568,12 @@ in, or below, a copied body reports the callee's frame and every frame it was
 copied into (trace.frame.2). `AIL_OPT_OFF=wide` turns it off. *(ADR 0940)*
 
 ```ail rules=native.inline.1
-fn scale(xs List[int], k int) int
-    mut s := 0
-    for x in xs
-        s += x * k
-    s
+fn area(w int, h int) int
+    print("area of {w} by {h}")
+    w * h
 
 fn main()
-    print(scale([1, 2, 3], 4))
+    print(area(3, 4))
 ```
 
 **native.reuse.1** — A list made empty inside a loop may be one object that

@@ -312,7 +312,13 @@ pub fn branch_on(cond int, yes int, no int) Term
 pub fn switch_on(cond int, cases List[int], other int) Term
     mut ts := cases
     ts.push(other)
-    Term(kind: "switch", cond: cond, targets: ts, args: [List[int]() for _ in 0..ts.len()], value: -1)
+    Term(
+        kind: "switch",
+        cond: cond,
+        targets: ts,
+        args: [List[int]() for _ in 0..ts.len()],
+        value: -1,
+    )
 
 pub fn return_of(value int) Term
     Term(kind: "return", cond: -1, targets: [], args: [], value: value)

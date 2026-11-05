@@ -20,7 +20,7 @@ never reach the callee's bounds checks.
 1. **Candidates** (`compiler/mir/inline_wide.ail`): a function that is not
    on a cycle of the call graph (Tarjan, `recursive_names`), not `main` or a
    runtime function, with no indirect call, no primitive that reads its frame
-   or starts a thread, and no jump to its entry. One called from a single
+   or starts a thread, no jump to its entry and no loop. One called from a single
    place (and whose address is not taken) qualifies up to `SINGLE_LIMIT` 200
    instructions; any other up to `WIDE_LIMIT` 30.
 2. **Per-caller budget.** Inlining goes on to the copied calls too (bounded
@@ -34,6 +34,13 @@ never reach the callee's bounds checks.
 4. **Dead functions.** A candidate that nothing calls or names after all
    passes is dropped from the module.
 5. Off under `AIL_INSTRUMENT` and with `AIL_OPT_OFF=wide` (or `inline`).
+
+## Measured, first run (ail-linux, 870d0571 against main d40e5092)
+
+With loops allowed in the callee, `matmul` went 5 → 10 ms and `spectralnorm`
+3 → 5 ms (both back to main with `AIL_OPT_OFF=wide`), `lzr` 4191 → 4115 ms,
+the rest flat. A function with a loop is therefore never a candidate: the call
+costs little beside its loop, and the copy lost the loop's facts in the caller.
 
 ## Deferred
 
@@ -54,5 +61,6 @@ change can cost.
   others, so no limit reaches them.
 - **Inlining everything below a size, recursion included**: unbounded copies
   of a cycle, and the stage-2 compile-time cost that killed ADR 0890 pass 1a.
+- **Callees with loops** (the first run): slower where measured, see above.
 - **Dropping the inlined call's frames**: a trap would name the wrong
   function, against trace.frame.2.

@@ -45,13 +45,16 @@ pub fn wide_candidates(m Module, leaves Set[str]) Map[str, int]
             continue
         c := calls.get(f.name) else 0
         single := c == 1 and not taken.contains(f.name)
-        if n <= WIDE_LIMIT or single and n <= SINGLE_LIMIT
+        # A function with a loop stays a call: the call costs little beside the
+        # loop, and copied into a caller the loop measured slower (matmul 2x,
+        # spectralnorm 1.7x on ail-linux), so only straight-line code goes.
+        if (n <= WIDE_LIMIT or single and n <= SINGLE_LIMIT) and find_loops(f).len() == 0
             out[f.name] = n
     out
 
 ## A function's instruction count, or -1 when it may not be copied: the
 ## runtime's own functions and `main`, an indirect call, a primitive that
-## reads its own frame or makes a thread, or a jump back to its entry.
+## reads its own frame or makes a thread, a jump back to its entry, or a loop.
 fn wide_size(f Func) int
     if f.name.starts_with("rt.") or f.name == "main"
         return -1

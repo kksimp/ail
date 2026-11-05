@@ -66,6 +66,8 @@ struct Gen
     loc List[int]
     blabels List[int]
     next_block int
+    ## Bytes left for repeated dispatches in this function (§dispatch_chain).
+    dup_left int
     remat List[mir.Inst]
     uses List[int]
     stubs List[Stub]
@@ -155,6 +157,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         loc: al.loc,
         blabels: [],
         next_block: -1,
+        dup_left: DISPATCH_BYTES,
         remat: remat,
         uses: uses,
         stubs: [],
@@ -565,6 +568,13 @@ fn Gen.goto(mut self, to int, args List[int], inline bool)
 ## The most instructions a copied dispatch has (native.match.2).
 DISPATCH_MAX := 32
 
+## The most entries the table of a copied dispatch has.
+DISPATCH_ENTRIES := 64
+
+## How many bytes of copied dispatches (about 8 per instruction, 4 per table
+## entry) one function may have.
+DISPATCH_BYTES := 4096
+
 ## Whether `to` starts a dispatch: at most four blocks, each jumping to the
 ## next, the last ending in a `switch`, with at most `DISPATCH_MAX`
 ## instructions, no call, and nothing the allocator moves in or out of them.
@@ -588,6 +598,9 @@ fn Gen.dispatch_chain(self, to int) bool
         if count > DISPATCH_MAX
             return false
         if h.term.kind == "switch"
+            cost := 8 * count + 4 * h.term.targets.len()
+            if h.term.targets.len() > DISPATCH_ENTRIES + 1 or cost > dup_left
+                return false
             return not mir.opt_off("taildup")
         if h.term.kind != "jump" or h.term.targets[0] == b
             return false
@@ -601,9 +614,11 @@ fn Gen.replay_dispatch(mut self, to int)
     mut b := to
     while true
         h := f.blocks[b]
+        dup_left -= 8 * h.insts.len()
         for i in h.insts
             gen_inst(i)
         if h.term.kind == "switch"
+            dup_left -= 4 * h.term.targets.len()
             switch_jump(h.term)
             return
         nxt := h.term.targets[0]

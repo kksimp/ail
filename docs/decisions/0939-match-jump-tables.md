@@ -39,7 +39,10 @@ for a `switch` and never duplicates it.
    allocator parks across it (ADR 0848), that ends in a `switch` repeats the
    chain's instructions, the moves between its blocks and the `switch` with
    its own table, instead of jumping to it. A rotated loop test (ADR 0611)
-   whose body is such a chain repeats it too. Every value keeps its one
+   whose body is such a chain repeats it too. A copy needs a table of at most
+   64 entries, and one function gets at most 4 KB of copies (about 8 bytes an
+   instruction, 4 an entry), so a compiler full of large matches does not grow
+   by a table per arm. Every value keeps its one
    location, so the copy does exactly what the original does.
    `AIL_OPT_OFF=taildup`.
 
@@ -48,7 +51,10 @@ the in-order test chooses (native.match.1).
 
 ## Measured
 
-To be filled from the runner (ADR 0890 protocol): vm, lzr and the perfbench
+First run (ail-linux, 870d0571 against main d40e5092, no caps on the copies):
+vm 3863 → 2958 ms (gcc -O2 1671, Python 122593); with `AIL_OPT_OFF=switch`
+4033, with `AIL_OPT_OFF=taildup` 3328; the rest flat. The stage-2 compiler
+went 8.7 → 18.3 MB with this and ADR 0940 together; the caps above came after. To be filled from the runner (ADR 0890 protocol): vm, lzr and the perfbench
 set against gcc -O2 and Python on ail-linux and the Mac, and the stage-2
 compiler's size and build time.
 
