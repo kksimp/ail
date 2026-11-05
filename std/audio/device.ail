@@ -35,9 +35,10 @@ pub fn open() proc.Child ! DeviceError
     cmd := host_path()?
     mut c := proc.start(cmd, []) else err
         return DeviceError(kind: "start", message: "{err}")
-    hello := c.out.recv() else err
-        status := proc.kill(move c)
-        return DeviceError(kind: "host_exited", message: "the audio host exited with status {status} ({err})")
+    hello := c.out.recv() else return DeviceError(
+        kind: "host_exited",
+        message: "the audio host exited before it was ready",
+    )
     if hello != "ready"
         proc.kill(move c)
         return DeviceError(kind: "version", message: "the audio host said: {hello}")
