@@ -414,8 +414,8 @@ fmt plain compiler/rt/native/glob.ail	2af6ed39dec8fe57	0	b16269cb237cd29e
 fmt long compiler/rt/native/glob.ail	2af6ed39dec8fe57	0	4db8baf304823970
 fmt plain compiler/rt/native/hash.ail	83339f0dd7eb05ba	0	627f9e74fdea14d5
 fmt long compiler/rt/native/hash.ail	83339f0dd7eb05ba	0	7a1634e76b4cdb2e
-fmt plain compiler/rt/native/heap.ail	caaf0cba0d179e37	0	034f28038b3adf48
-fmt long compiler/rt/native/heap.ail	caaf0cba0d179e37	0	f3a1305234c7921e
+fmt plain compiler/rt/native/heap.ail	357b22fbd67b2610	0	c547f09d096fd6fd
+fmt long compiler/rt/native/heap.ail	357b22fbd67b2610	0	042b80d170019baa
 fmt plain compiler/rt/native/instr.ail	c4601af394cadfbb	0	56463d32ea371a40
 fmt long compiler/rt/native/instr.ail	c4601af394cadfbb	0	27da08aadf2e331d
 fmt plain compiler/rt/native/limits.ail	3b46830a28933c29	0	09751309d20b05c7
