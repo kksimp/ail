@@ -31,7 +31,7 @@ pub fn host_path() str ! DeviceError
     p
 
 ## An open audio host (std.audio.9).
-pub struct Device
+pub unique struct Device
     child proc.Child
 
 ## Starts the audio host and waits for it to be ready (std.audio.9).
@@ -49,8 +49,8 @@ fn gone(move c proc.Child) ! DeviceError
     status := proc.kill(move c)
     DeviceError(kind: "host_exited", message: "the audio host exited with status {status}")
 
-fn answer(mut d Device) str ! DeviceError
-    line := d.child.out.recv() else return DeviceError(
+fn Device.answer(mut self) str ! DeviceError
+    line := self.child.out.recv() else return DeviceError(
         kind: "host_exited",
         message: "the audio host closed",
     )
@@ -60,17 +60,17 @@ fn answer(mut d Device) str ! DeviceError
 
 ## Plays `c` on the default output and returns when it has finished
 ## (std.audio.9).
-pub fn play(mut d Device, c audio.Clip) ! DeviceError
-    d.child.stdin.send("play {c.rate} {c.channels} {audio.to_pcm16(c).base64()}\n")
-    r := answer(mut d)?
+pub fn Device.play(mut self, c audio.Clip) ! DeviceError
+    self.child.stdin.send("play {c.rate} {c.channels} {audio.to_pcm16(c).base64()}\n")
+    r := self.answer()?
     if r != "done"
         return DeviceError(kind: "protocol", message: "expected done, got: {r}")
 
 ## Records `ms` milliseconds from the default input (std.audio.10). The clip
 ## has the rate and channel count the device gave, near `rate` and `channels`.
-pub fn record(mut d Device, ms int, rate int, channels int) audio.Clip ! DeviceError
-    d.child.stdin.send("rec {ms} {rate} {channels}\n")
-    r := answer(mut d)?
+pub fn Device.record(mut self, ms int, rate int, channels int) audio.Clip ! DeviceError
+    self.child.stdin.send("rec {ms} {rate} {channels}\n")
+    r := self.answer()?
     parts := r.split(" ")
     if parts.len() != 4 or parts[0] != "data"
         return DeviceError(kind: "protocol", message: "expected data, got: {r}")
@@ -83,5 +83,5 @@ pub fn record(mut d Device, ms int, rate int, channels int) audio.Clip ! DeviceE
     audio.from_pcm16(b, r2, c2)
 
 ## Stops the host (std.audio.9).
-pub fn close(move d Device)
-    d.child.stdin.close()
+pub fn Device.close(move self)
+    self.child.stdin.close()
