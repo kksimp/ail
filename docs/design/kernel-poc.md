@@ -8,8 +8,7 @@
 - **Fixed by the designer:** no no-GC mode, no 32-bit support (including wasm32).
 - **Builds on:** [ADR 0820](../decisions/0820-driver-level-unsafe.md),
   [ADR 0835](../decisions/0835-native-raw-pointers-and-hw.md),
-  [native-abi.md](native-abi.md). ADR number: to be allocated (ask the
-  integrator); this note becomes the ADR's body once accepted.
+  [native-abi.md](native-abi.md). [ADR 0953](../decisions/0953-freestanding-targets-and-kernel-poc.md) records the build plan.
 
 ## The claim on trial
 
