@@ -1,0 +1,479 @@
+## Vector escape loops (native.vec.2, ADR 0945; ADR 0845 stage 2). The nest
+##
+##     for x in 0..n
+##         cr := f(x)                      # float arithmetic of x and invariants
+##         mut zr := 0.0
+##         mut zi := 0.0
+##         mut k := 0
+##         while k < MAX
+##             if zr * zr + zi * zi > T
+##                 break
+##             t := zr * zr - zi * zi + cr
+##             zi = 2.0 * zr * zi + ci     # ci doesn't depend on x
+##             zr = t
+##             k += 1
+##         ... uses k ...
+##
+## is the escape-time loop of Mandelbrot and Julia sets: the points are
+## independent and a lane that has left keeps its state, so four points (two on
+## ARM64) run a pass of `rt.vec_escape` under a lane mask, each lane with the
+## scalar loop's operations in the scalar order. Before the nest, a guard
+## (`n <= ESC_LIMIT`) picks the vector path: one loop computes every `cr[x]` into a
+## buffer, one kernel call fills a buffer of counts, and the `x` loop then reads
+## its `k` from that buffer instead of running the `while` loop. Without the
+## guard the loop runs as written. `cr` is float arithmetic only, so no trap
+## moves; the loop that makes `cr` is the one slice of the body that computes it.
+
+## Largest `n` that takes the vector path (two buffers of this many words).
+ESC_LIMIT := 16777216
+
+## Largest `MAX`: the kernel counts in a double and converts to `int32`.
+ESC_STEPS := 1048576
+
+pub fn vec_loops(f Func) Func
+    if opt_off("vec") or opt_off("vecloop") or f.name.starts_with("rt.")
+        return f
+    mut g := f
+    mut tries := 0
+    while tries < 2
+        tries += 1
+        next := escape_next(g) else break
+        g = next
+    g
+
+## What the matcher found.
+struct Esc
+    ## The `x` loop: its header, preheader, body, exit, bound, `x`.
+    xh int
+    pre int
+    bx int
+    bound int
+    x int
+    lo int
+    ## The escape loop: header, the three blocks it owns, and the exit block.
+    eh int
+    eb int
+    leave int
+    stay int
+    step int
+    ## Values: the count, the limit (a constant), the threshold, `cr`, `ci`.
+    k int
+    mx int
+    thr int
+    cr int
+    ci int
+    ## The constants the loop's header defines for its limit, to remake.
+    mx_in_header bool
+    steps int
+
+fn escape_next(f Func) Func?
+    loops := find_loops(f)
+    defs := defs_of(f)
+    for xl in loops
+        if e := escape_of(f, defs, loops, xl)
+            if out := rewritten(f, defs, loops, xl, e)
+                return out
+    none
+
+fn fconst_of(f Func, defs List[Def], v int) float?
+    i := inst_of(f, defs, v)?
+    if i.op == "fconst" then i.fimm else none
+
+fn preds_of(f Func, b int) List[int]
+    mut out := List[int]()
+    for p in 0..f.blocks.len()
+        for t in f.blocks[p].term.targets
+            if t == b
+                out.push(p)
+    out
+
+fn escape_of(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo) Esc?
+    cx := counted(f, defs, xl)?
+    if cx.q >= 0 or cx.step >= 0
+        return none
+    lo0 := const_of(f, defs, cx.lo)?
+    if lo0 != 0
+        return none
+    # Exactly one loop inside, the escape loop, entered from the body.
+    mut ei := -1
+    for q in 0..loops.len()
+        if loops[q].header != xl.header and xl.member[loops[q].header]
+            if ei >= 0
+                return none
+            ei = q
+    if ei < 0
+        return none
+    el := loops[ei]
+    bx := cx.body
+    bxt := f.blocks[bx].term
+    if bxt.kind != "jump" or bxt.targets[0] != el.header or el.pre != bx
+        return none
+    if el.latches.len() != 1 or el.exits != 2 or el.blocks.len() != 4
+        return none
+    # The header: `k < MAX`.
+    eh := el.header
+    h := f.blocks[eh]
+    if h.params.len() != 3 or h.term.kind != "branch"
+        return none
+    k := h.params[0]
+    zr := h.params[1]
+    zi := h.params[2]
+    if f.vals[k] != Ty.Int or f.vals[zr] != Ty.Float or f.vals[zi] != Ty.Float
+        return none
+    cmp := inst_of(f, defs, h.term.cond)?
+    if cmp.op != "lt" or cmp.arg(0) != k or defs[h.term.cond].block != eh
+        return none
+    mx := cmp.arg(1)
+    steps := const_of(f, defs, mx)?
+    if steps < 1 or steps > ESC_STEPS
+        return none
+    in_header := defs[mx].block == eh
+    if in_header and h.insts.len() != 2
+        return none
+    if not in_header and (h.insts.len() != 1 or el.member[defs[mx].block])
+        return none
+    stay := h.term.targets[0]
+    leave := h.term.targets[1]
+    if not el.member[stay] or el.member[leave] or not xl.member[leave]
+        return none
+    # The test block: zr * zr + zi * zi > T.
+    tb := f.blocks[stay]
+    if tb.insts.len() != 5 or tb.term.kind != "branch" or tb.params.len() != 0
+        return none
+    ins := tb.insts
+    if ins[0].op != "fmul" or ins[0].arg(0) != zr or ins[0].arg(1) != zr
+        return none
+    if ins[1].op != "fmul" or ins[1].arg(0) != zi or ins[1].arg(1) != zi
+        return none
+    if ins[2].op != "fadd" or ins[2].arg(0) != ins[0].dst or ins[2].arg(1) != ins[1].dst
+        return none
+    if ins[3].op != "fconst"
+        return none
+    if ins[4].op != "fgt" or ins[4].arg(0) != ins[2].dst or ins[4].arg(1) != ins[3].dst
+        return none
+    if tb.term.cond != ins[4].dst
+        return none
+    out_b := tb.term.targets[0]
+    step_b := tb.term.targets[1]
+    # The escape block jumps to the exit with nothing.
+    ob := f.blocks[out_b]
+    if ob.insts.len() != 0 or ob.term.kind != "jump" or ob.term.targets[0] != leave
+        return none
+    if ob.term.args[0].len() != 0 or not el.member[out_b]
+        return none
+    # The step block.
+    sb := f.blocks[step_b]
+    if sb.insts.len() != 8 or sb.term.kind != "jump" or sb.term.targets[0] != eh
+        return none
+    if not el.member[step_b] or el.latches[0] != step_b
+        return none
+    si := sb.insts
+    if si[0].op != "fsub" or si[0].arg(0) != ins[0].dst or si[0].arg(1) != ins[1].dst
+        return none
+    cr := si[1].arg(1)
+    if si[1].op != "fadd" or si[1].arg(0) != si[0].dst
+        return none
+    if si[2].op != "fconst" or si[2].fimm != 2.0
+        return none
+    if si[3].op != "fmul" or si[3].arg(0) != si[2].dst or si[3].arg(1) != zr
+        return none
+    if si[4].op != "fmul" or si[4].arg(0) != si[3].dst or si[4].arg(1) != zi
+        return none
+    ci := si[5].arg(1)
+    if si[5].op != "fadd" or si[5].arg(0) != si[4].dst
+        return none
+    if si[6].op != "const" or si[6].imm != 1
+        return none
+    if si[7].op != "add" or si[7].site >= 0 or si[7].arg(0) != k or si[7].arg(1) != si[6].dst
+        return none
+    sa := sb.term.args[0]
+    if sa.len() != 3 or sa[0] != si[7].dst or sa[1] != si[1].dst or sa[2] != si[5].dst
+        return none
+    # `cr` is made in the body of the `x` loop, `ci` before it.
+    if defs[cr].block != bx or f.vals[cr] != Ty.Float
+        return none
+    if xl.member[defs[ci].block] or f.vals[ci] != Ty.Float
+        return none
+    # The start: k = 0, zr = zi = 0.0.
+    sargs := bxt.args[0]
+    if sargs.len() != 3
+        return none
+    k0 := const_of(f, defs, sargs[0])?
+    if k0 != 0
+        return none
+    z0 := fconst_of(f, defs, sargs[1])?
+    z1 := fconst_of(f, defs, sargs[2])?
+    if z0 != 0.0 or z1 != 0.0
+        return none
+    # The escape loop's blocks are these four; the exit is entered from the
+    # header and the escape block only, and takes no parameters yet.
+    for b in el.blocks
+        if b != eh and b != stay and b != out_b and b != step_b
+            return none
+    if f.blocks[leave].params.len() != 0
+        return none
+    ps := preds_of(f, leave)
+    if ps.len() != 2 or not ps.contains(eh) or not ps.contains(out_b)
+        return none
+    # What the loop made that is read outside it: only `k` and the limit.
+    mut inside := Set[int]()
+    for p in h.params
+        inside.add(p)
+    for b in el.blocks
+        for i in f.blocks[b].insts
+            if i.dst >= 0
+                inside.add(i.dst)
+    for b in 0..f.blocks.len()
+        if el.member[b]
+            continue
+        for i in f.blocks[b].insts
+            for a in i.operands()
+                if inside.contains(a) and a != k and a != mx
+                    return none
+        for a in f.blocks[b].term.uses()
+            if inside.contains(a) and a != k and a != mx
+                return none
+    # The slice of the body that makes `cr`: float arithmetic only.
+    if slice_of(f, defs, xl, cx, cr, bx) == none
+        return none
+    Esc(
+        xh: xl.header,
+        pre: xl.pre,
+        bx: bx,
+        bound: cx.bound,
+        x: cx.p,
+        lo: cx.lo,
+        eh: eh,
+        eb: out_b,
+        leave: leave,
+        stay: stay,
+        step: step_b,
+        k: k,
+        mx: mx,
+        thr: ins[3].dst,
+        cr: cr,
+        ci: ci,
+        mx_in_header: in_header,
+        steps: steps,
+    )
+
+## The body's instructions that `cr` needs, in order (their indexes in the
+## block), or `none` when one is not a plain float or constant operation or
+## reads a value the loop made other than `x` and the slice's own.
+fn slice_of(f Func, defs List[Def], xl LoopInfo, cx Counted, cr int, bx int) List[int]?
+    insts := f.blocks[bx].insts
+    mut need := Set[int]()
+    need.add(cr)
+    mut keep := List[int]()
+    mut k := insts.len()
+    while k > 0
+        k -= 1
+        i := insts[k]
+        if i.dst < 0 or not need.contains(i.dst)
+            continue
+        if not slice_op(i)
+            return none
+        keep.push(k)
+        for a in i.operands()
+            if a == cx.p
+                continue
+            if defs[a].block == bx
+                need.add(a)
+            elif xl.member[defs[a].block]
+                return none
+    mut out := List[int]()
+    mut j := keep.len()
+    while j > 0
+        j -= 1
+        out.push(keep[j])
+    out
+
+fn slice_op(i Inst) bool
+    match i.op
+        "fconst" | "const" | "itof" | "fadd" | "fsub" | "fmul" | "fdiv" => i.site < 0
+        _ => false
+
+fn nv(mut g Func, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
+
+fn konst_i(mut g Func, mut out List[Inst], t Ty, n int) int
+    v := nv(mut g, t)
+    mut i := inst(v, "const", [])
+    i.imm = n
+    out.push(i)
+    v
+
+fn call_to(dst int, name str, args List[int]) Inst
+    mut c := inst(dst, "call", args)
+    c.name = name
+    c
+
+fn rewritten(f Func, defs List[Def], loops List[LoopInfo], xl LoopInfo, e Esc) Func?
+    cxx := counted(f, defs, xl)?
+    sl := slice_of(f, defs, xl, cxx, e.cr, e.bx)?
+    mut g := f
+    nb := f.blocks.len()
+    gb := nb
+    g1 := nb + 1
+    g2 := nb + 2
+    jb := nb + 3
+    a0 := nb + 4
+    ah := nb + 5
+    ab := nb + 6
+    kb := nb + 7
+    bk := nb + 8
+    pb := nb + 9
+    pre_args := f.blocks[e.pre].term.args[0]
+    # The guard: `n <= ESC_LIMIT`.
+    mut gi := List[Inst]()
+    lim := konst_i(mut g, mut gi, Ty.Int, ESC_LIMIT)
+    okv := nv(mut g, Ty.Bool)
+    gi.push(inst(okv, "le", [e.bound, lim]))
+    gblock := Block(params: [], insts: gi, term: branch_on(okv, g1, g2))
+    # Fast: room for `n` rounded up to 4, the vector path on.
+    mut i1 := List[Inst]()
+    three := konst_i(mut g, mut i1, Ty.Int, 3)
+    cap1 := nv(mut g, Ty.Int)
+    i1.push(inst(cap1, "add", [e.bound, three]))
+    yes := konst_i(mut g, mut i1, Ty.Bool, 1)
+    b1 := Block(params: [], insts: i1, term: jump_to(jb, [cap1, yes]))
+    # Else: tiny buffers, the vector path off.
+    mut i2 := List[Inst]()
+    four := konst_i(mut g, mut i2, Ty.Int, 4)
+    no := konst_i(mut g, mut i2, Ty.Bool, 0)
+    b2 := Block(params: [], insts: i2, term: jump_to(jb, [four, no]))
+    # Join: the buffers, then the vector path or the loop.
+    capv := nv(mut g, Ty.Int)
+    fastv := nv(mut g, Ty.Bool)
+    mut ji := List[Inst]()
+    crb := nv(mut g, Ty.List(Ty.Int))
+    ji.push(call_to(crb, "rt.list_new", [capv]))
+    kbuf := nv(mut g, Ty.List(Ty.Int))
+    ji.push(call_to(kbuf, "rt.list_new", [capv]))
+    crd := nv(mut g, Ty.Int)
+    ji.push(inst(crd, "data", [crb]))
+    kd := nv(mut g, Ty.Int)
+    ji.push(inst(kd, "data", [kbuf]))
+    jblock := Block(params: [capv, fastv], insts: ji, term: Term(
+        kind: "branch",
+        cond: fastv,
+        targets: [a0, pb],
+        args: [[], []],
+        value: -1,
+    ))
+    ablock0 := Block(params: [], insts: [], term: jump_to(ah, [e.lo]))
+    # The `cr` loop.
+    xa := nv(mut g, Ty.Int)
+    mut hi := List[Inst]()
+    ca := nv(mut g, Ty.Bool)
+    hi.push(inst(ca, "lt", [xa, e.bound]))
+    hblock := Block(params: [xa], insts: hi, term: branch_on(ca, ab, kb))
+    mut vm := Map[int, int]()
+    vm[e.x] = xa
+    mut bi := List[Inst]()
+    for at in sl
+        i := f.blocks[e.bx].insts[at]
+        mut r := i
+        mut args := List[int]()
+        for a in i.operands()
+            if m := vm.get(a)
+                args.push(m)
+            else
+                args.push(a)
+        r = r.with_args(args)
+        r.dst = nv(mut g, f.vals[i.dst])
+        vm[i.dst] = r.dst
+        bi.push(r)
+    mut stc := inst(-1, "stx", [crd, xa, vm[e.cr]])
+    stc.imm = 8
+    bi.push(stc)
+    onev := konst_i(mut g, mut bi, Ty.Int, 1)
+    xn := nv(mut g, Ty.Int)
+    bi.push(inst(xn, "add", [xa, onev]))
+    bblock := Block(params: [], insts: bi, term: jump_to(ah, [xn]))
+    # The kernel call.
+    mut ki := List[Inst]()
+    mxv := konst_i(mut g, mut ki, Ty.Int, e.steps)
+    thrv := nv(mut g, Ty.Float)
+    mut tc := inst(thrv, "fconst", [])
+    thr0 := fconst_of(f, defs, e.thr) else 4.0
+    tc.fimm = thr0
+    ki.push(tc)
+    ki.push(call_to(-1, "rt.vec_escape", [crd, kd, e.bound, mxv, e.ci, thrv, kbuf]))
+    kblock := Block(params: [], insts: ki, term: jump_to(pb, []))
+    pblock2 := Block(params: [], insts: [], term: jump_to(e.xh, pre_args))
+    # The pixel taking its count from the buffer.
+    mut pi := List[Inst]()
+    dk := nv(mut g, Ty.Int)
+    pi.push(inst(dk, "data", [kbuf]))
+    kk := nv(mut g, Ty.Int)
+    mut ld := inst(kk, "ldx", [dk, e.x])
+    ld.imm = 8
+    pi.push(ld)
+    # The exit takes the count: from the loop's two exits and from here.
+    kp := nv(mut g, Ty.Int)
+    pblock := Block(params: [], insts: pi, term: jump_to(e.leave, [kk]))
+    # Reads of `k` and of the limit outside the escape loop.
+    mut rep := [v for v in 0..g.vals.len()]
+    rep[e.k] = kp
+    mut remade := -1
+    if e.mx_in_header
+        remade = nv(mut g, Ty.Int)
+        rep = [v for v in 0..g.vals.len()]
+        rep[e.k] = kp
+        rep[e.mx] = remade
+    for b in 0..nb
+        if b == e.eh or b == e.stay or b == e.eb or b == e.step
+            continue
+        for q in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[q] = g.blocks[b].insts[q].with_args([
+                rep[a]
+                for a in g.blocks[b].insts[q].operands()
+            ])
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = rep[t.cond]
+        if t.value >= 0
+            t.value = rep[t.value]
+        t.args = [[rep[a] for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    mut lb := g.blocks[e.leave]
+    lb.params = [kp]
+    if e.mx_in_header
+        mut mi := inst(remade, "const", [])
+        mi.imm = e.steps
+        mut ni := [mi]
+        ni.extend(lb.insts)
+        lb.insts = ni
+    g.blocks[e.leave] = lb
+    # The two edges that leave the escape loop pass `k`.
+    mut ht := g.blocks[e.eh].term
+    ht.args = [ht.args[0], [e.k]]
+    g.blocks[e.eh].term = ht
+    mut ot := g.blocks[e.eb].term
+    ot.args = [[e.k]]
+    g.blocks[e.eb].term = ot
+    # The body picks the path; the preheader runs the guard.
+    mut bt := g.blocks[e.bx].term
+    old_args := bt.args[0]
+    g.blocks[e.bx].term = Term(
+        kind: "branch",
+        cond: fastv,
+        targets: [bk, e.eh],
+        args: [[], old_args],
+        value: -1,
+    )
+    g.blocks[e.pre].term = jump_to(gb, [])
+    g.blocks.push(gblock)
+    g.blocks.push(b1)
+    g.blocks.push(b2)
+    g.blocks.push(jblock)
+    g.blocks.push(ablock0)
+    g.blocks.push(hblock)
+    g.blocks.push(bblock)
+    g.blocks.push(kblock)
+    g.blocks.push(pblock)
+    g.blocks.push(pblock2)
+    g

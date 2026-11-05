@@ -13,6 +13,7 @@ pub fn is_kernel(name str) bool
     name == "rt.vec_axpy"
         or name == "rt.vec_axpyi"
         or name == "rt.vec_axpyf"
+        or name == "rt.vec_escape"
         or name == "rt.vec_zip"
         or name == "rt.vec_scal"
         or name == "rt.vec_axpy32"
@@ -33,6 +34,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_axpy" => kernel_axpy(mut a)
         "rt.vec_axpyi" => kernel_axpyi(mut a)
         "rt.vec_axpyf" => kernel_axpyf(mut a)
+        "rt.vec_escape" => kernel_escape(mut a)
         "rt.vec_zip" => kernel_zip(mut a)
         "rt.vec_axpy32" => kernel_axpy32(mut a)
         "rt.vec_zip32" => kernel_zip32(mut a)
@@ -784,5 +786,77 @@ fn kernel_exp(mut a Asm)
     a.vmovups_rm128(6, at(RSP, 576))
     a.vmovups_rm128(7, at(RSP, 592))
     a.alu_ri("add", RSP, 608)
+    a.vzeroupper()
+    a.ret()
+
+## `rt.vec_escape(cr, out, n, max, keep; ci, thr)` (native.vec.2): escape counts
+## of `z <- z * z + c`, four points a pass under a lane mask. rdi = cr, rsi = out,
+## rdx = n, rcx = max, xmm0 = ci, xmm1 = thr; r8 (keep) is ignored. ymm0 zr,
+## ymm1 zi, ymm2 the count as a double (exact below 2^53), ymm3 the live lanes,
+## ymm4/ymm5 zr*zr and zi*zi, ymm6/ymm7 scratch (saved). The constants live on
+## the stack: ci at 0, thr at 32, 2.0 at 64, 1.0 at 96. A lane that has left
+## keeps its zr, zi and count (blend and masked add), so each lane runs the
+## scalar loop's operations in its order. Whole groups, so the last may read
+## and write up to three elements past `n` (the caller leaves room).
+fn kernel_escape(mut a Asm)
+    a.alu_ri("sub", RSP, 160)
+    a.vmovups_mr128(at(RSP, 128), 6)
+    a.vmovups_mr128(at(RSP, 144), 7)
+    a.vbroadcastsd(2, 0)
+    a.vmovupd_mr(at(RSP, 0), 2)
+    a.vbroadcastsd(2, 1)
+    a.vmovupd_mr(at(RSP, 32), 2)
+    a.mov_ri(RAX, 4611686018427387904)
+    for j in 0..4
+        a.mov_mr(at(RSP, 64 + 8 * j), RAX)
+    a.mov_ri(RAX, 4607182418800017408)
+    for j in 0..4
+        a.mov_mr(at(RSP, 96 + 8 * j), RAX)
+    group := a.label()
+    step := a.label()
+    store := a.label()
+    done := a.label()
+    a.bind(group)
+    a.alu_ri("cmp", RDX, 0)
+    a.jcc(CC_LE, done)
+    a.vpd_rrr(87, 0, 0, 0)
+    a.vpd_rrr(87, 1, 1, 1)
+    a.vpd_rrr(87, 2, 2, 2)
+    a.vcmppd_rrr(3, 0, 0, 0)
+    a.mov_rr(R9, RCX)
+    a.bind(step)
+    a.alu_ri("cmp", R9, 0)
+    a.jcc(CC_LE, store)
+    a.vpd256_rrr("fmul", 4, 0, 0)
+    a.vpd256_rrr("fmul", 5, 1, 1)
+    a.vpd256_rrr("fadd", 6, 4, 5)
+    a.vcmppd_rrm(6, 6, at(RSP, 32), 30)
+    a.vlogic256_rrr(85, 3, 6, 3)
+    a.vmovmskpd(R10, 3)
+    a.alu_ri("cmp", R10, 0)
+    a.jcc(CC_E, store)
+    a.vpd256_rrr("fsub", 6, 4, 5)
+    a.vpd256_rrm("fadd", 6, 6, at(RDI, 0))
+    a.vpd256_rrm("fmul", 7, 0, at(RSP, 64))
+    a.vpd256_rrr("fmul", 7, 7, 1)
+    a.vpd256_rrm("fadd", 7, 7, at(RSP, 0))
+    a.vblendvpd(0, 0, 6, 3)
+    a.vblendvpd(1, 1, 7, 3)
+    a.vlogic256_rrm(84, 4, 3, at(RSP, 96))
+    a.vpd256_rrr("fadd", 2, 2, 4)
+    a.alu_ri("sub", R9, 1)
+    a.jmp(step)
+    a.bind(store)
+    a.vcvtpd2dq(4, 2)
+    a.vpmovsxdq(4, 4)
+    a.vmovupd_mr(at(RSI, 0), 4)
+    a.alu_ri("add", RDI, 32)
+    a.alu_ri("add", RSI, 32)
+    a.alu_ri("sub", RDX, 4)
+    a.jmp(group)
+    a.bind(done)
+    a.vmovups_rm128(6, at(RSP, 128))
+    a.vmovups_rm128(7, at(RSP, 144))
+    a.alu_ri("add", RSP, 160)
     a.vzeroupper()
     a.ret()

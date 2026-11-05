@@ -620,3 +620,30 @@ pub fn Asm.vushr4(mut self, d int, n int, k int)
 ## `rev64 vd.16b, vn.16b`: the bytes of each half reversed.
 pub fn Asm.vrev64(mut self, d int, n int)
     word(1310722048 + n * 32 + d)
+
+## Lane masks for `rt.vec_escape` (native.vec.2), all on `.2d` (or `.16b`)
+## vectors: `fcmgt vd, vn, vm` and `fcmeq vd, vn, vm` (all ones where true,
+## false for a NaN); `bsl vd, vn, vm` (`vd` is the mask: its set bits take `vn`,
+## the rest `vm`); `and vd, vn, vm`; `bic vd, vn, vm` (`vn & ~vm`);
+## `addp dd, vn.2d` (the two lanes' sum, zero only if both are zero for masks);
+## `fcvtzs vd.2d, vn.2d`.
+pub fn Asm.vfcmgt(mut self, d int, n int, m int)
+    word(rrr(1860232192, d, n, m))
+
+pub fn Asm.vfcmeq(mut self, d int, n int, m int)
+    word(rrr(1314972672, d, n, m))
+
+pub fn Asm.vbsl(mut self, d int, n int, m int)
+    word(rrr(1851792384, d, n, m))
+
+pub fn Asm.vand(mut self, d int, n int, m int)
+    word(rrr(1310727168, d, n, m))
+
+pub fn Asm.vbic(mut self, d int, n int, m int)
+    word(rrr(1314921472, d, n, m))
+
+pub fn Asm.vaddp_d(mut self, d int, n int)
+    word(1592899584 + n * 32 + d)
+
+pub fn Asm.vfcvtzs2d(mut self, d int, n int)
+    word(1323415552 + n * 32 + d)
