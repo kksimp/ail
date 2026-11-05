@@ -638,8 +638,8 @@ fmt plain examples/runner.ail	ba1013884ac12895	0	9b790511219f5d96
 fmt long examples/runner.ail	ba1013884ac12895	0	e9c2c2ecae38ea45
 fmt plain examples/scan.ail	ef6c223dd5987458	0	8b732acf37f8eb45
 fmt long examples/scan.ail	ef6c223dd5987458	0	cf49150b62da358b
-fmt plain examples/scan_usage.ail	f77e3346c92a7ca6	0	bb95721ca2b76fb0
-fmt long examples/scan_usage.ail	f77e3346c92a7ca6	0	05006925ab6abada
+fmt plain examples/scan_usage.ail	7a9a538dc54ac1f4	0	f66a761381b4ffce
+fmt long examples/scan_usage.ail	7a9a538dc54ac1f4	0	ef17569f7f339e3e
 fmt plain examples/shapes.ail	de02f4ba7d4e1132	0	d728f933f63d8b03
 fmt long examples/shapes.ail	de02f4ba7d4e1132	0	e0349311afa2cae3
 fmt plain examples/sheet.ail	caaa1cff71a6c40d	0	0635e2f624ec0375
@@ -1252,8 +1252,8 @@ fmt plain tests/cases/format_spec_types.ail	5eeba22ec30e9ca1	0	455bbb65e596c2f8
 fmt long tests/cases/format_spec_types.ail	5eeba22ec30e9ca1	0	1fd465e7da42ece0
 fmt plain tests/cases/fs_copy_tree.ail	fb8341800da7fb91	0	679a626712a4e33f
 fmt long tests/cases/fs_copy_tree.ail	fb8341800da7fb91	0	de900c1ad962def3
-fmt plain tests/cases/fs_volume_range.ail	059a66417ab2d5da	0	355ba8db0f9151f3
-fmt long tests/cases/fs_volume_range.ail	059a66417ab2d5da	0	0f0283c80fffd3a6
+fmt plain tests/cases/fs_volume_range.ail	903adb89ca2797f4	0	61307719e4dc91a6
+fmt long tests/cases/fs_volume_range.ail	903adb89ca2797f4	0	efa02e2b8bd3b8b7
 fmt plain tests/cases/functions_and_bindings.ail	3ea8c893852b1845	0	ff9994d059ed8d17
 fmt long tests/cases/functions_and_bindings.ail	3ea8c893852b1845	0	541c5111db395b47
 fmt plain tests/cases/fuzz_csv_blank_row.ail	cb102f365082efd2	0	7949890c75fdfa77
