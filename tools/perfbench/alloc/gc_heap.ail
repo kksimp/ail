@@ -1,0 +1,41 @@
+# A large live heap (about 300 MB of short lists) kept across the collections
+# that workers set off by churning: the marking pause ADR 0944 shares among
+# the parked threads.
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn build(seed int, n int) List[List[int]]
+    mut rows := List[List[int]]()
+    for i in 0..n
+        mut r := List[int]()
+        for j in 0..8
+            r.push(seed + i * 8 + j)
+        rows.push(r)
+    rows
+
+fn sum(rows List[List[int]]) int
+    mut t := 0
+    for r in rows
+        for x in r
+            t += x
+    t
+
+fn churn(seed int, rounds int) int
+    mut total := 0
+    for r in 0..rounds
+        tmp := build(seed + r, 100)
+        total += tmp[99][7] - tmp[0][0]
+    total
+
+fn main()
+    n := size(2000000)
+    big := build(1, n)
+    mut sums := [0 for _ in 0..8]
+    par for i in 0..8
+        sums[i] = churn(i, 15000)
+    print(sums)
+    print(sum(big))

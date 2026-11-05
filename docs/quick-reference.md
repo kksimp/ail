@@ -421,7 +421,6 @@ mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
 xs.push(4)             # push, pop, sort and swap need a `mut` variable
-xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
@@ -431,8 +430,8 @@ empty := List[int]()   # an empty list of a given type, anywhere
 
 Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
-(`int?`, `none` when absent), `sorted()` (copy) and `sort()` (in place), `sum()`
-(ints or floats), `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
+(`int?`), `sorted()` (copy) and `sort()` (in place), `sum()`,
+`take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
 `flatten()`, `enumerate()` (`for i, x in xs.enumerate()`), `zip(xs, ys)` (pairs, to the shorter);
 `is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
@@ -451,16 +450,17 @@ for mut item in items      # `items` must be `mut`
 
 Inside a `for mut` loop the body can't use the list itself.
 
+`Grid[T]`, a flat 2-D list: `mut g := Grid.fill(rows, cols, v)` (or
+`Grid.from(xs)`), `g[i, j] += 1`, `g.rows`, `g.cols`, `g.cells`, `g.row(i)`.
+
 A comprehension builds a list, set or map in one expression:
 
 ```ail fragment
 xs := [3, 1, 4]
 squares := [x * x for x in xs]             # [9, 1, 16]
 big := [x for x in xs if x > 2]            # [3, 4]
-pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # nested, outermost first
 seen := {x % 2 for x in xs}                # a Set[int]
 sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
-nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 ```
 
 Loop variables end with it; `?` and `return` leave the function, `break` ends it.

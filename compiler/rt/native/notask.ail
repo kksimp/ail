@@ -26,6 +26,9 @@ fn gc_start_world()
 fn gc_scan_threads()
     return
 
+fn gc_par_mark() bool
+    false
+
 fn stack_end_self() int
     load64(global(STACK_TOP))
 
