@@ -11,6 +11,7 @@ enum Op {
     case stroke(x1: Double, y1: Double, x2: Double, y2: Double, color: Int, width: Double)
     case pic(x: Double, y: Double, w: Double, h: Double, src: String)
     case bitmap(x: Double, y: Double, w: Double, h: Double, id: String)
+    case shade(x: Double, y: Double, w: Double, h: Double, color: Int, alpha: Double)
     case clip(x: Double, y: Double, w: Double, h: Double)
     case unclip
 }
@@ -63,6 +64,7 @@ func decodeOp(_ any: Any) -> Op? {
         let id = text(d, "id")
         Bitmaps.store(id, w: int(d, "pw"), h: int(d, "ph"), base64: text(d, "data"))
         return .bitmap(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), id: id)
+    case "Shade": return .shade(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), color: int(d, "color"), alpha: num(d, "alpha"))
     case "Clip": return .clip(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"))
     case "Unclip": return .unclip
     default: return nil
@@ -145,7 +147,15 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 answerMeasure(obj["runs"] as? [[String: Any]] ?? [])
                 continue
             }
+            if kind == "popup" {
+                // std.app.18: a native menu at (x, y) of the canvas `id`.
+                let id = text(obj, "id"), x = num(obj, "x"), y = num(obj, "y")
+                let items = obj["items"] as? [String] ?? []
+                DispatchQueue.main.async { showPopup(id: id, x: x, y: y, items: items) }
+                continue
+            }
             if kind != "view" { continue }
+            Hover.enabled = flag(obj, "hover")
             if first {
                 first = false
                 if (obj["v"] as? NSNumber)?.intValue != 1 {
@@ -160,4 +170,32 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
         }
         DispatchQueue.main.async { onEnd() }
     }
+}
+
+/// std.app.16: whether the program wants `move` and `leave` events.
+enum Hover {
+    static var enabled = false
+}
+
+/// std.app.18: shows `items` as a menu and answers with a `popup` event whose `text` is the
+/// chosen label, or empty if the menu was dismissed.
+func showPopup(id: String, x: Double, y: Double, items: [String]) {
+    guard let view = CanvasView.registry[id] else {
+        Outbox.shared.send("popup", ["id": id, "text": ""])
+        return
+    }
+    let picker = MenuPicker()
+    let menu = NSMenu()
+    for label in items {
+        let item = NSMenuItem(title: label, action: #selector(MenuPicker.pick(_:)), keyEquivalent: "")
+        item.target = picker
+        menu.addItem(item)
+    }
+    menu.popUp(positioning: nil, at: NSPoint(x: x, y: y), in: view)
+    Outbox.shared.send("popup", ["id": id, "text": picker.chosen])
+}
+
+final class MenuPicker: NSObject {
+    var chosen = ""
+    @objc func pick(_ sender: NSMenuItem) { chosen = sender.title }
 }
