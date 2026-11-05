@@ -674,8 +674,9 @@ fn hash_sha1_block(h int, blk int, w int)
     store64(h + 24, (load64(h + 24) + d).bit_and(M32))
     store64(h + 32, (load64(h + 32) + e).bit_and(M32))
 
-## std.hash.6: SHA-1 (FIPS 180-4) as lower-case hex.
-fn hash_sha1(s str) str
+## std.hash.6: SHA-1 (FIPS 180-4) as lower-case hex. Broken against collisions:
+## not for security, so the public name is `sha1_legacy`.
+fn hash_sha1_legacy(s str) str
     a := str_addr(s)
     src := a + 16
     n := load64(a)
@@ -740,8 +741,9 @@ fn hash_md5_block(h int, blk int, k List[int], sh List[int])
     store64(h + 16, (load64(h + 16) + c).bit_and(M32))
     store64(h + 24, (load64(h + 24) + d).bit_and(M32))
 
-## std.hash.6: MD5 (RFC 1321) as lower-case hex.
-fn hash_md5(s str) str
+## std.hash.6: MD5 (RFC 1321) as lower-case hex. Broken against collisions:
+## not for security, so the public name is `md5_legacy`.
+fn hash_md5_legacy(s str) str
     k := [
         3614090360,
         3905402710,
