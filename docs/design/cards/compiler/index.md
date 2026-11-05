@@ -5,6 +5,7 @@ api  217 items
 ast  142 items
 attachcli  6 items
 budget  27 items
+cheader  30 items
 check  362 items
 codegen  55 items
 derive  40 items
@@ -14,8 +15,8 @@ explain  37 items
 fix  54 items
 fixrun  17 items
 fmt  64 items
-load  102 items
-mir  535 items
+load  103 items
+mir  538 items
 obj  65 items
 pkg  44 items
 scaffold  2 items

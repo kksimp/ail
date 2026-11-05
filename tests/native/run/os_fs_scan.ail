@@ -1,0 +1,43 @@
+## `fs.scan` (std.fs.23): every entry below the root in pre-order with its
+## bytes sorted, directories 0 long, one device, inodes and allocated sizes
+## set; a root that is missing or a file fails with its own path.
+fn probe(root str, path str)
+    r := fs.scan(path, false) else err
+        print("failed: {err.kind} {err.path.strip_prefix(root) else err.path}")
+        return
+    print(r.entries.len())
+
+fn main()
+    root := env.get("AIL_TEST_DIR") else return
+    base := "{root}/scan"
+    fs.make_dir("{base}/a/b") else return
+    fs.make_dir("{base}/a/c") else return
+    fs.make_dir("{base}/e") else return
+    fs.write_text("{base}/a/b/f1.txt", "12345") else return
+    fs.write_text("{base}/a/c/f2.txt", "ab") else return
+    fs.write_text("{base}/a/g.txt", "xyz") else return
+    fs.write_text("{base}/z.txt", "hello world") else return
+    s := fs.scan(base, true) else err
+        print("failed {err.kind}")
+        return
+    dev := s.entries[0].device
+    for e in s.entries
+        links := if e.is_dir then 0 else e.links
+        ok := e.device == dev and e.inode > 0 and e.alloc >= e.size and e.modified_ms > 1700000000000
+        print("{e.path.strip_prefix(root) else e.path} {e.size} {e.is_dir} {e.is_link} {links} {ok}")
+    print("skipped {s.skipped.len()}")
+    again := fs.scan(base, false) else err
+        print("failed {err.kind}")
+        return
+    print("same count {again.entries.len() == s.entries.len()}")
+    probe(root, "{base}/nope")
+    probe(root, "{base}/z.txt")
+    fs.remove("{base}/a/b/f1.txt") else return
+    fs.remove("{base}/a/c/f2.txt") else return
+    fs.remove("{base}/a/g.txt") else return
+    fs.remove("{base}/z.txt") else return
+    fs.remove("{base}/a/b") else return
+    fs.remove("{base}/a/c") else return
+    fs.remove("{base}/a") else return
+    fs.remove("{base}/e") else return
+    fs.remove(base) else return

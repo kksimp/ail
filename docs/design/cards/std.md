@@ -9,9 +9,25 @@ struct Metadata  ## std.fs.10 (ADR 0281)
     size int
     modified_ms int
     is_dir bool
+struct Volume  ## std.fs.24 (ADR 0928)
+    total int
+    free int
 error struct CompressError  ## std.compress (ADR 0443)
     kind str
     message str
+struct Entry  ## std.fs.23 (ADR 0927): one entry of `fs.scan`, and the scan.
+    path str
+    size int
+    alloc int
+    modified_ms int
+    inode int
+    device int
+    links int
+    is_dir bool
+    is_link bool
+struct Scan
+    entries List[fs.Entry]
+    skipped List[str]
 struct Output  ## std.proc
     status int
     out str
