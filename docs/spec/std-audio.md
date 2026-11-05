@@ -4,7 +4,7 @@ Chapter key: `std`
 
 > **Status:** Draft (ADR 0949). Part 1 (clips,
 > mixing, WAV) is written in AIL in `std/audio/audio.ail` and tested by
-> `tests/cases/std_audio.ail`. Part 2 (devices) is specified here and not built.
+> `tests/cases/std_audio.ail`. Part 2 (devices) is built for macOS.
 
 **std.audio.1** — `use std.audio` imports a standard module written in AIL.
 A `Clip` has `rate` (Hz), `channels` and `samples`: interleaved floats in
@@ -28,21 +28,29 @@ else `AudioError`. `mix` sums, clamps to `-1.0..1.0`, and lasts as long as the l
 PCM; other chunks are skipped; 32-bit float is refused for now.
 `encode_wav(c) bytes` writes 16-bit PCM, clamping.
 
-## Devices (specified, not built)
+**std.audio.8** — `to_pcm16(c) bytes` is the clip as raw little-endian 16-bit
+PCM, interleaved, clamped; `from_pcm16(b, rate, channels) Clip` is the reverse.
 
-**Planned (part 2, no rule ID yet):** `std.audio.device`: `play(clip) Handle`, `Handle.stop()`,
-`Handle.wait()`, `open_output(rate, channels) Out` with `write(clip)`, and
-`open_input(rate, channels) In` with `read(ms) Clip`. A `Handle` is unique and
-must be waited, as tasks are (ADRs 0095-0096). Effect: `audio`.
+## Devices
 
-**Planned (part 2, no rule ID yet):** backends follow `std.app` (ADR 0838): a small host program per
-platform owns the real-time audio thread and exchanges PCM with AIL over its
-stdin and stdout, so no AIL code runs on an audio callback. Hosts: macOS
-(CoreAudio, AudioQueue/AUHAL, first), Windows (WASAPI shared mode, event
-driven), Linux (PipeWire, ALSA fallback). Mixing of several `play` calls happens
-in AIL's mixer thread, off the audio thread, with a ring buffer in the host.
-Target latency is under 20 ms. Mixing and DSP are SIMD and multi-core
-candidates for the auto-parallel pass.
+**std.audio.9** — `use std.audio.device` plays and records through a host
+program that owns the platform's audio API, as `std.app` does (ADR 0838), so no
+AIL code runs on an audio callback. `open() Device ! DeviceError` starts the
+host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
+`tools/audio-host/macos/run.sh`) and waits for its `ready` line;
+`play(mut d, clip)` blocks until the clip has played; `close(move d)` stops the
+host. `DeviceError` has `kind` (`no_host`, `start`, `version`, `host_exited`,
+`device`, `protocol`) and `message`. The host speaks one text line per message:
+`play RATE CH BASE64`, `rec MS RATE CH`, then `done`, `data RATE CH BASE64` or
+`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio).
+
+**std.audio.10** — `record(mut d, ms, rate, channels) Clip ! DeviceError` records
+from the default input. The clip has the rate and channels the device gave,
+which may differ from those asked for; `resample` and `to_mono` adapt it.
+
+**Planned (no rule ID yet):** WASAPI and PipeWire/ALSA hosts; streaming output
+(`open_output` with `write`) with a ring buffer in the host and under 20 ms
+latency; mixing several plays in a task off the audio thread.
 
 ## Rejected alternatives
 
@@ -84,6 +92,20 @@ fn main() !
         print("error: {err}")
         t
     print(audio.frames(odd))
+```
+
+```ail norun rules=std.audio.8,std.audio.9,std.audio.10
+use std.audio
+use std.audio.device
+
+fn main() !
+    mut d := device.open()?
+    d.play(audio.tone(440.0, 500, 44100, 0.3))?
+    heard := d.record(1000, 44100, 1)?
+    print(audio.peak(heard))
+    pcm := audio.to_pcm16(heard)
+    print(audio.frames(audio.from_pcm16(pcm, heard.rate, heard.channels)) == audio.frames(heard))
+    d.close()
 ```
 
 ## Open for Fable
