@@ -30,12 +30,8 @@ pub fn host_path() str ! DeviceError
         )
     p
 
-## An open audio host (std.audio.9).
-pub unique struct Device
-    child proc.Child
-
-## Starts the audio host and waits for it to be ready (std.audio.9).
-pub fn open() Device ! DeviceError
+## Starts the audio host, the `proc.Child` the other functions take, and waits for it to be ready (std.audio.9).
+pub fn open() proc.Child ! DeviceError
     cmd := host_path()?
     mut c := proc.start(cmd, []) else err
         return DeviceError(kind: "start", message: "{err}")
@@ -43,14 +39,14 @@ pub fn open() Device ! DeviceError
     if hello != "ready"
         proc.kill(move c)
         return DeviceError(kind: "version", message: "the audio host said: {hello}")
-    Device(child: c)
+    c
 
 fn gone(move c proc.Child) ! DeviceError
     status := proc.kill(move c)
     DeviceError(kind: "host_exited", message: "the audio host exited with status {status}")
 
-fn Device.answer(mut self) str ! DeviceError
-    line := self.child.out.recv() else return DeviceError(
+fn answer(mut c proc.Child) str ! DeviceError
+    line := c.out.recv() else return DeviceError(
         kind: "host_exited",
         message: "the audio host closed",
     )
@@ -60,17 +56,17 @@ fn Device.answer(mut self) str ! DeviceError
 
 ## Plays `c` on the default output and returns when it has finished
 ## (std.audio.9).
-pub fn Device.play(mut self, c audio.Clip) ! DeviceError
-    self.child.stdin.send("play {c.rate} {c.channels} {audio.to_pcm16(c).base64()}\n")
-    r := self.answer()?
+pub fn play(mut c proc.Child, clip audio.Clip) ! DeviceError
+    c.stdin.send("play {clip.rate} {clip.channels} {audio.to_pcm16(clip).base64()}\n")
+    r := answer(mut c)?
     if r != "done"
         return DeviceError(kind: "protocol", message: "expected done, got: {r}")
 
 ## Records `ms` milliseconds from the default input (std.audio.10). The clip
 ## has the rate and channel count the device gave, near `rate` and `channels`.
-pub fn Device.record(mut self, ms int, rate int, channels int) audio.Clip ! DeviceError
-    self.child.stdin.send("rec {ms} {rate} {channels}\n")
-    r := self.answer()?
+pub fn record(mut c proc.Child, ms int, rate int, channels int) audio.Clip ! DeviceError
+    c.stdin.send("rec {ms} {rate} {channels}\n")
+    r := answer(mut c)?
     parts := r.split(" ")
     if parts.len() != 4 or parts[0] != "data"
         return DeviceError(kind: "protocol", message: "expected data, got: {r}")
@@ -83,5 +79,5 @@ pub fn Device.record(mut self, ms int, rate int, channels int) audio.Clip ! Devi
     audio.from_pcm16(b, r2, c2)
 
 ## Stops the host (std.audio.9).
-pub fn Device.close(move self)
-    self.child.stdin.close()
+pub fn close(move c proc.Child)
+    c.stdin.close()

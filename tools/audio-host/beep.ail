@@ -5,5 +5,5 @@ use std.audio.device
 
 fn main() !
     mut d := device.open()?
-    d.play(audio.tone(440.0, 500, 44100, 0.3))?
-    d.close()
+    device.play(mut d, audio.tone(440.0, 500, 44100, 0.3))?
+    device.close(move d)

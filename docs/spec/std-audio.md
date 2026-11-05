@@ -35,7 +35,7 @@ PCM, interleaved, clamped; `from_pcm16(b, rate, channels) Clip` is the reverse.
 
 **std.audio.9** — `use std.audio.device` plays and records through a host
 program that owns the platform's audio API, as `std.app` does (ADR 0838), so no
-AIL code runs on an audio callback. `open() Device ! DeviceError` starts the
+AIL code runs on an audio callback. `open() proc.Child ! DeviceError` starts the
 host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
 `tools/audio-host/macos/run.sh`) and waits for its `ready` line;
 `play(mut d, clip)` blocks until the clip has played; `close(move d)` stops the
@@ -100,12 +100,12 @@ use std.audio.device
 
 fn main() !
     mut d := device.open()?
-    d.play(audio.tone(440.0, 500, 44100, 0.3))?
-    heard := d.record(1000, 44100, 1)?
+    device.play(mut d, audio.tone(440.0, 500, 44100, 0.3))?
+    heard := device.record(mut d, 1000, 44100, 1)?
     print(audio.peak(heard))
     pcm := audio.to_pcm16(heard)
     print(audio.frames(audio.from_pcm16(pcm, heard.rate, heard.channels)) == audio.frames(heard))
-    d.close()
+    device.close(move d)
 ```
 
 ## Open for Fable
