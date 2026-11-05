@@ -562,3 +562,40 @@ fn hash_hmac_sha256(key str, s str) str
     mac := alloc(32, KIND_BYTES)
     hash_sha256_raw(outer, 96, mac)
     hash_hex(mac, 32)
+
+## std.hash.5: HMAC-SHA-384 and HMAC-SHA-512 (RFC 2104, RFC 4231), 128-byte
+## blocks. `wide` picks SHA-512; the tag is `hl` bytes (64 or 48) as hex.
+fn hash_hmac_wide(key str, s str, wide bool) str
+    hl := if wide then 64 else 48
+    kp := str_addr(key)
+    kn := load64(kp)
+    block := hash_zeros(128)
+    if kn > 128
+        hash_sha512_raw(kp + 16, kn, block, wide)
+    else
+        copy_bytes(block, kp + 16, kn)
+    sp := str_addr(s)
+    n := load64(sp)
+    inner := alloc(128 + n, KIND_BYTES)
+    mut i := 0
+    while i < 128
+        store8(inner + i, load8(block + i).bit_xor(54))
+        i += 1
+    copy_bytes(inner + 128, sp + 16, n)
+    digest := alloc(64, KIND_BYTES)
+    hash_sha512_raw(inner, 128 + n, digest, wide)
+    outer := alloc(128 + 64, KIND_BYTES)
+    i = 0
+    while i < 128
+        store8(outer + i, load8(block + i).bit_xor(92))
+        i += 1
+    copy_bytes(outer + 128, digest, hl)
+    mac := alloc(64, KIND_BYTES)
+    hash_sha512_raw(outer, 128 + hl, mac, wide)
+    hash_hex(mac, hl)
+
+fn hash_hmac_sha384(key str, s str) str
+    hash_hmac_wide(key, s, false)
+
+fn hash_hmac_sha512(key str, s str) str
+    hash_hmac_wide(key, s, true)

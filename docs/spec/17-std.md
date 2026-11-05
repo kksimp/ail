@@ -430,6 +430,11 @@ as lower-case hex. *(ADR 0442)*
 checksums, not for security. Its value for a given input is the same on
 every platform and version, and may be any `int`. *(ADR 0444)*
 
+**std.hash.5** — `hmac_sha384(key str, s str) str` and
+`hmac_sha512(key str, s str) str` return the HMAC of RFC 2104 and RFC 4231
+(128-byte blocks) as lower-case hex, 96 and 128 digits. A key longer than the
+block is hashed first. They have no effects. *(ADR 0959)*
+
 ```ail
 use std.hash
 
