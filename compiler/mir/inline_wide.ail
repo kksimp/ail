@@ -1,9 +1,11 @@
 ## Inlining beyond leaves (ADR 0940, rule native.inline.1): a function that
 ## calls others may be copied into its callers too, by a cost model over the
 ## call graph, within a size budget. A function with one call in the whole
-## program goes inline there up to `SINGLE_LIMIT` instructions: the copy
-## replaces the only use, and the function is dropped. Any other goes up to
-## `WIDE_LIMIT`, and only at a call inside a loop of the caller (a hot site).
+## program goes inline there up to `SINGLE_LIMIT` instructions when that
+## call is inside a loop of the caller (a hot site): the copy replaces the
+## only use, and the function is dropped. Any other goes up to `WIDE_LIMIT`,
+## also only at a hot site. A call made once (`size()` at the top of `main`)
+## gains nothing copied, and measured slower (collatz, sieve +7%).
 ## Those copies may grow a caller by at most its own size (2x) and
 ## `CALLER_GROWTH`, and the program by at most `PROGRAM_GROWTH` percent. A
 ## function on a cycle of the call graph never goes (its body could copy
@@ -96,9 +98,9 @@ fn frame_prim(name str) bool
         _ => false
 
 ## Inline the calls of `f` that name a function in `leaves`, or in `wide`
-## under the cost model: the one call of a single-call function, written in
-## `f` itself, or a hot call (in a loop of `f`) while `f` may still grow and
-## `left`, the program's allowance, lasts. At most `INLINE_BUDGET` calls;
+## under the cost model, at a hot call (in a loop of `f`): the one call of a
+## single-call function, written in `f` itself, or any other while `f` may
+## still grow and `left`, the program's allowance, lasts. At most `INLINE_BUDGET` calls;
 ## returns the call budget left.
 fn expand_wide(
     mut f Func,
@@ -140,14 +142,14 @@ fn expand_wide(
                 break
     budget
 
-## Whether `f` calls a candidate that only a hot site takes (finding the
+## Whether `f` calls a candidate, which only a hot site takes (finding the
 ## loops costs a dominator tree, so only then).
 fn calls_wide(f Func, wide Wide) bool
     if f.name.starts_with("rt.")
         return false
     for blk in f.blocks
         for i in blk.insts
-            if i.op == "call" and wide.sizes.contains(i.name) and not wide.single.contains(i.name)
+            if i.op == "call" and wide.sizes.contains(i.name)
                 return true
     false
 
@@ -169,7 +171,7 @@ fn first_wide_call(
                 # Copies of the one call (brought in by another copy) count as
                 # any other call, so the function still goes inline once.
                 written := i.site < 0 or sites[i.site].from < 0
-                if wide.single.contains(i.name) and written
+                if wide.single.contains(i.name) and written and hot
                     return k
                 if hot and n <= WIDE_LIMIT and n <= room
                     return k
