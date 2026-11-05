@@ -1,9 +1,9 @@
-## std.gfx (spec std.gfx.1, std.gfx.3-6; ADR 0956): the headless half of the
+## std.gfx (spec std.gfx.1-5; ADR 0956): the headless half of the
 ## real-time frame loop. A game is a struct that implements `Game`; each
 ## frame it gets an `Input` snapshot and records draw commands into a
 ## `Frame`. `script` runs a game over scripted input with no window and
 ## returns each frame as text, so `ail test` covers a game. The window,
-## vsync and surface (std.gfx.2, std.gfx.7-10) come later.
+## vsync and surface come later (ADR 0957).
 
 use std.app
 
@@ -21,7 +21,7 @@ pub struct Frame
     pub h int
     pub cmds List[Cmd]
 
-## What the player did, as of one frame (std.gfx.3). `pressed` and `released`
+## What the player did, as of one frame (std.gfx.2). `pressed` and `released`
 ## hold the keys that changed since the previous frame; `down` holds every key
 ## held now. Keys are named as `std.ui.7` names them.
 pub struct Input
@@ -59,13 +59,13 @@ pub fn line(mut f Frame, x1 float, y1 float, x2 float, y2 float, color int)
 pub fn text(mut f Frame, x float, y float, s str, size float, color int)
     f.cmds.push(Cmd.Text(x: x, y: y, text: s, size: size, color: color))
 
-## The host event for releasing `key` (std.gfx.4).
+## The host event for releasing `key` (std.gfx.3).
 pub fn key_up(key str) app.Event
     mut e := app.event("keyup")
     e.text = key
     e
 
-## Whether `key` is held (std.gfx.3).
+## Whether `key` is held (std.gfx.2).
 pub fn down(i Input, key str) bool
     i.down.contains(key)
 
@@ -86,7 +86,7 @@ fn without(keys List[str], key str) List[str]
 
 ## The next frame's input from the previous one and the host events since
 ## then: `key` presses a key (not its auto-repeats), `keyup` releases it,
-## `click` and `move` set the pointer, `scroll` adds to the wheel (std.gfx.4).
+## `click` and `move` set the pointer, `scroll` adds to the wheel (std.gfx.3).
 pub fn next_input(prev Input, events List[app.Event]) Input
     mut held := prev.down
     mut went_down := List[str]()
@@ -125,7 +125,7 @@ pub fn next_input(prev Input, events List[app.Event]) Input
         wheel: wheel,
     )
 
-## One command as a line of text (std.gfx.5).
+## One command as a line of text (std.gfx.4).
 pub fn cmd_text(c Cmd) str
     match c
         Clear(color) => "clear {color}"
@@ -140,7 +140,7 @@ pub fn dump(f Frame) str
         lines.push("  {cmd_text(c)}")
     lines.join("\n")
 
-## Counts for a frame (std.gfx.6): commands, rectangles and lines, text runs.
+## Counts for a frame (std.gfx.5): commands, rectangles and lines, text runs.
 pub struct Stats
     pub cmds int
     pub fills int
@@ -159,7 +159,7 @@ pub fn stats(f Frame) Stats
             Text(_, _, _, _, _) => texts += 1
     Stats(cmds: f.cmds.len(), fills: fills, lines: lines, texts: texts)
 
-## Runs `g` over `steps` with no window (std.gfx.5): each is the host events
+## Runs `g` over `steps` with no window (std.gfx.4): each is the host events
 ## of one frame, `dt` seconds apart. Returns `dump` of every frame.
 pub fn script[T Game](mut g T, w int, h int, dt float, steps List[List[app.Event]]) List[str]
     mut out := List[str]()

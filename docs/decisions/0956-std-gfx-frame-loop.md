@@ -1,11 +1,11 @@
 # 0956. `std.gfx`: the frame loop for real-time programs
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; GUI; GPU
-- **Spec rules:** `std.gfx.1`-`std.gfx.6` ([std-gfx.md](../spec/std-gfx.md))
-- **Requested by:** the designer, who wants AIL to replace C, C++ and Rust, with real-time rendering that uses modern hardware well. Design: [gpu-frame-loop.md](../design/gpu-frame-loop.md). Not implemented yet.
+- **Spec rules:** `std.gfx.1`-`std.gfx.5` ([std-gfx.md](../spec/std-gfx.md))
+- **Requested by:** the designer, who wants AIL to replace C, C++ and Rust, with real-time rendering that uses modern hardware well. Design: [gpu-frame-loop.md](../design/gpu-frame-loop.md). The headless half (`Game`, `Input`, `Frame`, `script`, `dump`) and the macOS host's `keyup` ship with this ADR; the window frame loop and vsync tick follow under the same ADR.
 
 ## Context
 

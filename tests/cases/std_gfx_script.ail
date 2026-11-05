@@ -1,4 +1,4 @@
-## std.gfx.3-6: key-down, key-up and a frame dump, with no window.
+## std.gfx.1-5: key-down, key-up and a frame dump, with no window.
 use std.app
 use std.gfx
 

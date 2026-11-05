@@ -4,7 +4,7 @@
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; GUI; GPU
-- **Spec rules:** `std.gfx.7`-`std.gfx.10` ([std-gfx.md](../spec/std-gfx.md))
+- **Spec rules:** none yet; rule IDs are added to [std-gfx.md](../spec/std-gfx.md) when the code lands
 - **Requested by:** the designer, who wants AIL to replace C, C++ and Rust, with real-time rendering that uses modern hardware well. Design: [gpu-frame-loop.md](../design/gpu-frame-loop.md). Not implemented yet.
 
 ## Context

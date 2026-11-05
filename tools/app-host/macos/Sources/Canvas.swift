@@ -179,7 +179,7 @@ final class CanvasView: NSView {
         Outbox.shared.send("key", f)
     }
 
-    // std.gfx.4 (ADR 0956): key release, with the same name and hardware code.
+    // std.app.20 (ADR 0956): key release, with the same name and hardware code.
     override func keyUp(with e: NSEvent) {
         var f = mods(e)
         f["id"] = canvasId
