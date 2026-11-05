@@ -18,6 +18,7 @@ pub fn mir.inline_module(mut mir.Module) [env mutates]
 pub fn mir.inline_call(mut mir.Func, int, int, mir.Func, mut List[mir.Site]) [mutates]
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub fn mir.merge_blocks_in(mut mir.Func) [mutates]
+pub fn mir.interchange(mir.Func) mir.Func [env]
 pub struct mir.Def
 pub fn mir.defs_of(mir.Func) List[mir.Def]
 pub fn mir.inst_of(mir.Func, List[mir.Def], int) mir.Inst?
@@ -79,8 +80,9 @@ pub mir.PRELUDE_EMBED := ...
 pub fn mir.pure_calls(mut mir.Module) [mutates]
 pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
+pub mir.DATA := 1048576
 pub struct mir.Proven
-pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool], Map[int, int]) mir.Proven [env]
 pub fn mir.mark_recursion(mut mir.Module) [mutates]
 pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
@@ -100,4 +102,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1555); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1593); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

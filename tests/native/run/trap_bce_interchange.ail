@@ -1,0 +1,22 @@
+# A row of `b` is too short: the guard of the swapped nest fails, the nest
+# runs as written, and the first access past the end traps as it would
+# without the swap (native.bce.13, type.coll.4).
+fn main()
+    n := 3
+    mut b := List[List[int]]()
+    for k in 0..n
+        mut r := List[int]()
+        m := if k == 2 then 1 else n
+        for j in 0..m
+            r.push(k + j)
+        b.push(r)
+    mut t := 0
+    for i in 0..n
+        mut row := []
+        for j in 0..n
+            mut s := 0
+            for k in 0..n
+                s += b[i][k] * b[k][j]
+            row.push(s)
+        t += row[0]
+    print(t)

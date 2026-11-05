@@ -1,0 +1,23 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Vector loops for user code (native.vec.1, ADR 0942). The AIL bodies are
+## the scalar definitions and the reference; `compiler/x64/kernels.ail` and
+## `compiler/a64/kernels.ail` assemble them with AVX2 and NEON. `keep` is the list whose
+## elements `c` points into: passing it tells the optimizer the call changes
+## that list. The kernels ignore it.
+
+## `c[i] = c[i] + x * b[i]` for `i < n`, on `int` words. Called only where a
+## data-range guard (native.bce.12) has proved `|x|` and every `|b[i]|` at most
+## 2^20 and no sum overflowing, so the kernels may multiply 32-bit halves.
+fn vec_axpyi(c int, b int, n int, x int, keep List[int])
+    for i in 0..n
+        store64(c + 8 * i, load64(c + 8 * i) + x * load64(b + 8 * i))
+
+## `c[i] = c[i] + x * b[i]` for `i < n`, on `float`s: the product `x * b[i]`
+## and the sum `c[i] + q` rounded in that operand order, as the scalar loop
+## `s += x * y` does them, so a NaN keeps its payload.
+fn vec_axpyf(c int, b int, n int, x float, keep List[int])
+    for i in 0..n
+        q := x * loadf(b + 8 * i)
+        storef(c + 8 * i, loadf(c + 8 * i) + q)

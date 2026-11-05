@@ -1,0 +1,39 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The scan behind a data-range guard (native.bce.12, ADR 0941): the largest
+## magnitude among a list's `int` elements, taken once before a loop nest that
+## only reads them, so the guard can prove the nest's arithmetic can't
+## overflow. Lists are the objects of native-abi.md §2: +0 len, +8 cap,
+## +16 data.
+
+## Magnitudes from here on count as this one (2^62).
+DATARANGE_CAP := 4611686018427387904
+
+## The largest magnitude among the elements of `xs` (`depth` 1, a
+## `List[int]`) or of its rows (`depth` 2, a `List[List[int]]`), at most
+## 2^62; 0 for none.
+fn datarange_absmax(xs List[int], depth int) int
+    p := list_addr(xs)
+    if depth == 1
+        return datarange_words(load64(p + 16), load64(p))
+    n := load64(p)
+    data := load64(p + 16)
+    mut most := 0
+    for i in 0..n
+        r := load64(data + 8 * i)
+        m := datarange_words(load64(r + 16), load64(r))
+        if m > most
+            most = m
+    most
+
+fn datarange_words(data int, n int) int
+    mut most := 0
+    for i in 0..n
+        x := load64(data + 8 * i)
+        if x >= DATARANGE_CAP or x <= 0 - DATARANGE_CAP
+            return DATARANGE_CAP
+        a := if x < 0 then 0 - x else x
+        if a > most
+            most = a
+    most

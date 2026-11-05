@@ -213,6 +213,11 @@ holds a lock for one statement, so lines from different tasks don't mix.
 On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
 0599–0601)*
 
+**native.task.2** — A pool worker asleep in a blocking network wait
+(`accept`, a read, a write or a connect) stops counting as running, as in
+`wait` and channel waits, so a task queued meanwhile gets a thread even when
+`AIL_THREADS` is 1, and the collector may scan the sleeper. *(ADR 0599)*
+
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
@@ -434,6 +439,76 @@ fn dot(a List[int], b List[int], n int) int
 
 fn main()
     print(dot([1, 2, 3], [4, 5, 6], 3))
+```
+
+**native.bce.12** — In a counted loop at least two loops deep, an `int` read
+from a list, or from a row of a list of lists, that no call, `push` or
+assignment can change in an enclosing loop may be taken to lie within
++-2^20 where a scan of the list before that enclosing loop says so; an
+accumulator that every pass of the loop changes only by `+=` or `-=` of such
+a value may be taken to lie within its start plus the loop's trip count times
+that value's range, where the guard tests the trip count. The overflow checks
+this proves can't fail may be removed (expr.arith.4); otherwise the loop with
+its checks runs, and traps where it did. *(ADR 0941)*
+
+```ail rules=native.bce.12
+fn main()
+    a := [[1, 2], [3, 4]]
+    mut t := 0
+    for i in 0..2
+        for j in 0..2
+            mut s := 0
+            for k in 0..2
+                s += a[i][k] * a[k][j]
+            t += s
+    print(t)
+```
+
+**native.bce.13** — A counted loop over `j` whose body sets an accumulator
+`s` to a value from before the loop, runs a counted loop over `k` that only
+adds a term to `s` (`s += t`), and then pushes `s` to a list made empty just
+before the `j` loop and used nowhere else, may run with the `k` loop outside
+and the `j` loop inside, adding each term to the list's element `j`, where a
+guard before the loops proves that no index in the term is out of bounds and,
+for `int`, that no operation overflows (native.bce.12). Each element adds the
+same terms in the same order, so the list is the same. Otherwise the loops
+run as written. *(ADR 0941)*
+
+```ail rules=native.bce.13
+fn main()
+    a := [[1.0, 2.0], [3.0, 4.0]]
+    mut c := List[List[float]]()
+    for i in 0..2
+        mut row := List[float]()
+        for j in 0..2
+            mut s := 0.0
+            for k in 0..2
+                s += a[i][k] * a[k][j]
+            row.push(s)
+        c.push(row)
+    print(c[1][1])
+```
+
+**native.vec.1** — In a nest swapped under native.bce.13 whose term is
+`x * y`, with `y` the element `j` of a list and nothing else depending on
+`j`, the inner loop may be one call of a vector kernel per `k` that computes
+`row[base + j] + x * y` for every `j` with the same rounding, operand order
+and result as the loop (for `int`, where the guard keeps `x` within +-2^31
+and `y` within +-2^20). *(ADR 0942)*
+
+```ail rules=native.vec.1
+fn main()
+    a := [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    mut c := List[List[int]]()
+    for i in 0..3
+        mut row := []
+        for j in 0..3
+            mut s := 0
+            for k in 0..3
+                s += a[i][k] * a[k][j]
+            row.push(s)
+        c.push(row)
+    print(c[2][2])
 ```
 
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
