@@ -5,16 +5,16 @@
 ## postorder, so a loop's body follows its header.
 use mir
 
-## Split each branch edge that passes arguments: the new block jumps to the
-## old target with them.
+## Split each branch or switch edge that passes arguments: the new block
+## jumps to the old target with them.
 pub fn split_edges(f mir.Func) mir.Func
     mut g := f
     n := g.blocks.len()
     for b in 0..n
         t := g.blocks[b].term
-        if t.kind != "branch"
+        if t.kind != "branch" and t.kind != "switch"
             continue
-        for e in 0..2
+        for e in 0..t.targets.len()
             if t.args[e].len() == 0
                 continue
             g.blocks.push(mir.Block(

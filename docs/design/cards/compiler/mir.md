@@ -61,6 +61,7 @@ pub fn mir.inst(int, str, List[int]) mir.Inst
 pub struct mir.Term
 pub fn mir.jump_to(int, List[int]) mir.Term
 pub fn mir.branch_on(int, int, int) mir.Term
+pub fn mir.switch_on(int, List[int], int) mir.Term
 pub fn mir.return_of(int) mir.Term
 pub fn mir.unreachable_term() mir.Term
 pub struct mir.Block
@@ -103,4 +104,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1611); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1631); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

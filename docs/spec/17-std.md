@@ -430,6 +430,11 @@ as lower-case hex. *(ADR 0442)*
 checksums, not for security. Its value for a given input is the same on
 every platform and version, and may be any `int`. *(ADR 0444)*
 
+**std.hash.5** — `hmac_sha384(key str, s str) str` and
+`hmac_sha512(key str, s str) str` return the HMAC of RFC 2104 and RFC 4231
+(128-byte blocks) as lower-case hex, 96 and 128 digits. A key longer than the
+block is hashed first. They have no effects. *(ADR 0959)*
+
 ```ail
 use std.hash
 
@@ -2678,7 +2683,7 @@ fn main()
 
 ## Examples for the hash, compression, date, zone, net and process rules
 
-```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4
+```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5
 use std.hash
 
 fn main()
@@ -2686,6 +2691,8 @@ fn main()
     print(hash.sha384("abc").len())   # 96 hex digits
     print(hash.sha512("abc").len())   # 128 hex digits
     print(hash.hmac_sha256("key", "The quick brown fox jumps over the lazy dog").len())   # 64
+    print(hash.hmac_sha384("Jefe", "what do ya want for nothing?").len())   # 96 (RFC 4231 case 2)
+    print(hash.hmac_sha512("Jefe", "what do ya want for nothing?").len())   # 128
     print(hash.crc32("abc"))          # 891568578
     print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run
 ```

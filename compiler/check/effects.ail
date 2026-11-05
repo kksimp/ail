@@ -54,7 +54,7 @@ STD_EFFECTS := [
     # only; the file and directory ones read and write files.
     StdEffects(
         module: "hash",
-        names: ["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
+        names: ["crc32", "hash64", "hmac_sha256", "hmac_sha384", "hmac_sha512", "sha256", "sha384", "sha512"],
         effects: [],
     ),
     # unsafe.hw.5: hardware access.

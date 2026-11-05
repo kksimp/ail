@@ -564,6 +564,33 @@ fn main()
     print(name(2))
 ```
 
+**native.match.2** — A `match` that native.match.1 takes, whose distinct values
+span at most 1024 and fill at least a third of their span, may jump through
+a table indexed by the value minus the smallest: a value outside the span or
+in a gap goes where the in-order test sends it (the `_` arm, or nowhere for an
+exhaustive `match`). Code that jumps back to such a `match` (the next
+iteration of a loop around it) may repeat the selection there. The arm that
+runs, its bindings and the order of effects are those of native.match.1.
+`AIL_OPT_OFF=switch` turns the table off and `AIL_OPT_OFF=taildup` the
+repeat. *(ADR 0939)*
+
+```ail rules=native.match.2
+fn step(op int, acc int) int
+    match op
+        0 => acc + 1
+        1 => acc * 2
+        2 => acc - 3
+        3 => 0
+        4 => acc
+        _ => -1
+
+fn main()
+    mut acc := 0
+    for op in [0, 0, 1, 2, 9]
+        acc = step(op, acc)
+    print(acc)
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is
