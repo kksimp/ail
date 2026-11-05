@@ -214,7 +214,7 @@ FLOAT_OPS := ["fconst", "fadd", "fsub", "fmul", "fdiv", "fneg", "itof"]
 ## Magnitudes the spans stay within (2^62 - 1).
 SP_BIG := 4611686018427387903
 
-fn sp(lo int, hi int) Sp
+fn sp_of(lo int, hi int) Sp
     Sp(ok: lo >= 0 - SP_BIG and hi <= SP_BIG, lo: lo, hi: hi)
 
 fn sp_none() Sp
@@ -238,7 +238,7 @@ fn sp_mul(a Sp, b Sp) Sp
             lo = p
         if p > hi
             hi = p
-    sp(lo, hi)
+    sp_of(lo, hi)
 
 ## What the guard has to test, gathered from the body.
 struct Plan
@@ -289,8 +289,8 @@ fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
     mut spans := Map[int, Sp]()
     lk := const_of(f, defs, n.ck.lo) else return none
     lj := const_of(f, defs, n.cj.lo) else return none
-    spans[n.ck.p] = sp(lk, LIMIT - 1)
-    spans[n.cj.p] = sp(lj, LIMIT - 1)
+    spans[n.ck.p] = sp_of(lk, LIMIT - 1)
+    spans[n.cj.p] = sp_of(lj, LIMIT - 1)
     blk := f.blocks[n.body]
     s := f.blocks[n.kl.header].params[n.si]
     mut t := -1
@@ -302,7 +302,7 @@ fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
         if i.dst == n.term
             continue
         if i.op == "const"
-            spans[i.dst] = sp(i.imm, i.imm)
+            spans[i.dst] = sp_of(i.imm, i.imm)
         elif FLOAT_OPS.contains(i.op)
             # Floats don't trap; their order in each element is kept.
             continue
@@ -320,7 +320,7 @@ fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
                         return none
                     if not p.scans.contains(x)
                         p.scans.push(x)
-                    spans[i.dst] = sp(0 - DATA, DATA)
+                    spans[i.dst] = sp_of(0 - DATA, DATA)
             else
                 # A row of a list from before the nest.
                 rd := inst_of(f, defs, x)?
@@ -335,23 +335,23 @@ fn plan_of(f Func, defs List[Def], loops List[LoopInfo], n Nest) Plan?
                         return none
                     if not p.scans.contains(pl)
                         p.scans.push(pl)
-                    spans[i.dst] = sp(0 - DATA, DATA)
+                    spans[i.dst] = sp_of(0 - DATA, DATA)
                 elif f.vals[i.dst] != Ty.Float
                     return none
         elif i.op == "add" or i.op == "sub" or i.op == "mul" or i.op == "neg"
             if f.vals[i.dst] != Ty.Int
                 return none
             a := arg_sp(f, defs, n, i.arg(0), spans, mut p)
-            b := if i.op == "neg" then sp(0, 0) else arg_sp(f, defs, n, i.arg(1), spans, mut p)
+            b := if i.op == "neg" then sp_of(0, 0) else arg_sp(f, defs, n, i.arg(1), spans, mut p)
             if not a.ok or not b.ok
                 return none
             mut r := sp_mul(a, b)
             if i.op == "add"
-                r = sp(a.lo + b.lo, a.hi + b.hi)
+                r = sp_of(a.lo + b.lo, a.hi + b.hi)
             elif i.op == "sub"
-                r = sp(a.lo - b.hi, a.hi - b.lo)
+                r = sp_of(a.lo - b.hi, a.hi - b.lo)
             elif i.op == "neg"
-                r = sp(0 - a.hi, 0 - a.lo)
+                r = sp_of(0 - a.hi, 0 - a.lo)
             if not r.ok
                 return none
             spans[i.dst] = r
@@ -381,11 +381,11 @@ fn arg_sp(f Func, defs List[Def], n Nest, v int, spans Map[int, Sp], mut p Plan)
     if s := spans.get(v)
         return s
     if c := const_of(f, defs, v)
-        return sp(c, c)
+        return sp_of(c, c)
     if not n.jl.member[defs[v].block] and f.vals[v] == Ty.Int
         if not p.held.contains(v)
             p.held.push(v)
-        return sp(0 - LIMIT, LIMIT)
+        return sp_of(0 - LIMIT, LIMIT)
     sp_none()
 
 ## The guard and the swapped nest; the original nest runs when a test fails.
@@ -481,7 +481,7 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
     mut s0 := n.s0
     if n.jl.member[defs[n.s0].block]
         # A constant the nest made (`mut s := 0`).
-        s0 = outside(f, defs, n, mut gd, mut vm0, n.s0)?
+        s0 = swap_arg(f, defs, n, mut gd, mut vm0, n.s0)?
     mut ps := inst(-1, "call", [n.row, s0])
     ps.name = n.push
     gd.cur.push(ps)
@@ -517,8 +517,8 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
             if k == n.upd or i.dst == n.term or i.dst == ax.y or i.dst == ax.t
                 continue
             clone_into(f, defs, n, mut gd, mut vm, i)?
-        lv := outside(f, defs, n, mut gd, mut vm, ax.list)?
-        xv := outside(f, defs, n, mut gd, mut vm, ax.x)?
+        lv := swap_arg(f, defs, n, mut gd, mut vm, ax.list)?
+        xv := swap_arg(f, defs, n, mut gd, mut vm, ax.x)?
         bp := gd.emit("add", [gd.emit("data", [lv], Ty.Int), lj8], Ty.Int)
         mut kc2 := inst(-1, "call", [cptr, bp, cnt, xv, n.row])
         kc2.name = if n.ty == Ty.Int then "rt.vec_axpyi" else "rt.vec_axpyf"
@@ -551,7 +551,7 @@ fn swapped(f Func, defs List[Def], loops List[LoopInfo], n Nest) Func?
             clone_into(f, defs, n, mut gd, mut vm, i)?
         at := gd.emit("add", [off, jv], Ty.Int)
         old := gd.emit("get", [n.row, at], n.ty)
-        tv := outside(f, defs, n, mut gd, mut vm, t)?
+        tv := swap_arg(f, defs, n, mut gd, mut vm, t)?
         sum := gd.emit(if n.ty == Ty.Int then "add" else "fadd", [old, tv], n.ty)
         gd.cur.push(inst(-1, "set", [n.row, at, sum]))
         j1 := gd.emit("add", [jv, one], Ty.Int)
@@ -575,7 +575,7 @@ fn clone_into(f Func, defs List[Def], n Nest, mut gd Guard, mut vm Map[int, int]
     r.site = -1
     mut args := List[int]()
     for a in i.operands()
-        args.push(outside(f, defs, n, mut gd, mut vm, a)?)
+        args.push(swap_arg(f, defs, n, mut gd, mut vm, a)?)
     r = r.with_args(args)
     if i.dst >= 0
         r.dst = gd.value(f.vals[i.dst])
@@ -634,15 +634,15 @@ fn axpy_of(f Func, defs List[Def], n Nest, p Plan) Axpy
         if not alone
             continue
         if n.ty == Ty.Int
-            mut small := false
+            mut fits := false
             if xs := p.spans.get(x)
-                small = xs.ok and sp_mag(xs) < 2147483648
+                fits = xs.ok and sp_mag(xs) < 2147483648
             elif c := const_of(f, defs, x)
-                small = c > 0 - 2147483648 and c < 2147483648
+                fits = c > 0 - 2147483648 and c < 2147483648
             else
                 # From before the nest: the guard keeps it within +-LIMIT.
-                small = p.held.contains(x)
-            if not small
+                fits = p.held.contains(x)
+            if not fits
                 continue
         else
             # The float kernel computes `x * y` and `s + t` in that order, so
@@ -654,7 +654,7 @@ fn axpy_of(f Func, defs List[Def], n Nest, p Plan) Axpy
 
 ## Operand `v` in the swapped body: renamed if the body made it, a fresh
 ## constant if the nest made it, else itself (from before the nest).
-fn outside(f Func, defs List[Def], n Nest, mut gd Guard, mut vm Map[int, int], v int) int?
+fn swap_arg(f Func, defs List[Def], n Nest, mut gd Guard, mut vm Map[int, int], v int) int?
     if to := vm.get(v)
         return to
     if not n.jl.member[defs[v].block]

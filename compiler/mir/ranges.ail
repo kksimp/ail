@@ -94,19 +94,19 @@ pub fn prove(
     # since the test can fail where the first pass's guard would hold.
     accs := if opt_off("datarange") then List[Acc]() else accumulators(f, defs, lp, c, w.spans)
     if accs.len() > 0
-        mut most := 1
+        mut widest := 1
         for a in accs
-            if a.hi > most
-                most = a.hi
-            if 0 - a.lo > most
-                most = 0 - a.lo
+            if a.hi > widest
+                widest = a.hi
+            if 0 - a.lo > widest
+                widest = 0 - a.lo
         if tested
             # Room for the start (within +-LIMIT) and `trip` steps.
-            trip = (BIG - LIMIT) / most
+            trip = (BIG - LIMIT) / widest
             if trip > LIMIT
                 trip = LIMIT
         mut second := first
-        if trip > 0 and most <= (BIG - LIMIT) / trip
+        if trip > 0 and widest <= (BIG - LIMIT) / trip
             for a in accs
                 st := arg_span(f, defs, a.start, mut second, held, Map[int, int]())
                 if st.known

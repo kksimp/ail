@@ -628,10 +628,10 @@ fn data_lists(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo) Map[int
                 out[x] = r
     out
 
-## The outermost loop at least `least` levels around `lp` with `r` defined
+## The outermost loop at least `depth` levels around `lp` with `r` defined
 ## before it, in which no call, `set` or `push` can change `r` or its rows
 ## (the scans and row floors the guards add are not counted), else -1.
-fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int, least int) int
+fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int, depth int) int
     mut best := -1
     for k in 0..loops.len()
         o := loops[k]
@@ -644,7 +644,7 @@ fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int, l
         for q in loops
             if q.header != lp.header and q.member[lp.header] and o.member[q.header]
                 levels += 1
-        if levels < least
+        if levels < depth
             continue
         mut marks := [false for _ in 0..f.vals.len()]
         for blk in o.blocks
