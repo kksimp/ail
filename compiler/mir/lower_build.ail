@@ -67,6 +67,12 @@ fn Lower.par_builds(mut self, var str, body List[ast.Stmt], sc ast.ParScan) List
         out.push(Cap(name: n, ty: ty))
     out
 
+## A loop the compiler chose that only pushes cheap values (`xs.push(0)`): the
+## chunks' lists would be copied again by the gather, so it runs in order,
+## where the push writes in place (conc.par.14, conc.par.16).
+fn cheap_build(p ParSite) bool
+    p.builds.len() > 0 and p.work < 16
+
 fn has_build(builds List[Cap], n str) bool
     for b in builds
         if b.name == n

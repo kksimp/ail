@@ -543,6 +543,9 @@ fn Lower.lower_par_for(
                 tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
         return
+    if auto and cheap_build(plan)
+        lower_for(var, iter, body, false, pos)
+        return
     scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1
