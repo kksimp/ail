@@ -88,9 +88,9 @@ fn without(keys List[str], key str) List[str]
 ## then: `key` presses a key (not its auto-repeats), `keyup` releases it,
 ## `click` and `move` set the pointer, `scroll` adds to the wheel (std.gfx.4).
 pub fn next_input(prev Input, events List[app.Event]) Input
-    mut down := prev.down
-    mut pressed := List[str]()
-    mut released := List[str]()
+    mut held := prev.down
+    mut went_down := List[str]()
+    mut went_up := List[str]()
     mut typed := ""
     mut x := prev.x
     mut y := prev.y
@@ -98,15 +98,15 @@ pub fn next_input(prev Input, events List[app.Event]) Input
     mut wheel := 0.0
     for ev in events
         if ev.kind == "key"
-            if not down.contains(ev.text)
-                down.push(ev.text)
-                pressed.push(ev.text)
+            if not held.contains(ev.text)
+                held.push(ev.text)
+                went_down.push(ev.text)
             if ev.text.chars().len() == 1 and not ev.ctrl and not ev.meta
                 typed = "{typed}{ev.text}"
         elif ev.kind == "keyup"
-            if down.contains(ev.text)
-                down = without(down, ev.text)
-                released.push(ev.text)
+            if held.contains(ev.text)
+                held = without(held, ev.text)
+                went_up.push(ev.text)
         elif ev.kind == "click" or ev.kind == "move"
             x = ev.x
             y = ev.y
@@ -114,7 +114,7 @@ pub fn next_input(prev Input, events List[app.Event]) Input
                 buttons = 1
         elif ev.kind == "scroll"
             wheel = wheel + ev.dy
-    Input(down, pressed, released, typed, x, y, buttons, wheel)
+    Input(held, went_down, went_up, typed, x, y, buttons, wheel)
 
 ## One command as a line of text (std.gfx.5).
 pub fn cmd_text(c Cmd) str
