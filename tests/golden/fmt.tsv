@@ -734,8 +734,8 @@ fmt plain std/bigint/bigint.ail	c61bbdf1193ba68c	0	752865387c764edd
 fmt long std/bigint/bigint.ail	c61bbdf1193ba68c	0	bd94220b2400855d
 fmt plain std/csv/csv.ail	df7697bae73c0d4d	0	216138a37d3c301f
 fmt long std/csv/csv.ail	df7697bae73c0d4d	0	c764dba038db07d9
-fmt plain std/gfx/gfx.ail	ad07f558fa1006be	0	b927f2a22cb86798
-fmt long std/gfx/gfx.ail	ad07f558fa1006be	0	1c60589f3b51c99b
+fmt plain std/gfx/gfx.ail	3b2ce2c7a3b1fd15	0	d5fecff131b81add
+fmt long std/gfx/gfx.ail	3b2ce2c7a3b1fd15	0	f5e7e809253a34b3
 fmt plain std/log/log.ail	c50a775489ea48a2	0	98988d88493b2ef4
 fmt long std/log/log.ail	c50a775489ea48a2	0	b0aabec556e940a0
 fmt plain std/net/http.ail	8bf8240641547169	0	8a8c4938eb161373
