@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 24 — Cross-platform
 - **Spec rules:** plat.isa.2, native.build (new rule for the target)
-- **Builds on:** [ADR 0031](0031-hosts-and-cross-compilation.md), [ADR 0388](0388-native-arm64-linux.md), [ADR 0597](0597-native-pe-writer.md), [ADR 0598](0598-windows-native-os-layer.md), [ADR 0925](0925-windows-release-gate.md)
+- **Builds on:** [ADR 0031](0031-hosts-and-cross-compilation.md), [ADR 0388](0388-arm64-code-generation.md), [ADR 0597](0597-pe-executables-for-windows.md), [ADR 0598](0598-windows-imports-and-system-calls.md), [ADR 0925](0925-windows-release-gate.md)
 
 ## Context
 
