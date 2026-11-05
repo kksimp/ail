@@ -148,7 +148,13 @@ it holds (a generated `copy.T` function); fields change in place.
 +64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
 +72  u64  lastkey the last key found or added
 +80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
++88  u64  misskey the last key a probe missed (ADR 0936)
++96  u64  misshash its hash, reused by the insert that follows
++104 ptr  kcache  `str` keys only: 32 entry addresses, slot by key object address
 ```
+
+A `str`-keyed table is 360 bytes, others 104. A key cache slot counts only
+when its entry still holds that very string object (ADR 0936).
 
 The entry array is in insertion order, which is iteration order
 (type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or

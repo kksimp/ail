@@ -1157,6 +1157,15 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
         )
         expr(value, none, true)
         return
+    if grid_field_target(target)
+        err_help(
+            "type.grid.2",
+            expr_pos(target),
+            "a grid's `rows`, `cols` and `cells` can't be assigned",
+            "assign elements with `g[i, j] = v`, or build a new grid with `Grid.fill` or `Grid.from`",
+        )
+        expr(value, none, true)
+        return
     require_mutable(target, none, "assigned")
     vt := expr(value, tt, true)
     consume(value, vt)
