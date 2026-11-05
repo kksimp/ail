@@ -741,4 +741,12 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0923](0923-struct-scalar-replacement.md) | Native: scalar replacement of struct objects that stay in one function, and inlining of constructors *(delegated)* | Accepted | 2026-10-26 |
 | [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
 | [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
+| [0926](0926-c-header-import-subset.md) | `use c "header.h"`: a subset C header reader that writes `pub extern c fn` declarations *(delegated)* | Accepted | 2026-10-28 |
+| [0927](0927-fs-scan.md) | `fs.scan`: one bulk walk with allocated size, inode and kind *(delegated)* | Accepted | 2026-11-04 |
+| [0928](0928-fs-volume.md) | `fs.volume`: total and free bytes of a volume *(delegated)* | Accepted | 2026-11-04 |
+| [0929](0929-fs-read-range-trash.md) | `fs.read_range` and `fs.trash`: partial reads and recoverable delete *(delegated)* | Accepted | 2026-11-04 |
+| [0930](0930-std-app-progress-events.md) | `std.app` progress events for long jobs | Accepted | 2026-11-04 |
+| [0931](0931-std-app-canvas-hover.md) | `std.app` canvas hover events | Accepted | 2026-11-04 |
+| [0932](0932-std-app-click-count-and-menus.md) | `std.app` click count and context menus | Accepted | 2026-11-04 |
+| [0933](0933-std-app-alpha-fill.md) | `std.app` translucent fills | Accepted | 2026-11-04 |
 | [0938](0938-auto-parallel-push-builder-loops.md) | Run push-builder loops on the pool: one push per iteration, chunks joined in order *(delegated)* | Accepted | 2026-11-04 |

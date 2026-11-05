@@ -351,6 +351,41 @@ fn win_fstat(fd int, buf int) int
     store64(buf + 96, ft % 10000000 * 100)
     0
 
+## The facts `fs.scan` needs about the NUL-terminated UTF-8 `path`, links not
+## followed (a reparse point is opened as itself), as seven words at `out`:
+## length, allocated bytes (the length rounded up to 4096 bytes, 0 for a
+## directory), modification milliseconds, file index, volume serial number, link
+## count and kind (0 file, 1 directory, 2 reparse point). 0, or `-errno`.
+fn win_scan_stat(path int, out int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    # No access, share all; FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT.
+    h := import_call("CreateFileW", w, 0, 7, 0, 3, 35651584, 0)
+    if h == -1
+        return win_err()
+    t := win_tmp()
+    ok := import_call("GetFileInformationByHandle", h, t, 0, 0)
+    import_call("CloseHandle", h, 0, 0, 0)
+    if ok == 0
+        return win_err()
+    attrs := win_u32(t)
+    size := win_u32(t + 32) * 4294967296 + win_u32(t + 36)
+    mut kind := 0
+    if attrs.bit_and(1024) != 0
+        kind = 2
+    elif attrs.bit_and(16) != 0
+        kind = 1
+    store64(out, size)
+    store64(out + 8, if kind == 1 then 0 else (size + 4095) / 4096 * 4096)
+    ft := win_u32(t + 24) * 4294967296 + win_u32(t + 20) - 116444736000000000
+    store64(out + 16, ft / 10000)
+    store64(out + 24, win_u32(t + 44) * 4294967296 + win_u32(t + 48))
+    store64(out + 32, win_u32(t + 28))
+    store64(out + 40, win_u32(t + 40))
+    store64(out + 48, kind)
+    0
+
 ## `getcwd` into `buf`: the length with the NUL, or a negative result.
 fn win_getcwd(buf int) int
     w := os_scratch(OS_WIN_A)

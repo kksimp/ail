@@ -126,6 +126,7 @@ pub fn uses_tasks(text str) bool
         or text.contains("proc.start")
         or text.contains("std.app")
         or text.contains("tensor.")
+        or text.contains("fs.scan")
 
 ## `fn main() !`: no result and no error type of its own. The only `?` the
 ## subset knows is `t.wait()?`, which ends the program on a trap.
@@ -419,6 +420,16 @@ fn Lower.gen_task_dispatch(mut self)
     call("rt.tensor_chunk", [ps[1]], Ty.Unit)
     finish(return_of(-1))
     cur = tno
+    # The subtrees of an `fs.scan` (scan.ail, ADR 0927).
+    syes := new_block()
+    sno := new_block()
+    sealed[syes] = true
+    sealed[sno] = true
+    branch(op("eq", [ps[0], konst(1073741825, Ty.Int)], Ty.Bool), syes, [], sno, [])
+    cur = syes
+    call("rt.scan_chunk", [ps[1]], Ty.Unit)
+    finish(return_of(-1))
+    cur = sno
     for k in 0..tk.sites.len()
         yes := new_block()
         no := new_block()
