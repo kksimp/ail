@@ -28,7 +28,7 @@ one missing combination.
 
 ## Test platform (ADR 0925)
 
-**Unverified (Kaleb, 2026-11-05).** There is no Windows ARM64 hardware, and
+**Experimental and unverified (Kaleb, 2026-11-05).** Until it is verified it is excluded from the ADR 0925 release requirement, and no seed or release notes claim it is tested; `ail build --target` help marks it experimental. There is no Windows ARM64 hardware, and
 no VM will be set up (no space). ail-win is x64 and cannot run ARM64 PE. So
 the target is compile-only: `ail build --target aarch64-windows` writes a PE
 that has never run. It is experimental and unreleased, and no release may list

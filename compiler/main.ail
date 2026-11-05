@@ -187,7 +187,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows (experimental, unverified)] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
