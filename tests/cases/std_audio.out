@@ -15,3 +15,4 @@ error: not a WAV file
 800
 error: concat: formats differ
 800
+true

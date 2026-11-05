@@ -30,3 +30,5 @@ fn main() !
         print("error: {err}")
         t
     print(audio.frames(odd))
+    g := audio.gain(t, 0.5)
+    print(audio.peak(g) > 0.24 and audio.peak(g) <= 0.25)
