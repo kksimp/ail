@@ -174,7 +174,19 @@ final class CanvasView: NSView {
         f["id"] = canvasId
         f["text"] = keyName(e)
         if (f["text"] as? String ?? "").isEmpty { return }
+        f["repeat"] = e.isARepeat
+        f["code"] = e.keyCode
         Outbox.shared.send("key", f)
+    }
+
+    // std.gfx.4 (ADR 0956): key release, with the same name and hardware code.
+    override func keyUp(with e: NSEvent) {
+        var f = mods(e)
+        f["id"] = canvasId
+        f["text"] = keyName(e)
+        if (f["text"] as? String ?? "").isEmpty { return }
+        f["code"] = e.keyCode
+        Outbox.shared.send("keyup", f)
     }
 
     /// The key as std.ui names it (std.ui.7): a name for special keys, else

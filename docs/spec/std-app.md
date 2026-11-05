@@ -147,6 +147,8 @@ with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
 **std.app.19** — `Op.Shade(x, y, w, h, color, alpha float)` fills a rectangle with opacity `alpha` (0 to 1, clamped) over what is drawn. A host skips an op it doesn't know. *(ADR 0933)*
 
+**std.app.20** — A host sends `keyup` (a canvas's `id`, `text`, modifiers) when a key is released, and `key` carries `repeat` (auto-repeat) and `code` (the platform key code). A program that does not read them is unaffected; a host may omit both. *(ADR 0956)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11

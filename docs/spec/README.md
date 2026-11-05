@@ -109,6 +109,7 @@ aren't run.
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |
+| std | [Standard library: real-time frame loop](std-gfx.md) | `std` | Proposed |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

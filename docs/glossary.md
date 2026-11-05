@@ -269,5 +269,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Window host** | The main thread that owns the window and serves the program's requests (now the `std.app` host process, ADR 0838), because macOS allows windows only on the main thread (ADR 0178). |
 | **`with` block** | `with m as mut x` and a block: holds mutex `m`, with its value in `x`, and stores `x` back however the block ends; a trap keeps the old value (`conc.share.6`, ADR 0301). |
 | **Work stealing** | A scheduler in which each worker thread has its own queue of work and idle workers take work from the others' queues; the runtime uses one such pool for tasks and parallel loops (ADR 0238). |
+| **Frame loop** | The `std.gfx` cycle of reading `Input`, calling `update` and `draw`, and presenting at the display's vsync (ADR 0956). |
+| **Surface** | A shared-memory pixel buffer that a `std.gfx` program fills and the window host shows, with no JSON on the path (ADR 0957). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |
