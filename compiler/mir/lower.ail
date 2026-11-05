@@ -447,6 +447,7 @@ RT_ROOTS := [
     "rt.datarange_absmax",
     "rt.vec_axpyi",
     "rt.vec_axpyf",
+    "rt.vec_escape",
     "rt.list_new_for",
     "rt.fill",
 ]
