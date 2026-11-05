@@ -622,7 +622,10 @@ fn axpy_of(f Func, defs List[Def], n Nest, p Plan) Axpy
         if onj.contains(x) or not onj.contains(y)
             continue
         yi := inst_of(f, defs, y) else continue
-        if defs[y].block != n.body or yi.op != "get" or yi.arg(1) != n.cj.p or onj.contains(yi.arg(0))
+        if defs[y].block != n.body
+            or yi.op != "get"
+            or yi.arg(1) != n.cj.p
+            or onj.contains(yi.arg(0))
             continue
         # Only `y` and `t` may depend on `j`, and `y` is used only by `t`.
         mut alone := true

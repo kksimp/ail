@@ -17,7 +17,6 @@ BIG := 4611686018427387903
 ## stays below 2^40.
 pub DATA := 1048576
 
-
 struct Span
     known bool
     lo int
