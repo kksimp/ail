@@ -673,7 +673,7 @@ fn proven_loop_keys(file str, std str) Set[str]
 ## `ail build` makes before it adds the embedded prelude.
 fn mentions_prelude(srcs List[mir.Source]) bool
     for s in srcs
-        if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
+        if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default") or s.text.contains("Grid")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
         if s.text.contains("@derive")

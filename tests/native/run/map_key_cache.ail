@@ -16,7 +16,7 @@ fn main()
     mut twins := List[str]()
     for i in 0..48
         ks.push("key{i}")
-        twins.push("ke" + "y{i}")
+        twins.push("key{i}")
     mut m := Map[str, int]()
     mut s := Set[str]()
     mut want := [-1 for _ in 0..48]
