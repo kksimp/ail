@@ -505,8 +505,8 @@ starts, so it is scope-bound like `conc.task.4`. *(ADR 0238)*
 **conc.par.8** — A `par for` loop that `conc.par.5` accepts runs on the
 thread pool. So does every loop `conc.par.2–4` prove independent, unless
 `AIL_PARALLEL=0` or the run is deterministic (`conc.par.9`). A loop on the pool
-must also write only list elements and `int` accumulators, each accumulator by
-one `+=` outside nested loops; any other loop, a loop that captures a handle
+must also write only list elements, `int` accumulators, each accumulator by
+one `+=` outside nested loops, and lists it builds (`conc.par.16`); any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the pool has
 threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 
@@ -544,6 +544,28 @@ in such a run has a second copy for the calls made in order, which never forks; 
 traps are the same. `AIL_PARALLEL=0` and
 `--deterministic` run the calls one after the other. `ail effects --parallel` lists the runs
 that qualify. *(ADR 0914)*
+
+**conc.par.16** — A loop *builds* an outer list `out` when the only mention of
+`out` in its body is one statement `out.push(e)` at the top of the body (not
+under `if`, `match` or a nested loop), the `push` is the built-in one, and no
+`continue` outside nested loops can skip it. A built list does not make the
+loop's iterations interfere (`conc.par.2`): iteration `k` pushes element `k`.
+On the pool each chunk pushes into a list of its own; when no chunk traps, the
+chunks' lists are appended to `out` in chunk order, so `out` is the sequential
+list (`conc.par.1`); otherwise `out` is untouched and the loop runs in order
+(`conc.par.11`). A `[e par for x in xs]` comprehension with no filter builds
+its list this way. *(ADR 0938)*
+
+```ail rules=conc.par.16
+fn cube(i int) int
+    i * i * i
+
+fn main()
+    mut out := List[int]()
+    for i in 0..1000
+        out.push(cube(i))
+    print("{out.len()} {out[10]} {out[999]}")
+```
 
 **conc.par.10** — A task whose function has no `io`, `unsafe`, `spawn` or
 capability effect and calls no method of a handle, directly or through the

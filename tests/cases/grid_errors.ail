@@ -1,0 +1,8 @@
+## type.grid.2, type.grid.3: a grid's size fields are never assigned, and a
+## grid is indexed with two `int`s, `g[i, j]`.
+fn main()
+    mut g := Grid.fill(2, 2, 0)
+    g.rows = 3
+    print(g[1])
+    print(g[0, "a"])
+    print(g[0, 1, 2])

@@ -1957,7 +1957,13 @@ fn Parser.postfix(mut self) ast.Expr?
                 e = ast.Expr.Member(recv: e, name: m.name, name_pos: m.pos)
         elif at_sym("[")
             pos := bump().pos
-            index := range()?
+            mut index := range()?
+            # type.grid.3: `g[i, j]` indexes with the tuple `(i, j)`.
+            if at_sym(",")
+                mut elems := [index]
+                while eat_sym(",") and not at_sym("]")
+                    elems.push(expression()?)
+                index = ast.Expr.TupleLit(items: elems, pos: pos)
             if at_sym(":")
                 error_fix(
                     "type.coll.4",

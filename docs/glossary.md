@@ -103,6 +103,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (own repository kksimp/garlic): text mode first, with a page model for agents. See garlic-browser.md in that repository. |
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
+| **Grid** | `Grid[T]`, the prelude's 2-D list in one flat block, row by row: `Grid.fill(rows, cols, v)`, `g[i, j]` (`type.grid.*`, [ADR 0937](decisions/0937-grid-flat-2d-list.md)). |
 | **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Linux host `tools/app-host/linux`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
@@ -119,7 +120,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
 | **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
-| **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236). |
+| **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236), or pushes one element per iteration to a built list (`conc.par.16`, ADR 0938). |
 | **In-place reuse** | Reusing a uniquely owned value's memory at its last use for a new value, avoiding the allocator (Perceus-style). See ADR 0012. |
 | **Insertion order** | The iteration order of maps and sets: the order keys were first added. Updating a key keeps its place (ADR 0131). |
 | **Invariant** | An `invariant COND` line in a struct: a pure `bool` over its fields that holds after construction and after every `mut self` method, checked at run time (ADR 0305). |
@@ -170,6 +171,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
+| **Push-builder loop** | A loop whose body names an outer list only in one top-level `out.push(e)`, so iteration `k` pushes element `k`; it runs on the pool with a list per chunk, joined in order (`conc.par.16`, [ADR 0938](decisions/0938-auto-parallel-push-builder-loops.md)). |
 | **Renderer** | The part of a host that turns a view tree into controls on screen; one per platform (SwiftUI on macOS), so the same AIL app runs everywhere a host exists (ADR 0838). |
 | **SameSite** | The cookie attribute (`Strict`, `Lax` or `None`) that limits which cross-site requests carry the cookie; the cookie jar honours it ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Screen model** | What is on a screen as items (role, text, colour name, box, state) that an agent queries in text within a token budget, without a vision model (`std.screen`, ADR 0878). |

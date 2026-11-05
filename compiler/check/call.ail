@@ -1402,6 +1402,8 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
                         "index with an `int`, or slice with `lo..hi`",
                     )
         return rt
+    if ge := grid_elem(rt)
+        return grid_index(index, ge)
     # `m[k]` (type.map.3).
     if is_map_ty(rt)
         if is_range(index)

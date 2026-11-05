@@ -1,0 +1,15 @@
+# conc.par.16, conc.par.11: a trap in a chunk of a push-builder loop leaves the
+# outer list as it was and runs the loop in order, so the trap is the
+# sequential one: the first failing iteration (ADR 0938).
+fn inv(i int) int
+    mut s := 0
+    for k in 0..100
+        s += k
+    s / (i - 700)
+
+fn main()
+    mut out := [7]
+    print("before")
+    par for i in 0..1000
+        out.push(inv(i))
+    print(out.len())

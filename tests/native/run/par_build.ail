@@ -1,0 +1,38 @@
+# conc.par.16: a loop that pushes one element per iteration to an outer list
+# builds it on the pool, in chunks joined in order; the list is the
+# sequential one (ADR 0938).
+fn weigh(i int) int
+    mut s := 0
+    for k in 0..200
+        s += (i * k) % 7
+    s
+
+fn main()
+    n := 5000
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(weigh(i))
+    mut ok := true
+    for i in 0..n
+        if xs[i] != weigh(i)
+            ok = false
+    print("{xs.len()} {xs[0]} {xs[n - 1]} {ok}")
+    # A pushed value that is itself a list an inner loop builds.
+    mut rows := List[List[int]]()
+    par for i in 0..300
+        mut row := []
+        for j in 0..10
+            row.push(i * 10 + j)
+        rows.push(row)
+    print("{rows.len()} {rows[0][0]} {rows[299][9]} {rows[150]}")
+    # An outer list that already has elements, and one built from a list.
+    mut fs := [1.5]
+    for i in 0..4000
+        fs.push(weigh(i).to_float() / 2.0)
+    print("{fs.len()} {fs[0] == 1.5} {fs[4000] == 300.0}")
+    mut ws := List[int]()
+    for x in xs
+        ws.push(x + weigh(x))
+    print("{ws.len()} {ws[n - 1]}")
+    sq := [i * i par for i in 0..1000]
+    print("{sq.len()} {sq[999]}")

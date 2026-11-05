@@ -564,7 +564,8 @@ fn par_worth(lo int, hi int, work int, auto int) bool
         return false
     t := load64(pool() + P_TARGET)
     n := hi - lo
-    if n < 2
+    # conc.par.9: with one thread the loop runs as if there were no pool.
+    if n < 2 or t < 2
         return false
     # conc.par.14: heavy iterations (`PAR_HEAVY` operations each) repay the
     # pool even when there are fewer than twice as many as workers.
@@ -656,6 +657,25 @@ fn par_combine(grp int, env int, nacc int, first int) bool
             total += load64(w)
         store64(env + 8 * (first + a), total)
     true
+
+## Append each chunk's list for a built list (conc.par.16: task argument
+## `word`) to `out`, in chunk order: the elements of the sequential loop, in
+## its order. Room is made once for all of them.
+fn par_gather(grp int, word int, out List[int], size int)
+    p := list_addr(out)
+    mut total := load64(p)
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        total += load64(list_addr(list_at(load64(rec + T_ARGS + 8 * word))))
+    while total > load64(p + 8)
+        list_grow(p, size)
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        q := list_addr(list_at(load64(rec + T_ARGS + 8 * word)))
+        n := load64(p)
+        k := load64(q)
+        copy_list(load64(p + 16) + size * n, load64(q + 16), size * k)
+        store64(p, n + k)
 
 # ---- atomics (ADR 0600) ----
 
