@@ -1,0 +1,188 @@
+## std.audio clips (spec std.audio.1-7, draft): sound as plain data. A clip is
+## interleaved float samples in -1.0..1.0 with a sample rate and a channel
+## count. Everything here is pure; devices (playback, capture) come from
+## `std.audio.device`, which needs a host program and is not written yet.
+
+pub error struct AudioError "{why}"
+    pub why str
+
+pub struct Clip
+    pub rate int
+    pub channels int
+    pub samples List[float]
+
+## Frames (one sample per channel) in `c` (std.audio.2).
+pub fn frames(c Clip) int
+    c.samples.len() / c.channels
+
+## Length of `c` in milliseconds (std.audio.2).
+pub fn duration_ms(c Clip) int
+    frames(c) * 1000 / c.rate
+
+## `ms` milliseconds of silence (std.audio.3).
+pub fn silence(rate int, channels int, ms int) Clip
+    n := rate * ms / 1000 * channels
+    Clip(rate: rate, channels: channels, samples: [0.0 for _ in 0..n])
+
+## A mono sine tone of `freq` Hz and amplitude `amp` (std.audio.3).
+pub fn tone(freq float, ms int, rate int, amp float) Clip
+    n := rate * ms / 1000
+    w := 6.283185307179586 * freq / rate.to_float()
+    Clip(rate: rate, channels: 1, samples: [amp * (w * i.to_float()).sin() for i in 0..n])
+
+## Every sample times `g` (std.audio.4).
+pub fn gain(c Clip, g float) Clip
+    Clip(rate: c.rate, channels: c.channels, samples: [s * g for s in c.samples])
+
+## The largest absolute sample, 0.0 for an empty clip (std.audio.4).
+pub fn peak(c Clip) float
+    mut p := 0.0
+    for s in c.samples
+        a := if s < 0.0 then 0.0 - s else s
+        if a > p
+            p = a
+    p
+
+## `a` then `b`; both must share rate and channels (std.audio.5).
+pub fn concat(a Clip, b Clip) Clip ! AudioError
+    if a.rate != b.rate or a.channels != b.channels
+        return AudioError(why: "concat: formats differ")
+    mut out := a.samples
+    for s in b.samples
+        out.push(s)
+    Clip(rate: a.rate, channels: a.channels, samples: out)
+
+## `a` and `b` played together, as long as the longer one, samples summed and
+## clamped to -1.0..1.0 (std.audio.5).
+pub fn mix(a Clip, b Clip) Clip ! AudioError
+    if a.rate != b.rate or a.channels != b.channels
+        return AudioError(why: "mix: formats differ")
+    n := if a.samples.len() > b.samples.len() then a.samples.len() else b.samples.len()
+    mut out := List[float]()
+    for i in 0..n
+        x := if i < a.samples.len() then a.samples[i] else 0.0
+        y := if i < b.samples.len() then b.samples[i] else 0.0
+        out.push(clamp1(x + y))
+    Clip(rate: a.rate, channels: a.channels, samples: out)
+
+fn clamp1(x float) float
+    if x > 1.0
+        return 1.0
+    if x < -1.0
+        return -1.0
+    x
+
+## One channel: the mean of each frame's samples (std.audio.6).
+pub fn to_mono(c Clip) Clip
+    if c.channels == 1
+        return c
+    n := frames(c)
+    mut out := List[float]()
+    for f in 0..n
+        mut sum := 0.0
+        for ch in 0..c.channels
+            sum += c.samples[f * c.channels + ch]
+        out.push(sum / c.channels.to_float())
+    Clip(rate: c.rate, channels: 1, samples: out)
+
+## `c` at another sample rate, by linear interpolation (std.audio.6).
+pub fn resample(c Clip, rate int) Clip
+    if rate == c.rate or frames(c) == 0
+        return Clip(rate: rate, channels: c.channels, samples: c.samples)
+    n := frames(c)
+    m := n * rate / c.rate
+    step := c.rate.to_float() / rate.to_float()
+    mut out := List[float]()
+    for j in 0..m
+        pos := j.to_float() * step
+        i0 := pos.to_int()
+        i1 := if i0 + 1 < n then i0 + 1 else n - 1
+        t := pos - i0.to_float()
+        for ch in 0..c.channels
+            x := c.samples[i0 * c.channels + ch]
+            y := c.samples[i1 * c.channels + ch]
+            out.push(x + (y - x) * t)
+    Clip(rate: rate, channels: c.channels, samples: out)
+
+fn u16le(b bytes, i int) int
+    b[i].to_int() + b[i + 1].to_int() * 256
+
+fn u32le(b bytes, i int) int
+    u16le(b, i) + u16le(b, i + 2) * 65536
+
+fn put16(mut out List[u8], v int)
+    out.push((v % 256).to_u8())
+    out.push((v / 256 % 256).to_u8())
+
+fn put32(mut out List[u8], v int)
+    put16(mut out, v % 65536)
+    put16(mut out, v / 65536)
+
+## A RIFF/WAVE file holding 16-bit PCM or 32-bit float samples as a clip
+## (std.audio.7). Chunks other than `fmt ` and `data` are skipped.
+pub fn decode_wav(b bytes) Clip ! AudioError
+    if b.len() < 12 or not b[0..4].starts_with(b"RIFF") or not b[8..12].starts_with(b"WAVE")
+        return AudioError(why: "not a WAV file")
+    mut pos := 12
+    mut fmt := 0
+    mut channels := 0
+    mut rate := 0
+    mut bits := 0
+    mut have_fmt := false
+    while pos + 8 <= b.len()
+        id := b[pos..pos + 4]
+        size := u32le(b, pos + 4)
+        body := pos + 8
+        if id.starts_with(b"fmt ")
+            if size < 16 or body + 16 > b.len()
+                return AudioError(why: "short fmt chunk")
+            fmt = u16le(b, body)
+            channels = u16le(b, body + 2)
+            rate = u32le(b, body + 4)
+            bits = u16le(b, body + 14)
+            have_fmt = true
+        elif id.starts_with(b"data")
+            if not have_fmt
+                return AudioError(why: "data before fmt")
+            end := if body + size > b.len() then b.len() else body + size
+            ok16 := fmt == 1 and bits == 16
+            okf32 := fmt == 3 and bits == 32
+            if channels < 1 or rate < 1 or not (ok16 or okf32)
+                return AudioError(why: "unsupported format {fmt}/{bits} bit")
+            mut out := List[float]()
+            if ok16
+                mut i := body
+                while i + 2 <= end
+                    v := u16le(b, i)
+                    s := if v >= 32768 then v - 65536 else v
+                    out.push(s.to_float() / 32768.0)
+                    i += 2
+            else
+                return AudioError(why: "32-bit float WAV not supported yet")
+            return Clip(rate: rate, channels: channels, samples: out)
+        pos = body + size + size % 2
+    AudioError(why: "no data chunk")
+
+## `c` as a 16-bit PCM WAV file (std.audio.7). Samples are clamped.
+pub fn encode_wav(c Clip) bytes
+    n := c.samples.len() * 2
+    mut out := List[u8]()
+    for ch in "RIFF".to_bytes()
+        out.push(ch)
+    put32(mut out, 36 + n)
+    for ch in "WAVEfmt ".to_bytes()
+        out.push(ch)
+    put32(mut out, 16)
+    put16(mut out, 1)
+    put16(mut out, c.channels)
+    put32(mut out, c.rate)
+    put32(mut out, c.rate * c.channels * 2)
+    put16(mut out, c.channels * 2)
+    put16(mut out, 16)
+    for ch in "data".to_bytes()
+        out.push(ch)
+    put32(mut out, n)
+    for s in c.samples
+        v := (clamp1(s) * 32767.0).round().to_int()
+        put16(mut out, if v < 0 then v + 65536 else v)
+    bytes.from_list(out)
