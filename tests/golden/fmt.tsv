@@ -1838,8 +1838,8 @@ fmt plain tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	231927c13a56ad30
 fmt long tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	c2115ad2887463f9
 fmt plain tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d3dbd56a91c0ac72
 fmt long tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ebea676f06d88486
-fmt plain tests/cases/std_gfx_script.ail	2657f43b5818a668	0	0c2775da9a775e1e
-fmt long tests/cases/std_gfx_script.ail	2657f43b5818a668	0	d62d36919167b203
+fmt plain tests/cases/std_gfx_script.ail	a3006851a21f8b07	0	ec5a59afa8ed8f4b
+fmt long tests/cases/std_gfx_script.ail	a3006851a21f8b07	0	6544a3aa697281e1
 fmt plain tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	61f20e87d3a52c6f
 fmt long tests/cases/std_hash.ail	3ed8bcdcf37bb7a8	0	7a431ea241a4250a
 fmt plain tests/cases/std_hash_bytes.ail	11349941efd64c57	0	c1115f935c808982
