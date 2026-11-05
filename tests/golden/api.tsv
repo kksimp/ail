@@ -2068,6 +2068,12 @@ api --pretty tests/cases/generics_errors.ail	54da93331073b5ba	2	6e340b9cffb37a98
 api --symbols tests/cases/generics_errors.ail	54da93331073b5ba	2	6e340b9cffb37a98
 api --tokens tests/cases/generics_errors.ail	54da93331073b5ba	0	ef66982e40890a81
 api --ast tests/cases/generics_errors.ail	54da93331073b5ba	0	4089e2a39ca7fd3b
+api  tests/cases/grid_errors.ail	946035037cbe2f7a	2	6e340b9cffb37a98
+api --text tests/cases/grid_errors.ail	946035037cbe2f7a	2	6e340b9cffb37a98
+api --pretty tests/cases/grid_errors.ail	946035037cbe2f7a	2	6e340b9cffb37a98
+api --symbols tests/cases/grid_errors.ail	946035037cbe2f7a	2	6e340b9cffb37a98
+api --tokens tests/cases/grid_errors.ail	946035037cbe2f7a	0	90c7d2a8cde8515d
+api --ast tests/cases/grid_errors.ail	946035037cbe2f7a	0	4cc01a8abc710301
 api  tests/cases/habits_fixes_work.ail	6398a6b89265c7c3	0	b3a4afc8c4712193
 api --text tests/cases/habits_fixes_work.ail	6398a6b89265c7c3	0	3f65263d2476f460
 api --pretty tests/cases/habits_fixes_work.ail	6398a6b89265c7c3	0	e0c696d4a2aac733
@@ -5672,8 +5678,10 @@ api --diff  tests/cases/gen_types_methods.ail tests/cases/generic_owner_method.a
 api --diff --json tests/cases/gen_types_methods.ail tests/cases/generic_owner_method.ail	dc0d9cfe151ce6e2	0	05c21b9e02e99ea1
 api --diff  tests/cases/generic_owner_method.ail tests/cases/generics_errors.ail	0b40d7bdaa04e15b	2	86957422bd692e1f
 api --diff --json tests/cases/generic_owner_method.ail tests/cases/generics_errors.ail	0b40d7bdaa04e15b	2	86957422bd692e1f
-api --diff  tests/cases/generics_errors.ail tests/cases/habits_fixes_work.ail	59b401151ec133fd	2	86957422bd692e1f
-api --diff --json tests/cases/generics_errors.ail tests/cases/habits_fixes_work.ail	59b401151ec133fd	2	86957422bd692e1f
+api --diff  tests/cases/generics_errors.ail tests/cases/grid_errors.ail	9d64878bcebf365e	2	86957422bd692e1f
+api --diff --json tests/cases/generics_errors.ail tests/cases/grid_errors.ail	9d64878bcebf365e	2	86957422bd692e1f
+api --diff  tests/cases/grid_errors.ail tests/cases/habits_fixes_work.ail	861d8cd663a8eda9	2	6f901c5dee929039
+api --diff --json tests/cases/grid_errors.ail tests/cases/habits_fixes_work.ail	861d8cd663a8eda9	2	6f901c5dee929039
 api --diff  tests/cases/habits_fixes_work.ail tests/cases/hole_keyword_reserved.ail	2bc8b43153eece26	2	7d12cf86f2120c59
 api --diff --json tests/cases/habits_fixes_work.ail tests/cases/hole_keyword_reserved.ail	2bc8b43153eece26	2	7d12cf86f2120c59
 api --diff  tests/cases/hole_keyword_reserved.ail tests/cases/hole_trap.ail	f5353bd629db1853	2	7d12cf86f2120c59
