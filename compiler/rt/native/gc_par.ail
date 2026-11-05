@@ -93,7 +93,7 @@ fn gc_par_work()
             atomic_add(m + 8 * H_MBUSY, 1)
             gcp_unlock(m)
             store64(c + 16, take)
-            gc_drain_in(c, true)
+            gc_drain_in(c)
             atomic_add(m + 8 * H_MBUSY, -1)
         else
             if atomic_load(m + 8 * H_MBUSY) == 0
