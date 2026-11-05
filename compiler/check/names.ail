@@ -72,6 +72,7 @@ pub STD_MODULES := [
 pub AIL_STD_MODULES := [
     "std.app",
     "std.args",
+    "std.audio",
     "std.bigint",
     "std.attach",
     "std.attach.serve",
