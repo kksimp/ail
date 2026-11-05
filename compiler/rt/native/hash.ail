@@ -634,7 +634,10 @@ fn hash_sha1_block(h int, blk int, w int)
         store64(w + 8 * t, hash_be(blk + 4 * t, 4))
         t += 1
     while t < 80
-        x := load64(w + 8 * (t - 3)).bit_xor(load64(w + 8 * (t - 8))).bit_xor(load64(w + 8 * (t - 14))).bit_xor(load64(w + 8 * (t - 16)))
+        x := load64(w + 8 * (t - 3))
+            .bit_xor(load64(w + 8 * (t - 8)))
+            .bit_xor(load64(w + 8 * (t - 14)))
+            .bit_xor(load64(w + 8 * (t - 16)))
         store64(w + 8 * t, hash_rotl32(x, 1))
         t += 1
     mut a := load64(h)
@@ -906,12 +909,19 @@ fn hash_keccak_f(st int, b int, rc List[int], rot List[int])
     while r < 24
         mut x := 0
         while x < 5
-            c0 := load64(st + 8 * x).bit_xor(load64(st + 8 * (x + 5))).bit_xor(load64(st + 8 * (x + 10))).bit_xor(load64(st + 8 * (x + 15))).bit_xor(load64(st + 8 * (x + 20)))
+            c0 := load64(st + 8 * x)
+                .bit_xor(load64(st + 8 * (x + 5)))
+                .bit_xor(load64(st + 8 * (x + 10)))
+                .bit_xor(load64(st + 8 * (x + 15)))
+                .bit_xor(load64(st + 8 * (x + 20)))
             store64(b + 8 * x, c0)
             x += 1
         x = 0
         while x < 5
-            d := load64(b + 8 * ((x + 4) % 5)).bit_xor(hash_rotl64(load64(b + 8 * ((x + 1) % 5)), 1))
+            d := load64(b + 8 * ((x + 4) % 5)).bit_xor(hash_rotl64(
+                load64(b + 8 * ((x + 1) % 5)),
+                1,
+            ))
             mut y := 0
             while y < 25
                 store64(st + 8 * (x + y), load64(st + 8 * (x + y)).bit_xor(d))
