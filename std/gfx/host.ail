@@ -60,7 +60,16 @@ fn make_surface(w int, h int) Surface ! GfxError
         close(fd)
         if mapping.is_null()
             return GfxError(why: "cannot map the surface file")
-        Surface(base: mapping.offset(GUARD), mapped: total, path: path, w: w, h: h, stride: stride, count: 2, back: 0)
+        Surface(
+            base: mapping.offset(GUARD),
+            mapped: total,
+            path: path,
+            w: w,
+            h: h,
+            stride: stride,
+            count: 2,
+            back: 0,
+        )
 
 fn drop_file(s Surface)
     unsafe
@@ -233,7 +242,16 @@ fn private_surface(w int, h int) Surface
     total := GUARD + stride * h * 2 + GUARD
     unsafe
         block := mem.alloc(total, 0.to_u8())
-        Surface(base: block.offset(GUARD), mapped: total, path: "", w: w, h: h, stride: stride, count: 2, back: 0)
+        Surface(
+            base: block.offset(GUARD),
+            mapped: total,
+            path: "",
+            w: w,
+            h: h,
+            stride: stride,
+            count: 2,
+            back: 0,
+        )
 
 ## The pixels of `f` as `0xRRGGBB` numbers, row by row, drawn the way `run`
 ## draws them into a fresh surface and read back (std.gfx.9): a test of a

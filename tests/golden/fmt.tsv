@@ -1,5 +1,5 @@
-fmt plain compiler/a64/asm.ail	235939b400336d50	1	6e340b9cffb37a98
-fmt long compiler/a64/asm.ail	235939b400336d50	1	6e340b9cffb37a98
+fmt plain compiler/a64/asm.ail	235939b400336d50	0	61aa0b97f4becfb2
+fmt long compiler/a64/asm.ail	235939b400336d50	0	bf28c977eab3c627
 fmt plain compiler/a64/gen.ail	5636ee067646f21e	0	390bfa6921cb7aa6
 fmt long compiler/a64/gen.ail	5636ee067646f21e	0	1475f1c42bd9e6f6
 fmt plain compiler/a64/kernels.ail	5160d79b7436ecbf	0	7cb047a53c087fe7
@@ -752,8 +752,8 @@ fmt plain std/csv/csv.ail	df7697bae73c0d4d	0	216138a37d3c301f
 fmt long std/csv/csv.ail	df7697bae73c0d4d	0	c764dba038db07d9
 fmt plain std/gfx/gfx.ail	2c2ab1c3f4666491	0	e7e69f5f053a76b5
 fmt long std/gfx/gfx.ail	2c2ab1c3f4666491	0	d786731585ea066d
-fmt plain std/gfx/host.ail	6d79df93ebc7d8f5	0	7ff0566ca299d6be
-fmt long std/gfx/host.ail	6d79df93ebc7d8f5	0	1f596a92b400f2a3
+fmt plain std/gfx/host.ail	7334b575ae1798a1	0	7ff0566ca299d6be
+fmt long std/gfx/host.ail	7334b575ae1798a1	0	33782ac3967a5452
 fmt plain std/log/log.ail	c50a775489ea48a2	0	98988d88493b2ef4
 fmt long std/log/log.ail	c50a775489ea48a2	0	b0aabec556e940a0
 fmt plain std/net/http.ail	8bf8240641547169	0	8a8c4938eb161373
