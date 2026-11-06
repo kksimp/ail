@@ -5,8 +5,10 @@
 ## (san.sched.1), with the seed that replays it. It adds no analysis of its own and no runtime
 ## code: a program with a data race in `unsafe` code, or a missing join, shows up as a result that
 ## depends on the schedule. With `--tests` it runs `ail test` instead of `ail run`.
+## With `--race` it instead runs FILE once as a race-instrumented build (`AIL_SANITIZE=race`, ADR
+## 0967 stage 3) and reports the conflicting raw-pointer accesses (san.race.1-3); POSIX shells only.
 
-USAGE := "usage: ail sanitize [--seeds N] [--tests] [--timeout MS] [--json] FILE [ARGS...]"
+USAGE := "usage: ail sanitize [--seeds N] [--tests] [--race] [--timeout MS] [--json] FILE [ARGS...]"
 
 struct Run
     status int
@@ -16,6 +18,7 @@ struct Run
 struct Opts
     seeds int
     tests bool
+    race bool
     timeout int
     json bool
     file str
@@ -32,7 +35,12 @@ fn ail_path() str
 fn run_once(o Opts, schedule str) Run
     mut args := [if o.tests then "test" else "run", "--schedule={schedule}", o.file]
     args.extend(o.rest)
-    r := proc.run(ail_path(), args, none, o.timeout) else err
+    mut cmd := ail_path()
+    if o.race
+        args = ["AIL_SANITIZE=race", cmd, if o.tests then "test" else "run", o.file]
+        args.extend(o.rest)
+        cmd = "env"
+    r := proc.run(cmd, args, none, o.timeout) else err
         return Run(status: 124, out: "", err: "can't run: {err.kind}")
     Run(status: r.status, out: r.out, err: r.err)
 
@@ -51,7 +59,7 @@ fn finding(o Opts, seed int, why str, r Run) str
     "{o.file}: warning[san.sched.1]: schedule seed {seed}: {why}\n  replay: {replay}"
 
 fn parse(args List[str]) Opts?
-    mut o := Opts(seeds: 8, tests: false, timeout: 60000, json: false, file: "", rest: [])
+    mut o := Opts(seeds: 8, tests: false, race: false, timeout: 60000, json: false, file: "", rest: [])
     mut i := 0
     while i < args.len()
         a := args[i]
@@ -70,6 +78,7 @@ fn parse(args List[str]) Opts?
                         return none
                     o.timeout = args[i].to_int() else return none
                 "--tests" => o.tests = true
+                "--race" => o.race = true
                 "--json" => o.json = true
                 _ =>
                     if a.starts_with("--")
@@ -80,10 +89,26 @@ fn parse(args List[str]) Opts?
         return none
     o
 
+## `--race`: one instrumented run. Its standard error holds the `error[san.race.1]` reports
+## and the `san.race:` summary; the exit status is 1 when any access conflicted (san.race.2).
+fn race_main(o Opts)
+    r := run_once(o, "fixed")
+    if r.out != ""
+        print(r.out)
+    if o.json
+        for l in r.err.lines()
+            if l.starts_with("error[san.race.1]")
+                print("\{\"api\":1,\"severity\":\"error\",\"rule\":\"san.race.1\",\"file\":{quote(o.file)},\"message\":{quote(l)}}")
+    else
+        print(r.err)
+    io.exit(r.status)
+
 fn main() !
     o := parse(env.args()) else
         io.eprint(USAGE)
         io.exit(2)
+    if o.race
+        race_main(o)
     base := run_once(o, "fixed")
     mut found := 0
     for seed in 1..o.seeds + 1

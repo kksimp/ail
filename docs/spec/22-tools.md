@@ -780,6 +780,30 @@ fn main()
     print(1)
 ```
 
+**san.race.1** — `ail sanitize --race [--tests] [--timeout MS] [--json] FILE [ARGS...]` runs the program built with `AIL_SANITIZE=race` (POSIX shells; the variable also works with `ail run` and `ail build`). Each non-volatile raw-pointer `read` and `write` in the program's own code is checked against the last write and last read of the same 8-byte granule. Two accesses by different tasks, at least one a write, with no happens-before edge between them are a conflict. The report is `error[san.race.1]` on standard error with both source positions and task numbers; with `--json` one line per report. Each pair of positions is reported once, up to 20. Safe code and `par` loops over safe code cannot conflict (`conc.race.1`), so only `unsafe` accesses are checked, including those in `spawn` bodies and `par` chunks.
+
+**san.race.2** — The edges are: `spawn` (the child sees all the parent did before), `wait` and group waits (the waiter sees the child's whole run), `Mutex` lock and unlock, `Channel` send and receive, and `Atomic` operations (a store, `cas` or `add` publishes, a `load`, `cas` or `add` takes), each on its own object. A fresh `std.mem` block starts with no history. A run with a conflict exits 1 even if the program exited 0.
+
+**san.race.3** — The detector may miss a conflict, never invent one: a granule keeps one last write and one last read, tasks past the 255th share an id, and a full shadow table stops tracking new addresses; the summary line says when the last two happened. A race-instrumented build is slower and uses about 15 MB more address space; a normal build is unchanged.
+
+```ail tool=sanitize,--race,FILE expect=san.race.1 status=1 rules=san.race.1,san.race.2,san.race.3
+use std.mem
+
+fn bump(p *int)
+    unsafe
+        p.write(p.read() + 1)
+
+fn main() !
+    unsafe
+        p := mem.alloc(1, 0)
+        a := spawn bump(p)
+        b := spawn bump(p)
+        a.wait()?
+        b.wait()?
+        print(p.read())
+        mem.free(p)
+```
+
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`

@@ -20,6 +20,16 @@ Three stages; only stage 1 is built now.
 
 Rule keys: `san.sched.*` now; `san.leak.*` and `san.race.*` reserved.
 
+## Implementation notes: stage 3 (2026-11-06)
+
+Built as `ail sanitize --race`, rules `san.race.1-3` in [22-tools.md](../spec/22-tools.md). Differences from the design above:
+
+- The switch is `AIL_SANITIZE=race` at build time (like `AIL_INSTRUMENT`, and part of the native cache key), not a `--sanitize` flag on `ail run`; `ail sanitize --race` sets it.
+- Clocks are per task (up to 255 ids), one lock guards all state, and the shadow table is a hash of 8-byte granules with one last write and one last read. Mutexes, channels and atomics carry a clock per object. Misses are possible, false alarms are not (`san.race.3`).
+- Reports give both source positions, not stacks; stacks wait for ADR 0947's positions.
+- Volatile accesses are not checked (device registers). `std.mem` allocation clears the history of the new block.
+- Runtime `compiler/rt/native/race.ail`, lowering `compiler/mir/lower_race.ail`; global slot 64 (to be confirmed by the integrator).
+
 ## Consequences
 
 Stage 1 can miss a race a given seed set doesn't expose; more seeds raise the odds, and a finding always replays. It cannot name the racing accesses; stage 3 does. Output that legitimately varies by schedule (arrival order from workers) is reported too; the message says what differed so the author can judge.

@@ -70,8 +70,9 @@ fn sys_write(fd int, p int, n int)
             return
         done += r
 
-fn sys_exit(code int)
+fn sys_exit(status int)
     instr_dump()
+    code := race_exit(status)
     t := target()
     if t == 3
         import_call("ExitProcess", code, 0, 0, 0)

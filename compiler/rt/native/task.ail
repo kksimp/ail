@@ -63,7 +63,9 @@ T_PAR := 200
 T_BLK := 208
 T_KIDS := 216
 T_SIB := 224
-T_SIZE := 232
+# The race detector's id for the task (race.ail); 0 when it is off.
+T_RACE := 232
+T_SIZE := 240
 
 ## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
 fn cores() int
@@ -152,6 +154,7 @@ fn pool() int
 fn task_new(id int) int
     rec := alloc(T_SIZE, KIND_TASK)
     store64(rec + T_ID, id)
+    store64(rec + T_RACE, race_spawn(cur_race_id()))
     parent := cur_task()
     if parent != 0
         store64(rec + T_PAR, parent)
@@ -401,6 +404,7 @@ fn wait_done_dl(rec int, report bool) bool
             dead = prog_wait(rec + T_STATE, 0, "a task to finish", report)
         if k >= 0
             wait_leave()
+    race_join(load64(rec + T_RACE))
     dead
 
 ## A worker is about to sleep in `wait`: it stops counting as running, and
@@ -847,6 +851,7 @@ fn mutex_enter(m int, take bool) int
                 slot := pool() + P_HELD + 8 * (worker_index() + 1)
                 store64(m + M_NEXT, load64(slot))
                 store64(slot, m)
+            race_acquire(m)
             return 1
         w := load64(m + M_WAKE)
         unlock(m + M_LOCK)
@@ -859,6 +864,7 @@ fn mutex_enter(m int, take bool) int
     0
 
 fn mutex_leave(m int)
+    race_release(m)
     unlock(m + M_LOCK)
 
 ## `m.get()`.
@@ -908,6 +914,7 @@ fn mutex_unlock(m int, v int) int
     futex_wake(m + M_WAKE, 1000000)
     det_wake(m + M_WAKE)
     atomic_add(global(CHAN_EPOCH), 1)
+    race_release(m)
     unlock(m + M_LOCK)
     0
 
@@ -989,6 +996,13 @@ fn held_release(slot int)
         unlock(m + M_LOCK)
 
 # ---- cancellation (conc.cancel.1-4) ----
+
+## The race detector's id for the running task: 0 on the main thread.
+fn cur_race_id() int
+    rec := cur_task()
+    if rec == 0
+        return 0
+    load64(rec + T_RACE)
 
 ## The task record this thread is running, or 0 on the main thread.
 fn cur_task() int
