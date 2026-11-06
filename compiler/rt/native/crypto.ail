@@ -10,7 +10,7 @@
 fn crypto_bytes_of(p int, n int) str
     os := str_new(n, n)
     copy_bytes(os + 16, p, n)
-    os
+    str_at(os)
 
 ## std.crypto.1: whether the two byte strings are equal, in time that depends
 ## on their lengths only: every byte is read and no branch depends on a value.
@@ -39,7 +39,7 @@ fn crypto_random_bytes(n int) str
             trap_begin("trap[std.crypto.2]: ")
             out_str("the system has no random source")
             trap_end("")
-    os
+    str_at(os)
 
 ## std.crypto.3: HKDF-SHA-256 (RFC 5869), `len` bytes (0 to 8160); an empty
 ## `salt` is 32 zero bytes.
