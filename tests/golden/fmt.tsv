@@ -1,5 +1,5 @@
-fmt plain compiler/a64/asm.ail	235939b400336d50	0	61aa0b97f4becfb2
-fmt long compiler/a64/asm.ail	235939b400336d50	0	bf28c977eab3c627
+fmt plain compiler/a64/asm.ail	235939b400336d50	1	6e340b9cffb37a98
+fmt long compiler/a64/asm.ail	235939b400336d50	1	6e340b9cffb37a98
 fmt plain compiler/a64/gen.ail	5636ee067646f21e	0	390bfa6921cb7aa6
 fmt long compiler/a64/gen.ail	5636ee067646f21e	0	1475f1c42bd9e6f6
 fmt plain compiler/a64/kernels.ail	5160d79b7436ecbf	0	7cb047a53c087fe7
@@ -752,8 +752,8 @@ fmt plain std/csv/csv.ail	df7697bae73c0d4d	0	216138a37d3c301f
 fmt long std/csv/csv.ail	df7697bae73c0d4d	0	c764dba038db07d9
 fmt plain std/gfx/gfx.ail	2c2ab1c3f4666491	0	e7e69f5f053a76b5
 fmt long std/gfx/gfx.ail	2c2ab1c3f4666491	0	d786731585ea066d
-fmt plain std/gfx/host.ail	0d0a072da0339d9b	0	858dd8bab4d3a80c
-fmt long std/gfx/host.ail	0d0a072da0339d9b	0	4f09a33e13ee9f23
+fmt plain std/gfx/host.ail	6d79df93ebc7d8f5	0	7ff0566ca299d6be
+fmt long std/gfx/host.ail	6d79df93ebc7d8f5	0	1f596a92b400f2a3
 fmt plain std/log/log.ail	c50a775489ea48a2	0	98988d88493b2ef4
 fmt long std/log/log.ail	c50a775489ea48a2	0	b0aabec556e940a0
 fmt plain std/net/http.ail	8bf8240641547169	0	8a8c4938eb161373
@@ -1862,6 +1862,8 @@ fmt plain tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	231927c13a56ad30
 fmt long tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	c2115ad2887463f9
 fmt plain tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d3dbd56a91c0ac72
 fmt long tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ebea676f06d88486
+fmt plain tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	de7a3239ee94d682
+fmt long tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	753b4857a1e915ef
 fmt plain tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	5dc1d4d328b6b424
 fmt long tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	21cb7f6d322662c7
 fmt plain tests/cases/std_hash.ail	6b78ffa6b144942d	0	5befd156a87285af
@@ -4220,8 +4222,8 @@ fmt plain tools/fuzz/suite.ail	05b76ba4ee034148	0	f18f8ac7c06e99e1
 fmt long tools/fuzz/suite.ail	05b76ba4ee034148	0	506bd9a8943a6e3c
 fmt plain tools/gate/asm.ail	6ccb1b476c70a792	0	a7b2e0cb83aad36a
 fmt long tools/gate/asm.ail	6ccb1b476c70a792	0	fe69c8228658d7a1
-fmt plain tools/gate/gate.ail	677411e1dcdb1f31	0	643beed7037d7824
-fmt long tools/gate/gate.ail	677411e1dcdb1f31	0	ea454d538efd520c
+fmt plain tools/gate/gate.ail	ca23a9fc1480c491	0	643beed7037d7824
+fmt long tools/gate/gate.ail	ca23a9fc1480c491	0	ea454d538efd520c
 fmt plain tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	cefff86c796ed587
 fmt long tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	7e124b641dbf1cab
 fmt plain tools/gate/goldens.ail	33c251dd83e47eac	0	9f0e88b90b7ded6c
