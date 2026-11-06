@@ -10,6 +10,8 @@
 # test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
 # verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --budget`.
 $ErrorActionPreference = 'Stop'
+# A native program's exit status is data (ail run passes it on), never a PowerShell error (PowerShell 7.4+).
+$PSNativeCommandUseErrorActionPreference = $false
 
 $root = $PSScriptRoot
 # The native CLI splits paths on `/`; Windows takes `/` too, so hand it paths that way.
@@ -280,11 +282,28 @@ if ($route) {
             & $native build @rest; exit $LASTEXITCODE
         }
         'run' {
+            # The program's run settings (run.limit, GC stats, leak report) are for the program, not for the
+            # compiler: hide them from check-program and prepare, and put them back before the program starts.
+            $runEnv = @{}
+            foreach ($v in 'AIL_GC_STATS', 'AIL_GC_VERIFY', 'AIL_MAX_MEMORY_MB', 'AIL_TIMEOUT_MS', 'AIL_LEAK') {
+                $val = [Environment]::GetEnvironmentVariable($v)
+                if ($null -ne $val) { $runEnv[$v] = $val; Remove-Item "Env:$v" }
+            }
             & $native check-program @checkOpts $runFile
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $errFile = New-TemporaryFile
-            $prep = & $native prepare @runOpts $runFile 2> $errFile
-            if ($LASTEXITCODE -eq 0) {
+            # Start-Process with file redirection: PowerShell never wraps the child's stderr in error records,
+            # so nothing on it can stop the script under 'Stop' (a `2>` redirection does, even with 'Continue').
+            $outFile = New-TemporaryFile
+            $q = { param($t) '"' + ("$t" -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+            $prepArgs = (@('prepare') + @($runOpts) + @($runFile) | ForEach-Object { & $q $_ }) -join ' '
+            $pp = Start-Process -FilePath $native -ArgumentList $prepArgs -NoNewWindow -PassThru -RedirectStandardOutput $outFile.FullName -RedirectStandardError $errFile.FullName
+            $null = $pp.Handle
+            $pp.WaitForExit()
+            $prepRc = $pp.ExitCode
+            $prep = @(Get-Content $outFile); Remove-Item -Force $outFile
+            foreach ($k in $runEnv.Keys) { Set-Item "Env:$k" $runEnv[$k] }
+            if ($prepRc -eq 0) {
                 Remove-Item -Force $errFile
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile
