@@ -9,6 +9,8 @@ import Foundation
 
 final class Mapped {
     let base: UnsafeMutableRawPointer
+    /// Bytes of the mapping before `base` (the program's guard, `offset` in the surface line).
+    let skip: Int
     let bytes: Int
     let w: Int
     let h: Int
@@ -17,8 +19,9 @@ final class Mapped {
     var current = 0
     var lastDraw = Date()
 
-    init(base: UnsafeMutableRawPointer, bytes: Int, w: Int, h: Int, stride: Int, count: Int) {
+    init(base: UnsafeMutableRawPointer, skip: Int, bytes: Int, w: Int, h: Int, stride: Int, count: Int) {
         self.base = base
+        self.skip = skip
         self.bytes = bytes
         self.w = w
         self.h = h
@@ -26,7 +29,7 @@ final class Mapped {
         self.count = count
     }
 
-    deinit { munmap(base, bytes) }
+    deinit { munmap(base - skip, bytes) }
 
     /// The buffer `current` as an image that reads the shared bytes in place.
     func image() -> CGImage? {
@@ -53,14 +56,15 @@ enum Surfaces {
         let w = Int(number(obj, "w")), h = Int(number(obj, "h"))
         let stride = Int(number(obj, "stride")), count = max(Int(number(obj, "count")), 1)
         let path = str(obj, "path")
-        let bytes = stride * h * count
-        guard w > 0, h > 0, stride >= w * 4, bytes > 0 else { return false }
+        let offset = Int(number(obj, "offset"))
+        let bytes = stride * h * count + offset
+        guard w > 0, h > 0, stride >= w * 4, offset >= 0, bytes > 0 else { return false }
         let fd = open(path, O_RDWR)
         if fd < 0 { return false }
         defer { close(fd) }
         let p = mmap(nil, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
         guard let base = p, base != MAP_FAILED else { return false }
-        maps[id] = Mapped(base: base, bytes: bytes, w: w, h: h, stride: stride, count: count)
+        maps[id] = Mapped(base: base + offset, skip: offset, bytes: bytes, w: w, h: h, stride: stride, count: count)
         // A game reads the keyboard at once: the canvas takes the focus.
         DispatchQueue.main.async {
             if let v = CanvasView.registry[id] { v.window?.makeFirstResponder(v) }
