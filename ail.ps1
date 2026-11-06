@@ -10,6 +10,8 @@
 # test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
 # verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --budget`.
 $ErrorActionPreference = 'Stop'
+# A native program's exit status is data (ail run passes it on), never a PowerShell error (PowerShell 7.4+).
+$PSNativeCommandUseErrorActionPreference = $false
 
 $root = $PSScriptRoot
 # The native CLI splits paths on `/`; Windows takes `/` too, so hand it paths that way.
