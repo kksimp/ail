@@ -1,0 +1,84 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.crypto` (std.crypto.1-4, ADR 0959). A call `crypto.NAME(...)` is a call
+## of `crypto_NAME` here. A `bytes` argument has a `str`'s layout, so the
+## parameters are `str`; the lowering checks every length (std.crypto.3-4)
+## and gives a `str` result the type `bytes`.
+
+## `n` bytes at `p` as a new bytes object.
+fn crypto_bytes_of(p int, n int) str
+    os := str_new(n, n)
+    copy_bytes(os + 16, p, n)
+    str_at(os)
+
+## std.crypto.1: whether the two byte strings are equal, in time that depends
+## on their lengths only: every byte is read and no branch depends on a value.
+fn crypto_ct_eq(a str, b str) bool
+    pa := str_addr(a)
+    pb := str_addr(b)
+    na := load64(pa)
+    nb := load64(pb)
+    if na != nb
+        return false
+    mut diff := 0
+    mut i := 0
+    while i < na
+        diff = diff.bit_or(load8(pa + 16 + i).bit_xor(load8(pb + 16 + i)))
+        i += 1
+    diff == 0
+
+## std.crypto.2: `n` bytes from the operating system's generator
+## (`/dev/urandom` or ProcessPrng); never the seeded `std.random` generator.
+## With no system source it stops the program, since a fallback to a weaker
+## source would be silent.
+fn crypto_random_bytes(n int) str
+    os := str_new(n, n)
+    if n > 0
+        if tc_random(os + 16, n) != 0
+            trap_begin("trap[std.crypto.2]: ")
+            out_str("the system has no random source")
+            trap_end("")
+    str_at(os)
+
+## std.crypto.3: HKDF-SHA-256 (RFC 5869), `len` bytes (0 to 8160); an empty
+## `salt` is 32 zero bytes.
+fn crypto_hkdf_sha256(ikm str, salt str, info str, len int) str
+    pi := str_addr(ikm)
+    ps := str_addr(salt)
+    pn := str_addr(info)
+    prk := alloc_raw(32, KIND_BYTES)
+    kdh_extract(32, ps + 16, load64(ps), pi + 16, load64(pi), prk)
+    out := alloc_raw(len + 32, KIND_BYTES)
+    kdh_expand(32, prk, pn + 16, load64(pn), len, out)
+    crypto_bytes_of(out, len)
+
+## std.crypto.4: PBKDF2-HMAC-SHA-256 (RFC 8018) with `iters` rounds, `len` bytes.
+fn crypto_pbkdf2_sha256(password str, salt str, iters int, len int) str
+    pp := str_addr(password)
+    pk := pp + 16
+    kn := load64(pp)
+    ps := str_addr(salt)
+    sn := load64(ps)
+    blocks := (len + 31) / 32
+    out := alloc_raw(blocks * 32 + 32, KIND_BYTES)
+    seed := alloc_raw(sn + 4, KIND_BYTES)
+    copy_bytes(seed, ps + 16, sn)
+    u := alloc_raw(32, KIND_BYTES)
+    t := alloc_raw(32, KIND_BYTES)
+    mut b := 1
+    while b <= blocks
+        hash_put_be(seed + sn, b, 4)
+        kdh_hmac(32, pk, kn, seed, sn + 4, u)
+        copy_bytes(t, u, 32)
+        mut j := 1
+        while j < iters
+            kdh_hmac(32, pk, kn, u, 32, u)
+            mut i := 0
+            while i < 32
+                store8(t + i, load8(t + i).bit_xor(load8(u + i)))
+                i += 1
+            j += 1
+        copy_bytes(out + 32 * (b - 1), t, 32)
+        b += 1
+    crypto_bytes_of(out, len)

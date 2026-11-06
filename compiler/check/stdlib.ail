@@ -56,6 +56,7 @@ STD_FUNCTIONS := [
         "sha384",
         "sha512",
     ],
+    ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_line"],
@@ -240,6 +241,15 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
     if key == "fs.rename" or key == "fs.copy"
         return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
+    # std.crypto.1-4 (ADR 0959): `bytes` in, `bytes` out.
+    if key == "crypto.ct_eq"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bool)
+    if key == "crypto.random_bytes"
+        return StdSig(params: [Ty.Int], ret: Ty.Bytes)
+    if key == "crypto.hkdf_sha256"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes, Ty.Int], ret: Ty.Bytes)
+    if key == "crypto.pbkdf2_sha256"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Int, Ty.Int], ret: Ty.Bytes)
     if key == "env.args"
         return StdSig(params: [], ret: Ty.ListOf(text))
     if key == "env.get"
