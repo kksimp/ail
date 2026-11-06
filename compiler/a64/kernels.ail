@@ -13,6 +13,7 @@ pub fn is_kernel(name str) bool
     name == "rt.vec_axpy"
         or name == "rt.vec_axpyi"
         or name == "rt.vec_axpyf"
+        or name == "rt.vec_escape"
         or name == "rt.vec_zip"
         or name == "rt.vec_scal"
         or name == "rt.vec_mm"
@@ -32,6 +33,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_axpy" => kernel_axpy(mut a)
         "rt.vec_axpyi" => kernel_axpyi(mut a)
         "rt.vec_axpyf" => kernel_axpyf(mut a)
+        "rt.vec_escape" => kernel_escape(mut a)
         "rt.vec_zip" => kernel_zip(mut a)
         "rt.vec_mm" => kernel_mm(mut a)
         "rt.vec_zip32" => kernel_zip32(mut a)
@@ -688,4 +690,77 @@ fn kernel_sum16(mut a Asm, single bool)
     a.vop("fadd", 1, 1, 3)
     a.str_q(0, 3, 0)
     a.str_q(1, 3, 16)
+    a.ret()
+
+## `rt.vec_escape(cr, out, n, max, keep; ci, thr)` (native.vec.2): escape counts
+## of `z <- z * z + c`, eight points a pass in four independent groups of two
+## (one group is a dependent chain of float latencies; four fill the pipes).
+## x0 = cr, x1 = out, x2 = n, x3 = max, d0 = ci, d1 = thr; x4 (keep) is ignored.
+## Group g keeps zr, zi and the count (a double) in ZR[g], ZR[g]+1, ZR[g]+2;
+## v4..v7 and v29 are scratch; v16 ci, v17 thr, v18 2.0, v19 1.0. A lane has
+## left when `zr*zr + zi*zi > thr` (false for a NaN); it keeps its zr, zi
+## (frozen, so it stays gone) and count, so each lane runs the scalar loop's
+## operations in order. Whole passes: the last may read and write up to seven
+## elements past `n` (the caller leaves room).
+fn kernel_escape(mut a Asm)
+    zrs := [0, 20, 23, 26]
+    a.vdup(16, 0)
+    a.vdup(17, 1)
+    a.mov_ri(9, 4611686018427387904)
+    a.fmov_dx(18, 9)
+    a.vdup(18, 18)
+    a.mov_ri(9, 4607182418800017408)
+    a.fmov_dx(19, 9)
+    a.vdup(19, 19)
+    group := a.label()
+    step := a.label()
+    store := a.label()
+    done := a.label()
+    a.bind(group)
+    a.cmp_ri(2, 0)
+    a.b_cond(LE, done)
+    for g in 0..4
+        for r in 0..3
+            a.veor(zrs[g] + r, zrs[g] + r, zrs[g] + r)
+    a.mov_rr(9, 3)
+    a.bind(step)
+    a.cmp_ri(9, 0)
+    a.b_cond(LE, store)
+    for g in 0..4
+        zr := zrs[g]
+        zi := zr + 1
+        kk := zr + 2
+        a.vop("fmul", 4, zr, zr)
+        a.vop("fmul", 5, zi, zi)
+        a.vop("fadd", 6, 4, 5)
+        a.vfcmgt(6, 6, 17)
+        a.vop("fsub", 4, 4, 5)
+        a.ldr_q(5, 0, 16 * g)
+        a.vop("fadd", 4, 4, 5)
+        a.vop("fmul", 5, 18, zr)
+        a.vop("fmul", 5, 5, zi)
+        a.vop("fadd", 5, 5, 16)
+        a.vbif(zr, 4, 6)
+        a.vbif(zi, 5, 6)
+        a.vbic(7, 19, 6)
+        a.vop("fadd", kk, kk, 7)
+        if g == 0
+            a.vmov(29, 6)
+        else
+            a.vand(29, 29, 6)
+    a.vaddp_d(7, 29)
+    a.fmov_xd(10, 7)
+    a.cmn_ri(10, 2)
+    a.b_cond(EQ, store)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(step)
+    a.bind(store)
+    for g in 0..4
+        a.vfcvtzs2d(4, zrs[g] + 2)
+        a.str_q(4, 1, 16 * g)
+    a.alu_ri("add", 0, 0, 64)
+    a.alu_ri("add", 1, 1, 64)
+    a.alu_ri("sub", 2, 2, 8)
+    a.b(group)
+    a.bind(done)
     a.ret()

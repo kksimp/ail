@@ -7,20 +7,25 @@ use codegen
 pub fn link(img codegen.Image, code int, data int, bss int) List[u8]
     mut out := img.code
     for r in img.relocs
-        to := address(img, r.sym, code, data, bss)
-        pc := code + r.at
-        mut w := read32(out, r.at)
-        match r.kind
-            "rel32" => w = to + signed32(w) - (pc + 4 + r.tail)
-            "b26" => w = w.bit_or((to - pc).shr(2).bit_and(67108863))
-            "adrp" =>
-                pages := to.shr(12) - pc.shr(12)
-                w = w.bit_or(pages.bit_and(3).shl(29)).bit_or(pages.shr(2).bit_and(524287).shl(5))
-            "add12" => w = w.bit_or(to.bit_and(4095).shl(10))
-            _ => unreachable("unknown relocation {r.kind}")
-        for i in 0..4
-            out[r.at + i] = w.shr(8 * i).bit_and(255).to_u8()
+        link_reloc(mut out, r, address(img, r.sym, code, data, bss), code + r.at)
     out
+
+## Patch relocation `r` in `out`: `to` is the symbol's address and `pc` the
+## address of the patched word, in the same address space (an RVA works for
+## a PE image, whose base is page aligned). Shared by every object writer
+## (ADR 0968).
+pub fn link_reloc(mut out List[u8], r codegen.Reloc, to int, pc int)
+    mut w := read32(out, r.at)
+    match r.kind
+        "rel32" => w = to + signed32(w) - (pc + 4 + r.tail)
+        "b26" => w = w.bit_or((to - pc).shr(2).bit_and(67108863))
+        "adrp" =>
+            pages := to.shr(12) - pc.shr(12)
+            w = w.bit_or(pages.bit_and(3).shl(29)).bit_or(pages.shr(2).bit_and(524287).shl(5))
+        "add12" => w = w.bit_or(to.bit_and(4095).shl(10))
+        _ => unreachable("unknown relocation {r.kind}")
+    for i in 0..4
+        out[r.at + i] = w.shr(8 * i).bit_and(255).to_u8()
 
 ## The address of a symbol.
 fn address(img codegen.Image, sym str, code int, data int, bss int) int

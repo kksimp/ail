@@ -1,0 +1,310 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The race detector of `ail sanitize --race` (ADR 0967 stage 3, san.race.1-3).
+## A program built with `AIL_SANITIZE=race` calls `race_init` first in `main`
+## and `race_access` before each raw-pointer `read`/`write`; the task runtime
+## (task.ail, chan.ail) calls `race_spawn`, `race_join`, `race_acquire` and
+## `race_release` at its synchronisation edges. A program built without the
+## flag never calls `race_init`, so global slot `RACE` stays 0 and every hook
+## returns at once.
+##
+## It is a vector-clock detector in the style of FastTrack. Each task has an
+## id (the main task 0) and a clock of `MAXT` counters; an access is stamped
+## with the task's own counter, and it conflicts with the last write (or last
+## read) of its 8-byte granule when that stamp is not below the task's view of
+## the other task. Edges: a spawn copies the parent's clock to the child, a
+## wait joins the child's clock into the waiter's, a mutex or channel or atomic
+## carries a clock from its release to its acquire. Everything runs under one
+## lock, so a build with the detector is slow; a build without it pays nothing.
+##
+## Misses, never false alarms: a granule keeps one last write and one last
+## read, tasks past `MAXT` share an id, and a full shadow table stops tracking
+## new granules. The summary says when any of these happened (san.race.3).
+
+# Global slot 64: the block below, or 0 when the detector is off.
+RACE := 64
+
+# The block (one mapping, words of 8 bytes). Header: +0 lock, +8 next task
+# id, +16 races reported, +24 notes (1 task ids ran out, 2 shadow full),
+# +32 sync objects in use, +40 reports printed, +64 the pairs printed.
+R_LOCK := 0
+R_NEXT := 8
+R_COUNT := 16
+R_NOTE := 24
+R_NSYNC := 32
+R_PRINTED := 40
+R_SEEN := 64
+MAX_PRINT := 20
+
+# Clocks: `MAXT` tasks of `MAXT` words each. Then the keys and clocks of the
+# sync objects, then the shadow table: 48-byte entries holding the granule
+# plus one, the last write's stamp, the last read's stamp and the two sites.
+MAXT := 256
+CLKB := 2048
+R_CLK := 256
+R_SKEY := 524544
+SYNCN := 1024
+R_SCLK := 532736
+R_SHAD := 2629888
+SHAD_N := 262144
+ESZ := 48
+RACE_BYTES := 15216896
+
+# A stamp is the task id above bit 40 and the counter below.
+CMASK := 1099511627775
+
+## Turn the detector on; called first in `main`, on the only thread.
+fn race_init()
+    if load64(global(RACE)) != 0
+        return
+    p := heap_reserve(RACE_BYTES)
+    if p < 0
+        return
+    store64(p + R_CLK, 1)
+    store64(p + R_NEXT, 1)
+    store64(global(RACE), p)
+
+fn race_clock(p int, id int) int
+    p + R_CLK + id * CLKB
+
+## Task `par` starts task `child` now: the id of the new task, whose clock is
+## the parent's. 0 when the detector is off.
+fn race_spawn(parent int) int
+    p := load64(global(RACE))
+    if p == 0
+        return 0
+    lock(p + R_LOCK)
+    mut id := load64(p + R_NEXT)
+    mut fresh := true
+    if id >= MAXT
+        id = MAXT - 1
+        fresh = false
+        store64(p + R_NOTE, load64(p + R_NOTE).bit_or(1))
+    else
+        store64(p + R_NEXT, id + 1)
+    pc := race_clock(p, parent)
+    cc := race_clock(p, id)
+    for k in 0..MAXT
+        a := load64(pc + 8 * k)
+        if fresh or a > load64(cc + 8 * k)
+            store64(cc + 8 * k, a)
+    if fresh
+        store64(cc + 8 * id, 1)
+    store64(pc + 8 * parent, load64(pc + 8 * parent) + 1)
+    unlock(p + R_LOCK)
+    id
+
+## Join the clock `src` into the clock `dst`.
+fn race_merge(dst int, src int)
+    for k in 0..MAXT
+        a := load64(src + 8 * k)
+        if a > load64(dst + 8 * k)
+            store64(dst + 8 * k, a)
+
+## The running task has waited for task `child`: everything it did happens
+## before what the waiter does next.
+fn race_join(child int)
+    p := load64(global(RACE))
+    if p == 0
+        return
+    me := cur_race_id()
+    lock(p + R_LOCK)
+    if child != me
+        race_merge(race_clock(p, me), race_clock(p, child))
+    unlock(p + R_LOCK)
+
+## The clock of the sync object at address `a`, found or made.
+fn race_sync(p int, a int) int
+    mut h := a.shr(3).bit_xor(a.shr(13)).bit_and(SYNCN - 1)
+    mut n := 0
+    while n < SYNCN
+        k := load64(p + R_SKEY + 8 * h)
+        if k == a
+            return p + R_SCLK + h * CLKB
+        if k == 0
+            store64(p + R_SKEY + 8 * h, a)
+            store64(p + R_NSYNC, load64(p + R_NSYNC) + 1)
+            return p + R_SCLK + h * CLKB
+        h = (h + 1).bit_and(SYNCN - 1)
+        n += 1
+    p + R_SCLK + (SYNCN - 1) * CLKB
+
+## The running task takes what was released on the object at `a` (a mutex
+## acquired, a message received, an atomic read).
+fn race_acquire(a int)
+    p := load64(global(RACE))
+    if p == 0
+        return
+    me := cur_race_id()
+    lock(p + R_LOCK)
+    race_merge(race_clock(p, me), race_sync(p, a))
+    unlock(p + R_LOCK)
+
+## The running task publishes its past on the object at `a` (a mutex
+## released, a message sent, an atomic written), then starts a new epoch.
+fn race_release(a int)
+    p := load64(global(RACE))
+    if p == 0
+        return
+    me := cur_race_id()
+    lock(p + R_LOCK)
+    mc := race_clock(p, me)
+    race_merge(race_sync(p, a), mc)
+    store64(mc + 8 * me, load64(mc + 8 * me) + 1)
+    unlock(p + R_LOCK)
+
+## The entry of granule `g`, made if it is new; 0 when the table is full.
+fn race_slot(p int, g int) int
+    key := g + 1
+    mut h := g.bit_xor(g.shr(18)).bit_and(SHAD_N - 1)
+    mut n := 0
+    while n < 64
+        e := p + R_SHAD + h * ESZ
+        k := load64(e)
+        if k == key
+            return e
+        if k == 0
+            store64(e, key)
+            return e
+        h = (h + 1).bit_and(SHAD_N - 1)
+        n += 1
+    store64(p + R_NOTE, load64(p + R_NOTE).bit_or(2))
+    0
+
+## A block `[a, a + n)` is new: what was known of its addresses is dropped.
+fn race_forget(a int, n int)
+    p := load64(global(RACE))
+    if p == 0
+        return
+    lock(p + R_LOCK)
+    mut g := a.shr(3)
+    last := (a + n - 1).shr(3)
+    while g <= last
+        key := g + 1
+        mut h := g.bit_xor(g.shr(18)).bit_and(SHAD_N - 1)
+        mut c := 0
+        while c < 64
+            e := p + R_SHAD + h * ESZ
+            k := load64(e)
+            if k == key
+                store64(e + 8, 0)
+                store64(e + 16, 0)
+                c = 64
+            elif k == 0
+                c = 64
+            else
+                h = (h + 1).bit_and(SHAD_N - 1)
+                c += 1
+        g += 1
+    unlock(p + R_LOCK)
+
+## A raw-pointer access of `w` bytes at `a` (`isw` 1 for a write), at source
+## position `at`.
+fn race_access(a int, w int, isw int, at str)
+    p := load64(global(RACE))
+    if p == 0
+        return
+    me := cur_race_id()
+    lock(p + R_LOCK)
+    mc := race_clock(p, me)
+    c := load64(mc + 8 * me)
+    mut g := a.shr(3)
+    last := (a + w - 1).shr(3)
+    while g <= last
+        race_granule(p, g, me, mc, c, isw, at)
+        g += 1
+    unlock(p + R_LOCK)
+
+## Whether the stamp `s` (0 for none) happened before the running task's
+## present, whose clock is `mc`, or is the task's own.
+fn race_ordered(mc int, me int, s int) bool
+    if s == 0
+        return true
+    t := s.shr(40)
+    t == me or load64(mc + 8 * t) >= s.bit_and(CMASK)
+
+fn race_granule(p int, g int, me int, mc int, c int, isw int, at str)
+    e := race_slot(p, g)
+    if e == 0
+        return
+    w := load64(e + 8)
+    r := load64(e + 16)
+    if not race_ordered(mc, me, w)
+        race_report(p, g, me, isw, 1, w.shr(40), str_addr(at), load64(e + 24))
+    if isw == 1
+        if not race_ordered(mc, me, r)
+            race_report(p, g, me, 1, 0, r.shr(40), str_addr(at), load64(e + 32))
+        store64(e + 8, me.shl(40).bit_or(c))
+        store64(e + 24, str_addr(at))
+        store64(e + 16, 0)
+    elif r == 0 or race_ordered(mc, me, r)
+        store64(e + 16, me.shl(40).bit_or(c))
+        store64(e + 32, str_addr(at))
+
+## One conflict: this access (a write when `isw` is 1) against the earlier
+## one by task `other` (a write when `pw` is 1) at the site text `prior`.
+## Each pair of sites is printed once, the first `MAX_PRINT` pairs in all.
+fn race_report(p int, g int, me int, isw int, pw int, other int, now int, prior int)
+    store64(p + R_COUNT, load64(p + R_COUNT) + 1)
+    key := now.bit_xor(prior.shl(7))
+    printed := load64(p + R_PRINTED)
+    for k in 0..printed
+        if load64(p + R_SEEN + 8 * k) == key
+            return
+    if printed >= MAX_PRINT
+        return
+    store64(p + R_SEEN + 8 * printed, key)
+    store64(p + R_PRINTED, printed + 1)
+    sb_reset()
+    sb_text("error[san.race.1]: data race on address ")
+    put_int(g * 8)
+    sb_text("\n  ")
+    sb_text(if isw == 1 then "write" else "read")
+    sb_text(" by task ")
+    put_int(me)
+    sb_text(" at ")
+    race_site(now)
+    sb_text("\n  ")
+    sb_text(if pw == 1 then "write" else "read")
+    sb_text(" by task ")
+    put_int(other)
+    sb_text(" at ")
+    race_site(prior)
+    sb_text("\n  no wait, mutex, channel or atomic orders the two\n")
+    race_err(sb_str())
+
+## The site text at address `a` (a `str`), or a placeholder.
+fn race_site(a int)
+    if a == 0
+        sb_text("?")
+    else
+        sb_bytes(a + 16, load64(a))
+
+fn race_err(s str)
+    q := str_addr(s)
+    sys_write(2, q + 16, load64(q))
+
+## Before the process ends: print the summary and make a clean exit fail
+## (san.race.2). Off from here on, so the exit itself is not checked.
+fn race_exit(code int) int
+    p := load64(global(RACE))
+    if p == 0
+        return code
+    store64(global(RACE), 0)
+    n := load64(p + R_COUNT)
+    note := load64(p + R_NOTE)
+    if n > 0 or note != 0
+        sb_reset()
+        sb_text("san.race: ")
+        put_int(n)
+        sb_text(" conflicting accesses")
+        if note.bit_and(1) != 0
+            sb_text("; more than 255 tasks, the later ones share an id (san.race.3)")
+        if note.bit_and(2) != 0
+            sb_text("; the shadow table filled, later addresses went unchecked (san.race.3)")
+        sb_text("\n")
+        race_err(sb_str())
+    if n > 0 and code == 0
+        return 1
+    code

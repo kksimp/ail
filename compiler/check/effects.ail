@@ -54,9 +54,25 @@ STD_EFFECTS := [
     # only; the file and directory ones read and write files.
     StdEffects(
         module: "hash",
-        names: ["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
+        names: [
+            "crc32",
+            "hash64",
+            "hmac_sha256",
+            "hmac_sha384",
+            "hmac_sha512",
+            "md5_legacy",
+            "sha1_legacy",
+            "sha256",
+            "sha3_256",
+            "sha3_512",
+            "sha384",
+            "sha512",
+        ],
         effects: [],
     ),
+    # std.crypto.1-4: values only, except the system generator (effect `random`).
+    StdEffects(module: "crypto", names: ["ct_eq", "hkdf_sha256", "pbkdf2_sha256"], effects: []),
+    StdEffects(module: "crypto", names: ["random_bytes"], effects: ["random"]),
     # unsafe.hw.5: hardware access.
     StdEffects(module: "hw", names: ["at", "fence", "fence_io"], effects: ["hw"]),
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),

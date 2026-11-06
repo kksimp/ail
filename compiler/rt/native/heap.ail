@@ -38,8 +38,10 @@ H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112
 H_DIRTY := 152
-## Windows only: the end of the committed part of the heap region.
-H_COMMIT := 300
+## Windows only: the end of the committed part of the heap region. Not in 300-443
+## (the `AIL_GC_STATS` census tables) or 450 (the leak report's block): the census
+## once zeroed it, and the next commit then started from address 0.
+H_COMMIT := 500
 
 # Not a power of two: 257 cache lines, so each page starts one cache set
 # later than the one before (ADR 0562). With 16384, every page of a size class

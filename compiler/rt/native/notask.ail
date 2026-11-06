@@ -41,6 +41,10 @@ fn stack_end_self() int
 fn cur_task() int
     0
 
+## No task exists, so the race detector sees only the main task.
+fn cur_race_id() int
+    0
+
 fn task_cancelled() bool
     false
 

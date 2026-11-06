@@ -70,8 +70,10 @@ fn sys_write(fd int, p int, n int)
             return
         done += r
 
-fn sys_exit(code int)
+fn sys_exit(status int)
+    leak_exit(status)
     instr_dump()
+    code := race_exit(status)
     t := target()
     if t == 3
         import_call("ExitProcess", code, 0, 0, 0)
@@ -234,10 +236,16 @@ fn init(argc int, argv int)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
     heap_init(argv)
-    limits_init()
     # Windows has no argument vector on entry: read the command line.
     if target() == 3
         win_args_init()
+    # After `win_args_init`: on Windows that builds the environment, so the
+    # settings (`AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB`, `AIL_GC_STATS`, `AIL_GC_VERIFY`) are not seen before it.
+    limits_init()
+    # After the Windows environment is built, or `AIL_LEAK` is not seen there (san.leak.3).
+    leak := os_env_get("AIL_LEAK")
+    if leak != ""
+        leak_setup(leak)
     # The argument vector sits at the top of the main stack. Windows
     # (target 3) has no argument vector there: the thread's own bounds say how far the stack goes.
     if target() != 3
