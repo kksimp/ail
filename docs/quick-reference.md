@@ -18,8 +18,9 @@
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail mcp                       # the compiler's tools as an MCP stdio server (check, test, ask, impact, task_*)
-./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols)
+./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)
 ./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)
+./ail leak FILE                  # run with the leak report: growth by kind and the roots that hold it (san.leak.1-2); AIL_LEAK works on any native exe
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
 ./ail diff OLD NEW                  # what changed by meaning
 ./ail edit FILE.ail [--test] < EDITS
