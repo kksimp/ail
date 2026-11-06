@@ -136,7 +136,7 @@ fn Lower.os_module(self, recv ast.Expr) str
 ## The module name when `recv` is a standard module written in the
 ## runtime (ADR 0614), unless the program has its own module of the name.
 fn Lower.std_module(self, recv ast.Expr) str
-    for m in ["hash", "random"]
+    for m in ["hash", "random", "crypto"]
         if is_module(recv, m) and not aliases.contains(m)
             return m
     ""
@@ -170,7 +170,35 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
         call("rt.out_int", [vs[1]], Ty.Unit)
         trap_close(npos)
         cur = ok
-    Val(id: call(key, vs, sig.ret), ty: sig.ret)
+    if m == "crypto"
+        crypto_checks(name, npos, vs)
+    ret := call(key, vs, sig.ret)
+    # `std.crypto` results are `bytes`, which has a `str`'s layout.
+    if m == "crypto" and sig.ret == Ty.Str
+        return Val(id: op("copy", [ret], Ty.Bytes), ty: Ty.Bytes)
+    Val(id: ret, ty: sig.ret)
+
+## A trap `RULE: why` unless `cond` holds.
+fn Lower.crypto_require(mut self, cond int, rule str, npos ast.Pos, why str)
+    ok := check_branch(cond)
+    trap_open(rule, npos)
+    say(why)
+    trap_close(npos)
+    cur = ok
+
+## The length checks of `std.crypto` (std.crypto.2-4); `vs` are the lowered arguments.
+fn Lower.crypto_checks(mut self, name str, npos ast.Pos, vs List[int])
+    zero := konst(0, Ty.Int)
+    if name == "random_bytes"
+        crypto_require(op("le", [zero, vs[0]], Ty.Bool), "std.crypto.2", npos, "`random_bytes` needs a length of 0 or more")
+        crypto_require(op("le", [vs[0], konst(1073741824, Ty.Int)], Ty.Bool), "std.crypto.2", npos, "`random_bytes` makes at most 1073741824 bytes")
+    if name == "hkdf_sha256"
+        crypto_require(op("le", [zero, vs[3]], Ty.Bool), "std.crypto.3", npos, "`hkdf_sha256` needs a length of 0 or more")
+        crypto_require(op("le", [vs[3], konst(8160, Ty.Int)], Ty.Bool), "std.crypto.3", npos, "`hkdf_sha256` makes at most 8160 bytes (255 blocks)")
+    if name == "pbkdf2_sha256"
+        crypto_require(op("le", [konst(1, Ty.Int), vs[2]], Ty.Bool), "std.crypto.4", npos, "`pbkdf2_sha256` needs 1 or more iterations")
+        crypto_require(op("le", [zero, vs[3]], Ty.Bool), "std.crypto.4", npos, "`pbkdf2_sha256` needs a length of 0 or more")
+        crypto_require(op("le", [vs[3], konst(1048576, Ty.Int)], Ty.Bool), "std.crypto.4", npos, "`pbkdf2_sha256` makes at most 1048576 bytes")
 
 ## `random.shuffle(mut xs)` (std.random.4) on any list: the runtime swaps
 ## elements of the list's element size.

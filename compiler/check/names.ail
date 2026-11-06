@@ -50,6 +50,7 @@ ALLOWABLE := ["expr.match.3"]
 ## The standard modules (std.use.1), sorted.
 pub STD_MODULES := [
     "compress",
+    "crypto",
     "env",
     "fs",
     "hash",
