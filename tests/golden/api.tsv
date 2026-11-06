@@ -3676,6 +3676,12 @@ api --pretty tests/cases/std_compress_types.ail	1eca79943e56149f	2	6e340b9cffb37
 api --symbols tests/cases/std_compress_types.ail	1eca79943e56149f	2	6e340b9cffb37a98
 api --tokens tests/cases/std_compress_types.ail	1eca79943e56149f	0	ec724ef459d9751c
 api --ast tests/cases/std_compress_types.ail	1eca79943e56149f	0	45005502bc6b3890
+api  tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	6819782f93209dee
+api --text tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	b1b2e1dc3fbb9eb4
+api --pretty tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	45a2023d9f75b0c2
+api --symbols tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	84dfc3602b6baec1
+api --tokens tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	27c6f571f43beb96
+api --ast tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	4ea7343a77da0e20
 api  tests/cases/std_csv.ail	989fd71f4e11d563	0	e636257f48e56fd0
 api --text tests/cases/std_csv.ail	989fd71f4e11d563	0	5975d548dda51e23
 api --pretty tests/cases/std_csv.ail	989fd71f4e11d563	0	4163c861db0ab9dd
@@ -6238,8 +6244,10 @@ api --diff  tests/cases/std_compress.ail tests/cases/std_compress_files.ail	b92e
 api --diff --json tests/cases/std_compress.ail tests/cases/std_compress_files.ail	b92e79a3c7b01ac5	0	02999d889994a947
 api --diff  tests/cases/std_compress_files.ail tests/cases/std_compress_types.ail	ba4f674593ea6ee6	2	51e933e388b7d2a3
 api --diff --json tests/cases/std_compress_files.ail tests/cases/std_compress_types.ail	ba4f674593ea6ee6	2	51e933e388b7d2a3
-api --diff  tests/cases/std_compress_types.ail tests/cases/std_csv.ail	46088905614efb18	2	51e933e388b7d2a3
-api --diff --json tests/cases/std_compress_types.ail tests/cases/std_csv.ail	46088905614efb18	2	51e933e388b7d2a3
+api --diff  tests/cases/std_compress_types.ail tests/cases/std_crypto.ail	23e7947d78b4f810	2	51e933e388b7d2a3
+api --diff --json tests/cases/std_compress_types.ail tests/cases/std_crypto.ail	23e7947d78b4f810	2	51e933e388b7d2a3
+api --diff  tests/cases/std_crypto.ail tests/cases/std_csv.ail	7a156b51d32e3923	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_crypto.ail tests/cases/std_csv.ail	7a156b51d32e3923	0	489bd882925405d2
 api --diff  tests/cases/std_csv.ail tests/cases/std_csv_quote.ail	4b500eff330bc6c8	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_csv.ail tests/cases/std_csv_quote.ail	4b500eff330bc6c8	0	0cf4955de07b570d
 api --diff  tests/cases/std_csv_quote.ail tests/cases/std_date.ail	1acdd77c496e8984	0	1da7cd571ff6c0f4
