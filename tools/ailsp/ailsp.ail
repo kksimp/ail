@@ -30,6 +30,8 @@ struct Server
     ## The last outline `api --outline` gave for each path: completion falls back on it while the
     ## buffer does not check (lsp.complete.2).
     outlines Map[str, Json]
+    ## `AIL_LSP_DEBUG` is set: each command, its status and its standard error go to standard error.
+    debug bool
 
 ## ---- JSON helpers
 
@@ -193,6 +195,9 @@ fn Server.run(self, args List[str]) proc.Output?
     r := proc.run(self.ail, args) else err
         io.eprint("ail lsp: can't run {self.ail}: {err.kind}")
         return none
+    if self.debug
+        line := args.join(" ")
+        io.eprint("ail lsp debug: {line} -> status {r.status}\n{r.err}")
     r
 
 ## A position query (`api --type|--refs FILE LINE COL`) as JSON, or none when it has no answer.
@@ -631,34 +636,116 @@ fn item_kind(kind str) int
         "const" => 21
         _ => 6
 
-## The names for the cursor, in a buffer already made to check: the members of the value before a
-## `.`, else the locals in scope and the declarations of the file.
-fn Server.names(mut self, path str, line int, keep int, dotted bool, prefix str) List[Json]
-    mut out := List[Json]()
-    if dotted
-        ans := self.query("--type", path, line, keep) else return out
-        base := base_type(ans.text("type", ""))
-        for it in self.outline(path)
-            if it.text("name", "") != base
-                continue
-            for x in (it.arr("fields") else [])
-                out.push(entry(x.text("name", ""), 5, x.text("type", ""), "0"))
-            for x in (it.arr("methods") else [])
-                out.push(entry(x.text("name", ""), 2, x.text("signature", ""), "1"))
-    else
-        loc := self.query("--locals", path, line, keep)
-        if l := loc
-            for x in (l.arr("locals") else [])
-                out.push(entry(x.text("name", ""), 6, x.text("type", ""), "0"))
-        for it in self.outline(path)
-            kind := it.text("kind", "")
-            if ["fn", "struct", "enum", "trait", "const"].contains(kind)
-                out.push(entry(it.text("name", ""), item_kind(kind), it.text("signature", ""), "1"))
+fn by_prefix(items List[Json], prefix str) List[Json]
     mut kept := List[Json]()
-    for x in out
+    for x in items
         if prefix == "" or x.text("label", "").starts_with(prefix)
             kept.push(x)
     kept
+
+## The fields and methods of the type `base`, from the outline of the file.
+fn Server.members(mut self, path str, base str, prefix str) List[Json]
+    mut out := List[Json]()
+    for it in self.outline(path)
+        if it.text("name", "") != base
+            continue
+        for x in (it.arr("fields") else [])
+            out.push(entry(x.text("name", ""), 5, x.text("type", ""), "0"))
+        for x in (it.arr("methods") else [])
+            out.push(entry(x.text("name", ""), 2, x.text("signature", ""), "1"))
+    by_prefix(out, prefix)
+
+## The names for the cursor, in a buffer already made to check: the members of the value before a
+## `.`, else the locals in scope and the declarations of the file. Empty when `api` refuses it.
+fn Server.names(mut self, path str, line int, keep int, dotted bool, prefix str) List[Json]
+    if dotted
+        ans := self.query("--type", path, line, keep) else return []
+        return self.members(path, base_type(ans.text("type", "")), prefix)
+    mut out := List[Json]()
+    loc := self.query("--locals", path, line, keep)
+    if l := loc
+        for x in (l.arr("locals") else [])
+            out.push(entry(x.text("name", ""), 6, x.text("type", ""), "0"))
+    for it in self.outline(path)
+        kind := it.text("kind", "")
+        if ["fn", "struct", "enum", "trait", "const"].contains(kind)
+            out.push(entry(it.text("name", ""), item_kind(kind), it.text("signature", ""), "1"))
+    by_prefix(out, prefix)
+
+## ---- guesses from the text, when no copy of the buffer checks (lsp.complete.2)
+
+fn leading_ident(s str) str
+    mut out := ""
+    for c in s.chars()
+        if not is_ident(c)
+            break
+        out = "{out}{c}"
+    out
+
+## The parameters written in a `fn` line, each as `name Type`.
+fn fn_params(t str) List[str]
+    open := t.find("(") else return []
+    close := t.rfind(")") else return []
+    if close <= open
+        return []
+    inner := t.slice(open + 1, close)
+    [p.trim() for p in inner.split(",") if p.trim() != ""]
+
+fn is_fn_line(t str) bool
+    t.starts_with("fn ") or t.starts_with("pub fn ")
+
+## The type of `name` as the lines above `line` write it: a parameter `name Type`, `self` of a
+## method `fn Type.m`, or a binding `name := Type(...)`. Empty when it can't tell.
+fn guess_type(lines List[str], line int, name str) str
+    mut i := if line >= lines.len() then lines.len() - 1 else line
+    while i >= 0
+        t := lines[i].trim()
+        if is_fn_line(t)
+            head := t.strip_prefix("pub ") else t
+            if name == "self"
+                rest := head.slice(3, head.len())
+                d := rest.find(".") else return ""
+                return leading_ident(rest.slice(0, d))
+            for p in fn_params(t)
+                ws := p.words()
+                if ws.len() >= 2 and ws[0] == name
+                    return base_type(ws[1])
+            return ""
+        bind := t.strip_prefix("mut ") else t
+        if bind.starts_with("{name} := ")
+            rhs := bind.slice(name.chars().len() + 4, bind.len())
+            id := leading_ident(rhs)
+            c := id.chars()
+            if c.len() > 0 and c[0].is_alpha() and c[0] == c[0].to_upper()
+                return id
+            return ""
+        i -= 1
+    ""
+
+## The names bound above `line` in its function: its parameters, `name :=` and `for name`.
+fn guess_locals(lines List[str], line int) List[str]
+    mut out := List[str]()
+    mut i := if line >= lines.len() then lines.len() - 1 else line
+    while i >= 0
+        t := lines[i].trim()
+        if is_fn_line(t)
+            for p in fn_params(t)
+                n := leading_ident(p)
+                if n != "" and not out.contains(n)
+                    out.push(n)
+            break
+        bind := t.strip_prefix("mut ") else t
+        mut name := ""
+        if bind.starts_with("for ")
+            name = leading_ident(bind.slice(4, bind.len()))
+        else
+            n := leading_ident(bind)
+            if n != "" and bind.slice(n.chars().len(), bind.len()).starts_with(" :=")
+                name = n
+        if name != "" and not out.contains(name)
+            out.push(name)
+        i -= 1
+    out
 
 ## lsp.complete.1: names for the cursor from `api`. lsp.complete.2: a buffer being typed rarely
 ## checks, so the word at the cursor is taken out first (a `.` and what follows it, or the word
@@ -678,22 +765,36 @@ fn Server.completion(mut self, params Json) Json
     pad := text_of(cs, 0, ind)
     mut fixed := pad
     mut keep := w.0
+    mut recv := ""
     if dotted
         mut j := w.0 - 1
         while j > 0 and (is_ident(cs[j - 1]) or cs[j - 1] == '.')
             j -= 1
-        recv := text_of(cs, j, w.0 - 1)
+        recv = text_of(cs, j, w.0 - 1)
         if recv == ""
             return obj([member("isIncomplete", Json.Bool(false)), member("items", Json.Arr([]))])
         fixed = "{pad}ail_probe := {recv}"
         keep = fixed.chars().len()
     was_open := self.bufs.contains(path)
     self.bufs[path] = with_line(original, at.0, fixed)
-    names := self.names(path, at.0, keep, dotted, prefix)
+    mut names := self.names(path, at.0, keep, dotted, prefix)
     if was_open
         self.bufs[path] = original
     else
         self.bufs.remove(path)
+    lines := original.split("\n")
+    if dotted
+        if names.len() == 0
+            names = self.members(path, guess_type(lines, at.0, recv), prefix)
+    else
+        mut have := List[str]()
+        for x in names
+            have.push(x.text("label", ""))
+        mut guessed := List[Json]()
+        for n in guess_locals(lines, at.0)
+            if not have.contains(n)
+                guessed.push(entry(n, 6, "", "0"))
+        names.extend(by_prefix(guessed, prefix))
     obj([member("isIncomplete", Json.Bool(false)), member("items", Json.Arr(names))])
 
 ## ---- requests
@@ -763,7 +864,14 @@ fn Server.handle(mut self, req Json)
 
 fn main() !
     ail := env.get("AIL") else "./ail"
-    mut s := Server(bufs: Map[str, str](), down: false, ail: ail, outlines: Map[str, Json]())
+    debug := env.get("AIL_LSP_DEBUG") != none
+    mut s := Server(
+        bufs: Map[str, str](),
+        down: false,
+        ail: ail,
+        outlines: Map[str, Json](),
+        debug: debug,
+    )
     mut frames := Frames(carry: "")
     while true
         body := frames.next() else break
