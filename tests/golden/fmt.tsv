@@ -82,8 +82,8 @@ fmt plain compiler/check/handles.ail	a934f144d4cc822d	0	8e968507b3315fe3
 fmt long compiler/check/handles.ail	a934f144d4cc822d	0	46447b4841cd1b2f
 fmt plain compiler/check/moves.ail	e3d206735aaf87e6	0	e2263ae16f17f768
 fmt long compiler/check/moves.ail	e3d206735aaf87e6	0	117a12b699790a63
-fmt plain compiler/check/names.ail	efda0ad258b113d1	0	12aaa6b3d3cb6bbe
-fmt long compiler/check/names.ail	efda0ad258b113d1	0	b70a83285fdb0378
+fmt plain compiler/check/names.ail	457f3b0f7dd822b0	0	b890532f50466b08
+fmt long compiler/check/names.ail	457f3b0f7dd822b0	0	30f978e42d15c878
 fmt plain compiler/check/net.ail	110659230abb183c	0	7f42f40186ae8e0a
 fmt long compiler/check/net.ail	110659230abb183c	0	ed6c00362fa2c6ce
 fmt plain compiler/check/observe.ail	069de32265be4e83	0	31678d9c4f045420
@@ -160,8 +160,8 @@ fmt plain compiler/load/help.ail	49e14cd55185f04a	0	6ff89c6f3018a840
 fmt long compiler/load/help.ail	49e14cd55185f04a	0	cd8e7b06683d933b
 fmt plain compiler/load/implicit.ail	d3a0090c7e19bc26	0	925262d490f16bfe
 fmt long compiler/load/implicit.ail	d3a0090c7e19bc26	0	45d503185e604827
-fmt plain compiler/load/load.ail	bf8c814e495914d6	0	d8093348b001bc65
-fmt long compiler/load/load.ail	bf8c814e495914d6	0	c05f0a1ad0c38014
+fmt plain compiler/load/load.ail	ae08ba1d1260fe6a	0	fd53f5e785c4a3a0
+fmt long compiler/load/load.ail	ae08ba1d1260fe6a	0	763b82405dc2dcb6
 fmt plain compiler/load/report.ail	262751774702b0b9	0	a9e8afdfd49bde6d
 fmt long compiler/load/report.ail	262751774702b0b9	0	2fa4be9cd88b608d
 fmt plain compiler/load/resolve.ail	71be0edcc7f45d55	0	8677ee371b18569a
@@ -222,8 +222,8 @@ fmt plain compiler/mir/lower_enum.ail	570b8269118bbe5e	0	e7ecee5771fa08cd
 fmt long compiler/mir/lower_enum.ail	570b8269118bbe5e	0	e424ef2a91ffdc21
 fmt plain compiler/mir/lower_eqx.ail	043899e5075c1650	0	a755cbd30beba1ac
 fmt long compiler/mir/lower_eqx.ail	043899e5075c1650	0	9cb5d326fb61ee65
-fmt plain compiler/mir/lower_err.ail	4c2d0aa30eddf7b8	0	0e8a03c0d6d54029
-fmt long compiler/mir/lower_err.ail	4c2d0aa30eddf7b8	0	32f7581e040ad1a0
+fmt plain compiler/mir/lower_err.ail	ad340922978735f5	0	d1dccebf87dc6ec6
+fmt long compiler/mir/lower_err.ail	ad340922978735f5	0	b8883bedf369e6bc
 fmt plain compiler/mir/lower_excl.ail	97ed2f386d5892cd	0	5d6d8904a3e189b1
 fmt long compiler/mir/lower_excl.ail	97ed2f386d5892cd	0	dc4731a57cf86222
 fmt plain compiler/mir/lower_f32.ail	86b001bf579cabe9	0	725987ac35244913
@@ -282,8 +282,8 @@ fmt plain compiler/mir/lower_matchtree.ail	c344723f01ea1f17	0	11caf6210b2597b4
 fmt long compiler/mir/lower_matchtree.ail	c344723f01ea1f17	0	e162404986803959
 fmt plain compiler/mir/lower_mem.ail	688666122d412ecd	0	11be50e3a3d44383
 fmt long compiler/mir/lower_mem.ail	688666122d412ecd	0	fa9e92fe7152f202
-fmt plain compiler/mir/lower_mod.ail	26a172864d58e6da	0	00b73f5f884c2498
-fmt long compiler/mir/lower_mod.ail	26a172864d58e6da	0	06bc84632f97fbeb
+fmt plain compiler/mir/lower_mod.ail	aa861e5f47684034	0	a8da25a91e883743
+fmt long compiler/mir/lower_mod.ail	aa861e5f47684034	0	1c2b15bde7f9004e
 fmt plain compiler/mir/lower_move.ail	44903330591ff0f6	0	34965001ff3f46eb
 fmt long compiler/mir/lower_move.ail	44903330591ff0f6	0	57e3838447230843
 fmt plain compiler/mir/lower_net.ail	5e7d96e1abe905b6	0	ed24a9e11bf66497
@@ -726,8 +726,8 @@ fmt plain examples/ui_hello.ail	f0b19c9ec039c464	0	bc1d85e425e0809f
 fmt long examples/ui_hello.ail	f0b19c9ec039c464	0	6e68f87633f935b4
 fmt plain examples/workers.ail	f6727cffaac89afc	0	a1eb9ae203f4438a
 fmt long examples/workers.ail	f6727cffaac89afc	0	e852faf611f251f1
-fmt plain std/app/app.ail	904c2ed5a4e0b901	0	df6a18a5c072deab
-fmt long std/app/app.ail	904c2ed5a4e0b901	0	6440958b7181e99e
+fmt plain std/app/app.ail	0a9ef1acd38804f5	0	ccc91f39b4db1f60
+fmt long std/app/app.ail	0a9ef1acd38804f5	0	48a78a4664215d83
 fmt plain std/args/args.ail	d0e41ea14c3fd794	0	dd31a3ebb23d57a1
 fmt long std/args/args.ail	d0e41ea14c3fd794	0	d31841315839a8ec
 fmt plain std/attach/attach.ail	296c2b438965a408	0	5ffca9415be562df
@@ -742,6 +742,8 @@ fmt plain std/bigint/bigint.ail	c61bbdf1193ba68c	0	752865387c764edd
 fmt long std/bigint/bigint.ail	c61bbdf1193ba68c	0	bd94220b2400855d
 fmt plain std/csv/csv.ail	df7697bae73c0d4d	0	216138a37d3c301f
 fmt long std/csv/csv.ail	df7697bae73c0d4d	0	c764dba038db07d9
+fmt plain std/gfx/gfx.ail	2c2ab1c3f4666491	0	e7e69f5f053a76b5
+fmt long std/gfx/gfx.ail	2c2ab1c3f4666491	0	d786731585ea066d
 fmt plain std/log/log.ail	c50a775489ea48a2	0	98988d88493b2ef4
 fmt long std/log/log.ail	c50a775489ea48a2	0	b0aabec556e940a0
 fmt plain std/net/http.ail	8bf8240641547169	0	8a8c4938eb161373
@@ -1848,6 +1850,8 @@ fmt plain tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	231927c13a56ad30
 fmt long tests/cases/std_fs_missing.ail	10acb2f1b0641e01	0	c2115ad2887463f9
 fmt plain tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d3dbd56a91c0ac72
 fmt long tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ebea676f06d88486
+fmt plain tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	5dc1d4d328b6b424
+fmt long tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	21cb7f6d322662c7
 fmt plain tests/cases/std_hash.ail	6b78ffa6b144942d	0	5befd156a87285af
 fmt long tests/cases/std_hash.ail	6b78ffa6b144942d	0	a54928d819b6f6f6
 fmt plain tests/cases/std_hash_bytes.ail	11349941efd64c57	0	c1115f935c808982
