@@ -1,14 +1,12 @@
 ## Inlining beyond leaves (ADR 0940, rule native.inline.1): a function that
 ## calls others may be copied into its callers too, by a cost model over the
 ## call graph, within a size budget. A function with one call in the whole
-## program goes inline there up to `SINGLE_LIMIT` instructions when that
-## call is inside a loop of the caller (a hot site): the copy replaces the
-## only use, and the function is dropped. A call made once (`size()` at the
-## top of `main`) gains nothing copied, and measured slower (collatz, sieve
-## +7%). Any other goes up to `WIDE_LIMIT` at any call, and those copies may
-## grow a caller by at most `CALLER_GROWTH`. Copying those only at hot sites,
-## with a cap on the program's growth, kept a smaller compiler but lost most
-## of the speed (lzr -2.6% against -8.3%, wordfreq 0 against -17%). A
+## program goes inline there up to `SINGLE_LIMIT` instructions: the copy
+## replaces the only use, and the function is dropped. Any other goes up to
+## `WIDE_LIMIT` at any call, and those copies may grow a caller by at most
+## `CALLER_GROWTH`. Copying only at calls inside loops kept a smaller
+## compiler but lost the speed (lzr -2.6% against -8.3%, wordfreq 0 against
+## -17% on ail-linux), so any call goes. A
 ## function on a cycle of the call graph never goes (its body could copy
 ## itself without end), nor one with a loop (measured slower copied). The
 ## calls a copy brings with it keep the frames they stand for (trace.frame.2).
@@ -89,8 +87,7 @@ fn frame_prim(name str) bool
 
 ## Inline the calls of `f` that name a function in `leaves`, or in `wide`
 ## under the cost model: the one call of a single-call function, written in
-## `f` itself at a hot call (in a loop of `f`), or any other call while `f`
-## may still grow. At most `INLINE_BUDGET` calls; returns the call budget
+## `f` itself, or any other call while `f` may still grow. At most `INLINE_BUDGET` calls; returns the call budget
 ## left.
 fn expand_wide(
     mut f Func,
@@ -101,24 +98,14 @@ fn expand_wide(
 ) int
     mut budget := INLINE_BUDGET
     mut room := CALLER_GROWTH
-    mut hot := [false for _ in 0..f.blocks.len()]
-    if calls_wide(f, wide)
-        for lp in find_loops(f)
-            for b in 0..f.blocks.len()
-                if lp.member[b]
-                    hot[b] = true
     mut changed := true
     while changed and budget > 0
         changed = false
         for b in 0..f.blocks.len()
-            at := first_wide_call(f.blocks[b], leaves, wide, f.name, room, hot[b], sites)
+            at := first_wide_call(f.blocks[b], leaves, wide, f.name, room, sites)
             if at >= 0
                 name := f.blocks[b].insts[at].name
-                before := f.blocks.len()
                 inline_call(mut f, b, at, bodies[name], mut sites)
-                # The callee's blocks and the rest of `b` are as hot as `b`.
-                for _ in before..f.blocks.len()
-                    hot.push(hot[b])
                 if n := wide.sizes.get(name)
                     if not wide.single.contains(name)
                         room -= n
@@ -127,24 +114,12 @@ fn expand_wide(
                 break
     budget
 
-## Whether `f` calls a single-call candidate, which only a hot site takes
-## (finding the loops costs a dominator tree, so only then).
-fn calls_wide(f Func, wide Wide) bool
-    if f.name.starts_with("rt.")
-        return false
-    for blk in f.blocks
-        for i in blk.insts
-            if i.op == "call" and wide.single.contains(i.name)
-                return true
-    false
-
 fn first_wide_call(
     blk Block,
     leaves Set[str],
     wide Wide,
     self_name str,
     room int,
-    hot bool,
     sites List[Site],
 ) int
     for k in 0..blk.insts.len()
@@ -156,7 +131,7 @@ fn first_wide_call(
                 # Copies of the one call (brought in by another copy) count as
                 # any other call, so the function still goes inline once.
                 written := i.site < 0 or sites[i.site].from < 0
-                if wide.single.contains(i.name) and written and hot
+                if wide.single.contains(i.name) and written
                     return k
                 if n <= WIDE_LIMIT and n <= room
                     return k

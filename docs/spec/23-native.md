@@ -595,8 +595,7 @@ fn main()
 when the callee is not on a cycle of the call graph, is not `main` or part of
 the runtime, has no loop, and makes no indirect call: the one call of a
 function called from one place, up to 200 instructions, and any other call
-inside a loop of the caller up to 12, with each caller grown by at most its
-own size and 200 instructions, and the program by at most 10%, this way;
+up to 12, with each caller grown by at most 200 instructions this way;
 besides the leaf functions of ADR 0391. A function that nothing calls or
 names after this is left out of the executable. A trap in, or below, a copied
 body reports the callee's frame and every frame it was copied into
