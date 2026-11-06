@@ -1,0 +1,85 @@
+## std.audio.device (spec std.audio.9-10, ADR 0949): playback and capture
+## through a host program that owns the platform's audio API. The program and
+## the host exchange one text line per message on the host's standard input
+## and output, so no AIL code runs on an audio callback (ffi.decl.3).
+##
+## To the host: `play RATE CHANNELS BASE64` and `rec MS RATE CHANNELS`.
+## From the host: `ready`, `done`, `data RATE CHANNELS BASE64` and `error TEXT`.
+## The audio is little-endian 16-bit PCM, interleaved.
+use std.audio
+
+## Why a device could not be used (std.audio.9).
+pub error struct DeviceError "{kind}: {message}"
+    pub kind str
+    pub message str
+
+## The audio host program: `AIL_AUDIO_HOST`, else the one built under the
+## toolchain's directory (`AIL_ROOT`) by `tools/audio-host/macos/run.sh`.
+pub fn host_path() str ! DeviceError
+    if p := env.get("AIL_AUDIO_HOST")
+        return p
+    root := env.get("AIL_ROOT") else return DeviceError(
+        kind: "no_host",
+        message: "std.audio.9: set AIL_AUDIO_HOST to the audio host program",
+    )
+    p := "{root}/tools/audio-host/macos/build/ail-audio-host"
+    if not fs.exists(p)
+        return DeviceError(
+            kind: "no_host",
+            message: "std.audio.9: no audio host is built for this platform; macOS has one (tools/audio-host/macos/run.sh)",
+        )
+    p
+
+## Starts the audio host, the `proc.Child` the other functions take, and waits for it to be ready (std.audio.9).
+pub fn open() proc.Child ! DeviceError
+    open_at(host_path()?)?
+
+## Starts the audio host program `cmd` (std.audio.9).
+pub fn open_at(cmd str) proc.Child ! DeviceError
+    mut c := proc.start(cmd, []) else err
+        return DeviceError(kind: "start", message: "std.audio.9: {err}")
+    hello := c.out.recv() else return DeviceError(
+        kind: "host_exited",
+        message: "the audio host exited before it was ready",
+    )
+    if hello != "ready"
+        proc.kill(move c)
+        return DeviceError(kind: "version", message: "the audio host said: {hello}")
+    c
+
+fn answer(mut c proc.Child) str ! DeviceError
+    line := c.out.recv() else return DeviceError(
+        kind: "host_exited",
+        message: "the audio host closed",
+    )
+    if line.starts_with("error ")
+        return DeviceError(kind: "device", message: line.slice(6, line.len()))
+    line
+
+## Plays `c` on the default output and returns when it has finished
+## (std.audio.9).
+pub fn play(mut c proc.Child, clip audio.Clip) ! DeviceError
+    c.stdin.send("play {clip.rate} {clip.channels} {audio.to_pcm16(clip).base64()}\n")
+    r := answer(mut c)?
+    if r != "done"
+        return DeviceError(kind: "protocol", message: "expected done, got: {r}")
+
+## Records `ms` milliseconds from the default input (std.audio.10). The clip
+## has the rate and channel count the device gave, near `rate` and `channels`.
+pub fn record(mut c proc.Child, ms int, rate int, channels int) audio.Clip ! DeviceError
+    c.stdin.send("rec {ms} {rate} {channels}\n")
+    r := answer(mut c)?
+    parts := r.split(" ")
+    if parts.len() != 4 or parts[0] != "data"
+        return DeviceError(kind: "protocol", message: "expected data, got: {r}")
+    b := bytes.from_base64(parts[3]) else return DeviceError(
+        kind: "protocol",
+        message: "bad audio data",
+    )
+    r2 := parts[1].to_int() else return DeviceError(kind: "protocol", message: "bad rate")
+    c2 := parts[2].to_int() else return DeviceError(kind: "protocol", message: "bad channels")
+    audio.from_pcm16(b, r2, c2)
+
+## Stops the host (std.audio.9).
+pub fn close(move c proc.Child)
+    c.stdin.close()

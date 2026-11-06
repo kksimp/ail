@@ -25,6 +25,18 @@ Cost when unused (ADR 0868): none. It is a separate tool run only by `ail lsp`.
 
 Each request costs a process start (~tens of ms on the native CLI). Diagnostics are on open and save, not per keystroke, so the server never queues behind a slow check. Completion, rename, formatting and code actions are follow-ups; each is one more `ail` command behind one more dispatch line.
 
+## Amendment (2026-11-06): completion, rename and code actions
+
+Decided by: AI (delegated, ADR 0076). Approved by the designer as a follow-up.
+
+- **Code actions** (lsp.action.1-2): the `fixes` of `check --json` become `quickfix` actions, plus one `source.fixAll.ail` that takes the first non-overlapping fix of each diagnostic. This supersedes "fixes are not offered as code actions in version 1".
+- **Rename** (lsp.rename.1-2): the references of `api --refs` are the edit. No second resolver. The result is not re-checked.
+- **Completion** (lsp.complete.1-2): `api --locals`, `--outline` and `--type` on a scratch copy with the word at the cursor taken out, because a buffer being typed does not check; the last good outline answers when the copy still fails. Members are those of types declared in the file; standard types give none until `api` exposes the standard cards by type.
+- Each completion, rename or action request costs one to three `ail` processes, as the other requests do. The server also runs `api --outline` after each open or save to keep the fallback outline.
+- Not done: formatting, workspace symbols, signature help.
+
+Rejected: completing from a tokenizer scan of the buffer (a second analysis path, ADR 0918 reasoning); running `ail fix` for fix-all (it writes files; an edit list lets the editor undo).
+
 ## Rejected alternatives
 
 - **Call the checker in process:** faster, but a second path to keep equal to the CLI (ADR 0918 reasoning); `load_with` already allows it later without a protocol change.

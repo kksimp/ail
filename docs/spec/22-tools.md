@@ -741,7 +741,7 @@ fn main()
 ([ADR 0966](../decisions/0966-ail-lsp-language-server.md)). It runs the matching
 `ail` commands and reshapes their JSON; it has no analysis of its own.
 
-**lsp.proto.1** — The server speaks LSP 3.17 over standard input and output with `Content-Length` framing. It answers `initialize` with the capabilities `textDocumentSync` (open, close, full-text change, save), `hoverProvider`, `definitionProvider`, `referencesProvider` and `documentSymbolProvider`.
+**lsp.proto.1** — The server speaks LSP 3.17 over standard input and output with `Content-Length` framing. It answers `initialize` with the capabilities `textDocumentSync` (open, close, full-text change, save), `hoverProvider`, `definitionProvider`, `referencesProvider`, `documentSymbolProvider`, `completionProvider` (trigger `.`), `renameProvider` (with prepare) and `codeActionProvider` (`quickfix`, `source.fixAll.ail`).
 
 **lsp.proto.2** — A request is answered; a notification is not. An unknown request is error -32601, text that isn't JSON is error -32700, an unknown notification is ignored. `shutdown` then `exit` ends the process with status 0, `exit` alone with status 1.
 
@@ -757,9 +757,21 @@ fn main()
 
 **lsp.sym.1** — Document symbols are the `ail api --outline` items, nested: fields, variants and methods are children. `fn` is Function, `method` Method, `struct` Struct, `enum` Enum, `trait` Interface, `impl` Namespace, `const` Constant, `field` Field, `variant` EnumMember.
 
+**lsp.complete.1** — `textDocument/completion` answers a complete list of names from `ail api`: the locals in scope at the cursor (`api --locals`; Variable, with the type as detail), then the functions, structs, enums, traits and constants of the file (`api --outline`). Only names that start with the text typed so far are returned.
+
+**lsp.complete.2** — After a `.` the names are the fields (Field) and methods (Method) of the type of the value before the dot (`api --type`), looked up among the declarations of the file. A buffer being typed rarely checks, so before asking, the server rewrites the cursor's line in its scratch copy: to a blank line, or after a `.` to a binding of the dotted name before it (`ail_probe := p`), whose type is asked. When `api` refuses the copy (a later line used what the rewritten line bound), the names come from the text instead: the parameters and the `name :=` and `for name` bindings above the cursor in its function, and for a receiver that is one name, the type its parameter, `self` or `name := Type(...)` binding writes, looked up in the last outline that checked. A receiver that is not one name, and a type not declared in the file, give no members. `AIL_LSP_DEBUG` set makes the server print each command it runs, its status and its standard error to standard error. When the copy still has errors, the last outline that checked answers. Types that are not declared in the file give no members.
+
+**lsp.rename.1** — `textDocument/rename` rewrites every reference of `ail api --refs` to the new name, in every file the references are in, as a `changes` edit. A use through a module qualifier (`geo.origin`) rewrites only the name after the qualifier.
+
+**lsp.rename.2** — `textDocument/prepareRename` answers the range and name under the cursor when it is a declared name, else null. A new name that is not an identifier, a position with no name and a name the program does not declare (a standard item) are error -32602 and change nothing. The result is not re-checked: run `ail check` after.
+
+**lsp.action.1** — `textDocument/codeAction` offers each fix of `ail check --json` for a diagnostic at the requested lines as a `quickfix` whose edit applies it. The first fix is preferred and the diagnostic is attached.
+
+**lsp.action.2** — With two or more fixable diagnostics the server also offers `source.fixAll.ail`: the first fix of every diagnostic whose edits touch none already taken, in one edit.
+
 **lsp.pos.1** — Positions are zero-based lines and characters; a character is one Unicode scalar (equal to a UTF-16 unit below U+10000).
 
-```ail tool=lsp rules=lsp.proto.1,lsp.proto.2,lsp.sync.1,lsp.sync.2,lsp.diag.1,lsp.hover.1,lsp.def.1,lsp.sym.1,lsp.pos.1
+```ail tool=lsp rules=lsp.proto.1,lsp.proto.2,lsp.sync.1,lsp.sync.2,lsp.diag.1,lsp.hover.1,lsp.def.1,lsp.sym.1,lsp.complete.1,lsp.complete.2,lsp.rename.1,lsp.rename.2,lsp.action.1,lsp.action.2,lsp.pos.1
 fn main()
     print(1)
 ```
@@ -802,6 +814,42 @@ fn main() !
         b.wait()?
         print(p.read())
         mem.free(p)
+```
+
+## Leak report
+
+A garbage-collected program cannot lose memory it no longer reaches, but it can keep memory it
+no longer needs: a cache that is never trimmed, a list that only grows, a global holding a
+finished job. `ail leak` reports that growth and the roots that hold it
+([ADR 0969](../decisions/0969-leak-report.md)). It reports memory the program still reaches, so
+every number is a retained size, not a count of lost blocks.
+
+**san.leak.1** — With the report on, each collection counts the live bytes and objects by kind. After at least four collections, when live bytes at the latest collection are at least 1.5 times those at the first plus 1 MiB, and no collection of the last 64 fell by more than a twentieth of the one before, the report says live memory grew, with the first and latest totals and each kind that grew by 256 KiB or more. The sizes are payload plus the 8-byte header, so they differ a little from `AIL_MAX_MEMORY_MB`, which counts blocks.
+
+**san.leak.2** — The collection marks the roots one at a time, in the order: each global slot that points into the heap, the registers, the stack, the other threads. An object counts for the first root that reaches it, so the sizes add up to the live total. On growth the report lists the five roots that hold the most (at least 1 MiB each) with their bytes at the first and the latest collection, their object count and the kind with most bytes; `--all` lists the top five whenever they hold anything, growth or not. A root is `global slot N` (the slot's index; source names need the debug lane's positions, ADR 0947), `the stack`, `the registers` or `the other threads`. A conservative stack word can keep an object that no variable holds; the report cannot tell the two apart.
+
+**san.leak.3** — `ail leak [--json] [--all] FILE [ARGS...]` builds FILE and runs it with the environment variable `AIL_LEAK` set to `1`, `json`, `all` or `all,json`; the same variable works for any native executable, on every target. The report goes to standard error after the program's own output and ends with a summary line (`leak: N collections, S live at exit, growing` or `no growth`). With `json`, each finding is one line `{"api":1,"severity":"warning","rule":"san.leak.1"|"san.leak.2",...}` and the last line is `{"summary":true,"collections":N,"live_bytes":B,"grew":BOOL}`. The program's exit status is unchanged.
+
+**san.leak.4** — With the variable unset the runtime does nothing extra: the collector tests one word. With it set, collections run in single-thread mode, at least every 4 MiB allocated (or half the live bytes, if more), so a run is slower. A program that ends with status 0 after fewer than four collections gets one more collection at exit, when its locals are gone, so the report shows what the globals still hold. A run that traps keeps the collections it has.
+
+```ail tool=leak,FILE expect=leak[san.leak.1] rules=san.leak.1,san.leak.2
+fn main()
+    mut keep := List[List[int]]()
+    mut i := 0
+    while i < 48
+        mut row := List[int]()
+        mut j := 0
+        while j < 131072
+            row.push(j)
+            j += 1
+        keep.push(row)
+        i += 1
+    print(keep.len())
+```
+
+```ail tool=leak,--json,FILE expect="collections":1, rules=san.leak.3,san.leak.4
+fn main()
+    print(1)
 ```
 
 ## New projects

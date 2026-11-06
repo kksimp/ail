@@ -3640,6 +3640,12 @@ api --pretty tests/cases/std_audio.ail	2223a1a859aa64f9	0	5a4d084da1c3cd91
 api --symbols tests/cases/std_audio.ail	2223a1a859aa64f9	0	ea02b76fa097b1e4
 api --tokens tests/cases/std_audio.ail	2223a1a859aa64f9	0	0ee926f024d2ffeb
 api --ast tests/cases/std_audio.ail	2223a1a859aa64f9	0	2f6c52856965dfbc
+api  tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	51dcf29a61eaf908
+api --text tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	3475fdc0bfc668ea
+api --pretty tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	c6430428552adb4b
+api --symbols tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	ed56e70cd7aa1341
+api --tokens tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	fcee84de62490fae
+api --ast tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	50717adcff72a60c
 api  tests/cases/std_bigint.ail	187f79195f741f01	0	46c1bebd6ae176ca
 api --text tests/cases/std_bigint.ail	187f79195f741f01	0	1950bb0e5dcef6ba
 api --pretty tests/cases/std_bigint.ail	187f79195f741f01	0	64d009d0a950d3bc
@@ -3670,6 +3676,12 @@ api --pretty tests/cases/std_compress_types.ail	1eca79943e56149f	2	6e340b9cffb37
 api --symbols tests/cases/std_compress_types.ail	1eca79943e56149f	2	6e340b9cffb37a98
 api --tokens tests/cases/std_compress_types.ail	1eca79943e56149f	0	ec724ef459d9751c
 api --ast tests/cases/std_compress_types.ail	1eca79943e56149f	0	45005502bc6b3890
+api  tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	6819782f93209dee
+api --text tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	b1b2e1dc3fbb9eb4
+api --pretty tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	45a2023d9f75b0c2
+api --symbols tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	84dfc3602b6baec1
+api --tokens tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	27c6f571f43beb96
+api --ast tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	4ea7343a77da0e20
 api  tests/cases/std_csv.ail	989fd71f4e11d563	0	e636257f48e56fd0
 api --text tests/cases/std_csv.ail	989fd71f4e11d563	0	5975d548dda51e23
 api --pretty tests/cases/std_csv.ail	989fd71f4e11d563	0	4163c861db0ab9dd
@@ -3730,6 +3742,12 @@ api --pretty tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	b888ab8b0c379c40
 api --symbols tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ddb257ef288ddbe5
 api --tokens tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d6fa5e387a22d55d
 api --ast tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	cf76fa7a689c1f42
+api  tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	e0a3e0968210230d
+api --text tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	f40f75cd940e7508
+api --pretty tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	a2a52916a84ce1e2
+api --symbols tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	639e9b069e499ccf
+api --tokens tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	0838419ec6750b51
+api --ast tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	2aa7a395639ad3d7
 api  tests/cases/std_hash.ail	6b78ffa6b144942d	0	2250b7d0d24aca99
 api --text tests/cases/std_hash.ail	6b78ffa6b144942d	0	c3bc86620415bac4
 api --pretty tests/cases/std_hash.ail	6b78ffa6b144942d	0	3f53ba6b0b87d85a
@@ -3742,6 +3760,12 @@ api --pretty tests/cases/std_hash_bytes.ail	11349941efd64c57	0	bc947309f4bfe98b
 api --symbols tests/cases/std_hash_bytes.ail	11349941efd64c57	0	ecee8f36308da2b9
 api --tokens tests/cases/std_hash_bytes.ail	11349941efd64c57	0	d09482fb10c57937
 api --ast tests/cases/std_hash_bytes.ail	11349941efd64c57	0	a78acf07f257712e
+api  tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	e76537fa73b103f4
+api --text tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	6e23523dd75eb3b0
+api --pretty tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	696dabbe46f5c0db
+api --symbols tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	a7b8e322157f8734
+api --tokens tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	e0daceeba31a9ea5
+api --ast tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	f2dae7a0ed4dfa0d
 api  tests/cases/std_implicit.ail	30b16b0fac43d49b	0	97dd42957a96c55c
 api --text tests/cases/std_implicit.ail	30b16b0fac43d49b	0	038abb8110b869de
 api --pretty tests/cases/std_implicit.ail	30b16b0fac43d49b	0	36b07176c23f91c1
@@ -6208,8 +6232,10 @@ api --diff  tests/cases/std_args_derive.ail tests/cases/std_args_errors.ail	20c1
 api --diff --json tests/cases/std_args_derive.ail tests/cases/std_args_errors.ail	20c14474fac3f140	0	f448fce87bbcc8b0
 api --diff  tests/cases/std_args_errors.ail tests/cases/std_audio.ail	f2bf68090e42aef0	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_args_errors.ail tests/cases/std_audio.ail	f2bf68090e42aef0	0	ecf5878c630ba6ad
-api --diff  tests/cases/std_audio.ail tests/cases/std_bigint.ail	8a4616763d96502c	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_audio.ail tests/cases/std_bigint.ail	8a4616763d96502c	0	06180265f080eede
+api --diff  tests/cases/std_audio.ail tests/cases/std_audio_device.ail	48da75e0ab95a233	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_audio.ail tests/cases/std_audio_device.ail	48da75e0ab95a233	0	659513ca7ef8f410
+api --diff  tests/cases/std_audio_device.ail tests/cases/std_bigint.ail	8a817184f5c280ce	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_audio_device.ail tests/cases/std_bigint.ail	8a817184f5c280ce	0	6508aa95c21ca968
 api --diff  tests/cases/std_bigint.ail tests/cases/std_bytes_wrong_types.ail	9e571a35f4fa6ae9	2	b22100c5debfc3a6
 api --diff --json tests/cases/std_bigint.ail tests/cases/std_bytes_wrong_types.ail	9e571a35f4fa6ae9	2	b22100c5debfc3a6
 api --diff  tests/cases/std_bytes_wrong_types.ail tests/cases/std_compress.ail	f82c6534c8faa7a2	2	b22100c5debfc3a6
@@ -6218,8 +6244,10 @@ api --diff  tests/cases/std_compress.ail tests/cases/std_compress_files.ail	b92e
 api --diff --json tests/cases/std_compress.ail tests/cases/std_compress_files.ail	b92e79a3c7b01ac5	0	02999d889994a947
 api --diff  tests/cases/std_compress_files.ail tests/cases/std_compress_types.ail	ba4f674593ea6ee6	2	51e933e388b7d2a3
 api --diff --json tests/cases/std_compress_files.ail tests/cases/std_compress_types.ail	ba4f674593ea6ee6	2	51e933e388b7d2a3
-api --diff  tests/cases/std_compress_types.ail tests/cases/std_csv.ail	46088905614efb18	2	51e933e388b7d2a3
-api --diff --json tests/cases/std_compress_types.ail tests/cases/std_csv.ail	46088905614efb18	2	51e933e388b7d2a3
+api --diff  tests/cases/std_compress_types.ail tests/cases/std_crypto.ail	23e7947d78b4f810	2	51e933e388b7d2a3
+api --diff --json tests/cases/std_compress_types.ail tests/cases/std_crypto.ail	23e7947d78b4f810	2	51e933e388b7d2a3
+api --diff  tests/cases/std_crypto.ail tests/cases/std_csv.ail	7a156b51d32e3923	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_crypto.ail tests/cases/std_csv.ail	7a156b51d32e3923	0	489bd882925405d2
 api --diff  tests/cases/std_csv.ail tests/cases/std_csv_quote.ail	4b500eff330bc6c8	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_csv.ail tests/cases/std_csv_quote.ail	4b500eff330bc6c8	0	0cf4955de07b570d
 api --diff  tests/cases/std_csv_quote.ail tests/cases/std_date.ail	1acdd77c496e8984	0	1da7cd571ff6c0f4
@@ -6238,12 +6266,16 @@ api --diff  tests/cases/std_fs.ail tests/cases/std_fs_missing.ail	65b705f47f2de0
 api --diff --json tests/cases/std_fs.ail tests/cases/std_fs_missing.ail	65b705f47f2de083	0	50914cd21d7a2239
 api --diff  tests/cases/std_fs_missing.ail tests/cases/std_fs_walk.ail	0568c10d5c660a4b	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_fs_missing.ail tests/cases/std_fs_walk.ail	0568c10d5c660a4b	0	1dc25a32d13e4c47
-api --diff  tests/cases/std_fs_walk.ail tests/cases/std_hash.ail	58ed30e5296c3b9d	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_fs_walk.ail tests/cases/std_hash.ail	58ed30e5296c3b9d	0	9226bde503088326
+api --diff  tests/cases/std_fs_walk.ail tests/cases/std_gfx_script.ail	b6b4a36c2c7c5dfd	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_fs_walk.ail tests/cases/std_gfx_script.ail	b6b4a36c2c7c5dfd	0	806e703baf4f7dae
+api --diff  tests/cases/std_gfx_script.ail tests/cases/std_hash.ail	6acfac9e4cfc598f	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_gfx_script.ail tests/cases/std_hash.ail	6acfac9e4cfc598f	0	390f994af1a2e76c
 api --diff  tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c4124	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c4124	0	c06b73c420040b30
-api --diff  tests/cases/std_hash_bytes.ail tests/cases/std_implicit.ail	9b88f3470ed30efb	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_hash_bytes.ail tests/cases/std_implicit.ail	9b88f3470ed30efb	0	17f855a5ed0aafab
+api --diff  tests/cases/std_hash_bytes.ail tests/cases/std_hash_legacy.ail	d9bc1992c3b4f9e3	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_hash_bytes.ail tests/cases/std_hash_legacy.ail	d9bc1992c3b4f9e3	0	e404b3dfe1605b4c
+api --diff  tests/cases/std_hash_legacy.ail tests/cases/std_implicit.ail	f9eb04f7ea98542e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_hash_legacy.ail tests/cases/std_implicit.ail	f9eb04f7ea98542e	0	17dbad80b189da7d
 api --diff  tests/cases/std_implicit.ail tests/cases/std_implicit_hidden.ail	cc40724b412eb04c	2	ffc96a4e1ad7ed5b
 api --diff --json tests/cases/std_implicit.ail tests/cases/std_implicit_hidden.ail	cc40724b412eb04c	2	ffc96a4e1ad7ed5b
 api --diff  tests/cases/std_implicit_hidden.ail tests/cases/std_io.ail	9e614ccdafe31dd0	2	ffc96a4e1ad7ed5b
