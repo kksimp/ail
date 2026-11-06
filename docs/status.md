@@ -66,6 +66,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `Grid[T]` (ADR 0937, type.grid.1-6): a flat 2-D list in the prelude with `g[i, j]`; 6-17% fewer tokens than nested lists on 2-D code, 2x slower than them until bounds checks on `g[i, j]` are versioned out (P2).
 - Const generics (ADR 0954, proposed, `gen.const.1-5`): `int` parameters on types and functions by monomorphisation; spec and design only, no compiler work yet.
 - Custom hashing (ADR 0955, proposed, `trait.hash.1-3`): `impl Hash` with a `uses` field list for types with a hand-written `eq`; spec only.
+- Generators (ADR 0965, proposed, `gen.yield.1-4`): `yield` in a function returning `Seq[T]`, state-machine lowering, no colour; spec and design only.
 - Time zones (ADR 0924, decided): AIL will ship the IANA tz database so zones answer the same on every OS, Windows included; not yet implemented.
 - Data-range guards and interchange (ADR 0941, native.bce.12-13): a scan of the lists a nest only reads bounds their elements, so the nest's overflow checks go, and `for j: s := s0; for k: s += t; row.push(s)` runs as k outside, j inside, behind a guard; bit-identical for `int` and `float`.
 - Vector axpy kernels (ADR 0942, native.vec.1): the swapped nest's inner loop is one AVX2 or NEON kernel call per `k`; matmul-1400 on ail-linux 11.35 s → 1.95 s (gcc -O2 6.82 s).

@@ -767,6 +767,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0957](0957-shared-surface-transport.md) | Shared-surface transport for `std.gfx` (no JSON on the hot path) *(delegated)* | Proposed | 2026-11-05 |
 | [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Proposed | 2026-11-05 |
 | [0959](0959-std-crypto.md) | std.hash and std.crypto: in-house, constant-time, vector-checked primitives; HMAC-SHA-384/512 first *(delegated)* | Accepted | 2026-11-05 |
+| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Proposed | 2026-11-05 |
 | [0966](0966-ail-lsp-language-server.md) | `ail lsp`: the semantic API as a language server on stdio *(delegated)* | Accepted | 2026-11-05 |
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed | 2026-11-05 |
