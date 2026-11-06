@@ -2197,6 +2197,8 @@ fn Gate.native_misc(mut self)
 STD_UNTESTABLE := [
     ["time/date.ail", "now_local", "its value is the clock in the machine's zone"],
     ["attach/serve.ail", "run", "it serves until its window closes; attach_watched covers the wire"],
+    ["audio/device.ail", "play", "it plays through the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "record", "it records from the microphone, which a headless case lacks"],
     ["net/http.ail", "serve_dir", "it serves until the program stops, so a case cannot end it"],
 ]
 

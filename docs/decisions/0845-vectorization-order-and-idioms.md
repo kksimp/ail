@@ -6,7 +6,7 @@
 - **Topic:** 25 — Optimization strategy
 - **Spec rules:** none (backend policy under conc.par.1)
 - **Extends:** [ADR 0246](0246-simd-vectorisation.md), [ADR 0816](0816-native-codegen-entry-addressing-constants.md)
-- **Extended by:** [ADR 0942](0942-user-loop-vector-kernels.md) (integer and float axpy kernels behind the ADR 0941 guard)
+- **Extended by:** [ADR 0942](0942-user-loop-vector-kernels.md) (integer and float axpy kernels behind the ADR 0941 guard), [ADR 0945](0945-vector-escape-loops.md) (masked escape-time loops)
 
 ## Context
 

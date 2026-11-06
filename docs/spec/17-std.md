@@ -430,6 +430,20 @@ as lower-case hex. *(ADR 0442)*
 checksums, not for security. Its value for a given input is the same on
 every platform and version, and may be any `int`. *(ADR 0444)*
 
+**std.hash.5** — `hmac_sha384(key str, s str) str` and
+`hmac_sha512(key str, s str) str` return the HMAC of RFC 2104 and RFC 4231
+(128-byte blocks) as lower-case hex, 96 and 128 digits. A key longer than the
+block is hashed first. They have no effects. *(ADR 0959)*
+
+**std.hash.6** — `sha3_256(s str) str` and `sha3_512(s str) str` (FIPS 202)
+return the digest as lower-case hex (64 and 128 digits). `sha1_legacy(s str) str`
+(FIPS 180-4) and `md5_legacy(s str) str` (RFC 1321) return 40 and 32 digits.
+**SHA-1 and MD5 are broken against collisions and are not for security**: never
+for signatures, certificates, password storage or integrity against an attacker.
+They exist for file formats and protocols that require them (git objects, ETags,
+legacy checksums), and the `_legacy` suffix is the only way to name them. They
+have no effects. *(ADR 0959)*
+
 ```ail
 use std.hash
 
@@ -563,6 +577,41 @@ use std.compress
 fn main() !
     z := compress.gzip("abc abc abc abc")
     print(compress.gunzip(z)?.to_str() else "binary")
+```
+
+## Cryptography: `std.crypto`
+
+**std.crypto.1** — `ct_eq(a bytes, b bytes) bool` is true when the two byte
+strings are equal. Its running time depends on the lengths only, never on where
+the bytes differ, so a program compares MACs, tags and password hashes with it
+and never with `==`. It has no effects. *(ADR 0959)*
+
+**std.crypto.2** — `random_bytes(n int) bytes` returns `n` bytes (0 to
+1073741824) from the operating system's generator (`/dev/urandom`, or
+ProcessPrng on Windows). It never uses the `std.random` generator, so `seed`
+and `--seed` do not affect it. When the system has no source it stops the
+program with a trap, never falling back to a weaker one. An `n` outside the
+range traps. It has the effect `random`. *(ADR 0959)*
+
+**std.crypto.3** — `hkdf_sha256(ikm bytes, salt bytes, info bytes, len int)
+bytes` is HKDF (RFC 5869) with HMAC-SHA-256: `len` bytes, 0 to 8160. An empty
+`salt` stands for 32 zero bytes. A `len` outside the range traps. It has no
+effects. *(ADR 0959)*
+
+**std.crypto.4** — `pbkdf2_sha256(password bytes, salt bytes, iterations int,
+len int) bytes` is PBKDF2 (RFC 8018) with HMAC-SHA-256. `iterations` is at
+least 1 and `len` is 0 to 1048576, or it traps. It has no effects, and a call
+with a large `iterations` is slow by design. *(ADR 0959)*
+
+```ail rules=std.crypto.1,std.crypto.2,std.crypto.3,std.crypto.4
+use std.crypto
+
+fn main()
+    print(crypto.ct_eq(b"abc", b"abc"))                         # true
+    print(crypto.random_bytes(16).len())                        # 16
+    print(crypto.hkdf_sha256(b"key", b"salt", b"info", 8).len())   # 8
+    print(crypto.pbkdf2_sha256(b"password", b"salt", 1, 32).hex())
+    # 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
 ```
 
 ## Standard input and output: `std.io`
@@ -2678,7 +2727,7 @@ fn main()
 
 ## Examples for the hash, compression, date, zone, net and process rules
 
-```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4
+```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5,std.hash.6
 use std.hash
 
 fn main()
@@ -2686,6 +2735,12 @@ fn main()
     print(hash.sha384("abc").len())   # 96 hex digits
     print(hash.sha512("abc").len())   # 128 hex digits
     print(hash.hmac_sha256("key", "The quick brown fox jumps over the lazy dog").len())   # 64
+    print(hash.hmac_sha384("Jefe", "what do ya want for nothing?").len())   # 96 (RFC 4231 case 2)
+    print(hash.hmac_sha512("Jefe", "what do ya want for nothing?").len())   # 128
+    print(hash.sha1_legacy("abc"))           # a9993e364706816aba3e25717850c26c9cd0d89d
+    print(hash.md5_legacy("abc"))            # 900150983cd24fb0d6963f7d28e17f72
+    print(hash.sha3_256("abc").len())   # 64
+    print(hash.sha3_512("abc").len())   # 128
     print(hash.crc32("abc"))          # 891568578
     print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run
 ```

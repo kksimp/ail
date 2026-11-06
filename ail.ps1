@@ -10,6 +10,8 @@
 # test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
 # verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --budget`.
 $ErrorActionPreference = 'Stop'
+# A native program's exit status is data (ail run passes it on), never a PowerShell error (PowerShell 7.4+).
+$PSNativeCommandUseErrorActionPreference = $false
 
 $root = $PSScriptRoot
 # The native CLI splits paths on `/`; Windows takes `/` too, so hand it paths that way.
@@ -167,7 +169,7 @@ $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'task', 'mcp'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'task', 'mcp', 'leak'
 $route = (
     $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -237,6 +239,8 @@ if ($route) {
         'verify' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\verify\verify.ail')) @rest; exit $LASTEXITCODE }
         'task' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) @rest; exit $LASTEXITCODE }
         'mcp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) @rest; exit $LASTEXITCODE }
+        'lsp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) @rest; exit $LASTEXITCODE }
+        'sanitize' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) @rest; exit $LASTEXITCODE }
         'replay' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) @rest; exit $LASTEXITCODE }
         'test' {
             foreach ($a in $rest) {
@@ -244,6 +248,31 @@ if ($route) {
                 if ("$a" -eq '--native') { Fail '`ail test --native` is retired: `ail test` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)' }
             }
             $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
+        'leak' {
+            # ADR 0969: build FILE, run it with AIL_LEAK set (san.leak.3); the exit status is the program's.
+            $json = $false; $all = $false; $ops = @($rest)
+            while ($ops.Count -gt 0 -and ("$($ops[0])" -in '--json', '--all')) {
+                if ("$($ops[0])" -eq '--json') { $json = $true } else { $all = $true }
+                $ops = @($ops | Select-Object -Skip 1)
+            }
+            if ($ops.Count -lt 1) { Fail 'usage: ail leak [--json] [--all] FILE [ARGS...]' }
+            $mode = if ($all -and $json) { 'all,json' } elseif ($json) { 'json' } elseif ($all) { 'all' } else { '1' }
+            $leakExe = Join-Path ([IO.Path]::GetTempPath()) ("ail-leak-" + [Guid]::NewGuid().ToString('N') + '.exe')
+            & $native check-program $ops[0]
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & $native build $ops[0] -o (Fwd $leakExe)
+            if ($LASTEXITCODE -ne 0) { exit 2 }
+            $env:AIL_LEAK = $mode
+            # The report is on standard error: under 'Stop' PowerShell turns that into a NativeCommandError and exits 1.
+            $prevPref = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            & $leakExe @($ops | Select-Object -Skip 1)
+            $leakRc = $LASTEXITCODE
+            $ErrorActionPreference = $prevPref
+            Remove-Item Env:AIL_LEAK -ErrorAction SilentlyContinue
+            Remove-Item -Force $leakExe -ErrorAction SilentlyContinue
+            exit $leakRc
+        }
         'build' {
             # The native CLI's build doesn't check: check the file (the first operand) first.
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
@@ -253,11 +282,28 @@ if ($route) {
             & $native build @rest; exit $LASTEXITCODE
         }
         'run' {
+            # The program's run settings (run.limit, GC stats, leak report) are for the program, not for the
+            # compiler: hide them from check-program and prepare, and put them back before the program starts.
+            $runEnv = @{}
+            foreach ($v in 'AIL_GC_STATS', 'AIL_GC_VERIFY', 'AIL_MAX_MEMORY_MB', 'AIL_TIMEOUT_MS', 'AIL_LEAK') {
+                $val = [Environment]::GetEnvironmentVariable($v)
+                if ($null -ne $val) { $runEnv[$v] = $val; Remove-Item "Env:$v" }
+            }
             & $native check-program @checkOpts $runFile
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $errFile = New-TemporaryFile
-            $prep = & $native prepare @runOpts $runFile 2> $errFile
-            if ($LASTEXITCODE -eq 0) {
+            # Start-Process with file redirection: PowerShell never wraps the child's stderr in error records,
+            # so nothing on it can stop the script under 'Stop' (a `2>` redirection does, even with 'Continue').
+            $outFile = New-TemporaryFile
+            $q = { param($t) '"' + ("$t" -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+            $prepArgs = (@('prepare') + @($runOpts) + @($runFile) | ForEach-Object { & $q $_ }) -join ' '
+            $pp = Start-Process -FilePath $native -ArgumentList $prepArgs -NoNewWindow -PassThru -RedirectStandardOutput $outFile.FullName -RedirectStandardError $errFile.FullName
+            $null = $pp.Handle
+            $pp.WaitForExit()
+            $prepRc = $pp.ExitCode
+            $prep = @(Get-Content $outFile); Remove-Item -Force $outFile
+            foreach ($k in $runEnv.Keys) { Set-Item "Env:$k" $runEnv[$k] }
+            if ($prepRc -eq 0) {
                 Remove-Item -Force $errFile
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile

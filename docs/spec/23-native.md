@@ -511,6 +511,39 @@ fn main()
     print(c[2][2])
 ```
 
+**native.vec.2** — A counted `for` over `x` whose body makes `cr` by float
+arithmetic of `x` and values from before the loop, then runs the escape loop
+`while k < MAX` (`MAX` a constant from 1 to 2^20) with the exit test
+`zr * zr + zi * zi > T`, the step `t = zr * zr - zi * zi + cr`,
+`zi = 2.0 * zr * zi + ci` (`ci` from before the `x` loop), `zr = t`, `k += 1`
+from `zr = zi = 0.0`, may take each `k` from one vector kernel call per
+execution of the `x` loop that counts every point of the row at once, when
+`n <= 16777216`. Each lane performs the scalar loop's operations in the scalar
+order (no fused multiply-add, no reassociation) and a lane that has left keeps
+its state, so every `k` is the scalar `k`; a NaN never leaves. Otherwise the
+loop runs as written. *(ADR 0945)*
+
+```ail rules=native.vec.2
+fn escape(cr float, ci float) int
+    mut zr := 0.0
+    mut zi := 0.0
+    mut k := 0
+    while k < 50
+        if zr * zr + zi * zi > 4.0
+            break
+        t := zr * zr - zi * zi + cr
+        zi = 2.0 * zr * zi + ci
+        zr = t
+        k += 1
+    k
+
+fn main()
+    mut line := []
+    for x in 0..7
+        line.push(escape(-2.0 + 3.0 * x.to_float() / 7.0, 0.3))
+    print(line)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the
@@ -529,6 +562,33 @@ fn name(x int) str
 
 fn main()
     print(name(2))
+```
+
+**native.match.2** — A `match` that native.match.1 takes, whose distinct values
+span at most 1024 and fill at least a third of their span, may jump through
+a table indexed by the value minus the smallest: a value outside the span or
+in a gap goes where the in-order test sends it (the `_` arm, or nowhere for an
+exhaustive `match`). Code that jumps back to such a `match` (the next
+iteration of a loop around it) may repeat the selection there. The arm that
+runs, its bindings and the order of effects are those of native.match.1.
+`AIL_OPT_OFF=switch` turns the table off and `AIL_OPT_OFF=taildup` the
+repeat. *(ADR 0939)*
+
+```ail rules=native.match.2
+fn step(op int, acc int) int
+    match op
+        0 => acc + 1
+        1 => acc * 2
+        2 => acc - 3
+        3 => 0
+        4 => acc
+        _ => -1
+
+fn main()
+    mut acc := 0
+    for op in [0, 0, 1, 2, 9]
+        acc = step(op, acc)
+    print(acc)
 ```
 
 **native.reuse.1** — A list made empty inside a loop may be one object that

@@ -832,17 +832,23 @@ fn Lower.lower_atomic_method(
     if (env.get("AIL_SCHEDULE") else "").starts_with("random")
         call("rt.det_yield", [], Ty.Unit)
     if name == "load" and vs.len() == 0
-        return Val(id: prim_op("atomic_load", [cell], elem), ty: elem)
+        v := prim_op("atomic_load", [cell], elem)
+        race_sync(cell, true, false)
+        return Val(id: v, ty: elem)
     if name == "store" and vs.len() == 1
+        race_sync(cell, false, true)
         prim_op("atomic_store", [cell, vs[0]], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
     if name == "cas" and vs.len() == 2
+        race_sync(cell, false, true)
         got := prim_op("atomic_cas", [cell, vs[0], vs[1]], Ty.Int)
+        race_sync(cell, true, false)
         return Val(id: op("eq", [got, vs[0]], Ty.Bool), ty: Ty.Bool)
     if name == "add" and vs.len() == 1 and elem == Ty.Int
         # Retry until no other thread changed the cell between the read and
         # the swap; an overflow traps before the swap, leaving the cell as
         # it was (conc.atomic.5).
+        race_sync(cell, false, true)
         head := new_block()
         exit := new_block()
         jump(head, [])
@@ -855,6 +861,7 @@ fn Lower.lower_atomic_method(
         seal(head)
         seal(exit)
         cur = exit
+        race_sync(cell, true, false)
         return Val(id: old, ty: Ty.Int)
     unsupported(npos, "`.{name}()` on `{Ty.Atomic(elem).name()}`")
 

@@ -1,0 +1,44 @@
+# The escape loop of a Mandelbrot or Julia row (native.vec.2) runs as one
+# vector kernel call per row. Rows whose width leaves a tail on both ISAs (1,
+# 2, 3, 5, 13 and 22 points), an empty row and a negative width, and several
+# imaginary parts including a Julia-style fixed one; the counts are folded to a
+# sum and a hash that the scalar loop (AIL_OPT_OFF=vec) must print too.
+MAX_ITER := 50
+
+fn escape(cr float, ci float) int
+    mut zr := 0.0
+    mut zi := 0.0
+    mut k := 0
+    while k < MAX_ITER
+        if zr * zr + zi * zi > 4.0
+            break
+        t := zr * zr - zi * zi + cr
+        zi = 2.0 * zr * zi + ci
+        zr = t
+        k += 1
+    k
+
+fn row(cols int, ci float) List[int]
+    mut line := []
+    for x in 0..cols
+        cr := -2.0 + 3.0 * x.to_float() / cols.to_float()
+        k := escape(cr, ci)
+        line.push(k)
+    line
+
+fn fold(line List[int]) int
+    mut h := 0
+    for k in line
+        h = (h * 31 + k) % 1000003
+    h
+
+fn main()
+    widths := [1, 2, 3, 5, 13, 22, 64, 0, -3]
+    cis := [-1.2, 0.0, 0.3, 0.75, -0.5, 1.0]
+    for w in widths
+        for ci in cis
+            line := row(w, ci)
+            mut sum := 0
+            for k in line
+                sum += k
+            print("{w} {line.len()} {sum} {fold(line)}")

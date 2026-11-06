@@ -417,6 +417,45 @@ if [ "${1:-}" = mcp ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
 fi
 
+# `ail lsp` (ADR 0966): the compiler's semantic API as a language server on stdio, tools/ailsp/ailsp.ail.
+if [ "${1:-}" = lsp ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailsp/ailsp.ail" "${@:2}"
+fi
+
+# `ail sanitize` (ADR 0967): the schedule sanitizer, tools/ailsan/ailsan.ail.
+if [ "${1:-}" = sanitize ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailsan/ailsan.ail" "${@:2}"
+fi
+
+# `ail leak` (ADR 0968): build FILE, run it with the leak report on (AIL_LEAK, san.leak.*).
+# The report goes to standard error after the program's own output; the exit status is the program's.
+if [ "${1:-}" = leak ]; then
+    shift
+    leak_json=0
+    leak_all=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) leak_json=1 ;;
+            --all) leak_all=1 ;;
+            *) break ;;
+        esac
+        shift
+    done
+    [ $# -ge 1 ] || die "usage: ail leak [--json] [--all] FILE [ARGS...]"
+    leak_file="$1"
+    shift
+    leak_mode=1
+    [ "$leak_all" = 1 ] && leak_mode=all
+    [ "$leak_json" = 1 ] && leak_mode=json
+    [ "$leak_all$leak_json" = 11 ] && leak_mode=all,json
+    leak_exe="$(mktemp "${TMPDIR:-/tmp}/ail-leak.XXXXXX")" || exit 2
+    "$root/ail" build "$leak_file" -o "$leak_exe" || { rm -f "$leak_exe"; exit 2; }
+    AIL_LEAK="$leak_mode" "$leak_exe" "$@"
+    leak_rc=$?
+    rm -f "$leak_exe"
+    exit "$leak_rc"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"

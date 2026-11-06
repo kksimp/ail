@@ -1,0 +1,103 @@
+# A dense `match` jumps through a table (native.match.2): the same arm runs
+# for every value, including values below, above and between the cases, and
+# a loop around the dispatch repeats it at the end of each arm.
+enum Op
+    Push(n int)
+    Add
+    Sub
+    Mul
+    Jz(to int)
+    Jmp(to int)
+    Dup
+    Halt
+
+fn band(x int) str
+    match x
+        -3 => "m3"
+        -2 | -1 => "m"
+        0 => "z"
+        2 => "two"
+        4 | 5 => "45"
+        _ => "o"
+
+fn exact(x int) int
+    match x
+        10 => 1
+        11 => 2
+        12 => 3
+        13 => 4
+        14 => 5
+        _ => 0
+
+fn far(x int) int
+    match x
+        0 => 1
+        100 => 2
+        10000 => 3
+        1000000 => 4
+        100000000 => 5
+        _ => 0
+
+fn run(code List[Op]) int
+    mut st := [0 for _ in 0..16]
+    mut sp := 0
+    mut pc := 0
+    mut steps := 0
+    while pc < code.len()
+        op := code[pc]
+        pc += 1
+        steps += 1
+        match op
+            Push(n) =>
+                st[sp] = n
+                sp += 1
+            Add =>
+                sp -= 1
+                st[sp - 1] = st[sp - 1] + st[sp]
+            Sub =>
+                sp -= 1
+                st[sp - 1] = st[sp - 1] - st[sp]
+            Mul =>
+                sp -= 1
+                st[sp - 1] = st[sp - 1] * st[sp]
+            Jz(to) =>
+                sp -= 1
+                if st[sp] == 0
+                    pc = to
+            Jmp(to) => pc = to
+            Dup =>
+                st[sp] = st[sp - 1]
+                sp += 1
+            Halt => break
+    st[0] * 1000 + steps
+
+fn ints(code List[int]) int
+    mut acc := 0
+    mut pc := 0
+    while true
+        k := code[pc]
+        pc += 1
+        match k
+            0 => acc += 1
+            1 => acc *= 2
+            2 => acc -= 3
+            3 => pc = 0
+            4 => break
+            _ => acc = -1000
+    acc
+
+fn main()
+    mut line := ""
+    for x in -5..8
+        line = "{line}{band(x)} "
+    print(line)
+    big := [-9223372036854775807 - 1, -1, 9, 15, 9223372036854775807]
+    e1 := [exact(x) for x in big]
+    e2 := [exact(x) for x in 9..16]
+    print("{e1} {e2}")
+    fs := [far(x) for x in [0, 1, 100, 10000, 1000000, 100000000, -1]]
+    print("{fs}")
+    # Count 5 down to 0: [n] loop: dup, jz end, push -1, add, jmp loop.
+    prog := [Op.Push(5), Op.Dup, Op.Jz(7), Op.Push(-1), Op.Add, Op.Jmp(1), Op.Halt, Op.Halt]
+    print("{run(prog)}")
+    print("{ints([0, 0, 1, 2, 7, 1, 4])}")

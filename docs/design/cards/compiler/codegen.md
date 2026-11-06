@@ -65,7 +65,7 @@ pub fn codegen.push64(mut bytes List[u8], v int) [mutates]
 pub fn codegen.utf8(s str) List[u8]  ## The UTF-8 bytes of a string.
 pub fn codegen.add_trap_texts(mut img codegen.Image, m mir.Module, k int, op str) [mutates]  ## The constant texts a trap stub passes to `rt.trap` (native-abi.md §7):
 pub fn codegen.add_call_table(mut img codegen.Image, m mir.Module) [mutates]  ## Append the call table the runtime reads to print a trap's stack
-pub fn codegen.split_edges(f mir.Func) mir.Func  ## Split each branch edge that passes arguments: the new block jumps to the
+pub fn codegen.split_edges(f mir.Func) mir.Func  ## Split each branch or switch edge that passes arguments: the new block
 pub fn codegen.block_order(f mir.Func) List[int]  ## The blocks in reverse postorder from the entry.
 pub fn codegen.f64_bits(x float) int  ## Float constants in a 64-bit pattern, computed with exact float scaling
 pub fn codegen.split_for_calls(f0 mir.Func) mir.Func  ## Values that cross calls are copied where the calls begin (ADR 0625). The
