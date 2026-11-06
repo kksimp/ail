@@ -70,7 +70,7 @@ fn race_clock(p int, id int) int
 
 ## Task `par` starts task `child` now: the id of the new task, whose clock is
 ## the parent's. 0 when the detector is off.
-fn race_spawn(par int) int
+fn race_spawn(parent int) int
     p := load64(global(RACE))
     if p == 0
         return 0
@@ -83,7 +83,7 @@ fn race_spawn(par int) int
         store64(p + R_NOTE, load64(p + R_NOTE).bit_or(1))
     else
         store64(p + R_NEXT, id + 1)
-    pc := race_clock(p, par)
+    pc := race_clock(p, parent)
     cc := race_clock(p, id)
     for k in 0..MAXT
         a := load64(pc + 8 * k)
@@ -91,7 +91,7 @@ fn race_spawn(par int) int
             store64(cc + 8 * k, a)
     if fresh
         store64(cc + 8 * id, 1)
-    store64(pc + 8 * par, load64(pc + 8 * par) + 1)
+    store64(pc + 8 * parent, load64(pc + 8 * parent) + 1)
     unlock(p + R_LOCK)
     id
 
