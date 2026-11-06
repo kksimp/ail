@@ -117,6 +117,9 @@ impl app.App for Watched[T app.App + attach.Observe]
     fn focus(self) str
         inner.focus()
 
+    fn lines(mut self) List[str]
+        inner.lines()
+
     fn measures(self) List[app.Measure]
         inner.measures()
 

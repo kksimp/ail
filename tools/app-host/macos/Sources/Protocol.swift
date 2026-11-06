@@ -147,6 +147,17 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 answerMeasure(obj["runs"] as? [[String: Any]] ?? [])
                 continue
             }
+            if kind == "surface" {
+                // std.gfx.8 (ADR 0957): map the program's shared frame buffers.
+                if !Surfaces.attach(obj) {
+                    FileHandle.standardError.write("AIL App Host: cannot map the surface\n".data(using: .utf8)!)
+                }
+                continue
+            }
+            if kind == "present" {
+                Surfaces.present(obj)
+                continue
+            }
             if kind == "popup" {
                 // std.app.18: a native menu at (x, y) of the canvas `id`.
                 let id = text(obj, "id"), x = num(obj, "x"), y = num(obj, "y")

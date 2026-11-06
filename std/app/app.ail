@@ -371,6 +371,10 @@ pub trait App
     ## The widths of `runs`, in points, as the host measured them.
     fn measured(mut self, runs List[Measure], widths List[float])
         return
+    ## Extra protocol lines for the host, sent after each `update` and
+    ## cleared by this call (std.app.21).
+    fn lines(mut self) List[str]
+        []
     ## Whether the app wants `move` and `leave` events from canvases (std.app.16).
     fn hover(self) bool
         false
@@ -556,6 +560,9 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
                 break
             a.measured(want, widths)
             rounds += 1
+        # std.app.21: protocol lines the app asks to send as they are.
+        for extra in a.lines()
+            c.stdin.send("{extra}\n")
         # std.app.18: show a menu once per change of the app's request.
         want_menu := a.popup()
         if want_menu != shown
