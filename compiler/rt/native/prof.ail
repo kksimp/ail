@@ -1,0 +1,148 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The sampling profiler (debug.prof.1, ADR 0948). `AIL_PROFILE=1` makes a
+## Linux program ask for a `SIGPROF` signal every millisecond of CPU time
+## (`setitimer`). The signal handler stores the interrupted program counter
+## and the return addresses found by walking the frame pointers (the same
+## chain a trap's stack uses, ADR 0641) in a block made up front, so the
+## handler allocates nothing and takes no lock. At exit the samples are
+## written to standard error, one line each:
+##
+##     ailprof 1 samples=N dropped=D hz=1000
+##     S ADDR ADDR ...            innermost first, decimal code addresses
+##
+## `ail profile` turns the addresses into function, file and line with
+## `addr2line` over the executable's DWARF (ADR 0947) and prints JSON. Nothing runs when the
+## variable is unset.
+
+PF_STATE := 505
+PF_MAX := 8192
+PF_DEPTH := 16
+PF_STRIDE := 17
+PF_HDR := 64
+PF_OUT := 65536
+PF_HZ := 1000
+
+## The restorer the kernel returns to from the handler (x86-64 needs one).
+## The code generator replaces it with `mov eax, 15; syscall`.
+fn sigreturn()
+    syscall(15, 0, 0, 0, 0, 0, 0)
+
+## `AIL_PROFILE` is set: Linux only, any value but empty or `0` turns it on.
+fn prof_setup(v str)
+    if v == "0" or target() > 1
+        return
+    n := PF_HDR + 8 * PF_MAX * PF_STRIDE + PF_OUT
+    p := sys_mmap(n)
+    if p < 0
+        return
+    hset(PF_STATE, p)
+    # rt_sigaction(SIGPROF, {handler, flags, restorer, mask}, 0, 8)
+    act := p + 8
+    store64(act, fn_addr("rt.prof_handler"))
+    sa := target() == 0
+    if sa
+        # SA_SIGINFO | SA_RESTORER | SA_RESTART
+        store64(act + 8, 436207620)
+        store64(act + 16, fn_addr("rt.sigreturn"))
+    else
+        # SA_SIGINFO | SA_RESTART (ARM64 returns through the vdso)
+        store64(act + 8, 268435460)
+        store64(act + 16, 0)
+    store64(act + 24, 0)
+    syscall(if target() == 0 then 13 else 134, 27, act, 0, 8, 0, 0)
+    prof_timer(PF_HZ)
+
+## `setitimer(ITIMER_PROF)` at `hz` ticks a second of CPU time; 0 stops it.
+fn prof_timer(hz int)
+    p := hs(PF_STATE)
+    t := p + 48
+    usec := if hz == 0 then 0 else 1000000 / hz
+    store64(t, 0)
+    store64(t + 8, usec)
+    store64(t + 16, 0)
+    store64(t + 24, usec)
+    syscall(if target() == 0 then 38 else 103, 2, t, 0, 0, 0, 0)
+
+## The signal handler: `uc` is the interrupted context. x86-64: rip at 168,
+## rbp at 120. ARM64: pc at 440, x29 at 416.
+fn prof_handler(sig int, info int, uc int)
+    s := hs(PF_STATE)
+    if s == 0
+        return
+    i := atomic_add(s, 1)
+    if i >= PF_MAX
+        return
+    slot := s + PF_HDR + 8 * PF_STRIDE * i
+    pc := if target() == 0 then load64(uc + 168) else load64(uc + 440)
+    mut p := if target() == 0 then load64(uc + 120) else load64(uc + 416)
+    store64(slot + 8, pc)
+    mut n := 1
+    while n < PF_DEPTH and p != 0 and p.bit_and(7) == 0
+        store64(slot + 8 + 8 * n, load64(p + 8))
+        n += 1
+        q := load64(p)
+        # A caller's frame lies above this one, and not far above.
+        if q <= p or q - p > 1048576
+            break
+        p = q
+    store64(slot, n)
+
+fn pf_dec(buf int, at int, n int) int
+    mut digits := 1
+    mut m := n
+    while m >= 10
+        m = m / 10
+        digits += 1
+    mut k := digits
+    m = n
+    while k > 0
+        store8(buf + at + k - 1, 48 + m % 10)
+        m = m / 10
+        k -= 1
+    at + digits
+
+fn pf_text(buf int, at int, s str) int
+    q := str_addr(s)
+    n := load64(q)
+    for k in 0..n
+        store8(buf + at + k, load8(q + 16 + k))
+    at + n
+
+fn pf_flush(buf int, n int)
+    syscall(if target() == 0 then 1 else 64, 2, buf, n, 0, 0, 0)
+
+## Called when the program exits: stop the timer and write the samples.
+fn prof_exit()
+    m := load64(global(HEAP))
+    if m == 0 or load64(m + 8 * PF_STATE) == 0
+        return
+    s := load64(m + 8 * PF_STATE)
+    prof_timer(0)
+    store64(m + 8 * PF_STATE, 0)
+    taken := load64(s)
+    n := if taken > PF_MAX then PF_MAX else taken
+    buf := s + PF_HDR + 8 * PF_MAX * PF_STRIDE
+    mut at := pf_text(buf, 0, "ailprof 1 samples=")
+    at = pf_dec(buf, at, n)
+    at = pf_text(buf, at, " dropped=")
+    at = pf_dec(buf, at, taken - n)
+    at = pf_text(buf, at, " hz=")
+    at = pf_dec(buf, at, PF_HZ)
+    store8(buf + at, 10)
+    at += 1
+    for i in 0..n
+        slot := s + PF_HDR + 8 * PF_STRIDE * i
+        k := load64(slot)
+        if at + 24 * k + 4 > PF_OUT
+            pf_flush(buf, at)
+            at = 0
+        store8(buf + at, 83)
+        at += 1
+        for f in 0..k
+            store8(buf + at, 32)
+            at = pf_dec(buf, at + 1, load64(slot + 8 + 8 * f))
+        store8(buf + at, 10)
+        at += 1
+    pf_flush(buf, at)

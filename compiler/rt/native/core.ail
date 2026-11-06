@@ -71,6 +71,7 @@ fn sys_write(fd int, p int, n int)
         done += r
 
 fn sys_exit(status int)
+    prof_exit()
     leak_exit(status)
     instr_dump()
     code := race_exit(status)
@@ -243,6 +244,9 @@ fn init(argc int, argv int)
     # settings (`AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB`, `AIL_GC_STATS`, `AIL_GC_VERIFY`) are not seen before it.
     limits_init()
     # After the Windows environment is built, or `AIL_LEAK` is not seen there (san.leak.3).
+    prof := os_env_get("AIL_PROFILE")
+    if prof != ""
+        prof_setup(prof)
     leak := os_env_get("AIL_LEAK")
     if leak != ""
         leak_setup(leak)

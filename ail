@@ -471,6 +471,25 @@ if [ "${1:-}" = leak ]; then
     exit "$leak_rc"
 fi
 
+# `ail profile` (ADR 0948): build FILE, run it with the sampling profiler on (AIL_PROFILE=1), print
+# JSON: samples, functions by self time, hot lines, callers. Linux only; needs addr2line and python3.
+# The program's own output goes to standard error, the JSON to standard output.
+if [ "${1:-}" = profile ]; then
+    shift
+    [ $# -ge 1 ] || die "usage: ail profile FILE [ARGS...]"
+    prof_file="$1"
+    shift
+    prof_exe="$(mktemp "${TMPDIR:-/tmp}/ail-prof.XXXXXX")" || exit 2
+    prof_log="$prof_exe.log"
+    "$root/ail" build "$prof_file" -o "$prof_exe" || { rm -f "$prof_exe"; exit 2; }
+    AIL_PROFILE=1 "$prof_exe" "$@" 3>&2 1>&3 2>"$prof_log"
+    prof_rc=$?
+    grep -v '^ailprof \|^S ' "$prof_log" >&2
+    python3 -I "$root/tools/profile/profile.py" "$prof_exe" "$prof_log"
+    rm -f "$prof_exe" "$prof_log"
+    exit "$prof_rc"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"
