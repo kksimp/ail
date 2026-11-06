@@ -759,7 +759,7 @@ fn main()
 
 **lsp.complete.1** — `textDocument/completion` answers a complete list of names from `ail api`: the locals in scope at the cursor (`api --locals`; Variable, with the type as detail), then the functions, structs, enums, traits and constants of the file (`api --outline`). Only names that start with the text typed so far are returned.
 
-**lsp.complete.2** — After a `.` the names are the fields (Field) and methods (Method) of the type of the value before the dot (`api --type`), looked up among the declarations of the file. A buffer being typed rarely checks, so before asking, the server takes the word at the cursor out of its scratch copy: the `.` and what follows it, or the word replaced by `0`. When the copy still has errors, the last outline that checked answers. Types that are not declared in the file give no members.
+**lsp.complete.2** — After a `.` the names are the fields (Field) and methods (Method) of the type of the value before the dot (`api --type`), looked up among the declarations of the file. A buffer being typed rarely checks, so before asking, the server takes the word at the cursor out of its scratch copy: the `.` and the word after it, or the word replaced by `0`. When the copy still has errors, the last outline that checked answers. Types that are not declared in the file give no members.
 
 **lsp.rename.1** — `textDocument/rename` rewrites every reference of `ail api --refs` to the new name, in every file the references are in, as a `changes` edit. A use through a module qualifier (`geo.origin`) rewrites only the name after the qualifier.
 
