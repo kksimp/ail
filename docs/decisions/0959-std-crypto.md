@@ -25,7 +25,7 @@ RustCrypto) offer these as libraries; replacing them needs the same in std.
    and a cross-check against a second implementation in `tools/native-tls/`.
 4. **Slices**, each its own PR and spec rules:
    - S1a (this change): `hash.hmac_sha384`, `hash.hmac_sha512` (`std.hash.5`).
-   - S1b: `hash.sha1`, `hash.md5` (marked legacy, not for security), `hash.blake3`; `hash.sha3_256/512`.
+   - S1b: `hash.sha3_256/512`, and `hash.sha1_legacy` / `hash.md5_legacy` (broken; the `_legacy` suffix is the only name, so an agent can't pick them for security by accident) (`std.hash.6`, done); `hash.blake3` follows.
    - S1c: new `std.crypto`: `ct_eq`, `random_bytes` (OS source), `hkdf`, `pbkdf2_sha256/512`.
    - S1d: `crypto.seal/open` for AES-256-GCM and ChaCha20-Poly1305 (key, nonce, aad), exposing the TLS code.
    - S1e: `crypto.x25519`, `crypto.ed25519_sign/verify`, then `argon2id`.

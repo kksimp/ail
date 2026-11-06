@@ -18,6 +18,8 @@
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail mcp                       # the compiler's tools as an MCP stdio server (check, test, ask, impact, task_*)
+./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols)
+./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
 ./ail diff OLD NEW                  # what changed by meaning
 ./ail edit FILE.ail [--test] < EDITS
@@ -648,7 +650,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | Module | Functions |
 |---|---|
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
-| `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
+| `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `trash(p)` (recoverable delete; never permanent), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists` and `glob` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |

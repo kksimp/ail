@@ -1,0 +1,9 @@
+## Plays half a second of A 440 on the default output (needs the audio host:
+## tools/audio-host/macos/run.sh --beep).
+use std.audio
+use std.audio.device
+
+fn main() !
+    mut d := device.open()?
+    device.play(mut d, audio.tone(440.0, 500, 44100, 0.3))?
+    device.close(move d)

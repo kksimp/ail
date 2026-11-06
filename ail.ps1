@@ -237,6 +237,8 @@ if ($route) {
         'verify' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\verify\verify.ail')) @rest; exit $LASTEXITCODE }
         'task' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) @rest; exit $LASTEXITCODE }
         'mcp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) @rest; exit $LASTEXITCODE }
+        'lsp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) @rest; exit $LASTEXITCODE }
+        'sanitize' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) @rest; exit $LASTEXITCODE }
         'replay' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) @rest; exit $LASTEXITCODE }
         'test' {
             foreach ($a in $rest) {

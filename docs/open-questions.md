@@ -531,3 +531,12 @@ a field and keeps it up to date by hand.
 Recommendation: **b**, added next to the field form when a real program needs a
 computed value; **a** until then. Needs the designer, because it extends the
 approved syntax (ADR 0879 item 1).
+
+## OQ-141 — Reading an exact byte count from standard input (ADR 0966)
+
+`std.io` reads a line, the rest of input, or the rest as bytes (`std.io.1-5`). The language server protocol frames each message with `Content-Length: N` and then exactly N bytes with no line ending, so `ail lsp` reads the body as a line and cuts it by byte count (lsp.proto.1).
+
+- **a.** Keep the line trick. Pro: no runtime change. Con: breaks if a client sends a body with a raw newline, and reads past the body into the next header.
+- **b.** Add `io.read_exact(n int) bytes?` (none at end of input). Pro: exact, also serves binary protocols and agents' own stdio servers. Con: one runtime primitive on three targets.
+
+Recommendation: **b** when the std lane next touches `std.io`; `ail lsp` then drops the carry.
