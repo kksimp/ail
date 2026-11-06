@@ -61,6 +61,10 @@ enum Surfaces {
         let p = mmap(nil, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
         guard let base = p, base != MAP_FAILED else { return false }
         maps[id] = Mapped(base: base, bytes: bytes, w: w, h: h, stride: stride, count: count)
+        // A game reads the keyboard at once: the canvas takes the focus.
+        DispatchQueue.main.async {
+            if let v = CanvasView.registry[id] { v.window?.makeFirstResponder(v) }
+        }
         return true
     }
 
