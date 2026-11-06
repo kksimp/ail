@@ -104,8 +104,22 @@ fn raster(s Surface, f gfx.Frame)
     for c in f.cmds
         match c
             Clear(color) => fill(s, 0, 0, s.w, s.h, color)
-            Rect(x, y, w, h, color) => fill(s, x.to_int(), y.to_int(), w.to_int(), h.to_int(), color)
-            Line(x1, y1, x2, y2, color) => stroke(s, x1.to_int(), y1.to_int(), x2.to_int(), y2.to_int(), color)
+            Rect(x, y, w, h, color) => fill(
+                s,
+                x.to_int(),
+                y.to_int(),
+                w.to_int(),
+                h.to_int(),
+                color,
+            )
+            Line(x1, y1, x2, y2, color) => stroke(
+                s,
+                x1.to_int(),
+                y1.to_int(),
+                x2.to_int(),
+                y2.to_int(),
+                color,
+            )
             Text(_, _, _, _, _) => skip()
 
 ## The canvas that carries the surface, and the key for host lines about it.
@@ -147,7 +161,11 @@ impl app.App for Loop[T gfx.Game]
                 unlinked = true
             dt := if ev.dx > 0.1 then 0.1 else ev.dx
             step(mut self, dt)
-        elif ev.kind == "key" or ev.kind == "keyup" or ev.kind == "click" or ev.kind == "move" or ev.kind == "scroll"
+        elif ev.kind == "key"
+            or ev.kind == "keyup"
+            or ev.kind == "click"
+            or ev.kind == "move"
+            or ev.kind == "scroll"
             pending.push(ev)
 
     fn view(self) app.Node
@@ -181,7 +199,18 @@ fn step[T gfx.Game](mut l Loop[T], dt float)
 ## until the window closes (std.gfx.6). The file of the shared surface is
 ## removed when the host has mapped it.
 pub fn run[T gfx.Game](mut g T, title str, w int, h int) ! GfxError
-    mut l := Loop(game: g, name: title, w: w, h: h, surf: none, input: gfx.idle(), pending: [], out: [], failed: "", unlinked: false)
+    mut l := Loop(
+        game: g,
+        name: title,
+        w: w,
+        h: h,
+        surf: none,
+        input: gfx.idle(),
+        pending: [],
+        out: [],
+        failed: "",
+        unlinked: false,
+    )
     app.run(mut l) else err
         return GfxError(why: err.message)
     g = l.game
