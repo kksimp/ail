@@ -239,6 +239,10 @@ fn init(argc int, argv int)
     # Windows has no argument vector on entry: read the command line.
     if target() == 3
         win_args_init()
+    # After the Windows environment is built, or `AIL_LEAK` is not seen there (san.leak.3).
+    leak := os_env_get("AIL_LEAK")
+    if leak != ""
+        leak_setup(leak)
     # The argument vector sits at the top of the main stack. Windows
     # (target 3) has no argument vector there: the thread's own bounds say how far the stack goes.
     if target() != 3

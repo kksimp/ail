@@ -61,9 +61,6 @@ fn limits_init()
     verify := os_env_get("AIL_GC_VERIFY")
     if verify != ""
         gv_setup(verify)
-    leak := os_env_get("AIL_LEAK")
-    if leak != ""
-        leak_setup(leak)
     if mb > 0
         store64(global(LIM_CAP), mb * 1048576)
     if ms > 0
