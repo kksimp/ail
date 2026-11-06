@@ -149,6 +149,8 @@ with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
 **std.app.20** — A host sends `keyup` (a canvas's `id`, `text`, modifiers) when a key is released, and `key` carries `repeat` (auto-repeat) and `code` (the platform key code). A program that does not read them is unaffected; a host may omit both. *(ADR 0956)*
 
+**std.app.21** — `trait App` has `pick(self) Picker?` (default `none`); `struct Picker` is `id`, `prompt`, `folders bool` (a folder, else a file) and `start` (the folder to open in, `""` for the host's choice). When it differs from the last one sent, `run` sends `{"v":1,"t":"pick","id":I,"prompt":P,"folders":F,"start":S}`; the host shows its native open dialog and answers `{"kind":"picked","id":I,"text":PATH}`, `text` empty if the user cancelled. A host with no native dialog answers `{"kind":"pick_error","id":I,"text":WHY}` at once, so an app can fall back to a text field. The app clears its `Picker` when it sees either event. *(ADR 0971)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11

@@ -213,6 +213,14 @@ pub struct Popup
     pub y float
     pub items List[str]
 
+## A native file or folder chooser the app asks for (std.app.21). `start` is
+## the folder it opens in ("" for the host's choice).
+pub struct Picker
+    pub id str
+    pub prompt str
+    pub folders bool
+    pub start str
+
 ## Progress of a long job (std.app.15): `total` is 0 when unknown.
 pub struct Progress
     pub done int
@@ -377,6 +385,9 @@ pub trait App
     ## A native menu to show; the host answers with a `popup` event (std.app.18).
     fn popup(self) Popup?
         none
+    ## A native chooser to show; the host answers `picked` (std.app.21).
+    fn pick(self) Picker?
+        none
 
 fn indent(depth int) str
     "  ".repeat(depth)
@@ -517,6 +528,7 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
         return AppError(kind: "start", message: "{err}")
     mut sent := frame(a)
     mut shown := a.popup()
+    mut chosen := a.pick()
     c.stdin.send("{sent}\n")
     hello := c.out.recv() else return gone(move c)
     j := parse_json(hello) else return mismatch(move c, hello)
@@ -562,6 +574,12 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
             if m := want_menu
                 c.stdin.send("{popup_line(m)}\n")
             shown = want_menu
+        # std.app.21: show a chooser once per change of the app's request.
+        want_pick := a.pick()
+        if want_pick != chosen
+            if k := want_pick
+                c.stdin.send("{pick_line(k)}\n")
+            chosen = want_pick
         now := frame(a)
         if now != sent
             c.stdin.send("{now}\n")
@@ -597,6 +615,18 @@ fn measure_line(runs List[Measure]) str
         for r in runs
     ]
     "\{\"v\":1,\"t\":\"measure\",\"runs\":{Json.Arr(items).to_text()}}"
+
+## The request for a native chooser (std.app.21).
+fn pick_line(k Picker) str
+    j := Json.Obj([
+        member("v", num(1.0)),
+        member("t", txt("pick")),
+        member("id", txt(k.id)),
+        member("prompt", txt(k.prompt)),
+        member("folders", Json.Bool(k.folders)),
+        member("start", txt(k.start)),
+    ])
+    j.to_text()
 
 ## The request for a native menu (std.app.18).
 fn popup_line(p Popup) str
