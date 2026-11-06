@@ -197,6 +197,31 @@ fn main()
     print(app.outline(p.view()))
 ```
 
+```ail rules=std.app.20
+use std.app
+
+struct Held
+    keys int
+
+impl app.App for Held
+    fn update(mut self, ev app.Event)
+        if ev.kind == "key"
+            keys += 1
+        elif ev.kind == "keyup"
+            keys -= 1
+
+    fn view(self) app.Node
+        app.label("held {keys}")
+
+fn main()
+    mut h := Held(keys: 0)
+    mut up := app.event("keyup")
+    up.text = "a"
+    screens := app.script(mut h, [app.key("a"), up])
+    print(screens[0])
+    print(screens[1])
+```
+
 ```ail norun rules=std.app.13
 use std.app
 

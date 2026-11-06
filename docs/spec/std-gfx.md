@@ -33,3 +33,32 @@ effects. *(ADR 0956)*
 
 **std.gfx.5** — `stats(f)` gives `cmds`, `fills` (`Clear` and `Rect`),
 `lines` and `texts` of a frame. *(ADR 0956)*
+
+## Examples
+
+```ail rules=std.gfx.1,std.gfx.2,std.gfx.3,std.gfx.4,std.gfx.5
+use std.app
+use std.gfx
+
+struct Dot
+    x float
+
+impl gfx.Game for Dot
+    fn update(mut self, input gfx.Input, dt float)
+        if gfx.down(input, "right")
+            x += 10.0 * dt
+
+    fn draw(self, mut f gfx.Frame)
+        gfx.clear(mut f, 0)
+        gfx.rect(mut f, self.x, 0.0, 2.0, 2.0, 0xff0000)
+
+fn main()
+    mut d := Dot(x: 0.0)
+    steps := [[app.key("right")], [gfx.key_up("right")]]
+    frames := gfx.script(mut d, 16, 8, 1.0, steps)
+    print(frames[1])
+    i := gfx.next_input(gfx.idle(), [app.key("a")])
+    print(gfx.pressed(i, "a"))
+    f := gfx.new_frame(4, 4)
+    print(gfx.stats(f).cmds)
+```
