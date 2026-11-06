@@ -2,10 +2,10 @@
 ## one subprogram per function, and a line table. gdb and lldb read them for
 ## `break NAME`, `break FILE:LINE` and backtraces with `FILE:LINE`.
 ##
-## Stage 1 draws the line table from the call table the code generators
-## already keep (ADR 0641, `Image.calls`): a row for every user call, at the
-## call instruction's last byte, so a frame's `pc - 1` lookup lands on it.
-## Statements that are not calls have no row yet. Frames are found from the
+## The line table has a row for every user call (ADR 0641, `Image.calls`), at
+## the call instruction's last byte so a frame's `pc - 1` lookup lands on it,
+## and one for every checked operation (`Image.lines`: bounds, overflow,
+## division). Other statements have no row yet. Frames are found from the
 ## frame pointer every function keeps, so there is no `.debug_frame`.
 use codegen
 use mir
@@ -118,6 +118,21 @@ fn info(img codegen.Image, text_addr int) List[u8]
     out.extend(body)
     out
 
+## A row of the line table: the address's offset in the code, and the position.
+struct LineRow
+    at int
+    pos int
+
+## Calls (at the last byte of the call, so `pc - 1` finds them) and checked
+## operations (at their first byte), in address order.
+fn rows(img codegen.Image) List[LineRow]
+    mut all := List[LineRow]()
+    for c in img.calls
+        all.push(LineRow(at: c.off - 1, pos: c.pos))
+    for c in img.lines
+        all.push(LineRow(at: c.off, pos: c.pos))
+    all.sorted(by: |r| r.at)
+
 fn line(img codegen.Image, text_addr int) List[u8]
     mut hdr := List[u8]()
     # minimum instruction length, maximum operations, default is_stmt,
@@ -145,10 +160,10 @@ fn line(img codegen.Image, text_addr int) List[u8]
     mut ln := 1
     mut col := 0
     mut emitted := false
-    for c in img.calls
+    for c in rows(img)
         l := mir.call_line(c.pos)
         f := mir.call_file(c.pos) + 1
-        at := c.off - 1
+        at := c.at
         if l == 0 or f > img.files.len() or at < addr or (at == addr and emitted)
             continue
         # DW_LNS_advance_pc

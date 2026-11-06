@@ -3,7 +3,7 @@
 Non-normative. Staging for ADR 0016 and ADR 0021 (decided by the designer);
 the stage ADRs are numbered by the lead.
 
-## Stage 1 (this change): DWARF 4 for ELF (`debug.dwarf.1`)
+## Stage 1: DWARF 4 for ELF (`debug.dwarf.1`)
 
 `compiler/obj/dwarf.ail` adds `.debug_abbrev`, `.debug_info` and
 `.debug_line` after the symbol table in every ELF executable (they are not
@@ -14,7 +14,7 @@ carries one subprogram per function (`low_pc`, `high_pc`). gdb and lldb get
 `break NAME`, `break FILE:LINE` on call lines, and backtraces with
 `FILE:LINE`.
 
-Known limits, each a later stage: lines exist only for calls; no variables;
+Rows also exist for checked operations (bounds, overflow, division). Known limits, each a later stage: other statements have no row; no variables;
 no `.debug_frame` (the debuggers use the frame pointer every function keeps);
 no Mach-O or PE output. Language is DW_LANG_C99, the closest one debuggers
 evaluate expressions in.

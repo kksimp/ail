@@ -37,6 +37,9 @@ pub struct Image
     pub imports List[str]
     ## The module's source files, for the debug line table (debug.dwarf.1).
     pub files List[str]
+    ## The positions of checked operations (an offset and `mir.call_pos`), in
+    ## address order within a function, for the debug line table.
+    pub lines List[CallRow]
 
 pub fn new_image() Image
     Image(
@@ -50,6 +53,7 @@ pub fn new_image() Image
         calls: [],
         imports: [],
         files: [],
+        lines: [],
     )
 
 ## A string object (native-abi.md §2) in the read-only data, once per symbol.

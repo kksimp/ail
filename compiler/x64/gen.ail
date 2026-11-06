@@ -61,6 +61,7 @@ struct Gen
     sites ref codegen.Sites
     nglobals int
     calls List[codegen.CallRow]
+    lines List[codegen.CallRow]
     f64s List[float]
     f mir.Func
     loc List[int]
@@ -153,6 +154,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         sites: sites,
         nglobals: img.globals,
         calls: [],
+        lines: [],
         f64s: [],
         f: f,
         loc: al.loc,
@@ -199,6 +201,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     base := img.code.len()
     for c in g.calls
         img.calls.push(codegen.CallRow(off: c.off + base, pos: c.pos, func: c.func))
+    for c in g.lines
+        img.lines.push(codegen.CallRow(off: c.off + base, pos: c.pos, func: c.func))
     img.funcs[f.name] = base
     img.code.extend(g.a.code)
     for fx in g.a.fixups
@@ -750,6 +754,10 @@ fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
 fn Gen.gen_inst(mut self, i mir.Inst)
     if codegen.is_remat(i)
         return
+    if i.site >= 0
+        # A checked operation's position, for the debug line table.
+        s := sites.list[i.site]
+        lines.push(codegen.CallRow(off: a.code.len(), pos: mir.call_pos(s.file, s.line, s.col), func: f.name))
     match i.op
         "add" | "sub" | "mul" => arith(i)
         "div" | "rem" => divide(i)
