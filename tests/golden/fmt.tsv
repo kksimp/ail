@@ -722,8 +722,8 @@ fmt plain examples/ui_hello.ail	f0b19c9ec039c464	0	bc1d85e425e0809f
 fmt long examples/ui_hello.ail	f0b19c9ec039c464	0	6e68f87633f935b4
 fmt plain examples/workers.ail	f6727cffaac89afc	0	a1eb9ae203f4438a
 fmt long examples/workers.ail	f6727cffaac89afc	0	e852faf611f251f1
-fmt plain std/app/app.ail	904c2ed5a4e0b901	0	df6a18a5c072deab
-fmt long std/app/app.ail	904c2ed5a4e0b901	0	6440958b7181e99e
+fmt plain std/app/app.ail	0a9ef1acd38804f5	0	ccc91f39b4db1f60
+fmt long std/app/app.ail	0a9ef1acd38804f5	0	48a78a4664215d83
 fmt plain std/args/args.ail	d0e41ea14c3fd794	0	dd31a3ebb23d57a1
 fmt long std/args/args.ail	d0e41ea14c3fd794	0	d31841315839a8ec
 fmt plain std/attach/attach.ail	296c2b438965a408	0	5ffca9415be562df
