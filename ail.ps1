@@ -283,7 +283,12 @@ if ($route) {
             & $native check-program @checkOpts $runFile
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $errFile = New-TemporaryFile
+            # Standard error goes to a file: under 'Stop' PowerShell would turn any line there (an AIL_GC_STATS
+            # census, a trap report) into a NativeCommandError and exit 1 before the status is read.
+            $prevPref = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
             $prep = & $native prepare @runOpts $runFile 2> $errFile
+            $ErrorActionPreference = $prevPref
             if ($LASTEXITCODE -eq 0) {
                 Remove-Item -Force $errFile
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
