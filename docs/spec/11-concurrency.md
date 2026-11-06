@@ -396,6 +396,25 @@ fn main() !
     p.wait()?
 ```
 
+**conc.share.8** — A `m.set(e)` of a `Mutex` whose `e` uses a value read from the
+same mutex with `m.get()` (directly, or through a local bound to it) reads and
+writes in two critical sections, so tasks that run between them lose each
+other's updates. The implementation MUST warn at the `set`; the help says to
+update the value inside one `with m as mut x` block (`conc.share.6`).
+`@allow("conc.share.8")` on the function allows it (`gram.attr.5`).
+*(ADR 0970)*
+
+```ail rules=conc.share.8
+fn bump(total Mutex[int], n int)
+    cur := total.get()
+    total.set(cur + n)          # warns: another task may have changed `total`
+
+fn main()
+    total := Mutex(0)
+    bump(total, 2)
+    print(total.get())
+```
+
 **conc.select.1** — `task.select(chans List[Channel[T]]) int?` waits until
 one of the channels has a value waiting and returns its index in `chans`;
 when several do, the lowest index. It takes no value: `chans[i].recv()` then

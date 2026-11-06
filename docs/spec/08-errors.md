@@ -511,6 +511,27 @@ fn smallest(nums List[int]) int
     nums.min() else 0
 count := (m.get(k) else 0) + 1
 ```
+**err.else.7** — `x.to_int() else d` and `x.to_float() else d` with a value
+`d` that doesn't leave turn a failed parse into `d`. When the same function also
+rejects a failed parse of the same kind (`else return ...`, `else continue` or
+a block), the implementation MUST warn at each such `d`: one input is rejected,
+a like one is silently replaced. The help says to write `else return <error>`;
+the note points at the parse that rejects. `@allow("err.else.7")` on the
+function allows it (`gram.attr.5`). *(ADR 0970)*
+
+```ail rules=err.else.7
+error enum BadLine
+    BadNumber "bad number"
+
+fn parse(a str, b str) int ! BadLine
+    x := a.to_int() else 0                  # warns: `b` below rejects a bad number
+    y := b.to_int() else return BadNumber
+    x + y
+
+fn main()
+    print(parse("1", "2") else 0)
+```
+
 **err.ctx.1** — Each propagation by `?` MUST record its source location in
 the propagated error's return trace. *(ADR 0050)*
 

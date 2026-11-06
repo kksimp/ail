@@ -416,6 +416,29 @@ defer print("first")
 print("body")
 ```
 
+**own.defer.4** — When a function adjusts a place with `p -= e` (or `p += e`)
+directly in its body and undoes it with `p += e` (or `p -= e`) later in the
+body, but a `return`, `?` or `else return` between the two leaves without
+undoing it, the implementation MUST warn at that exit: the adjustment, such as
+a taken slot, leaks on that path. The help says to write `defer p += e` right
+after the adjustment. A function that defers the undo, or that undoes before the
+exit, isn't warned. `@allow("own.defer.4")` on the function allows it
+(`gram.attr.5`). *(ADR 0970)*
+
+```ail rules=own.defer.4
+fn take(mut slots int, n int) int
+    slots -= 1
+    if n < 0
+        return 0            # warns: `slots` is not given back on this path
+    slots += 1
+    n
+
+fn main()
+    mut slots := 4
+    print(take(mut slots, -1))
+    print(slots)
+```
+
 ## Runnable examples for the rules above
 
 Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must

@@ -783,3 +783,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
 | [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
+| [0970](0970-diagnosis-lints.md) | Diagnosis lints: `ail check` warns on a swallowed parse, a mutex get-then-set, a floor-divided batch loop and a counter leaked on an early exit; `ail sanitize` names the mutex *(delegated)* | Accepted | 2026-11-06 |

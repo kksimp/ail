@@ -187,6 +187,27 @@ statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
 to that loop. AIL has no `loop` keyword: the help for it says `while true`.
 *(ADR 0139)*
 
+**expr.loop.8** — In `for b in 0..xs.len() / N`, where `N` is a name (a
+constant or a parameter) and the body multiplies `b` by `N` to find a batch, the
+division rounds down, so a last batch of fewer than `N` items is never visited.
+The implementation MUST warn at the bound; the help gives
+`(xs.len() + N - 1) / N` and says to end the last batch at `xs.len()`.
+`@allow("expr.loop.8")` on the function allows it (`gram.attr.5`).
+*(ADR 0970)*
+
+```ail rules=expr.loop.8
+BATCH := 4
+
+fn main()
+    xs := [1, 2, 3, 4, 5, 6]
+    mut sum := 0
+    for b in 0..xs.len() / BATCH    # warns: the last two items are skipped
+        lo := b * BATCH
+        for i in lo..lo + BATCH
+            sum += xs[i]
+    print(sum)
+```
+
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
 

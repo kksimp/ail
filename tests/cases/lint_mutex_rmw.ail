@@ -1,0 +1,24 @@
+# A mutex read with `get()` and written back with `set()` loses updates
+# (conc.share.8); `with m as mut x` and `@allow` do not.
+fn lossy(total Mutex[int], n int)
+    cur := total.get()
+    total.set(cur + n)
+
+fn direct(total Mutex[int], n int)
+    total.set(total.get() + n)
+
+fn safe(total Mutex[int], n int)
+    with total as mut t
+        t += n
+
+@allow("conc.share.8") fn allowed(total Mutex[int], n int)
+    cur := total.get()
+    total.set(cur + n)
+
+fn main()
+    total := Mutex(0)
+    lossy(total, 1)
+    direct(total, 2)
+    safe(total, 3)
+    allowed(total, 4)
+    print(total.get())

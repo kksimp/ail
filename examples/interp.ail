@@ -517,7 +517,7 @@ fn binary(pos Pos, op str, a Value, b Value) Value ! MiniError
 fn wrong_arguments(pos Pos, name str, want int, got int) MiniError
     MiniError(pos, "wrong number of arguments: '{name}' takes {want} but got {got}")
 
-fn Interp.call(mut self, pos Pos, name str, args List[Value]) Value ! MiniError
+@allow("own.defer.4") fn Interp.call(mut self, pos Pos, name str, args List[Value]) Value ! MiniError
     if name == "print" or name == "str"
         if args.len() != 1
             return wrong_arguments(pos, name, 1, args.len())

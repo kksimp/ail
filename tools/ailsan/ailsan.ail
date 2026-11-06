@@ -4,7 +4,8 @@
 ## seeds 1..N), and reports every schedule whose exit status or output differs from the fixed run
 ## (san.sched.1), with the seed that replays it. It adds no analysis of its own and no runtime
 ## code: a program with a data race in `unsafe` code, or a missing join, shows up as a result that
-## depends on the schedule. With `--tests` it runs `ail test` instead of `ail run`.
+## depends on the schedule. With `--tests` it runs `ail test` instead of `ail run`. When schedules
+## differ it also names the `ail check` warnings that explain such a result (san.sched.3).
 ## With `--race` it instead runs FILE once as a race-instrumented build (`AIL_SANITIZE=race`, ADR
 ## 0967 stage 3) and reports the conflicting raw-pointer accesses (san.race.1-3); POSIX shells only.
 
@@ -111,6 +112,25 @@ fn race_main(o Opts)
         print(r.err)
     io.exit(r.status)
 
+## The `conc.share.8` warnings of `ail check FILE` (san.sched.3): a mutex read and written back
+## in two steps, the usual cause of a result that depends on the schedule. One entry per warning:
+## its line and message.
+fn suspects(o Opts) List[str]
+    mut out := List[str]()
+    r := proc.run(ail_path(), ["check", "--json", o.file], none, o.timeout) else return out
+    for l in r.err.lines()
+        if l.contains("\"rule\":\"conc.share.8\"")
+            at := l.split("\"line\":")[1].split(",")[0]
+            why := l.split("\"message\":\"")[1].split("\"")[0]
+            out.push("{at}|{why}")
+    out
+
+fn suspect_line(o Opts, s str) str
+    parts := s.split("|")
+    if o.json
+        return "\{\"api\":1,\"severity\":\"note\",\"rule\":\"san.sched.3\",\"file\":{quote(o.file)},\"line\":{parts[0]},\"message\":{quote("likely cause: " + parts[1])}}"
+    "{o.file}:{parts[0]}: note[san.sched.3]: likely cause: {parts[1]}"
+
 fn main() !
     o := parse(env.args()) else
         io.eprint(USAGE)
@@ -125,6 +145,9 @@ fn main() !
         if why != ""
             found += 1
             print(finding(o, seed, why, r))
+    if found > 0
+        for s in suspects(o)
+            print(suspect_line(o, s))
     if o.json
         print("\{\"summary\":true,\"seeds\":{o.seeds},\"schedule_dependent\":{found}}")
     else

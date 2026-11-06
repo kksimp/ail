@@ -740,7 +740,7 @@ fn P.atom(mut self) int
         return self.escape(f, at)
     self.mk(1, c.code(), if f.bit_and(F_I) != 0 then 1 else 0, 0, 0)
 
-fn P.group(mut self, at int) int
+@allow("own.defer.4") fn P.group(mut self, at int) int
     f := self.fl
     self.depth += 1
     if self.depth > 200

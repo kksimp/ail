@@ -1,0 +1,412 @@
+## Diagnosis lints (ADR 0970): warnings for four bug shapes that type checking
+## can't see and that no tool of C, Python or Rust flags either. They read the
+## syntax of one function body, in source order, and report with a help the
+## agent can act on: err.else.7 (a parse failure turned into a value),
+## conc.share.8 (a mutex read, then written back), expr.loop.8 (a floor-divided
+## loop bound) and own.defer.4 (a counter given back only on the success path).
+## Each is allowed per function with `@allow("rule")` (gram.attr.5).
+use ast
+
+## One fact seen in the body: what, about which name, where, in which
+## top-level statement (`idx`), and whether it sits directly in the body.
+struct Ev
+    kind str
+    name str
+    pos ast.Pos
+    idx int
+    text str
+    top bool
+
+struct Finding
+    rule str
+    pos ast.Pos
+    message str
+    help str
+    note_pos ast.Pos?
+    note str
+
+struct Walk
+    evs List[Ev]
+    idx int
+    mutexes List[str]
+    ## local name -> the mutex it was read from with `get()`.
+    gets Map[str, str]
+    ## every name read, and `m.get()` as text, in the order walked.
+    seen List[str]
+    in_defer bool
+
+## The part of a parameter's type that names a mutex.
+@allow("expr.match.3") fn is_mutex_type(t ast.TypeRef) bool
+    match t.shape
+        Named(n, _) => n == "Mutex"
+        RefTo(inner) => is_mutex_type(inner)
+        _ => false
+
+@allow("expr.match.3") fn is_mutex_ctor(e ast.Expr) bool
+    match e
+        Call(callee, _, _) =>
+            match callee
+                Name(n, _) => n == "Mutex"
+                TypeArgs(n, _, _) => n == "Mutex"
+                _ => false
+        _ => false
+
+## `x.to_int()` and `x.to_float()`: the parses whose failure `else` can hide.
+@allow("expr.match.3") fn parse_method(e ast.Expr) str?
+    match e
+        Method(_, n, _, args) =>
+            if args.len() == 0 and (n == "to_int" or n == "to_float")
+                return n
+            none
+        _ => none
+
+@allow("expr.match.3") fn is_negative(e ast.Expr) bool
+    match e
+        Unary(op, _, _) => op == ast.UnOp.Neg
+        _ => false
+
+## `a`, `a.b`: a place a counter lives in, as text.
+@allow("expr.match.3") fn place_text(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Member(recv, f, _) =>
+            r := place_text(recv)?
+            "{r}.{f}"
+        _ => none
+
+fn pos_before(a ast.Pos, b ast.Pos) bool
+    a.line < b.line or (a.line == b.line and a.col < b.col)
+
+fn Walk.add(mut self, kind str, name str, at ast.Pos, text str, top bool)
+    evs.push(Ev(kind: kind, name: name, pos: at, idx: idx, text: text, top: top))
+
+fn Walk.stmts(mut self, body List[ast.Stmt], top bool)
+    for k in 0..body.len()
+        if top
+            idx = k
+        stmt(body[k], top)
+
+@allow("expr.match.3") fn Walk.stmt(mut self, s ast.Stmt, top bool)
+    match s
+        Let(name, _, _, value, otherwise) =>
+            expr(value)
+            if is_mutex_ctor(value)
+                mutexes.push(name)
+            if m := get_of(value)
+                gets[name] = m
+            if o := otherwise
+                parse_else(value, o)
+                else_part(o)
+        LetTuple(_, value, _) => expr(value)
+        Assign(target, op, value, at) =>
+            expr(target)
+            expr(value)
+            if o := op
+                sym := op_symbol(o)
+                if sym == "+" or sym == "-"
+                    if p := place_text(target)
+                        kind := if in_defer then "defer-adj" else "adj"
+                        add(kind, p, at, sym, top)
+        While(cond, body, _) =>
+            expr(cond)
+            stmts(body, false)
+        For(_, lv, _, _, iter, body, _) =>
+            expr(iter)
+            floor_loop(lv, iter)
+            stmts(body, false)
+        Return(value, at) =>
+            if x := value
+                expr(x)
+            add("exit", "return", at, "", top)
+        Eval(value) => expr(value)
+        Handle(value, otherwise) =>
+            expr(value)
+            parse_else(value, otherwise)
+            else_part(otherwise)
+        Defer(inner, _) =>
+            in_defer = true
+            stmt(inner, false)
+            in_defer = false
+        With(mutex, _, _, body, _) =>
+            expr(mutex)
+            stmts(body, false)
+        Unsafe(body, _) => stmts(body, false)
+        _ => 0
+
+@allow("expr.match.3") fn Walk.else_part(mut self, o ast.Else)
+    match o
+        Fallback(d) => expr(d)
+        Leave(st) => stmt(st, false)
+        Handler(_, body, _) => stmts(body, false)
+
+## `x.to_int() else d` and `x.to_int() else return ...` (err.else.7).
+@allow("expr.match.3") fn Walk.parse_else(mut self, value ast.Expr, o ast.Else)
+    m := parse_method(value) else return
+    match o
+        Fallback(d) =>
+            # A negative sentinel (`else -1`) is the usual "checked right after" form.
+            if not is_negative(d)
+                add("parse-default", m, expr_pos(d), "", false)
+        Leave => add("parse-leave", m, expr_pos(value), "", false)
+        Handler => add("parse-leave", m, expr_pos(value), "", false)
+
+## `m.get()` of a known mutex: the mutex's name.
+@allow("expr.match.3") fn Walk.get_of(self, e ast.Expr) str?
+    match e
+        Method(recv, n, _, args) =>
+            if n == "get" and args.len() == 0
+                match recv
+                    Name(m, _) =>
+                        if mutexes.contains(m)
+                            return m
+                    _ => return none
+            none
+        _ => none
+
+## `for b in 0..xs.len() / N` (expr.loop.8): the loop variable and `N`.
+@allow("expr.match.3") fn Walk.floor_loop(mut self, lv str, iter ast.Expr)
+    match iter
+        Range(_, hi, _, _) =>
+            h := hi else return
+            match h
+                Binary(op, l, r, _) =>
+                    if op != ast.BinOp.Div
+                        return
+                    match r
+                        Name(c, _) =>
+                            match l
+                                Method(recv, n, _, args) =>
+                                    if n == "len" and args.len() == 0
+                                        what := place_text(recv) else "the list"
+                                        add("floor-loop", c, expr_pos(h), "{lv}|{what}", false)
+                                _ => 0
+                        _ => 0
+                _ => 0
+        _ => 0
+
+## `b * N` where `b` is the variable of a loop that ran to `xs.len() / N`.
+@allow("expr.match.3") fn Walk.batch_mul(mut self, op ast.BinOp, l ast.Expr, r ast.Expr, at ast.Pos)
+    if op != ast.BinOp.Mul
+        return
+    match l
+        Name(a, _) =>
+            match r
+                Name(b, _) =>
+                    add("mul", b, at, a, false)
+                    add("mul", a, at, b, false)
+                _ => 0
+        _ => 0
+
+@allow("expr.match.3") fn Walk.method(mut self, recv ast.Expr, n str, at ast.Pos, mark int)
+    match recv
+        Name(m, _) =>
+            if not mutexes.contains(m)
+                return
+            if n == "get"
+                seen.push("{m}.get()")
+            if n != "set"
+                return
+            mut hit := false
+            for k in mark..seen.len()
+                u := seen[k]
+                if u == "{m}.get()"
+                    hit = true
+                if g := gets.get(u)
+                    if g == m
+                        hit = true
+            if hit
+                add("rmw", m, at, "", false)
+        _ => 0
+
+@allow("expr.match.3") fn Walk.expr(mut self, e ast.Expr)
+    match e
+        Name(n, _) => seen.push(n)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Hole(x) => expr(x)
+                    Fmt(x, _) => expr(x)
+                    Lit => continue
+        ListLit(items, _) => exprs(items)
+        SetLit(items, _) => exprs(items)
+        TupleLit(items, _) => exprs(items)
+        Call(callee, args, _) =>
+            expr(callee)
+            for a in args
+                expr(a.value)
+        Method(recv, n, at, args) =>
+            expr(recv)
+            mark := seen.len()
+            for a in args
+                expr(a.value)
+            method(recv, n, at, mark)
+        Member(recv, _, _) => expr(recv)
+        Index(recv, i, _) =>
+            expr(recv)
+            expr(i)
+        Unary(_, x, _) => expr(x)
+        NewRef(x, _) => expr(x)
+        Binary(op, l, r, at) =>
+            expr(l)
+            expr(r)
+            batch_mul(op, l, r, at)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                expr(x)
+            if x := hi
+                expr(x)
+        MapLit(entries, _) =>
+            for en in entries
+                expr(en.key)
+                expr(en.value)
+        Comp(_, elem, value, clauses, _) =>
+            for c in clauses
+                expr(c.iter)
+                if x := c.cond
+                    expr(x)
+            expr(elem)
+            if x := value
+                expr(x)
+        If(branches, els, _, _) =>
+            for b in branches
+                match b.cond
+                    Test(c) => expr(c)
+                    Bind(_, _, c) => expr(c)
+                stmts(b.body, false)
+            if body := els
+                stmts(body, false)
+        Match(scrutinee, arms, _) =>
+            expr(scrutinee)
+            for a in arms
+                if g := a.guard
+                    expr(g)
+                stmts(a.body, false)
+        Try(inner, context, at) =>
+            expr(inner)
+            if c := context
+                expr(c)
+            add("exit", "?", at, "", false)
+        OrElse(value, otherwise, _) =>
+            expr(value)
+            parse_else(value, otherwise)
+            else_part(otherwise)
+        _ => 0
+
+fn Walk.exprs(mut self, xs List[ast.Expr])
+    for x in xs
+        expr(x)
+
+## What the walk found, as warnings.
+fn Walk.findings(self) List[Finding]
+    mut out := List[Finding]()
+    # err.else.7: one parse is rejected, another is defaulted.
+    mut have_leave := false
+    mut leave := ast.Pos(line: 0, col: 0)
+    for e in evs
+        if e.kind == "parse-leave" and not have_leave
+            have_leave = true
+            leave = e.pos
+    if have_leave
+        for e in evs
+            if e.kind == "parse-default"
+                out.push(Finding(
+                    rule: "err.else.7",
+                    pos: e.pos,
+                    message: "`x.{e.name}() else <default>` turns a failed parse into a value, but another parse in this function rejects bad input",
+                    help: "write `else return <error>` (or `else continue`) like the other parse, or mark the function `@allow(\"err.else.7\")` if the default is meant",
+                    note_pos: leave,
+                    note: "this parse rejects bad input",
+                ))
+    # conc.share.8: a mutex read, then written back from what was read.
+    for e in evs
+        if e.kind == "rmw"
+            out.push(Finding(
+                rule: "conc.share.8",
+                pos: e.pos,
+                message: "`{e.name}.set(..)` writes back a value read with `{e.name}.get()`; tasks that interleave between the two lose each other's updates",
+                help: "update `{e.name}` in one critical section: `with {e.name} as mut g` and change `g` inside it (conc.share.6), or use `Atomic`; `ail sanitize` replays the lost update",
+                note_pos: none,
+                note: "",
+            ))
+    # expr.loop.8: `0..xs.len() / N` with batches of N.
+    for e in evs
+        if e.kind == "floor-loop"
+            parts := e.text.split("|")
+            lv := parts[0]
+            mut batched := false
+            for m in evs
+                if m.kind == "mul" and m.name == e.name and m.text == lv
+                    batched = true
+            if batched
+                out.push(Finding(
+                    rule: "expr.loop.8",
+                    pos: e.pos,
+                    message: "`{parts[1]}.len() / {e.name}` rounds down, so a last batch of fewer than {e.name} items is never visited",
+                    help: "count batches with `({parts[1]}.len() + {e.name} - 1) / {e.name}` and end the last one at `{parts[1]}.len()`, or mark the function `@allow(\"expr.loop.8\")`",
+                    note_pos: none,
+                    note: "",
+                ))
+    # own.defer.4: `n -= 1` given back by `n += 1` only after an early exit.
+    for a in evs
+        if a.kind != "adj" or not a.top
+            continue
+        mut rel := -1
+        mut deferred := false
+        for r in evs
+            if r.name == a.name and r.text != a.text
+                if r.kind == "defer-adj" and r.idx >= a.idx
+                    deferred = true
+                if r.kind == "adj" and r.top and r.idx > a.idx and rel < 0
+                    rel = r.idx
+        if rel < 0 or deferred
+            continue
+        for x in evs
+            if x.kind != "exit" or x.idx <= a.idx or x.idx >= rel
+                continue
+            mut undone := false
+            for r in evs
+                if r.kind == "adj" and r.name == a.name and r.text != a.text
+                    if r.idx == x.idx and pos_before(r.pos, x.pos)
+                        undone = true
+            if not undone
+                inv := if a.text == "-" then "+=" else "-="
+                out.push(Finding(
+                    rule: "own.defer.4",
+                    pos: x.pos,
+                    message: "this exit leaves `{a.name}` adjusted: the `{a.name} {a.text}=` above is undone only on the path that reaches the end",
+                    help: "write `defer {a.name} {inv} ..` right after the adjustment so every exit undoes it, or undo it before this exit; mark the function `@allow(\"own.defer.4\")` if that is meant",
+                    note_pos: a.pos,
+                    note: "adjusted here",
+                ))
+                break
+    out
+
+## Runs the diagnosis lints on one function body.
+fn Checker.lint_fn(mut self, f ast.FnDecl)
+    if is_prelude_line(f.pos.line)
+        return
+    body := f.body else return
+    mut w := Walk(
+        evs: [],
+        idx: 0,
+        mutexes: [],
+        gets: Map[str, str](),
+        seen: [],
+        in_defer: false,
+    )
+    for p in f.params
+        if is_mutex_type(p.ty)
+            w.mutexes.push(p.name)
+    w.stmts(body, true)
+    for fd in w.findings()
+        mut allowed := false
+        for a in f.attrs
+            if a.name == "allow" and a.arg == fd.rule
+                allowed = true
+        if allowed
+            continue
+        mut d := new_diag(fd.rule, fd.pos, fd.message).with_help(fd.help)
+        if np := fd.note_pos
+            d = d.with_note(np, fd.note)
+        d.warning = true
+        diags.push(d)

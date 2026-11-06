@@ -792,6 +792,13 @@ fn main()
     print(1)
 ```
 
+**san.sched.3** — When at least one schedule differs, `ail sanitize` also runs `ail check --json FILE` and prints a note for each `conc.share.8` warning (a mutex read, then written back): `FILE:LINE: note[san.sched.3]: likely cause: MESSAGE`; with `--json` one line with `"severity":"note"` and `"rule":"san.sched.3"` per note, before the summary line. A program with no such warning prints no note. *(ADR 0970)*
+
+```ail tool=sanitize,FILE expect=schedules rules=san.sched.3
+fn main()
+    print(1)
+```
+
 **san.race.1** — `ail sanitize --race [--tests] [--timeout MS] [--json] FILE [ARGS...]` runs the program built with `AIL_SANITIZE=race` (POSIX shells; the variable also works with `ail run` and `ail build`). Each non-volatile raw-pointer `read` and `write` in the program's own code is checked against the last write and last read of the same 8-byte granule. Two accesses by different tasks, at least one a write, with no happens-before edge between them are a conflict. The report is `error[san.race.1]` on standard error with both source positions and task numbers; with `--json` one line per report. Each pair of positions is reported once, up to 20. Safe code and `par` loops over safe code cannot conflict (`conc.race.1`), so only `unsafe` accesses are checked, including those in `spawn` bodies and `par` chunks.
 
 **san.race.2** — The edges are: `spawn` (the child sees all the parent did before), `wait` and group waits (the waiter sees the child's whole run), `Mutex` lock and unlock, `Channel` send and receive, and `Atomic` operations (a store, `cas` or `add` publishes, a `load`, `cas` or `add` takes), each on its own object. A fresh `std.mem` block starts with no history. A run with a conflict exits 1 even if the program exited 0.

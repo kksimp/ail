@@ -142,9 +142,10 @@ The attributes known to the bootstrap are `@test`, `@pure`, `@inline`,
 
 **gram.attr.5** — `@allow("rule")` before a function allows the warning with
 that rule ID anywhere in the function: the checker doesn't report it. The
-argument is one string literal naming a warning that can be allowed; the
-bootstrap allows `expr.match.3` only. A missing or other argument is a
-compile-time error. *(ADR 0379)*
+argument is one string literal naming a warning that can be allowed: `expr.match.3`,
+and the diagnosis lints `err.else.7`, `conc.share.8`, `expr.loop.8` and
+`own.defer.4`. A missing or other argument is a compile-time error.
+*(ADR 0379, ADR 0970)*
 
 ```ail fragment
 enum Role

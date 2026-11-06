@@ -313,6 +313,7 @@ fn Checker.check_fn(mut self, idx int)
             if r := f.ret
                 d = d.with_note(r.pos, "the return type is declared here")
             diags.push(d)
+    lint_fn(f)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)

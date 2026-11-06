@@ -1,0 +1,38 @@
+# A counter taken, then given back only after an early return, leaks on that
+# path (own.defer.4); `defer`, undoing first and `@allow` do not.
+fn leaky(mut slots int, n int) int
+    slots -= 1
+    if n < 0
+        return 0
+    slots += 1
+    n
+
+fn deferred(mut slots int, n int) int
+    slots -= 1
+    defer slots += 1
+    if n < 0
+        return 0
+    n
+
+fn undone(mut slots int, n int) int
+    slots -= 1
+    if n < 0
+        slots += 1
+        return 0
+    slots += 1
+    n
+
+@allow("own.defer.4") fn allowed(mut slots int, n int) int
+    slots -= 1
+    if n < 0
+        return 0
+    slots += 1
+    n
+
+fn main()
+    mut slots := 4
+    print(leaky(mut slots, -1))
+    print(deferred(mut slots, -1))
+    print(undone(mut slots, -1))
+    print(allowed(mut slots, -1))
+    print(slots)

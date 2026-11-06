@@ -1,0 +1,24 @@
+# `x.to_int() else 0` next to a parse that rejects bad input warns
+# (err.else.7); a negative sentinel and an `@allow` do not.
+error enum LineError
+    BadNumber "bad number"
+
+fn price(a str, b str) int ! LineError
+    x := a.to_int() else 0
+    y := b.to_int() else return BadNumber
+    x + y
+
+fn sentinel(a str, b str) int ! LineError
+    x := a.to_int() else -1
+    y := b.to_int() else return BadNumber
+    x + y
+
+@allow("err.else.7") fn allowed(a str, b str) int ! LineError
+    x := a.to_int() else 0
+    y := b.to_int() else return BadNumber
+    x + y
+
+fn main()
+    print(price("1", "2") else 0)
+    print(sentinel("1", "2") else 0)
+    print(allowed("1", "2") else 0)

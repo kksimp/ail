@@ -45,7 +45,7 @@ pub CONC_TYPES := ["Task", "TaskGroup", "Channel", "Mutex", "Atomic"]
 pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated", "allow"]
 
 ## The warnings `@allow` can name (gram.attr.5).
-ALLOWABLE := ["expr.match.3"]
+ALLOWABLE := ["expr.match.3", "err.else.7", "conc.share.8", "expr.loop.8", "own.defer.4"]
 
 ## The standard modules (std.use.1), sorted.
 pub STD_MODULES := [

@@ -1,0 +1,39 @@
+# `0..xs.len() / BATCH` with `b * BATCH` skips the last partial batch
+# (expr.loop.8); a literal divisor, a ceiling and `@allow` do not.
+BATCH := 4
+
+fn skipped(xs List[int]) int
+    mut sum := 0
+    for b in 0..xs.len() / BATCH
+        lo := b * BATCH
+        for i in lo..lo + BATCH
+            sum += xs[i]
+    sum
+
+fn ceiling(xs List[int]) int
+    mut sum := 0
+    for b in 0..(xs.len() + BATCH - 1) / BATCH
+        lo := b * BATCH
+        for i in lo..(lo + BATCH).min(xs.len())
+            sum += xs[i]
+    sum
+
+fn pairs(xs List[int]) int
+    mut sum := 0
+    for b in 0..xs.len() / 2
+        sum += xs[b * 2]
+    sum
+
+@allow("expr.loop.8") fn allowed(xs List[int]) int
+    mut sum := 0
+    for b in 0..xs.len() / BATCH
+        lo := b * BATCH
+        sum += xs[lo]
+    sum
+
+fn main()
+    xs := [1, 2, 3, 4, 5, 6]
+    print(skipped(xs))
+    print(ceiling(xs))
+    print(pairs(xs))
+    print(allowed(xs))
