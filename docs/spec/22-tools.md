@@ -741,7 +741,7 @@ fn main()
 ([ADR 0966](../decisions/0966-ail-lsp-language-server.md)). It runs the matching
 `ail` commands and reshapes their JSON; it has no analysis of its own.
 
-**lsp.proto.1** — The server speaks LSP 3.17 over standard input and output with `Content-Length` framing. It answers `initialize` with the capabilities `textDocumentSync` (open, close, full-text change, save), `hoverProvider`, `definitionProvider`, `referencesProvider` and `documentSymbolProvider`.
+**lsp.proto.1** — The server speaks LSP 3.17 over standard input and output with `Content-Length` framing. It answers `initialize` with the capabilities `textDocumentSync` (open, close, full-text change, save), `hoverProvider`, `definitionProvider`, `referencesProvider`, `documentSymbolProvider`, `completionProvider` (trigger `.`), `renameProvider` (with prepare) and `codeActionProvider` (`quickfix`, `source.fixAll.ail`).
 
 **lsp.proto.2** — A request is answered; a notification is not. An unknown request is error -32601, text that isn't JSON is error -32700, an unknown notification is ignored. `shutdown` then `exit` ends the process with status 0, `exit` alone with status 1.
 
@@ -757,9 +757,21 @@ fn main()
 
 **lsp.sym.1** — Document symbols are the `ail api --outline` items, nested: fields, variants and methods are children. `fn` is Function, `method` Method, `struct` Struct, `enum` Enum, `trait` Interface, `impl` Namespace, `const` Constant, `field` Field, `variant` EnumMember.
 
+**lsp.complete.1** — `textDocument/completion` answers a complete list of names from `ail api`: the locals in scope at the cursor (`api --locals`; Variable, with the type as detail), then the functions, structs, enums, traits and constants of the file (`api --outline`). Only names that start with the text typed so far are returned.
+
+**lsp.complete.2** — After a `.` the names are the fields (Field) and methods (Method) of the type of the value before the dot (`api --type`), looked up among the declarations of the file. A buffer being typed rarely checks, so before asking, the server rewrites the cursor's line in its scratch copy: to a blank line, or after a `.` to a binding of the dotted name before it (`ail_probe := p`), whose type is asked. When `api` refuses the copy (a later line used what the rewritten line bound), the names come from the text instead: the parameters and the `name :=` and `for name` bindings above the cursor in its function, and for a receiver that is one name, the type its parameter, `self` or `name := Type(...)` binding writes, looked up in the last outline that checked. A receiver that is not one name, and a type not declared in the file, give no members. `AIL_LSP_DEBUG` set makes the server print each command it runs, its status and its standard error to standard error. When the copy still has errors, the last outline that checked answers. Types that are not declared in the file give no members.
+
+**lsp.rename.1** — `textDocument/rename` rewrites every reference of `ail api --refs` to the new name, in every file the references are in, as a `changes` edit. A use through a module qualifier (`geo.origin`) rewrites only the name after the qualifier.
+
+**lsp.rename.2** — `textDocument/prepareRename` answers the range and name under the cursor when it is a declared name, else null. A new name that is not an identifier, a position with no name and a name the program does not declare (a standard item) are error -32602 and change nothing. The result is not re-checked: run `ail check` after.
+
+**lsp.action.1** — `textDocument/codeAction` offers each fix of `ail check --json` for a diagnostic at the requested lines as a `quickfix` whose edit applies it. The first fix is preferred and the diagnostic is attached.
+
+**lsp.action.2** — With two or more fixable diagnostics the server also offers `source.fixAll.ail`: the first fix of every diagnostic whose edits touch none already taken, in one edit.
+
 **lsp.pos.1** — Positions are zero-based lines and characters; a character is one Unicode scalar (equal to a UTF-16 unit below U+10000).
 
-```ail tool=lsp rules=lsp.proto.1,lsp.proto.2,lsp.sync.1,lsp.sync.2,lsp.diag.1,lsp.hover.1,lsp.def.1,lsp.sym.1,lsp.pos.1
+```ail tool=lsp rules=lsp.proto.1,lsp.proto.2,lsp.sync.1,lsp.sync.2,lsp.diag.1,lsp.hover.1,lsp.def.1,lsp.sym.1,lsp.complete.1,lsp.complete.2,lsp.rename.1,lsp.rename.2,lsp.action.1,lsp.action.2,lsp.pos.1
 fn main()
     print(1)
 ```
