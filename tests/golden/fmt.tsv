@@ -1816,8 +1816,8 @@ fmt plain tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	77c1a63f43b7a515
 fmt long tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	d853b5ff47caa3cf
 fmt plain tests/cases/std_audio.ail	2223a1a859aa64f9	0	abb55e5009070438
 fmt long tests/cases/std_audio.ail	2223a1a859aa64f9	0	b90d539092f4733d
-fmt plain tests/cases/std_audio_device.ail	065717a0853c00ba	0	3a29b47914fbc4b0
-fmt long tests/cases/std_audio_device.ail	065717a0853c00ba	0	ffb5ab61b37d8c37
+fmt plain tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	cef7096dcdede900
+fmt long tests/cases/std_audio_device.ail	ed1a29d0d1e025fe	0	5855994110f07b55
 fmt plain tests/cases/std_bigint.ail	187f79195f741f01	0	cf7a0f5cdf6a9959
 fmt long tests/cases/std_bigint.ail	187f79195f741f01	0	432d108163beb95b
 fmt plain tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	0	6b80a756210ea37d
@@ -4204,8 +4204,8 @@ fmt plain tools/fuzz/suite.ail	05b76ba4ee034148	0	f18f8ac7c06e99e1
 fmt long tools/fuzz/suite.ail	05b76ba4ee034148	0	506bd9a8943a6e3c
 fmt plain tools/gate/asm.ail	6ccb1b476c70a792	0	a7b2e0cb83aad36a
 fmt long tools/gate/asm.ail	6ccb1b476c70a792	0	fe69c8228658d7a1
-fmt plain tools/gate/gate.ail	3716ce9a8e476b02	0	597c82f1c2237304
-fmt long tools/gate/gate.ail	3716ce9a8e476b02	0	f9c8b81dc4144811
+fmt plain tools/gate/gate.ail	8ac208ca1376ca77	0	db9f310a64fc53c2
+fmt long tools/gate/gate.ail	8ac208ca1376ca77	0	572b4694edf18766
 fmt plain tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	cefff86c796ed587
 fmt long tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	7e124b641dbf1cab
 fmt plain tools/gate/goldens.ail	33c251dd83e47eac	0	9f0e88b90b7ded6c
