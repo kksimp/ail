@@ -13,7 +13,7 @@ AIL is garbage-collected (a feature), so a block cannot be lost the way `malloc`
 
 ## Decision
 
-- `AIL_LEAK=1|json|all|all,json` turns the report on in any native executable. `ail leak [--json] [--all] FILE [ARGS...]` builds FILE and runs it with the variable set (`ail`, shell form; Windows sets the variable itself).
+- `AIL_LEAK=1|json|all|all,json` turns the report on in any native executable. `ail leak [--json] [--all] FILE [ARGS...]` builds FILE and runs it with the variable set (`ail`, shell form; `ail.ps1` has the same command).
 - With it on, the collector marks the roots one at a time through counting versions of its scan and drain (`compiler/rt/native/leak.ail`) and records bytes and objects per kind and per root. The counting versions mirror `gc_scan_in` and `gc_drain`; the normal path is untouched except for one word test.
 - Findings: `san.leak.1` live memory grew (first against latest collection, with a monotone check over the last 64); `san.leak.2` the top roots that hold it, with kind and first/latest bytes. `--all` lists roots without growth. Text on standard error, or JSON lines with a summary.
 - Collections run at least every 4 MiB allocated, or every half of the live bytes, and single-threaded, so there are enough samples. A program with fewer than four collections gets one more at exit, which shows what globals keep.
