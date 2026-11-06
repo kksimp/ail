@@ -71,6 +71,7 @@ fn sys_write(fd int, p int, n int)
         done += r
 
 fn sys_exit(code int)
+    leak_exit(code)
     instr_dump()
     t := target()
     if t == 3
