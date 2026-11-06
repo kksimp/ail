@@ -59,7 +59,15 @@ fn finding(o Opts, seed int, why str, r Run) str
     "{o.file}: warning[san.sched.1]: schedule seed {seed}: {why}\n  replay: {replay}"
 
 fn parse(args List[str]) Opts?
-    mut o := Opts(seeds: 8, tests: false, race: false, timeout: 60000, json: false, file: "", rest: [])
+    mut o := Opts(
+        seeds: 8,
+        tests: false,
+        race: false,
+        timeout: 60000,
+        json: false,
+        file: "",
+        rest: [],
+    )
     mut i := 0
     while i < args.len()
         a := args[i]
