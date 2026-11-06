@@ -172,11 +172,11 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
         cur = ok
     if m == "crypto"
         crypto_checks(name, npos, vs)
-    ret := call(key, vs, sig.ret)
+    res := call(key, vs, sig.ret)
     # `std.crypto` results are `bytes`, which has a `str`'s layout.
     if m == "crypto" and sig.ret == Ty.Str
-        return Val(id: op("copy", [ret], Ty.Bytes), ty: Ty.Bytes)
-    Val(id: ret, ty: sig.ret)
+        return Val(id: op("copy", [res], Ty.Bytes), ty: Ty.Bytes)
+    Val(id: res, ty: sig.ret)
 
 ## A trap `RULE: why` unless `cond` holds.
 fn Lower.crypto_require(mut self, cond int, rule str, npos ast.Pos, why str)
@@ -186,19 +186,21 @@ fn Lower.crypto_require(mut self, cond int, rule str, npos ast.Pos, why str)
     trap_close(npos)
     cur = ok
 
+## `lo <= v <= hi` for the argument `v` of `crypto.name`, or a trap `rule: ...`.
+fn Lower.crypto_range(mut self, rule str, name str, npos ast.Pos, v int, lo int, hi int)
+    why := "`{name}` needs a value from {lo} to {hi}"
+    crypto_require(op("le", [konst(lo, Ty.Int), v], Ty.Bool), rule, npos, why)
+    crypto_require(op("le", [v, konst(hi, Ty.Int)], Ty.Bool), rule, npos, why)
+
 ## The length checks of `std.crypto` (std.crypto.2-4); `vs` are the lowered arguments.
 fn Lower.crypto_checks(mut self, name str, npos ast.Pos, vs List[int])
-    zero := konst(0, Ty.Int)
     if name == "random_bytes"
-        crypto_require(op("le", [zero, vs[0]], Ty.Bool), "std.crypto.2", npos, "`random_bytes` needs a length of 0 or more")
-        crypto_require(op("le", [vs[0], konst(1073741824, Ty.Int)], Ty.Bool), "std.crypto.2", npos, "`random_bytes` makes at most 1073741824 bytes")
+        crypto_range("std.crypto.2", name, npos, vs[0], 0, 1073741824)
     if name == "hkdf_sha256"
-        crypto_require(op("le", [zero, vs[3]], Ty.Bool), "std.crypto.3", npos, "`hkdf_sha256` needs a length of 0 or more")
-        crypto_require(op("le", [vs[3], konst(8160, Ty.Int)], Ty.Bool), "std.crypto.3", npos, "`hkdf_sha256` makes at most 8160 bytes (255 blocks)")
+        crypto_range("std.crypto.3", name, npos, vs[3], 0, 8160)
     if name == "pbkdf2_sha256"
-        crypto_require(op("le", [konst(1, Ty.Int), vs[2]], Ty.Bool), "std.crypto.4", npos, "`pbkdf2_sha256` needs 1 or more iterations")
-        crypto_require(op("le", [zero, vs[3]], Ty.Bool), "std.crypto.4", npos, "`pbkdf2_sha256` needs a length of 0 or more")
-        crypto_require(op("le", [vs[3], konst(1048576, Ty.Int)], Ty.Bool), "std.crypto.4", npos, "`pbkdf2_sha256` makes at most 1048576 bytes")
+        crypto_range("std.crypto.4", name, npos, vs[2], 1, 4611686018427387904)
+        crypto_range("std.crypto.4", name, npos, vs[3], 0, 1048576)
 
 ## `random.shuffle(mut xs)` (std.random.4) on any list: the runtime swaps
 ## elements of the list's element size.
