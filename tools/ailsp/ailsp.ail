@@ -498,11 +498,12 @@ fn Server.actions(self, params Json) Json
             rule := d.text("rule", "")
             mut preferred := true
             for f in fixes
+                fix_edits := [edit_of(e) for e in (f.arr("edits") else [])]
                 out.push(obj([
                     member("title", Json.Str(f.text("title", "Fix {rule}"))),
                     member("kind", Json.Str("quickfix")),
                     member("diagnostics", Json.Arr([lsp_diag(d)])),
-                    member("edit", workspace_edit(path, [edit_of(e) for e in (f.arr("edits") else [])])),
+                    member("edit", workspace_edit(path, fix_edits)),
                     member("isPreferred", Json.Bool(preferred)),
                 ]))
                 preferred = false
@@ -566,10 +567,7 @@ fn Server.prepare(self, params Json) Json
     w := word_at(cs, at.1)
     if name == "" or text_of(cs, w.0, w.1) != name
         return Json.Null
-    obj([
-        member("range", range_json(at.0, w.0, at.0, w.1)),
-        member("placeholder", Json.Str(name)),
-    ])
+    obj([member("range", range_json(at.0, w.0, at.0, w.1)), member("placeholder", Json.Str(name))])
 
 ## lsp.rename.1: every reference of `api --refs` is rewritten to the new name, in every file.
 fn Server.rename(self, id Json, params Json)
@@ -654,7 +652,7 @@ fn Server.names(mut self, path str, line int, keep int, dotted bool, prefix str)
                 out.push(entry(x.text("name", ""), 6, x.text("type", ""), "0"))
         for it in self.outline(path)
             kind := it.text("kind", "")
-            if kind == "fn" or kind == "struct" or kind == "enum" or kind == "trait" or kind == "const"
+            if ["fn", "struct", "enum", "trait", "const"].contains(kind)
                 out.push(entry(it.text("name", ""), item_kind(kind), it.text("signature", ""), "1"))
     mut kept := List[Json]()
     for x in out
@@ -694,6 +692,7 @@ fn Server.initialize(self, id Json)
         member("change", num(1)),
         member("save", Json.Bool(true)),
     ])
+    kinds := [Json.Str("quickfix"), Json.Str("source.fixAll.ail")]
     caps := obj([
         member("textDocumentSync", sync),
         member("hoverProvider", Json.Bool(true)),
@@ -702,9 +701,7 @@ fn Server.initialize(self, id Json)
         member("documentSymbolProvider", Json.Bool(true)),
         member("completionProvider", obj([member("triggerCharacters", Json.Arr([Json.Str(".")]))])),
         member("renameProvider", obj([member("prepareProvider", Json.Bool(true))])),
-        member("codeActionProvider", obj([
-            member("codeActionKinds", Json.Arr([Json.Str("quickfix"), Json.Str("source.fixAll.ail")])),
-        ])),
+        member("codeActionProvider", obj([member("codeActionKinds", Json.Arr(kinds))])),
     ])
     info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
     reply(id, obj([member("capabilities", caps), member("serverInfo", info)]))
@@ -753,7 +750,8 @@ fn Server.handle(mut self, req Json)
         _ => failure(id, -32601, "unknown method {method}")
 
 fn main() !
-    mut s := Server(bufs: Map[str, str](), down: false, ail: env.get("AIL") else "./ail", outlines: Map[str, Json]())
+    ail := env.get("AIL") else "./ail"
+    mut s := Server(bufs: Map[str, str](), down: false, ail: ail, outlines: Map[str, Json]())
     mut frames := Frames(carry: "")
     while true
         body := frames.next() else break
