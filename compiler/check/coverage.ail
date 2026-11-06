@@ -78,6 +78,7 @@ pub COVERED_RULES := [
     "expr.op.3",
     "ffi.call.1",
     "ffi.decl.3",
+    "ffi.export.2",
     "gen.bound.1",
     "gen.bound.3",
     "gen.decl.1",

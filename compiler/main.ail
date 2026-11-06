@@ -140,6 +140,8 @@ fn main() !
             check_cmd(args[1..])
         "pkg" =>
             io.exit(pkg.command(args[1..]))
+        "header" =>
+            io.exit(load.header_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "check-errors" =>

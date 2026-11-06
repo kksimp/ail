@@ -4,7 +4,7 @@ Chapter key: `ffi`
 
 > **Status:** Drafted (partial). Specified and implemented: `extern c fn`
 > declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926), the
-> type mapping, loading, and calls on Linux, macOS and Windows. Not yet specified: callbacks, exporting AIL functions to C,
+> type mapping, loading, and calls on Linux, macOS and Windows. Exports are specified (`ffi.export.1-3`); the library output is not built yet. Not yet specified: callbacks,
 > structs by value, variadic functions, and header search configuration.
 
 ## Declarations
@@ -41,6 +41,42 @@ extern c "libm" fn hypot(a float, b float) float
 extern c fn abs(x i32) i32
 extern c fn strlen(s *u8) int
 ```
+
+## Exports
+
+**ffi.export.1** — `pub export c fn name(params) Result` followed by a body
+declares an AIL function that C can call. `export c "symbol" fn` names the C
+symbol; without a string it is the AIL name. The declaration is at the top
+level and starts with `pub`; `export` with anything but `c`, or without `pub`,
+is error `ffi.export.1`. Inside AIL it is an ordinary function. *(ADR 0950)*
+
+**ffi.export.2** — An exported function has the signature of an `extern c fn`
+(`ffi.decl.3`): C-layout types only, no `mut` parameter, at most six
+integer-like and eight float parameters, and no type, `self` or type
+parameters. *(ADR 0950)*
+
+```ail error=ffi.export.2
+pub export c fn total(xs List[int]) int
+    xs.len()
+
+fn main()
+    print(total([1, 2]))
+```
+
+```ail tool=run,FILE expect=7 rules=ffi.export.1
+pub export c "ail_add" fn add(a i32, b i32) i32
+    a + b
+
+fn main()
+    print(add(3, 4))
+```
+
+**ffi.export.3** — `ail header FILE [-o OUT.h]` prints a C header of the
+exported functions in source order: `int` is `int64_t`, `float` is `double`,
+`bool` is `bool`, sized numbers are the `<stdint.h>` types, a pointer to a
+scalar is a pointer to its C type and any other pointer is `void *`. The
+program is checked first. Building the library itself (`ail build --lib`)
+is not yet specified. *(ADR 0950)*
 
 ## Calls
 
