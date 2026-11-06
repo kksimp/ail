@@ -295,6 +295,42 @@ fn main()
     app.run(mut q) else return
 ```
 
+```ail rules=std.app.21
+use std.app
+
+struct Where
+    path str
+    asking bool
+
+impl app.App for Where
+    fn update(mut self, ev app.Event)
+        if ev.kind == "press" and ev.id == "choose"
+            asking = true
+        if ev.kind == "picked"
+            path = ev.text
+            asking = false
+        if ev.kind == "pick_error"
+            asking = false
+
+    fn view(self) app.Node
+        app.column([app.label("scan {path}"), app.button("choose", "Choose folder")])
+
+    fn pick(self) app.Picker?
+        if asking
+            return app.Picker(id: "folder", prompt: "Folder to scan", folders: true, start: "")
+        none
+
+fn main()
+    mut w := Where(path: "", asking: false)
+    app.script(mut w, [app.press("choose")])
+    print(w.pick() != none)
+    mut done := app.event("picked")
+    done.id = "folder"
+    done.text = "/tmp"
+    app.script(mut w, [done])
+    print("{w.path} {w.pick() != none}")
+```
+
 ```ail rules=std.app.15,std.app.16,std.app.17,std.app.18,std.app.19
 use std.app
 
