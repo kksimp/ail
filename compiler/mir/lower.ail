@@ -929,6 +929,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
         enter_contracts(f, key)
     uniq_params(f)
     instr_call(f, sig.params, params)
+    race_enter()
     want := not ret.is_unit()
     if want
         tail_want = ret

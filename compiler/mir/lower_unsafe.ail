@@ -121,6 +121,7 @@ fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.P
 fn Lower.ptr_read(mut self, r Val, t Ty, volatile bool, name str, npos ast.Pos) Val
     ptr_check(r.id, t, volatile, name, npos)
     w := ptr_size(t)
+    race_access(r.id, w, false, volatile, npos)
     load := "pload{w * 8}"
     mut i := inst(-1, "prim", [r.id])
     i.name = load
@@ -141,6 +142,7 @@ fn Lower.ptr_write(mut self, r Val, t Ty, v Val, volatile bool, name str, npos a
         return unsupported(npos, "`.{name}()` of a `{v.ty.name()}` through a `{r.ty.name()}`")
     ptr_check(r.id, t, volatile, name, npos)
     w := ptr_size(t)
+    race_access(r.id, w, true, volatile, npos)
     mut bits := v.id
     if t == Ty.Float
         mut f := inst(-1, "prim", [v.id])
