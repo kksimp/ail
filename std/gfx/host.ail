@@ -34,7 +34,7 @@ fn make_surface(w int, h int) Surface ! GfxError
     dir := env.get("TMPDIR") else "/tmp"
     template := "{dir}/ail-gfx-XXXXXX"
     stride := w * 4
-    bytes := stride * h * 2
+    total := stride * h * 2
     unsafe
         t := mem.cstr(template)
         fd := mkstemp(t)
@@ -43,11 +43,11 @@ fn make_surface(w int, h int) Surface ! GfxError
             return GfxError(why: "cannot create the surface file in {dir}")
         path := mem.from_cstr(t)
         mem.free(t)
-        if ftruncate(fd, bytes) != 0
+        if ftruncate(fd, total) != 0
             close(fd)
             return GfxError(why: "cannot size the surface file")
         # PROT_READ | PROT_WRITE is 3, MAP_SHARED is 1.
-        base := mmap(mem.null(), bytes, 3, 1, fd, 0)
+        base := mmap(mem.null(), total, 3, 1, fd, 0)
         close(fd)
         if base.is_null()
             return GfxError(why: "cannot map the surface file")
@@ -121,7 +121,7 @@ fn present_line(buf int) str
 ## `Input`, and each `vsync` runs `update` and `draw` and presents.
 struct Loop[T gfx.Game]
     game T
-    title str
+    name str
     w int
     h int
     surf Surface?
@@ -154,7 +154,7 @@ impl app.App for Loop[T gfx.Game]
         app.canvas(CANVAS, 0.0, 0.0, [])
 
     fn title(self) str
-        title
+        name
 
     fn hover(self) bool
         true
@@ -181,7 +181,7 @@ fn step[T gfx.Game](mut l Loop[T], dt float)
 ## until the window closes (std.gfx.6). The file of the shared surface is
 ## removed when the host has mapped it.
 pub fn run[T gfx.Game](mut g T, title str, w int, h int) ! GfxError
-    mut l := Loop(game: g, title: title, w: w, h: h, surf: none, input: gfx.idle(), pending: [], out: [], failed: "", unlinked: false)
+    mut l := Loop(game: g, name: title, w: w, h: h, surf: none, input: gfx.idle(), pending: [], out: [], failed: "", unlinked: false)
     app.run(mut l) else err
         return GfxError(why: err.message)
     g = l.game

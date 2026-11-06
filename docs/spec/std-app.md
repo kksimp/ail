@@ -203,6 +203,31 @@ fn main()
     print(app.outline(p.view()))
 ```
 
+```ail rules=std.app.21
+use std.app
+
+struct Sender
+    queue List[str]
+
+impl app.App for Sender
+    fn update(mut self, ev app.Event)
+        queue.push("\{\"v\":1,\"t\":\"present\"}")
+
+    fn view(self) app.Node
+        app.label("sender")
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Sender(queue: [])
+    s.update(app.event("start"))
+    print(s.lines().len())
+    print(s.lines().len())
+```
+
 ```ail rules=std.app.20
 use std.app
 
