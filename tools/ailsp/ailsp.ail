@@ -1,8 +1,10 @@
 ## `ail lsp` in AIL (ADR 0966, lsp.*): the compiler's semantic API as a Language Server on stdio.
 ##   ail lsp
 ## It adds no analysis of its own. Each request runs the matching `ail` command (`check --json`,
-## `api --type`, `api --refs`, `api --outline`) and reshapes the JSON into LSP; the rule id of a
-## diagnostic is its LSP `code`, so `ail explain RULE` answers it (lsp.diag.1).
+## `api --type`, `api --refs`, `api --locals`, `api --outline`) and reshapes the JSON into LSP; the
+## rule id of a diagnostic is its LSP `code`, so `ail explain RULE` answers it (lsp.diag.1). The
+## fixes of `check --json` are the code actions (lsp.action.1-2), the references of `api --refs`
+## are rename (lsp.rename.1-2) and the names `api` knows are completion (lsp.complete.1-2).
 
 ## LSP SymbolKind of an outline kind (lsp.sym.1).
 fn symbol_kind(kind str) int
@@ -25,6 +27,11 @@ struct Server
     down bool
     ## The `ail` command.
     ail str
+    ## The last outline `api --outline` gave for each path: completion falls back on it while the
+    ## buffer does not check (lsp.complete.2).
+    outlines Map[str, Json]
+    ## `AIL_LSP_DEBUG` is set: each command, its status and its standard error go to standard error.
+    debug bool
 
 ## ---- JSON helpers
 
@@ -188,6 +195,9 @@ fn Server.run(self, args List[str]) proc.Output?
     r := proc.run(self.ail, args) else err
         io.eprint("ail lsp: can't run {self.ail}: {err.kind}")
         return none
+    if self.debug
+        line := args.join(" ")
+        io.eprint("ail lsp debug: {line} -> status {r.status}\n{r.err}")
     r
 
 ## A position query (`api --type|--refs FILE LINE COL`) as JSON, or none when it has no answer.
@@ -216,10 +226,10 @@ fn range_json(line int, col int, end_line int, end_col int) Json
         member("end", obj([member("line", num(end_line)), member("character", num(end_col))])),
     ])
 
-## lsp.diag.1: the diagnostics of one file, as `ail check --json` reports them.
-fn Server.diagnostics(self, path str) Json
+## The diagnostics of `ail check --json` that are in `path`.
+fn Server.raw_diags(self, path str) List[Json]
     work := self.work(path)
-    ran := self.run(["check", "--json", work]) else return Json.Arr([])
+    ran := self.run(["check", "--json", work]) else return []
     mut out := List[Json]()
     mine := base_name(path)
     for l in "{ran.out}\n{ran.err}".split("\n")
@@ -230,24 +240,41 @@ fn Server.diagnostics(self, path str) Json
             continue
         if base_name(d.text("file", "")) != mine
             continue
-        line := (d.int("line") else 1) - 1
-        col := (d.int("col") else 1) - 1
-        end_line := (d.int("end_line") else line + 1) - 1
-        end_col := (d.int("end_col") else col + 2) - 1
-        mut message := d.text("message", "")
-        help := d.text("help", "")
-        if help != ""
-            message = "{message}\nhelp: {help}"
-        out.push(obj([
-            member("range", range_json(line, col, end_line, end_col)),
-            member("severity", num(if d.text("severity", "error") == "warning" then 2 else 1)),
-            member("code", Json.Str(d.text("rule", ""))),
-            member("source", Json.Str("ail")),
-            member("message", Json.Str(message)),
-        ]))
-    Json.Arr(out)
+        out.push(d)
+    out
 
-fn Server.publish(self, path str)
+## The zero-based first and last line of a diagnostic.
+fn diag_lines(d Json)(int, int)
+    line := (d.int("line") else 1) - 1
+    (line, (d.int("end_line") else line + 1) - 1)
+
+fn diag_range(d Json) Json
+    line := (d.int("line") else 1) - 1
+    col := (d.int("col") else 1) - 1
+    end_line := (d.int("end_line") else line + 1) - 1
+    end_col := (d.int("end_col") else col + 2) - 1
+    range_json(line, col, end_line, end_col)
+
+## One diagnostic of `check --json` as an LSP Diagnostic.
+fn lsp_diag(d Json) Json
+    mut message := d.text("message", "")
+    help := d.text("help", "")
+    if help != ""
+        message = "{message}\nhelp: {help}"
+    obj([
+        member("range", diag_range(d)),
+        member("severity", num(if d.text("severity", "error") == "warning" then 2 else 1)),
+        member("code", Json.Str(d.text("rule", ""))),
+        member("source", Json.Str("ail")),
+        member("message", Json.Str(message)),
+    ])
+
+## lsp.diag.1: the diagnostics of one file, as `ail check --json` reports them.
+fn Server.diagnostics(self, path str) Json
+    Json.Arr([lsp_diag(d) for d in self.raw_diags(path)])
+
+fn Server.publish(mut self, path str)
+    self.refresh(path)
     notify("textDocument/publishDiagnostics", obj([
         member("uri", Json.Str(path_uri(path))),
         member("diagnostics", self.diagnostics(path)),
@@ -326,6 +353,450 @@ fn Server.symbols(self, params Json) Json
         return Json.Arr([])
     Json.Arr([symbol_json(it) for it in (doc.arr("items") else [])])
 
+## ---- text helpers
+
+fn is_ident(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+fn text_of(cs List[char], a int, b int) str
+    mut out := ""
+    mut i := a
+    while i < b
+        out = "{out}{cs[i]}"
+        i += 1
+    out
+
+## The text of an open document, else the saved file.
+fn Server.text(self, path str) str
+    if t := self.bufs.get(path)
+        return t
+    fs.read_text(path) else ""
+
+fn line_chars(text str, line int) List[char]
+    ls := text.split("\n")
+    if line < 0 or line >= ls.len()
+        return []
+    ls[line].chars()
+
+fn with_line(text str, line int, new str) str
+    mut ls := text.split("\n")
+    if line >= 0 and line < ls.len()
+        ls[line] = new
+    ls.join("\n")
+
+## The identifier around column `col` of a line: where it starts and ends.
+fn word_at(cs List[char], col int)(int, int)
+    mut a := col
+    while a > 0 and is_ident(cs[a - 1])
+        a -= 1
+    mut b := col
+    while b < cs.len() and is_ident(cs[b])
+        b += 1
+    (a, b)
+
+## Is `name` written at `at`, as a whole word?
+fn matches_at(cs List[char], at int, name str) bool
+    n := name.chars().len()
+    if at < 0 or at + n > cs.len()
+        return false
+    if text_of(cs, at, at + n) != name
+        return false
+    if at + n < cs.len() and is_ident(cs[at + n])
+        return false
+    at == 0 or not is_ident(cs[at - 1])
+
+fn valid_name(s str) bool
+    cs := s.chars()
+    if cs.len() == 0
+        return false
+    if cs[0].is_digit()
+        return false
+    for c in cs
+        if not is_ident(c)
+            return false
+    true
+
+## The name an `api` symbol id ends in: `fn:geo.origin` is `origin`, `local:x` is `x`.
+fn symbol_name(sym str) str
+    mut s := sym
+    if i := s.rfind(":")
+        s = s.slice(i + 1, s.len())
+    if i := s.rfind(".")
+        s = s.slice(i + 1, s.len())
+    s
+
+## The type name of a type text, without `?`, type arguments and module: `geo.P[int]?` is `P`.
+fn base_type(t str) str
+    mut s := t.trim()
+    while s.ends_with("?")
+        s = s.slice(0, s.len() - 1)
+    if i := s.find("[")
+        s = s.slice(0, i)
+    if i := s.rfind(".")
+        s = s.slice(i + 1, s.len())
+    s
+
+## ---- the outline cache
+
+## Ask `api --outline` again; keep the answer when the file checks.
+fn Server.refresh(mut self, path str)
+    ran := self.run(["api", "--outline", self.work(path)]) else return
+    if ran.status != 0
+        return
+    doc := parse_json(ran.out) else err
+        return
+    self.outlines[path] = Json.Arr(doc.arr("items") else [])
+
+## The declarations of the file: fresh when it checks, else the last good ones.
+fn Server.outline(mut self, path str) List[Json]
+    self.refresh(path)
+    j := self.outlines.get(path) else return []
+    j.as_arr() else []
+
+## ---- code actions (lsp.action.1-2)
+
+fn edit_of(e Json) Json
+    line := (e.int("line") else 1) - 1
+    col := (e.int("col") else 1) - 1
+    end_line := (e.int("end_line") else line + 1) - 1
+    end_col := (e.int("end_col") else col + 1) - 1
+    obj([
+        member("range", range_json(line, col, end_line, end_col)),
+        member("newText", Json.Str(e.text("text", ""))),
+    ])
+
+fn workspace_edit(path str, edits List[Json]) Json
+    obj([member("changes", obj([member(path_uri(path), Json.Arr(edits))]))])
+
+## Is `kind` one of the kinds the client asked for (none asked: all)?
+fn wants(only List[Json], kind str) bool
+    if only.len() == 0
+        return true
+    for k in only
+        want := k.as_str() else ""
+        if kind.starts_with(want)
+            return true
+    false
+
+fn span_key(line int, col int) int
+    line * 1048576 + col
+
+## lsp.action.1: each fix of a diagnostic at the range is a quick fix. lsp.action.2: the first fix
+## of every diagnostic whose edits touch none already taken is one `source.fixAll.ail` action.
+fn Server.actions(self, params Json) Json
+    path := doc_path(params)
+    rng := params.get("range") else obj([])
+    first := (rng.get("start") else obj([])).int("line") else 0
+    last := (rng.get("end") else obj([])).int("line") else first
+    ctx := params.get("context") else obj([])
+    only := ctx.arr("only") else []
+    mut out := List[Json]()
+    mut all := List[Json]()
+    mut taken := List[int]()
+    mut n_all := 0
+    for d in self.raw_diags(path)
+        fixes := d.arr("fixes") else []
+        if fixes.len() == 0
+            continue
+        span := diag_lines(d)
+        if wants(only, "quickfix") and span.0 <= last and span.1 >= first
+            rule := d.text("rule", "")
+            mut preferred := true
+            for f in fixes
+                fix_edits := [edit_of(e) for e in (f.arr("edits") else [])]
+                out.push(obj([
+                    member("title", Json.Str(f.text("title", "Fix {rule}"))),
+                    member("kind", Json.Str("quickfix")),
+                    member("diagnostics", Json.Arr([lsp_diag(d)])),
+                    member("edit", workspace_edit(path, fix_edits)),
+                    member("isPreferred", Json.Bool(preferred)),
+                ]))
+                preferred = false
+        if not wants(only, "source.fixAll")
+            continue
+        edits := fixes[0].arr("edits") else []
+        mut clash := false
+        for e in edits
+            s := span_key((e.int("line") else 1) - 1, (e.int("col") else 1) - 1)
+            t := span_key((e.int("end_line") else 1) - 1, (e.int("end_col") else 1) - 1)
+            mut k := 0
+            while k < taken.len()
+                if (s < taken[k + 1] and taken[k] < t) or s == taken[k]
+                    clash = true
+                k += 2
+        if clash
+            continue
+        for e in edits
+            all.push(edit_of(e))
+            taken.push(span_key((e.int("line") else 1) - 1, (e.int("col") else 1) - 1))
+            taken.push(span_key((e.int("end_line") else 1) - 1, (e.int("end_col") else 1) - 1))
+        n_all += 1
+    if n_all >= 2
+        out.push(obj([
+            member("title", Json.Str("Fix all auto-fixable problems ({n_all})")),
+            member("kind", Json.Str("source.fixAll.ail")),
+            member("edit", workspace_edit(path, all)),
+        ]))
+    Json.Arr(out)
+
+## ---- rename (lsp.rename.1-2)
+
+## The file of a reference: one under the scratch directory is the real file again.
+fn Server.real_file(self, path str, file str) str
+    if file.contains("/ailsp/")
+        return "{dir_name(path)}/{base_name(file)}"
+    file
+
+## Where `name` is written in the reference that starts at `col`: there, or after a module
+## qualifier (`geo.origin` is referenced at the `g`; api.refs.2).
+fn name_start(cs List[char], col int, name str) int?
+    if matches_at(cs, col, name)
+        return col
+    mut end := col
+    while end < cs.len() and (is_ident(cs[end]) or cs[end] == '.')
+        end += 1
+    mut i := col
+    while i < end
+        if cs[i] == '.' and matches_at(cs, i + 1, name)
+            return i + 1
+        i += 1
+    none
+
+## lsp.rename.2: the range and name under the cursor when it is a declared name that can change.
+fn Server.prepare(self, params Json) Json
+    path := doc_path(params)
+    at := pos_of(params)
+    ans := self.query("--refs", path, at.0, at.1) else return Json.Null
+    name := symbol_name(ans.text("symbol", ""))
+    cs := line_chars(self.text(path), at.0)
+    w := word_at(cs, at.1)
+    if name == "" or text_of(cs, w.0, w.1) != name
+        return Json.Null
+    obj([member("range", range_json(at.0, w.0, at.0, w.1)), member("placeholder", Json.Str(name))])
+
+## lsp.rename.1: every reference of `api --refs` is rewritten to the new name, in every file.
+fn Server.rename(self, id Json, params Json)
+    path := doc_path(params)
+    at := pos_of(params)
+    new := params.text("newName", "")
+    if not valid_name(new)
+        failure(id, -32602, "`{new}` is not a name (lsp.rename.2)")
+        return
+    ans := self.query("--refs", path, at.0, at.1) else
+        failure(id, -32602, "there is no name to rename here (lsp.rename.2)")
+        return
+    name := symbol_name(ans.text("symbol", ""))
+    mut declared := false
+    for r in (ans.arr("refs") else [])
+        if r.flag("def", false)
+            declared = true
+    if name == "" or not declared
+        failure(id, -32602, "this name is not declared in the program (lsp.rename.2)")
+        return
+    mut seen := Map[str, bool]()
+    mut by := Map[str, List[Json]]()
+    for r in (ans.arr("refs") else [])
+        file := self.real_file(path, r.text("file", path))
+        line := (r.int("line") else 1) - 1
+        cs := line_chars(self.text(file), line)
+        start := name_start(cs, (r.int("col") else 1) - 1, name) else continue
+        key := "{file}:{line}:{start}"
+        if seen.contains(key)
+            continue
+        seen[key] = true
+        uri := path_uri(file)
+        mut edits := by.get(uri) else []
+        edits.push(obj([
+            member("range", range_json(line, start, line, start + name.chars().len())),
+            member("newText", Json.Str(new)),
+        ]))
+        by[uri] = edits
+    mut files := List[JsonMember]()
+    for uri in by.keys()
+        files.push(member(uri, Json.Arr(by[uri])))
+    reply(id, obj([member("changes", obj(files))]))
+
+## ---- completion (lsp.complete.1-2)
+
+fn entry(label str, kind int, detail str, sort str) Json
+    obj([
+        member("label", Json.Str(label)),
+        member("kind", num(kind)),
+        member("detail", Json.Str(detail)),
+        member("sortText", Json.Str("{sort}{label}")),
+    ])
+
+## LSP CompletionItemKind of an outline kind.
+fn item_kind(kind str) int
+    match kind
+        "fn" => 3
+        "struct" => 22
+        "enum" => 13
+        "trait" => 8
+        "const" => 21
+        _ => 6
+
+fn by_prefix(items List[Json], prefix str) List[Json]
+    mut kept := List[Json]()
+    for x in items
+        if prefix == "" or x.text("label", "").starts_with(prefix)
+            kept.push(x)
+    kept
+
+## The fields and methods of the type `base`, from the outline of the file.
+fn Server.members(mut self, path str, base str, prefix str) List[Json]
+    mut out := List[Json]()
+    for it in self.outline(path)
+        if it.text("name", "") != base
+            continue
+        for x in (it.arr("fields") else [])
+            out.push(entry(x.text("name", ""), 5, x.text("type", ""), "0"))
+        for x in (it.arr("methods") else [])
+            out.push(entry(x.text("name", ""), 2, x.text("signature", ""), "1"))
+    by_prefix(out, prefix)
+
+## The names for the cursor, in a buffer already made to check: the members of the value before a
+## `.`, else the locals in scope and the declarations of the file. Empty when `api` refuses it.
+fn Server.names(mut self, path str, line int, keep int, dotted bool, prefix str) List[Json]
+    if dotted
+        ans := self.query("--type", path, line, keep) else return []
+        return self.members(path, base_type(ans.text("type", "")), prefix)
+    mut out := List[Json]()
+    loc := self.query("--locals", path, line, keep)
+    if l := loc
+        for x in (l.arr("locals") else [])
+            out.push(entry(x.text("name", ""), 6, x.text("type", ""), "0"))
+    for it in self.outline(path)
+        kind := it.text("kind", "")
+        if ["fn", "struct", "enum", "trait", "const"].contains(kind)
+            out.push(entry(it.text("name", ""), item_kind(kind), it.text("signature", ""), "1"))
+    by_prefix(out, prefix)
+
+## ---- guesses from the text, when no copy of the buffer checks (lsp.complete.2)
+
+fn leading_ident(s str) str
+    mut out := ""
+    for c in s.chars()
+        if not is_ident(c)
+            break
+        out = "{out}{c}"
+    out
+
+## The parameters written in a `fn` line, each as `name Type`.
+fn fn_params(t str) List[str]
+    open := t.find("(") else return []
+    close := t.rfind(")") else return []
+    if close <= open
+        return []
+    inner := t.slice(open + 1, close)
+    [p.trim() for p in inner.split(",") if p.trim() != ""]
+
+fn is_fn_line(t str) bool
+    t.starts_with("fn ") or t.starts_with("pub fn ")
+
+## The type of `name` as the lines above `line` write it: a parameter `name Type`, `self` of a
+## method `fn Type.m`, or a binding `name := Type(...)`. Empty when it can't tell.
+fn guess_type(lines List[str], line int, name str) str
+    mut i := if line >= lines.len() then lines.len() - 1 else line
+    while i >= 0
+        t := lines[i].trim()
+        if is_fn_line(t)
+            head := t.strip_prefix("pub ") else t
+            if name == "self"
+                rest := head.slice(3, head.len())
+                d := rest.find(".") else return ""
+                return leading_ident(rest.slice(0, d))
+            for p in fn_params(t)
+                ws := p.words()
+                if ws.len() >= 2 and ws[0] == name
+                    return base_type(ws[1])
+            return ""
+        bind := t.strip_prefix("mut ") else t
+        if bind.starts_with("{name} := ")
+            rhs := bind.slice(name.chars().len() + 4, bind.len())
+            id := leading_ident(rhs)
+            c := id.chars()
+            if c.len() > 0 and c[0].is_alpha() and c[0] == c[0].to_upper()
+                return id
+            return ""
+        i -= 1
+    ""
+
+## The names bound above `line` in its function: its parameters, `name :=` and `for name`.
+fn guess_locals(lines List[str], line int) List[str]
+    mut out := List[str]()
+    mut i := if line >= lines.len() then lines.len() - 1 else line
+    while i >= 0
+        t := lines[i].trim()
+        if is_fn_line(t)
+            for p in fn_params(t)
+                n := leading_ident(p)
+                if n != "" and not out.contains(n)
+                    out.push(n)
+            break
+        bind := t.strip_prefix("mut ") else t
+        mut name := ""
+        if bind.starts_with("for ")
+            name = leading_ident(bind.slice(4, bind.len()))
+        else
+            n := leading_ident(bind)
+            if n != "" and bind.slice(n.chars().len(), bind.len()).starts_with(" :=")
+                name = n
+        if name != "" and not out.contains(name)
+            out.push(name)
+        i -= 1
+    out
+
+## lsp.complete.1: names for the cursor from `api`. lsp.complete.2: a buffer being typed rarely
+## checks, so the word at the cursor is taken out first (a `.` and what follows it, or the word
+## replaced by `0`); when the buffer still doesn't check, the last good outline answers.
+fn Server.completion(mut self, params Json) Json
+    path := doc_path(params)
+    at := pos_of(params)
+    original := self.text(path)
+    cs := line_chars(original, at.0)
+    col := if at.1 > cs.len() then cs.len() else at.1
+    w := word_at(cs, col)
+    prefix := text_of(cs, w.0, col)
+    dotted := w.0 > 0 and cs[w.0 - 1] == '.'
+    mut ind := 0
+    while ind < cs.len() and (cs[ind] == ' ' or cs[ind] == '\t')
+        ind += 1
+    pad := text_of(cs, 0, ind)
+    mut fixed := pad
+    mut keep := w.0
+    mut recv := ""
+    if dotted
+        mut j := w.0 - 1
+        while j > 0 and (is_ident(cs[j - 1]) or cs[j - 1] == '.')
+            j -= 1
+        recv = text_of(cs, j, w.0 - 1)
+        if recv == ""
+            return obj([member("isIncomplete", Json.Bool(false)), member("items", Json.Arr([]))])
+        fixed = "{pad}ail_probe := {recv}"
+        keep = fixed.chars().len()
+    was_open := self.bufs.contains(path)
+    self.bufs[path] = with_line(original, at.0, fixed)
+    mut names := self.names(path, at.0, keep, dotted, prefix)
+    if was_open
+        self.bufs[path] = original
+    else
+        self.bufs.remove(path)
+    lines := original.split("\n")
+    if dotted
+        if names.len() == 0
+            names = self.members(path, guess_type(lines, at.0, recv), prefix)
+    else
+        mut have := List[str]()
+        for x in names
+            have.push(x.text("label", ""))
+        mut guessed := List[Json]()
+        for n in guess_locals(lines, at.0)
+            if not have.contains(n)
+                guessed.push(entry(n, 6, "", "0"))
+        names.extend(by_prefix(guessed, prefix))
+    obj([member("isIncomplete", Json.Bool(false)), member("items", Json.Arr(names))])
+
 ## ---- requests
 
 fn Server.initialize(self, id Json)
@@ -334,12 +805,16 @@ fn Server.initialize(self, id Json)
         member("change", num(1)),
         member("save", Json.Bool(true)),
     ])
+    kinds := [Json.Str("quickfix"), Json.Str("source.fixAll.ail")]
     caps := obj([
         member("textDocumentSync", sync),
         member("hoverProvider", Json.Bool(true)),
         member("definitionProvider", Json.Bool(true)),
         member("referencesProvider", Json.Bool(true)),
         member("documentSymbolProvider", Json.Bool(true)),
+        member("completionProvider", obj([member("triggerCharacters", Json.Arr([Json.Str(".")]))])),
+        member("renameProvider", obj([member("prepareProvider", Json.Bool(true))])),
+        member("codeActionProvider", obj([member("codeActionKinds", Json.Arr(kinds))])),
     ])
     info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
     reply(id, obj([member("capabilities", caps), member("serverInfo", info)]))
@@ -381,10 +856,22 @@ fn Server.handle(mut self, req Json)
         "textDocument/definition" => reply(id, self.refs(params, true))
         "textDocument/references" => reply(id, self.refs(params, false))
         "textDocument/documentSymbol" => reply(id, self.symbols(params))
+        "textDocument/completion" => reply(id, self.completion(params))
+        "textDocument/prepareRename" => reply(id, self.prepare(params))
+        "textDocument/rename" => self.rename(id, params)
+        "textDocument/codeAction" => reply(id, self.actions(params))
         _ => failure(id, -32601, "unknown method {method}")
 
 fn main() !
-    mut s := Server(bufs: Map[str, str](), down: false, ail: env.get("AIL") else "./ail")
+    ail := env.get("AIL") else "./ail"
+    debug := env.get("AIL_LSP_DEBUG") != none
+    mut s := Server(
+        bufs: Map[str, str](),
+        down: false,
+        ail: ail,
+        outlines: Map[str, Json](),
+        debug: debug,
+    )
     mut frames := Frames(carry: "")
     while true
         body := frames.next() else break

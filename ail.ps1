@@ -167,7 +167,7 @@ $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'task', 'mcp'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'task', 'mcp', 'leak'
 $route = (
     $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -246,6 +246,31 @@ if ($route) {
                 if ("$a" -eq '--native') { Fail '`ail test --native` is retired: `ail test` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)' }
             }
             $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
+        'leak' {
+            # ADR 0969: build FILE, run it with AIL_LEAK set (san.leak.3); the exit status is the program's.
+            $json = $false; $all = $false; $ops = @($rest)
+            while ($ops.Count -gt 0 -and ("$($ops[0])" -in '--json', '--all')) {
+                if ("$($ops[0])" -eq '--json') { $json = $true } else { $all = $true }
+                $ops = @($ops | Select-Object -Skip 1)
+            }
+            if ($ops.Count -lt 1) { Fail 'usage: ail leak [--json] [--all] FILE [ARGS...]' }
+            $mode = if ($all -and $json) { 'all,json' } elseif ($json) { 'json' } elseif ($all) { 'all' } else { '1' }
+            $leakExe = Join-Path ([IO.Path]::GetTempPath()) ("ail-leak-" + [Guid]::NewGuid().ToString('N') + '.exe')
+            & $native check-program $ops[0]
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & $native build $ops[0] -o (Fwd $leakExe)
+            if ($LASTEXITCODE -ne 0) { exit 2 }
+            $env:AIL_LEAK = $mode
+            # The report is on standard error: under 'Stop' PowerShell turns that into a NativeCommandError and exits 1.
+            $prevPref = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            & $leakExe @($ops | Select-Object -Skip 1)
+            $leakRc = $LASTEXITCODE
+            $ErrorActionPreference = $prevPref
+            Remove-Item Env:AIL_LEAK -ErrorAction SilentlyContinue
+            Remove-Item -Force $leakExe -ErrorAction SilentlyContinue
+            exit $leakRc
+        }
         'build' {
             # The native CLI's build doesn't check: check the file (the first operand) first.
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1

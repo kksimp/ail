@@ -1,0 +1,26 @@
+## std.crypto.1-4: constant-time compare, system random bytes, HKDF-SHA-256 (RFC 5869
+## cases 1 and 3) and PBKDF2-HMAC-SHA-256 (the RFC 7914 / widely published vectors).
+use std.crypto
+
+fn hex(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn main()
+    print(crypto.ct_eq(b"abc", b"abc"))
+    print(crypto.ct_eq(b"abc", b"abd"))
+    print(crypto.ct_eq(b"abc", b"ab"))
+    print(crypto.ct_eq(b"", b""))
+    r := crypto.random_bytes(32)
+    print(r.len())
+    print(crypto.ct_eq(r, crypto.random_bytes(32)))
+    print(crypto.random_bytes(0).len())
+    ikm := hex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")
+    salt := hex("000102030405060708090a0b0c")
+    info := hex("f0f1f2f3f4f5f6f7f8f9")
+    print(crypto.hkdf_sha256(ikm, salt, info, 42).hex())
+    print(crypto.hkdf_sha256(ikm, b"", b"", 42).hex())
+    print(crypto.hkdf_sha256(ikm, salt, info, 0).len())
+    print(crypto.pbkdf2_sha256(b"password", b"salt", 1, 32).hex())
+    print(crypto.pbkdf2_sha256(b"password", b"salt", 2, 32).hex())
+    print(crypto.pbkdf2_sha256(b"password", b"salt", 4096, 32).hex())
+    print(crypto.pbkdf2_sha256(b"passwordPASSWORDpassword", b"saltSALTsaltSALTsaltSALTsaltSALTsalt", 4096, 40).hex())

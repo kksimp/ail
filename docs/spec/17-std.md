@@ -579,6 +579,41 @@ fn main() !
     print(compress.gunzip(z)?.to_str() else "binary")
 ```
 
+## Cryptography: `std.crypto`
+
+**std.crypto.1** — `ct_eq(a bytes, b bytes) bool` is true when the two byte
+strings are equal. Its running time depends on the lengths only, never on where
+the bytes differ, so a program compares MACs, tags and password hashes with it
+and never with `==`. It has no effects. *(ADR 0959)*
+
+**std.crypto.2** — `random_bytes(n int) bytes` returns `n` bytes (0 to
+1073741824) from the operating system's generator (`/dev/urandom`, or
+ProcessPrng on Windows). It never uses the `std.random` generator, so `seed`
+and `--seed` do not affect it. When the system has no source it stops the
+program with a trap, never falling back to a weaker one. An `n` outside the
+range traps. It has the effect `random`. *(ADR 0959)*
+
+**std.crypto.3** — `hkdf_sha256(ikm bytes, salt bytes, info bytes, len int)
+bytes` is HKDF (RFC 5869) with HMAC-SHA-256: `len` bytes, 0 to 8160. An empty
+`salt` stands for 32 zero bytes. A `len` outside the range traps. It has no
+effects. *(ADR 0959)*
+
+**std.crypto.4** — `pbkdf2_sha256(password bytes, salt bytes, iterations int,
+len int) bytes` is PBKDF2 (RFC 8018) with HMAC-SHA-256. `iterations` is at
+least 1 and `len` is 0 to 1048576, or it traps. It has no effects, and a call
+with a large `iterations` is slow by design. *(ADR 0959)*
+
+```ail rules=std.crypto.1,std.crypto.2,std.crypto.3,std.crypto.4
+use std.crypto
+
+fn main()
+    print(crypto.ct_eq(b"abc", b"abc"))                         # true
+    print(crypto.random_bytes(16).len())                        # 16
+    print(crypto.hkdf_sha256(b"key", b"salt", b"info", 8).len())   # 8
+    print(crypto.pbkdf2_sha256(b"password", b"salt", 1, 32).hex())
+    # 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
+```
+
 ## Standard input and output: `std.io`
 
 **std.io.1** — `read_line() str?` reads one line from standard input,
