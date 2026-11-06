@@ -261,8 +261,12 @@ if ($route) {
             & $native build $ops[0] -o (Fwd $leakExe)
             if ($LASTEXITCODE -ne 0) { exit 2 }
             $env:AIL_LEAK = $mode
+            # The report is on standard error: under 'Stop' PowerShell turns that into a NativeCommandError and exits 1.
+            $prevPref = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
             & $leakExe @($ops | Select-Object -Skip 1)
             $leakRc = $LASTEXITCODE
+            $ErrorActionPreference = $prevPref
             Remove-Item Env:AIL_LEAK -ErrorAction SilentlyContinue
             Remove-Item -Force $leakExe -ErrorAction SilentlyContinue
             exit $leakRc
