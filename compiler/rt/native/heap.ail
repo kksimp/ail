@@ -72,6 +72,8 @@ KIND_ATOMIC := 11
 ## memory until touched. A negative result is the error.
 fn heap_reserve(n int) int
     t := target()
+    if t == 4
+        return none_mmap(n)
     # Windows has no overcommit: MEM_COMMIT | MEM_RESERVE counts against the
     # commit limit, and a refusal (0) is the error the size loop halves on
     # (ADR 0608).

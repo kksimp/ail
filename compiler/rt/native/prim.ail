@@ -71,8 +71,19 @@ fn gc_regs(buf int) int
 fn globals_end() int
     todo
 
-## The target: 0 Linux x86-64, 1 Linux ARM64, 2 macOS ARM64.
+## The target: 0 Linux x86-64, 1 Linux ARM64, 2 macOS ARM64, 3 Windows,
+## 4 freestanding x86-64 (ADR 0953).
 fn target() int
+    todo
+
+## Freestanding targets only (ADR 0953): byte port I/O (x86-64) and halt.
+fn port_out8(port int, v int)
+    todo
+
+fn port_in8(port int) int
+    todo
+
+fn halt()
     todo
 
 ## The address of the call table (`trace.tab`, trace.frame.1).

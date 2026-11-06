@@ -199,7 +199,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows (experimental, unverified)] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-none|x86_64-windows|aarch64-windows (experimental, unverified)] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
@@ -497,6 +497,8 @@ fn executable_list(m mir.Module, path str, target str) List[u8]
     match target
         "x86_64-linux" => obj.elf(x64.generate(m), obj.X86_64)
         "aarch64-linux" => obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)
+        # Freestanding (ADR 0953): the arena matches NONE_ARENA in rt/native/none.ail.
+        "x86_64-none" => obj.elf_none(x64.generate_none(m), obj.X86_64, 268435456)
         "x86_64-windows" => obj.pe_image(x64.generate_windows(m))
         "aarch64-windows" => obj.pe_image_for(a64.generate(m, a64.WINDOWS), obj.PE_ARM64)
         "aarch64-macos" =>

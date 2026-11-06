@@ -2,7 +2,7 @@
 # Boot an AIL kernel image under QEMU and summarise its JSON-lines trace.
 # Usage: tools/kernel/run.sh IMAGE.iso [TIMEOUT_S]   (runs on Kaleb's machines, not in cloud containers)
 # The kernel prints one JSON object per line on COM1 and exits through the
-# isa-debug-exit device: code 33 (0x10 << 1 | 1) means success.
+# isa-debug-exit device: the exit status is (code << 1) | 1, so success (code 0) is 1.
 set -u
 img=${1:?usage: run.sh IMAGE.iso [TIMEOUT_S]}
 secs=${2:-60}
@@ -24,5 +24,5 @@ gcs = [e for e in ev if e.get("ev") == "gc"]
 print(json.dumps({"ev": "run", "qemu_rc": int(sys.argv[2]), "accel": sys.argv[3],
                   "gc_events": len(gcs), "done": bool(done),
                   "panics": done[-1].get("panics") if done else None}))
-sys.exit(0 if done and done[-1].get("panics") == 0 and sys.argv[2] == "33" else 1)
+sys.exit(0 if done and done[-1].get("panics") == 0 and sys.argv[2] == "1" else 1)
 PY

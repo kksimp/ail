@@ -50,6 +50,9 @@ MAXW := 64
 
 fn sys_write(fd int, p int, n int)
     t := target()
+    if t == 4
+        none_write(p, n)
+        return
     if t == 3
         # Windows output (ADR 0608): `WriteFile` (win.ail) on the standard handle until every byte is written.
         # A failed write ends the output, as on the other targets.
@@ -75,6 +78,9 @@ fn sys_exit(status int)
     instr_dump()
     code := race_exit(status)
     t := target()
+    if t == 4
+        none_exit(code)
+        return
     if t == 3
         import_call("ExitProcess", code, 0, 0, 0)
         return
@@ -83,6 +89,8 @@ fn sys_exit(status int)
 
 fn sys_mmap(n int) int
     t := target()
+    if t == 4
+        return none_mmap(n)
     # MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE (ADR 0608).
     if t == 3
         p := import_call("VirtualAlloc", 0, n, 12288, 4)
@@ -94,6 +102,8 @@ fn sys_mmap(n int) int
 ## A thread-stack region: `n` bytes that need no commit up front.
 fn sys_mmap_lazy(n int) int
     t := target()
+    if t == 4
+        return none_mmap(n)
     k := if t == 0 then 9 else if t == 1 then 222 else 197
     flags := if t == 2 then 4098 else 16418
     syscall(k, 0, n, 3, flags, -1, 0)
@@ -231,6 +241,8 @@ fn out_unlock()
 
 ## Called by the entry with the process's argument count and vector.
 fn init(argc int, argv int)
+    if target() == 4
+        none_init()
     store64(global(ARGC), argc)
     store64(global(ARGV), argv)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
@@ -241,14 +253,18 @@ fn init(argc int, argv int)
         win_args_init()
     # After `win_args_init`: on Windows that builds the environment, so the
     # settings (`AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB`, `AIL_GC_STATS`, `AIL_GC_VERIFY`) are not seen before it.
-    limits_init()
-    # After the Windows environment is built, or `AIL_LEAK` is not seen there (san.leak.3).
-    leak := os_env_get("AIL_LEAK")
-    if leak != ""
-        leak_setup(leak)
+    # No environment on a freestanding target (ADR 0953).
+    if target() != 4
+        limits_init()
+        # After the Windows environment is built, or `AIL_LEAK` is not seen there (san.leak.3).
+        leak := os_env_get("AIL_LEAK")
+        if leak != ""
+            leak_setup(leak)
     # The argument vector sits at the top of the main stack. Windows
     # (target 3) has no argument vector there: the thread's own bounds say how far the stack goes.
-    if target() != 3
+    if target() == 4
+        store64(global(STACK_LIMIT), argv - NONE_STACK_USE)
+    elif target() != 3
         store64(global(STACK_LIMIT), argv - stack_use())
     else
         p := alloc(16, KIND_ATOMIC)

@@ -55,6 +55,8 @@ struct Gen
     a Asm
     ## The Windows target (ADR 0608): `target()` is 3.
     win bool
+    ## The freestanding target (ADR 0953): `target()` is 4.
+    none bool
     ## What the function needs from the image and the module, without a copy
     ## of either per function: the sites (shared), the globals' size, and the
     ## requests `gen_func` replays on the image afterwards, in order.
@@ -92,6 +94,15 @@ struct Gen
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
+    generate_for(m, false)
+
+## The freestanding target `x86_64-none` (ADR 0953): the bootloader enters
+## `_start` in 64-bit mode with a valid stack, so there is no `argc`/`argv`;
+## the entry stack pointer is passed as the stack top.
+pub fn generate_none(m mir.Module) codegen.Image
+    generate_for(m, true)
+
+fn generate_for(m mir.Module, none bool) codegen.Image
     mut img := codegen.new_image()
     img.globals = m.globals_used()
     for i in 0..m.strs.len()
@@ -101,8 +112,12 @@ pub fn generate(m mir.Module) codegen.Image
     # _start: pass argc and argv to `rt.init`, align the stack, run `main`,
     # exit 0.
     a.alu_rr("xor", RBP, RBP)
-    a.mov_rm(RDI, at(RSP, 0))
-    a.lea(RSI, at(RSP, 8))
+    if none
+        a.mov_ri(RDI, 0)
+        a.mov_rr(RSI, RSP)
+    else
+        a.mov_rm(RDI, at(RSP, 0))
+        a.lea(RSI, at(RSP, 8))
     a.alu_ri("and", RSP, -16)
     a.call_sym("rt.init")
     a.call_sym("main")
@@ -116,12 +131,12 @@ pub fn generate(m mir.Module) codegen.Image
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
         else
-            gen_func(mut img, m, sites, f, false)
+            gen_func(mut img, m, sites, f, false, none)
     codegen.add_call_table(mut img, m)
     img
 
 ## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
-fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, win bool)
+fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, win bool, none bool)
     f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
@@ -149,6 +164,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     mut g := Gen(
         a: new_asm(),
         win: win,
+        none: none,
         sites: sites,
         nglobals: img.globals,
         calls: [],
@@ -1383,6 +1399,16 @@ fn Gen.prim(mut self, i mir.Inst)
                     a.mov32_mr(mem, v)
         "pfence" | "pfence_io" =>
             a.mfence()
+        "port_out8" =>
+            parallel([move_of(RDX, i.arg(0)), move_of(RAX, i.arg(1))])
+            a.out_dx_al()
+        "port_in8" =>
+            parallel([move_of(RDX, i.arg(0))])
+            a.mov_ri(RAX, 0)
+            a.in_al_dx()
+            put_gpr(i.dst, RAX)
+        "halt" =>
+            a.hlt()
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
             parallel([move_of(regs[k], i.arg(k)) for k in 0..i.argc()])
@@ -1474,7 +1500,7 @@ fn Gen.prim(mut self, i mir.Inst)
             put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)
-            a.mov_ri(d, if win then 3 else 0)
+            a.mov_ri(d, if none then 4 else if win then 3 else 0)
             put_gpr(i.dst, d)
         "code_tab" =>
             d := out_gpr(i.dst, S1)

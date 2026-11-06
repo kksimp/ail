@@ -86,7 +86,7 @@ pub fn generate_windows(m mir.Module) codegen.Image
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
         else
-            gen_func(mut img, m, sites, f, true)
+            gen_func(mut img, m, sites, f, true, false)
     codegen.add_call_table(mut img, m)
     img
 

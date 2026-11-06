@@ -18,20 +18,33 @@ pub AARCH64 := 183
 pub fn elf(img codegen.Image, machine int) List[u8]
     if img.imports.len() > 0
         return elf_dynamic(img, machine)
+    elf_at(img, machine, BASE, 0)
+
+## The freestanding image (ADR 0953): linked in the higher half, where Limine
+## loads a kernel, with a static arena of `arena` bytes after the globals.
+pub fn elf_none(img codegen.Image, machine int, arena int) List[u8]
+    elf_at(img, machine, NONE_BASE, arena)
+
+## The base of the higher half (0xffffffff80000000 as a signed number).
+NONE_BASE := -2147483648
+
+fn elf_at(img codegen.Image, machine int, base int, arena int) List[u8]
     code_off := EHDR + 2 * PHDR
     data_off := align_up(code_off + img.code.len(), 16)
     size := data_off + img.data.len()
-    bss := align_up(BASE + size, PAGE)
-    code := link(img, BASE + code_off, BASE + data_off, bss)
+    # `base` is page aligned, so align the offset: a negative base would
+    # round the wrong way in `align_up`.
+    bss := base + align_up(size, PAGE)
+    code := link(img, base + code_off, base + data_off, bss)
     mut out := List[u8]()
-    header(mut out, machine, BASE + code_off + img.entry)
-    segment(mut out, 5, 0, BASE, size, size)
-    segment(mut out, 6, 0, bss, 0, 8 * img.globals)
+    header(mut out, machine, base + code_off + img.entry)
+    segment(mut out, 5, 0, base, size, size)
+    segment(mut out, 6, 0, bss, 0, 8 * img.globals + arena)
     out.extend(code)
     while out.len() < data_off
         out.push(0.to_u8())
     out.extend(img.data)
-    symbols(mut out, img, BASE + code_off, code_off)
+    symbols(mut out, img, base + code_off, code_off)
     out
 
 ## `.text`, `.symtab`, `.strtab` and `.shstrtab`, then the section headers,

@@ -217,6 +217,9 @@ PRIMS := {
     "fn_addr": "int",
     "gc_regs": "int",
     "globals_end": "int",
+    "port_out8": "unit",
+    "port_in8": "int",
+    "halt": "unit",
 }
 
 ## Lower a program and, when given, the runtime; `Problems` lists what is
