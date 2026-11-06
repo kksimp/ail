@@ -37,7 +37,13 @@ never reach the callee's bounds checks.
    below a copied body lists every source frame (trace.frame.2).
 4. **Dead functions.** A candidate that nothing calls or names after all
    passes is dropped from the module.
-5. Off under `AIL_INSTRUMENT` and with `AIL_OPT_OFF=wide` (or `inline`).
+5. **Runtime functions take leaves only.** `rt.dispatch` calls each
+   `spawn` site's `task.K` once, so without this the spawned function would
+   be copied into it; the passes after inlining leave runtime functions
+   alone, so a copied call there missed the result object `sret_convert`
+   passes (native.stack.2) and wrote through a stray pointer
+   (`tests/cases/std_app_inbox.ail` crashed; `tests/native/run/inline_wide_task.ail`).
+6. Off under `AIL_INSTRUMENT` and with `AIL_OPT_OFF=wide` (or `inline`).
 
 ## Measured, first run (ail-linux, 870d0571 against main d40e5092)
 

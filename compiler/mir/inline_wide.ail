@@ -98,16 +98,23 @@ fn expand_wide(
 ) int
     mut budget := INLINE_BUDGET
     mut room := CALLER_GROWTH
+    # A runtime function (`rt.dispatch`, which calls each `spawn` site's
+    # `task.K`) takes leaves only: later passes leave runtime functions as
+    # they are, so a copied call there would miss the result object
+    # `sret_convert` gives its callee (native.stack.2), and crash.
+    mut take := wide
+    if f.name.starts_with("rt.")
+        take = Wide(sizes: Map[str, int](), single: Set[str]())
     mut changed := true
     while changed and budget > 0
         changed = false
         for b in 0..f.blocks.len()
-            at := first_wide_call(f.blocks[b], leaves, wide, f.name, room, sites)
+            at := first_wide_call(f.blocks[b], leaves, take, f.name, room, sites)
             if at >= 0
                 name := f.blocks[b].insts[at].name
                 inline_call(mut f, b, at, bodies[name], mut sites)
-                if n := wide.sizes.get(name)
-                    if not wide.single.contains(name)
+                if n := take.sizes.get(name)
+                    if not take.single.contains(name)
                         room -= n
                 budget -= 1
                 changed = true

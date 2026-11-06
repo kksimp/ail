@@ -1,0 +1,24 @@
+# native.inline.1: a spawned function called once goes inline into its task
+# function but not into the runtime's `rt.dispatch`, so its call of a
+# function that builds its result in the caller's object (native.stack.2)
+# still passes that object (ADR 0940).
+struct P
+    x int
+    y int
+
+fn make(n int) P
+    mut s := 0
+    for i in 0..n
+        s += i
+    print("made {n}")
+    P(x: n, y: s)
+
+fn post(ch Channel[P])
+    ch.send(make(4))
+
+fn main()
+    ch := Channel[P](4)
+    g := TaskGroup()
+    g.add(spawn post(ch))
+    p := ch.recv() else P(x: 0, y: 0)
+    print(p.x + p.y)
