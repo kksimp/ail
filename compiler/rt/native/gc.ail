@@ -83,7 +83,11 @@ fn gc_mark_list_data(c int, w int, len int)
                 gc_scan_in(c, bs + 8, bs + 8 + 8 * len)
 
 fn gc_scan_range(from int, to int)
-    gc_scan_in(gc_stack(), from, to)
+    # With AIL_LEAK the ranges are counted per root (leak.ail, san.leak.2).
+    if hs(LK_STATE) != 0
+        lk_scan(from, to)
+    else
+        gc_scan_in(gc_stack(), from, to)
 
 ## Most words are not heap addresses (integers, characters, small values), so
 ## the range test is done here once per word, with the heap bounds read once,
@@ -200,7 +204,7 @@ fn gc_sweep()
     hset(H_HINT, 0)
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
-    hset(H_THRESH, if live * 3 > MIN_THRESH then live * 3 else MIN_THRESH)
+    hset(H_THRESH, gc_thresh(live))
     hset(H_FASTLIM, if load64(global(MULTI)) == 0 and hs(26) == 0 then hs(H_THRESH) else 0)
 
 ## `AIL_GC_VERIFY` set: before marking, check every allocated block's header
@@ -369,13 +373,17 @@ fn gc_collect()
         gc_verify()
     sp := gc_regs(m + 8 * H_REGS)
     hset(H_MARKN, 0)
-    gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
-    gc_scan_range(sp, stack_end_self())
-    gc_scan_threads()
-    gc_scan_range(global(OUT_BUF), globals_end())
-    # With threads and a large heap the parked threads help (ADR 0944).
-    if not gc_par_mark()
-        gc_drain()
+    if hs(LK_STATE) != 0
+        # The leak report marks root by root and counts (leak.ail, san.leak.2).
+        leak_mark(sp, m)
+    else
+        gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
+        gc_scan_range(sp, stack_end_self())
+        gc_scan_threads()
+        gc_scan_range(global(OUT_BUF), globals_end())
+        # With threads and a large heap the parked threads help (ADR 0944).
+        if not gc_par_mark()
+            gc_drain()
     if hs(25) != 0
         gc_census()
     gc_sweep()

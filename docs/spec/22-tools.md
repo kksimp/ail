@@ -780,6 +780,42 @@ fn main()
     print(1)
 ```
 
+## Leak report
+
+A garbage-collected program cannot lose memory it no longer reaches, but it can keep memory it
+no longer needs: a cache that is never trimmed, a list that only grows, a global holding a
+finished job. `ail leak` reports that growth and the roots that hold it
+([ADR 0969](../decisions/0969-leak-report.md)). It reports memory the program still reaches, so
+every number is a retained size, not a count of lost blocks.
+
+**san.leak.1** — With the report on, each collection counts the live bytes and objects by kind. After at least four collections, when live bytes at the latest collection are at least 1.5 times those at the first plus 1 MiB, and no collection of the last 64 fell by more than a twentieth of the one before, the report says live memory grew, with the first and latest totals and each kind that grew by 256 KiB or more. The sizes are payload plus the 8-byte header, so they differ a little from `AIL_MAX_MEMORY_MB`, which counts blocks.
+
+**san.leak.2** — The collection marks the roots one at a time, in the order: each global slot that points into the heap, the registers, the stack, the other threads. An object counts for the first root that reaches it, so the sizes add up to the live total. On growth the report lists the five roots that hold the most (at least 1 MiB each) with their bytes at the first and the latest collection, their object count and the kind with most bytes; `--all` lists the top five whenever they hold anything, growth or not. A root is `global slot N` (the slot's index; source names need the debug lane's positions, ADR 0947), `the stack`, `the registers` or `the other threads`. A conservative stack word can keep an object that no variable holds; the report cannot tell the two apart.
+
+**san.leak.3** — `ail leak [--json] [--all] FILE [ARGS...]` builds FILE and runs it with the environment variable `AIL_LEAK` set to `1`, `json`, `all` or `all,json`; the same variable works for any native executable, on every target. The report goes to standard error after the program's own output and ends with a summary line (`leak: N collections, S live at exit, growing` or `no growth`). With `json`, each finding is one line `{"api":1,"severity":"warning","rule":"san.leak.1"|"san.leak.2",...}` and the last line is `{"summary":true,"collections":N,"live_bytes":B,"grew":BOOL}`. The program's exit status is unchanged.
+
+**san.leak.4** — With the variable unset the runtime does nothing extra: the collector tests one word. With it set, collections run in single-thread mode, at least every 4 MiB allocated (or half the live bytes, if more), so a run is slower. A program that ends with status 0 after fewer than four collections gets one more collection at exit, when its locals are gone, so the report shows what the globals still hold. A run that traps keeps the collections it has.
+
+```ail tool=leak,FILE expect=leak[san.leak.1] rules=san.leak.1,san.leak.2
+fn main()
+    mut keep := List[List[int]]()
+    mut i := 0
+    while i < 48
+        mut row := List[int]()
+        mut j := 0
+        while j < 131072
+            row.push(j)
+            j += 1
+        keep.push(row)
+        i += 1
+    print(keep.len())
+```
+
+```ail tool=leak,--json,FILE expect="collections":1, rules=san.leak.3,san.leak.4
+fn main()
+    print(1)
+```
+
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
