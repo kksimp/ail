@@ -47,15 +47,20 @@ buffers (`Clear`, `Rect` and `Line` in pixels; `Text` is not drawn yet; anything
 off the surface is dropped). The host shows a buffer as the whole canvas,
 scaled. *(ADR 0957)*
 
-**std.gfx.8** — The buffers live in one shared mapping. The program makes a
+**std.gfx.8** — The buffers live in one shared mapping that starts with `O` unused bytes (and ends with as many), so that no buffer begins at a page boundary where the runtime's block check would see the end of another block. The program makes a
 file with `mkstemp` under `$TMPDIR` (mode 0600, random name), maps it
 `MAP_SHARED`, and sends `{"v":1,"t":"surface","id":"gfx","w":W,"h":H,
-"stride":S,"count":2,"path":P}` through `lines` (`std.app.21`); per frame it
+"stride":S,"offset":O,"count":2,"path":P}` through `lines` (`std.app.21`); per frame it
 sends `{"v":1,"t":"present","id":"gfx","buf":K}`. The host maps the file by
 path, shows buffer K at its next draw, and answers each drawn frame with the
 event `vsync` (`id`, `dx` the seconds since the previous one). The program
 unlinks the file at the first `vsync`. A host skips a `surface` it can't map.
 *(ADR 0957)*
+
+**std.gfx.9** — `host.pixels(f Frame) List[int] ! GfxError` draws `f` the way
+`run` does into a fresh surface and returns its pixels as `0xRRGGBB`, row by
+row (`w * h` numbers), with no window: a test sees what would be shown. Alpha
+is ignored.
 
 ## Examples
 
@@ -108,4 +113,22 @@ fn main()
     mut b := Ball(x: 10.0, v: 120.0)
     host.run(mut b, "ball", 320, 240) else err
         print("{err.why}")
+```
+
+```ail rules=std.gfx.7,std.gfx.9
+use std.gfx
+use std.gfx.host
+
+fn main()
+    mut f := gfx.new_frame(4, 3)
+    gfx.clear(mut f, 0x112233)
+    gfx.rect(mut f, 1.0, 1.0, 2.0, 1.0, 0xff0000)
+    gfx.line(mut f, 0.0, 0.0, 3.0, 0.0, 0x00ff00)
+    px := host.pixels(f) else err
+        print(err.why)
+        return
+    print(px.len())
+    print(px[0])
+    print(px[5])
+    print(px[11])
 ```

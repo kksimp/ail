@@ -1,4 +1,4 @@
-## std.gfx.host (spec std.gfx.6-8; ADR 0957): `run` shows a `Game` in a window.
+## std.gfx.host (spec std.gfx.6-9; ADR 0957): `run` shows a `Game` in a window.
 ## The frame is drawn by the CPU into a shared mapping of two RGBA8 buffers,
 ## which the macOS app host maps by path and shows without JSON on the path;
 ## each `present` is answered by a `vsync` that paces the next frame. The
@@ -14,6 +14,13 @@ extern c fn ftruncate(fd i32, len int) i32
 extern c fn mmap(addr *u8, len int, prot i32, flags i32, fd i32, offset int) *u8
 extern c fn unlink(path *u8) i32
 extern c fn close(fd i32) i32
+extern c fn munmap(addr *u8, len int) i32
+
+## Bytes of unused file before the first buffer and after the last: the
+## runtime's `std.mem` block check (unsafe.ptr.5) treats an access at the end
+## address of a block as past it, so a mapping that happens to sit right after
+## one must not start at the mapping's first byte. A multiple of every page size.
+GUARD := 16384
 
 pub error struct GfxError "{why}"
     pub why str
@@ -21,6 +28,7 @@ pub error struct GfxError "{why}"
 ## The shared frame buffers: `count` of them, each `stride` bytes by `h` rows.
 struct Surface
     base *u8
+    mapped int
     path str
     w int
     h int
@@ -34,7 +42,8 @@ fn make_surface(w int, h int) Surface ! GfxError
     dir := env.get("TMPDIR") else "/tmp"
     template := "{dir}/ail-gfx-XXXXXX"
     stride := w * 4
-    total := stride * h * 2
+    buffers := stride * h * 2
+    total := GUARD + buffers + GUARD
     unsafe
         t := mem.cstr(template)
         fd := mkstemp(t)
@@ -47,11 +56,11 @@ fn make_surface(w int, h int) Surface ! GfxError
             close(fd)
             return GfxError(why: "cannot size the surface file")
         # PROT_READ | PROT_WRITE is 3, MAP_SHARED is 1.
-        base := mmap(mem.null(), total, 3, 1, fd, 0)
+        mapping := mmap(mem.null(), total, 3, 1, fd, 0)
         close(fd)
-        if base.is_null()
+        if mapping.is_null()
             return GfxError(why: "cannot map the surface file")
-        Surface(base: base, path: path, w: w, h: h, stride: stride, count: 2, back: 0)
+        Surface(base: mapping.offset(GUARD), mapped: total, path: path, w: w, h: h, stride: stride, count: 2, back: 0)
 
 fn drop_file(s Surface)
     unsafe
@@ -126,7 +135,7 @@ fn raster(s Surface, f gfx.Frame)
 CANVAS := "gfx"
 
 fn surface_line(s Surface) str
-    "\{\"v\":1,\"t\":\"surface\",\"id\":\"{CANVAS}\",\"w\":{s.w},\"h\":{s.h},\"stride\":{s.stride},\"count\":{s.count},\"path\":\"{s.path}\"}"
+    "\{\"v\":1,\"t\":\"surface\",\"id\":\"{CANVAS}\",\"w\":{s.w},\"h\":{s.h},\"stride\":{s.stride},\"offset\":{GUARD},\"count\":{s.count},\"path\":\"{s.path}\"}"
 
 fn present_line(buf int) str
     "\{\"v\":1,\"t\":\"present\",\"id\":\"{CANVAS}\",\"buf\":{buf}}"
@@ -216,3 +225,36 @@ pub fn run[T gfx.Game](mut g T, title str, w int, h int) ! GfxError
     g = l.game
     if l.failed != ""
         return GfxError(why: l.failed)
+
+## A private surface in `std.mem` memory, for `pixels` where the C library has
+## no `mkstemp` (Windows).
+fn private_surface(w int, h int) Surface
+    stride := w * 4
+    total := GUARD + stride * h * 2 + GUARD
+    unsafe
+        block := mem.alloc(total, 0.to_u8())
+        Surface(base: block.offset(GUARD), mapped: total, path: "", w: w, h: h, stride: stride, count: 2, back: 0)
+
+## The pixels of `f` as `0xRRGGBB` numbers, row by row, drawn the way `run`
+## draws them into a fresh surface and read back (std.gfx.9): a test of a
+## frame's pixels with no window. Windows uses a private buffer, not a file.
+pub fn pixels(f gfx.Frame) List[int] ! GfxError
+    windows := (env.get("OS") else "") == "Windows_NT"
+    s := if windows then private_surface(f.w, f.h) else make_surface(f.w, f.h)?
+    if not windows
+        drop_file(s)
+    raster(s, f)
+    mut out := List[int]()
+    unsafe
+        for y in 0..f.h
+            for x in 0..f.w
+                q := s.base.offset(s.back * s.stride * s.h + y * s.stride + x * 4)
+                r := q.read().to_int()
+                g := q.offset(1).read().to_int()
+                b := q.offset(2).read().to_int()
+                out.push(r * 65536 + g * 256 + b)
+        if windows
+            mem.free(s.base.offset(0 - GUARD))
+        else
+            munmap(s.base.offset(0 - GUARD), s.mapped)
+    out
