@@ -64,11 +64,6 @@ final class CanvasView: NSView {
         }
     }
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        Edge.apply(window)
-    }
-
     /// `resize` (std.app.5) with the edge-mode insets (std.app.25).
     func reportSize() {
         let size = reported

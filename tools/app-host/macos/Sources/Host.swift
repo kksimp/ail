@@ -21,7 +21,7 @@ final class Model: ObservableObject {
         self.focus = focus
         sync(tree)
         self.tree = tree
-        Edge.apply(nil)
+        Edge.apply(self)
         if !started {
             started = true
             Outbox.shared.send("start", Edge.insets(Edge.window(nil)))
@@ -85,12 +85,19 @@ struct HostApp: App {
                 .frame(minWidth: 320, minHeight: 200)
                 .navigationTitle(model.title)
                 .onAppear {
+                    if Reader.started { return }
+                    Reader.started = true
                     readViews(onView: { model.show(title: $0, focus: $1, tree: $2) },
                               onEnd: { NSApp.terminate(nil) })
                 }
         }
         .defaultSize(width: 1000, height: 720)
     }
+}
+
+/// The stdin reader runs once, whichever window's root appears first.
+enum Reader {
+    static var started = false
 }
 
 struct Root: View {

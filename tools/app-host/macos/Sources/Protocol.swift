@@ -202,10 +202,14 @@ enum Hover {
 
 /// std.app.25 (ADR 0981): edge mode. The app draws up to the window's top edge; the
 /// title bar is hidden, the traffic lights stay, and the app is told the room they take.
+/// SwiftUI's own window keeps a title-bar band over the content whatever its style
+/// mask says, so edge mode moves the tree into a plain AppKit window of our own.
 enum Edge {
     static var wanted = false
     static var applied = false
     static var lastEvent: NSEvent?
+    /// Our window, once edge mode is on.
+    static var own: NSWindow?
 
     /// The window controls' room in points: their right edge plus a gap, and the title bar's height.
     static func insets(_ w: NSWindow?) -> [String: Any] {
@@ -215,40 +219,41 @@ enum Edge {
         return ["inset_left": right + 8, "inset_top": max(top, 0)]
     }
 
-    /// The app's window: the one a canvas sits in, else the key or first visible one.
+    /// The app's window: ours in edge mode, else the one a canvas sits in, the key or first visible one.
     static func window(_ w: NSWindow?) -> NSWindow? {
-        w ?? CanvasView.registry.values.first?.window ?? NSApp.keyWindow
+        own ?? w ?? CanvasView.registry.values.first?.window ?? NSApp.keyWindow
             ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })
     }
 
-    /// Hides the title bar once the app asks for edge mode, and keeps it hidden: SwiftUI
-    /// sets the title again on every update. The first time, every canvas reports its
-    /// size again so the app learns the insets.
-    static func apply(_ w: NSWindow?) {
-        guard wanted, let w = window(w) else { return }
-        let first = !applied
+    /// Once the app asks for edge mode: a plain window with a transparent, title-less
+    /// title bar whose content reaches the top edge, holding the same tree; the SwiftUI
+    /// window closes. Every canvas then reports its size again so the app learns the insets.
+    static func apply(_ model: Model) {
+        guard wanted, !applied else { return }
+        guard let old = window(nil) else { return }
         applied = true
-        if !w.styleMask.contains(.fullSizeContentView) { w.styleMask.insert(.fullSizeContentView) }
-        w.titlebarAppearsTransparent = true
-        w.titleVisibility = .hidden
-        w.toolbar = nil
-        w.titlebarSeparatorStyle = .none
-        w.isMovableByWindowBackground = false
-        // The title bar's material still tints the content under it; hide it and keep the buttons.
-        if let frame = w.contentView?.superview {
-            for v in frame.subviews where String(describing: type(of: v)).contains("Titlebar") {
-                hideMaterial(v)
-            }
-        }
-        if first {
-            FileHandle.standardError.write("AIL App Host: edge mode on (std.app.25)\n".data(using: .utf8)!)
+        let win = NSWindow(contentRect: old.frame,
+                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                           backing: .buffered, defer: false)
+        win.title = old.title
+        win.titlebarAppearsTransparent = true
+        win.titleVisibility = .hidden
+        win.titlebarSeparatorStyle = .none
+        win.isMovableByWindowBackground = false
+        win.isReleasedWhenClosed = false
+        win.minSize = NSSize(width: 320, height: 200)
+        win.backgroundColor = .windowBackgroundColor
+        let hosting = NSHostingView(rootView: Root(model: model))
+        hosting.autoresizingMask = [.width, .height]
+        win.contentView = hosting
+        win.setFrame(old.frame, display: false)
+        own = win
+        win.makeKeyAndOrderFront(nil)
+        old.orderOut(nil)
+        old.close()
+        FileHandle.standardError.write("AIL App Host: edge mode on (std.app.25)\n".data(using: .utf8)!)
+        DispatchQueue.main.async {
             for v in CanvasView.registry.values { v.reportSize() }
-        }
-    }
-
-    static func hideMaterial(_ v: NSView) {
-        for s in v.subviews {
-            if s is NSVisualEffectView { s.isHidden = true } else { hideMaterial(s) }
         }
     }
 
