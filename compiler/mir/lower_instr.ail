@@ -43,6 +43,11 @@ pub struct Instr
     tjson bool
     ## `watch=NAME`: the variable whose assignments are events (`--watch`, trace.watch.1).
     watch str
+    ## `probe=LINE:a+b:FILE` (`--at FILE:LINE --show a,b`, probe.run.1): the values of `a` and `b`
+    ## are printed before the statement at that line runs. `probe_line` is 0 for none.
+    probe_line int
+    probe_names List[str]
+    probe_file str
     ## The element write of the statement being lowered that is shown with a note
     ## (trace.watch.4): `wpos` identifies the operation (the method name's or the assignment's
     ## position, line 0 for none) and `wat` is the position the event shows. `noted` is set
@@ -59,6 +64,22 @@ fn watch_name(modes str) str
     for m in modes.split(",")
         if m.starts_with("watch=")
             return m.replace("watch=", "")
+    ""
+
+## Part `k` (0 line, 1 names, 2 file) of the `probe=LINE:NAMES:FILE` mode, or "". The file is the rest of
+## the text, so a Windows path may hold colons.
+fn probe_part(modes str, k int) str
+    for m in modes.split(",")
+        if m.starts_with("probe=")
+            body := m.replace("probe=", "")
+            a := body.find(":") else return ""
+            rest := body.slice(a + 1, body.len())
+            b := rest.find(":") else return ""
+            if k == 0
+                return body.slice(0, a)
+            if k == 1
+                return rest.slice(0, b)
+            return rest.slice(b + 1, rest.len())
     ""
 
 ## The variable an assignment target is rooted in, and where its text starts.
@@ -299,6 +320,9 @@ fn new_instr() Instr
         effects: modes.split(",").contains("traceeffects"),
         tjson: modes.split(",").contains("tracejson"),
         watch: watch_name(modes),
+        probe_line: probe_part(modes, 0).to_int() else 0,
+        probe_names: probe_part(modes, 1).split("+"),
+        probe_file: probe_part(modes, 2),
         wpos: ast.Pos(line: 0, col: 0),
         wat: ast.Pos(line: 0, col: 0),
         noted: false,
@@ -314,10 +338,45 @@ fn instr_owned(p str) bool
         and not p.starts_with("std/")
         and not p.contains("/std/")
 
+## `probe: NAME = VALUE at POS` for each probed name in scope, before the statement at the probed line
+## runs (probe.run.1-3). It shares the watch event budget (trace.run.4).
+fn Lower.probe_stmt(mut self, s ast.Stmt)
+    if is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    if instr_line(s) != instr.probe_line
+        return
+    p := path.replace("\\", "/")
+    f := instr.probe_file.replace("\\", "/")
+    if p != f and not p.ends_with("/{f}")
+        return
+    pos := ast.Pos(line: instr.probe_line, col: instr_col(s))
+    on := new_block()
+    cont := new_block()
+    branch(call("rt.watch_open", [], Ty.Bool), on, [], cont, [])
+    seal(on)
+    cur = on
+    for name in instr.probe_names
+        key := lookup(name) else
+            say("probe: {name} = (not in scope) at {trace_at(pos)}\n")
+            continue
+        ty := var_ty.get(key) else Ty.Unknown
+        if ty.is_unknown() or not vals_printable(ty, structs)
+            say("probe: {name} = (not printable) at {trace_at(pos)}\n")
+            continue
+        say("probe: {name} = ")
+        describe(Val(id: read_var(key, cur), ty: ty), pos)
+        say(" at {trace_at(pos)}\n")
+    call("rt.watch_close", [], Ty.Unit)
+    jump(cont, [])
+    seal(cont)
+    cur = cont
+
 ## The start of statement `s` is a site.
 fn Lower.instr_stmt(mut self, s ast.Stmt)
     if instr.watch != ""
         watch_stmt(s)
+    if instr.probe_line != 0
+        probe_stmt(s)
     if instr.sp >= 0 and instr.owner == fname
         vals_spill()
     if not (instr.on or instr.steps)

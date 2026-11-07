@@ -184,6 +184,23 @@ fn main()
     print(n)
 ```
 
+**probe.run.1** — `ail run --at FILE:LINE --show a,b FILE` prints, once each time the
+statement that starts on `FILE:LINE` is about to run, `probe: NAME = VALUE at LINE:COL`
+on standard error for each listed name, then the summary line (trace.run.4). The two
+options go together. `FILE` is matched against the end of the program's file paths.
+Nothing is edited, and a build without the options costs nothing. *(ADR-TBD)*
+
+**probe.run.2** — A name that is not a local, parameter or `for` variable in scope at the
+line prints `(not in scope)`, and one whose type has no text form prints `(not printable)`.
+The run goes on. A statement that holds a body (`if`, `for`, `while`) is one site, run once
+per entry; a line of the body is its own site, run once per pass.
+
+**probe.run.3** — Over `--replay R` (replay.run.1) the same run is repeated exactly, so a
+probe asks the failing run itself. Probe events share the event budget of trace.run.4.
+
+```ail pkg=probe_demo tool=run,--at,main.ail:3,--show,n,main.ail expect=probe: rules=probe.run.1,probe.run.2,probe.run.3
+```
+
 ## Tracing tests
 
 **trace.test.1** — `ail test --trace[=calls|effects|all]` (and `--trace-limit`,
