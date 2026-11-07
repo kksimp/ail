@@ -3,6 +3,7 @@
 // standard output. The first line each way carries "v": 1.
 
 import AppKit
+import SwiftUI
 
 /// A drawing step of a canvas (std.app.3).
 enum Op {
