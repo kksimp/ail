@@ -2191,21 +2191,21 @@ keep the first `n` columns or rows, clamped to the rectangle; `inset(n)`
 shrinks every side by `n`, never below zero; `has(c, r)` tests a cell.
 `cols_of(sizes)` and `rows_of(sizes)` split a rectangle side by side or
 stacked: a size of 0 or more is fixed, and -1 shares what is left evenly,
-the first such sizes taking any remainder. *(ADR pending)*
+the first such sizes taking any remainder. *(ADR 0973)*
 
 **std.ui.26** — `Label` shows its `text` (bold if `bold`) cut or padded to
-its rectangle. It takes no events. *(ADR pending)*
+its rectangle. It takes no events. *(ADR 0973)*
 
 **std.ui.27** — `Checkbox` toggles `checked` on a click, or on Space or
 Enter while `focused`, and answers `Changed`. `RadioGroup` shows one choice
 per row; Up and Down move `selected`, a click on a row picks it (both
 `Changed`), Enter answers `Submit`, and `chosen()` is the selected choice.
-*(ADR pending)*
+*(ADR 0973)*
 
 **std.ui.28** — `ProgressBar` shows `done` of `total` as a bar and a
 percentage (`percent()`, 0 to 100; an empty total is 0). `Tabs` shows one
 row of titles; Left, Right and Tab move `selected`, and a click on a title
-picks it (all `Changed`). *(ADR pending)*
+picks it (all `Changed`). *(ADR 0973)*
 
 ## Tensors: `std.tensor`
 
