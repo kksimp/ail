@@ -26,6 +26,26 @@ function Fail([string]$message) {
     exit 2
 }
 
+# Windows PowerShell 5.1 (and PowerShell before 7.3) joins native arguments into a command line without escaping
+# embedded quotes: `d"e` loses its quote and merges with the arguments after it. Escape them for the Windows
+# command-line rules ourselves; 7.3+ already does that, so there the arguments go through untouched.
+$legacyArgs = $PSVersionTable.PSVersion -lt [version]'7.3'
+function Esc-Native($list) {
+    foreach ($a in @($list)) {
+        $t = [string]$a
+        if (-not $legacyArgs) { $t; continue }
+        if ($t -eq '') { '""'; continue }
+        if ($t -match '[ \t]') {
+            # Quote it ourselves. PowerShell 5.1 wraps an argument when it sees whitespace outside quotes, counting every `"`
+            # (even a backslash-escaped one) as a toggle, so `"c\"d e"` would be wrapped again and split. Inside a quoted
+            # argument the Windows rules read `""` as one literal quote and stay inside, which the count also leaves balanced.
+            $t = '"' + ($t -replace '(\\*)"', '$1$1""' -replace '(\\+)$', '$1$1') + '"'
+        }
+        elseif ($t.Contains('"')) { $t = $t -replace '(\\*)"', '$1$1\"' }
+        $t
+    }
+}
+
 $cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
 # A path that exists is handed on with forward slashes (see Fwd).
 $rest = @($args | Select-Object -Skip 1 | ForEach-Object { if ("$_" -and (Test-Path -LiteralPath "$_" -ErrorAction SilentlyContinue)) { Fwd "$_" } else { $_ } })
@@ -194,6 +214,8 @@ $route = (
 if ($cmd -eq 'build' -and ($rest -contains '--derived-out')) { $route = $false }
 
 if ($route) {
+    $rawRest = $rest
+    $rest = @(Esc-Native $rest)
     $nativeDir = Join-Path $root '.native'
     $native = Join-Path $nativeDir "ail$exe"
     $stale = -not (Test-Path $native)
@@ -322,7 +344,8 @@ if ($route) {
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile
                 $progExe = [string]($prep | Select-Object -Last 1)
-                $progArgs = @(if ($null -ne $replayArgs) { $replayArgs } else { $rest | Select-Object -Skip $runSkip })
+                $progArgsRaw = @(if ($null -ne $replayArgs) { $replayArgs } else { $rawRest | Select-Object -Skip $runSkip })
+                $progArgs = @(Esc-Native $progArgsRaw)
                 if ($snapJson) {
                     # tools/trapjson.awk turns the text trap report on stderr into one JSON object (trace.snap.4); awk comes with Git.
                     # Files and raw bytes, so no line ending is changed on the way.
@@ -330,7 +353,7 @@ if ($route) {
                     $errTmp = [IO.Path]::GetTempFileName(); $outTmp = [IO.Path]::GetTempFileName()
                     try {
                         $startArgs = @{ FilePath = $progExe; NoNewWindow = $true; PassThru = $true; RedirectStandardError = $errTmp }
-                        if ($progArgs.Count -gt 0) { $startArgs.ArgumentList = (@($progArgs | ForEach-Object { & $winQuote $_ }) -join ' ') }
+                        if ($progArgsRaw.Count -gt 0) { $startArgs.ArgumentList = (@($progArgsRaw | ForEach-Object { & $winQuote $_ }) -join ' ') }
                         $proc = Start-Process @startArgs
                         $null = $proc.Handle   # without this, ExitCode can read empty after WaitForExit
                         $proc.WaitForExit()
@@ -365,6 +388,7 @@ if ($route) {
 # `ail selftest` with no arguments is the native gate (ADR 0865): tools\gate\win-gate.ps1 runs gate.ail's suites with the
 # native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers.
 if ($cmd -eq 'selftest') {
+    $rest = @(Esc-Native $rest)
     if ($rest.Count -eq 0) { & (Join-Path $root 'tools\gate\win-gate.ps1'); exit $LASTEXITCODE }
     if ($rest[0] -eq '--test') { Fail '`ail selftest --test NAME` ran one cargo test and is retired: name a gate suite, as `ail selftest cases`, or run `ail test FILE` (ADR 0900)' }
     if ($rest[0] -eq '--fuzz') {
