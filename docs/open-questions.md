@@ -8,6 +8,10 @@ and its entry here is replaced by a link.
 
 IDs (`OQ-NNN`) are never reused.
 
+State on 2026-11-07: 81 entries, 25 open and 56 resolved. Resolved entries stay
+here for history; each links the ADR that settled it. Open ones are live design
+work, and new ones are welcome as issues (the proposal template has the same shape).
+
 ---
 
 ## OQ-001 — ISA priority policy
