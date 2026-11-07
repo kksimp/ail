@@ -46,6 +46,10 @@ fn build(src str, exe str) str?
         return none
     r.err.lines().first() else "build failed"
 
+## `text` with CRLF line ends as LF.
+fn lf(text str) str
+    text.replace("\r\n", "\n")
+
 fn alarm_for(stem str) int
     60
 
@@ -78,10 +82,11 @@ fn Gate.examples(mut self, tmp str)
             red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
-        if got.status != 0 or got.out != want
+        # Windows may hand a program's lines back as CRLF (a checkout with autocrlf, the console's translation): compare LF.
+        if got.status != 0 or lf(got.out) != lf(want)
             red(
                 "examples/{name}",
-                "exit {got.status}; output differs from {stem}.out\n{got.out}{got.err}",
+                "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
 
 fn Gate.selfhost(mut self)
