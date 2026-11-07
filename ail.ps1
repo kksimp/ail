@@ -241,7 +241,7 @@ if ($route) {
             }
         }
         if (-not (Test-Path $seed)) {
-            Fail 'no seed for this host: sign in with gh or set GITHUB_TOKEN, then rerun (tools\release\fetch-seed.ps1; ADR 0855)'
+            Fail 'no seed for this host: check the network and rerun (tools\release\fetch-seed.ps1; ADR 0855)'
         }
         $log = "$native.log"
         $mainAil = Fwd (Join-Path $root 'compiler\main.ail')

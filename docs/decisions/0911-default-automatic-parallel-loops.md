@@ -1,6 +1,6 @@
 # 0911. Native code runs proven independent loops in parallel by default, past a work threshold
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-07, by the integrator after it landed through the gate with its spec rules; proposed 2026-10-25)
 - **Date:** 2026-10-25
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25
 - **Scope amended by:** [ADR 0938](0938-auto-parallel-push-builder-loops.md) (push-builder loops, conc.par.16)
