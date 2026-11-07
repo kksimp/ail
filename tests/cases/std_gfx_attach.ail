@@ -23,7 +23,8 @@ impl attach.Observe for Ball
         [attach.observed("x", "float", "{x}")]
 
 fn main()
-    mut l := host.new_loop(Ball(x: 0.0), "ball", 32, 16)
+    mut g := Ball(x: 0.0)
+    mut l := host.new_loop(g, "ball", 32, 16)
     f := host.advance(mut l, 1.0)
     print(gfx.stats(f).cmds)
     sc := view.of_node(l.shown(), 32.0, 16.0, "")
@@ -33,3 +34,6 @@ fn main()
     mut tr := attach.Tracker.new()
     tr.update(l.observed())
     print(tr.observe([], 0))
+    host.finish(mut g, l) else err
+        print(err.why)
+    print(g.x)

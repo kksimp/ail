@@ -2198,6 +2198,11 @@ STD_UNTESTABLE := [
     ["time/date.ail", "now_local", "its value is the clock in the machine's zone"],
     ["attach/serve.ail", "run", "it serves until its window closes; attach_watched covers the wire"],
     [
+        "gfx/watch.ail",
+        "run",
+        "it serves the attach socket and opens a window until it closes; std_gfx_attach covers its loop",
+    ],
+    [
         "gfx/host.ail",
         "run",
         "it opens a window and runs until it closes; the std-gfx.md norun example covers the types",

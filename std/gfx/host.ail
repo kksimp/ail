@@ -233,23 +233,46 @@ fn ops_of(f gfx.Frame) List[app.Op]
     mut out := List[app.Op]()
     for c in f.cmds
         match c
-            Clear(color) => out.push(app.Op.Fill(x: 0.0, y: 0.0, w: f.w.to_float(), h: f.h.to_float(), color: color))
+            Clear(color) => out.push(app.Op.Fill(
+                x: 0.0,
+                y: 0.0,
+                w: f.w.to_float(),
+                h: f.h.to_float(),
+                color: color,
+            ))
             Rect(x, y, w, h, color) => out.push(app.Op.Fill(x: x, y: y, w: w, h: h, color: color))
-            Line(x1, y1, x2, y2, color) => out.push(app.Op.Stroke(x1: x1, y1: y1, x2: x2, y2: y2, color: color, width: 1.0))
-            Text(x, y, t, size, color) => out.push(app.Op.Str(x: x, y: y, text: t, font: "mono", size: size, fg: color, bold: false, italic: false, underline: false))
+            Line(x1, y1, x2, y2, color) => out.push(app.Op.Stroke(
+                x1: x1,
+                y1: y1,
+                x2: x2,
+                y2: y2,
+                color: color,
+                width: 1.0,
+            ))
+            Text(x, y, t, size, color) => out.push(app.Op.Str(
+                x: x,
+                y: y,
+                text: t,
+                font: "mono",
+                size: size,
+                fg: color,
+                bold: false,
+                italic: false,
+                underline: false,
+            ))
     out
 
 ## What an attached agent can observe of a running game (std.gfx.10): the
 ## game's own values, and the last frame's command counts.
 impl attach.Observe for Loop[T gfx.Game + attach.Observe]
     fn observed(self) List[attach.Observed]
-        mut out := game.observed()
+        mut seen := game.observed()
         st := gfx.stats(last)
-        out.push(attach.observed("gfx.cmds", "int", "{st.cmds}"))
-        out.push(attach.observed("gfx.fills", "int", "{st.fills}"))
-        out.push(attach.observed("gfx.lines", "int", "{st.lines}"))
-        out.push(attach.observed("gfx.texts", "int", "{st.texts}"))
-        out
+        seen.push(attach.observed("gfx.cmds", "int", "{st.cmds}"))
+        seen.push(attach.observed("gfx.fills", "int", "{st.fills}"))
+        seen.push(attach.observed("gfx.lines", "int", "{st.lines}"))
+        seen.push(attach.observed("gfx.texts", "int", "{st.texts}"))
+        seen
 
 ## The loop for `g`, for `std.gfx.watch` (which runs it with the attach
 ## listener); `run` is the same without it.
