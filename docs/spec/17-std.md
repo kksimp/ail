@@ -2742,6 +2742,9 @@ fn main()
 use std.ui
 use std.ui.widgets
 
+fn press(k str) ui.Event
+    Key(key: k, ctrl: false, alt: false, shift: false)
+
 fn main()
     theme := Map[str, int]()
     area := widgets.Rect(col: 0, row: 0, cols: 20, rows: 4)
@@ -2753,7 +2756,7 @@ fn main()
     print(area.inset(1).rows)                      # 2
     print(widgets.Label(text: "hi", bold: true).render(rows[0], theme).len())
     mut box := widgets.Checkbox(label: "on", checked: false, focused: true)
-    space := ui.Event.Key(key: " ", ctrl: false, alt: false, shift: false)
+    space := press(" ")
     print(box.on_event(space, rows[2]))            # Changed
     print(box.checked)                             # true
     mut radio := widgets.RadioGroup.new(["a", "b"])
