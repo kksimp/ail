@@ -171,6 +171,12 @@ final class CanvasView: NSView {
     }
 
     override func keyDown(with e: NSEvent) {
+        // std.app.23 (ADR 0978): Command-V brings the clipboard's text as `paste`.
+        if e.modifierFlags.contains(.command), e.keyCode == 9,
+           let s = NSPasteboard.general.string(forType: .string) {
+            Outbox.shared.send("paste", ["id": canvasId, "text": s])
+            return
+        }
         var f = mods(e)
         f["id"] = canvasId
         f["text"] = keyName(e)

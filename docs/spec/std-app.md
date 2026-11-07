@@ -155,6 +155,12 @@ the app's next call returns only new ones; it is how an app sends protocol
 lines the tree cannot express, such as `surface` and `present`
 (`std.gfx.6`). A host skips a line it doesn't know. *(ADR 0957)*
 
+**std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
+clipboard's text) when the paste key (Command-V on macOS, Control-V
+elsewhere) is pressed in a canvas, instead of the `key` event for it; a
+host whose clipboard it cannot read sends the `key` event as before, so a
+program must not depend on `paste`. *(ADR 0978)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -226,6 +232,33 @@ fn main()
     s.update(app.event("start"))
     print(s.lines().len())
     print(s.lines().len())
+```
+
+```ail rules=std.app.23
+use std.app
+
+## A one-line drawn field: typed keys add characters, a paste adds its text.
+struct Field
+    text str
+
+impl app.App for Field
+    fn update(mut self, ev app.Event)
+        if ev.kind == "paste"
+            text = "{text}{ev.text}"
+        elif ev.kind == "key" and ev.text.chars().len() == 1
+            text = "{text}{ev.text}"
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+fn main()
+    mut f := Field(text: "")
+    f.update(app.key("a"))
+    mut p := app.event("paste")
+    p.id = "f"
+    p.text = "il.dev"
+    f.update(p)
+    print(f.text)
 ```
 
 ```ail rules=std.app.20

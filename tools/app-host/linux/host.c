@@ -574,6 +574,18 @@ static const char *key_name(guint kv) {
 
 static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
     (void)d;
+    /* std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`. */
+    if ((e->state & GDK_CONTROL_MASK) && gdk_keyval_to_lower(e->keyval) == GDK_KEY_v) {
+        gchar *s = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+        if (s) {
+            Ev ev = ev_new("paste");
+            ev_str(&ev, "id", cid(w));
+            ev_str(&ev, "text", s);
+            ev_send(&ev);
+            g_free(s);
+            return TRUE;
+        }
+    }
     const char *name = key_name(e->keyval);
     char buf[8] = { 0 };
     if (!name) {
