@@ -1,4 +1,4 @@
-# 0974. `std.fs` attributes: mode, modification time, symbolic links, truncate
+# 0977. `std.fs` attributes: mode, modification time, symbolic links, truncate
 
 - **Status:** Accepted
 - **Date:** 2026-11-07
