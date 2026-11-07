@@ -90,7 +90,7 @@ impl app.App for Watched[T app.App + attach.Observe]
             mut sent := app.event_from_json(req)
             if sent.id != ""
                 # `id` is the control's own id or the `#N` that `screen` shows for it (attach.input.2).
-                found := view.control_id(inner.view(), sent.id.strip_prefix("#") else sent.id)
+                found := view.control_id(inner.shown(), sent.id.strip_prefix("#") else sent.id)
                 if found == ""
                     hub.replies.send(attach.input_unknown(sent.id))
                     return
@@ -100,7 +100,7 @@ impl app.App for Watched[T app.App + attach.Observe]
             return
         if ev.kind == "external" and ev.id == "attach"
             tr.update(inner.observed())
-            sc := view.of_node(inner.view(), w, h, inner.focus())
+            sc := view.of_node(inner.shown(), w, h, inner.focus())
             hub.replies.send(attach.answer(ev.text, token, tr, sc, ""))
             return
         if ev.kind == "resize"

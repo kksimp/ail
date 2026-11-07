@@ -155,6 +155,11 @@ the app's next call returns only new ones; it is how an app sends protocol
 lines the tree cannot express, such as `surface` and `present`
 (`std.gfx.6`). A host skips a line it doesn't know. *(ADR 0957)*
 
+**std.app.24** — `trait App` has `shown(self) Node` (default `view`). An attached
+agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are built
+from `shown`, so an app that draws somewhere its tree doesn't show, as a
+`std.gfx` game does, can say what is on screen. *(ADR 0979)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11

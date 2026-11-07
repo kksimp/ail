@@ -772,3 +772,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed | 2026-11-05 |
 | [0969](0969-leak-report.md) | The leak report: `ail leak` shows growth by kind and retention by root on the GC heap *(delegated)* | Accepted | 2026-11-06 |
+| [0979](0979-gfx-windows-publish-attach.md) | `std.gfx` windows publish the attach socket (`gfx.watch.run`, `App.shown`) *(delegated)* | Accepted | 2026-11-07 |
