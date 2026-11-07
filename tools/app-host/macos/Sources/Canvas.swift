@@ -55,6 +55,8 @@ final class CanvasView: NSView {
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    /// In edge mode the canvas lies under the title bar; only the app's `drag` line moves the window (std.app.25).
+    override var mouseDownCanMoveWindow: Bool { false }
 
     override func setFrameSize(_ size: NSSize) {
         super.setFrameSize(size)
