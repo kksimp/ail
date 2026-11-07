@@ -379,7 +379,7 @@ fn Checker.check_impls(mut self)
         by_generator := decl.derive != none and (imp.methods.len() == 0 or decl.methods.len() == 0)
         if by_generator
             defined = defined
-        elif built_in and imp.methods.len() == 0
+        elif built_in and imp.methods.len() == 0 and not (tr == std_hash and imp.uses.len() > 0)
             check_derived(i, tr, target)
         else
             missing := [
