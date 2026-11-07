@@ -16,7 +16,14 @@ $cases = @(
 $fails = 0
 foreach ($c in $cases) {
     $want = ($c | ForEach-Object { "[$_]" }) -join "`n"
-    $got = ((& powershell -NoProfile -ExecutionPolicy Bypass -File $ail run $prog @c 2>&1) -join "`n").TrimEnd()
+    # The outer call is native too: quote its arguments by the Windows rules so ail.ps1 sees them whole.
+    $q = { param($t) '"' + ("$t" -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+    $line = (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ail, 'run', $prog) + $c | ForEach-Object { & $q $_ }) -join ' '
+    $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
+    $p = Start-Process powershell -ArgumentList $line -NoNewWindow -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+    $null = $p.Handle; $p.WaitForExit()
+    $got = ((@(Get-Content $o) + @(Get-Content $e)) -join "`n").TrimEnd()
+    Remove-Item -Force $o, $e
     if ($got -ne $want) { $fails++; "RED args: $($c -join ' | ')`n  want: $($want -replace "`n",' ')`n  got:  $($got -replace "`n",' ')" }
 }
 if ($fails -eq 0) { 'PS1-ARGS GREEN' } else { "PS1-ARGS RED ($fails)" }

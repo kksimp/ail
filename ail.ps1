@@ -35,9 +35,10 @@ function Esc-Native($list) {
         $t = [string]$a
         if (-not $legacyArgs) { $t; continue }
         if ($t -eq '') { '""'; continue }
-        if ($t.Contains('"')) { $t = $t -replace '(\\*)"', '$1$1\"' }
-        # PowerShell wraps an argument that has a space or tab in quotes: trailing backslashes must not escape the closing one.
-        if ($t -match '[ \t]') { $t = $t -replace '(\\+)$', '$1$1' }
+        if ($t -match '[ \t"]') {
+            # Quote it ourselves: PowerShell wraps nothing that already has a quote in it, so a space would split the argument.
+            $t = '"' + ($t -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+        }
         $t
     }
 }
