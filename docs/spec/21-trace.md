@@ -1,6 +1,6 @@
 # 21. Runtime traces and trap snapshots
 
-Chapter key: `trace`
+Chapter keys: `trace`, `probe`
 
 > **Status:** Drafted (partial). Specified: `ail run --trace`, its event
 > budget and summary, `--watch NAME`, and the snapshot a trap carries.
@@ -443,3 +443,30 @@ fn main()
     for i in 0..100000000
         xs.push(i)
 ```
+
+## Probes
+
+**probe.run.1** — `ail run --at FILE:LINE --show a,b [FILE]` prints, on standard
+error, one line `probe: FILE:LINE a = V, b = W` each time a statement that starts on
+line LINE of FILE begins, with the values of the variables `a` and `b` in scope at
+that point. It may be combined with `--replay R` (`replay.run.1`), which repeats the
+recorded run. The program's output and exit status are unchanged
+([ADR 0921](../decisions/0921-replay-probes.md)).
+**probe.run.2** — A name that is not a variable in scope at the line shows
+`<unset>`, and a value of a type the trap snapshots cannot print (`trace.val.1`) shows
+`<type>`. Values are cut and escaped as in a trace (`trace.val.1-2`).
+**probe.run.3** — A probe event counts against the event budget and summary of
+`trace.run.4`; with `--json` it is the object `{"api":1,"trace":"probe","at":"FILE:LINE",
+"NAME":"VALUE",...}`.
+**probe.run.4** — `--at` needs `FILE:LINE` and `--show` needs variable names
+separated by commas, and each needs the other; otherwise it is a usage error
+(exit 2). A program run without them is built and behaves as before.
+
+```ail pkg=probe_demo tool=run,--at,main.ail:3,--show,n,main.ail expect=probe: rules=probe.run.1
+```
+
+```ail tool=run,--at,nosuch,--show,a,FILE status=2 expect=probe.run.4 rules=probe.run.1,probe.run.2,probe.run.3,probe.run.4
+fn main()
+    print("hi")
+```
+
