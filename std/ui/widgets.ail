@@ -587,12 +587,7 @@ pub fn Rect.top(self, n int) Rect
 
 ## `r` shrunk by `n` cells on every side, never below zero (std.ui.25).
 pub fn Rect.inset(self, n int) Rect
-    Rect(
-        col: col + n,
-        row: row + n,
-        cols: (cols - 2 * n).max(0),
-        rows: (rows - 2 * n).max(0),
-    )
+    Rect(col: col + n, row: row + n, cols: (cols - 2 * n).max(0), rows: (rows - 2 * n).max(0))
 
 ## Whether the cell (`c`, `rw`) lies inside `r`.
 pub fn Rect.has(self, c int, rw int) bool
@@ -811,8 +806,7 @@ pub fn Tabs.on_event(mut self, ev ui.Event, r Rect) Action
         if hit.row != 0
             return Ignored
         for i in 0..titles.len()
-            if hit.col >= title_col(i)
-                and hit.col < title_col(i) + titles[i].chars().len() + 2
+            if hit.col >= title_col(i) and hit.col < title_col(i) + titles[i].chars().len() + 2
                 if i == selected
                     return Ignored
                 selected = i
@@ -838,16 +832,28 @@ pub fn Tabs.render(self, r Rect, theme Map[str, int]) List[Run]
         mut bg := color(theme, "line_bg")
         if on
             bg = color(theme, "status_bg")
+        gap := used > 0
+        if gap and used < r.cols
+            out.push(Run(
+                col: r.col + used,
+                row: r.row,
+                text: " ",
+                fg: color(theme, "fg"),
+                bg: color(theme, "bg"),
+                bold: false,
+            ))
+        if gap
+            used += 1
         if used < r.cols
             out.push(Run(
                 col: r.col + used,
                 row: r.row,
-                text: fit(text, r.cols - used),
+                text: fit(text, text.chars().len().min(r.cols - used)),
                 fg: color(theme, "status_fg"),
                 bg: bg,
                 bold: on,
             ))
-        used += text.chars().len() + 1
+        used += text.chars().len()
     if used < r.cols
         out.push(Run(
             col: r.col + used,

@@ -2753,7 +2753,7 @@ fn main()
     print(area.inset(1).rows)                      # 2
     print(widgets.Label(text: "hi", bold: true).render(rows[0], theme).len())
     mut box := widgets.Checkbox(label: "on", checked: false, focused: true)
-    space := Key(key: " ", ctrl: false, alt: false, shift: false)
+    space := ui.Event.Key(key: " ", ctrl: false, alt: false, shift: false)
     print(box.on_event(space, rows[2]))            # Changed
     print(box.checked)                             # true
     mut radio := widgets.RadioGroup.new(["a", "b"])
