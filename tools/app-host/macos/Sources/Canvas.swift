@@ -62,8 +62,13 @@ final class CanvasView: NSView {
             reported = size
             let cell = ("M" as NSString).size(withAttributes: [.font: cellFont])
             let lineH = ceil(cellFont.ascender - cellFont.descender + cellFont.leading)
-            Outbox.shared.send("resize", ["id": canvasId, "dx": size.width, "dy": size.height,
-                                          "cell_w": cell.width, "cell_h": lineH])
+            var f = Edge.insets(window)
+            f["id"] = canvasId
+            f["dx"] = size.width
+            f["dy"] = size.height
+            f["cell_w"] = cell.width
+            f["cell_h"] = lineH
+            Outbox.shared.send("resize", f)
         }
     }
 
@@ -125,6 +130,7 @@ final class CanvasView: NSView {
 
     override func mouseDown(with e: NSEvent) {
         window?.makeFirstResponder(self)
+        Edge.lastEvent = e
         click(e, "left")
     }
     override func rightMouseDown(with e: NSEvent) { click(e, "right") }

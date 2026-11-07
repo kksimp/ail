@@ -171,8 +171,14 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 DispatchQueue.main.async { showPick(id: id, prompt: prompt, folders: folders, start: start) }
                 continue
             }
+            if kind == "drag" || kind == "zoom" {
+                // std.app.25: in edge mode the app says when its strip is dragged or double-clicked.
+                DispatchQueue.main.async { Edge.act(kind) }
+                continue
+            }
             if kind != "view" { continue }
             Hover.enabled = flag(obj, "hover")
+            Edge.wanted = flag(obj, "edge")
             if first {
                 first = false
                 if (obj["v"] as? NSNumber)?.intValue != 1 {
@@ -192,6 +198,38 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
 /// std.app.16: whether the program wants `move` and `leave` events.
 enum Hover {
     static var enabled = false
+}
+
+/// std.app.25 (ADR 0981): edge mode. The app draws up to the window's top edge; the
+/// title bar is hidden, the traffic lights stay, and the app is told the room they take.
+enum Edge {
+    static var wanted = false
+    static var applied = false
+    static var lastEvent: NSEvent?
+
+    /// The window controls' room in points: their right edge plus a gap, and the title bar's height.
+    static func insets(_ w: NSWindow?) -> [String: Any] {
+        guard applied, let w = w else { return ["inset_left": 0, "inset_top": 0] }
+        let right = w.standardWindowButton(.zoomButton)?.frame.maxX ?? 70
+        let top = w.frame.height - w.contentLayoutRect.height
+        return ["inset_left": right + 8, "inset_top": max(top, 0)]
+    }
+
+    /// Hides the title bar of `w` once the app asks for edge mode.
+    static func apply(_ w: NSWindow?) {
+        guard wanted, !applied, let w = w else { return }
+        applied = true
+        w.styleMask.insert(.fullSizeContentView)
+        w.titlebarAppearsTransparent = true
+        w.titleVisibility = .hidden
+        w.isMovableByWindowBackground = false
+    }
+
+    static func act(_ kind: String) {
+        guard let w = NSApp.keyWindow ?? NSApp.windows.first else { return }
+        if kind == "zoom" { w.zoom(nil); return }
+        if let e = lastEvent { w.performDrag(with: e) }
+    }
 }
 
 /// std.app.18: shows `items` as a menu and answers with a `popup` event whose `text` is the

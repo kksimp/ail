@@ -21,9 +21,10 @@ final class Model: ObservableObject {
         self.focus = focus
         sync(tree)
         self.tree = tree
+        Edge.apply(NSApp.windows.first)
         if !started {
             started = true
-            Outbox.shared.send("start")
+            Outbox.shared.send("start", Edge.insets(NSApp.windows.first))
         }
     }
 

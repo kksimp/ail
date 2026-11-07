@@ -781,3 +781,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
 | [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
+| [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
