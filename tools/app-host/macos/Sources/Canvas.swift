@@ -115,6 +115,7 @@ final class CanvasView: NSView {
                 g.restoreGState()
             }
         }
+        Surfaces.draw(canvasId, in: g, bounds: bounds)
     }
 
     private func mods(_ e: NSEvent) -> [String: Any] {
