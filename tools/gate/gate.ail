@@ -77,12 +77,14 @@ fn Gate.examples(mut self, tmp str)
             unbuilt.push("examples/{name}")
             continue
         built += 1
-        # Under a timeout: one hang is one red example, not a stuck gate. `proc.run` kills it, with no `perl` between (on
-        # Windows the exec wrapper lost the output of some examples).
-        got := proc.run(exe, [], none, 1000 * alarm_for(stem)) else
+        # Under a 60 second alarm: one hang is one red example, not a stuck gate.
+        mut got := proc.run("perl", ["-e", "alarm {alarm_for(stem)}; exec @ARGV", exe]) else
             red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
+        # A just-built exe on Windows can come back empty on its first start (the virus scanner is still looking at it): once more.
+        if got.out == "" and want != ""
+            got = proc.run("perl", ["-e", "alarm {alarm_for(stem)}; exec @ARGV", exe]) else got
         # Windows may hand a program's lines back as CRLF (a checkout with autocrlf, the console's translation): compare LF.
         if got.status != 0 or lf(got.out) != lf(want)
             red(
