@@ -302,9 +302,6 @@ fn main() !
             stdin_file := if b.stdin.is_empty() then "" else "{dir}/{b.stdin}"
             r := ail_in(dir, args, stdin_file)
             mut want := b.expect_text
-            # ffi.load.3: a C call outside the libc subset traps as not supported on Windows, whatever the library or symbol.
-            if (env.get("OS") else "") == "Windows_NT" and want.starts_with("trap[ffi.load.")
-                want = "trap[ffi.load.3]"
             if r.status != b.status or not "{r.out}{r.err}".contains(want)
                 ok = false
                 fails.push("{at}: `ail {args.join(" ")}` should exit {b.status} and print `{want}`; exit {r.status}\n{r.out}{r.err}")

@@ -214,9 +214,6 @@ fn run_case(at str, exp str) str?
     if fs.exists("{exp}trap")
         r := case_run(cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         mut rule := slurp("{exp}trap").trim()
-        # ffi.load.3: a C call on Windows traps as not supported, whatever the library or symbol.
-        if (env.get("OS") else "") == "Windows_NT" and rule.starts_with("ffi.load.")
-            rule = "ffi.load.3"
         if r.status != 1 or not r.err.contains("trap[{rule}]")
             return "expected trap[{rule}] (exit 1), got {r.status}\n{r.err}"
         if r.out != want_out
