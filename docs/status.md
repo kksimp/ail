@@ -65,7 +65,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native string-keyed map key cache (ADR 0936): the entry of a key object is found without hashing it again, and an insert reuses the hash of the probe that missed; wordfreq 10M 0.27 s → 0.22 s, 1.649G → 1.452G instructions on ail-linux; Mac 0.097 s → 0.062 s (C 0.150 s).
 - `Grid[T]` (ADR 0937, type.grid.1-6): a flat 2-D list in the prelude with `g[i, j]`; 6-17% fewer tokens than nested lists on 2-D code, 2x slower than them until bounds checks on `g[i, j]` are versioned out (P2).
 - Const generics (ADR 0954, proposed, spec rules planned): `int` parameters on types and functions by monomorphisation; spec and design only, no compiler work yet.
-- Custom hashing (ADR 0955, proposed, spec rules planned): `impl Hash` with a `uses` field list for types with a hand-written `eq`; spec only.
+- Custom hashing (ADR 0955, `trait.hash.1-2`): `impl Hash` with a `uses` field list for a non-generic struct with a hand-written `eq`; the map table hashes and compares those fields (native only).
 - Generators (ADR 0965, proposed, spec rules planned): `yield` in a function returning `Seq[T]`, state-machine lowering, no colour; spec and design only.
 - Time zones (ADR 0924, decided): AIL will ship the IANA tz database so zones answer the same on every OS, Windows included; not yet implemented.
 - Data-range guards and interchange (ADR 0941, native.bce.12-13): a scan of the lists a nest only reads bounds their elements, so the nest's overflow checks go, and `for j: s := s0; for k: s += t; row.push(s)` runs as k outside, j inside, behind a guard; bit-identical for `int` and `float`.

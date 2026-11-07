@@ -1,10 +1,10 @@
 # 0955. Custom hashing: `impl Hash` names the fields that take part
 
-- **Status:** Proposed
+- **Status:** Accepted (slice 1 implemented)
 - **Date:** 2026-11-05
 - **Decided by:** Designer (2026-11-05, card answer: option A, `impl Hash` names the fields)
 - **Topic:** 10 — Traits
-- **Spec rules:** planned `trait.hash.1-3` (spec 10), added with the implementation; the rules are the Decision items below
+- **Spec rules:** [trait.hash.1-2](../spec/10-traits.md)
 - **Amends:** [ADR 0133](0133-automatic-hash.md) (`Hash` stays automatic; a hand-written `impl Hash` is now allowed for the case below)
 - **Resolves:** OQ-042
 
@@ -16,7 +16,7 @@ A hand-written `fn eq` removes `Hash` (trait.auto.5), so a type with its own equ
 
 1. `impl Hash for T` with one `uses` line naming fields restores `Hash` for a type whose `fn eq` is hand-written: `impl Hash for Key` then, indented, `uses id, region` (trait.hash.1). Without `impl Hash`, ADR 0133 is unchanged.
 2. Only the named fields are hashed, in the order written, with the automatic rule for each field's type. Each named field MUST itself be `Hash` (trait.hash.2).
-3. Consistency: equal values must hash equal, so every named field must be one that `eq` requires to be equal. The checker warns when the `eq` body never reads a named field (trait.hash.3). A hash that ignores a field `eq` compares is always safe; only extra hashed fields can miss.
+3. The table identifies a key by the named fields alone, in hash and comparison (the native key shape marks the other fields `_`); it never calls the user's `fn eq`. `eq` SHOULD compare at least the named fields. Slice 1 has no warning when it doesn't (the planned `trait.hash.3`). Only a struct without type parameters takes `uses`; an enum or generic struct is a later slice.
 4. `uses` is the only form. No `fn hash`, no `Hasher` value, so hash values stay unobservable and output cannot depend on the hash function.
 
 ## Rejected alternatives
