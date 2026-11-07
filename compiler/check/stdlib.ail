@@ -38,6 +38,12 @@ STD_FUNCTIONS := [
         "volume",
         "read_range",
         "trash",
+        "mode",
+        "set_mode",
+        "set_modified",
+        "read_link",
+        "symlink",
+        "truncate",
         "write_bytes",
         "write_text",
     ],
@@ -237,6 +243,14 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.trash"
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.mode"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Int))
+    if key == "fs.set_mode" or key == "fs.set_modified" or key == "fs.truncate"
+        return StdSig(params: [text, Ty.Int], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.read_link"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+    if key == "fs.symlink"
+        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.scan"
         return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
     if key == "fs.rename" or key == "fs.copy"
