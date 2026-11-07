@@ -77,8 +77,9 @@ fn Gate.examples(mut self, tmp str)
             unbuilt.push("examples/{name}")
             continue
         built += 1
-        # Under a 60 second alarm: one hang is one red example, not a stuck gate.
-        got := proc.run("perl", ["-e", "alarm {alarm_for(stem)}; exec @ARGV", exe]) else
+        # Under a timeout: one hang is one red example, not a stuck gate. `proc.run` kills it, with no `perl` between (on
+        # Windows the exec wrapper lost the output of some examples).
+        got := proc.run(exe, [], none, 1000 * alarm_for(stem)) else
             red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
