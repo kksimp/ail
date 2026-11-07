@@ -149,6 +149,12 @@ with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
 **std.app.20** — A host sends `keyup` (a canvas's `id`, `text`, modifiers) when a key is released, and `key` carries `repeat` (auto-repeat) and `code` (the platform key code). A program that does not read them is unaffected; a host may omit both. *(ADR 0956)*
 
+**std.app.21** — `trait App` has `lines(mut self) List[str]` (default empty).
+After each `update`, `run` sends every returned line to the host unchanged and
+the app's next call returns only new ones; it is how an app sends protocol
+lines the tree cannot express, such as `surface` and `present`
+(`std.gfx.6`). A host skips a line it doesn't know. *(ADR 0957)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -195,6 +201,31 @@ fn main()
     print(ev.x)
     print(app.frame(p).starts_with("\{\"v\":1,\"t\":\"view\",\"title\":\"Pad\""))
     print(app.outline(p.view()))
+```
+
+```ail rules=std.app.21
+use std.app
+
+struct Sender
+    queue List[str]
+
+impl app.App for Sender
+    fn update(mut self, ev app.Event)
+        queue.push("\{\"v\":1,\"t\":\"present\"}")
+
+    fn view(self) app.Node
+        app.label("sender")
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Sender(queue: [])
+    s.update(app.event("start"))
+    print(s.lines().len())
+    print(s.lines().len())
 ```
 
 ```ail rules=std.app.20

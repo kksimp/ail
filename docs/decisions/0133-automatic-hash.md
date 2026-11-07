@@ -1,6 +1,6 @@
 # 0133. `Hash` is implemented automatically, like `Eq` and `ToStr`
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0955](0955-custom-hash-names-fields.md)
 - **Date:** 2026-10-05
 - **Decided by:** Designer (2026-10-05)
 - **Topic:** 10 — Traits; 4 — Type system
