@@ -1591,7 +1591,8 @@ fn main()
 ```
 
 **std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
-else the zone `/etc/localtime` links to, else `"UTC"`.
+else the zone `/etc/localtime` links to (on Windows, the active zone mapped to
+its IANA name, `std.tz.3`), else `"UTC"`.
 
 ```ail rules=std.tz.2
 use std.tz
@@ -1605,7 +1606,7 @@ fn main()
 looks there first. When `AIL_ROOT` is unset or the file is missing, a name is
 looked up in the system directories, and on Windows it is `none`.
 `tz.system()` is `TZ` if it names a safe zone, else the zone `/etc/localtime`
-links to, else `"UTC"` (on Windows, `TZ` else `"UTC"`). UTC and fixed offsets
+links to, else `"UTC"` (on Windows, `TZ` if it names a safe zone, else the active Windows zone ID mapped to its IANA name by `tools/tzdata/windows-zones.txt`, else `"UTC"`; ADR 0972). UTC and fixed offsets
 work everywhere. *(ADR 0924)*
 
 ```ail rules=std.tz.3
