@@ -52,8 +52,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
-| **Generator** | A function with `yield` that returns `Seq[T]`, a lazy single-use sequence compiled to a state machine. Proposed in [ADR 0965](decisions/0965-generators.md) (`gen.yield.*`). |
-| **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md) (`gen.const.*`). |
+| **Generator** | A function with `yield` that returns `Seq[T]`, a lazy single-use sequence compiled to a state machine. Proposed in [ADR 0965](decisions/0965-generators.md). |
+| **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md). |
 | **Constant time (cryptography)** | Code whose branches and memory indexes never depend on secret data, so its timing reveals nothing about keys or plaintext. Required of the TLS primitives (ADRs 0360, 0366). |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
 | **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed at compile time (before `main` in the bootstrap); visible in the whole module (ADR 0132, ADR 0225). |

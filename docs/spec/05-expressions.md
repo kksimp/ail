@@ -1047,15 +1047,3 @@ fn main()
     print(grade('c'))                 # low
     print(grade('x'))                 # high
 ```
-
-## Generators (proposed)
-
-> **Status:** Proposed, not implemented. [ADR 0965](../decisions/0965-generators.md), [design](../design/generators.md).
-
-**gen.yield.1** — A function whose body contains `yield e` MUST return `Seq[T]`, and `e` MUST have type `T`. Calling it runs no body code.
-
-**gen.yield.2** — `yield` MUST NOT appear inside `par`, `spawn` or a closure.
-
-**gen.yield.3** — A `Seq[T]` is consumed by one use; using a copy after it was consumed is a compile-time error naming this rule.
-
-**gen.yield.4** — `for x in e` accepts `e` of type `Seq[T]`, giving `x` type `T` (extends `expr.loop.4`).

@@ -4,7 +4,7 @@
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 05 — Expressions; 11 — Concurrency
-- **Spec rules:** [gen.yield.1-4](../spec/05-expressions.md)
+- **Spec rules:** planned `gen.yield.1-4` (spec 05), added with the implementation; the rules are the Decision items below
 - **Builds on:** [ADR 0095](0095-colorless-tasks.md), [ADR 0096](0096-scope-bound-tasks.md)
 
 ## Context

@@ -1157,16 +1157,7 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         return none
     if eat_sym("[")
         while true
-            if tag_at(0) == "int"
-                # gen.const.1-2: a const argument is an int literal, kept as a
-                # `Named` whose name is the digits; the checker resolves it.
-                v := match peek()
-                    Int(x) => "{x}"
-                    Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
-                cpos := bump().pos
-                args.push(ast.TypeRef(shape: ast.TypeShape.Named(name: v, args: List[ast.TypeRef]()), pos: cpos))
-            else
-                args.push(type_ref("a type argument", "gram.generic.1")?)
+            args.push(type_ref("a type argument", "gram.generic.1")?)
             if not eat_sym(",") or at_sym("]")
                 break
         expect_sym("]", "`]` after the type arguments", "gram.generic.1")?

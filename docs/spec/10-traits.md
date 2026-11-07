@@ -532,7 +532,7 @@ and `error` types whose fields all are. A generic type is `Hash` per instance
 aren't `Hash`. A hand-written `fn eq` (`trait.auto.3`) removes `Hash`. An
 `impl Ord` doesn't change `Eq` (`==` never calls `cmp`), so a type with
 `impl Ord` and an automatic `Eq` stays `Hash`. `impl Hash` is a compile-time
-error, except the field-list form of `trait.hash.1` (ADR 0955, proposed). A constraint `[T Hash]` implies
+error, since custom hashing isn't designed. A constraint `[T Hash]` implies
 `Eq`: the prelude declares `trait Hash Eq` (`trait.super.3`). Map keys and set elements MUST be `Hash` (`type.map.2`). Hash values are
 never visible to programs, so output can't depend on the hash function.
 *(ADR 0133)*
@@ -546,15 +546,6 @@ fn main()
     m[Sq(s: 1)] = 5
     print(m[Sq(s: 1)])
 ```
-
-**trait.hash.1** *(proposed, ADR 0955)* — A type with a hand-written `fn eq`
-MAY write `impl Hash for T` whose body is one line `uses a, b`, naming fields of
-`T`. The type is then `Hash`, hashing the named fields in order.
-
-**trait.hash.2** *(proposed)* — Every named field MUST be `Hash`.
-
-**trait.hash.3** *(proposed)* — The checker warns when the `eq` body never reads
-a named field, since only extra hashed fields can make equal values hash apart.
 
 ## Runnable examples for the rules above
 

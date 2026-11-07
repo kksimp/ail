@@ -4,7 +4,7 @@
 - **Date:** 2026-11-05
 - **Decided by:** Designer (2026-11-05, card answer: option A, `impl Hash` names the fields)
 - **Topic:** 10 — Traits
-- **Spec rules:** [trait.hash.1-3](../spec/10-traits.md)
+- **Spec rules:** planned `trait.hash.1-3` (spec 10), added with the implementation; the rules are the Decision items below
 - **Amends:** [ADR 0133](0133-automatic-hash.md) (`Hash` stays automatic; a hand-written `impl Hash` is now allowed for the case below)
 - **Resolves:** OQ-042
 

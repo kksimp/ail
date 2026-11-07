@@ -4,7 +4,7 @@
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 09 — Generics
-- **Spec rules:** [gen.const.1-5](../spec/09-generics.md)
+- **Spec rules:** planned `gen.const.1-5` (spec 09), added with the implementation; the rules are the Decision items below
 - **Builds on:** [ADR 0041](0041-square-bracket-generics.md), [ADR 0090](0090-collections.md) (defers fixed arrays and SIMD vectors to const generics), [ADR 0536](0536-native-generics-by-monomorphisation.md), [ADR 0937](0937-grid-flat-2d-list.md)
 
 ## Context
