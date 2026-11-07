@@ -35,10 +35,13 @@ function Esc-Native($list) {
         $t = [string]$a
         if (-not $legacyArgs) { $t; continue }
         if ($t -eq '') { '""'; continue }
-        if ($t -match '[ \t"]') {
-            # Quote it ourselves: PowerShell wraps nothing that already has a quote in it, so a space would split the argument.
-            $t = '"' + ($t -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+        if ($t -match '[ \t]') {
+            # Quote it ourselves. PowerShell 5.1 wraps an argument when it sees whitespace outside quotes, counting every `"`
+            # (even a backslash-escaped one) as a toggle, so `"c\"d e"` would be wrapped again and split. Inside a quoted
+            # argument the Windows rules read `""` as one literal quote and stay inside, which the count also leaves balanced.
+            $t = '"' + ($t -replace '(\\*)"', '$1$1""' -replace '(\\+)$', '$1$1') + '"'
         }
+        elseif ($t.Contains('"')) { $t = $t -replace '(\\*)"', '$1$1\"' }
         $t
     }
 }
