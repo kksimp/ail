@@ -80,7 +80,14 @@ fn Lower.note_hash_uses(mut self, prog ast.Program, pre str)
 
 ## `S n ; shapes` for struct `n` where a field not in `used` is `_`: skipped
 ## when hashing and comparing (trait.hash.1).
-fn Lower.used_struct_shape(self, n str, used List[str], outer List[str], offs List[int], base int) str
+fn Lower.used_struct_shape(
+    self,
+    n str,
+    used List[str],
+    outer List[str],
+    offs List[int],
+    base int,
+) str
     slots := structs[n]
     head := "S{slots.len()};"
     ns := with_name(outer, n)
