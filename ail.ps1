@@ -62,7 +62,7 @@ if ($cmd -eq 'check') {
 # Tracing and recording belong to `run` and `test` (trace.run.1, replay.rec.1).
 if ($cmd -notin 'run', 'test') {
     foreach ($a in $rest) {
-        if ("$a" -in '--trace', '--trace-limit', '--watch', '--verbose' -or "$a" -like '--trace=*' -or "$a" -like '--watch=*') {
+        if ("$a" -in '--trace', '--trace-limit', '--watch', '--verbose', '--at', '--show' -or "$a" -like '--trace=*' -or "$a" -like '--watch=*') {
             [Console]::Error.WriteLine("error[trace.run.1]: the tracing options (``$a``) work with ``ail run`` and ``ail test`` (trace.run.1)"); exit 2
         }
         if ("$a" -in '--record', '--replay') {
@@ -81,7 +81,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 
 # `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
-$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null
+$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null; $probeAt = $null; $probeShow = $null
 if ($cmd -eq 'run') {
     $k = 0
     :scan while ($k -lt $rest.Count) {
@@ -106,6 +106,14 @@ if ($cmd -eq 'run') {
             '^--watch$' {
                 if ($v -notmatch '^[A-Za-z0-9_]+$') { Fail '`--watch` needs a variable name, e.g. `--watch total` (trace.watch.1)' }
                 Add-Instrument "watch=$v"; $traceRun = $true; $k += 2; continue
+            }
+            '^--at$' {
+                if ($v -notmatch '^.+:[1-9]\d*$') { Fail 'error[probe.run.4]: `--at` needs FILE:LINE, e.g. `--at main.ail:12` (probe.run.4)' }
+                $probeAt = $v; $k += 2; continue
+            }
+            '^--show$' {
+                if ($v -notmatch '^[A-Za-z0-9_,]+$') { Fail 'error[probe.run.4]: `--show` needs variable names, e.g. `--show i,total` (probe.run.4)' }
+                $probeShow = $v; $k += 2; continue
             }
             '^--no-contracts$' { Add-Instrument 'nocontracts'; $k++; continue }
             '^--trace(=all)?$' { Add-Instrument 'trace,traceeffects'; $traceRun = $true; $k++; continue }
@@ -156,6 +164,12 @@ if ($cmd -eq 'run') {
         $recPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AIL_RECORD)
         $recHead = '{"ail_record":1,"program":' + (& $quote $runFile) + ',"args":[' + $recArgs + '],"seed":' + $env:AIL_SEED + ',"limit":67108864}' + "`n"
         try { [IO.File]::WriteAllText($recPath, $recHead, (New-Object Text.UTF8Encoding($false))) } catch { Fail "can't write the recording $($env:AIL_RECORD)" }
+    }
+    # probe.run.1: `--at FILE:LINE --show a,b` builds the probe in; each needs the other.
+    if ($probeAt -or $probeShow) {
+        if (-not ($probeAt -and $probeShow)) { Fail 'error[probe.run.4]: `--at` and `--show` go together, e.g. `--at main.ail:12 --show i,total` (probe.run.4)' }
+        Add-Instrument ('probe=' + $probeAt + ':' + ($probeShow -replace ',', '|'))
+        $traceRun = $true
     }
     # trace.run.1: with a trace, `--json` makes the events JSON objects; trace.snap.4: alone, it makes a trap one JSON object.
     if ($jsonOpt) {

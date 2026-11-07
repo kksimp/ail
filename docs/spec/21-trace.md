@@ -462,6 +462,9 @@ recorded run. The program's output and exit status are unchanged
 separated by commas, and each needs the other; otherwise it is a usage error
 (exit 2). A program run without them is built and behaves as before.
 
+```ail pkg=probe_demo tool=run,--at,main.ail:3,--show,n,main.ail expect=probe: rules=probe.run.1
+```
+
 ```ail tool=run,--at,nosuch,--show,a,FILE status=2 expect=probe.run.4 rules=probe.run.1,probe.run.2,probe.run.3,probe.run.4
 fn main()
     print("hi")
