@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
+    hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
     self_ty str
     ## Variables whose list or struct belongs to someone else (parameters,
@@ -287,6 +289,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
@@ -502,6 +505,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
+    note_hash_uses(prog, pre)
     for f in program_fns(prog)
         if is_test(f)
             continue

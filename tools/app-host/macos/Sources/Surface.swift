@@ -65,9 +65,14 @@ enum Surfaces {
         let p = mmap(nil, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
         guard let base = p, base != MAP_FAILED else { return false }
         maps[id] = Mapped(base: base + offset, skip: offset, bytes: bytes, w: w, h: h, stride: stride, count: count)
-        // A game reads the keyboard at once: the canvas takes the focus.
+        // A game reads the keyboard at once: the canvas takes the focus, and the
+        // window is sized so the canvas is exactly the surface, one point per pixel
+        // (std.gfx.6).
         DispatchQueue.main.async {
-            if let v = CanvasView.registry[id] { v.window?.makeFirstResponder(v) }
+            guard let v = CanvasView.registry[id], let win = v.window else { return }
+            win.makeFirstResponder(v)
+            fitWindow(win, to: v, width: CGFloat(w), height: CGFloat(h))
+            report(id, v, w, h)
         }
         return true
     }
@@ -94,5 +99,38 @@ enum Surfaces {
         let dt = now.timeIntervalSince(m.lastDraw)
         m.lastDraw = now
         Outbox.shared.send("vsync", ["id": id, "dx": dt, "text": String(m.current)])
+    }
+}
+
+/// Resizes `win` by the difference between the canvas and the size the surface wants,
+/// so the controls and padding around the canvas keep their size.
+private func fitWindow(_ win: NSWindow, to v: NSView, width: CGFloat, height: CGFloat) {
+    guard let content = win.contentView else { return }
+    content.layoutSubtreeIfNeeded()
+    let dx = width - v.bounds.width, dy = height - v.bounds.height
+    if abs(dx) < 0.5 && abs(dy) < 0.5 { return }
+    win.setContentSize(NSSize(width: content.bounds.width + dx, height: content.bounds.height + dy))
+    content.layoutSubtreeIfNeeded()
+}
+
+/// With `AIL_GFX_REPORT=FILE`, appends one line to FILE once the window has settled:
+/// the surface size, the canvas size in points, the backing scale and the canvas in
+/// pixels. tools/app-host/macos/gfx-size-check.sh reads it.
+private func report(_ id: String, _ v: NSView, _ w: Int, _ h: Int) {
+    guard let path = ProcessInfo.processInfo.environment["AIL_GFX_REPORT"], !path.isEmpty else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        let scale = v.window?.backingScaleFactor ?? 1
+        let line = String(format: "gfx-surface id=%@ surface=%dx%d canvas=%dx%d scale=%g pixels=%dx%d\n", id, w, h,
+                          Int(v.bounds.width.rounded()), Int(v.bounds.height.rounded()), Double(scale),
+                          Int((v.bounds.width * scale).rounded()), Int((v.bounds.height * scale).rounded()))
+        if let data = line.data(using: .utf8) {
+            if let fh = FileHandle(forWritingAtPath: path) {
+                fh.seekToEndOfFile()
+                fh.write(data)
+                fh.closeFile()
+            } else {
+                FileManager.default.createFile(atPath: path, contents: data)
+            }
+        }
     }
 }

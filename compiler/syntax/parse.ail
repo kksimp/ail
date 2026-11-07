@@ -1013,14 +1013,42 @@ fn Parser.impl_decl(mut self)
         target: owner,
         pos: pos,
         methods: [],
+        uses: [],
     ))
     if not eat_newline()
         unexpected("end of line after the `impl`", "trait.impl.1")
         skip_statement()
         return
     if peek() == Tok.Indent
-        methods := fn_block(ast.Within.InImpl(index), "the `impl`")
-        impls[index].methods = methods
+        if trait_name.name == "Hash" and uses_next()
+            impls[index].uses = hash_uses()
+        else
+            methods := fn_block(ast.Within.InImpl(index), "the `impl`")
+            impls[index].methods = methods
+
+## Whether the block after an `impl` line starts with the word `uses`.
+fn Parser.uses_next(self) bool
+    match peek_at(1)
+        Ident(s) => s == "uses"
+        Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false
+
+## The indented line `uses a, b` of an `impl Hash` block: the fields that
+## take part in the hash (trait.hash.1).
+fn Parser.hash_uses(mut self) List[ast.Ident]
+    mut out := List[ast.Ident]()
+    eat_indent()
+    bump()
+    while true
+        n := take_name("a field name after `uses`", "trait.hash.1") else break
+        out.push(n)
+        if not eat_sym(",")
+            break
+    eat_newline()
+    while peek() != Tok.Dedent and peek() != Tok.Eof
+        unexpected("the end of the `impl Hash` block, which holds one `uses` line", "trait.hash.1")
+        skip_statement()
+    eat_dedent()
+    out
 
 ## The indented functions of a `trait` or `impl` block; their indexes in `fns`.
 fn Parser.fn_block(mut self, within ast.Within, what str) List[int]

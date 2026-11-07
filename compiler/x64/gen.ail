@@ -1221,7 +1221,11 @@ fn Gen.call_out(mut self, i mir.Inst)
     # A C function (`icall` named "c", ADR 0870) may clobber xmm8-xmm13, which
     # AIL functions keep: save them around the call.
     c_call := indirect and i.name == "c"
-    if c_call
+    # On Windows the C convention is Win64 (ffi.load.3): the argument's position
+    # names its register (rcx rdx r8 r9 or xmm0-3), 32 bytes of shadow space come
+    # first, later arguments go on the stack, and xmm6-xmm15 are the callee's to keep.
+    winc := c_call and self.win
+    if c_call and not winc
         a.alu_ri("sub", RSP, 48)
         for k in 0..6
             a.vmovsd_mr(at(RSP, 8 * k), 8 + k)
@@ -1230,6 +1234,13 @@ fn Gen.call_out(mut self, i mir.Inst)
         v := i.arg(k)
         if indirect and k == 0
             moves.push(move_of(S0, v))
+        elif winc
+            if k > 4
+                extra.push(v)
+            elif f.vals[v].is_float()
+                moves.push(move_of(codegen.FLOAT_BASE + k - 1, v))
+            else
+                moves.push(move_of(WIN_INT_ARGS[k - 1], v))
         elif f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
@@ -1240,11 +1251,15 @@ fn Gen.call_out(mut self, i mir.Inst)
             extra.push(v)
     # Integer arguments after the sixth go on the stack, the seventh lowest,
     # in a 16-byte multiple (native-abi.md §1).
-    room := (8 * extra.len() + 15) / 16 * 16
+    shadow := if winc then 32 else 0
+    room := (shadow + 8 * extra.len() + 15) / 16 * 16
     if room > 0
         a.alu_ri("sub", RSP, room)
         for k in 0..extra.len()
-            a.mov_mr(at(RSP, 8 * k), gpr(extra[k], S0))
+            if f.vals[extra[k]].is_float()
+                a.vmovsd_mr(at(RSP, shadow + 8 * k), xmm(extra[k], X0))
+            else
+                a.mov_mr(at(RSP, shadow + 8 * k), gpr(extra[k], S0))
     parallel(moves)
     if indirect
         a.call_reg(S0)
@@ -1270,7 +1285,7 @@ fn Gen.call_out(mut self, i mir.Inst)
                 ))
     if room > 0
         a.alu_ri("add", RSP, room)
-    if c_call
+    if c_call and not winc
         for k in 0..6
             a.vmovsd_rm(8 + k, at(RSP, 8 * k))
         a.alu_ri("add", RSP, 48)

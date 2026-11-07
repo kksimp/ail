@@ -45,6 +45,7 @@ pub mir.STD_AIL := ...
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
 pub fn mir.prelude_text(str) str
+pub struct mir.Probe
 pub struct mir.TaskState
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(str) bool
@@ -104,4 +105,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1631); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1638); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

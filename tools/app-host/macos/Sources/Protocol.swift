@@ -165,6 +165,12 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 DispatchQueue.main.async { showPopup(id: id, x: x, y: y, items: items) }
                 continue
             }
+            if kind == "pick" {
+                // std.app.22: a native chooser; answered with `picked`.
+                let id = text(obj, "id"), prompt = text(obj, "prompt"), folders = flag(obj, "folders"), start = text(obj, "start")
+                DispatchQueue.main.async { showPick(id: id, prompt: prompt, folders: folders, start: start) }
+                continue
+            }
             if kind != "view" { continue }
             Hover.enabled = flag(obj, "hover")
             if first {
@@ -209,4 +215,25 @@ func showPopup(id: String, x: Double, y: Double, items: [String]) {
 final class MenuPicker: NSObject {
     var chosen = ""
     @objc func pick(_ sender: NSMenuItem) { chosen = sender.title }
+}
+
+/// std.app.22: shows an open panel for a folder or a file and answers with a `picked` event
+/// whose `text` is the chosen path, empty if the user cancelled.
+func showPick(id: String, prompt: String, folders: Bool, start: String) {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = folders
+    panel.canChooseFiles = !folders
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Choose"
+    panel.message = prompt
+    if !start.isEmpty { panel.directoryURL = URL(fileURLWithPath: start) }
+    let finish: (NSApplication.ModalResponse) -> Void = { r in
+        let path = r == .OK ? (panel.url?.path ?? "") : ""
+        Outbox.shared.send("picked", ["id": id, "text": path])
+    }
+    if let w = NSApp.keyWindow {
+        panel.beginSheetModal(for: w, completionHandler: finish)
+    } else {
+        panel.begin(completionHandler: finish)
+    }
 }

@@ -1,0 +1,16 @@
+## mod.unit.1: a type of the program named like a variant inside a standard module
+## doesn't shadow that module's own name.
+use std.app
+
+struct Field
+    text str
+
+struct Button
+    n int
+
+fn main()
+    f := Field(text: "x")
+    b := Button(n: 2)
+    print("{f.text} {b.n}")
+    print(app.outline(app.field("n", "abc", "hint")))
+    print(app.outline(app.button("go", "Go")))

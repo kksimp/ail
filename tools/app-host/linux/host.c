@@ -574,6 +574,18 @@ static const char *key_name(guint kv) {
 
 static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
     (void)d;
+    /* std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`. */
+    if ((e->state & GDK_CONTROL_MASK) && gdk_keyval_to_lower(e->keyval) == GDK_KEY_v) {
+        gchar *s = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+        if (s) {
+            Ev ev = ev_new("paste");
+            ev_str(&ev, "id", cid(w));
+            ev_str(&ev, "text", s);
+            ev_send(&ev);
+            g_free(s);
+            return TRUE;
+        }
+    }
     const char *name = key_name(e->keyval);
     char buf[8] = { 0 };
     if (!name) {
@@ -708,6 +720,17 @@ static void canvas_size(GtkWidget *w, const Node *n) {
     gtk_widget_set_valign(w, n->h > 0 ? GTK_ALIGN_START : GTK_ALIGN_FILL);
 }
 
+/* True when the tree has a canvas that fills the window: the app draws its
+   own chrome, so the host adds no frame and no gaps (ADR 0888, as the
+   Windows host does). */
+static gboolean edge(const Node *n) {
+    if (n->kind == N_CANVAS && (n->w <= 0 || n->h <= 0)) return TRUE;
+    for (int i = 0; i < n->nkids; i++) if (edge(n->kids[i])) return TRUE;
+    return FALSE;
+}
+
+static gboolean edge_tree = FALSE;
+
 static GtkWidget *build(Node *n) {
     GtkWidget *w = NULL;
     switch (n->kind) {
@@ -746,7 +769,7 @@ static GtkWidget *build(Node *n) {
         break;
     case N_COLUMN:
     case N_ROW:
-        w = gtk_box_new(n->kind == N_COLUMN ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL, 6);
+        w = gtk_box_new(n->kind == N_COLUMN ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL, edge_tree ? 0 : 6);
         for (int i = 0; i < n->nkids; i++) {
             GtkWidget *k = build(n->kids[i]);
             gtk_box_pack_start(GTK_BOX(w), k, FALSE, TRUE, 0);
@@ -835,6 +858,8 @@ static void show_view(const char *title, const char *focus, Node *tree) {
         if (content) gtk_widget_destroy(content);
         g_hash_table_remove_all(by_id);
         node_free(current);
+        edge_tree = edge(tree);
+        gtk_container_set_border_width(GTK_CONTAINER(window), edge_tree ? 0 : 8);
         content = build(tree);
         gtk_container_add(GTK_CONTAINER(window), content);
         gtk_widget_show_all(content);
@@ -867,6 +892,12 @@ static void handle_line(const char *line) {
     const char *t = jstr(obj, "t");
     if (!strcmp(t, "measure")) {
         answer_measure(jget(obj, "runs"));
+    } else if (!strcmp(t, "pick")) {
+        /* std.app.22: no native chooser on this host yet; say so rather than hang. */
+        Ev e = ev_new("pick_error");
+        ev_str(&e, "id", jstr(obj, "id"));
+        ev_str(&e, "text", "this host has no native file chooser yet");
+        ev_send(&e);
     } else if (!strcmp(t, "view")) {
         if (first_view) {
             first_view = FALSE;

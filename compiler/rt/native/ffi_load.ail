@@ -22,7 +22,7 @@ fn ffi_dlopen(path int) int
     if t == 2
         return import_call("_dlopen", path, RTLD_NOW, 0, 0)
     if t == 3
-        return 0
+        return import_call("LoadLibraryA", path, 0, 0, 0)
     import_call("dlopen", path, RTLD_NOW, 0, 0)
 
 fn ffi_dlsym(handle int, name int) int
@@ -30,7 +30,7 @@ fn ffi_dlsym(handle int, name int) int
     if t == 2
         return import_call("_dlsym", handle, name, 0, 0)
     if t == 3
-        return 0
+        return import_call("GetProcAddress", handle, name, 0, 0)
     import_call("dlsym", handle, name, 0, 0)
 
 ## Open the library at `pre + (lib?) + name + suf`; 0 when it can't.
@@ -60,15 +60,25 @@ fn ffi_has_lib_prefix(name str) bool
     a := str_addr(name)
     load64(a) >= 3 and load8(a + 16) == 108 and load8(a + 17) == 105 and load8(a + 18) == 98
 
+## Whether `name` is the C or math library, which Windows keeps in the Universal CRT.
+fn ffi_is_crt(name str) bool
+    name == "c" or name == "m" or name == "libc" or name == "libm" or name == "msvcrt"
+
 ## The handle of library `name`, as the platform spells shared libraries.
 fn ffi_open_lib(name str) int
     if ffi_literal(name)
         return ffi_try("", false, name, "")
+    if target() == 3 and ffi_is_crt(name)
+        return ffi_try("", false, "ucrtbase", ".dll")
     mut k := 0
     while k < 2
         if k == 1 and ffi_has_lib_prefix(name)
             break
-        if target() == 2
+        if target() == 3
+            h := ffi_try("", k == 1, name, ".dll")
+            if h != 0
+                return h
+        elif target() == 2
             h := ffi_try("", k == 1, name, ".dylib")
             if h != 0
                 return h
@@ -96,20 +106,23 @@ fn ffi_addr(k int, lib str, has_lib bool, name str) int
     if a != 0
         return a
     store64(global(FFI_ST), 0)
-    if target() == 3
-        store64(global(FFI_ST), 3)
-        return 0
     mut handle := 0
     if has_lib
         handle = ffi_open_lib(lib)
         if handle == 0
             store64(global(FFI_ST), 1)
             return 0
+    elif target() == 3
+        # No library: the C library, which Windows keeps in the Universal CRT.
+        handle = ffi_open_lib("ucrtbase")
     else
         # The running program's own symbols, libc included.
         handle = ffi_dlopen(0)
     c := mem_cstr(name)
     p := ffi_dlsym(handle, c)
+    if p == 0 and not has_lib and target() == 3
+        # An older C runtime, then the executable's own imports' DLL.
+        p = ffi_dlsym(ffi_open_lib("msvcrt"), c)
     mem_free(c)
     if p == 0
         store64(global(FFI_ST), 2)

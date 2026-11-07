@@ -1,0 +1,87 @@
+## std.ui.25-28: layout on `Rect`, and the label, checkbox, radio group,
+## progress bar and tabs, driven by hand-built events and rendered without a window.
+use std.ui
+use std.ui.widgets
+
+fn key(k str) ui.Event
+    Key(key: k, ctrl: false, alt: false, shift: false)
+
+fn click(c int, r int) ui.Event
+    Mouse(col: c, row: r, button: "left", kind: "down")
+
+fn show(runs List[widgets.Run])
+    for r in runs
+        print("|{r.text}|")
+
+fn dims(r widgets.Rect) str
+    "{r.col},{r.row} {r.cols}x{r.rows}"
+
+fn main()
+    theme := Map[str, int]()
+    # Layout.
+    area := widgets.Rect(col: 2, row: 1, cols: 20, rows: 10)
+    print(dims(area.left(5)))
+    print(dims(area.left(99)))
+    print(dims(area.top(3)))
+    print(dims(area.inset(2)))
+    print(dims(area.inset(9)))
+    print(area.has(2, 1))
+    print(area.has(22, 1))
+    for c in area.cols_of([4, -1, -1])
+        print(dims(c))
+    for c in area.rows_of([1, -1, -1, 2])
+        print(dims(c))
+    for c in area.cols_of([-1, -1, -1])
+        print(dims(c))
+    # Label.
+    show(widgets.Label(text: "hello", bold: false).render(widgets.Rect(col: 0, row: 0, cols: 8, rows: 1), theme))
+    show(widgets.Label(text: "hello", bold: true).render(widgets.Rect(col: 0, row: 0, cols: 3, rows: 1), theme))
+    # Checkbox.
+    r := widgets.Rect(col: 0, row: 0, cols: 10, rows: 1)
+    mut cb := widgets.Checkbox(label: "on", checked: false, focused: false)
+    print(cb.on_event(key(" "), r))
+    print(cb.on_event(click(1, 0), r))
+    print(cb.checked)
+    cb.focused = true
+    print(cb.on_event(key("enter"), r))
+    print(cb.on_event(key("x"), r))
+    print(cb.checked)
+    show(cb.render(r, theme))
+    cb.on_event(key(" "), r)
+    show(cb.render(r, theme))
+    # RadioGroup.
+    r3 := widgets.Rect(col: 0, row: 0, cols: 10, rows: 3)
+    mut rg := widgets.RadioGroup.new(["red", "green", "blue"])
+    print(rg.on_event(key("up"), r3))
+    print(rg.on_event(key("down"), r3))
+    print(rg.chosen() else "none")
+    print(rg.on_event(click(2, 2), r3))
+    print(rg.chosen() else "none")
+    print(rg.on_event(click(2, 2), r3))
+    print(rg.on_event(key("down"), r3))
+    print(rg.on_event(key("enter"), r3))
+    show(rg.render(r3, theme))
+    rg.selected = 7
+    print(rg.chosen() else "none")
+    # ProgressBar.
+    r12 := widgets.Rect(col: 0, row: 0, cols: 14, rows: 1)
+    for d in [0, 1, 2, 4, 9]
+        p := widgets.ProgressBar(done: d, total: 4)
+        print("{p.percent()}")
+        show(p.render(r12, theme))
+    print(widgets.ProgressBar(done: 3, total: 0).percent())
+    # Tabs.
+    r20 := widgets.Rect(col: 0, row: 0, cols: 20, rows: 1)
+    mut t := widgets.Tabs.new(["one", "two", "three"])
+    show(t.render(r20, theme))
+    print(t.on_event(key("right"), r20))
+    print(t.on_event(key("tab"), r20))
+    print(t.on_event(key("tab"), r20))
+    print(t.selected)
+    print(t.on_event(key("left"), r20))
+    print(t.on_event(click(1, 0), r20))
+    print(t.selected)
+    print(t.on_event(click(9, 0), r20))
+    print(t.selected)
+    print(t.on_event(click(19, 0), r20))
+    print(t.on_event(key("q"), r20))
