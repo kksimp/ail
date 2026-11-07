@@ -2186,6 +2186,27 @@ outside the lines highlights none) and takes the wheel. `Tree` shows
 opens, Left closes, Enter opens or closes a parent and submits a leaf.
 *(ADR 0315)*
 
+**std.ui.25** — Layout is pure arithmetic on `Rect`. `left(n)` and `top(n)`
+keep the first `n` columns or rows, clamped to the rectangle; `inset(n)`
+shrinks every side by `n`, never below zero; `has(c, r)` tests a cell.
+`cols_of(sizes)` and `rows_of(sizes)` split a rectangle side by side or
+stacked: a size of 0 or more is fixed, and -1 shares what is left evenly,
+the first such sizes taking any remainder. *(ADR pending)*
+
+**std.ui.26** — `Label` shows its `text` (bold if `bold`) cut or padded to
+its rectangle. It takes no events. *(ADR pending)*
+
+**std.ui.27** — `Checkbox` toggles `checked` on a click, or on Space or
+Enter while `focused`, and answers `Changed`. `RadioGroup` shows one choice
+per row; Up and Down move `selected`, a click on a row picks it (both
+`Changed`), Enter answers `Submit`, and `chosen()` is the selected choice.
+*(ADR pending)*
+
+**std.ui.28** — `ProgressBar` shows `done` of `total` as a bar and a
+percentage (`percent()`, 0 to 100; an empty total is 0). `Tabs` shows one
+row of titles; Left, Right and Tab move `selected`, and a click on a title
+picks it (all `Changed`). *(ADR pending)*
+
 ## Tensors: `std.tensor`
 
 Dense arrays of numbers whose operations run as whole-array kernels: on the
@@ -2715,6 +2736,32 @@ fn main()
     print(button.render(widgets.Rect(col: 0, row: 0, cols: 6, rows: 1), theme).len())
     lines := widgets.text_rows(list.render(widgets.Rect(col: 0, row: 0, cols: 12, rows: 3), theme), 12, 3)
     print(lines.len())
+```
+
+```ail rules=std.ui.25,std.ui.26,std.ui.27,std.ui.28
+use std.ui
+use std.ui.widgets
+
+fn main()
+    theme := Map[str, int]()
+    area := widgets.Rect(col: 0, row: 0, cols: 20, rows: 4)
+    rows := area.rows_of([1, -1, 1])
+    print(rows.len())                              # 3: header, body, footer
+    halves := rows[1].cols_of([-1, -1])
+    print(halves[0].cols + halves[1].cols)         # 20
+    print(area.left(30).cols)                      # 20: clamped
+    print(area.inset(1).rows)                      # 2
+    print(widgets.Label(text: "hi", bold: true).render(rows[0], theme).len())
+    mut box := widgets.Checkbox(label: "on", checked: false, focused: true)
+    space := Key(key: " ", ctrl: false, alt: false, shift: false)
+    print(box.on_event(space, rows[2]))            # Changed
+    print(box.checked)                             # true
+    mut radio := widgets.RadioGroup.new(["a", "b"])
+    radio.selected = 1
+    print(radio.chosen() else "")                  # b
+    print(widgets.ProgressBar(done: 1, total: 4).percent())   # 25
+    tabs := widgets.Tabs.new(["one", "two"])
+    print(widgets.text_rows(tabs.render(rows[0], theme), 20, 1)[0])
 ```
 
 ```ail rules=std.tensor.6
