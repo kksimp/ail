@@ -1,6 +1,6 @@
 # 0909. `ail verify --diff`: what a change proved, what tests exercised, what stays unverified
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-07, by the integrator after it landed through the gate with its spec rules; proposed 2026-10-25)
 - **Date:** 2026-10-25
 - **Decided by:** Designer (2026-10-25, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0396](0396-ail-diff-semantic-diff.md) (`ail diff`), [ADR 0882](0882-edit-impact.md) (impact and affected tests), [ADR 0211](0211-contract-runtime-checks.md) (contracts), [ADR 0394](0394-token-budgets-on-every-command.md) (`--budget`)
