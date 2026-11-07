@@ -708,6 +708,17 @@ static void canvas_size(GtkWidget *w, const Node *n) {
     gtk_widget_set_valign(w, n->h > 0 ? GTK_ALIGN_START : GTK_ALIGN_FILL);
 }
 
+/* True when the tree has a canvas that fills the window: the app draws its
+   own chrome, so the host adds no frame and no gaps (ADR 0888, as the
+   Windows host does). */
+static gboolean edge(const Node *n) {
+    if (n->kind == N_CANVAS && (n->w <= 0 || n->h <= 0)) return TRUE;
+    for (int i = 0; i < n->nkids; i++) if (edge(n->kids[i])) return TRUE;
+    return FALSE;
+}
+
+static gboolean edge_tree = FALSE;
+
 static GtkWidget *build(Node *n) {
     GtkWidget *w = NULL;
     switch (n->kind) {
@@ -746,7 +757,7 @@ static GtkWidget *build(Node *n) {
         break;
     case N_COLUMN:
     case N_ROW:
-        w = gtk_box_new(n->kind == N_COLUMN ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL, 6);
+        w = gtk_box_new(n->kind == N_COLUMN ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL, edge_tree ? 0 : 6);
         for (int i = 0; i < n->nkids; i++) {
             GtkWidget *k = build(n->kids[i]);
             gtk_box_pack_start(GTK_BOX(w), k, FALSE, TRUE, 0);
@@ -835,6 +846,8 @@ static void show_view(const char *title, const char *focus, Node *tree) {
         if (content) gtk_widget_destroy(content);
         g_hash_table_remove_all(by_id);
         node_free(current);
+        edge_tree = edge(tree);
+        gtk_container_set_border_width(GTK_CONTAINER(window), edge_tree ? 0 : 8);
         content = build(tree);
         gtk_container_add(GTK_CONTAINER(window), content);
         gtk_widget_show_all(content);
