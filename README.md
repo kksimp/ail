@@ -39,8 +39,8 @@ fn main()
 ```
 
 The first run downloads the published seed compiler, checks it, and builds the
-native `ail` with it into `.native/`. Nothing outside the repository is changed. On Windows use `.\ail.ps1 run examples\hello.ail`
-(not yet tested on Windows).
+native `ail` with it into `.native/`. On Windows use `.\ail.ps1 run examples\hello.ail`.
+Seeds are published for macOS ARM64, Linux x86-64, Linux ARM64 and Windows x86-64.
 
 ## Targets
 
@@ -49,13 +49,19 @@ Linux, Windows, and macOS are all first-class.
 | | x86-64 (v3) | ARM64 (v8.2-A) |
 |---|---|---|
 | Linux | ✓ | ✓ |
-| Windows | ✓ | ✓ |
+| Windows | ✓ | experimental¹ |
 | macOS | — | ✓ |
+
+¹ The compiler emits Windows ARM64 executables, but they have not been run on
+Windows ARM64 hardware and there is no seed for that host
+([ADR 0968](docs/decisions/0968-aarch64-windows-target.md)).
 
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
-now, testing is local on Linux and macOS
-([ADR 0842](docs/decisions/0842-mac-first-gate.md)).
+now, testing is local: the gate runs on macOS and Linux
+([ADR 0842](docs/decisions/0842-mac-first-gate.md)), and the native, examples
+and run suites must pass on Windows x86-64 before every release
+([ADR 0925](docs/decisions/0925-windows-release-gate.md)).
 
 ## Install
 
@@ -112,12 +118,6 @@ AI agents: read [AGENTS.md](AGENTS.md) first.
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): how a change gets tested without hosted CI, and what a PR needs.
 - [SECURITY.md](SECURITY.md): report vulnerabilities privately through GitHub.
-
-## Community token
-
-An AIL community token exists on pump.fun: [HFwDPcrXvYLNTyNbv4CQuqx3rH54f4AHNRn1n56Npump](https://pump.fun/coin/HFwDPcrXvYLNTyNbv4CQuqx3rH54f4AHNRn1n56Npump).
-
-It is not an investment and gives no rights in the project. The address above is the only official one; treat any other as an impersonation.
 
 ## License
 
