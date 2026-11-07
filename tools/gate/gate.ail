@@ -2418,7 +2418,8 @@ fn main() !
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
-    _ := proc.run("rm", ["-rf", tmp]) else return
+    # Cleanup must never skip the verdict below: with no `rm` (Windows without Git's usr\bin on PATH) the run still reports.
+    _ := proc.run("rm", ["-rf", tmp]) else proc.Output(status: 127, out: "", err: "")
     if g.unbuilt.len() > 0
         print("{g.unbuilt.len()} examples are not native yet: {g.unbuilt.join(" ")}")
     if g.fails == 0

@@ -9,16 +9,24 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
 # A std.app program would open the host's window and wait for ever: a host path that doesn't exist makes `app.run` fail at once.
 if (-not $env:AIL_APP_HOST) { $env:AIL_APP_HOST = 'C:/nonexistent/ail-app-host' }
+# The suites run `sh`, `perl`, `rm` and friends: Git for Windows has them in usr\bin. Put that on PATH, or stop here.
+$gitUsr = Join-Path $env:ProgramFiles 'Git\usr\bin'
+if ((Test-Path $gitUsr) -and (($env:PATH -split ';') -notcontains $gitUsr)) { $env:PATH = "$env:PATH;$gitUsr" }
+$missing = @('sh', 'perl', 'rm', 'mktemp') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
+if ($missing) { "GATE RED (missing tools on PATH: $($missing -join ' '); install Git for Windows or add its usr\bin)"; exit 1 }
 $out = Join-Path $env:TEMP 'ail-gate'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $ail = Join-Path $root 'ail.ps1'
 $fails = 0
-$pattern = '^test .* FAILED|panicked at|differs from|^error|disagreement|FAIL '
+$pattern = '^RED |^test .* FAILED|panicked at|differs from|^error|disagreement|FAIL '
 
 function Run([string]$name, [string[]]$cmdArgs) {
     $log = Join-Path $out "$name.log"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $ail @cmdArgs *> $log
-    if ($LASTEXITCODE -eq 0) { return }
+    # The gate prints `RED name` lines for what failed: a log with one is red whatever the exit status says.
+    $rc = $LASTEXITCODE
+    $redLines = @(Select-String -Path $log -Pattern '^RED ' -ErrorAction SilentlyContinue)
+    if ($rc -eq 0 -and $redLines.Count -eq 0) { return }
     $script:fails++
     "RED $name"
     Select-String -Path $log -Pattern $pattern | Select-Object -First 8 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
