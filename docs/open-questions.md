@@ -172,14 +172,7 @@ questions. They will be opened topic by topic during Stage 1.
 **Resolved** by [ADR 0173](decisions/0173-format-specifications-in-interpolation.md) (`{x:>8}`, `{r:.2}`, `{n:0>4x}`).
 
 ## OQ-042 — Custom hashing
-`Hash` is automatic and can't be implemented by hand
-([ADR 0133](decisions/0133-automatic-hash.md)), so a type with its own
-`fn eq` can't be a map key or set element. Options: let `impl Hash` declare
-which fields take part (consistent with a custom `eq` by construction), a
-`fn hash(self, mut h Hasher)` method as in Rust (flexible, but can disagree
-with `eq`), or keep the restriction. Hash values must stay invisible to
-programs, so output never depends on the hash function. *Owner: AI under
-ADR 0076; decide when a real program needs it.*
+**Resolved** by [ADR 0955](decisions/0955-custom-hash-names-fields.md) (`impl Hash` names the fields that take part).
 
 ## OQ-043 — `s.len()`: bytes or characters
 **Resolved** by [ADR 0208](decisions/0208-str-len-counts-characters.md) (`len()` counts characters, `byte_len()` bytes).
