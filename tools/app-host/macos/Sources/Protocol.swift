@@ -232,10 +232,23 @@ enum Edge {
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.toolbar = nil
+        w.titlebarSeparatorStyle = .none
         w.isMovableByWindowBackground = false
+        // The title bar's material still tints the content under it; hide it and keep the buttons.
+        if let frame = w.contentView?.superview {
+            for v in frame.subviews where String(describing: type(of: v)).contains("Titlebar") {
+                hideMaterial(v)
+            }
+        }
         if first {
             FileHandle.standardError.write("AIL App Host: edge mode on (std.app.25)\n".data(using: .utf8)!)
             for v in CanvasView.registry.values { v.reportSize() }
+        }
+    }
+
+    static func hideMaterial(_ v: NSView) {
+        for s in v.subviews {
+            if s is NSVisualEffectView { s.isHidden = true } else { hideMaterial(s) }
         }
     }
 
