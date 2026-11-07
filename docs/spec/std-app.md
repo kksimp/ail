@@ -157,6 +157,12 @@ lines the tree cannot express, such as `surface` and `present`
 
 **std.app.22** — `trait App` has `pick(self) Picker?` (default `none`); `struct Picker` is `id`, `prompt`, `folders bool` (a folder, else a file) and `start` (the folder to open in, `""` for the host's choice). When it differs from the last one sent, `run` sends `{"v":1,"t":"pick","id":I,"prompt":P,"folders":F,"start":S}`; the host shows its native open dialog and answers `{"kind":"picked","id":I,"text":PATH}`, `text` empty if the user cancelled. A host with no native dialog answers `{"kind":"pick_error","id":I,"text":WHY}` at once, so an app can fall back to a text field. The app clears its `Picker` when it sees either event. *(ADR 0971)*
 
+**std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
+clipboard's text) when the paste key (Command-V on macOS, Control-V
+elsewhere) is pressed in a canvas, instead of the `key` event for it; a
+host whose clipboard it cannot read sends the `key` event as before, so a
+program must not depend on `paste`. *(ADR 0978)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -228,6 +234,33 @@ fn main()
     s.update(app.event("start"))
     print(s.lines().len())
     print(s.lines().len())
+```
+
+```ail rules=std.app.23
+use std.app
+
+## A one-line drawn field: typed keys add characters, a paste adds its text.
+struct Field
+    text str
+
+impl app.App for Field
+    fn update(mut self, ev app.Event)
+        if ev.kind == "paste"
+            text = "{text}{ev.text}"
+        elif ev.kind == "key" and ev.text.chars().len() == 1
+            text = "{text}{ev.text}"
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+fn main()
+    mut f := Field(text: "")
+    f.update(app.key("a"))
+    mut p := app.event("paste")
+    p.id = "f"
+    p.text = "il.dev"
+    f.update(p)
+    print(f.text)
 ```
 
 ```ail rules=std.app.20

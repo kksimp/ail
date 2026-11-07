@@ -27,6 +27,17 @@ final class Model: ObservableObject {
         }
     }
 
+    /// True when the tree has a canvas that fills the window: the app draws
+    /// its own chrome, so the host adds no frame and no gaps (ADR 0888, as
+    /// the Windows host does).
+    static func edge(_ n: Node) -> Bool {
+        switch n {
+        case let .canvas(_, w, h, _): return w <= 0 || h <= 0
+        case let .column(kids), let .row(kids): return kids.contains(where: edge)
+        default: return false
+        }
+    }
+
     private func sync(_ n: Node) {
         switch n {
         case let .field(id, value, _):
@@ -86,11 +97,22 @@ struct Root: View {
     @FocusState private var focused: String?
 
     var body: some View {
-        NodeView(node: model.tree, model: model, focused: $focused)
-            .padding(8)
+        let edge = Model.edge(model.tree)
+        NodeView(node: model.tree, model: model, focused: $focused, gap: edge ? 0 : 6)
+            .padding(edge ? 0 : 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .onChange(of: model.focus) { id in
-                if !id.isEmpty { focused = id }
+                if id.isEmpty { return }
+                // std.app.4: a canvas named by `focus` takes the keys (its view
+                // may still be building, so ask again on the next turn).
+                if let c = CanvasView.registry[id] {
+                    c.window?.makeFirstResponder(c)
+                } else {
+                    focused = id
+                    DispatchQueue.main.async {
+                        if let c = CanvasView.registry[id] { c.window?.makeFirstResponder(c) }
+                    }
+                }
             }
     }
 }
@@ -99,6 +121,8 @@ struct NodeView: View {
     let node: Node
     @ObservedObject var model: Model
     var focused: FocusState<String?>.Binding
+    /// The space between a column's or row's children.
+    var gap: CGFloat = 6
 
     var body: some View {
         switch node {
@@ -121,12 +145,12 @@ struct NodeView: View {
                 get: { on },
                 set: { v in Outbox.shared.send("toggle", ["id": id, "text": v ? "on" : "off"]) }))
         case let .column(kids):
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(kids.enumerated()), id: \.offset) { _, k in NodeView(node: k, model: model, focused: focused) }
+            VStack(alignment: .leading, spacing: gap) {
+                ForEach(Array(kids.enumerated()), id: \.offset) { _, k in NodeView(node: k, model: model, focused: focused, gap: gap) }
             }
         case let .row(kids):
-            HStack(spacing: 6) {
-                ForEach(Array(kids.enumerated()), id: \.offset) { _, k in NodeView(node: k, model: model, focused: focused) }
+            HStack(spacing: gap) {
+                ForEach(Array(kids.enumerated()), id: \.offset) { _, k in NodeView(node: k, model: model, focused: focused, gap: gap) }
             }
         case .spacer:
             Spacer()

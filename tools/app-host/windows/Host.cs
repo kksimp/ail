@@ -470,6 +470,14 @@ class CanvasView : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        // std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`.
+        if (e.Control && !e.Alt && e.KeyCode == Keys.V && Clipboard.ContainsText())
+        {
+            e.SuppressKeyPress = true;
+            e.Handled = true;
+            Outbox.Send("paste", ModArgs("id", CanvasId, "text", Clipboard.GetText()));
+            return;
+        }
         string name = KeyName(e.KeyCode);
         bool chord = e.Control || e.Alt;
         if (name == null && chord)
