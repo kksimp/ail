@@ -14,6 +14,9 @@ $gitUsr = Join-Path $env:ProgramFiles 'Git\usr\bin'
 if ((Test-Path $gitUsr) -and (($env:PATH -split ';') -notcontains $gitUsr)) { $env:PATH = "$env:PATH;$gitUsr" }
 $missing = @('sh', 'perl', 'rm', 'mktemp') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
 if ($missing) { "GATE RED (missing tools on PATH: $($missing -join ' '); install Git for Windows or add its usr\bin)"; exit 1 }
+# gate.ail builds into $TMPDIR (default /tmp) and Git's perl and sh start the programs from there: with TMPDIR unset, /tmp means
+# a different directory to the native build and to Git's tools, and every example "ran" with no output. A Windows path with `/` is the same to both.
+if (-not $env:TMPDIR) { $env:TMPDIR = $env:TEMP -replace '\\', '/' }
 $out = Join-Path $env:TEMP 'ail-gate'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $ail = Join-Path $root 'ail.ps1'
