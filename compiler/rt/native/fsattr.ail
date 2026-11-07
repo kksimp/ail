@@ -205,6 +205,43 @@ fn fs_symlink(to str, path str, at str)
         return
     os_succeed()
 
+## `fs.write_at(path, off, data)` (std.fs.33): `data` over the bytes from
+## `off`; a file shorter than `off` grows with zero bytes first. The file is
+## opened for writing without truncation (and made when missing).
+fn fs_write_at(path str, off int, data str, at str)
+    if off < 0
+        flush()
+        out_str("trap[std.fs.33]: negative offset\n")
+        flush_to(2)
+        sys_exit(1)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    # O_WRONLY | O_CREAT (Linux bits; win_open and the macOS arm take them too).
+    fd := os_open(p, if target() == 2 then 513 else 65, 438)
+    if fd < 0
+        fsattr_fail(path, fd, at)
+        return
+    q := str_addr(data)
+    n := load64(q)
+    mut r := os_lseek(fd, off, 0)
+    mut done := 0
+    while r >= 0 and done < n
+        r = os_write(fd, q + 16 + done, n - done)
+        if r == -4
+            r = 0
+            continue
+        if r <= 0
+            break
+        done += r
+    os_close(fd)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()
+
 ## `fs.truncate(path, len)` (std.fs.32): the file ends at byte `len`; a file
 ## shorter than `len` grows with zero bytes. `ftruncate` on an open descriptor
 ## (ARM64 Linux has no `truncate` call); Windows `SetFilePointerEx` then

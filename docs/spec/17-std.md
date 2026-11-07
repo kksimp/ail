@@ -243,7 +243,12 @@ fails with kind `permission`. *(ADR 0974)*
 byte `len`: bytes past it are dropped and a shorter file grows with zero
 bytes. A negative `len` traps. *(ADR 0974)*
 
-```ail norun rules=std.fs.27,std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32
+**std.fs.33** — `write_at(path str, offset int, data bytes) ! IoError` writes
+`data` over the bytes of the file from `offset`, making the file when it is
+missing and growing it with zero bytes when it is shorter than `offset`; the
+rest of the file is unchanged. A negative `offset` traps. *(ADR 0974)*
+
+```ail norun rules=std.fs.27,std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33
 use std.fs
 
 fn main() !
@@ -253,6 +258,7 @@ fn main() !
     fs.symlink("tool.sh", "run")?
     print(fs.read_link("run")?)
     fs.truncate("archive.bin", 1048576)?
+    fs.write_at("out.bin", 4096, b"tail")?
 ```
 
 ```ail rules=std.fs.20

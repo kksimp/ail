@@ -4,11 +4,11 @@
 - **Date:** 2026-11-07
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** Standard library (`std.fs`)
-- **Spec rules:** std.fs.27, std.fs.28, std.fs.29, std.fs.30, std.fs.31, std.fs.32
+- **Spec rules:** std.fs.27, std.fs.28, std.fs.29, std.fs.30, std.fs.31, std.fs.32, std.fs.33
 
 ## Context
 
-An archiver (Clove) must put files back as they were: executable bits, modification times and symbolic links. Extracting without a second copy of the data on disk means shrinking the archive as its blocks are consumed. `std.fs` could read the size and time of a file but set nothing, had no view of links beyond `scan`'s `is_link`, and could not cut a file short.
+An archiver (Clove) must put files back as they were: executable bits, modification times and symbolic links. Extracting without a second copy of the data on disk means shrinking the archive as its blocks are consumed. `std.fs` could read the size and time of a file but set nothing, had no view of links beyond `scan`'s `is_link`, and could not cut a file short or write into the middle of one (extracting a block from the end of an archive into the middle of its file).
 
 ## Options considered
 
@@ -26,7 +26,7 @@ An archiver (Clove) must put files back as they were: executable bits, modificat
 
 ## Decision
 
-Add `fs.mode`, `fs.set_mode`, `fs.set_modified`, `fs.read_link`, `fs.symlink` and `fs.truncate` (`std.fs.27` to `std.fs.32`), in `compiler/rt/native/fsattr.ail`. Modes are the twelve permission bits as an `int`; times are the milliseconds `metadata` reports. Windows: `mode` reports 438 or 292 from the read-only attribute and `set_mode` changes only that attribute; `symlink` uses the unprivileged flag and fails with `permission` without developer mode; `read_link` fails with `other` until written.
+Add `fs.mode`, `fs.set_mode`, `fs.set_modified`, `fs.read_link`, `fs.symlink`, `fs.truncate` and `fs.write_at` (`std.fs.27` to `std.fs.33`), in `compiler/rt/native/fsattr.ail`. Modes are the twelve permission bits as an `int`; times are the milliseconds `metadata` reports. Windows: `mode` reports 438 or 292 from the read-only attribute and `set_mode` changes only that attribute; `symlink` uses the unprivileged flag and fails with `permission` without developer mode; `read_link` fails with `other` until written.
 
 ## Rationale
 

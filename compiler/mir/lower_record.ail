@@ -43,6 +43,7 @@ RECORDED := [
     "fs_read_link",
     "fs_symlink",
     "fs_truncate",
+    "fs_write_at",
     "fs_scan",
     "env_vars",
     "tz_offset",
