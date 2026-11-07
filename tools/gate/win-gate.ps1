@@ -46,5 +46,7 @@ else {
     & $hello *> $null
     if ($LASTEXITCODE -ne 0) { $fails++; 'RED native binaries do not start' }
 }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'ps1-args-test.ps1') *> (Join-Path $out 'ps1_args.log')
+if ($LASTEXITCODE -ne 0) { $fails++; 'RED ps1_args'; Get-Content (Join-Path $out 'ps1_args.log') | Select-Object -First 8 }
 if ($fails -eq 0) { 'GATE GREEN' } else { "GATE RED ($fails failures); logs in $out" }
 exit ([int]($fails -gt 0))
