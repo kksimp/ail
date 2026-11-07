@@ -60,16 +60,27 @@ final class CanvasView: NSView {
         super.setFrameSize(size)
         if size != reported {
             reported = size
-            let cell = ("M" as NSString).size(withAttributes: [.font: cellFont])
-            let lineH = ceil(cellFont.ascender - cellFont.descender + cellFont.leading)
-            var f = Edge.insets(window)
-            f["id"] = canvasId
-            f["dx"] = size.width
-            f["dy"] = size.height
-            f["cell_w"] = cell.width
-            f["cell_h"] = lineH
-            Outbox.shared.send("resize", f)
+            reportSize()
         }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        Edge.apply(window)
+    }
+
+    /// `resize` (std.app.5) with the edge-mode insets (std.app.25).
+    func reportSize() {
+        let size = reported
+        let cell = ("M" as NSString).size(withAttributes: [.font: cellFont])
+        let lineH = ceil(cellFont.ascender - cellFont.descender + cellFont.leading)
+        var f = Edge.insets(window)
+        f["id"] = canvasId
+        f["dx"] = size.width
+        f["dy"] = size.height
+        f["cell_w"] = cell.width
+        f["cell_h"] = lineH
+        Outbox.shared.send("resize", f)
     }
 
     override func draw(_ dirty: NSRect) {

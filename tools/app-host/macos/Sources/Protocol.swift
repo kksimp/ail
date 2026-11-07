@@ -215,18 +215,31 @@ enum Edge {
         return ["inset_left": right + 8, "inset_top": max(top, 0)]
     }
 
-    /// Hides the title bar of `w` once the app asks for edge mode.
+    /// The app's window: the one a canvas sits in, else the key or first visible one.
+    static func window(_ w: NSWindow?) -> NSWindow? {
+        w ?? CanvasView.registry.values.first?.window ?? NSApp.keyWindow
+            ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })
+    }
+
+    /// Hides the title bar once the app asks for edge mode, and keeps it hidden: SwiftUI
+    /// sets the title again on every update. The first time, every canvas reports its
+    /// size again so the app learns the insets.
     static func apply(_ w: NSWindow?) {
-        guard wanted, !applied, let w = w else { return }
+        guard wanted, let w = window(w) else { return }
+        let first = !applied
         applied = true
-        w.styleMask.insert(.fullSizeContentView)
+        if !w.styleMask.contains(.fullSizeContentView) { w.styleMask.insert(.fullSizeContentView) }
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
+        w.toolbar = nil
         w.isMovableByWindowBackground = false
+        if first {
+            for v in CanvasView.registry.values { v.reportSize() }
+        }
     }
 
     static func act(_ kind: String) {
-        guard let w = NSApp.keyWindow ?? NSApp.windows.first else { return }
+        guard let w = window(nil) else { return }
         if kind == "zoom" { w.zoom(nil); return }
         if let e = lastEvent { w.performDrag(with: e) }
     }
