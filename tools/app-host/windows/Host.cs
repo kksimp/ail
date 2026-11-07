@@ -929,6 +929,12 @@ static class Program
             {
                 object obj = Json.Parse(line);
                 string kind = Json.Text(Json.Get(obj, "t"));
+                if (kind == "pick")
+                {
+                    // std.app.22: no native chooser on this host yet; say so rather than hang.
+                    Outbox.Send("pick_error", "id", Json.Text(Json.Get(obj, "id")), "text", "this host has no native file chooser yet");
+                    continue;
+                }
                 if (kind == "measure") { AnswerMeasure(Json.Get(obj, "runs") as List<object> ?? new List<object>()); continue; }
                 if (kind != "view") continue;
                 if (first)

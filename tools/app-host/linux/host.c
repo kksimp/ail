@@ -867,6 +867,12 @@ static void handle_line(const char *line) {
     const char *t = jstr(obj, "t");
     if (!strcmp(t, "measure")) {
         answer_measure(jget(obj, "runs"));
+    } else if (!strcmp(t, "pick")) {
+        /* std.app.22: no native chooser on this host yet; say so rather than hang. */
+        Ev e = ev_new("pick_error");
+        ev_str(&e, "id", jstr(obj, "id"));
+        ev_str(&e, "text", "this host has no native file chooser yet");
+        ev_send(&e);
     } else if (!strcmp(t, "view")) {
         if (first_view) {
             first_view = FALSE;
