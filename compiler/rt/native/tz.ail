@@ -391,6 +391,58 @@ fn tz_offset(zone str, secs int) int
         return 0
     0
 
+## The IANA name of the Windows zone now active (std.tz.2, ADR 0972): the
+## zone ID from `GetDynamicTimeZoneInformation` (`TimeZoneKeyName`, the
+## UTF-16 string at byte 172) looked up in `tools/tzdata/windows-zones.txt`,
+## lines `Windows ID<TAB>IANA name`. `UTC` when any step fails.
+fn tz_win_system() str
+    root := env_get("AIL_ROOT")
+    if str_addr(root) == 0
+        return "UTC"
+    info := alloc(432, KIND_ATOMIC)
+    if import_call("GetDynamicTimeZoneInformation", info, 0, 0, 0) == 4294967295
+        return "UTC"
+    key := alloc(1024, KIND_ATOMIC)
+    klen := win_narrow(info + 172, key)
+    if klen == 0
+        return "UTC"
+    p := os_cstr(OS_PATH_A, str_cat3(root, "/", "tools/tzdata/windows-zones.txt"))
+    if p == 0
+        return "UTC"
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        return "UTC"
+    s := os_read_fd(fd)
+    os_close(fd)
+    if s < 0
+        return "UTC"
+    n := load64(s)
+    b := s + 16
+    mut i := 0
+    while i < n
+        mut e := i
+        while e < n and load8(b + e) != 10
+            e += 1
+        mut tab := i
+        while tab < e and load8(b + tab) != 9
+            tab += 1
+        mut hit := tab < e and tab - i == klen
+        mut k := 0
+        while hit and k < klen
+            if load8(b + i + k) != load8(key + k)
+                hit = false
+            k += 1
+        if hit
+            mut stop := e
+            if stop > tab + 1 and load8(b + stop - 1) == 13
+                stop -= 1
+            name := str_sub(s, tab + 1, stop)
+            if tz_safe(name)
+                return name
+            return "UTC"
+        i = e + 1
+    "UTC"
+
 ## `tz.system()` (std.tz.2): `TZ` if it names a safe zone, else the zone
 ## `/etc/localtime` links to, else `UTC`.
 fn tz_system() str
@@ -405,7 +457,7 @@ fn tz_system() str
         if tz_safe(name)
             return name
     if target() == 3
-        return "UTC"
+        return tz_win_system()
     path := os_cstr(OS_PATH_A, "/etc/localtime")
     if path != 0
         buf := alloc(4096, KIND_ATOMIC)

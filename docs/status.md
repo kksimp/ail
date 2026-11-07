@@ -64,7 +64,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
 - Native string-keyed map key cache (ADR 0936): the entry of a key object is found without hashing it again, and an insert reuses the hash of the probe that missed; wordfreq 10M 0.27 s → 0.22 s, 1.649G → 1.452G instructions on ail-linux; Mac 0.097 s → 0.062 s (C 0.150 s).
 - `Grid[T]` (ADR 0937, type.grid.1-6): a flat 2-D list in the prelude with `g[i, j]`; 6-17% fewer tokens than nested lists on 2-D code, 2x slower than them until bounds checks on `g[i, j]` are versioned out (P2).
-- Time zones (ADR 0924, decided): AIL will ship the IANA tz database so zones answer the same on every OS, Windows included; not yet implemented.
+- Time zones (ADR 0924): AIL ships the IANA tz database, so zones answer the same on every OS, Windows included; the Windows system zone maps to its IANA name (ADR 0972).
 - Data-range guards and interchange (ADR 0941, native.bce.12-13): a scan of the lists a nest only reads bounds their elements, so the nest's overflow checks go, and `for j: s := s0; for k: s += t; row.push(s)` runs as k outside, j inside, behind a guard; bit-identical for `int` and `float`.
 - Vector axpy kernels (ADR 0942, native.vec.1): the swapped nest's inner loop is one AVX2 or NEON kernel call per `k`; matmul-1400 on ail-linux 11.35 s → 1.95 s (gcc -O2 6.82 s).
 - Vector escape loops (ADR 0945, native.vec.2): a Mandelbrot-style escape loop in a counted `for` becomes one AVX2 (8 points a pass) masked kernel call per row; opt out with `AIL_OPT_OFF=vec` or `vecloop`. Written without a build; awaiting runner results.

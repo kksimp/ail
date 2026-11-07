@@ -14,3 +14,5 @@ s_cbrt.c, s_expm1.c, s_tanh.c and their kernels), rewritten in AIL.
   this notice is preserved.
 
 tools/tzdata: the IANA Time Zone Database (tzdata.zi and the TZif files built from it), which is in the public domain.
+
+tools/tzdata/windows-zones.txt: derived from the Unicode CLDR windowsZones.xml, Copyright (c) Unicode, Inc., under the Unicode License v3 (https://www.unicode.org/license.txt).
