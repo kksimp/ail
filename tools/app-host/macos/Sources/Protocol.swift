@@ -234,6 +234,7 @@ enum Edge {
         w.toolbar = nil
         w.isMovableByWindowBackground = false
         if first {
+            FileHandle.standardError.write("AIL App Host: edge mode on (std.app.25)\n".data(using: .utf8)!)
             for v in CanvasView.registry.values { v.reportSize() }
         }
     }
