@@ -102,6 +102,9 @@ struct Root: View {
         NodeView(node: model.tree, model: model, focused: $focused, gap: edge ? 0 : 6)
             .padding(edge ? 0 : 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // std.app.25: in edge mode the tree reaches under the (transparent) title bar,
+            // which SwiftUI otherwise keeps clear as a safe area.
+            .ignoresSafeArea(.container, edges: Edge.wanted ? .top : [])
             .onChange(of: model.focus) { id in
                 if id.isEmpty { return }
                 // std.app.4: a canvas named by `focus` takes the keys (its view
