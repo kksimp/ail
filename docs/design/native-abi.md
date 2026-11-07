@@ -475,7 +475,7 @@ declaration (`extern c "libm" fn`) or from libc when none is.
 |---|---|
 | Linux x86-64, ARM64 (ELF) | `PT_INTERP` (the system loader), `DT_NEEDED` for each library, a `.got` slot per symbol bound at load time (`R_X86_64_GLOB_DAT`, `R_AARCH64_GLOB_DAT`; `DT_FLAGS` `BIND_NOW`, so no lazy PLT), calls as `call [rip+slot]` / `ldr x16, slot; blr x16` |
 | macOS ARM64 (Mach-O) | `LC_LOAD_DYLIB` per library (`/usr/lib/libSystem.B.dylib` always), chained fixups for the `__got` slots, same `ldr`/`blr` call; library names resolve as in `ffi.load.1` |
-| Windows x86-64 | stub, `plat.win.1` and `ffi.load.3` |
+| Windows x86-64 | no import table entry per symbol: `LoadLibraryA`/`GetProcAddress` bind it on the first call (`ffi.load.3`, ADR 0980), called with the Win64 convention; ARM64 binds the same way with AAPCS64 (experimental, ADR 0968) |
 
 A program with **no** `extern` links no libc and has no `PT_INTERP`
 (`ffi.link.1`, ADR 0105): the static executable of §3 is unchanged. A program

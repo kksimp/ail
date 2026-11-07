@@ -138,7 +138,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0130](0130-floats.md) | `float` is IEEE 754 binary64, with Python's text form and a total `cmp` (details delegated) | Accepted | 2026-10-05 |
 | [0131](0131-maps-and-sets.md) | Maps and sets keep insertion order; the collection API, places and loops (details delegated) | Accepted | 2026-10-05 |
 | [0132](0132-module-constants.md) | Module constants: `NAME := expr` with a constant expression (details delegated) | Accepted | 2026-10-05 |
-| [0133](0133-automatic-hash.md) | `Hash` is automatic, like `Eq` and `ToStr` (amends 0126) | Accepted | 2026-10-05 |
+| [0133](0133-automatic-hash.md) | `Hash` is automatic, like `Eq` and `ToStr` (amends 0126) | Accepted; amended by 0955 | 2026-10-05 |
 | [0134](0134-characters.md) | `char`: traits, classification, digits and code points *(delegated)* | Accepted | 2026-10-05 |
 | [0135](0135-string-literals-and-methods.md) | Multi-line and raw strings, `\'`, and the `str` methods (amends 0089) *(delegated)* | Accepted | 2026-10-05 |
 | [0136](0136-list-methods-and-slices.md) | List methods, open-ended slices that trap, and `xs.sum()` *(delegated)* | Accepted | 2026-10-05 |
@@ -762,10 +762,13 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
 | [0945](0945-vector-escape-loops.md) | Native: vector kernel for escape-time loops, mandelbrot-style (ADR 0845 stage 2) *(delegated)* | Accepted | 2026-11-05 |
 | [0949](0949-std-audio.md) | std.audio: sound as data, devices through a host program *(delegated)* | Accepted | 2026-11-05 |
+| [0954](0954-const-generics.md) | Const generics: `int` parameters on types and functions (`struct Vec[T, N int]`), by monomorphisation *(delegated)* | Proposed | 2026-11-05 |
+| [0955](0955-custom-hash-names-fields.md) | Custom hashing: `impl Hash` names the fields that take part (amends 0133, resolves OQ-042) | Proposed | 2026-11-05 |
 | [0956](0956-std-gfx-frame-loop.md) | `std.gfx`: the frame loop for real-time programs (key-up, vsync, `Input` snapshots) *(delegated)* | Accepted | 2026-11-05 |
 | [0957](0957-shared-surface-transport.md) | Shared-surface transport for `std.gfx` (no JSON on the hot path) *(delegated)* | Accepted | 2026-11-05 |
 | [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Proposed | 2026-11-05 |
 | [0959](0959-std-crypto.md) | std.hash and std.crypto: in-house, constant-time, vector-checked primitives; HMAC-SHA-384/512 first *(delegated)* | Accepted | 2026-11-05 |
+| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Proposed | 2026-11-05 |
 | [0966](0966-ail-lsp-language-server.md) | `ail lsp`: the semantic API as a language server on stdio *(delegated)* | Accepted | 2026-11-05 |
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed | 2026-11-05 |
@@ -773,3 +776,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0971](0971-std-app-file-chooser.md) | `std.app` native file and folder chooser *(delegated)* | Accepted | 2026-11-06 |
 | [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
+| [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
