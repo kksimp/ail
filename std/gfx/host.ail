@@ -243,13 +243,13 @@ fn ops_of(f gfx.Frame) List[app.Op]
 ## game's own values, and the last frame's command counts.
 impl attach.Observe for Loop[T gfx.Game + attach.Observe]
     fn observed(self) List[attach.Observed]
-        mut out := game.observed()
+        mut seen := game.observed()
         st := gfx.stats(last)
-        out.push(attach.observed("gfx.cmds", "int", "{st.cmds}"))
-        out.push(attach.observed("gfx.fills", "int", "{st.fills}"))
-        out.push(attach.observed("gfx.lines", "int", "{st.lines}"))
-        out.push(attach.observed("gfx.texts", "int", "{st.texts}"))
-        out
+        seen.push(attach.observed("gfx.cmds", "int", "{st.cmds}"))
+        seen.push(attach.observed("gfx.fills", "int", "{st.fills}"))
+        seen.push(attach.observed("gfx.lines", "int", "{st.lines}"))
+        seen.push(attach.observed("gfx.texts", "int", "{st.texts}"))
+        seen
 
 ## The loop for `g`, for `std.gfx.watch` (which runs it with the attach
 ## listener); `run` is the same without it.
