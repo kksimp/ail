@@ -4,8 +4,9 @@
 #   tools/release/seed.sh TAG [--upload]
 # Checks the self-host fixed point (tools/self-host/run.sh), builds the native
 # CLI (compiler/main.ail) with the stage-2 compiler for each target, writes
-# tools/release/seeds.sha256 and SEED_TAG, and with --upload makes a PRIVATE
-# release TAG on kksimp/ail with `gh`. Commit the two files afterwards.
+# tools/release/seeds.sha256 and SEED_TAG, and with --upload makes the
+# release TAG on kksimp/ail with `gh` (it has the repository's visibility).
+# Commit the two files afterwards.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
@@ -30,10 +31,9 @@ cp "$sums" tools/release/seeds.sha256
 echo "$tag" > tools/release/SEED_TAG
 cat tools/release/seeds.sha256 >&2
 if [ "$upload" = --upload ]; then
-    gh repo view kksimp/ail --json isPrivate -q .isPrivate | grep -qx true || { echo "seed: the repository isn't private; not uploading" >&2; exit 1; }
     gh release create "$tag" --repo kksimp/ail --title "Native ail seeds $tag" --notes "ADR 0855 seeds; verified by tools/release/seeds.sha256." \
         "$out"/ail-seed-aarch64-macos "$out"/ail-seed-x86_64-linux "$out"/ail-seed-aarch64-linux "$out"/ail-seed-x86_64-windows.exe
     echo "seed: uploaded $tag. Commit tools/release/seeds.sha256 and SEED_TAG." >&2
 else
-    echo "seed: built in $out; rerun with --upload to publish (private release)" >&2
+    echo "seed: built in $out; rerun with --upload to publish" >&2
 fi
