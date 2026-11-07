@@ -419,6 +419,35 @@ fn win_getcwd(buf int) int
         return -5
     win_narrow(w, buf) + 1
 
+## `fs.volume` (std.fs.24): the volume holding `path` as bytes, `total` at
+## `out` and `free` (what the caller may use) at `out + 8`. GetDiskFreeSpaceExW
+## wants a directory, so a file is asked by its parent.
+fn win_volume(path int, out int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    a := win_attrs(w)
+    if a < 0
+        return win_err_at(w)
+    if a.bit_and(16) == 0
+        mut n := 0
+        mut last := -1
+        while load8(w + 2 * n) != 0 or load8(w + 2 * n + 1) != 0
+            if load8(w + 2 * n) == 92 and load8(w + 2 * n + 1) == 0
+                last = n
+            n += 1
+        if last > 0
+            win_put16(w, last, 0)
+        else
+            win_put16(w, 0, 46)
+            win_put16(w, 1, 0)
+    t := win_tmp()
+    if import_call("GetDiskFreeSpaceExW", w, t, t + 8, 0) == 0
+        return win_err_at(w)
+    store64(out, load64(t + 8))
+    store64(out + 8, load64(t))
+    0
+
 # ---- clocks ----
 
 ## Milliseconds since 1970-01-01T00:00:00Z.
