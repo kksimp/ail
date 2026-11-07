@@ -36,7 +36,9 @@ pub fn shim(text str) str
             rest = line.strip_prefix("impl gfx.Game for ") else ""
         if rest != ""
             owner := rest.trim()
-            if not owner.contains("[") and not text.contains("Observe for {owner}") and not owners.contains(owner)
+            if not owner.contains("[")
+                and not text.contains("Observe for {owner}")
+                and not owners.contains(owner)
                 owners.push(owner)
     for o in owners
         out.push("impl attach.Observe for {o}")
