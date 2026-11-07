@@ -1,8 +1,9 @@
 # 0975. Library entry: lazy runtime init, caller stack as GC root, serialised first slice
 
-- **Status:** Proposed
+- **Status:** Accepted (first slice)
 - **Date:** 2026-11-07
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); escalation criterion 3 applies to the serialised first slice, see below
+- **Approval:** the serialised first slice was approved by the project coordinator on 2026-11-07, on the designer's delegation of technical calls; no designer card. The parallel second slice needs its own ADR.
 - **Topic:** 14 — FFI
 - **Spec rules:** `ffi.export.4-5` (to be written with the code)
 - **Builds on:** [ADR 0950](0950-c-abi-exports.md), [ADR 0943](0943-per-thread-allocation-caches.md)
