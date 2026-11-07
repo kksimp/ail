@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## File attributes for archivers and build tools (std.fs.27 to std.fs.32, ADR
-## 0974): permission bits, the modification time, symbolic links and
+## 0977): permission bits, the modification time, symbolic links and
 ## truncation. Each call is one system call per platform; the Windows arm goes
 ## through kernel32 (`import_call`), where a symbolic link needs a privilege
 ## or developer mode and `read_link` is not written yet (kind `other`).
@@ -225,17 +225,9 @@ fn fs_write_at(path str, off int, data str, at str)
         fsattr_fail(path, fd, at)
         return
     q := str_addr(data)
-    n := load64(q)
     mut r := os_lseek(fd, off, 0)
-    mut done := 0
-    while r >= 0 and done < n
-        r = os_write(fd, q + 16 + done, n - done)
-        if r == -4
-            r = 0
-            continue
-        if r <= 0
-            break
-        done += r
+    if r >= 0
+        r = os_write_all(fd, q + 16, load64(q))
     os_close(fd)
     if r < 0
         fsattr_fail(path, r, at)

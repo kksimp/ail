@@ -40,3 +40,7 @@ Small named calls cost fewer tokens at the call site than a struct round trip (A
 ## Rejected alternatives
 
 Option B writes what it did not mean to; Option C has no Windows arm and costs a process per file.
+
+## Windows (ADR 0008 lockstep)
+
+Every call has a Windows arm and the spec says what it does there: `mode` reads the read-only attribute as 292 or 438; `set_mode` sets or clears that attribute from the owner write bit and ignores the other bits; `set_modified` is `SetFileTime`; `symlink` is `CreateSymbolicLinkW` with the unprivileged flag, failing with `permission` where developer mode is off; `truncate` and `write_at` are `SetEndOfFile` and a positioned `WriteFile`; `read_link` fails with `other` until a `DeviceIoControl` arm is written.

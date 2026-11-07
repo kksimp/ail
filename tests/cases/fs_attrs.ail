@@ -1,4 +1,4 @@
-## std.fs.27 to std.fs.32: mode, set_mode, set_modified, read_link, symlink, truncate.
+## std.fs.27 to std.fs.33: mode, set_mode, set_modified, read_link, symlink, truncate, write_at.
 ## A link may be refused on Windows (permission or other), so the link check
 ## prints the same line either way.
 fn main() !
@@ -18,12 +18,16 @@ fn main() !
     print(fs.read_text(f)?)
     fs.truncate(f, 6)?
     print(fs.read_bytes(f)?.len())
+    fs.write_at(f, 4, b"ab")?
+    fs.write_at(f, 8, b"z")?
+    print(fs.read_bytes(f)?.len())
+    print(fs.read_range(f, 0, 6)?.to_str())
     l := "{base}/link"
     mut link_ok := false
     fs.symlink("a.txt", l) else err
         link_ok = err.kind == "permission" or err.kind == "other"
     if not link_ok
-        link_ok = fs.read_link(l)? == "a.txt" and fs.read_bytes(l)?.len() == 6
+        link_ok = fs.read_link(l)? == "a.txt" and fs.read_bytes(l)?.len() == 9
         fs.remove(l)?
     print("link {if link_ok then "ok" else "wrong"}")
     fs.read_link(f) else err
