@@ -240,10 +240,10 @@ fn main()
 use std.app
 
 ## A one-line drawn field: typed keys add characters, a paste adds its text.
-struct Field
+struct Omnibox
     text str
 
-impl app.App for Field
+impl app.App for Omnibox
     fn update(mut self, ev app.Event)
         if ev.kind == "paste"
             text = "{text}{ev.text}"
@@ -254,7 +254,7 @@ impl app.App for Field
         app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
 
 fn main()
-    mut f := Field(text: "")
+    mut f := Omnibox(text: "")
     f.update(app.key("a"))
     mut p := app.event("paste")
     p.id = "f"
