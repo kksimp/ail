@@ -110,6 +110,11 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             )
         return t
     if d := types.get(n)
+        if root_decl_hidden(d, npos)
+            # Inside a module a bare name is its own or the standard one: a root type of the same
+            # name is not in scope there (mod.unit.1), so a variant such as `Field(...)` wins.
+            if v := bare_variant(n, npos, expect)
+                return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
         match d
             DStruct(s) =>
                 symbols[pos_key(npos)] = "type:{n}"
@@ -155,6 +160,11 @@ fn Checker.args_only(mut self, args List[ast.Arg])
     elif variant_owners(n).len() == 0
         unknown_name(n, npos, args.len())
     Ty.Unknown
+
+## Whether `d` is declared in the root module while `at` is inside another module (mod.unit.1).
+fn Checker.root_decl_hidden(self, d Def, at ast.Pos) bool
+    decl := def_pos(d)
+    decl.line < 1073741824 and module_at(prog, decl) == "" and module_at(prog, at) != ""
 
 fn no_binds() List[Bind]?
     none
