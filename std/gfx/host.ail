@@ -189,7 +189,7 @@ impl app.App for Loop[T gfx.Game]
             pending.push(ev)
 
     fn view(self) app.Node
-        app.canvas(CANVAS, 0.0, 0.0, [])
+        app.canvas(CANVAS, w.to_float(), h.to_float(), [])
 
     fn title(self) str
         name

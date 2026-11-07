@@ -38,7 +38,7 @@ effects. *(ADR 0956)*
 ! GfxError` for any `T` that implements `Game`. It starts the app host
 (`std.app.10`), shows a window with one canvas, and once per display refresh
 runs `next_input`, `update` (with `dt` the seconds since the last shown frame,
-at most 0.1), `draw`, and presents, until the window closes. It has the effects
+at most 0.1), `draw`, and presents, until the window closes. The window is sized so that its canvas is exactly `w` by `h` points, one point per surface pixel (a Retina display shows each pixel on a 2 by 2 square). It has the effects
 of `app.run`. A host that can't map the surface, or a missing host, fails with
 `GfxError`. *(ADR 0957)*
 
