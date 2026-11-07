@@ -143,6 +143,12 @@ Attach off adds no listener, no thread and no `observed` method (zero cost).
 **attach.run.3** — The cache key of a build includes whether attach is on.
 *(ADR 0884)*
 
+**attach.run.4** — A program that imports `std.gfx.host` on a line of its own
+and calls `host.run(` is rewritten the same way: each `host.run(` call becomes a
+`std.gfx.watch.run(` call and an `impl attach.Observe` is added for each
+non-generic `impl gfx.Game for T` that has none, so `ail attach screen` and
+`observe` work on a game's window (`std.gfx.10`). *(ADR 0979)*
+
 ```ail norun rules=attach.run.1,attach.run.2,attach.run.3
 # ail run counter.ail            attach on: the socket is served
 # ail run --no-attach counter.ail   attach off

@@ -81,6 +81,7 @@ pub AIL_STD_MODULES := [
     "std.csv",
     "std.gfx",
     "std.gfx.host",
+    "std.gfx.watch",
     "std.log",
     "std.net.http",
     "std.screen",

@@ -379,6 +379,10 @@ pub trait App
     ## The widths of `runs`, in points, as the host measured them.
     fn measured(mut self, runs List[Measure], widths List[float])
         return
+    ## The tree an attached agent's screen model is built from (std.app.24).
+    ## It is `view`, unless the app draws somewhere the tree doesn't show.
+    fn shown(self) Node
+        self.view()
     ## Extra protocol lines for the host, sent after each `update` and
     ## cleared by this call (std.app.21).
     fn lines(mut self) List[str]

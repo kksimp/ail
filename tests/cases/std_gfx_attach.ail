@@ -1,0 +1,35 @@
+## std.gfx.10, std.app.24: what an attached agent sees of a game window,
+## asked headless: the screen model built from `shown`, and `observe`.
+use std.attach
+use std.gfx
+use std.gfx.host
+use std.screen
+use std.screen.view
+
+struct Ball
+    x float
+
+impl gfx.Game for Ball
+    fn update(mut self, input gfx.Input, dt float)
+        x += 10.0 * dt
+
+    fn draw(self, mut f gfx.Frame)
+        gfx.clear(mut f, 0x112233)
+        gfx.rect(mut f, x, 5.0, 4.0, 4.0, 0xff0000)
+        gfx.text(mut f, 1.0, 1.0, "score", 12.0, 0xffffff)
+
+impl attach.Observe for Ball
+    fn observed(self) List[attach.Observed]
+        [attach.observed("x", "float", "{x}")]
+
+fn main()
+    mut l := host.new_loop(Ball(x: 0.0), "ball", 32, 16)
+    f := host.advance(mut l, 1.0)
+    print(gfx.stats(f).cmds)
+    sc := view.of_node(l.shown(), 32.0, 16.0, "")
+    print(sc.items.len())
+    for it in sc.items
+        print("{it.role} {it.x} {it.y} {it.w} {it.h}")
+    mut tr := attach.Tracker.new()
+    tr.update(l.observed())
+    print(tr.observe([], 0))
