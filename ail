@@ -273,7 +273,7 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         if [ -x "$root/.native/seed" ]; then
             AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "the seed couldn't build the native CLI"; }
         else
-            die "no seed for this host: sign in with gh or set GITHUB_TOKEN, then rerun (tools/release/fetch-seed.sh; ADR 0855)"
+            die "no seed for this host: check the network and rerun (tools/release/fetch-seed.sh; ADR 0855)"
         fi
         rm -f "$log"
         mv "$native.new" "$native"
