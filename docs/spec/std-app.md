@@ -157,6 +157,18 @@ lines the tree cannot express, such as `surface` and `present`
 
 **std.app.22** — `trait App` has `pick(self) Picker?` (default `none`); `struct Picker` is `id`, `prompt`, `folders bool` (a folder, else a file) and `start` (the folder to open in, `""` for the host's choice). When it differs from the last one sent, `run` sends `{"v":1,"t":"pick","id":I,"prompt":P,"folders":F,"start":S}`; the host shows its native open dialog and answers `{"kind":"picked","id":I,"text":PATH}`, `text` empty if the user cancelled. A host with no native dialog answers `{"kind":"pick_error","id":I,"text":WHY}` at once, so an app can fall back to a text field. The app clears its `Picker` when it sees either event. *(ADR 0971)*
 
+**std.app.25** — `trait App` has `edge(self) bool` (default `false`). While
+it is `true` (the `view` line carries `"edge":true`), a host shows no title
+bar and lets the app draw up to the window's top edge, keeping its own
+window controls, and `start` and every `resize` carry `inset_left` and
+`inset_top` (floats, points): the room those controls take at the window's
+top-left, `0` when the host draws none there. The app moves the window by
+sending the line `{"v":1,"t":"drag"}` through `lines()` (std.app.21) on a
+mouse-down in its own strip, and `{"v":1,"t":"zoom"}` on a double-click
+there. A host that cannot hide its title bar keeps its decorations and
+reports both insets as `0`, so a program must not depend on edge mode.
+*(ADR 0981)*
+
 **std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
 clipboard's text) when the paste key (Command-V on macOS, Control-V
 elsewhere) is pressed in a canvas, instead of the `key` event for it; a
@@ -234,6 +246,47 @@ fn main()
     s.update(app.event("start"))
     print(s.lines().len())
     print(s.lines().len())
+```
+
+```ail rules=std.app.25
+use std.app
+
+## A tab strip that starts right of the window controls and moves the window.
+struct Strip
+    left float
+    queue List[str]
+
+impl app.App for Strip
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            left = ev.inset_left
+        elif ev.kind == "click" and ev.x >= left
+            queue.push(if ev.clicks == 2 then "\{\"v\":1,\"t\":\"zoom\"}" else "\{\"v\":1,\"t\":\"drag\"}")
+
+    fn view(self) app.Node
+        app.canvas("strip", 0.0, 0.0, [app.draw_rect(left, 0.0, 200.0, 40.0, 0x35363a)])
+
+    fn edge(self) bool
+        true
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Strip(left: 0.0, queue: [])
+    mut start := app.event("start")
+    start.inset_left = 78.0
+    start.inset_top = 28.0
+    s.update(start)
+    print(app.frame(s).contains("\"edge\":true"))
+    mut c := app.event("click")
+    c.x = 100.0
+    c.clicks = 1
+    s.update(c)
+    print(s.lines())
+    print(app.outline(s.view()))
 ```
 
 ```ail rules=std.app.23

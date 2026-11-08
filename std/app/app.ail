@@ -196,6 +196,10 @@ pub struct Event
     pub meta bool
     ## For `click`: 1, 2 or 3 (std.app.17); 0 for other kinds.
     pub clicks int
+    ## For `start` and `resize` in edge mode (std.app.25): the room the
+    ## host's window controls take at the window's top-left, in points.
+    pub inset_left float
+    pub inset_top float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono` or `sans`.
@@ -318,6 +322,8 @@ pub fn event(kind str) Event
         alt: false,
         shift: false,
         meta: false,
+        inset_left: 0.0,
+        inset_top: 0.0,
     )
 
 ## A button press, for tests.
@@ -385,6 +391,10 @@ pub trait App
         []
     ## Whether the app wants `move` and `leave` events from canvases (std.app.16).
     fn hover(self) bool
+        false
+    ## Whether the app draws up to the window's top edge, with no title bar
+    ## (std.app.25); the host then reports its window controls' insets.
+    fn edge(self) bool
         false
     ## A native menu to show; the host answers with a `popup` event (std.app.18).
     fn popup(self) Popup?
@@ -467,6 +477,8 @@ pub fn event_from_json(j Json) Event
         shift: j.flag("shift", false),
         meta: j.flag("meta", false),
         clicks: (j.num("clicks") else 0.0).to_int(),
+        inset_left: j.num("inset_left") else 0.0,
+        inset_top: j.num("inset_top") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.
@@ -474,7 +486,8 @@ pub fn frame[T App](a T) str
     title := a.title().to_json().to_text()
     focus := a.focus().to_json().to_text()
     hov := if a.hover() then ",\"hover\":true" else ""
-    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus}{hov},\"tree\":{a.view().to_json().to_text()}}"
+    edge := if a.edge() then ",\"edge\":true" else ""
+    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus}{hov}{edge},\"tree\":{a.view().to_json().to_text()}}"
 
 ## Feeds each event to `a` in order, with no host (std.app.11), and returns
 ## the outline after each one: a test of `update` and `view`.
