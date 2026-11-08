@@ -1,0 +1,49 @@
+## std.audio.11: FLAC decoding (a mono and a stereo stream made by a reference encoder).
+use std.audio
+
+fn mono() bytes
+    parts := [
+    "664c6143800000220240024000007900007901f400f0000000a01c49ef32fd78",
+    "903f6bce9f5a2025b187fff86408009f374e0000056b0a320dc50fb60fcd0e05",
+    "0a94e59980bc086b2f6ea0cd4ee721563f0f004ef3e6411024123150fdd56535",
+    "188c6244f54bdfd88c420886c9eaba9d0ed48c2208c892abf759d198c421912e",
+    "3d77ea9c4a190c6cd3d2d17177128cc621323a1d7baeac84118cc9af552d7959",
+    "007a7b",
+    ]
+    bytes.from_hex(parts.join("")) else b""
+
+fn stereo() bytes
+    parts := [
+    "664c614380000022024002400000f50000f501f402f0000000a094617dc3ea0f",
+    "0a7b2bdf40a3ddaf9dabfff86418009f954e0000056b0a320dc50fb60fcd0e05",
+    "0a94e59980bc086b2f6ea0cd4ee721563f0f004ef3e6411024123150fdd56535",
+    "188c6244f54bdfd88c420886c9eaba9d0ed48c2208c892abf759d198c421912e",
+    "3d77ea9c4a190c6cd3d2d17177128cc621323a1d7baeac84118cc9af552d7959",
+    "13800001fb437143ffc381421700207e21398bcd21d1a7cedde6204fc70856ff",
+    "a96012a88808c1bb05e17fc10808cd0e5396a18618c6ea539fe31830888751cf",
+    "60840c6262a87e5821011827e771d510610634e570b3b0820c6d5c7e3a210310",
+    "465728ebd84202112a8a2af4204188d8a728fb8c318234729cf78cc0ccbdcc",
+    ]
+    bytes.from_hex(parts.join("")) else b""
+
+fn total(c audio.Clip) int
+    mut t := 0
+    for s in c.samples
+        t += (s * 32768.0).round().to_int()
+    t
+
+fn main() !
+    m := audio.decode_flac(mono())?
+    print(m.rate)
+    print(m.channels)
+    print(audio.frames(m))
+    print(total(m))
+    s := audio.decode_flac(stereo())?
+    print(s.channels)
+    print(audio.frames(s))
+    print(total(s))
+    print(s.samples.len())
+    bad := audio.decode_flac(b"RIFF") else err
+        print("error: {err}")
+        m
+    print(audio.frames(bad))
