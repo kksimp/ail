@@ -757,7 +757,11 @@ fn Gen.gen_inst(mut self, i mir.Inst)
     if i.site >= 0
         # A checked operation's position, for the debug line table.
         s := sites.list[i.site]
-        lines.push(codegen.CallRow(off: a.code.len(), pos: mir.call_pos(s.file, s.line, s.col), func: f.name))
+        lines.push(codegen.CallRow(
+            off: a.code.len(),
+            pos: mir.call_pos(s.file, s.line, s.col),
+            func: f.name,
+        ))
     match i.op
         "add" | "sub" | "mul" => arith(i)
         "div" | "rem" => divide(i)

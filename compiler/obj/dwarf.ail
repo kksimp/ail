@@ -32,8 +32,8 @@ fn sleb(mut out List[u8], v int)
     while true
         low := rest.bit_and(127)
         rest = rest.shr(7)
-        sign := low.bit_and(64) != 0
-        if (rest == 0 and not sign) or (rest == -1 and sign)
+        negative := low.bit_and(64) != 0
+        if (rest == 0 and not negative) or (rest == -1 and negative)
             out.push(low.to_u8())
             return
         out.push(low.bit_or(128).to_u8())
@@ -65,12 +65,12 @@ fn spans(img codegen.Image) List[Span]
 ## `.debug_abbrev`, `.debug_info` and `.debug_line` for code at `text_addr`.
 pub fn debug_sections(img codegen.Image, text_addr int) List[DebugSec]
     [
-        DebugSec(name: ".debug_abbrev", data: abbrev()),
-        DebugSec(name: ".debug_info", data: info(img, text_addr)),
-        DebugSec(name: ".debug_line", data: line(img, text_addr)),
+        DebugSec(name: ".debug_abbrev", data: abbrev_section()),
+        DebugSec(name: ".debug_info", data: info_section(img, text_addr)),
+        DebugSec(name: ".debug_line", data: line_section(img, text_addr)),
     ]
 
-fn abbrev() List[u8]
+fn abbrev_section() List[u8]
     mut b := List[u8]()
     # 1: compile unit, with children: producer, language, name, low_pc,
     # high_pc (a length), stmt_list.
@@ -94,7 +94,7 @@ fn abbrev() List[u8]
     uleb(mut b, 0)
     b
 
-fn info(img codegen.Image, text_addr int) List[u8]
+fn info_section(img codegen.Image, text_addr int) List[u8]
     mut body := List[u8]()
     put(mut body, 4, 2)
     put(mut body, 0, 4)
@@ -133,7 +133,7 @@ fn rows(img codegen.Image) List[LineRow]
         all.push(LineRow(at: c.off, pos: c.pos))
     all.sorted(by: |r| r.at)
 
-fn line(img codegen.Image, text_addr int) List[u8]
+fn line_section(img codegen.Image, text_addr int) List[u8]
     mut hdr := List[u8]()
     # minimum instruction length, maximum operations, default is_stmt,
     # line base -5, line range 14, opcode base 13.
