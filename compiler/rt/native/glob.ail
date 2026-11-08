@@ -66,6 +66,8 @@ fn glob_lexists(path str) bool
     p := os_cstr(OS_PATH_B, path)
     if p == 0
         return false
+    if target() == 3
+        return os_access(p) == 0
     at := if target() == 2 then -2 else -100
     syscall(os_pick(439, 439, 466), at, p, 0, os_pick(256, 256, 32), 0, 0) == 0
 

@@ -197,9 +197,11 @@ fn main()
         print(no_such_function_in_libc(1))
 ```
 
-**ffi.load.3** — On Windows `extern c fn` is reported at run time as not
-supported yet; the implementation needs `LoadLibraryA` and the Win64 calling
-convention. *(ADR 0431, ADR 0004)*
+**ffi.load.3** — On Windows the library is opened with `LoadLibraryA` and the
+symbol found with `GetProcAddress`, and the call uses the Win64 convention.
+`c`, `libc`, `m`, `libm` and `msvcrt` name the Universal CRT (`ucrtbase.dll`);
+any other name is tried as `NAME.dll`, then `libNAME.dll`. A library or symbol
+that can't be found traps with `ffi.load.1` or `ffi.load.2`. *(ADR 0431, ADR 0004, ADR 0980)*
 
 ## Linking (Linux)
 
@@ -274,8 +276,8 @@ fn main()
 ```
 
 ```ail norun rules=ffi.load.3
-# norun: on Windows the call traps as "not supported yet"; on Linux and macOS the library
-# "kernel32" can't be loaded, so the call traps too.
+# norun: on Windows the call runs through `LoadLibraryA`; on Linux and macOS the library
+# "kernel32" can't be loaded, so the call traps.
 extern c "kernel32" fn GetTickCount() i32
 
 fn main()

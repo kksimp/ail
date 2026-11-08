@@ -1,0 +1,9 @@
+# `tz.system()` names a zone the database knows, on every OS (std.tz.2, std.tz.3, ADR 0972).
+use std.tz
+
+fn main()
+    zone := tz.system()
+    if off := tz.offset(zone, 0)
+        print("known {off % 900 == 0}")
+    else
+        print("unknown")

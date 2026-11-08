@@ -3742,6 +3742,12 @@ api --pretty tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	b888ab8b0c379c40
 api --symbols tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	ddb257ef288ddbe5
 api --tokens tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	d6fa5e387a22d55d
 api --ast tests/cases/std_fs_walk.ail	986d19ab1196d8eb	0	cf76fa7a689c1f42
+api  tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	303a5b23491dfaf7
+api --text tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	6e23523dd75eb3b0
+api --pretty tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	088754c3ee203647
+api --symbols tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	7b8d2e336dc4e5c4
+api --tokens tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	6c68a384d89bed4f
+api --ast tests/cases/std_gfx_pixels.ail	c6c4c44b111889a4	0	a4afcb181f048daa
 api  tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	e0a3e0968210230d
 api --text tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	f40f75cd940e7508
 api --pretty tests/cases/std_gfx_script.ail	51db41fef20e0fd6	0	a2a52916a84ce1e2
@@ -6266,8 +6272,10 @@ api --diff  tests/cases/std_fs.ail tests/cases/std_fs_missing.ail	65b705f47f2de0
 api --diff --json tests/cases/std_fs.ail tests/cases/std_fs_missing.ail	65b705f47f2de083	0	50914cd21d7a2239
 api --diff  tests/cases/std_fs_missing.ail tests/cases/std_fs_walk.ail	0568c10d5c660a4b	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_fs_missing.ail tests/cases/std_fs_walk.ail	0568c10d5c660a4b	0	1dc25a32d13e4c47
-api --diff  tests/cases/std_fs_walk.ail tests/cases/std_gfx_script.ail	b6b4a36c2c7c5dfd	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_fs_walk.ail tests/cases/std_gfx_script.ail	b6b4a36c2c7c5dfd	0	806e703baf4f7dae
+api --diff  tests/cases/std_fs_walk.ail tests/cases/std_gfx_pixels.ail	fda31cf9555de7c1	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_fs_walk.ail tests/cases/std_gfx_pixels.ail	fda31cf9555de7c1	0	a5e971c2677d1bdb
+api --diff  tests/cases/std_gfx_pixels.ail tests/cases/std_gfx_script.ail	960253a3d2b2032b	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_gfx_pixels.ail tests/cases/std_gfx_script.ail	960253a3d2b2032b	0	72926f28e76ba29b
 api --diff  tests/cases/std_gfx_script.ail tests/cases/std_hash.ail	6acfac9e4cfc598f	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_gfx_script.ail tests/cases/std_hash.ail	6acfac9e4cfc598f	0	390f994af1a2e76c
 api --diff  tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c4124	0	1da7cd571ff6c0f4

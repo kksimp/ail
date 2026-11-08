@@ -574,3 +574,296 @@ pub fn Tree.render(self, r Rect, theme Map[str, int]) List[Run]
 
 pub fn Tree.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
     draw_runs(mut w, render(r, theme))
+
+# ---- Layout --------------------------------------------------------------------
+
+## The first `n` columns of `r`, clamped to its width (std.ui.25).
+pub fn Rect.left(self, n int) Rect
+    Rect(col: col, row: row, cols: n.max(0).min(cols), rows: rows)
+
+## The first `n` rows of `r`, clamped to its height (std.ui.25).
+pub fn Rect.top(self, n int) Rect
+    Rect(col: col, row: row, cols: cols, rows: n.max(0).min(rows))
+
+## `r` shrunk by `n` cells on every side, never below zero (std.ui.25).
+pub fn Rect.inset(self, n int) Rect
+    Rect(col: col + n, row: row + n, cols: (cols - 2 * n).max(0), rows: (rows - 2 * n).max(0))
+
+## Whether the cell (`c`, `rw`) lies inside `r`.
+pub fn Rect.has(self, c int, rw int) bool
+    c >= col and c < col + cols and rw >= row and rw < row + rows
+
+## The sizes in `sizes` made to fill `total`: a size of 0 or more is fixed,
+## and -1 shares what is left evenly (the first ones take any remainder).
+fn share(sizes List[int], total int) List[int]
+    mut fixed := 0
+    mut flex := 0
+    for s in sizes
+        if s < 0
+            flex += 1
+        else
+            fixed += s
+    spare := (total - fixed).max(0)
+    mut out := List[int]()
+    mut i := 0
+    for s in sizes
+        if s >= 0
+            out.push(s.min((total).max(0)))
+        else
+            mut n := spare / flex
+            if i < spare % flex
+                n += 1
+            i += 1
+            out.push(n)
+    out
+
+## Splits `r` into side-by-side rectangles of the given widths (std.ui.25).
+pub fn Rect.cols_of(self, sizes List[int]) List[Rect]
+    mut out := List[Rect]()
+    mut c := col
+    for w in share(sizes, cols)
+        out.push(Rect(col: c, row: row, cols: w, rows: rows))
+        c += w
+    out
+
+## Splits `r` into stacked rectangles of the given heights (std.ui.25).
+pub fn Rect.rows_of(self, sizes List[int]) List[Rect]
+    mut out := List[Rect]()
+    mut y := row
+    for h in share(sizes, rows)
+        out.push(Rect(col: col, row: y, cols: cols, rows: h))
+        y += h
+    out
+
+# ---- Label -------------------------------------------------------------------------
+
+## Fixed text, cut or padded to its rectangle (std.ui.26).
+pub struct Label
+    pub text str
+    pub bold bool
+
+pub fn Label.render(self, r Rect, theme Map[str, int]) List[Run]
+    [Run(
+        col: r.col,
+        row: r.row,
+        text: fit(text, r.cols),
+        fg: color(theme, "fg"),
+        bg: color(theme, "bg"),
+        bold: bold,
+    )]
+
+pub fn Label.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- Checkbox ----------------------------------------------------------------------
+
+## A labelled box that a click, or Space or Enter while focused, toggles
+## (std.ui.27).
+pub struct Checkbox
+    pub label str
+    pub checked bool
+    pub focused bool
+
+pub fn Checkbox.on_event(mut self, ev ui.Event, r Rect) Action
+    if _ := clicked(ev, r)
+        checked = not checked
+        return Changed
+    k := plain_key(ev) else return Ignored
+    if focused and (k == " " or k == "enter")
+        checked = not checked
+        return Changed
+    Ignored
+
+pub fn Checkbox.render(self, r Rect, theme Map[str, int]) List[Run]
+    mut mark := " "
+    if checked
+        mark = "x"
+    mut bg := color(theme, "bg")
+    if focused
+        bg = color(theme, "select_bg")
+    [Run(
+        col: r.col,
+        row: r.row,
+        text: fit("[{mark}] {label}", r.cols),
+        fg: color(theme, "fg"),
+        bg: bg,
+        bold: focused,
+    )]
+
+pub fn Checkbox.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- RadioGroup --------------------------------------------------------------------
+
+## One choice of several, one per row. Up and Down move the choice, a click
+## picks a row, and Enter submits (std.ui.27).
+pub struct RadioGroup
+    pub choices List[str]
+    pub selected int
+
+pub fn RadioGroup.new(choices List[str]) RadioGroup
+    RadioGroup(choices: choices, selected: 0)
+
+pub fn RadioGroup.chosen(self) str?
+    if selected < 0 or selected >= choices.len()
+        return none
+    choices[selected]
+
+pub fn RadioGroup.on_event(mut self, ev ui.Event, r Rect) Action
+    if hit := clicked(ev, r)
+        if hit.row < choices.len() and hit.row != selected
+            selected = hit.row
+            return Changed
+        return Ignored
+    k := plain_key(ev) else return Ignored
+    if k == "enter"
+        return Submit
+    if k == "up" and selected > 0
+        selected -= 1
+        return Changed
+    if k == "down" and selected < choices.len() - 1
+        selected += 1
+        return Changed
+    Ignored
+
+pub fn RadioGroup.render(self, r Rect, theme Map[str, int]) List[Run]
+    mut out := List[Run]()
+    for i in 0..r.rows
+        mut text := ""
+        mut on := false
+        if i < choices.len()
+            on = i == selected
+            mut mark := " "
+            if on
+                mark = "*"
+            text = "({mark}) {choices[i]}"
+        mut bg := color(theme, "bg")
+        if on
+            bg = color(theme, "select_bg")
+        out.push(Run(
+            col: r.col,
+            row: r.row + i,
+            text: fit(text, r.cols),
+            fg: color(theme, "fg"),
+            bg: bg,
+            bold: on,
+        ))
+    out
+
+pub fn RadioGroup.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- ProgressBar -------------------------------------------------------------------
+
+## A bar showing `done` of `total` steps and the percentage (std.ui.28).
+pub struct ProgressBar
+    pub done int
+    pub total int
+
+## The percentage done, 0 to 100; an empty total counts as 0.
+pub fn ProgressBar.percent(self) int
+    if total <= 0
+        return 0
+    (done.max(0).min(total) * 100) / total
+
+pub fn ProgressBar.render(self, r Rect, theme Map[str, int]) List[Run]
+    label := " {percent()}%"
+    inner := (r.cols - 2 - label.chars().len()).max(0)
+    full := inner * percent() / 100
+    bar := "[{"#".repeat(full)}{" ".repeat(inner - full)}]{label}"
+    [Run(
+        col: r.col,
+        row: r.row,
+        text: fit(bar, r.cols),
+        fg: color(theme, "status_fg"),
+        bg: color(theme, "line_bg"),
+        bold: false,
+    )]
+
+pub fn ProgressBar.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- Tabs --------------------------------------------------------------------------
+
+## A row of tab titles with one selected. Left, Right and Tab move between
+## them and a click picks one (std.ui.28).
+pub struct Tabs
+    pub titles List[str]
+    pub selected int
+
+pub fn Tabs.new(titles List[str]) Tabs
+    Tabs(titles: titles, selected: 0)
+
+## The column where title `i` starts, relative to the row's first column.
+fn Tabs.title_col(self, i int) int
+    mut c := 0
+    for j in 0..i
+        c += titles[j].chars().len() + 3
+    c
+
+pub fn Tabs.on_event(mut self, ev ui.Event, r Rect) Action
+    if hit := clicked(ev, r)
+        if hit.row != 0
+            return Ignored
+        for i in 0..titles.len()
+            if hit.col >= title_col(i) and hit.col < title_col(i) + titles[i].chars().len() + 2
+                if i == selected
+                    return Ignored
+                selected = i
+                return Changed
+        return Ignored
+    k := plain_key(ev) else return Ignored
+    if k == "right" or k == "tab"
+        if selected < titles.len() - 1
+            selected += 1
+            return Changed
+        return Ignored
+    if k == "left" and selected > 0
+        selected -= 1
+        return Changed
+    Ignored
+
+pub fn Tabs.render(self, r Rect, theme Map[str, int]) List[Run]
+    mut out := List[Run]()
+    mut used := 0
+    for i in 0..titles.len()
+        text := " {titles[i]} "
+        on := i == selected
+        mut bg := color(theme, "line_bg")
+        if on
+            bg = color(theme, "status_bg")
+        gap := used > 0
+        if gap and used < r.cols
+            out.push(Run(
+                col: r.col + used,
+                row: r.row,
+                text: " ",
+                fg: color(theme, "fg"),
+                bg: color(theme, "bg"),
+                bold: false,
+            ))
+        if gap
+            used += 1
+        if used < r.cols
+            out.push(Run(
+                col: r.col + used,
+                row: r.row,
+                text: fit(text, text.chars().len().min(r.cols - used)),
+                fg: color(theme, "status_fg"),
+                bg: bg,
+                bold: on,
+            ))
+        used += text.chars().len()
+    if used < r.cols
+        out.push(Run(
+            col: r.col + used,
+            row: r.row,
+            text: " ".repeat(r.cols - used),
+            fg: color(theme, "fg"),
+            bg: color(theme, "bg"),
+            bold: false,
+        ))
+    out
+
+pub fn Tabs.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))

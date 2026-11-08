@@ -9,16 +9,27 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
 # A std.app program would open the host's window and wait for ever: a host path that doesn't exist makes `app.run` fail at once.
 if (-not $env:AIL_APP_HOST) { $env:AIL_APP_HOST = 'C:/nonexistent/ail-app-host' }
+# The suites run `sh`, `perl`, `rm` and friends: Git for Windows has them in usr\bin. Put that on PATH, or stop here.
+$gitUsr = Join-Path $env:ProgramFiles 'Git\usr\bin'
+if ((Test-Path $gitUsr) -and (($env:PATH -split ';') -notcontains $gitUsr)) { $env:PATH = "$env:PATH;$gitUsr" }
+$missing = @('sh', 'perl', 'rm', 'mktemp') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
+if ($missing) { "GATE RED (missing tools on PATH: $($missing -join ' '); install Git for Windows or add its usr\bin)"; exit 1 }
+# gate.ail builds into $TMPDIR (default /tmp) and Git's perl and sh start the programs from there: with TMPDIR unset, /tmp means
+# a different directory to the native build and to Git's tools, and every example "ran" with no output. A Windows path with `/` is the same to both.
+if (-not $env:TMPDIR) { $env:TMPDIR = $env:TEMP -replace '\\', '/' }
 $out = Join-Path $env:TEMP 'ail-gate'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $ail = Join-Path $root 'ail.ps1'
 $fails = 0
-$pattern = '^test .* FAILED|panicked at|differs from|^error|disagreement|FAIL '
+$pattern = '^RED |^test .* FAILED|panicked at|differs from|^error|disagreement|FAIL '
 
 function Run([string]$name, [string[]]$cmdArgs) {
     $log = Join-Path $out "$name.log"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $ail @cmdArgs *> $log
-    if ($LASTEXITCODE -eq 0) { return }
+    # The gate prints `RED name` lines for what failed: a log with one is red whatever the exit status says.
+    $rc = $LASTEXITCODE
+    $redLines = @(Select-String -Path $log -Pattern '^RED ' -ErrorAction SilentlyContinue)
+    if ($rc -eq 0 -and $redLines.Count -eq 0) { return }
     $script:fails++
     "RED $name"
     Select-String -Path $log -Pattern $pattern | Select-Object -First 8 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
@@ -46,5 +57,7 @@ else {
     & $hello *> $null
     if ($LASTEXITCODE -ne 0) { $fails++; 'RED native binaries do not start' }
 }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'ps1-args-test.ps1') *> (Join-Path $out 'ps1_args.log')
+if ($LASTEXITCODE -ne 0) { $fails++; 'RED ps1_args'; Get-Content (Join-Path $out 'ps1_args.log') | Select-Object -First 8 }
 if ($fails -eq 0) { 'GATE GREEN' } else { "GATE RED ($fails failures); logs in $out" }
 exit ([int]($fails -gt 0))

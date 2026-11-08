@@ -96,6 +96,8 @@ pub struct ImplDecl
     pub pos Pos
     ## Indexes into `Program.fns`.
     pub methods List[int]
+    ## The field names of an `impl Hash` block's `uses` line (trait.hash.1).
+    pub uses List[Ident]
 
 pub struct StructDecl
     pub name str

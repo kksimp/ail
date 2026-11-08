@@ -149,6 +149,39 @@ with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
 **std.app.20** — A host sends `keyup` (a canvas's `id`, `text`, modifiers) when a key is released, and `key` carries `repeat` (auto-repeat) and `code` (the platform key code). A program that does not read them is unaffected; a host may omit both. *(ADR 0956)*
 
+**std.app.21** — `trait App` has `lines(mut self) List[str]` (default empty).
+After each `update`, `run` sends every returned line to the host unchanged and
+the app's next call returns only new ones; it is how an app sends protocol
+lines the tree cannot express, such as `surface` and `present`
+(`std.gfx.6`). A host skips a line it doesn't know. *(ADR 0957)*
+
+**std.app.22** — `trait App` has `pick(self) Picker?` (default `none`); `struct Picker` is `id`, `prompt`, `folders bool` (a folder, else a file) and `start` (the folder to open in, `""` for the host's choice). When it differs from the last one sent, `run` sends `{"v":1,"t":"pick","id":I,"prompt":P,"folders":F,"start":S}`; the host shows its native open dialog and answers `{"kind":"picked","id":I,"text":PATH}`, `text` empty if the user cancelled. A host with no native dialog answers `{"kind":"pick_error","id":I,"text":WHY}` at once, so an app can fall back to a text field. The app clears its `Picker` when it sees either event. *(ADR 0971)*
+
+**std.app.25** — `trait App` has `edge(self) bool` (default `false`). While
+it is `true` (the `view` line carries `"edge":true`), a host shows no title
+bar and lets the app draw up to the window's top edge, keeping its own
+window controls, and `start` and every `resize` carry `inset_left` and
+`inset_top` (floats, points): the room those controls take at the window's
+top-left, `0` when the host draws none there. The app moves the window by
+sending the line `{"v":1,"t":"drag"}` through `lines()` (std.app.21) on a
+mouse-down in its own strip, and `{"v":1,"t":"zoom"}` on a double-click
+there. A host that cannot hide its title bar keeps its decorations and
+reports both insets as `0`, so a program must not depend on edge mode.
+*(ADR 0981)*
+
+**std.app.26** — An app puts text on the system clipboard by sending the
+line `{"v":1,"t":"clipboard","text":T}` through `lines()` (std.app.21);
+`app.clipboard(text)` is that line. The host copies `T` exactly as given
+(UTF-8, no newline conversion). A host that cannot write the clipboard
+ignores the line, as any unknown line, so a program must not depend on it.
+*(ADR 0982)*
+
+**std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
+clipboard's text) when the paste key (Command-V on macOS, Control-V
+elsewhere) is pressed in a canvas, instead of the `key` event for it; a
+host whose clipboard it cannot read sends the `key` event as before, so a
+program must not depend on `paste`. *(ADR 0978)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -195,6 +228,129 @@ fn main()
     print(ev.x)
     print(app.frame(p).starts_with("\{\"v\":1,\"t\":\"view\",\"title\":\"Pad\""))
     print(app.outline(p.view()))
+```
+
+```ail rules=std.app.21
+use std.app
+
+struct Sender
+    queue List[str]
+
+impl app.App for Sender
+    fn update(mut self, ev app.Event)
+        queue.push("\{\"v\":1,\"t\":\"present\"}")
+
+    fn view(self) app.Node
+        app.label("sender")
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Sender(queue: [])
+    s.update(app.event("start"))
+    print(s.lines().len())
+    print(s.lines().len())
+```
+
+```ail rules=std.app.25
+use std.app
+
+## A tab strip that starts right of the window controls and moves the window.
+struct Strip
+    left float
+    queue List[str]
+
+impl app.App for Strip
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            left = ev.inset_left
+        elif ev.kind == "click" and ev.x >= left
+            queue.push(if ev.clicks == 2 then "\{\"v\":1,\"t\":\"zoom\"}" else "\{\"v\":1,\"t\":\"drag\"}")
+
+    fn view(self) app.Node
+        app.canvas("strip", 0.0, 0.0, [app.draw_rect(left, 0.0, 200.0, 40.0, 0x35363a)])
+
+    fn edge(self) bool
+        true
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Strip(left: 0.0, queue: [])
+    mut start := app.event("start")
+    start.inset_left = 78.0
+    start.inset_top = 28.0
+    s.update(start)
+    print(app.frame(s).contains("\"edge\":true"))
+    mut c := app.event("click")
+    c.x = 100.0
+    c.clicks = 1
+    s.update(c)
+    print(s.lines())
+    print(app.outline(s.view()))
+```
+
+```ail rules=std.app.26
+use std.app
+
+## A drawn field whose text Command-C (Control-C elsewhere) copies.
+struct Field
+    text str
+    out List[str]
+
+impl app.App for Field
+    fn update(mut self, ev app.Event)
+        if ev.kind == "key" and ev.meta and ev.text == "c"
+            out.push(app.clipboard(text))
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+    fn lines(mut self) List[str]
+        sent := out
+        out = []
+        sent
+
+fn main()
+    mut f := Field(text: "ail.dev", out: [])
+    mut c := app.key("c")
+    c.meta = true
+    f.update(c)
+    print(f.lines())
+    print(f.lines())
+```
+
+```ail rules=std.app.23
+use std.app
+
+## A one-line drawn field: typed keys add characters, a paste adds its text.
+struct Omnibox
+    text str
+
+impl app.App for Omnibox
+    fn update(mut self, ev app.Event)
+        if ev.kind == "paste"
+            text = "{text}{ev.text}"
+        elif ev.kind == "key" and ev.text.chars().len() == 1
+            text = "{text}{ev.text}"
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+fn main()
+    mut f := Omnibox(text: "")
+    f.update(app.key("a"))
+    mut p := app.event("paste")
+    p.id = "f"
+    p.text = "il.dev"
+    f.update(p)
+    print(f.text)
 ```
 
 ```ail rules=std.app.20
@@ -291,6 +447,42 @@ impl app.App for Quiet
 fn main()
     mut q := Quiet(n: 0)
     app.run(mut q) else return
+```
+
+```ail rules=std.app.22
+use std.app
+
+struct Where
+    path str
+    asking bool
+
+impl app.App for Where
+    fn update(mut self, ev app.Event)
+        if ev.kind == "press" and ev.id == "choose"
+            asking = true
+        if ev.kind == "picked"
+            path = ev.text
+            asking = false
+        if ev.kind == "pick_error"
+            asking = false
+
+    fn view(self) app.Node
+        app.column([app.label("scan {path}"), app.button("choose", "Choose folder")])
+
+    fn pick(self) app.Picker?
+        if asking
+            return app.Picker(id: "folder", prompt: "Folder to scan", folders: true, start: "")
+        none
+
+fn main()
+    mut w := Where(path: "", asking: false)
+    app.script(mut w, [app.press("choose")])
+    print(w.pick() != none)
+    mut done := app.event("picked")
+    done.id = "folder"
+    done.text = "/tmp"
+    app.script(mut w, [done])
+    print("{w.path} {w.pick() != none}")
 ```
 
 ```ail rules=std.app.15,std.app.16,std.app.17,std.app.18,std.app.19

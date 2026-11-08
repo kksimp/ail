@@ -10,7 +10,7 @@ fn main() !
     b := proc.run("sh", ["-c", "echo oops >&2; exit 3"])?
     print(b.status)
     print(b.err.trim())
-    c := proc.run("sort", [], "pear\napple\nfig\n")?
+    c := proc.run("sh", ["-c", "sort"], "pear\napple\nfig\n")?
     print(c.out)
     d := proc.run("sh", ["-c", "echo done"], none, 10000)?
     print(d.out.trim())

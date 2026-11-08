@@ -146,6 +146,8 @@ pub COVERED_RULES := [
     "trait.auto.4",
     "trait.auto.5",
     "trait.derive.1",
+    "trait.hash.1",
+    "trait.hash.2",
     "trait.impl.1",
     "trait.impl.3",
     "trait.impl.4",

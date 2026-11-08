@@ -43,7 +43,7 @@ removal every program, including the tools, runs natively.
 ## Rejected alternatives
 
 - **Seed binaries checked into git.** Megabytes per target per update, forever, in history.
-- **A public release.** The project is private for now; a private release needs no new policy.
+- **A public release.** The project is private for now; a private release needs no new policy. (A public-release policy is proposed in [ADR 0976](0976-public-release-and-seed-trust.md).)
 - **Trusting the download without a hash.** A swapped asset would run as the compiler.
 - **Porting the interpreter to AIL.** Already declined; native-only keeps one execution model.
 - **Deleting Rust first.** The native subset does not yet cover every tool and test program (RR-3).
