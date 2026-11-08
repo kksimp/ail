@@ -74,6 +74,8 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
         Named(n, args) => return resolve_named(n, args, t.pos)
 
 fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
+    if n.len() > 0 and "0123456789".contains(n.slice(0, 1))
+        return Ty.ConstVal(n.to_int() else 0)
     for k in 0..scope.len()
         s := scope[scope.len() - 1 - k]
         if s.name == n
@@ -271,6 +273,7 @@ fn Checker.ty_name(self, t Ty) str
             args := [ty_name(p) for p in ps].join(", ")
             if r == Ty.Unit then "fn({args})" else "fn({args}) {ty_name(r)}"
         Tuple(xs) => "({[ty_name(x) for x in xs].join(", ")})"
+        ConstVal(v) => "{v}"
 
 fn Checker.with_args(self, n str, args List[Ty]) str
     if args.len() == 0 then n else "{n}[{[ty_name(a) for a in args].join(", ")}]"
