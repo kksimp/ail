@@ -227,7 +227,9 @@ pub fn text_line(f gfx.Frame) str
     for c in f.cmds
         match c
             Text(x, y, t, size, color) => items.push("\{\"x\":{x},\"y\":{y},\"s\":{Json.Str(t).to_text()},\"size\":{size},\"color\":{color}}")
-            _ => skip()
+            Clear(_) => skip()
+            Rect(_, _, _, _, _) => skip()
+            Line(_, _, _, _, _) => skip()
     "\{\"v\":1,\"t\":\"text\",\"id\":\"{CANVAS}\",\"items\":[{items.join(",")}]}"
 
 ## The game's next frame with no window (std.gfx.10): this frame's input,
