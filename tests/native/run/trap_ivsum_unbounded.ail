@@ -1,0 +1,12 @@
+# `a + l != n` bounds nothing, so `a + l` keeps its check (native.bce.14): it
+# overflows on the third iteration and traps there (expr.arith.1).
+fn scan(a int, n int) int
+    mut l := 0
+    while l < 4 and a + l != n
+        print(l)
+        l += 1
+    l
+
+fn main()
+    print(scan(5, 7))
+    print(scan(9223372036854775806, 0))
