@@ -458,16 +458,67 @@ static void ctx_setup(PangoContext *pc) {
 #endif
 }
 
-static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
+static GHashTable *installed; /* lower-cased family name -> family name (std.app.28) */
+
+static void load_installed(void) {
+    if (installed) return;
+    installed = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    PangoFontFamily **fams = NULL;
+    int n = 0;
+    pango_font_map_list_families(pango_cairo_font_map_get_default(), &fams, &n);
+    for (int i = 0; i < n; i++) {
+        const char *name = pango_font_family_get_name(fams[i]);
+        g_hash_table_insert(installed, g_utf8_strdown(name, -1), g_strdup(name));
+    }
+    g_free(fams);
+}
+
+/* std.app.28: resolves a CSS `font-family` list to the first installed family, else the list's
+   first generic (`serif`, `mono`, `sans`), else `sans`. The result is owned by the caller. */
+static char *resolve_family(const char *list) {
+    load_installed();
+    const char *generic = NULL;
+    char **parts = g_strsplit(list, ",", -1);
+    for (int i = 0; parts[i]; i++) {
+        char *f = g_strstrip(parts[i]);
+        size_t n = strlen(f);
+        if (n >= 2 && (f[0] == '"' || f[0] == '\'') && f[n - 1] == f[0]) { f[n - 1] = 0; f = g_strstrip(f + 1); }
+        if (!*f) continue;
+        char *low = g_utf8_strdown(f, -1);
+        if (!strcmp(low, "serif")) { if (!generic) generic = "serif"; }
+        else if (!strcmp(low, "monospace") || !strcmp(low, "ui-monospace") || !strcmp(low, "mono")) { if (!generic) generic = "mono"; }
+        else if (!strcmp(low, "sans-serif") || !strcmp(low, "system-ui") || !strcmp(low, "ui-sans-serif") || !strcmp(low, "sans")) { if (!generic) generic = "sans"; }
+        else {
+            const char *name = g_hash_table_lookup(installed, low);
+            if (name) { char *r = g_strdup(name); g_free(low); g_strfreev(parts); return r; }
+        }
+        g_free(low);
+    }
+    g_strfreev(parts);
+    return g_strdup(generic ? generic : "sans");
+}
+
+/* The font description of `family` (std.app.3, std.app.28); `used`, when given, gets the host face
+   or installed family chosen, owned by the caller. */
+static PangoFontDescription *font_desc_used(const char *family, double size, gboolean bold, gboolean italic, char **used) {
     PangoFontDescription *d = pango_font_description_new();
-    /* std.app.3: `web:<id>` is the family found in the font; one not sent yet falls back to `sans`. */
-    gboolean is_web = !strncmp(family, "web:", 4);
-    const char *web = is_web ? (const char *)g_hash_table_lookup(webfonts, family + 4) : NULL;
-    pango_font_description_set_family(d, web ? web : is_web || !strcmp(family, "sans") ? sans_family : !strcmp(family, "serif") ? SERIF_LIST : MONO_LIST);
+    const char *web = !strncmp(family, "web:", 4) ? (const char *)g_hash_table_lookup(webfonts, family + 4) : NULL;
+    char *chosen = NULL;
+    if (web) chosen = g_strdup(family);
+    else if (!strncmp(family, "web:", 4)) chosen = g_strdup("sans"); /* a web font not sent yet */
+    else if (!strcmp(family, "sans") || !strcmp(family, "serif") || !strcmp(family, "mono")) chosen = g_strdup(family);
+    else chosen = resolve_family(family);
+    const char *pango = web ? web : !strcmp(chosen, "sans") ? sans_family : !strcmp(chosen, "serif") ? SERIF_LIST : !strcmp(chosen, "mono") ? MONO_LIST : chosen;
+    pango_font_description_set_family(d, pango);
+    if (used) *used = chosen; else g_free(chosen);
     pango_font_description_set_absolute_size(d, (size > 0 ? size : 13) * PANGO_SCALE);
     pango_font_description_set_weight(d, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
     pango_font_description_set_style(d, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
     return d;
+}
+
+static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
+    return font_desc_used(family, size, bold, italic, NULL);
 }
 
 /* The size of one character of `mono` at 13 points (std.app.5). */
@@ -487,9 +538,15 @@ static void answer_measure(const JVal *runs) {
     PangoContext *pc = gtk_widget_get_pango_context(w);
     ctx_setup(pc);
     GString *out = g_string_new("");
+    GString *fonts = g_string_new("");
     for (int i = 0; runs && runs->kind == J_ARR && i < runs->n; i++) {
         const JVal *r = runs->vals[i];
-        PangoFontDescription *d = font_desc(jstr(r, "font"), jnum(r, "size"), jflag(r, "bold"), jflag(r, "italic"));
+        char *used = NULL;
+        PangoFontDescription *d = font_desc_used(jstr(r, "font"), jnum(r, "size"), jflag(r, "bold"), jflag(r, "italic"), &used);
+        if (i) g_string_append_c(fonts, ',');
+        for (char *p = used; *p; p++) if (*p == ',') *p = ' ';
+        g_string_append(fonts, used);
+        g_free(used);
         PangoLayout *l = pango_layout_new(pc);
         pango_layout_set_font_description(l, d);
         pango_layout_set_text(l, jstr(r, "text"), -1);
@@ -503,8 +560,10 @@ static void answer_measure(const JVal *runs) {
     }
     Ev e = ev_new("measured");
     ev_str(&e, "text", out->str);
+    ev_str(&e, "fonts", fonts->str); /* std.app.28 */
     ev_send(&e);
     g_string_free(out, TRUE);
+    g_string_free(fonts, TRUE);
     g_object_ref_sink(w);
     g_object_unref(w);
 }

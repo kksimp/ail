@@ -807,6 +807,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1009](1009-readiness-io.md) | Readiness I/O: `epoll` and `kqueue` sets for the HTTP server's parked connections *(delegated)* | Accepted | 2026-11-09 |
 | [1010](1010-c-header-constants-enums-fnptr.md) | C header import breadth: `#define` constants, enums and function-pointer types *(delegated)* | Accepted | 2026-11-09 |
 | [1011](1011-os-signals.md) | `os.signals`: SIGINT, SIGTERM, SIGHUP, SIGQUIT and SIGWINCH as a `Channel[str]`; the Windows console Ctrl-C handler *(delegated)* | Accepted | 2026-11-09 |
+| [1005](1005-std-app-font-family-list.md) | `std.app` font-family lists: the host measures and draws in the first installed family and says which *(delegated)* | Accepted | 2026-11-08 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
 | [1016](1016-fs-map.md) | `fs.map`: a read-only memory-mapped `bytes` view of a file *(delegated)* | Accepted | 2026-11-09 |
 | [1017](1017-std-app-screen-size-and-scale.md) | `std.app` reports the display's size and scale on `start` and `resize` *(delegated)* | Accepted | 2026-11-09 |

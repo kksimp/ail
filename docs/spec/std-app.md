@@ -121,8 +121,8 @@ and `view` without a window. *(ADR 0838)*
 
 **std.app.13** — `trait App` also has `measures(self) List[Measure]` (default
 empty) and `measured(mut self, runs List[Measure], widths List[float])`
-(default does nothing). `struct Measure` is `text`, `font` (`mono`, `sans` or `serif`),
-`size`, `bold` and `italic`. After each `update`, while `measures()` is not
+(default does nothing). `struct Measure` is `text`, `font` (`mono`, `sans`, `serif`,
+`web:` and a `Font` id, or a `font-family` list, std.app.28), `size`, `bold` and `italic`. After each `update`, while `measures()` is not
 empty (at most 4 rounds), `run` sends `{"v":1,"t":"measure","runs":[...]}` with
 the same fields per run, and waits for the host's `{"kind":"measured","text":W}`
 event, where `W` is each run's advance width in points in the font a `Str` op
@@ -210,6 +210,20 @@ program must not depend on `paste`. *(ADR 0978)*
 agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are built
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
+
+**std.app.28** — `Measure.font` and `Str.font` may be a CSS `font-family`
+list: family names separated by commas, each optionally quoted. The host
+measures and draws the text in the first family of the list that is
+installed (matched without regard to case); when none is, in the list's
+first generic family (`serif` is `serif`; `monospace` and `ui-monospace`
+are `mono`; `sans-serif`, `system-ui` and `ui-sans-serif` are `sans`), and
+with no generic either, in `sans`. All three hosts choose this way. The
+`measured` event may carry `"fonts":F`, each run's chosen family in the same
+order, joined by commas (a host that does not say omits it); `Event` has
+`fonts` and `trait App` has `fonts_used(mut self, runs List[Measure], used List[str])`
+(default does nothing), called after `measured` when the host said.
+`family_list(font) List[str]` is the list's families, unquoted and in order,
+and `generic_of(font) str` the face the list falls back to. *(ADR 1005)*
 
 **std.app.30** — A host sends `appearance` (`text` is `dark` or `light`) once right after `start`, and again whenever the system's dark or light setting changes. An app may answer with a new view, as for any event. A host that cannot read the setting sends none, so a program must not depend on it and keeps a default theme. *(ADR 1008)*
 
@@ -429,6 +443,18 @@ fn main()
     u.x = 50.0
     s.update(u)
     print((s.from, s.to, s.held))
+
+```ail rules=std.app.28
+use std.app
+
+## A page's heading font: the host draws it in Georgia when that is
+## installed, else in its serif face.
+fn main()
+    heading := "\"Nope Display 9z\", Georgia, serif"
+    print(app.family_list(heading).join("|"))
+    print(app.generic_of(heading))
+    print(app.generic_of("ui-monospace, Menlo"))
+    print(app.generic_of("Inter"))
 ```
 
 ```ail rules=std.app.26

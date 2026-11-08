@@ -13,22 +13,65 @@ func color(_ c: Int) -> NSColor {
 }
 
 func font(_ family0: String, _ size: Double, bold: Bool, italic: Bool) -> NSFont {
-    let family = family0.hasPrefix("web:") ? "sans" : family0
+    return fontUsed(family0, size, bold: bold, italic: italic).0
+}
+
+/// The installed font families, lower-cased, for std.app.28.
+private let installedFamilies: Set<String> = Set(NSFontManager.shared.availableFontFamilies.map { $0.lowercased() })
+
+/// Resolves a CSS `font-family` list (std.app.28): the first installed family wins,
+/// else the list's first generic (`serif`, `mono` for monospace, `sans` otherwise).
+/// Returns the host face or the installed family's name.
+func resolveFamily(_ list: String) -> String {
+    var generic = ""
+    for part in list.split(separator: ",") {
+        var f = part.trimmingCharacters(in: .whitespaces)
+        if f.count >= 2, let q = f.first, (q == "\"" || q == "'"), f.last == q {
+            f = String(f.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        if f.isEmpty { continue }
+        let low = f.lowercased()
+        switch low {
+        case "serif": if generic.isEmpty { generic = "serif" }
+        case "monospace", "ui-monospace", "mono": if generic.isEmpty { generic = "mono" }
+        case "sans-serif", "system-ui", "ui-sans-serif", "sans", "-apple-system", "blinkmacsystemfont":
+            if generic.isEmpty { generic = "sans" }
+        default:
+            if installedFamilies.contains(low) {
+                return NSFontManager.shared.availableFontFamilies.first { $0.lowercased() == low } ?? f
+            }
+        }
+    }
+    return generic.isEmpty ? "sans" : generic
+}
+
+/// The font a `Str` of this family is drawn in and the family the host chose (std.app.28).
+func fontUsed(_ family0: String, _ size: Double, bold: Bool, italic: Bool) -> (NSFont, String) {
     let s = CGFloat(size > 0 ? size : 13)
     let w: NSFont.Weight = bold ? .bold : .regular
     var f: NSFont
-    if family0.hasPrefix("web:"), let wf = WebFonts.font(String(family0.dropFirst(4)), s) {
-        return wf
+    if family0.hasPrefix("web:") {
+        if let wf = WebFonts.font(String(family0.dropFirst(4)), s) { return (wf, family0) }
+        return (NSFont.systemFont(ofSize: s, weight: w), "sans")
     }
+    let family = (family0 == "mono" || family0 == "sans" || family0 == "serif") ? family0 : resolveFamily(family0)
     switch family {
     case "sans": f = NSFont.systemFont(ofSize: s, weight: w)
     case "serif":
         let sys = NSFont.systemFont(ofSize: s, weight: w)
         f = sys.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: s) } ?? sys
-    default: f = NSFont.monospacedSystemFont(ofSize: s, weight: w)
+    case "mono": f = NSFont.monospacedSystemFont(ofSize: s, weight: w)
+    default:
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if bold { traits.insert(.bold) }
+        if italic { traits.insert(.italic) }
+        let d = NSFontDescriptor(fontAttributes: [.family: family]).withSymbolicTraits(traits)
+        f = NSFont(descriptor: d, size: s) ?? NSFont(descriptor: NSFontDescriptor(fontAttributes: [.family: family]), size: s)
+            ?? NSFont.systemFont(ofSize: s, weight: w)
+        return (f, family)
     }
     if italic { f = NSFontManager.shared.convert(f, toHaveTrait: .italicFontMask) }
-    return f
+    return (f, family)
 }
 
 struct CanvasRep: NSViewRepresentable {

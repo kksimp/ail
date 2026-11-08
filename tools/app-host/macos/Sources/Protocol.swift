@@ -159,12 +159,15 @@ final class Outbox {
 /// of the same family, size and weight is drawn in, sent back as one `measured` event whose
 /// `text` is the widths joined by commas.
 func answerMeasure(_ runs: [[String: Any]]) {
+    var fonts: [String] = []
     let widths = runs.map { r -> String in
-        let f = font(text(r, "font"), num(r, "size"), bold: flag(r, "bold"), italic: flag(r, "italic"))
+        let (f, used) = fontUsed(text(r, "font"), num(r, "size"), bold: flag(r, "bold"), italic: flag(r, "italic"))
+        fonts.append(used.replacingOccurrences(of: ",", with: " "))
         let w = (text(r, "text") as NSString).size(withAttributes: [.font: f]).width
         return String(format: "%.3f", Double(w))
     }
-    Outbox.shared.send("measured", ["text": widths.joined(separator: ",")])
+    // std.app.28: the family each run was measured in.
+    Outbox.shared.send("measured", ["text": widths.joined(separator: ","), "fonts": fonts.joined(separator: ",")])
 }
 
 /// Reads views from standard input on a background thread and hands each

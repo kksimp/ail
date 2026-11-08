@@ -403,8 +403,49 @@ static class Fonts
         catch (Exception) { }
     }
 
-    public static Font Get(string family, double size, bool bold, bool italic, bool underline)
+    static Dictionary<string, string> installed;
+
+    /// The installed families, lower-cased, for std.app.28.
+    static Dictionary<string, string> Installed()
     {
+        if (installed == null)
+        {
+            var d = new Dictionary<string, string>();
+            using (var all = new InstalledFontCollection())
+                foreach (FontFamily ff in all.Families) d[ff.Name.ToLowerInvariant()] = ff.Name;
+            installed = d;
+        }
+        return installed;
+    }
+
+    /// std.app.28: the host face (`mono`, `sans`, `serif`, `web:` id) or installed family a
+    /// `font` names: a CSS `font-family` list resolves to its first installed family, else its
+    /// first generic, else `sans`.
+    public static string Resolve(string family)
+    {
+        if (family == "mono" || family == "sans" || family == "serif" || family.StartsWith("web:")) return family;
+        string generic = null;
+        foreach (string part in family.Split(','))
+        {
+            string f = part.Trim();
+            if (f.Length >= 2 && (f[0] == '"' || f[0] == '\'') && f[f.Length - 1] == f[0]) f = f.Substring(1, f.Length - 2).Trim();
+            if (f.Length == 0) continue;
+            string low = f.ToLowerInvariant();
+            if (low == "serif") { if (generic == null) generic = "serif"; }
+            else if (low == "monospace" || low == "ui-monospace" || low == "mono") { if (generic == null) generic = "mono"; }
+            else if (low == "sans-serif" || low == "system-ui" || low == "ui-sans-serif" || low == "sans") { if (generic == null) generic = "sans"; }
+            else
+            {
+                string name;
+                if (Installed().TryGetValue(low, out name)) return name;
+            }
+        }
+        return generic ?? "sans";
+    }
+
+    public static Font Get(string family0, double size, bool bold, bool italic, bool underline)
+    {
+        string family = Resolve(family0);
         float s = size > 0 ? (float)size : 13;
         string key = family + "|" + s + "|" + bold + italic + underline;
         Font f;
@@ -418,7 +459,12 @@ static class Fonts
                 FontStyle ws = wf.IsStyleAvailable(st) ? st : (FontStyle.Regular | (underline ? FontStyle.Underline : 0));
                 f = new Font(wf, s, ws, GraphicsUnit.Pixel);
             }
-            else f = new Font(family == "sans" || family.StartsWith("web:") ? Sans : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
+            else
+            {
+                string name = family == "sans" || family.StartsWith("web:") ? Sans : family == "serif" ? "Georgia" : family == "mono" ? "Consolas" : family;
+                try { f = new Font(name, s, st, GraphicsUnit.Pixel); }
+                catch (ArgumentException) { f = new Font(name, s, FontStyle.Regular | (underline ? FontStyle.Underline : 0), GraphicsUnit.Pixel); }
+            }
             cache[key] = f;
         }
         return f;
@@ -1238,6 +1284,7 @@ static class Program
     static void AnswerMeasure(List<object> runs)
     {
         var widths = new List<string>();
+        var fonts = new List<string>();
         using (var bmp = new Bitmap(1, 1))
         using (var g = Graphics.FromImage(bmp))
         {
@@ -1247,13 +1294,16 @@ static class Program
             fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
             foreach (object r in runs)
             {
-                Font f = Fonts.Get(Json.Text(Json.Get(r, "font")), Json.Num(Json.Get(r, "size")),
+                string font = Json.Text(Json.Get(r, "font"));
+                Font f = Fonts.Get(font, Json.Num(Json.Get(r, "size")),
                                    Json.Flag(Json.Get(r, "bold")), Json.Flag(Json.Get(r, "italic")), false);
                 float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, fmt).Width;
                 widths.Add(w.ToString("0.000", CultureInfo.InvariantCulture));
+                fonts.Add(Fonts.Resolve(font).Replace(',', ' '));
             }
         }
-        Outbox.Send("measured", "text", string.Join(",", widths.ToArray()));
+        // std.app.28: the family each run was measured in.
+        Outbox.Send("measured", "text", string.Join(",", widths.ToArray()), "fonts", string.Join(",", fonts.ToArray()));
     }
 
     [STAThread]
