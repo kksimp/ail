@@ -11,4 +11,3 @@ tools/agentbench/agentbench.py report
 ```
 
 `AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked.
-
