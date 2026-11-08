@@ -1,0 +1,333 @@
+## std.audio.opus (spec std.opus.1-N, ADR 0990): an Opus decoder in AIL,
+## written from RFC 6716. Part 1: packet framing (RFC 6716 §3) and the range
+## decoder every layer reads with (§4.1). The CELT layer follows, then SILK
+## and hybrid.
+
+## Why a packet could not be decoded (std.opus.1).
+pub error struct OpusError "opus: {why}"
+    pub why str
+
+## Which layers code a frame (std.opus.2).
+pub enum Mode
+    Silk
+    Hybrid
+    Celt
+
+## A packet split into its frames (std.opus.2, RFC 6716 §3.1-3.2). `samples`
+## is the length of one frame at 48 kHz: 120 for 2.5 ms up to 2880 for 60 ms.
+## `bandwidth` is the coded audio bandwidth in Hz: 4000 (narrowband), 6000
+## (medium), 8000 (wide), 12000 (super-wide) or 20000 (full band).
+pub struct Packet
+    pub config int
+    pub mode Mode
+    pub bandwidth int
+    pub samples int
+    pub stereo bool
+    pub frames List[bytes]
+
+## The frame length in samples at 48 kHz and the bandwidth of each of the 32
+## configurations (RFC 6716 Table 2).
+fn config_samples(config int) int
+    if config < 12
+        return [480, 960, 1920, 2880][config % 4]
+    if config < 16
+        return [480, 960][config % 2]
+    [120, 240, 480, 960][config % 4]
+
+fn config_bandwidth(config int) int
+    if config < 12
+        return [4000, 6000, 8000][config / 4]
+    if config < 16
+        return if config < 14 then 12000 else 20000
+    c := (config - 16) / 4
+    [4000, 8000, 12000, 20000][c]
+
+fn config_mode(config int) Mode
+    if config < 12
+        return Mode.Silk
+    if config < 16
+        return Mode.Hybrid
+    Mode.Celt
+
+## The length of a frame coded in one or two bytes at `p` (RFC 6716 §3.1):
+## the value and the bytes used, or a used count of 0 when `b` ends first.
+fn frame_length(b bytes, p int)(int, int)
+    if p >= b.len()
+        return (0, 0)
+    first := b[p].to_int()
+    if first < 252
+        return (first, 1)
+    if p + 1 >= b.len()
+        return (0, 0)
+    (b[p + 1].to_int() * 4 + first, 2)
+
+## Splits a packet into its frames (std.opus.2). Follows RFC 6716 §3.4's
+## rules: a malformed packet fails rather than decoding garbage.
+pub fn parse_packet(b bytes) Packet ! OpusError
+    if b.len() < 1
+        return OpusError(why: "empty packet")
+    toc := b[0].to_int()
+    config := toc.shr(3)
+    code := toc.bit_and(3)
+    samples := config_samples(config)
+    mut frames := List[bytes]()
+    if code == 0
+        frames.push(b[1..])
+    elif code == 1
+        if (b.len() - 1) % 2 != 0
+            return OpusError(why: "code 1 packet with an odd length")
+        half := (b.len() - 1) / 2
+        frames.push(b[1..1 + half])
+        frames.push(b[1 + half..])
+    elif code == 2
+        n, used := frame_length(b, 1)
+        if used == 0 or 1 + used + n > b.len()
+            return OpusError(why: "code 2 packet with a bad first length")
+        frames.push(b[1 + used..1 + used + n])
+        frames.push(b[1 + used + n..])
+    else
+        if b.len() < 2
+            return OpusError(why: "code 3 packet without a frame count")
+        fc := b[1].to_int()
+        vbr := fc.bit_and(0x80) != 0
+        padded := fc.bit_and(0x40) != 0
+        count := fc.bit_and(0x3F)
+        if count == 0 or count * samples > 5760
+            return OpusError(why: "code 3 packet with {count} frames")
+        mut p := 2
+        mut pad := 0
+        if padded
+            while true
+                if p >= b.len()
+                    return OpusError(why: "padding runs past the packet")
+                v := b[p].to_int()
+                p += 1
+                if v == 255
+                    pad += 254
+                else
+                    pad += v
+                    break
+        end := b.len() - pad
+        if end < p
+            return OpusError(why: "padding longer than the packet")
+        if vbr
+            mut sizes := List[int]()
+            for _ in 0..count - 1
+                n, used := frame_length(b, p)
+                if used == 0
+                    return OpusError(why: "code 3 packet with a bad length")
+                p += used
+                sizes.push(n)
+            for n in sizes
+                if p + n > end
+                    return OpusError(why: "frames run past the packet")
+                frames.push(b[p..p + n])
+                p += n
+            frames.push(b[p..end])
+        else
+            if (end - p) % count != 0
+                return OpusError(why: "CBR frames of unequal length")
+            each := (end - p) / count
+            for _ in 0..count
+                frames.push(b[p..p + each])
+                p += each
+    for f in frames
+        if f.len() > 1275
+            return OpusError(why: "a frame longer than 1275 bytes")
+    Packet(
+        config: config,
+        mode: config_mode(config),
+        bandwidth: config_bandwidth(config),
+        samples: samples,
+        stereo: toc.bit_and(4) != 0,
+        frames: frames,
+    )
+
+## The packet's length in samples at 48 kHz, every frame together.
+pub fn Packet.duration(self) int
+    samples * frames.len()
+
+## The range decoder (RFC 6716 §4.1)
+
+## Bits in the decoder's registers: the range is kept above BOT after every
+## step and reads one byte (SYM bits) at a time.
+SYM := 8
+TOP := 0x80000000
+BOT := 0x800000
+EXTRA := 7
+MASK32 := 0xFFFFFFFF
+
+## Number of bits needed for `x`: 0 for 0, else floor(log2 x) + 1.
+pub fn ilog(x int) int
+    mut n := 0
+    mut v := x
+    while v > 0
+        n += 1
+        v = v.shr(1)
+    n
+
+## The decoder over one frame's bytes (std.opus.3). The range coder reads
+## from the front; raw bits (`bits`) are read from the back.
+pub struct RangeDecoder
+    data bytes
+    front int
+    back int
+    rng int
+    val int
+    rem int
+    ext int
+    window int
+    window_bits int
+    ## Bits read so far, for `tell` (RFC 6716 §4.1.6).
+    total int
+    ## Set when a symbol could not be decoded as the stream says.
+    pub failed bool
+
+fn RangeDecoder.next_front(mut self) int
+    if self.front < self.data.len()
+        v := self.data[self.front].to_int()
+        self.front += 1
+        return v
+    0
+
+fn RangeDecoder.next_back(mut self) int
+    if self.back < self.data.len()
+        self.back += 1
+        return self.data[self.data.len() - self.back].to_int()
+    0
+
+## Keeps the range above BOT, reading bytes as it widens (RFC 6716 §4.1.2.1).
+fn RangeDecoder.normalize(mut self)
+    while self.rng <= BOT
+        self.total += SYM
+        self.rng = self.rng.shl(SYM)
+        prev := self.rem
+        self.rem = self.next_front()
+        sym := prev.shl(SYM).bit_or(self.rem).shr(SYM - EXTRA)
+        self.val = (self.val.shl(SYM) + 255.bit_and(sym.bit_not())).bit_and(TOP - 1)
+
+## A decoder over `data` (RFC 6716 §4.1.1).
+pub fn decoder(data bytes) RangeDecoder
+    mut d := RangeDecoder(
+        data: data,
+        front: 0,
+        back: 0,
+        rng: 128,
+        val: 0,
+        rem: 0,
+        ext: 1,
+        window: 0,
+        window_bits: 0,
+        total: 33 - 24,
+        failed: false,
+    )
+    d.rem = d.next_front()
+    d.val = d.rng - 1 - d.rem.shr(SYM - EXTRA)
+    d.normalize()
+    d
+
+## The cumulative frequency of the next symbol out of `ft` (§4.1.2); follow
+## with `update`.
+pub fn RangeDecoder.decode(mut self, ft int) int
+    self.ext = self.rng / ft
+    s := self.val / self.ext
+    ft - (s + 1).min(ft)
+
+## As `decode` with `ft` = 2^bits.
+pub fn RangeDecoder.decode_bin(mut self, bits int) int
+    self.ext = self.rng.shr(bits)
+    s := self.val / self.ext
+    ft := lsh(1, bits)
+    ft - (s + 1).min(ft)
+
+## Consumes the symbol with cumulative range `fl..fh` out of `ft` (§4.1.2).
+pub fn RangeDecoder.update(mut self, fl int, fh int, ft int)
+    s := self.ext * (ft - fh)
+    self.val -= s
+    self.rng = if fl > 0 then self.ext * (fh - fl) else self.rng - s
+    self.normalize()
+
+## One bit whose chance of being 1 is 1/2^logp (§4.1.3.1).
+pub fn RangeDecoder.bit_logp(mut self, logp int) bool
+    s := self.rng.shr(logp)
+    one := self.val < s
+    if one
+        self.rng = s
+    else
+        self.val -= s
+        self.rng -= s
+    self.normalize()
+    one
+
+## A symbol from an inverse cumulative table of 8-bit entries over 2^ftb
+## (§4.1.3.3); the table ends in 0.
+pub fn RangeDecoder.icdf(mut self, table List[int], ftb int) int
+    r := self.rng.shr(ftb)
+    mut s := self.rng
+    mut t := s
+    mut k := -1
+    while true
+        k += 1
+        t = s
+        s = r * table[k]
+        if self.val >= s
+            break
+    self.val -= s
+    self.rng = t - s
+    self.normalize()
+    k
+
+## A uniform integer in `0..ft` (§4.1.5): above 8 bits the low bits are raw.
+pub fn RangeDecoder.uint(mut self, ft int) int
+    requires ft > 1
+    top := ft - 1
+    mut ftb := ilog(top)
+    if ftb > 8
+        ftb -= 8
+        f := top.shr(ftb) + 1
+        s := self.decode(f)
+        self.update(s, s + 1, f)
+        t := s.shl(ftb).bit_or(self.bits(ftb))
+        if t <= top
+            return t
+        self.failed = true
+        return top
+    s := self.decode(ft)
+    self.update(s, s + 1, ft)
+    s
+
+## `n` raw bits from the end of the frame, least significant first (§4.1.4).
+pub fn RangeDecoder.bits(mut self, n int) int
+    if self.window_bits < n
+        while self.window_bits <= 24
+            self.window = self.window.bit_or(self.next_back().shl(self.window_bits))
+            self.window_bits += SYM
+    v := self.window.bit_and(lsh(1, n) - 1)
+    self.window = self.window.shr(n)
+    self.window_bits -= n
+    self.total += n
+    v
+
+## Whole bits used so far, rounded up (§4.1.6.1).
+pub fn RangeDecoder.tell(self) int
+    total - ilog(rng)
+
+## Bits used so far in eighths of a bit (§4.1.6.2).
+pub fn RangeDecoder.tell_frac(self) int
+    nbits := total.shl(3)
+    mut l := ilog(rng)
+    mut r := rng.shr(l - 16)
+    for _ in 0..3
+        r = (r * r).shr(15)
+        b := r.shr(16)
+        l = 2 * l + b
+        if b != 0
+            r = r.shr(1)
+    nbits - l
+
+## The bytes of the frame, for a layer that needs its length.
+pub fn RangeDecoder.size(self) int
+    data.len()
+
+fn lsh(v int, n int) int
+    v.shl(n)
