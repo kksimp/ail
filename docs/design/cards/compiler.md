@@ -46,7 +46,7 @@ tests: 6 (`ail test` lists them)
 
 ## syntax (110 items)
 
-## watch (4 items)
+## watch (5 items)
 
 ## x64 (115 items)
 
