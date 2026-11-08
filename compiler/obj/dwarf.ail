@@ -15,16 +15,7 @@ pub struct DebugSec
     pub name str
     pub data List[u8]
 
-## The unsigned LEB128 encoding of `v` (0 or more).
-fn uleb(mut out List[u8], v int)
-    mut rest := v
-    while true
-        low := rest.bit_and(127)
-        rest = rest.shr(7)
-        if rest == 0
-            out.push(low.to_u8())
-            return
-        out.push(low.bit_or(128).to_u8())
+## The unsigned LEB128 encoding of `v` is `uleb`, in `macho.ail`.
 
 ## The signed LEB128 encoding of `v`.
 fn sleb(mut out List[u8], v int)
