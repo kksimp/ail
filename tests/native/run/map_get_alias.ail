@@ -1,0 +1,39 @@
+# A heap value read out of a map, with `get`, `else` or an index, is a copy:
+# changing it leaves the map alone (own.val.1, type.map.6).
+struct Box
+    items List[int]
+
+fn take_last(adj Map[str, List[str]], k str) List[str]
+    mut s := adj.get(k) else List[str]()
+    s.pop()
+    s
+
+fn main()
+    m := {"a": ["x", "y"]}
+    r := take_last(m, "a")
+    print("{r} {m}")
+    nested := {"a": [[1], [2]]}
+    mut n := nested.get("a") else [[0]]
+    n[0].push(9)
+    n.pop()
+    print("{n} {nested}")
+    boxes := {"b": Box(items: [1, 2])}
+    mut b := boxes.get("b") else Box(items: [])
+    b.items.push(3)
+    print("{b.items} {boxes["b"].items}")
+    sets := {"s": {1, 2}}
+    mut t := sets.get("s") else Set[int]()
+    t.add(3)
+    print("{t.len()} {sets["s"].len()}")
+    maps := {"m": {"k": 1}}
+    mut u := maps.get("m") else Map[str, int]()
+    u["z"] = 2
+    print("{u.len()} {maps["m"].len()}")
+    opt := {"a": [1, 2]}
+    if v := opt.get("a")
+        mut w := v
+        w.pop()
+        print("{w} {opt}")
+    mut z := opt["a"]
+    z.push(5)
+    print("{z} {opt}")
