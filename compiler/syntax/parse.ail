@@ -1942,7 +1942,10 @@ fn Parser.type_arg(mut self, rule str) ast.TypeRef?
             Int(x) => "{x}"
             Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
         cpos := bump().pos
-        return ast.TypeRef(shape: ast.TypeShape.Named(name: v, args: List[ast.TypeRef]()), pos: cpos)
+        return ast.TypeRef(
+            shape: ast.TypeShape.Named(name: v, args: List[ast.TypeRef]()),
+            pos: cpos,
+        )
     type_ref("a type argument", rule)
 
 ## Type arguments after `[`, through `]` (gen.infer.2).
