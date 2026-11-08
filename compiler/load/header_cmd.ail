@@ -52,14 +52,11 @@ pub fn c_header(prog ast.Program, source str) str
             for line in d.split("\n")
                 out = "{out}/* {line.trim()} */\n"
         ret := if r := f.ret then c_type(r) else "void"
-        mut ps := [
-            "{c_type(p.ty)} {p.name}"
-            for p in f.params
-        ]
+        mut ps := ["{c_type(p.ty)} {p.name}" for p in f.params]
         if ps.len() == 0
             ps = ["void"]
         out = "{out}{ret} {symbol(f)}({ps.join(", ")});\n"
-    "{out}\n#ifdef __cplusplus\n\}\n#endif\n\n#endif\n"
+    "{out}\n#ifdef __cplusplus\n}\n#endif\n\n#endif\n"
 
 ## Whether `f` is a `pub export c fn` (the parser's attribute `export c`).
 fn exported(f ast.FnDecl) bool
@@ -78,7 +75,10 @@ fn guard_name(source str) str
     stem := base.split(".")[0]
     mut s := ""
     for c in stem.chars()
-        s = "{s}{if (c.is_alpha() or c.is_digit()) then c.to_upper() else "_"}"
+        if c.is_alpha() or c.is_digit()
+            s = "{s}{c.to_upper()}"
+        else
+            s = "{s}_"
     "{s}_H"
 
 ## ffi.map.1 in reverse: the C spelling of a type that has a C layout.
