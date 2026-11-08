@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; GUI; GPU
 - **Spec rules:** none yet; rule IDs are added to [std-gfx.md](../spec/std-gfx.md) when the code lands
+- **Amended by:** [0995](0995-gpu-compute-plan.md), which sets the build layers, the Metal helper process and the offload policy.
 - **Requested by:** the designer, who wants AIL to replace C, C++ and Rust, with real-time rendering that uses modern hardware well. Design: [gpu-frame-loop.md](../design/gpu-frame-loop.md). Not implemented yet.
 
 ## Context
