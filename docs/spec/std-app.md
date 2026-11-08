@@ -193,6 +193,11 @@ elsewhere) is pressed in a canvas, instead of the `key` event for it; a
 host whose clipboard it cannot read sends the `key` event as before, so a
 program must not depend on `paste`. *(ADR 0978)*
 
+**std.app.24** — `trait App` has `shown(self) Node` (default `view`). An attached
+agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are built
+from `shown`, so an app that draws somewhere its tree doesn't show, as a
+`std.gfx` game does, can say what is on screen. *(ADR 0979)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
