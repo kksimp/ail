@@ -43,7 +43,7 @@ of `app.run`. A host that can't map the surface, or a missing host, fails with
 `GfxError`. *(ADR 0957)*
 
 **std.gfx.7** — The frame is drawn by the CPU into the back one of two RGBA8
-buffers (`Clear`, `Rect` and `Line` in pixels; `Text` is not drawn yet; anything
+buffers (`Clear`, `Rect` and `Line` in pixels; `Text` is drawn by the host over the surface, from the line `{"v":1,"t":"text","id":"gfx","items":[{"x","y","s","size","color"}]}` that `run` sends when the frame's text changes, so `pixels` shows none; anything
 off the surface is dropped). The host shows a buffer as the whole canvas,
 scaled. *(ADR 0957)*
 
@@ -165,4 +165,15 @@ fn main()
     mut tr := attach.Tracker.new()
     tr.update(l.observed())
     print(tr.observe(["gfx.cmds"], 0))
+```
+
+```ail rules=std.gfx.7
+use std.gfx
+use std.gfx.host
+
+fn main()
+    mut f := gfx.new_frame(40, 20)
+    gfx.text(mut f, 2.0, 3.0, "hi", 12.0, 0xff0000)
+    print(host.text_line(f))
+    print(host.text_line(gfx.new_frame(4, 4)))
 ```
