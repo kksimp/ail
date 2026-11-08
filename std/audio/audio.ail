@@ -409,7 +409,9 @@ pub fn decode_flac(data bytes) Clip ! AudioError
         n := if assign < 8 then assign + 1 else 2
         mut chans := List[List[int]]()
         for c in 0..n
-            side := (assign == 8 and c == 1) or (assign == 9 and c == 0) or (assign == 10 and c == 1)
+            side := (assign == 8 and c == 1)
+                or (assign == 9 and c == 0)
+                or (assign == 10 and c == 1)
             chans.push(flac_subframe(mut b, size, if side then bps + 1 else bps)?)
         if assign >= 8
             for i in 0..size
