@@ -111,6 +111,7 @@ aren't run.
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |
 | std | [Standard library: real-time frame loop](std-gfx.md) | `std` | Drafted |
 | std | [Standard library: WebM demuxing](std-webm.md) | `std` | Drafted |
+| std | [Standard library: Opus decoding](std-opus.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).
