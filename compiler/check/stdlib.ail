@@ -34,6 +34,7 @@ STD_FUNCTIONS := [
         "remove",
         "rename",
         "scan",
+        "scan_count",
         "walk",
         "volume",
         "read_range",
@@ -239,6 +240,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.scan"
         return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
+    if key == "fs.scan_count"
+        return StdSig(params: [], ret: std_struct("fs.ScanCount"))
     if key == "fs.rename" or key == "fs.copy"
         return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
     # std.crypto.1-4 (ADR 0959): `bytes` in, `bytes` out.
