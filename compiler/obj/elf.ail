@@ -18,7 +18,7 @@ pub AARCH64 := 183
 pub fn elf(img codegen.Image, machine int) List[u8]
     if img.imports.len() > 0
         return elf_dynamic(img, machine)
-    code_off := EHDR + 2 * PHDR
+    code_off := align_up(EHDR + 2 * PHDR, 64)
     data_off := align_up(code_off + img.code.len(), 16)
     size := data_off + img.data.len()
     bss := align_up(BASE + size, PAGE)
@@ -27,6 +27,8 @@ pub fn elf(img codegen.Image, machine int) List[u8]
     header(mut out, machine, BASE + code_off + img.entry)
     segment(mut out, 5, 0, BASE, size, size)
     segment(mut out, 6, 0, bss, 0, 8 * img.globals)
+    while out.len() < code_off
+        out.push(0.to_u8())
     out.extend(code)
     while out.len() < data_off
         out.push(0.to_u8())
@@ -194,7 +196,7 @@ fn elf_dynamic(img codegen.Image, machine int) List[u8]
     rela_len := 24 * img.imports.len()
     dyn_off := rela_off + rela_len
     dyn_len := 16 * 11
-    code_off := align_up(dyn_off + dyn_len, 16)
+    code_off := align_up(dyn_off + dyn_len, 64)
     data_off := align_up(code_off + img.code.len(), 16)
     size := data_off + img.data.len()
     bss := align_up(BASE + size, PAGE)

@@ -591,6 +591,19 @@ fn main()
     print(acc)
 ```
 
+**native.align.1** — The x86-64 backend may place the first block of the body of
+a small innermost loop at a multiple of 64 bytes, filling the gap with `nop`s on the
+path into the loop: the program's output,
+exit status and traps are those of the unaligned code. *(ADR 0890)*
+
+```ail rules=native.align.1
+fn main()
+    mut sum := 0
+    for i in 0..1000
+        sum += i
+    print(sum)
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is

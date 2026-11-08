@@ -162,6 +162,20 @@ change, so x86-64 and ARM64 get it together (native.match.1). Rejected for now: 
 table, which needs a new terminator and an indirect branch in both backends and an
 `unreachable` bound check; reconsider if the tree's measured gain is small.
 
+## Pass 6 (amendment, 2026-10-27): align hot loop heads on x86-64
+
+The matmul k loop is 47 bytes and its head sat 36 bytes into a 64-byte line, so every
+iteration fetched two lines. The ELF writer now starts the code on a 64-byte boundary
+(`compiler/obj/elf.ail`), and the x86-64 backend (`compiler/x64/gen.ail`) starts the block
+where the back edge of an innermost loop lands on a fresh 64-byte line when the loop is small
+(at most 64 bytes, guessed at 4 bytes per MIR instruction) and would otherwise straddle two lines (native.align.1,
+`AIL_OPT_OFF=align` turns it off). With a rotated test (ADR 0611) that block is the first
+body block, not the test. The padding sits on the path into the loop, run once per entry.
+Code grows only for the loops that would straddle: 0 to 63 bytes each. Adopted only if the on/off A/B shows a gain
+on ail-linux; ARM64 fetches 4-byte instructions and is left alone. Rejected: aligning
+function starts (the loop pad uses the function's offset instead, so no gap between
+functions), aligning every loop head, and aligning to 32 (a 46-byte loop at 0 mod 32 still crosses a 64-byte line).
+
 ## Rationale
 
 The listed gaps point at allocation and register pressure first, not at `-O3` loop
