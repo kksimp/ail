@@ -711,9 +711,12 @@ p := t.wait()?                # its result; fails with Trapped if it trapped
 g := TaskGroup()              # tasks that return nothing
 g.add(spawn work(2))          # waited when g's block ends, or:
 g.wait_all()?
+# a `unique struct` may hold a `TaskGroup` field: its release waits the tasks
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty
+w := ch.try_recv() else 0     # none if nothing is waiting now
+u := ch.recv_for(50) else 0   # waits at most 50 ms
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions

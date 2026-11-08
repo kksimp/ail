@@ -270,6 +270,7 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         for k in 0..vs.len()
             if vs[k] < 0
                 vs[k] = new_table(slots[k].ty)
+    own_groups(slots, vs)
     t := Ty.Struct(n)
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()
