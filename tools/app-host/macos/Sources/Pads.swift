@@ -1,4 +1,4 @@
-// Gamepads for std.gfx (std.gfx.11, ADR 0983): GameController.framework is polled
+// Gamepads for std.gfx (std.gfx.11, ADR 0985): GameController.framework is polled
 // with each drawn frame, and a `pad` event goes to the program when a pad's state
 // changes. `text` is `buttons,lx,ly,rx,ry,lt,rt`; `buttons` has the bits of
 // `pad_bit` (a 1, b 2, x 4, y 8, lb 16, rb 32, back 64, start 128, l3 256, r3 512,
