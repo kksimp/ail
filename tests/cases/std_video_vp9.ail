@@ -63,6 +63,7 @@ fn main()
             if n == 0
                 rgba := f.rgba()
                 print("rgba {rgba.len()} {digest(rgba)} {rgba[..8].to_list()}")
+                print("chroma {f.cw()}x{f.ch()}")
             n += 1
     fails(b"")
     fails(b"\x00\x00")
