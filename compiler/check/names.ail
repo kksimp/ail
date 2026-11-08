@@ -42,7 +42,7 @@ pub SIZED := ["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32"]
 pub CONC_TYPES := ["Task", "TaskGroup", "Channel", "Mutex", "Atomic"]
 
 ## The attributes the bootstrap knows (test.attr.1).
-pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated", "allow"]
+pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated", "allow", "tool"]
 
 ## The warnings `@allow` can name (gram.attr.5).
 ALLOWABLE := ["expr.match.3"]

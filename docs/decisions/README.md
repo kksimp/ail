@@ -707,7 +707,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
 | [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Proposed (planned, not implemented) | 2026-10-24 |
-| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed (planned, not implemented) | 2026-10-24 |
+| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` (narrowed by [0986](0986-app-tools-and-attach-mcp.md)) | Proposed (planned, not implemented) | 2026-10-24 |
 | [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed (planned, not implemented) | 2026-10-24 |
 | [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed (planned, not implemented) | 2026-10-24 |
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Proposed (planned, not implemented) | 2026-10-24 |
@@ -785,3 +785,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
+| [0986](0986-app-tools-and-attach-mcp.md) | `@tool` methods: typed actions a running app offers agents (`tools`, `call` behind `--attach-input`), and `ail attach mcp` *(delegated)* | Accepted | 2026-11-08 |

@@ -9,7 +9,7 @@ Chapter key: `test`
 
 ## Attributes
 
-**test.attr.1** — The only attributes are `@test` and `@pure`. Any other
+**test.attr.1** — The attributes are `@test`, `@pure`, `@inline`, `@deprecated`, `@allow` and `@tool` (`attach.tool.1`). Any other
 attribute name is a compile-time error that lists the known attributes. The
 attribute syntax itself is `gram.attr.1–2`; an attribute on a line of its own
 is `gram.attr.2`. *(ADR 0083, ADR 0167)*

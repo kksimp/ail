@@ -1,0 +1,50 @@
+## `@tool` methods (ADR 0986): actions a running app offers an attached agent,
+## so their parameters and result must cross the wire as JSON (attach.tool.1-2).
+use ast
+
+TOOL_HELP := "write `@tool fn T.name(mut self, a int, b str)`: a method of a struct, whose parameters are `int`, `float`, `bool`, `str` or an enum without payloads, and whose result is nothing or a type `@observe` allows, optionally with `!`"
+
+pub fn check_tools(prog ast.Program) List[Diag]
+    mut diags := List[Diag]()
+    for f in prog.fns
+        if not has_attr(f, "tool")
+            continue
+        why := tool_problem(f, prog)
+        if why != ""
+            diags.push(Diag(
+                rule: "attach.tool.2",
+                pos: f.pos,
+                message: "`@tool` function `{f.name}` {why}",
+                help: TOOL_HELP,
+                notes: [],
+                fixes: [],
+                warning: false,
+            ))
+    diags
+
+## attach.tool.1: why `f` can't be a tool, or "".
+fn tool_problem(f ast.FnDecl, prog ast.Program) str
+    o := f.owner else return "is not a method; an agent calls a tool on the running app's state"
+    if f.receiver == none
+        return "has no `self`; a tool runs on the running app's state"
+    if f.generics.len() > 0 or o.params != none
+        return "is generic; a tool's types must be known to describe it"
+    for p in f.params
+        if not tool_param(p.ty, prog)
+            return "has parameter `{p.name}` of a type an agent can't send"
+    r := f.ret else return ""
+    match r.shape
+        Fallible(ok, _) =>
+            t := ok else return ""
+            if not observable(t, prog)
+                return "returns a type an agent can't read as text"
+        _ =>
+            if not observable(r, prog)
+                return "returns a type an agent can't read as text"
+    ""
+
+## The types a tool's parameter may have: those of attach.observe.1 without `List`.
+fn tool_param(t ast.TypeRef, prog ast.Program) bool
+    match t.shape
+        Named(name, args) => name != "List" and args.len() == 0 and observable(t, prog)
+        _ => false
