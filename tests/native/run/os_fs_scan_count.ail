@@ -23,20 +23,20 @@ fn main()
     done := Atomic(0)
     t := spawn watch(done)
     mut entries := 0
-    mut bytes := 0
+    mut total := 0
     for _ in 0..50
         s := fs.scan(base, true) else err
             print("failed {err.kind}")
             break
         entries += s.entries.len()
         for e in s.entries
-            bytes += e.alloc
+            total += e.alloc
     done.store(1)
     rising := t.wait() else false
     c := fs.scan_count()
     print("never fell {rising}")
     print("entries {c.entries == entries} {c.entries}")
-    print("bytes {c.bytes == bytes} {bytes > 0}")
+    print("bytes {c.bytes == total} {total > 0}")
     for f in ["a/1.txt", "a/b/2.txt", "c/3.txt", "4.txt"]
         fs.remove("{base}/{f}") else return
     for d in ["a/b", "a", "c"]
