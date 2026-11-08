@@ -1,0 +1,16 @@
+# Named, bare-name (shorthand) and positional arguments mixed in a struct literal: a bare
+# `meas` sets the field of that name; a positional one fills the next free field.
+struct Probe
+    x float
+
+struct Ctx
+    d int
+    pics List[int]
+    meas Map[str, float]
+    probes List[Probe]
+    reach float
+
+fn main()
+    meas := {"a": 1.0}
+    c := Ctx(7, reach: 2.0, pics: [1, 2], meas, probes: [])
+    print("{c.d} {c.pics.len()} {c.meas.len()} {c.probes.len()} {c.reach}")

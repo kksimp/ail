@@ -6,6 +6,7 @@
 ##
 ## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
 use ast
+use cheader
 use fix
 use mir
 use pkg
@@ -36,10 +37,14 @@ pub struct Loaded
 STD_MODULES := [
     ("std.app", "app/app.ail"),
     ("std.args", "args/args.ail"),
+    ("std.audio", "audio/audio.ail"),
+    ("std.audio.device", "audio/device.ail"),
     ("std.bigint", "bigint/bigint.ail"),
     ("std.attach", "attach/attach.ail"),
     ("std.attach.serve", "attach/serve.ail"),
     ("std.csv", "csv/csv.ail"),
+    ("std.gfx", "gfx/gfx.ail"),
+    ("std.gfx.host", "gfx/host.ail"),
     ("std.log", "log/log.ail"),
     ("std.net.http", "net/http.ail"),
     ("std.screen", "screen/screen.ail"),
@@ -57,6 +62,9 @@ STD_TYPES := {
     "CompressError": "compress",
     "IoError": "fs",
     "Metadata": "fs",
+    "Volume": "fs",
+    "Entry": "fs",
+    "Scan": "fs",
     "Response": "net",
     "RawResponse": "net",
     "RawOutput": "proc",
@@ -143,6 +151,8 @@ fn load_package(
     mut seen := Set[str]()
     seen.add("")
     mut queue := [("", root_files)]
+    # The modules made from C headers, by module name (ffi.decl.1).
+    mut made := Map[str, str]()
     while queue.len() > 0
         item := queue.pop() else break
         module := item.0
@@ -153,6 +163,8 @@ fn load_package(
             mut src := ""
             if given := over.get(p)
                 src = given
+            elif made.contains(module)
+                src = made[module]
             else
                 src = fs.read_text(p) else return LoadError("can't read {shown}")
             base := files.len() * FILE_LINES
@@ -162,6 +174,14 @@ fn load_package(
             for d in lexed.diags
                 diags.push(at_line(d, base))
             for imp in scan_uses(toks)
+                if cheader.is_use(imp)
+                    # A C header: its module is written from the header's own text (ffi.decl.1).
+                    if not seen.contains(imp[0])
+                        seen.add(imp[0])
+                        if text := cheader.module_for(cheader.header_of(imp[0]), cheader.dir_of(p))
+                            made[imp[0]] = text
+                            queue.push((imp[0], ["<{imp[0]}>"]))
+                    continue
                 if imp[0] == "std"
                     dotted := imp.join(".")
                     if sf := std_file(dotted)
@@ -179,10 +199,12 @@ fn load_package(
             tokens.extend(toks)
             sources.push(src)
             files.push(ast.SourceFile(path: shown, module: module, base: base))
-    tokens.push(syntax.Token(
-        tok: syntax.Tok.Eof,
-        pos: ast.Pos(line: files.len() * FILE_LINES, col: 1),
-    ))
+    # The end of the input sits just past the last file's last line, so an error at it
+    # (an unclosed `fn broken(`) is reported there, not at the next file's base line.
+    mut end_line := files.len() * FILE_LINES
+    if files.len() > 0 and sources.len() == files.len()
+        end_line = files[files.len() - 1].base + sources[sources.len() - 1].lines().len() + 1
+    tokens.push(syntax.Token(tok: syntax.Tok.Eof, pos: ast.Pos(line: end_line, col: 1)))
     mut first := assemble(tokens, files, diags, std, packages)?
     first.texts = sources
     mut done := first
@@ -258,6 +280,11 @@ fn at_line(d syntax.Diag, base int) syntax.Diag
                             Sym(s) =>
                                 if s != "."
                                     break
+                            Str(h) =>
+                                # `use c "header.h" as name` (ffi.decl.1).
+                                if parts == ["c"]
+                                    parts = [cheader.module_name(h)]
+                                break
                             _ => break
                         j += 1
                     if parts.len() > 0
@@ -329,7 +356,8 @@ fn assemble(
     named and not declared
 
 ## The always-read prelude, plus the optional modules the program names
-## (json.prelude.1, ADR 0161): `json`, `jsonderive`, `default`, `argsderive` and `derive`.
+## (json.prelude.1, ADR 0161): `json`, `jsonderive`, `default`, `argsderive`, `derive`
+## and `grid` (ADR 0937).
 @allow("expr.match.3") fn prelude_text(tokens List[syntax.Token]) str
     parts := split_modules(mir.PRELUDE_EMBED)
     want_json_derive := wants(tokens, JSON_DERIVE_NAMES)
@@ -358,10 +386,12 @@ fn assemble(
         text = "{text}{parts[4]}"
     if want_json_derive or want_default or want_args or at_derive or wants(tokens, DERIVE_NAMES)
         text = "{text}{parts[5]}"
+    if wants(tokens, ["Grid"])
+        text = "{text}{parts[6]}"
     text
 
 ## The prelude cut at its `## @module` markers: core, json, jsonderive,
-## default, argsderive, derive. Each part after the first starts after its marker line.
+## default, argsderive, derive, grid. Each part after the first starts after its marker line.
 fn split_modules(text str) List[str]
     mut parts := List[str]()
     mut cur := List[str]()

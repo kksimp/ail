@@ -47,7 +47,8 @@ struct Stub
     op str
     ## 1: the result overwrote `a`, which is result - b (an add); 2: result + b
     ## (a sub); 3: the second operand was overwritten by a sum with the first,
-    ## a constant. The stub undoes it before reporting.
+    ## a constant; 4: `b` is already the list's length (`bounds`). The stub
+    ## undoes it before reporting.
     undo int
 
 struct Gen
@@ -65,6 +66,8 @@ struct Gen
     loc List[int]
     blabels List[int]
     next_block int
+    ## Bytes left for repeated dispatches in this function (§dispatch_chain).
+    dup_left int
     remat List[mir.Inst]
     uses List[int]
     stubs List[Stub]
@@ -83,6 +86,7 @@ struct Gen
     wrap int
     region List[bool]
     holes List[codegen.Hole]
+    sallocs Map[int, int]
     ## The dynamic-library symbols this function calls (Linux, ADR 0870).
     imports List[str]
 
@@ -153,6 +157,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         loc: al.loc,
         blabels: [],
         next_block: -1,
+        dup_left: DISPATCH_BYTES,
         remat: remat,
         uses: uses,
         stubs: [],
@@ -165,6 +170,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         wrap: al.wrap,
         region: al.region,
         holes: al.holes,
+        sallocs: al.sallocs,
         imports: [],
     )
     for r in al.saved
@@ -499,6 +505,7 @@ fn Gen.gen_block(mut self, b int)
                 r := gpr(t.cond, S0)
                 a.test_rr(r, r)
             branch_to(cc, yes, no)
+        "switch" => switch_jump(t)
         "return" =>
             if t.value >= 0
                 if f.vals[t.value].is_float()
@@ -507,6 +514,25 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(RAX, t.value)])
             epilogue(b)
         _ => a.ud2()
+
+## A jump table (native.match.2): an index at or past the last entry (as an
+## unsigned number) goes to the last target; else `jmp` to the table's start
+## plus the entry's 32-bit distance. The table follows the jump. Each copy of
+## a dispatch (§goto) has its own `jmp`, which predicts on its own.
+fn Gen.switch_jump(mut self, t mir.Term)
+    n := t.targets.len() - 1
+    r := gpr(t.cond, S0)
+    a.alu_ri("cmp", r, n)
+    a.jcc(CC_AE, blabels[t.targets[n]])
+    table := a.label()
+    a.lea_label(S1, table)
+    a.movsxd_rm(S0, at_index(S1, r, 4, 0))
+    a.alu_rr("add", S0, S1)
+    a.jmp_reg(S0)
+    a.bind(table)
+    start := a.here()
+    for k in 0..n
+        a.table_entry(start, blabels[t.targets[k]])
 
 ## Whether block `to` is only a comparison and a branch: a jump to it is
 ## cheaper as the comparison and branch themselves, one instruction fewer
@@ -522,7 +548,15 @@ fn Gen.goto(mut self, to int, args List[int], inline bool)
     if rotates(to)
         # The loop test again here, instead of a jump back to it.
         h := f.blocks[to]
-        branch_to(compare(h.insts[h.insts.len() - 1]), h.term.targets[0], h.term.targets[1])
+        cc := compare(h.insts[h.insts.len() - 1])
+        if cc < 16 and inline and dispatch_chain(h.term.targets[0])
+            # And the body's dispatch again too (native.match.2).
+            a.jcc(invert(cc), blabels[h.term.targets[1]])
+            replay_dispatch(h.term.targets[0])
+        else
+            branch_to(cc, h.term.targets[0], h.term.targets[1])
+    elif inline and dispatch_chain(to)
+        replay_dispatch(to)
     elif inline and tail_block(to)
         h := f.blocks[to]
         for i in h.insts
@@ -530,6 +564,68 @@ fn Gen.goto(mut self, to int, args List[int], inline bool)
         goto(h.term.targets[0], h.term.args[0], false)
     else
         a.jmp(blabels[to])
+
+## The most instructions a copied dispatch has (native.match.2).
+DISPATCH_MAX := 32
+
+## The most entries the table of a copied dispatch has.
+DISPATCH_ENTRIES := 64
+
+## How many bytes of copied dispatches (about 8 per instruction, 4 per table
+## entry) one function may have.
+DISPATCH_BYTES := 4096
+
+## Whether `to` starts a dispatch: at most four blocks, each jumping to the
+## next, the last ending in a `switch`, with at most `DISPATCH_MAX`
+## instructions, no call, and nothing the allocator moves in or out of them.
+## A jump to one repeats it (tail duplication, native.match.2), so every arm
+## of an interpreter loop ends in an indirect jump of its own, which the
+## branch predictor keys on the arm that ran.
+fn Gen.dispatch_chain(self, to int) bool
+    mut b := to
+    mut count := 0
+    for _ in 0..4
+        if b == wrap or b == 0
+            return false
+        h := f.blocks[b]
+        for i in h.insts
+            if codegen.is_call(i)
+                return false
+        for hl in holes
+            if hl.block == b
+                return false
+        count += h.insts.len()
+        if count > DISPATCH_MAX
+            return false
+        if h.term.kind == "switch"
+            cost := 8 * count + 4 * h.term.targets.len()
+            if h.term.targets.len() > DISPATCH_ENTRIES + 1 or cost > dup_left
+                return false
+            return not mir.opt_off("taildup")
+        if h.term.kind != "jump" or h.term.targets[0] == b
+            return false
+        b = h.term.targets[0]
+    false
+
+## Repeat the dispatch that starts at block `to` here (§dispatch_chain): its
+## instructions, the moves into each next block's parameters, and its jump
+## table.
+fn Gen.replay_dispatch(mut self, to int)
+    mut b := to
+    while true
+        h := f.blocks[b]
+        dup_left -= 8 * h.insts.len()
+        for i in h.insts
+            gen_inst(i)
+        if h.term.kind == "switch"
+            dup_left -= 4 * h.term.targets.len()
+            switch_jump(h.term)
+            return
+        nxt := h.term.targets[0]
+        ps := f.blocks[nxt].params
+        args := h.term.args[0]
+        parallel([move_of(loc[ps[j]], args[j]) for j in 0..ps.len()])
+        b = nxt
 
 ## Whether `to` is one or two instructions (no call) and a jump, with nothing
 ## the allocator moves in or out of it: cheaper to repeat than to jump to.
@@ -761,6 +857,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
+        "bounds" => bounds(i)
         "data" =>
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(gpr(i.arg(0), S0), 16))
@@ -799,6 +896,12 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
             parallel([move_of(loc[i.dst], i.arg(0))])
+        "salloc" =>
+            # The object's header word has the lowest address and its first
+            # field the next one up; slots count downwards from `rbp`.
+            d := out_gpr(i.dst, S1)
+            a.lea(d, slot(sallocs[i.dst] + i.imm / 8 - 1))
+            put_gpr(i.dst, d)
         _ => unreachable("x64: no code for `{i.op}`")
 
 fn Gen.arith(mut self, i mir.Inst)
@@ -1118,7 +1221,11 @@ fn Gen.call_out(mut self, i mir.Inst)
     # A C function (`icall` named "c", ADR 0870) may clobber xmm8-xmm13, which
     # AIL functions keep: save them around the call.
     c_call := indirect and i.name == "c"
-    if c_call
+    # On Windows the C convention is Win64 (ffi.load.3): the argument's position
+    # names its register (rcx rdx r8 r9 or xmm0-3), 32 bytes of shadow space come
+    # first, later arguments go on the stack, and xmm6-xmm15 are the callee's to keep.
+    winc := c_call and self.win
+    if c_call and not winc
         a.alu_ri("sub", RSP, 48)
         for k in 0..6
             a.vmovsd_mr(at(RSP, 8 * k), 8 + k)
@@ -1127,6 +1234,13 @@ fn Gen.call_out(mut self, i mir.Inst)
         v := i.arg(k)
         if indirect and k == 0
             moves.push(move_of(S0, v))
+        elif winc
+            if k > 4
+                extra.push(v)
+            elif f.vals[v].is_float()
+                moves.push(move_of(codegen.FLOAT_BASE + k - 1, v))
+            else
+                moves.push(move_of(WIN_INT_ARGS[k - 1], v))
         elif f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
@@ -1137,11 +1251,15 @@ fn Gen.call_out(mut self, i mir.Inst)
             extra.push(v)
     # Integer arguments after the sixth go on the stack, the seventh lowest,
     # in a 16-byte multiple (native-abi.md §1).
-    room := (8 * extra.len() + 15) / 16 * 16
+    shadow := if winc then 32 else 0
+    room := (shadow + 8 * extra.len() + 15) / 16 * 16
     if room > 0
         a.alu_ri("sub", RSP, room)
         for k in 0..extra.len()
-            a.mov_mr(at(RSP, 8 * k), gpr(extra[k], S0))
+            if f.vals[extra[k]].is_float()
+                a.vmovsd_mr(at(RSP, shadow + 8 * k), xmm(extra[k], X0))
+            else
+                a.mov_mr(at(RSP, shadow + 8 * k), gpr(extra[k], S0))
     parallel(moves)
     if indirect
         a.call_reg(S0)
@@ -1167,7 +1285,7 @@ fn Gen.call_out(mut self, i mir.Inst)
                 ))
     if room > 0
         a.alu_ri("add", RSP, room)
-    if c_call
+    if c_call and not winc
         for k in 0..6
             a.vmovsd_rm(8 + k, at(RSP, 8 * k))
         a.alu_ri("add", RSP, 48)
@@ -1391,6 +1509,19 @@ fn Gen.list_index(mut self, i mir.Inst, size int) Mem
     a.mov_rm(RAX, at(l, 16))
     at_index(RAX, x, size, 0)
 
+## `bounds idx, len`: the check of a `get` or `set` whose list header was
+## hoisted out of a loop (ADR 0890): trap at `site` unless `0 <= idx < len`.
+## The stub gets the length itself, not the list.
+fn Gen.bounds(mut self, i mir.Inst)
+    l := gpr(i.arg(1), S0)
+    if k := imm32(i.arg(0))
+        a.alu_ri("cmp", l, k)
+        a.jcc(CC_BE, stub(3, i.arg(0), i.arg(1), i.site, ""))
+    else
+        a.alu_rr("cmp", gpr(i.arg(0), S1), l)
+        a.jcc(CC_AE, stub(3, i.arg(0), i.arg(1), i.site, ""))
+    stubs[stubs.len() - 1].undo = 4
+
 fn Gen.list_get(mut self, i mir.Inst)
     t := f.vals[i.dst]
     if t.is_float()
@@ -1502,7 +1633,7 @@ fn Gen.gen_stubs(mut self)
             a.alu_rr("add", RSI, RDX)
         elif s.undo == 3
             a.alu_rr("sub", RDX, RSI)
-        if s.kind == 3
+        if s.kind == 3 and s.undo != 4
             # The list's length.
             a.mov_rm(RDX, at(RDX, 0))
         a.call_sym("rt.trap")

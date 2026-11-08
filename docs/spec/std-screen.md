@@ -76,7 +76,7 @@ below 1.0 and a `why` (`std.screen.3`).
 times its height and its area is under 5% of the raster; then it is a `button`
 whose text is the label, `conf` 0.9 with a cut corner (rounded) and 0.7 without.
 
-```ail skip=bootstrap rules=std.screen.10,std.screen.11
+```ail rules=std.screen.10,std.screen.11
 use std.screen
 use std.screen.pixels
 
@@ -108,7 +108,7 @@ with `why` "estimated layout"; `focus` (`App.focus`) marks the focused control.
 For app `a`: `of_node(a.view(), w, h, a.focus())`. The model is built only when
 this is called (`std.screen.9`).
 
-```ail skip=bootstrap rules=std.screen.12,std.screen.13
+```ail rules=std.screen.12,std.screen.13
 use std.app
 use std.screen
 use std.screen.view
@@ -126,7 +126,7 @@ screenshot). A `Bitmap` with an empty `data` or a size that doesn't match
 `pw`, `ph` gets the `image` item only. Nothing is computed until a query is
 called (`std.screen.9`). *(ADR 0878)*
 
-```ail skip=bootstrap rules=std.screen.14
+```ail rules=std.screen.14
 use std.app
 use std.screen.view
 
@@ -152,7 +152,7 @@ a `caret` of one cell. All are exact (`conf` 1.0), so no pixel classifier is
 needed. The editor (`--print --screen`) and the PDF viewer (`view --screen`)
 print `describe` of it. *(ADR 0878)*
 
-```ail skip=bootstrap rules=std.screen.15
+```ail rules=std.screen.15
 use std.screen.cells
 use std.ui.widgets
 

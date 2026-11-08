@@ -46,22 +46,38 @@ struct CanvasRep: NSViewRepresentable {
 }
 
 final class CanvasView: NSView {
-    var canvasId = ""
+    /// Canvases by id, so a `popup` (std.app.18) finds the view to show its menu in.
+    static var registry: [String: CanvasView] = [:]
+    var canvasId = "" { didSet { CanvasView.registry[canvasId] = self } }
+    private var lastMove = Date.distantPast
     var ops: [Op] = []
     private var reported = CGSize.zero
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    /// In edge mode the canvas lies under the title bar; only the app's `drag` line moves the window (std.app.25).
+    override var mouseDownCanMoveWindow: Bool { false }
 
     override func setFrameSize(_ size: NSSize) {
         super.setFrameSize(size)
         if size != reported {
             reported = size
-            let cell = ("M" as NSString).size(withAttributes: [.font: cellFont])
-            let lineH = ceil(cellFont.ascender - cellFont.descender + cellFont.leading)
-            Outbox.shared.send("resize", ["id": canvasId, "dx": size.width, "dy": size.height,
-                                          "cell_w": cell.width, "cell_h": lineH])
+            reportSize()
         }
+    }
+
+    /// `resize` (std.app.5) with the edge-mode insets (std.app.25).
+    func reportSize() {
+        let size = reported
+        let cell = ("M" as NSString).size(withAttributes: [.font: cellFont])
+        let lineH = ceil(cellFont.ascender - cellFont.descender + cellFont.leading)
+        var f = Edge.insets(window)
+        f["id"] = canvasId
+        f["dx"] = size.width
+        f["dy"] = size.height
+        f["cell_w"] = cell.width
+        f["cell_h"] = lineH
+        Outbox.shared.send("resize", f)
     }
 
     override func draw(_ dirty: NSRect) {
@@ -101,6 +117,10 @@ final class CanvasView: NSView {
                     NSColor.quaternaryLabelColor.setFill()
                     r.fill()
                 }
+            case let .shade(x, y, w, h, c, a):
+                // std.app.19: a fill with opacity `a`, clamped to 0...1.
+                color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1))).setFill()
+                NSRect(x: x, y: y, width: w, height: h).fill(using: .sourceOver)
             case let .clip(x, y, w, h):
                 g.saveGState()
                 g.clip(to: CGRect(x: x, y: y, width: w, height: h))
@@ -108,6 +128,7 @@ final class CanvasView: NSView {
                 g.restoreGState()
             }
         }
+        Surfaces.draw(canvasId, in: g, bounds: bounds)
     }
 
     private func mods(_ e: NSEvent) -> [String: Any] {
@@ -117,6 +138,9 @@ final class CanvasView: NSView {
 
     override func mouseDown(with e: NSEvent) {
         window?.makeFirstResponder(self)
+        Edge.lastEvent = e
+        // A drag moves the window only once the app asks (std.app.25).
+        if Edge.applied { window?.isMovable = false }
         click(e, "left")
     }
     override func rightMouseDown(with e: NSEvent) { click(e, "right") }
@@ -129,7 +153,27 @@ final class CanvasView: NSView {
         f["x"] = p.x
         f["y"] = p.y
         f["text"] = button
+        f["clicks"] = min(max(e.clickCount, 1), 3)
         Outbox.shared.send("click", f)
+    }
+
+    // std.app.16: pointer position, at most once per 16 ms, only while the program asks.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with e: NSEvent) {
+        guard Hover.enabled, Date().timeIntervalSince(lastMove) >= 0.016 else { return }
+        lastMove = Date()
+        let p = convert(e.locationInWindow, from: nil)
+        Outbox.shared.send("move", ["id": canvasId, "x": p.x, "y": p.y])
+    }
+
+    override func mouseExited(with e: NSEvent) {
+        if Hover.enabled { Outbox.shared.send("leave", ["id": canvasId]) }
     }
 
     override func scrollWheel(with e: NSEvent) {
@@ -143,11 +187,29 @@ final class CanvasView: NSView {
     }
 
     override func keyDown(with e: NSEvent) {
+        // std.app.23 (ADR 0978): Command-V brings the clipboard's text as `paste`.
+        if e.modifierFlags.contains(.command), e.keyCode == 9,
+           let s = NSPasteboard.general.string(forType: .string) {
+            Outbox.shared.send("paste", ["id": canvasId, "text": s])
+            return
+        }
         var f = mods(e)
         f["id"] = canvasId
         f["text"] = keyName(e)
         if (f["text"] as? String ?? "").isEmpty { return }
+        f["repeat"] = e.isARepeat
+        f["code"] = e.keyCode
         Outbox.shared.send("key", f)
+    }
+
+    // std.app.20 (ADR 0956): key release, with the same name and hardware code.
+    override func keyUp(with e: NSEvent) {
+        var f = mods(e)
+        f["id"] = canvasId
+        f["text"] = keyName(e)
+        if (f["text"] as? String ?? "").isEmpty { return }
+        f["code"] = e.keyCode
+        Outbox.shared.send("keyup", f)
     }
 
     /// The key as std.ui names it (std.ui.7): a name for special keys, else

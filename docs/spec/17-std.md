@@ -164,6 +164,56 @@ write or remove the process has no right to. It is the same on every platform.
 above. A program that reads `other` gets the path and the kind, not the OS text.
 *(ADR 0783)*
 
+**std.fs.23** — `scan(root str, same_device bool) Scan ! IoError` walks the
+tree below `root` once and returns `struct Scan { entries List[Entry], skipped
+List[str] }`, with `struct Entry { path str, size int, alloc int, modified_ms
+int, inode int, device int, links int, is_dir bool, is_link bool }`. It lists
+every file, directory and link below `root` (not `root` itself) in pre-order,
+each directory's names sorted by bytes, each `path` being `root` joined with
+the path below it (`path.join`). Links are not followed: an entry that is a
+link has `is_link` true, and `size` is that of the link. `size` is the length
+in bytes (`0` for a directory), `alloc` the bytes allocated on disk for the
+entry itself, which is what deleting it frees (a sparse, compressed or cloned
+file may differ from `size`), `inode` and `device` identify the file so a hard
+link seen twice can be counted once, and `links` is its hard-link count.
+`modified_ms` is as in `std.fs.10`. With `same_device` true, a directory on a
+different device than `root` is listed but not entered. A directory that can't
+be read is listed, entered no further, and its path added to `skipped`; only a
+`root` that can't be read fails. The result does not depend on how the walk is
+scheduled, so an implementation may read subtrees in parallel. *(ADR 0927)*
+
+**std.fs.24** — `volume(path str) Volume ! IoError` returns `struct Volume {
+total int, free int }`: the size in bytes of the volume holding `path` and the
+bytes a program without privilege can still write to it. *(ADR 0928)*
+
+**std.fs.25** — `read_range(path str, offset int, len int) bytes ! IoError`
+reads up to `len` bytes starting at byte `offset`. It returns fewer at the end
+of the file and an empty `bytes` when `offset` is at or past it. A negative
+`offset` or `len` traps. It fails as `read_bytes` does (`std.fs.15`,
+`std.fs.16`). *(ADR 0929)*
+
+**std.fs.26** — `trash(path str) ! IoError` moves a file or a whole directory
+to the user's trash, so the user can put it back: `~/.Trash` (or the volume's
+`.Trashes`) on macOS, the freedesktop trash with its `.trashinfo` on Linux, the
+Recycle Bin on Windows. On Linux the `.trashinfo` records the deletion time in UTC. A name already in the trash gets a unique suffix. It
+never copies or deletes: when no trash on the volume can be written, it fails
+with kind `other`. *(ADR 0929)*
+
+```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26
+use std.fs
+
+fn main() !
+    s := fs.scan("/Users/me/Library/Caches", true)?
+    mut total := 0
+    for e in s.entries
+        if not e.is_dir and not e.is_link
+            total += e.alloc
+    v := fs.volume("/")?
+    print("{total} of {v.total} bytes, {v.free} free, {s.skipped.len()} skipped")
+    head := fs.read_range("a.bin", 0, 4096)?
+    fs.trash("old.bin")?
+```
+
 ```ail rules=std.fs.20
 use std.fs
 
@@ -304,7 +354,7 @@ fn main()
 ```
 
 **std.env.5** — `vars() Map[str, str]` returns the environment variables
-whose names and values are UTF-8, in order of their names' bytes.
+whose names and values are UTF-8, in order of their names' bytes. On Windows, where names ignore case, they are ASCII capitals.
 *(ADR 0282)*
 
 ```ail rules=std.env.5
@@ -379,6 +429,20 @@ as lower-case hex. *(ADR 0442)*
 **std.hash.4** — `hash64(s str) int` is a fast 64-bit hash for tables and
 checksums, not for security. Its value for a given input is the same on
 every platform and version, and may be any `int`. *(ADR 0444)*
+
+**std.hash.5** — `hmac_sha384(key str, s str) str` and
+`hmac_sha512(key str, s str) str` return the HMAC of RFC 2104 and RFC 4231
+(128-byte blocks) as lower-case hex, 96 and 128 digits. A key longer than the
+block is hashed first. They have no effects. *(ADR 0959)*
+
+**std.hash.6** — `sha3_256(s str) str` and `sha3_512(s str) str` (FIPS 202)
+return the digest as lower-case hex (64 and 128 digits). `sha1_legacy(s str) str`
+(FIPS 180-4) and `md5_legacy(s str) str` (RFC 1321) return 40 and 32 digits.
+**SHA-1 and MD5 are broken against collisions and are not for security**: never
+for signatures, certificates, password storage or integrity against an attacker.
+They exist for file formats and protocols that require them (git objects, ETags,
+legacy checksums), and the `_legacy` suffix is the only way to name them. They
+have no effects. *(ADR 0959)*
 
 ```ail
 use std.hash
@@ -513,6 +577,41 @@ use std.compress
 fn main() !
     z := compress.gzip("abc abc abc abc")
     print(compress.gunzip(z)?.to_str() else "binary")
+```
+
+## Cryptography: `std.crypto`
+
+**std.crypto.1** — `ct_eq(a bytes, b bytes) bool` is true when the two byte
+strings are equal. Its running time depends on the lengths only, never on where
+the bytes differ, so a program compares MACs, tags and password hashes with it
+and never with `==`. It has no effects. *(ADR 0959)*
+
+**std.crypto.2** — `random_bytes(n int) bytes` returns `n` bytes (0 to
+1073741824) from the operating system's generator (`/dev/urandom`, or
+ProcessPrng on Windows). It never uses the `std.random` generator, so `seed`
+and `--seed` do not affect it. When the system has no source it stops the
+program with a trap, never falling back to a weaker one. An `n` outside the
+range traps. It has the effect `random`. *(ADR 0959)*
+
+**std.crypto.3** — `hkdf_sha256(ikm bytes, salt bytes, info bytes, len int)
+bytes` is HKDF (RFC 5869) with HMAC-SHA-256: `len` bytes, 0 to 8160. An empty
+`salt` stands for 32 zero bytes. A `len` outside the range traps. It has no
+effects. *(ADR 0959)*
+
+**std.crypto.4** — `pbkdf2_sha256(password bytes, salt bytes, iterations int,
+len int) bytes` is PBKDF2 (RFC 8018) with HMAC-SHA-256. `iterations` is at
+least 1 and `len` is 0 to 1048576, or it traps. It has no effects, and a call
+with a large `iterations` is slow by design. *(ADR 0959)*
+
+```ail rules=std.crypto.1,std.crypto.2,std.crypto.3,std.crypto.4
+use std.crypto
+
+fn main()
+    print(crypto.ct_eq(b"abc", b"abc"))                         # true
+    print(crypto.random_bytes(16).len())                        # 16
+    print(crypto.hkdf_sha256(b"key", b"salt", b"info", 8).len())   # 8
+    print(crypto.pbkdf2_sha256(b"password", b"salt", 1, 32).hex())
+    # 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
 ```
 
 ## Standard input and output: `std.io`
@@ -960,8 +1059,9 @@ pool, up to 4 idle per scheme, host and port and 32 in all, for at most 30
 seconds (less if the server's `Keep-Alive: timeout=` says so). The next
 request to the same origin, redirects included, uses it; a pooled connection
 the server has closed is dropped when found, and a request that fails on one
-before any response byte arrived is sent again on a new connection if its
-method is `GET`, `HEAD`, `PUT`, `DELETE` or `OPTIONS`. The header
+before any response byte arrived (a reset or end of file) is sent again, once, on a new
+connection, whatever its method, as browsers do (ADR 0915); a failure after a response
+byte, or on a new connection, is not. The header
 `Connection: close` in `opts.headers` sends that header and keeps nothing.
 The header `Transfer-Encoding: chunked` sends the body of `POST`, `PUT` and
 `PATCH` as chunks of at most 8 KiB, with no `Content-Length`. Interim `1xx`
@@ -1476,9 +1576,11 @@ fn main()
 zone `zone` at the instant `secs` (seconds since the epoch), or `none` when the
 zone isn't installed, the name is empty or unsafe (it may hold only letters,
 digits and `/ _ + -`, no `..`, no leading `/`). It reads TZif files (RFC 9636)
-from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
-POSIX rule for instants after its last transition. It has the effects `fs` and
-`env`. *(ADR 0448)*
+from the copy of the IANA database shipped with AIL (`std.tz.3`), so a zone
+gives the same offsets on every OS; when that copy is missing it falls back to
+`/usr/share/zoneinfo` and the usual alternatives (none on Windows). It applies
+the file's POSIX rule for instants after its last transition. It has the
+effects `fs` and `env`. *(ADR 0448, ADR 0924)*
 
 ```ail rules=std.tz.1
 use std.tz
@@ -1489,7 +1591,8 @@ fn main()
 ```
 
 **std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
-else the zone `/etc/localtime` links to, else `"UTC"`.
+else the zone `/etc/localtime` links to (on Windows, the active zone mapped to
+its IANA name, `std.tz.3`), else `"UTC"`.
 
 ```ail rules=std.tz.2
 use std.tz
@@ -1498,9 +1601,13 @@ fn main()
     print(tz.system().len() > 0)
 ```
 
-**std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
-every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
-lands; UTC and fixed offsets work everywhere.
+**std.tz.3** — AIL ships the IANA tz database as slim TZif files in
+`tools/tzdata/zones` under `AIL_ROOT` (the tree `ail` runs from); `tz.offset`
+looks there first. When `AIL_ROOT` is unset or the file is missing, a name is
+looked up in the system directories, and on Windows it is `none`.
+`tz.system()` is `TZ` if it names a safe zone, else the zone `/etc/localtime`
+links to, else `"UTC"` (on Windows, `TZ` if it names a safe zone, else the active Windows zone ID mapped to its IANA name by `tools/tzdata/windows-zones.txt`, else `"UTC"`; ADR 0972). UTC and fixed offsets
+work everywhere. *(ADR 0924)*
 
 ```ail rules=std.tz.3
 use std.tz
@@ -1673,7 +1780,7 @@ holds a value, and a key path through a value that is not a table fail with
 unterminated string, an invalid escape, an invalid number and a missing value
 are further causes. *(ADR 0901)*
 
-```ail skip=bootstrap rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
+```ail rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
 use std.toml
 
 fn main() !
@@ -1689,7 +1796,7 @@ fn main() !
     print((db.get("node") else Json.Null).to_text())
 ```
 
-```ail skip=bootstrap rules=std.toml.7,std.toml.8
+```ail rules=std.toml.7,std.toml.8
 use std.toml
 
 fn main()
@@ -1733,7 +1840,7 @@ negative. *(ADR 0902)*
 digits`, `invalid digit 'C'`, `division by zero`, `negative exponent` and
 `negative factorial`. *(ADR 0902)*
 
-```ail skip=bootstrap rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
+```ail rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
 use std.bigint
 
 fn main() !
@@ -2079,6 +2186,27 @@ outside the lines highlights none) and takes the wheel. `Tree` shows
 `Node`s in depth-first order, hiding the children of a closed node; Right
 opens, Left closes, Enter opens or closes a parent and submits a leaf.
 *(ADR 0315)*
+
+**std.ui.25** — Layout is pure arithmetic on `Rect`. `left(n)` and `top(n)`
+keep the first `n` columns or rows, clamped to the rectangle; `inset(n)`
+shrinks every side by `n`, never below zero; `has(c, r)` tests a cell.
+`cols_of(sizes)` and `rows_of(sizes)` split a rectangle side by side or
+stacked: a size of 0 or more is fixed, and -1 shares what is left evenly,
+the first such sizes taking any remainder. *(ADR 0973)*
+
+**std.ui.26** — `Label` shows its `text` (bold if `bold`) cut or padded to
+its rectangle. It takes no events. *(ADR 0973)*
+
+**std.ui.27** — `Checkbox` toggles `checked` on a click, or on Space or
+Enter while `focused`, and answers `Changed`. `RadioGroup` shows one choice
+per row; Up and Down move `selected`, a click on a row picks it (both
+`Changed`), Enter answers `Submit`, and `chosen()` is the selected choice.
+*(ADR 0973)*
+
+**std.ui.28** — `ProgressBar` shows `done` of `total` as a bar and a
+percentage (`percent()`, 0 to 100; an empty total is 0). `Tabs` shows one
+row of titles; Left, Right and Tab move `selected`, and a click on a title
+picks it (all `Changed`). *(ADR 0973)*
 
 ## Tensors: `std.tensor`
 
@@ -2611,6 +2739,35 @@ fn main()
     print(lines.len())
 ```
 
+```ail rules=std.ui.25,std.ui.26,std.ui.27,std.ui.28
+use std.ui
+use std.ui.widgets
+
+fn press(k str) ui.Event
+    Key(key: k, ctrl: false, alt: false, shift: false)
+
+fn main()
+    theme := Map[str, int]()
+    area := widgets.Rect(col: 0, row: 0, cols: 20, rows: 4)
+    rows := area.rows_of([1, -1, 1])
+    print(rows.len())                              # 3: header, body, footer
+    halves := rows[1].cols_of([-1, -1])
+    print(halves[0].cols + halves[1].cols)         # 20
+    print(area.left(30).cols)                      # 20: clamped
+    print(area.inset(1).rows)                      # 2
+    print(widgets.Label(text: "hi", bold: true).render(rows[0], theme).len())
+    mut box := widgets.Checkbox(label: "on", checked: false, focused: true)
+    space := press(" ")
+    print(box.on_event(space, rows[2]))            # Changed
+    print(box.checked)                             # true
+    mut radio := widgets.RadioGroup.new(["a", "b"])
+    radio.selected = 1
+    print(radio.chosen() else "")                  # b
+    print(widgets.ProgressBar(done: 1, total: 4).percent())   # 25
+    tabs := widgets.Tabs.new(["one", "two"])
+    print(widgets.text_rows(tabs.render(rows[0], theme), 20, 1)[0])
+```
+
 ```ail rules=std.tensor.6
 fn main()
     xs := tensor.from([1, 2, 3], [3])
@@ -2621,7 +2778,7 @@ fn main()
 
 ## Examples for the hash, compression, date, zone, net and process rules
 
-```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4
+```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5,std.hash.6
 use std.hash
 
 fn main()
@@ -2629,6 +2786,12 @@ fn main()
     print(hash.sha384("abc").len())   # 96 hex digits
     print(hash.sha512("abc").len())   # 128 hex digits
     print(hash.hmac_sha256("key", "The quick brown fox jumps over the lazy dog").len())   # 64
+    print(hash.hmac_sha384("Jefe", "what do ya want for nothing?").len())   # 96 (RFC 4231 case 2)
+    print(hash.hmac_sha512("Jefe", "what do ya want for nothing?").len())   # 128
+    print(hash.sha1_legacy("abc"))           # a9993e364706816aba3e25717850c26c9cd0d89d
+    print(hash.md5_legacy("abc"))            # 900150983cd24fb0d6963f7d28e17f72
+    print(hash.sha3_256("abc").len())   # 64
+    print(hash.sha3_512("abc").len())   # 128
     print(hash.crc32("abc"))          # 891568578
     print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run
 ```
@@ -2801,7 +2964,7 @@ fn main() !
 use std.tz
 
 fn main()
-    print(tz.system().len() > 0)                     # "UTC" on Windows until the registry reader lands
+    print(tz.system().len() > 0)                     # "UTC" on Windows unless TZ names a zone
     print(tz.offset("UTC", 0) else 0)                # 0
 ```
 

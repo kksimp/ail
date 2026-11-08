@@ -406,6 +406,33 @@ pub fn Asm.jcc(mut self, cc int, l int)
     byte(128 + cc)
     rel_label(l)
 
+## `jmp r`: an indirect jump (a `switch`, native.match.2).
+pub fn Asm.jmp_reg(mut self, r int)
+    rex(0, 0, 0, r, false)
+    byte(255)
+    byte(224 + low(r))
+
+## `lea dst, [rip + l]`: the address of local label `l`.
+pub fn Asm.lea_label(mut self, dst int, l int)
+    rex(1, dst, 0, 0, false)
+    byte(141)
+    byte(low(dst) * 8 + 5)
+    rel_label(l)
+
+## `movsxd dst, dword [m]`: a signed 32-bit load.
+pub fn Asm.movsxd_rm(mut self, dst int, m Mem)
+    op_rm(false, 99, dst, m)
+
+## A jump table entry: the 32-bit distance from `table`, the table's start in
+## the code, to label `l` (`tail` makes the field relative to `table`).
+pub fn Asm.table_entry(mut self, table int, l int)
+    fixups.push(Fixup(at: code.len(), label: l, sym: "", tail: table - (code.len() + 4)))
+    u32(0)
+
+## The current offset in the code.
+pub fn Asm.here(self) int
+    code.len()
+
 pub fn Asm.call_sym(mut self, sym str)
     byte(232)
     fixups.push(Fixup(at: code.len(), label: -1, sym: sym, tail: 0))
@@ -459,7 +486,8 @@ pub fn Asm.resolve_labels(mut self)
         to := labels[f.label]
         if to < 0
             unreachable("label {f.label} was never placed")
-        rel := to - (f.at + 4)
+        # A field is relative to the end of its instruction, `tail` bytes on.
+        rel := to - (f.at + 4 + f.tail)
         for i in 0..4
             code[f.at + i] = rel.shr(8 * i).bit_and(255).to_u8()
     fixups = rest
@@ -628,6 +656,17 @@ pub fn Asm.vcvtpd2dq(mut self, dst int, src int)
 
 pub fn Asm.vpmovsxdq(mut self, dst int, src int)
     vex256_rr(1, 2, 37, dst, 0, src)
+
+## `vpaddq dst, a, b`, `vpmuldq dst, a, b` (the signed low 32 bits of each
+## lane multiplied to 64) and `vpbroadcastq dst, xmm` on ymm registers.
+pub fn Asm.vpaddq_rrr(mut self, dst int, a int, b int)
+    vex256_rr(1, 1, 212, dst, a, b)
+
+pub fn Asm.vpmuldq_rrr(mut self, dst int, a int, b int)
+    vex256_rr(1, 2, 40, dst, a, b)
+
+pub fn Asm.vpbroadcastq(mut self, dst int, src int)
+    vex256_rr(1, 2, 89, dst, 0, src)
 
 ## `vpaddq dst, a, [m]` and `vpsllq dst, src, imm` on ymm registers.
 pub fn Asm.vpaddq_rrm(mut self, dst int, a int, m Mem)

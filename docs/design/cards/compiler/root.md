@@ -3,7 +3,7 @@ entry: main in main.ail
 
 ## (root)
 ```
-fn main() ! [clock env fail fs io proc]
+fn main() ! [clock env fail fs io net proc]
     fails with JsonError | fs.IoError
 BUILD_USAGE := ...
 fn positive(v str) bool
@@ -14,7 +14,7 @@ fn compiler_dir() str [env io]
 fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool) [clock env fs io proc]
 fn cached_copy(exe str, out str, target str) bool [fs io proc]
 fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool) [clock env fs io proc]
-fn finish_build(m mir.Module, file str, out str, target str) [fs io proc]
+fn finish_build(m mir.Module, file str, out str, target str) [env fs io proc]
 fn check_dump(path str, many bool) ! [env fail fs io]
     fails with JsonError | fs.IoError
 fn runtime(dir str, path str) !ast.Program [clock env fail fs io proc]
@@ -24,9 +24,9 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [clock env fail 
 fn source_text(path str) !str [fail fs io]
     fails with fs.IoError
 fn imported_text(file_arg str, text str, std str) str [env fs io]
-fn executable_hex(m mir.Module, path str, target str) str [io]
-fn executable_bytes(m mir.Module, path str, target str) bytes [io]
-fn executable_list(m mir.Module, path str, target str) List[u8] [io]
+fn executable_hex(m mir.Module, path str, target str) str [env io]
+fn executable_bytes(m mir.Module, path str, target str) bytes [env io]
+fn executable_list(m mir.Module, path str, target str) List[u8] [env io]
 fn runtime_syntax(path str, text str) [io]
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
@@ -34,7 +34,6 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     fails with fs.IoError
 PROOF_MAX_BYTES := 1500000
 fn par_keys(file str, std str, size int) Set[str] [clock env fs io proc]
-fn has_for_loop(text str) bool
 fn parallel_on() bool [env]
 fn proven_loop_keys(file str, std str) Set[str] [clock env fs io proc]
 fn mentions_prelude(srcs List[mir.Source]) bool
@@ -77,4 +76,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1315); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1310); dropped: private items, doc comments

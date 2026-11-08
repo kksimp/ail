@@ -13,10 +13,31 @@ struct Metadata
     modified_ms int
     is_dir bool
 
+## std.fs.24 (ADR 0928)
+struct Volume
+    total int
+    free int
+
 ## std.compress (ADR 0443)
 error struct CompressError
     kind str
     message str
+
+## std.fs.23 (ADR 0927): one entry of `fs.scan`, and the scan.
+struct Entry
+    path str
+    size int
+    alloc int
+    modified_ms int
+    inode int
+    device int
+    links int
+    is_dir bool
+    is_link bool
+
+struct Scan
+    entries List[fs.Entry]
+    skipped List[str]
 
 ## std.proc
 struct Output

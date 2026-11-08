@@ -1,0 +1,21 @@
+# native.task.2: with AIL_THREADS=1 a task asleep in `accept` does not hold
+# the only worker; a task spawned after it still runs.
+use std.net
+
+fn worker(srv net.Server) !
+    while true
+        _ := srv.accept() else
+            print("worker stops")
+            return
+
+fn square(n int) int
+    n * n
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    a := spawn worker(srv)
+    b := spawn square(7)
+    print("square {b.wait()?}")
+    srv.close()
+    a.wait()?
+    print("done")

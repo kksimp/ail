@@ -289,6 +289,16 @@ fn rec_next(name str) int
                 pos += 1
         else
             break
+    # `{"truncated":true}` ends a recording that hit its size limit (replay.rec.4).
+    if pos + 2 < n and load8(d + pos + 2) == 116
+        rec_stop(
+            "replay.rec.4",
+            "the recording was cut at its size limit, so it holds no result for `",
+            name,
+            "`",
+            "",
+            "",
+        )
     if pos >= n or load8(d + pos + 2) != 99
         rec_stop(
             "replay.run.3",
@@ -313,9 +323,24 @@ fn rec_next(name str) int
             name,
             "`",
         )
+    mut eol := q + i
+    while eol < d + n and load8(eol) != 10
+        eol += 1
     mut e := q + i
-    while not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
+    while e + 8 < eol
+        and not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
         e += 1
+    if e + 8 >= eol
+        # A call recorded without a result (`"uncaptured":true`, replay.nat.1): a replay can't answer it.
+        store64(s + REC_POS, eol - d)
+        rec_stop(
+            "replay.cap.2",
+            "`",
+            name,
+            "` was recorded without a result (the native build doesn't capture it), so a replay can't answer it",
+            "",
+            "",
+        )
     p := e + 9
     mut j := p
     while j < d + n and load8(j) != 10
@@ -750,6 +775,110 @@ fn rec_fs_metadata(path str, at str) int
             rec_text(s, if load64(m + 16) != 0 then ",true]}" else ",false]}")
         rec_end(s)
     m
+
+fn rec_fs_volume(path str, at str) int
+    if rec_mode() == 2
+        p := rec_next("fs.volume")
+        if rec_failed(p)
+            rec_raise(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        m := obj_new(16, 4)
+        store64(m, rec_c_int())
+        rec_c_next()
+        store64(m + 8, rec_c_int())
+        return m
+    m := fs_volume(path, at)
+    s := rec_begin("fs.volume", 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_text(s, "\{\"struct\":\"fs.Volume\",\"fields\":[")
+            rec_int(s, load64(m))
+            rec_byte(s, 44)
+            rec_int(s, load64(m + 8))
+            rec_text(s, "]}")
+        rec_end(s)
+    m
+
+fn rec_fs_read_range(path str, off int, len int, at str) str
+    if rec_mode() == 2
+        return rec_r_bytes("fs.read_range", at)
+    r := fs_read_range(path, off, len, at)
+    rec_w_bytes("fs.read_range", r)
+    r
+
+fn rec_fs_trash(path str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.trash", at)
+        return
+    fs_trash(path, at)
+    rec_w_unit("fs.trash", 1)
+
+## `fs.scan` (std.fs.23): `{"struct":"fs.Scan","fields":[[ENTRY,...],[PATH,...]]}`
+## with each entry the array of its nine fields.
+fn rec_fs_scan(root str, same_device bool, at str) int
+    if rec_mode() == 2
+        p := rec_next("fs.scan")
+        if rec_failed(p)
+            rec_raise(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        mut es := List[int]()
+        if rec_c_open()
+            es.push(rec_c_scan_entry())
+            while rec_c_next()
+                es.push(rec_c_scan_entry())
+        rec_c_next()
+        sk := rec_c_strs()
+        r := obj_new(16, 4)
+        store64(r, list_addr(es))
+        store64(r + 8, list_addr(sk))
+        return r
+    r := fs_scan(root, same_device, at)
+    s := rec_begin("fs.scan", 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_text(s, "\{\"struct\":\"fs.Scan\",\"fields\":[[")
+            es := list_at(load64(r))
+            for i in 0..es.len()
+                e := es[i]
+                if i > 0
+                    rec_byte(s, 44)
+                rec_byte(s, 91)
+                rec_json(s, str_at(load64(e)))
+                for k in 1..7
+                    rec_byte(s, 44)
+                    rec_int(s, load64(e + 8 * k))
+                rec_text(s, if load64(e + 56) != 0 then ",true" else ",false")
+                rec_text(s, if load64(e + 64) != 0 then ",true]" else ",false]")
+            rec_text(s, "],")
+            rec_w_strs_body(s, list_at(load64(r + 8)))
+            rec_text(s, "]}")
+        rec_end(s)
+    r
+
+## One entry of a recorded scan; the cursor is at its `[`.
+fn rec_c_scan_entry() int
+    rec_c_open()
+    e := obj_new(72, 4)
+    store64(e, str_addr(rec_c_str()))
+    for k in 1..7
+        rec_c_next()
+        store64(e + 8 * k, rec_c_int())
+    rec_c_next()
+    store64(e + 56, if rec_c_bool() then 1 else 0)
+    rec_c_next()
+    store64(e + 64, if rec_c_bool() then 1 else 0)
+    rec_c_next()
+    e
 
 fn rec_env_vars() int
     if rec_mode() == 2

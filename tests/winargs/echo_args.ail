@@ -1,0 +1,4 @@
+## Prints each command-line argument as [arg], one per line. tools/gate/ps1-args-test.ps1 runs it through ail.ps1.
+fn main() !
+    for a in env.args()
+        print("[{a}]")

@@ -191,6 +191,7 @@ fn chan_send(ch int, v int) int
             unlock(ch + C_LOCK)
             return chan_msg("send on a closed channel `", ch, "`")
         if load64(ch + C_COUNT) < load64(ch + C_CAP)
+            race_release(ch)
             chan_put(ch, v)
             unlock(ch + C_LOCK)
             return 0
@@ -218,6 +219,7 @@ fn chan_recv(ch int) int
             store64(ch + C_COUNT, n - 1)
             chan_wake(ch)
             unlock(ch + C_LOCK)
+            race_acquire(ch)
             return v
         if load64(ch + C_CLOSED) != 0 or task_cancelled()
             unlock(ch + C_LOCK)

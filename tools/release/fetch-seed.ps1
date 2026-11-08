@@ -1,6 +1,7 @@
-# Download the native compiler seed for this host from the private repository's release and install it
+# Download the native compiler seed for this host from the repository's release and install it
 # as .native\seed(.exe) (ADR 0855), the PowerShell twin of fetch-seed.sh. The SHA-256 in
-# tools\release\seeds.sha256 must match; nothing unverified is installed. Needs `gh` signed in or GITHUB_TOKEN.
+# tools\release\seeds.sha256 must match; nothing unverified is installed. Tries the plain release-download URL
+# first (no login); if that fails, as it does while the repository is private, falls back to `gh` or GITHUB_TOKEN.
 #   tools\release\fetch-seed.ps1 [TAG]     TAG defaults to the first line of tools\release\SEED_TAG
 param([string]$Tag = '')
 $ErrorActionPreference = 'Stop'
@@ -22,9 +23,20 @@ $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ail-seed-" + [guid]::NewGui
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $file = Join-Path $tmp $asset
 try {
-    $gh = Get-Command gh -ErrorAction SilentlyContinue
+    $plain = $false
+    try {
+        # TLS 1.2 for Windows PowerShell 5.1, whose default may be older; no progress bar, which slows 5.1 down.
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$repo/releases/download/$Tag/$asset" -OutFile $file
+        $plain = $true
+    } catch { Remove-Item -Force $file -ErrorAction SilentlyContinue }
+    $gh = $null
+    if (-not $plain) { $gh = Get-Command gh -ErrorAction SilentlyContinue }
     if ($gh) { & gh auth status *> $null }
-    if ($gh -and $LASTEXITCODE -eq 0) {
+    if ($plain) {
+        # Downloaded without a login; the SHA-256 check below still applies.
+    } elseif ($gh -and $LASTEXITCODE -eq 0) {
         $id = & gh api "repos/$repo/releases/tags/$Tag" --jq ".assets[] | select(.name == \`"$asset\`") | .id"
         if (-not $id) { Fail "release $Tag has no asset $asset" }
         # `gh release download`, not `gh api ... > $file`: Windows PowerShell 5.1 would re-encode a redirected native
@@ -39,7 +51,7 @@ try {
         $h['Accept'] = 'application/octet-stream'
         Invoke-WebRequest -UseBasicParsing -Headers $h -Uri "https://api.github.com/repos/$repo/releases/assets/$id" -OutFile $file
     } else {
-        Fail 'sign in with gh (gh auth login) or set GITHUB_TOKEN'
+        Fail "can't download $asset from release $Tag (for a private copy, sign in with gh or set GITHUB_TOKEN)"
     }
     $got = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
     if ($got -ne $want) { Fail "SHA-256 mismatch for $asset (got $got, want $want); not installing" }

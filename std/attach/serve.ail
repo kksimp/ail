@@ -71,12 +71,33 @@ pub struct Watched[T app.App + attach.Observe]
     pub hub Hub
     pub w float
     pub h float
+    ## Whether `input` requests are applied (attach.input.1).
+    pub input bool
 
 impl app.App for Watched[T app.App + attach.Observe]
     fn attach(mut self, inbox app.Inbox)
         inner.attach(inbox)
 
     fn update(mut self, ev app.Event)
+        if ev.kind == "external" and ev.id == "attach" and attach.is_input(ev.text)
+            why := attach.input_refusal(ev.text, token, input)
+            if why != ""
+                hub.replies.send(why)
+                return
+            req := parse_json(ev.text) else
+                hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
+                return
+            mut sent := app.event_from_json(req)
+            if sent.id != ""
+                # `id` is the control's own id or the `#N` that `screen` shows for it (attach.input.2).
+                found := view.control_id(inner.view(), sent.id.strip_prefix("#") else sent.id)
+                if found == ""
+                    hub.replies.send(attach.input_unknown(sent.id))
+                    return
+                sent.id = found
+            inner.update(sent)
+            hub.replies.send(attach.input_applied(sent.kind))
+            return
         if ev.kind == "external" and ev.id == "attach"
             tr.update(inner.observed())
             sc := view.of_node(inner.view(), w, h, inner.focus())
@@ -95,6 +116,9 @@ impl app.App for Watched[T app.App + attach.Observe]
 
     fn focus(self) str
         inner.focus()
+
+    fn lines(mut self) List[str]
+        inner.lines()
 
     fn measures(self) List[app.Measure]
         inner.measures()
@@ -154,7 +178,15 @@ pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
     inbox := app.new_inbox()
     g := TaskGroup()
     g.add(spawn listen_loop(l, inbox, hub))
-    mut w := Watched(inner: a, token: token, tr: attach.Tracker.new(), hub: hub, w: 800.0, h: 600.0)
+    mut w := Watched(
+        inner: a,
+        token: token,
+        tr: attach.Tracker.new(),
+        hub: hub,
+        w: 800.0,
+        h: 600.0,
+        input: (env.get("AIL_ATTACH_INPUT") else "") == "1",
+    )
     app.run_with(mut w, app.host_path()?, [], inbox)?
     a = w.inner
     l.close()

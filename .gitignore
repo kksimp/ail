@@ -10,3 +10,5 @@ tools/fuzz/failures/
 .native/
 .ail-test-*
 tools/agentbench/results/
+.ail-task
+!/tests/cases/packages/*/.ail-task

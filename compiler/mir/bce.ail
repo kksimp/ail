@@ -50,7 +50,7 @@ MAX_PER := 8
 ## to this value.
 MAX_REACH := 16777216
 
-## `AIL_OPT_OFF=bce,reserve,keep,inline,fill,fold,forward,pure,memo,reuse,unroll` (comma list) turns the named
+## `AIL_OPT_OFF=bce,reserve,keep,inline,fill,fold,forward,pure,memo,reuse,unroll,datarange` (comma list) turns the named
 ## optimizations off in the compiler's output, to bisect a miscompile.
 pub fn opt_off(name str) bool
     off := env.get("AIL_OPT_OFF") else ""
@@ -583,6 +583,96 @@ fn floor_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, b int) 
             best = k
     best
 
+## How deep `t` holds `int`s: 1 for a `List[int]`, 2 for a
+## `List[List[int]]`, else 0.
+fn int_rows(t Ty) int
+    match t
+        List(e) => if e == Ty.Int then 1 else 2 * int_list(e)
+        _ => 0
+
+fn int_list(t Ty) int
+    match t
+        List(e) => if e == Ty.Int then 1 else 0
+        _ => 0
+
+## The lists the loop `lp` reads `int` elements from whose elements, and
+## those of the list they are rows of, can't change in a loop two or more
+## levels around `lp`: each list and the list the scan before that loop
+## covers (native.bce.12). Scanning only there makes the scan's cost small
+## against the nest's.
+fn data_lists(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo) Map[int, int]
+    mut out := Map[int, int]()
+    if opt_off("datarange")
+        return out
+    mut tried := Map[int, bool]()
+    for b in lp.blocks
+        if b == lp.header
+            continue
+        for i in f.blocks[b].insts
+            if i.op != "get" or i.dst < 0 or f.vals[i.dst] != Ty.Int
+                continue
+            x := i.arg(0)
+            if out.contains(x)
+                continue
+            pb := parent(f, defs, x)
+            mut r := x
+            if pb >= 0
+                if parent(f, defs, pb) >= 0 or int_rows(f.vals[pb]) != 2
+                    continue
+                r = pb
+            elif int_rows(f.vals[x]) != 1
+                continue
+            if not tried.contains(r)
+                tried[r] = data_loop(f, defs, loops, lp, r, 2) >= 0
+            if tried[r]
+                out[x] = r
+    out
+
+## The outermost loop at least `depth` levels around `lp` with `r` defined
+## before it, in which no call, `set` or `push` can change `r` or its rows
+## (the scans and row floors the guards add are not counted), else -1.
+fn data_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, r int, depth int) int
+    mut best := -1
+    for k in 0..loops.len()
+        o := loops[k]
+        if o.header == lp.header or not o.member[lp.header] or o.pre < 0
+            continue
+        if defs[r].block < 0 or o.member[defs[r].block]
+            continue
+        # Levels: the loops around `lp` inside `o`, `o` included.
+        mut levels := 0
+        for q in loops
+            if q.header != lp.header and q.member[lp.header] and o.member[q.header]
+                levels += 1
+        if levels < depth
+            continue
+        mut marks := [false for _ in 0..f.vals.len()]
+        for blk in o.blocks
+            for i in f.blocks[blk].insts
+                if i.op == "call" or i.op == "prim"
+                    if i.name == "rt.datarange_absmax" or i.name == "rt.list_rows_min"
+                        continue
+                    for a in i.operands()
+                        if is_list(f.vals[a])
+                            taint(f, defs, a, mut marks)
+                elif i.op == "set"
+                    taint(f, defs, i.arg(0), mut marks)
+                elif i.op == "stx"
+                    # A store through a list's element address, from a loop
+                    # versioned earlier.
+                    if d := inst_of(f, defs, i.arg(0))
+                        if d.op == "data"
+                            taint(f, defs, d.arg(0), mut marks)
+                        else
+                            return -1
+                    else
+                        return -1
+        if not clean(f, defs, r, marks)
+            continue
+        if best < 0 or o.member[loops[best].header]
+            best = k
+    best
+
 fn version(
     f Func,
     defs List[Def],
@@ -684,7 +774,8 @@ fn version(
     mut fx := [false for _ in 0..nv]
     for v in 0..nv
         fx[v] = defs[v].block >= 0 and fixed(defs, inl, hidx, v)
-    pr := prove(f, defs, lp, c, rpo(f), fx)
+    elems := data_lists(f, defs, loops, lp)
+    pr := prove(f, defs, lp, c, rpo(f), fx, elems)
     # The highest index that the loop's arithmetic bounds, per list.
     mut reach := Map[int, int]()
     # The accesses that can lose their checks, and what that takes.
@@ -844,6 +935,30 @@ fn version(
     mut floors := known
     mut floor_pre := List[int]()
     mut floor_call := List[Inst]()
+    if use_ranges
+        # Elements the nest only reads are within +-DATA, from one scan per
+        # list before the loop the list doesn't change in (native.bce.12).
+        for r in pr.scanned
+            pre := loops[data_loop(f, defs, loops, lp, r, 2)].pre
+            fkey := "abs|{r}|{pre}"
+            mut m := -1
+            if kn := floors.get(fkey)
+                m = kn
+            else
+                dv := gd.value(Ty.Int)
+                mut dk := inst(dv, "const", [])
+                dk.imm = int_rows(f.vals[r])
+                floor_pre.push(pre)
+                floor_call.push(dk)
+                m = gd.value(Ty.Int)
+                mut fc := inst(m, "call", [r, dv])
+                fc.name = "rt.datarange_absmax"
+                floor_pre.push(pre)
+                floor_call.push(fc)
+                floors[fkey] = m
+            gd.check(gd.emit("le", [m, gd.konst(DATA)], Ty.Bool))
+        if pr.trip > 0
+            gd.check(gd.emit("le", [fresh_of(hoists, hidx, c.bound), gd.konst(pr.trip)], Ty.Bool))
     # `hi <= len - off` is stronger than `hi <= len`.
     mut shifted := Set[int]()
     # `y < len - k` is stronger than `y < len - j` for j <= k.

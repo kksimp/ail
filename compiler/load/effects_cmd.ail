@@ -40,6 +40,8 @@ fn parallel_report(loaded Loaded, path str, json bool) str
         ]
         return "\{\"ail_api\":1,\"loops\":[{items.join(",")}]}\n"
     mut out := ""
+    for fr in check.fork_rows(loaded.program)
+        out = "{out}{place(files, path, fr.pos)} {fr.func} calls {fr.callees.join(", ")}: {fr.verdict} (conc.par.15: {fr.reason})\n"
     for r in rows
         kw := if r.is_par then "par for" else "for"
         near := if r.at.line == r.pos.line

@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
+    hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
     self_ty str
     ## Variables whose list or struct belongs to someone else (parameters,
@@ -287,6 +289,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
@@ -444,6 +447,10 @@ RT_ROOTS := [
     "rt.list_pushb",
     "rt.list_reserve",
     "rt.list_rows_min",
+    "rt.datarange_absmax",
+    "rt.vec_axpyi",
+    "rt.vec_axpyf",
+    "rt.vec_escape",
     "rt.list_new_for",
     "rt.fill",
 ]
@@ -498,6 +505,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
+    note_hash_uses(prog, pre)
     for f in program_fns(prog)
         if is_test(f)
             continue
@@ -925,6 +933,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
         enter_contracts(f, key)
     uniq_params(f)
     instr_call(f, sig.params, params)
+    race_enter()
     want := not ret.is_unit()
     if want
         tail_want = ret
@@ -1047,6 +1056,8 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
         s := body[i]
         if done()
             dead_block()
+        if fork_stmt(body, i)
+            continue
         instr_stmt(s)
         ct_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
@@ -1096,7 +1107,8 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         got := lower_get_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
             return
-        declare(name, got.ty, got.id)
+        # `get` hands out the stored value; the binding owns a copy (own.val.1).
+        declare(name, got.ty, copy_if_place(value, got))
         return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
@@ -1176,7 +1188,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
             # A loop the compiler chose is an outermost one: inside another loop it
-            # would pay the dispatch on every run of the outer body (conc.par.12).
+            # would pay the dispatch on every run of the outer body (conc.par.14).
             if is_par
                 or loops.len() == 0 and auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
@@ -1237,9 +1249,9 @@ fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
         if v.ty.is_coll()
             return copy_coll(v)
         return if needs_copy(v.ty) then copy_value(v) else v.id
-    if v.ty.is_coll() and is_place(e)
+    if v.ty.is_coll() and aliases_place(e)
         return note_move(e, v, copy_coll(v))
-    if not needs_copy(v.ty) or not is_place(e)
+    if not needs_copy(v.ty) or not aliases_place(e)
         return v.id
     note_move(e, v, copy_value(v))
 
@@ -1300,6 +1312,9 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             uniq_replace(key)
             write_var(key, cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
+            if g := grid_place(recv, index, ipos)
+                lower_assign_body(g, op, value, pos)
+                return
             if assign_after_rhs(target, op, value, pos)
                 return
             l := lower_value(recv, none) else return

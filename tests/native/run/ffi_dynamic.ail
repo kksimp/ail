@@ -5,9 +5,9 @@ use std.mem
 extern c "m" fn cbrt(x float) float
 extern c "libm" fn ldexp(x float, e i32) float
 extern c "m" fn fmax(a float, b float) float
-extern c fn labs(x int) int
+extern c fn llabs(x int) int
 extern c fn isalpha(c i32) i32
-extern c fn strtol(s *u8, end *u8, base i32) int
+extern c fn strtoll(s *u8, end *u8, base i32) int
 extern c fn strcmp(a *u8, b *u8) i32
 extern c fn isdigit(c i32) i32
 extern c fn tolower(c i32) i32
@@ -24,7 +24,7 @@ fn compare(a str, b str) i32
 fn parse(text str, base i32) int
     unsafe
         p := mem.cstr(text)
-        n := strtol(p, mem.null(), base)
+        n := strtoll(p, mem.null(), base)
         mem.free(p)
         n
 
@@ -33,7 +33,7 @@ fn main()
         print(cbrt(8.0) / 4.0)
         print(ldexp(1.5, 4))
         print(fmax(2.5, -1.0))
-        print(labs(-123456789012))
+        print(llabs(-123456789012))
         print(isalpha(65) != 0)
         print(isalpha(48) != 0)
         print(isdigit(55) != 0)

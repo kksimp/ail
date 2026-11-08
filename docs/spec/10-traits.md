@@ -350,7 +350,7 @@ struct Scene
 **trait.any.3** — Where a value of type `any Trait` is expected, a value of any
 type implementing `Trait` converts to it implicitly. *(ADR 0129)*
 
-```ail skip=bootstrap rules=trait.any.3
+```ail rules=trait.any.3
 trait Shape
     fn area(self) float
 
@@ -384,7 +384,7 @@ fn main()
     print(show(1))
 ```
 
-```ail skip=bootstrap
+```ail
 trait Shape
     fn area(self) float
 
@@ -402,7 +402,7 @@ fn main()
 **trait.any.5** — `any Trait` satisfies a constraint `Trait` only when every
 method of `Trait` can be called through it (`trait.any.4`). *(ADR 0129)*
 
-```ail skip=bootstrap rules=trait.any.5
+```ail rules=trait.any.5
 trait Shape
     fn area(self) float
 
@@ -532,7 +532,7 @@ and `error` types whose fields all are. A generic type is `Hash` per instance
 aren't `Hash`. A hand-written `fn eq` (`trait.auto.3`) removes `Hash`. An
 `impl Ord` doesn't change `Eq` (`==` never calls `cmp`), so a type with
 `impl Ord` and an automatic `Eq` stays `Hash`. `impl Hash` is a compile-time
-error, since custom hashing isn't designed. A constraint `[T Hash]` implies
+error except the `uses` form of `trait.hash.1`. A constraint `[T Hash]` implies
 `Eq`: the prelude declares `trait Hash Eq` (`trait.super.3`). Map keys and set elements MUST be `Hash` (`type.map.2`). Hash values are
 never visible to programs, so output can't depend on the hash function.
 *(ADR 0133)*
@@ -545,6 +545,52 @@ fn main()
     mut m := Map[Sq, int]()
     m[Sq(s: 1)] = 5
     print(m[Sq(s: 1)])
+```
+
+**trait.hash.1** — A struct with its own `fn eq` and no type parameters MAY
+write `impl Hash for T` whose body is one line `uses a, b`, naming fields of
+`T`. `T` is then `Hash`: a map or set of `T` identifies a key by those fields
+alone, in hash and in comparison, so the other fields (even a `float`) are
+ignored. A hand-written `fn eq` SHOULD compare at least the named fields; the
+table never calls it. Any other `impl Hash` (no `uses`, methods, an enum, a
+generic struct) is `trait.auto.5`. *(ADR 0955)*
+
+```ail rules=trait.hash.1
+struct Key
+    id int
+    noise float
+
+impl Eq for Key
+    fn eq(self, other Self) bool
+        self.id == other.id
+
+impl Hash for Key
+    uses id
+
+fn main()
+    mut m := Map[Key, int]()
+    m[Key(id: 1, noise: 1.5)] = 7
+    print(m[Key(id: 1, noise: 9.0)])
+```
+
+**trait.hash.2** — In `uses`, `T` MUST have its own `fn eq` (otherwise `==`
+and the automatic hash already agree), and each name MUST be a distinct field
+of `T` whose type is `Hash`. *(ADR 0955)*
+
+```ail error=trait.hash.2
+struct Key
+    id int
+    f float
+
+impl Eq for Key
+    fn eq(self, other Self) bool
+        self.id == other.id
+
+impl Hash for Key
+    uses f
+
+fn main()
+    print(1)
 ```
 
 ## Runnable examples for the rules above
@@ -682,7 +728,7 @@ impl Named for P               # a second impl of the same trait
         "again"
 ```
 
-```ail skip=bootstrap rules=trait.auto.4
+```ail rules=trait.auto.4
 # A method named `to_str` declared outside an impl of ToStr should be rejected, and the
 # diagnostic should suggest the impl. The bootstrap accepts `fn to_str(p P) str`: a bootstrap bug.
 fn main()

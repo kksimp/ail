@@ -1,6 +1,6 @@
 ## std.attach (spec attach.wire.2, attach.wire.3, attach.wire.4, attach.wire.5; ADR 0884): the protocol a running
 ## program speaks to an attached agent, as pure functions. One JSON object per
-## line in, one per line out. Every query reads; none writes (attach.wire.4).
+## line in, one per line out. Every query reads, except `input`, which acts only when the program was started with `--attach-input` (attach.input.1).
 ## The listener, the token file and the app wrapper are separate (ADR 0884).
 
 use std.screen
@@ -106,7 +106,41 @@ pub fn answer(line str, token str, tr Tracker, sc screen.Screen, heap str) str
         if heap == ""
             return failure("no heap summary is available")
         return "\{\"v\":1,\"heap\":{text(heap)}}"
+    if q == "input"
+        return failure("input is off; start the program with `ail run --attach-input` (attach.input.1)")
     failure("unknown query {text(q)}; the queries are observe, screen and heap, and all of them only read")
+
+## The event kinds an `input` request may send: what a person does at the window (attach.input.3).
+INPUT_KINDS := ["press", "edit", "submit", "toggle", "click", "scroll", "key"]
+
+## Whether request line `line` is an `input` request (attach.input.1).
+pub fn is_input(line str) bool
+    req := parse_json(line) else return false
+    (req.str("q") else "") == "input"
+
+## Why `line`, an `input` request, is refused, as a reply line; "" when it may be applied (attach.input.1-3).
+## `on` is whether the program was started with `--attach-input`.
+pub fn input_refusal(line str, token str, on bool) str
+    req := parse_json(line) else err
+        return failure("not JSON: {err.message}")
+    if not authorized(req, token)
+        return failure("missing or wrong token")
+    if not on
+        return failure("input is off; start the program with `ail run --attach-input` (attach.input.1)")
+    if req.str("value") != none
+        return failure("`value` is not a member of an event; the new text of a field is `text` (attach.input.2)")
+    kind := req.str("kind") else ""
+    if not INPUT_KINDS.contains(kind)
+        return failure("`kind` must be one of {INPUT_KINDS.join(", ")} (attach.input.3)")
+    ""
+
+## The reply when `id` names no control of the program's view (attach.input.2).
+pub fn input_unknown(id str) str
+    failure("no control `{id}`; `id` is a control's own id or the #N that `screen` shows for it (attach.input.2)")
+
+## The reply to an applied `input` request (attach.input.2).
+pub fn input_applied(kind str) str
+    "\{\"v\":1,\"applied\":{text(kind)}}"
 
 ## A type that can report its observed values (attach.observe.4). The compiler
 ## writes the `impl` for a type with `@observe` fields when attach is on; a

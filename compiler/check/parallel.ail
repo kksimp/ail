@@ -88,9 +88,54 @@ struct Scan
     writes List[Write]
     reads List[Read]
     problems List[Problem]
+    ## A `continue` outside nested loops: some iteration may skip a push (conc.par.16).
+    skips bool
+    ## Where the built-in `push` calls name their receiver (`at_key`), for conc.par.16.
+    pushes List[int]
 
 fn new_scan(cx ParContext, var str, range bool) Scan
-    Scan(cx: cx, var: var, range: range, scopes: [], depth: 0, writes: [], reads: [], problems: [])
+    Scan(
+        cx: cx,
+        var: var,
+        range: range,
+        scopes: [],
+        depth: 0,
+        writes: [],
+        reads: [],
+        problems: [],
+        skips: false,
+        pushes: [],
+    )
+
+fn at_key(p ast.Pos) int
+    p.line * 100000 + p.col
+
+## conc.par.16: the receivers of the `xs.push(e)` statements at the top of a
+## loop body, by name, with where each names it; a name pushed twice is left out.
+fn top_pushes(body List[ast.Stmt]) Map[str, int]
+    mut out := Map[str, int]()
+    mut twice := Set[str]()
+    for s in body
+        recv := pushed_recv(s) else continue
+        n := name_of(recv) else continue
+        if out.contains(n)
+            twice.add(n)
+        out[n] = at_key(expr_pos(recv))
+    for n in twice
+        out.remove(n)
+    out
+
+## The receiver of a `NAME.push(e)` statement.
+@allow("expr.match.3") fn pushed_recv(s ast.Stmt) ast.Expr?
+    match s
+        Eval(e) =>
+            match e
+                Method(recv, name, _, args) =>
+                    if name != "push" or args.len() != 1 or args[0].mutable or name_of(recv) == none
+                        return none
+                    recv
+                _ => none
+        _ => none
 
 ## `[i]`, `[i - 1]`, `.name`; `[...]` for an index too complex to show.
 fn step_text(s Step) str
@@ -190,7 +235,9 @@ fn Scan.stmt(mut self, s ast.Stmt)
         Break(p) =>
             if depth == 0
                 exit("`break`", p)
-        Continue => return
+        Continue =>
+            if depth == 0
+                skips = true
         Return(e, p) =>
             if x := e
                 expr(x)
@@ -459,6 +506,8 @@ fn Scan.method_call(mut self, recv ast.Expr, n str, name_pos ast.Pos, args List[
             and not cx.fx.trait_calls.contains(key)
             and MUTATING.contains(n)
     if mutating
+        if n == "push" and not std_module and not cx.fx.targets.contains(key)
+            pushes.push(at_key(expr_pos(recv)))
         write(recv, none, expr_pos(recv))
     elif not (n == "len" and read_place(recv, true))
         expr(recv)
@@ -736,12 +785,17 @@ fn judge_for(
             roots.push(wr.root)
     mut reductions := List[str]()
     mut elements := List[str]()
+    mut builders := List[str]()
+    tops := top_pushes(body)
     for root in roots.sorted()
         ws := [wr for wr in scan.writes if wr.root == root]
         reads_of := [r for r in scan.reads if r.root == root]
         whole := [wr for wr in ws if is_whole(wr.kind)]
         adds := [wr for wr in ws if is_add(wr.kind)]
-        if whole.len() > 0
+        if is_builder(scan, tops, root, ws, reads_of)
+            # conc.par.16: one push per iteration, in iteration order.
+            builders.push(root)
+        elif whole.len() > 0
             problems.push(Problem(
                 rule: "conc.par.2",
                 reason: "writes `{root}`, which outlives the iteration",
@@ -875,7 +929,12 @@ fn judge_for(
         )
     mut rule := "conc.par.2"
     mut reason := "writes nothing that outlives the iteration"
-    if reductions.len() > 0
+    pushed := if builders.len()
+        == 0 then "" else "pushes one element per iteration to `{builders.join("`, `")}`"
+    if pushed != "" and reductions.len() == 0 and elements.len() == 0
+        rule = "conc.par.16"
+        reason = pushed
+    elif reductions.len() > 0
         names := ["`{r}`" for r in reductions].join(", ")
         more := if elements.len() == 0 then "" else " and writes only `{elements.join("`, `")}`"
         rule = "conc.par.4"
@@ -883,6 +942,8 @@ fn judge_for(
     elif elements.len() > 0
         rule = "conc.par.3"
         reason = "writes only `{elements.join("`, `")}`"
+    if pushed != "" and rule != "conc.par.16"
+        reason = "{reason}, and {pushed}"
     Verdict(
         pos: pos,
         var: var,
@@ -894,6 +955,15 @@ fn judge_for(
         at: pos,
         help: none,
     )
+
+## conc.par.16: `root` is a list the body builds: its one write is a built-in
+## `root.push(e)` statement at the top of the body, nothing reads it, and no
+## `continue` skips the push, so iteration `k` pushes element `k`.
+fn is_builder(scan Scan, tops Map[str, int], root str, ws List[Write], reads_of List[Read]) bool
+    at := tops.get(root) else return false
+    if scan.skips or ws.len() != 1 or reads_of.len() > 0 or ws[0].depth != 0
+        return false
+    is_whole(ws[0].kind) and at_key(ws[0].pos) == at and scan.pushes.contains(at)
 
 ## Which functions synchronise through a handle or an atomic: directly, or
 ## by calling a function that does (a fixed point over the call graph).
@@ -1279,4 +1349,180 @@ fn Checker.check_par_comps(self) List[Diag]
             if h := v.help
                 d = d.with_help(h)
             out.push(d)
+    out
+
+# ---- automatic fork-join of independent calls (conc.par.15, ADR 0914), analysis ----
+
+## One run of adjacent `name := f(...)` statements whose calls could fork.
+pub struct ForkRow
+    pub pos ast.Pos
+    pub func str
+    ## The called functions, in source order.
+    pub callees List[str]
+    ## `fork`: every run of two or more heavy independent calls.
+    pub verdict str
+    pub reason str
+    ## The positions of the calls, the first with mark `F` and the others `C`.
+    pub calls List[ast.Pos]
+
+## A `name := f(args)` of a pure free function `f` without `mut` arguments.
+struct ForkCall
+    name str
+    callee str
+    idx int
+    pos ast.Pos
+    ## The names the arguments mention.
+    reads List[str]
+
+## Whether a block has a loop at any depth.
+fn has_loop(b List[ast.Stmt]) bool
+    for s in b
+        match s
+            For | While => return true
+            Let | Assign | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => continue
+        for inner in each_block(s)
+            if has_loop(inner)
+                return true
+    false
+
+## Whether calling function `i` is expensive enough to fork: it has a loop, or
+## it can reach itself, or it reaches a function that has a loop.
+fn heavy_fn(cx ParContext, i int) bool
+    mut seen := Set[int]()
+    mut queue := [i]
+    mut first := true
+    while queue.len() > 0
+        j := queue.pop() else break
+        if seen.contains(j) and not first
+            if j == i
+                return true
+            continue
+        seen.add(j)
+        first = false
+        if body := cx.prog.fns[j].body
+            if has_loop(body)
+                return true
+        for k in cx.effects.calls[j]
+            if k == i
+                return true
+            if not seen.contains(k)
+                queue.push(k)
+    false
+
+## An argument the fork path may evaluate before the earlier calls run: a name,
+## a literal, or `name + k` / `name - k` with a literal `k` (the lowering guards
+## the overflow; any other expression might trap or have an effect).
+@allow("expr.match.3") fn fork_arg(e ast.Expr) bool
+    match e
+        Name | Int | Float | Bool => true
+        Binary(o, a, b, _) =>
+            match o
+                Add | Sub =>
+                    match a
+                        Name => fork_int_lit(b)
+                        _ => false
+                _ => false
+        _ => false
+
+@allow("expr.match.3") fn fork_int_lit(e ast.Expr) bool
+    match e
+        Int => true
+        _ => false
+
+## The call of a `name := f(args)` statement that conc.par.15 may fork, or none.
+@allow("expr.match.3") fn fork_call(cx ParContext, s ast.Stmt) ForkCall?
+    match s
+        Let(name, _, _, value, o) =>
+            if o != none
+                return none
+            match value
+                Call(callee, args, pos) =>
+                    n := callee_name(callee)?
+                    i := cx.fx.free.get(n)?
+                    for e in cx.effects.sets[i]
+                        if impure(e)
+                            return none
+                    if not heavy_fn(cx, i)
+                        return none
+                    mut sc := ast.new_scan()
+                    for a in args
+                        if a.mutable or a.label != none or not fork_arg(a.value)
+                            return none
+                        ast.scan_block(mut sc, [ast.Stmt.Eval(value: a.value)], 0)
+                    if sc.bad
+                        return none
+                    return ForkCall(
+                        name: name,
+                        callee: n,
+                        idx: i,
+                        pos: pos,
+                        reads: sc.names.sorted(),
+                    )
+                _ => return none
+        Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => return none
+
+## The rows of the runs in `b` and the blocks inside it.
+fn fork_block(cx ParContext, fname str, b List[ast.Stmt], mut out List[ForkRow])
+    mut run := List[ForkCall]()
+    mut defined := Set[str]()
+    for s in b
+        c := fork_call(cx, s)
+        mut extend := false
+        if call := c
+            extend = true
+            for r in call.reads
+                if defined.contains(r)
+                    extend = false
+            if not extend
+                flush_fork(cx, fname, run, mut out)
+                run = []
+                defined = Set[str]()
+            if call.name != "_"
+                defined.add(call.name)
+            run.push(call)
+        else
+            flush_fork(cx, fname, run, mut out)
+            run = []
+            defined = Set[str]()
+        for inner in each_block(s)
+            fork_block(cx, fname, inner, mut out)
+    flush_fork(cx, fname, run, mut out)
+
+fn flush_fork(cx ParContext, fname str, run List[ForkCall], mut out List[ForkRow])
+    if run.len() < 2
+        return
+    out.push(ForkRow(
+        pos: run[0].pos,
+        func: fname,
+        callees: [c.callee for c in run],
+        verdict: "fork",
+        reason: "{[c.callee for c in run].join(", ")} are pure, independent and heavy",
+        calls: [c.pos for c in run],
+    ))
+
+## Every run of independent pure calls in the user's functions, in source order
+## (conc.par.15): `ail effects --parallel`.
+fn Checker.fork_rows(self) List[ForkRow]
+    cx := par_context()
+    mut out := List[ForkRow]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        id := if f.owner == none
+            and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(prog, f)}"
+        fork_block(cx, id, body, mut out)
+    out.sorted(by: |r| r.pos.line * 100000 + r.pos.col)
+
+## The calls of the runs conc.par.15 forks: their positions, the first of each
+## run with mark `F`, the rest `C` (the lowering's keys).
+pub struct ForkSite
+    pub pos ast.Pos
+    pub mark str
+
+fn Checker.fork_sites(self) List[ForkSite]
+    mut out := List[ForkSite]()
+    for r in fork_rows()
+        for k in 0..r.calls.len()
+            out.push(ForkSite(pos: r.calls[k], mark: if k == 0 then "F" else "C"))
     out

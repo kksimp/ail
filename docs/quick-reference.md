@@ -15,6 +15,12 @@
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
 ./ail ask FILE who writes field F   # also: who reads F, what calls f, what does f call, which effects reach f, who uses T
+./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
+./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
+./ail mcp                       # the compiler's tools as an MCP stdio server (check, test, ask, impact, task_*)
+./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)
+./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)
+./ail leak FILE                  # run with the leak report: growth by kind and the roots that hold it (san.leak.1-2); AIL_LEAK works on any native exe
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
 ./ail diff OLD NEW                  # what changed by meaning
 ./ail edit FILE.ail [--test] < EDITS
@@ -418,7 +424,6 @@ mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
 xs.push(4)             # push, pop, sort and swap need a `mut` variable
-xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
@@ -428,8 +433,8 @@ empty := List[int]()   # an empty list of a given type, anywhere
 
 Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
-(`int?`, `none` when absent), `sorted()` (copy) and `sort()` (in place), `sum()`
-(ints or floats), `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
+(`int?`), `sorted()` (copy) and `sort()` (in place), `sum()`,
+`take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
 `flatten()`, `enumerate()` (`for i, x in xs.enumerate()`), `zip(xs, ys)` (pairs, to the shorter);
 `is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
@@ -448,16 +453,17 @@ for mut item in items      # `items` must be `mut`
 
 Inside a `for mut` loop the body can't use the list itself.
 
+`Grid[T]`, a flat 2-D list: `mut g := Grid.fill(rows, cols, v)` (or
+`Grid.from(xs)`), `g[i, j] += 1`, `g.rows`, `g.cols`, `g.cells`, `g.row(i)`.
+
 A comprehension builds a list, set or map in one expression:
 
 ```ail fragment
 xs := [3, 1, 4]
 squares := [x * x for x in xs]             # [9, 1, 16]
 big := [x for x in xs if x > 2]            # [3, 4]
-pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # nested, outermost first
 seen := {x % 2 for x in xs}                # a Set[int]
 sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
-nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 ```
 
 Loop variables end with it; `?` and `return` leave the function, `break` ends it.
@@ -645,8 +651,9 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | Module | Functions |
 |---|---|
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
-| `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists` and `glob` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
+| `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
+| `std.crypto` | `ct_eq(a, b) bool` (constant time; use it, never `==`, for MACs and tags), `random_bytes(n) bytes` (system generator, effect `random`), `hkdf_sha256(ikm, salt, info, len) bytes`, `pbkdf2_sha256(password, salt, iterations, len) bytes` (all `bytes`) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `trash(p)` (recoverable delete; never permanent), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists` and `glob` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |

@@ -4,9 +4,17 @@
 ## the checker sees one program whose names are unique. Imports and access to
 ## private items are checked here.
 use ast
+use cheader
 use check
 use pkg
 use syntax
+
+## Whether a file of the program belongs to `module`.
+fn has_module(files List[ast.SourceFile], module str) bool
+    for f in files
+        if f.module == module
+            return true
+    false
 
 ## What an import name refers to.
 enum Target
@@ -136,7 +144,18 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         head := u.path[0]
         reach := packages.target(module, [p.name for p in u.path])
         mut target := none
-        if head.name == "std" and std_module_known(dotted)
+        if cheader.is_use([p.name for p in u.path])
+            # `use c "header.h" as name` (ffi.decl.1): the module the loader wrote from the header.
+            if has_module(prog.files, dotted)
+                target = Target.Module(dotted)
+            else
+                found.push(diag(
+                    "ffi.decl.1",
+                    head.pos,
+                    "can't find the C header `{cheader.header_of(dotted)}`",
+                    "put it next to this file, or in a system include directory such as /usr/include",
+                ))
+        elif head.name == "std" and std_module_known(dotted)
             target = Target.Module(dotted)
         elif head.name == "std"
             target = Target.Std

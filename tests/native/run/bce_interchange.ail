@@ -1,0 +1,99 @@
+# Reduction nests run with their two inner loops swapped when a guard proves
+# no check in them can fail (native.bce.13): the sums are the same, for `int`
+# and for `float` (each element adds its terms in the same order). Shapes
+# that aren't square, a start that isn't 0, and a guard that fails (large
+# elements) print the same as the loops as written.
+fn ints(r int, c int, seed int, big int) List[List[int]]
+    mut g := List[List[int]]()
+    for i in 0..r
+        mut row := List[int]()
+        for j in 0..c
+            row.push(((i * 5 + j * 3 + seed) % 9 - 4) * big)
+        g.push(row)
+    g
+
+fn floats(r int, c int, seed int) List[List[float]]
+    mut g := List[List[float]]()
+    for i in 0..r
+        mut row := List[float]()
+        for j in 0..c
+            row.push(((i * 5 + j * 3 + seed) % 9).to_float() * 0.1 - 0.37)
+        g.push(row)
+    g
+
+fn mul(a List[List[int]], b List[List[int]], n int, m int, p int) List[List[int]]
+    mut c := List[List[int]]()
+    for i in 0..n
+        mut row := []
+        for j in 0..p
+            mut s := 3
+            for k in 0..m
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+fn mulf(a List[List[float]], b List[List[float]], n int) List[List[float]]
+    mut c := List[List[float]]()
+    for i in 0..n
+        mut row := List[float]()
+        for j in 0..n
+            mut s := 0.0
+            for k in 0..n
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+## The same nest with a start the swap doesn't take (made in the j loop).
+fn mulf_ref(a List[List[float]], b List[List[float]], n int) List[List[float]]
+    mut c := List[List[float]]()
+    for i in 0..n
+        mut row := List[float]()
+        for j in 0..n
+            mut s := j.to_float() * 0.0
+            for k in 0..n
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+## Starts that aren't 0, and a term with an outer index in it.
+fn band(a List[List[int]], n int) int
+    mut t := 0
+    for i in 0..n
+        mut row := []
+        for j in 1..n
+            mut s := 0
+            for k in 2..n
+                s += a[k][j] * (i - k) + a[i][k]
+            row.push(s)
+        for x in row
+            t += x
+    t
+
+fn total(c List[List[int]]) int
+    mut t := 0
+    for row in c
+        for x in row
+            t += x
+    t
+
+fn main()
+    a := ints(5, 7, 1, 1)
+    b := ints(7, 4, 2, 1)
+    c := mul(a, b, 5, 7, 4)
+    print(total(c))
+    print(c[4][3])
+    big := 1099511627776
+    print(total(mul(ints(5, 7, 1, big), ints(7, 4, 2, 1), 5, 7, 4)))
+    f := mulf(floats(6, 6, 1), floats(6, 6, 4), 6)
+    g := mulf_ref(floats(6, 6, 1), floats(6, 6, 4), 6)
+    mut differ := 0
+    for i in 0..6
+        for j in 0..6
+            if f[i][j] != g[i][j]
+                differ += 1
+    print(differ)
+    print(f[2][5] > 0.12 and f[2][5] < 0.13)
+    print(band(ints(8, 8, 3, 1), 8))

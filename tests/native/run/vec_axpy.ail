@@ -1,0 +1,81 @@
+# The swapped matrix nests (native.bce.13) with a term `x * b[k][j]` become
+# one vector kernel call per `k` (native.vec.1). Widths that leave a tail on
+# both ISAs (13 and 21 columns), negative elements, a start that isn't 0,
+# and a float nest checked element by element against the same nest the swap
+# doesn't take.
+fn ints(r int, c int, seed int) List[List[int]]
+    mut g := List[List[int]]()
+    for i in 0..r
+        mut row := List[int]()
+        for j in 0..c
+            row.push((i * 7 + j * 5 + seed) % 23 - 11)
+        g.push(row)
+    g
+
+fn floats(r int, c int, seed int) List[List[float]]
+    mut g := List[List[float]]()
+    for i in 0..r
+        mut row := List[float]()
+        for j in 0..c
+            row.push(((i * 7 + j * 5 + seed) % 23).to_float() * 0.25 - 2.6)
+        g.push(row)
+    g
+
+fn mul(a List[List[int]], b List[List[int]], n int, m int, p int, lo int) List[List[int]]
+    mut c := List[List[int]]()
+    for i in 0..n
+        mut row := []
+        for j in lo..p
+            mut s := -5
+            for k in 0..m
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+fn mulf(a List[List[float]], b List[List[float]], n int, m int, p int) List[List[float]]
+    mut c := List[List[float]]()
+    for i in 0..n
+        mut row := List[float]()
+        for j in 0..p
+            mut s := 0.5
+            for k in 0..m
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+fn mulf_ref(a List[List[float]], b List[List[float]], n int, m int, p int) List[List[float]]
+    mut c := List[List[float]]()
+    for i in 0..n
+        mut row := List[float]()
+        for j in 0..p
+            mut s := j.to_float() * 0.0 + 0.5
+            for k in 0..m
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+fn total(c List[List[int]]) int
+    mut t := 0
+    for row in c
+        for x in row
+            t += x
+    t
+
+fn main()
+    c := mul(ints(6, 9, 1), ints(9, 13, 2), 6, 9, 13, 0)
+    print(total(c))
+    print(c[5][12])
+    d := mul(ints(4, 5, 3), ints(5, 21, 4), 4, 5, 21, 3)
+    print(total(d))
+    print(d[3].len())
+    f := mulf(floats(5, 7, 1), floats(7, 21, 2), 5, 7, 21)
+    g := mulf_ref(floats(5, 7, 1), floats(7, 21, 2), 5, 7, 21)
+    mut differ := 0
+    for i in 0..5
+        for j in 0..21
+            if f[i][j] != g[i][j]
+                differ += 1
+    print(differ)

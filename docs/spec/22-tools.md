@@ -1,6 +1,6 @@
-# 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
+# 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -339,7 +339,7 @@ records come first. The note says which records are in one line and gives
 `--from K`, which shows record `K + 1` expanded. A JSON line is its own
 one-line form ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 6, [ADR 0880](../decisions/0880-budgeted-diagnostic-forms.md)).
 
-```ail skip=bootstrap tool=check,--budget,200,FILE expect=full status=2 rules=budget.out.7
+```ail tool=check,--budget,200,FILE expect=budget status=2 rules=budget.out.7
 fn main()
     x := 1
     x = 2
@@ -399,8 +399,8 @@ error types, its `requires`/`ensures`, the trait method it implements,
 whether a trait method has a default, its doc comment, or, for functions and
 methods, the text of its body (the lines after its first, to the next
 declaration, without trailing blank and comment lines). Members (fields,
-variants, methods) are declarations of their own. When either side is
-rejected, declarations are not compared.
+variants, methods) are declarations of their own. When either side has
+syntax or load errors, declarations are not compared (`diff.out.8` for check errors).
 
 **diff.out.3** — Diagnostics are matched by rule, file (relative to the
 compared path) and message, counting repeats; line numbers are shown but not
@@ -438,6 +438,25 @@ subsequence, at most 12 lines and then `... N more changed lines`. With
 ```
 
 ```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
+```
+
+**diff.out.8** — A side with check errors but no syntax or load errors is still
+compared, as far as its declarations resolve: the report starts with `api:
+partial, NEW has errors; compared as far as they allow` (JSON: `{"change":"api",
+"op":"partial","reason":...}`) and its diagnostics are listed as usual. Tests are
+not run on a side with errors.
+
+```ail pkg=diff_partial tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=partial, rules=diff.out.8
+```
+
+**diff.out.9** — An added function or method that is a removed one under another
+name (same kind, same signature once the name is left out, same body text) is a
+*rename*: one line `> fn:old -> fn:new (renamed)` (JSON: `"op":"renamed"` with `from`
+and `id`), counted as `N renamed` in the summary when there is any, and not as an
+addition and a removal. A function whose body also mentions its own name differs
+in body, so it stays an addition and a removal.
+
+```ail pkg=diff_rename tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=(renamed) rules=diff.out.9
 ```
 
 **api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
@@ -536,7 +555,7 @@ are shown and the status is 2, as `api.diff.4`. A subject that names no
 declaration of the right kind, or a question with no known verb, is an error
 (status 2) that says so.
 
-```ail skip=bootstrap tool=ask,FILE,who,writes,field,total expect=fn:add rules=api.ask.1,api.ask.2
+```ail tool=ask,FILE,who,writes,field,total expect=fn:add rules=api.ask.1,api.ask.2
 struct Cart
     total int
 fn add(mut c Cart, n int)
@@ -547,7 +566,7 @@ fn main()
     print(c.total)
 ```
 
-```ail skip=bootstrap tool=ask,FILE,who,reads,field,total? expect=fn:main rules=api.ask.2
+```ail tool=ask,FILE,who,reads,field,total? expect=fn:main rules=api.ask.2
 struct Cart
     total int
 fn main()
@@ -555,7 +574,7 @@ fn main()
     print(c.total)
 ```
 
-```ail skip=bootstrap tool=ask,FILE,what,calls,show expect=fn:pay rules=api.ask.3
+```ail tool=ask,FILE,what,calls,show expect=fn:pay rules=api.ask.3
 fn show(n int) str
     "{n}"
 fn pay(n int) str
@@ -564,21 +583,21 @@ fn main()
     print(pay(1))
 ```
 
-```ail skip=bootstrap tool=ask,FILE,what,does,main,call expect=fn:pay rules=api.ask.3
+```ail tool=ask,FILE,what,does,main,call expect=fn:pay rules=api.ask.3
 fn pay(n int) int
     n + 1
 fn main()
     print(pay(1))
 ```
 
-```ail skip=bootstrap tool=ask,FILE,which,effects,reach,main expect=fn:log rules=api.ask.4
+```ail tool=ask,FILE,which,effects,reach,main expect=fn:log rules=api.ask.4
 fn log(s str)
     print(s)
 fn main()
     log("hi")
 ```
 
-```ail skip=bootstrap tool=ask,FILE,who,uses,Cart expect=type:Cart rules=api.ask.5
+```ail tool=ask,FILE,who,uses,Cart expect=type:Cart rules=api.ask.5
 struct Cart
     total int
 fn size(c Cart) int
@@ -587,14 +606,14 @@ fn main()
     print(size(Cart(total: 1)))
 ```
 
-```ail skip=bootstrap tool=ask,FILE,who,writes,field,nosuch status=2 expect=api.ask.1 rules=api.ask.1
+```ail tool=ask,FILE,who,writes,field,nosuch status=2 expect=api.ask.1 rules=api.ask.1
 struct Cart
     total int
 fn main()
     print(Cart(total: 1).total)
 ```
 
-```ail skip=bootstrap tool=ask,FILE,who,writes,field,total status=2 expect=api.ask.6 rules=api.ask.6
+```ail tool=ask,FILE,who,writes,field,total status=2 expect=api.ask.6 rules=api.ask.6
 struct Cart
     total int
 fn main()
@@ -629,9 +648,206 @@ unknown revision is an error: exit status 2.
 **api.impact.4** — The impact is the changed declarations, the affected
 functions, the affected tests and the *effects* changes: each function whose
 effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
-`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`.
+`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`,
+and, only when they apply, `"via":{id:next}` (for each affected function, the declaration it
+names or calls on its way to a changed one), `"reaches":{test:[ids]}` (the changed declaration
+each affected test reaches) and `"partial":true` (`api.impact.5`). Text output adds one
+`via: fn:test > fn:caller > fn:changed` line per affected test.
 
-```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
+**api.impact.5** — When the edited version has check errors (not syntax or load
+errors) the impact is still printed, read from the graph as far as it resolves, with
+`"partial":true` (text: a `partial:` line), and the errors are shown. `ail ask
+--affected` and `ail edit --impact` do this for the edited version only: a signature
+change that breaks its callers lists those callers as affected, which are the
+functions that now need an edit. The version at the revision must still check. The
+exit status stays 2 for `ail edit` while it has errors.
+
+**api.impact.6** — A changed type reaches its members by line. When only the text of
+existing fields or variants changed, only those members are seeded: a function that
+reads another field is not affected, and neither is one that only names the type.
+When a field or variant was added or removed, or the type's own line changed, the
+type and all its members are seeded, as constructors and matches must change. The
+changed list is the same either way. *(ADR 0868 item 3)*
+
+```ail pkg=edit_impact_field tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=via: rules=edit.out.5,api.impact.6
+```
+
+```ail tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
+fn main()
+    print(1)
+```
+
+## Agent tasks
+
+`ail task` records one change from start to finish
+([ADR 0917](../decisions/0917-ail-task-protocol.md)).
+
+**task.state.1** — The open task is the file `.ail-task` of the current directory: `program`, `goal`, `rev` and `last` (`none`, `green` or `red`) as `key=value` lines.
+
+**task.state.2** — A directory has one open task. `start` with one open, and any other subcommand with none, is an error: exit status 2.
+
+**task.start.1** — `ail task start PROGRAM GOAL... [--rev REV]` opens a task whose base is `REV` (default `HEAD`). The program must compare against the base as `api.impact.3` does; if it can't, no task is opened: exit status 2.
+
+**task.verify.1** — `ail task verify` runs `ail check PROGRAM`, then, if that passes, `ail test PROGRAM --affected --since REV`, and records `green` only when both pass.
+
+**task.verify.2** — Exit status is 0 for green and 1 for red.
+
+**task.verify.3** — A red result shows the stage that failed (`check` or `test`) and the last 20 non-blank lines of its output.
+
+**task.verify.4** — The test stage runs with `--bundle-failure` (`bundle.write.1`). A red test stage lists the bundle files it wrote as `bundles` (`--json`), and `next` names `ail test --bundle PATH` for the first.
+
+**task.verify.5** — A green `verify` also runs `ail verify --diff --json --rev REV PROGRAM` (`verify.run.1`) and reports its JSON as `diff`, `null` when it prints none.
+
+**task.status.1** — `ail task status` prints the goal, the last verify result and the impact since the base (`api.impact.4`).
+
+**task.finish.1** — `ail task finish` is refused (exit status 1) unless the last verify was green.
+
+**task.finish.2** — A finished or aborted task removes `.ail-task`.
+
+**task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
+
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.out.1
+fn main()
+    print(1)
+```
+
+```ail pkg=task_red tool=task,verify status=1 expect=red rules=task.state.1,task.verify.1,task.verify.2,task.verify.3
+```
+
+## MCP server
+
+`ail mcp` serves the compiler's tools to an agent
+([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md)); `ail serve --mcp` is the
+different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
+
+**mcp.proto.1** — The server reads one JSON-RPC 2.0 message per line of standard input and writes one per line of standard output. It answers `initialize` (protocol version echoed, capability `tools`, server `ail`), `ping`, `tools/list` and `tools/call`; any other method is error -32601, text that isn't JSON is error -32700.
+
+**mcp.proto.2** — A message with no `id` (a notification) gets no reply.
+
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones. `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead.
+
+**mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
+
+**mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
+
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2
+fn main()
+    print(1)
+```
+
+## Language server
+
+`ail lsp` serves the semantic API to any editor as a Language Server
+([ADR 0966](../decisions/0966-ail-lsp-language-server.md)). It runs the matching
+`ail` commands and reshapes their JSON; it has no analysis of its own.
+
+**lsp.proto.1** — The server speaks LSP 3.17 over standard input and output with `Content-Length` framing. It answers `initialize` with the capabilities `textDocumentSync` (open, close, full-text change, save), `hoverProvider`, `definitionProvider`, `referencesProvider`, `documentSymbolProvider`, `completionProvider` (trigger `.`), `renameProvider` (with prepare) and `codeActionProvider` (`quickfix`, `source.fixAll.ail`).
+
+**lsp.proto.2** — A request is answered; a notification is not. An unknown request is error -32601, text that isn't JSON is error -32700, an unknown notification is ignored. `shutdown` then `exit` ends the process with status 0, `exit` alone with status 1.
+
+**lsp.sync.1** — The server keeps the text of each open document. A change replaces the whole text.
+
+**lsp.sync.2** — A command sees unsaved text: when an open document differs from the file on disk, the server copies the `.ail` files of its directory to a scratch directory under the temporary directory, lays every open buffer of that directory over them, and runs the command there. Packages with subdirectories see the saved text of files outside the directory.
+
+**lsp.diag.1** — On open and on save the server publishes the diagnostics of `ail check --json` for that document. The rule id is the diagnostic's `code`, the source is `ail`, an error is severity 1 and a warning severity 2, and a `help` is appended to the message. Closing a document publishes an empty list.
+
+**lsp.hover.1** — Hover is `ail api --type`: the type under the cursor, then for a call the callee's signature and doc comment, as Markdown.
+
+**lsp.def.1** — Definition is the `def` entry of `ail api --refs`; references are all its entries. A use through a module resolves to the declaring file.
+
+**lsp.sym.1** — Document symbols are the `ail api --outline` items, nested: fields, variants and methods are children. `fn` is Function, `method` Method, `struct` Struct, `enum` Enum, `trait` Interface, `impl` Namespace, `const` Constant, `field` Field, `variant` EnumMember.
+
+**lsp.complete.1** — `textDocument/completion` answers a complete list of names from `ail api`: the locals in scope at the cursor (`api --locals`; Variable, with the type as detail), then the functions, structs, enums, traits and constants of the file (`api --outline`). Only names that start with the text typed so far are returned.
+
+**lsp.complete.2** — After a `.` the names are the fields (Field) and methods (Method) of the type of the value before the dot (`api --type`), looked up among the declarations of the file. A buffer being typed rarely checks, so before asking, the server rewrites the cursor's line in its scratch copy: to a blank line, or after a `.` to a binding of the dotted name before it (`ail_probe := p`), whose type is asked. When `api` refuses the copy (a later line used what the rewritten line bound), the names come from the text instead: the parameters and the `name :=` and `for name` bindings above the cursor in its function, and for a receiver that is one name, the type its parameter, `self` or `name := Type(...)` binding writes, looked up in the last outline that checked. A receiver that is not one name, and a type not declared in the file, give no members. `AIL_LSP_DEBUG` set makes the server print each command it runs, its status and its standard error to standard error. When the copy still has errors, the last outline that checked answers. Types that are not declared in the file give no members.
+
+**lsp.rename.1** — `textDocument/rename` rewrites every reference of `ail api --refs` to the new name, in every file the references are in, as a `changes` edit. A use through a module qualifier (`geo.origin`) rewrites only the name after the qualifier.
+
+**lsp.rename.2** — `textDocument/prepareRename` answers the range and name under the cursor when it is a declared name, else null. A new name that is not an identifier, a position with no name and a name the program does not declare (a standard item) are error -32602 and change nothing. The result is not re-checked: run `ail check` after.
+
+**lsp.action.1** — `textDocument/codeAction` offers each fix of `ail check --json` for a diagnostic at the requested lines as a `quickfix` whose edit applies it. The first fix is preferred and the diagnostic is attached.
+
+**lsp.action.2** — With two or more fixable diagnostics the server also offers `source.fixAll.ail`: the first fix of every diagnostic whose edits touch none already taken, in one edit.
+
+**lsp.pos.1** — Positions are zero-based lines and characters; a character is one Unicode scalar (equal to a UTF-16 unit below U+10000).
+
+```ail tool=lsp rules=lsp.proto.1,lsp.proto.2,lsp.sync.1,lsp.sync.2,lsp.diag.1,lsp.hover.1,lsp.def.1,lsp.sym.1,lsp.complete.1,lsp.complete.2,lsp.rename.1,lsp.rename.2,lsp.action.1,lsp.action.2,lsp.pos.1
+fn main()
+    print(1)
+```
+
+## Sanitizers
+
+`ail sanitize` finds results that depend on the task schedule
+([ADR 0967](../decisions/0967-sanitizers.md)). Safe code cannot race (`conc.race.1`);
+a schedule-dependent result points at `unsafe` or FFI code, or at a missing `wait`. The memory
+checks of `unsafe.ptr.4-6` and `unsafe.mem.2` already trap, so they need no sanitizer mode.
+
+**san.sched.1** — `ail sanitize [--seeds N] [--tests] [--timeout MS] [--json] FILE [ARGS...]` runs `ail run FILE` (with `--tests`, `ail test FILE`) once with `--schedule=fixed` and then with `--schedule=random:SEED` for each seed 1 to N (default 8). A run whose exit status or standard output differs from the fixed run is a finding: a warning with the rule `san.sched.1`, the seed and the command that replays it. With `--json` each finding is one line `{"api":1,"severity":"warning","rule":"san.sched.1","file":...,"seed":...,"message":...,"replay":...}`, then a summary line with `seeds` and `schedule_dependent`.
+
+**san.sched.2** — The exit status is 0 when no run differs, 1 when one does, 2 for bad arguments. A run that can't start or exceeds `--timeout` (default 60000 ms) has status 124.
+
+```ail tool=sanitize,FILE expect=schedules rules=san.sched.1,san.sched.2
+fn main()
+    print(1)
+```
+
+**san.race.1** — `ail sanitize --race [--tests] [--timeout MS] [--json] FILE [ARGS...]` runs the program built with `AIL_SANITIZE=race` (POSIX shells; the variable also works with `ail run` and `ail build`). Each non-volatile raw-pointer `read` and `write` in the program's own code is checked against the last write and last read of the same 8-byte granule. Two accesses by different tasks, at least one a write, with no happens-before edge between them are a conflict. The report is `error[san.race.1]` on standard error with both source positions and task numbers; with `--json` one line per report. Each pair of positions is reported once, up to 20. Safe code and `par` loops over safe code cannot conflict (`conc.race.1`), so only `unsafe` accesses are checked, including those in `spawn` bodies and `par` chunks.
+
+**san.race.2** — The edges are: `spawn` (the child sees all the parent did before), `wait` and group waits (the waiter sees the child's whole run), `Mutex` lock and unlock, `Channel` send and receive, and `Atomic` operations (a store, `cas` or `add` publishes, a `load`, `cas` or `add` takes), each on its own object. A fresh `std.mem` block starts with no history. A run with a conflict exits 1 even if the program exited 0.
+
+**san.race.3** — The detector may miss a conflict, never invent one: a granule keeps one last write and one last read, tasks past the 255th share an id, and a full shadow table stops tracking new addresses; the summary line says when the last two happened. A race-instrumented build is slower and uses about 15 MB more address space; a normal build is unchanged.
+
+```ail tool=sanitize,--race,FILE expect=san.race.1 status=1 rules=san.race.1,san.race.2,san.race.3
+use std.mem
+
+fn bump(p *int)
+    unsafe
+        p.write(p.read() + 1)
+
+fn main() !
+    unsafe
+        p := mem.alloc(1, 0)
+        a := spawn bump(p)
+        b := spawn bump(p)
+        a.wait()?
+        b.wait()?
+        print(p.read())
+        mem.free(p)
+```
+
+## Leak report
+
+A garbage-collected program cannot lose memory it no longer reaches, but it can keep memory it
+no longer needs: a cache that is never trimmed, a list that only grows, a global holding a
+finished job. `ail leak` reports that growth and the roots that hold it
+([ADR 0969](../decisions/0969-leak-report.md)). It reports memory the program still reaches, so
+every number is a retained size, not a count of lost blocks.
+
+**san.leak.1** — With the report on, each collection counts the live bytes and objects by kind. After at least four collections, when live bytes at the latest collection are at least 1.5 times those at the first plus 1 MiB, and no collection of the last 64 fell by more than a twentieth of the one before, the report says live memory grew, with the first and latest totals and each kind that grew by 256 KiB or more. The sizes are payload plus the 8-byte header, so they differ a little from `AIL_MAX_MEMORY_MB`, which counts blocks.
+
+**san.leak.2** — The collection marks the roots one at a time, in the order: each global slot that points into the heap, the registers, the stack, the other threads. An object counts for the first root that reaches it, so the sizes add up to the live total. On growth the report lists the five roots that hold the most (at least 1 MiB each) with their bytes at the first and the latest collection, their object count and the kind with most bytes; `--all` lists the top five whenever they hold anything, growth or not. A root is `global slot N` (the slot's index; source names need the debug lane's positions, ADR 0947), `the stack`, `the registers` or `the other threads`. A conservative stack word can keep an object that no variable holds; the report cannot tell the two apart.
+
+**san.leak.3** — `ail leak [--json] [--all] FILE [ARGS...]` builds FILE and runs it with the environment variable `AIL_LEAK` set to `1`, `json`, `all` or `all,json`; the same variable works for any native executable, on every target. The report goes to standard error after the program's own output and ends with a summary line (`leak: N collections, S live at exit, growing` or `no growth`). With `json`, each finding is one line `{"api":1,"severity":"warning","rule":"san.leak.1"|"san.leak.2",...}` and the last line is `{"summary":true,"collections":N,"live_bytes":B,"grew":BOOL}`. The program's exit status is unchanged.
+
+**san.leak.4** — With the variable unset the runtime does nothing extra: the collector tests one word. With it set, collections run in single-thread mode, at least every 4 MiB allocated (or half the live bytes, if more), so a run is slower. A program that ends with status 0 after fewer than four collections gets one more collection at exit, when its locals are gone, so the report shows what the globals still hold. A run that traps keeps the collections it has.
+
+```ail tool=leak,FILE expect=leak[san.leak.1] rules=san.leak.1,san.leak.2
+fn main()
+    mut keep := List[List[int]]()
+    mut i := 0
+    while i < 48
+        mut row := List[int]()
+        mut j := 0
+        while j < 131072
+            row.push(j)
+            j += 1
+        keep.push(row)
+        i += 1
+    print(keep.len())
+```
+
+```ail tool=leak,--json,FILE expect="collections":1, rules=san.leak.3,san.leak.4
 fn main()
     print(1)
 ```
@@ -1041,7 +1257,10 @@ has an `impact` member.
 ```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
 ```
 
-```ail skip=bootstrap pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
+```ail pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
+```
+
+```ail pkg=edit_impact_sig tool=edit,--dry-run,--impact,main.ail stdin=edits.json status=2 expect=partial: rules=edit.out.5,api.impact.2,api.impact.5
 ```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
@@ -1077,7 +1296,7 @@ fn adds()
     assert_eq(1 + 1, 3)
 ```
 
-```ail skip=bootstrap pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
+```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
 ```
 ## Record and replay
 **replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
@@ -1144,17 +1363,97 @@ function, or none left) traps with `replay.run.3`, naming the call the
 recording expected and where it was recorded; a recorded result that names
 a type the program doesn't have traps the same way.
 
-```ail skip=bootstrap pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
+```ail pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
 ```
 
-```ail skip=bootstrap pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
+```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
 ```
 
-```ail skip=bootstrap pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
+```ail pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
 ```
 
-```ail skip=bootstrap pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
+```ail pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
 ```
 
-```ail skip=bootstrap pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
+```ail pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
 ```
+
+## Failure bundles
+
+**bundle.write.1** — `ail test FILE --bundle-failure[=DIR]` records the tests as
+`--record` does (`replay.rec.1`) and, for each test that failed, writes
+`DIR/NAME.json` (default `.ail/bundles`; `NAME` keeps letters, digits and `_`,
+other characters become `-`). It writes nothing when every test passes and
+prints `bundle: PATH` on standard error for each file
+([ADR 0910](../decisions/0910-test-bundle-failure.md)).
+**bundle.write.2** — A bundle is JSON lines. The first line is
+`{"ail_bundle":1,"test","program","program_hash","compiler","message","cases","property_seed","input","schedule"}`:
+the test, the program path as given, the FNV-1a hash of its text, the
+`ail --version` text, the failure message, and, for a property test, its case
+count, seed and shrunk input (`test.prop.3`), and the `AIL_SCHEDULE` it ran under
+(`conc.sched.2`). The rest is the recording of `replay.rec.2`: its first line,
+`{"test":NAME}`, and the test's calls.
+**bundle.run.1** — `ail test --bundle PATH` runs the test of the bundle again
+from its recording, as `--replay` does (`replay.run.1`), and reports as `ail test`
+does. The program is the bundle's `program`.
+**bundle.run.2** — When the program's text no longer has the bundle's
+`program_hash`, `--bundle` says so on standard error before it runs; the result
+is the run's own.
+
+```ail pkg=bundle_env tool=test,--bundle-failure=out,t.ail status=1 expect=bundle: rules=bundle.write.1,bundle.write.2
+```
+
+```ail pkg=bundle_env tool=test,--bundle,bad.json status=1 expect=differs rules=bundle.run.1,bundle.run.2
+```
+
+## Verifying a change
+
+**verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
+with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
+(`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
+*failures*. The exit status is 0 when there is no check error and no new
+failure (`verify.run.5`), 1 otherwise, and 2 for a usage error or a program that cannot be compared
+([ADR 0909](../decisions/0909-ail-verify-diff.md)).
+**verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
+(a missing `main` is not an error) and lists the changed declarations
+(`api.impact.1`). A program with errors is not tested.
+**verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
+`ail test FILE --affected` ran: the names that passed and the names that failed.
+**verify.run.4** — *Unverified* lists what no result speaks for: that no test
+ran for the changed declarations, each changed declaration that no affected
+test reaches (when `ail ask --affected --json` gives `reaches`), a partial impact
+(`"partial":true`), each function whose effects changed
+(`api.impact.4`), and each skipped test. *Failures* lists the check errors and
+the failed tests. `--json` prints the same parts as one object with
+`"verify":1`.
+**verify.run.5** — A failure is *new* unless the test also fails when the tree at
+REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
+When REV cannot be unpacked or run, every failed test is new.
+
+```ail tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5
+fn main()
+    print("hi")
+```
+
+## Shrinking a failure bundle
+
+**shrink.run.1** — `ail replay --shrink [--time MS] [-o OUT] BUNDLE` takes a failure
+bundle (`bundle.write.1-2`). A file that is not a bundle, or a bundle whose test does
+not fail when replayed (`bundle.run.1`), is an error (exit 2) and nothing is written
+([ADR 0920](../decisions/0920-replay-shrink.md)).
+**shrink.run.2** — The texts the recorded calls returned (a file read, an
+environment value, a process's output) are cut line by line, largest cuts first. A
+cut stays when `ail test --bundle` still fails with the same `FAIL` line, test name
+and message included, as the unshrunk bundle; otherwise it is undone. Numbers,
+booleans and the order of calls are never changed.
+**shrink.run.3** — The search stops after `--time` milliseconds (default 60000),
+counted from the first cut, and keeps the cuts made so far. The limit is checked
+between tries, so a run can overrun it by the try in progress and the first replay
+that proves the bundle fails.
+**shrink.run.4** — When anything was cut, the smaller bundle is written to OUT
+(default: BUNDLE with `.min` added) and the command prints `shrunk`; when nothing
+could be cut it writes nothing and prints `nothing to cut`. Both exit 0.
+
+```ail tool=replay,--shrink,nosuch.json status=2 expect=shrink.run.1 rules=shrink.run.1,shrink.run.2,shrink.run.3,shrink.run.4
+```
+

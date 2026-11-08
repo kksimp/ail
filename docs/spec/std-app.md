@@ -137,6 +137,51 @@ run and stops them after, in its own block, where their handles live.
 once before the first `update`. `exited` (the host's pipe closed) fails `run`
 with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
+**std.app.15** — `struct Progress` has `done int`, `total int` (`0` when unknown) and `note str`. `progress(source, p) Event` makes an `external` event (`std.app.14`) whose `text` is `progress|done|total|note`; `progress_of(ev) Progress?` reads it back and gives `none` for any other event. *(ADR 0930)*
+
+**std.app.16** — `trait App` has `hover(self) bool` (default `false`). While it is `true` (the `view` line carries `"hover":true`), a host sends `move` (a canvas's `id`, `x`, `y`) at most once per 16 ms with the last position, and `leave` (`id`). A host that can't track the pointer sends neither, so no app may need them. *(ADR 0931)*
+
+**std.app.17** — `Event` has `clicks int`: 1, 2 or 3 for a `click`, `0` for other kinds, from the platform's multi-click timing. *(ADR 0932)*
+
+**std.app.18** — `trait App` has `popup(self) Popup?` (default `none`); `struct Popup` is `id`, `x`, `y` and `items List[str]`. When it differs from the last one sent, `run` sends `{"v":1,"t":"popup","id":I,"x":X,"y":Y,"items":[...]}`; the host shows its native menu there and answers `{"kind":"popup","id":I,"text":LABEL}`, `text` empty if dismissed. A host with no menu answers dismissed. *(ADR 0932)*
+
+**std.app.19** — `Op.Shade(x, y, w, h, color, alpha float)` fills a rectangle with opacity `alpha` (0 to 1, clamped) over what is drawn. A host skips an op it doesn't know. *(ADR 0933)*
+
+**std.app.20** — A host sends `keyup` (a canvas's `id`, `text`, modifiers) when a key is released, and `key` carries `repeat` (auto-repeat) and `code` (the platform key code). A program that does not read them is unaffected; a host may omit both. *(ADR 0956)*
+
+**std.app.21** — `trait App` has `lines(mut self) List[str]` (default empty).
+After each `update`, `run` sends every returned line to the host unchanged and
+the app's next call returns only new ones; it is how an app sends protocol
+lines the tree cannot express, such as `surface` and `present`
+(`std.gfx.6`). A host skips a line it doesn't know. *(ADR 0957)*
+
+**std.app.22** — `trait App` has `pick(self) Picker?` (default `none`); `struct Picker` is `id`, `prompt`, `folders bool` (a folder, else a file) and `start` (the folder to open in, `""` for the host's choice). When it differs from the last one sent, `run` sends `{"v":1,"t":"pick","id":I,"prompt":P,"folders":F,"start":S}`; the host shows its native open dialog and answers `{"kind":"picked","id":I,"text":PATH}`, `text` empty if the user cancelled. A host with no native dialog answers `{"kind":"pick_error","id":I,"text":WHY}` at once, so an app can fall back to a text field. The app clears its `Picker` when it sees either event. *(ADR 0971)*
+
+**std.app.25** — `trait App` has `edge(self) bool` (default `false`). While
+it is `true` (the `view` line carries `"edge":true`), a host shows no title
+bar and lets the app draw up to the window's top edge, keeping its own
+window controls, and `start` and every `resize` carry `inset_left` and
+`inset_top` (floats, points): the room those controls take at the window's
+top-left, `0` when the host draws none there. The app moves the window by
+sending the line `{"v":1,"t":"drag"}` through `lines()` (std.app.21) on a
+mouse-down in its own strip, and `{"v":1,"t":"zoom"}` on a double-click
+there. A host that cannot hide its title bar keeps its decorations and
+reports both insets as `0`, so a program must not depend on edge mode.
+*(ADR 0981)*
+
+**std.app.26** — An app puts text on the system clipboard by sending the
+line `{"v":1,"t":"clipboard","text":T}` through `lines()` (std.app.21);
+`app.clipboard(text)` is that line. The host copies `T` exactly as given
+(UTF-8, no newline conversion). A host that cannot write the clipboard
+ignores the line, as any unknown line, so a program must not depend on it.
+*(ADR 0982)*
+
+**std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
+clipboard's text) when the paste key (Command-V on macOS, Control-V
+elsewhere) is pressed in a canvas, instead of the `key` event for it; a
+host whose clipboard it cannot read sends the `key` event as before, so a
+program must not depend on `paste`. *(ADR 0978)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -183,6 +228,154 @@ fn main()
     print(ev.x)
     print(app.frame(p).starts_with("\{\"v\":1,\"t\":\"view\",\"title\":\"Pad\""))
     print(app.outline(p.view()))
+```
+
+```ail rules=std.app.21
+use std.app
+
+struct Sender
+    queue List[str]
+
+impl app.App for Sender
+    fn update(mut self, ev app.Event)
+        queue.push("\{\"v\":1,\"t\":\"present\"}")
+
+    fn view(self) app.Node
+        app.label("sender")
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Sender(queue: [])
+    s.update(app.event("start"))
+    print(s.lines().len())
+    print(s.lines().len())
+```
+
+```ail rules=std.app.25
+use std.app
+
+## A tab strip that starts right of the window controls and moves the window.
+struct Strip
+    left float
+    queue List[str]
+
+impl app.App for Strip
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            left = ev.inset_left
+        elif ev.kind == "click" and ev.x >= left
+            queue.push(if ev.clicks == 2 then "\{\"v\":1,\"t\":\"zoom\"}" else "\{\"v\":1,\"t\":\"drag\"}")
+
+    fn view(self) app.Node
+        app.canvas("strip", 0.0, 0.0, [app.draw_rect(left, 0.0, 200.0, 40.0, 0x35363a)])
+
+    fn edge(self) bool
+        true
+
+    fn lines(mut self) List[str]
+        sent := queue
+        queue = []
+        sent
+
+fn main()
+    mut s := Strip(left: 0.0, queue: [])
+    mut start := app.event("start")
+    start.inset_left = 78.0
+    start.inset_top = 28.0
+    s.update(start)
+    print(app.frame(s).contains("\"edge\":true"))
+    mut c := app.event("click")
+    c.x = 100.0
+    c.clicks = 1
+    s.update(c)
+    print(s.lines())
+    print(app.outline(s.view()))
+```
+
+```ail rules=std.app.26
+use std.app
+
+## A drawn field whose text Command-C (Control-C elsewhere) copies.
+struct Field
+    text str
+    out List[str]
+
+impl app.App for Field
+    fn update(mut self, ev app.Event)
+        if ev.kind == "key" and ev.meta and ev.text == "c"
+            out.push(app.clipboard(text))
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+    fn lines(mut self) List[str]
+        sent := out
+        out = []
+        sent
+
+fn main()
+    mut f := Field(text: "ail.dev", out: [])
+    mut c := app.key("c")
+    c.meta = true
+    f.update(c)
+    print(f.lines())
+    print(f.lines())
+```
+
+```ail rules=std.app.23
+use std.app
+
+## A one-line drawn field: typed keys add characters, a paste adds its text.
+struct Omnibox
+    text str
+
+impl app.App for Omnibox
+    fn update(mut self, ev app.Event)
+        if ev.kind == "paste"
+            text = "{text}{ev.text}"
+        elif ev.kind == "key" and ev.text.chars().len() == 1
+            text = "{text}{ev.text}"
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+fn main()
+    mut f := Omnibox(text: "")
+    f.update(app.key("a"))
+    mut p := app.event("paste")
+    p.id = "f"
+    p.text = "il.dev"
+    f.update(p)
+    print(f.text)
+```
+
+```ail rules=std.app.20
+use std.app
+
+struct Held
+    keys int
+
+impl app.App for Held
+    fn update(mut self, ev app.Event)
+        if ev.kind == "key"
+            keys += 1
+        elif ev.kind == "keyup"
+            keys -= 1
+
+    fn view(self) app.Node
+        app.label("held {keys}")
+
+fn main()
+    mut h := Held(keys: 0)
+    mut up := app.event("keyup")
+    up.text = "a"
+    screens := app.script(mut h, [app.key("a"), up])
+    print(screens[0])
+    print(screens[1])
 ```
 
 ```ail norun rules=std.app.13
@@ -254,4 +447,77 @@ impl app.App for Quiet
 fn main()
     mut q := Quiet(n: 0)
     app.run(mut q) else return
+```
+
+```ail rules=std.app.22
+use std.app
+
+struct Where
+    path str
+    asking bool
+
+impl app.App for Where
+    fn update(mut self, ev app.Event)
+        if ev.kind == "press" and ev.id == "choose"
+            asking = true
+        if ev.kind == "picked"
+            path = ev.text
+            asking = false
+        if ev.kind == "pick_error"
+            asking = false
+
+    fn view(self) app.Node
+        app.column([app.label("scan {path}"), app.button("choose", "Choose folder")])
+
+    fn pick(self) app.Picker?
+        if asking
+            return app.Picker(id: "folder", prompt: "Folder to scan", folders: true, start: "")
+        none
+
+fn main()
+    mut w := Where(path: "", asking: false)
+    app.script(mut w, [app.press("choose")])
+    print(w.pick() != none)
+    mut done := app.event("picked")
+    done.id = "folder"
+    done.text = "/tmp"
+    app.script(mut w, [done])
+    print("{w.path} {w.pick() != none}")
+```
+
+```ail rules=std.app.15,std.app.16,std.app.17,std.app.18,std.app.19
+use std.app
+
+struct Pad
+    menu app.Popup?
+
+impl app.App for Pad
+    fn update(mut self, ev app.Event)
+        if ev.kind == "click" and ev.text == "right"
+            menu = app.Popup(id: "pad", x: ev.x, y: ev.y, items: ["Reveal", "Trash"])
+        if ev.kind == "popup"
+            menu = none
+
+    fn view(self) app.Node
+        app.canvas("pad", 0.0, 0.0, [app.Op.Shade(x: 0.0, y: 0.0, w: 4.0, h: 4.0, color: 0, alpha: 0.5)])
+
+    fn hover(self) bool
+        true
+
+    fn popup(self) app.Popup?
+        menu
+
+fn main()
+    ev := app.progress("scan", app.Progress(done: 3, total: 10, note: "a|b"))
+    p := app.progress_of(ev) else app.Progress(done: -1, total: -1, note: "")
+    print("{p.done}/{p.total} {p.note}")
+    print(app.progress_of(app.external("scan", "other")) == none)
+    mut pad := Pad(menu: none)
+    print(app.outline(pad.view()))
+    print(app.frame(pad).contains("\"hover\":true"))
+    j := parse_json("\{\"kind\":\"click\",\"id\":\"pad\",\"text\":\"right\",\"clicks\":2}") else Json.Null
+    c := app.event_from_json(j)
+    print(c.clicks)
+    pad.update(c)
+    print(pad.popup() != none)
 ```

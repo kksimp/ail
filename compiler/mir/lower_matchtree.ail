@@ -1,0 +1,169 @@
+## `match` as a binary decision tree (ADR 0890, rule native.match.1). A match
+## over an `int` or an enum's variant index whose arms each test int literals
+## or variants (no guard, no range) picks its arm by comparing against the
+## sorted values, about log2(arms) compares, instead of trying the arms in
+## order. The arm that runs, the order of its effects and the bindings are
+## those of the in-order test, since no two arms test the same value (the
+## first one wins) and a pattern tests only its values.
+
+use ast
+
+## The fewest distinct values for which the tree is built.
+MATCH_TREE_MIN := 5
+
+## The most entries a jump table has (native.match.2): a table holds at least
+## one value in three of its range.
+SWITCH_MAX := 1024
+
+## The values pattern `p` tests, or none for a pattern the tree doesn't take.
+fn Lower.tree_values(mut self, p ast.Pattern, s Val) List[int]?
+    match p
+        Literal(lit, _) =>
+            match lit
+                IntLit(t) =>
+                    n := t.to_int() else return none
+                    return [n]
+                _ => return none
+        Variant(_, name, _, _) =>
+            en := enum_name(s.ty)?
+            k := case_index(en, name)
+            if k < 0
+                return none
+            return [k]
+        Alt(alts, _) =>
+            mut out := List[int]()
+            for a in alts
+                vs := tree_values(a, s)?
+                for v in vs
+                    out.push(v)
+            return out
+        _ => return none
+
+## The block of each arm when the match is built as a tree, with the dispatch
+## already emitted from the current block; an arm that no value reaches has
+## block -1. An empty list when the match isn't a tree: the caller tries the
+## arms in order.
+fn Lower.match_tree(mut self, arms List[ast.Arm], s Val, tag int, en str) List[int]
+    no_tree := List[int]()
+    if opt_off("matchtree") or not (en != "" or s.ty == Ty.Int)
+        return no_tree
+    mut cases := List[int]()
+    mut owner := List[int]()
+    mut dflt := -1
+    for idx in 0..arms.len()
+        if dflt >= 0
+            break
+        arm := arms[idx]
+        if arm.guard != none
+            return no_tree
+        match arm.pat
+            Wildcard(_) => dflt = idx
+            _ =>
+                vs := tree_values(arm.pat, s) else return no_tree
+                for v in vs
+                    if not cases.contains(v)
+                        cases.push(v)
+                        owner.push(idx)
+    if cases.len() < MATCH_TREE_MIN
+        return no_tree
+    keys := cases
+    mut order := List[int]()
+    for k in 0..cases.len()
+        order.push(k)
+    sorted := order.sorted(by: |k| keys[k])
+    mut bodies := [-1 for _ in 0..arms.len()]
+    for k in 0..cases.len()
+        if bodies[owner[k]] < 0
+            bodies[owner[k]] = new_block()
+    mut target := -1
+    if dflt >= 0
+        bodies[dflt] = new_block()
+        target = bodies[dflt]
+    else
+        target = new_block()
+    mut sv := List[int]()
+    mut sb := List[int]()
+    for k in sorted
+        sv.push(cases[k])
+        sb.push(bodies[owner[k]])
+    # A flat enum's variant index is the value itself, typed as the enum: `lt` takes an `int`.
+    key := if en != "" then op("copy", [tag], Ty.Int) else tag
+    if dense(sv)
+        switch_emit(sv, sb, key, target)
+    else
+        tree_emit(sv, sb, 0, sv.len(), key, target)
+    if dflt < 0
+        # Exhaustive (expr.match.2): no value reaches here.
+        seal(target)
+        cur = target
+        finish(unreachable_term())
+    bodies
+
+## Emit the tests for the sorted values `lo..hi`, ending every path in an
+## arm's block or in `target`; the current block is where it starts.
+fn Lower.tree_emit(mut self, sv List[int], sb List[int], lo int, hi int, tag int, target int)
+    n := hi - lo
+    if n <= 3
+        for k in lo..hi
+            last := k == hi - 1
+            nxt := if last then target else new_block()
+            branch(op("eq", [tag, konst(sv[k], Ty.Int)], Ty.Bool), sb[k], [], nxt, [])
+            if not last
+                seal(nxt)
+                cur = nxt
+        return
+    mid := lo + n / 2
+    left := new_block()
+    right := new_block()
+    branch(op("lt", [tag, konst(sv[mid], Ty.Int)], Ty.Bool), left, [], right, [])
+    seal(left)
+    cur = left
+    tree_emit(sv, sb, lo, mid, tag, target)
+    seal(right)
+    cur = right
+    tree_emit(sv, sb, mid, hi, tag, target)
+
+## Whether the sorted values `sv` are dense enough for a jump table
+## (native.match.2): at most `SWITCH_MAX` entries, a third or more of them
+## taken.
+fn dense(sv List[int]) bool
+    if opt_off("switch") or sv.len() == 0
+        return false
+    lo := sv[0]
+    hi := sv[sv.len() - 1]
+    # Far-apart values never make a table; this also keeps `hi - lo` in range.
+    if lo < -1073741824 or hi > 1073741824
+        return false
+    span := hi - lo + 1
+    span <= SWITCH_MAX and span <= 3 * sv.len()
+
+## End the current block with a jump table over the sorted values `sv`
+## (native.match.2): entry `v - lo` goes to the block of value `v`, a gap or
+## any value outside `lo..=hi` to `target`. The index is `tag - lo` wrapped,
+## so one unsigned comparison takes every value outside the range.
+fn Lower.switch_emit(mut self, sv List[int], sb List[int], tag int, target int)
+    lo := sv[0]
+    span := sv[sv.len() - 1] - lo + 1
+    idx := if lo == 0 then tag else op("sub", [tag, konst(lo, Ty.Int)], Ty.Int)
+    mut cases := [target for _ in 0..span]
+    for k in 0..sv.len()
+        cases[sv[k] - lo] = sb[k]
+    from := cur
+    finish(switch_on(idx, cases, target))
+    # `finish` counts an edge per entry; the SSA builder wants each block that
+    # ends here once among its target's predecessors (it gives every edge to
+    # the target the same arguments).
+    mut seen := List[int]()
+    for t in cases
+        if seen.contains(t)
+            continue
+        seen.push(t)
+        mut kept := List[int]()
+        mut had := false
+        for p in preds[t]
+            if p == from and had
+                continue
+            if p == from
+                had = true
+            kept.push(p)
+        preds[t] = kept

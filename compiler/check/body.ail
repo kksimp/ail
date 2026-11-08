@@ -89,6 +89,21 @@ pub fn parallel_rows(p ast.Program) List[ParRow]
     c := checked_fns(p, false, [])
     c.parallel_rows()
 
+## What the lowering runs in parallel: the proven loops and the calls of the
+## runs that fork (conc.par.8, conc.par.15), from one check of the program.
+pub struct ParSites
+    pub loops List[ast.Pos]
+    pub forks List[ForkSite]
+
+pub fn par_sites(p ast.Program) ParSites
+    c := checked_fns(p, false, [])
+    ParSites(loops: c.proven_loops(), forks: c.fork_sites())
+
+## The runs of independent pure calls that could fork (conc.par.15): `ail effects --parallel`.
+pub fn fork_rows(p ast.Program) List[ForkRow]
+    c := checked_fns(p, false, [])
+    c.fork_rows()
+
 ## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
 pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     mut c := checked_fns(p, full, denied)
@@ -1139,6 +1154,15 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             expr_pos(target),
             "`bytes` is immutable, so an element can't be assigned",
             "build a new value: `b = b[..i] + bytes.from_list([x]) + b[i + 1..]`, or edit a `List[u8]` and convert it with `bytes.from_list`",
+        )
+        expr(value, none, true)
+        return
+    if grid_field_target(target)
+        err_help(
+            "type.grid.2",
+            expr_pos(target),
+            "a grid's `rows`, `cols` and `cells` can't be assigned",
+            "assign elements with `g[i, j] = v`, or build a new grid with `Grid.fill` or `Grid.from`",
         )
         expr(value, none, true)
         return

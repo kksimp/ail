@@ -176,7 +176,8 @@ fn TomlParser.key_path(mut self) !List[str]
             parts.push(literal_string()?)
         else
             start := pos
-            while not at_end() and (chars[pos].is_alpha() or chars[pos].is_digit() or chars[pos] == '_' or chars[pos] == '-')
+            while not at_end()
+                and (chars[pos].is_alpha() or chars[pos].is_digit() or chars[pos] == '_' or chars[pos] == '-')
                 pos += 1
             if pos == start
                 return fail("expected a key")
@@ -261,7 +262,8 @@ fn TomlParser.scalar(mut self) !Json
         return Json.Bool(true)
     if word == "false"
         return Json.Bool(false)
-    if word.contains(':') or (word.len() >= 10 and word.char_at(4) == '-' and word.char_at(7) == '-')
+    if word.contains(':')
+        or (word.len() >= 10 and word.char_at(4) == '-' and word.char_at(7) == '-')
         return Json.Str(word)
     clean := word.replace("_", "")
     if clean.starts_with("0x") or clean.starts_with("0o") or clean.starts_with("0b")

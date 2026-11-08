@@ -1,0 +1,16 @@
+## std.gfx.7, std.gfx.9: a frame drawn into the shared surface and read back.
+use std.gfx
+use std.gfx.host
+
+fn main()
+    mut f := gfx.new_frame(4, 3)
+    gfx.clear(mut f, 0x112233)
+    gfx.rect(mut f, 1.0, 1.0, 2.0, 1.0, 0xff0000)
+    gfx.line(mut f, 0.0, 0.0, 3.0, 0.0, 0x00ff00)
+    gfx.rect(mut f, 3.0, 2.0, 5.0, 5.0, 0x0000ff)
+    px := host.pixels(f) else err
+        print(err.why)
+        return
+    print(px.len())
+    for y in 0..3
+        print("{px[y * 4].to_hex()} {px[y * 4 + 1].to_hex()} {px[y * 4 + 2].to_hex()} {px[y * 4 + 3].to_hex()}")

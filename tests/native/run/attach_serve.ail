@@ -1,0 +1,13 @@
+use std.attach.serve
+
+fn main()
+    # attach.wire.1-2: a token is 48 hex digits and differs between calls; the token file is named by its port.
+    a := serve.make_token()
+    b := serve.make_token()
+    assert_eq(a.chars().len(), 48)
+    assert(a != b)
+    for c in a.chars()
+        assert("0123456789abcdef".contains("{c}"))
+    path := serve.token_path("4242")
+    assert(path.ends_with("ail-attach-4242.json"))
+    print("ok")

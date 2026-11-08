@@ -129,6 +129,13 @@ pub fn prelude_text(text str) str
     mut out := List[str]()
     for line in text.lines()
         if m := line.strip_prefix("## @module ")
-            keep = ["json", "jsonderive", "default", "derive", "argsderive"].contains(m.trim())
+            keep = [
+                "json",
+                "jsonderive",
+                "default",
+                "derive",
+                "argsderive",
+                "grid",
+            ].contains(m.trim())
         out.push(if keep then line else "")
     "{out.join("\n")}\n"

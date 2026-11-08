@@ -1,17 +1,22 @@
 # compiler
 entry: main in main.ail
+tests: 6 (`ail test` lists them)
 
-## (root) (63 items)
+## (root) (62 items)
 
-## a64 (74 items)
+## a64 (81 items)
 
-## api (211 items)
+## api (217 items)
 
 ## ast (142 items)
 
+## attachcli (6 items)
+
 ## budget (27 items)
 
-## check (349 items)
+## cheader (30 items)
+
+## check (366 items)
 
 ## codegen (55 items)
 
@@ -29,11 +34,11 @@ entry: main in main.ail
 
 ## fmt (64 items)
 
-## load (102 items)
+## load (103 items)
 
-## mir (488 items)
+## mir (602 items)
 
-## obj (65 items)
+## obj (66 items)
 
 ## pkg (44 items)
 
@@ -43,6 +48,6 @@ entry: main in main.ail
 
 ## watch (4 items)
 
-## x64 (109 items)
+## x64 (115 items)
 
-trimmed to fit 4000 tokens (~219); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~251); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

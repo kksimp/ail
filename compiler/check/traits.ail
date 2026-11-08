@@ -58,14 +58,18 @@ fn Checker.collect_impls(mut self)
                     n := c.slice(1, c.len()).to_int() else 0
                     if c.starts_with("s") then Ty.Struct(n, args) else Ty.Enum(n, args)
         if tr != none and tr == std_hash
-            err_help(
-                "trait.auto.5",
-                imp.pos,
-                "`Hash` can't be implemented: every type whose `==` is automatic is `Hash` already",
-                "remove this `impl`; custom hashing isn't designed yet (OQ-042)",
-            )
-            impl_info.push(ImplInfo(tr: none, target: Ty.Unknown, params: []))
-            continue
+            mut is_struct := false
+            if c := con
+                is_struct = c.starts_with("s")
+            if imp.uses.len() == 0 or imp.methods.len() > 0 or not is_struct or params.len() > 0
+                err_help(
+                    "trait.auto.5",
+                    imp.pos,
+                    "`Hash` can't be implemented by methods: every type whose `==` is automatic is `Hash` already",
+                    "for a struct with its own `fn eq`, write `impl Hash for T` and one indented line `uses a, b` naming the fields to hash (trait.hash.1)",
+                )
+                impl_info.push(ImplInfo(tr: none, target: Ty.Unknown, params: []))
+                continue
         if t := tr
             if c := con
                 mut built_in_type := true
@@ -256,7 +260,7 @@ fn binds_of(params List[int], args List[Ty]) List[Bind]
 fn Checker.hash_cause_of_parts(self, t Ty) str
     n := type_name_of(t) else ""
     if custom_eq(t)
-        return "`{n}` has its own `fn eq`, and custom hashing isn't designed yet (OQ-042)"
+        return "`{n}` has its own `fn eq`; to make it `Hash`, write `impl Hash for {n}` and a line `uses a, b` naming the fields to hash (trait.hash.1)"
     for f in field_types_of(t)
         if not implements(f, std_hash)
             return "`{n}` has a part of type {show(f)}: {hash_cause(f)}"
@@ -334,6 +338,8 @@ fn Checker.check_impls(mut self)
         tr := impl_info[i].tr else continue
         target := impl_info[i].target
         decl := prog.traits[tr]
+        if tr == std_hash
+            check_hash_uses(imp, target)
         binds := [Bind(param: trait_self[tr], ty: target)]
         mut defined := List[str]()
         for m in imp.methods
@@ -373,7 +379,7 @@ fn Checker.check_impls(mut self)
         by_generator := decl.derive != none and (imp.methods.len() == 0 or decl.methods.len() == 0)
         if by_generator
             defined = defined
-        elif built_in and imp.methods.len() == 0
+        elif built_in and imp.methods.len() == 0 and not (tr == std_hash and imp.uses.len() > 0)
             check_derived(i, tr, target)
         else
             missing := [
@@ -448,3 +454,45 @@ fn Checker.check_impls(mut self)
                 tr,
             ) else "define the trait's methods in this `impl` instead of deriving `{trait_name}`"
             err_help("trait.derive.1", imp.pos, text, hint)
+
+## The `uses` line of `impl Hash for T` (trait.hash.1-2): `T` has its own
+## `fn eq`, and every field named is a field of `T` that is `Hash`.
+fn Checker.check_hash_uses(mut self, imp ast.ImplDecl, target Ty)
+    index := match target
+        Struct(n, _) => n
+        _ => -1
+    if index < 0
+        return
+    decl := prog.structs[index]
+    if not custom_eq(target)
+        err_help(
+            "trait.hash.2",
+            imp.pos,
+            "`{decl.name}` has no `fn eq` of its own, so `==` already agrees with its automatic hash",
+            "remove this `impl Hash`; `uses` is for a type whose `impl Eq` defines `fn eq`",
+        )
+        return
+    mut seen := List[str]()
+    for u in imp.uses
+        if seen.contains(u.name)
+            err("trait.hash.2", u.pos, "field `{u.name}` is listed twice in `uses`")
+            continue
+        seen.push(u.name)
+        mut found := -1
+        for k in 0..decl.fields.len()
+            if decl.fields[k].name == u.name
+                found = k
+        if found < 0
+            err_help(
+                "trait.hash.2",
+                u.pos,
+                "`{decl.name}` has no field `{u.name}`",
+                "name a field of `{decl.name}` in `uses`",
+            )
+        elif not implements(field_types[index][found], std_hash)
+            err_help(
+                "trait.hash.2",
+                u.pos,
+                "field `{u.name}` isn't `Hash`",
+                hash_cause(field_types[index][found]),
+            )

@@ -47,3 +47,12 @@ newline-delimited JSON, so a Windows host is a renderer only; apps don't change.
 The host no longer looks like Windows 98. It reads the app's first canvas fill as the window colour and uses it for the form, native controls and the title bar (dark or light, with the caption and border colour, via `DwmSetWindowAttribute`; ignored before Windows 10 1809). Text fields are borderless pills with an accent ring on focus, buttons are flat, and the UI face stays Segoe UI (Segoe UI Variable measures and draws bold at different widths in GDI+). Slanted strokes are anti-aliased while rectangles stay pixel-exact. A canvas that fills the window removes the 8 px frame. Rejected: a host theme option in the protocol (apps already express the look through their canvas colours).
 
 A box whose canvases are painted in one colour is a surface of that colour: its fields, buttons and labels take their colours from it, not from the window's (a toolbar lighter than the tab strip above it).
+
+## Amendment 2026-11-07: the same frame rule on every host
+
+The Mac (SwiftUI) and Linux (GTK) hosts now follow the Windows rule above: a
+tree with a canvas that fills the window gets no 8 point frame and no gaps
+between rows, so an app that draws its own chrome (Garlic's Chromium-style
+tab strip and toolbar) reaches the window's edges on all three. The Mac
+host also makes a canvas named by `focus` (std.app.4) the first responder,
+so keys reach a program that draws its own address field before any click.

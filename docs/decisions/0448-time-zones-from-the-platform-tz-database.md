@@ -1,6 +1,6 @@
 # 0448. Time zones: UTC, fixed offsets and the platform tz database through `std.tz`
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0924](0924-ship-the-tz-database.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 17 — Standard library

@@ -41,9 +41,36 @@ pub fn of_cells(
         x := r.col.to_float()
         y := r.row.to_float()
         if r.bg != page
-            items.push(screen.item(2000000 + hash(r.row, r.col), "box", "", r.bg, x, y, n.to_float(), 1.0))
+            items.push(screen.item(
+                2000000 + hash(r.row, r.col),
+                "box",
+                "",
+                r.bg,
+                x,
+                y,
+                n.to_float(),
+                1.0,
+            ))
         if r.text.trim() != ""
-            items.push(screen.item(3000000 + hash(r.row, r.col), "text", r.text, r.fg, x, y, n.to_float(), 1.0))
+            items.push(screen.item(
+                3000000 + hash(r.row, r.col),
+                "text",
+                r.text,
+                r.fg,
+                x,
+                y,
+                n.to_float(),
+                1.0,
+            ))
     if cursor_col >= 0 and cursor_row >= 0 and cursor_col < cols and cursor_row < rows
-        items.push(screen.item(8000000, "caret", "", 0x000000, cursor_col.to_float(), cursor_row.to_float(), 1.0, 1.0))
+        items.push(screen.item(
+            8000000,
+            "caret",
+            "",
+            0x000000,
+            cursor_col.to_float(),
+            cursor_row.to_float(),
+            1.0,
+            1.0,
+        ))
     screen.Screen(w: cols.to_float(), h: rows.to_float(), items: items)

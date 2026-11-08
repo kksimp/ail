@@ -1,0 +1,40 @@
+struct Plain
+    x int
+
+impl Hash for Plain
+    uses x
+
+struct Own
+    a int
+    b float
+
+impl Eq for Own
+    fn eq(self, other Self) bool
+        self.a == other.a
+
+impl Hash for Own
+    uses a, nope
+
+struct Twice
+    a int
+
+impl Eq for Twice
+    fn eq(self, other Self) bool
+        self.a == other.a
+
+impl Hash for Twice
+    uses a, a
+
+struct Flt
+    a int
+    f float
+
+impl Eq for Flt
+    fn eq(self, other Self) bool
+        self.f == other.f
+
+impl Hash for Flt
+    uses f
+
+fn main()
+    print(1)

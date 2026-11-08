@@ -217,7 +217,8 @@ fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
         want = "refs/tags/{source.pin}"
     if c := locked
         want = c
-    found := run_git(["-C", tmp, "rev-parse", "--verify", "--quiet", "{want}^\{commit}"]) else err
+    # `rev-list -n 1` peels a tag to its commit with no `^\{commit}`, which the MSYS `env` mangles on Windows.
+    found := run_git(["-C", tmp, "rev-list", "-n", "1", want, "--"]) else err
         return failed("can't run `git` for dependency `{name}`: {err}", "install `git`")
     if found.status != 0
         mut what := "{source.kind} `{source.pin}`"

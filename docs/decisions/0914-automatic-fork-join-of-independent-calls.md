@@ -1,10 +1,11 @@
 # 0914. Run independent calls in a straight-line block as a fork-join, when each is worth it
 
-- **Status:** Proposed
+- **Status:** Accepted (stage (a) built; stages (b) and (c) follow)
 - **Date:** 2026-10-26
-- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25
+- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25; the plan approved by the integrator 2026-10-26 under ADR 0076 on these conditions: results and traps equal the sequential run; `AIL_PARALLEL=0` and `--deterministic` run the plain sequential clone; the stage-2 size, the self-build time and a fib/tree bench are reported against main
+- **Scope amended by:** [ADR 0938](0938-auto-parallel-push-builder-loops.md) (push-builder loops, conc.par.16)
 - **Topic:** 11 — Concurrency; 25 — Optimization strategy
-- **Spec rules:** conc.par.1 (result and trap identical to sequential), conc.par.14 (new, below)
+- **Spec rules:** conc.par.1 (result and trap identical to sequential), conc.par.15 (new, below)
 - **Builds on:** [ADR 0163](0163-inferred-effect-sets.md), [ADR 0236](0236-automatic-parallel-loops.md), [ADR 0238](0238-parallel-runtime-model.md), [ADR 0599](0599-native-threads-and-task-pool.md), [ADR 0601](0601-native-par-for.md), [ADR 0911](0911-default-automatic-parallel-loops.md)
 
 ## Context
@@ -27,7 +28,7 @@ signatures: the calls share no `mut` argument and neither has `io`, `unsafe`,
 2. **Lowering.** Calls 2..n become pooled tasks (ADR 0599); call 1 runs on the
    calling thread, which then waits for the rest (work-stealing helps while it
    waits). Results arrive in the order of the source.
-3. **Cost model (conc.par.14).** A call is worth forking only when its callee
+3. **Cost model (conc.par.15).** A call is worth forking only when its callee
    is *heavy*: it contains a loop, or is recursive, or calls a heavy function.
    A recursive call forks only above a depth cut set by a depth argument the
    lowering adds (a hidden counter, forked while below `log2(workers)+2`), so
@@ -42,14 +43,30 @@ signatures: the calls share no `mut` argument and neither has `io`, `unsafe`,
    groups; (b) lowering behind the hidden depth counter; (c) benchmark on
    `fib` and merge sort; ship (b) only if (c) beats sequential on 4 cores.
 
+7. **Stage (b) as built: a live-task cap, not a depth clone.** The calls after
+   the first become `spawn`-style tasks only when `rt.fork_ok` says fewer than
+   twice as many tasks as workers are alive; otherwise the run executes in
+   order. This replaces the hidden depth counter and second clone of point 3:
+   it needs no extra function copy and no hidden parameter, and the cap bounds
+   task creation the same way. Measured on fib(35): checking for room in every
+   recursive call cost 147 ms against 50 ms sequential, so a self-recursive
+   function also gets a `.seq` copy that calls itself and never checks. Only the
+   shallow spine forks; in-order, rerun and task calls use the copy (fib(35):
+   46 ms on 1 core, 19 ms on 3, 50 ms sequential). The task graph is not fixed from run to run,
+   but results and traps are (point 4). Arguments may be a name, a literal or
+   `name +- k`, whose overflow is checked first (a failed check runs in order),
+   so evaluating them early cannot change which trap fires. Results of type
+   `int`, `float` or `bool` only; anything else runs in order.
+
 ## Rejected alternatives
 
 - **Fork every pure call:** task cost (microseconds) dwarfs most calls.
 - **A `fork` keyword only:** that is `spawn` plus `wait`, which exists.
 - **Speculative execution of impure calls:** results would not be
   bit-identical on traps and effects.
-- **Dynamic cutoff by queue length only:** non-deterministic task graphs
-  make profiles and tests harder to read; a static depth cut is stable.
+- **A static depth cut with a cloned function (the first plan):** doubles the
+  code of every recursive candidate and adds a hidden parameter. Replaced by
+  the live-task cap of point 7 because the cap is simpler and bounds tasks as well.
 
 ## Consequences
 

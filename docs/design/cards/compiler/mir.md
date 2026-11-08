@@ -13,10 +13,12 @@ pub fn mir.fold(mir.Func) mir.Func
 pub fn mir.fold_in(mut mir.Func) [mutates]
 pub fn mir.rpo(mir.Func) List[int]
 pub fn mir.forward_loads(mir.Func) mir.Func
+pub fn mir.hoist_headers(mir.Func) mir.Func [env]
 pub fn mir.inline_module(mut mir.Module) [env mutates]
 pub fn mir.inline_call(mut mir.Func, int, int, mir.Func, mut List[mir.Site]) [mutates]
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub fn mir.merge_blocks_in(mut mir.Func) [mutates]
+pub fn mir.interchange(mir.Func) mir.Func [env]
 pub struct mir.Def
 pub fn mir.defs_of(mir.Func) List[mir.Def]
 pub fn mir.inst_of(mir.Func, List[mir.Def], int) mir.Inst?
@@ -43,6 +45,7 @@ pub mir.STD_AIL := ...
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
 pub fn mir.prelude_text(str) str
+pub struct mir.Probe
 pub struct mir.TaskState
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(str) bool
@@ -59,6 +62,7 @@ pub fn mir.inst(int, str, List[int]) mir.Inst
 pub struct mir.Term
 pub fn mir.jump_to(int, List[int]) mir.Term
 pub fn mir.branch_on(int, int, int) mir.Term
+pub fn mir.switch_on(int, List[int], int) mir.Term
 pub fn mir.return_of(int) mir.Term
 pub fn mir.unreachable_term() mir.Term
 pub struct mir.Block
@@ -73,21 +77,32 @@ pub fn mir.call_col(int) int
 pub fn mir.mark_nonneg(mir.Func) mir.Func
 pub fn mir.rewrite_nonneg(mir.Func) mir.Func
 pub fn mir.unroll_self(mut mir.Func, mut List[mir.Site]) bool [env mutates]
+pub fn mir.unroll_self_upto(mut mir.Func, mut List[mir.Site], int) bool [env mutates]
 pub mir.PRELUDE_EMBED := ...
 pub fn mir.pure_calls(mut mir.Module) [mutates]
 pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
+pub mir.DATA := 1048576
 pub struct mir.Proven
-pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool], Map[int, int]) mir.Proven [env]
 pub fn mir.mark_recursion(mut mir.Module) [mutates]
 pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.simplify_in(mut mir.Func) [mutates]
+pub fn mir.sret_convert(mut mir.Module) [mutates]
+pub fn mir.sroa_in(mut mir.Func) bool [mutates]
+pub mir.STACK_MAX_BYTES := 128
+pub mir.STACK_MAX_WORDS := 24
+pub fn mir.st_is_struct(mir.Ty) bool
+pub fn mir.st_call_borrows(Map[str, List[bool]], str, int) bool
+pub fn mir.borrow_summaries(mir.Module) Map[str, List[bool]]
+pub fn mir.stackify(mut mir.Module) [mutates]
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
 pub fn mir.func_text(mir.Func) str
+pub fn mir.vec_loops(mir.Func) mir.Func [env]
 pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1368); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1638); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

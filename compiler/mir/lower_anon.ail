@@ -76,6 +76,6 @@ fn Lower.any_text_ok(mut self, t str) bool
     if impls.len() == 0
         return false
     for s in impls
-        if not text_ok(Ty.Struct(s))
+        if not text_ok(impl_ty(s))
             return false
     true

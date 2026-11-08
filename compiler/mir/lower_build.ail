@@ -1,0 +1,114 @@
+## Push-builder loops on the pool (conc.par.16, ADR 0938): a loop whose body
+## pushes exactly one element per iteration to an outer list is the
+## comprehension `[e for x in xs]` written with `push`. Each chunk pushes into
+## a list of its own; after every chunk ends without a trap, the lists are
+## appended to the outer one in chunk order, so the list is the sequential one
+## (conc.par.1). A trap leaves the outer list untouched and the loop runs again
+## in order (conc.par.11).
+use ast
+
+## Word of a chunk's task-record arguments that holds its list for builder
+## `k`: after the environment, `lo`, `hi` and three accumulators (task.ail).
+BUILD_WORD := 12
+MAX_BUILDS := 4
+
+## The receiver of a `xs.push(e)` statement, when it is a name.
+@allow("expr.match.3") fn push_target(s ast.Stmt) str?
+    match s
+        Eval(e) =>
+            match e
+                Method(recv, name, _, args) =>
+                    if name != "push" or args.len() != 1 or args[0].mutable
+                        return none
+                    match recv
+                        Name(n, _) => n
+                        _ => none
+                _ => none
+        _ => none
+
+## A `continue` outside the loops nested in `body`: some iteration may skip its push.
+@allow("expr.match.3") fn skips_push(body List[ast.Stmt]) bool
+    for s in body
+        match s
+            Continue => return true
+            Eval(e) =>
+                match e
+                    If(branches, els, _, _) =>
+                        for b in branches
+                            if skips_push(b.body)
+                                return true
+                        if body2 := els
+                            if skips_push(body2)
+                                return true
+                    _ => continue
+            _ => continue
+    false
+
+## The outer lists the body builds (conc.par.16): each is named once in the
+## body, by a `push` statement at its top, and no `continue` can skip it.
+fn Lower.par_builds(mut self, var str, body List[ast.Stmt], sc ast.ParScan) List[Cap]
+    mut out := List[Cap]()
+    if skips_push(body)
+        return out
+    mut seen := Map[str, int]()
+    for s in body
+        if n := push_target(s)
+            seen[n] = (seen.get(n) else 0) + 1
+    for n in seen.keys().sorted()
+        if seen[n] != 1 or n == var or sc.decls.contains(n) or out.len() == MAX_BUILDS
+            continue
+        if (sc.reads.get(n) else 0) != 1 or sc.adds.contains(n) or sc.other.contains(n)
+            continue
+        key := lookup(n) else continue
+        ty := var_ty[key]
+        e := ty.elem() else continue
+        if ty == Ty.Bytes or is_uniq(e)
+            continue
+        out.push(Cap(name: n, ty: ty))
+    out
+
+## A loop the compiler chose that only pushes cheap values (`xs.push(0)`): the
+## chunks' lists would be copied again by the gather, so it runs in order,
+## where the push writes in place (conc.par.14, conc.par.16).
+fn cheap_build(p ParSite) bool
+    p.builds.len() > 0 and p.work < 16
+
+fn has_build(builds List[Cap], n str) bool
+    for b in builds
+        if b.name == n
+            return true
+    false
+
+## In a chunk: each built list starts empty (`push` sizes it, native.bce.6).
+fn Lower.chunk_builds_begin(mut self, p ParSite)
+    for b in p.builds
+        declare(b.name, b.ty, call("rt.list_new", [konst(0, Ty.Int)], b.ty))
+
+## At the end of a chunk: its lists go into its task record.
+fn Lower.chunk_builds_end(mut self, rec int, p ParSite)
+    for k in 0..p.builds.len()
+        key := lookup(p.builds[k].name) else continue
+        at := op("add", [rec, konst(T_ARGS + 8 * (BUILD_WORD + k), Ty.Int)], Ty.Int)
+        prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
+
+## After every chunk ran: append the chunks' lists to the outer lists, in
+## chunk order. The element types are the ones the loop in order found, so
+## the in-order loop is lowered first (`lower_par_for`).
+fn Lower.gather_builds(mut self, pi int, grp int)
+    mut p := tk.pars[pi]
+    mut found := List[Cap]()
+    for k in 0..p.builds.len()
+        b := p.builds[k]
+        key := lookup(b.name) else
+            found.push(b)
+            continue
+        t := var_ty[key]
+        found.push(Cap(name: b.name, ty: t))
+        e := t.elem() else continue
+        call(
+            "rt.par_gather",
+            [grp, konst(BUILD_WORD + k, Ty.Int), read_var(key, cur), konst(elem_bytes(e), Ty.Int)],
+            Ty.Unit,
+        )
+    p.builds = found
+    tk.pars[pi] = p

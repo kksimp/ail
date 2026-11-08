@@ -77,7 +77,14 @@ fn Lower.declare_generic_fn(mut self, f ast.FnDecl, pre str) bool
             gen.fns[fn_key(f, pre)] = GenFn(decl: f, file: file)
             return true
         if f.generics.len() > 0
-            problem(f.pos, "`{o.name}.{f.name}`: generic methods aren't in the native subset yet")
+            if ["int", "float", "bool", "str", "List"].contains(o.name)
+                problem(
+                    f.pos,
+                    "`{o.name}.{f.name}`: generic methods aren't in the native subset yet",
+                )
+                return true
+            # A generic method of a plain struct or enum: an instance per call's type arguments (gen.method.3).
+            gen.fns[fn_key(f, pre)] = GenFn(decl: f, file: file)
             return true
         if o.name == "List" and o.params != none
             # `impl Trait for List[T]`: an instance per element type.
@@ -549,6 +556,42 @@ fn Lower.generic_method_call(mut self, key str, recv Val, args List[ast.Arg], po
     cells_back(cells)
     res
 
+## `r.m(...)` where `m` is a generic method of the plain struct or enum `key` names
+## (`Box.twice[T]`): bind its type parameters from the arguments (gen.method.3)
+## and call the instance for those types.
+fn Lower.owner_method_call(mut self, key str, recv Val, args List[ast.Arg], pos ast.Pos) Val?
+    gf := gen.fns[key]
+    f := gf.decl
+    m := f.name
+    owner := key.slice(0, key.len() - m.len() - 1)
+    mnames := generic_names(f.generics)
+    if args.len() != f.params.len()
+        return unsupported(
+            pos,
+            "calling `{key}` with {args.len()} arguments instead of {f.params.len()}",
+        )
+    mut binds := Map[str, Ty]()
+    mut vs := List[Val]()
+    for k in 0..args.len()
+        a := args[k]
+        if a.label != none
+            return unsupported(pos, "calling `{key}` with a labelled argument")
+        pt := f.params[k].ty
+        v := lower_value(a.value, decl_type(pt, binds, mnames, gf.file))?
+        unify(pt, v.ty, mnames, mut binds)
+        vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
+    check_mut_overlap(args, pos)
+    if not all_bound(mnames, binds, m, pos)
+        return none
+    full := "{key}[{[binds[n].name() for n in mnames].join(", ")}]"
+    sig := instance(full, f, binds, owner, gf.file)?
+    mut cells := List[Cell]()
+    mut ids := [recv.id]
+    ids.extend(generic_arg_ids(args, vs, sig.params, 1, mut cells))
+    res := Val(id: user_call(full, ids, sig.ret, pos, full), ty: sig.ret)
+    cells_back(cells)
+    res
+
 ## `G(...)` or `G[T](...)` of a generic struct: bind its type parameters
 ## from the written types, the expected type or the fields' values.
 fn Lower.generic_struct(
@@ -567,16 +610,14 @@ fn Lower.generic_struct(
         return unsupported(pos, "`{s.name}(...)` without every field")
     mut at := List[int]()
     mut vs := List[Val]()
+    ats := arg_fields([f.name for f in s.fields], args)
     for k in 0..args.len()
         a := args[k]
-        mut j := k
-        if l := a.label
-            j = -1
-            for i in 0..s.fields.len()
-                if s.fields[i].name == l.name
-                    j = i
-            if j < 0
+        j := ats[k]
+        if j < 0
+            if l := a.label
                 return unsupported(l.pos, "field `{l.name}` of `{s.name}`")
+            return unsupported(expr_pos(a.value), "too many arguments for `{s.name}(...)`")
         ft := s.fields[j].ty
         v := lower_value(a.value, decl_type(ft, binds, gt.params, gt.file))?
         unify(ft, v.ty, gt.params, mut binds)
