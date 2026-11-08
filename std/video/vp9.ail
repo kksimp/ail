@@ -3025,7 +3025,7 @@ fn Decoder.build_mask(mut self, mi_row int, mi_col int, bw int, bh int)
         return
     sb := (mi_row.shr(3) * sb_cols + mi_col.shr(3))
     y64 := sb * 64
-    u16 := sb * 16
+    uv16 := sb * 16
     r0 := mi_row.bit_and(7)
     c0 := mi_col.bit_and(7)
     for i in 0..bh
@@ -3047,9 +3047,9 @@ fn Decoder.build_mask(mut self, mi_row int, mi_col int, bw int, bh int)
     uvh := n8h.shr(1).max(1)
     if build_uv
         for j in 0..uvw
-            lf_auv[u16 + ur * 4 + uc + j] = kuv
+            lf_auv[uv16 + ur * 4 + uc + j] = kuv
         for i in 0..uvh
-            lf_luv[u16 + (ur + i) * 4 + uc] = kuv
+            lf_luv[uv16 + (ur + i) * 4 + uc] = kuv
     if m_skip == 1 and m_ref0 > 0
         return
     step := [1, 1, 2, 4][txy]
@@ -3066,11 +3066,11 @@ fn Decoder.build_mask(mut self, mi_row int, mi_col int, bw int, bh int)
         for i in 0..uvh
             for j in 0..uvw
                 if i % ustep == 0
-                    lf_auv[u16 + (ur + i) * 4 + uc + j] = kuv
+                    lf_auv[uv16 + (ur + i) * 4 + uc + j] = kuv
                 if j % ustep == 0
-                    lf_luv[u16 + (ur + i) * 4 + uc + j] = kuv
+                    lf_luv[uv16 + (ur + i) * 4 + uc + j] = kuv
                 if txuv == 0
-                    lf_iuv[u16 + (ur + i) * 4 + uc + j] = 1
+                    lf_iuv[uv16 + (ur + i) * 4 + uc + j] = 1
 
 ## Filters the frame, one superblock at a time in raster order: Y, then U
 ## and V, each its vertical edges before its horizontal ones.
