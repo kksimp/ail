@@ -226,7 +226,13 @@ pub fn text_line(f gfx.Frame) str
     mut items := List[str]()
     for c in f.cmds
         match c
-            Text(x, y, t, size, color) => items.push("\{\"x\":{x},\"y\":{y},\"s\":{Json.Str(t).to_text()},\"size\":{size},\"color\":{color}}")
+            Text(
+                x,
+                y,
+                t,
+                size,
+                color,
+            ) => items.push("\{\"x\":{x},\"y\":{y},\"s\":{Json.Str(t).to_text()},\"size\":{size},\"color\":{color}}")
             _ => skip()
     "\{\"v\":1,\"t\":\"text\",\"id\":\"{CANVAS}\",\"items\":[{items.join(",")}]}"
 
