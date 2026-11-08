@@ -1,0 +1,10 @@
+## std.gfx.7: the line that carries a frame's text to the host.
+use std.gfx
+use std.gfx.host
+
+fn main()
+    mut f := gfx.new_frame(40, 20)
+    gfx.text(mut f, 2.0, 3.0, "hi", 12.0, 0xff0000)
+    gfx.rect(mut f, 0.0, 0.0, 1.0, 1.0, 0)
+    print(host.text_line(f))
+    print(host.text_line(gfx.new_frame(4, 4)))

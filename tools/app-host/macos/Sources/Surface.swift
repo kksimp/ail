@@ -54,8 +54,12 @@ enum Surfaces {
     /// `{"t":"text","id":I,"items":[{"x","y","s","size","color"}]}`: replaces the surface's text.
     static func setText(_ obj: [String: Any]) {
         let id = str(obj, "id")
-        texts[id] = obj["items"] as? [[String: Any]] ?? []
-        DispatchQueue.main.async { CanvasView.registry[id]?.needsDisplay = true }
+        let items = obj["items"] as? [[String: Any]] ?? []
+        // The reader thread parses; the dictionary is only touched on the main thread, where it is drawn.
+        DispatchQueue.main.async {
+            texts[id] = items
+            CanvasView.registry[id]?.needsDisplay = true
+        }
     }
 
     /// `{"t":"surface","id":I,"w":W,"h":H,"stride":S,"count":N,"path":P}` (std.gfx.8): map the file.
