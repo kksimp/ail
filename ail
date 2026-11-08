@@ -334,6 +334,7 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"
     fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
+    if [ "$1" = header ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" header "$@"; fi
     if [ "$1" = test ] && [ -n "$has_budget" ]; then
         # `ail test --budget [N] [--from K] [--json] FILE`: the native runner under the budget (budget.out.3).
         bopts=(); copts=(); prev=
