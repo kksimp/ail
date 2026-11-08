@@ -1,0 +1,28 @@
+## trait.method.7: a method is only reached through a call, so inside a method
+## a bare `pick` that is a field of the receiver is the field, even when a trait
+## default method of the same name exists; `pick()` is still the method.
+use std.app
+
+struct Pad
+    pick int
+
+impl app.App for Pad
+    fn update(mut self, ev app.Event)
+        pick += 1
+
+    fn view(self) app.Node
+        app.canvas("pad", 0.0, 0.0, [])
+
+    fn total(self) int
+        pick + 10
+
+    fn chosen(self) bool
+        pick() == none
+
+fn main()
+    mut p := Pad(pick: 4)
+    print(p.total())
+    j := parse_json("\{\"kind\":\"x\",\"id\":\"\",\"text\":\"\"}") else Json.Null
+    p.update(app.event_from_json(j))
+    print(p.pick)
+    print(p.chosen())
