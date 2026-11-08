@@ -156,37 +156,222 @@ BAND4 := [0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5]
 SCAN_AT := [0, 48, 240, 1008]
 COUNTER_TO_CTX := [2, 3, 4, 1, 3, 9, 0, 9, 9, 5, 5, 9, 5, 9, 9, 9, 9, 9, 6]
 MODE_2_COUNTER := [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 0, 0, 3, 1]
+
 # mv_ref_blocks: 8 (row, col) candidates for each block size, rows first.
 MV_REF_ROW := [
-    -1, 0, -1, -2, 0, -2, -1, -2,
-    -1, 0, -1, -2, 0, -2, -1, -2,
-    -1, 0, -1, -2, 0, -2, -1, -2,
-    -1, 0, -1, -2, 0, -2, -1, -2,
-    0, -1, 1, -1, 0, -2, -2, -1,
-    -1, 0, -1, -1, -2, 0, -1, -2,
-    -1, 0, -1, 1, -1, -3, 0, -3,
-    0, -1, 2, -1, -1, 0, -3, -3,
-    -1, 0, -1, -1, 1, -3, 0, -3,
-    -1, 1, -1, 2, -1, -3, 0, -3,
-    0, -1, 4, -1, -1, 0, -3, 2,
-    -1, 0, -1, 2, -1, -3, 0, -1,
-    -1, 3, -1, 4, -1, -1, 0, -1,
+    -1,
+    0,
+    -1,
+    -2,
+    0,
+    -2,
+    -1,
+    -2,
+    -1,
+    0,
+    -1,
+    -2,
+    0,
+    -2,
+    -1,
+    -2,
+    -1,
+    0,
+    -1,
+    -2,
+    0,
+    -2,
+    -1,
+    -2,
+    -1,
+    0,
+    -1,
+    -2,
+    0,
+    -2,
+    -1,
+    -2,
+    0,
+    -1,
+    1,
+    -1,
+    0,
+    -2,
+    -2,
+    -1,
+    -1,
+    0,
+    -1,
+    -1,
+    -2,
+    0,
+    -1,
+    -2,
+    -1,
+    0,
+    -1,
+    1,
+    -1,
+    -3,
+    0,
+    -3,
+    0,
+    -1,
+    2,
+    -1,
+    -1,
+    0,
+    -3,
+    -3,
+    -1,
+    0,
+    -1,
+    -1,
+    1,
+    -3,
+    0,
+    -3,
+    -1,
+    1,
+    -1,
+    2,
+    -1,
+    -3,
+    0,
+    -3,
+    0,
+    -1,
+    4,
+    -1,
+    -1,
+    0,
+    -3,
+    2,
+    -1,
+    0,
+    -1,
+    2,
+    -1,
+    -3,
+    0,
+    -1,
+    -1,
+    3,
+    -1,
+    4,
+    -1,
+    -1,
+    0,
+    -1,
 ]
+
 MV_REF_COL := [
-    0, -1, -1, 0, -2, -1, -2, -2,
-    0, -1, -1, 0, -2, -1, -2, -2,
-    0, -1, -1, 0, -2, -1, -2, -2,
-    0, -1, -1, 0, -2, -1, -2, -2,
-    -1, 0, -1, -1, -2, 0, -1, -2,
-    0, -1, 1, -1, 0, -2, -2, -1,
-    0, -1, 1, -1, -1, 0, -3, -3,
-    -1, 0, -1, -1, 1, -3, 0, -3,
-    0, -1, 2, -1, -1, 0, -3, -3,
-    1, -1, 2, -1, -1, 0, -3, -3,
-    -1, 0, -1, 2, -1, -3, 0, -1,
-    0, -1, 4, -1, -1, 0, -3, 2,
-    3, -1, 4, -1, -1, 0, -1, 6,
+    0,
+    -1,
+    -1,
+    0,
+    -2,
+    -1,
+    -2,
+    -2,
+    0,
+    -1,
+    -1,
+    0,
+    -2,
+    -1,
+    -2,
+    -2,
+    0,
+    -1,
+    -1,
+    0,
+    -2,
+    -1,
+    -2,
+    -2,
+    0,
+    -1,
+    -1,
+    0,
+    -2,
+    -1,
+    -2,
+    -2,
+    -1,
+    0,
+    -1,
+    -1,
+    -2,
+    0,
+    -1,
+    -2,
+    0,
+    -1,
+    1,
+    -1,
+    0,
+    -2,
+    -2,
+    -1,
+    0,
+    -1,
+    1,
+    -1,
+    -1,
+    0,
+    -3,
+    -3,
+    -1,
+    0,
+    -1,
+    -1,
+    1,
+    -3,
+    0,
+    -3,
+    0,
+    -1,
+    2,
+    -1,
+    -1,
+    0,
+    -3,
+    -3,
+    1,
+    -1,
+    2,
+    -1,
+    -1,
+    0,
+    -3,
+    -3,
+    -1,
+    0,
+    -1,
+    2,
+    -1,
+    -3,
+    0,
+    -1,
+    0,
+    -1,
+    4,
+    -1,
+    -1,
+    0,
+    -3,
+    2,
+    3,
+    -1,
+    4,
+    -1,
+    -1,
+    0,
+    -1,
+    6,
 ]
+
 ## The default frame context in the FC_ layout: coefficient, mode and motion vector probabilities (libvpx vp9_entropy.c, vp9_entropymode.c, vp9_entropymv.c).
 fn hex_fc() str
     [
@@ -828,19 +1013,261 @@ fn inv_recenter(v int, m int) int
     m + v.shr(1)
 
 INV_MAP := [
-    7, 20, 33, 46, 59, 72, 85, 98, 111, 124, 137, 150, 163, 176, 189, 202, 215, 228, 241, 254,
-    1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27,
-    28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52,
-    53, 54, 55, 56, 57, 58, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 73, 74, 75, 76, 77,
-    78, 79, 80, 81, 82, 83, 84, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 99, 100, 101,
-    102, 103, 104, 105, 106, 107, 108, 109, 110, 112, 113, 114, 115, 116, 117, 118, 119, 120,
-    121, 122, 123, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 138, 139, 140,
-    141, 142, 143, 144, 145, 146, 147, 148, 149, 151, 152, 153, 154, 155, 156, 157, 158, 159,
-    160, 161, 162, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 177, 178, 179,
-    180, 181, 182, 183, 184, 185, 186, 187, 188, 190, 191, 192, 193, 194, 195, 196, 197, 198,
-    199, 200, 201, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 216, 217, 218,
-    219, 220, 221, 222, 223, 224, 225, 226, 227, 229, 230, 231, 232, 233, 234, 235, 236, 237,
-    238, 239, 240, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 253,
+    7,
+    20,
+    33,
+    46,
+    59,
+    72,
+    85,
+    98,
+    111,
+    124,
+    137,
+    150,
+    163,
+    176,
+    189,
+    202,
+    215,
+    228,
+    241,
+    254,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    149,
+    151,
+    152,
+    153,
+    154,
+    155,
+    156,
+    157,
+    158,
+    159,
+    160,
+    161,
+    162,
+    164,
+    165,
+    166,
+    167,
+    168,
+    169,
+    170,
+    171,
+    172,
+    173,
+    174,
+    175,
+    177,
+    178,
+    179,
+    180,
+    181,
+    182,
+    183,
+    184,
+    185,
+    186,
+    187,
+    188,
+    190,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200,
+    201,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209,
+    210,
+    211,
+    212,
+    213,
+    214,
+    216,
+    217,
+    218,
+    219,
+    220,
+    221,
+    222,
+    223,
+    224,
+    225,
+    226,
+    227,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236,
+    237,
+    238,
+    239,
+    240,
+    242,
+    243,
+    244,
+    245,
+    246,
+    247,
+    248,
+    249,
+    250,
+    251,
+    252,
+    253,
+    253,
 ]
 
 ## A differential update of probability `i` of the frame context (VP9 spec 6.3.5).
@@ -1179,8 +1606,12 @@ fn Decoder.decode_frame(mut self, pos int, size int)
     if p + header_size > end
         fail = "truncated frame"
         return
-    use_prev_mvs = error_res == 0 and width == last_width and height == last_height and
-        last_intra_only == 0 and last_show == 1 and last_frame_type != 0
+    use_prev_mvs = error_res == 0
+        and width == last_width
+        and height == last_height
+        and last_intra_only == 0
+        and last_show == 1
+        and last_frame_type != 0
     for i in 0..FC_SIZE
         fc[i] = fcs[ctx_idx * FC_SIZE + i]
     for i in 0..C_SIZE
@@ -1380,8 +1811,10 @@ fn Decoder.decode_tiles(mut self, start int, end int)
                 if tp + 4 > end
                     fail = "truncated tile size"
                     return
-                sz = buf[tp].to_int().shl(24) + buf[tp + 1].to_int().shl(16) + buf[tp + 2].to_int().shl(8) +
-                    buf[tp + 3].to_int()
+                sz = buf[tp].to_int().shl(24)
+                    + buf[tp + 1].to_int().shl(16)
+                    + buf[tp + 2].to_int().shl(8)
+                    + buf[tp + 3].to_int()
                 tp += 4
             if sz <= 0 or tp + sz > end
                 fail = "bad tile size"
@@ -2050,7 +2483,10 @@ fn Decoder.mv_scan(mut self, ref_frame int, block int)
                 if which >= 0
                     if c_sb[c] < B8X8
                         sub := [1, 2, 1, 3, 3, 2, 3, 3][block * 2 + bint(dc == 0)]
-                        add_cand(c_mv[(c * 4 + sub) * 4 + which * 2], c_mv[(c * 4 + sub) * 4 + which * 2 + 1])
+                        add_cand(
+                            c_mv[(c * 4 + sub) * 4 + which * 2],
+                            c_mv[(c * 4 + sub) * 4 + which * 2 + 1],
+                        )
                     else
                         add_cand(c_mv[c * 16 + 12 + which * 2], c_mv[c * 16 + 13 + which * 2])
                     if rf_done
@@ -2090,7 +2526,8 @@ fn Decoder.mv_scan(mut self, ref_frame int, block int)
                         add_scaled(c, 0, ref_frame)
                         if rf_done
                             return
-                    differs := c_mv[c * 16 + 14] != c_mv[c * 16 + 12] or c_mv[c * 16 + 15] != c_mv[c * 16 + 13]
+                    differs := c_mv[c * 16 + 14] != c_mv[c * 16 + 12]
+                        or c_mv[c * 16 + 15] != c_mv[c * 16 + 13]
                     if c_ref1[c] > 0 and c_ref1[c] != ref_frame and differs
                         add_scaled(c, 1, ref_frame)
                         if rf_done
@@ -2102,7 +2539,8 @@ fn Decoder.mv_scan(mut self, ref_frame int, block int)
             add_prev(cell0, 0, ref_frame, true)
             if rf_done
                 return
-        pdiff := prev_mvs[cell0 * 6 + 4] != prev_mvs[cell0 * 6 + 2] or prev_mvs[cell0 * 6 + 5] != prev_mvs[cell0 * 6 + 3]
+        pdiff := prev_mvs[cell0 * 6 + 4] != prev_mvs[cell0 * 6 + 2]
+            or prev_mvs[cell0 * 6 + 5] != prev_mvs[cell0 * 6 + 3]
         if r1 > 0 and r1 != ref_frame and pdiff
             add_prev(cell0, 1, ref_frame, true)
 
@@ -2174,7 +2612,7 @@ fn Decoder.inc_mv_comp(mut self, v int, comp int)
         counts[cb + CM_HP + e] += 1
 
 ## Reads a motion vector difference and adds it to best_r/best_c[r].
-fn Decoder.read_mv(mut self, r int) (int, int)
+fn Decoder.read_mv(mut self, r int)(int, int)
     j := tree(MV_JOINT_TREE, SRC_FC, FC_MV_JOINT)
     usehp := allow_hp == 1 and best_r[r].abs() < 64 and best_c[r].abs() < 64
     mut dr := 0
@@ -2562,12 +3000,21 @@ fn avg3(a int, b int, c int) int
     (a + 2 * b + c + 2).shr(2)
 
 fn needs_left(mode int) bool
-    mode == DC_PRED or mode == H_PRED or mode == D135_PRED or mode == D117_PRED or mode == D153_PRED or
-        mode == D207_PRED or mode == TM_PRED
+    mode == DC_PRED
+        or mode == H_PRED
+        or mode == D135_PRED
+        or mode == D117_PRED
+        or mode == D153_PRED
+        or mode == D207_PRED
+        or mode == TM_PRED
 
 fn needs_above(mode int) bool
-    mode == DC_PRED or mode == V_PRED or mode == D135_PRED or mode == D117_PRED or mode == D153_PRED or
-        mode == TM_PRED
+    mode == DC_PRED
+        or mode == V_PRED
+        or mode == D135_PRED
+        or mode == D117_PRED
+        or mode == D153_PRED
+        or mode == TM_PRED
 
 ## The edge pixel `i` of the above row: `ea(-1)` is the top-left corner.
 fn Decoder.ea(self, i int) int
@@ -2575,7 +3022,17 @@ fn Decoder.ea(self, i int) int
 
 ## Predicts one transform block from its decoded neighbours (VP9 spec 8.5.1,
 ## libvpx build_intra_predictors).
-fn Decoder.intra_predict(mut self, p int, mi_row int, mi_col int, row int, col int, tx int, mode int, n4w int)
+fn Decoder.intra_predict(
+    mut self,
+    p int,
+    mi_row int,
+    mi_col int,
+    row int,
+    col int,
+    tx int,
+    mode int,
+    n4w int,
+)
     ss := if p == 0 then 0 else 1
     stride := if p == 0 then ystride else cstride
     bs := (4).shl(tx)
@@ -2922,7 +3379,20 @@ fn Decoder.inter_predict(mut self, mi_row int, mi_col int)
                         predict_block(p, rs, r, mi_row, mi_col, 4 * x, 4 * y, 4, 4, mvr, mvc, kern)
                         i += 1
             else
-                predict_block(p, rs, r, mi_row, mi_col, 0, 0, 4 * n4w, 4 * n4h, m_mv[12 + r * 2], m_mv[13 + r * 2], kern)
+                predict_block(
+                    p,
+                    rs,
+                    r,
+                    mi_row,
+                    mi_col,
+                    0,
+                    0,
+                    4 * n4w,
+                    4 * n4h,
+                    m_mv[12 + r * 2],
+                    m_mv[13 + r * 2],
+                    kern,
+                )
 
 ## Pixel (x, y) of plane `p` of slot `s`, clamped to the frame (the border
 ## libvpx extends).
@@ -2934,8 +3404,21 @@ fn Decoder.ref_px(self, at int, stride int, fw int, fh int, x int, y int) int
 ## Motion compensated prediction of a w x h block (VP9 spec 8.5.2): 8-tap
 ## sub-pixel filters, horizontal then vertical; `which` 1 averages into the
 ## first prediction.
-fn Decoder.predict_block(mut self, p int, s int, which int, mi_row int, mi_col int, x int, y int, w int, h int,
-    mv_r int, mv_c int, kern int)
+fn Decoder.predict_block(
+    mut self,
+    p int,
+    s int,
+    which int,
+    mi_row int,
+    mi_col int,
+    x int,
+    y int,
+    w int,
+    h int,
+    mv_r int,
+    mv_c int,
+    kern int,
+)
     ss := if p == 0 then 0 else 1
     stride := if p == 0 then ystride else cstride
     fw := if p == 0 then width else (width + 1).shr(1)
@@ -3218,12 +3701,21 @@ fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
         q1 := px(s, step, 1)
         q2 := px(s, step, 2)
         q3 := px(s, step, 3)
-        mask := (p3 - p2).abs() <= lm and (p2 - p1).abs() <= lm and (p1 - p0).abs() <= lm and
-            (q1 - q0).abs() <= lm and (q2 - q1).abs() <= lm and (q3 - q2).abs() <= lm and
-            (p0 - q0).abs() * 2 + (p1 - q1).abs() / 2 <= mbl
+        mask := (p3 - p2).abs() <= lm
+            and (p2 - p1).abs() <= lm
+            and (p1 - p0).abs() <= lm
+            and (q1 - q0).abs() <= lm
+            and (q2 - q1).abs() <= lm
+            and (q3 - q2).abs() <= lm
+            and (p0 - q0).abs() * 2 + (p1 - q1).abs() / 2 <= mbl
         if mask
-            flat := kind >= 2 and (p1 - p0).abs() <= 1 and (q1 - q0).abs() <= 1 and (p2 - p0).abs() <= 1 and
-                (q2 - q0).abs() <= 1 and (p3 - p0).abs() <= 1 and (q3 - q0).abs() <= 1
+            flat := kind >= 2
+                and (p1 - p0).abs() <= 1
+                and (q1 - q0).abs() <= 1
+                and (p2 - p0).abs() <= 1
+                and (q2 - q0).abs() <= 1
+                and (p3 - p0).abs() <= 1
+                and (q3 - q0).abs() <= 1
             mut done := false
             if kind == 3 and flat
                 p7 := px(s, step, -8)
@@ -3234,30 +3726,99 @@ fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
                 q5 := px(s, step, 5)
                 q6 := px(s, step, 6)
                 q7 := px(s, step, 7)
-                flat2 := (p4 - p0).abs() <= 1 and (q4 - q0).abs() <= 1 and (p5 - p0).abs() <= 1 and
-                    (q5 - q0).abs() <= 1 and (p6 - p0).abs() <= 1 and (q6 - q0).abs() <= 1 and
-                    (p7 - p0).abs() <= 1 and (q7 - q0).abs() <= 1
+                flat2 := (p4 - p0).abs() <= 1
+                    and (q4 - q0).abs() <= 1
+                    and (p5 - p0).abs() <= 1
+                    and (q5 - q0).abs() <= 1
+                    and (p6 - p0).abs() <= 1
+                    and (q6 - q0).abs() <= 1
+                    and (p7 - p0).abs() <= 1
+                    and (q7 - q0).abs() <= 1
                 if flat2
-                    setpx(s, step, -7, (p7 * 7 + p6 * 2 + p5 + p4 + p3 + p2 + p1 + p0 + q0 + 8).shr(4))
-                    setpx(s, step, -6, (p7 * 6 + p6 + p5 * 2 + p4 + p3 + p2 + p1 + p0 + q0 + q1 + 8).shr(4))
-                    setpx(s, step, -5, (p7 * 5 + p6 + p5 + p4 * 2 + p3 + p2 + p1 + p0 + q0 + q1 + q2 + 8).shr(4))
-                    setpx(s, step, -4, (p7 * 4 + p6 + p5 + p4 + p3 * 2 + p2 + p1 + p0 + q0 + q1 + q2 + q3 + 8).shr(4))
-                    setpx(s, step, -3,
-                        (p7 * 3 + p6 + p5 + p4 + p3 + p2 * 2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 + 8).shr(4))
-                    setpx(s, step, -2,
-                        (p7 * 2 + p6 + p5 + p4 + p3 + p2 + p1 * 2 + p0 + q0 + q1 + q2 + q3 + q4 + q5 + 8).shr(4))
-                    setpx(s, step, -1,
-                        (p7 + p6 + p5 + p4 + p3 + p2 + p1 + p0 * 2 + q0 + q1 + q2 + q3 + q4 + q5 + q6 + 8).shr(4))
-                    setpx(s, step, 0,
-                        (p6 + p5 + p4 + p3 + p2 + p1 + p0 + q0 * 2 + q1 + q2 + q3 + q4 + q5 + q6 + q7 + 8).shr(4))
-                    setpx(s, step, 1,
-                        (p5 + p4 + p3 + p2 + p1 + p0 + q0 + q1 * 2 + q2 + q3 + q4 + q5 + q6 + q7 * 2 + 8).shr(4))
-                    setpx(s, step, 2,
-                        (p4 + p3 + p2 + p1 + p0 + q0 + q1 + q2 * 2 + q3 + q4 + q5 + q6 + q7 * 3 + 8).shr(4))
-                    setpx(s, step, 3, (p3 + p2 + p1 + p0 + q0 + q1 + q2 + q3 * 2 + q4 + q5 + q6 + q7 * 4 + 8).shr(4))
-                    setpx(s, step, 4, (p2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 * 2 + q5 + q6 + q7 * 5 + 8).shr(4))
-                    setpx(s, step, 5, (p1 + p0 + q0 + q1 + q2 + q3 + q4 + q5 * 2 + q6 + q7 * 6 + 8).shr(4))
-                    setpx(s, step, 6, (p0 + q0 + q1 + q2 + q3 + q4 + q5 + q6 * 2 + q7 * 7 + 8).shr(4))
+                    setpx(
+                        s,
+                        step,
+                        -7,
+                        (p7 * 7 + p6 * 2 + p5 + p4 + p3 + p2 + p1 + p0 + q0 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        -6,
+                        (p7 * 6 + p6 + p5 * 2 + p4 + p3 + p2 + p1 + p0 + q0 + q1 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        -5,
+                        (p7 * 5 + p6 + p5 + p4 * 2 + p3 + p2 + p1 + p0 + q0 + q1 + q2 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        -4,
+                        (p7 * 4 + p6 + p5 + p4 + p3 * 2 + p2 + p1 + p0 + q0 + q1 + q2 + q3 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        -3,
+                        (p7 * 3 + p6 + p5 + p4 + p3 + p2 * 2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        -2,
+                        (p7 * 2 + p6 + p5 + p4 + p3 + p2 + p1 * 2 + p0 + q0 + q1 + q2 + q3 + q4 + q5 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        -1,
+                        (p7 + p6 + p5 + p4 + p3 + p2 + p1 + p0 * 2 + q0 + q1 + q2 + q3 + q4 + q5 + q6 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        0,
+                        (p6 + p5 + p4 + p3 + p2 + p1 + p0 + q0 * 2 + q1 + q2 + q3 + q4 + q5 + q6 + q7 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        1,
+                        (p5 + p4 + p3 + p2 + p1 + p0 + q0 + q1 * 2 + q2 + q3 + q4 + q5 + q6 + q7 * 2 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        2,
+                        (p4 + p3 + p2 + p1 + p0 + q0 + q1 + q2 * 2 + q3 + q4 + q5 + q6 + q7 * 3 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        3,
+                        (p3 + p2 + p1 + p0 + q0 + q1 + q2 + q3 * 2 + q4 + q5 + q6 + q7 * 4 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        4,
+                        (p2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 * 2 + q5 + q6 + q7 * 5 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        5,
+                        (p1 + p0 + q0 + q1 + q2 + q3 + q4 + q5 * 2 + q6 + q7 * 6 + 8).shr(4),
+                    )
+                    setpx(
+                        s,
+                        step,
+                        6,
+                        (p0 + q0 + q1 + q2 + q3 + q4 + q5 + q6 * 2 + q7 * 7 + 8).shr(4),
+                    )
                     done = true
             if not done and flat
                 setpx(s, step, -3, (p3 + p3 + p3 + 2 * p2 + p1 + p0 + q0 + 4).shr(3))
@@ -3354,8 +3915,11 @@ fn Decoder.adapt_mode(mut self)
         merge1(FC_COMP_INTER + i, counts[C_COMP_INTER + i * 2], counts[C_COMP_INTER + i * 2 + 1])
         merge1(FC_COMP_REF + i, counts[C_COMP_REF + i * 2], counts[C_COMP_REF + i * 2 + 1])
         for j in 0..2
-            merge1(FC_SINGLE_REF + i * 2 + j, counts[C_SINGLE_REF + i * 4 + j * 2],
-                counts[C_SINGLE_REF + i * 4 + j * 2 + 1])
+            merge1(
+                FC_SINGLE_REF + i * 2 + j,
+                counts[C_SINGLE_REF + i * 4 + j * 2],
+                counts[C_SINGLE_REF + i * 4 + j * 2 + 1],
+            )
     for i in 0..7
         tree_merge(INTER_MODE_TREE, FC_INTER_MODE + i * 3, C_INTER_MODE + i * 4, 0)
     for i in 0..4
@@ -3375,7 +3939,11 @@ fn Decoder.adapt_mode(mut self)
             merge1(FC_TX16 + i * 2, counts[a16], counts[a16 + 1] + counts[a16 + 2])
             merge1(FC_TX16 + i * 2 + 1, counts[a16 + 1], counts[a16 + 2])
             a32 := C_TX32 + i * 4
-            merge1(FC_TX32 + i * 3, counts[a32], counts[a32 + 1] + counts[a32 + 2] + counts[a32 + 3])
+            merge1(
+                FC_TX32 + i * 3,
+                counts[a32],
+                counts[a32 + 1] + counts[a32 + 2] + counts[a32 + 3],
+            )
             merge1(FC_TX32 + i * 3 + 1, counts[a32 + 1], counts[a32 + 2] + counts[a32 + 3])
             merge1(FC_TX32 + i * 3 + 2, counts[a32 + 2], counts[a32 + 3])
     for i in 0..3
@@ -3742,7 +4310,23 @@ fn Decoder.iadst16(mut self, o int, s int)
     mut x13 := co[o + 12 * s]
     mut x14 := co[o + 1 * s]
     mut x15 := co[o + 14 * s]
-    if x0.bit_or(x1).bit_or(x2).bit_or(x3).bit_or(x4).bit_or(x5).bit_or(x6).bit_or(x7).bit_or(x8).bit_or(x9).bit_or(x10).bit_or(x11).bit_or(x12).bit_or(x13).bit_or(x14).bit_or(x15) == 0
+    if x0
+        .bit_or(x1)
+        .bit_or(x2)
+        .bit_or(x3)
+        .bit_or(x4)
+        .bit_or(x5)
+        .bit_or(x6)
+        .bit_or(x7)
+        .bit_or(x8)
+        .bit_or(x9)
+        .bit_or(x10)
+        .bit_or(x11)
+        .bit_or(x12)
+        .bit_or(x13)
+        .bit_or(x14)
+        .bit_or(x15)
+        == 0
         for k in 0..16
             co[o + k * s] = 0
         return
