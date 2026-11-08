@@ -131,30 +131,35 @@ fn tool_lines(facts ObserveFacts) List[str] ! DeriveError
         out.push("        attach.tool({quote(t.name)}, {quote(t.doc)}, {names}, {types}, {quote(t.ret)}),")
     out.push("    ]")
     out.extend(["", "fn call(mut self, name str, args Json) str"])
-    for t in facts.tools
-        out.push("    if name == {quote(t.name)}")
+    mut j := 0
+    for tf in facts.tools
+        # Each tool's locals get their own names: a name can't be declared twice in a function.
+        out.push("    if name == {quote(tf.name)}")
         mut call_args := List[str]()
-        for k in 0..t.params.len()
-            a := "a{k}"
-            out.extend(arg_lines(t.name, t.params[k], t.types[k], a, facts)?)
+        r := "r{j}"
+        rv := "rv{j}"
+        for k in 0..tf.params.len()
+            a := "a{j}_{k}"
+            out.extend(arg_lines(tf.name, tf.params[k], tf.types[k], a, facts)?)
             call_args.push(a)
-        invoke := "self.{t.name}({call_args.join(", ")})"
-        if t.ret == ""
-            if t.fallible
+        invoke := "self.{tf.name}({call_args.join(", ")})"
+        if tf.ret == ""
+            if tf.fallible
                 out.push("        {invoke} else err")
                 out.push("            return attach.call_failed(\"\{err}\")")
             else
                 out.push("        {invoke}")
             out.push("        return attach.called(\"null\")")
         else
-            if t.fallible
-                out.push("        r := {invoke} else err")
+            if tf.fallible
+                out.push("        {r} := {invoke} else err")
                 out.push("            return attach.call_failed(\"\{err}\")")
             else
-                out.push("        r := {invoke}")
-            out.push("        mut rv := \"\"")
-            out.extend(value_lines(t.ret, "r", "rv", facts, 0, "        ")?)
-            out.push("        return attach.called(rv)")
+                out.push("        {r} := {invoke}")
+            out.push("        mut {rv} := \"\"")
+            out.extend(value_lines(tf.ret, r, rv, facts, 100 * (j + 1), "        ")?)
+            out.push("        return attach.called({rv})")
+        j += 1
     out.push("    attach.no_tool(name)")
     out
 

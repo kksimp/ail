@@ -84,7 +84,7 @@ pub fn command(args List[str]) int
             return 2
         fields.push("\"name\":{syntax.quote(pairs[0])}")
         pairs = pairs[1..]
-    mut args := List[str]()
+    mut call_args := List[str]()
     for kv in pairs
         eq := kv.find("=") else
             io.eprint("error: `{kv}` is not key=value\n{ATTACH_USAGE}")
@@ -93,11 +93,11 @@ pub fn command(args List[str]) int
         value := kv.slice(eq + 1, kv.len())
         # A call's pairs are its arguments, sent as text; the tool reads each by its type (attach.tool.4).
         if q == "call"
-            args.push("{syntax.quote(key)}:{syntax.quote(value)}")
+            call_args.push("{syntax.quote(key)}:{syntax.quote(value)}")
         else
             fields.push("{syntax.quote(key)}:{field_json(key, value)}")
     if q == "call"
-        fields.push("\"args\":\{{args.join(",")}}")
+        fields.push("\"args\":\{{call_args.join(",")}}")
     line := send(app, "\{{fields.join(",")}}") else err
         io.eprint("error: {err.message}")
         return 2
