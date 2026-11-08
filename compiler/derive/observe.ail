@@ -44,7 +44,10 @@ pub fn observe_facts(progs List[ast.Program], name str) ObserveFacts
     for p in progs
         for f in p.fns
             o := f.owner else continue
-            if o.name.split(".").last() != name or [a for a in f.attrs if a.name == "tool"].len() == 0
+            if o.name.split(".").last() != name or [
+                a
+                for a in f.attrs if a.name == "tool"
+            ].len() == 0
                 continue
             mut ret := ""
             mut fallible := false

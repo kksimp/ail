@@ -107,7 +107,10 @@ impl app.App for Watched[T app.App + attach.Observe]
             creq := parse_json(ev.text) else
                 hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return
-            hub.replies.send(inner.call(creq.str("name") else "", creq.get("args") else Json.Obj([])))
+            hub.replies.send(inner.call(
+                creq.str("name") else "",
+                creq.get("args") else Json.Obj([]),
+            ))
             return
         if ev.kind == "external" and ev.id == "attach" and attach.query(ev.text) == "tools"
             treq := parse_json(ev.text) else

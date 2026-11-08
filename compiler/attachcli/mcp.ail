@@ -23,7 +23,11 @@ fn mcp_tool(name str, about str, props List[JsonMember], needs List[str]) Json
         jm("properties", Json.Obj(props)),
         jm("required", Json.Arr([Json.Str(n) for n in needs])),
     ])
-    Json.Obj([jm("name", Json.Str(name)), jm("description", Json.Str(about)), jm("inputSchema", schema)])
+    Json.Obj([
+        jm("name", Json.Str(name)),
+        jm("description", Json.Str(about)),
+        jm("inputSchema", schema),
+    ])
 
 ## The fixed tools: the read queries and `input` (attach.wire.4, attach.input.1).
 fn fixed_tools() List[Json]
@@ -77,7 +81,10 @@ fn schema_type(ty str) str
 fn app_tools(port int) List[Json]
     mut out := List[Json]()
     app := pick(running(), port) else return out
-    line := send(app, "\{\"v\":1,\"q\":\"tools\",\"token\":{syntax.quote(app.token)}}") else return out
+    line := send(
+        app,
+        "\{\"v\":1,\"q\":\"tools\",\"token\":{syntax.quote(app.token)}}",
+    ) else return out
     reply := parse_json(line) else return out
     for t in reply.arr("tools") else []
         name := t.str("name") else continue
@@ -132,7 +139,10 @@ fn mcp_call(id Json, params Json, port int)
         return
     args := params.get("arguments") else Json.Obj([])
     app := pick(running(), port) else
-        rpc_reply(id, text_result("no running app publishes an attach socket; start it with `ail run --attach-input`", true))
+        rpc_reply(id, text_result(
+            "no running app publishes an attach socket; start it with `ail run --attach-input`",
+            true,
+        ))
         return
     mut ms := request_for(name, args)
     ms.push(jm("token", Json.Str(app.token)))

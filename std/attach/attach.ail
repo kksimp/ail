@@ -164,9 +164,7 @@ pub fn tools_reply(ts List[Tool]) str
         mut ps := List[str]()
         for k in 0..t.params.len()
             ps.push("\{\"name\":{text(t.params[k])},\"type\":{text(t.types[k])}}")
-        parts.push(
-            "\{\"name\":{text(t.name)},\"doc\":{text(t.doc)},\"params\":[{ps.join(",")}],\"result\":{text(t.result)}}",
-        )
+        parts.push("\{\"name\":{text(t.name)},\"doc\":{text(t.doc)},\"params\":[{ps.join(",")}],\"result\":{text(t.result)}}")
     "\{\"v\":1,\"tools\":[{parts.join(",")}]}"
 
 ## The query `q` of request line `line`; "" when it is not JSON or has none.
