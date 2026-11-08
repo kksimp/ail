@@ -400,6 +400,11 @@ fn main()
 **own.defer.1** — `defer S` schedules statement `S` to run when the enclosing
 block exits by any path, including a trap. *(ADR 0066)*
 
+> **Note:** in the native compiler the trap cleanups (`defer`s and the releases of unique
+> locals) are those of the main thread. A task that traps does not run the `defer`s or
+> release the unique locals of its own body; the main thread's run when the trap ends
+> the program. Known gap.
+
 **own.defer.2** — Deferred statements in the same block run in reverse order
 of their `defer` statements. *(ADR 0066)* Deferred statements and the cleanup
 of values owned by the block run together in reverse order of the `defer`
