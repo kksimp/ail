@@ -892,6 +892,9 @@ static void handle_line(const char *line) {
     const char *t = jstr(obj, "t");
     if (!strcmp(t, "measure")) {
         answer_measure(jget(obj, "runs"));
+    } else if (!strcmp(t, "clipboard")) {
+        /* std.app.26 (ADR 0982): the app puts text on the system clipboard. */
+        gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), jstr(obj, "text"), -1);
     } else if (!strcmp(t, "pick")) {
         /* std.app.22: no native chooser on this host yet; say so rather than hang. */
         Ev e = ev_new("pick_error");

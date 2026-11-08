@@ -172,6 +172,15 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 DispatchQueue.main.async { showPick(id: id, prompt: prompt, folders: folders, start: start) }
                 continue
             }
+            if kind == "clipboard" {
+                // std.app.26 (ADR 0982): the app puts text on the system clipboard.
+                let t = text(obj, "text")
+                DispatchQueue.main.async {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(t, forType: .string)
+                }
+                continue
+            }
             if kind == "drag" || kind == "zoom" {
                 // std.app.25: in edge mode the app says when its strip is dragged or double-clicked.
                 DispatchQueue.main.async { Edge.act(kind) }
