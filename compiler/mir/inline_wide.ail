@@ -105,14 +105,27 @@ fn expand_wide(
     mut take := wide
     if f.name.starts_with("rt.")
         take = Wide(sizes: Map[str, int](), single: Set[str]())
+    # `main` runs once: only its loops gain from a copy. Copies at the calls
+    # it makes once (`size()` reading the arguments) went with slower
+    # wordfreq, sieve and collatz on ail-linux (ADR 0940).
+    mut warm := [f.name != "main" for _ in 0..f.blocks.len()]
+    if f.name == "main"
+        for lp in find_loops(f)
+            for b in 0..f.blocks.len()
+                if lp.member[b]
+                    warm[b] = true
     mut changed := true
     while changed and budget > 0
         changed = false
         for b in 0..f.blocks.len()
-            at := first_wide_call(f.blocks[b], leaves, take, f.name, room, sites)
+            at := first_wide_call(f.blocks[b], leaves, take, f.name, room, warm[b], sites)
             if at >= 0
                 name := f.blocks[b].insts[at].name
+                before := f.blocks.len()
                 inline_call(mut f, b, at, bodies[name], mut sites)
+                # The copy's blocks and the rest of `b` are as warm as `b`.
+                for _ in before..f.blocks.len()
+                    warm.push(warm[b])
                 if n := take.sizes.get(name)
                     if not take.single.contains(name)
                         room -= n
@@ -127,6 +140,7 @@ fn first_wide_call(
     wide Wide,
     self_name str,
     room int,
+    warm bool,
     sites List[Site],
 ) int
     for k in 0..blk.insts.len()
@@ -134,6 +148,8 @@ fn first_wide_call(
         if i.op == "call" and i.name != self_name
             if leaves.contains(i.name)
                 return k
+            if not warm
+                continue
             if n := wide.sizes.get(i.name)
                 # Copies of the one call (brought in by another copy) count as
                 # any other call, so the function still goes inline once.
