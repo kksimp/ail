@@ -19,5 +19,5 @@ samples of all frames together.
 decoder of RFC 6716 §4.1: `decode(ft)` then `update(fl, fh, ft)`,
 `decode_bin(bits)`, `bit_logp(logp)`, `icdf(table, ftb)`, `uint(ft)`, raw
 `bits(n)` from the frame's end, `tell()` and `tell_frac()` (eighth bits).
-`error` is set when `uint` reads a value out of range. `ilog(x)` is the bits
+`failed` is set when `uint` reads a value out of range. `ilog(x)` is the bits
 needed for `x`.

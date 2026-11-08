@@ -181,7 +181,7 @@ pub struct RangeDecoder
     ## Bits read so far, for `tell` (RFC 6716 §4.1.6).
     total int
     ## Set when a symbol could not be decoded as the stream says.
-    pub error bool
+    pub failed bool
 
 fn RangeDecoder.next_front(mut self) int
     if self.front < self.data.len()
@@ -219,7 +219,7 @@ pub fn decoder(data bytes) RangeDecoder
         window: 0,
         window_bits: 0,
         total: 33 - 24,
-        error: false,
+        failed: false,
     )
     d.rem = d.next_front()
     d.val = d.rng - 1 - d.rem.shr(SYM - EXTRA)
@@ -290,7 +290,7 @@ pub fn RangeDecoder.uint(mut self, ft int) int
         t := s.shl(ftb).bit_or(self.bits(ftb))
         if t <= top
             return t
-        self.error = true
+        self.failed = true
         return top
     s := self.decode(ft)
     self.update(s, s + 1, ft)

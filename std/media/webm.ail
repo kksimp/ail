@@ -542,7 +542,8 @@ fn uint_bytes(v int) List[int]
     [v.shr(8 * (n - 1 - i)).bit_and(0xFF) for i in 0..n]
 
 fn el(id int, data bytes) bytes
-    pre := id_bytes(id) + size_bytes(data.len())
+    mut pre := id_bytes(id)
+    pre.extend(size_bytes(data.len()))
     bytes.from_list([x.to_u8() for x in pre]) + data
 
 fn el_uint(id int, v int) bytes
@@ -566,7 +567,8 @@ fn el_whole_float(id int, v int) bytes
         mant_lo := if e <= 20 then 0 else frac.bit_and(lsh(1, e - 20) - 1).shl(52 - e)
         hi = (e + 1023).shl(20).bit_or(mant_hi)
         lo = mant_lo
-    body := [hi.shr(24 - 8 * i).bit_and(0xFF) for i in 0..4] + [lo.shr(24 - 8 * i).bit_and(0xFF) for i in 0..4]
+    mut body := [hi.shr(24 - 8 * i).bit_and(0xFF) for i in 0..4]
+    body.extend([lo.shr(24 - 8 * i).bit_and(0xFF) for i in 0..4])
     el(id, bytes.from_list([x.to_u8() for x in body]))
 
 ## A WebM file of `tracks` and `frames` (std.webm.8): the frames go into
@@ -609,7 +611,10 @@ pub fn write(tracks List[Track], frames List[Frame]) bytes
             start_ms = ms
             cluster = el_uint(ID_TIMECODE, ms)
         rel := ms - start_ms
-        pre := size_bytes(f.track) + [rel.shr(8).bit_and(0xFF), rel.bit_and(0xFF), if f.key then 0x80 else 0]
+        mut pre := size_bytes(f.track)
+        pre.push(rel.shr(8).bit_and(0xFF))
+        pre.push(rel.bit_and(0xFF))
+        pre.push(if f.key then 0x80 else 0)
         cluster = cluster + el(ID_SIMPLE, bytes.from_list([x.to_u8() for x in pre]) + f.data)
     if start_ms >= 0
         body = body + el(ID_CLUSTER, cluster)
