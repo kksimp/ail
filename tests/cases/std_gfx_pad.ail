@@ -1,0 +1,20 @@
+## std.gfx.11: gamepad state per frame, with pressed and released edges.
+use std.gfx
+
+fn show(i gfx.Input)
+    p := gfx.pad(i, 0)
+    print("{gfx.pad_down(i, 0, "a")} {gfx.pad_pressed(i, 0, "a")} {gfx.pad_released(i, 0, "a")} {p.lx} {p.ly} {p.rt}")
+
+fn main()
+    i0 := gfx.idle()
+    show(i0)
+    i1 := gfx.next_input(i0, [gfx.pad_event(0, "1,0.5,-0.5,0,0,0,1.0")])
+    show(i1)
+    i2 := gfx.next_input(i1, [])
+    show(i2)
+    i3 := gfx.next_input(i2, [gfx.pad_event(0, "0,0,0,0,0,0,0")])
+    show(i3)
+    print(gfx.pad_bit("start"))
+    print(gfx.pad_down(i3, 3, "a"))
+    i4 := gfx.next_input(i3, [gfx.pad_event(0, "")])
+    print(gfx.pad(i4, 0).buttons)
