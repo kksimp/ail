@@ -370,7 +370,7 @@ fn Demuxer.read_tracks(mut self, at int, end int) ! WebmError
                 t.number = be_uint(self.buf, k.at, k.size)
             elif k.id == ID_TYPE
                 kind := be_uint(self.buf, k.at, k.size)
-                t.kind = if kind == 1 then "video" elif kind == 2 then "audio" else "other"
+                t.kind = kind_name(kind)
             elif k.id == ID_CODEC
                 t.codec = text(self.buf, k)
             elif k.id == ID_PRIVATE
@@ -416,13 +416,13 @@ fn Demuxer.read_cues(mut self, at int, end int) ! WebmError
                 ns = be_uint(self.buf, k.at, k.size) * self.scale
             elif k.id == ID_CUEPOS
                 mut track := 0
-                mut pos := 0
+                mut cluster_pos := 0
                 for q in children(self.buf, k.at, k.at + k.size)?
                     if q.id == ID_CUETRACK
                         track = be_uint(self.buf, q.at, q.size)
                     elif q.id == ID_CUECLUSTER
-                        pos = be_uint(self.buf, q.at, q.size)
-                self.cues.push(Cue(ns: ns, track: track, pos: pos))
+                        cluster_pos = be_uint(self.buf, q.at, q.size)
+                self.cues.push(Cue(ns: ns, track: track, pos: cluster_pos))
 
 ## A Block or SimpleBlock at `buf[at..end]`, split by its lacing (std.webm.3).
 fn Demuxer.read_block(mut self, at int, end int, simple bool, group_key bool, mut out List[Frame]) ! WebmError
@@ -436,7 +436,7 @@ fn Demuxer.read_block(mut self, at int, end int, simple bool, group_key bool, mu
     key := if simple then flags.bit_and(0x80) != 0 else group_key
     ns := self.cluster_ns + rel * self.scale
     lacing := flags.shr(1).bit_and(3)
-    step := (self.track(tn.value) else blank_track()).default_ns
+    lace_ns := (self.track(tn.value) else blank_track()).default_ns
     if lacing == 0
         out.push(Frame(track: tn.value, ns: ns, key: key, data: self.buf[p..end]))
         return
@@ -482,7 +482,7 @@ fn Demuxer.read_block(mut self, at int, end int, simple bool, group_key bool, mu
         return WebmError(why: "lace sizes overrun the block at byte {self.consumed}")
     sizes.push(end - p - used)
     for i, s in sizes.enumerate()
-        out.push(Frame(track: tn.value, ns: ns + i * step, key: key, data: self.buf[p..p + s]))
+        out.push(Frame(track: tn.value, ns: ns + i * lace_ns, key: key, data: self.buf[p..p + s]))
         p += s
 
 ## A whole file at once: its tracks, duration, cues and frames (std.webm.6).
@@ -505,6 +505,21 @@ pub fn Media.first(self, kind str) Track?
     none
 
 ## Writing
+
+## The TrackType number of a track kind, and back (std.webm.2).
+fn kind_code(kind str) int
+    if kind == "video"
+        return 1
+    if kind == "audio"
+        return 2
+    0x11
+
+fn kind_name(code int) str
+    if code == 1
+        return "video"
+    if code == 2
+        return "audio"
+    "other"
 
 fn id_bytes(id int) List[int]
     mut n := 1
@@ -563,7 +578,7 @@ pub fn write(tracks List[Track], frames List[Frame]) bytes
     mut entries := b""
     for t in tracks
         mut e := el_uint(ID_NUMBER, t.number) + el_uint(0x73C5, t.number)
-        kind := if t.kind == "video" then 1 elif t.kind == "audio" then 2 else 0x11
+        kind := kind_code(t.kind)
         e = e + el_uint(ID_TYPE, kind) + el_text(ID_CODEC, t.codec)
         if t.private.len() > 0
             e = e + el(ID_PRIVATE, t.private)
