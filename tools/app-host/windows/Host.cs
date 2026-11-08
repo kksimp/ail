@@ -943,6 +943,13 @@ static class Program
                     Outbox.Send("pick_error", "id", Json.Text(Json.Get(obj, "id")), "text", "this host has no native file chooser yet");
                     continue;
                 }
+                if (kind == "clipboard")
+                {
+                    // std.app.26 (ADR 0982): the app puts text on the system clipboard (an STA call, so on the form's thread).
+                    string t = Json.Text(Json.Get(obj, "text"));
+                    form.BeginInvoke((Action)delegate { try { if (t.Length > 0) Clipboard.SetText(t); else Clipboard.Clear(); } catch (Exception) { } });
+                    continue;
+                }
                 if (kind == "measure") { AnswerMeasure(Json.Get(obj, "runs") as List<object> ?? new List<object>()); continue; }
                 if (kind != "view") continue;
                 if (first)

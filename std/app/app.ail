@@ -489,6 +489,11 @@ pub fn frame[T App](a T) str
     edge := if a.edge() then ",\"edge\":true" else ""
     "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus}{hov}{edge},\"tree\":{a.view().to_json().to_text()}}"
 
+## The line that puts `text` on the system clipboard (std.app.26), for
+## `lines()`: a host that cannot write the clipboard ignores it.
+pub fn clipboard(text str) str
+    "\{\"v\":1,\"t\":\"clipboard\",\"text\":{text.to_json().to_text()}}"
+
 ## Feeds each event to `a` in order, with no host (std.app.11), and returns
 ## the outline after each one: a test of `update` and `view`.
 pub fn script[T App](mut a T, events List[Event]) List[str]

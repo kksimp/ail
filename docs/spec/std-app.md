@@ -169,6 +169,13 @@ there. A host that cannot hide its title bar keeps its decorations and
 reports both insets as `0`, so a program must not depend on edge mode.
 *(ADR 0981)*
 
+**std.app.26** — An app puts text on the system clipboard by sending the
+line `{"v":1,"t":"clipboard","text":T}` through `lines()` (std.app.21);
+`app.clipboard(text)` is that line. The host copies `T` exactly as given
+(UTF-8, no newline conversion). A host that cannot write the clipboard
+ignores the line, as any unknown line, so a program must not depend on it.
+*(ADR 0982)*
+
 **std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
 clipboard's text) when the paste key (Command-V on macOS, Control-V
 elsewhere) is pressed in a canvas, instead of the `key` event for it; a
@@ -287,6 +294,36 @@ fn main()
     s.update(c)
     print(s.lines())
     print(app.outline(s.view()))
+```
+
+```ail rules=std.app.26
+use std.app
+
+## A drawn field whose text Command-C (Control-C elsewhere) copies.
+struct Field
+    text str
+    out List[str]
+
+impl app.App for Field
+    fn update(mut self, ev app.Event)
+        if ev.kind == "key" and ev.meta and ev.text == "c"
+            out.push(app.clipboard(text))
+
+    fn view(self) app.Node
+        app.canvas("f", 0.0, 0.0, [app.draw_text(4.0, 4.0, text, 0xffffff)])
+
+    fn lines(mut self) List[str]
+        sent := out
+        out = []
+        sent
+
+fn main()
+    mut f := Field(text: "ail.dev", out: [])
+    mut c := app.key("c")
+    c.meta = true
+    f.update(c)
+    print(f.lines())
+    print(f.lines())
 ```
 
 ```ail rules=std.app.23
