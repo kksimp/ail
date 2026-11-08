@@ -37,3 +37,16 @@ fn main()
     mut z := opt["a"]
     z.push(5)
     print("{z} {opt}")
+    adj := {"a": ["b", "c"], "b": ["c"], "c": []}
+    print("{reach(adj, "a").len()} {adj}")
+
+fn reach(adj Map[str, List[str]], start str) Set[str]
+    mut seen := Set[str]()
+    mut stack := adj.get(start) else List[str]()
+    while not stack.is_empty()
+        n := stack.pop() else break
+        if seen.add(n)
+            next := adj.get(n) else List[str]()
+            for m in next
+                stack.push(m)
+    seen
