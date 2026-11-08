@@ -176,6 +176,17 @@ line `{"v":1,"t":"clipboard","text":T}` through `lines()` (std.app.21);
 ignores the line, as any unknown line, so a program must not depend on it.
 *(ADR 0982)*
 
+**std.app.27** — A host sends `down` when a mouse button is pressed in a
+canvas and `up` when it is released, each with the canvas's `id`, `x`, `y`,
+`text` (the button, as `click`), the modifiers and `clicks` (std.app.17;
+`0` on `up`); `click` is sent as before, after `down`. The press captures
+the pointer: until the release, the same canvas gets `move` (whether or not
+hover is on, std.app.16) and the one `up` that follows every `down`, even
+when the pointer leaves the canvas or the window, with coordinates relative
+to that canvas (so possibly negative or past its size). A host may omit
+`down` and `up` (then it sends neither), so a program must not depend on
+them. *(ADR 0983)*
+
 **std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
 clipboard's text) when the paste key (Command-V on macOS, Control-V
 elsewhere) is pressed in a canvas, instead of the `key` event for it; a
@@ -294,6 +305,49 @@ fn main()
     s.update(c)
     print(s.lines())
     print(app.outline(s.view()))
+```
+
+```ail rules=std.app.27
+use std.app
+
+## A canvas that selects a span: the press starts it, moves stretch it, the
+## release ends it.
+struct Select
+    from float
+    to float
+    held bool
+
+impl app.App for Select
+    fn update(mut self, ev app.Event)
+        match ev.kind
+            "down" =>
+                from = ev.x
+                to = ev.x
+                held = true
+            "move" => if held
+                to = ev.x
+            "up" => held = false
+            _ => held = held
+
+    fn view(self) app.Node
+        app.canvas("s", 0.0, 0.0, [app.draw_rect(from.min(to), 0.0, (to - from).abs(), 20.0, 0x8ab4f8)])
+
+fn main()
+    mut s := Select(from: 0.0, to: 0.0, held: false)
+    mut d := app.event("down")
+    d.id = "s"
+    d.x = 10.0
+    d.text = "left"
+    s.update(d)
+    mut m := app.event("move")
+    m.id = "s"
+    m.x = 50.0
+    s.update(m)
+    mut u := app.event("up")
+    u.id = "s"
+    u.x = 50.0
+    s.update(u)
+    print((s.from, s.to, s.held))
 ```
 
 ```ail rules=std.app.26
