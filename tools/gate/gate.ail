@@ -2349,6 +2349,13 @@ STD_UNTESTABLE := [
     ],
     ["audio/device.ail", "play", "it plays through the sound hardware, which a headless case lacks"],
     ["audio/device.ail", "record", "it records from the microphone, which a headless case lacks"],
+    ["audio/device.ail", "stream_open", "it needs the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "stream_write", "it needs the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "stream_status", "it needs the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "stream_pause", "it needs the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "stream_resume", "it needs the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "stream_flush", "it needs the sound hardware, which a headless case lacks"],
+    ["audio/device.ail", "stream_close", "it needs the sound hardware, which a headless case lacks"],
     ["net/http.ail", "serve_dir", "it serves until the program stops, so a case cannot end it"],
 ]
 
