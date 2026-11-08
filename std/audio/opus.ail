@@ -51,7 +51,7 @@ fn config_mode(config int) Mode
 
 ## The length of a frame coded in one or two bytes at `p` (RFC 6716 §3.1):
 ## the value and the bytes used, or a used count of 0 when `b` ends first.
-fn frame_length(b bytes, p int) (int, int)
+fn frame_length(b bytes, p int)(int, int)
     if p >= b.len()
         return (0, 0)
     first := b[p].to_int()

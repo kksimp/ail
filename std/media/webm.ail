@@ -186,14 +186,16 @@ fn be_float(b bytes, p int, n int) float
         v := be_uint(b, p, 4)
         e := v.shr(23).bit_and(0xFF)
         m := v.bit_and(0x7FFFFF).to_float()
-        mag := if e == 0 then m * pow2(-149.0) else (1.0 + m / 8388608.0) * pow2((e - 127).to_float())
+        mag := if e
+            == 0 then m * pow2(-149.0) else (1.0 + m / 8388608.0) * pow2((e - 127).to_float())
         return if v.shr(31) == 1 then -mag else mag
     if n == 8
         hi := be_uint(b, p, 4)
         lo := be_uint(b, p + 4, 4)
         e := hi.shr(20).bit_and(0x7FF)
         m := hi.bit_and(0xFFFFF).to_float() * 4294967296.0 + lo.to_float()
-        mag := if e == 0 then m * pow2(-1074.0) else (1.0 + m / 4503599627370496.0) * pow2((e - 1023).to_float())
+        mag := if e
+            == 0 then m * pow2(-1074.0) else (1.0 + m / 4503599627370496.0) * pow2((e - 1023).to_float())
         return if hi.shr(31) == 1 then -mag else mag
     0.0
 
@@ -298,7 +300,13 @@ pub fn Demuxer.push(mut self, chunk bytes) List[Frame] ! WebmError
             continue
         if h.size == UNKNOWN
             return WebmError(why: "unknown size for element {h.id.to_hex()}")
-        wanted := h.id == ID_EBML or h.id == ID_INFO or h.id == ID_TRACKS or h.id == ID_CUES or h.id == ID_TIMECODE or h.id == ID_SIMPLE or h.id == ID_GROUP
+        wanted := h.id == ID_EBML
+            or h.id == ID_INFO
+            or h.id == ID_TRACKS
+            or h.id == ID_CUES
+            or h.id == ID_TIMECODE
+            or h.id == ID_SIMPLE
+            or h.id == ID_GROUP
         if not wanted
             have := self.buf.len() - self.pos
             if h.len + h.size > have
@@ -425,7 +433,14 @@ fn Demuxer.read_cues(mut self, at int, end int) ! WebmError
                 self.cues.push(Cue(ns: ns, track: track, pos: cluster_pos))
 
 ## A Block or SimpleBlock at `buf[at..end]`, split by its lacing (std.webm.3).
-fn Demuxer.read_block(mut self, at int, end int, simple bool, group_key bool, mut out List[Frame]) ! WebmError
+fn Demuxer.read_block(
+    mut self,
+    at int,
+    end int,
+    simple bool,
+    group_key bool,
+    mut out List[Frame],
+) ! WebmError
     tn := vint(self.buf, at, false)
     if tn.len <= 0 or at + tn.len + 3 > end
         return WebmError(why: "bad block at byte {self.consumed}")
@@ -575,8 +590,20 @@ fn el_whole_float(id int, v int) bytes
 ## clusters in the order given, with millisecond timecodes; a cluster starts at
 ## each video key frame and whenever a time would not fit the block's 16 bits.
 pub fn write(tracks List[Track], frames List[Frame]) bytes
-    header := el(ID_EBML, el_uint(0x4286, 1) + el_uint(0x42F7, 1) + el_uint(0x42F2, 4) + el_uint(0x42F3, 8) + el_text(ID_DOCTYPE, "webm") + el_uint(0x4287, 4) + el_uint(0x4285, 2))
-    info := el(ID_INFO, el_uint(ID_SCALE, 1000000) + el_text(0x4D80, "ail std.media.webm") + el_text(0x5741, "ail std.media.webm"))
+    header := el(
+        ID_EBML,
+        el_uint(0x4286, 1) + el_uint(0x42F7, 1) + el_uint(0x42F2, 4) + el_uint(0x42F3, 8) + el_text(
+            ID_DOCTYPE,
+            "webm",
+        ) + el_uint(0x4287, 4) + el_uint(0x4285, 2),
+    )
+    info := el(
+        ID_INFO,
+        el_uint(ID_SCALE, 1000000) + el_text(
+            0x4D80,
+            "ail std.media.webm",
+        ) + el_text(0x5741, "ail std.media.webm"),
+    )
     mut entries := b""
     for t in tracks
         mut e := el_uint(ID_NUMBER, t.number) + el_uint(0x73C5, t.number)
@@ -593,7 +620,10 @@ pub fn write(tracks List[Track], frames List[Frame]) bytes
         if t.kind == "video"
             e = e + el(ID_VIDEO, el_uint(ID_WIDTH, t.width) + el_uint(ID_HEIGHT, t.height))
         elif t.kind == "audio"
-            e = e + el(ID_AUDIO, el_whole_float(ID_RATE, t.rate.to_int()) + el_uint(ID_CHANNELS, t.channels))
+            e = e + el(
+                ID_AUDIO,
+                el_whole_float(ID_RATE, t.rate.to_int()) + el_uint(ID_CHANNELS, t.channels),
+            )
         entries = entries + el(ID_ENTRY, e)
     mut body := info + el(ID_TRACKS, entries)
     mut video := Set[int]()
@@ -604,7 +634,10 @@ pub fn write(tracks List[Track], frames List[Frame]) bytes
     mut start_ms := -1
     for f in frames
         ms := f.ns / 1000000
-        fresh := start_ms < 0 or ms - start_ms > 32767 or ms < start_ms or (f.key and video.contains(f.track))
+        fresh := start_ms < 0
+            or ms - start_ms > 32767
+            or ms < start_ms
+            or (f.key and video.contains(f.track))
         if fresh
             if start_ms >= 0
                 body = body + el(ID_CLUSTER, cluster)
