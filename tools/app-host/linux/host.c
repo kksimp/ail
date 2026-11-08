@@ -512,16 +512,46 @@ static void mods(Ev *e, guint state) {
 
 static const char *cid(GtkWidget *w) { return g_object_get_data(G_OBJECT(w), "ail-id"); }
 
-static gboolean canvas_press(GtkWidget *w, GdkEventButton *e, gpointer d) {
-    (void)d;
-    if (e->type != GDK_BUTTON_PRESS) return TRUE;
-    gtk_widget_grab_focus(w);
-    Ev ev = ev_new("click");
+/* A pointer event of `kind` for the button event `e` on canvas `w`. */
+static void pointer_ev(const char *kind, GtkWidget *w, GdkEventButton *e) {
+    Ev ev = ev_new(kind);
     mods(&ev, e->state);
     ev_str(&ev, "id", cid(w));
     ev_num(&ev, "x", e->x);
     ev_num(&ev, "y", e->y);
     ev_str(&ev, "text", e->button == 1 ? "left" : e->button == 3 ? "right" : "other");
+    ev_num(&ev, "clicks", e->type == GDK_3BUTTON_PRESS ? 3 : e->type == GDK_2BUTTON_PRESS ? 2 : 1);
+    ev_send(&ev);
+}
+
+/* std.app.27 (ADR 0983): `down` before `click`; GTK's implicit grab keeps the
+   motion and the release on this canvas until the button is released. */
+static gboolean canvas_press(GtkWidget *w, GdkEventButton *e, gpointer d) {
+    (void)d;
+    if (e->type != GDK_BUTTON_PRESS) return TRUE;
+    gtk_widget_grab_focus(w);
+    pointer_ev("down", w, e);
+    pointer_ev("click", w, e);
+    return TRUE;
+}
+
+static gboolean canvas_release(GtkWidget *w, GdkEventButton *e, gpointer d) {
+    (void)d;
+    pointer_ev("up", w, e);
+    return TRUE;
+}
+
+/* `move` while a button is held (std.app.27), at most once per 16 ms. */
+static gboolean canvas_drag(GtkWidget *w, GdkEventMotion *e, gpointer d) {
+    (void)d;
+    static guint32 last = 0;
+    if (!(e->state & (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK))) return FALSE;
+    if (e->time - last < 16) return TRUE;
+    last = e->time;
+    Ev ev = ev_new("move");
+    ev_str(&ev, "id", cid(w));
+    ev_num(&ev, "x", e->x);
+    ev_num(&ev, "y", e->y);
     ev_send(&ev);
     return TRUE;
 }
@@ -784,11 +814,13 @@ static GtkWidget *build(Node *n) {
         w = gtk_drawing_area_new();
         set_id(w, n->id);
         gtk_widget_set_can_focus(w, TRUE);
-        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK);
+        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK);
         gtk_style_context_add_class(gtk_widget_get_style_context(w), "view");
         canvas_size(w, n);
         g_signal_connect(w, "draw", G_CALLBACK(canvas_draw), n);
         g_signal_connect(w, "button-press-event", G_CALLBACK(canvas_press), NULL);
+        g_signal_connect(w, "button-release-event", G_CALLBACK(canvas_release), NULL);
+        g_signal_connect(w, "motion-notify-event", G_CALLBACK(canvas_drag), NULL);
         g_signal_connect(w, "scroll-event", G_CALLBACK(canvas_scroll), NULL);
         g_signal_connect(w, "key-press-event", G_CALLBACK(canvas_key), NULL);
         g_signal_connect(w, "size-allocate", G_CALLBACK(canvas_alloc), NULL);

@@ -430,12 +430,36 @@ class CanvasView : Control
         return l.ToArray();
     }
 
+    static string ButtonName(MouseButtons b)
+    {
+        return b == MouseButtons.Left ? "left" : b == MouseButtons.Right ? "right" : "other";
+    }
+
+    // std.app.27 (ADR 0983): `down` before `click`, `up` on release, `move` while held;
+    // Capture keeps them on this canvas until the button is released.
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
         Focus();
-        string button = e.Button == MouseButtons.Left ? "left" : e.Button == MouseButtons.Right ? "right" : "other";
-        Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", button));
+        Capture = true;
+        Outbox.Send("down", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
+        Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        Capture = false;
+        Outbox.Send("up", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", 0));
+    }
+
+    DateTime lastDrag = DateTime.MinValue;
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (e.Button == MouseButtons.None || (DateTime.Now - lastDrag).TotalMilliseconds < 16) return;
+        lastDrag = DateTime.Now;
+        Outbox.Send("move", "id", CanvasId, "x", e.X, "y", e.Y);
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
