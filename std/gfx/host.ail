@@ -306,7 +306,6 @@ pub fn run[T gfx.Game](mut g T, title str, w int, h int) ! GfxError
         return GfxError(why: err.message)
     finish(mut g, l)?
 
-
 ## A private surface in `std.mem` memory, for `pixels` where the C library has
 ## no `mkstemp` (Windows).
 fn private_surface(w int, h int) Surface
