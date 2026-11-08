@@ -3,6 +3,7 @@
 // standard output. The first line each way carries "v": 1.
 
 import AppKit
+import SwiftUI
 
 /// A drawing step of a canvas (std.app.3).
 enum Op {
@@ -147,6 +148,17 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 answerMeasure(obj["runs"] as? [[String: Any]] ?? [])
                 continue
             }
+            if kind == "surface" {
+                // std.gfx.8 (ADR 0957): map the program's shared frame buffers.
+                if !Surfaces.attach(obj) {
+                    FileHandle.standardError.write("AIL App Host: cannot map the surface\n".data(using: .utf8)!)
+                }
+                continue
+            }
+            if kind == "present" {
+                Surfaces.present(obj)
+                continue
+            }
             if kind == "popup" {
                 // std.app.18: a native menu at (x, y) of the canvas `id`.
                 let id = text(obj, "id"), x = num(obj, "x"), y = num(obj, "y")
@@ -154,8 +166,29 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 DispatchQueue.main.async { showPopup(id: id, x: x, y: y, items: items) }
                 continue
             }
+            if kind == "pick" {
+                // std.app.22: a native chooser; answered with `picked`.
+                let id = text(obj, "id"), prompt = text(obj, "prompt"), folders = flag(obj, "folders"), start = text(obj, "start")
+                DispatchQueue.main.async { showPick(id: id, prompt: prompt, folders: folders, start: start) }
+                continue
+            }
+            if kind == "clipboard" {
+                // std.app.26 (ADR 0982): the app puts text on the system clipboard.
+                let t = text(obj, "text")
+                DispatchQueue.main.async {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(t, forType: .string)
+                }
+                continue
+            }
+            if kind == "drag" || kind == "zoom" {
+                // std.app.25: in edge mode the app says when its strip is dragged or double-clicked.
+                DispatchQueue.main.async { Edge.act(kind) }
+                continue
+            }
             if kind != "view" { continue }
             Hover.enabled = flag(obj, "hover")
+            Edge.wanted = flag(obj, "edge")
             if first {
                 first = false
                 if (obj["v"] as? NSNumber)?.intValue != 1 {
@@ -175,6 +208,75 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
 /// std.app.16: whether the program wants `move` and `leave` events.
 enum Hover {
     static var enabled = false
+}
+
+/// std.app.25 (ADR 0981): edge mode. The app draws up to the window's top edge; the
+/// title bar is hidden, the traffic lights stay, and the app is told the room they take.
+/// SwiftUI's own window keeps a title-bar band over the content whatever its style
+/// mask says, so edge mode moves the tree into a plain AppKit window of our own.
+enum Edge {
+    static var wanted = false
+    static var applied = false
+    static var lastEvent: NSEvent?
+    /// Our window, once edge mode is on.
+    static var own: NSWindow?
+
+    /// The window controls' room in points: their right edge plus a gap, and the title bar's height.
+    static func insets(_ w: NSWindow?) -> [String: Any] {
+        guard applied, let w = w else { return ["inset_left": 0, "inset_top": 0] }
+        let right = w.standardWindowButton(.zoomButton)?.frame.maxX ?? 70
+        let top = w.frame.height - w.contentLayoutRect.height
+        return ["inset_left": right + 8, "inset_top": max(top, 0)]
+    }
+
+    /// The app's window: ours in edge mode, else the one a canvas sits in, the key or first visible one.
+    static func window(_ w: NSWindow?) -> NSWindow? {
+        own ?? w ?? CanvasView.registry.values.first?.window ?? NSApp.keyWindow
+            ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil })
+    }
+
+    /// Once the app asks for edge mode: a plain window with a transparent, title-less
+    /// title bar whose content reaches the top edge, holding the same tree; the SwiftUI
+    /// window closes. Every canvas then reports its size again so the app learns the insets.
+    static func apply(_ model: Model) {
+        guard wanted, !applied else { return }
+        guard let old = window(nil) else { return }
+        applied = true
+        let win = NSWindow(contentRect: old.frame,
+                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                           backing: .buffered, defer: false)
+        win.title = old.title
+        win.titlebarAppearsTransparent = true
+        win.titleVisibility = .hidden
+        win.titlebarSeparatorStyle = .none
+        win.isMovableByWindowBackground = false
+        // The title bar's own drag handling is off: the app says when to move (`drag`).
+        win.isMovable = false
+        win.isReleasedWhenClosed = false
+        win.minSize = NSSize(width: 320, height: 200)
+        win.backgroundColor = .windowBackgroundColor
+        let hosting = NSHostingView(rootView: Root(model: model))
+        hosting.autoresizingMask = [.width, .height]
+        win.contentView = hosting
+        win.setFrame(old.frame, display: false)
+        own = win
+        win.makeKeyAndOrderFront(nil)
+        old.orderOut(nil)
+        old.close()
+        FileHandle.standardError.write("AIL App Host: edge mode on (std.app.25)\n".data(using: .utf8)!)
+        DispatchQueue.main.async {
+            for v in CanvasView.registry.values { v.reportSize() }
+        }
+    }
+
+    static func act(_ kind: String) {
+        guard let w = window(nil) else { return }
+        if kind == "zoom" { w.zoom(nil); return }
+        if let e = lastEvent {
+            w.isMovable = true
+            w.performDrag(with: e)
+        }
+    }
 }
 
 /// std.app.18: shows `items` as a menu and answers with a `popup` event whose `text` is the
@@ -198,4 +300,25 @@ func showPopup(id: String, x: Double, y: Double, items: [String]) {
 final class MenuPicker: NSObject {
     var chosen = ""
     @objc func pick(_ sender: NSMenuItem) { chosen = sender.title }
+}
+
+/// std.app.22: shows an open panel for a folder or a file and answers with a `picked` event
+/// whose `text` is the chosen path, empty if the user cancelled.
+func showPick(id: String, prompt: String, folders: Bool, start: String) {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = folders
+    panel.canChooseFiles = !folders
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Choose"
+    panel.message = prompt
+    if !start.isEmpty { panel.directoryURL = URL(fileURLWithPath: start) }
+    let finish: (NSApplication.ModalResponse) -> Void = { r in
+        let path = r == .OK ? (panel.url?.path ?? "") : ""
+        Outbox.shared.send("picked", ["id": id, "text": path])
+    }
+    if let w = NSApp.keyWindow {
+        panel.beginSheetModal(for: w, completionHandler: finish)
+    } else {
+        panel.begin(completionHandler: finish)
+    }
 }

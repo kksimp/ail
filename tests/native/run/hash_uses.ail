@@ -1,0 +1,30 @@
+# `impl Hash ... uses` (trait.hash.1, ADR 0955): a struct with its own `fn eq`
+# is a map key and set element, hashed and compared by the fields named.
+
+struct Key
+    id int
+    label str
+    noise float
+
+impl Eq for Key
+    fn eq(self, other Self) bool
+        self.id == other.id and self.label == other.label
+
+impl Hash for Key
+    uses id, label
+
+fn main()
+    mut m := Map[Key, int]()
+    m[Key(id: 1, label: "a", noise: 1.5)] = 10
+    m[Key(id: 2, label: "b", noise: 0.5)] = 20
+    m[Key(id: 1, label: "a", noise: 9.0)] = 11
+    print(m.len())
+    print(m[Key(id: 1, label: "a", noise: 0.0)])
+    print(m[Key(id: 2, label: "b", noise: 7.0)])
+    print(m.contains(Key(id: 1, label: "b", noise: 1.5)))
+    print(m.contains(Key(id: 2, label: "b", noise: 3.0)))
+    mut s := Set[Key]()
+    print(s.add(Key(id: 5, label: "x", noise: 1.0)))
+    print(s.add(Key(id: 5, label: "x", noise: 2.0)))
+    print(s.add(Key(id: 5, label: "y", noise: 1.0)))
+    print(s.len())

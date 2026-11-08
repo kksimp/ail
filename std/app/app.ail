@@ -196,6 +196,10 @@ pub struct Event
     pub meta bool
     ## For `click`: 1, 2 or 3 (std.app.17); 0 for other kinds.
     pub clicks int
+    ## For `start` and `resize` in edge mode (std.app.25): the room the
+    ## host's window controls take at the window's top-left, in points.
+    pub inset_left float
+    pub inset_top float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono` or `sans`.
@@ -212,6 +216,14 @@ pub struct Popup
     pub x float
     pub y float
     pub items List[str]
+
+## A native file or folder chooser the app asks for (std.app.22). `start` is
+## the folder it opens in ("" for the host's choice).
+pub struct Picker
+    pub id str
+    pub prompt str
+    pub folders bool
+    pub start str
 
 ## Progress of a long job (std.app.15): `total` is 0 when unknown.
 pub struct Progress
@@ -310,6 +322,8 @@ pub fn event(kind str) Event
         alt: false,
         shift: false,
         meta: false,
+        inset_left: 0.0,
+        inset_top: 0.0,
     )
 
 ## A button press, for tests.
@@ -371,11 +385,22 @@ pub trait App
     ## The widths of `runs`, in points, as the host measured them.
     fn measured(mut self, runs List[Measure], widths List[float])
         return
+    ## Extra protocol lines for the host, sent after each `update` and
+    ## cleared by this call (std.app.21).
+    fn lines(mut self) List[str]
+        []
     ## Whether the app wants `move` and `leave` events from canvases (std.app.16).
     fn hover(self) bool
         false
+    ## Whether the app draws up to the window's top edge, with no title bar
+    ## (std.app.25); the host then reports its window controls' insets.
+    fn edge(self) bool
+        false
     ## A native menu to show; the host answers with a `popup` event (std.app.18).
     fn popup(self) Popup?
+        none
+    ## A native chooser to show; the host answers `picked` (std.app.22).
+    fn pick(self) Picker?
         none
 
 fn indent(depth int) str
@@ -452,6 +477,8 @@ pub fn event_from_json(j Json) Event
         shift: j.flag("shift", false),
         meta: j.flag("meta", false),
         clicks: (j.num("clicks") else 0.0).to_int(),
+        inset_left: j.num("inset_left") else 0.0,
+        inset_top: j.num("inset_top") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.
@@ -459,7 +486,13 @@ pub fn frame[T App](a T) str
     title := a.title().to_json().to_text()
     focus := a.focus().to_json().to_text()
     hov := if a.hover() then ",\"hover\":true" else ""
-    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus}{hov},\"tree\":{a.view().to_json().to_text()}}"
+    edge := if a.edge() then ",\"edge\":true" else ""
+    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus}{hov}{edge},\"tree\":{a.view().to_json().to_text()}}"
+
+## The line that puts `text` on the system clipboard (std.app.26), for
+## `lines()`: a host that cannot write the clipboard ignores it.
+pub fn clipboard(text str) str
+    "\{\"v\":1,\"t\":\"clipboard\",\"text\":{text.to_json().to_text()}}"
 
 ## Feeds each event to `a` in order, with no host (std.app.11), and returns
 ## the outline after each one: a test of `update` and `view`.
@@ -517,6 +550,7 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
         return AppError(kind: "start", message: "{err}")
     mut sent := frame(a)
     mut shown := a.popup()
+    mut chosen := a.pick()
     c.stdin.send("{sent}\n")
     hello := c.out.recv() else return gone(move c)
     j := parse_json(hello) else return mismatch(move c, hello)
@@ -556,12 +590,21 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
                 break
             a.measured(want, widths)
             rounds += 1
+        # std.app.21: protocol lines the app asks to send as they are.
+        for extra in a.lines()
+            c.stdin.send("{extra}\n")
         # std.app.18: show a menu once per change of the app's request.
         want_menu := a.popup()
         if want_menu != shown
             if m := want_menu
                 c.stdin.send("{popup_line(m)}\n")
             shown = want_menu
+        # std.app.22: show a chooser once per change of the app's request.
+        want_pick := a.pick()
+        if want_pick != chosen
+            if k := want_pick
+                c.stdin.send("{pick_line(k)}\n")
+            chosen = want_pick
         now := frame(a)
         if now != sent
             c.stdin.send("{now}\n")
@@ -597,6 +640,18 @@ fn measure_line(runs List[Measure]) str
         for r in runs
     ]
     "\{\"v\":1,\"t\":\"measure\",\"runs\":{Json.Arr(items).to_text()}}"
+
+## The request for a native chooser (std.app.22).
+fn pick_line(k Picker) str
+    j := Json.Obj([
+        member("v", num(1.0)),
+        member("t", txt("pick")),
+        member("id", txt(k.id)),
+        member("prompt", txt(k.prompt)),
+        member("folders", Json.Bool(k.folders)),
+        member("start", txt(k.start)),
+    ])
+    j.to_text()
 
 ## The request for a native menu (std.app.18).
 fn popup_line(p Popup) str

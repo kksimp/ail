@@ -87,7 +87,8 @@ fn map_hash(kind int, k int) int
 # shapes (a struct or tuple, one word per field), `E` n `;` and n variants
 # `V` m `;` and m shapes (an enum whose first word is the variant), `O` and
 # a shape (an optional: 0 is `none`, and a word, float or optional inside is
-# boxed), `@` n `;` (the shape at offset n: a type that holds itself).
+# boxed), `@` n `;` (the shape at offset n: a type that holds itself), `_` (a
+# struct field that `impl Hash ... uses` leaves out: neither hashed nor compared).
 
 fn shape_at(sh int, p int) int
     load8(sh + 16 + p)
@@ -149,6 +150,8 @@ fn shape_some(sh int, p int, v int) int
 
 fn shape_hash(sh int, p int, v int, h int) int
     c := shape_at(sh, p)
+    if c == 95
+        return h
     if c == 64
         return shape_hash(sh, shape_num(sh, p + 1), v, h)
     if c == 79
@@ -190,6 +193,8 @@ fn shape_hash(sh int, p int, v int, h int) int
 
 fn shape_eq(sh int, p int, a int, b int) bool
     c := shape_at(sh, p)
+    if c == 95
+        return true
     if c == 64
         return shape_eq(sh, shape_num(sh, p + 1), a, b)
     if c == 79

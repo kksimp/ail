@@ -52,6 +52,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
+| **Generator** | A function with `yield` that returns `Seq[T]`, a lazy single-use sequence compiled to a state machine. Proposed in [ADR 0965](decisions/0965-generators.md). |
+| **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md). |
 | **Constant time (cryptography)** | Code whose branches and memory indexes never depend on secret data, so its timing reveals nothing about keys or plaintext. Required of the TLS primitives (ADRs 0360, 0366). |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
 | **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed at compile time (before `main` in the bootstrap); visible in the whole module (ADR 0132, ADR 0225). |
@@ -211,6 +213,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Safepoint** | A point where a thread can pause for the GC. Polls cost a little. Loops that provably don't allocate can omit them. |
 | **Second-class borrow** | Temporary access to an argument that lasts only for a call and can't be stored or returned, so no lifetimes are needed (ADR 0062). |
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
+| **Seed** | A native `ail` binary published as a release asset for one host (`ail-seed-ARCH-OS`). `./ail` downloads it, checks its SHA-256 against `tools/release/seeds.sha256` and uses it to build the compiler from source; only the designer publishes seeds ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md), [ADR 0976](decisions/0976-public-release-and-seed-trust.md)). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0904; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |

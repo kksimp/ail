@@ -16,10 +16,10 @@ $p.StandardInput.WriteLine($view)
 $p.StandardInput.WriteLine('not json')
 $p.StandardInput.WriteLine('{"v":1,"t":"measure","runs":[{"text":"hello","font":"mono","size":13,"bold":false,"italic":false},{"text":"hi","font":"sans","size":13,"bold":true,"italic":false}]}')
 $p.StandardInput.Flush()
-# Every event for 3 s; keep the pending read, a second one would fail.
+# Events for up to 15 s (a loaded machine is slow to show the first line), ending once `start` and `measured` are in; keep the pending read, a second one would fail.
 $lines = @()
 $u = $null
-$deadline = [DateTime]::Now.AddSeconds(3)
+$deadline = [DateTime]::Now.AddSeconds(15)
 while ([DateTime]::Now -lt $deadline) {
     if ($null -eq $u) { $u = $p.StandardOutput.ReadLineAsync() }
     if (-not $u.Wait(500)) { continue }
@@ -27,6 +27,7 @@ while ([DateTime]::Now -lt $deadline) {
     Write-Output "line: $($u.Result)"
     $lines += $u.Result
     $u = $null
+    if (($lines -like '*"kind":"start"*') -and ($lines -like '*"kind":"measured"*')) { break }
 }
 $p.StandardInput.Close()
 if (-not $p.WaitForExit(10000)) { Write-Output 'smoke: RED host did not exit'; $p.Kill(); exit 1 }

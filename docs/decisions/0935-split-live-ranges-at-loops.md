@@ -38,8 +38,10 @@ slot. `AIL_OPT_OFF=split` turns step 1 off.
 
 ## Measured
 
-Pending (runner, ADR 0890 protocol: ail-linux and the Mac, min of 7, stage-2
-compiler; classic ten, BIGRACE, stage-2 self-build time).
+Mac, min of 7, stage-2 compiler, promote and split on against off: runtime
+neutral on the classic programs (lzr 1.01, vm 1.00, matmul 0.98) and the
+stage-2 self-build 2.6% slower. ail-linux agreed (all within ±5%). See
+Rejection below.
 
 ## Rejected alternatives
 

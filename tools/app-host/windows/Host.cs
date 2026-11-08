@@ -470,6 +470,14 @@ class CanvasView : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        // std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`.
+        if (e.Control && !e.Alt && e.KeyCode == Keys.V && Clipboard.ContainsText())
+        {
+            e.SuppressKeyPress = true;
+            e.Handled = true;
+            Outbox.Send("paste", ModArgs("id", CanvasId, "text", Clipboard.GetText()));
+            return;
+        }
         string name = KeyName(e.KeyCode);
         bool chord = e.Control || e.Alt;
         if (name == null && chord)
@@ -929,6 +937,19 @@ static class Program
             {
                 object obj = Json.Parse(line);
                 string kind = Json.Text(Json.Get(obj, "t"));
+                if (kind == "pick")
+                {
+                    // std.app.22: no native chooser on this host yet; say so rather than hang.
+                    Outbox.Send("pick_error", "id", Json.Text(Json.Get(obj, "id")), "text", "this host has no native file chooser yet");
+                    continue;
+                }
+                if (kind == "clipboard")
+                {
+                    // std.app.26 (ADR 0982): the app puts text on the system clipboard (an STA call, so on the form's thread).
+                    string t = Json.Text(Json.Get(obj, "text"));
+                    form.BeginInvoke((Action)delegate { try { if (t.Length > 0) Clipboard.SetText(t); else Clipboard.Clear(); } catch (Exception) { } });
+                    continue;
+                }
                 if (kind == "measure") { AnswerMeasure(Json.Get(obj, "runs") as List<object> ?? new List<object>()); continue; }
                 if (kind != "view") continue;
                 if (first)

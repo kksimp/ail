@@ -99,7 +99,7 @@ aren't run.
 | 20 | [Contracts](20-contracts.md) | `contract` | Drafted (partial) |
 | 15 | [Compile-time execution and metaprogramming](15-compile-time.md) | `ct` | Drafted (partial) |
 | 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
-| 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace` | Drafted (partial) |
+| 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace`, `probe` | Drafted (partial) |
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink` | Drafted (partial) |
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |

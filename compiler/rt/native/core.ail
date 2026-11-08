@@ -70,9 +70,10 @@ fn sys_write(fd int, p int, n int)
             return
         done += r
 
-fn sys_exit(code int)
-    leak_exit(code)
+fn sys_exit(status int)
+    leak_exit(status)
     instr_dump()
+    code := race_exit(status)
     t := target()
     if t == 3
         import_call("ExitProcess", code, 0, 0, 0)
@@ -235,10 +236,12 @@ fn init(argc int, argv int)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
     heap_init(argv)
-    limits_init()
     # Windows has no argument vector on entry: read the command line.
     if target() == 3
         win_args_init()
+    # After `win_args_init`: on Windows that builds the environment, so the
+    # settings (`AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB`, `AIL_GC_STATS`, `AIL_GC_VERIFY`) are not seen before it.
+    limits_init()
     # After the Windows environment is built, or `AIL_LEAK` is not seen there (san.leak.3).
     leak := os_env_get("AIL_LEAK")
     if leak != ""
@@ -259,7 +262,7 @@ fn init(argc int, argv int)
             )
 
 ## Windows (target 3) hands the program no `argv` or `envp`: build them from
-## `GetCommandLineW` (UTF-16, by the rules of `CommandLineToArgvW`, program
+## `GetCommandLineW` (UTF-16, by the rules of `CommandLineToArgvW`, with `""` in a quoted part a literal quote, program
 ## name first) and `GetEnvironmentStringsW`. They live in pages that are
 ## never freed.
 fn win_args_init()
@@ -325,8 +328,14 @@ fn win_args_init()
                         store8(out, 92)
                         out += 1
             elif c == 34
-                quoted = not quoted
-                i += 1
+                if quoted and win_unit(p, i + 1) == 34
+                    # `""` inside a quoted part is one literal quote and the part goes on (as in the CRT since 2008).
+                    store8(out, 34)
+                    out += 1
+                    i += 2
+                else
+                    quoted = not quoted
+                    i += 1
             elif (c == 32 or c == 9) and not quoted
                 break
             else

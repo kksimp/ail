@@ -46,6 +46,10 @@ fn build(src str, exe str) str?
         return none
     r.err.lines().first() else "build failed"
 
+## `text` with CRLF line ends as LF.
+fn lf(text str) str
+    text.replace("\r\n", "\n")
+
 fn alarm_for(stem str) int
     60
 
@@ -78,10 +82,11 @@ fn Gate.examples(mut self, tmp str)
             red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
-        if got.status != 0 or got.out != want
+        # Windows may hand a program's lines back as CRLF (a checkout with autocrlf, the console's translation): compare LF.
+        if got.status != 0 or lf(got.out) != lf(want)
             red(
                 "examples/{name}",
-                "exit {got.status}; output differs from {stem}.out\n{got.out}{got.err}",
+                "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
 
 fn Gate.selfhost(mut self)
@@ -209,9 +214,6 @@ fn run_case(at str, exp str) str?
     if fs.exists("{exp}trap")
         r := case_run(cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         mut rule := slurp("{exp}trap").trim()
-        # ffi.load.3: a C call on Windows traps as not supported, whatever the library or symbol.
-        if (env.get("OS") else "") == "Windows_NT" and rule.starts_with("ffi.load.")
-            rule = "ffi.load.3"
         if r.status != 1 or not r.err.contains("trap[{rule}]")
             return "expected trap[{rule}] (exit 1), got {r.status}\n{r.err}"
         if r.out != want_out
@@ -2197,6 +2199,11 @@ fn Gate.native_misc(mut self)
 STD_UNTESTABLE := [
     ["time/date.ail", "now_local", "its value is the clock in the machine's zone"],
     ["attach/serve.ail", "run", "it serves until its window closes; attach_watched covers the wire"],
+    [
+        "gfx/host.ail",
+        "run",
+        "it opens a window and runs until it closes; the std-gfx.md norun example covers the types",
+    ],
     ["audio/device.ail", "play", "it plays through the sound hardware, which a headless case lacks"],
     ["audio/device.ail", "record", "it records from the microphone, which a headless case lacks"],
     ["net/http.ail", "serve_dir", "it serves until the program stops, so a case cannot end it"],
@@ -2418,7 +2425,8 @@ fn main() !
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
-    _ := proc.run("rm", ["-rf", tmp]) else return
+    # Cleanup must never skip the verdict below: with no `rm` (Windows without Git's usr\bin on PATH) the run still reports.
+    _ := proc.run("rm", ["-rf", tmp]) else proc.Output(status: 127, out: "", err: "")
     if g.unbuilt.len() > 0
         print("{g.unbuilt.len()} examples are not native yet: {g.unbuilt.join(" ")}")
     if g.fails == 0

@@ -1,6 +1,6 @@
 # 0910. `ail test --bundle-failure`: one file that reproduces a failing test
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-07, by the integrator after it landed through the gate with its spec rules; proposed 2026-10-25)
 - **Date:** 2026-10-25
 - **Decided by:** Designer (2026-10-25, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0398](0398-record-and-replay.md) (record and replay), [ADR 0199](0199-property-seeds-and-shrinking.md) (property seeds), [ADR 0186](0186-deterministic-task-scheduler.md) (schedule seeds)
