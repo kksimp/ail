@@ -4,6 +4,8 @@ Each design decision has its own file (see [ADR 0001](0001-record-decisions-as-a
 New ADRs copy [0000-template.md](0000-template.md) and take the next free number.
 ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 
+Status legend: **Accepted** is decided; the spec and code may still be catching up (see [status.md](../status.md)). **Proposed** is not decided or not built: *planned, not implemented* means the direction is chosen but no code exists, so do not read it as shipped behaviour. **Superseded** and **Rejected** are kept for history.
+
 | # | Title | Status | Date |
 |---|---|---|---|
 | [0001](0001-record-decisions-as-adrs.md) | Record design decisions as numbered ADRs | Accepted | 2026-10-04 |
@@ -138,7 +140,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0130](0130-floats.md) | `float` is IEEE 754 binary64, with Python's text form and a total `cmp` (details delegated) | Accepted | 2026-10-05 |
 | [0131](0131-maps-and-sets.md) | Maps and sets keep insertion order; the collection API, places and loops (details delegated) | Accepted | 2026-10-05 |
 | [0132](0132-module-constants.md) | Module constants: `NAME := expr` with a constant expression (details delegated) | Accepted | 2026-10-05 |
-| [0133](0133-automatic-hash.md) | `Hash` is automatic, like `Eq` and `ToStr` (amends 0126) | Accepted | 2026-10-05 |
+| [0133](0133-automatic-hash.md) | `Hash` is automatic, like `Eq` and `ToStr` (amends 0126) | Accepted; amended by 0955 | 2026-10-05 |
 | [0134](0134-characters.md) | `char`: traits, classification, digits and code points *(delegated)* | Accepted | 2026-10-05 |
 | [0135](0135-string-literals-and-methods.md) | Multi-line and raw strings, `\'`, and the `str` methods (amends 0089) *(delegated)* | Accepted | 2026-10-05 |
 | [0136](0136-list-methods-and-slices.md) | List methods, open-ended slices that trap, and `xs.sum()` *(delegated)* | Accepted | 2026-10-05 |
@@ -704,15 +706,15 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0886](0886-native-values-mode.md) | Native `ail run --values`: frame values in a trap | Accepted | 2026-10-24 |
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
-| [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Proposed | 2026-10-24 |
-| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed | 2026-10-24 |
-| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed | 2026-10-24 |
-| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed | 2026-10-24 |
-| [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Proposed | 2026-10-24 |
-| [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Proposed | 2026-10-24 |
-| [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed | 2026-10-24 |
-| [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Proposed | 2026-10-24 |
-| [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Proposed | 2026-10-24 |
+| [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Proposed (planned, not implemented) | 2026-10-24 |
+| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed (planned, not implemented) | 2026-10-24 |
+| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed (planned, not implemented) | 2026-10-24 |
+| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed (planned, not implemented) | 2026-10-24 |
+| [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Proposed (planned, not implemented) | 2026-10-24 |
+| [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Proposed (planned, not implemented) | 2026-10-24 |
+| [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed (planned, not implemented) | 2026-10-24 |
+| [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Proposed (planned, not implemented) | 2026-10-24 |
+| [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Proposed (planned, not implemented) | 2026-10-24 |
 | [0900](0900-refuse-rust-only-routes.md) | `./ail` refuses `test --native` and `selftest --test` (Rust-only routes) | Accepted | 2026-10-24 |
 | [0901](0901-std-toml.md) | `std.toml`: TOML read into the `Json` value *(delegated)* | Accepted | 2026-10-25 |
 | [0902](0902-std-bigint.md) | `std.bigint`: integers of any size *(delegated)* | Accepted | 2026-10-25 |
@@ -727,14 +729,57 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0885](0885-contracts-checked-by-fuzzing.md) | Contracts checked by fuzzing: `ail test --contracts` gives a counterexample for a failing `requires` or `ensures` | Accepted | 2026-10-24 |
 | [0890](0890-optimizer-roadmap-to-match-c.md) | Optimizer roadmap to match C at -O2/-O3: allocation, register allocation, inlining, loop opts, range analysis, auto-vectorization, maps, tail calls; speed-only per ADR 0874 *(delegated)* | Accepted | 2026-10-24 |
 | [0908](0908-apps-in-their-own-repositories.md) | The apps (Garlic, Garlic Press, ail-edit, Clove) live in their own private AGPL-3.0 repositories; ail holds the language only | Accepted | 2026-10-25 |
-| [0909](0909-ail-verify-diff.md) | `ail verify --diff`: proved, tested, unverified and new failures for a change | Proposed | 2026-10-25 |
-| [0910](0910-test-bundle-failure.md) | `ail test --bundle-failure`: one file that reproduces a failing test | Proposed | 2026-10-25 |
-| [0911](0911-default-automatic-parallel-loops.md) | Native code runs proven independent loops in parallel by default, past a work threshold | Proposed | 2026-10-25 |
+| [0909](0909-ail-verify-diff.md) | `ail verify --diff`: proved, tested, unverified and new failures for a change | Accepted | 2026-10-25 |
+| [0910](0910-test-bundle-failure.md) | `ail test --bundle-failure`: one file that reproduces a failing test | Accepted | 2026-10-25 |
+| [0911](0911-default-automatic-parallel-loops.md) | Native code runs proven independent loops in parallel by default, past a work threshold | Accepted | 2026-10-25 |
 | [0913](0913-http2-client-over-alpn.md) | An HTTP/2 client over ALPN in the native `std.net` *(delegated)* | Accepted | 2026-10-26 |
 | [0914](0914-automatic-fork-join-of-independent-calls.md) | Run independent pure calls in a straight-line block as a fork-join, when each is worth it | Accepted | 2026-10-26 |
 | [0915](0915-http-retry-any-method-on-stale-pooled-connection.md) | The HTTP client resends any method once when a pooled connection dies before a response byte | Accepted | 2026-10-26 |
-| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Proposed | 2026-10-26 |
+| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Proposed (planned, not implemented) | 2026-10-26 |
 | [0917](0917-ail-task-protocol.md) | `ail task`: start, status, verify and finish one change with a recorded base and a stated next step *(delegated)* | Accepted | 2026-10-26 |
 | [0918](0918-ail-mcp-compiler-tools.md) | `ail mcp`: the compiler's own tools (check, test, ask, impact, task) as an MCP server on stdio *(delegated)* | Accepted | 2026-10-26 |
 | [0919](0919-attach-input-opt-in.md) | `ail run --attach-input`: an opt-in `input` request so an agent can click and type in a running app | Accepted | 2026-10-26 |
 | [0920](0920-replay-shrink.md) | `ail replay --shrink`: the smallest recording that still fails the same way | Accepted | 2026-10-26 |
+| [0921](0921-replay-probes.md) | Probes: `--at FILE:LINE --show a,b` prints chosen values each time a line runs | Accepted | 2026-10-26 |
+| [0923](0923-struct-scalar-replacement.md) | Native: scalar replacement of struct objects that stay in one function, and inlining of constructors *(delegated)* | Accepted | 2026-10-26 |
+| [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
+| [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
+| [0926](0926-c-header-import-subset.md) | `use c "header.h"`: a subset C header reader that writes `pub extern c fn` declarations *(delegated)* | Accepted | 2026-10-28 |
+| [0927](0927-fs-scan.md) | `fs.scan`: one bulk walk with allocated size, inode and kind *(delegated)* | Accepted | 2026-11-04 |
+| [0928](0928-fs-volume.md) | `fs.volume`: total and free bytes of a volume *(delegated)* | Accepted | 2026-11-04 |
+| [0929](0929-fs-read-range-trash.md) | `fs.read_range` and `fs.trash`: partial reads and recoverable delete *(delegated)* | Accepted | 2026-11-04 |
+| [0930](0930-std-app-progress-events.md) | `std.app` progress events for long jobs | Accepted | 2026-11-04 |
+| [0931](0931-std-app-canvas-hover.md) | `std.app` canvas hover events | Accepted | 2026-11-04 |
+| [0932](0932-std-app-click-count-and-menus.md) | `std.app` click count and context menus | Accepted | 2026-11-04 |
+| [0933](0933-std-app-alpha-fill.md) | `std.app` translucent fills | Accepted | 2026-11-04 |
+| [0934](0934-promote-struct-fields-in-loops.md) | Native: struct fields kept in registers across loops: measured no gain, not merged *(delegated)* | Rejected | 2026-11-05 |
+| [0935](0935-split-live-ranges-at-loops.md) | Native: live-range splitting at call-free loops: measured no gain, not merged *(delegated)* | Rejected | 2026-11-05 |
+| [0936](0936-native-map-key-cache.md) | Native string-keyed maps cache keys by object, and an insert reuses the missed probe's hash *(delegated)* | Accepted | 2026-11-04 |
+| [0937](0937-grid-flat-2d-list.md) | `Grid[T]`: a flat 2-D list in the prelude, indexed `g[i, j]` *(delegated)* | Accepted | 2026-11-04 |
+| [0938](0938-auto-parallel-push-builder-loops.md) | Run push-builder loops on the pool: one push per iteration, chunks joined in order *(delegated)* | Accepted | 2026-11-04 |
+| [0939](0939-match-jump-tables.md) | Native: `match` through a jump table, with the dispatch repeated in each arm *(delegated)* | Accepted | 2026-11-04 |
+| [0941](0941-data-range-loop-guards.md) | Native: data-range guards for loop nests, and ikj interchange of reduction nests *(delegated)* | Accepted | 2026-11-04 |
+| [0942](0942-user-loop-vector-kernels.md) | Native: vector kernels for swapped reduction nests (ADR 0845 stage 3, first step) *(delegated)* | Accepted | 2026-11-04 |
+| [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
+| [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
+| [0945](0945-vector-escape-loops.md) | Native: vector kernel for escape-time loops, mandelbrot-style (ADR 0845 stage 2) *(delegated)* | Accepted | 2026-11-05 |
+| [0949](0949-std-audio.md) | std.audio: sound as data, devices through a host program *(delegated)* | Accepted | 2026-11-05 |
+| [0954](0954-const-generics.md) | Const generics: `int` parameters on types and functions (`struct Vec[T, N int]`), by monomorphisation *(delegated)* | Proposed | 2026-11-05 |
+| [0955](0955-custom-hash-names-fields.md) | Custom hashing: `impl Hash` names the fields that take part (amends 0133, resolves OQ-042) | Accepted | 2026-11-05 |
+| [0956](0956-std-gfx-frame-loop.md) | `std.gfx`: the frame loop for real-time programs (key-up, vsync, `Input` snapshots) *(delegated)* | Accepted | 2026-11-05 |
+| [0957](0957-shared-surface-transport.md) | Shared-surface transport for `std.gfx` (no JSON on the hot path) *(delegated)* | Accepted | 2026-11-05 |
+| [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Proposed (planned, not implemented) | 2026-11-05 |
+| [0959](0959-std-crypto.md) | std.hash and std.crypto: in-house, constant-time, vector-checked primitives; HMAC-SHA-384/512 first *(delegated)* | Accepted | 2026-11-05 |
+| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Proposed | 2026-11-05 |
+| [0966](0966-ail-lsp-language-server.md) | `ail lsp`: the semantic API as a language server on stdio *(delegated)* | Accepted | 2026-11-05 |
+| [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
+| [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed (experimental: compile-only, unverified) | 2026-11-05 |
+| [0969](0969-leak-report.md) | The leak report: `ail leak` shows growth by kind and retention by root on the GC heap *(delegated)* | Accepted | 2026-11-06 |
+| [0971](0971-std-app-file-chooser.md) | `std.app` native file and folder chooser *(delegated)* | Accepted | 2026-11-06 |
+| [0972](0972-windows-system-zone.md) | Windows system zone: map the Windows zone ID to its IANA name *(delegated)* | Accepted | 2026-11-07 |
+| [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
+| [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
+| [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
+| [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
+| [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
+| [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |

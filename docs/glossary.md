@@ -13,6 +13,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
 | **Ad hoc signature** | A code signature with no certificate: SHA-256 hashes of the file's pages in a code directory. Apple Silicon runs only signed executables; `ail build` signs Mach-O files this way itself (ADR 0389). |
 | **Address folding** | Folding a constant offset into a memory access, so `s[bi + 3]` loads directly instead of copying the index, adding, then loading ([ADR 0625](decisions/0625-address-folding.md)). |
+| **Allocation cache** | A thread's own free-list heads and bump page per size class, from which the native allocator serves small objects without a lock once the process has threads; refilled under the allocation lock and emptied at each collection ([ADR 0943](decisions/0943-per-thread-allocation-caches.md)). |
 | **ADR** | Architecture Decision Record: one file per design decision in `docs/decisions/`. See ADR 0001. |
 | **AEAD** | Authenticated encryption with associated data: a cipher that encrypts and authenticates in one step and refuses to decrypt on a bad tag. TLS 1.3 uses ChaCha20-Poly1305 and AES-GCM (ADR 0366). |
 | **Agent-tool corpus** | The benchmark programs of the kind an AI agent writes when operating a computer (`logscan`, `tasks`, `build`, and since ADR 0280 `snapdiff` and `csvreport`), each with a Python twin, measured for tokens and speed. See ADRs 0217 and 0218. |
@@ -51,6 +52,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
+| **Generator** | A function with `yield` that returns `Seq[T]`, a lazy single-use sequence compiled to a state machine. Proposed in [ADR 0965](decisions/0965-generators.md). |
+| **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md). |
 | **Constant time (cryptography)** | Code whose branches and memory indexes never depend on secret data, so its timing reveals nothing about keys or plaintext. Required of the TLS primitives (ADRs 0360, 0366). |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
 | **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed at compile time (before `main` in the bootstrap); visible in the whole module (ADR 0132, ADR 0225). |
@@ -102,6 +105,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (own repository kksimp/garlic): text mode first, with a page model for agents. See garlic-browser.md in that repository. |
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
+| **Grid** | `Grid[T]`, the prelude's 2-D list in one flat block, row by row: `Grid.fill(rows, cols, v)`, `g[i, j]` (`type.grid.*`, [ADR 0937](decisions/0937-grid-flat-2d-list.md)). |
 | **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Linux host `tools/app-host/linux`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
@@ -118,7 +122,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
 | **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
-| **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236). |
+| **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236), or pushes one element per iteration to a built list (`conc.par.16`, ADR 0938). |
 | **In-place reuse** | Reusing a uniquely owned value's memory at its last use for a new value, avoiding the allocator (Perceus-style). See ADR 0012. |
 | **Insertion order** | The iteration order of maps and sets: the order keys were first added. Updating a key keeps its place (ADR 0131). |
 | **Invariant** | An `invariant COND` line in a struct: a pure `bool` over its fields that holds after construction and after every `mut self` method, checked at run time (ADR 0305). |
@@ -169,6 +173,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
+| **Push-builder loop** | A loop whose body names an outer list only in one top-level `out.push(e)`, so iteration `k` pushes element `k`; it runs on the pool with a list per chunk, joined in order (`conc.par.16`, [ADR 0938](decisions/0938-auto-parallel-push-builder-loops.md)). |
 | **Renderer** | The part of a host that turns a view tree into controls on screen; one per platform (SwiftUI on macOS), so the same AIL app runs everywhere a host exists (ADR 0838). |
 | **SameSite** | The cookie attribute (`Strict`, `Lax` or `None`) that limits which cross-site requests carry the cookie; the cookie jar honours it ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Screen model** | What is on a screen as items (role, text, colour name, box, state) that an agent queries in text within a token budget, without a vision model (`std.screen`, ADR 0878). |
@@ -208,6 +213,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Safepoint** | A point where a thread can pause for the GC. Polls cost a little. Loops that provably don't allocate can omit them. |
 | **Second-class borrow** | Temporary access to an argument that lasts only for a call and can't be stored or returned, so no lifetimes are needed (ADR 0062). |
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
+| **Seed** | A native `ail` binary published as a release asset for one host (`ail-seed-ARCH-OS`). `./ail` downloads it, checks its SHA-256 against `tools/release/seeds.sha256` and uses it to build the compiler from source; only the designer publishes seeds ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md), [ADR 0976](decisions/0976-public-release-and-seed-trust.md)). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0904; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
@@ -265,6 +271,10 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Whole-program optimisation** | Optimising across all modules at once (specialisation, devirtualisation, cross-module constant propagation). See OQ-017. |
 | **Window host** | The main thread that owns the window and serves the program's requests (now the `std.app` host process, ADR 0838), because macOS allows windows only on the main thread (ADR 0178). |
 | **`with` block** | `with m as mut x` and a block: holds mutex `m`, with its value in `x`, and stores `x` back however the block ends; a trap keeps the old value (`conc.share.6`, ADR 0301). |
+| **Schedule sanitizer** | `ail sanitize`: runs a program on the fixed schedule and under seeded random schedules and reports any run whose result differs (ADR 0967). |
+| **Leak report** | `ail leak`: the collector counts live bytes by object kind and by root at each collection, and reports growth and the roots that hold it (ADR 0969). |
 | **Work stealing** | A scheduler in which each worker thread has its own queue of work and idle workers take work from the others' queues; the runtime uses one such pool for tasks and parallel loops (ADR 0238). |
+| **Frame loop** | The `std.gfx` cycle of reading `Input`, calling `update` and `draw`, and presenting at the display's vsync (ADR 0956). |
+| **Surface** | A shared-memory pixel buffer that a `std.gfx` program fills and the window host shows, with no JSON on the path (ADR 0957). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |

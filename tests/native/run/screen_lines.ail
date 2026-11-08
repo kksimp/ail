@@ -1,0 +1,31 @@
+use std.app
+use std.screen
+use std.screen.view
+
+fn main()
+    # std.screen.4: `lines` lists items most important first, and `+N more` counts those a budget cuts off.
+    items := [screen.item(1, "text", "Cart", 0x333333, 0.0, 0.0, 30.0, 20.0), screen.item(2, "button", "Pay", 0xcc2222, 0.0, 30.0, 40.0, 24.0)]
+    all := screen.lines(items, 0)
+    assert(all.contains("button 'Pay'"))
+    assert(all.contains("text 'Cart'"))
+    assert(not all.contains("more"))
+    assert_eq(screen.lines([], 0), "nothing")
+    cut := screen.lines(items, 1)
+    assert(cut.contains("+1 more"))
+    # std.screen.12: canvas ops become items, moved by the offset, in paint order.
+    ops := [app.draw_rect(5.0, 5.0, 30.0, 10.0, 0xcc2222), app.draw_text(6.0, 6.0, "Hi", 0xffffff)]
+    drawn := view.of_ops(ops, 0.0, 80.0)
+    assert_eq(drawn.len(), 2)
+    assert_eq(drawn[0].role, "box")
+    assert_eq(drawn[0].y, 85.0)
+    assert_eq(drawn[1].role, "text")
+    assert_eq(drawn[1].text, "Hi")
+    # std.screen.13: a view tree becomes a screen, and `control_id` resolves a control by its id or its #N.
+    tree := app.column([app.label("Cart"), app.button("pay", "Pay"), app.field("q", "", "search")])
+    sc := view.of_node(tree, 300.0, 200.0, "q")
+    assert(sc.find("button", "", "", 0).contains("button 'Pay'"))
+    assert(sc.find("textbox", "", "", 0).contains("focused"))
+    assert_eq(view.control_id(tree, "pay"), "pay")
+    assert_eq(view.control_id(tree, "1319297"), "pay")
+    assert_eq(view.control_id(tree, "nope"), "")
+    print("ok")

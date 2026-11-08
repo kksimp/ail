@@ -3,6 +3,7 @@
 ## (mod.use.1-2, mod.vis.1-2), `@derive` traits (ct.derive.1), and
 ## recovery from other languages' constructs (gram.foreign.1, gram.rec.1).
 use ast
+use cheader
 use fix
 
 # ---- Contracts ----
@@ -336,6 +337,8 @@ fn Parser.use_decl(mut self)
         skip_statement()
 
 fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
+    if header := c_header()
+        return header_use(pos, header)
     mut path := [take_name("a module path after `use`", "mod.use.1")?]
     while true
         if at_sym(":") and sym_at(1) == ":" and adjacent(i)
@@ -361,12 +364,48 @@ fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
         return none
     ast.Use(path: path, alias: alias, pos: pos)
 
+## The header of a `use c "header.h"`, when the line is one (ffi.decl.1).
+fn Parser.c_header(self) str?
+    if tag_at(0) != "id" or ident() != "c"
+        return none
+    h := str_at(1)
+    if h == ""
+        return none
+    h
+
+## The text of the string literal `n` tokens ahead, or "".
+fn Parser.str_at(self, n int) str
+    match peek_at(n)
+        Str(h) => h
+        Ident(_) | Kw(_) | Sym(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
+
+## `use c "header.h" as name` (ffi.decl.1, ADR 0926): the import of the module that
+## `cheader.module_name` makes for the header, under `name`.
+fn Parser.header_use(mut self, pos ast.Pos, header str) ast.Use?
+    i += 2
+    if not eat_kw("as")
+        error_text(
+            "ffi.decl.1",
+            here(),
+            "`use c \"{header}\"` needs a name",
+            "write `use c \"{header}\" as NAME`",
+            "",
+        )
+        skip_statement()
+        return none
+    alias := take_name("a name after `as`", "ffi.decl.1")?
+    if not eat_newline() and peek() != Tok.Eof
+        unexpected("end of line after the import", "mod.use.1")
+        return none
+    ast.Use(path: [ast.Ident(name: cheader.module_name(header), pos: pos)], alias: alias, pos: pos)
+
 ## `pub` before a top-level declaration (mod.vis.1). The declaration follows
 ## on the same line, so the line marks it public.
 fn Parser.pub_marker(mut self)
     pos := bump().pos
     k := kw_at(0)
     if k == "fn"
+        or k == "extern"
         or k == "struct"
         or k == "enum"
         or k == "error"

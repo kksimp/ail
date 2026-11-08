@@ -91,11 +91,25 @@ fn classify(w int, h int, px List[int], b Blob, texts List[screen.Item]) screen.
     round := rounded(w, px, b)
     shape := if round then "rounded" else "square"
     id := 5000000 + b.y0 * w + b.x0
-    mut it := screen.item(id, "panel", text, b.color, b.x0.to_float(), b.y0.to_float(), bw.to_float(), bh.to_float())
+    mut it := screen.item(
+        id,
+        "panel",
+        text,
+        b.color,
+        b.x0.to_float(),
+        b.y0.to_float(),
+        bw.to_float(),
+        bh.to_float(),
+    )
     it.conf = 0.5
     it.why = "flat {screen.color_name(b.color)} {shape} rectangle"
     ratio := bw.to_float() / bh.to_float()
-    if text != "" and bh >= 16 and bh <= 60 and ratio >= 1.5 and ratio <= 12.0 and bw * bh * 20 < w * h
+    if text != ""
+        and bh >= 16
+        and bh <= 60
+        and ratio >= 1.5
+        and ratio <= 12.0
+        and bw * bh * 20 < w * h
         it.role = "button"
         it.conf = if round then 0.9 else 0.7
         it.why = "{shape} {screen.color_name(b.color)} rectangle with text '{text}'"

@@ -1,8 +1,16 @@
 """Loopback HTTP server for gate.ail's `net` suite: the routes tests/net/client.ail asks for.
 Usage: python3 -I tools/gate/net_server.py PORT"""
 import socket
+import threading
+import os
 import sys
 import time
+
+# A server the gate could not stop (on Windows `kill` may not reach it) must not outlive the run: it would
+# hold the gate's output pipe open and keep `ail selftest` from exiting. The net suite takes minutes.
+_guard = threading.Timer(1200, lambda: os._exit(0))
+_guard.daemon = True
+_guard.start()
 
 
 # Every reply says `Connection: close`: this server closes after one request, and a

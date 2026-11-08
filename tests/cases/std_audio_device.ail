@@ -1,0 +1,28 @@
+## std.audio.8-9: raw PCM round trip, and a missing audio host is an error with a kind, never a crash.
+use std.audio
+use std.audio.device
+
+fn main() !
+    t := audio.tone(440.0, 20, 8000, 0.5)
+    pcm := audio.to_pcm16(t)
+    print(pcm.len())
+    back := audio.from_pcm16(pcm, 8000, 1)
+    print(audio.frames(back))
+    d := audio.peak(back) - audio.peak(t)
+    print(d < 0.001 and d > -0.001)
+    missing()
+    p := device.host_path() else err
+        ""
+    print(p.len() >= 0)
+    h := device.open() else err
+        print("open checked")
+        return
+    device.close(move h)
+    print("open checked")
+
+fn missing()
+    c := device.open_at("/nonexistent/ail-audio-host") else err
+        print(err.kind)
+        return
+    device.close(move c)
+    print("opened")

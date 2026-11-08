@@ -27,6 +27,7 @@ use api
 use ast
 use attachcli
 use budget
+use cheader
 use check
 use doc
 use edit
@@ -45,6 +46,9 @@ use x64
 
 fn main() !
     args := env.args()
+    # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
+    if args.len() == 1 and args[0] == "new"
+        io.exit(scaffold.command([]))
     if args.len() == 0
         or (args.len() < 2 and args[0] != "explain" and args[0] != "diff" and args[0] != "attach")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
@@ -183,7 +187,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows (experimental, unverified)] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
@@ -201,6 +205,8 @@ fn fwd(p str) str
 fn host_target() str
     # Windows sets `OS`; it has no `uname`.
     if (env.get("OS") else "") == "Windows_NT"
+        if (env.get("PROCESSOR_ARCHITECTURE") else "").to_lower() == "arm64"
+            return "aarch64-windows"
         return "x86_64-windows"
     out := proc.run("uname", ["-sm"]) else
         return "x86_64-linux"
@@ -480,6 +486,7 @@ fn executable_list(m mir.Module, path str, target str) List[u8]
         "x86_64-linux" => obj.elf(x64.generate(m), obj.X86_64)
         "aarch64-linux" => obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)
         "x86_64-windows" => obj.pe_image(x64.generate_windows(m))
+        "aarch64-windows" => obj.pe_image_for(a64.generate(m, a64.WINDOWS), obj.PE_ARM64)
         "aarch64-macos" =>
             name := path.split("/").last() else path
             obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))
@@ -541,6 +548,14 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             if parts.len() == 0
                 continue
             imp := parts.join(".")
+            if cheader.is_use(parts)
+                # `use c "header.h" as name` (ffi.decl.1, ADR 0926): the module is written from the header.
+                if loaded.contains(imp)
+                    continue
+                loaded.add(imp)
+                if text := cheader.module_for(cheader.header_of(imp), cheader.dir_of(srcs[k].path))
+                    srcs.push(parse_text(imp, "<{imp}>", text))
+                continue
             if parts[0] == "std"
                 if loaded.contains(imp)
                     continue
@@ -580,7 +595,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
         for ui in 0..srcs[i].prog.uses.len()
             u := srcs[i].prog.uses[ui]
             parts := [x.name for x in u.path]
-            if parts.len() == 0 or parts[0] == "std"
+            if parts.len() == 0 or parts[0] == "std" or cheader.is_use(parts)
                 continue
             t := packages.target(srcs[i].module, parts)
             if t.module == parts.join(".") or t.undeclared
@@ -669,7 +684,10 @@ fn proven_loop_keys(file str, std str) Set[str]
 ## `ail build` makes before it adds the embedded prelude.
 fn mentions_prelude(srcs List[mir.Source]) bool
     for s in srcs
-        if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
+        if s.text.contains("json")
+            or s.text.contains("Json")
+            or s.text.contains("Default")
+            or s.text.contains("Grid")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
         if s.text.contains("@derive")
@@ -786,15 +804,17 @@ fn run_generators(
         return []
     exe := executable_bytes(m, "derive", host_target())
     tmp := env.get("TMPDIR") else "/tmp"
-    file := "{tmp}/ail-derive-{time.now_ms()}"
+    ext := exe_ext(host_target())
+    file := "{tmp}/ail-derive-{time.now_ms()}{ext}"
     fs.write_bytes(file, exe) else err
         io.eprint("error[native.build.3]: can't write {file}: {err}")
         io.exit(2)
         return []
-    _ := proc.run("chmod", ["755", file]) else err
-        io.eprint("error[native.build.3]: can't run the generators: {err}")
-        io.exit(2)
-        return []
+    if ext.is_empty()
+        _ := proc.run("chmod", ["755", file]) else err
+            io.eprint("error[native.build.3]: can't run the generators: {err}")
+            io.exit(2)
+            return []
     ran := proc.run(file, []) else err
         remove_quietly(file)
         io.eprint("error[native.build.3]: can't run the generators: {err}")
@@ -1033,7 +1053,7 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     lock := "{fs.read_text(path.join(root, "ail.lock")) else ""}{fs.read_text(path.join(file, "ail.lock")) else ""}"
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_OPT_OFF") else ""}",
+        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_SANITIZE") else ""} {env.get("AIL_OPT_OFF") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         "lock {hash.sha256(lock)}",

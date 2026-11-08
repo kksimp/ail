@@ -196,7 +196,7 @@ fn net_sys_send(fd int, p int, n int) int
 ## (negative: forever): 1 ready, 0 timed out, or a negative `errno`.
 fn net_wait(fd int, events int, ms int) int
     if not det_on()
-        return net_poll(fd, events, ms)
+        return net_poll_blocked(fd, events, ms)
     # On a deterministic schedule the task holds the turn, so it polls and
     # lets the others run in between: the peer that would make `fd` ready may be one
     # (conc.sched.3).
@@ -213,6 +213,20 @@ fn net_wait(fd int, events int, ms int) int
         if r2 != 0
             return r2
     0
+
+## `net_poll` on a pool worker (native.task.2): a worker asleep in `poll` stops
+## counting as running, so a task queued meanwhile gets a thread even when
+## `AIL_THREADS` is 1, and the collector may scan the sleeper. A zero wait
+## returns at once and needs neither.
+fn net_poll_blocked(fd int, events int, ms int) int
+    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
+        return net_poll(fd, events, ms)
+    wait_enter()
+    s := blocked_enter()
+    r := net_poll(fd, events, ms)
+    blocked_leave(s)
+    wait_leave()
+    r
 
 fn net_poll(fd int, events int, ms int) int
     if target() == 3

@@ -1,0 +1,54 @@
+# Loop nests that only read their lists: a scan of each list before the nest
+# bounds the elements, so the inner loop's `*` and its accumulator's `+=` lose
+# their overflow checks (native.bce.12). The same nest over large elements,
+# where the guard fails, runs the checked loop and prints the same sums.
+fn grid(n int, seed int, big int) List[List[int]]
+    mut g := List[List[int]]()
+    for i in 0..n
+        mut row := List[int]()
+        for j in 0..n
+            row.push(((i * 7 + j * 3 + seed) % 11 - 5) * big)
+        g.push(row)
+    g
+
+fn mul(a List[List[int]], b List[List[int]], n int) List[List[int]]
+    mut c := List[List[int]]()
+    for i in 0..n
+        mut row := List[int]()
+        for j in 0..n
+            mut s := 0
+            for k in 0..n
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    c
+
+fn total(c List[List[int]]) int
+    mut t := 0
+    for row in c
+        for x in row
+            t += x
+    t
+
+## A flat list read by every pass of the outer loops.
+fn weigh(xs List[int], n int) int
+    mut t := 0
+    for i in 0..n
+        for j in 0..n
+            mut s := 7
+            for k in 0..xs.len()
+                s -= xs[k] * (i - j)
+            t += s % 1000
+    t
+
+fn main()
+    n := 9
+    a := grid(n, 1, 1)
+    b := grid(n, 4, 1)
+    c := mul(a, b, n)
+    print(total(c))
+    print(c[3][5])
+    big := 1073741824
+    c2 := mul(grid(n, 1, big), grid(n, 4, 1), n)
+    print(total(c2) / big)
+    print(weigh([3, -1, 4, -1, 5, -9, 2, 6], 6))

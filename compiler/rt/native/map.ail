@@ -16,9 +16,19 @@
 ##   +56 vmode  0 plain values, 1 lists (copied on copy), 2 maps and sets
 ##   +64 vinfo  vmode 1: nesting depth * 256 + element bytes
 ##   +72 lastkey, +80 laste: the last key found or added and its entry (0: none)
+##   +88 misskey, +96 misshash: the last key a probe missed and its hash, so
+##       the insert that follows does not hash it again (ADR 0936)
+##   +104 str keys only: 32 words, entry addresses by key object (ADR 0936)
 ## The index has twice the array's capacity, so it is at most half full.
 
-MAP_BYTES := 88
+MAP_BYTES := 104
+## A `str`-keyed table also holds the key cache.
+MAP_BYTES_STR := 360
+MAP_KCACHE := 104
+
+## The table object's size for key kind `kind`.
+fn map_bytes(kind int) int
+    if kind == 1 then MAP_BYTES_STR else MAP_BYTES
 
 ## Heap kinds (native-abi.md): 7 table, 3 entries (scanned word by word),
 ## 11 index (no pointers). `alloc(n, kind)`.
@@ -77,7 +87,8 @@ fn map_hash(kind int, k int) int
 # shapes (a struct or tuple, one word per field), `E` n `;` and n variants
 # `V` m `;` and m shapes (an enum whose first word is the variant), `O` and
 # a shape (an optional: 0 is `none`, and a word, float or optional inside is
-# boxed), `@` n `;` (the shape at offset n: a type that holds itself).
+# boxed), `@` n `;` (the shape at offset n: a type that holds itself), `_` (a
+# struct field that `impl Hash ... uses` leaves out: neither hashed nor compared).
 
 fn shape_at(sh int, p int) int
     load8(sh + 16 + p)
@@ -139,6 +150,8 @@ fn shape_some(sh int, p int, v int) int
 
 fn shape_hash(sh int, p int, v int, h int) int
     c := shape_at(sh, p)
+    if c == 95
+        return h
     if c == 64
         return shape_hash(sh, shape_num(sh, p + 1), v, h)
     if c == 79
@@ -180,6 +193,8 @@ fn shape_hash(sh int, p int, v int, h int) int
 
 fn shape_eq(sh int, p int, a int, b int) bool
     c := shape_at(sh, p)
+    if c == 95
+        return true
     if c == 64
         return shape_eq(sh, shape_num(sh, p + 1), a, b)
     if c == 79
@@ -250,6 +265,8 @@ fn map_key_eq(kind int, a int, b int) bool
 
 ## Fresh tables of capacity `ecap` (a power of two); `used` is not changed.
 fn map_tables(m int, ecap int)
+    if load64(m + 32) == 1
+        map_zero(m + MAP_KCACHE, 32)
     store64(m + 16, ecap)
     store64(m + 24, ecap * 2 - 1)
     store64(m + 40, map_alloc(ecap * 24, 3))
@@ -260,13 +277,15 @@ fn map_tables(m int, ecap int)
 ## An empty map or set. `kind` is the key kind; `vmode` and `vinfo` say how
 ## a copy treats values.
 fn map_new(kind int, vmode int, vinfo int) int
-    m := map_alloc(MAP_BYTES, 7)
+    m := map_alloc(map_bytes(kind), 7)
     store64(m, 0)
     store64(m + 8, 0)
     store64(m + 32, kind)
     store64(m + 56, vmode)
     store64(m + 64, vinfo)
     store64(m + 80, 0)
+    store64(m + 88, 0)
+    store64(m + 96, if kind == 1 or kind > 15 then 0 else map_hash_int(0))
     map_tables(m, 8)
     m
 
@@ -277,10 +296,29 @@ fn map_find(m int, k int) int
     if load64(m + 80) != 0 and load64(m + 72) == k
         return load64(m + 80)
     kind := load64(m + 32)
+    if kind == 1
+        # The key cache (ADR 0936), written out here so that the hit makes no
+        # call once `map_find` is inlined into the caller.
+        e := load64(m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31))
+        if e != 0 and load64(e + 8) == k
+            store64(m + 72, k)
+            store64(m + 80, e)
+            return e
+        return map_probe(m, k, map_hash_str(k))
     if kind > 15
         return map_probe(m, k, map_hash(kind, k))
-    h := if kind == 1 then map_hash_str(k) else map_hash_int(k)
-    map_probe(m, k, h)
+    map_probe(m, k, map_hash_int(k))
+
+## The key cache slot of string object `k` (ADR 0936): the top five bits of
+## the address times an odd constant (`map_find` and `map_probe` write it
+## out). A program looks up the same string objects again and again
+## (literals, the words of a vocabulary, names held in a tree), so a key
+## object's entry is remembered and found without hashing its bytes. A slot is
+## trusted only when its entry holds this very object: the entry keeps the
+## object alive, so no other string can have its address, and strings never
+## change. A removal clears the entry's key; a rebuild or copy clears the cache.
+fn map_kslot(m int, k int) int
+    m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31)
 
 ## The probe of `map_find`, apart from the hash so that only `m` and `k` live
 ## across the hash call. A hit in the first slot, the usual case, makes no
@@ -290,13 +328,34 @@ fn map_probe(m int, k int, h int) int
     j := h.bit_and(load64(m + 24))
     s := load64(load64(m + 48) + 8 * j)
     if s == 0
+        store64(m + 88, k)
+        store64(m + 96, h)
         return 0
     e := load64(m + 40) + 24 * (s - 1)
     if load64(e) == h and load64(e + 8) == k
         store64(m + 72, k)
         store64(m + 80, e)
+        if load64(m + 32) == 1
+            store64(m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31), e)
         return e
     map_probe_from(m, k, h, j)
+
+## Remember entry `e` of key `k`: the last key, and the key cache of a
+## `str`-keyed table.
+fn map_found(m int, k int, e int)
+    store64(m + 72, k)
+    store64(m + 80, e)
+    if load64(m + 32) == 1
+        store64(map_kslot(m, k), e)
+
+## The hash of `k`, a key a probe has just missed: kept from that probe
+## (ADR 0936), else computed. The table holds `misskey`, so the object stays
+## alive and its address names it.
+fn map_hash_missed(m int, k int) int
+    kind := load64(m + 32)
+    if load64(m + 88) == k and kind <= 15
+        return load64(m + 96)
+    map_hash(kind, k)
 
 ## The probe from slot `j` on. What a step needs of `m` is read again, not kept.
 fn map_probe_from(m int, k int, h int, from int) int
@@ -305,11 +364,12 @@ fn map_probe_from(m int, k int, h int, from int) int
     while s != 0
         e := load64(m + 40) + 24 * (s - 1)
         if load64(e) == h and (load64(e + 8) == k or map_key_eq(load64(m + 32), load64(e + 8), k))
-            store64(m + 72, k)
-            store64(m + 80, e)
+            map_found(m, k, e)
             return e
         j = (j + 1).bit_and(load64(m + 24))
         s = load64(load64(m + 48) + 8 * j)
+    store64(m + 88, k)
+    store64(m + 96, h)
     0
 
 fn map_index_put(m int, h int, number int)
@@ -355,8 +415,7 @@ fn map_append(m int, h int, k int, v int) int
     store64(m + 8, used + 1)
     store64(m, load64(m) + 1)
     map_index_put(m, h, used + 1)
-    store64(m + 72, k)
-    store64(m + 80, e)
+    map_found(m, k, e)
     e
 
 ## The live entry in slot `i` of the entries array (`i` below `used`), or 0
@@ -378,13 +437,13 @@ fn map_set(m int, k int, v int)
     if e != 0
         store64(e + 16, v)
         return
-    map_append(m, map_hash(load64(m + 32), k), k, v)
+    map_append(m, map_hash_missed(m, k), k, v)
 
 ## `s.add(x)`: whether `x` was new.
 fn map_add(m int, k int) bool
     if map_find(m, k) != 0
         return false
-    map_append(m, map_hash(load64(m + 32), k), k, 0)
+    map_append(m, map_hash_missed(m, k), k, 0)
     true
 
 fn map_has(m int, k int) bool
@@ -449,9 +508,12 @@ fn map_words_n(m int, off int, size int) List[int]
 
 ## A copy that shares nothing with `m`: tables, and the lists and maps in it.
 fn map_copy(m int) int
-    n := map_alloc(MAP_BYTES, 7)
-    copy_bytes(n, m, MAP_BYTES)
+    obj := map_bytes(load64(m + 32))
+    n := map_alloc(obj, 7)
+    copy_bytes(n, m, obj)
     store64(n + 80, 0)
+    if obj == MAP_BYTES_STR
+        map_zero(n + MAP_KCACHE, 32)
     used := load64(m + 8)
     ents := map_alloc(load64(m + 16) * 24, 3)
     copy_bytes(ents, load64(m + 40), 24 * used)
@@ -714,5 +776,5 @@ fn map_counts(kind int, xs List[int]) int
         if e != 0
             store64(e + 16, load64(e + 16) + 1)
         else
-            map_append(m, map_hash(kind, k), k, 1)
+            map_append(m, map_hash_missed(m, k), k, 1)
     m

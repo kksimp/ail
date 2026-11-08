@@ -1,0 +1,38 @@
+# A `match` of five or more int or variant arms picks its arm with a decision
+# tree (native.match.1): the same arm runs, with the same bindings.
+enum Op
+    Push(n int)
+    Add
+    Mul
+    Neg
+    Dup
+    Halt
+
+fn name(x int) str
+    match x
+        0 => "zero"
+        1 | 2 => "small"
+        3 => "three"
+        7 => "seven"
+        9 | 10 => "big"
+        _ => "other"
+
+fn cost(op Op) int
+    match op
+        Push(n) => n
+        Add => 10
+        Mul => 20
+        Neg => 30
+        Dup => 40
+        Halt => 50
+
+fn main()
+    mut line := ""
+    for x in 0..12
+        line = "{line}{name(x)} "
+    print(line)
+    ops := [Op.Push(5), Op.Add, Op.Mul, Op.Neg, Op.Dup, Op.Halt]
+    mut total := 0
+    for op in ops
+        total += cost(op)
+    print("{total}")

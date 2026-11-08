@@ -213,6 +213,11 @@ holds a lock for one statement, so lines from different tasks don't mix.
 On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
 0599–0601)*
 
+**native.task.2** — A pool worker asleep in a blocking network wait
+(`accept`, a read, a write or a connect) stops counting as running, as in
+`wait` and channel waits, so a task queued meanwhile gets a thread even when
+`AIL_THREADS` is 1, and the collector may scan the sleeper. *(ADR 0599)*
+
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
@@ -417,6 +422,175 @@ fn main()
     print(total)
 ```
 
+**native.bce.11** — A loop that only reads and writes the elements of a
+list it did not make (`xs[i]`, `xs[i] = v`, `xs.len()`) may read the list's
+length and element pointer once, before the loop, and use them for every
+access: the lists are a parameter of the function or the result of a call,
+defined outside the loop, and the loop neither passes one to a call, pushes
+to it, nor uses it in any other way. Each check keeps its place, its index,
+its site and the length it reports, so a trap is the same. *(ADR 0890)*
+
+```ail rules=native.bce.11
+fn dot(a List[int], b List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += a[i] * b[i]
+    s
+
+fn main()
+    print(dot([1, 2, 3], [4, 5, 6], 3))
+```
+
+**native.bce.12** — In a counted loop at least two loops deep, an `int` read
+from a list, or from a row of a list of lists, that no call, `push` or
+assignment can change in an enclosing loop may be taken to lie within
++-2^20 where a scan of the list before that enclosing loop says so; an
+accumulator that every pass of the loop changes only by `+=` or `-=` of such
+a value may be taken to lie within its start plus the loop's trip count times
+that value's range, where the guard tests the trip count. The overflow checks
+this proves can't fail may be removed (expr.arith.4); otherwise the loop with
+its checks runs, and traps where it did. *(ADR 0941)*
+
+```ail rules=native.bce.12
+fn main()
+    a := [[1, 2], [3, 4]]
+    mut t := 0
+    for i in 0..2
+        for j in 0..2
+            mut s := 0
+            for k in 0..2
+                s += a[i][k] * a[k][j]
+            t += s
+    print(t)
+```
+
+**native.bce.13** — A counted loop over `j` whose body sets an accumulator
+`s` to a value from before the loop, runs a counted loop over `k` that only
+adds a term to `s` (`s += t`), and then pushes `s` to a list made empty just
+before the `j` loop and used nowhere else, may run with the `k` loop outside
+and the `j` loop inside, adding each term to the list's element `j`, where a
+guard before the loops proves that no index in the term is out of bounds and,
+for `int`, that no operation overflows (native.bce.12). Each element adds the
+same terms in the same order, so the list is the same. Otherwise the loops
+run as written. *(ADR 0941)*
+
+```ail rules=native.bce.13
+fn main()
+    a := [[1.0, 2.0], [3.0, 4.0]]
+    mut c := List[List[float]]()
+    for i in 0..2
+        mut row := List[float]()
+        for j in 0..2
+            mut s := 0.0
+            for k in 0..2
+                s += a[i][k] * a[k][j]
+            row.push(s)
+        c.push(row)
+    print(c[1][1])
+```
+
+**native.vec.1** — In a nest swapped under native.bce.13 whose term is
+`x * y`, with `y` the element `j` of a list and nothing else depending on
+`j`, the inner loop may be one call of a vector kernel per `k` that computes
+`row[base + j] + x * y` for every `j` with the same rounding, operand order
+and result as the loop (for `int`, where the guard keeps `x` within +-2^31
+and `y` within +-2^20). *(ADR 0942)*
+
+```ail rules=native.vec.1
+fn main()
+    a := [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    mut c := List[List[int]]()
+    for i in 0..3
+        mut row := []
+        for j in 0..3
+            mut s := 0
+            for k in 0..3
+                s += a[i][k] * a[k][j]
+            row.push(s)
+        c.push(row)
+    print(c[2][2])
+```
+
+**native.vec.2** — A counted `for` over `x` whose body makes `cr` by float
+arithmetic of `x` and values from before the loop, then runs the escape loop
+`while k < MAX` (`MAX` a constant from 1 to 2^20) with the exit test
+`zr * zr + zi * zi > T`, the step `t = zr * zr - zi * zi + cr`,
+`zi = 2.0 * zr * zi + ci` (`ci` from before the `x` loop), `zr = t`, `k += 1`
+from `zr = zi = 0.0`, may take each `k` from one vector kernel call per
+execution of the `x` loop that counts every point of the row at once, when
+`n <= 16777216`. Each lane performs the scalar loop's operations in the scalar
+order (no fused multiply-add, no reassociation) and a lane that has left keeps
+its state, so every `k` is the scalar `k`; a NaN never leaves. Otherwise the
+loop runs as written. *(ADR 0945)*
+
+```ail rules=native.vec.2
+fn escape(cr float, ci float) int
+    mut zr := 0.0
+    mut zi := 0.0
+    mut k := 0
+    while k < 50
+        if zr * zr + zi * zi > 4.0
+            break
+        t := zr * zr - zi * zi + cr
+        zi = 2.0 * zr * zi + ci
+        zr = t
+        k += 1
+    k
+
+fn main()
+    mut line := []
+    for x in 0..7
+        line.push(escape(-2.0 + 3.0 * x.to_float() / 7.0, 0.3))
+    print(line)
+```
+
+**native.match.1** — A `match` over an `int` or an enum whose arms each test
+int literals (alone or with `|`) or variants, with no guard and no range, and
+at least five distinct values, may pick its arm by comparing against the
+sorted values instead of testing the arms in order. The arm that runs, its
+bindings and the order of effects are those of expr.match.1-12: the first arm
+that tests a value takes it. *(ADR 0890)*
+
+```ail rules=native.match.1
+fn name(x int) str
+    match x
+        0 => "zero"
+        1 | 2 => "small"
+        3 => "three"
+        7 => "seven"
+        _ => "other"
+
+fn main()
+    print(name(2))
+```
+
+**native.match.2** — A `match` that native.match.1 takes, whose distinct values
+span at most 1024 and fill at least a third of their span, may jump through
+a table indexed by the value minus the smallest: a value outside the span or
+in a gap goes where the in-order test sends it (the `_` arm, or nowhere for an
+exhaustive `match`). Code that jumps back to such a `match` (the next
+iteration of a loop around it) may repeat the selection there. The arm that
+runs, its bindings and the order of effects are those of native.match.1.
+`AIL_OPT_OFF=switch` turns the table off and `AIL_OPT_OFF=taildup` the
+repeat. *(ADR 0939)*
+
+```ail rules=native.match.2
+fn step(op int, acc int) int
+    match op
+        0 => acc + 1
+        1 => acc * 2
+        2 => acc - 3
+        3 => 0
+        4 => acc
+        _ => -1
+
+fn main()
+    mut acc := 0
+    for op in [0, 0, 1, 2, 9]
+        acc = step(op, acc)
+    print(acc)
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is
@@ -434,6 +608,106 @@ fn main()
         rows.push(row)
     print(rows)
 ```
+**native.sroa.1** — A struct built in a function and only read back there
+(its fields read by `.f`, never returned, stored, passed to a call, joined at a
+block or changed after it is built) may have no object: the field reads use
+the values it was built from. Constructors that only build their result
+(`Vec.add`) are inlined into their callers first, so that chains such as
+`a.sub(b).unit()` qualify. Nothing a program can observe changes, only the
+allocation. `AIL_OPT_OFF=sroa` turns it off. *(ADR 0923)*
+
+```ail rules=native.sroa.1
+struct P
+    x float
+    y float
+
+fn P.add(self, o P) P
+    P(x: x + o.x, y: y + o.y)
+
+fn main()
+    a := P(x: 1.0, y: 2.0)
+    print(a.add(a).add(a).y)
+```
+
+**native.sroa.2** — Struct objects that meet at a block parameter (a `mut`
+variable assigned in a branch or carried round a loop) may also have no
+object, when each of them qualifies under native.sroa.1 and the parameter is
+only read by field access: the parameter becomes one parameter per field. *(ADR 0923)*
+
+```ail rules=native.sroa.2
+struct P
+    x float
+    y float
+
+fn main()
+    mut p := P(x: 1.0, y: 2.0)
+    for i in 0..3
+        p = P(x: p.x + 1.0, y: p.y * 2.0)
+    print(p.y)
+```
+
+**native.sroa.3** — After native.sroa.1 and 2, a call that is given a struct
+the caller has just built may be inlined when the callee calls nothing and
+only reads it, and a self-recursive function that hands such a struct to
+itself may have one copy of its own body inlined (the code that makes a
+trap's stack list every source frame is unchanged), so that the struct needs
+no object in the first level of the recursion. *(ADR 0923)*
+
+```ail rules=native.sroa.3
+struct P
+    x float
+    y float
+
+fn len2(p P) float
+    p.x * p.x + p.y * p.y
+
+fn go(p P, d int) float
+    if d == 0
+        return len2(p)
+    go(P(x: p.x + 1.0, y: p.y), d - 1)
+
+fn main()
+    print(go(P(x: 0.0, y: 3.0), 4))
+```
+
+**native.stack.1** — A struct built in a function that nothing but calls and
+field accesses ever sees may live in the function's frame, not the heap: when
+every use is a field read or write, or an argument for a parameter that the
+callee only reads (or passes on to such a parameter), the object is not
+carried past the call, so each activation and each iteration has its own copy
+and the callee cannot keep it. *(ADR 0923)*
+
+```ail rules=native.stack.1
+struct P
+    x float
+    y float
+
+fn depth(p P, d int) float
+    if d == 0
+        return p.x + p.y
+    depth(P(x: p.x + 1.0, y: p.y * 2.0), d - 1)
+
+fn main()
+    print(depth(P(x: 0.0, y: 1.0), 3))
+```
+
+**native.stack.2** — A function whose every result is an object it built
+itself, and that is not used as a function value, may build the result in an
+object its caller provides; each direct caller provides one in its frame when
+it only reads the result or lends it to a call, else on the heap. *(ADR 0923)*
+
+```ail rules=native.stack.2
+struct P
+    x float
+    y float
+
+fn shift(p P) P
+    P(x: p.x + 1.0, y: p.y)
+
+fn main()
+    print(shift(shift(P(x: 0.0, y: 2.0))).x)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
@@ -532,14 +806,9 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-struct Tag
-    n int
-
-fn Tag.pick[T](self, xs List[T]) T
-    xs[n]
-
 fn main()
-    print(Tag(n: 0).pick([1, 2]))
+    cs := ['b', 'a']
+    print(cs.sorted(by: |c| c))
 ```
 
 ```ail norun rules=native.build.2

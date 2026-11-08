@@ -1,0 +1,29 @@
+# Small objects (strings, short lists) built on every thread at once inside a
+# parallel loop, then on the main thread after it: the contended case the
+# allocation lock served before ADR 0943.
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn work(seed int, rounds int) int
+    mut total := 0
+    for r in 0..rounds
+        mut parts := List[str]()
+        for k in 0..6
+            parts.push("w{seed}-{r}-{k}")
+        mut xs := List[int]()
+        for k in 0..12
+            xs.push(k + r)
+        total += parts.join(",").len() + xs[11]
+    total
+
+fn main()
+    n := size(200000)
+    mut sums := [0 for _ in 0..8]
+    par for i in 0..8
+        sums[i] = work(i, n)
+    print(sums)
+    print(work(9, n))

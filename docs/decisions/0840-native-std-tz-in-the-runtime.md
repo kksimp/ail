@@ -1,6 +1,6 @@
 # 0840. `std.tz` in native builds: a TZif reader in the runtime
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0924](0924-ship-the-tz-database.md)
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076; approved by the integrator for the native self-compile lanes)
 - **Topic:** 23 — Compiler architecture

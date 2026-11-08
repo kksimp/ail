@@ -26,22 +26,43 @@ pub fn inline_module(mut out Module)
         and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(out)
     fills := by_name.contains("rt.fill")
+    if not opt_off("sroa")
+        for _ in 0..2
+            expand_allocating(mut out)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
         budget := expand_calls(mut f, leaves, bodies, mut out.sites)
         unrolled := unroll_self(mut f, mut out.sites)
-        if budget < INLINE_BUDGET or unrolled
+        mut scalar := false
+        if not f.name.starts_with("rt.") and not opt_off("sroa")
+            # The join blocks of inlined calls first: a value that crosses a
+            # jump's argument counts as escaping.
+            merge_blocks_in(mut f)
+            scalar = sroa_in(mut f)
+        if budget < INLINE_BUDGET or unrolled or scalar
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
         merge_blocks_in(mut f)
+        out.funcs[k] = f
+    if not opt_off("sroa")
+        late_inline(mut out)
+    if not opt_off("stack") and not opt_off("sret")
+        sret_convert(mut out)
+    if not opt_off("stack")
+        stackify(mut out)
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
         if f.name.starts_with("rt.")
             f = forwarded(f)
         else
-            f = forwarded(fill_loops(
-                kept_lengths(bce(mark_nonneg(f), reserve, grow_only), reserve and grow_only),
+            f = forwarded(hoist_headers(fill_loops(
+                kept_lengths(
+                    bce(mark_nonneg(interchange(vec_loops(f))), reserve, grow_only),
+                    reserve and grow_only,
+                ),
                 fills and not opt_off("fill"),
-            ))
+            )))
             if not opt_off("fold")
                 fold_addresses(mut f)
         if not opt_off("fold")
@@ -76,8 +97,137 @@ fn expand_calls(mut f Func, leaves Set[str], bodies Map[str, Func], mut sites Li
                 break
     budget
 
+## One round of inlining small functions that call nothing but `rt.obj_new`
+## (a struct constructor such as `Vec.add`), so that `sroa_in` can see the
+## object a chain of them builds. Callee bodies are those at the start of the
+## round; two rounds reach `a.sub(b).unit()`.
+fn expand_allocating(mut out Module)
+    mut leaves := Set[str]()
+    mut bodies := Map[str, Func]()
+    for f in out.funcs
+        if not f.name.starts_with("rt.") and inlinable_with(f, true)
+            leaves.add(f.name)
+            bodies[f.name] = f
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
+        if f.name.starts_with("rt.")
+            continue
+        budget := expand_calls(mut f, leaves, bodies, mut out.sites)
+        if budget < INLINE_BUDGET
+            # As after any inlining, so the constants of the copies are shared.
+            simplify_in(mut f)
+            fold_in(mut f)
+            simplify_in(mut f)
+            merge_blocks_in(mut f)
+        out.funcs[k] = f
+
+## After scalar replacement, a function that calls nothing and takes a struct
+## is up to this long for `late_inline`.
+LATE_LIMIT := 100
+
+## The most calls `late_inline` expands in one function.
+LATE_BUDGET := 8
+
+## A function that passes a fresh object to its own call is unrolled up to
+## this long (`late_inline`).
+UNROLL_FRESH := 400
+
+## Second inlining, after every function has been through scalar replacement:
+## a call that is given an object the caller just built goes inline when the
+## callee reads fields and calls nothing (`hit(s, p, light)` in a ray
+## tracer), so the object can go. A self-recursive function that hands a fresh
+## object to itself is unrolled once for the same reason.
+fn late_inline(mut out Module)
+    mut leaves := Set[str]()
+    mut bodies := Map[str, Func]()
+    for f in out.funcs
+        if not f.name.starts_with("rt.") and f.name != "main"
+            if takes_struct(f) and inlinable_upto(f, false, LATE_LIMIT)
+                leaves.add(f.name)
+                bodies[f.name] = f
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
+        if f.name.starts_with("rt.")
+            continue
+        fresh := fresh_objects(f)
+        if fresh.len() == 0
+            continue
+        # Unrolling needs a body with no other calls (it keeps one frame per
+        # call), so a function that will be unrolled has every callee inlined.
+        every := gives_fresh_to_self(f, fresh)
+        mut done := 0
+        mut again := true
+        while again and done < LATE_BUDGET
+            again = false
+            for b in 0..f.blocks.len()
+                at := first_fresh_call(f.blocks[b], leaves, f.name, fresh, every)
+                if at >= 0
+                    callee := bodies[f.blocks[b].insts[at].name]
+                    inline_call(mut f, b, at, callee, mut out.sites)
+                    done += 1
+                    again = true
+                    break
+        mut changed := done > 0
+        if every and unroll_self_upto(mut f, mut out.sites, UNROLL_FRESH)
+            changed = true
+        if changed
+            merge_blocks_in(mut f)
+            changed = sroa_in(mut f)
+            simplify_in(mut f)
+            fold_in(mut f)
+            simplify_in(mut f)
+            merge_blocks_in(mut f)
+        out.funcs[k] = f
+
+fn takes_struct(f Func) bool
+    for p in f.blocks[0].params
+        if ty_is_struct(f.vals[p])
+            return true
+    false
+
+fn ty_is_struct(t Ty) bool
+    match t
+        Struct(_) => true
+        _ => false
+
+## The values `f` builds with `rt.obj_new`.
+fn fresh_objects(f Func) Set[int]
+    mut fresh := Set[int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0
+                fresh.add(i.dst)
+    fresh
+
+fn first_fresh_call(blk Block, leaves Set[str], self_name str, fresh Set[int], every bool) int
+    for k in 0..blk.insts.len()
+        i := blk.insts[k]
+        if i.op == "call" and i.name != self_name and leaves.contains(i.name)
+            if every
+                return k
+            for j in 0..i.argc()
+                if fresh.contains(i.arg(j))
+                    return k
+    -1
+
+fn gives_fresh_to_self(f Func, fresh Set[int]) bool
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == f.name
+                for j in 0..i.argc()
+                    if fresh.contains(i.arg(j))
+                        return true
+    false
+
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
+    inlinable_with(f, false)
+
+## `inlinable`, optionally letting `rt.obj_new` calls stay in the body.
+fn inlinable_with(f Func, allocs bool) bool
+    inlinable_upto(f, allocs, INLINE_LIMIT)
+
+fn inlinable_upto(f Func, allocs bool, limit int) bool
     # `rt.vec_*` are replaced by assembled kernels where the target has them.
     if f.name.starts_with("rt.vec_") or f.name == "rt.fill" or f.name.starts_with("rt.aes_hw_")
         return false
@@ -85,6 +235,8 @@ fn inlinable(f Func) bool
     for blk in f.blocks
         n += blk.insts.len()
         for i in blk.insts
+            if i.op == "call" and allocs and i.name == "rt.obj_new"
+                continue
             if i.op == "call"
                 or i.op == "icall"
                 or i.op == "prim" and (i.name == "syscall" or i.name == "clone")
@@ -92,7 +244,7 @@ fn inlinable(f Func) bool
         for t in blk.term.targets
             if t == 0
                 return false
-    n <= INLINE_LIMIT
+    n <= limit
 
 fn first_call(blk Block, leaves Set[str], self_name str) int
     for k in 0..blk.insts.len()
@@ -163,7 +315,18 @@ pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
         t := blk.term
         mut nt := t
         if t.kind == "return"
-            nt = jump_to(rest, if t.value >= 0 then [t.value + nv] else [])
+            mut rv := if t.value >= 0 then t.value + nv else -1
+            if rv >= 0
+                and cont_params.len() == 1
+                and g.vals[rv].name() != g.vals[cont_params[0]].name()
+                # `T` returned where the function says `T?` (or the reverse):
+                # the join block's parameter has the declared type.
+                cv := g.vals.len()
+                g.vals.push(g.vals[cont_params[0]])
+                g.names.push("")
+                insts.push(inst(cv, "copy", [rv]))
+                rv = cv
+            nt = jump_to(rest, if rv >= 0 then [rv] else [])
         else
             nt.cond = if t.cond >= 0 then t.cond + nv else -1
             nt.targets = [x + nb for x in t.targets]

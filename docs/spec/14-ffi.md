@@ -2,17 +2,28 @@
 
 Chapter key: `ffi`
 
-> **Status:** Drafted (partial). Specified and implemented in the bootstrap
-> interpreter: `extern c fn` declarations, the type mapping, loading, and
-> calls on Linux and macOS. Specified, not built: `use c "header.h"`
-> (`ffi.decl.1`). Not yet specified: callbacks, exporting AIL functions to C,
+> **Status:** Drafted (partial). Specified and implemented: `extern c fn`
+> declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926), the
+> type mapping, loading, and calls on Linux, macOS and Windows. Not yet specified: callbacks, exporting AIL functions to C,
 > structs by value, variadic functions, and header search configuration.
 
 ## Declarations
 
 **ffi.decl.1** — `use c "header.h" as name` makes the C declarations of
 `header.h` available under `name`. The header is parsed by the
-implementation's own C header parser. *(ADR 0103)*
+implementation's own C header parser. *(ADR 0103, ADR 0926)*
+
+The header is found beside the file that imports it, else in the system's
+include directories; a header that is not found is error `ffi.decl.1`. Only
+the header's own text is read: `#include` is not followed and no `#if` or
+macro is evaluated. Each function prototype whose types `ffi.decl.3` allows
+becomes `extern c fn name(...)` under `name`, with `char` as `u8` behind a
+pointer and `i8` otherwise, `int` as `i32`, `long` as `i64` (`i32` on
+Windows), `double` as `float`, `float` as `f32`, `size_t` as `u64`, and any
+pointer to a type that is not a scalar as `*u8`. A prototype the FFI cannot
+carry (variadic, a struct by value, a function-pointer parameter, too many
+register arguments) is left out, and using its name is the ordinary
+`mod.use.2` error. Calling a declaration is unsafe (`ffi.call.1`).
 
 **ffi.decl.2** — `extern c fn name(params) Result` declares one C function;
 `extern c "lib" fn name(params) Result` names the library it lives in. The
@@ -74,11 +85,15 @@ the same name; `*T` is a pointer. A parameter narrower than 64 bits is passed
 extended to 64 bits by its signedness. *(ADR 0432)*
 
 ```ail tool=run,FILE expect=5 rules=ffi.map.1
-extern c fn labs(x int) int
+use std.mem
+
+extern c fn strlen(s *u8) int
 
 fn main()
     unsafe
-        print(labs(-5))
+        p := mem.cstr("hello")
+        print(strlen(p))
+        mem.free(p)
 ```
 
 **ffi.map.2** — A result narrower than 64 bits is truncated to its declared
@@ -108,11 +123,11 @@ check `unsafe.ptr.5-6`: an access outside a block, or to a freed one, is
 undefined as in C. *(ADR 0436, ADR 0844, ADR 0870)*
 
 ```ail tool=run,FILE expect=true rules=ffi.native.1
-extern c fn isdigit(c i32) i32
+extern c fn toupper(c i32) i32
 
 fn main()
     unsafe
-        print(isdigit(55) != 0)
+        print(toupper(97) == 65)
 ```
 
 ## Loading
@@ -146,9 +161,11 @@ fn main()
         print(no_such_function_in_libc(1))
 ```
 
-**ffi.load.3** — On Windows `extern c fn` is reported at run time as not
-supported yet; the implementation needs `LoadLibraryA` and the Win64 calling
-convention. *(ADR 0431, ADR 0004)*
+**ffi.load.3** — On Windows the library is opened with `LoadLibraryA` and the
+symbol found with `GetProcAddress`, and the call uses the Win64 convention.
+`c`, `libc`, `m`, `libm` and `msvcrt` name the Universal CRT (`ucrtbase.dll`);
+any other name is tried as `NAME.dll`, then `libNAME.dll`. A library or symbol
+that can't be found traps with `ffi.load.1` or `ffi.load.2`. *(ADR 0431, ADR 0004, ADR 0980)*
 
 ## Linking (Linux)
 
@@ -223,8 +240,8 @@ fn main()
 ```
 
 ```ail norun rules=ffi.load.3
-# norun: on Windows the call traps as "not supported yet"; on Linux and macOS the library
-# "kernel32" can't be loaded, so the call traps too.
+# norun: on Windows the call runs through `LoadLibraryA`; on Linux and macOS the library
+# "kernel32" can't be loaded, so the call traps.
 extern c "kernel32" fn GetTickCount() i32
 
 fn main()
@@ -232,10 +249,26 @@ fn main()
         print(GetTickCount())
 ```
 
-```ail skip=bootstrap rules=ffi.decl.1
-use c "stdlib.h" as libc
+```c
+/* mylib.h */
+int abs(int x);
+int toupper(int c);
+double hypot(double a, double b);
+int printf(const char *format, ...);   /* left out: variadic */
+```
+
+```ail tool=run,DIR pkg=ffi_header expect=5.0 rules=ffi.decl.1
+use c "mylib.h" as lib
 
 fn main()
     unsafe
-        print(libc.abs(-5))
+        print(lib.abs(-5))
+        print(lib.hypot(3.0, 4.0))
+```
+
+```ail tool=check,DIR pkg=ffi_header_missing status=2 expect=ffi.decl.1 rules=ffi.decl.1
+use c "no_such_header.h" as lib
+
+fn main()
+    print("hi")
 ```

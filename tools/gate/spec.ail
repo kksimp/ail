@@ -233,10 +233,8 @@ fn show_fail(f str)
 fn main() !
     root := repo_root()
     # A directory of its own per run, so two gates at once don't clash.
-    mk1 := proc.run("mktemp", [
-        "-d",
-        "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail.XXXXXX",
-    ]) else return
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
+    mk1 := proc.run("mktemp", ["-d", "{base}/ail-spec-ail.XXXXXX"]) else return
     tmp := mk1.out.trim()
     mut files := fs.glob("docs/spec/*.md")
     files.sort()
@@ -303,9 +301,10 @@ fn main() !
                     args.push(a)
             stdin_file := if b.stdin.is_empty() then "" else "{dir}/{b.stdin}"
             r := ail_in(dir, args, stdin_file)
-            if r.status != b.status or not "{r.out}{r.err}".contains(b.expect_text)
+            mut want := b.expect_text
+            if r.status != b.status or not "{r.out}{r.err}".contains(want)
                 ok = false
-                fails.push("{at}: `ail {args.join(" ")}` should exit {b.status} and print `{b.expect_text}`; exit {r.status}\n{r.out}{r.err}")
+                fails.push("{at}: `ail {args.join(" ")}` should exit {b.status} and print `{want}`; exit {r.status}\n{r.out}{r.err}")
         else
             code := if (b.wrap or b.kind == "error")
                 and not has_main(b.code) then wrap_fragment(b.code) else b.code

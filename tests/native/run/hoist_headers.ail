@@ -1,0 +1,44 @@
+# A loop over lists it doesn't build reads each list's length and element
+# pointer once, before the loop (native.bce.10); every check still traps at
+# the same line, with the same index and length.
+fn dot(a List[int], b List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += a[i] * b[i]
+    s
+
+fn bump(mut xs List[int], n int)
+    for i in 0..n
+        xs[i] += i
+
+fn scaled(xs List[float], k float) int
+    mut t := 0.0
+    for i in 0..xs.len()
+        t += xs[i] * k
+    (t * 10.0).to_int()
+
+fn flags(fs List[bool]) int
+    mut c := 0
+    for i in 0..fs.len()
+        if fs[i]
+            c += 1
+    c
+
+fn rows(m List[List[int]]) int
+    mut t := 0
+    for i in 0..m.len()
+        for j in 0..m[i].len()
+            t += m[i][j]
+    t
+
+fn main()
+    a := [1, 2, 3, 4, 5]
+    b := [5, 4, 3, 2, 1]
+    print(dot(a, b, 5))
+    mut c := [10, 20, 30]
+    bump(mut c, 3)
+    print(c)
+    print(scaled([1.5, 2.5, 3.0], 2.0))
+    print(flags([true, false, true, true]))
+    print(rows([[1, 2], [3], [4, 5, 6]]))
+    print(dot(a, b, 6))

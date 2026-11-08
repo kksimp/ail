@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
+    hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
     self_ty str
     ## Variables whose list or struct belongs to someone else (parameters,
@@ -287,6 +289,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
@@ -444,6 +447,10 @@ RT_ROOTS := [
     "rt.list_pushb",
     "rt.list_reserve",
     "rt.list_rows_min",
+    "rt.datarange_absmax",
+    "rt.vec_axpyi",
+    "rt.vec_axpyf",
+    "rt.vec_escape",
     "rt.list_new_for",
     "rt.fill",
 ]
@@ -498,6 +505,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
+    note_hash_uses(prog, pre)
     for f in program_fns(prog)
         if is_test(f)
             continue
@@ -925,6 +933,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
         enter_contracts(f, key)
     uniq_params(f)
     instr_call(f, sig.params, params)
+    race_enter()
     want := not ret.is_unit()
     if want
         tail_want = ret
@@ -1303,6 +1312,9 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             uniq_replace(key)
             write_var(key, cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
+            if g := grid_place(recv, index, ipos)
+                lower_assign_body(g, op, value, pos)
+                return
             if assign_after_rhs(target, op, value, pos)
                 return
             l := lower_value(recv, none) else return

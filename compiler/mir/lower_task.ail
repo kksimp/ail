@@ -49,6 +49,8 @@ struct ParSite
     ## The body calls a function (`ParScan.calls`): a written `par for` over
     ## such a body goes to the pool from two iterations (conc.par.14).
     calls bool
+    ## Outer lists pushed once per iteration (conc.par.16, lower_build.ail).
+    builds List[Cap]
 
 pub struct TaskState
     ## Whether the task runtime is linked (so `print` takes the output lock).
@@ -124,6 +126,7 @@ pub fn uses_tasks(text str) bool
         or text.contains("proc.start")
         or text.contains("std.app")
         or text.contains("tensor.")
+        or text.contains("fs.scan")
 
 ## `fn main() !`: no result and no error type of its own. The only `?` the
 ## subset knows is `t.wait()?`, which ends the program on a trap.
@@ -417,6 +420,16 @@ fn Lower.gen_task_dispatch(mut self)
     call("rt.tensor_chunk", [ps[1]], Ty.Unit)
     finish(return_of(-1))
     cur = tno
+    # The subtrees of an `fs.scan` (scan.ail, ADR 0927).
+    syes := new_block()
+    sno := new_block()
+    sealed[syes] = true
+    sealed[sno] = true
+    branch(op("eq", [ps[0], konst(1073741825, Ty.Int)], Ty.Bool), syes, [], sno, [])
+    cur = syes
+    call("rt.scan_chunk", [ps[1]], Ty.Unit)
+    finish(return_of(-1))
+    cur = sno
     for k in 0..tk.sites.len()
         yes := new_block()
         no := new_block()
@@ -463,8 +476,9 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     mut caps := List[Cap]()
     mut accs := List[str]()
     mut atomic := false
+    builds := par_builds(var, body, sc)
     for n in sc.names.sorted()
-        if n == var
+        if n == var or has_build(builds, n)
             continue
         key := lookup(n) else
             # A field of `self` is not in the chunk's scope: run in order.
@@ -508,7 +522,9 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         aliases: aliases,
         self_ty: self_ty,
         work: sc.work + 1 + callee_work(sc, prefix, 0),
-        calls: sc.calls,
+        # A built list's `push` is not a call that makes an iteration heavy (conc.par.14).
+        calls: sc.calls and (sc.callees.len() > 0 or builds.len() == 0),
+        builds: builds,
     )
 
 fn root_of(e ast.Expr) str
@@ -536,6 +552,9 @@ fn Lower.lower_par_for(
             note := "{file_paths[file]}:{pos.line}:{pos.col}: warning[conc.par.13]: `par for {var}` runs in order: {tk.why}"
             if not tk.notes.contains(note)
                 tk.notes.push(note)
+        lower_for(var, iter, body, false, pos)
+        return
+    if auto and cheap_build(plan)
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
@@ -571,7 +590,8 @@ fn Lower.lower_par_for(
                 )
             _ => return
     id := tk.sites.len()
-    tk.sites.push(TaskSite(func: "task.{id}", params: [], ret: Ty.Unit, loop: tk.pars.len()))
+    pi := tk.pars.len()
+    tk.sites.push(TaskSite(func: "task.{id}", params: [], ret: Ty.Unit, loop: pi))
     tk.pars.push(plan)
     ncaps := plan.caps.len()
     par_blk := new_block()
@@ -620,14 +640,16 @@ fn Lower.lower_par_for(
     branch(all_ok, done, [], seq, [])
     seal(done)
     seal(seq)
+    # The loop in order first: it finds the element type of a built list (conc.par.16).
+    cur = seq
+    lower_for(var, seq_iter, body, false, pos)
+    jump(join, [])
     cur = done
     for a in 0..plan.accs.len()
         key := lookup(plan.accs[a]) else continue
         at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
         write_var(key, cur, prim_op("load64", [at], Ty.Int))
-    jump(join, [])
-    cur = seq
-    lower_for(var, seq_iter, body, false, pos)
+    gather_builds(pi, grp)
     jump(join, [])
     seal(join)
     cur = join
@@ -661,6 +683,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         self_ty: self_ty,
         work: 0,
         calls: false,
+        builds: [],
     )
     # Problems of the loop's body belong to its own file, not the one lowered before or after.
     stamp_problems()
@@ -676,6 +699,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         declare(c.name, c.ty, prim_op(if c.ty.is_float() then "loadf" else "load64", [at], c.ty))
     declare("__lo", Ty.Int, rec_word(rec, 1))
     declare("__hi", Ty.Int, rec_word(rec, 2))
+    chunk_builds_begin(p)
     for a in p.accs
         declare(a, Ty.Int, konst(0, Ty.Int))
         declare("{a}#min", Ty.Int, konst(0, Ty.Int))
@@ -713,6 +737,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
             key := lookup(name) else continue
             at := op("add", [rec, konst(base + 8 * part, Ty.Int)], Ty.Int)
             prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
+    chunk_builds_end(rec, p)
     finish(return_of(-1))
     tk.in_chunk = false
     tk.owner = ""
@@ -807,17 +832,23 @@ fn Lower.lower_atomic_method(
     if (env.get("AIL_SCHEDULE") else "").starts_with("random")
         call("rt.det_yield", [], Ty.Unit)
     if name == "load" and vs.len() == 0
-        return Val(id: prim_op("atomic_load", [cell], elem), ty: elem)
+        v := prim_op("atomic_load", [cell], elem)
+        race_sync(cell, true, false)
+        return Val(id: v, ty: elem)
     if name == "store" and vs.len() == 1
+        race_sync(cell, false, true)
         prim_op("atomic_store", [cell, vs[0]], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
     if name == "cas" and vs.len() == 2
+        race_sync(cell, false, true)
         got := prim_op("atomic_cas", [cell, vs[0], vs[1]], Ty.Int)
+        race_sync(cell, true, false)
         return Val(id: op("eq", [got, vs[0]], Ty.Bool), ty: Ty.Bool)
     if name == "add" and vs.len() == 1 and elem == Ty.Int
         # Retry until no other thread changed the cell between the read and
         # the swap; an overflow traps before the swap, leaving the cell as
         # it was (conc.atomic.5).
+        race_sync(cell, false, true)
         head := new_block()
         exit := new_block()
         jump(head, [])
@@ -830,6 +861,7 @@ fn Lower.lower_atomic_method(
         seal(head)
         seal(exit)
         cur = exit
+        race_sync(cell, true, false)
         return Val(id: old, ty: Ty.Int)
     unsupported(npos, "`.{name}()` on `{Ty.Atomic(elem).name()}`")
 

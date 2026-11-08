@@ -1,0 +1,19 @@
+# The elements are too large for the data-range guard (native.bce.12): the
+# checked nest runs and traps at the same `*` as without the guard
+# (expr.arith.1).
+fn main()
+    n := 4
+    mut a := List[List[int]]()
+    for i in 0..n
+        mut row := List[int]()
+        for j in 0..n
+            row.push(if i == 2 and j == 3 then 4611686018427387904 else i + j)
+        a.push(row)
+    mut t := 0
+    for i in 0..n
+        for j in 0..n
+            mut s := 0
+            for k in 0..n
+                s += a[i][k] * a[k][j]
+            t += s
+    print(t)

@@ -1,6 +1,12 @@
 edit --dry-run tests/cases/packages/edit_impact edits.json	a2c25f214f28fe72	0	eb8f67e6c42e1967
 edit --dry-run --json tests/cases/packages/edit_impact edits.json	a2c25f214f28fe72	0	7eb7de70775ba875
 edit --dry-run --diff tests/cases/packages/edit_impact edits.json	a2c25f214f28fe72	0	eb8f67e6c42e1967
+edit --dry-run tests/cases/packages/edit_impact_field edits.json	bb52bdd739063f8d	0	b9388804c1d2b272
+edit --dry-run --json tests/cases/packages/edit_impact_field edits.json	bb52bdd739063f8d	0	0e5270effbb89b76
+edit --dry-run --diff tests/cases/packages/edit_impact_field edits.json	bb52bdd739063f8d	0	b9388804c1d2b272
+edit --dry-run tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	5c89d0f1fd2bbb4e
+edit --dry-run --json tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	ae0b7682a1e6d48a
+edit --dry-run --diff tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	5c89d0f1fd2bbb4e
 edit --dry-run tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
 edit --dry-run --json tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
 edit --dry-run --diff tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d

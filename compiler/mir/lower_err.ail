@@ -377,7 +377,7 @@ fn Lower.recv_ty(self, e ast.Expr) Ty?
                 return none
             t := var_ty[k]
             if t.is_unknown() then none else t
-        Index(r, _, _) => recv_ty(r)?.elem()
+        Index(r, _, _) => index_ty(recv_ty(r)?)
         Member(r, f, _) =>
             match recv_ty(r)?
                 Struct(s) =>
@@ -924,8 +924,10 @@ fn Lower.display_call(mut self, v Val) int?
 SHOWN_STD_AIL := [
     "std.app.",
     "std.args.",
+    "std.audio.",
     "std.bigint.",
     "std.csv.",
+    "std.gfx.",
     "std.log.",
     "std.net.http.",
     "std.screen.",

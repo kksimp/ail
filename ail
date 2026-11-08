@@ -8,6 +8,13 @@
 # There is no Rust toolchain here (ADR 0855): the published seed (tools/release/fetch-seed.sh) builds the native CLI.
 set -euo pipefail
 
+# Git for Windows' sh (the gate's scripts run `./ail` through it): this script can't build or run anything there, so hand
+# the arguments to the PowerShell twin, which does (ail.ps1, like ail.cmd for programs that start `ail` themselves).
+case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*)
+        exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -W)/ail.ps1" "$@" ;;
+esac
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # std.app.10: a program finds the app host built under the toolchain.
 export AIL_ROOT="$root"
@@ -131,6 +138,16 @@ if [ "${1:-}" = run ]; then
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!A-Za-z0-9_]*) die "\`--watch\` needs a variable name, e.g. \`--watch total\` (trace.watch.1)" ;; esac
                 export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}watch=$v"; trace_run=1; k=$((k + 2)) ;;
+            --at)
+                v="${run_args[$((k + 1))]-}"
+                probe_tail="${v##*:}"
+                case "$probe_tail" in "" | *[!0-9]*) die "error[probe.run.4]: \`--at\` needs FILE:LINE, e.g. \`--at main.ail:12\` (probe.run.4)" ;; esac
+                [ "$probe_tail" != "$v" ] && [ "${v%:*}" != "" ] || die "error[probe.run.4]: \`--at\` needs FILE:LINE, e.g. \`--at main.ail:12\` (probe.run.4)"
+                probe_at="$v"; k=$((k + 2)) ;;
+            --show)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!A-Za-z0-9_,]*) die "error[probe.run.4]: \`--show\` needs variable names, e.g. \`--show i,total\` (probe.run.4)" ;; esac
+                probe_show="${v//,/|}"; k=$((k + 2)) ;;
             --no-contracts) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}nocontracts"; k=$((k + 1)) ;;
             --trace | --trace=all) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace,traceeffects"; trace_run=1; k=$((k + 1)) ;;
             --trace=calls) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace"; trace_run=1; k=$((k + 1)) ;;
@@ -162,6 +179,11 @@ if [ "${1:-}" = run ]; then
         esac
     done
     run_skip=$k
+    # probe.run.1: `--at FILE:LINE --show a,b` builds the probe in; each needs the other.
+    if [ -n "${probe_at:-}${probe_show:-}" ]; then
+        [ -n "${probe_at:-}" ] && [ -n "${probe_show:-}" ] || die "error[probe.run.4]: \`--at\` and \`--show\` go together, e.g. \`--at main.ail:12 --show i,total\` (probe.run.4)"
+        export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}probe=$probe_at:$probe_show"; trace_run=1
+    fi
     # trace.run.1: with a trace, `--json` makes the events JSON objects.
     if [ "${trace_run:-}" = 1 ] && [ "$budget_opts" = " --json" ]; then
         budget_opts=""; export AIL_TRACE_JSON=1 AIL_INSTRUMENT="$AIL_INSTRUMENT,tracejson"
@@ -266,7 +288,7 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         if [ -x "$root/.native/seed" ]; then
             AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "the seed couldn't build the native CLI"; }
         else
-            die "no seed for this host: sign in with gh or set GITHUB_TOKEN, then rerun (tools/release/fetch-seed.sh; ADR 0855)"
+            die "no seed for this host: check the network and rerun (tools/release/fetch-seed.sh; ADR 0855)"
         fi
         rm -f "$log"
         mv "$native.new" "$native"
@@ -408,6 +430,45 @@ fi
 # `ail mcp` (ADR 0918): the compiler's tools as an MCP server on stdio, tools/ailmcp/ailmcp.ail.
 if [ "${1:-}" = mcp ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
+fi
+
+# `ail lsp` (ADR 0966): the compiler's semantic API as a language server on stdio, tools/ailsp/ailsp.ail.
+if [ "${1:-}" = lsp ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailsp/ailsp.ail" "${@:2}"
+fi
+
+# `ail sanitize` (ADR 0967): the schedule sanitizer, tools/ailsan/ailsan.ail.
+if [ "${1:-}" = sanitize ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailsan/ailsan.ail" "${@:2}"
+fi
+
+# `ail leak` (ADR 0968): build FILE, run it with the leak report on (AIL_LEAK, san.leak.*).
+# The report goes to standard error after the program's own output; the exit status is the program's.
+if [ "${1:-}" = leak ]; then
+    shift
+    leak_json=0
+    leak_all=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) leak_json=1 ;;
+            --all) leak_all=1 ;;
+            *) break ;;
+        esac
+        shift
+    done
+    [ $# -ge 1 ] || die "usage: ail leak [--json] [--all] FILE [ARGS...]"
+    leak_file="$1"
+    shift
+    leak_mode=1
+    [ "$leak_all" = 1 ] && leak_mode=all
+    [ "$leak_json" = 1 ] && leak_mode=json
+    [ "$leak_all$leak_json" = 11 ] && leak_mode=all,json
+    leak_exe="$(mktemp "${TMPDIR:-/tmp}/ail-leak.XXXXXX")" || exit 2
+    "$root/ail" build "$leak_file" -o "$leak_exe" || { rm -f "$leak_exe"; exit 2; }
+    AIL_LEAK="$leak_mode" "$leak_exe" "$@"
+    leak_rc=$?
+    rm -f "$leak_exe"
+    exit "$leak_rc"
 fi
 
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.

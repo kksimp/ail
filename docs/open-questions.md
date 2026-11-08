@@ -8,6 +8,10 @@ and its entry here is replaced by a link.
 
 IDs (`OQ-NNN`) are never reused.
 
+State on 2026-11-07: 81 entries, 25 open and 56 resolved. Resolved entries stay
+here for history; each links the ADR that settled it. Open ones are live design
+work, and new ones are welcome as issues (the proposal template has the same shape).
+
 ---
 
 ## OQ-001 — ISA priority policy
@@ -172,14 +176,7 @@ questions. They will be opened topic by topic during Stage 1.
 **Resolved** by [ADR 0173](decisions/0173-format-specifications-in-interpolation.md) (`{x:>8}`, `{r:.2}`, `{n:0>4x}`).
 
 ## OQ-042 — Custom hashing
-`Hash` is automatic and can't be implemented by hand
-([ADR 0133](decisions/0133-automatic-hash.md)), so a type with its own
-`fn eq` can't be a map key or set element. Options: let `impl Hash` declare
-which fields take part (consistent with a custom `eq` by construction), a
-`fn hash(self, mut h Hasher)` method as in Rust (flexible, but can disagree
-with `eq`), or keep the restriction. Hash values must stay invisible to
-programs, so output never depends on the hash function. *Owner: AI under
-ADR 0076; decide when a real program needs it.*
+**Resolved** by [ADR 0955](decisions/0955-custom-hash-names-fields.md) (`impl Hash` names the fields that take part).
 
 ## OQ-043 — `s.len()`: bytes or characters
 **Resolved** by [ADR 0208](decisions/0208-str-len-counts-characters.md) (`len()` counts characters, `byte_len()` bytes).
@@ -531,3 +528,12 @@ a field and keeps it up to date by hand.
 Recommendation: **b**, added next to the field form when a real program needs a
 computed value; **a** until then. Needs the designer, because it extends the
 approved syntax (ADR 0879 item 1).
+
+## OQ-141 — Reading an exact byte count from standard input (ADR 0966)
+
+`std.io` reads a line, the rest of input, or the rest as bytes (`std.io.1-5`). The language server protocol frames each message with `Content-Length: N` and then exactly N bytes with no line ending, so `ail lsp` reads the body as a line and cuts it by byte count (lsp.proto.1).
+
+- **a.** Keep the line trick. Pro: no runtime change. Con: breaks if a client sends a body with a raw newline, and reads past the body into the next header.
+- **b.** Add `io.read_exact(n int) bytes?` (none at end of input). Pro: exact, also serves binary protocols and agents' own stdio servers. Con: one runtime primitive on three targets.
+
+Recommendation: **b** when the std lane next touches `std.io`; `ail lsp` then drops the carry.

@@ -110,6 +110,11 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             )
         return t
     if d := types.get(n)
+        if root_decl_hidden(d, npos)
+            # Inside a module a bare name is its own or the standard one: a root type of the same
+            # name is not in scope there (mod.unit.1), so a variant such as `Field(...)` wins.
+            if v := bare_variant(n, npos, expect)
+                return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
         match d
             DStruct(s) =>
                 symbols[pos_key(npos)] = "type:{n}"
@@ -155,6 +160,11 @@ fn Checker.args_only(mut self, args List[ast.Arg])
     elif variant_owners(n).len() == 0
         unknown_name(n, npos, args.len())
     Ty.Unknown
+
+## Whether `d` is declared in the root module while `at` is inside another module (mod.unit.1).
+fn Checker.root_decl_hidden(self, d Def, at ast.Pos) bool
+    decl := def_pos(d)
+    decl.line < 1073741824 and module_at(prog, decl) == "" and module_at(prog, at) != ""
 
 fn no_binds() List[Bind]?
     none
@@ -1253,6 +1263,16 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
     )
     true
 
+## True when the struct type `t` has a field called `n`.
+fn Checker.has_field(self, t Ty, n str) bool
+    match t
+        Struct(s, _) =>
+            for f in prog.structs[s].fields
+                if f.name == n
+                    return true
+            false
+        _ => false
+
 @allow("expr.match.3") fn Checker.field(mut self, recv ast.Expr, n str, at ast.Pos, expect Ty?) Ty
     mut head := ""
     mut targs := List[ast.TypeRef]()
@@ -1313,7 +1333,9 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
     match rt0
         RefOf(t) => rt = t
         _ => rt = rt0
-    if candidates(rt, n).len() > 0
+    # trait.method.7: a method is only reached through a call, so in value
+    # position a field of the same name wins.
+    if candidates(rt, n).len() > 0 and not self.has_field(rt, n)
         diags.push(
             new_diag("expr.op.3", at, "`{n}` is a method, so calling it needs `()`")
                 .with_help("write `.{n}()`")
@@ -1402,6 +1424,8 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
                         "index with an `int`, or slice with `lo..hi`",
                     )
         return rt
+    if ge := grid_elem(rt)
+        return grid_index(index, ge)
     # `m[k]` (type.map.3).
     if is_map_ty(rt)
         if is_range(index)

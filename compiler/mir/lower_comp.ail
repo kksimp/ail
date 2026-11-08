@@ -37,8 +37,9 @@ fn comp_loops(inner List[ast.Stmt], clauses List[ast.CompFor], pos ast.Pos) List
             )]
             unpacked.extend(body)
             body = unpacked
+        # `[e par for x in xs]` builds its list on the pool (conc.par.12, conc.par.16).
         body = [ast.Stmt.For(
-            is_par: false,
+            is_par: c.is_par and clauses.len() == 1 and c.cond == none and c.unpack.len() == 0,
             var: c.var,
             var_pos: c.var_pos,
             mutable: false,

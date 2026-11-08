@@ -74,13 +74,25 @@ fn Lower.assign_param(mut self, key str, ty Ty, v int, pos ast.Pos) int
             for k in 0..3
                 store(p, k, load(v, k, Ty.Int))
         Map(_, _) | Set(_) =>
-            for k in 0..11
+            for k in 0..13
                 store(p, k, load(v, k, Ty.Int))
             # The remembered entry belongs to the old table.
             store(p, 10, konst(0, Ty.Int))
+            # So do a `str` table's cached entries (ADR 0936).
+            if str_keyed(ty)
+                zero := konst(0, Ty.Int)
+                for k in 13..45
+                    store(p, k, zero)
         _ =>
             # A value held in a cell (a scalar, `str`, enum or optional
             # `mut` parameter or `mut self`, lower_cell.ail).
             store(p, 0, v)
             return v
     p
+
+## Whether a map or set has `str` keys, so its table holds the key cache.
+fn str_keyed(t Ty) bool
+    match t
+        Map(k, _) => key_kind(k) == 1
+        Set(e) => key_kind(e) == 1
+        _ => false

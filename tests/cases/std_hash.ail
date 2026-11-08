@@ -1,4 +1,4 @@
-## std.hash.1-4: digests, HMAC, CRC-32 and the fast hash, against the
+## std.hash.1-5: digests, HMAC (SHA-256, -384, -512), CRC-32 and the fast hash, against the
 ## vectors of FIPS 180-4, RFC 4231 and the CRC-32 check value.
 use std.hash
 
@@ -8,6 +8,8 @@ fn main()
     print(hash.sha384("abc"))
     print(hash.sha512("abc"))
     print(hash.hmac_sha256("Jefe", "what do ya want for nothing?"))
+    print(hash.hmac_sha384("Jefe", "what do ya want for nothing?"))
+    print(hash.hmac_sha512("Jefe", "what do ya want for nothing?"))
     print(hash.crc32("123456789"))
     print(hash.crc32(""))
     print(hash.hash64("hello") == hash.hash64("hello"))

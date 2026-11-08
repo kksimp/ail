@@ -4,7 +4,8 @@
 ## (int, char, bool), `f` a float, `s` a string, `L` and the shape of its
 ## elements a list (`b` elements are bytes), `S` n `;` and n shapes a struct
 ## or tuple, `E` n `;` and n variants `V` m `;` and m shapes an enum, `O` and
-## a shape an optional, `@` n `;` the shape at offset n (a recursive type).
+## a shape an optional, `@` n `;` the shape at offset n (a recursive type),
+## `_` a field that `impl Hash ... uses` leaves out (trait.hash.1).
 use ast
 
 ## The shape of `t` as a key, or "" when it can't be one.
@@ -36,6 +37,9 @@ fn Lower.shape_from(self, t Ty, outer List[str], offs List[int], base int) str
                 return "@{offs[k]};"
             if not structs.contains(n)
                 return ""
+            used := hash_uses(n)
+            if used.len() > 0
+                return used_struct_shape(n, used, outer, offs, base)
             mut ts := List[Ty]()
             for sl in structs[n]
                 ts.push(sl.ty)
@@ -62,6 +66,42 @@ fn Lower.shape_from(self, t Ty, outer List[str], offs List[int], base int) str
                 out = "{out}{head}{inner}"
             out
         _ => ""
+
+## The field names of `impl Hash for n` with a `uses` line (trait.hash.1), or
+## none: the table then hashes and compares only those fields.
+fn Lower.hash_uses(self, n str) List[str]
+    hash_uses_of.get(n) else []
+
+## Record the `uses` lines of `prog`'s `impl Hash` blocks, by struct key.
+fn Lower.note_hash_uses(mut self, prog ast.Program, pre str)
+    for im in prog.impls
+        if im.trait_name == "Hash" and im.uses.len() > 0
+            hash_uses_of[owner_key(im.target.name, pre)] = [u.name for u in im.uses]
+
+## `S n ; shapes` for struct `n` where a field not in `used` is `_`: skipped
+## when hashing and comparing (trait.hash.1).
+fn Lower.used_struct_shape(
+    self,
+    n str,
+    used List[str],
+    outer List[str],
+    offs List[int],
+    base int,
+) str
+    slots := structs[n]
+    head := "S{slots.len()};"
+    ns := with_name(outer, n)
+    os := with_off(offs, base)
+    mut out := ""
+    for sl in slots
+        if not used.contains(sl.name)
+            out = "{out}_"
+            continue
+        s := shape_from(sl.ty, ns, os, base + head.len() + out.len())
+        if s == ""
+            return ""
+        out = "{out}{s}"
+    "{head}{out}"
 
 ## The shapes of the field types `ts` one after the other from offset `base`,
 ## or "!" when one can't be a key.

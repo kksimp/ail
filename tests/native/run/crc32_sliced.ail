@@ -1,0 +1,33 @@
+## std.hash.3: the nibble path (under 1024 bytes) and the slicing-by-8 path (1024 and up) of CRC-32 give
+## the bit-by-bit result at every length around the cut and the eight-byte steps.
+use std.hash
+
+fn reference(s str) int
+    mut crc := 4294967295
+    for ch in s.chars()
+        crc = crc.bit_xor(ch.code())
+        for k in 0..8
+            if crc.bit_and(1) == 1
+                crc = crc.shr(1).bit_xor(3988292384)
+            else
+                crc = crc.shr(1)
+    crc.bit_xor(4294967295)
+
+fn text(n int, seed int) str
+    mut x := seed
+    mut out := List[str]()
+    for i in 0..n
+        x = (x * 1103515245 + 12345) % 2147483648
+        out.push("{char.from_code(33 + x / 65536 % 90) else '?'}")
+    out.join("")
+
+fn main()
+    mut bad := 0
+    for n in [0, 1, 2, 3, 7, 8, 9, 15, 16, 17, 255, 256, 1000, 1015, 1016, 1023, 1024, 1025, 1031, 1032, 1033, 2048, 4097, 10007]
+        s := text(n, n + 1)
+        if hash.crc32(s) != reference(s)
+            print("differs at {n}")
+            bad += 1
+    print(hash.crc32("123456789"))
+    print(hash.crc32(text(5000, 7)) == reference(text(5000, 7)))
+    print(bad)

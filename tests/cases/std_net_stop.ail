@@ -12,6 +12,9 @@ fn accept_one(srv net.Server) str
 
 fn hang_up(l net.Listener) !
     c := l.accept()?
+    # Read the client's hello first: closing with it unread resets the connection, and where that
+    # discards the reply (Windows) the client sees `closed` instead of `tls`.
+    _ := c.read_bytes(1)?
     c.write("not tls\n")?
     c.close()
 
