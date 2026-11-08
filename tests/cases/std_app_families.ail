@@ -1,0 +1,13 @@
+## std.app.28: a `font-family` list is parsed in order and falls back to
+## the generic face of its first generic family; "Nope Display 9z" is no
+## installed font anywhere, so the fallback is what a host would use.
+use std.app
+
+fn main()
+    heading := "\"Nope Display 9z\", 'Georgia' , serif"
+    print(app.family_list(heading).join("|"))
+    print(app.generic_of(heading))
+    print(app.generic_of("ui-monospace, Menlo"))
+    print(app.generic_of("Inter"))
+    print(app.generic_of("mono"))
+    print(app.family_list("  ").len())

@@ -1,0 +1,40 @@
+## std.app.28: the host says which family it measured each run in, and the
+## app hears it after the widths. The fake host answers the generic face.
+use std.app
+
+struct Meter
+    words List[str]
+    widths Map[str, float]
+    faces Map[str, str]
+
+impl app.App for Meter
+    fn update(mut self, ev app.Event)
+        return
+
+    fn view(self) app.Node
+        mut parts := List[str]()
+        for w in words
+            parts.push("{w}={widths.get(w) else -1.0}/{faces.get(w) else "?"}")
+        Label(parts.join(" "))
+
+    fn measures(self) List[app.Measure]
+        mut out := List[app.Measure]()
+        for w in words
+            if not widths.contains(w)
+                out.push(app.Measure(text: w, font: "\"Nope Display 9z\", serif", size: 10.0, bold: false, italic: false))
+        out
+
+    fn measured(mut self, runs List[app.Measure], ws List[float])
+        for k in 0..runs.len()
+            widths[runs[k].text] = ws[k]
+
+    fn fonts_used(mut self, runs List[app.Measure], used List[str])
+        for k in 0..runs.len()
+            faces[runs[k].text] = used[k]
+
+fn main() !
+    mut m := Meter(words: ["ab", "cdef"], widths: {}, faces: {})
+    host := "tests/app/measure_host.ail"
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
+    app.run_host(mut m, ail, ["run", host])?
+    print(app.outline(m.view()))
