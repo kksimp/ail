@@ -56,6 +56,7 @@ STD_MODULES := [
     ("std.time.date", "time/date.ail"),
     ("std.toml", "toml/toml.ail"),
     ("std.ui.widgets", "ui/widgets.ail"),
+    ("std.video.vp9", "video/vp9.ail"),
 ]
 
 ## Each type of a standard module, declared in `std/types.ail`, and its module.
