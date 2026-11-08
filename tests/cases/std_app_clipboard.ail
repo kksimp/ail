@@ -1,0 +1,6 @@
+use std.app
+
+## std.app.26: the clipboard line is plain JSON with the text escaped.
+fn main()
+    print(app.clipboard("ail.dev"))
+    print(app.clipboard("say \"hi\""))
