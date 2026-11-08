@@ -39,8 +39,8 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   the gate passes, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting).
 - **One checker:** checker changes go in `compiler/check/` only. There is no
-  Rust checker to compare with any more; `tests/checker_known_new.txt` is history
-  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
+  Rust checker to compare with any more; the parity list `tests/checker_known_new.txt`
+  was deleted on 2026-11-08 ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
   by [ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)).
 - **Native only ([ADR 0865](docs/decisions/0865-no-double-work.md)):** new
   features get no interpreter code. Native-only cases are listed in
