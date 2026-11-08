@@ -63,9 +63,11 @@ is a good size) and returns at once with a `StreamStatus`; `stream_status`,
 say. `StreamStatus` has `played`, the frames the device has finished, and
 `buffered`, the frames queued and not yet played: `played` is the clock to
 time video frames to, accurate to one chunk. `stream_flush` drops the queue and
-zeroes both counts, for a seek. The host protocol adds `open_stream RATE CH`,
+zeroes both counts, for a seek. `stream_write` does not wait for playback and
+the host's queue has no limit, so the caller applies back-pressure: write while
+`buffered` is under about 200 ms of frames and sleep otherwise. The host protocol adds `open_stream RATE CH`,
 `write BASE64`, `clock`, `pause`, `resume`, `flush` and `close_stream`, each
-answered by `played N buffered M` (`ok` for open and close).
+answered by `played N buffered M` (`ok` for open and close). *(ADR 0993)*
 
 **Planned (no rule ID yet):** a PipeWire host; mixing several
 plays in a task off the audio thread.
@@ -164,6 +166,17 @@ fn main() !
     device.stream_flush(mut d)?
     device.stream_close(mut d)?
     device.close(move d)
+```
+
+```ail rules=std.audio.12
+use std.audio
+use std.audio.device
+
+fn main() !
+    c := device.open_at("/nonexistent/ail-audio-host") else err
+        print("no audio device: {err.kind}")
+        return
+    device.close(move c)
 ```
 
 ## Open for Fable

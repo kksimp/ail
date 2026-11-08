@@ -15,7 +15,7 @@ AIL has no audio, which blocks games and media apps from replacing C and C++.
 
 1. `std.audio` is written in AIL. A `Clip` is interleaved float samples with a rate and channel count; mixing, resampling and WAV are pure functions (part 1, built).
 2. Devices (`std.audio.device`, part 2) use one host program per platform, talking PCM over stdin/stdout as `std.app` does: CoreAudio on macOS first, then WASAPI, then PipeWire with ALSA fallback. No AIL code runs on an audio callback.
-3. Decoders follow in the order FLAC, Vorbis, MP3. FLAC is built: [ADR 0974](0974-flac-decoding.md).
+3. Decoders follow in the order FLAC, Vorbis, MP3. FLAC is built: [ADR 0974](0974-flac-decoding.md). Streaming output: [ADR 0993](0993-audio-streaming-output.md).
 
 ## Rejected alternatives
 
