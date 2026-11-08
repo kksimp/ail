@@ -62,6 +62,13 @@ unlinks the file at the first `vsync`. A host skips a `surface` it can't map.
 row (`w * h` numbers), with no window: a test sees what would be shown. Alpha
 is ignored.
 
+**std.gfx.10** — `use std.gfx.watch` adds `run`, as `host.run` with the attach
+listener on (`attach.wire.1`), for a game that implements `attach.Observe`.
+`ail attach screen` then answers with the last frame's commands: `Clear` and
+`Rect` as boxes, `Line` as lines, `Text` as text (`std.app.24`). `ail attach
+observe` gives the game's observed values and `gfx.cmds`, `gfx.fills`,
+`gfx.lines` and `gfx.texts` of the last frame. *(ADR 0979)*
+
 ## Examples
 
 ```ail rules=std.gfx.1,std.gfx.2,std.gfx.3,std.gfx.4,std.gfx.5
@@ -131,4 +138,31 @@ fn main()
     print(px[0])
     print(px[5])
     print(px[11])
+```
+
+```ail rules=std.gfx.10,std.app.24
+use std.attach
+use std.gfx
+use std.gfx.host
+
+struct Dot
+    n int
+
+impl gfx.Game for Dot
+    fn update(mut self, input gfx.Input, dt float)
+        n += 1
+
+    fn draw(self, mut f gfx.Frame)
+        gfx.rect(mut f, 1.0, 1.0, 2.0, 2.0, 0xff0000)
+
+impl attach.Observe for Dot
+    fn observed(self) List[attach.Observed]
+        [attach.observed("n", "int", "{n}")]
+
+fn main()
+    mut l := host.new_loop(Dot(n: 0), "dot", 8, 8)
+    _ := host.advance(mut l, 0.1)
+    mut tr := attach.Tracker.new()
+    tr.update(l.observed())
+    print(tr.observe(["gfx.cmds"], 0))
 ```

@@ -1,0 +1,17 @@
+## std.gfx.watch (spec std.gfx.10, attach.run.4; ADR 0979): `run` shows a
+## `Game` as `std.gfx.host.run` does, with the attach listener on, so
+## `ail attach screen` answers with the last frame's draw list and `observe`
+## with the game's values and the frame's command counts. `ail run` retargets
+## `host.run(` calls here (the attach shim); a program doesn't import it.
+
+use std.attach
+use std.attach.serve
+use std.gfx
+use std.gfx.host
+
+## `host.run` with the attach listener on 127.0.0.1 (attach.wire.1).
+pub fn run[T gfx.Game + attach.Observe](mut g T, title str, w int, h int) ! host.GfxError
+    mut l := host.new_loop(g, title, w, h)
+    serve.run(mut l) else err
+        return host.GfxError(why: err.message)
+    host.finish(mut g, l)?
