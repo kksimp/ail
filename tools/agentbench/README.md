@@ -11,5 +11,3 @@ tools/agentbench/agentbench.py report
 ```
 
 `AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked.
-
-Known AIL bug found while validating `depgraph`: `mut s := m.get(k) else List[str]()` then `s.pop()` also shrank the list stored in the map (native build; repro `bugs/native-map-get-list-alias.ail` in the project files). The solution copies the list instead, so `validate` does not depend on the fix. Agents hitting it in a trial is real data; note it in that trial's record.
