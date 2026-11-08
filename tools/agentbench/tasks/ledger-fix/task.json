@@ -1,0 +1,39 @@
+{
+ "id": "ledger-fix",
+ "kind": "fix",
+ "title": "Fix reported ledger bugs",
+ "timeout_s": 3600,
+ "max_nudges": 2,
+ "max_turns": 150,
+ "build": {
+  "ail": [
+   "ail",
+   "build",
+   "src/main.ail",
+   "-o",
+   "ledger"
+  ],
+  "c": [
+   "cc",
+   "-O1",
+   "-g",
+   "-Wall",
+   "-Wextra",
+   "-fsanitize=address,undefined",
+   "-o",
+   "ledger",
+   "src/main.c"
+  ]
+ },
+ "docs": {
+  "ail": [
+   "docs/language-card.md"
+  ],
+  "c": [
+   "tools/agentbench/docs/c-libc-card.md"
+  ]
+ },
+ "doc_token_tolerance": 0.05,
+ "base": "ledger",
+ "exe": "ledger"
+}

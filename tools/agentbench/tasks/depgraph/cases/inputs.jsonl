@@ -1,0 +1,20 @@
+{"name": "order-basic", "args": ["order"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": true}
+{"name": "cycles-none", "args": ["cycles"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": true}
+{"name": "deps-basic", "args": ["deps", "app"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": true}
+{"name": "rdeps-basic", "args": ["rdeps", "util"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": true}
+{"name": "order-ties", "args": ["order"], "stdin": "z\ny -> x\nB\na\n", "visible": false}
+{"name": "order-cycle", "args": ["order"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "visible": false}
+{"name": "cycles-some", "args": ["cycles"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "visible": true}
+{"name": "deps-on-cycle", "args": ["deps", "a"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "visible": false}
+{"name": "rdeps-on-cycle", "args": ["rdeps", "c"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "visible": false}
+{"name": "self-loop", "args": ["cycles"], "stdin": "x -> x\ny -> x\n", "visible": false}
+{"name": "unknown", "args": ["deps", "nope"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}
+{"name": "bad-lines", "args": ["order"], "stdin": "a -> b\nbad line here\na ->b\n a -> b\n# note\n\nb -> c -> d\na\tb\nc\n", "visible": false}
+{"name": "bad-and-cycle", "args": ["order"], "stdin": "a -> b\nb -> a\n???\n", "visible": false}
+{"name": "dup-edges", "args": ["deps", "a"], "stdin": "a -> b\na -> b\nb -> c\n", "visible": false}
+{"name": "crlf", "args": ["order"], "stdin": "a -> b\r\nb\n", "visible": false}
+{"name": "usage-none", "args": [], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}
+{"name": "usage-bad-name", "args": ["deps", "a b"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}
+{"name": "usage-extra", "args": ["order", "x"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}
+{"name": "bytes-order", "args": ["order"], "stdin": "b\nB\n_\n.\na\n-\n", "visible": false}
+{"name": "empty", "args": ["order"], "stdin": "", "visible": false}
