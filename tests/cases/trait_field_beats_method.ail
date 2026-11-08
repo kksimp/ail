@@ -13,11 +13,11 @@ impl app.App for Pad
     fn view(self) app.Node
         app.canvas("pad", 0.0, 0.0, [])
 
-    fn total(self) int
-        pick + 10
+fn Pad.total(self) int
+    pick + 10
 
-    fn chosen(self) bool
-        pick() == none
+fn Pad.chosen(self) bool
+    pick() == none
 
 fn main()
     mut p := Pad(pick: 4)
