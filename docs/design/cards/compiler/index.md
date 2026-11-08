@@ -22,4 +22,4 @@ pkg  44 items
 scaffold  2 items
 syntax  110 items
 watch  4 items
-x64  115 items
+x64  118 items

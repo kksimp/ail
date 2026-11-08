@@ -48,6 +48,6 @@ tests: 6 (`ail test` lists them)
 
 ## watch (4 items)
 
-## x64 (115 items)
+## x64 (118 items)
 
 trimmed to fit 4000 tokens (~251); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
