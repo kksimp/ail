@@ -1,0 +1,86 @@
+## std.webm.1-8: WebM demuxing, fed whole and in pieces, and the writer.
+use std.media.webm
+
+fn tracks() List[webm.Track]
+    mut v := webm.blank_track()
+    v.number = 1
+    v.kind = "video"
+    v.codec = "V_VP9"
+    v.width = 320
+    v.height = 180
+    mut a := webm.blank_track()
+    a.number = 2
+    a.kind = "audio"
+    a.codec = "A_OPUS"
+    a.private = b"OpusHead\x01\x02\x38\x01\x80\xbb\x00\x00\x00\x00\x00"
+    a.rate = 48000.0
+    a.channels = 2
+    a.delay_ns = 6500000
+    a.preroll_ns = 80000000
+    [v, a]
+
+fn frames() List[webm.Frame]
+    [
+        webm.Frame(track: 1, ns: 0, key: true, data: b"key0"),
+        webm.Frame(track: 2, ns: 0, key: true, data: b"op0"),
+        webm.Frame(track: 2, ns: 20000000, key: true, data: b"op1"),
+        webm.Frame(track: 1, ns: 33000000, key: false, data: b"inter1"),
+        webm.Frame(track: 1, ns: 40000000000, key: false, data: b"late"),
+        webm.Frame(track: 1, ns: 41000000000, key: true, data: b"key2"),
+    ]
+
+fn show(f webm.Frame) str
+    "{f.track} {f.ns / 1000000} {f.key} {f.data.text()}"
+
+## Unknown-size Segment and Cluster, and the three lacings: Xiph (2, 300 and
+## 1 bytes), EBML in a BlockGroup with a ReferenceBlock (5, 3, 4) and fixed (4, 4).
+fn laced() bytes
+    parts := [
+        "1a45dfa3874282847765626d1853806701ffffffffffffff1654ae6b98ae96d7",
+        "81018381028686415f4f50555323e3838401312d001f43b67501ffffffffffff",
+        "ffe78164a34137810000820202ff2d6162070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "07070707070707070707070707070707070707070707070707070707077aa098",
+        "a19381000a060285bd313131313132323233333333fb8101a38d81001e840141",
+        "41414142424242",
+    ]
+    bytes.from_hex(parts.join("")) else b""
+
+fn main() !
+    file := webm.write(tracks(), frames())
+    m := webm.read(file)?
+    for t in m.tracks
+        print("{t.number} {t.kind} {t.codec} {t.width}x{t.height} {t.rate} {t.channels} {t.private.len()} {t.delay_ns} {t.preroll_ns}")
+    for f in m.frames
+        print(show(f))
+    print(m.of(2).len())
+    print((m.first("audio")?).codec)
+    # The same bytes, seven at a time, as a network feed would bring them.
+    mut d := webm.new()
+    mut got := List[webm.Frame]()
+    mut i := 0
+    mut ready_at := -1
+    while i < file.len()
+        end := (i + 7).min(file.len())
+        got.extend(d.push(file[i..end])?)
+        if d.ready and ready_at < 0
+            ready_at = got.len()
+        i = end
+    print(got.len())
+    print(ready_at)
+    print(d.consumed == file.len())
+    print([show(f) for f in got] == [show(f) for f in m.frames])
+    lm := webm.read(laced())?
+    for f in lm.frames
+        print("{f.track} {f.ns / 1000000} {f.key} {f.data.len()}")
+    bad := webm.read(b"not webm") else err
+        print(err)
+        m
+    print(bad.frames.len())
