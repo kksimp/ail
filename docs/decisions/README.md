@@ -770,3 +770,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed | 2026-11-05 |
 | [0969](0969-leak-report.md) | The leak report: `ail leak` shows growth by kind and retention by root on the GC heap *(delegated)* | Accepted | 2026-11-06 |
 | [0974](0974-flac-decoding.md) | std.audio: decode FLAC in AIL, amends ADR 0949 *(delegated)* | Accepted | 2026-11-07 |
+| [0993](0993-audio-streaming-output.md) | std.audio.device: streaming output with a played-frames clock, amends ADR 0949 *(delegated)* | Accepted | 2026-11-08 |
