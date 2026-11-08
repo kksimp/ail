@@ -21,9 +21,11 @@ final class Model: ObservableObject {
         self.focus = focus
         sync(tree)
         self.tree = tree
+        Edge.apply(self)
+        Edge.own?.title = title
         if !started {
             started = true
-            Outbox.shared.send("start")
+            Outbox.shared.send("start", Edge.insets(Edge.window(nil)))
         }
     }
 
@@ -84,12 +86,19 @@ struct HostApp: App {
                 .frame(minWidth: 320, minHeight: 200)
                 .navigationTitle(model.title)
                 .onAppear {
+                    if Reader.started { return }
+                    Reader.started = true
                     readViews(onView: { model.show(title: $0, focus: $1, tree: $2) },
                               onEnd: { NSApp.terminate(nil) })
                 }
         }
         .defaultSize(width: 1000, height: 720)
     }
+}
+
+/// The stdin reader runs once, whichever window's root appears first.
+enum Reader {
+    static var started = false
 }
 
 struct Root: View {
@@ -101,6 +110,9 @@ struct Root: View {
         NodeView(node: model.tree, model: model, focused: $focused, gap: edge ? 0 : 6)
             .padding(edge ? 0 : 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // std.app.25: in edge mode the tree reaches under the (transparent) title bar,
+            // which SwiftUI otherwise keeps clear as a safe area.
+            .ignoresSafeArea(.container, edges: Edge.wanted ? .top : [])
             .onChange(of: model.focus) { id in
                 if id.isEmpty { return }
                 // std.app.4: a canvas named by `focus` takes the keys (its view
