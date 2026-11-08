@@ -139,6 +139,8 @@ final class CanvasView: NSView {
     override func mouseDown(with e: NSEvent) {
         window?.makeFirstResponder(self)
         Edge.lastEvent = e
+        // A drag moves the window only once the app asks (std.app.25).
+        if Edge.applied { window?.isMovable = false }
         click(e, "left")
     }
     override func rightMouseDown(with e: NSEvent) { click(e, "right") }

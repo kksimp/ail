@@ -241,6 +241,8 @@ enum Edge {
         win.titleVisibility = .hidden
         win.titlebarSeparatorStyle = .none
         win.isMovableByWindowBackground = false
+        // The title bar's own drag handling is off: the app says when to move (`drag`).
+        win.isMovable = false
         win.isReleasedWhenClosed = false
         win.minSize = NSSize(width: 320, height: 200)
         win.backgroundColor = .windowBackgroundColor
@@ -261,7 +263,10 @@ enum Edge {
     static func act(_ kind: String) {
         guard let w = window(nil) else { return }
         if kind == "zoom" { w.zoom(nil); return }
-        if let e = lastEvent { w.performDrag(with: e) }
+        if let e = lastEvent {
+            w.isMovable = true
+            w.performDrag(with: e)
+        }
     }
 }
 
