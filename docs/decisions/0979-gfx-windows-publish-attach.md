@@ -28,4 +28,4 @@ Headless, `host.pixels`, `gfx.stats` and `gfx.dump` show a frame as text. A live
 
 ## Consequences
 
-Text is reported as a string at its position but is not yet drawn by the CPU surface (`std.gfx.7`). Windows has no native sockets yet, so a Windows game window runs without the listener (as `std.attach.serve.run` already does).
+Text is reported as a string at its position; the host draws it over the surface (`std.gfx.7`), so `host.pixels` does not show it. Windows has no native sockets yet, so a Windows game window runs without the listener (as `std.attach.serve.run` already does).
