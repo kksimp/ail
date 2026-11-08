@@ -39,10 +39,13 @@ P_TOP := 1024
 # A thread parked for the collector publishes its stack pointer here, with
 # the callee-saved registers it had (native-abi.md §10).
 P_PARK := 2048
+# 80 bytes per thread slot, 65 slots (`MAXW` workers and the main thread), to 9296.
 P_REGS := 4096
 # The mutexes each thread holds from `lock` (a list through the mutex records).
-P_HELD := 12288
-POOL_SZ := 24576
+# The text builders (`P_SB`, 9344) and failures (`P_ERR`, 10944) of core.ail lie
+# between; each holds 24 bytes per slot (ADR 0946: the layout fits 64 workers).
+P_HELD := 12544
+POOL_SZ := 32768
 # Heap kinds of the blocks tasks use: every word may be a pointer, except an
 # atomic cell, which is `KIND_ATOMIC` (heap.ail).
 KIND_TASK := 12
@@ -564,7 +567,7 @@ PAR_MIN_WORK := 65536
 PAR_HEAVY := 4096
 
 ## Whether `par for lo..hi` goes to the pool: at least twice as many
-## iterations as workers (conc.par.8). A chunk function takes the environment
+## iterations as the workers the region uses (conc.par.8, conc.par.17). A chunk function takes the environment
 ## record, `lo` and `hi` from its task record's arguments 0 to 2, then
 ## 3 words (sum, lowest and highest running sum) per accumulator.
 fn par_worth(lo int, hi int, work int, auto int) bool
@@ -580,7 +583,9 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     # pool even when there are fewer than twice as many as workers.
     if work >= PAR_HEAVY
         return true
-    if n < 2 * t
+    # Twice as many iterations as the workers the region would use (conc.par.17),
+    # so a big pool doesn't send a short heavy loop back in order.
+    if n < 2 * par_width(n, work)
         return false
     # A loop the compiler chose also needs enough work in all.
     auto == 0 or n >= PAR_MIN_WORK / work

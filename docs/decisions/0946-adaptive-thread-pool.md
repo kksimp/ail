@@ -21,8 +21,17 @@ they cannot use.
    uses `n / ceil(65536 / work)` workers, at least 2, at most the pool size,
    where `work` is the compiler's per-iteration cost (conc.par.14) and 65536
    operations is about 50 microseconds. Chunks stay four per worker used.
+   When the cost is only a floor (the body has a loop, or calls a function
+   that loops or recurses), the region uses the whole pool: a static count
+   of 16 per nested loop would otherwise put a stencil's rows on 3 workers.
 3. `AIL_PAR_LOG` prints one line per region: iterations, work, workers used of
    the pool, chunks. This is what an agent reads to see why N threads ran.
+
+4. The pool block grows to 32 KiB and its per-thread tables are laid out for
+   65 slots: the text builders (`P_SB`) and pending failures (`P_ERR`) moved
+   past the parked registers (`P_REGS`, 80 bytes a slot), and the Windows
+   scratch (`P_WTMP`) no longer folds threads past 29 onto one block. With
+   the old layout a 22nd thread's text builder overlapped the first failure.
 
 Workers still start lazily, one per queued chunk, so unused cores cost nothing.
 
