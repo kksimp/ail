@@ -4,7 +4,7 @@ Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
 > functions, the `ail test` runner and its result format, `assert` and
-> `assert_eq`, property tests, and doc examples as tests. Not yet designed:
+> `assert_eq`, property tests, fuzzing, mutation testing, and doc examples as tests. Not yet designed:
 > fixtures, test filtering, parallel runs, and expected-failure tests.
 
 ## Attributes
@@ -245,6 +245,76 @@ fn main()
 ```ail tool=test,--fuzz,small,--cases,50,FILE expect=cases rules=test.fuzz.5
 @test fn small(n int)
     assert(n + 0 == n)
+
+fn main()
+    print("x")
+```
+
+## Mutation testing
+
+**test.mutate.1** — `ail test --mutate [--max N] [--timeout MS] FILE` checks how well the tests of
+`FILE` notice a change to the program ([ADR 1022](../decisions/1022-mutation-testing.md)). It runs
+the tests once, with the build counting the statements run (`test.cover.4`), and prints their
+results as usual. If a test fails, no test passed, or the tests don't build, no mutant is made, the
+error names `test.mutate.1`, and the exit status is that of the run (1 when a test failed, 2 otherwise).
+
+```ail tool=test,--mutate,FILE status=1 expect=test.mutate.1 rules=test.mutate.1
+fn five() int
+    5
+
+@test fn bad()
+    assert(five() == 6)
+
+fn main()
+    print("x")
+```
+
+**test.mutate.2** — A mutant is the program with one change to one line. A line `if C` or `elif C`
+(with no `then`) has the mutant `if not (C)`. Then each place in a line where one of these
+applies gives a mutant: `==`, `!=`, `<=`, `>=`, `+=` and `-=` become `!=`, `==`, `<`, `>`, `-=` and
+`+=`; `<` and `>` become `<=` and `>=`; `+`, `-`, `*` and `/` become `-`, `+`, `+` and `*`; `and`,
+`or`, `true` and `false` become `or`, `and`, `false` and `true`; `not` is dropped; a whole decimal
+number N becomes N + 1, and 0 becomes 1. Strings, characters, comments, attribute lines, `use`,
+`assert`, `requires` and `ensures` lines and lines at the top level are not changed.
+
+**test.mutate.3** — Only a line that the run of `test.mutate.1` reached, in a function that is not
+a test and not `main`, is changed. Mutants are in line order, then column order. There are at
+most `--max` of them (default 50, and 0 means no limit); when there are more, they are
+spread evenly (the Ith kept is number I times count over max), so the same program and tests give the same mutants.
+
+**test.mutate.4** — Each mutant is written to a copy of the file beside it and run with `ail test
+--json` and a per-test limit of `--timeout` (default 5000 ms). The mutant is *killed* when that run
+exits 1, *survived* when it exits 0 and as many tests passed as in the first run, and *invalid*
+otherwise (it doesn't type-check, doesn't build, or a test was left out). The copy is deleted at the end.
+
+**test.mutate.5** — A surviving mutant is printed as `survived FILE:LINE: CHANGE (in FN)`; the
+last line is `mutants: N run, K killed, S survived, I invalid, score P%`, where P is K over K plus
+S (100 when both are 0). With `--json` each survivor is `{"mutant":true,"file":...,"line":...,
+"fn":...,"mutation":...,"status":"survived"}` and the last line is `{"mutate":true,"mutants":N,
+"killed":K,"survived":S,"invalid":I}`. The exit status is 1 when S is more than 0, otherwise 0.
+
+```ail tool=test,--mutate,FILE status=1 expect=survived rules=test.mutate.2,test.mutate.3,test.mutate.4,test.mutate.5
+fn sign(n int) int
+    if n > 0
+        return 1
+    if n < 0
+        return -1
+    0
+
+@test fn positive()
+    assert(sign(5) == 1)
+
+fn main()
+    print("x")
+```
+
+```ail tool=test,--mutate,--max,3,FILE expect=mutants rules=test.mutate.3,test.mutate.5
+fn double(n int) int
+    n * 2
+
+@test fn doubles()
+    assert_eq(double(3), 6)
+    assert_eq(double(0), 0)
 
 fn main()
     print("x")

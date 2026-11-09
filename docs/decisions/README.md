@@ -793,4 +793,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
 | [1020](1020-ail-context.md) | `ail context`: a token-budgeted bundle for an edit; amends ADR 0891 *(delegated)* | Accepted | 2026-11-09 |
+| [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
