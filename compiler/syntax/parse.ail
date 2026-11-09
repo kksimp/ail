@@ -899,7 +899,7 @@ fn Parser.generic_params(mut self) List[ast.GenericParam]?
     mut params := List[ast.GenericParam]()
     while not at_sym("]")
         # gen.const.1: `const N int`, a const parameter.
-        is_const := tag_at(0) == "id" and ident() == "const" and tag_at(1) == "id" and tag_at(2) == "id"
+        is_const := tag_at(0) == "id" and tok_text(peek()) == "const" and tag_at(1) == "id" and tag_at(2) == "id"
         if is_const
             bump()
         n := take_name("a type parameter name", "gen.decl.1")?
