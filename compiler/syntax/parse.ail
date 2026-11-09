@@ -830,7 +830,22 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
     expect_sym("(", "`(` after the function name", "gram.fn.1")?
     mut receiver := absent[ast.Receiver]()
     mut params := List[ast.Param]()
+    mut variadic := false
     while not at_sym(")")
+        if at_sym("..") and sym_at(1) == "."
+            # ffi.var.1: `...` ends the parameters of an `extern c fn`, after at least one.
+            if ext == none or params.len() == 0
+                error_text(
+                    "ffi.var.1",
+                    here(),
+                    "`...` ends the parameter list of an `extern c fn` that has a named parameter before it",
+                    "write `extern c fn name(first i32, ...) Result`",
+                    "",
+                )
+                return none
+            i += 2
+            variadic = true
+            break
         is_self := at_kw("self") or (at_kw("mut") or at_kw("move")) and kw_at(1) == "self"
         if is_self
             mutable := eat_kw("mut")
@@ -919,8 +934,11 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
             return none
     else
         fb = fn_body("the signature of {full}", in_trait(within))?
+    mut marks := List[ast.Attr]()
+    if variadic
+        marks.push(ast.Attr(name: "variadic c", pos: pos, arg: absent[str]()))
     ast.FnDecl(
-        attrs: [],
+        attrs: marks,
         owner: owner,
         name: name,
         pos: pos,

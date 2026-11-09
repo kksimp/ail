@@ -1220,7 +1220,9 @@ fn Gen.call_out(mut self, i mir.Inst)
     indirect := i.op == "icall"
     # A C function (`icall` named "c", ADR 0870) may clobber xmm8-xmm13, which
     # AIL functions keep: save them around the call.
-    c_call := indirect and i.name == "c"
+    c_call := indirect and (i.name == "c" or i.name.starts_with("cv"))
+    # A variadic call (`cv<N>`, ADR 1031).
+    variadic := c_call and i.name.starts_with("cv")
     # On Windows the C convention is Win64 (ffi.load.3): the argument's position
     # names its register (rcx rdx r8 r9 or xmm0-3), 32 bytes of shadow space come
     # first, later arguments go on the stack, and xmm6-xmm15 are the callee's to keep.
@@ -1261,6 +1263,16 @@ fn Gen.call_out(mut self, i mir.Inst)
             else
                 a.mov_mr(at(RSP, shadow + 8 * k), gpr(extra[k], S0))
     parallel(moves)
+    if variadic
+        if winc
+            # Win64 (ffi.var.4): a float among the first four arguments is also in
+            # the integer register of its position.
+            for k in 1..i.argc().min(5)
+                if f.vals[i.arg(k)].is_float()
+                    a.vmovq_rx(WIN_INT_ARGS[k - 1], k - 1)
+        else
+            # System V (ffi.var.4): `al` is an upper bound of the vector registers used.
+            a.mov_ri(RAX, nf)
     if indirect
         a.call_reg(S0)
     elif i.name.starts_with("libsys.")
