@@ -13,6 +13,9 @@ enum Op {
     case pic(x: Double, y: Double, w: Double, h: Double, src: String)
     case bitmap(x: Double, y: Double, w: Double, h: Double, id: String)
     case shade(x: Double, y: Double, w: Double, h: Double, color: Int, alpha: Double)
+    case round(x: Double, y: Double, w: Double, h: Double, r: Double, color: Int, alpha: Double, stroke: Double)
+    case poly(points: [Double], color: Int, alpha: Double)
+    case line(points: [Double], color: Int, width: Double)
     case clip(x: Double, y: Double, w: Double, h: Double)
     case unclip
 }
@@ -31,6 +34,7 @@ indirect enum Node {
 
 private func num(_ d: [String: Any], _ k: String) -> Double { (d[k] as? NSNumber)?.doubleValue ?? 0 }
 private func int(_ d: [String: Any], _ k: String) -> Int { (d[k] as? NSNumber)?.intValue ?? 0 }
+private func points(_ d: [String: Any]) -> [Double] { (d["points"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue ?? 0 } }
 private func text(_ d: [String: Any], _ k: String) -> String { d[k] as? String ?? "" }
 private func flag(_ d: [String: Any], _ k: String) -> Bool { (d[k] as? NSNumber)?.boolValue ?? false }
 
@@ -66,6 +70,11 @@ func decodeOp(_ any: Any) -> Op? {
         Bitmaps.store(id, w: int(d, "pw"), h: int(d, "ph"), base64: text(d, "data"))
         return .bitmap(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), id: id)
     case "Shade": return .shade(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), color: int(d, "color"), alpha: num(d, "alpha"))
+    case "Round":
+        return .round(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), r: num(d, "r"), color: int(d, "color"),
+                      alpha: num(d, "alpha"), stroke: num(d, "stroke"))
+    case "Poly": return .poly(points: points(d), color: int(d, "color"), alpha: num(d, "alpha"))
+    case "Line": return .line(points: points(d), color: int(d, "color"), width: num(d, "width"))
     case "Clip": return .clip(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"))
     case "Unclip": return .unclip
     default: return nil

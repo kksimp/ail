@@ -180,6 +180,9 @@ class StrOp : Op { public double X, Y, Size; public string Text, Font; public in
 class FillOp : Op { public double X, Y, W, H; public int Color; }
 class ShadeOp : Op { public double X, Y, W, H, Alpha; public int Color; }
 class StrokeOp : Op { public double X1, Y1, X2, Y2, Width; public int Color; }
+class RoundOp : Op { public double X, Y, W, H, R, Alpha, Stroke; public int Color; }
+class PolyOp : Op { public float[] Points; public double Alpha; public int Color; }
+class LineOp : Op { public float[] Points; public double Width; public int Color; }
 class PicOp : Op { public double X, Y, W, H; public string Src; }
 class BitmapOp : Op { public double X, Y, W, H; public string Id; }
 class ClipOp : Op { public double X, Y, W, H; }
@@ -236,6 +239,16 @@ class Node
         return n;
     }
 
+    // The `points` array of a Poly or Line (std.app.32).
+    static float[] Pts(object d)
+    {
+        var l = Json.Get(d, "points") as List<object>;
+        if (l == null) return new float[0];
+        var a = new float[l.Count];
+        for (int i = 0; i < a.Length; i++) a[i] = (float)Json.Num(l[i]);
+        return a;
+    }
+
     static Op DecodeOp(object d)
     {
         double X = Json.Num(Json.Get(d, "x")), Y = Json.Num(Json.Get(d, "y")), W = Json.Num(Json.Get(d, "w")), H = Json.Num(Json.Get(d, "h"));
@@ -252,6 +265,11 @@ class Node
             case "Stroke":
                 return new StrokeOp { X1 = Json.Num(Json.Get(d, "x1")), Y1 = Json.Num(Json.Get(d, "y1")), X2 = Json.Num(Json.Get(d, "x2")),
                     Y2 = Json.Num(Json.Get(d, "y2")), Color = color, Width = Json.Num(Json.Get(d, "width")) };
+            case "Round":
+                return new RoundOp { X = X, Y = Y, W = W, H = H, R = Json.Num(Json.Get(d, "r")), Color = color,
+                    Alpha = Json.Num(Json.Get(d, "alpha")), Stroke = Json.Num(Json.Get(d, "stroke")) };
+            case "Poly": return new PolyOp { Points = Pts(d), Color = color, Alpha = Json.Num(Json.Get(d, "alpha")) };
+            case "Line": return new LineOp { Points = Pts(d), Color = color, Width = Json.Num(Json.Get(d, "width")) };
             case "Pic": return new PicOp { X = X, Y = Y, W = W, H = H, Src = Json.Text(Json.Get(d, "src")) };
             case "Bitmap":
                 string id = Json.Text(Json.Get(d, "id"));
@@ -485,6 +503,37 @@ class CanvasView : Control
                 }
                 continue;
             }
+            // std.app.32: anti-aliased shapes, pixel corners at integer coordinates as in cairo and AppKit.
+            var rnd = op as RoundOp;
+            var poly = op as PolyOp;
+            var line = op as LineOp;
+            if (rnd != null || poly != null || line != null)
+            {
+                var smoothing = g.SmoothingMode;
+                var offset = g.PixelOffsetMode;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.None;
+                if (rnd != null) DrawRound(g, rnd);
+                else if (poly != null && poly.Points.Length >= 6)
+                {
+                    var pts = new PointF[poly.Points.Length / 2];
+                    for (int i = 0; i < pts.Length; i++) pts[i] = new PointF(poly.Points[i * 2], poly.Points[i * 2 + 1]);
+                    using (var b = new SolidBrush(Tint(poly.Color, poly.Alpha))) g.FillPolygon(b, pts, FillMode.Winding);
+                }
+                else if (line != null && line.Points.Length >= 4)
+                {
+                    var pts = new PointF[line.Points.Length / 2];
+                    for (int i = 0; i < pts.Length; i++) pts[i] = new PointF(line.Points[i * 2], line.Points[i * 2 + 1]);
+                    using (var p = new Pen(Rgb(line.Color), line.Width > 0 ? (float)line.Width : 1))
+                    {
+                        p.StartCap = LineCap.Round; p.EndCap = LineCap.Round; p.LineJoin = LineJoin.Round;
+                        g.DrawLines(p, pts);
+                    }
+                }
+                g.SmoothingMode = smoothing;
+                g.PixelOffsetMode = offset;
+                continue;
+            }
             var pic = op as PicOp;
             var bm = op as BitmapOp;
             if (pic != null || bm != null)
@@ -512,6 +561,37 @@ class CanvasView : Control
                 continue;
             }
             if (op is UnclipOp && saved.Count > 0) g.Restore(saved.Pop());
+        }
+    }
+
+    static Color Tint(int rgb, double alpha)
+    {
+        double a = Math.Min(Math.Max(alpha, 0), 1);
+        Color c = Rgb(rgb);
+        return Color.FromArgb((int)Math.Round(a * 255), c.R, c.G, c.B);
+    }
+
+    // A rounded rectangle, radius at most half the shorter side; a stroke is centred on the edge (std.app.32).
+    static void DrawRound(Graphics g, RoundOp r)
+    {
+        float x = (float)r.X, y = (float)r.Y, w = (float)r.W, h = (float)r.H;
+        float rr = (float)Math.Min(Math.Max(r.R, 0), Math.Min(r.W, r.H) / 2);
+        float d = rr * 2;
+        using (var path = new GraphicsPath())
+        {
+            if (rr <= 0) path.AddRectangle(new RectangleF(x, y, w, h));
+            else
+            {
+                path.AddArc(x, y, d, d, 180, 90);
+                path.AddArc(x + w - d, y, d, d, 270, 90);
+                path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+                path.AddArc(x, y + h - d, d, d, 90, 90);
+                path.CloseFigure();
+            }
+            if (r.Stroke > 0)
+                using (var p = new Pen(Tint(r.Color, r.Alpha), (float)r.Stroke)) g.DrawPath(p, path);
+            else
+                using (var b = new SolidBrush(Tint(r.Color, r.Alpha))) g.FillPath(b, path);
         }
     }
 

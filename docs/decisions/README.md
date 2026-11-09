@@ -814,6 +814,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
 | [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
+| [1032](1032-std-app-vector-ops.md) | `std.app` vector ops: `Round`, `Poly`, `Line` *(delegated)* | Accepted | 2026-11-09 |
 | [1035](1035-v0-1-0-freeze-and-release-candidate.md) | v0.1.0: freeze after the lanes in flight, one release candidate gated on three hosts | Accepted | 2026-11-09 |
 | [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
 | [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |

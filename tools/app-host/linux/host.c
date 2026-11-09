@@ -229,10 +229,12 @@ static void send_id(const char *kind, const char *id) { Ev e = ev_new(kind); ev_
 
 /* ---- The view tree (std.app.2-3) ---- */
 
-typedef enum { O_STR, O_FILL, O_SHADE, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP } OpKind;
+typedef enum { O_STR, O_FILL, O_SHADE, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP, O_ROUND, O_POLY, O_LINE } OpKind;
 typedef struct {
     OpKind kind;
     double x, y, w, h, x2, y2, size, width, alpha;
+    double r, stroke;        /* O_ROUND (std.app.32) */
+    double *pts; int npts;   /* O_POLY, O_LINE: x0, y0, x1, y1, ...; npts is the number of points */
     int color;
     char *text, *font;   /* O_STR: text, font; O_PIC: text is src; O_BITMAP: text is the id */
     gboolean bold, italic, underline;
@@ -255,7 +257,7 @@ struct Node {
 static void node_free(Node *n) {
     if (!n) return;
     free(n->id); free(n->text); free(n->hint);
-    for (int i = 0; i < n->nops; i++) { free(n->ops[i].text); free(n->ops[i].font); }
+    for (int i = 0; i < n->nops; i++) { free(n->ops[i].text); free(n->ops[i].font); free(n->ops[i].pts); }
     free(n->ops);
     for (int i = 0; i < n->nkids; i++) node_free(n->kids[i]);
     free(n->kids);
@@ -361,6 +363,18 @@ static Node *decode_node(const JVal *d) {
                     op.kind = O_BITMAP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
                     free(op.text); op.text = strdup(jstr(o, "id"));
                     bitmap_store(op.text, (int)jnum(o, "pw"), (int)jnum(o, "ph"), jstr(o, "data"));
+                } else if (!strcmp(ok, "Round")) {
+                    op.kind = O_ROUND; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
+                    op.r = jnum(o, "r"); op.color = (int)jnum(o, "color"); op.alpha = jnum(o, "alpha"); op.stroke = jnum(o, "stroke");
+                } else if (!strcmp(ok, "Poly") || !strcmp(ok, "Line")) {
+                    op.kind = ok[0] == 'P' ? O_POLY : O_LINE;
+                    op.color = (int)jnum(o, "color"); op.alpha = jnum(o, "alpha"); op.width = jnum(o, "width");
+                    JVal *pa = jget(o, "points");
+                    if (pa && pa->kind == J_ARR) {
+                        op.pts = calloc(pa->n ? pa->n : 1, sizeof *op.pts);
+                        for (int k = 0; k < pa->n; k++) op.pts[k] = pa->vals[k]->kind == J_NUM ? pa->vals[k]->num : 0;
+                        op.npts = pa->n / 2;
+                    }
                 } else if (!strcmp(ok, "Clip")) {
                     op.kind = O_CLIP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
                 } else if (!strcmp(ok, "Unclip")) {
@@ -573,6 +587,51 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
             cairo_set_line_width(cr, op->width > 0 ? op->width : 1);
             set_color(cr, op->color);
             cairo_stroke(cr);
+            break;
+        case O_ROUND: {
+            /* std.app.32: radius at most half the shorter side; a stroke is centred on the edge. */
+            double rr = op->r < 0 ? 0 : op->r, lim = (op->w < op->h ? op->w : op->h) / 2;
+            if (rr > lim) rr = lim;
+            double a = op->alpha < 0 ? 0 : op->alpha > 1 ? 1 : op->alpha;
+            if (rr <= 0) cairo_rectangle(cr, op->x, op->y, op->w, op->h);
+            else {
+                cairo_new_sub_path(cr);
+                cairo_arc(cr, op->x + op->w - rr, op->y + rr, rr, -G_PI / 2, 0);
+                cairo_arc(cr, op->x + op->w - rr, op->y + op->h - rr, rr, 0, G_PI / 2);
+                cairo_arc(cr, op->x + rr, op->y + op->h - rr, rr, G_PI / 2, G_PI);
+                cairo_arc(cr, op->x + rr, op->y + rr, rr, G_PI, 3 * G_PI / 2);
+                cairo_close_path(cr);
+            }
+            cairo_set_source_rgba(cr, ((op->color >> 16) & 0xff) / 255.0, ((op->color >> 8) & 0xff) / 255.0, (op->color & 0xff) / 255.0, a);
+            if (op->stroke > 0) { cairo_set_line_width(cr, op->stroke); cairo_stroke(cr); }
+            else cairo_fill(cr);
+            break;
+        }
+        case O_POLY:
+            if (op->npts >= 3) {
+                double a = op->alpha < 0 ? 0 : op->alpha > 1 ? 1 : op->alpha;
+                cairo_new_path(cr);
+                cairo_move_to(cr, op->pts[0], op->pts[1]);
+                for (int k = 1; k < op->npts; k++) cairo_line_to(cr, op->pts[k * 2], op->pts[k * 2 + 1]);
+                cairo_close_path(cr);
+                cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
+                cairo_set_source_rgba(cr, ((op->color >> 16) & 0xff) / 255.0, ((op->color >> 8) & 0xff) / 255.0, (op->color & 0xff) / 255.0, a);
+                cairo_fill(cr);
+            }
+            break;
+        case O_LINE:
+            if (op->npts >= 2) {
+                cairo_new_path(cr);
+                cairo_move_to(cr, op->pts[0], op->pts[1]);
+                for (int k = 1; k < op->npts; k++) cairo_line_to(cr, op->pts[k * 2], op->pts[k * 2 + 1]);
+                cairo_set_line_width(cr, op->width > 0 ? op->width : 1);
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+                cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+                set_color(cr, op->color);
+                cairo_stroke(cr);
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+                cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
+            }
             break;
         case O_PIC: {
             GdkPixbuf *pb = load_pic(op->text);

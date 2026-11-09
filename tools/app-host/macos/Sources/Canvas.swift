@@ -121,6 +121,40 @@ final class CanvasView: NSView {
                 // std.app.19: a fill with opacity `a`, clamped to 0...1.
                 color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1))).setFill()
                 NSRect(x: x, y: y, width: w, height: h).fill(using: .sourceOver)
+            case let .round(x, y, w, h, r, c, a, stroke):
+                // std.app.32: a rounded rectangle; the radius is at most half the shorter side.
+                let rr = CGFloat(min(max(r, 0), min(w, h) / 2))
+                let p = NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h), xRadius: rr, yRadius: rr)
+                let tint = color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1)))
+                if stroke > 0 {
+                    p.lineWidth = CGFloat(stroke)
+                    tint.setStroke()
+                    p.stroke()
+                } else {
+                    tint.setFill()
+                    p.fill()
+                }
+            case let .poly(pts, c, a):
+                if pts.count >= 6 {
+                    let p = NSBezierPath()
+                    p.windingRule = .nonZero
+                    p.move(to: NSPoint(x: pts[0], y: pts[1]))
+                    for k in 1..<(pts.count / 2) { p.line(to: NSPoint(x: pts[k * 2], y: pts[k * 2 + 1])) }
+                    p.close()
+                    color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1))).setFill()
+                    p.fill()
+                }
+            case let .line(pts, c, width):
+                if pts.count >= 4 {
+                    let p = NSBezierPath()
+                    p.move(to: NSPoint(x: pts[0], y: pts[1]))
+                    for k in 1..<(pts.count / 2) { p.line(to: NSPoint(x: pts[k * 2], y: pts[k * 2 + 1])) }
+                    p.lineWidth = CGFloat(width > 0 ? width : 1)
+                    p.lineCapStyle = .round
+                    p.lineJoinStyle = .round
+                    color(c).setStroke()
+                    p.stroke()
+                }
             case let .clip(x, y, w, h):
                 g.saveGState()
                 g.clip(to: CGRect(x: x, y: y, width: w, height: h))

@@ -34,6 +34,7 @@ points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
 `mono`, `sans` or `serif`, ADR 0905; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
+`Round`, `Poly` and `Line` (anti-aliased shapes, std.app.32),
 `Pic(x, y, w, h, src)` (an image file path or URL),
 `Bitmap(x, y, w, h, id, pw, ph, data)` (a `pw` by `ph` image scaled to the
 rectangle; `data` is its `R, G, B, A` bytes in standard base64, which
@@ -207,6 +208,24 @@ from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
 
 **std.app.30** — A host sends `appearance` (`text` is `dark` or `light`) once right after `start`, and again whenever the system's dark or light setting changes. An app may answer with a new view, as for any event. A host that cannot read the setting sends none, so a program must not depend on it and keeps a default theme. *(ADR 1008)*
+
+**std.app.32** — Three ops draw anti-aliased vector shapes, in points, colors
+`0xRRGGBB`. `Round(x, y, w, h, r, color, alpha, stroke float)` is a rounded
+rectangle: `r` is clamped to 0 up to half the shorter side (so a circle is
+`r = w / 2`), `stroke` 0 fills it and `stroke` above 0 outlines it with that
+width, centred on its edge; `alpha` (0 to 1, clamped) is its opacity.
+`Poly(points, color, alpha)` fills the polygon through `points`
+(`x0, y0, x1, y1, ...`) with the non-zero winding rule; fewer than 3 points
+draw nothing and a trailing odd value is ignored. `Line(points, color, width)`
+strokes an open polyline with round caps and round joins; fewer than 2 points
+draw nothing, and a `width` of 0 or less is 1. A host draws all three
+with its platform's anti-aliasing at device resolution, and the display list
+(the `view` JSON and `outline`) is the same on every host. A host that does not
+know an op skips it (std.app.19). `app.outline` prints
+`round X,Y WxH rR COLOR ALPHA STROKE`, `poly N COLOR ALPHA` and
+`line N COLOR WIDTH` (`N` is the point count), and `std.screen` shows `Round`
+and `Poly` as a `box` and `Line` as a `line` over their bounding boxes
+(std.screen.12). *(ADR 1032)*
 
 ## Examples
 
@@ -632,4 +651,16 @@ fn main()
     print(c.clicks)
     pad.update(c)
     print(pad.popup() != none)
+```
+
+```ail rules=std.app.32
+use std.app
+
+fn main()
+    ops := [
+        app.Op.Round(x: 0.0, y: 0.0, w: 20.0, h: 20.0, r: 10.0, color: 0xff0000, alpha: 1.0, stroke: 0.0),
+        app.Op.Poly(points: [0.0, 0.0, 10.0, 0.0, 5.0, 8.0], color: 0x00ff00, alpha: 0.5),
+        app.Op.Line(points: [0.0, 0.0, 5.0, 5.0, 10.0, 0.0], color: 0, width: 2.0),
+    ]
+    print(app.outline(app.canvas("c", 20.0, 20.0, ops)))
 ```
