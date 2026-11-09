@@ -2402,7 +2402,7 @@ fn lsp_frame(body str) str
     "Content-Length: {body.byte_len()}\r\n\r\n{body}"
 
 fn lsp_pos(uri str, line int, ch int) str
-    "~'textDocument':~'uri':'{uri}'^,'position':~'line':{line},'character':{ch}^"
+    "~'textDocument':~'uri':'{uri}'^,'position':~'line':{line},'character':{ch}^^"
 
 ## One `ail lsp` session in `d`: the messages in order, then `shutdown` and `exit`. Returns the server's frames.
 fn lsp_session(d str, uri str, text str, msgs List[str]) proc.Output
