@@ -16,6 +16,7 @@ STD_MODULES := [
     "proc",
     "random",
     "regex",
+    "simd",
     "tensor",
     "time",
     "tz",

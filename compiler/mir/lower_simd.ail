@@ -1,0 +1,89 @@
+## `std.simd` (ADR 1014, std.simd.1-9): the vector type `f64x4`, four `float`
+## lanes in 32 bytes. A vector is a MIR value of type `Ty.Vec`, held in four
+## stack slots by the code generators (no register class yet), made by
+## `simd.splat_f64x4` and `simd.load_f64x4`, combined lane by lane with
+## `+ - * /`, added up by `.sum()` and written back by `simd.store_f64x4`. It
+## can't be a parameter, a result, a field or a call's operand (verify.ail).
+use ast
+
+fn vec_f64x4() Ty
+    Ty.Vec("f64x4")
+
+## `simd.NAME(...)`, from `lower_std_call`. `none` after a report.
+fn Lower.lower_simd_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    for a in args
+        if a.label != none or (a.mutable and name != "store_f64x4")
+            return unsupported(npos, "this call of `simd.{name}`")
+    match name
+        "splat_f64x4" => simd_splat(npos, args)
+        "load_f64x4" => simd_load(npos, args)
+        "store_f64x4" => simd_store(npos, args)
+        _ => unsupported(npos, "`simd.{name}`")
+
+## `simd.splat_f64x4(x)` (std.simd.1): `x` in every lane.
+fn Lower.simd_splat(mut self, npos ast.Pos, args List[ast.Arg]) Val?
+    if args.len() != 1
+        return unsupported(npos, "this call of `simd.splat_f64x4`")
+    x := lower_value(args[0].value, Ty.Float)?
+    if x.ty != Ty.Float
+        return unsupported(npos, "`simd.splat_f64x4` of a `{x.ty.name()}`")
+    t := vec_f64x4()
+    Val(id: op("vsplat", [x.id], t), ty: t)
+
+## Trap (type.coll.4) unless `0 <= x < n`.
+fn Lower.simd_bound(mut self, x int, n int, pos ast.Pos)
+    mut b := inst(-1, "bounds", [x, n])
+    b.site = bounds_site(pos)
+    emit_void(b)
+
+## The address of element `i` of the `List[float]` `xs`, once lanes `i` to
+## `i + 3` are known to be in it (std.simd.1).
+fn Lower.simd_elems(mut self, xs Val, i Val, pos ast.Pos) int
+    n := op("len", [xs.id], Ty.Int)
+    simd_bound(i.id, n, pos)
+    last := op("add", [i.id, konst(3, Ty.Int)], Ty.Int)
+    simd_bound(last, n, pos)
+    op("data", [xs.id], Ty.Int)
+
+## `simd.load_f64x4(xs, i)` (std.simd.1): the lanes `xs[i]` to `xs[i + 3]`.
+fn Lower.simd_load(mut self, npos ast.Pos, args List[ast.Arg]) Val?
+    if args.len() != 2
+        return unsupported(npos, "this call of `simd.load_f64x4`")
+    xs := lower_value(args[0].value, none)?
+    if xs.ty != Ty.List(Ty.Float)
+        return unsupported(npos, "`simd.load_f64x4` of a `{xs.ty.name()}`")
+    i := lower_value(args[1].value, Ty.Int)?
+    base := simd_elems(xs, i, npos)
+    t := vec_f64x4()
+    Val(id: op("vload", [base, i.id], t), ty: t)
+
+## `simd.store_f64x4(mut xs, i, v)` (std.simd.1): the lanes of `v` to
+## `xs[i]` to `xs[i + 3]`.
+fn Lower.simd_store(mut self, npos ast.Pos, args List[ast.Arg]) Val?
+    if args.len() != 3 or not args[0].mutable
+        return unsupported(npos, "this call of `simd.store_f64x4`")
+    xs := lower_value(args[0].value, none)?
+    if xs.ty != Ty.List(Ty.Float)
+        return unsupported(npos, "`simd.store_f64x4` of a `{xs.ty.name()}`")
+    i := lower_value(args[1].value, Ty.Int)?
+    v := lower_value(args[2].value, vec_f64x4())?
+    if v.ty != vec_f64x4()
+        return unsupported(npos, "`simd.store_f64x4` of a `{v.ty.name()}`")
+    base := simd_elems(xs, i, npos)
+    emit_void(inst(-1, "vstore", [v.id, base, i.id]))
+    Val(id: -1, ty: Ty.Unit)
+
+## A method of a vector: `v.sum()` (std.simd.3).
+fn Lower.lower_simd_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    if name == "sum" and args.len() == 0
+        return Val(id: op("vsum", [r.id], Ty.Float), ty: Ty.Float)
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## `a + b`, `a - b`, `a * b` and `a / b` on two vectors of one type
+## (std.simd.4): every lane on its own, as the `float` operation.
+fn Lower.vec_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    name := op_name(o)
+    if name == "add" or name == "sub" or name == "mul" or name == "div"
+        return Val(id: op("vf{name}", [a.id, b.id], a.ty), ty: a.ty)
+    problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
+    a

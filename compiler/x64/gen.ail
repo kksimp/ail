@@ -89,6 +89,9 @@ struct Gen
     sallocs Map[int, int]
     ## The dynamic-library symbols this function calls (Linux, ADR 0870).
     imports List[str]
+    ## The number of 8-byte slots the frame holds; a function with vectors
+    ## keeps its last four for cycles of vector moves.
+    nslots int
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
@@ -172,6 +175,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         holes: al.holes,
         sallocs: al.sallocs,
         imports: [],
+        nslots: al.slots,
     )
     for r in al.saved
         if r >= codegen.FLOAT_BASE
@@ -263,6 +267,10 @@ fn Gen.epilogue(mut self, block int)
 fn Gen.slot(self, l int) Mem
     at(RBP, 0 - slot_base - 8 * (l - codegen.SLOT_BASE + 1))
 
+## The lowest address of the 32 bytes of the vector in slots `l` to `l + 3`.
+fn Gen.vslot(self, l int) Mem
+    slot(l + 3)
+
 fn is_reg(l int) bool
     l >= 0 and l < codegen.SLOT_BASE
 
@@ -346,6 +354,8 @@ fn Gen.put_xmm(mut self, v int, x int)
 # ---- parallel moves ----
 
 fn Gen.move_of(mut self, dst int, v int) Move
+    if f.vals[v].is_vec()
+        return Move(dst: dst, src: loc[v], imm: 0, sym: "vec", float: false)
     i := remat[v]
     fl := f.vals[v].is_float()
     if i.op == "const"
@@ -381,13 +391,24 @@ fn Gen.parallel(mut self, moves List[Move])
             continue
         # A cycle: save the first destination's value and read it from there.
         d := pending[0].dst
-        tmp := if pending[0].float then X1 + codegen.FLOAT_BASE else S1
-        emit_move(Move(dst: tmp, src: d, imm: 0, sym: "", float: pending[0].float))
+        vec := pending[0].sym == "vec"
+        mut tmp := S1
+        if vec
+            tmp = codegen.SLOT_BASE + nslots - 4
+        elif pending[0].float
+            tmp = X1 + codegen.FLOAT_BASE
+        kind := if vec then "vec" else ""
+        emit_move(Move(dst: tmp, src: d, imm: 0, sym: kind, float: pending[0].float))
         for j in 0..pending.len()
             if pending[j].src == d
                 pending[j].src = tmp
 
 fn Gen.emit_move(mut self, mv Move)
+    if mv.sym == "vec"
+        # A vector (slots to slots), through ymm14 (ADR 1014).
+        a.vmovupd_rm(X0, vslot(mv.src))
+        a.vmovupd_mr(vslot(mv.dst), X0)
+        return
     if mv.float
         x := if is_reg(mv.dst) then mv.dst - codegen.FLOAT_BASE else X0
         if mv.src < 0
@@ -419,6 +440,9 @@ fn Gen.emit_move(mut self, mv Move)
         a.mov_mr(slot(mv.dst), r)
 
 fn Gen.entry_moves(mut self)
+    for p in f.params
+        if f.vals[p].is_vec()
+            unreachable("x64: a vector parameter (std.simd.5)")
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -896,6 +920,32 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
             parallel([move_of(loc[i.dst], i.arg(0))])
+        "vsplat" =>
+            x := xmm(i.arg(0), X0)
+            a.vbroadcastsd(X0, x)
+            a.vmovupd_mr(vslot(loc[i.dst]), X0)
+        "vload" =>
+            base := gpr(i.arg(0), S0)
+            idx := gpr(i.arg(1), S1)
+            a.vmovupd_rm(X0, at_index(base, idx, 8, 0))
+            a.vmovupd_mr(vslot(loc[i.dst]), X0)
+        "vstore" =>
+            base := gpr(i.arg(1), S0)
+            idx := gpr(i.arg(2), S1)
+            a.vmovupd_rm(X0, vslot(loc[i.arg(0)]))
+            a.vmovupd_mr(at_index(base, idx, 8, 0), X0)
+        "vfadd" | "vfsub" | "vfmul" | "vfdiv" =>
+            a.vmovupd_rm(X0, vslot(loc[i.arg(0)]))
+            a.vpd256_rrm(i.op.strip_prefix("v") else i.op, X0, X0, vslot(loc[i.arg(1)]))
+            a.vmovupd_mr(vslot(loc[i.dst]), X0)
+        "vsum" =>
+            # (l0 + l1) + (l2 + l3), the fixed tree (std.simd.3).
+            a.vmovupd_rm(X0, vslot(loc[i.arg(0)]))
+            a.vhaddpd256(X0, X0, X0)
+            a.vextractf128(X1, X0, 1)
+            d := out_xmm(i.dst, X0)
+            a.vsd_rrr("fadd", d, X0, X1)
+            put_xmm(i.dst, d)
         "salloc" =>
             # The object's header word has the lowest address and its first
             # field the next one up; slots count downwards from `rbp`.

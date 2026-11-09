@@ -267,6 +267,15 @@ fn Gen.epilogue(mut self, block int)
 fn Gen.slot(self, l int) int
     sp_shift + 8 * (saved.len() + l - codegen.SLOT_BASE)
 
+## `into` = the address of the 32 bytes of the vector in slots `l` to `l + 3`.
+fn Gen.vaddr(mut self, l int, into int)
+    a.alu_ri("add", into, SP, slot(l))
+
+## `into` = `base + 8 * index`, the address of an element of a list (`vload`).
+fn Gen.velem(mut self, base int, idx int, into int)
+    a.shift_ri("lsl", into, idx, 3)
+    a.alu_rr("add", into, base, into)
+
 fn is_reg(l int) bool
     l >= 0 and l < codegen.SLOT_BASE
 
@@ -347,6 +356,8 @@ fn Gen.put_fpr(mut self, v int, x int)
 # ---- parallel moves ----
 
 fn Gen.move_of(self, dst int, v int) Move
+    if f.vals[v].is_vec()
+        return Move(dst: dst, src: loc[v], imm: 0, sym: "vec", float: false)
     i := remat[v]
     fl := f.vals[v].is_float()
     if i.op == "const"
@@ -380,13 +391,28 @@ fn Gen.parallel(mut self, moves List[Move])
             pending.remove_at(done)
             continue
         d := pending[0].dst
-        tmp := if pending[0].float then X1 + FB else S1
-        emit_move(Move(dst: tmp, src: d, imm: 0, sym: "", float: pending[0].float))
+        vec := pending[0].sym == "vec"
+        mut tmp := S1
+        if vec
+            tmp = codegen.SLOT_BASE + slots - 4
+        elif pending[0].float
+            tmp = X1 + FB
+        kind := if vec then "vec" else ""
+        emit_move(Move(dst: tmp, src: d, imm: 0, sym: kind, float: pending[0].float))
         for j in 0..pending.len()
             if pending[j].src == d
                 pending[j].src = tmp
 
 fn Gen.emit_move(mut self, mv Move)
+    if mv.sym == "vec"
+        # A vector (slots to slots), in two halves through v30 and v31 (ADR 1014).
+        vaddr(mv.src, S0)
+        vaddr(mv.dst, S1)
+        a.ldr_q(X0, S0, 0)
+        a.ldr_q(X1, S0, 16)
+        a.str_q(X0, S1, 0)
+        a.str_q(X1, S1, 16)
+        return
     if mv.float
         x := if is_reg(mv.dst) then mv.dst - FB else X0
         if mv.src < 0
@@ -416,6 +442,9 @@ fn Gen.emit_move(mut self, mv Move)
         a.str(r, SP, slot(mv.dst))
 
 fn Gen.entry_moves(mut self)
+    for p in f.params
+        if f.vals[p].is_vec()
+            unreachable("a64: a vector parameter (std.simd.5)")
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -839,6 +868,50 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             else
                 a.str(gpr(v, S1), r, i.imm)
         "copy" => parallel([move_of(loc[i.dst], i.arg(0))])
+        "vsplat" =>
+            x := fpr(i.arg(0), X0)
+            a.vdup(X0, x)
+            vaddr(loc[i.dst], S0)
+            a.str_q(X0, S0, 0)
+            a.str_q(X0, S0, 16)
+        "vload" =>
+            base := gpr(i.arg(0), S0)
+            idx := gpr(i.arg(1), S2)
+            velem(base, idx, S1)
+            a.ldr_q(X0, S1, 0)
+            a.ldr_q(X1, S1, 16)
+            vaddr(loc[i.dst], S0)
+            a.str_q(X0, S0, 0)
+            a.str_q(X1, S0, 16)
+        "vstore" =>
+            base := gpr(i.arg(1), S0)
+            idx := gpr(i.arg(2), S2)
+            velem(base, idx, S1)
+            vaddr(loc[i.arg(0)], S0)
+            a.ldr_q(X0, S0, 0)
+            a.ldr_q(X1, S0, 16)
+            a.str_q(X0, S1, 0)
+            a.str_q(X1, S1, 16)
+        "vfadd" | "vfsub" | "vfmul" | "vfdiv" =>
+            vaddr(loc[i.arg(0)], S0)
+            vaddr(loc[i.arg(1)], S1)
+            vaddr(loc[i.dst], S2)
+            op := i.op.strip_prefix("v") else i.op
+            for h in [0, 16]
+                a.ldr_q(X0, S0, h)
+                a.ldr_q(X1, S1, h)
+                a.vop(op, X0, X0, X1)
+                a.str_q(X0, S2, h)
+        "vsum" =>
+            # (l0 + l1) + (l2 + l3), the fixed tree (std.simd.3).
+            vaddr(loc[i.arg(0)], S0)
+            a.ldr_q(X0, S0, 0)
+            a.ldr_q(X1, S0, 16)
+            a.vfaddp_d(X0, X0)
+            a.vfaddp_d(X1, X1)
+            d := out_fpr(i.dst, X0)
+            a.fop("fadd", d, X0, X1)
+            put_fpr(i.dst, d)
         "salloc" =>
             # Slots count upwards from `sp`: the header word, then the fields.
             d := out_gpr(i.dst, S1)

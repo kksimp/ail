@@ -107,6 +107,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     if not same_ty(a.ty, b.ty)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
         return a
+    if a.ty.is_vec()
+        return vec_binary(o, a, b, pos)
     if a.ty.is_ref() and (name == "eq" or name == "ne")
         return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
     if k := own_cmp(a.ty)

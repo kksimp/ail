@@ -26,6 +26,13 @@ pub fn verify(f Func) List[str]
                 def_index[d] = k
     if f.params != f.blocks[0].params
         errs.push("{f.name}: the entry block's parameters aren't the function's")
+    # std.simd.5: a vector stays in its function's frame, so it is neither a
+    # parameter, a result nor a call's operand.
+    for p in f.params
+        if f.vals[p].is_vec()
+            errs.push("{f.name}: a vector can't be a parameter (std.simd.5)")
+    if f.ret.is_vec()
+        errs.push("{f.name}: a vector can't be a result (std.simd.5)")
     dom := dominators(f)
     for b in 0..n
         blk := f.blocks[b]
@@ -34,6 +41,12 @@ pub fn verify(f Func) List[str]
             for u in i.operands()
                 check_use(f, dom, def_block, def_index, u, b, k, mut errs)
             check_types(f, i, mut errs)
+            if not i.op.starts_with("v") and i.op != "copy"
+                if i.dst >= 0 and f.vals[i.dst].is_vec()
+                    errs.push("{f.name}: `{i.op}` can't make a vector (std.simd.5)")
+                for u in i.operands()
+                    if f.vals[u].is_vec()
+                        errs.push("{f.name}: `{i.op}` can't take a vector (std.simd.5)")
         for u in blk.term.uses()
             check_use(f, dom, def_block, def_index, u, b, blk.insts.len(), mut errs)
         for e in 0..blk.term.targets.len()

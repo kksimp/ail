@@ -276,8 +276,15 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
         weighed: false,
         func: f,
     )
+    mut has_vec := false
     for v in queue
-        s.assign(v, f.vals[v].is_float(), t)
+        if f.vals[v].is_vec()
+            # A vector lives in four consecutive slots (ADR 1014, std.simd).
+            s.loc[v] = SLOT_BASE + s.slots
+            s.slots += 4
+            has_vec = true
+        else
+            s.assign(v, f.vals[v].is_float(), t)
     mut sallocs := Map[int, int]()
     for blk in f.blocks
         for i in blk.insts
@@ -301,6 +308,10 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
         for e in c.exits
             holes.push(Hole(block: e, store: false, reg: r, slot: at, float: fl))
     shrink := shrink_wrap(f, order, s, bstart, bend, t)
+    # The last four slots hold a vector while a cycle of vector moves turns
+    # (`Gen.parallel`).
+    if has_vec
+        s.slots += 4
     Alloc(
         loc: s.loc,
         order: order,

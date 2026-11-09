@@ -620,6 +620,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "bytes" => Ty.Bytes
                 "char" => Ty.Char
                 "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "u64" | "f32" => scalar_ty(name)
+                "f64x4" => vec_f64x4()
                 "List" =>
                     if args.len() != 1
                         return none
@@ -2090,6 +2091,8 @@ fn Lower.lower_method(
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
         return lower_sorted(r, name, args, npos)
+    if r.ty.is_vec()
+        return lower_simd_method(r, name, npos, args)
     if k := builtin_method(r.ty, name)
         return struct_call(k, r, args, npos)
     if r.ty.is_coll()

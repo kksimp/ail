@@ -92,6 +92,7 @@ STD_FUNCTIONS := [
         "replace_first",
         "split",
     ],
+    ["simd", "load_f64x4", "splat_f64x4", "store_f64x4"],
     ["tensor", "from", "from_fn", "zeros"],
     ["task", "cancelled", "check", "select"],
     ["time", "now_ms", "sleep_ms"],
@@ -164,6 +165,8 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return shuffle_call(args, at)
+    if module == "simd" and n == "store_f64x4"
+        return simd_store_call(args, at)
     if module == "task" and n == "select"
         return select_call(args, at)
     sig := std_signature(module, n)
@@ -214,6 +217,11 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.ListOf(Ty.Int), Ty.Unknown], ret: self.tensor_ty(Ty.Unknown))
     if key == "tensor.zeros"
         return StdSig(params: [Ty.ListOf(Ty.Int)], ret: self.tensor_ty(Ty.Unknown))
+    # std.simd.1: `f64x4` is a `Num` of that name for the checker.
+    if key == "simd.splat_f64x4"
+        return StdSig(params: [Ty.Float], ret: Ty.Num("f64x4"))
+    if key == "simd.load_f64x4"
+        return StdSig(params: [Ty.ListOf(Ty.Float), Ty.Int], ret: Ty.Num("f64x4"))
     if key == "fs.read_text"
         return StdSig(params: [text], ret: fails_with("fs.IoError", text))
     if key == "fs.write_text" or key == "fs.append_text"
@@ -465,6 +473,53 @@ fn Checker.shuffle_call(mut self, args List[ast.Arg], at ast.Pos) Ty
             expr_pos(a.value),
             "`shuffle` needs a list, not {ty_name(t)}",
             "to pick one element, use `xs[random.int(0, xs.len() - 1)]`",
+        )
+    Ty.Unit
+
+## std.simd.1: `simd.store_f64x4(mut xs, i, v)` writes the lanes of `v` to
+## `xs[i]` to `xs[i + 3]` of a `List[float]`.
+fn Checker.simd_store_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    if args.len() != 3
+        args_only(args)
+        err(
+            "std.simd.1",
+            at,
+            "`store_f64x4` takes a list, an index and a vector, but {was_were(args.len())} given",
+        )
+        return Ty.Unit
+    for a in args
+        if a.label != none
+            unsupported(at, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+    a := args[0]
+    t := expr(a.value, none, true)
+    if not a.mutable
+        err_help(
+            "own.param.2",
+            at,
+            "this parameter is `mut`, so the argument must be marked `mut`",
+            "write `mut` before the argument",
+        )
+    else
+        require_mutable(a.value, "own.param.2", "passed `mut`")
+    if t != Ty.ListOf(Ty.Float) and t != Ty.Unknown
+        err(
+            "std.simd.1",
+            expr_pos(a.value),
+            "`store_f64x4` needs a `List[float]`, not {ty_name(t)}",
+        )
+    it := expr(args[1].value, Ty.Int, true)
+    if it != Ty.Int and it != Ty.Unknown
+        err(
+            "std.simd.1",
+            expr_pos(args[1].value),
+            "the index of `store_f64x4` is an `int`, not {ty_name(it)}",
+        )
+    vt := expr(args[2].value, Ty.Num("f64x4"), true)
+    if vt != Ty.Num("f64x4") and vt != Ty.Unknown
+        err(
+            "std.simd.1",
+            expr_pos(args[2].value),
+            "`store_f64x4` stores an `f64x4`, not {ty_name(vt)}",
         )
     Ty.Unit
 

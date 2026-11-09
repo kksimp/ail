@@ -63,6 +63,15 @@ pub enum Ty
     ## an `int`, sign- or zero-extended from its width, so its value is
     ## always inside the type's range. `kind` is the type's name.
     Sized(kind str)
+    ## A SIMD vector (ADR 1014, std.simd): `kind` is its type's name,
+    ## `f64x4`. It lives in four consecutive 8-byte stack slots, never in a
+    ## register, a call or the heap.
+    Vec(kind str)
+
+pub fn Ty.is_vec(self) bool
+    match self
+        Vec(_) => true
+        _ => false
 
 pub fn Ty.is_ref(self) bool
     match self
@@ -134,6 +143,7 @@ pub fn Ty.name(self) str
         Byte => "u8"
         Char => "char"
         Sized(k) => k
+        Vec(k) => k
         List(e) => "List[{e.name()}]"
         Map(k, v) => "Map[{k.name()}, {v.name()}]"
         Set(e) => "Set[{e.name()}]"
@@ -193,6 +203,11 @@ pub fn Ty.name(self) str
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
 ## | `salloc` | | the address of the second word of `imm / 8 + 1` words in the function's frame (native.stack.1); the first word is the object header; written by the `stackify` pass, never by lowering |
+## | `vsplat` | x | a `Vec` with the `float` `x` in every lane (std.simd.1) |
+## | `vload` | base, index | a `Vec` read from the elements of `base` (a `data`) from `index`; not checked |
+## | `vstore` | vec, base, index | writes the lanes to those elements; not checked |
+## | `vfadd vfsub vfmul vfdiv` | a, b | lane-wise `float` arithmetic on two `Vec`s |
+## | `vsum` | vec | the lanes added as a balanced tree, a `float` (std.simd.3) |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst
     pub dst int
@@ -398,6 +413,7 @@ pub fn Inst.is_pure(self) bool
         "const" | "fconst" | "str" | "fnaddr" | "fadd" | "fsub" | "fmul" | "fdiv" => true
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
+        "vsplat" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vsum" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
         "band" | "bor" | "bxor" | "bnot" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => site < 0

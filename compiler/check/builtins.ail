@@ -358,6 +358,11 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Num("f32"))
             none
         Num(k) =>
+            # std.simd.3: the lanes of an `f64x4` added.
+            if k == "f64x4"
+                if n == "sum"
+                    return read([], Ty.Float)
+                return none
             if k == "f32"
                 if ["abs", "floor", "ceil", "round", "sqrt"].contains(n)
                     return read([], t)
@@ -500,11 +505,18 @@ fn read(params List[Ty], result Ty) Builtin?
         Char => CHAR_METHODS
         Int => INT_METHODS
         Float => FLOAT_METHODS
-        Num(k) => if k == "f32" then F32_METHODS else SIZED_INT_METHODS
+        Num(k) => num_method_names(k)
         ListOf => LIST_METHODS
         MapOf => MAP_METHODS
         SetOf => SET_METHODS
         _ => []
+
+fn num_method_names(k str) List[str]
+    if k == "f64x4"
+        return ["sum"]
+    if k == "f32"
+        return F32_METHODS
+    SIZED_INT_METHODS
 
 @allow("expr.match.3") fn elem_of(t Ty) Ty
     match t

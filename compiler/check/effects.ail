@@ -76,6 +76,9 @@ STD_EFFECTS := [
     StdEffects(module: "crypto", names: ["random_bytes"], effects: ["random"]),
     # unsafe.hw.5: hardware access.
     StdEffects(module: "hw", names: ["at", "fence", "fence_io"], effects: ["hw"]),
+    # std.simd.1: values only; `store_f64x4` changes the list it is given.
+    StdEffects(module: "simd", names: ["load_f64x4", "splat_f64x4"], effects: []),
+    StdEffects(module: "simd", names: ["store_f64x4"], effects: ["mutates"]),
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
     StdEffects(
         module: "compress",

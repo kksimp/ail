@@ -87,7 +87,7 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         ty = Ty.Int
     elif n == "float" or n == "f64"
         ty = Ty.Float
-    elif SIZED.contains(n)
+    elif SIZED.contains(n) or n == "f64x4"
         ty = Ty.Num(n)
     elif n == "str"
         ty = Ty.Str

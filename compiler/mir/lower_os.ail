@@ -137,7 +137,7 @@ fn Lower.os_module(self, recv ast.Expr) str
 ## The module name when `recv` is a standard module written in the
 ## runtime (ADR 0614), unless the program has its own module of the name.
 fn Lower.std_module(self, recv ast.Expr) str
-    for m in ["hash", "random", "crypto"]
+    for m in ["hash", "random", "crypto", "simd"]
         if is_module(recv, m) and not aliases.contains(m)
             return m
     ""
@@ -146,6 +146,8 @@ fn Lower.std_module(self, recv ast.Expr) str
 ## runtime's `NAME_m`, typed by its declaration. `random.int` first checks
 ## `lo <= hi` (std.random.2).
 fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    if m == "simd"
+        return lower_simd_call(name, npos, args)
     if m == "random" and name == "shuffle"
         return lower_shuffle(npos, args)
     key := "rt.{m}_{name}"

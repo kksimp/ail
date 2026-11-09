@@ -1,0 +1,52 @@
+# `std.simd` `f64x4` (std.simd.1-5; ADR 1014): four `float` lanes, lane-wise
+# `+ - * /`, `sum()` as a balanced tree, loads and stores, vectors across loop
+# iterations and swaps, each checked against a scalar twin.
+use std.simd
+
+fn dot_vec(xs List[float], ys List[float]) float
+    mut acc := simd.splat_f64x4(0.0)
+    mut i := 0
+    while i + 4 <= xs.len()
+        acc = acc + simd.load_f64x4(xs, i) * simd.load_f64x4(ys, i)
+        i += 4
+    mut s := acc.sum()
+    while i < xs.len()
+        s += xs[i] * ys[i]
+        i += 1
+    s
+
+fn dot_scalar(xs List[float], ys List[float]) float
+    mut s := 0.0
+    for i in 0..xs.len()
+        s += xs[i] * ys[i]
+    s
+
+fn main()
+    xs := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    ys := [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+    print(dot_vec(xs, ys))
+    print(dot_scalar(xs, ys))
+    print(dot_vec(xs, ys) == dot_scalar(xs, ys))
+
+    a := simd.load_f64x4(xs, 2)
+    b := simd.splat_f64x4(2.0)
+    print((a + b).sum())
+    print((a - b).sum())
+    print((a * b).sum())
+    print((a / b).sum())
+    mut out := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    simd.store_f64x4(mut out, 1, a * b - a / b)
+    print(out)
+
+    mut p := simd.splat_f64x4(1.0)
+    mut q := simd.load_f64x4([0.0, 1.0, 2.0, 3.0], 0)
+    for _ in 0..5
+        t := p + q
+        p = q
+        q = t
+    print(p.sum())
+    print(q.sum())
+    mut r := q
+    r = r - p
+    print(r.sum())
+    print(q.sum())

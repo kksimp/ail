@@ -444,6 +444,10 @@ pub fn Asm.ldr_q(mut self, t int, n int, off int)
 pub fn Asm.str_q(mut self, t int, n int, off int)
     word(1031798784 + off / 16 * 1024 + n * 32 + t)
 
+## `faddp dd, vn.2d`: the two lanes added, as a `float` (std.simd.3, ADR 1014).
+pub fn Asm.vfaddp_d(mut self, d int, n int)
+    word(2120571904 + n * 32 + d)
+
 ## `movi vd.2d, #0`.
 pub fn Asm.vzero(mut self, d int)
     word(1862329344 + d)
