@@ -29,4 +29,4 @@ Spec 09 lists const generics as not designed. Fixed arrays, matrices, SIMD vecto
 
 ## Consequences
 
-Checker and lowering land in later slices (parser and checker in `compiler/check/`, lowering in its own `compiler/mir/lower_constgen.ail`, ADR 0823). Status moves to Accepted when slice 2 passes the gate.
+Checker and lowering land in later slices (parser and checker in `compiler/check/`, lowering in its own `compiler/mir/lower_constgen.ail`, ADR 0823). Slices 1 and 2 (`gen.const.1-3`) are implemented; const expressions, arrays and SIMD types are later slices.
