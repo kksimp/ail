@@ -41,17 +41,24 @@ half of the handshake.
    serves it and not the accept loop; a failed handshake is a `tls` error of
    that read or write, and the connection stays unusable (`TS_PEND = -1`),
    so no data is ever written in the clear.
-5. **Signing** (`tls_sign.ail`): ECDSA over SHA-256 with a nonce from the OS
-   generator, rejection-sampled below n. The scalar multiplication always
-   runs 256 doublings and additions and selects the result with masks. The
-   scalar is lengthened by n or 2n to exactly 257 bits (the usual defence
-   against nonce-length timing). The limb arithmetic underneath
-   (`tls_big.ail`) was written for public values and is **not constant
-   time**: Montgomery multiplication ends with a data-dependent
-   subtraction. This falls short of ADR 0959 rule 2. It is accepted for
-   the first slice because the nonce is fresh per signature and blinded in
-   length, and the follow-up is the constant-time P-256 of the std.crypto
-   plan (planned ADR 0999); `tsg_sign` is the single place to switch.
+5. **Signing** (`tls_sign.ail`, `tls_p256.ail`): ECDSA over SHA-256 with a
+   nonce from the OS generator, rejection-sampled below n. Everything that
+   touches the key or the nonce is constant time (ADR 0959 rule 2): the
+   Montgomery multiplication, addition and subtraction end in mask selects
+   with no secret-dependent branch (`ctm_*`); points use the complete
+   projective addition of Renes, Costello and Batina (2016, Algorithm 4,
+   a = -3), which has no special cases, so a scalar multiplication always
+   runs 256 doublings and 256 additions and picks the sum by mask; inversion
+   is a fixed-exponent power. Only two branches remain on secret-derived
+   values, the rejections of a nonce or `r`/`s` equal to zero or out of range
+   (probability about 2^-32, revealing nothing about the key). The variable-
+   time code of `tls_big.ail` and `tls_sig.ail` is used for public values
+   only. The formulas and the limb routines were checked against a reference
+   implementation in Python during development; the vectors in the gate are
+   the live handshakes of `tools/native-tls/server-check.sh`. AIL integer
+   multiplication and shifts compile to the machine's constant-time
+   instructions, and lists are indexed by public positions only. Audit of the
+   generated code for secret-dependent branches is a separate follow-up.
 6. **Recorder:** `listen_tls` has a `rec_` wrapper like `listen`.
 7. **Not in this slice:** `net.serve` over TLS (HTTPS for the built-in HTTP
    server), RSA and P-384 keys, Ed25519 certificates, SNI-based certificate

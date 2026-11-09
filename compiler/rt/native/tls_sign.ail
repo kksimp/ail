@@ -4,12 +4,10 @@
 ## ECDSA P-256 signing and private-key loading for the native TLS server (ADR
 ## 1013, std.net.33): a PEM `PRIVATE KEY` (PKCS#8) or `EC PRIVATE KEY` (SEC 1)
 ## becomes a 32-byte scalar, and a message becomes a DER `ECDSA-Sig-Value`
-## (SEC 1 4.1.3) over SHA-256. The curve arithmetic is that of tls_sig.ail
-## (verification) and tls_big.ail. The nonce comes from the OS generator, and
-## the scalar is lengthened by one or two multiples of n so that every
-## multiplication runs the same 256 steps (each step doubles, adds, and picks
-## by masks). The limb arithmetic underneath is not constant time: ADR 1013
-## names that, and the planned replacement of ADR 0999.
+## (SEC 1 4.1.3) over SHA-256. The nonce comes from the OS generator. All
+## arithmetic on the key and the nonce is constant time (tls_p256.ail, ADR
+## 0959 rule 2); tls_sig.ail's variable-time code is used for public values
+## only (the curve constants, the generator set-up).
 
 ## The point `[x, y, z]` chosen by `bit`: `a` when 1, `b` when 0, by masks.
 fn tsg_sel(bit int, a List[List[int]], b List[List[int]]) List[List[int]]
@@ -22,36 +20,8 @@ fn tsg_sel(bit int, a List[List[int]], b List[List[int]]) List[List[int]]
         out.push(v)
     out
 
-## `kk * g` for a scalar `kk` of exactly 257 bits, as Jacobian residues.
-fn tsg_mul(f List[List[int]], g List[List[int]], kk List[int]) List[List[int]]
-    mut acc := g
-    mut i := 255
-    while i >= 0
-        acc = ec_double(f, acc)
-        sum := ec_add(f, acc, g)
-        bit := if tbig_bit(kk, i) then 1 else 0
-        acc = tsg_sel(bit, sum, acc)
-        i -= 1
-    acc
-
-## `s + n` or `s + 2n`, whichever has exactly 257 bits (`s` is below n).
-fn tsg_lengthen(s List[int], n List[int]) List[int]
-    mut t := tsg_add(s, n)
-    if tbig_bits(t) != 257
-        t = tsg_add(t, n)
-    t
-
-## `a + b` without reduction; the result must fit the limbs.
-fn tsg_add(a List[int], b List[int]) List[int]
-    mut out := tbig_zero(a.len())
-    mut carry := 0
-    for i in 0..a.len()
-        v := a[i] + b[i] + carry
-        out[i] = v.bit_and(BIG_MASK)
-        carry = v.shr(BIG_BITS)
-    out
-
-## The P-256 field context and generator: `[f, g]` where `g` is `[x, y, z]`.
+## The P-256 field context and generator: `[f, g, [b]]` where `g` is
+## `[x, y, z]` and `b` the curve constant, all as residues.
 fn tsg_curve() List[List[List[int]]]
     k := tbig_limbs(32)
     f := mont_new(sig_big_hex(sig_curve_p(0), k))
@@ -60,18 +30,7 @@ fn tsg_curve() List[List[List[int]]]
         mont_to(f, sig_big_hex(sig_curve_gy(0), k)),
         f[3],
     ]
-    [f, g]
-
-## The affine `x` and `y` of the point `pt` as 32-byte big-endian numbers at
-## `x` and `y`; false at infinity.
-fn tsg_affine(f List[List[int]], pt List[List[int]], x int, y int) bool
-    if tbig_is_zero(pt[2])
-        return false
-    zi := mont_inv(f, pt[2])
-    zi2 := mont_mul(f, zi, zi)
-    tbig_to_be(mont_from(f, mont_mul(f, pt[0], zi2)), x, 32)
-    tbig_to_be(mont_from(f, mont_mul(f, pt[1], mont_mul(f, zi2, zi))), y, 32)
-    true
+    [f, g, [mont_to(f, sig_big_hex(sig_curve_b(0), k))]]
 
 ## Whether the 32 bytes at `d` are a valid private scalar: 0 < d < n.
 fn tsg_scalar_ok(d int) bool
@@ -83,16 +42,17 @@ fn tsg_scalar_ok(d int) bool
 ## The public key `04 || x || y` (65 bytes at `out`) of the scalar at `d`.
 fn tsg_public(d int, out int) bool
     k := tbig_limbs(32)
-    n := sig_big_hex(sig_curve_n(0), k)
     c := tsg_curve()
-    kk := tsg_lengthen(tbig_from_be(d, 32, k), n)
-    pt := tsg_mul(c[0], c[1], kk)
+    pt := ctp_mul(c[0], c[2][0], c[1], tbig_from_be(d, 32, k))
     store8(out, 4)
-    tsg_affine(c[0], pt, out + 1, out + 33)
+    ctp_affine(c[0], pt, out + 1, out + 33)
 
 ## Sign the `mn` bytes at `msg` with the scalar at `d` (ECDSA, SHA-256). The
 ## DER signature goes to `out` (room for 80); its length is returned, or 0 if
-## the system has no random numbers.
+## the system has no random numbers. Everything that touches `d` or the nonce
+## runs through tls_p256.ail, which has no secret-dependent branch or index;
+## the only branches on secret-derived values are the rejections below, which
+## happen with probability about 2^-32 and reveal nothing about d.
 fn tsg_sign(d int, msg int, mn int, out int) int
     k := tbig_limbs(32)
     n := sig_big_hex(sig_curve_n(0), k)
@@ -101,11 +61,9 @@ fn tsg_sign(d int, msg int, mn int, out int) int
     nm := mont_new(n)
     digest := alloc_raw(64, KIND_BYTES)
     hash_sha256_raw(msg, mn, digest)
-    mut e := tbig_from_be(digest, 32, k)
-    if tbig_cmp(e, n) >= 0
-        e = tbig_sub(e, n)
-    dm := mont_to(nm, tbig_from_be(d, 32, k))
-    em := mont_to(nm, e)
+    e := ctm_reduce(tbig_from_be(digest, 32, k), 0, n)
+    dm := ctm_to(nm, tbig_from_be(d, 32, k))
+    em := ctm_to(nm, e)
     rnd := alloc_raw(40, KIND_BYTES)
     xb := alloc_raw(40, KIND_BYTES)
     yb := alloc_raw(40, KIND_BYTES)
@@ -115,18 +73,16 @@ fn tsg_sign(d int, msg int, mn int, out int) int
         kv := tbig_from_be(rnd, 32, k)
         if tbig_is_zero(kv) or tbig_cmp(kv, n) >= 0
             continue
-        pt := tsg_mul(f, c[1], tsg_lengthen(kv, n))
-        if not tsg_affine(f, pt, xb, yb)
+        pt := ctp_mul(f, c[2][0], c[1], kv)
+        if not ctp_affine(f, pt, xb, yb)
             continue
-        mut r := tbig_from_be(xb, 32, k)
-        if tbig_cmp(r, n) >= 0
-            r = tbig_sub(r, n)
+        r := ctm_reduce(tbig_from_be(xb, 32, k), 0, n)
         if tbig_is_zero(r)
             continue
-        rm := mont_to(nm, r)
-        t := mont_add(nm, em, mont_mul(nm, rm, dm))
-        kinv := mont_inv(nm, mont_to(nm, kv))
-        s := mont_from(nm, mont_mul(nm, kinv, t))
+        rm := ctm_to(nm, r)
+        t := ctm_add(nm, em, ctm_mul(nm, rm, dm))
+        kinv := ctm_inv(nm, ctm_to(nm, kv))
+        s := ctm_from(nm, ctm_mul(nm, kinv, t))
         if tbig_is_zero(s)
             continue
         rb := alloc_raw(40, KIND_BYTES)

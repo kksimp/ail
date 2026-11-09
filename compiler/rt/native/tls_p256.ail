@@ -1,0 +1,203 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Constant-time P-256 for the native TLS server's signatures (ADR 1013, ADR
+## 0959 rule 2): field and scalar arithmetic over the limbs of tls_big.ail with
+## no branch, no index and no division that depends on a secret, and the
+## complete projective addition of Renes, Costello and Batina (2016,
+## Algorithm 4, a = -3), which has no special cases (doubling, infinity), so a
+## scalar multiplication runs the same operations whatever the scalar. Loops
+## run over public lengths and public exponents only. The context `ctx` is
+## that of `mont_new`; its set-up uses public moduli.
+
+## `a` where `mask` is all ones, else `b`, limb by limb.
+fn ctm_msel(mask int, a List[int], b List[int]) List[int]
+    mut out := tbig_zero(a.len())
+    for i in 0..a.len()
+        out[i] = b[i].bit_xor(a[i].bit_xor(b[i]).bit_and(mask))
+    out
+
+## `t - m` if `top` is nonzero or `t >= m`, else `t`; `t` and `m` have the
+## same number of limbs, `t` below 2m once `top` is counted.
+fn ctm_reduce(t List[int], top int, m List[int]) List[int]
+    mut d := tbig_zero(m.len())
+    mut borrow := 0
+    for i in 0..m.len()
+        v := t[i] - m[i] - borrow
+        d[i] = v.bit_and(BIG_MASK)
+        borrow = v.shr(63).bit_and(1)
+    neg := (top - borrow).shr(63).bit_and(1)
+    ctm_msel(neg - 1, d, t)
+
+## `a * b / R mod m`, as `mont_mul` but ending without a branch.
+fn ctm_mul(ctx List[List[int]], a List[int], b List[int]) List[int]
+    m := ctx[0]
+    minv := ctx[2][0]
+    k := m.len()
+    mut t := tbig_zero(k + 2)
+    for i in 0..k
+        ai := a[i]
+        mut carry := 0
+        for j in 0..k
+            v := t[j] + ai * b[j] + carry
+            t[j] = v.bit_and(BIG_MASK)
+            carry = v.shr(BIG_BITS)
+        v := t[k] + carry
+        t[k] = v.bit_and(BIG_MASK)
+        t[k + 1] = v.shr(BIG_BITS)
+        mi := (t[0] * minv).bit_and(BIG_MASK)
+        carry = (t[0] + mi * m[0]).shr(BIG_BITS)
+        for j in 1..k
+            w := t[j] + mi * m[j] + carry
+            t[j - 1] = w.bit_and(BIG_MASK)
+            carry = w.shr(BIG_BITS)
+        w2 := t[k] + carry
+        t[k - 1] = w2.bit_and(BIG_MASK)
+        t[k] = t[k + 1] + w2.shr(BIG_BITS)
+    mut out := tbig_zero(k)
+    for j in 0..k
+        out[j] = t[j]
+    ctm_reduce(out, t[k], m)
+
+fn ctm_to(ctx List[List[int]], x List[int]) List[int]
+    ctm_mul(ctx, x, ctx[1])
+
+fn ctm_from(ctx List[List[int]], a List[int]) List[int]
+    ctm_mul(ctx, a, tbig_one(ctx[0].len()))
+
+## `(a + b) mod m` for `a, b < m` (the limbs have room for the carry).
+fn ctm_add(ctx List[List[int]], a List[int], b List[int]) List[int]
+    mut s := tbig_zero(a.len())
+    mut carry := 0
+    for i in 0..a.len()
+        v := a[i] + b[i] + carry
+        s[i] = v.bit_and(BIG_MASK)
+        carry = v.shr(BIG_BITS)
+    ctm_reduce(s, 0, ctx[0])
+
+## `(a - b) mod m` for `a, b < m`.
+fn ctm_sub(ctx List[List[int]], a List[int], b List[int]) List[int]
+    m := ctx[0]
+    mut d := tbig_zero(a.len())
+    mut borrow := 0
+    for i in 0..a.len()
+        v := a[i] - b[i] - borrow
+        d[i] = v.bit_and(BIG_MASK)
+        borrow = v.shr(63).bit_and(1)
+    mask := 0 - borrow
+    mut out := tbig_zero(a.len())
+    mut carry := 0
+    for i in 0..a.len()
+        w := d[i] + m[i].bit_and(mask) + carry
+        out[i] = w.bit_and(BIG_MASK)
+        carry = w.shr(BIG_BITS)
+    out
+
+## `base ^ e` for a residue `base` and a PUBLIC exponent `e`.
+fn ctm_pow(ctx List[List[int]], base List[int], e List[int]) List[int]
+    mut r := ctx[3]
+    mut i := tbig_bits(e) - 1
+    while i >= 0
+        r = ctm_mul(ctx, r, r)
+        if tbig_bit(e, i)
+            r = ctm_mul(ctx, r, base)
+        i -= 1
+    r
+
+## The inverse of a nonzero residue modulo the prime of `ctx`.
+fn ctm_inv(ctx List[List[int]], a List[int]) List[int]
+    two := tbig_zero(ctx[0].len())
+    two[0] = 2
+    ctm_pow(ctx, a, tbig_sub(ctx[0], two))
+
+# ---- points: [X, Y, Z] residues, projective, (0, 1, 0) at infinity ----
+
+## `p + q` by RCB Algorithm 4 (complete for every input); `bm` is the curve
+## constant b as a residue.
+fn ctp_add(
+    f List[List[int]],
+    bm List[int],
+    p List[List[int]],
+    q List[List[int]],
+) List[List[int]]
+    x1 := p[0]
+    y1 := p[1]
+    z1 := p[2]
+    x2 := q[0]
+    y2 := q[1]
+    z2 := q[2]
+    mut t0 := ctm_mul(f, x1, x2)
+    mut t1 := ctm_mul(f, y1, y2)
+    mut t2 := ctm_mul(f, z1, z2)
+    mut t3 := ctm_add(f, x1, y1)
+    mut t4 := ctm_add(f, x2, y2)
+    t3 = ctm_mul(f, t3, t4)
+    t4 = ctm_add(f, t0, t1)
+    t3 = ctm_sub(f, t3, t4)
+    t4 = ctm_add(f, y1, z1)
+    mut x3 := ctm_add(f, y2, z2)
+    t4 = ctm_mul(f, t4, x3)
+    x3 = ctm_add(f, t1, t2)
+    t4 = ctm_sub(f, t4, x3)
+    x3 = ctm_add(f, x1, z1)
+    mut y3 := ctm_add(f, x2, z2)
+    x3 = ctm_mul(f, x3, y3)
+    y3 = ctm_add(f, t0, t2)
+    y3 = ctm_sub(f, x3, y3)
+    mut z3 := ctm_mul(f, bm, t2)
+    x3 = ctm_sub(f, y3, z3)
+    z3 = ctm_add(f, x3, x3)
+    x3 = ctm_add(f, x3, z3)
+    z3 = ctm_sub(f, t1, x3)
+    x3 = ctm_add(f, t1, x3)
+    y3 = ctm_mul(f, bm, y3)
+    t1 = ctm_add(f, t2, t2)
+    t2 = ctm_add(f, t1, t2)
+    y3 = ctm_sub(f, y3, t2)
+    y3 = ctm_sub(f, y3, t0)
+    t1 = ctm_add(f, y3, y3)
+    y3 = ctm_add(f, t1, y3)
+    t1 = ctm_add(f, t0, t0)
+    t0 = ctm_add(f, t1, t0)
+    t0 = ctm_sub(f, t0, t2)
+    t1 = ctm_mul(f, t4, y3)
+    t2 = ctm_mul(f, t0, y3)
+    y3 = ctm_mul(f, x3, z3)
+    y3 = ctm_add(f, y3, t2)
+    x3 = ctm_mul(f, t3, x3)
+    x3 = ctm_sub(f, x3, t1)
+    z3 = ctm_mul(f, t4, z3)
+    t1 = ctm_mul(f, t3, t0)
+    z3 = ctm_add(f, z3, t1)
+    [x3, y3, z3]
+
+## Bit `i` of `a` as 0 or 1, without a branch.
+fn ctp_bit(a List[int], i int) int
+    a[i / BIG_BITS].shr(i % BIG_BITS).bit_and(1)
+
+## `k * g` for a 256-bit scalar `k` (limbs): 256 doublings and 256 additions,
+## the sum chosen by a mask.
+fn ctp_mul(
+    f List[List[int]],
+    bm List[int],
+    g List[List[int]],
+    k List[int],
+) List[List[int]]
+    mut acc := [tbig_zero(f[0].len()), f[3], tbig_zero(f[0].len())]
+    mut i := 255
+    while i >= 0
+        acc = ctp_add(f, bm, acc, acc)
+        sum := ctp_add(f, bm, acc, g)
+        acc = tsg_sel(ctp_bit(k, i), sum, acc)
+        i -= 1
+    acc
+
+## The affine coordinates of `pt` as 32-byte big-endian numbers at `x` and
+## `y`; false at infinity (which no valid scalar reaches).
+fn ctp_affine(f List[List[int]], pt List[List[int]], x int, y int) bool
+    if tbig_is_zero(pt[2])
+        return false
+    zi := ctm_inv(f, pt[2])
+    tbig_to_be(ctm_from(f, ctm_mul(f, pt[0], zi)), x, 32)
+    tbig_to_be(ctm_from(f, ctm_mul(f, pt[1], zi)), y, 32)
+    true
