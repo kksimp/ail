@@ -1636,6 +1636,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
 fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
     key := lookup(name) else
+        if v := const_param_value(name)
+            return v
         if consts.contains("{prefix}{name}")
             return lower_const("{prefix}{name}", want)
         k := self_slot(name)
