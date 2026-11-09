@@ -1,0 +1,68 @@
+## std.opus.2-3: packet framing and the range decoder. The range-coded stream
+## was made by a range encoder written after RFC 6716 §5.1 (synthetic data, no
+## licence attached).
+use std.audio.opus
+
+fn mode_name(m opus.Mode) str
+    match m
+        Silk => "silk"
+        Hybrid => "hybrid"
+        Celt => "celt"
+
+fn show(hex str)
+    data := bytes.from_hex(hex) else b""
+    p := opus.parse_packet(data) else err
+        print(err)
+        return
+    sizes := [f.len() for f in p.frames]
+    print("{p.config} {mode_name(p.mode)} {p.bandwidth} {p.samples} {p.stereo} {sizes} {p.duration()}")
+
+fn stream() bytes
+    parts := [
+        "7360e2af6ef949f683880d84980c000000000000000000000000000000000000",
+        "0000000000000000000000000000000000000000000000634c9119b39680723a",
+    ]
+    bytes.from_hex(parts.join("")) else b""
+
+## Each step: the operation, its parameter and the value the encoder wrote.
+OPS := "dec:13:5,logp:3:0,icdf:8:3,uint:3000:2666,bits:5:3,dec:13:1,logp:3:0,icdf:8:0,uint:3000:1497,bits:5:3,dec:13:8,logp:3:0,icdf:8:0,uint:3000:1776,bits:5:26,dec:13:1,logp:3:0,icdf:8:3,uint:3000:242,bits:5:7,dec:13:3,logp:3:0,icdf:8:0,uint:3000:2363,bits:5:25,dec:13:0,logp:3:0,icdf:8:0,uint:3000:2280,bits:5:8,dec:13:4,logp:3:0,icdf:8:0,uint:3000:2338,bits:5:19,dec:13:8,logp:3:0,icdf:8:1,uint:3000:422,bits:5:12"
+
+fn main()
+    show("fc010203")
+    show("01aabbccdd")
+    show("6a026162636465")
+    show("83c302010278797a770000")
+    show("a302aabbccdd")
+    show("01aa")
+    show("")
+    mut d := opus.decoder(stream())
+    table := [200, 120, 40, 0]
+    mut good := 0
+    mut bad := List[str]()
+    for op in OPS.split(",")
+        parts := op.split(":")
+        a := parts[1].to_int() else 0
+        want := parts[2].to_int() else 0
+        mut got := 0
+        if parts[0] == "dec"
+            got = d.decode(a)
+            d.update(got, got + 1, a)
+        elif parts[0] == "logp"
+            got = if d.bit_logp(a) then 1 else 0
+        elif parts[0] == "icdf"
+            got = d.icdf(table, a)
+        elif parts[0] == "uint"
+            got = d.uint(a)
+        else
+            got = d.bits(a)
+        if got == want
+            good += 1
+        else
+            bad.push("{op} got {got}")
+    print(good)
+    print(bad)
+    print(d.tell())
+    print(d.failed)
+    print(opus.ilog(0))
+    print(opus.ilog(255))
+    print(opus.ilog(256))
