@@ -109,6 +109,7 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Language specification](docs/spec/README.md)
 - [Open questions](docs/open-questions.md)
 - [Roadmap](docs/roadmap.md)
+- [Benchmarks: AIL against C and Python, with commands](docs/benchmarks.md)
 - [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
 - [Research: beating C on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
 

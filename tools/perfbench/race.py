@@ -135,6 +135,8 @@ def main():
     ap.add_argument("--all", action="store_true", help="--native --c --python")
     ap.add_argument("--timeout", type=int, default=120)
     ap.add_argument("--build-args", default=os.environ.get("AIL_BUILD_ARGS", ""))
+    ap.add_argument("--no-run", action="store_true", help="skip the `ail run` column (programs too big for it)")
+    ap.add_argument("--json", metavar="FILE", help="also write the raw numbers as JSON (tools/bench/publish.sh)")
     ap.add_argument("--md", metavar="FILE", help="also write the table and environment as Markdown")
     ap.add_argument("--programs", nargs="*", help="programs to race (default: the interpreter set)")
     a = ap.parse_args()
@@ -146,7 +148,7 @@ def main():
     progs = [p if os.path.isabs(p) else os.path.join(ROOT, p) for p in (a.programs or DEFAULT_SET)]
     tmp = tempfile.mkdtemp(prefix="perfbench-")
 
-    cols = ["ail"]
+    cols = [] if a.no_run else ["ail"]
     if a.native: cols.append("native")
     cols_c = [cc for cc in ("clang", "gcc") if a.c and shutil.which(cc)]
     if a.c and not cols_c:
@@ -171,9 +173,9 @@ def main():
         for p in progs:
             name = os.path.splitext(os.path.basename(p))[0]
             extra = size_args(p)
-            res = {"ail": measure([AIL, "run", p] + extra, runs, a.timeout)}
+            res = {} if a.no_run else {"ail": measure([AIL, "run", p] + extra, runs, a.timeout)}
             ref = expected_out(p)
-            if ref is None:
+            if ref is None and "ail" in res:
                 ref = res["ail"].get("out")
             if a.native and native_ok:
                 exe = build_native(p, tmp, a.build_args)
@@ -189,6 +191,8 @@ def main():
             if py:
                 src = twin(p, ".py")
                 res["python"] = measure([py, "-I", src] + extra, runs, a.timeout) if src else {"err": "no twin"}
+            if ref is None:  # no NAME.out and no interpreter run: the first column that ran sets the reference
+                ref = next((r["out"] for r in res.values() if "out" in r), None)
             for c, r in res.items():
                 if "out" in r and ref is not None and r["out"].replace(b"\r\n", b"\n") != ref.replace(b"\r\n", b"\n"):
                     res[c] = {"err": "DIFF"}  # drag.out.1
@@ -233,6 +237,12 @@ def main():
             return min(ts)
         print("parsum min_s: 1 thread %.3f, pool %.3f" % (pool({"AIL_THREADS": "1"}), pool({})))
 
+    if a.json:
+        import json
+        with open(a.json, "w") as f:
+            json.dump({"runs": runs, "columns": cols, "rows": [
+                {"program": n, "cells": {c: {k: v for k, v in r.items() if k != "out"} for c, r in res.items()}}
+                for n, res in rows]}, f, indent=1)
     if a.md:
         write_md(a.md, table, cols, runs, cols_c, py)
 
