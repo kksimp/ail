@@ -789,3 +789,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0997](0997-std-net-udp.md) | `std.net` UDP sockets: `bind_udp`, `send_to`, `recv_from`, text addresses *(delegated)* | Accepted | 2026-11-08 |
 | [0998](0998-std-net-stun-ice.md) | `std.net.stun` and `std.net.ice`: STUN messages, full ICE agent over `Udp` *(delegated)* | Accepted | 2026-11-09 |
+| [0999](0999-std-crypto-p256.md) | `std.crypto` P-256 ECDH and ECDSA signing, constant-time, and HMAC-SHA1 *(delegated)* | Accepted | 2026-11-09 |
+
