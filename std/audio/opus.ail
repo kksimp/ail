@@ -3189,14 +3189,7 @@ fn dct4(x List[float], from int, stride int, pl Dct4Plan) List[float]
 
 ## Adds the windowed inverse MDCT of one block into `out` from `at`: the
 ## 2n-sample output's windowed middle n + 120 samples (RFC 6716 §4.3.7).
-fn imdct_add(
-    mut out List[float],
-    at int,
-    coefs List[float],
-    from int,
-    stride int,
-    pl Dct4Plan,
-)
+fn imdct_add(mut out List[float], at int, coefs List[float], from int, stride int, pl Dct4Plan)
     n := pl.n
     y := dct4(coefs, from, stride, pl)
     z := (n - OVERLAP) / 2
