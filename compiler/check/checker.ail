@@ -1080,8 +1080,12 @@ fn Checker.check_unique_fields(mut self)
             continue
         for f in 0..decl.fields.len()
             unique_field(field_types[s][f], decl.fields[f].ty.pos, decl.name, "struct")
+            group_field(field_types[s][f], decl.fields[f].ty.pos, decl.name)
     for e in 0..prog.enums.len()
         decl := prog.enums[e]
+        for v in 0..decl.variants.len()
+            for f in 0..decl.variants[v].fields.len()
+                group_in_enum(variant_types[e][v][f], decl.variants[v].fields[f].ty.pos)
         if decl.is_unique
             continue
         for v in 0..decl.variants.len()

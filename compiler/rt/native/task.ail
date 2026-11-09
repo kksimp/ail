@@ -972,11 +972,32 @@ fn mutex_unlock(m int, v int) int
     unlock(m + M_LOCK)
     0
 
+## A group record: the task count, whether `wait_all` reported, the tasks,
+## whether it was cancelled, and its owner (`G_OWNER`).
 fn group_new() int
-    alloc(32, KIND_ENV)
+    alloc(40, KIND_ENV)
 
-## `g.add(t)`.
+## Who waits for a group's tasks (conc.task.10, ADR 0996): 0 the block that made
+## it, 1 the `unique` struct whose field holds it, 2 nobody any more (released).
+G_OWNER := 32
+
+## The group became a field of a `unique` struct: the struct's release waits
+## for its tasks, not the block that made the group.
+fn group_own(g int)
+    store64(g + G_OWNER, 1)
+
+## The `unique` struct that holds the group is released: wait for its tasks.
+fn group_release(g int)
+    store64(g + G_OWNER, 2)
+    group_finish(g)
+
+## `g.add(t)`. A group whose owner is gone waits for the task at once, so no
+## task is ever left unwaited (conc.task.5, conc.task.10).
 fn group_add(g int, rec int)
+    if load64(g + G_OWNER) == 2
+        if not wait_done_dl(rec, true)
+            group_trap(rec)
+        return
     n := load64(g)
     arr := load64(g + 16)
     if arr == 0 or n % 8 == 0
@@ -1007,6 +1028,13 @@ fn group_wait(g int, at str)
 ## The block that holds the group ends: wait for the tasks, and a trap in one
 ## that `wait_all` didn't report ends this task too (conc.task.8).
 fn group_end(g int)
+    if load64(g + G_OWNER) == 1
+        return
+    store64(g + G_OWNER, 2)
+    group_finish(g)
+
+## Wait for every task of `g`; a trap that `wait_all` didn't report ends this task.
+fn group_finish(g int)
     n := load64(g)
     mut bad := 0
     for i in 0..n
@@ -1016,6 +1044,12 @@ fn group_end(g int)
         if bad == 0 and atomic_load(rec + T_STATE) == 3
             bad = rec
     if bad != 0 and load64(g + 8) == 0
+        group_trap(bad)
+
+## End this task with the trap of task `rec`, if it trapped.
+fn group_trap(rec int)
+    if atomic_load(rec + T_STATE) == 3
+        bad := rec
         trap(
             load64(bad + T_KIND),
             load64(bad + T_A),

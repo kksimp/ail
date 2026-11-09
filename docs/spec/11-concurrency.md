@@ -201,6 +201,36 @@ fn main() !
     g.wait_all()?
 ```
 
+**conc.task.10** — A field of a `unique` struct (`own.uniq.1`) may be a
+`TaskGroup`; a field of a struct that isn't `unique`, or of an enum variant,
+can't. The struct owns the group: tasks added through the field run until
+the struct is released (`own.uniq.3`, `own.uniq.7`), and its release waits for
+them as the end of a group's block does (`conc.task.8`), so every task is
+waited exactly once (`conc.task.5`). The field can't be assigned. A task added
+to a group whose owner was already released, through a copy of the group made
+before, is waited at once. *(ADR 0996)*
+
+```ail rules=conc.task.10
+unique struct Pool
+    tasks TaskGroup
+    out Channel[int]
+
+fn work(n int, out Channel[int])
+    out.send(n * n)
+
+fn Pool.start(mut self, n int)
+    ch := self.out
+    self.tasks.add(spawn work(n, ch))
+
+fn main()
+    mut p := Pool(tasks: TaskGroup(), out: Channel[int](4))
+    p.start(3)
+    p.start(4)
+    a := p.out.recv() else 0
+    b := p.out.recv() else 0
+    print(a + b)
+```
+
 ## Cancellation
 
 **conc.cancel.1** — `t.cancel()` asks task `t` to stop, and `g.cancel()`
@@ -394,6 +424,26 @@ fn main() !
     for v in ch
         print(v)
     p.wait()?
+```
+
+**conc.share.8** — `ch.try_recv()` returns `T?`: the oldest value if one is
+waiting now, else `none`, at once, whether the channel is open or closed.
+`ch.recv_for(ms)` waits as `recv` does for at most `ms` milliseconds (`ms`
+below 0 counts as 0) and returns `none` when the time runs out or the channel
+is closed and empty. Neither ever reports a deadlock (`conc.task.7`). Under
+`--deterministic` no time passes: `recv_for` waits as `recv` does, and when
+every other task is blocked, where `recv` would report a deadlock, its time
+is up and it returns `none`. A cancelled
+task's `recv_for` returns `none` as `recv` does (`conc.cancel.4`). *(ADR 0996)*
+
+```ail rules=conc.share.8
+fn main()
+    ch := Channel[int](2)
+    a := ch.try_recv() else -1
+    ch.send(7)
+    b := ch.try_recv() else -1
+    c := ch.recv_for(10) else -1
+    print("{a} {b} {c}")
 ```
 
 **conc.select.1** — `task.select(chans List[Channel[T]]) int?` waits until

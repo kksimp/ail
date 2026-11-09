@@ -39,6 +39,20 @@ fn Lower.mutex_type_of(mut self, args List[ast.TypeRef]) Ty?
         return none
     Ty.Mutex(e)
 
+## `TaskGroup` written as a type: a field of a `unique` struct (conc.task.10).
+fn group_type_of(args List[ast.TypeRef]) Ty?
+    if args.len() != 0
+        return none
+    Ty.Group
+
+## A struct is built with `TaskGroup` fields (conc.task.10, ADR 0996): each group
+## is the struct's now, so its release waits for the tasks, not the block that
+## made the group (`rt.group_own`, `rt.group_release`).
+fn Lower.own_groups(mut self, slots List[Slot], vs List[int])
+    for k in 0..slots.len()
+        if slots[k].ty == Ty.Group and vs[k] >= 0
+            call("rt.group_own", [vs[k]], Ty.Unit)
+
 ## `Mutex(v)`, `Mutex[T](v)` and `TaskGroup()`.
 fn Lower.lower_sync_new(mut self, name str, args List[ast.Arg], pos ast.Pos) Val?
     if name == "Mutex"
