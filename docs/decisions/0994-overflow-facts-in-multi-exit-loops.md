@@ -48,7 +48,8 @@ sums count, and runtime (`rt.`) functions are skipped.
 
 ## Consequences
 
-- lzr's match loop loses two `jo` per pass; scan loops lose theirs.
+- lzr's match loop loses two `jo` per pass; scan loops lose theirs. An index
+  `x * c` bounds `x` as well, so vm's `code[pc * 2 + 1]` and `pc += 1` lose theirs.
 - Bounds checks in multi-exit loops remain (Option B is still open).
 - Tests: `tests/native/run/ivsum_scan.ail`, and
   `trap_ivsum_unbounded.ail`, where `a + l != n` bounds nothing and the sum

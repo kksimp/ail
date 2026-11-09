@@ -6,7 +6,8 @@
 ##
 ## - `x < y` on the edge taken when it is true (`lt`, `gt` swapped, or the
 ##   false edge of `ge` and `le`): `x` is at most 2^63 - 2, so `x + 1` fits.
-## - `x` used as a checked list index (`get`, `set`, `bounds`) before: `0 <= x < len`,
+## - `x` (or `x` in `x * c`, `c >= 1`) used as a checked list index (`get`,
+##   `set`, `bounds`) before: `0 <= x < len`,
 ##   and no list holds 2^62 elements, so `x + c` and `x - c` fit for a
 ##   constant `c` from 0 to 2^62, and so does the sum of two such indexes.
 ##
@@ -51,6 +52,15 @@ pub fn iv_sums(f Func) Func
             ix := ivs_index_of(f, i)
             if ix >= 0
                 ivs_note(mut facts, ix, IvsFact(block: b, at: k))
+                # `xs[x * c]` for a constant `c >= 1`: `0 <= x < 2^62` too.
+                if m := inst_of(f, defs, ix)
+                    if m.op == "mul" and m.n == 2
+                        c1 := const_of(f, defs, m.arg(1)) else 0
+                        c0 := const_of(f, defs, m.arg(0)) else 0
+                        if c1 >= 1
+                            ivs_note(mut facts, m.arg(0), IvsFact(block: b, at: k))
+                        elif c0 >= 1
+                            ivs_note(mut facts, m.arg(1), IvsFact(block: b, at: k))
         t := blk.term
         if t.kind != "branch" or t.targets.len() != 2 or t.targets[0] == t.targets[1]
             continue

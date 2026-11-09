@@ -30,6 +30,19 @@ fn near_top(a int, n int) int
         l += 1
     l
 
+## `code[pc * 2]` bounds `pc` too, so `pc * 2 + 1` and `pc + 1` fit.
+fn pairs(code List[int]) int
+    mut pc := 0
+    mut t := 0
+    while true
+        op := code[pc * 2]
+        arg := code[pc * 2 + 1]
+        pc += 1
+        if op == 0
+            break
+        t += op * arg
+    t
+
 fn main()
     data := [1, 2, 3, 1, 2, 3, 1, 2, 4, 5]
     print(match_len(data, 3, 0, data.len()))
@@ -39,3 +52,4 @@ fn main()
     print(count_after(data, 5))
     print(count_after(data, 20))
     print(near_top(9223372036854775806, 9223372036854775807))
+    print(pairs([1, 2, 3, 4, 0, 0]))

@@ -491,7 +491,8 @@ fn main()
 
 **native.bce.14** — The overflow check of an `int` `+` or `-` may be removed
 where a fact on every path to it bounds an operand: on the edge where `x < y`
-holds, `x + 1` can't overflow; after `x` is a checked list index, `0 <= x` and
+holds, `x + 1` can't overflow; after `x` (or `x * c` for a constant `c >= 1`) is a
+checked list index, `0 <= x` and
 `x` is below any list's length (under 2^62), so `x + c` and `x - c` for a
 constant `c` from 0 to 2^62, and the sum of two such indexes, can't overflow.
 In a loop where `l` starts at 0 and every path back adds 1 to it without
