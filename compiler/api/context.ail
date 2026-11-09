@@ -154,12 +154,7 @@ fn piece_cost(p Piece, first bool) int
 
 ## Every piece, in the order they are kept, most needed first: the sections of
 ## api.ctx.2 in the order of api.ctx.3, each in source order.
-fn context_pieces(
-    g Graph,
-    texts List[str],
-    id str,
-    path str,
-) List[Piece]
+fn context_pieces(g Graph, texts List[str], id str, path str) List[Piece]
     prog := g.prog
     mut pieces := List[Piece]()
     i := g.fn_index(id) else return pieces
@@ -276,7 +271,7 @@ fn dropped_text(pieces List[Piece], from int) str
         counts[s] = (counts.get(s) else 0) + 1
     ["{n} {counts.get(n) else 0}" for n in names].join(", ")
 
-fn trailer(pieces List[Piece], from int, needs int) str
+fn cut_line(pieces List[Piece], from int, needs int) str
     "cut: {dropped_text(pieces, from)}; --budget {needs} shows all"
 
 ## `ail context PROGRAM SYMBOL [--budget N] [--json]`; the exit status: 0 the
@@ -354,7 +349,7 @@ pub fn context_command(args List[str], std str) int
     for p in pieces
         needs += piece_cost(p, p.section != last)
         last = p.section
-    reserve := if needs <= tokens then 0 else estimate_tokens("{trailer(pieces, 1, 99999)}\n")
+    reserve := if needs <= tokens then 0 else estimate_tokens("{cut_line(pieces, 1, 99999)}\n")
     # The most pieces, in order, that fit: a prefix, so what is cut is always the least needed.
     mut room := tokens - estimate_tokens("{title}\n") - reserve
     mut shown := 0
@@ -386,13 +381,17 @@ pub fn context_command(args List[str], std str) int
         mut cut := List[Kv]()
         for n in cut_names
             cut.push(kv(n, J.Int(counts.get(n) else 0)))
-        print(write_json(J.Obj([
-            kv("target", J.Str(id)),
-            kv("budget", J.Int(tokens)),
-            kv("needs", J.Int(needs)),
-            kv("sections", J.Obj(sections)),
-            kv("cut", J.Obj(cut)),
-        ]), false, 0))
+        print(write_json(
+            J.Obj([
+                kv("target", J.Str(id)),
+                kv("budget", J.Int(tokens)),
+                kv("needs", J.Int(needs)),
+                kv("sections", J.Obj(sections)),
+                kv("cut", J.Obj(cut)),
+            ]),
+            false,
+            0,
+        ))
         return 0
     mut out := [title]
     last = ""
@@ -403,6 +402,6 @@ pub fn context_command(args List[str], std str) int
         for l in p.lines
             out.push("  {l}")
     if shown < pieces.len()
-        out.push(trailer(pieces, shown, needs))
+        out.push(cut_line(pieces, shown, needs))
     print(out.join("\n"))
     0
