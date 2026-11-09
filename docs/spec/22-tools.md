@@ -942,6 +942,59 @@ fn main()
 ```ail pkg=task_red tool=task,verify status=1 expect=red rules=task.state.1,task.verify.1,task.verify.2,task.verify.3
 ```
 
+## Merge by declaration
+
+`ail merge` is a three-way merge for `.ail` files that works on declarations, so
+two branches that change different functions never conflict
+([ADR 1019](../decisions/1019-ail-merge-driver.md)).
+
+**merge.split.1** — A file is cut into declarations. A line at column 0 starts one; the indented lines after it, and blank lines followed by an indented line, belong to it. Comment (`#`) and attribute (`@`) lines at column 0 belong to the declaration after them, unless a blank line separates them. Blank lines after a declaration are kept as its gap.
+
+**merge.split.2** — A declaration's key is its kind and name (`fn Point.sum`, `struct Point`, `const NAME`); `pub`, `unique` and `error` are not part of it. Any other declaration (`use`, `impl`, `test`, a loose comment) is keyed by its first line. A repeated key gets `#2`, `#3`. A rename is a removal and an addition.
+
+**merge.decl.1** — A declaration whose text differs from the base on one side only takes that side's text, or is dropped if that side removed it. Text is compared exactly.
+
+**merge.decl.2** — A declaration that is the same on both sides, added, changed or removed, appears once.
+
+**merge.order.1** — The merged file keeps the order of OURS. A declaration only THEIRS has goes after the declaration before it in THEIRS.
+
+**merge.line.1** — A declaration changed on both sides is merged line by line as `git merge-file` would. If that merges cleanly, the result is used.
+
+**merge.conflict.1** — Otherwise the declaration is one hunk: `<<<<<<< ours`, OURS's text, `||||||| base`, the base text, `=======`, THEIRS's text and `>>>>>>> theirs`, with a section empty for a side that lacks the declaration. Each one is reported on standard error as `conflict: KEY (merge.conflict.1)`, and the exit status is 1. Every other declaration is merged.
+
+**merge.cli.1** — `ail merge BASE OURS THEIRS` writes the result to OURS, the way a git merge driver is called; further arguments (git's `%L` and `%P`) are ignored. `--stdout` prints it instead and writes nothing. The exit status is 0 for a clean merge, 1 for conflicts, 2 for an error.
+
+**merge.cli.2** — A file that can't be read is an error: exit status 2.
+
+**merge.cli.3** — With `--json` the answer is one object on standard output, `{"merged":BOOL,"conflicts":[KEY...]}`.
+
+**merge.install.1** — `ail merge --install` adds `*.ail merge=ail` to `.gitattributes` unless it is there, and sets `merge.ail.driver` to `ail merge %O %A %B %L %P` (`./ail` when the current directory has one) in the repository's git config. Outside a git repository it is an error: exit status 2.
+
+```ail pkg=merge_disjoint tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=quadruple rules=merge.split.1,merge.split.2,merge.decl.1,merge.order.1,merge.cli.1
+```
+
+```ail pkg=merge_same tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=two rules=merge.decl.2
+```
+
+```ail pkg=merge_lines tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=60 rules=merge.line.1
+```
+
+```ail pkg=merge_conflict tool=merge,base.ail,ours.ail,theirs.ail status=1 expect=conflict: rules=merge.conflict.1,merge.cli.1
+```
+
+```ail pkg=merge_conflict tool=merge,--stdout,--json,base.ail,ours.ail,theirs.ail status=1 expect="merged":false rules=merge.cli.3
+```
+
+```ail pkg=merge_conflict tool=merge,nosuch.ail,ours.ail,theirs.ail status=2 expect=merge.cli.2 rules=merge.cli.2
+```
+
+`--install` changes the git configuration of the repository it runs in, so its example is counted, not run.
+
+```ail skip=context rules=merge.install.1
+fn main()
+    print(1)
+```
+
 ## MCP server
 
 `ail mcp` serves the compiler's tools to an agent

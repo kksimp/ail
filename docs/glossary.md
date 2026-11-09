@@ -5,6 +5,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **`ail merge`** | A three-way merge that cuts `.ail` files into declarations, so branches that change different declarations never conflict; it works as a git merge driver ([ADR 1019](decisions/1019-ail-merge-driver.md)). |
 | **Task (agent)** | One change from `ail task start` to `finish`: a base revision, a goal and the last verify result, kept in `.ail-task` ([ADR 0917](decisions/0917-ail-task-protocol.md)). |
 | **`ail mcp`** | The compiler's own tools served over MCP on stdio ([ADR 0918](decisions/0918-ail-mcp-compiler-tools.md)); not `ail serve --mcp`, which serves a program's `@tool` functions. |
 | **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
