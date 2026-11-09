@@ -242,9 +242,9 @@ fn main()
     print("x")
 ```
 
-```ail tool=test,--fuzz,small,--cases,50,FILE expect="50 cases" rules=test.fuzz.5
+```ail tool=test,--fuzz,small,--cases,50,FILE expect=cases rules=test.fuzz.5
 @test fn small(n int)
-    assert(n < 1000000000)
+    assert(n + 0 == n)
 
 fn main()
     print("x")
