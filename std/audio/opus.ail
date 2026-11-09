@@ -599,6 +599,9 @@ pub struct CeltState
     pf_old_gain float
     pf_old_tapset int
 
+fn zeros(n int) List[float]
+    [0.0 for _ in 0..n]
+
 ## The history each channel keeps: the post-filter looks back up to 1024
 ## samples and the overlap runs 120 past the frame.
 HIST := 2048
@@ -610,7 +613,7 @@ pub fn celt_state(channels int) CeltState
         energy: [0.0 for _ in 0..2 * NB_BANDS],
         prev1: [-28.0 for _ in 0..2 * NB_BANDS],
         prev2: [-28.0 for _ in 0..2 * NB_BANDS],
-        hist: [[0.0 for _ in 0..HIST + OVERLAP] for _ in 0..2],
+        hist: [zeros(HIST + OVERLAP), zeros(HIST + OVERLAP)],
         deemph: [0.0, 0.0],
         seed: 0,
         pf_period: 0,
@@ -836,9 +839,9 @@ fn allocate(mut d RangeDecoder, start int, end int, offsets List[int], caps List
                 psum += alloc_floor
             k -= 1
         if psum > total
-            hi = mid
+            hi = step
         else
-            lo = mid
+            lo = step
     psum = 0
     done = false
     mut bits := [0 for _ in 0..NB_BANDS]
@@ -1444,8 +1447,8 @@ fn all_bands(mut d RangeDecoder, mut st CeltState, start int, end int, c int, lm
     blocks := if short_blocks then m else 1
     norm_offset := m * EBANDS[start]
     span := m * EBANDS[NB_BANDS - 1] - norm_offset
-    mut norm := [[0.0 for _ in 0..span] for _ in 0..2]
-    mut xs := [[0.0 for _ in 0..m * EBANDS[NB_BANDS]] for _ in 0..c]
+    mut norm := [zeros(span), zeros(span)]
+    mut xs := [zeros(m * EBANDS[NB_BANDS]) for _ in 0..c]
     mut masks := [0 for _ in 0..2 * NB_BANDS]
     mut ctx := BandCtx(band: start, intensity: intensity, spread: spread, tf_change: 0, remaining: 0, seed: st.seed)
     mut dual := dual0
@@ -1815,7 +1818,8 @@ pub fn decode(mut st CeltState, b bytes) audio.Clip ! OpusError
         return e
     celt := match pk.mode
         Celt => true
-        _ => false
+        Silk => false
+        Hybrid => false
     if not celt
         return OpusError(why: "SILK and hybrid frames are not decoded yet")
     lm := match pk.samples
