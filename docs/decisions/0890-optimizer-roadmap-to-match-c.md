@@ -162,6 +162,14 @@ change, so x86-64 and ARM64 get it together (native.match.1). Rejected for now: 
 table, which needs a new terminator and an indirect branch in both backends and an
 `unreachable` bound check; reconsider if the tree's measured gain is small.
 
+## Dropped leftovers (2026-11-09)
+
+- **SROA constructor filter and size cap** (`claude/project-thread-bi6mi0-sroa2`): measured on
+  2026-10-27 at -1.5% size and +6% raytrace time, and it conflicts with the joins, late inline and
+  sret work in ADR 0923. Dropped; `AIL_SROA_STATS` is not ported.
+- **Constant-displacement folding** (`lane/235-disp-fold`, `mir/disp.ail`): `fold_prim_addresses`
+  (`mir/addr.ail`) folds the same `load64`/`store64` addresses and also scaled indexes. Superseded.
+
 ## Rationale
 
 The listed gaps point at allocation and register pressure first, not at `-O3` loop
