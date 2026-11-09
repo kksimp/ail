@@ -7,6 +7,12 @@ import SwiftUI
 /// The monospace font a canvas's cell size is measured in (std.app.5).
 let cellFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
+/// The natural line height of `sans` at 13 points, whole points (std.app.34).
+func sansLine() -> Double {
+    let f = NSFont.systemFont(ofSize: 13, weight: .regular)
+    return Double(ceil(f.ascender - f.descender + f.leading))
+}
+
 func color(_ c: Int) -> NSColor {
     NSColor(srgbRed: CGFloat((c >> 16) & 0xff) / 255, green: CGFloat((c >> 8) & 0xff) / 255,
             blue: CGFloat(c & 0xff) / 255, alpha: 1)
@@ -124,6 +130,7 @@ final class CanvasView: NSView {
         f["dy"] = size.height
         f["cell_w"] = cell.width
         f["cell_h"] = lineH
+        f["sans_line"] = sansLine()
         Outbox.shared.send("resize", f)
     }
 

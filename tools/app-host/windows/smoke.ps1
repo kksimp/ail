@@ -36,6 +36,7 @@ $start = ($lines | Where-Object { $_ -like '*"kind":"start"*' } | Select-Object 
 $firstResize = ($lines | Where-Object { $_ -like '*"kind":"resize"*' } | Select-Object -First 1)
 if (-not $start) { Write-Output 'smoke: RED no start event'; exit 1 }
 if ($firstResize -and [array]::IndexOf($lines, $start) -gt [array]::IndexOf($lines, $firstResize)) { Write-Output 'smoke: RED resize came before start'; exit 1 }
+if ($start -notmatch '"sans_line":[1-9]') { Write-Output "smoke: RED start lacks sans_line: $start"; exit 1 }
 $measured = ($lines | Where-Object { $_ -like '*"kind":"measured"*' } | Select-Object -First 1)
 if ($measured -notmatch '"text":"[0-9.]+,[0-9.]+"') { Write-Output "smoke: RED measured reply missing or wrong: $measured"; exit 1 }
 # Edge mode (std.app.25, std.app.33): `start` carries the window controls' insets, the controls at the right.

@@ -260,6 +260,8 @@ pub struct Event
     ## For `start` and `resize` in edge mode: the room the window controls
     ## take at the top-right, `0` when none are there (std.app.33).
     pub inset_right float
+    ## For `start` and `resize` (std.app.34): the natural line height of `sans` at 13 points, `0` when the host does not say.
+    pub sans_line float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono`, `sans`, `serif`, `web:` and a `Font` id, or a CSS
@@ -391,6 +393,7 @@ pub fn event(kind str) Event
         scale: 0.0,
         fonts: "",
         inset_right: 0.0,
+        sans_line: 0.0,
     )
 
 ## The families of a CSS `font-family` list, in order, unquoted and trimmed
@@ -590,6 +593,7 @@ pub fn event_from_json(j Json) Event
         scale: j.num("scale") else 0.0,
         fonts: j.text("fonts", ""),
         inset_right: j.num("inset_right") else 0.0,
+        sans_line: j.num("sans_line") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.

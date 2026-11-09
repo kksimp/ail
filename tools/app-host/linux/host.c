@@ -965,6 +965,21 @@ static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
 /* Last size reported per canvas id, so a rebuilt canvas does not repeat it. */
 static GHashTable *reported; /* id -> double[2] */
 
+/* std.app.34: the natural line height of `sans` at 13 points, whole points, as drawn: a layout's
+   logical height is the line box a `Str` is placed in, so the glyph box is centred in it. */
+static double sans_line_height(PangoContext *pc) {
+    ctx_setup(pc);
+    PangoFontDescription *d = font_desc("sans", 13, FALSE, FALSE);
+    PangoLayout *l = pango_layout_new(pc);
+    pango_layout_set_font_description(l, d);
+    pango_layout_set_text(l, "Mg", -1);
+    PangoRectangle r;
+    pango_layout_get_extents(l, NULL, &r);
+    g_object_unref(l);
+    pango_font_description_free(d);
+    return ceil(r.height / (double)PANGO_SCALE);
+}
+
 static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
     (void)d;
     const char *id = cid(w);
@@ -985,6 +1000,7 @@ static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
     ev_num(&ev, "cell_h", ch);
     ev_screen(&ev);
     ev_insets(&ev);
+    ev_num(&ev, "sans_line", sans_line_height(gtk_widget_get_pango_context(w)));
     ev_send(&ev);
 }
 
@@ -1434,7 +1450,7 @@ static void handle_line(const char *line) {
         show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree, jflag(obj, "edge"));
         if (!started) {
             started = TRUE;
-            { Ev se = ev_new("start"); ev_screen(&se); ev_insets(&se); ev_send(&se); }
+            { Ev se = ev_new("start"); ev_screen(&se); ev_insets(&se); ev_num(&se, "sans_line", sans_line_height(gtk_widget_get_pango_context(window))); ev_send(&se); }
             send_appearance();
             watch_appearance();
         }

@@ -818,6 +818,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
 | [1032](1032-std-app-vector-ops.md) | `std.app` vector ops: `Round`, `Poly`, `Line` *(delegated)* | Accepted | 2026-11-09 |
 | [1033](1033-std-app-inset-right.md) | `std.app` edge mode: `inset_right` for window controls at the top-right (Windows, Linux); amends ADR 0981 *(delegated)* | Accepted | 2026-11-09 |
+| [1034](1034-std-app-text-placement.md) | `std.app` text placement and `sans_line`; Windows font table *(delegated)* | Accepted | 2026-11-09 |
 | [1035](1035-v0-1-0-freeze-and-release-candidate.md) | v0.1.0: freeze after the lanes in flight, one release candidate gated on three hosts | Accepted | 2026-11-09 |
 | [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
 | [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |
