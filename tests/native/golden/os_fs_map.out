@@ -1,0 +1,11 @@
+len 20000
+first true last true
+head 61626162
+churn true
+after 20000 true true
+same true
+empty 0
+missing not_found
+0
+dir is_dir
+0

@@ -833,6 +833,13 @@ fn rec_fs_read_range(path str, off int, len int, at str) str
     rec_w_bytes("fs.read_range", r)
     r
 
+fn rec_fs_map(path str, at str) str
+    if rec_mode() == 2
+        return rec_r_bytes("fs.map", at)
+    r := fs_map(path, at)
+    rec_w_bytes("fs.map", r)
+    r
+
 fn rec_fs_trash(path str, at str)
     if rec_mode() == 2
         rec_r_unit("fs.trash", at)
