@@ -677,8 +677,7 @@ fn main()
 standard output, undecoded and with no newline added. Output from `print` and
 `write_bytes` reaches standard output in the order the calls ran; `exit`
 flushes it (`std.io.4`). `io.read_bytes` (`std.io.5`) is the matching read, so
-a filter reads all of standard input as bytes and writes bytes back. *(ADR
-TBD)*
+a filter reads all of standard input as bytes and writes bytes back. *(ADR 1007)*
 
 ```ail rules=std.io.6
 use std.io
