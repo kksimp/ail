@@ -2042,7 +2042,7 @@ fn Gate.net(mut self)
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
         red("attach none", "exit {nobody.status}\n{nobody.err}")
     bad := sh_run("TMPDIR={ad} ./ail attach set x=1")
-    if bad.status != 2 or not bad.err.contains("the queries are observe, screen and heap")
+    if bad.status != 2 or not bad.err.contains("the queries are observe, screen, heap and tools")
         red("attach unknown query", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {ad}")
     # std.net.5, std.net.13: https and a raw TLS Conn against `openssl s_server`.
