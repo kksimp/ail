@@ -476,6 +476,11 @@ if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"
 fi
 
+# `ail merge` (ADR 1019): a three-way merge by declaration and a git merge driver, tools/ailmerge/ailmerge.ail.
+if [ "${1:-}" = merge ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmerge/ailmerge.ail" "${@:2}"
+fi
+
 if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail 0.1.0 (native)"; exit 0; fi
 
 # Everything else has no native form.

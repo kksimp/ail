@@ -1,0 +1,8 @@
+fn report(n int) int
+    a := n + 1
+    b := n + 2
+    c := n + 3
+    d := n + 4
+    e := n + 5
+    f := n + 60
+    a + b + c + d + e + f

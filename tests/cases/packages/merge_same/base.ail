@@ -1,0 +1,4 @@
+use std.csv
+
+fn one() int
+    1

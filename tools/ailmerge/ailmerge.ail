@@ -1,0 +1,269 @@
+## `ail merge` in AIL (ADR 1019, merge.*): a three-way merge by declaration, for use as a git merge driver.
+##   ail run tools/ailmerge/ailmerge.ail BASE OURS THEIRS [--stdout] [--json]
+##   ail run tools/ailmerge/ailmerge.ail --install
+## A source file is cut into declarations (merge.split.1). Two sides that change different
+## declarations never conflict; one that changes a declaration both sides changed is merged
+## line by line, and only if that fails it is one conflict hunk with both bodies and the base.
+
+MARK_OURS := "<<<<<<< ours"
+MARK_BASE := "||||||| base"
+MARK_MID := "======="
+MARK_THEIRS := ">>>>>>> theirs"
+
+## A source file as declarations: the order of their keys, each one's text and the blank lines after it.
+struct Side
+    order List[str]
+    texts Map[str, str]
+    gaps Map[str, int]
+
+## The merge: the file's text, and the key of each declaration left in conflict.
+struct Merged
+    out str
+    conflicts List[str]
+
+fn usage() int
+    io.eprint("usage: ail merge BASE OURS THEIRS [--stdout] [--json]   (writes the result to OURS; exit 1 on conflict)\n       ail merge --install   (use this merge for *.ail in the current git repository)")
+    2
+
+## The leading word of a declaration line, up to the first character that is not part of a name.
+fn name_of(s str) str
+    mut out := List[char]()
+    mut depth := 0
+    for c in s.chars()
+        if c == '['
+            depth += 1
+        elif c == ']'
+            depth -= 1
+        elif depth == 0 and (c == ' ' or c == '(' or c == ':' or c == '\{' or c == '<' or c == '=')
+            break
+        out.push(c)
+    out.join("")
+
+## A declaration's key (merge.split.2): its kind and name, so a body edit keeps the key and a rename does not.
+fn key_of(chunk List[str]) str
+    mut head := ""
+    for l in chunk
+        if not (l.starts_with("#") or l.starts_with("@"))
+            head = l.trim()
+            break
+    if head == ""
+        return "text {chunk[0].trim()}"
+    mut h := head
+    if h.starts_with("pub ")
+        h = h.slice(4, h.len())
+    words := h.split(" ")
+    kind := words[0]
+    if kind == "fn" or kind == "struct" or kind == "enum" or kind == "trait" or kind == "type"
+        if words.len() > 1
+            return "{kind} {name_of(h.slice(kind.len() + 1, h.len()))}"
+    if kind == "unique" or kind == "error"
+        if words.len() > 2
+            return "{words[1]} {name_of(h.slice(kind.len() + words[1].len() + 2, h.len()))}"
+    if h.contains(" := ") and not h.starts_with("use ") and not h.starts_with("test ")
+        at := h.find(" := ") else 0
+        return "const {h.slice(0, at)}"
+    "text {h}"
+
+## Adds a finished declaration to `side`; a repeated key gets `#2`, `#3`.
+fn add_chunk(mut side Side, chunk List[str], gap int)
+    if chunk.is_empty()
+        return
+    base := key_of(chunk)
+    mut key := base
+    mut n := 1
+    while side.texts.contains(key)
+        n += 1
+        key = "{base} #{n}"
+    side.order.push(key)
+    side.texts[key] = chunk.join("\n")
+    side.gaps[key] = gap
+
+fn is_prefix(l str) bool
+    l.starts_with("#") or l.starts_with("@")
+
+## Cuts a source file into declarations (merge.split.1): a column-0 line starts one, indented and blank lines followed by an indented line continue it, and comment and attribute lines at column 0 belong to the declaration after them.
+fn split_decls(src str) Side
+    mut side := Side(order: List[str](), texts: Map[str, str](), gaps: Map[str, int]())
+    mut cur := List[str]()
+    mut has_head := false
+    mut blanks := 0
+    for l in src.lines()
+        if l.trim() == ""
+            blanks += 1
+            continue
+        indented := l.starts_with(" ") or l.starts_with("\t")
+        if indented and not cur.is_empty()
+            for _ in 0..blanks
+                cur.push("")
+            blanks = 0
+            cur.push(l)
+            has_head = true
+            continue
+        if is_prefix(l)
+            if has_head or blanks > 0
+                add_chunk(mut side, cur, blanks)
+                cur = []
+                has_head = false
+            cur.push(l)
+        else
+            if has_head or blanks > 0
+                add_chunk(mut side, cur, blanks)
+                cur = []
+            cur.push(l)
+            has_head = true
+        blanks = 0
+    add_chunk(mut side, cur, blanks)
+    side
+
+fn text_of(side Side, key str) str
+    if side.texts.contains(key)
+        return side.texts[key]
+    ""
+
+fn gap_of(side Side, key str) int
+    if side.gaps.contains(key)
+        return side.gaps[key]
+    1
+
+## `git merge-file` on the three bodies of one declaration (merge.line.1): the merged text, or none if it conflicts or can't run.
+fn line_merge(tmp str, ours str, base str, theirs str) str?
+    if tmp == "" or ours == "" or base == "" or theirs == ""
+        return none
+    fs.write_text("{tmp}/ours", "{ours}\n") else return none
+    fs.write_text("{tmp}/base", "{base}\n") else return none
+    fs.write_text("{tmp}/theirs", "{theirs}\n") else return none
+    r := proc.run("git", ["merge-file", "-p", "{tmp}/ours", "{tmp}/base", "{tmp}/theirs"]) else return none
+    if r.status != 0
+        return none
+    r.out.trim_end()
+
+## The three bodies of a conflicting declaration, in diff3 layout (merge.conflict.1); a side that lacks it has an empty section.
+fn conflict_lines(ours str, base str, theirs str) List[str]
+    mut out := [MARK_OURS]
+    if ours != ""
+        out.push(ours)
+    out.push(MARK_BASE)
+    if base != ""
+        out.push(base)
+    out.push(MARK_MID)
+    if theirs != ""
+        out.push(theirs)
+    out.push(MARK_THEIRS)
+    out
+
+## The declarations of the merged file, in `ours` order with the declarations only `theirs` has placed after the one before them (merge.order.1).
+fn merged_order(ours Side, theirs Side) List[str]
+    mut keys := ours.order
+    mut anchor := -1
+    for k in theirs.order
+        if keys.contains(k)
+            anchor = keys.index_of(k) else -1
+        else
+            keys.insert(anchor + 1, k)
+            anchor += 1
+    keys
+
+## The three-way merge: a declaration changed on one side takes that side (merge.decl.1), the same on both appears once (merge.decl.2).
+fn merge_sides(base Side, ours Side, theirs Side, tmp str) Merged
+    mut lines := List[str]()
+    mut conflicts := List[str]()
+    for k in merged_order(ours, theirs)
+        b := text_of(base, k)
+        o := text_of(ours, k)
+        t := text_of(theirs, k)
+        mut body := o
+        mut gap := gap_of(ours, k)
+        if o == t
+            body = o
+        elif o == b
+            body = t
+            gap = gap_of(theirs, k)
+        elif t == b
+            body = o
+        else
+            if merged := line_merge(tmp, o, b, t)
+                body = merged
+            else
+                conflicts.push(k)
+                body = conflict_lines(o, b, t).join("\n")
+        if body == ""
+            continue
+        lines.push(body)
+        for _ in 0..gap
+            lines.push("")
+    mut n := lines.len()
+    while n > 0 and lines[n - 1] == ""
+        n -= 1
+    joined := lines[..n].join("\n")
+    Merged(out: "{joined}\n", conflicts: conflicts)
+
+## A file's text, or exit 2 (merge.cli.2).
+fn read(path str) str
+    fs.read_text(path) else err
+        io.eprint("error: can't read {path}: {err} (merge.cli.2)")
+        io.exit(2)
+        ""
+
+fn quote(s str) str
+    "\"{s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
+
+## `--install` (merge.install.1): `*.ail merge=ail` in `.gitattributes` and the driver in the repository's git config.
+fn install() !int
+    cmd := if fs.exists("./ail") then "./ail" else "ail"
+    attrs := fs.read_text(".gitattributes") else ""
+    if not attrs.lines().contains("*.ail merge=ail")
+        keep := if attrs == "" or attrs.ends_with("\n") then attrs else "{attrs}\n"
+        fs.write_text(".gitattributes", "{keep}*.ail merge=ail\n")? "writing .gitattributes"
+    a := proc.run("git", ["config", "merge.ail.name", "AIL declaration merge"]) else err
+        io.eprint("error: can't run git: {err}")
+        return 2
+    b := proc.run("git", ["config", "merge.ail.driver", "{cmd} merge %O %A %B %L %P"]) else err
+        io.eprint("error: can't run git: {err}")
+        return 2
+    if a.status != 0 or b.status != 0
+        io.eprint("error: `git config` failed; run this inside a git repository (merge.install.1)")
+        return 2
+    print("installed: *.ail merges by declaration (.gitattributes, merge.ail.driver = {cmd} merge %O %A %B %L %P)")
+    0
+
+fn main() !
+    args := env.args()
+    if args.contains("--install")
+        io.exit(install()?)
+    mut files := List[str]()
+    mut to_stdout := false
+    mut json := false
+    for a in args
+        if a == "--stdout"
+            to_stdout = true
+        elif a == "--json"
+            json = true
+        elif a.starts_with("--")
+            io.exit(usage())
+        else
+            files.push(a)
+    # git passes the marker size and the path after the three files (merge.cli.1).
+    if files.len() < 3
+        io.exit(usage())
+    base_text := read(files[0])
+    ours_text := read(files[1])
+    theirs_text := read(files[2])
+    mut tmp := ""
+    if mk := proc.run("mktemp", ["-d"])
+        if mk.status == 0
+            tmp = mk.out.trim()
+    result := merge_sides(split_decls(base_text), split_decls(ours_text), split_decls(theirs_text), tmp)
+    if tmp != ""
+        gone := proc.run("rm", ["-rf", tmp]) else return
+    if to_stdout
+        print(result.out.strip_suffix("\n") else result.out)
+    else
+        fs.write_text(files[1], result.out)? "writing {files[1]}"
+    # merge.cli.3
+    if json
+        print("\{\"merged\":{result.conflicts.is_empty()},\"conflicts\":[{[quote(c) for c in result.conflicts].join(",")}]}")
+    else
+        for c in result.conflicts
+            io.eprint("conflict: {c} (merge.conflict.1)")
+    code := if result.conflicts.is_empty() then 0 else 1
+    io.exit(code)
