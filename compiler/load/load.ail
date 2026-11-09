@@ -68,6 +68,7 @@ STD_TYPES := {
     "Volume": "fs",
     "Entry": "fs",
     "Scan": "fs",
+    "ScanCount": "fs",
     "Response": "net",
     "RawResponse": "net",
     "RawOutput": "proc",
