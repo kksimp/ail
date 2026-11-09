@@ -176,6 +176,14 @@ on ail-linux; ARM64 fetches 4-byte instructions and is left alone. Rejected: ali
 function starts (the loop pad uses the function's offset instead, so no gap between
 functions), aligning every loop head, and aligning to 32 (a 46-byte loop at 0 mod 32 still crosses a 64-byte line).
 
+## Dropped leftovers (2026-11-09)
+
+- **SROA constructor filter and size cap** (`claude/project-thread-bi6mi0-sroa2`): measured on
+  2026-10-27 at -1.5% size and +6% raytrace time, and it conflicts with the joins, late inline and
+  sret work in ADR 0923. Dropped; `AIL_SROA_STATS` is not ported.
+- **Constant-displacement folding** (`lane/235-disp-fold`, `mir/disp.ail`): `fold_prim_addresses`
+  (`mir/addr.ail`) folds the same `load64`/`store64` addresses and also scaled indexes. Superseded.
+
 ## Rationale
 
 The listed gaps point at allocation and register pressure first, not at `-O3` loop
