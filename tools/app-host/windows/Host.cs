@@ -297,10 +297,46 @@ static class Fonts
 {
     static readonly Dictionary<string, Font> cache = new Dictionary<string, Font>();
     public const float CellSize = 13;
+    static string sans;
+    static string mono;
 
-    /// The UI face. Segoe UI Variable is a variable font that GDI+ measures and draws at different widths
-    /// in bold and italic, so the static Segoe UI stays.
-    public const string Sans = "Segoe UI";
+    static bool Installed(string face)
+    {
+        using (var fonts = new InstalledFontCollection())
+            foreach (FontFamily f in fonts.Families)
+                if (string.Equals(f.Name, face, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    /// The UI face (std.app.34): Segoe UI Variable Text when it is installed and the chosen renderer draws its
+    /// bold and italic at the widths it measures (GDI+ did not for the variable font, ADR 1034), else Segoe UI.
+    public static string Sans
+    {
+        get
+        {
+            if (sans == null)
+            {
+                sans = "Segoe UI";
+                try { if (Installed("Segoe UI Variable Text") && TextMode.Agrees("Segoe UI Variable Text")) sans = "Segoe UI Variable Text"; }
+                catch (Exception) { }
+            }
+            return sans;
+        }
+    }
+
+    /// Cascadia Mono when it is installed, else Consolas.
+    static string Mono
+    {
+        get
+        {
+            if (mono == null)
+            {
+                mono = "Consolas";
+                try { if (Installed("Cascadia Mono")) mono = "Cascadia Mono"; } catch (Exception) { }
+            }
+            return mono;
+        }
+    }
 
     public static Font Get(string family, double size, bool bold, bool italic, bool underline)
     {
@@ -310,10 +346,136 @@ static class Fonts
         if (!cache.TryGetValue(key, out f))
         {
             FontStyle st = (bold ? FontStyle.Bold : 0) | (italic ? FontStyle.Italic : 0) | (underline ? FontStyle.Underline : 0);
-            f = new Font(family == "sans" ? Sans : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
+            f = Make(family == "sans" ? Sans : family == "serif" ? "Georgia" : Mono, s, st);
             cache[key] = f;
         }
         return f;
+    }
+
+    public static Font Make(string face, float px, FontStyle st)
+    {
+        string key = "face|" + face + "|" + px + "|" + (int)st;
+        Font f;
+        if (!cache.TryGetValue(key, out f))
+        {
+            f = new Font(face, px, st, GraphicsUnit.Pixel);
+            cache[key] = f;
+        }
+        return f;
+    }
+
+    /// The natural line height of `sans` at 13 points, whole points (std.app.34), like `cell_h` for `mono`.
+    public static double SansLine()
+    {
+        Font f = Get("sans", CellSize, false, false, false);
+        using (var bmp = new Bitmap(1, 1))
+        using (var g = Graphics.FromImage(bmp))
+            return Math.Ceiling(f.GetHeight(g));
+    }
+}
+
+/// How text is drawn and measured (std.app.34). AIL_HOST_TEXT picks the variant while the choice is made by
+/// capture: a = GDI+ ClearTypeGridFit (the first host), b = GDI+ AntiAliasGridFit, c = GDI+ AntiAlias with
+/// TextContrast 0, d = GDI TextRenderer (what native Win32 programs get; whole-pixel positions).
+static class TextMode
+{
+    public static readonly char Mode = Pick();
+
+    static char Pick()
+    {
+        string v = Environment.GetEnvironmentVariable("AIL_HOST_TEXT");
+        if (!string.IsNullOrEmpty(v) && "abcd".IndexOf(char.ToLowerInvariant(v[0])) >= 0) return char.ToLowerInvariant(v[0]);
+        return 'a';
+    }
+
+    const TextFormatFlags Flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping |
+                                  TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.SingleLine;
+
+    public static void Apply(Graphics g)
+    {
+        switch (Mode)
+        {
+            case 'b': g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit; break;
+            case 'c': g.TextRenderingHint = TextRenderingHint.AntiAlias; g.TextContrast = 0; break;
+            default: g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit; break;
+        }
+    }
+
+    /// The advance width in points, trailing spaces counted.
+    public static float Width(Graphics g, string text, Font f)
+    {
+        if (Mode == 'd')
+            return TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), Flags).Width;
+        var fmt = new StringFormat(StringFormat.GenericTypographic);
+        fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+        return g.MeasureString(text, f, 100000, fmt).Width;
+    }
+
+    /// Top of the ascent line for a `Str` at y: the ascent-to-descent box is centred in the line box (std.app.34).
+    public static float Lead(Font f)
+    {
+        FontFamily ff = f.FontFamily;
+        FontStyle st = f.Style;
+        float em = ff.GetEmHeight(st);
+        if (em <= 0) return 0;
+        float line = ff.GetLineSpacing(st), glyphs = ff.GetCellAscent(st) + ff.GetCellDescent(st);
+        return Math.Max(0, (line - glyphs) / 2 * f.Size / em);
+    }
+
+    /// Draw `text` with its line box's top at (x, y) in the graphics' world space.
+    public static void Draw(Graphics g, string text, Font f, Color c, float x, float y)
+    {
+        y += Lead(f);
+        if (Mode != 'd')
+        {
+            using (var b = new SolidBrush(c))
+                g.DrawString(text, f, b, x, y, StringFormat.GenericTypographic);
+            return;
+        }
+        // TextRenderer ignores the world transform: draw in device space with a font of the device size.
+        var p = new[] { new PointF(x, y) };
+        g.TransformPoints(CoordinateSpace.Device, CoordinateSpace.World, p);
+        float sc = g.Transform.Elements[0];
+        Font df = Math.Abs(sc - 1) < 0.001f ? f : Fonts.Make(f.Name, f.Size * sc, f.Style);
+        GraphicsState st = g.Save();
+        g.ResetTransform();
+        TextRenderer.DrawText(g, text, df, new Point((int)Math.Round(p[0].X), (int)Math.Round(p[0].Y)), c, Flags);
+        g.Restore(st);
+    }
+
+    /// The width in px of the dark pixels of `text` drawn in `face`.
+    static int Ink(string face, string text, FontStyle st, out float advance)
+    {
+        Font f = Fonts.Make(face, 13, st);
+        using (var bmp = new Bitmap(300, 40))
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.White);
+            Apply(g);
+            advance = Width(g, text, f);
+            Draw(g, text, f, Color.Black, 10, 8);
+            int lo = int.MaxValue, hi = -1;
+            for (int x = 0; x < bmp.Width; x++)
+                for (int y = 0; y < bmp.Height; y++)
+                    if (bmp.GetPixel(x, y).R < 200) { if (x < lo) lo = x; if (x > hi) hi = x; break; }
+            return hi < lo ? 0 : hi - lo + 1;
+        }
+    }
+
+    /// True when `face` is drawn at the widths it is measured at: how far the advance width exceeds the ink width
+    /// (the side bearings) must be within 1 px for bold and italic of what it is for regular.
+    public static bool Agrees(string face)
+    {
+        const string probe = "Hamburgefonstiv";
+        float adv;
+        int ink = Ink(face, probe, FontStyle.Regular, out adv);
+        float regular = adv - ink;
+        foreach (FontStyle st in new[] { FontStyle.Bold, FontStyle.Italic })
+        {
+            int w = Ink(face, probe, st, out adv);
+            if (w == 0 || Math.Abs((adv - w) - regular) > 1) return false;
+        }
+        return ink > 0;
     }
 }
 
@@ -340,7 +502,8 @@ class CanvasView : Control
         using (var bmp = new Bitmap(1, 1))
         using (var g = Graphics.FromImage(bmp))
         {
-            w = g.MeasureString("M", f, 10000, StringFormat.GenericTypographic).Width;
+            TextMode.Apply(g);
+            w = TextMode.Width(g, "M", f);
             h = Math.Ceiling(f.GetHeight(g));
         }
     }
@@ -353,7 +516,7 @@ class CanvasView : Control
             reported = Size;
             double cw, ch;
             CellMetrics(out cw, out ch);
-            Outbox.Send("resize", "id", CanvasId, "dx", Width, "dy", Height, "cell_w", cw, "cell_h", ch);
+            Outbox.Send("resize", "id", CanvasId, "dx", Width, "dy", Height, "cell_w", cw, "cell_h", ch, "sans_line", Fonts.SansLine());
         }
     }
 
@@ -361,8 +524,8 @@ class CanvasView : Control
     {
         Graphics g = e.Graphics;
         g.Clear(BackColor);
-        // ClearType text; rectangles stay pixel-exact, slanted lines are anti-aliased.
-        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        // Rectangles stay pixel-exact, slanted lines are anti-aliased; text per TextMode (std.app.34).
+        TextMode.Apply(g);
         g.SmoothingMode = SmoothingMode.None;
         g.PixelOffsetMode = PixelOffsetMode.Half;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
@@ -379,9 +542,8 @@ class CanvasView : Control
             var str = op as StrOp;
             if (str != null)
             {
-                using (var b = new SolidBrush(Rgb(str.Fg)))
-                    g.DrawString(str.Text, Fonts.Get(str.Font, str.Size, str.Bold, str.Italic, str.Underline), b,
-                                 (float)str.X, (float)str.Y, StringFormat.GenericTypographic);
+                TextMode.Draw(g, str.Text, Fonts.Get(str.Font, str.Size, str.Bold, str.Italic, str.Underline), Rgb(str.Fg),
+                              (float)str.X, (float)str.Y);
                 continue;
             }
             var stroke = op as StrokeOp;
@@ -708,7 +870,7 @@ class HostForm : Form
         if (!started)
         {
             started = true;
-            Outbox.Send("start");
+            Outbox.Send("start", "sans_line", Fonts.SansLine());
         }
         if (s != shape)
         {
@@ -930,15 +1092,13 @@ static class Program
         using (var bmp = new Bitmap(1, 1))
         using (var g = Graphics.FromImage(bmp))
         {
-            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            TextMode.Apply(g);
             // A run that ends in a space (the text before a bold or linked word) must count it.
-            var fmt = new StringFormat(StringFormat.GenericTypographic);
-            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
             foreach (object r in runs)
             {
                 Font f = Fonts.Get(Json.Text(Json.Get(r, "font")), Json.Num(Json.Get(r, "size")),
                                    Json.Flag(Json.Get(r, "bold")), Json.Flag(Json.Get(r, "italic")), false);
-                float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, fmt).Width;
+                float w = TextMode.Width(g, Json.Text(Json.Get(r, "text")), f);
                 widths.Add(w.ToString("0.000", CultureInfo.InvariantCulture));
             }
         }

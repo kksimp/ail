@@ -198,6 +198,15 @@ agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are bui
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
 
+**std.app.34** — A `Str` at `y` is drawn with the ascent-to-descent box of its
+glyphs centred in the line box whose top is `y` and whose height is the host
+font's natural line height at that size, on every host. `start` and every
+`resize` carry `sans_line` (float, points, whole): the natural line height of
+`sans` at size 13, as `cell_h` is for `mono`, so an app centres text in a row of
+height `h` at `y + (h - sans_line * size / 13) / 2` with no per-platform
+constant; `0` when the host does not say, and an app then uses its own
+constant. `event(kind)` makes it `0`. *(ADR 1034)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -353,6 +362,32 @@ fn main()
     u.x = 50.0
     s.update(u)
     print((s.from, s.to, s.held))
+```
+
+```ail rules=std.app.34
+use std.app
+
+## A row label centred by the host's `sans` line height.
+struct Row
+    line float
+    top float
+
+impl app.App for Row
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            line = ev.sans_line
+            top = (32.0 - (if line > 0.0 then line else 16.0)) / 2.0
+
+    fn view(self) app.Node
+        app.canvas("row", 0.0, 0.0, [app.draw_text(8.0, top, "Tab", 0xffffff)])
+
+fn main()
+    mut r := Row(line: 0.0, top: 0.0)
+    r.update(app.event("start"))
+    print(r.top)
+    j := parse_json("\{\"kind\":\"resize\",\"sans_line\":18}") else Json.Null
+    r.update(app.event_from_json(j))
+    print(r.top)
 ```
 
 ```ail rules=std.app.26

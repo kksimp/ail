@@ -796,3 +796,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
+| [1034](1034-std-app-text-placement.md) | `std.app` text placement and `sans_line`; Windows font table *(delegated)* | Accepted | 2026-11-09 |
