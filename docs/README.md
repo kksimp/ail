@@ -9,7 +9,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
 | [roadmap.md](roadmap.md) | Phased development plan |
-| Note | Design documents dated before the Rust removal (ADR 0904) may mention `cargo`, `./ail selftest` or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842). |
+| Note | Design documents dated before the Rust removal (ADR 0904) may mention `cargo`, the interpreter or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842), and `./ail selftest` runs its native suites (ADR 0865). |
 | [open-questions.md](open-questions.md) | Unresolved design questions, with options, pros, cons, and recommendations |
 | [decisions/](decisions/README.md) | Architecture Decision Records: one per decision, including rejected alternatives |
 | [spec/](spec/README.md) | Normative language specification with stable rule IDs |
@@ -78,8 +78,9 @@ Design notes:
 
 Tools:
 - Apps (Garlic browser, Garlic Press PDF viewer, ail-edit code editor, Clove) live in their own repositories: see the repository layout in AGENTS.md.
-- [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run
-  `tools/perfbench/run.sh [RUNS]`; results in
+- [tools/perfbench/](../tools/perfbench/run.sh): drag-race programs (AIL, C and
+  Python twins). Run `tools/perfbench/run.sh [RUNS]`; the older interpreter
+  results are history in
   [design/interpreter-performance.md](design/interpreter-performance.md).
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.
   Run `tools/tokbench/run.sh` (macOS/Linux) or `tools\tokbench\run.ps1`

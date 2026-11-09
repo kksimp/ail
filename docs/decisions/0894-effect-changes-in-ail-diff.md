@@ -1,6 +1,6 @@
 # 0894. Effect changes in `ail diff`
 
-- **Status:** Proposed
+- **Status:** Deferred past 0.1.0
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0396](0396-ail-diff-semantic-diff.md), [ADR 0868](0868-ai-first-tooling-after-rust-removal.md) item 3
