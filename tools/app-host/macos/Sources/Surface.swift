@@ -48,6 +48,19 @@ private func str(_ d: [String: Any], _ k: String) -> String { d[k] as? String ??
 
 enum Surfaces {
     static var maps: [String: Mapped] = [:]
+    /// The text items of each surface's canvas (std.gfx.7), drawn over its pixels.
+    static var texts: [String: [[String: Any]]] = [:]
+
+    /// `{"t":"text","id":I,"items":[{"x","y","s","size","color"}]}`: replaces the surface's text.
+    static func setText(_ obj: [String: Any]) {
+        let id = str(obj, "id")
+        let items = obj["items"] as? [[String: Any]] ?? []
+        // The reader thread parses; the dictionary is only touched on the main thread, where it is drawn.
+        DispatchQueue.main.async {
+            texts[id] = items
+            CanvasView.registry[id]?.needsDisplay = true
+        }
+    }
 
     /// `{"t":"surface","id":I,"w":W,"h":H,"stride":S,"count":N,"path":P}` (std.gfx.8): map the file.
     /// Returns false if it can't be mapped; the program then sees no `vsync` and fails with `no_host`.
@@ -95,6 +108,17 @@ enum Surfaces {
         g.interpolationQuality = .none
         g.draw(img, in: bounds)
         g.restoreGState()
+        // Text positions are in surface pixels; the canvas may scale them.
+        let sx = bounds.width / CGFloat(m.w)
+        for t in texts[id] ?? [] {
+            let size = CGFloat(number(t, "size") > 0 ? number(t, "size") : 12) * sx
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedSystemFont(ofSize: size, weight: .regular),
+                .foregroundColor: color(Int(number(t, "color"))),
+            ]
+            (str(t, "s") as NSString).draw(at: NSPoint(x: CGFloat(number(t, "x")) * sx, y: CGFloat(number(t, "y")) * sx),
+                                           withAttributes: attrs)
+        }
         let now = Date()
         let dt = now.timeIntervalSince(m.lastDraw)
         m.lastDraw = now

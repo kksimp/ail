@@ -155,6 +155,11 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
                 }
                 continue
             }
+            if kind == "text" {
+                // std.gfx.7: text the program wants over the surface, in the host's fonts.
+                Surfaces.setText(obj)
+                continue
+            }
             if kind == "present" {
                 Surfaces.present(obj)
                 continue

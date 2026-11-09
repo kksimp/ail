@@ -1,0 +1,23 @@
+# own.uniq.3, own.defer.1: a program that uses tasks still runs the main
+# thread's cleanups and deferred statements when a trap ends it.
+unique struct Lock
+    id int
+
+impl Drop for Lock
+    fn drop(mut self)
+        print("unlock {id}")
+
+fn square(n int) int
+    n * n
+
+fn inner(n int) int
+    l := Lock(id: n)
+    defer print("inner defer")
+    t := spawn square(n)
+    xs := [1, 2]
+    s := t.wait() else 0
+    xs[n] + s
+
+fn main()
+    a := Lock(id: 1)
+    print(inner(5))

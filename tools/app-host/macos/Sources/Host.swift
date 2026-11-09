@@ -7,6 +7,8 @@ import SwiftUI
 
 /// The latest view from the program.
 final class Model: ObservableObject {
+    /// The one model: the AppDelegate starts the reader before any window exists.
+    static let shared = Model()
     @Published var title = "AIL"
     @Published var focus = ""
     @Published var tree: Node = .label("")
@@ -61,6 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.applicationIconImage = img
         }
         NSApp.activate(ignoringOtherApps: true)
+        // The program's first view must not wait for a window: on some systems (macOS 27) the
+        // SwiftUI scene opens none, and the reader would never start. Read now, and open a window
+        // ourselves if SwiftUI has not shown one after a moment.
+        startReader()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if !NSApp.windows.contains(where: { $0.isVisible && $0.contentView != nil }) {
+                openFallbackWindow()
+            }
+        }
         // A window restored from another display's position can open off screen.
         DispatchQueue.main.async {
             for w in NSApp.windows where !(NSScreen.screens.contains { $0.visibleFrame.intersects(w.frame) }) {
@@ -75,22 +86,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// Starts the stdin reader once, whichever comes first: the delegate or a window's root.
+func startReader() {
+    if Reader.started { return }
+    Reader.started = true
+    readViews(onView: { Model.shared.show(title: $0, focus: $1, tree: $2) },
+              onEnd: { NSApp.terminate(nil) })
+}
+
+/// A plain window holding the same root, for when the SwiftUI scene opens none.
+func openFallbackWindow() {
+    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
+                       styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                       backing: .buffered, defer: false)
+    win.title = Model.shared.title
+    win.minSize = NSSize(width: 320, height: 200)
+    win.isReleasedWhenClosed = false
+    let hosting = NSHostingView(rootView: Root(model: Model.shared))
+    hosting.autoresizingMask = [.width, .height]
+    win.contentView = hosting
+    win.center()
+    Edge.own = win
+    win.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    FileHandle.standardError.write("AIL App Host: opened a window of its own (the SwiftUI scene showed none)\n".data(using: .utf8)!)
+}
+
 @main
 struct HostApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var model = Model()
+    @StateObject private var model = Model.shared
 
     var body: some Scene {
         WindowGroup {
             Root(model: model)
                 .frame(minWidth: 320, minHeight: 200)
                 .navigationTitle(model.title)
-                .onAppear {
-                    if Reader.started { return }
-                    Reader.started = true
-                    readViews(onView: { model.show(title: $0, focus: $1, tree: $2) },
-                              onEnd: { NSApp.terminate(nil) })
-                }
+                .onAppear { startReader() }
         }
         .defaultSize(width: 1000, height: 720)
     }

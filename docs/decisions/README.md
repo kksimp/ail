@@ -785,4 +785,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
+| [0988](0988-std-media-webm.md) | `std.media.webm`: WebM and Matroska demuxing in AIL, fed in pieces for Media Source Extensions *(delegated)* | Accepted | 2026-11-08 |
+| [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0994](0994-overflow-facts-in-multi-exit-loops.md) | Native: drop overflow checks that bounds and index uses rule out, in loops that leave in more than one place *(delegated)* | Accepted | 2026-11-08 |
