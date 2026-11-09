@@ -96,8 +96,8 @@ fn main()
 ## Any `std.app` program
 
 **std.screen.12** — `use std.screen.view` provides `of_ops(ops, ox, oy)`,
-which turns canvas ops into items moved by (`ox`, `oy`): `Fill` is a `box`, `Str`
-a `text`, `Pic` and `Bitmap` an `image`, `Stroke` a `line`. These boxes are
+which turns canvas ops into items moved by (`ox`, `oy`): `Fill`, `Shade`, `Round` and `Poly` are a `box`, `Str`
+a `text`, `Pic` and `Bitmap` an `image`, `Stroke` and `Line` a `line`. These boxes are
 exact (`conf` 1.0), except that a string's width is estimated.
 
 **std.screen.13** — `of_node(node, w, h, focus)` makes the `Screen` of a view

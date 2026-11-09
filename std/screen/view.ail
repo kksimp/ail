@@ -18,8 +18,8 @@ fn text_w(s str, size float) float
     s.chars().len().to_float() * size * 0.6
 
 ## The items of canvas ops `ops`, moved by (`ox`, `oy`), in paint order
-## (std.screen.12): fills and shades are `box`, strings `text`, pictures and bitmaps
-## `image`, strokes `line`.
+## (std.screen.12): fills, shades, rounded rectangles and polygons are `box`, strings `text`, pictures and bitmaps
+## `image`, strokes and polylines `line`.
 pub fn of_ops(ops List[app.Op], ox float, oy float) List[screen.Item]
     mut out := List[screen.Item]()
     for op in ops
@@ -86,9 +86,55 @@ pub fn of_ops(ops List[app.Op], ox float, oy float) List[screen.Item]
                 (x2 - x1).abs().max(width),
                 (y2 - y1).abs().max(width),
             ))
+            Round(x, y, w, h, _, c, _, _) => out.push(screen.item(
+                2000000 + hash("{x}{y}{w}{h}"),
+                "box",
+                "",
+                c,
+                ox + x,
+                oy + y,
+                w,
+                h,
+            ))
+            Poly(points, c, _) =>
+                if points.len() >= 6
+                    out.push(points_item(2000000, "box", points, c, 0.0, ox, oy))
+            Line(points, c, width) =>
+                if points.len() >= 4
+                    out.push(points_item(6000000, "line", points, c, width, ox, oy))
             Clip(_, _, _, _) => out = out
             Unclip => out = out
     out
+
+## The extreme of the x (`off` 0) or y (`off` 1) values of `points`, the
+## smallest or the largest.
+fn extent(points List[float], off int, largest bool) float
+    n := points.len() / 2
+    if n == 0
+        return 0.0
+    mut best := points[off]
+    for k in 0..n
+        v := points[k * 2 + off]
+        if largest
+            best = best.max(v)
+        else
+            best = best.min(v)
+    best
+
+## The item of a polygon or polyline: its bounding box, grown by `width`.
+fn points_item(base int, role str, points List[float], c int, width float, ox float, oy float) screen.Item
+    x0 := extent(points, 0, false)
+    y0 := extent(points, 1, false)
+    screen.item(
+        base + hash("{x0}{y0}{points.len()}"),
+        role,
+        "",
+        c,
+        ox + x0,
+        oy + y0,
+        (extent(points, 0, true) - x0).max(width),
+        (extent(points, 1, true) - y0).max(width),
+    )
 
 ## The regions the pixel classifier finds in a `Bitmap` (std.screen.14), moved
 ## and scaled from bitmap pixels to the rectangle (`x`, `y`, `w`, `h`). An
