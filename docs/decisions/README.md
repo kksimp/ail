@@ -792,3 +792,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
+| [1021](1021-perf-explain.md) | `ail perf --explain FN FILE`: per-loop optimisation remarks (bounds checks, vector kernels, parallel verdict, calls left) with rule and fix *(delegated)* | Accepted | 2026-11-09 |
