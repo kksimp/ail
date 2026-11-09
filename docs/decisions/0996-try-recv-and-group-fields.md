@@ -20,8 +20,12 @@ between them with sleeps.
 1. **`ch.try_recv() T?`** returns a queued value at once, or `none`.
    **`ch.recv_for(ms int) T?`** waits as `recv` does, for at most `ms`
    milliseconds. A timed wait is not counted as blocked, so it never reports a
-   deadlock. Under `--deterministic` no time passes, so `recv_for` behaves as
-   `try_recv`.
+   deadlock. Under `--deterministic` no time passes: `recv_for` waits as
+   `recv` does, and its time is up only when every other task is blocked
+   (where `recv` would report a deadlock). An earlier draft made it
+   `try_recv`. Then a polling loop left early whenever the scheduler had not
+   yet run the sender, and the gate's deterministic run of
+   `conc_chan_try_recv` deadlocked.
 2. **A `unique` struct may hold a `TaskGroup` field.** The must-wait rule of
    ADR 0096 holds in three ways:
    - The struct must be `unique`. Its value can't be copied, and it is

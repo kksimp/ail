@@ -431,7 +431,9 @@ waiting now, else `none`, at once, whether the channel is open or closed.
 `ch.recv_for(ms)` waits as `recv` does for at most `ms` milliseconds (`ms`
 below 0 counts as 0) and returns `none` when the time runs out or the channel
 is closed and empty. Neither ever reports a deadlock (`conc.task.7`). Under
-`--deterministic` no time passes, so `recv_for` is `try_recv`. A cancelled
+`--deterministic` no time passes: `recv_for` waits as `recv` does, and when
+every other task is blocked, where `recv` would report a deadlock, its time
+is up and it returns `none`. A cancelled
 task's `recv_for` returns `none` as `recv` does (`conc.cancel.4`). *(ADR 0996)*
 
 ```ail rules=conc.share.8

@@ -255,8 +255,9 @@ fn chan_try_recv(ch int) int
 
 ## `ch.recv_for(ms)` (conc.share.8): as `recv`, but 0 once `ms` milliseconds
 ## pass with no value. A timed wait is never a deadlock (conc.task.7), so it
-## isn't counted among the blocked threads; under `--deterministic` no time
-## passes, and it is `try_recv`.
+## isn't counted among the blocked threads. Under `--deterministic` no time
+## passes: it waits as `recv` does, and where `recv` would find a deadlock the
+## time is up instead.
 fn chan_recv_for(ch int, ms int) int
     det_yield()
     end := time_mono_ms() + (if ms < 0 then 0 else ms)
@@ -268,10 +269,18 @@ fn chan_recv_for(ch int, ms int) int
             race_acquire(ch)
             return v
         left := end - time_mono_ms()
-        if load64(ch + C_CLOSED) != 0 or task_cancelled() or det_on() or left <= 0
+        # A deterministic run has no clock: only a wait of no time is up at once.
+        up := if det_on() then ms <= 0 else left <= 0
+        if load64(ch + C_CLOSED) != 0 or task_cancelled() or up
             unlock(ch + C_LOCK)
             return 0
-        if load64(ch + C_SOURCE) != 0
+        if det_on() and load64(ch + C_SOURCE) == 0
+            if chan_sleep(ch, "a value from a channel")
+                # Nothing else can run: the time is up, and no deadlock is reported.
+                chan_fault()
+                unlock(ch + C_LOCK)
+                return 0
+        elif load64(ch + C_SOURCE) != 0
             unlock(ch + C_LOCK)
             chan_pump_ms(ch, left)
             lock(ch + C_LOCK)
