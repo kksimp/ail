@@ -138,7 +138,10 @@ fn find_sig(lines List[str], name str) Found
         inner := rest.slice(open + 1, close)
         after := rest.slice(close + 1, rest.len())
         trimmed := after.trim()
-        if trimmed == "!" or trimmed.starts_with("! ") or trimmed.ends_with(" !") or trimmed.contains(" ! ")
+        if trimmed == "!"
+            or trimmed.starts_with("! ")
+            or trimmed.ends_with(" !")
+            or trimmed.contains(" ! ")
             return refused("`{name}` can fail (`!`)")
         mut params := List[Param]()
         for part in split_top(inner)
@@ -148,11 +151,14 @@ fn find_sig(lines List[str], name str) Found
             if pname == "mut" or pname == "move" or pname == "ref" or part.contains("=")
                 return refused("`{name}` has a `mut`, `move` or default parameter")
             params.push(Param(name: pname, ty: part.slice(sp, part.len()).trim()))
-        return Found(
-            ok: true,
-            why: "",
-            sig: Sig(name: name, line: i, inner: inner, after: after, ret: trimmed, params: params),
-        )
+        return Found(ok: true, why: "", sig: Sig(
+            name: name,
+            line: i,
+            inner: inner,
+            after: after,
+            ret: trimmed,
+            params: params,
+        ))
     refused("no top-level function `{name}` in the file")
 
 ## The columns of the rows: each parameter, then the result (infer.cand.1).
@@ -302,20 +308,44 @@ fn candidates(sig Sig, cols List[Col], data List[List[int]], allow_ensures bool)
                 continue
             op := relation(data[i], data[j])
             if op != ""
-                reqs.push(Cand(kind: "requires", cond: "{cols[i].expr} {op} {cols[j].expr}", col: i, other: j, op: op))
+                reqs.push(Cand(
+                    kind: "requires",
+                    cond: "{cols[i].expr} {op} {cols[j].expr}",
+                    col: i,
+                    other: j,
+                    op: op,
+                ))
     for i in 0..np
         if ops.contains(i) and ops[i] != ""
-            ranges.push(Cand(kind: "requires", cond: range_cond(cols[i].expr, ops[i]), col: i, other: -1, op: ops[i]))
+            ranges.push(Cand(
+                kind: "requires",
+                cond: range_cond(cols[i].expr, ops[i]),
+                col: i,
+                other: -1,
+                op: ops[i],
+            ))
     if allow_ensures and stats.contains(res)
         if ops[res] != ""
-            ens_ranges.push(Cand(kind: "ensures", cond: range_cond(cols[res].expr, ops[res]), col: res, other: -1, op: ops[res]))
+            ens_ranges.push(Cand(
+                kind: "ensures",
+                cond: range_cond(cols[res].expr, ops[res]),
+                col: res,
+                other: -1,
+                op: ops[res],
+            ))
         for i in 0..np
             if not stats.contains(i) or stats[i].distinct < 2
                 continue
             # The result compared with the parameter: `relation` is read as result OP param.
             op := relation(data[res], data[i])
             if op != ""
-                ens_rels.push(Cand(kind: "ensures", cond: "{cols[res].expr} {op} {cols[i].expr}", col: res, other: i, op: op))
+                ens_rels.push(Cand(
+                    kind: "ensures",
+                    cond: "{cols[res].expr} {op} {cols[i].expr}",
+                    col: res,
+                    other: i,
+                    op: op,
+                ))
     # A result range a relation already gives (`result > n` with `n >= 0`) is dropped.
     mut kept_ens := List[Cand]()
     for e in ens_ranges
@@ -507,17 +537,7 @@ fn run(args List[str]) int
                 ("min", Json.Num(min_calls.to_float())),
                 ("applied", Json.Bool(apply and not cands.is_empty())),
                 ("note", Json.Str(if note.is_empty() then "observed, not proved: a test run showed these, so check them with `ail test --contracts`" else note)),
-                (
-                    "proposals",
-                    Json.Arr([
-                        obj([
-                            ("kind", Json.Str(c.kind)),
-                            ("cond", Json.Str(c.cond)),
-                            ("calls", Json.Num(calls.to_float())),
-                        ])
-                        for c in cands
-                    ]),
-                ),
+                ("proposals", Json.Arr([obj([("kind", Json.Str(c.kind)), ("cond", Json.Str(c.cond)), ("calls", Json.Num(calls.to_float()))]) for c in cands])),
                 ("patch", Json.Str(patch_text)),
             ]).to_text(),
         )
