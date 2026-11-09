@@ -240,8 +240,9 @@ pub trait Observe
     fn tools(self) List[Tool]
         []
 
-    ## Runs action `name` with arguments `args` (a JSON object) and gives the reply line (attach.tool.4).
-    ## A default is lowered in the impl's file, so it names only prelude items.
-    fn call(mut self, name str, args Json) str
-        why := Json.Str("no tool `{name}`; `tools` lists them (attach.tool.4)").to_text()
+    ## Runs action `ail_tool` with arguments `ail_args` (a JSON object) and gives the reply line (attach.tool.4).
+    ## A default is lowered in the impl's file, so it names only prelude items; the parameters'
+    ## names are ones no app's field is likely to have.
+    fn call(mut self, ail_tool str, ail_args Json) str
+        why := Json.Str("no tool `{ail_tool}`; `tools` lists them (attach.tool.4)").to_text()
         "\{\"v\":1,\"error\":{why}}"

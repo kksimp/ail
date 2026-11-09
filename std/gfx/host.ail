@@ -302,8 +302,8 @@ impl attach.Observe for Loop[T gfx.Game + attach.Observe]
     fn tools(self) List[attach.Tool]
         game.tools()
 
-    fn call(mut self, name str, args Json) str
-        game.call(name, args)
+    fn call(mut self, ail_tool str, ail_args Json) str
+        game.call(ail_tool, ail_args)
 
 ## The loop for `g`, for `std.gfx.watch` (which runs it with the attach
 ## listener); `run` is the same without it.

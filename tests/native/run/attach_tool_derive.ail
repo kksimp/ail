@@ -10,6 +10,9 @@ error struct ShopError
 struct Shop
     @observe items List[str]
     @observe total int
+    # Fields named like a call's parameters must not clash with the generated `call`.
+    name str
+    args int
 
 ## Adds `qty` of `item` to the cart; gives the new total.
 @tool fn Shop.add(mut self, item str, qty int) int
@@ -38,7 +41,7 @@ fn js(text str) Json
     parse_json(text) else Json.Obj([])
 
 fn main()
-    mut s := Shop(items: [], total: 0)
+    mut s := Shop(items: [], total: 0, name: "shop", args: 0)
     ts := s.tools()
     assert_eq(ts.len(), 3)
     assert_eq(ts[0].name, "add")
