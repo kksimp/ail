@@ -26,7 +26,7 @@ Measured: driving "add 2 teas" took 4 requests by `input` (screen, edit, press, 
 
 ## Consequences
 
-- A `gfx.Game` window does not forward its game's tools yet (`std.gfx.host.Loop`'s hand-written `Observe`); its `tools` answer is empty.
+- A `gfx.Game` window forwards its game's tools (`std.gfx.host.Loop`'s `Observe`), so a game's `@tool` methods work the same way.
 - A hand-written `impl attach.Observe` writes `tools` and `call` itself or offers none.
 - `List` parameters, optional parameters and structs as arguments are left out of version 1.
 

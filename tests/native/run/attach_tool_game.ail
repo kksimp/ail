@@ -1,0 +1,33 @@
+## attach.tool.3-4 on a game window: the loop forwards the game's `@tool` methods.
+use std.attach
+use std.gfx
+use std.gfx.host
+
+struct Ball
+    @observe x float
+
+impl gfx.Game for Ball
+    fn update(mut self, input gfx.Input, dt float)
+        x += 10.0 * dt
+
+    fn draw(self, mut f gfx.Frame)
+        gfx.clear(mut f, 0x112233)
+
+## Moves the ball to `to`.
+@tool fn Ball.jump(mut self, to float) float
+    x = to
+    x
+
+impl attach.Observe for Ball
+
+fn main()
+    mut g := Ball(x: 0.0)
+    mut l := host.new_loop(g, "ball", 32, 16)
+    assert_eq(l.tools().len(), 1)
+    assert_eq(l.tools()[0].name, "jump")
+    a := parse_json("\{\"to\":4.5}") else Json.Obj([])
+    assert_eq(l.call("jump", a), "\{\"v\":1,\"result\":4.5}")
+    host.finish(mut g, l) else err
+        print(err.why)
+    assert_eq(g.x, 4.5)
+    print("ok")
