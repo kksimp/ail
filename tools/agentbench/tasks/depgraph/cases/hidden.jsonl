@@ -1,0 +1,20 @@
+{"name": "order-basic", "args": ["order"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "lone\nutil\nlib\nlog\napp\n", "code": 0}
+{"name": "cycles-none", "args": ["cycles"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "", "code": 0}
+{"name": "deps-basic", "args": ["deps", "app"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "lib\nlog\nutil\n", "code": 0}
+{"name": "rdeps-basic", "args": ["rdeps", "util"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "app\nlib\nlog\n", "code": 0}
+{"name": "order-ties", "args": ["order"], "stdin": "z\ny -> x\nB\na\n", "stdout": "B\na\nx\ny\nz\n", "code": 0}
+{"name": "order-cycle", "args": ["order"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "stdout": "", "code": 3}
+{"name": "cycles-some", "args": ["cycles"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "stdout": "a\nb\nc\n", "code": 0}
+{"name": "deps-on-cycle", "args": ["deps", "a"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "stdout": "a\nb\nc\n", "code": 0}
+{"name": "rdeps-on-cycle", "args": ["rdeps", "c"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "stdout": "a\nb\nc\nd\n", "code": 0}
+{"name": "self-loop", "args": ["cycles"], "stdin": "x -> x\ny -> x\n", "stdout": "x\n", "code": 0}
+{"name": "unknown", "args": ["deps", "nope"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "", "code": 4}
+{"name": "bad-lines", "args": ["order"], "stdin": "a -> b\nbad line here\na ->b\n a -> b\n# note\n\nb -> c -> d\na\tb\nc\n", "stdout": "b\na\nc\n", "code": 2}
+{"name": "bad-and-cycle", "args": ["order"], "stdin": "a -> b\nb -> a\n???\n", "stdout": "", "code": 3}
+{"name": "dup-edges", "args": ["deps", "a"], "stdin": "a -> b\na -> b\nb -> c\n", "stdout": "b\nc\n", "code": 0}
+{"name": "crlf", "args": ["order"], "stdin": "a -> b\r\nb\n", "stdout": "b\n", "code": 2}
+{"name": "usage-none", "args": [], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "", "code": 1}
+{"name": "usage-bad-name", "args": ["deps", "a b"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "", "code": 1}
+{"name": "usage-extra", "args": ["order", "x"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "", "code": 1}
+{"name": "bytes-order", "args": ["order"], "stdin": "b\nB\n_\n.\na\n-\n", "stdout": "-\n.\nB\n_\na\nb\n", "code": 0}
+{"name": "empty", "args": ["order"], "stdin": "", "stdout": "", "code": 0}

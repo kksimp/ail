@@ -4,6 +4,7 @@
   agentbench.py gen TASK                       # fill cases/{visible,hidden}.jsonl from the task's ref.py
   agentbench.py docs TASK                      # check the two arms' doc bundles are within tolerance
   agentbench.py run TASK ARM TRIAL --model M   # or AGENTBENCH_MODEL # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
+  agentbench.py validate TASK                  # solution/ passes every hidden case; a fix task's seed/ fails some
   agentbench.py score DIR                      # re-score a finished trial's workspace against the hidden cases
   agentbench.py report [RESULTS]               # markdown table over all trials
 Run on a Kaleb machine only (ADR 0842): trials call a paid model and build with `ail` / `cc`.
@@ -19,7 +20,9 @@ PROMPT = ("You are in a fresh repository. Read SPEC.md and DOCS/, then implement
 
 def task_dir(t): return os.path.join(HERE, "tasks", t)
 def load_task(t):
-    with open(os.path.join(task_dir(t), "task.json")) as f: return json.load(f)
+    with open(os.path.join(task_dir(t), "task.json")) as f: d = json.load(f)
+    d.setdefault("exe", t)
+    return d  # "base": a task whose spec, oracle and case inputs this one extends (fix tasks)
 def jsonl(path):
     with open(path) as f: return [json.loads(l) for l in f if l.strip()]
 
@@ -33,10 +36,15 @@ def run_case(exe, case, timeout=10):
     except subprocess.TimeoutExpired:
         return {"name": case["name"], "ok": False, "code": None, "stdout": "", "err": "timeout", "s": timeout}
 
+def case_inputs(t):
+    task = load_task(t); own = os.path.join(task_dir(t), "cases", "inputs.jsonl")
+    base = case_inputs(task["base"]) if "base" in task else []
+    return base + (jsonl(own) if os.path.exists(own) else [])
+
 def cmd_gen(a):
-    d = task_dir(a.task); ref = os.path.join(d, "ref.py")
+    d = task_dir(a.task); ref = os.path.join(task_dir(load_task(a.task).get("base", a.task)), "ref.py")
     vis, hid = [], []
-    for c in jsonl(os.path.join(d, "cases", "inputs.jsonl")):
+    for c in case_inputs(a.task):
         p = subprocess.run([sys.executable, "-I", ref] + c["args"], input=c["stdin"].encode(), capture_output=True)
         full = {"name": c["name"], "args": c["args"], "stdin": c["stdin"], "stdout": p.stdout.decode(), "code": p.returncode}
         hid.append(full)
@@ -64,7 +72,9 @@ SHIM_TEST = "#!/bin/sh\ncd \"$(dirname \"$0\")\"\n./build >/dev/null 2>&1 || {{ 
 def prep(t, task, arm, ws):
     shutil.copytree(os.path.join(task_dir(t), "seed", arm), ws, dirs_exist_ok=True)
     shutil.copy(os.path.join(task_dir(t), "spec.md" if task["kind"] == "build" else "issue.md"), os.path.join(ws, "SPEC.md"))
+    if task["kind"] == "fix": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
     os.makedirs(os.path.join(ws, "DOCS"), exist_ok=True); os.makedirs(os.path.join(ws, ".bench"), exist_ok=True)
+    with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
     for p in task["docs"][arm]: shutil.copy(os.path.join(ROOT, p), os.path.join(ws, "DOCS", os.path.basename(p)))
     shutil.copy(os.path.join(task_dir(t), "cases", "visible.jsonl"), os.path.join(ws, ".bench", "visible.jsonl"))
     for name, body in (("build", SHIM_BUILD.format(cmd=" ".join(task["build"][arm]))), ("test", SHIM_TEST.format(me=os.path.abspath(__file__)))):
@@ -95,7 +105,7 @@ def score_ws(t, arm, ws):
     task = load_task(t)
     r = subprocess.run(task["build"][arm], cwd=ws, capture_output=True, text=True)
     if r.returncode: return {"built": False, "passed": 0, "total": len(jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))), "failed": []}
-    res = [run_case(os.path.join(ws, "ledger" if t == "ledger" else task.get("exe", t)), c) for c in jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))]
+    res = [run_case(os.path.join(ws, task["exe"]), c) for c in jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))]
     return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]]}
 
 def cmd_run(a):
@@ -122,11 +132,23 @@ def cmd_score(a):
     m["score"] = score_ws(m["task"], m["arm"], os.path.join(a.dir, "ws")); m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
     json.dump(m, open(os.path.join(a.dir, "metrics.json"), "w"), indent=1); print(m["score"])
 
+def cmd_validate(a):
+    """Every arm's solution/ must pass all hidden cases; a fix task's seed/ must fail some, then be fixed by solution/."""
+    task = load_task(a.task); sol_task = task.get("base", a.task); ok = True
+    for arm in ARMS:
+        for what, src in (("solution", os.path.join(task_dir(sol_task), "solution", arm)), ("seed", os.path.join(task_dir(a.task), "seed", arm))):
+            if what == "seed" and task["kind"] != "fix": continue
+            with tempfile.TemporaryDirectory() as ws:
+                shutil.copytree(src, ws, dirs_exist_ok=True); sc = score_ws(a.task, arm, ws)
+            good = sc["built"] and (sc["passed"] == sc["total"]) == (what == "solution")
+            ok &= good; print(("ok  " if good else "FAIL"), arm, what, f"{sc['passed']}/{sc['total']}", "fails:", sc["failed"])
+    sys.exit(0 if ok else 1)
+
 # --- `visible` is the in-workspace test runner (called by ./test) --------
 def cmd_visible(a):
     cases = jsonl(os.path.join(a.dir, ".bench", "visible.jsonl")); bad = 0
     for c in cases:
-        r = run_case(os.path.join(a.dir, "ledger"), c)
+        r = run_case(os.path.join(a.dir, open(os.path.join(a.dir, ".bench", "exe")).read()), c)
         if not r["ok"]:
             bad += 1; print(f"FAIL {c['name']}: args={c['args']} want code {c['code']} got {r['code']}\n  want stdout {c['stdout']!r}\n  got  stdout {r['stdout']!r}\n  stderr {r['err']!r}")
     print(f"{len(cases) - bad}/{len(cases)} visible cases pass"); sys.exit(1 if bad else 0)
@@ -142,7 +164,7 @@ def cmd_report(a):
 
 def main():
     p = argparse.ArgumentParser(); s = p.add_subparsers(dest="c", required=True)
-    for n, args in (("gen", ["task"]), ("docs", ["task"]), ("run", ["task", "arm", "trial"]), ("score", ["dir"]), ("visible", ["dir"]), ("report", [])):
+    for n, args in (("gen", ["task"]), ("docs", ["task"]), ("run", ["task", "arm", "trial"]), ("score", ["dir"]), ("validate", ["task"]), ("visible", ["dir"]), ("report", [])):
         q = s.add_parser(n)
         for x in args: q.add_argument(x)
         if n == "run": q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)

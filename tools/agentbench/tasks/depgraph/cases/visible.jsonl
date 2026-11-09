@@ -1,0 +1,5 @@
+{"name": "order-basic", "args": ["order"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "lone\nutil\nlib\nlog\napp\n", "code": 0}
+{"name": "cycles-none", "args": ["cycles"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "", "code": 0}
+{"name": "deps-basic", "args": ["deps", "app"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "lib\nlog\nutil\n", "code": 0}
+{"name": "rdeps-basic", "args": ["rdeps", "util"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "app\nlib\nlog\n", "code": 0}
+{"name": "cycles-some", "args": ["cycles"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "stdout": "a\nb\nc\n", "code": 0}
