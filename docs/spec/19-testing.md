@@ -193,6 +193,63 @@ fn main()
     print("x")
 ```
 
+## Fuzzing
+
+**test.fuzz.1** — `ail test --fuzz NAME [--time MS] [--cases N] [--seed S] [--corpus DIR] FILE`
+fuzzes the property test `NAME` ([ADR 1015](../decisions/1015-user-fuzzing.md)). Only that test
+is built, and the build counts the statements run (`test.cover.4`). The run ends after `--time`
+milliseconds (default 10000), or after `--cases` runs when that is given and `--time` is not, and
+the exit status and the text and `--json` forms are those of a property test (`test.prop.4`,
+`test.run.3-4`), with `cases` the number of runs. A name that is not a property test of the file
+is an error (exit 2).
+
+```ail tool=test,--fuzz,nosuch,FILE status=2 expect=test.fuzz.1 rules=test.fuzz.1
+@test fn small(n int)
+    assert(n < 1000000)
+
+fn main()
+    print("x")
+```
+
+**test.fuzz.2** — A run is coverage-guided. The first input is the simplest value of each
+parameter. Every later input is, one time in ten, a fresh `test.prop.3` input, and otherwise a
+mutation of an input kept earlier: one to three parameters changed by a small step or an edge
+value (numbers), an inserted, dropped or changed character (`str`, `bytes`), an element added,
+dropped or changed (collections), or a changed field (`struct`, `enum`, tuples, optionals). An
+input is kept when it runs a statement that no earlier input did. The parameter types are those of
+`test.prop.2`. The same `--seed` and the same hit pattern give the same inputs.
+
+**test.fuzz.3** — With `--corpus DIR`, the directory is made if missing. Before the first mutation
+every file in it that fits the parameters is run, then each kept input is written to
+`DIR/id-HASH`, so a later run starts from the earlier run's coverage. A file is the arguments'
+text tokens (`test.prop.4`), one `=TOKEN` line each, with `\`, newline and return written
+`\\`, `\n` and `\r`. A file that does not fit the parameters is ignored.
+
+**test.fuzz.4** — The first failing input is shrunk as in `test.prop.5` and reported as in
+`test.prop.4`. With `--corpus DIR` it is also written to `DIR/crash-HASH`, which the next run
+replays first, so a fixed bug stays a regression test. `--bundle-failure` records the failure as
+for any test (`bundle.write.1`), and `ail replay --shrink` (`shrink.run.1`) shrinks that bundle.
+
+**test.fuzz.5** — A run that finds nothing ends with the line `fuzz NAME: R runs, K kept, S
+statements reached` on standard error. Only the property test's own code and what it calls count
+as statements.
+
+```ail tool=test,--fuzz,small,--cases,400,--corpus,.ail-test-fuzz-corpus,FILE status=1 expect=input: n = rules=test.fuzz.2,test.fuzz.3,test.fuzz.4
+@test fn small(n int)
+    assert(n < 100)
+
+fn main()
+    print("x")
+```
+
+```ail tool=test,--fuzz,small,--cases,50,FILE expect="50 cases" rules=test.fuzz.5
+@test fn small(n int)
+    assert(n < 1000000000)
+
+fn main()
+    print("x")
+```
+
 ## Doc examples
 
 **test.doc.1** — In `ail test`, each block fenced exactly ```` ```ail ```` inside
