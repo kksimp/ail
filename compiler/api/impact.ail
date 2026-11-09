@@ -18,6 +18,8 @@ pub struct Impact
     pub tests List[str]
     ## Functions whose effects differ, with the effects before and after.
     pub effects List[EffectChange]
+    ## Changed functions that no `@test` function reaches (ADR 1024), in source order.
+    pub untested List[str]
     ## For each affected function, the declaration it names or calls on the way to
     ## a changed one (the next step of its path), in `affected` order.
     pub via List[(str, str)]
@@ -187,6 +189,22 @@ fn type_seeds(
         return id_and(id, also_reaches(id, known))
     touched
 
+## Whether a `@test` function (one of `tests`) is, or calls, `id` (ADR 1024, api.rev.11).
+fn reaches_test(id str, users Map[str, List[str]], tests Set[str]) bool
+    mut seen := Set[str]()
+    mut queue := [id]
+    mut at := 0
+    while at < queue.len()
+        cur := queue[at]
+        at += 1
+        if tests.contains(cur)
+            return true
+        for f in users.get(cur) else []
+            if not seen.contains(f)
+                seen.add(f)
+                queue.push(f)
+    false
+
 ## What changed between `old` and `new` can reach (api.impact.1-3).
 pub fn impact_between(
     old load.Loaded,
@@ -272,10 +290,24 @@ pub fn impact_between(
                 effects.push(EffectChange(id: id, old: was, new: now))
         elif now.len() > 0 and after.prog.fns[i].pos.line < 1073741824
             effects.push(EffectChange(id: id, old: [], new: now))
+    mut test_ids := Set[str]()
+    for i in 0..after.api.fn_ids.len()
+        if after.is_test(i)
+            test_ids.add(after.api.fn_ids[i])
+    mut untested := List[str]()
+    for i in 0..after.api.fn_ids.len()
+        id := after.api.fn_ids[i]
+        if not changed.contains(id) or id == "fn:main" or after.is_test(i)
+            continue
+        if after.prog.fns[i].pos.line >= 1073741824
+            continue
+        if not reaches_test(id, users, test_ids)
+            untested.push(id)
     Impact(
         changed: changed,
         affected: ordered,
         tests: tests,
+        untested: untested,
         effects: effects,
         via: via,
         reaches: reaches,

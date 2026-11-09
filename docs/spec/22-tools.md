@@ -753,6 +753,101 @@ fn main()
     print(missing)
 ```
 
+## Review of a change
+
+`ail review BASE..HEAD` summarises a change by meaning, in one budgeted report
+([ADR 1024](../decisions/1024-ail-review.md), which builds the Proposed
+[ADR 0894](../decisions/0894-effect-changes-in-ail-diff.md)). A reviewer, human
+or agent, judges a pull request from a few hundred tokens instead of reading its
+diff. It compares two versions the way `ail diff` does and reads them through the
+same checker graph as `ail ask`.
+
+**api.rev.1** — `ail review BASE..HEAD [PATH] [--budget N] [--json] [--deny-new]`
+compares `PATH` (a program file or a directory with `.ail` files at its top; default `.`) as git has it at revision `BASE` with `PATH` at
+`HEAD`, each copied out as `diff.out.5` does. `ail review --files OLD NEW` compares
+two files or two package directories instead. An argument that is not `BASE..HEAD`,
+an unknown revision or path and an unknown option are errors with status 2.
+
+**api.rev.2** — N is a positive number of tokens; a bare `--budget` and no
+`--budget` both mean 500.
+
+**api.rev.3** — The report has these sections, each of whole lines: `effects`,
+`api`, `contracts`, `perf` and `untested`; a section with no lines is left out.
+Within a section the lines that matter most come first (`NEW CAPABILITY`, then the
+rest; `BREAKING`, then the rest). The report keeps the longest prefix of its lines,
+in that order, that fits the budget, counted with the estimate of `ail api --card`
+(`api.card.3`). A line is never cut in the middle. When anything is cut, the last line
+says what: `cut: untested 2; --budget N shows all`, where N is the budget that
+shows everything. The output is the same for the same program and arguments.
+
+**api.rev.4** — The first line is always shown: `review RANGE: effects N (C new
+capability), api N (B breaking), contracts N, perf N, untested N`, with
+`; partial, a version has check errors` added when either version has check errors
+(it is then read as far as it resolves, as `api.impact.5` does). A version with
+syntax or load errors can't be compared: the errors are shown and the status is 2.
+
+**api.rev.5** — With `--json` the report is one object: `range`, `budget`, `needs`
+(the budget that shows everything), `new_capabilities`, `breaking`, `untested` (the
+counts), `partial`, `sections` (each shown section with the array of its lines) and
+`cut` (each section with lines left out, with their count).
+
+**api.rev.6** — The status is 0 when the report was printed. With `--deny-new` it is 1
+instead when `effects` has a `NEW CAPABILITY` line, so a gate without hosted CI
+([ADR 0085](../decisions/0085-interim-local-testing-gate.md)) can refuse a change that widens what
+a program can do. Status 2 is an error.
+
+**api.rev.7** — `effects` has a line `ID: +net -fs` for each function whose inferred
+effect set differs (`eff.infer.*`), callers that inherit the change included, since
+their sets differ too. A function that is `main` or `pub` and gains an effect widens
+what the program can do: its line starts `NEW CAPABILITY`.
+
+**api.rev.8** — `api` has one line for each public declaration that was added
+(`+ ID SIGNATURE`), removed (`- ID`) or changed (`~ ID: KEYS`), as
+`api.diff.1-3` find them. A line that can break a caller ends `BREAKING`, followed
+for an addition or a removal by the reason.
+
+**api.rev.9** — `contracts` has a line `ID requires: OLD -> NEW` or `ID ensures: OLD
+-> NEW` for each function or method whose precondition or postcondition differs or
+is new. `(none)` stands for an absent one.
+
+**api.rev.10** — `perf` has a line for each loop whose `ail perf --explain` verdict
+(ADR 1021) differs between the versions. It is
+empty until that command exists.
+
+**api.rev.11** — `untested` has the id of each changed or new function, other than
+`main` and `@test` functions, that no `@test` function reaches by calls or by
+naming it (`api.impact.2`).
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=CAPABILITY rules=api.rev.1,api.rev.4,api.rev.7
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--deny-new status=1 expect=CAPABILITY rules=api.rev.6
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=BREAKING rules=api.rev.3,api.rev.8
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=requires: rules=api.rev.9
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=fn:helper rules=api.rev.11
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--budget,1 status=0 expect=cut: rules=api.rev.2,api.rev.3
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--json status=0 expect="new_capabilities":1 rules=api.rev.5
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,old/a.ail status=0 expect=perf rules=api.rev.10
+```
+
+```ail pkg=review_pair tool=review,nosuch status=2 expect=BASE..HEAD rules=api.rev.1
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--budget,0 status=2 expect=positive rules=api.rev.2
+```
+
 ## Edit impact
 
 What an edit can break, from the same graph as `ail ask`

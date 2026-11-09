@@ -709,7 +709,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Accepted (built by [1020](1020-ail-context.md)) | 2026-10-24 |
 | [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed (planned, not implemented) | 2026-10-24 |
 | [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed (planned, not implemented) | 2026-10-24 |
-| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed (planned, not implemented) | 2026-10-24 |
+| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Accepted (built by [1024](1024-ail-review.md)) | 2026-10-24 |
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Accepted (built by [1023](1023-ail-infer-contracts.md)) | 2026-10-24 |
 | [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Proposed (planned, not implemented) | 2026-10-24 |
 | [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed (planned, not implemented) | 2026-10-24 |
@@ -795,4 +795,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1020](1020-ail-context.md) | `ail context`: a token-budgeted bundle for an edit; amends ADR 0891 *(delegated)* | Accepted | 2026-11-09 |
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
+| [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
