@@ -226,6 +226,17 @@ static void ev_screen(Ev *e) {
     ev_num(e, "screen_h", g.height);
     ev_num(e, "scale", gdk_monitor_get_scale_factor(m));
 }
+/* std.app.25, std.app.33: in edge mode the window has no title bar and the host's own controls sit
+   at the top-right, so `start` and `resize` carry what they take. */
+#define EDGE_CTL_W 138.0 /* three buttons of 46 points */
+#define EDGE_CTL_H 32.0
+static gboolean edge_mode = FALSE;
+static void ev_insets(Ev *e) {
+    if (!edge_mode) return;
+    ev_num(e, "inset_left", 0);
+    ev_num(e, "inset_top", EDGE_CTL_H);
+    ev_num(e, "inset_right", EDGE_CTL_W);
+}
 static void send_simple(const char *kind) { Ev e = ev_new(kind); ev_send(&e); }
 static void send_id(const char *kind, const char *id) { Ev e = ev_new(kind); ev_str(&e, "id", id); ev_send(&e); }
 
@@ -807,9 +818,14 @@ static void pointer_ev(const char *kind, GtkWidget *w, GdkEventButton *e) {
 
 /* std.app.27 (ADR 0983): `down` before `click`; GTK's implicit grab keeps the
    motion and the release on this canvas until the button is released. */
+/* The last press, for the `drag` line (std.app.25): GTK moves a window from a press. */
+static struct { guint button, time; gdouble x_root, y_root; gboolean valid; } last_press;
+
 static gboolean canvas_press(GtkWidget *w, GdkEventButton *e, gpointer d) {
     (void)d;
     if (e->type != GDK_BUTTON_PRESS) return TRUE;
+    last_press.button = e->button; last_press.time = e->time;
+    last_press.x_root = e->x_root; last_press.y_root = e->y_root; last_press.valid = TRUE;
     gtk_widget_grab_focus(w);
     pointer_ev("down", w, e);
     pointer_ev("click", w, e);
@@ -968,6 +984,7 @@ static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
     ev_num(&ev, "cell_w", cw);
     ev_num(&ev, "cell_h", ch);
     ev_screen(&ev);
+    ev_insets(&ev);
     ev_send(&ev);
 }
 
@@ -1211,8 +1228,75 @@ static void follow_dark(const Node *tree) {
     g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", want ? TRUE : FALSE, NULL);
 }
 
-static void show_view(const char *title, const char *focus, Node *tree) {
+static GtkWidget *overlay, *ctl_box, *grips[3];
+
+/* std.app.25: edge mode drops the title bar and shows the host's controls and resize edges. */
+static void set_edge(gboolean on) {
+    if (edge_mode == on) return;
+    edge_mode = on;
+    gtk_window_set_decorated(GTK_WINDOW(window), !on);
+    gtk_widget_set_visible(ctl_box, on);
+    for (int i = 0; i < 3; i++) gtk_widget_set_visible(grips[i], on);
+    g_hash_table_remove_all(reported); /* the next size-allocate sends `resize` with the insets */
+}
+
+static void on_minimize(GtkButton *b, gpointer d) { (void)b; (void)d; gtk_window_iconify(GTK_WINDOW(window)); }
+static void toggle_max(void) {
+    if (gtk_window_is_maximized(GTK_WINDOW(window))) gtk_window_unmaximize(GTK_WINDOW(window));
+    else gtk_window_maximize(GTK_WINDOW(window));
+}
+static void on_maximize(GtkButton *b, gpointer d) { (void)b; (void)d; toggle_max(); }
+static void on_close(GtkButton *b, gpointer d) { (void)b; (void)d; gtk_window_close(GTK_WINDOW(window)); }
+
+static gboolean on_grip(GtkWidget *w, GdkEventButton *e, gpointer edge) {
+    (void)w;
+    if (e->type != GDK_BUTTON_PRESS || e->button != 1 || gtk_window_is_maximized(GTK_WINDOW(window))) return FALSE;
+    gtk_window_begin_resize_drag(GTK_WINDOW(window), (GdkWindowEdge)GPOINTER_TO_INT(edge), e->button, (gint)e->x_root, (gint)e->y_root, e->time);
+    return TRUE;
+}
+
+/* The overlay holds the app's content, the controls at the top-right (46 by 32 points each) and
+   thin edges that resize an undecorated window. Both stay hidden outside edge mode. */
+static void build_edge_chrome(void) {
+    overlay = gtk_overlay_new();
+    gtk_container_add(GTK_CONTAINER(window), overlay);
+    ctl_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    const char *icons[3] = { "window-minimize-symbolic", "window-maximize-symbolic", "window-close-symbolic" };
+    GCallback cbs[3] = { G_CALLBACK(on_minimize), G_CALLBACK(on_maximize), G_CALLBACK(on_close) };
+    for (int i = 0; i < 3; i++) {
+        GtkWidget *b = gtk_button_new_from_icon_name(icons[i], GTK_ICON_SIZE_MENU);
+        gtk_button_set_relief(GTK_BUTTON(b), GTK_RELIEF_NONE);
+        gtk_widget_set_size_request(b, (int)(EDGE_CTL_W / 3), (int)EDGE_CTL_H);
+        gtk_widget_set_can_focus(b, FALSE);
+        g_signal_connect(b, "clicked", cbs[i], NULL);
+        gtk_box_pack_start(GTK_BOX(ctl_box), b, FALSE, FALSE, 0);
+    }
+    gtk_widget_set_halign(ctl_box, GTK_ALIGN_END);
+    gtk_widget_set_valign(ctl_box, GTK_ALIGN_START);
+    gtk_widget_set_no_show_all(ctl_box, TRUE);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), ctl_box);
+    /* left, right and bottom edges, 5 points wide */
+    GtkAlign ha[3] = { GTK_ALIGN_START, GTK_ALIGN_END, GTK_ALIGN_FILL };
+    GtkAlign va[3] = { GTK_ALIGN_FILL, GTK_ALIGN_FILL, GTK_ALIGN_END };
+    GdkWindowEdge ed[3] = { GDK_WINDOW_EDGE_WEST, GDK_WINDOW_EDGE_EAST, GDK_WINDOW_EDGE_SOUTH };
+    for (int i = 0; i < 3; i++) {
+        GtkWidget *g = gtk_event_box_new();
+        gtk_event_box_set_visible_window(GTK_EVENT_BOX(g), FALSE);
+        gtk_widget_add_events(g, GDK_BUTTON_PRESS_MASK);
+        gtk_widget_set_size_request(g, i < 2 ? 5 : -1, i < 2 ? -1 : 5);
+        gtk_widget_set_halign(g, ha[i]);
+        gtk_widget_set_valign(g, va[i]);
+        gtk_widget_set_no_show_all(g, TRUE);
+        g_signal_connect(g, "button-press-event", G_CALLBACK(on_grip), GINT_TO_POINTER(ed[i]));
+        gtk_overlay_add_overlay(GTK_OVERLAY(overlay), g);
+        grips[i] = g;
+    }
+    gtk_widget_show_all(overlay);
+}
+
+static void show_view(const char *title, const char *focus, Node *tree, gboolean want_edge) {
     gtk_window_set_title(GTK_WINDOW(window), title);
+    set_edge(want_edge && edge(tree));
     sync_fields(tree);
     follow_dark(tree);
     if (current && same_shape(current, tree)) {
@@ -1229,7 +1313,7 @@ static void show_view(const char *title, const char *focus, Node *tree) {
         edge_tree = edge(tree);
         gtk_container_set_border_width(GTK_CONTAINER(window), edge_tree ? 0 : 8);
         content = build(tree);
-        gtk_container_add(GTK_CONTAINER(window), content);
+        gtk_container_add(GTK_CONTAINER(overlay), content);
         gtk_widget_show_all(content);
         if (fid) {
             GtkWidget *w = g_hash_table_lookup(by_id, fid);
@@ -1321,6 +1405,13 @@ static void handle_line(const char *line) {
     } else if (!strcmp(t, "clipboard")) {
         /* std.app.26 (ADR 0982): the app puts text on the system clipboard. */
         gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), jstr(obj, "text"), -1);
+    } else if (!strcmp(t, "drag") || !strcmp(t, "zoom")) {
+        /* std.app.25: the app's own strip moves the window (a press began it) or toggles maximise. */
+        if (edge_mode && !strcmp(t, "zoom")) toggle_max();
+        else if (edge_mode && last_press.valid) {
+            last_press.valid = FALSE;
+            gtk_window_begin_move_drag(GTK_WINDOW(window), (gint)last_press.button, (gint)last_press.x_root, (gint)last_press.y_root, last_press.time);
+        }
     } else if (!strcmp(t, "pick")) {
         /* std.app.22: no native chooser on this host yet; say so rather than hang. */
         Ev e = ev_new("pick_error");
@@ -1340,10 +1431,10 @@ static void handle_line(const char *line) {
         JVal *title = jget(obj, "title");
         hover_on = jflag(obj, "hover");
         Node *tree = decode_node(jget(obj, "tree"));
-        show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree);
+        show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree, jflag(obj, "edge"));
         if (!started) {
             started = TRUE;
-            { Ev se = ev_new("start"); ev_screen(&se); ev_send(&se); }
+            { Ev se = ev_new("start"); ev_screen(&se); ev_insets(&se); ev_send(&se); }
             send_appearance();
             watch_appearance();
         }
@@ -1404,6 +1495,7 @@ int main(int argc, char **argv) {
     gtk_container_set_border_width(GTK_CONTAINER(window), 8);
     g_signal_connect(window, "delete-event", G_CALLBACK(on_delete), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    build_edge_chrome();
     gtk_widget_show(window);
 
     GIOChannel *in = g_io_channel_unix_new(0);

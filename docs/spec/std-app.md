@@ -174,6 +174,15 @@ there. A host that cannot hide its title bar keeps its decorations and
 reports both insets as `0`, so a program must not depend on edge mode.
 *(ADR 0981)*
 
+**std.app.33** — While `edge` is `true` (std.app.25), `start` and every
+`resize` also carry `inset_right` (float, points): the room the host's
+window controls take at the window's top-right, `0` when it draws none
+there. `Event.inset_right` is `0.0` for every other kind and when the host
+omits it. A host with its controls on the right (Windows, Linux) reports
+`inset_right` and an `inset_left` of `0`; the macOS host reports
+`inset_left` and `0`. An app keeps its strip between `inset_left` and
+`width - inset_right`. *(ADR 1033, amends ADR 0981)*
+
 **std.app.26** — An app puts text on the system clipboard by sending the
 line `{"v":1,"t":"clipboard","text":T}` through `lines()` (std.app.21);
 `app.clipboard(text)` is that line. The host copies `T` exactly as given
@@ -400,6 +409,37 @@ impl app.App for Themed
     print(app.step(mut t, ev))
     ev.text = "light"
     print(app.step(mut t, ev))
+```
+
+```ail rules=std.app.33
+use std.app
+
+## A tab strip that stops left of the window controls on the right.
+struct Tabs
+    room float
+
+impl app.App for Tabs
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            room = ev.dx - ev.inset_right
+
+    fn view(self) app.Node
+        app.canvas("tabs", 0.0, 0.0, [app.draw_rect(0.0, 0.0, room, 32.0, 0x202124)])
+
+    fn edge(self) bool
+        true
+
+fn main()
+    mut t := Tabs(room: 0.0)
+    mut r := app.event("resize")
+    r.dx = 1000.0
+    r.inset_right = 138.0
+    r.inset_top = 32.0
+    t.update(r)
+    print(app.outline(t.view()))
+    j := parse_json("\{\"kind\":\"resize\",\"dx\":900,\"inset_right\":138}") else Json.Null
+    print(app.event_from_json(j).inset_right)
+    print(app.event("start").inset_right)
 ```
 
 ```ail rules=std.app.27

@@ -471,6 +471,162 @@ static class Fonts
     }
 }
 
+// ---- Edge mode (std.app.25, std.app.33) ---------------------------------
+
+/// What the host tells the app about its window controls while the app asks for edge mode:
+/// three 46 x 32 point buttons at the top-right, so 138 points of room on the right.
+static class EdgeMode
+{
+    public static bool On;
+    public const double Right = 138, Top = 32;
+
+    /// The `inset_*` members of `start` and `resize`; none outside edge mode (they read as 0).
+    public static object[] Insets()
+    {
+        if (!On) return new object[0];
+        return new object[] { "inset_left", 0.0, "inset_top", Top, "inset_right", Right };
+    }
+
+    public static object[] Cat(object[] a, object[] b)
+    {
+        var l = new List<object>(a);
+        l.AddRange(b);
+        return l.ToArray();
+    }
+}
+
+/// Minimise, maximise or restore, and close, drawn in the Windows 11 style at the window's top-right
+/// while the app owns the title bar (std.app.33). Glyphs come from Segoe Fluent Icons (Segoe MDL2
+/// Assets before Windows 11), or are drawn as lines when neither is installed.
+class CaptionButtons : Control
+{
+    readonly Form form;
+    readonly Look look;
+    readonly string iconFont;
+    readonly float scale;
+    readonly int bw, bh;
+    int hot = -1, down = -1;
+
+    static readonly char[] Glyphs = { '', '', '', '' }; // minimise, maximise, restore, close
+
+    public CaptionButtons(Form f, Look l)
+    {
+        form = f;
+        look = l;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        TabStop = false;
+        scale = (float)Dpi.Scale;
+        bw = Dpi.Px(46);
+        bh = Dpi.Px(32);
+        Size = new Size(bw * 3, bh);
+        Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        BackColor = l.Bg;
+        iconFont = FindIconFont();
+    }
+
+    static string FindIconFont()
+    {
+        using (var fc = new InstalledFontCollection())
+        {
+            foreach (string want in new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" })
+                foreach (FontFamily ff in fc.Families) if (ff.Name == want) return want;
+        }
+        return null;
+    }
+
+    int At(Point p) { return p.X < 0 || p.X >= Width || p.Y < 0 || p.Y >= Height ? -1 : p.X / bw; }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int i = At(e.Location);
+        if (i != hot) { hot = i; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        hot = -1;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button == MouseButtons.Left) { down = At(e.Location); Invalidate(); }
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        int i = At(e.Location), was = down;
+        down = -1;
+        Invalidate();
+        if (e.Button != MouseButtons.Left || i < 0 || i != was) return;
+        if (i == 0) form.WindowState = FormWindowState.Minimized;
+        else if (i == 1) form.WindowState = form.WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+        else form.Close();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.Clear(look.Bg);
+        bool max = form.WindowState == FormWindowState.Maximized;
+        for (int i = 0; i < 3; i++)
+        {
+            var cell = new Rectangle(i * bw, 0, bw, bh);
+            Color glyph = look.Fg;
+            if (i == hot || i == down)
+            {
+                bool press = i == down && i == hot;
+                if (i == 2)
+                {
+                    using (var b = new SolidBrush(Color.FromArgb(press ? 230 : 255, 0xC4, 0x2B, 0x1C))) g.FillRectangle(b, cell);
+                    glyph = Color.White;
+                }
+                else using (var b = new SolidBrush(Color.FromArgb(press ? 15 : 26, look.Fg))) g.FillRectangle(b, cell);
+            }
+            DrawGlyph(g, cell, i == 1 && max ? 2 : i == 2 ? 3 : i, glyph);
+        }
+    }
+
+    /// `kind`: 0 minimise, 1 maximise, 2 restore, 3 close.
+    void DrawGlyph(Graphics g, Rectangle cell, int kind, Color c)
+    {
+        if (iconFont != null)
+        {
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            using (var f = new Font(iconFont, 10f, FontStyle.Regular, GraphicsUnit.Point))
+            using (var b = new SolidBrush(c))
+            using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                g.DrawString(Glyphs[kind].ToString(), f, b, cell, fmt);
+            return;
+        }
+        // No icon font: lines, 10 points across, one device pixel wide.
+        int s = (int)Math.Round(10 * scale) , cx = cell.X + cell.Width / 2, cy = cell.Y + cell.Height / 2;
+        int x0 = cx - s / 2, y0 = cy - s / 2;
+        using (var p = new Pen(c, 1f))
+        {
+            g.SmoothingMode = SmoothingMode.None;
+            if (kind == 0) g.DrawLine(p, x0, cy, x0 + s, cy);
+            else if (kind == 1) g.DrawRectangle(p, x0, y0, s, s);
+            else if (kind == 2)
+            {
+                int d = (int)Math.Round(2 * scale);
+                g.DrawRectangle(p, x0, y0 + d, s - d, s - d);
+                g.DrawLines(p, new[] { new Point(x0 + d, y0 + d), new Point(x0 + d, y0), new Point(x0 + s, y0), new Point(x0 + s, y0 + s - d), new Point(x0 + s - d, y0 + s - d) });
+            }
+            else
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.DrawLine(p, x0, y0, x0 + s, y0 + s);
+                g.DrawLine(p, x0 + s, y0, x0, y0 + s);
+            }
+        }
+    }
+}
+
 class CanvasView : Control
 {
     public string CanvasId = "";
@@ -510,7 +666,7 @@ class CanvasView : Control
             reported = Size;
             double cw, ch;
             CellMetrics(out cw, out ch);
-            Outbox.Send("resize", "id", CanvasId, "dx", Width / Dpi.Scale, "dy", Height / Dpi.Scale, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
+            Outbox.Send("resize", EdgeMode.Cat(new object[] { "id", CanvasId, "dx", Width / Dpi.Scale, "dy", Height / Dpi.Scale, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale }, EdgeMode.Insets()));
         }
     }
 
@@ -693,11 +849,28 @@ class CanvasView : Control
 
     // std.app.27 (ADR 0983): `down` before `click`, `up` on release, `move` while held;
     // Capture keeps them on this canvas until the button is released.
+    /// The canvas whose pressed button has not been released yet, and which button (for `BeginDrag`).
+    public static CanvasView Held;
+    MouseButtons heldButton;
+
+    /// The window manager took over a press (a window drag from the app's strip) and swallowed the
+    /// release, so say it to the app: its `down` needs an `up` (std.app.27).
+    public void ReleaseHeld()
+    {
+        if (Held != this) return;
+        Held = null;
+        Capture = false;
+        Point p = PointToClient(Cursor.Position);
+        Outbox.Send("up", ModArgs("id", CanvasId, "x", p.X / Dpi.Scale, "y", p.Y / Dpi.Scale, "text", ButtonName(heldButton), "clicks", 0));
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
         Focus();
         Capture = true;
+        Held = this;
+        heldButton = e.Button;
         Outbox.Send("down", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
         Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
     }
@@ -706,6 +879,7 @@ class CanvasView : Control
     {
         base.OnMouseUp(e);
         Capture = false;
+        if (Held == this) Held = null;
         Outbox.Send("up", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", 0));
     }
 
@@ -935,6 +1109,18 @@ class HostForm : Form
     readonly Dictionary<string, Control> byId = new Dictionary<string, Control>();
     readonly List<Control> leaves = new List<Control>();
     Look look = Look.From(new Node());
+    CaptionButtons caption; // only in edge mode (std.app.25, std.app.33)
+
+    const int WM_NCCALCSIZE = 0x0083, WM_NCHITTEST = 0x0084, WM_NCLBUTTONDOWN = 0x00A1;
+    const int HTCLIENT = 1, HTCAPTION = 2, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14;
+    const int SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
+    const int GRIP = 6; // the top edge that still resizes while the app owns the title bar
+    const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_FRAMECHANGED = 0x20;
+
+    [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] static extern bool ReleaseCapture();
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
 
     [DllImport("dwmapi.dll")]
     static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -989,7 +1175,7 @@ class HostForm : Form
             if (current != null)
             {
                 shape = ""; // rebuild the controls at the new scale
-                ShowView(Text, "", current, Dpi.Hover);
+                ShowView(Text, "", current, Dpi.Hover, EdgeMode.On);
             }
             foreach (Control c in byId.Values)
             {
@@ -998,7 +1184,7 @@ class HostForm : Form
             }
             return;
         }
-        base.WndProc(ref m);
+        EdgeProc(ref m);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1020,6 +1206,66 @@ class HostForm : Form
         }
         catch (DllNotFoundException) { }
         catch (EntryPointNotFoundException) { }
+    }
+
+    /// Edge mode keeps the frame (shadow, snapping, resize edges, rounded corners) but gives the client
+    /// area the title bar's room: WM_NCCALCSIZE leaves the top at the window's top.
+    void EdgeProc(ref Message m)
+    {
+        if (EdgeMode.On && m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
+        {
+            int top = Marshal.ReadInt32(m.LParam, 4); // rgrc[0].top: left, top, right, bottom
+            base.WndProc(ref m);
+            int inset = WindowState == FormWindowState.Maximized ? GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER) : 0;
+            Marshal.WriteInt32(m.LParam, 4, top + inset);
+            return;
+        }
+        base.WndProc(ref m);
+        if (EdgeMode.On && m.Msg == WM_NCHITTEST && (int)m.Result == HTCLIENT && WindowState == FormWindowState.Normal)
+        {
+            long l = m.LParam.ToInt64();
+            Point p = PointToClient(new Point((short)(l & 0xffff), (short)((l >> 16) & 0xffff)));
+            if (p.Y >= 0 && p.Y < GRIP)
+            {
+                int right = ClientSize.Width - (caption != null ? caption.Width : 0);
+                if (p.X < GRIP) m.Result = (IntPtr)HTTOPLEFT;
+                else if (p.X >= ClientSize.Width - GRIP) m.Result = (IntPtr)HTTOPRIGHT;
+                else if (p.X < right) m.Result = (IntPtr)HTTOP; // the buttons keep their top rows
+            }
+        }
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (caption != null) caption.Invalidate(); // maximise or restore glyph
+    }
+
+    void SetEdge(bool on)
+    {
+        if (EdgeMode.On == on) return;
+        EdgeMode.On = on;
+        // Make Windows ask for the client area again, with or without the title bar.
+        if (IsHandleCreated)
+            SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    /// `{"t":"drag"}` (std.app.25): the press in the app's strip moves the window, as a title bar would.
+    public void BeginDrag()
+    {
+        CanvasView held = CanvasView.Held;
+        if (held != null && (Control.MouseButtons & MouseButtons.Left) != 0)
+        {
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        }
+        if (held != null) held.ReleaseHeld();
+    }
+
+    /// `{"t":"zoom"}`: maximise, or restore.
+    public void Zoom()
+    {
+        WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -1052,18 +1298,19 @@ class HostForm : Form
         Outbox.Send("appearance", "text", now);
     }
 
-    public void ShowView(string title, string focus, Node tree, bool hover)
+    public void ShowView(string title, string focus, Node tree, bool hover, bool edge)
     {
         Dpi.Hover = hover;
         Text = title;
+        SetEdge(edge && Look.Edge(tree));
         Look next = Look.From(tree);
-        string s = tree.Shape() + "|" + next.Key();
+        string s = tree.Shape() + "|" + next.Key() + (EdgeMode.On ? "|edge" : "");
         string wantFocus = focus;
         // The first line to the program is `start`, ahead of any `resize` the layout causes.
         if (!started)
         {
             started = true;
-            Outbox.Send("start", "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
+            Outbox.Send("start", EdgeMode.Cat(new object[] { "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale }, EdgeMode.Insets()));
             SendAppearance();
             Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate { SendAppearance(); };
         }
@@ -1086,6 +1333,14 @@ class HostForm : Form
             Control root = Build(tree, true);
             root.Dock = DockStyle.Fill;
             Controls.Add(root);
+            caption = null;
+            if (EdgeMode.On)
+            {
+                caption = new CaptionButtons(this, look);
+                caption.Location = new Point(ClientSize.Width - caption.Width, 0);
+                Controls.Add(caption);
+                caption.BringToFront();
+            }
             ResumeLayout(true);
             shape = s;
         }
@@ -1335,6 +1590,8 @@ static class Program
                     form.BeginInvoke((Action)delegate { try { if (t.Length > 0) Clipboard.SetText(t); else Clipboard.Clear(); } catch (Exception) { } });
                     continue;
                 }
+                if (kind == "drag") { form.BeginInvoke((Action)form.BeginDrag); continue; }
+                if (kind == "zoom") { form.BeginInvoke((Action)form.Zoom); continue; }
                 if (kind == "measure") { AnswerMeasure(Json.Get(obj, "runs") as List<object> ?? new List<object>()); continue; }
                 if (kind != "view") continue;
                 if (first)
@@ -1349,8 +1606,9 @@ static class Program
                 string title = Json.Text(Json.Get(obj, "title"));
                 string focus = Json.Text(Json.Get(obj, "focus"));
                 bool hover = Json.Flag(Json.Get(obj, "hover"));
+                bool edge = Json.Flag(Json.Get(obj, "edge"));
                 Node tree = Node.Decode(Json.Get(obj, "tree"));
-                form.BeginInvoke((Action)delegate { form.ShowView(title.Length > 0 ? title : "AIL", focus, tree, hover); });
+                form.BeginInvoke((Action)delegate { form.ShowView(title.Length > 0 ? title : "AIL", focus, tree, hover, edge); });
             }
             form.BeginInvoke((Action)delegate { Application.Exit(); });
         });

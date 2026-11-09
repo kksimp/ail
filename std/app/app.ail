@@ -257,6 +257,9 @@ pub struct Event
     ## For `measured`: the font family the host used for each run, joined
     ## by commas; empty from a host that does not say (std.app.28).
     pub fonts str
+    ## For `start` and `resize` in edge mode: the room the window controls
+    ## take at the top-right, `0` when none are there (std.app.33).
+    pub inset_right float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono`, `sans`, `serif`, `web:` and a `Font` id, or a CSS
@@ -387,6 +390,7 @@ pub fn event(kind str) Event
         screen_h: 0.0,
         scale: 0.0,
         fonts: "",
+        inset_right: 0.0,
     )
 
 ## The families of a CSS `font-family` list, in order, unquoted and trimmed
@@ -585,6 +589,7 @@ pub fn event_from_json(j Json) Event
         screen_h: j.num("screen_h") else 0.0,
         scale: j.num("scale") else 0.0,
         fonts: j.text("fonts", ""),
+        inset_right: j.num("inset_right") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.
