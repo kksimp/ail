@@ -127,6 +127,21 @@ static class Json
 
 // ---- Protocol ------------------------------------------------------------
 
+/// std.app.31 (ADR 1017): the primary display's size in points and its scale.
+static class ScreenInfo
+{
+    public static double W { get { return Screen.PrimaryScreen.Bounds.Width * 96.0 / Dpi; } }
+    public static double H { get { return Screen.PrimaryScreen.Bounds.Height * 96.0 / Dpi; } }
+    public static double Scale { get { return Dpi / 96.0; } }
+    static double Dpi
+    {
+        get
+        {
+            using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) return g.DpiX;
+        }
+    }
+}
+
 /// Writes events to standard output, one JSON object per line (std.app.8).
 static class Outbox
 {
@@ -353,7 +368,7 @@ class CanvasView : Control
             reported = Size;
             double cw, ch;
             CellMetrics(out cw, out ch);
-            Outbox.Send("resize", "id", CanvasId, "dx", Width, "dy", Height, "cell_w", cw, "cell_h", ch);
+            Outbox.Send("resize", "id", CanvasId, "dx", Width, "dy", Height, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
         }
     }
 
@@ -708,7 +723,7 @@ class HostForm : Form
         if (!started)
         {
             started = true;
-            Outbox.Send("start");
+            Outbox.Send("start", "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
         }
         if (s != shape)
         {
