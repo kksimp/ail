@@ -55,7 +55,7 @@ fn Lower.chan_deadlock_check(mut self, r int, pos ast.Pos)
     seal(cont)
     cur = cont
 
-## `send`, `recv` and `close` on a channel.
+## `send`, `recv`, `try_recv`, `recv_for` and `close` on a channel.
 fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.mutable or a.label != none
@@ -74,6 +74,16 @@ fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[a
         r := call("rt.chan_recv", [ch.id], t)
         chan_deadlock_check(r, npos)
         return Val(id: r, ty: t)
+    # conc.share.8: a receive that never waits, or waits at most `ms` milliseconds.
+    if name == "try_recv" and args.len() == 0
+        t := Ty.Opt(chan_elem(ch.ty) else Ty.Str)
+        return Val(id: call("rt.chan_try_recv", [ch.id], t), ty: t)
+    if name == "recv_for" and args.len() == 1
+        t := Ty.Opt(chan_elem(ch.ty) else Ty.Str)
+        ms := lower_value(args[0].value, Ty.Int)?
+        if ms.ty != Ty.Int
+            return unsupported(npos, "`recv_for` of `{ms.ty.name()}`")
+        return Val(id: call("rt.chan_recv_for", [ch.id, ms.id], t), ty: t)
     if name == "close" and args.len() == 0
         msg := call("rt.chan_close", [ch.id], Ty.Int)
         tensor_trap_if(msg, "conc.share.4", npos)

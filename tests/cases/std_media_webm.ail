@@ -77,6 +77,7 @@ fn main() !
     print(ready_at)
     print(d.consumed == file.len())
     print([show(f) for f in got] == [show(f) for f in m.frames])
+    print((d.track(2)?).codec)
     lm := webm.read(laced())?
     for f in lm.frames
         print("{f.track} {f.ns / 1000000} {f.key} {f.data.len()}")

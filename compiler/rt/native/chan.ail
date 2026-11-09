@@ -1,8 +1,8 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `Channel[str]` (native.chan.1, conc.share.3-4, conc.share.7, conc.select.1; ADR 0599). A
-## channel is a record of ten words (heap kind 13, scanned conservatively),
+## `Channel[str]` (native.chan.1, conc.share.3-4, conc.share.7-8, conc.select.1; ADR 0599,
+## ADR 0996). A channel is a record of ten words (heap kind 13, scanned conservatively),
 ## and a value is the record's address; a copy of the handle is the same
 ## channel. The queue is a ring of string pointers. All fields are guarded by
 ## the record's lock word; a thread that must wait releases the lock and
@@ -204,20 +204,27 @@ fn chan_send(ch int, v int) int
             return chan_fault()
     0
 
+## Holding the lock: take the oldest value, or 0 when none is queued.
+fn chan_take(ch int) int
+    n := load64(ch + C_COUNT)
+    if n == 0
+        return 0
+    head := load64(ch + C_HEAD)
+    ring := load64(ch + C_RING)
+    v := load64(ring + 8 * head)
+    store64(ring + 8 * head, 0)
+    store64(ch + C_HEAD, (head + 1) % load64(ch + C_RCAP))
+    store64(ch + C_COUNT, n - 1)
+    chan_wake(ch)
+    v
+
 ## `ch.recv()`: the oldest value, or 0 once the channel is closed and empty.
 fn chan_recv(ch int) int
     det_yield()
     lock(ch + C_LOCK)
     while true
-        n := load64(ch + C_COUNT)
-        if n > 0
-            head := load64(ch + C_HEAD)
-            ring := load64(ch + C_RING)
-            v := load64(ring + 8 * head)
-            store64(ring + 8 * head, 0)
-            store64(ch + C_HEAD, (head + 1) % load64(ch + C_RCAP))
-            store64(ch + C_COUNT, n - 1)
-            chan_wake(ch)
+        v := chan_take(ch)
+        if v != 0
             unlock(ch + C_LOCK)
             race_acquire(ch)
             return v
@@ -231,6 +238,64 @@ fn chan_recv(ch int) int
         elif chan_sleep(ch, "a value from a channel")
             unlock(ch + C_LOCK)
             return 0
+    0
+
+## `ch.try_recv()` (conc.share.8, ADR 0996): the oldest value if one is queued
+## now, else 0; it never waits. A child's output is read first, without waiting.
+fn chan_try_recv(ch int) int
+    det_yield()
+    if load64(ch + C_SOURCE) != 0
+        chan_ready(ch)
+    lock(ch + C_LOCK)
+    v := chan_take(ch)
+    unlock(ch + C_LOCK)
+    if v != 0
+        race_acquire(ch)
+    v
+
+## `ch.recv_for(ms)` (conc.share.8): as `recv`, but 0 once `ms` milliseconds
+## pass with no value. A timed wait is never a deadlock (conc.task.7), so it
+## isn't counted among the blocked threads. Under `--deterministic` no time
+## passes: it waits as `recv` does, and where `recv` would find a deadlock the
+## time is up instead.
+fn chan_recv_for(ch int, ms int) int
+    det_yield()
+    end := time_mono_ms() + (if ms < 0 then 0 else ms)
+    lock(ch + C_LOCK)
+    while true
+        v := chan_take(ch)
+        if v != 0
+            unlock(ch + C_LOCK)
+            race_acquire(ch)
+            return v
+        left := end - time_mono_ms()
+        # A deterministic run has no clock: only a wait of no time is up at once.
+        up := if det_on() then ms <= 0 else left <= 0
+        if load64(ch + C_CLOSED) != 0 or task_cancelled() or up
+            unlock(ch + C_LOCK)
+            return 0
+        if det_on() and load64(ch + C_SOURCE) == 0
+            if chan_sleep(ch, "a value from a channel")
+                # Nothing else can run: the time is up, and no deadlock is reported.
+                chan_fault()
+                unlock(ch + C_LOCK)
+                return 0
+        elif load64(ch + C_SOURCE) != 0
+            unlock(ch + C_LOCK)
+            chan_pump_ms(ch, left)
+            lock(ch + C_LOCK)
+        else
+            w := load64(ch + C_WAKE)
+            task_block_on(ch)
+            unlock(ch + C_LOCK)
+            k := worker_index()
+            if k >= 0
+                wait_enter()
+            futex_wait_timed(ch + C_WAKE, w, left)
+            if k >= 0
+                wait_leave()
+            task_block_on(0)
+            lock(ch + C_LOCK)
     0
 
 ## `ch.close()`: 0, or the message of the trap when it was closed already.

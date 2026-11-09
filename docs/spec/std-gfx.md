@@ -69,7 +69,31 @@ listener on (`attach.wire.1`), for a game that implements `attach.Observe`.
 observe` gives the game's observed values and `gfx.cmds`, `gfx.fills`,
 `gfx.lines` and `gfx.texts` of the last frame. *(ADR 0979)*
 
+**std.gfx.11** — `Input.pads` holds the connected gamepads (`pad(i, n)` is
+gamepad `n`, or `no_pad()`). A `Pad` has `buttons`, `pressed` and `released`
+(bit sets of `pad_bit(name)`: `a` 1, `b` 2, `x` 4, `y` 8, `lb` 16, `rb` 32,
+`back` 64, `start` 128, `l3` 256, `r3` 512, `up` 1024, `down` 2048, `left`
+4096, `right` 8192), sticks `lx`, `ly`, `rx`, `ry` from -1.0 to 1.0 (right and
+up are positive) and triggers `lt`, `rt` from 0.0 to 1.0. `pad_down`,
+`pad_pressed` and `pad_released` ask about one button. The host sends the
+event `pad` (`id` the gamepad's number, `text` the state `buttons,lx,ly,rx,ry,
+lt,rt`, empty when disconnected) when a gamepad's state changes, and
+`pad_event(n, state)` makes one for a test. The macOS host reads gamepads with
+GameController; a host that can't (Linux and Windows hosts today) sends no
+`pad` event, so `Input.pads` stays empty and every pad reads as `no_pad()`: a game
+must not need a gamepad. *(ADR 0985)*
+
 ## Examples
+
+```ail rules=std.gfx.11
+use std.gfx
+
+fn main()
+    i := gfx.next_input(gfx.idle(), [gfx.pad_event(0, "1,0.5,-0.5,0,0,0,1.0")])
+    print(gfx.pad_down(i, 0, "a"))
+    print(gfx.pad(i, 0).lx)
+    print(gfx.pad(i, 3).buttons == gfx.no_pad().buttons)
+```
 
 ```ail rules=std.gfx.1,std.gfx.2,std.gfx.3,std.gfx.4,std.gfx.5
 use std.app

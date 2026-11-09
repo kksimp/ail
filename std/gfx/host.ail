@@ -187,6 +187,7 @@ impl app.App for Loop[T gfx.Game]
             or ev.kind == "click"
             or ev.kind == "move"
             or ev.kind == "scroll"
+            or ev.kind == "pad"
             pending.push(ev)
 
     fn view(self) app.Node

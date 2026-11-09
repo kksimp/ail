@@ -1,0 +1,44 @@
+## `fs.scan_count` (std.fs.27, ADR 0992): zero before any scan; read from another
+## task while scans run it never goes down; afterwards it has grown by exactly the
+## entries and allocated bytes the scans listed.
+fn watch(done Atomic[int]) bool
+    mut last := fs.scan_count()
+    mut ok := true
+    while done.load() == 0
+        c := fs.scan_count()
+        if c.entries < last.entries or c.bytes < last.bytes
+            ok = false
+        last = c
+    ok
+
+fn main()
+    root := env.get("AIL_TEST_DIR") else return
+    base := "{root}/count"
+    z := fs.scan_count()
+    print("before {z.entries} {z.bytes}")
+    for d in ["a", "a/b", "c"]
+        fs.make_dir("{base}/{d}") else return
+    for f in ["a/1.txt", "a/b/2.txt", "c/3.txt", "4.txt"]
+        fs.write_text("{base}/{f}", "x".repeat(5000)) else return
+    done := Atomic(0)
+    t := spawn watch(done)
+    mut entries := 0
+    mut total := 0
+    for _ in 0..50
+        s := fs.scan(base, true) else err
+            print("failed {err.kind}")
+            break
+        entries += s.entries.len()
+        for e in s.entries
+            total += e.alloc
+    done.store(1)
+    rising := t.wait() else false
+    c := fs.scan_count()
+    print("never fell {rising}")
+    print("entries {c.entries == entries} {c.entries}")
+    print("bytes {c.bytes == total} {total > 0}")
+    for f in ["a/1.txt", "a/b/2.txt", "c/3.txt", "4.txt"]
+        fs.remove("{base}/{f}") else return
+    for d in ["a/b", "a", "c"]
+        fs.remove("{base}/{d}") else return
+    fs.remove(base) else return

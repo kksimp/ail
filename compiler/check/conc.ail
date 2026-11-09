@@ -114,7 +114,11 @@ fn Checker.conc_method(mut self, kind str, t Ty, n str, at ast.Pos, given List[a
         ret = Ty.Res(Ty.Unit, Errs.ErrSet([trapped]))
     elif kind == "Channel" and n == "send"
         params = [t]
-    elif kind == "Channel" and n == "recv"
+    elif kind == "Channel" and (n == "recv" or n == "try_recv")
+        ret = Ty.Opt(t)
+    elif kind == "Channel" and n == "recv_for"
+        # conc.share.8: waits at most this many milliseconds.
+        params = [Ty.Int]
         ret = Ty.Opt(t)
     elif kind == "Channel" and n == "close"
         ret = Ty.Unit
@@ -155,7 +159,7 @@ fn conc_methods(kind str, t Ty) str
     if kind == "TaskGroup"
         return "`add`, `wait_all` and `cancel`"
     if kind == "Channel"
-        return "`send`, `recv` and `close`"
+        return "`send`, `recv`, `try_recv`, `recv_for` and `close`"
     if kind == "Mutex"
         return "`get`, `set`, `swap`, `lock` and `unlock`"
     if t == Ty.Int
@@ -360,3 +364,46 @@ fn Checker.atomic_inner(mut self, t Ty, at ast.Pos) bool
         "share other values through a `Mutex`, e.g. `Mutex(value)`",
     )
     false
+
+## ---- `TaskGroup` fields (conc.task.10, ADR 0996) ----
+
+@allow("expr.match.3") fn is_group(t Ty) bool
+    match t
+        Conc(k, _) => k == "TaskGroup"
+        _ => false
+
+## A `TaskGroup` field: only in a `unique` struct, whose one release waits for
+## the group's tasks, so none is left unwaited (conc.task.5).
+fn Checker.group_field(mut self, t Ty, at ast.Pos, owner str)
+    if is_group(t)
+        err_help(
+            "conc.task.10",
+            at,
+            "a `TaskGroup` field makes `{owner}` unique: its release waits for the group's tasks",
+            "declare it `unique struct {owner}`",
+        )
+
+fn Checker.group_in_enum(mut self, t Ty, at ast.Pos)
+    if is_group(t)
+        err_help(
+            "conc.task.10",
+            at,
+            "an enum variant can't hold a `TaskGroup`",
+            "hold the group in a field of a `unique struct`",
+        )
+
+## `x.g = e` on a `TaskGroup` field: the group the struct was made with waits
+## at its release, so it is never replaced (conc.task.10).
+@allow("expr.match.3") fn Checker.group_field_assign(mut self, target ast.Expr, tt Ty) bool
+    if not is_group(tt)
+        return false
+    match target
+        Member(_, n, p) =>
+            err_help(
+                "conc.task.10",
+                p,
+                "the `TaskGroup` field `{n}` can't be assigned",
+                "add tasks to it with `.add(spawn f())`; a struct's group is the one it was made with",
+            )
+            true
+        _ => false
