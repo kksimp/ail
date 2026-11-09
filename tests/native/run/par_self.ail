@@ -1,0 +1,31 @@
+# conc.par.8: a loop in a method that names fields of `self` bare runs on
+# the pool; the chunks get the fields' values when the loop starts.
+struct Grid
+    cells List[int]
+    n int
+    k int
+
+fn weigh(x int) int
+    mut s := 0
+    for j in 0..300
+        s += (x * j + j) % 11
+    s
+
+fn Grid.total(self) int
+    mut s := 0
+    for i in 0..n
+        s += weigh(cells[i]) + k
+    s
+
+fn Grid.double(mut self)
+    par for i in 0..n
+        cells[i] = cells[i] * 2 + k
+
+fn main()
+    mut cells := List[int]()
+    for i in 0..4000
+        cells.push(i % 97)
+    mut g := Grid(cells: cells, n: 4000, k: 3)
+    print(g.total())
+    g.double()
+    print("{g.cells[0]} {g.cells[3999]} {g.total()}")

@@ -539,7 +539,7 @@ fn main()
 
 **conc.par.13** — A written `par for` that the native compiler runs in order, because its
 body has a construct the chunked version doesn't take (a `match`, a constructor, a method on a
-captured list, a field of `self`, and so on), prints
+captured list, an assignment to a field of `self`, and so on), prints
 `FILE:LINE:COL: warning[conc.par.13]: `par for V` runs in order: REASON` on standard error
 when the program is built, and `ail check` warns the same way. The result is the sequential one. A loop the compiler chose
 says nothing. *(ADR 0911)*
