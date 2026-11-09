@@ -646,6 +646,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     none
                 "Channel" => chan_type_of(args)
                 "Mutex" => mutex_type_of(args)
+                "TaskGroup" => group_type_of(args)
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
