@@ -104,6 +104,7 @@ fn os_lookup(mod str, name str) OsFn?
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_bytes" => os_fn("rt.io_read_bytes", [], Ty.Bytes, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
+        "io.write_bytes" => os_fn("rt.io_write_bytes", [Ty.Bytes], Ty.Unit, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
         "tz.offset" => os_fn("rt.tz_offset", [s, Ty.Int], Ty.Opt(Ty.Int), false)
         "tz.system" => os_fn("rt.tz_system", [], s, false)

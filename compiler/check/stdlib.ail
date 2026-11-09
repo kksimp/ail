@@ -59,7 +59,7 @@ STD_FUNCTIONS := [
     ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
-    ["io", "eprint", "exit", "read_all", "read_bytes", "read_line"],
+    ["io", "eprint", "exit", "read_all", "read_bytes", "read_line", "write_bytes"],
     [
         "net",
         "connect",
@@ -279,6 +279,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "io.read_bytes"
         return StdSig(params: [], ret: Ty.Bytes)
+    # std.io.6: `write_bytes` writes raw bytes to standard output.
+    if key == "io.write_bytes"
+        return StdSig(params: [Ty.Bytes], ret: Ty.Unit)
     # std.io.4: `exit` never returns.
     if key == "io.exit"
         return StdSig(params: [Ty.Int], ret: Ty.Never)
