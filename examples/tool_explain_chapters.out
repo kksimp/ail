@@ -16,6 +16,7 @@ fix 9 0
 gen 14 0
 gram 17 2
 http 3 0
+infer 10 0
 json 22 0
 lex 24 7
 lsp 15 0
@@ -40,4 +41,4 @@ trait 45 4
 type 123 10
 unsafe 21 0
 verify 5 0
-all 1223 54
+all 1233 54
