@@ -2,8 +2,9 @@
 ## The style and cursor helpers and `parse` are pure strings and values. `open`
 ## puts a terminal in raw mode on the alternate screen and `Term.poll` returns
 ## its key, mouse and resize events. The terminal comes from the C library's
-## `tcgetattr`, `tcsetattr`, `cfmakeraw`, `poll`, `read` and `write`, so no
-## runtime piece is needed. The size is not read with `ioctl` (it is variadic,
+## `tcgetattr`, `tcsetattr`, `cfmakeraw`, `poll`, `read` and `write` (on
+## Windows, kernel32's console calls with virtual-terminal input and output,
+## so the same sequences and `parse` apply), so no runtime piece is needed. The size is not read with `ioctl` (it is variadic,
 ## which `ffi.decl.3` leaves out): the terminal is asked for the cursor
 ## position after moving it to the far corner.
 use std.mem
@@ -16,6 +17,16 @@ extern c fn cfmakeraw(t *u8)
 extern c fn poll(fds *u8, n int, ms i32) i32
 extern c fn read(fd i32, buf *u8, n int) int
 extern c fn write(fd i32, buf *u8, n int) int
+
+extern c "kernel32" fn GetStdHandle(n i32) int
+extern c "kernel32" fn GetConsoleMode(h int, mode *u8) i32
+extern c "kernel32" fn SetConsoleMode(h int, mode i32) i32
+extern c "kernel32" fn SetConsoleOutputCP(cp i32) i32
+extern c "kernel32" fn SetConsoleCP(cp i32) i32
+extern c "kernel32" fn GetConsoleScreenBufferInfo(h int, info *u8) i32
+extern c "kernel32" fn WaitForSingleObject(h int, ms i32) i32
+extern c "kernel32" fn ReadFile(h int, buf *u8, n i32, got *u8, ov *u8) i32
+extern c "kernel32" fn WriteFile(h int, buf *u8, n i32, put *u8, ov *u8) i32
 
 ## The escape byte that starts every control sequence.
 ESC := "\u{1b}"
@@ -310,12 +321,49 @@ pub fn parse(data bytes) List[Event]
 fn is_windows() bool
     (env.get("OS") else "") == "Windows_NT"
 
+fn win_in() int
+    unsafe
+        GetStdHandle((0 - 10).to_i32())
+
+fn win_out() int
+    unsafe
+        GetStdHandle((0 - 11).to_i32())
+
+## A 32-bit console mode word at `p`, as an int.
+fn word_at(p *u8) int
+    unsafe
+        b0 := p.read().to_int()
+        b1 := p.offset(1).read().to_int()
+        b2 := p.offset(2).read().to_int()
+        b3 := p.offset(3).read().to_int()
+        b0 + b1 * 256 + b2 * 65536 + b3 * 16777216
+
 ## Whether standard input and output are both a terminal (std.term.4).
 pub fn is_tty() bool
-    if is_windows()
-        return false
     unsafe
+        if is_windows()
+            m := mem.alloc(8, 0.to_u8())
+            ok := GetConsoleMode(win_in(), m) != 0 and GetConsoleMode(win_out(), m) != 0
+            mem.free(m)
+            return ok
         isatty(0) == 1 and isatty(1) == 1
+
+## The visible window of the Windows console, in cells.
+fn win_size() Size
+    unsafe
+        info := mem.alloc(32, 0.to_u8())
+        mut cols := 80
+        mut rows := 24
+        if GetConsoleScreenBufferInfo(win_out(), info) != 0
+            # srWindow is four 16-bit values at byte 10: left, top, right, bottom.
+            left := info.offset(10).read().to_int() + info.offset(11).read().to_int() * 256
+            top := info.offset(12).read().to_int() + info.offset(13).read().to_int() * 256
+            right := info.offset(14).read().to_int() + info.offset(15).read().to_int() * 256
+            bottom := info.offset(16).read().to_int() + info.offset(17).read().to_int() * 256
+            cols = right - left + 1
+            rows = bottom - top + 1
+        mem.free(info)
+        Size(cols: cols, rows: rows)
 
 ## Writes `s` to standard output at once, without waiting for a newline.
 fn send(s str)
@@ -323,16 +371,26 @@ fn send(s str)
         p := mem.cstr(s)
         total := s.byte_len()
         mut off := 0
+        put := mem.alloc(8, 0.to_u8())
         while off < total
-            w := write(1, p.offset(off), total - off)
+            mut w := 0
+            if is_windows()
+                if WriteFile(win_out(), p.offset(off), (total - off).to_i32(), put, mem.null()) != 0
+                    w = word_at(put)
+            else
+                w = write(1, p.offset(off), total - off)
             if w <= 0
                 break
             off += w
+        mem.free(put)
         mem.free(p)
 
 ## Whether standard input has bytes within `ms` milliseconds (negative: wait).
 fn wait_input(ms int) bool
     unsafe
+        if is_windows()
+            wait := if ms < 0 then 0 - 1 else ms
+            return WaitForSingleObject(win_in(), wait.to_i32()) == 0
         fds := mem.alloc(8, 0.to_u8())
         fds.offset(4).write(1.to_u8())
         n := poll(fds, 1, ms.to_i32())
@@ -343,7 +401,14 @@ fn read_chunk() List[int]
     mut out := List[int]()
     unsafe
         buf := mem.alloc(256, 0.to_u8())
-        n := read(0, buf, 256)
+        mut n := 0
+        if is_windows()
+            got := mem.alloc(8, 0.to_u8())
+            if ReadFile(win_in(), buf, 256.to_i32(), got, mem.null()) != 0
+                n = word_at(got)
+            mem.free(got)
+        else
+            n = read(0, buf, 256)
         for i in 0..n
             out.push(buf.offset(i).read().to_int())
         mem.free(buf)
@@ -355,6 +420,8 @@ fn size_query() str
     "{ESC}7{ESC}[9999;9999H{ESC}[6n{ESC}8"
 
 fn probe_size() Size
+    if is_windows()
+        return win_size()
     send(size_query())
     if wait_input(500)
         for ev in parse_ints(read_chunk())
@@ -382,11 +449,11 @@ pub struct Term
 ## `mouse` also asks for mouse events. Raw mode turns off output processing
 ## (end each line with `\r\n`) and signals (Ctrl-C is the key `c` with `ctrl`).
 pub fn open(mouse bool) Term ! TermError
-    if is_windows()
-        return TermError(why: "std.term.8: the Windows console is not supported yet")
     if not is_tty()
         return TermError(why: "std.term.5: standard input and output must be a terminal")
     unsafe
+        if is_windows()
+            return open_windows(mouse)
         saved := mem.alloc(256, 0.to_u8())
         if tcgetattr(0, saved) != 0
             mem.free(saved)
@@ -414,6 +481,41 @@ pub fn open(mouse bool) Term ! TermError
             asked: time.now_ms(),
         )
 
+## Raw mode on the Windows console (std.term.5): input arrives as the same
+## escape sequences as on Unix (virtual-terminal input), output is processed
+## for them, and both code pages are UTF-8. `saved` holds the old input and
+## output modes.
+fn open_windows(mouse bool) Term ! TermError
+    unsafe
+        saved := mem.alloc(8, 0.to_u8())
+        if GetConsoleMode(win_in(), saved) == 0 or GetConsoleMode(win_out(), saved.offset(4)) == 0
+            mem.free(saved)
+            return TermError(why: "std.term.5: cannot read the console modes")
+        # Input: virtual-terminal input (0x200) only, so no line input, echo or Ctrl-C.
+        # Output: processed (1), virtual-terminal processing (4), no automatic return (8).
+        if SetConsoleMode(win_in(), 512.to_i32()) == 0
+            mem.free(saved)
+            return TermError(why: "std.term.5: cannot set raw mode")
+        if SetConsoleMode(win_out(), 13.to_i32()) == 0
+            SetConsoleMode(win_in(), word_at(saved).to_i32())
+            mem.free(saved)
+            return TermError(why: "std.term.5: the console has no virtual-terminal output")
+        SetConsoleOutputCP(65001.to_i32())
+        SetConsoleCP(65001.to_i32())
+        send("{enter_alt()}{hide_cursor()}")
+        if mouse
+            send("{ESC}[?1000h{ESC}[?1002h{ESC}[?1006h")
+        size := win_size()
+        Term(
+            saved: saved,
+            mouse: mouse,
+            active: true,
+            cols: size.cols,
+            rows: size.rows,
+            queue: [],
+            asked: time.now_ms(),
+        )
+
 fn Term.restore(mut self)
     if not active
         return
@@ -422,7 +524,11 @@ fn Term.restore(mut self)
         send("{ESC}[?1006l{ESC}[?1002l{ESC}[?1000l")
     send("{reset()}{show_cursor()}{leave_alt()}")
     unsafe
-        tcsetattr(0, 2, saved)
+        if is_windows()
+            SetConsoleMode(win_in(), word_at(saved).to_i32())
+            SetConsoleMode(win_out(), word_at(saved.offset(4)).to_i32())
+        else
+            tcsetattr(0, 2, saved)
 
 ## Puts the terminal back as `open` found it (std.term.5).
 pub fn Term.close(mut self)
@@ -448,7 +554,11 @@ pub fn Term.poll(mut self, ms int) Event?
             return first
         now := time.now_ms()
         if now - asked >= CHECK_MS
-            send(size_query())
+            if is_windows()
+                sz := win_size()
+                note_size(sz.cols, sz.rows)
+            else
+                send(size_query())
             asked = now
         mut left := CHECK_MS
         if ms >= 0

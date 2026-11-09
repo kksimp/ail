@@ -15,7 +15,7 @@ AIL has no way to write a terminal program: raw mode, key and mouse input, the a
 ### Option A — a std module written in AIL over libc calls (chosen)
 `std/term/term.ail` declares `tcgetattr`, `tcsetattr`, `cfmakeraw`, `poll`, `read` and `write` with `extern c fn`, as `std.gfx.host` does for `mmap`. The decoder and styles are pure AIL.
 - **Pros:** no runtime or lowering change, so macOS and Linux, arm64 and x86-64 share one source (ADR 0008); the decoder is a pure function that `tests/cases` checks without a terminal.
-- **Cons:** the FFI cannot call variadic functions (`ffi.decl.3`), so `ioctl(TIOCGWINSZ)` is out; Windows needs another path.
+- **Cons:** the FFI cannot call variadic functions (`ffi.decl.3`), so `ioctl(TIOCGWINSZ)` is out; Windows needs a different set of calls (below).
 
 ### Option B — runtime functions in `compiler/rt/native`
 - **Pros:** `ioctl` and the Windows console API are reachable.
@@ -31,7 +31,11 @@ Option A. The size comes from the terminal itself: save the cursor, move to row 
 
 `Term` is a plain value closed with `close()` (idempotent), used with `defer`. A `unique` type with `Drop` would restore the terminal on every path, but `pub unique struct` is not accepted by the parser's `pub` rule (`Parser.pub_marker`), and changing the parser needs a new seed before the std source can use it. That is a follow-up.
 
-Windows: `open` fails with `TermError` (`std.term.8`) and `is_tty` is false; the pure functions work. The Windows console slice (`SetConsoleMode`, `ReadConsoleInputW`, virtual-terminal output) follows as a named slice. Per ADR 0925 it is not needed for the Windows release gate until it ships.
+Windows: the same module calls kernel32 (`GetConsoleMode`, `SetConsoleMode`, `WaitForSingleObject`, `ReadFile`, `WriteFile`, `GetConsoleScreenBufferInfo`, `SetConsoleOutputCP`), bound lazily by `ffi.load.3` (ADR 0980), so a Unix run never loads them. Input is set to virtual-terminal input (0x200), which makes the console deliver the same escape sequences as a Unix terminal, so `parse` is shared. Output is set to processed plus virtual-terminal processing (1 | 4 | 8). The size is read from the console window, so Windows needs no cursor-position query. Both code pages are set to UTF-8, and `close` restores the saved modes (the code pages stay). It needs a console that supports virtual-terminal output (Windows 10 1809 and later); `open` fails with `TermError` otherwise. Unverified on ail-win until the gate runs there (ADR 0925).
+
+## Gap found: variadic C functions
+
+`ioctl`, `fcntl` and `open` are variadic in C, and the FFI cannot call variadic functions (`ffi.decl.3`, ADR 0926 skips them; on arm64 macOS variadic arguments also go on the stack, which a plain call would not match). `ioctl(TIOCGWINSZ)` is the clean way to get a terminal size and was out of reach, as are device `ioctl`s generally. For the systems ABI lane: specify variadic calls (`extern c fn ioctl(fd i32, req int, ...)`) with the per-target convention (macOS arm64 stack, Linux and Win64 register rules).
 
 ## Rationale
 
