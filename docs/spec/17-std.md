@@ -1010,7 +1010,7 @@ handle are used from one task at a time (`Server.accept` excepted). After
 and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
 certificate rules, and returns a `Conn` that reads and writes the
 decrypted stream. Failures are kind `tls`, or the transport's kind during
-the handshake. A TLS server is `listen_tls` (`std.net.32`). *(ADR 0421, ADR 0360)*
+the handshake. A TLS server is `listen_tls` (`std.net.33`). *(ADR 0421, ADR 0360)*
 
 **std.net.14** — Serving needs a capability of its own. `serve` and
 `listen` have the effects `net`, `net.serve` and `io`; every other `std.net`
@@ -1200,9 +1200,9 @@ fn main()
     print(r.status)
 ```
 
-**std.net.32** — `listen_tls(addr str, cert_pem str, key_pem str) Listener ! NetError` is `listen` for TLS 1.3. `cert_pem` holds the certificate chain, leaf first, as PEM `CERTIFICATE` blocks; `key_pem` holds the leaf's private key as one PEM `PRIVATE KEY` (PKCS#8) or `EC PRIVATE KEY` (SEC 1) block. Both must be ECDSA P-256 (prime256v1) and the key must match the leaf; a PEM that is malformed, encrypted, RSA, or on another curve, or a key that doesn't match, fails with kind `tls` before the socket is opened, with the reason as the message. `accept` returns the `Conn` at once; its handshake runs on the first read or write, so a slow client delays only the task that serves it, and a failed handshake fails that call with kind `tls` and leaves the `Conn` unusable. The server speaks TLS 1.3 only, with `TLS_AES_128_GCM_SHA256` or `TLS_CHACHA20_POLY1305_SHA256`, the X25519 group, and the signature scheme `ecdsa_secp256r1_sha256`; it asks for no client certificate, and it issues no tickets. A client that offers none of these gets an alert and a `tls` error. The `Conn` is otherwise a `Conn` (`std.net.12`), and `listen_tls` has the effects of `listen` (`std.net.14`). *(ADR 1013)*
+**std.net.33** — `listen_tls(addr str, cert_pem str, key_pem str) Listener ! NetError` is `listen` for TLS 1.3. `cert_pem` holds the certificate chain, leaf first, as PEM `CERTIFICATE` blocks; `key_pem` holds the leaf's private key as one PEM `PRIVATE KEY` (PKCS#8) or `EC PRIVATE KEY` (SEC 1) block. Both must be ECDSA P-256 (prime256v1) and the key must match the leaf; a PEM that is malformed, encrypted, RSA, or on another curve, or a key that doesn't match, fails with kind `tls` before the socket is opened, with the reason as the message. `accept` returns the `Conn` at once; its handshake runs on the first read or write, so a slow client delays only the task that serves it, and a failed handshake fails that call with kind `tls` and leaves the `Conn` unusable. The server speaks TLS 1.3 only, with `TLS_AES_128_GCM_SHA256` or `TLS_CHACHA20_POLY1305_SHA256`, the X25519 group, and the signature scheme `ecdsa_secp256r1_sha256`; it asks for no client certificate, and it issues no tickets. A client that offers none of these gets an alert and a `tls` error. The `Conn` is otherwise a `Conn` (`std.net.12`), and `listen_tls` has the effects of `listen` (`std.net.14`). *(ADR 1013)*
 
-```ail norun rules=std.net.32
+```ail norun rules=std.net.33
 use std.fs
 use std.net
 

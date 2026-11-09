@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## ECDSA P-256 signing and private-key loading for the native TLS server (ADR
-## 1013, std.net.32): a PEM `PRIVATE KEY` (PKCS#8) or `EC PRIVATE KEY` (SEC 1)
+## 1013, std.net.33): a PEM `PRIVATE KEY` (PKCS#8) or `EC PRIVATE KEY` (SEC 1)
 ## becomes a 32-byte scalar, and a message becomes a DER `ECDSA-Sig-Value`
 ## (SEC 1 4.1.3) over SHA-256. The curve arithmetic is that of tls_sig.ail
 ## (verification) and tls_big.ail. The nonce comes from the OS generator, and

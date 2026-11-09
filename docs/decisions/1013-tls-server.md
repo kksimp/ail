@@ -4,7 +4,7 @@
 - **Date:** 2026-11-09
 - **Decided by:** AI (delegated, ADR 0076); in-house TLS and crypto is the designer's rule ([ADR 0360](0360-in-house-tls-for-std-net.md))
 - **Topic:** 17 — Standard library
-- **Spec rules:** std.net.32 (std.net.13 now points to it)
+- **Spec rules:** std.net.33 (std.net.13 now points to it)
 - **Builds on:** [ADR 0421](0421-raw-tcp-and-tls-conn.md), [ADR 0836](0836-native-tls.md), [ADR 0959](0959-std-crypto.md)
 
 ## Context
@@ -19,7 +19,7 @@ half of the handshake.
 ## Decision
 
 1. **API:** `net.listen_tls(addr, cert_pem, key_pem) Listener ! NetError`
-   (std.net.32). `accept` and the `Conn` are those of `listen` (std.net.12).
+   (std.net.33). `accept` and the `Conn` are those of `listen` (std.net.12).
 2. **Keys:** ECDSA P-256 only. The chain is PEM `CERTIFICATE` blocks, leaf
    first; the key is one `PRIVATE KEY` or `EC PRIVATE KEY` block, checked
    against the leaf's public key at `listen_tls`, so a mismatched pair fails

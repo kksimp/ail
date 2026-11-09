@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The native TLS server (ADR 1013, std.net.32) against `openssl s_client`,
+# The native TLS server (ADR 1013, std.net.33) against `openssl s_client`,
 # `curl` and AIL's own client, with a throwaway CA: each connects, writes one
 # line, and must read it back in an `echo: ` reply. Also a client that offers
 # only TLS 1.2, and one that trusts no CA. Run from anywhere:

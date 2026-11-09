@@ -558,7 +558,7 @@ fn net_listen(addr str, at str) int
         return net_fail(addr, net_errno_kind(-r2), "can't listen on {addr}", at)
     net_wrap(net_add(fd, NET_LISTENER, "", net_name(fd, false)))
 
-## `net.listen_tls(addr, cert_pem, key_pem)` (std.net.32): a `Listener` whose
+## `net.listen_tls(addr, cert_pem, key_pem)` (std.net.33): a `Listener` whose
 ## connections speak TLS 1.3 (tls_server.ail), or 0.
 fn net_listen_tls(addr str, cert_pem str, key_pem str, at str) int
     cfg := obj_new(TSC_BYTES, 4)
@@ -654,7 +654,7 @@ fn net_accept(h int, at str) int
             c := net_add(r, NET_CONN, net_addr_text(sa), "")
             cfg := load64(o + NET_TLSCFG)
             if cfg != 0
-                # `net.listen_tls` (std.net.32): the handshake runs on the first read or write.
+                # `net.listen_tls` (std.net.33): the handshake runs on the first read or write.
                 ts_prepare(net_obj(c), cfg)
             return net_wrap(c)
         if r == -4

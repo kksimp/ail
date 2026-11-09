@@ -1,4 +1,4 @@
-## std.net.32: `net.listen_tls` checks its certificate and key before it opens
+## std.net.33: `net.listen_tls` checks its certificate and key before it opens
 ## the socket, and says what is wrong. The certificate and keys are throwaway
 ## ECDSA P-256 fixtures; the live handshake is tools/native-tls/server-check.sh.
 use std.net

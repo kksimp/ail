@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## The native TLS 1.3 server (ADR 1013, std.net.32): `net.listen_tls` loads a
+## The native TLS 1.3 server (ADR 1013, std.net.33): `net.listen_tls` loads a
 ## certificate chain and an ECDSA P-256 key once (`ts_config`); every accepted
 ## connection then runs the handshake on its first read or write
 ## (`ts_handshake`), so a slow client holds up its own task and not the accept
