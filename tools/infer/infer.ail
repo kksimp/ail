@@ -433,10 +433,10 @@ fn run(args List[str]) int
     if not cases.is_empty()
         test_args.extend(["--cases", cases])
     ran := proc.run(ail_path(), test_args) else err
-        _ := proc.run("rm", ["-rf", scratch, copy]) else return 2
+        gone1 := proc.run("rm", ["-rf", scratch, copy]) else return 2
         return die("can't run the tests: {err}")
     seen := fs.read_text(rows_path) else ""
-    _ := proc.run("rm", ["-rf", scratch, copy]) else return 2
+    gone2 := proc.run("rm", ["-rf", scratch, copy]) else return 2
     # infer.cand.1: each row is one call; a row with the wrong number of cells is not read.
     mut data := List[List[int]]()
     for _ in 0..cols.len()
