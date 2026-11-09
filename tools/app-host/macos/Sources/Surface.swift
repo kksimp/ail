@@ -119,6 +119,7 @@ enum Surfaces {
             (str(t, "s") as NSString).draw(at: NSPoint(x: CGFloat(number(t, "x")) * sx, y: CGFloat(number(t, "y")) * sx),
                                            withAttributes: attrs)
         }
+        Pads.poll()
         let now = Date()
         let dt = now.timeIntervalSince(m.lastDraw)
         m.lastDraw = now

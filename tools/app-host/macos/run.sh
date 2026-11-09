@@ -37,7 +37,7 @@ if [ ! -x "$exe" ] || [ -n "$(find "$here/Sources" "$here/run.sh" -newer "$exe" 
 </dict></plist>
 PLIST
     swiftc -O -parse-as-library -target arm64-apple-macos13 \
-        -framework SwiftUI -framework AppKit \
+        -framework SwiftUI -framework AppKit -framework GameController \
         "$here"/Sources/*.swift -o "$exe"
 fi
 
