@@ -1,0 +1,17 @@
+struct Member
+    key str
+    n int
+
+enum Json
+    Num(n int)
+    Obj(members List[Member])
+
+fn mk() Json
+    mut ms := List[Member]()
+    ms.push(Member("a", 1))
+    Obj(ms)
+
+fn main()
+    match mk()
+        Obj(ms) => print(ms.len())
+        Num(n) => print(n)
