@@ -176,7 +176,14 @@ fn compress(data List[int]) List[int]
     n := data.len()
     mut head := [-1 for _ in 0..1048576]
     mut prev := [-1 for _ in 0..n]
-    mut e := Enc(low: 0, rng: 4294967295, cache: 0, cache_size: 1, out: [], probs: [1024 for _ in 0..2400])
+    mut e := Enc(
+        low: 0,
+        rng: 4294967295,
+        cache: 0,
+        cache_size: 1,
+        out: [],
+        probs: [1024 for _ in 0..2400],
+    )
     mut ins := 0
     mut st := 0
     mut i := 0
