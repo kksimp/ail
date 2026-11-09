@@ -38,5 +38,16 @@ if (-not $start) { Write-Output 'smoke: RED no start event'; exit 1 }
 if ($firstResize -and [array]::IndexOf($lines, $start) -gt [array]::IndexOf($lines, $firstResize)) { Write-Output 'smoke: RED resize came before start'; exit 1 }
 $measured = ($lines | Where-Object { $_ -like '*"kind":"measured"*' } | Select-Object -First 1)
 if ($measured -notmatch '"text":"[0-9.]+,[0-9.]+"') { Write-Output "smoke: RED measured reply missing or wrong: $measured"; exit 1 }
+# Edge mode (std.app.25, std.app.33): `start` carries the window controls' insets, the controls at the right.
+$p2 = [System.Diagnostics.Process]::Start($psi)
+$edge = '{"v":1,"t":"view","title":"edge","focus":"","edge":true,"tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Fill","x":0,"y":0,"w":20,"h":20,"color":2105376}]}}'
+$p2.StandardInput.WriteLine($edge)
+$p2.StandardInput.Flush()
+$e1 = $p2.StandardOutput.ReadLineAsync()
+$got = if ($e1.Wait(15000)) { $e1.Result } else { '' }
+Write-Output "edge line: $got"
+$p2.StandardInput.Close()
+if (-not $p2.WaitForExit(10000)) { $p2.Kill() }
+if ($got -notmatch '"kind":"start"' -or $got -notmatch '"inset_right":138' -or $got -notmatch '"inset_top":32') { Write-Output 'smoke: RED edge mode start lacks inset_right 138 and inset_top 32'; exit 1 }
 Write-Output 'smoke: GREEN'
 exit 0

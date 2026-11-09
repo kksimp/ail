@@ -200,6 +200,9 @@ pub struct Event
     ## host's window controls take at the window's top-left, in points.
     pub inset_left float
     pub inset_top float
+    ## For `start` and `resize` in edge mode: the room the window controls
+    ## take at the top-right, `0` when none are there (std.app.33).
+    pub inset_right float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono` or `sans`.
@@ -324,6 +327,7 @@ pub fn event(kind str) Event
         meta: false,
         inset_left: 0.0,
         inset_top: 0.0,
+        inset_right: 0.0,
     )
 
 ## A button press, for tests.
@@ -483,6 +487,7 @@ pub fn event_from_json(j Json) Event
         clicks: (j.num("clicks") else 0.0).to_int(),
         inset_left: j.num("inset_left") else 0.0,
         inset_top: j.num("inset_top") else 0.0,
+        inset_right: j.num("inset_right") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.
