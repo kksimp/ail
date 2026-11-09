@@ -620,6 +620,139 @@ fn main()
     print(missing)
 ```
 
+## Context for an edit
+
+`ail context PROGRAM SYMBOL` prints the smallest bundle of the program that an
+edit to one function needs, cut to a token budget
+([ADR 1020](../decisions/1020-ail-context.md), which implements
+[ADR 0891](../decisions/0891-ail-context-budgeted-pack.md)). One call replaces
+the file reads before an edit. It reads the same graph as `ail ask`.
+
+**api.ctx.1** — `ail context PROGRAM SYMBOL [--budget N] [--json]`. SYMBOL names
+one function or method as `api.ask.1` does: by its id (`fn:pay`), its qualified
+name (`Cart.add`) or its bare name. A bare name that fits several functions is an
+error that lists their ids. N is a positive number of tokens; a bare `--budget`
+and no `--budget` both mean 2000.
+
+**api.ctx.2** — The pack has these sections, each of whole items: `signature`
+(where the function is declared, its signature, contracts and doc comment), `body`
+(its lines as written, comments included), `effects` (each effect with the chain
+of calls that carries it, as `api.ask.4`), `callees` (the signatures of the
+functions it calls), `callers` (the signatures of the functions that call it, tests
+excluded), `types` (the types its signature and body name, with their fields,
+at most 12 lines each), `tests` (the signatures of the `@test` functions that reach
+it, directly or through callers) and `rules` (the spec rule IDs its comments and
+doc cite). Standard modules and generated code are not part of a pack.
+
+**api.ctx.3** — Items are kept in the order the sections are listed in
+`api.ctx.2`; within a section, in source order.
+
+**api.ctx.4** — The pack is counted with the same estimate as `ail api --card`.
+It keeps the longest prefix of the items, in the order of `api.ctx.3`, that fits
+the budget, so what is cut is always the least needed. An item is never cut in
+the middle. The signature is shown even when it alone is over the budget. When
+anything is cut, the last line says what: `cut: callers 2, tests 3; --budget N
+shows all`, where N is the budget that shows everything. The output is the same
+for the same program and arguments.
+
+**api.ctx.5** — A rule ID is a word in a `#` comment of the body, or in the doc
+comment, spelled as three or more lowercase parts and a number last
+(`api.ask.3`, `own.defer.4`). Each is listed once, in the order it appears.
+
+**api.ctx.6** — A program that has errors can't be read for context: the errors
+are shown and the status is 2. A SYMBOL that names no function, or fits several,
+is an error with status 2. A pack that is printed has status 0.
+
+**api.ctx.7** — With `--json` the pack is one object: `target` (the function id),
+`budget`, `needs` (the budget that shows everything), `sections` (the section
+names that are shown, each with the array of its items, an item's lines joined
+with newlines) and `cut` (each section with items left out, with their count).
+
+```ail tool=context,FILE,pay expect=callees rules=api.ctx.1,api.ctx.2,api.ctx.3
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,fn:pay,--budget,1 expect=cut: rules=api.ctx.4
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay,--budget,1,--json expect="cut":{"body":1,"callees":1,"callers":1} rules=api.ctx.4,api.ctx.7
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,log expect=effects rules=api.ctx.2
+fn log(s str)
+    print(s)
+fn main()
+    log("hi")
+```
+
+```ail tool=context,FILE,total expect=types rules=api.ctx.2
+struct Cart
+    n int
+fn total(c Cart) int
+    c.n
+fn main()
+    print(total(Cart(n: 1)))
+```
+
+```ail tool=context,FILE,pay expect=pays_one rules=api.ctx.2
+fn pay(n int) int
+    n + 1
+@test fn pays_one()
+    assert_eq(pay(1), 2)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay,--json expect="rules":["api.ask.3"] rules=api.ctx.5
+fn pay(n int) int
+    # api.ask.3: callers are listed once.
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,nosuch status=2 expect=api.ctx.6 rules=api.ctx.6
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay,--budget,0 status=2 expect=positive rules=api.ctx.1
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay status=2 expect=api.ctx.6 rules=api.ctx.6
+fn pay(n int) int
+    n + 1
+fn main()
+    print(missing)
+```
+
 ## Edit impact
 
 What an edit can break, from the same graph as `ail ask`
