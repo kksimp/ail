@@ -7,6 +7,8 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
 | [language-card.md](language-card.md) | The whole language in one read, under 8,000 tokens, for AI agents (non-normative) |
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
+| [packages.md](packages.md) | Using packages: `ail.pkg`, path and git dependencies, `ail.lock`, capability grants, a worked example |
+| [windows.md](windows.md) | AIL on Windows: PowerShell 5.1 and 7, execution policy, where files go |
 | [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
 | [roadmap.md](roadmap.md) | Phased development plan |
 | Note | Design documents dated before the Rust removal (ADR 0904) may mention `cargo`, `./ail selftest` or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842). |
@@ -56,7 +58,7 @@ Design notes:
 - [design/semantic-api.md](design/semantic-api.md): the machine-readable
   interfaces of `ail`: diagnostics schema, fixes, `ail explain`, `ail api`,
   `ail fix`, with the `api.*` and `fix.*` rules.
-- [design/packages.md](design/packages.md): `ail.pkg` manifests, dependencies
+- [design/packages.md](design/packages.md) (user guide: [packages.md](packages.md)): `ail.pkg` manifests, dependencies
   and per-dependency capability grants.
 - [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
   writes.
