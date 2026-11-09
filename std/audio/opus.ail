@@ -3192,8 +3192,6 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
         tell = d.tell()
     intra := tell + 3 <= total and d.bit_logp(3)
     coarse_energy(mut d, mut st, start, end, intra, lm, c, total)
-    print("DBG h {silence} {pf_pitch} {transient} {intra} {d.tell()}")
-    print("DBG e {[(st.energy[k] * 1000.0).round().to_int() for k in 0..c * NB_BANDS]}")
     tf := tf_decode(mut d, start, end, transient, lm, total)
     mut spread := 2
     if d.tell() + 4 <= total
@@ -3208,7 +3206,6 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
     bits -= rsv
     al := allocate(mut d, start, end, da.0, caps, trim, bits, lm, c)
     fine_energy(mut d, mut st, start, end, al.fine, c)
-    print("DBG a {tf} {spread} {trim} {da.0} {al.coded} {al.pulses} {al.fine} {al.intensity} {al.dual} {al.balance}")
     ab := all_bands(
         mut d,
         mut st,
@@ -3226,12 +3223,10 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
         al,
     )
     mut xs := ab.0
-    print("DBG b {d.tell_frac()} {[(xs[0][k] * 10000.0).round().to_int() for k in 0..8]} {ab.1}")
     anti := rsv > 0 and d.bits(1) == 1
     finalise_energy(mut d, mut st, start, end, al, total - d.tell(), c)
     if anti
         st.seed = anti_collapse(mut xs, ab.1, lm, c, start, end, st, al.pulses, st.seed)
-    print("DBG f {anti} {[(st.energy[k] * 1000.0).round().to_int() for k in 0..c * NB_BANDS]}")
     if silence
         for k in 0..2 * NB_BANDS
             st.energy[k] = -28.0
@@ -3303,7 +3298,6 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
             mem = PREEMPH * v
             y[i4] = v
         st.deemph[ch4] = mem
-        print("DBG o {[y[k].round().to_int() for k in 0..4]} {st.seed}")
         pcm.push(y)
     pcm
 
