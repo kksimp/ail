@@ -837,10 +837,9 @@ a signal is closed, that signal's default action returns. `ch.send(v)` on a
 signal channel has no effect. `signals` traps if the system refuses the
 handler. *(ADR 1011)*
 
-**std.os.4** — On Windows, `"INT"` is Ctrl-C and Ctrl-Break, and `"TERM"` is
-the console closing, the user logging off and the system shutting down (the
-program ends a few seconds after the handler returns, as Windows decides).
-`"HUP"`, `"QUIT"` and `"WINCH"` are accepted and never delivered there. *(ADR 1011)*
+**std.os.4** — On Windows, every console control event (Ctrl-C, Ctrl-Break,
+the console closing, logoff, shutdown) is delivered as `"INT"`. `"HUP"`,
+`"QUIT"`, `"TERM"` and `"WINCH"` are accepted and never delivered there. *(ADR 1011)*
 
 ```ail norun rules=std.os.1,std.os.2,std.os.3,std.os.4
 use std.os

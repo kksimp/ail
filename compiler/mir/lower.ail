@@ -209,6 +209,7 @@ PRIMS := {
     "sp": "int",
     "clone": "int",
     "restart": "unit",
+    "sigreturn": "unit",
     "import_call": "int",
     "fn_addr": "int",
     "gc_regs": "int",

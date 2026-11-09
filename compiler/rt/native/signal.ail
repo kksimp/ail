@@ -12,24 +12,22 @@
 ## into one value per kind.
 ##
 ## Linux x86-64 and ARM64 install the handler with `rt_sigaction`; x86-64 also
-## needs a return stub (`rt_sigreturn`), a nine-byte page of code made once.
+## needs a return function (`sig_ret`, ending in the `sigreturn` intrinsic).
 ## macOS calls libSystem's `signal`. Windows registers a console control
-## handler, a few bytes of machine code made once that bump a counter by event
-## number, because the system calls it with the Win64 convention; INT is
-## Ctrl-C and Ctrl-Break, TERM is the console closing, logoff and shutdown.
+## handler (`sig_win_ctrl`); the event number is not readable there, so every
+## console event (Ctrl-C, Ctrl-Break, close, logoff, shutdown) is INT.
 ##
 ## Global slot 66 is the table, made by the first `os.signals` (ADR 1011):
 ##   +0    count of all signals (the word sleepers wait on)
 ##   +8*N  count of signal N (1-31)
 ##   +256+8*N  channels watching N (the handler is restored at zero)
-##   +512  Windows: counts by console event number (0-6)
-##   +576  the stub's address, +584 1 once the Windows handler is registered
+##   +512  Windows: console events so far
+##   +584  1 once the Windows handler is registered
 
 SIG_TAB := 66
 SIG_MAGIC := 91368264820
 ST_WATCH := 256
 ST_WIN := 512
-ST_CODE := 576
 ST_WON := 584
 
 # The state of one channel (its `source` word, chan.ail).
@@ -93,56 +91,26 @@ fn sig_handler(sg int)
 ## How many times signal `sg` has arrived.
 fn sig_count(t int, sg int) int
     if target() == 3
-        w := t + ST_WIN
         if sg == 2
-            return atomic_load(w) + atomic_load(w + 8)
-        if sg == 15
-            return atomic_load(w + 16) + atomic_load(w + 40) + atomic_load(w + 48)
+            return atomic_load(t + ST_WIN)
         return 0
     atomic_load(t + 8 * sg)
 
-## Store four code bytes at `p + at`.
-fn sig_code(p int, at int, a int, b int, c int, d int)
-    store8(p + at, a)
-    store8(p + at + 1, b)
-    store8(p + at + 2, c)
-    store8(p + at + 3, d)
+## Linux x86-64: the function the kernel returns to from the handler
+## (`SA_RESTORER`); it ends in `rt_sigreturn`.
+fn sig_ret()
+    sigreturn()
 
-## Linux x86-64: a page holding `mov rax, 15; syscall` (`rt_sigreturn`), or 0.
-fn sig_restorer(t int) int
-    c := atomic_load(t + ST_CODE)
-    if c != 0
-        return c
-    p := syscall(9, 0, 4096, 7, 34, -1, 0)
-    if p < 0
-        return 0
-    sig_code(p, 0, 72, 199, 192, 15)
-    sig_code(p, 4, 0, 0, 0, 15)
-    sig_code(p, 8, 5, 0, 0, 0)
-    old := atomic_cas(t + ST_CODE, 0, p)
-    if old == 0 then p else old
-
-## Windows: the control handler, machine code that adds one to the counter of
-## the event in `ecx` (0-6) at `t + ST_WIN` and returns TRUE, or 0.
-fn sig_win_stub(t int) int
-    c := atomic_load(t + ST_CODE)
-    if c != 0
-        return c
-    p := import_call("VirtualAlloc", 0, 4096, 12288, 64)
-    if p == 0
-        return 0
-    # mov rdx, imm64; mov ecx, ecx; cmp ecx, 7; jae +5; lock inc [rdx+rcx*8];
-    # mov eax, 1; ret
-    sig_code(p, 0, 72, 186, 0, 0)
-    sig_code(p, 4, 0, 0, 0, 0)
-    sig_code(p, 8, 0, 0, 137, 201)
-    sig_code(p, 12, 131, 249, 7, 115)
-    sig_code(p, 16, 5, 240, 72, 255)
-    sig_code(p, 20, 4, 202, 184, 1)
-    sig_code(p, 24, 0, 0, 0, 195)
-    store64(p + 2, t + ST_WIN)
-    old := atomic_cas(t + ST_CODE, 0, p)
-    if old == 0 then p else old
+## Windows: the console control handler, run on a thread the system makes.
+## Its argument (the event) is in a register this convention does not read,
+## so every event counts as INT. It ends its thread with exit code 1 (TRUE:
+## handled) instead of returning into the system with registers changed.
+fn sig_win_ctrl() int
+    t := load64(global(SIG_TAB))
+    if t != 0
+        atomic_add(t + ST_WIN, 1)
+    import_call("ExitThread", 1, 0, 0, 0)
+    1
 
 ## Make signal `sg` reach the table. True when it can.
 fn sig_install(t int, sg int) bool
@@ -150,11 +118,7 @@ fn sig_install(t int, sg int) bool
     if k == 3
         if atomic_cas(t + ST_WON, 0, 1) != 0
             return true
-        stub := sig_win_stub(t)
-        if stub == 0
-            atomic_store(t + ST_WON, 0)
-            return false
-        return import_call("SetConsoleCtrlHandler", stub, 1, 0, 0) != 0
+        return import_call("SetConsoleCtrlHandler", fn_addr("rt.sig_win_ctrl"), 1, 0, 0) != 0
     h := fn_addr("rt.sig_handler")
     if k == 2
         import_call("_signal", sg, h, 0, 0)
@@ -162,9 +126,7 @@ fn sig_install(t int, sg int) bool
     a := alloc(64, KIND_BYTES)
     store64(a, h)
     if k == 0
-        r := sig_restorer(t)
-        if r == 0
-            return false
+        r := fn_addr("rt.sig_ret")
         # SA_RESTART | SA_RESTORER
         store64(a + 8, 335544320)
         store64(a + 16, r)
@@ -179,7 +141,7 @@ fn sig_default(t int, sg int)
     if k == 3
         if sig_count_watch(t, 2) + sig_count_watch(t, 15) == 0
             if atomic_cas(t + ST_WON, 1, 0) == 1
-                import_call("SetConsoleCtrlHandler", atomic_load(t + ST_CODE), 0, 0, 0)
+                import_call("SetConsoleCtrlHandler", fn_addr("rt.sig_win_ctrl"), 0, 0, 0)
         return
     if k == 2
         import_call("_signal", sg, 0, 0, 0)
