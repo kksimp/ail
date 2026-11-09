@@ -234,7 +234,7 @@ for any test (`bundle.write.1`), and `ail replay --shrink` (`shrink.run.1`) shri
 statements reached` on standard error. Only the property test's own code and what it calls count
 as statements.
 
-```ail tool=test,--fuzz,small,--cases,400,--corpus,.ail-test-fuzz-corpus,FILE status=1 expect=input: n = rules=test.fuzz.2,test.fuzz.3,test.fuzz.4
+```ail tool=test,--fuzz,small,--cases,400,--corpus,.ail-test-fuzz-corpus,FILE status=1 expect=input: rules=test.fuzz.2,test.fuzz.3,test.fuzz.4
 @test fn small(n int)
     assert(n < 100)
 

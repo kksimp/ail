@@ -1540,6 +1540,10 @@ fn corpus_args(w World, tys List[Ty], text str) List[Node]?
         return none
     args
 
+struct FuzzRun
+    fail str?
+    ids Set[int]
+
 ## One run of the instrumented binary: the failure line, if any, and the ids of the statements it ran.
 fn fuzz_case(
     w World,
@@ -1549,10 +1553,10 @@ fn fuzz_case(
     tys List[Ty],
     args List[Node],
     hits str,
-) !(str?, Set[int])
+) !FuzzRun
     fs.write_text(hits, "")?
     fail := try_case_in(w, lead, exe, slot, tys, args, ["AIL_INSTRUMENT_OUT={hits}"])
-    (fail, hit_ids(hits))
+    FuzzRun(fail: fail, ids: hit_ids(hits))
 
 ## Fuzzes the property test `t` (test.fuzz.1-5): inputs that reach a statement no earlier input did
 ## are kept (and written to `dir` when there is one), the next inputs are mutations of the kept ones,
@@ -1613,7 +1617,7 @@ fn run_fuzz(
                 args[j] = moved
         runs += 1
         res := fuzz_case(w, lead, exe, slot, tys, args, hits)?
-        if fail := res.0
+        if fail := res.fail
             small := shrink_input(w, lead, exe, slot, t, tys, args, fail)
             body := corpus_text(w, tys, small.0)
             if not dir.is_empty() and not known.contains(body)
@@ -1625,7 +1629,7 @@ fn run_fuzz(
                 shown.push("{t.params[i].name} = {show(w, tys[i], small.0[i])}")
             return Prop(status: "fail", message: small.1, cases: runs, input: shown.join(", "))
         mut fresh := false
-        for id in res.1.sorted()
+        for id in res.ids.sorted()
             if not seen.contains(id)
                 seen.add(id)
                 fresh = true
