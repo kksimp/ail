@@ -28,7 +28,10 @@ binary filter (`clove c FILE -c`, `clove d -`) needs both ends.
 
 Option A. `io.write_bytes(data bytes)` writes the bytes to standard output,
 undecoded, no newline, in order with `print`; `exit` flushes it. Effect `io`.
-No `io.read_all_bytes`: `io.read_bytes` is that function.
+No `io.read_all_bytes`: `io.read_bytes` (std.io.5, ADR 0415) is that function and
+the read half of the pair. Output is binary on every target: Windows writes
+with `WriteFile` on the standard handle (ADR 0608), so `\n` is never turned
+into `\r\n`.
 
 ## Consequences
 

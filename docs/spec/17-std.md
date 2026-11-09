@@ -674,7 +674,8 @@ fn main()
 ```
 
 **std.io.6** — `write_bytes(data bytes)` writes the bytes of `data` to
-standard output, undecoded and with no newline added. Output from `print` and
+standard output, undecoded and with no newline added, and on Windows too with no `\n` to
+`\r\n` translation. Output from `print` and
 `write_bytes` reaches standard output in the order the calls ran; `exit`
 flushes it (`std.io.4`). `io.read_bytes` (`std.io.5`) is the matching read, so
 a filter reads all of standard input as bytes and writes bytes back. *(ADR 1007)*
