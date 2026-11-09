@@ -1800,7 +1800,7 @@ fn log2_frac(value int, frac int) int
     mut f := frac
     while true
         b := v.shr(16)
-        l += b.shl(frac)
+        l += b.shl(f)
         v = (v + b).shr(b)
         v = (v * v + 0x7FFF).shr(15)
         if f <= 0
