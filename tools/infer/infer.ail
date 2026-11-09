@@ -176,7 +176,12 @@ fn stand_in(sig Sig, pub_fn bool, out_path str) List[str]
     has_ret := sig.ret != ""
     res := cols[cols.len() - 1]
     if has_ret
-        cells.push(if res.kind == "int" then "{LB}infer_res{RB}" elif res.kind == "len" then "{LB}infer_res.len(){RB}" else "-")
+        mut last_cell := "-"
+        if res.kind == "int"
+            last_cell = "{LB}infer_res{RB}"
+        elif res.kind == "len"
+            last_cell = "{LB}infer_res.len(){RB}"
+        cells.push(last_cell)
     call := "infer_orig_{sig.name}({names.join(", ")})"
     mut out := List[str]()
     out.push("{if pub_fn then "pub " else ""}fn {sig.name}({sig.inner}){sig.after}")
