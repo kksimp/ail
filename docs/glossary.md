@@ -149,6 +149,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190); a `move self` method moves its receiver (ADR 0317). |
 | **`move self`** | A method receiver that takes ownership: `fn Conn.close(move self)`; `c.close()` moves `c`, with no mark at the call (ADR 0317). |
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
+| **Mutation testing** | `ail test --mutate`: changes the reached lines of a program one way at a time, runs the tests on each change and reports the changes (mutants) that no test fails on ([ADR 1022](decisions/1022-mutation-testing.md)). |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
 | **Native subset** | The constructs the native backend compiles (native.subset.1): free functions over numbers, string literals and lists of numbers; anything else is reported before code is made (ADR 0384). |

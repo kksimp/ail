@@ -17,6 +17,7 @@
 ## (`bytes`, a type from another module) makes the test `skip`. The exit status is 0 if every test that ran passed.
 ##   ail run tools/ailtest/ailtest.ail [--json] [--cases N] [--seed S] FILE
 ## `--fuzz NAME [--time MS] [--corpus DIR]` fuzzes the property test NAME with coverage guidance (test.fuzz.1-5).
+## `--mutate [--max N]` changes the reached lines of the program one way at a time and reports the changes no test notices (test.mutate.1-5).
 ## `--contracts` fuzzes every function's `requires` and `ensures` and reports a counterexample (contract.fuzz.1).
 ## `--affected [--since REV]` runs only the tests that the changes since git revision REV
 ## (default `HEAD`) can reach, from `ail ask FILE --affected` (test.affected.1).
@@ -2488,6 +2489,255 @@ fn print_cover(c FileCover, json bool, detail bool)
 
 ## One event of a test's trace, from a line the run wrote to `EXE.trace`
 ## (`call<TAB>FN<TAB>LINE<TAB>COL<TAB>NAME=VALUE...`), as JSON; "" for a line that isn't the program's.
+## ---- Mutation testing (test.mutate.1-5, ADR 1022) ----
+
+struct Mutant
+    at_line int
+    shown str
+    newl str
+    owner str
+
+fn ident_char(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+## The line with the characters `a` to `b` replaced by `repl`.
+fn splice(cs List[char], a int, b int, repl str) str
+    "{chars_text(cs, 0, a)}{repl}{chars_text(cs, b, cs.len())}"
+
+## The name of the function a top-level `fn` or `pub fn` line declares, or "".
+fn decl_name(l str) str
+    mut s := l
+    if s.starts_with("pub ")
+        s = s.slice(4, s.len())
+    if not s.starts_with("fn ")
+        return ""
+    rest := s.slice(3, s.len())
+    cut := rest.find("(") else rest.len()
+    rest.slice(0, cut).trim()
+
+## The replacement of an operator at `i` (test.mutate.2): its text, and the length it replaces, or none.
+fn op_swap(cs List[char], i int)(str, int)?
+    c := cs[i]
+    nxt := if i + 1 < cs.len() then cs[i + 1] else ' '
+    prv := if i > 0 then cs[i - 1] else ' '
+    if nxt == '='
+        if c == '=' and prv != '=' and prv != '!' and prv != '<' and prv != '>' and prv != ':'
+            return ("!=", 2)
+        if c == '!'
+            return ("==", 2)
+        if c == '<' and prv != '<'
+            return ("<", 2)
+        if c == '>' and prv != '>' and prv != '-' and prv != '='
+            return (">", 2)
+        if c == '+'
+            return ("-=", 2)
+        if c == '-'
+            return ("+=", 2)
+        return none
+    if c == '<' and nxt != '<' and prv != '<' and nxt != '-'
+        return ("<=", 1)
+    if c == '>' and nxt != '>' and prv != '>' and prv != '-' and prv != '='
+        return (">=", 1)
+    if c == '+' and nxt != '+' and prv != '+'
+        return ("-", 1)
+    if c == '-' and nxt != '>' and prv != '-'
+        return ("+", 1)
+    if c == '*' and nxt != '*' and prv != '*'
+        return ("+", 1)
+    if c == '/' and nxt != '/' and prv != '/'
+        return ("*", 1)
+    none
+
+## The mutants of one source line, in column order (test.mutate.2): a branch condition negated,
+## a comparison, arithmetic or boolean operator flipped, `true` and `false` swapped, `not`
+## dropped, and a whole number changed by one. Strings, comments, declarations and checks are left alone.
+fn line_mutants(l str, ln int, owner str) List[Mutant]
+    mut out := List[Mutant]()
+    cs := l.chars()
+    mut lead := 0
+    while lead < cs.len() and cs[lead] == ' '
+        lead += 1
+    if lead == 0 or lead >= cs.len()
+        return out
+    trimmed := l.trim()
+    for skip in ["#", "@", "assert", "requires", "ensures", "use "]
+        if trimmed.starts_with(skip)
+            return out
+    for kw in ["if ", "elif "]
+        if trimmed.starts_with(kw) and not trimmed.contains(" then ") and not trimmed.contains("#")
+            cond := trimmed.slice(kw.len(), trimmed.len())
+            now := "{kw}not ({cond})"
+            out.push(Mutant(
+                at_line: ln,
+                shown: "{trimmed} -> {now}",
+                newl: "{l.slice(0, lead)}{now}",
+                owner: owner,
+            ))
+    mut i := lead
+    while i < cs.len()
+        c := cs[i]
+        if c == '#'
+            break
+        if c == '"' or c == '\''
+            e := literal_end(cs, i)
+            if e < 0
+                break
+            i = e
+            continue
+        if c.is_alpha() or c == '_'
+            mut j := i
+            while j < cs.len() and ident_char(cs[j])
+                j += 1
+            word := chars_text(cs, i, j)
+            mut now := ""
+            if word == "and"
+                now = "or"
+            elif word == "or"
+                now = "and"
+            elif word == "true"
+                now = "false"
+            elif word == "false"
+                now = "true"
+            if not now.is_empty()
+                out.push(Mutant(
+                    at_line: ln,
+                    shown: "{word} -> {now}",
+                    newl: splice(cs, i, j, now),
+                    owner: owner,
+                ))
+            elif word == "not" and j < cs.len() and cs[j] == ' '
+                out.push(Mutant(
+                    at_line: ln,
+                    shown: "not -> removed",
+                    newl: splice(cs, i, j + 1, ""),
+                    owner: owner,
+                ))
+            i = j
+            continue
+        if c.is_digit()
+            mut j := i
+            while j < cs.len() and (cs[j].is_digit() or cs[j] == '_')
+                j += 1
+            before := i > 0 and (ident_char(cs[i - 1]) or cs[i - 1] == '.')
+            frac := j + 1 < cs.len() and cs[j] == '.' and cs[j + 1].is_digit()
+            tail := j < cs.len() and cs[j].is_alpha()
+            if not before and not frac and not tail
+                digits := chars_text(cs, i, j)
+                if n := digits.replace("_", "").to_int()
+                    now := if n == 0 then "1" else "{n + 1}"
+                    out.push(Mutant(
+                        at_line: ln,
+                        shown: "{digits} -> {now}",
+                        newl: splice(cs, i, j, now),
+                        owner: owner,
+                    ))
+            i = j
+            continue
+        if sw := op_swap(cs, i)
+            out.push(Mutant(
+                at_line: ln,
+                shown: "{chars_text(cs, i, i + sw.1)} -> {sw.0}",
+                newl: splice(cs, i, i + sw.1, sw.0),
+                owner: owner,
+            ))
+            i += sw.1
+            continue
+        i += 1
+    out
+
+## At most `limit` of the mutants, spread evenly and in order (test.mutate.3).
+fn pick_mutants(cands List[Mutant], limit int) List[Mutant]
+    if limit <= 0 or cands.len() <= limit
+        return cands
+    mut out := List[Mutant]()
+    for i in 0..limit
+        out.push(cands[i * cands.len() / limit])
+    out
+
+## How many `"status":"pass"` lines a `--json` run printed.
+fn count_passed(out str) int
+    mut n := 0
+    for l in out.lines()
+        if l.contains("\"status\":\"pass\"")
+            n += 1
+    n
+
+## Runs the tests against each mutant of the reached lines of `file` and reports the survivors
+## (test.mutate.1-5). `base` is the baseline exit status and `base_pass` its passing tests.
+fn run_mutants(
+    file str,
+    text str,
+    tests List[TestFn],
+    reached Set[int],
+    limit int,
+    timeout str,
+    json bool,
+    base_pass int,
+    built bool,
+    base int,
+) !int
+    if not built
+        io.eprint("error[test.mutate.1]: the tests did not build, so no mutant can be judged")
+        return 2
+    if base != 0
+        io.eprint("error[test.mutate.1]: the tests fail, so no mutant can be judged; fix them first")
+        return base
+    if base_pass == 0
+        io.eprint("error[test.mutate.1]: no test passed, so no mutant can be killed")
+        return 2
+    src := text.lines()
+    mut owners := List[str]()
+    mut cur := ""
+    for l in src
+        if not l.is_empty() and not l.starts_with(" ") and not l.starts_with("#")
+            cur = decl_name(l)
+        owners.push(cur)
+    mut cands := List[Mutant]()
+    for ln in reached.sorted()
+        if ln < 1 or ln > src.len() or owners[ln - 1] == "main" or owners[ln - 1].is_empty()
+            continue
+        mut in_test := false
+        for t in tests
+            if ln - 1 >= t.first and ln - 1 <= t.last
+                in_test = true
+        if in_test
+            continue
+        for m in line_mutants(src[ln - 1], ln, owners[ln - 1])
+            cands.push(m)
+    chosen := pick_mutants(cands, limit)
+    dir := path.dir(file)
+    copy := if dir.is_empty() then ".ail-mutant-{path.stem(file)}.ail" else "{dir}/.ail-mutant-{path.stem(file)}.ail"
+    limit_ms := if timeout.is_empty() then "5000" else timeout
+    mut killed := 0
+    mut survived := 0
+    for m in chosen
+        mut body := src
+        body[m.at_line - 1] = m.newl
+        fs.write_text(copy, "{body.join("\n")}\n")? "writing {copy}"
+        r := proc.run(
+            ail_path(),
+            ["test", "--json", "--timeout", limit_ms, copy],
+            none,
+            120000,
+        ) else continue
+        if r.status == 1
+            killed += 1
+        elif r.status == 0 and count_passed(r.out) == base_pass
+            survived += 1
+            if json
+                print("\{\"mutant\":true,\"file\":{json_str(file)},\"line\":{m.at_line},\"fn\":{json_str(m.owner)},\"mutation\":{json_str(m.shown)},\"status\":\"survived\"}")
+            else
+                print("survived {file}:{m.at_line}: {m.shown} (in {m.owner})")
+    _ := proc.run("rm", ["-f", copy]) else return 2
+    invalid := chosen.len() - killed - survived
+    if json
+        print("\{\"mutate\":true,\"mutants\":{chosen.len()},\"killed\":{killed},\"survived\":{survived},\"invalid\":{invalid}}")
+    else
+        judged := killed + survived
+        score := if judged == 0 then 100 else killed * 100 / judged
+        print("mutants: {chosen.len()} run, {killed} killed, {survived} survived, {invalid} invalid, score {score}%")
+    if survived > 0 then 1 else 0
+
 fn trace_json(line str) str
     c := line.split("\t")
     if c.len() == 1
@@ -2629,7 +2879,7 @@ fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
     a
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] FILE")
     io.exit(2)
     2
 
@@ -2659,6 +2909,8 @@ fn main() !
     mut corpus_dir := ""
     mut fuzz_ms := 0
     mut cases_given := false
+    mut mutating := false
+    mut mutate_max := 50
     for a in env.args()
         if want == "--since"
             since = a
@@ -2673,6 +2925,13 @@ fn main() !
             cases = a.to_int() else usage()
             cases_given = true
             want = ""
+        elif a == "--mutate"
+            mutating = true
+        elif want == "--max"
+            mutate_max = a.to_int() else usage()
+            want = ""
+        elif a == "--max"
+            want = a
         elif want == "--fuzz"
             fuzz = a
             want = ""
@@ -2755,6 +3014,9 @@ fn main() !
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
+    if mutating and coverage.is_empty()
+        # test.mutate.1: the build counts the statements run, to leave out code no test reaches.
+        coverage = "lines"
     mut own_rec := false
     if not bundle_dir.is_empty() and rec_mode.is_empty()
         # bundle.write.1: the failures are recorded as `--record` does, into a file of ours.
@@ -3202,6 +3464,11 @@ fn main() !
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
     code := report(verdicts, json, text.lines(), traces, at_pos)
+    mut reached := Set[int]()
+    mut base_pass := 0
+    for v in verdicts
+        if v.status == "pass"
+            base_pass += 1
     if not coverage.is_empty() and built
         mut skip := Set[str]()
         for t in found.tests
@@ -3219,7 +3486,25 @@ fn main() !
             dir,
             skip,
         )
-            print_cover(c, json, coverage == "lines")
+            if mutating
+                if c.file == file
+                    reached = c.hit_lines
+            else
+                print_cover(c, json, coverage == "lines")
+    mut exit_code := code
+    if mutating
+        exit_code = run_mutants(
+            file,
+            text,
+            found.tests,
+            reached,
+            mutate_max,
+            timeout,
+            json,
+            base_pass,
+            built,
+            code,
+        )?
     if scratch.is_empty()
         _ := proc.run("rm", [
             "-f",
@@ -3230,7 +3515,7 @@ fn main() !
             "{exe}.fuzz",
             "{exe}.trace",
             "{exe}.rec",
-        ]) else io.exit(code)
+        ]) else io.exit(exit_code)
     else
-        _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)
-    io.exit(code)
+        _ := proc.run("rm", ["-rf", scratch]) else io.exit(exit_code)
+    io.exit(exit_code)
