@@ -2422,11 +2422,12 @@ fn lsp_session(d str, uri str, text str, msgs List[str]) proc.Output
     for m in all
         input = "{input}{lsp_frame(m)}"
     script := "cd \"$0\" && AIL=\"$1\" exec \"$1\" lsp"
-    proc.run("sh", ["-c", script, d, "{repo_root()}/ail"], input) else return proc.Output(
-        status: 127,
-        out: "",
-        err: "could not start sh",
-    )
+    r := proc.run(
+        "sh",
+        ["-c", script, d, "{repo_root()}/ail"],
+        input,
+    ) else return proc.Output(status: 127, out: "", err: "could not start sh")
+    r
 
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
@@ -2457,13 +2458,34 @@ fn Gate.agent_tools(mut self, tmp str)
     again := ail_in(repo_root(), "{base}/ctx", ["context", "prog.ail", "fn:pay"])
     if again.out != full.out
         red("context is deterministic", "`fn:pay` and `pay` differ\n{again.out}")
-    tool("context budget", "{base}/ctx", ["context", "prog.ail", "pay", "--budget", "1"], 0, ["cut:", "--budget"])
-    tool("context json", "{base}/ctx", ["context", "prog.ail", "pay", "--budget", "1", "--json"], 0, [
-        "\"target\":\"fn:pay\"",
-        "\"cut\":",
-    ])
-    tool("context unknown symbol", "{base}/ctx", ["context", "prog.ail", "nosuch"], 2, ["api.ctx.6"])
-    tool("context zero budget", "{base}/ctx", ["context", "prog.ail", "pay", "--budget", "0"], 2, ["positive"])
+    tool(
+        "context budget",
+        "{base}/ctx",
+        ["context", "prog.ail", "pay", "--budget", "1"],
+        0,
+        ["cut:", "--budget"],
+    )
+    tool(
+        "context json",
+        "{base}/ctx",
+        ["context", "prog.ail", "pay", "--budget", "1", "--json"],
+        0,
+        ["\"target\":\"fn:pay\"", "\"cut\":"],
+    )
+    tool(
+        "context unknown symbol",
+        "{base}/ctx",
+        ["context", "prog.ail", "nosuch"],
+        2,
+        ["api.ctx.6"],
+    )
+    tool(
+        "context zero budget",
+        "{base}/ctx",
+        ["context", "prog.ail", "pay", "--budget", "0"],
+        2,
+        ["positive"],
+    )
     # infer.cand.1-6, infer.out.1-4 (ADR 1023)
     infer := src_of([
         "fn pay(n int) int",
@@ -2475,17 +2497,43 @@ fn Gate.agent_tools(mut self, tmp str)
         "    print(pay(1))",
     ])
     fs.write_text("{base}/infer/prog.ail", infer) else return
-    tool("infer proposes", "{base}/infer", ["infer", "--contracts", "pay", "prog.ail"], 0, ["requires n > 0", "proved"])
-    tool("infer json", "{base}/infer", ["infer", "--contracts", "pay", "prog.ail", "--json"], 0, [
-        "\"kind\":\"requires\"",
-        "\"cond\":\"n > 0\"",
-        "\"applied\":false",
-    ])
+    tool(
+        "infer proposes",
+        "{base}/infer",
+        ["infer", "--contracts", "pay", "prog.ail"],
+        0,
+        ["requires n > 0", "proved"],
+    )
+    tool(
+        "infer json",
+        "{base}/infer",
+        ["infer", "--contracts", "pay", "prog.ail", "--json"],
+        0,
+        ["\"kind\":\"requires\"", "\"cond\":\"n > 0\"", "\"applied\":false"],
+    )
     if slurp("{base}/infer/prog.ail") != infer
         red("infer without --apply", "wrote the file")
-    tool("infer min", "{base}/infer", ["infer", "--contracts", "pay", "prog.ail", "--min", "100"], 0, ["needed"])
-    tool("infer bad function", "{base}/infer", ["infer", "--contracts", "nosuch", "prog.ail"], 2, ["infer.cand.1"])
-    tool("infer apply", "{base}/infer", ["infer", "--contracts", "pay", "prog.ail", "--apply"], 0, ["edited"])
+    tool(
+        "infer min",
+        "{base}/infer",
+        ["infer", "--contracts", "pay", "prog.ail", "--min", "100"],
+        0,
+        ["needed"],
+    )
+    tool(
+        "infer bad function",
+        "{base}/infer",
+        ["infer", "--contracts", "nosuch", "prog.ail"],
+        2,
+        ["infer.cand.1"],
+    )
+    tool(
+        "infer apply",
+        "{base}/infer",
+        ["infer", "--contracts", "pay", "prog.ail", "--apply"],
+        0,
+        ["edited"],
+    )
     applied := slurp("{base}/infer/prog.ail")
     if not applied.contains("requires n > 0")
         red("infer --apply", "the file has no `requires n > 0`:\n{applied}")
@@ -2513,26 +2561,57 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     if probe.out != "6\n"
         red("probe leaves the output alone", probe.out)
-    tool("probe unset", "{base}/probe", ["run", "--at", "prog.ail:4", "--show", "nosuch", "prog.ail"], 0, ["nosuch = <unset>"])
-    tool("probe needs --show", "{base}/probe", ["run", "--at", "prog.ail:4", "prog.ail"], 2, ["probe.run.4"])
+    tool(
+        "probe unset",
+        "{base}/probe",
+        ["run", "--at", "prog.ail:4", "--show", "nosuch", "prog.ail"],
+        0,
+        ["nosuch = <unset>"],
+    )
+    tool(
+        "probe needs --show",
+        "{base}/probe",
+        ["run", "--at", "prog.ail:4", "prog.ail"],
+        2,
+        ["probe.run.4"],
+    )
     tool("probe record", "{base}/probe", ["run", "--record", "r.json", "prog.ail"], 0, [""])
-    tool("probe over replay", "{base}/probe", ["run", "--replay", "r.json", "--at", "prog.ail:4", "--show", "n,total"], 0, [
-        "probe: prog.ail:4 n = 3, total = 3",
-    ])
+    tool(
+        "probe over replay",
+        "{base}/probe",
+        ["run", "--replay", "r.json", "--at", "prog.ail:4", "--show", "n,total"],
+        0,
+        ["probe: prog.ail:4 n = 3, total = 3"],
+    )
     # san.sched.1-2 (ADR 0967): a clean program, and a lost update that seed 2 shows (the native scheduler, see `misc`)
     fs.write_text("{base}/san/prog.ail", "fn main()\n    print(1)\n") else return
-    tool("sanitize clean", "{base}/san", ["sanitize", "prog.ail"], 0, ["8 schedules, 0 differ from the fixed schedule"])
+    tool(
+        "sanitize clean",
+        "{base}/san",
+        ["sanitize", "prog.ail"],
+        0,
+        ["8 schedules, 0 differ from the fixed schedule"],
+    )
     tool("sanitize bad arguments", "{base}/san", ["sanitize"], 2, ["usage: ail sanitize"])
     race := "{repo_root()}/tests/schedule/race.ail"
-    tool("sanitize finds the lost update", "{base}/san", ["sanitize", "--tests", "--seeds", "2", race], 1, [
-        "warning[san.sched.1]: schedule seed 2",
-        "2 schedules, 1 differ from the fixed schedule",
-    ])
-    tool("sanitize json", "{base}/san", ["sanitize", "--tests", "--seeds", "2", "--json", race], 1, [
-        "\"rule\":\"san.sched.1\"",
-        "\"seed\":2",
-        "\"summary\":true,\"seeds\":2,\"schedule_dependent\":1",
-    ])
+    tool(
+        "sanitize finds the lost update",
+        "{base}/san",
+        ["sanitize", "--tests", "--seeds", "2", race],
+        1,
+        ["warning[san.sched.1]: schedule seed 2", "2 schedules, 1 differ from the fixed schedule"],
+    )
+    tool(
+        "sanitize json",
+        "{base}/san",
+        ["sanitize", "--tests", "--seeds", "2", "--json", race],
+        1,
+        [
+            "\"rule\":\"san.sched.1\"",
+            "\"seed\":2",
+            "\"summary\":true,\"seeds\":2,\"schedule_dependent\":1",
+        ],
+    )
     # san.leak.1-4 (ADR 0969): 48 MiB held by a local that stays live
     fs.write_text("{base}/leak/prog.ail", src_of([
         "fn main()",
@@ -2548,7 +2627,13 @@ fn Gate.agent_tools(mut self, tmp str)
         "        i += 1",
         "    print(keep.len())",
     ])) else return
-    lk := tool("leak grows", "{base}/leak", ["leak", "prog.ail"], 0, ["leak[san.leak.1]", "growing"])
+    lk := tool(
+        "leak grows",
+        "{base}/leak",
+        ["leak", "prog.ail"],
+        0,
+        ["leak[san.leak.1]", "growing"],
+    )
     if lk.out != "48\n"
         red("leak leaves the output alone", lk.out)
     tool("leak json", "{base}/leak", ["leak", "--json", "prog.ail"], 0, [
@@ -2566,33 +2651,33 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("fuzz finds a failure", "{base}/fuzz", [
-        "test",
-        "--fuzz",
-        "small",
-        "--cases",
-        "400",
-        "--corpus",
-        "corpus",
-        "prog.ail",
-    ], 1, ["input:"])
+    tool(
+        "fuzz finds a failure",
+        "{base}/fuzz",
+        ["test", "--fuzz", "small", "--cases", "400", "--corpus", "corpus", "prog.ail"],
+        1,
+        ["input:"],
+    )
     mut crash := false
     for f in fs.list_dir("{base}/fuzz/corpus") else []
         if f.starts_with("crash-")
             crash = true
     if not crash
         red("fuzz corpus", "no crash- file in {base}/fuzz/corpus")
-    tool("fuzz replays the crash first", "{base}/fuzz", [
-        "test",
-        "--fuzz",
-        "small",
-        "--cases",
-        "400",
-        "--corpus",
-        "corpus",
-        "prog.ail",
-    ], 1, ["input:"])
-    tool("fuzz unknown test", "{base}/fuzz", ["test", "--fuzz", "nosuch", "prog.ail"], 2, ["test.fuzz.1"])
+    tool(
+        "fuzz replays the crash first",
+        "{base}/fuzz",
+        ["test", "--fuzz", "small", "--cases", "400", "--corpus", "corpus", "prog.ail"],
+        1,
+        ["input:"],
+    )
+    tool(
+        "fuzz unknown test",
+        "{base}/fuzz",
+        ["test", "--fuzz", "nosuch", "prog.ail"],
+        2,
+        ["test.fuzz.1"],
+    )
     fs.write_text("{base}/fuzz2/prog.ail", src_of([
         "@test fn small(n int)",
         "    assert(n + 0 == n)",
@@ -2600,11 +2685,13 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("fuzz clean run", "{base}/fuzz2", ["test", "--fuzz", "small", "--cases", "50", "prog.ail"], 0, [
-        "fuzz small: ",
-        " runs, ",
-        " statements reached",
-    ])
+    tool(
+        "fuzz clean run",
+        "{base}/fuzz2",
+        ["test", "--fuzz", "small", "--cases", "50", "prog.ail"],
+        0,
+        ["fuzz small: ", " runs, ", " statements reached"],
+    )
     # test.mutate.1-5 (ADR 1022)
     fs.write_text("{base}/mut/prog.ail", src_of([
         "fn sign(n int) int",
@@ -2620,18 +2707,20 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("mutate survivors", "{base}/mut", ["test", "--mutate", "prog.ail"], 1, [
-        "survived ",
-        "(in sign)",
-        "mutants: ",
-        "score ",
-    ])
-    tool("mutate json", "{base}/mut", ["test", "--mutate", "--json", "prog.ail"], 1, [
-        "\"mutant\":true",
-        "\"fn\":\"sign\"",
-        "\"status\":\"survived\"",
-        "\"mutate\":true",
-    ])
+    tool(
+        "mutate survivors",
+        "{base}/mut",
+        ["test", "--mutate", "prog.ail"],
+        1,
+        ["survived ", "(in sign)", "mutants: ", "score "],
+    )
+    tool(
+        "mutate json",
+        "{base}/mut",
+        ["test", "--mutate", "--json", "prog.ail"],
+        1,
+        ["\"mutant\":true", "\"fn\":\"sign\"", "\"status\":\"survived\"", "\"mutate\":true"],
+    )
     fs.write_text("{base}/mut2/prog.ail", src_of([
         "fn double(n int) int",
         "    n * 2",
@@ -2643,9 +2732,13 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("mutate all killed", "{base}/mut2", ["test", "--mutate", "prog.ail"], 0, [
-        "mutants: 2 run, 2 killed, 0 survived, 0 invalid, score 100%",
-    ])
+    tool(
+        "mutate all killed",
+        "{base}/mut2",
+        ["test", "--mutate", "prog.ail"],
+        0,
+        ["mutants: 2 run, 2 killed, 0 survived, 0 invalid, score 100%"],
+    )
     fs.write_text("{base}/mut2/bad.ail", src_of([
         "fn five() int",
         "    5",
@@ -2656,7 +2749,13 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("mutate needs green tests", "{base}/mut2", ["test", "--mutate", "bad.ail"], 1, ["test.mutate.1"])
+    tool(
+        "mutate needs green tests",
+        "{base}/mut2",
+        ["test", "--mutate", "bad.ail"],
+        1,
+        ["test.mutate.1"],
+    )
     # lsp.complete.1-2, lsp.rename.1-2, lsp.action.1-2 (ADR 0966): real sessions over stdin and stdout
     prog1 := src_of([
         "struct Pt",
@@ -2675,10 +2774,22 @@ fn Gate.agent_tools(mut self, tmp str)
     s1 := lsp_session("{base}/lsp1", u1, prog1, [
         jreq(2, "textDocument/completion", lsp_pos(u1, 9, 12)),
         jreq(3, "textDocument/prepareRename", lsp_pos(u1, 4, 4)),
-        jreq(4, "textDocument/rename", "~'textDocument':~'uri':'{u1}'^,'position':~'line':4,'character':4^,'newName':'size'^"),
-        jreq(5, "textDocument/rename", "~'textDocument':~'uri':'{u1}'^,'position':~'line':4,'character':4^,'newName':'1x'^"),
+        jreq(
+            4,
+            "textDocument/rename",
+            "~'textDocument':~'uri':'{u1}'^,'position':~'line':4,'character':4^,'newName':'size'^",
+        ),
+        jreq(
+            5,
+            "textDocument/rename",
+            "~'textDocument':~'uri':'{u1}'^,'position':~'line':4,'character':4^,'newName':'1x'^",
+        ),
     ])
-    want("lsp initialize", s1.out, ["\"completionProvider\"", "\"renameProvider\"", "\"codeActionProvider\""])
+    want("lsp initialize", s1.out, [
+        "\"completionProvider\"",
+        "\"renameProvider\"",
+        "\"codeActionProvider\"",
+    ])
     want("lsp completion", s1.out, ["\"label\":\"norm\""])
     if s1.out.contains("\"label\":\"main\"")
         red("lsp completion prefix", "`main` was offered after `no`")
@@ -2707,7 +2818,11 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     fs.write_text("{base}/lsp2/main.ail", prog2) else return
     u2 := "file://{base}/lsp2/main.ail"
-    s2 := lsp_session("{base}/lsp2", u2, typing, [jreq(2, "textDocument/completion", lsp_pos(u2, 6, 12))])
+    s2 := lsp_session("{base}/lsp2", u2, typing, [jreq(
+        2,
+        "textDocument/completion",
+        lsp_pos(u2, 6, 12),
+    )])
     want("lsp completion after a dot", s2.out, ["\"label\":\"x\"", "\"label\":\"y\""])
     prog3 := src_of([
         "fn main()",
@@ -2719,9 +2834,11 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     fs.write_text("{base}/lsp3/main.ail", prog3) else return
     u3 := "file://{base}/lsp3/main.ail"
-    s3 := lsp_session("{base}/lsp3", u3, prog3, [
-        jreq(2, "textDocument/codeAction", "~'textDocument':~'uri':'{u3}'^,'range':~'start':~'line':0,'character':0^,'end':~'line':5,'character':0^^,'context':~'diagnostics':[]^^"),
-    ])
+    s3 := lsp_session("{base}/lsp3", u3, prog3, [jreq(
+        2,
+        "textDocument/codeAction",
+        "~'textDocument':~'uri':'{u3}'^,'range':~'start':~'line':0,'character':0^,'end':~'line':5,'character':0^^,'context':~'diagnostics':[]^^",
+    )])
     want("lsp code actions", s3.out, ["\"quickfix\"", "mut ", "source.fixAll.ail"])
     sh_run("rm -rf {base}")
 
