@@ -21,6 +21,9 @@ pub fn effects_command(rest List[str], std str) int
         for d in found
             if not d.warning
                 return 2
+    if rest.contains("--gpu")
+        print(gpu_report(loaded, paths[0], json).trim_end())
+        return 0
     if rest.contains("--parallel")
         print(parallel_report(loaded, paths[0], json).trim_end())
         return 0
@@ -53,3 +56,21 @@ fn place(files List[ast.SourceFile], path str, p ast.Pos) str
     found := locate(files, p)
     file := if found.0 == "" then path else found.0
     "{file}:{found.1.line}:{found.1.col}"
+
+## `ail effects --gpu` (std.gpu.1-2): one line per `for` loop in source order,
+## `FILE:LINE:COL ID for VAR: VERDICT (RULE: REASON)`, with ` work N` for an eligible
+## loop; or one JSON object with `--json`.
+fn gpu_report(loaded Loaded, path str, json bool) str
+    rows := check.gpu_rows(loaded.program)
+    files := loaded.program.files
+    if json
+        items := [
+            "\{\"at\":{Json.Str(place(files, path, r.pos)).to_text()},\"fn\":{Json.Str(r.func).to_text()},\"var\":{Json.Str(r.var).to_text()},\"verdict\":\"{r.verdict}\",\"rule\":\"{r.rule}\",\"reason\":{Json.Str(r.reason).to_text()},\"work\":{r.work}}"
+            for r in rows
+        ]
+        return "\{\"ail_api\":1,\"loops\":[{items.join(",")}]}\n"
+    mut out := ""
+    for r in rows
+        cost := if r.verdict == "eligible" then " work {r.work}" else ""
+        out = "{out}{place(files, path, r.pos)} {r.func} for {r.var}: {r.verdict} ({r.rule}: {r.reason}){cost}\n"
+    out

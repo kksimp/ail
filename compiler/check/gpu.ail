@@ -1,0 +1,62 @@
+## `ail effects --gpu` (std.gpu.1-2, ADR 0995): for each `for` loop, whether its body
+## could run as a GPU kernel. Only the CPU path runs today; this report is layer 1.
+
+## One row of `ail effects --gpu`: a `for` loop and whether it could be a GPU kernel.
+pub struct GpuRow
+    pub pos ast.Pos
+    pub func str
+    pub var str
+    ## `eligible` or `cpu`.
+    pub verdict str
+    pub rule str
+    pub reason str
+    ## Operations one iteration costs (conc.par.14), for the offload estimate.
+    pub work int
+
+## Every `for` loop of the user's functions with its GPU verdict, in source order.
+@allow("expr.match.3") fn Checker.gpu_rows(self) List[GpuRow]
+    cx := par_context()
+    mut out := List[GpuRow]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        id := if f.owner == none
+            and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(prog, f)}"
+        for s in loops(body)
+            v := judge(cx, f, s) else continue
+            match s
+                For(_, _, _, mutable, iter, lbody, _) =>
+                    out.push(gpu_row(v, id, mutable, iter, lbody))
+                _ => continue
+    out.sorted(by: |r| r.pos.line * 100000 + r.pos.col)
+
+fn cpu_row(v Verdict, id str, why str) GpuRow
+    GpuRow(pos: v.pos, func: id, var: v.var, verdict: "cpu", rule: "std.gpu.2", reason: why, work: 0)
+
+fn gpu_row(v Verdict, id str, mutable bool, iter ast.Expr, body List[ast.Stmt]) GpuRow
+    if v.sequential
+        return cpu_row(v, id, "the iterations are not independent ({v.rule}: {v.reason})")
+    if mutable or not is_range(iter)
+        return cpu_row(v, id, "iterates a collection; a kernel needs a range `a..b`")
+    mut sc := ast.new_scan()
+    ast.scan_block(mut sc, body, 0)
+    if sc.bad
+        return cpu_row(v, id, "has {sc.why}")
+    if sc.calls
+        names := if sc.callees.len() > 0 then sc.callees.join(", ") else "a method that changes its receiver"
+        return cpu_row(v, id, "calls {names}; inline it into the loop body")
+    GpuRow(
+        pos: v.pos,
+        func: id,
+        var: v.var,
+        verdict: "eligible",
+        rule: "std.gpu.1",
+        reason: "scalar body, independent iterations",
+        work: sc.work,
+    )
+
+## All rows of the program (`ail effects --gpu`).
+pub fn gpu_rows(p ast.Program) List[GpuRow]
+    c := checked_fns(p, false, [])
+    c.gpu_rows()
