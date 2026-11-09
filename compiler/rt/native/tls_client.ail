@@ -41,7 +41,9 @@ TS_RAK := 352
 TS_WAK := 360
 TS_ALPN := 368
 TS_ALPNO := 376
-TS_BYTES := 384
+TS_PEND := 384
+TS_SRV := 392
+TS_BYTES := 400
 
 # Global slot 42: the cache of trusted roots (tc_cached_roots).
 TLS_ROOTS := 42
@@ -79,6 +81,10 @@ fn tc_hex(v int, digits int) str
 
 ## Fail with `msg`: kind 0 is a protocol failure, 1 a certificate failure.
 fn tc_err(st int, kind int, msg str) int
+    # The server side (tls_server.ail) reuses the messages: "the server" is the peer.
+    if load64(st + TS_SRV) != 0 and load64(str_addr(msg)) >= 10 and msg.slice(0, 10) == "the server"
+        store64(st + TS_MSG, str_addr("the client{msg.slice(10, load64(str_addr(msg)))}"))
+        return TC_ERR - kind
     store64(st + TS_MSG, str_addr(msg))
     TC_ERR - kind
 
@@ -1140,6 +1146,10 @@ fn tc_connect_alpn(o int, host str, alpn int) int
 ## Like `os_read` on the decrypted stream: the bytes, 0 at the end, or an error.
 fn tc_read(o int, p int, n int) int
     st := load64(o + NET_TLS)
+    if load64(st + TS_PEND) != 0
+        pe := tc_pending(o, st)
+        if pe != 0
+            return pe
     while true
         if load64(st + TS_CLOSED) != 0
             return 0
@@ -1235,4 +1245,16 @@ fn tc_post(o int) int
     0
 
 fn tc_write(o int, p int, n int) int
+    st := load64(o + NET_TLS)
+    if load64(st + TS_PEND) != 0
+        pe := tc_pending(o, st)
+        if pe != 0
+            return pe
     tc_write_record(o, 23, p, n)
+
+## An accepted connection's handshake runs on its first read or write
+## (tls_server.ail); after a failed one `TS_PEND` is -1 and nothing flows.
+fn tc_pending(o int, st int) int
+    if load64(st + TS_PEND) < 0
+        return tc_err(st, 0, "the TLS handshake with the peer failed earlier")
+    ts_handshake(o, st)

@@ -1,0 +1,7 @@
+listening
+listening
+tls: the private key doesn't match the certificate
+tls: cert_pem holds no CERTIFICATE block
+tls: key_pem must hold exactly one PRIVATE KEY or EC PRIVATE KEY block
+tls: the private key is RSA; the TLS server signs with ECDSA P-256 keys only (ADR 1013)
+tls: the private key is encrypted; decrypt it first (ADR 1013)

@@ -85,6 +85,13 @@ fn rec_net_listen(addr str, at str) int
     rec_net_w_handle("net.listen", "net.Listener", r)
     r
 
+fn rec_net_listen_tls(addr str, cert_pem str, key_pem str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.listen_tls", at)
+    r := net_listen_tls(addr, cert_pem, key_pem, at)
+    rec_net_w_handle("net.listen_tls", "net.Listener", r)
+    r
+
 fn rec_net_accept(h int, at str) int
     if rec_mode() == 2
         return rec_net_r_handle("net.accept", at)

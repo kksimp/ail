@@ -68,6 +68,7 @@ STD_FUNCTIONS := [
         "get",
         "get_bytes",
         "listen",
+        "listen_tls",
         "open",
         "options",
         "post",
@@ -345,6 +346,12 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Server")))
     if key == "net.listen"
         return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Listener")))
+    # std.net.30: a listener that speaks TLS 1.3.
+    if key == "net.listen_tls"
+        return StdSig(
+            params: [text, text, text],
+            ret: fails_with("net.NetError", std_struct("net.Listener")),
+        )
     if key == "net.connect" or key == "net.connect_tls"
         return StdSig(
             params: [text, Ty.Int],

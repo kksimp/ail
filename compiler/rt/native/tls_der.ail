@@ -200,6 +200,13 @@ fn der_base64(p int, n int) List[int]
 ## The certificates of a PEM text (`str`) as a list of `[address, length]` of
 ## their DER bytes.
 fn der_pem(text str) List[List[int]]
+    der_pem_label(text, "CERTIFICATE")
+
+## The blocks labelled `label` (`PRIVATE KEY`, `EC PRIVATE KEY`, ...) of a PEM
+## text, as `der_pem` returns certificates.
+fn der_pem_label(text str, label str) List[List[int]]
+    begin := "-----BEGIN {label}-----"
+    stop := "-----END {label}-----"
     mut out := List[List[int]]()
     mut inside := false
     mut start := 0
@@ -220,10 +227,10 @@ fn der_pem(text str) List[List[int]]
             a += 1
         while b > a and (load8(p + b - 1) == 32 or load8(p + b - 1) == 9 or load8(p + b - 1) == 13)
             b -= 1
-        if der_is_line(p, a, b, "-----BEGIN CERTIFICATE-----")
+        if der_is_line(p, a, b, begin)
             inside = true
             blen = 0
-        elif der_is_line(p, a, b, "-----END CERTIFICATE-----")
+        elif der_is_line(p, a, b, stop)
             if inside
                 d := der_base64(buf, blen)
                 if d.len() > 0

@@ -1,0 +1,378 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native TLS 1.3 server (ADR 1013, std.net.32): `net.listen_tls` loads a
+## certificate chain and an ECDSA P-256 key once (`ts_config`); every accepted
+## connection then runs the handshake on its first read or write
+## (`ts_handshake`), so a slow client holds up its own task and not the accept
+## loop. It reuses the record layer, key schedule and post-handshake code of
+## tls_client.ail. One key exchange (X25519, offered by every client that
+## speaks TLS 1.3), the suites TLS_AES_128_GCM_SHA256 and
+## TLS_CHACHA20_POLY1305_SHA256, the signature scheme ecdsa_secp256r1_sha256,
+## no HelloRetryRequest, no client certificates, no resumption, no early data.
+
+# Words of the server configuration (`cfg`).
+TSC_MSG := 0
+TSC_MSGN := 8
+TSC_KEY := 16
+TSC_BYTES := 24
+
+## The configuration for `cert_pem` and `key_pem`, stored in the word object
+## `cfg`; "" if good, else why not.
+fn ts_config(cert_pem str, key_pem str, cfg int) str
+    ders := der_pem(cert_pem)
+    if ders.len() == 0
+        return "cert_pem holds no CERTIFICATE block"
+    if ders.len() > 16
+        return "cert_pem holds more than 16 certificates"
+    leaf := x_parse(ders[0][0], ders[0][1])
+    if leaf[X_ERR] != 0
+        return str_at(leaf[X_ERR])
+    if leaf[X_KT] != 2 or leaf[X_CURVE] != 0
+        return "the certificate's key is not ECDSA P-256; the TLS server signs with P-256 keys only (ADR 1013)"
+    slot := alloc_raw(8, KIND_BYTES)
+    why := tsg_load(key_pem, slot)
+    if why != ""
+        return why
+    d := load64(slot)
+    pubkey := alloc_raw(80, KIND_BYTES)
+    if not tsg_public(d, pubkey)
+        return "the private key is invalid"
+    if leaf[X_K1N] != 65 or not tls_ct_eq(pubkey, ders[0][0] + leaf[X_K1], 65)
+        return "the private key doesn't match the certificate"
+    # The Certificate message (RFC 8446 section 4.4.2): no request context,
+    # then each certificate with no extensions.
+    mut total := 8
+    for c in ders
+        total += c[1] + 5
+    msg := alloc_raw(total + 16, KIND_BYTES)
+    store8(msg, 11)
+    store8(msg + 1, (total - 4).shr(16).bit_and(255))
+    tc_w16(msg, 2, total - 4)
+    store8(msg + 4, 0)
+    store8(msg + 5, (total - 8).shr(16).bit_and(255))
+    tc_w16(msg, 6, total - 8)
+    mut at := 8
+    for c in ders
+        store8(msg + at, c[1].shr(16).bit_and(255))
+        tc_w16(msg, at + 1, c[1])
+        copy_bytes(msg + at + 3, c[0], c[1])
+        at += 3 + c[1]
+        tc_w16(msg, at, 0)
+        at += 2
+    store64(cfg + TSC_MSG, msg)
+    store64(cfg + TSC_MSGN, total)
+    store64(cfg + TSC_KEY, d)
+    ""
+
+## Prepare the accepted socket object `o` to run its handshake on first use.
+fn ts_prepare(o int, cfg int)
+    st := obj_new(TS_BYTES, 4)
+    for i in 0..TS_BYTES / 8
+        store64(st + 8 * i, 0)
+    store64(o + NET_TLS, st)
+    store64(st + TS_REC, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
+    store64(st + TS_PBUF, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
+    store64(st + TS_HS, alloc_raw(TC_HS_MAX + 16, KIND_BYTES))
+    store64(st + TS_TR, alloc_raw(TC_TR_MAX + 16, KIND_BYTES))
+    store64(st + TS_SRV, 1)
+    store64(st + TS_PEND, cfg)
+
+## Send alert `code` (best effort) and fail with `msg`.
+fn ts_fail(o int, st int, code int, msg str) int
+    al := alloc_raw(8, KIND_BYTES)
+    store8(al, 2)
+    store8(al + 1, code)
+    tc_write_record(o, 21, al, 2)
+    tc_err(st, 0, msg)
+
+## Run the handshake of `o` (state `st`): 0 or an error. A failure leaves
+## `TS_PEND` at -1, so the connection can't carry data.
+fn ts_handshake(o int, st int) int
+    cfg := load64(st + TS_PEND)
+    e := ts_run(o, st, cfg)
+    store64(st + TS_PEND, (if e == 0 then 0 else -1))
+    e
+
+fn ts_run(o int, st int, cfg int) int
+    hs := load64(st + TS_HS)
+    mut e := tc_msg(o, false)
+    if e != 0
+        return e
+    if load8(hs) != 1
+        return ts_fail(
+            o,
+            st,
+            10,
+            "the client sent handshake message {load8(hs)} where ClientHello belongs (unexpected_message)",
+        )
+    n := load64(st + TS_MLEN) - 4
+    p := hs + 4
+    if n < 35
+        return tc_bad(st, "ClientHello")
+    mut off := 34
+    sl := load8(p + off)
+    sid := p + off + 1
+    off += 1 + sl
+    if sl > 32 or off + 2 > n
+        return tc_bad(st, "ClientHello")
+    cl := tc_r16(p + off)
+    off += 2
+    if cl.bit_and(1) != 0 or off + cl + 1 > n
+        return tc_bad(st, "ClientHello")
+    mut suite := 0
+    mut i := 0
+    while i < cl and suite == 0
+        s := tc_r16(p + off + i)
+        if s == 4865 or s == 4867
+            suite = s
+        i += 2
+    off += cl
+    off += 1 + load8(p + off)
+    if off + 2 > n
+        return ts_fail(
+            o,
+            st,
+            70,
+            "the client offers no TLS 1.3 (it sent no extensions); AIL's TLS server speaks TLS 1.3 only (protocol_version)",
+        )
+    el := tc_r16(p + off)
+    off += 2
+    if off + el != n
+        return tc_bad(st, "ClientHello extensions")
+    mut v13 := false
+    mut sig := false
+    mut share := 0
+    mut x25519 := false
+    while off < n
+        if off + 4 > n
+            return tc_bad(st, "ClientHello extensions")
+        ty := tc_r16(p + off)
+        dl := tc_r16(p + off + 2)
+        off += 4
+        if off + dl > n
+            return tc_bad(st, "ClientHello extensions")
+        q := p + off
+        if ty == 43
+            if dl < 1 or load8(q) + 1 != dl
+                return tc_bad(st, "ClientHello extension")
+            for j in 0..(load8(q) / 2)
+                if tc_r16(q + 1 + 2 * j) == 772
+                    v13 = true
+        elif ty == 13
+            if dl < 2 or tc_r16(q) + 2 != dl
+                return tc_bad(st, "ClientHello extension")
+            for j in 0..(tc_r16(q) / 2)
+                if tc_r16(q + 2 + 2 * j) == 1027
+                    sig = true
+        elif ty == 10
+            if dl < 2 or tc_r16(q) + 2 != dl
+                return tc_bad(st, "ClientHello extension")
+            for j in 0..(tc_r16(q) / 2)
+                if tc_r16(q + 2 + 2 * j) == 29
+                    x25519 = true
+        elif ty == 51
+            if dl < 2 or tc_r16(q) + 2 != dl
+                return tc_bad(st, "ClientHello extension")
+            mut k := 2
+            while k + 4 <= dl
+                kl := tc_r16(q + k + 2)
+                if k + 4 + kl > dl
+                    return tc_bad(st, "ClientHello extension")
+                if tc_r16(q + k) == 29 and kl == 32
+                    share = q + k + 4
+                k += 4 + kl
+        off += dl
+    if not v13
+        return ts_fail(
+            o,
+            st,
+            70,
+            "the client doesn't offer TLS 1.3; AIL's TLS server speaks TLS 1.3 only (protocol_version)",
+        )
+    if suite == 0
+        return ts_fail(
+            o,
+            st,
+            40,
+            "the client offers neither TLS_AES_128_GCM_SHA256 nor TLS_CHACHA20_POLY1305_SHA256 (handshake_failure)",
+        )
+    if not sig
+        return ts_fail(
+            o,
+            st,
+            40,
+            "the client doesn't accept ecdsa_secp256r1_sha256 signatures (handshake_failure)",
+        )
+    if share == 0
+        if x25519
+            return ts_fail(
+                o,
+                st,
+                40,
+                "the client sent no X25519 key share, and AIL's TLS server has no HelloRetryRequest (handshake_failure)",
+            )
+        return ts_fail(
+            o,
+            st,
+            40,
+            "the client doesn't offer the X25519 key exchange group (handshake_failure)",
+        )
+    store64(st + TS_SUITE, suite)
+    store64(st + TS_HL, 32)
+    hl := 32
+    e = tc_tr_add(st, hs, load64(st + TS_MLEN))
+    if e != 0
+        return e
+    # Our secrets: 32 bytes of random for the hello and 32 for X25519.
+    rnd := alloc_raw(64, KIND_BYTES)
+    if tc_random(rnd, 64) < 0
+        return tc_err(st, 0, "no secure random numbers")
+    pubkey := alloc_raw(32, KIND_BYTES)
+    x25519_base(pubkey, rnd + 32)
+    shared := alloc_raw(32, KIND_BYTES)
+    x25519_raw(shared, rnd + 32, share)
+    mut zero := true
+    for j in 0..32
+        if load8(shared + j) != 0
+            zero = false
+    if zero
+        return ts_fail(o, st, 47, "the client's X25519 key share is invalid (illegal_parameter)")
+    # ServerHello.
+    sh := alloc_raw(160, KIND_BYTES)
+    mut b := 4
+    b = tc_w16(sh, b, 771)
+    copy_bytes(sh + b, rnd, 32)
+    b += 32
+    b = tc_w8(sh, b, sl)
+    copy_bytes(sh + b, sid, sl)
+    b += sl
+    b = tc_w16(sh, b, suite)
+    b = tc_w8(sh, b, 0)
+    b = tc_w16(sh, b, 46)
+    b = tc_w16(sh, b, 43)
+    b = tc_w16(sh, b, 2)
+    b = tc_w16(sh, b, 772)
+    b = tc_w16(sh, b, 51)
+    b = tc_w16(sh, b, 36)
+    b = tc_w16(sh, b, 29)
+    b = tc_w16(sh, b, 32)
+    copy_bytes(sh + b, pubkey, 32)
+    b += 32
+    store8(sh, 2)
+    store8(sh + 1, 0)
+    tc_w16(sh, 2, b - 4)
+    tc_drop(st)
+    e = tc_tr_add(st, sh, b)
+    if e != 0
+        return e
+    mut w := tc_write_record(o, 22, sh, b)
+    if w < 0
+        return w
+    ccs := alloc_raw(8, KIND_BYTES)
+    store8(ccs, 20)
+    store8(ccs + 1, 3)
+    store8(ccs + 2, 3)
+    store8(ccs + 3, 0)
+    store8(ccs + 4, 1)
+    store8(ccs + 5, 1)
+    w = tc_raw_write(o, ccs, 6)
+    if w < 0
+        return w
+    # The key schedule (RFC 8446 section 7.1), as in the client.
+    sec := alloc_raw(512, KIND_BYTES)
+    zeros := sec + 448
+    for j in 0..8
+        store64(zeros + 8 * j, 0)
+    eh := sec + 320
+    kdh_hash(hl, zeros, 0, eh)
+    early := sec
+    kdh_extract(hl, zeros, 0, zeros, hl, early)
+    derived := sec + 64
+    kdh_derive_secret(hl, early, "derived", eh, derived)
+    hsec := sec + 128
+    kdh_extract(hl, derived, hl, shared, 32, hsec)
+    th := alloc_raw(64, KIND_BYTES)
+    tc_tr_hash(st, th)
+    c_hs := sec + 192
+    s_hs := sec + 256
+    kdh_derive_secret(hl, hsec, "c hs traffic", th, c_hs)
+    kdh_derive_secret(hl, hsec, "s hs traffic", th, s_hs)
+    tc_set_keys(st, false, s_hs)
+    tc_set_keys(st, true, c_hs)
+    # EncryptedExtensions, Certificate, CertificateVerify, Finished.
+    cn := load64(cfg + TSC_MSGN)
+    fl := alloc_raw(cn + 256, KIND_BYTES)
+    store8(fl, 8)
+    store8(fl + 1, 0)
+    store8(fl + 2, 0)
+    store8(fl + 3, 2)
+    store8(fl + 4, 0)
+    store8(fl + 5, 0)
+    copy_bytes(fl + 6, load64(cfg + TSC_MSG), cn)
+    e = tc_tr_add(st, fl, 6 + cn)
+    if e != 0
+        return e
+    tc_tr_hash(st, th)
+    signed := alloc_raw(192, KIND_BYTES)
+    for j in 0..64
+        store8(signed + j, 32)
+    copy_bytes(signed + 64, str_addr("TLS 1.3, server CertificateVerify") + 16, 33)
+    store8(signed + 97, 0)
+    copy_bytes(signed + 98, th, hl)
+    sigb := alloc_raw(96, KIND_BYTES)
+    sn := tsg_sign(load64(cfg + TSC_KEY), signed, 98 + hl, sigb)
+    if sn == 0
+        return tc_err(st, 0, "no secure random numbers")
+    cv := fl + 6 + cn
+    store8(cv, 15)
+    store8(cv + 1, 0)
+    tc_w16(cv, 2, sn + 4)
+    tc_w16(cv, 4, 1027)
+    tc_w16(cv, 6, sn)
+    copy_bytes(cv + 8, sigb, sn)
+    e = tc_tr_add(st, cv, 8 + sn)
+    if e != 0
+        return e
+    tc_tr_hash(st, th)
+    fin := cv + 8 + sn
+    store8(fin, 20)
+    store8(fin + 1, 0)
+    tc_w16(fin, 2, hl)
+    tc_finished(hl, s_hs, th, fin + 4)
+    e = tc_tr_add(st, fin, 4 + hl)
+    if e != 0
+        return e
+    w = tc_write_record(o, 22, fl, 6 + cn + 8 + sn + 4 + hl)
+    if w < 0
+        return w
+    tc_tr_hash(st, th)
+    derived2 := sec + 384
+    kdh_derive_secret(hl, hsec, "derived", eh, derived2)
+    master := alloc_raw(64, KIND_BYTES)
+    kdh_extract(hl, derived2, hl, zeros, hl, master)
+    c_ap := alloc_raw(64, KIND_BYTES)
+    s_ap := alloc_raw(64, KIND_BYTES)
+    kdh_derive_secret(hl, master, "c ap traffic", th, c_ap)
+    kdh_derive_secret(hl, master, "s ap traffic", th, s_ap)
+    tc_set_keys(st, false, s_ap)
+    # The client's Finished.
+    e = tc_msg(o, true)
+    if e != 0
+        return e
+    e = tc_expect(st, 20, "Finished")
+    if e != 0
+        return e
+    m := load64(st + TS_MLEN)
+    want := alloc_raw(64, KIND_BYTES)
+    tc_finished(hl, c_hs, th, want)
+    if m != 4 + hl or not tls_ct_eq(hs + 4, want, hl)
+        return ts_fail(o, st, 51, "the client's Finished didn't verify (decrypt_error)")
+    if load64(st + TS_HSN) != m
+        return tc_err(st, 0, "the client's handshake message spanned a key change (unexpected_message)")
+    tc_drop(st)
+    tc_set_keys(st, true, c_ap)
+    # Keep the secrets and the configuration alive to here.
+    if load8(sec) + load8(rnd) + load8(cfg) < 0
+        return -1
+    0

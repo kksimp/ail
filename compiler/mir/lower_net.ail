@@ -23,6 +23,12 @@ fn net_fn(rt str, params List[Ty], ret Ty, fails bool) NetFn
 fn net_module_lookup(name str) NetFn?
     match name
         "listen" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_LISTENER), true)
+        "listen_tls" => net_fn(
+            "rt.net_listen_tls",
+            [Ty.Str, Ty.Str, Ty.Str],
+            Ty.Struct(NET_LISTENER),
+            true,
+        )
         "serve" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_SERVER), true)
         "connect_tls" => net_fn("rt.net_connect_tls", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
         "connect" => net_fn("rt.net_connect", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)

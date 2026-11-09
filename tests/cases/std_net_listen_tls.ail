@@ -1,0 +1,61 @@
+## std.net.32: `net.listen_tls` checks its certificate and key before it opens
+## the socket, and says what is wrong. The certificate and keys are throwaway
+## ECDSA P-256 fixtures; the live handshake is tools/native-tls/server-check.sh.
+use std.net
+
+CERT := [
+    "-----BEGIN CERTIFICATE-----",
+    "MIIBlDCCATugAwIBAgIUAaxyvKAPgGOldYjGC5AhD35aHEkwCgYIKoZIzj0EAwIw",
+    "FDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MTEwOTE0NTQwNVoYDzIxMjYxMDE2",
+    "MTQ1NDA1WjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjO",
+    "PQMBBwNCAAQJzDW67Z6b09Aziy8paQ0kdxUu6PZLwWn6stqMiPj/xvhozeHFLrxj",
+    "9x5bhwe7RGJmimV6Fn0NDzSa9qiAtrdmo2kwZzAdBgNVHQ4EFgQUCPsFK3x3XnMa",
+    "X0kve287kPbqrYgwHwYDVR0jBBgwFoAUCPsFK3x3XnMaX0kve287kPbqrYgwDwYD",
+    "VR0TAQH/BAUwAwEB/zAUBgNVHREEDTALgglsb2NhbGhvc3QwCgYIKoZIzj0EAwID",
+    "RwAwRAIgMoCBR5loUOBLGQlzu/c07SnKTA3OPQcWp+mknWen4IkCIGgtRSl79nsO",
+    "2lIhSIM+ccAUeb91rovmti6HRFF+1sJH",
+    "-----END CERTIFICATE-----",
+]
+
+EC_KEY := [
+    "-----BEGIN EC PRIVATE KEY-----",
+    "MHcCAQEEINwg3oD5BQ4Kr2jQzbghFxlDfzmb2M4lH6hgjVi5PsjgoAoGCCqGSM49",
+    "AwEHoUQDQgAECcw1uu2em9PQM4svKWkNJHcVLuj2S8Fp+rLajIj4/8b4aM3hxS68",
+    "Y/ceW4cHu0RiZoplehZ9DQ80mvaogLa3Zg==",
+    "-----END EC PRIVATE KEY-----",
+]
+
+P8_KEY := [
+    "-----BEGIN PRIVATE KEY-----",
+    "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg3CDegPkFDgqvaNDN",
+    "uCEXGUN/OZvYziUfqGCNWLk+yOChRANCAAQJzDW67Z6b09Aziy8paQ0kdxUu6PZL",
+    "wWn6stqMiPj/xvhozeHFLrxj9x5bhwe7RGJmimV6Fn0NDzSa9qiAtrdm",
+    "-----END PRIVATE KEY-----",
+]
+
+OTHER_KEY := [
+    "-----BEGIN EC PRIVATE KEY-----",
+    "MHcCAQEEIJikJrHmDfOtApKRKvo6Wpe/Jz7dfUjNYgxmWRXcfUZNoAoGCCqGSM49",
+    "AwEHoUQDQgAEI71Is14GZuK8c5q4Tg5yvJQvQa58kvBqCoNgY1eCQk0rzY5J4Vdt",
+    "iowJ7/D237vCN48VAgoPrUw4OedOt2Ewsw==",
+    "-----END EC PRIVATE KEY-----",
+]
+
+fn pem(ls List[str]) str
+    ls.join("\n")
+
+fn outcome(cert str, key str) str
+    l := net.listen_tls("127.0.0.1:0", cert, key) else err
+        return "{err.kind}: {err.message}"
+    l.close()
+    "listening"
+
+fn main()
+    cert := pem(CERT)
+    print(outcome(cert, pem(EC_KEY)))
+    print(outcome(cert, pem(P8_KEY)))
+    print(outcome(cert, pem(OTHER_KEY)))
+    print(outcome("", pem(EC_KEY)))
+    print(outcome(cert, ""))
+    print(outcome(cert, "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n"))
+    print(outcome(cert, "-----BEGIN ENCRYPTED PRIVATE KEY-----\nAAAA\n-----END ENCRYPTED PRIVATE KEY-----\n"))
