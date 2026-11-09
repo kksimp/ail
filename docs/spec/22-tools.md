@@ -763,7 +763,7 @@ diff. It compares two versions the way `ail diff` does and reads them through th
 same checker graph as `ail ask`.
 
 **api.rev.1** — `ail review BASE..HEAD [PATH] [--budget N] [--json] [--deny-new]`
-compares `PATH` (default `.`) as git has it at revision `BASE` with `PATH` at
+compares `PATH` (a program file or a directory with `.ail` files at its top; default `.`) as git has it at revision `BASE` with `PATH` at
 `HEAD`, each copied out as `diff.out.5` does. `ail review --files OLD NEW` compares
 two files or two package directories instead. An argument that is not `BASE..HEAD`,
 an unknown revision or path and an unknown option are errors with status 2.

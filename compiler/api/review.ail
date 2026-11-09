@@ -277,7 +277,10 @@ pub fn review_command(args List[str], std str) int
     got := rv_items(old_path, new_path, std)
     remove_scrap(scrap_old)
     remove_scrap(scrap_new)
-    built := got else return 2
+    built := got else
+        if not files
+            io.eprint("hint: PATH must be a program file or a directory with .ail files at its top (default `.`), e.g. ail review main..HEAD compiler (api.rev.1)")
+        return 2
     items := built.0
     head := rv_head(label, items, built.1)
     # The report's full cost, and the most the trailer can cost, which is kept free (api.rev.3).
