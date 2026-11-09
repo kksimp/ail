@@ -90,7 +90,6 @@ pub AIL_STD_MODULES := [
     "std.screen.pixels",
     "std.screen.cells",
     "std.screen.view",
-    "std.simd",
     "std.net.jar",
     "std.time.date",
     "std.toml",

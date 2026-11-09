@@ -45,7 +45,6 @@ pub STD_AIL := [
     "std.screen.pixels",
     "std.screen.cells",
     "std.screen.view",
-    "std.simd",
     "std.net.jar",
     "std.regex",
     "std.time.date",
