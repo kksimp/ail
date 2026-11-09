@@ -706,7 +706,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0886](0886-native-values-mode.md) | Native `ail run --values`: frame values in a trap | Accepted | 2026-10-24 |
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
-| [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Proposed (planned, not implemented) | 2026-10-24 |
+| [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Accepted (built by [1020](1020-ail-context.md)) | 2026-10-24 |
 | [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed (planned, not implemented) | 2026-10-24 |
 | [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed (planned, not implemented) | 2026-10-24 |
 | [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed (planned, not implemented) | 2026-10-24 |
@@ -792,4 +792,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
+| [1020](1020-ail-context.md) | `ail context`: a token-budgeted bundle for an edit; amends ADR 0891 *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
