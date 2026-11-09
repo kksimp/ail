@@ -1,0 +1,72 @@
+## std.vpx.1-6: a 32x32 stream of 16 frames made by libvpx's vpxenc (two-pass,
+## alternate references, so two packets are superframes with a hidden frame),
+## checked against vpxdec's output, then the RGBA conversion and the errors.
+## The clip is synthetic: generated shapes and noise, no licence attached.
+use std.video.vp9
+
+## Each packet, after its length in two bytes.
+fn stream() bytes
+    parts := [
+        "007a824983420001f001f60038241c18f2000030700000708aa4b892bc08f14e",
+        "ad7ab0b566fe614fac25ffb536bf10c2bf727eea8c9db8042662bac2f5a12fcc",
+        "08291dd85a27382932b29f9df2cd83f27290fb93b0269ea3448a4f917f91a8c0",
+        "5738071937f805f8f1c7fbc86f87d7819c9d746934dff966658a880000488400",
+        "80494e802940000180700000763c294825c340274acb27739eb1b81dff3095ff",
+        "4e5f56cf8d5000860040961c205a0000036000007397d180de76ea279f740bed",
+        "f000c1291bc10017860040961c405a00000360000071ed697ff4600962e00000",
+        "2d860040961c585a0000037000007c5957b85f70eadd382cb0a41fd07d6bf320",
+        "c03f61f5a85eff3c103d0fe75c00001a860040960c585a0000036000006860ff",
+        "21ff46efdc18acf32ca00020860040960c7c5a000003600000694ffe939eac80",
+        "48c0fb4be587a743c3fb4600000f860100921c005a00000320000053f0004d84",
+        "0040854e9629400001806000007d8cd548d1fe57ffa57fffef66f1f3637fb57b",
+        "6104e381f9fc555e02949240913269d362c417b7ac58008600410e0c2c5a0000",
+        "032000004c517020c13811c1001c8600410e0c4c5a00000360000074af22fdfe",
+        "6257fda87c4745b2600000118600410e0c4c5a00000320000052ef5a8c001e86",
+        "00410e0c4c5a0000036000006860fff3727bca82dd784c070638f5cc00002186",
+        "00410e0c4c5a000003600000694ffd119caca3acbee6441978f42be183c81300",
+        "002a8600410e0c705a0000037000007c75416899eb1ee79c2bf0c06d6d5f1b3c",
+        "f34946964da28930a68d49b0001c8600410e0c545a00000360000000310e3fd7",
+        "c6abfeb724fffec4154000158600410e0c545a00000360000025b29d8f831f15",
+        "0000108600810a1c005a000003200000569000",
+    ]
+    bytes.from_hex(parts.join("")) else b""
+
+fn digest(b bytes) int
+    mut h := 0
+    for x in b
+        h = (h * 31 + x.to_int()) % 1000000007
+    h
+
+fn fails(data bytes)
+    mut d := vp9.decoder()
+    frames := d.decode(data) else err
+        print(err)
+        return
+    print("decoded {frames.len()} frames")
+
+fn main()
+    data := stream()
+    mut d := vp9.decoder()
+    mut p := 0
+    mut n := 0
+    while p + 2 <= data.len()
+        size := data[p].to_int() * 256 + data[p + 1].to_int()
+        packet := data[p + 2..p + 2 + size]
+        p += 2 + size
+        superframe := packet[size - 1].to_int().bit_and(0xE0) == 0xC0
+        frames := d.decode(packet) else err
+            print(err)
+            return
+        for f in frames
+            tag := if superframe then " (superframe)" else ""
+            print("{n} {f.width}x{f.height} {digest(f.y)} {digest(f.u)} {digest(f.v)}{tag}")
+            if n == 0
+                rgba := f.rgba()
+                print("rgba {rgba.len()} {digest(rgba)} {rgba[..8].to_list()}")
+                print("chroma {f.cw()}x{f.ch()}")
+            n += 1
+    fails(b"")
+    fails(b"\x00\x00")
+    fails(b"\xa0\x00")
+    fails(b"\x86\x00\x00\x00")
+    fails(b"\x88")
