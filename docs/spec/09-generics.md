@@ -337,7 +337,7 @@ fn main()
 ## Const generics
 
 **gen.const.1** — A struct or function MAY declare a const parameter as a name
-followed by `int`: `struct Vec[T, N int]`, `fn dot[N int](...)`. A const
+preceded by `const` and followed by `int`: `struct Vec[T, const N int]`, `fn dot[const N int](...)`. A const
 argument is an int literal (`Vec[float, 3]`) or a const parameter in scope. A
 call that uses one const parameter twice, as `dot` does, needs the same value
 in both places; lengths that differ (`Vec[float, 3]` against `Vec[float, 4]`)
@@ -347,7 +347,7 @@ are an ordinary argument type mismatch (`expr.call.2`). *(ADR 0954)*
 in scope, and a type parameter MUST NOT get one. *(ADR 0954)*
 
 ```ail error=gen.const.2
-struct Vec[T, N int]
+struct Vec[T, const N int]
     data List[T]
 
 fn f(v Vec[float, int])
@@ -361,13 +361,13 @@ fn main()
 fixed per instance. *(ADR 0954)*
 
 ```ail rules=gen.const.1,gen.const.3
-struct Vec[T, N int]
+struct Vec[T, const N int]
     data List[T]
 
 fn Vec.size(self) int
     N
 
-fn dot[N int](a Vec[float, N], b Vec[float, N]) float
+fn dot[const N int](a Vec[float, N], b Vec[float, N]) float
     mut s := 0.0
     for i in 0..N
         s += a.data[i] * b.data[i]

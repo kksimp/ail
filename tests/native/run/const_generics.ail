@@ -1,14 +1,14 @@
-# Const generics (gen.const.1, gen.const.3, ADR 0954): `N int` in a struct's and
+# Const generics (gen.const.1, gen.const.3, ADR 0954): `const N int` in a struct's and
 # a function's type parameters, `N` as an int value, and one `N` shared by two
 # parameters.
 
-struct Vec[T, N int]
+struct Vec[T, const N int]
     data List[T]
 
 fn Vec.size(self) int
     N
 
-fn dot[N int](a Vec[float, N], b Vec[float, N]) float
+fn dot[const N int](a Vec[float, N], b Vec[float, N]) float
     mut s := 0.0
     for i in 0..N
         s += a.data[i] * b.data[i]

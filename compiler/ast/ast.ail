@@ -79,6 +79,8 @@ pub struct GenericParam
     pub name str
     pub pos Pos
     pub bounds List[Ident]
+    ## `const N int`, a const generic parameter (gen.const.1).
+    pub is_const bool
 
 pub struct TraitDecl
     pub name str

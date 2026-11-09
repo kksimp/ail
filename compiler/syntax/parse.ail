@@ -898,13 +898,17 @@ fn Parser.generic_params(mut self) List[ast.GenericParam]?
     bump()
     mut params := List[ast.GenericParam]()
     while not at_sym("]")
+        # gen.const.1: `const N int`, a const parameter.
+        is_const := tag_at(0) == "id" and ident() == "const" and tag_at(1) == "id" and tag_at(2) == "id"
+        if is_const
+            bump()
         n := take_name("a type parameter name", "gen.decl.1")?
         mut bounds := List[ast.Ident]()
         if tag_at(0) == "id"
             bounds.push(dotted_name("a trait", "gen.bound.1")?)
             while eat_sym("+")
                 bounds.push(dotted_name("a trait after `+`", "gen.bound.1")?)
-        params.push(ast.GenericParam(name: n.name, pos: n.pos, bounds: bounds))
+        params.push(ast.GenericParam(name: n.name, pos: n.pos, bounds: bounds, is_const: is_const))
         if not eat_sym(",")
             break
     expect_sym("]", "`]` or `,` in the type parameters", "gen.decl.1")?
