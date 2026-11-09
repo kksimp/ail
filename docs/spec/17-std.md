@@ -1200,6 +1200,18 @@ fn main()
     print(r.status)
 ```
 
+**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux and a `kqueue` set on macOS, so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. On Windows the server keeps its `poll` loop (IOCP is a later slice). The native runtime only. *(ADR 1009)*
+
+```ail norun rules=std.net.32
+use std.net
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    # Thousands of idle connections cost the next request nothing extra.
+    ex := srv.accept()?
+    ex.respond(net.Response(status: 200, headers: {}, body: "ok"))?
+```
+
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
 **std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*
