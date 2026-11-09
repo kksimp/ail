@@ -23,12 +23,15 @@ pub fn host_path() str ! DeviceError
         message: "std.audio.9: set AIL_AUDIO_HOST to the audio host program",
     )
     p := "{root}/tools/audio-host/macos/build/ail-audio-host"
-    if not fs.exists(p)
+    q := "{root}/tools/audio-host/linux/build/ail-audio-host"
+    if fs.exists(p)
+        return p
+    if not fs.exists(q)
         return DeviceError(
             kind: "no_host",
-            message: "std.audio.9: no audio host is built for this platform; macOS has one (tools/audio-host/macos/run.sh)",
+            message: "std.audio.9: no audio host is built; run tools/audio-host/macos/run.sh (macOS) or tools/audio-host/linux/run.sh (Linux)",
         )
-    p
+    q
 
 ## Starts the audio host, the `proc.Child` the other functions take, and waits for it to be ready (std.audio.9).
 pub fn open() proc.Child ! DeviceError

@@ -47,7 +47,7 @@ host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
 host. `DeviceError` has `kind` (`no_host`, `start`, `version`, `host_exited`,
 `device`, `protocol`) and `message`. The host speaks one text line per message:
 `play RATE CH BASE64`, `rec MS RATE CH`, then `done`, `data RATE CH BASE64` or
-`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio). Elsewhere `open` fails with kind `no_host`
+`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio) and Linux (ALSA through `libasound.so.2`, which PipeWire and PulseAudio serve as the `default` device). Elsewhere `open` fails with kind `no_host`
 and a message naming this rule; it never crashes.
 
 **std.audio.10** — `record(mut d, ms, rate, channels) Clip ! DeviceError` records
