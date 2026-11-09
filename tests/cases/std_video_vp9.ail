@@ -1,4 +1,4 @@
-## std.vp9.1-6: a 32x32 stream of 16 frames made by libvpx's vpxenc (two-pass,
+## std.vpx.1-6: a 32x32 stream of 16 frames made by libvpx's vpxenc (two-pass,
 ## alternate references, so two packets are superframes with a hidden frame),
 ## checked against vpxdec's output, then the RGBA conversion and the errors.
 ## The clip is synthetic: generated shapes and noise, no licence attached.

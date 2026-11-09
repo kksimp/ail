@@ -1,15 +1,15 @@
-## std.video.vp9 (spec std.vp9.1-6, ADR 0989): a VP9 video decoder in AIL.
+## std.video.vp9 (spec std.vpx.1-6, ADR 0989): a VP9 video decoder in AIL.
 ## Profile 0 (8-bit, 4:2:0). Frames come out as I420 planes; `Frame.rgba`
 ## converts one for drawing. Decoding follows the VP9 bitstream specification
 ## and libvpx (BSD-3-Clause, see NOTICE), whose output it matches bit for bit.
 ## Not yet supported: profiles 1-3, and references of a different size
 ## (scaled prediction); both fail with a Vp9Error.
 
-## Why a frame could not be decoded (std.vp9.1).
+## Why a frame could not be decoded (std.vpx.1).
 pub error struct Vp9Error "vp9: {why}"
     pub why str
 
-## One decoded picture (std.vp9.3): I420 planes without padding. `y` has
+## One decoded picture (std.vpx.3): I420 planes without padding. `y` has
 ## `width * height` bytes; `u` and `v` have `cw() * ch()` bytes each, the
 ## chroma size rounded up. `space` is the stream's colour space (1 BT.601,
 ## 2 BT.709, 0 unknown; VP9 spec 7.2.2) and `full_range` its range.
@@ -22,7 +22,7 @@ pub struct Frame
     pub space int
     pub full_range bool
 
-## The chroma plane width and height (std.vp9.3).
+## The chroma plane width and height (std.vpx.3).
 pub fn Frame.cw(self) int
     (width + 1) / 2
 
@@ -601,7 +601,7 @@ fn hex_filters() str
         "40404060a040404040404058a840404040404050b040404040404048b8404040",
     ].join("")
 
-## A VP9 stream decoder (std.vp9.2). It keeps the reference frames, the
+## A VP9 stream decoder (std.vpx.2). It keeps the reference frames, the
 ## probability contexts and the segmentation state between calls. All its
 ## fields are internal.
 pub struct Decoder
@@ -800,7 +800,7 @@ fn unhex(s str, w int) List[int]
         i += w
     out
 
-## A new decoder with no reference frames (std.vp9.2).
+## A new decoder with no reference frames (std.vpx.2).
 pub fn decoder() Decoder
     mut d := Decoder.default()
     kf := unhex(hex_kf(), 2)
@@ -897,7 +897,7 @@ pub fn decoder() Decoder
     d.k_iuv = [0 for _ in 0..16]
     d
 
-## Decodes one packet (std.vp9.2): a frame, or a superframe of several, as
+## Decodes one packet (std.vpx.2): a frame, or a superframe of several, as
 ## WebM and IVF carry them. Returns the frames it shows, usually one; a hidden
 ## frame (an alternate reference) shows none.
 pub fn Decoder.decode(mut self, data bytes) List[Frame] ! Vp9Error
@@ -935,7 +935,7 @@ pub fn Decoder.decode(mut self, data bytes) List[Frame] ! Vp9Error
 
 # ---------------------------------------------------------------- bit reading
 
-## Reads `nb` bits of the uncompressed header at bit `at` (std.vp9.4).
+## Reads `nb` bits of the uncompressed header at bit `at` (std.vpx.4).
 fn Decoder.bits(self, at int, nb int) int
     mut v := 0
     for k in 0..nb
@@ -1300,7 +1300,7 @@ fn Decoder.mv_update(mut self, i int)
 # ---------------------------------------------------------------- frames and headers
 
 ## Sets the frame size; a new size reallocates the frame pool, so earlier
-## references can no longer be used (std.vp9.5).
+## references can no longer be used (std.vpx.5).
 fn Decoder.set_size(mut self, w int, h int)
     if w == width and h == height and mem.len() > 0
         return
@@ -1740,7 +1740,7 @@ fn Decoder.compressed_header(mut self)
             mv_update(b + MVC_CLASS0_HP)
             mv_update(b + MVC_HP)
 
-## Copies slot `s` out as a Frame (std.vp9.3).
+## Copies slot `s` out as a Frame (std.vpx.3).
 fn Decoder.frame_out(self, s int) Frame
     w := slot_w[s]
     h := slot_h[s]
@@ -4833,7 +4833,7 @@ fn Decoder.idct32(mut self, o int, s int)
 
 # ---------------------------------------------------------------- colour conversion
 
-## The frame as RGBA bytes, 4 per pixel, rows top to bottom (std.vp9.6).
+## The frame as RGBA bytes, 4 per pixel, rows top to bottom (std.vpx.6).
 ## Uses the frame's colour space: BT.709 when the stream says so, else
 ## BT.601, in studio range unless the stream says full range. Chroma is
 ## repeated for each pair of pixels.

@@ -4,7 +4,7 @@
 - **Date:** 2026-11-08
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; media
-- **Spec rules:** `std.vp9.1`-`std.vp9.6` ([std-vp9.md](../spec/std-vp9.md))
+- **Spec rules:** `std.vpx.1`-`std.vpx.6` ([std-vp9.md](../spec/std-vp9.md))
 - **Builds on:** ADR 0988 (std.media.webm), [ADR 0009](0009-custom-tooling-policy.md), [ADR 0510](0510-licence-apache-2-with-runtime-exception.md)
 - **Requested by:** the designer, who wants Garlic to play YouTube; VP9 + Opus in WebM first (2026-11-08).
 
