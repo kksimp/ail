@@ -1,0 +1,29 @@
+# conc.par.18: `task.set_threads` caps the pool from the next loop on; the
+# results are the same at every cap (conc.par.1). ADR 1018.
+
+fn weigh(i int) int
+    mut s := 0
+    for k in 0..400
+        s += (i * k + k) % 13
+    s
+
+fn run() int
+    mut out := List[int]()
+    for i in 0..3000
+        out.push(weigh(i))
+    mut total := 0
+    for i in 0..3000
+        total += out[i]
+    total
+
+fn main()
+    task.set_threads(1)
+    one := run()
+    print("cap {task.threads()}: {one}")
+    task.set_threads(4)
+    four := run()
+    print("cap {task.threads()}: {four} same {one == four}")
+    task.set_threads(0)
+    print("clamped {task.threads()}")
+    task.set_threads(1000)
+    print("clamped {task.threads()}")
