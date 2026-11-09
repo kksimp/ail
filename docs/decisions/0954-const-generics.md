@@ -1,10 +1,10 @@
 # 0954. Const generics: `int` parameters on types and functions
 
-- **Status:** Accepted (slice 1: `gen.const.1`, `gen.const.3`)
+- **Status:** Accepted (slices 1-2: `gen.const.1-3`)
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 09 — Generics
-- **Spec rules:** [gen.const.1, gen.const.3](../spec/09-generics.md); `gen.const.2`, `gen.const.4-5` stay planned (the other Decision items)
+- **Spec rules:** [gen.const.1-3](../spec/09-generics.md); `gen.const.4-5` stay planned (Decision items 4 and 5; a length mismatch is `expr.call.2`)
 - **Builds on:** [ADR 0041](0041-square-bracket-generics.md), [ADR 0090](0090-collections.md) (defers fixed arrays and SIMD vectors to const generics), [ADR 0536](0536-native-generics-by-monomorphisation.md), [ADR 0937](0937-grid-flat-2d-list.md)
 
 ## Context

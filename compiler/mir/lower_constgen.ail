@@ -1,4 +1,4 @@
-## Const generics (ADR 0954, gen.const.1 and gen.const.3): a const argument `4` is the type
+## Const generics (ADR 0954, gen.const.1 to gen.const.3): a const argument `4` is the type
 ## `Struct("4")` (no source can declare a struct of that name), bound to its
 ## parameter in `gen.tsubst` like a type, and an instance is named with it
 ## (`Vec[float, 4]`). The parameter `N` read as a value is the constant.

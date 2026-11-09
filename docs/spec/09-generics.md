@@ -5,7 +5,7 @@ Chapter key: `gen`
 > **Status:** Drafted (partial). Specified: bracket syntax (`gram.generic.1`),
 > generic types, constraints, methods on generic types, inference, anonymous
 > generic parameters, and the compilation-strategy freedom. Not yet designed:
-> variance, const generics beyond `gen.const.1` and `gen.const.3`, and methods for one instantiation only. Because
+> variance, const generics beyond `gen.const.1-3`, and methods for one instantiation only. Because
 > user code can't declare such methods, `xs.sum()` (`List[int]` and
 > `List[float]` only) is a built-in special case (`type.coll.12`, ADR 0136).
 > `Hash` is now a usable bound (`trait.auto.5`, ADR 0133).
@@ -340,7 +340,22 @@ fn main()
 followed by `int`: `struct Vec[T, N int]`, `fn dot[N int](...)`. A const
 argument is an int literal (`Vec[float, 3]`) or a const parameter in scope. A
 call that uses one const parameter twice, as `dot` does, needs the same value
-in both places. *(ADR 0954)*
+in both places; lengths that differ (`Vec[float, 3]` against `Vec[float, 4]`)
+are an ordinary argument type mismatch (`expr.call.2`). *(ADR 0954)*
+
+**gen.const.2** — A const parameter MUST get an int literal or a const parameter
+in scope, and a type parameter MUST NOT get one. *(ADR 0954)*
+
+```ail error=gen.const.2
+struct Vec[T, N int]
+    data List[T]
+
+fn f(v Vec[float, int])
+    print(1)
+
+fn main()
+    print(1)
+```
 
 **gen.const.3** — Inside the declaration a const parameter is an `int` value,
 fixed per instance. *(ADR 0954)*
