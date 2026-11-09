@@ -4,7 +4,7 @@ Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
 > functions, the `ail test` runner and its result format, `assert` and
-> `assert_eq`, property tests, and doc examples as tests. Not yet designed:
+> `assert_eq`, property tests, fuzzing, mutation testing, and doc examples as tests. Not yet designed:
 > fixtures, test filtering, parallel runs, and expected-failure tests.
 
 ## Attributes
@@ -188,6 +188,133 @@ struct Box[T]
 
 @test fn bad(b Box[int])
     assert(true)
+
+fn main()
+    print("x")
+```
+
+## Fuzzing
+
+**test.fuzz.1** — `ail test --fuzz NAME [--time MS] [--cases N] [--seed S] [--corpus DIR] FILE`
+fuzzes the property test `NAME` ([ADR 1015](../decisions/1015-user-fuzzing.md)). Only that test
+is built, and the build counts the statements run (`test.cover.4`). The run ends after `--time`
+milliseconds (default 10000), or after `--cases` runs when that is given and `--time` is not, and
+the exit status and the text and `--json` forms are those of a property test (`test.prop.4`,
+`test.run.3-4`), with `cases` the number of runs. A name that is not a property test of the file
+is an error (exit 2).
+
+```ail tool=test,--fuzz,nosuch,FILE status=2 expect=test.fuzz.1 rules=test.fuzz.1
+@test fn small(n int)
+    assert(n < 1000000)
+
+fn main()
+    print("x")
+```
+
+**test.fuzz.2** — A run is coverage-guided. The first input is the simplest value of each
+parameter. Every later input is, one time in ten, a fresh `test.prop.3` input, and otherwise a
+mutation of an input kept earlier: one to three parameters changed by a small step or an edge
+value (numbers), an inserted, dropped or changed character (`str`, `bytes`), an element added,
+dropped or changed (collections), or a changed field (`struct`, `enum`, tuples, optionals). An
+input is kept when it runs a statement that no earlier input did. The parameter types are those of
+`test.prop.2`. The same `--seed` and the same hit pattern give the same inputs.
+
+**test.fuzz.3** — With `--corpus DIR`, the directory is made if missing. Before the first mutation
+every file in it that fits the parameters is run, then each kept input is written to
+`DIR/id-HASH`, so a later run starts from the earlier run's coverage. A file is the arguments'
+text tokens (`test.prop.4`), one `=TOKEN` line each, with `\`, newline and return written
+`\\`, `\n` and `\r`. A file that does not fit the parameters is ignored.
+
+**test.fuzz.4** — The first failing input is shrunk as in `test.prop.5` and reported as in
+`test.prop.4`. With `--corpus DIR` it is also written to `DIR/crash-HASH`, which the next run
+replays first, so a fixed bug stays a regression test. `--bundle-failure` records the failure as
+for any test (`bundle.write.1`), and `ail replay --shrink` (`shrink.run.1`) shrinks that bundle.
+
+**test.fuzz.5** — A run that finds nothing ends with the line `fuzz NAME: R runs, K kept, S
+statements reached` on standard error. Only the property test's own code and what it calls count
+as statements.
+
+```ail tool=test,--fuzz,small,--cases,400,--corpus,.ail-test-fuzz-corpus,FILE status=1 expect=input: rules=test.fuzz.2,test.fuzz.3,test.fuzz.4
+@test fn small(n int)
+    assert(n < 100)
+
+fn main()
+    print("x")
+```
+
+```ail tool=test,--fuzz,small,--cases,50,FILE expect=cases rules=test.fuzz.5
+@test fn small(n int)
+    assert(n + 0 == n)
+
+fn main()
+    print("x")
+```
+
+## Mutation testing
+
+**test.mutate.1** — `ail test --mutate [--max N] [--timeout MS] FILE` checks how well the tests of
+`FILE` notice a change to the program ([ADR 1022](../decisions/1022-mutation-testing.md)). It runs
+the tests once, with the build counting the statements run (`test.cover.4`), and prints their
+results as usual. If a test fails, no test passed, or the tests don't build, no mutant is made, the
+error names `test.mutate.1`, and the exit status is that of the run (1 when a test failed, 2 otherwise).
+
+```ail tool=test,--mutate,FILE status=1 expect=test.mutate.1 rules=test.mutate.1
+fn five() int
+    5
+
+@test fn bad()
+    assert(five() == 6)
+
+fn main()
+    print("x")
+```
+
+**test.mutate.2** — A mutant is the program with one change to one line. A line `if C` or `elif C`
+(with no `then`) has the mutant `if not (C)`. Then each place in a line where one of these
+applies gives a mutant: `==`, `!=`, `<=`, `>=`, `+=` and `-=` become `!=`, `==`, `<`, `>`, `-=` and
+`+=`; `<` and `>` become `<=` and `>=`; `+`, `-`, `*` and `/` become `-`, `+`, `+` and `*`; `and`,
+`or`, `true` and `false` become `or`, `and`, `false` and `true`; `not` is dropped; a whole decimal
+number N becomes N + 1, and 0 becomes 1. Strings, characters, comments, attribute lines, `use`,
+`assert`, `requires` and `ensures` lines and lines at the top level are not changed.
+
+**test.mutate.3** — Only a line that the run of `test.mutate.1` reached, in a function that is not
+a test and not `main`, is changed. Mutants are in line order, then column order. There are at
+most `--max` of them (default 50, and 0 means no limit); when there are more, they are
+spread evenly (the Ith kept is number I times count over max), so the same program and tests give the same mutants.
+
+**test.mutate.4** — Each mutant is written to a copy of the file beside it and run with `ail test
+--json` and a per-test limit of `--timeout` (default 5000 ms). The mutant is *killed* when that run
+exits 1, *survived* when it exits 0 and as many tests passed as in the first run, and *invalid*
+otherwise (it doesn't type-check, doesn't build, or a test was left out). The copy is deleted at the end.
+
+**test.mutate.5** — A surviving mutant is printed as `survived FILE:LINE: CHANGE (in FN)`; the
+last line is `mutants: N run, K killed, S survived, I invalid, score P%`, where P is K over K plus
+S (100 when both are 0). With `--json` each survivor is `{"mutant":true,"file":...,"line":...,
+"fn":...,"mutation":...,"status":"survived"}` and the last line is `{"mutate":true,"mutants":N,
+"killed":K,"survived":S,"invalid":I}`. The exit status is 1 when S is more than 0, otherwise 0.
+
+```ail tool=test,--mutate,FILE status=1 expect=survived rules=test.mutate.2,test.mutate.3,test.mutate.4,test.mutate.5
+fn sign(n int) int
+    if n > 0
+        return 1
+    if n < 0
+        return -1
+    0
+
+@test fn positive()
+    assert(sign(5) == 1)
+
+fn main()
+    print("x")
+```
+
+```ail tool=test,--mutate,--max,3,FILE expect=mutants rules=test.mutate.3,test.mutate.5
+fn double(n int) int
+    n * 2
+
+@test fn doubles()
+    assert_eq(double(3), 6)
+    assert_eq(double(0), 0)
 
 fn main()
     print("x")

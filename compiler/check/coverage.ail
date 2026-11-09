@@ -16,6 +16,7 @@ pub COVERED_RULES := [
     "conc.share.4",
     "conc.share.6",
     "conc.task.1",
+    "conc.task.10",
     "conc.task.5",
     "conc.task.8",
     "contract.decl.2",

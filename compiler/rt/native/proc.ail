@@ -640,6 +640,16 @@ fn chan_pump(ch int)
         ps_check_deadline(ps)
         ps_round(ps, false, ps_poll_ms(ps))
 
+## One round of `chan_pump` that waits at most `ms` milliseconds
+## (`recv_for`, conc.share.8, ADR 0996).
+fn chan_pump_ms(ch int, ms int)
+    ps := load64(ch + CH_SOURCE)
+    if ps_reap(ps)
+        return
+    ps_check_deadline(ps)
+    p := ps_poll_ms(ps)
+    ps_round(ps, false, if ms < p then ms else p)
+
 ## Whether `recv` on `ch` would return at once (std.ui, ADR 0863): a value is
 ## queued or the channel is closed. A child's output is read first, without
 ## waiting.
