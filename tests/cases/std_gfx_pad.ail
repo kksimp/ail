@@ -21,6 +21,7 @@ fn show(i gfx.Input)
     print("{gfx.pad_down(i, 0, "a")} {gfx.pad_pressed(i, 0, "a")} {gfx.pad_released(i, 0, "a")} {p.lx} {p.ly} {p.rt}")
 
 fn main()
+    assert(gfx.no_pad().buttons == 0)
     i0 := gfx.idle()
     show(i0)
     i1 := gfx.next_input(i0, [gfx.pad_event(0, "1,0.5,-0.5,0,0,0,1.0")])

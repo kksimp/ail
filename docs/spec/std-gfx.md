@@ -85,6 +85,16 @@ must not need a gamepad. *(ADR 0985)*
 
 ## Examples
 
+```ail rules=std.gfx.11
+use std.gfx
+
+fn main()
+    i := gfx.next_input(gfx.idle(), [gfx.pad_event(0, "1,0.5,-0.5,0,0,0,1.0")])
+    print(gfx.pad_down(i, 0, "a"))
+    print(gfx.pad(i, 0).lx)
+    print(gfx.pad(i, 3).buttons == gfx.no_pad().buttons)
+```
+
 ```ail rules=std.gfx.1,std.gfx.2,std.gfx.3,std.gfx.4,std.gfx.5
 use std.app
 use std.gfx

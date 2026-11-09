@@ -57,7 +57,17 @@ pub trait Game
 
 ## An input with nothing held or typed.
 pub fn idle() Input
-    Input(down: [], pressed: [], released: [], text: "", x: 0.0, y: 0.0, buttons: 0, wheel: 0.0, pads: [])
+    Input(
+        down: [],
+        pressed: [],
+        released: [],
+        text: "",
+        x: 0.0,
+        y: 0.0,
+        buttons: 0,
+        wheel: 0.0,
+        pads: [],
+    )
 
 pub fn new_frame(w int, h int) Frame
     Frame(w: w, h: h, cmds: [])
@@ -88,7 +98,22 @@ pub fn no_pad() Pad
 ## `rb` 32, `back` 64, `start` 128, `l3` 256, `r3` 512, `up` 1024, `down` 2048,
 ## `left` 4096, `right` 8192; 0 for any other name.
 pub fn pad_bit(name str) int
-    names := ["a", "b", "x", "y", "lb", "rb", "back", "start", "l3", "r3", "up", "down", "left", "right"]
+    names := [
+        "a",
+        "b",
+        "x",
+        "y",
+        "lb",
+        "rb",
+        "back",
+        "start",
+        "l3",
+        "r3",
+        "up",
+        "down",
+        "left",
+        "right",
+    ]
     for k in 0..names.len()
         if names[k] == name
             return 1.shl(k)
