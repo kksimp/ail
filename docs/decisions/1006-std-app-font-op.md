@@ -4,7 +4,7 @@
 - **Date:** 2026-11-09
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; GUI
-- **Spec rules:** `std.app.3`, `std.app.28` ([std-app.md](../spec/std-app.md))
+- **Spec rules:** `std.app.3`, `std.app.29` ([std-app.md](../spec/std-app.md))
 - **Amends:** [ADR 0838](0838-std-app-native-windows.md), [ADR 0905](0905-std-app-serif-font.md)
 
 ## Context

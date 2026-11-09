@@ -202,7 +202,7 @@ agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are bui
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
 
-**std.app.28** — `Op.Font(id, data)` keeps a web font in the host under `id`: `data` is a TrueType or OpenType file in standard base64, and an empty `data` keeps the font already sent. A `Str` whose `font` is `web:` followed by that `id` is drawn and measured in it; a host that has no font under the `id`, or cannot read the bytes, draws `sans`. The op draws nothing, and a program sends the bytes once and the `id` alone afterwards. *(ADR 1006)*
+**std.app.29** — `Op.Font(id, data)` keeps a web font in the host under `id`: `data` is a TrueType or OpenType file in standard base64, and an empty `data` keeps the font already sent. A `Str` whose `font` is `web:` followed by that `id` is drawn and measured in it; a host that has no font under the `id`, or cannot read the bytes, draws `sans`. The op draws nothing, and a program sends the bytes once and the `id` alone afterwards. *(ADR 1006)*
 
 ## Examples
 
@@ -587,7 +587,7 @@ fn main()
     print(pad.popup() != none)
 ```
 
-```ail rules=std.app.28
+```ail rules=std.app.29
 use std.app
 
 struct Face
