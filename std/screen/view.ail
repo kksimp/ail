@@ -86,6 +86,7 @@ pub fn of_ops(ops List[app.Op], ox float, oy float) List[screen.Item]
                 (x2 - x1).abs().max(width),
                 (y2 - y1).abs().max(width),
             ))
+            Font(_, _) => out = out
             Clip(_, _, _, _) => out = out
             Unclip => out = out
     out

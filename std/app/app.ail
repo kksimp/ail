@@ -7,7 +7,7 @@
 
 ## One drawing step of a `Canvas`. Coordinates are in points, colors `0xRRGGBB`.
 pub enum Op
-    ## Text whose top-left corner is at `x`, `y`; `font` is `mono` or `sans`.
+    ## Text whose top-left corner is at `x`, `y`; `font` is `mono`, `sans`, `serif` or `web:` and the `id` of a `Font`.
     Str(
         x float,
         y float,
@@ -31,6 +31,11 @@ pub enum Op
     Bitmap(x float, y float, w float, h float, id str, pw int, ph int, data str)
     ## A rectangle filled with opacity `alpha`, 0 to 1 (std.app.19).
     Shade(x float, y float, w float, h float, color int, alpha float)
+    ## A web font: `data` is the bytes of a TrueType or OpenType file in
+    ## standard base64. The host keeps the font under `id`; a `Str` whose
+    ## `font` is `web:` followed by `id` is drawn in it (an empty `data` keeps
+    ## the font already sent). Draws nothing itself.
+    Font(id str, data str)
     ## Limits later steps to a rectangle, until the matching `Unclip`.
     Clip(x float, y float, w float, h float)
     Unclip
@@ -131,6 +136,7 @@ impl ToJson for Op
                     member("color", Json.Num(color.to_float())),
                     member("alpha", num(alpha)),
                 ])
+            Font(id, data) => tagged("Font", [member("id", txt(id)), member("data", txt(data))])
             Clip(x, y, w, h) =>
                 tagged("Clip", [
                     member("x", num(x)),
@@ -455,6 +461,7 @@ fn op_text(op Op) str
         Pic(x, y, w, h, src) => "pic {x},{y} {w}x{h} {src}"
         Bitmap(x, y, w, h, id, pw, ph, _) => "bitmap {x},{y} {w}x{h} {id} {pw}x{ph}"
         Shade(x, y, w, h, color, alpha) => "shade {x},{y} {w}x{h} {color.to_hex()} {alpha}"
+        Font(id, data) => "font {id} {data.len()}"
         Clip(x, y, w, h) => "clip {x},{y} {w}x{h}"
         Unclip => "unclip"
 
