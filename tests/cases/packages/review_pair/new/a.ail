@@ -1,0 +1,13 @@
+pub fn price(n int, k int) int
+    requires n >= 0
+    n * k
+
+pub fn total(n int) int
+    print("total")
+    price(n, 2) + 1
+
+fn helper() int
+    7
+
+@test fn prices()
+    assert_eq(price(2, 2), 4)

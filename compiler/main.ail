@@ -157,6 +157,8 @@ fn main() !
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "context" =>
             io.exit(api.context_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "review" =>
+            io.exit(api.review_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
             cli_run(args[1..])
         "prepare" =>
