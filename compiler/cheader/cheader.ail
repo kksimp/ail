@@ -90,6 +90,101 @@ fn ident_start(c char) bool
 fn ident_char(c char) bool
     c.is_alpha() or c.is_digit() or c == '_'
 
+## The index just past the name of an object-like `#define NAME` that starts at `at` (a `#`),
+## or 0 for any other directive (a function-like macro too).
+fn define_name_end(cs List[char], at int) int
+    n := cs.len()
+    mut j := at + 1
+    while j < n and (cs[j] == ' ' or cs[j] == '\t')
+        j += 1
+    word := ident_at(cs, j)
+    if word != "define"
+        return 0
+    j += word.len()
+    while j < n and (cs[j] == ' ' or cs[j] == '\t')
+        j += 1
+    name := ident_at(cs, j)
+    if name.is_empty()
+        return 0
+    j += name.len()
+    if j < n and cs[j] == '('
+        return 0
+    j
+
+## The identifier that starts at `at` ("" for none).
+fn ident_at(cs List[char], at int) str
+    mut j := at
+    mut word := ""
+    while j < cs.len() and (ident_char(cs[j]) and (j > at or ident_start(cs[j])))
+        word = "{word}{cs[j]}"
+        j += 1
+    word
+
+## The macro name of the `#define` whose name ends just before `after`.
+fn directive_word(cs List[char], after int) str
+    mut j := after
+    while j > 0 and ident_char(cs[j - 1])
+        j -= 1
+    ident_at(cs, j)
+
+## The tokens of a `#define` body from `start` to the end of its line, pushed to `out`; a
+## string or character literal is kept whole, with its quotes. Returns the index of the line end.
+fn lex_define(cs List[char], start int, mut out List[str]) int
+    n := cs.len()
+    mut i := start
+    while i < n
+        c := cs[i]
+        if c == '\n'
+            return i
+        elif c == '\\' and i + 1 < n and cs[i + 1] == '\n'
+            i += 2
+        elif c == '\\' and i + 2 < n and cs[i + 1] == '\r' and cs[i + 2] == '\n'
+            i += 3
+        elif c.is_space()
+            i += 1
+        elif c == '/' and i + 1 < n and cs[i + 1] == '*'
+            i += 2
+            while i + 1 < n and not (cs[i] == '*' and cs[i + 1] == '/')
+                i += 1
+            i += 2
+        elif c == '/' and i + 1 < n and cs[i + 1] == '/'
+            while i < n and cs[i] != '\n'
+                i += 1
+        elif c == '"' or c == '\''
+            mut raw := "{c}"
+            i += 1
+            while i < n and cs[i] != c and cs[i] != '\n'
+                if cs[i] == '\\' and i + 1 < n and cs[i + 1] != '\n'
+                    raw = "{raw}{cs[i]}"
+                    i += 1
+                raw = "{raw}{cs[i]}"
+                i += 1
+            if i < n and cs[i] == c
+                raw = "{raw}{c}"
+                i += 1
+            out.push(raw)
+        elif c.is_digit()
+            mut word := ""
+            while i < n
+                ch := cs[i]
+                if ident_char(ch) or ch == '.'
+                    word = "{word}{ch}"
+                    i += 1
+                elif (ch == '+' or ch == '-') and (word.ends_with("e") or word.ends_with("E")) and not (word.starts_with("0x") or word.starts_with("0X"))
+                    word = "{word}{ch}"
+                    i += 1
+                else
+                    break
+            out.push(word)
+        elif ident_start(c)
+            word := ident_at(cs, i)
+            out.push(word)
+            i += word.len()
+        else
+            out.push("{c}")
+            i += 1
+    i
+
 ## The tokens of a header: identifiers, numbers and single symbols. Comments, preprocessor
 ## lines (with their continuations), string and character literals are dropped.
 pub fn tokens(text str) List[str]
@@ -106,10 +201,17 @@ pub fn tokens(text str) List[str]
         elif c.is_space()
             i += 1
         elif c == '#' and fresh
-            while i < n and cs[i] != '\n'
-                if cs[i] == '\\' and i + 1 < n
+            after := define_name_end(cs, i)
+            if after > 0
+                out.push("#define")
+                out.push(directive_word(cs, after))
+                i = lex_define(cs, after, mut out)
+                out.push("#end")
+            else
+                while i < n and cs[i] != '\n'
+                    if cs[i] == '\\' and i + 1 < n
+                        i += 1
                     i += 1
-                i += 1
         elif c == '/' and i + 1 < n and cs[i + 1] == '*'
             i += 2
             while i + 1 < n and not (cs[i] == '*' and cs[i + 1] == '/')
@@ -292,6 +394,315 @@ fn parse_type(toks List[str], aliases Map[str, str], windows bool) CType?
         return none
     CType(text: stars_of(stars, "u8"))
 
+## ---- Constants: object-like `#define` and enumerators (ffi.decl.4) ----
+
+## No constant is larger than this, so that no sum or shift can overflow `int`.
+LIMIT := 2305843009213693952
+
+## The result of reading an expression: `pos` is the index of the next token.
+struct Ev
+    ok bool
+    v int
+    pos int
+
+fn ev_fail() Ev
+    Ev(ok: false, v: 0, pos: 0)
+
+## The value of an integer literal such as `42`, `0x2A`, `052`, `0b101` or `42UL`.
+fn number_value(word str) int?
+    mut cs := word.chars()
+    while cs.len() > 1 and (cs[cs.len() - 1] == 'u' or cs[cs.len() - 1] == 'U' or cs[cs.len() - 1] == 'l' or cs[cs.len() - 1] == 'L')
+        cs = cs[..(cs.len() - 1)]
+    mut radix := 10
+    mut k := 0
+    if cs.len() > 2 and cs[0] == '0' and (cs[1] == 'x' or cs[1] == 'X')
+        radix = 16
+        k = 2
+    elif cs.len() > 2 and cs[0] == '0' and (cs[1] == 'b' or cs[1] == 'B')
+        radix = 2
+        k = 2
+    elif cs.len() > 1 and cs[0] == '0'
+        radix = 8
+        k = 1
+    mut v := 0
+    while k < cs.len()
+        d := cs[k].to_digit(radix) else return none
+        if v > 100000000000000000
+            return none
+        v = v * radix + d
+        if v > LIMIT
+            return none
+        k += 1
+    v
+
+## The code of a character literal such as `'a'` or `'\n'`.
+fn char_value(word str) int?
+    cs := word.chars()
+    if cs.len() == 3 and cs[1] != '\\' and cs[2] == '\''
+        return cs[1].code()
+    if cs.len() == 4 and cs[1] == '\\' and cs[3] == '\''
+        e := cs[2]
+        if e == 'n'
+            return 10
+        if e == 't'
+            return 9
+        if e == 'r'
+            return 13
+        if e == '0'
+            return 0
+        if e == '\\'
+            return 92
+        if e == '\''
+            return 39
+        if e == '"'
+            return 34
+    none
+
+fn in_range(v int) bool
+    v <= LIMIT and v >= 0 - LIMIT
+
+## A unary expression: a literal, a known constant, a parenthesised expression, or `-`, `+`, `~` of one.
+fn ev_unary(t List[str], pos int, ints Map[str, int]) Ev
+    if pos >= t.len()
+        return ev_fail()
+    tok := t[pos]
+    if tok == "-" or tok == "+" or tok == "~"
+        r := ev_unary(t, pos + 1, ints)
+        if not r.ok
+            return r
+        if tok == "-"
+            return Ev(ok: true, v: 0 - r.v, pos: r.pos)
+        if tok == "~"
+            return Ev(ok: true, v: 0 - r.v - 1, pos: r.pos)
+        return r
+    if tok == "("
+        r := ev_bin(t, pos + 1, 0, ints)
+        if not r.ok or r.pos >= t.len() or t[r.pos] != ")"
+            return ev_fail()
+        return Ev(ok: true, v: r.v, pos: r.pos + 1)
+    first := tok.char_at(0) else return ev_fail()
+    if first.is_digit()
+        v := number_value(tok) else return ev_fail()
+        return Ev(ok: true, v: v, pos: pos + 1)
+    if first == '\''
+        v := char_value(tok) else return ev_fail()
+        return Ev(ok: true, v: v, pos: pos + 1)
+    if ident_start(first)
+        v := ints.get(tok) else return ev_fail()
+        return Ev(ok: true, v: v, pos: pos + 1)
+    ev_fail()
+
+## The binding power of the binary operator at `pos` and its width in tokens; power -1 for none.
+fn ev_op(t List[str], pos int) Ev
+    op := t[pos]
+    nxt := if pos + 1 < t.len() then t[pos + 1] else ""
+    if op == "*" or op == "/" or op == "%"
+        return Ev(ok: true, v: 10, pos: 1)
+    if op == "+" or op == "-"
+        return Ev(ok: true, v: 9, pos: 1)
+    if (op == "<" or op == ">") and nxt == op
+        return Ev(ok: true, v: 8, pos: 2)
+    if op == "&" and nxt != "&"
+        return Ev(ok: true, v: 5, pos: 1)
+    if op == "^"
+        return Ev(ok: true, v: 4, pos: 1)
+    if op == "|" and nxt != "|"
+        return Ev(ok: true, v: 3, pos: 1)
+    ev_fail()
+
+## `a op b` for the operator `op`, or none when C would not give a plain `int`.
+fn ev_apply(op str, a int, b int) int?
+    if op == "+"
+        return a + b
+    if op == "-"
+        return a - b
+    if op == "*"
+        if a > 2147483648 or a < -2147483648 or b > 2147483648 or b < -2147483648
+            return none
+        return a * b
+    if op == "/" or op == "%"
+        if a < 0 or b <= 0
+            return none
+        if op == "/"
+            return a / b
+        return a % b
+    if op == "<"
+        if b < 0 or b > 60 or a < 0
+            return none
+        mut v := a
+        for _ in 0..b
+            v = v * 2
+            if v > LIMIT
+                return none
+        return v
+    if op == ">"
+        if b < 0 or b > 62 or a < 0
+            return none
+        return a.shr(b)
+    if op == "&"
+        return a.bit_and(b)
+    if op == "|"
+        return a.bit_or(b)
+    if op == "^"
+        return a.bit_xor(b)
+    none
+
+## A binary expression whose operators bind at least as tightly as `minp`.
+fn ev_bin(t List[str], pos int, minp int, ints Map[str, int]) Ev
+    first := ev_unary(t, pos, ints)
+    if not first.ok
+        return first
+    mut cur := first
+    while cur.pos < t.len()
+        info := ev_op(t, cur.pos)
+        if not info.ok or info.v < minp
+            break
+        rhs := ev_bin(t, cur.pos + info.pos, info.v + 1, ints)
+        if not rhs.ok
+            return ev_fail()
+        v := ev_apply(t[cur.pos], cur.v, rhs.v) else return ev_fail()
+        if not in_range(v)
+            return ev_fail()
+        cur = Ev(ok: true, v: v, pos: rhs.pos)
+    cur
+
+## The integer value of the whole token list `t`, or none.
+fn eval_int(t List[str], ints Map[str, int]) int?
+    if t.is_empty()
+        return none
+    r := ev_bin(t, 0, 0, ints)
+    if r.ok and r.pos == t.len()
+        return r.v
+    none
+
+## The body of a string literal token as an AIL string literal's contents, or none.
+fn c_string(raw str) str?
+    cs := raw.chars()
+    if cs.len() < 2 or cs[0] != '"' or cs[cs.len() - 1] != '"'
+        return none
+    mut out := ""
+    mut i := 1
+    while i < cs.len() - 1
+        c := cs[i]
+        if c == '\\'
+            i += 1
+            if i >= cs.len() - 1
+                return none
+            e := cs[i]
+            if e == 'n'
+                out = "{out}\\n"
+            elif e == 't'
+                out = "{out}\\t"
+            elif e == '\\'
+                out = "{out}\\\\"
+            elif e == '"'
+                out = "{out}\\\""
+            elif e == '\''
+                out = "{out}'"
+            else
+                return none
+        elif c == '{'
+            out = "{out}\\\{"
+        elif c == '"' or c.code() < 32
+            return none
+        else
+            out = "{out}{c}"
+        i += 1
+    out
+
+## `3.25` from `3.25`, `3.25f` or `3.25L`: a float literal the lexer reads back, or none.
+fn float_text(word str) str?
+    mut cs := word.chars()
+    if cs.len() > 1 and (cs[cs.len() - 1] == 'f' or cs[cs.len() - 1] == 'F' or cs[cs.len() - 1] == 'l' or cs[cs.len() - 1] == 'L')
+        cs = cs[..(cs.len() - 1)]
+    mut dots := 0
+    mut before := 0
+    mut after := 0
+    for c in cs
+        if c == '.'
+            dots += 1
+        elif c.is_digit()
+            if dots == 0
+                before += 1
+            else
+                after += 1
+        else
+            return none
+    if dots != 1 or before == 0 or after == 0
+        return none
+    mut out := ""
+    for c in cs
+        out = "{out}{c}"
+    out
+
+## `body` without one pair of parentheses around the whole of a body that has no other.
+fn unparen(body List[str]) List[str]
+    if body.len() >= 3 and body[0] == "(" and body[body.len() - 1] == ")"
+        inner := body[1..(body.len() - 1)]
+        if not inner.contains("(") and not inner.contains(")")
+            return inner
+    body
+
+## Whether `name` can be a module constant of the generated module.
+fn const_name_ok(name str, seen Set[str]) bool
+    first := name.char_at(0) else return false
+    ident_start(first) and not RESERVED.contains(name) and not name.starts_with("__") and not seen.contains(name)
+
+## Write `pub NAME := v` for an integer constant.
+fn emit_int(name str, v int, mut ints Map[str, int], mut seen Set[str], mut lines List[str])
+    if not const_name_ok(name, seen)
+        return
+    seen.add(name)
+    ints[name] = v
+    lines.push("pub {name} := {v}")
+
+## One `#define NAME body`: an integer, float or string constant is kept, anything else is left out.
+fn add_define(name str, body List[str], mut ints Map[str, int], mut seen Set[str], mut lines List[str])
+    if body.is_empty() or not const_name_ok(name, seen)
+        return
+    b := unparen(body)
+    if b.len() == 1 and b[0].starts_with("\"")
+        text := c_string(b[0]) else return
+        seen.add(name)
+        lines.push("pub {name} := \"{text}\"")
+        return
+    mut sign := ""
+    mut digits := b
+    if b.len() == 2 and b[0] == "-"
+        sign = "-"
+        digits = b[1..]
+    if digits.len() == 1
+        first := digits[0].char_at(0) else return
+        if first.is_digit() and digits[0].contains(".")
+            text := float_text(digits[0]) else return
+            seen.add(name)
+            lines.push("pub {name} := {sign}{text}")
+            return
+    v := eval_int(body, ints) else return
+    emit_int(name, v, mut ints, mut seen, mut lines)
+
+## The enumerators of an `enum` whose body (between the braces) is `body`, each as a constant.
+fn add_enum(body List[str], mut ints Map[str, int], mut seen Set[str], mut lines List[str])
+    mut next := 0
+    mut known := true
+    for part in split_params(body)
+        p := clean(part)
+        if p.is_empty()
+            continue
+        name := p[0]
+        if p.len() > 1
+            if p[1] == "="
+                if v := eval_int(p[2..], ints)
+                    next = v
+                    known = true
+                else
+                    known = false
+            else
+                known = false
+        if known
+            emit_int(name, next, mut ints, mut seen, mut lines)
+            next += 1
+
 ## One function: the C name and its `pub extern c fn` line.
 struct CFn
     name str
@@ -315,8 +726,31 @@ fn split_params(toks List[str]) List[List[str]]
     out.push(cur)
     out
 
+## The declarator name of a function-pointer declaration `R (*name)(params)` (the name may be
+## absent, giving ""), or none when `toks` is not one (ffi.decl.5).
+fn fn_pointer_name(toks List[str]) str?
+    d := clean(toks)
+    p := d.index_of("(") else return none
+    if p + 2 >= d.len() or d[p + 1] != "*"
+        return none
+    close := after_group(d, p) - 1
+    if close >= d.len() or d[close] != ")" or close + 1 >= d.len() or d[close + 1] != "("
+        return none
+    inner := d[(p + 2)..close]
+    if inner.is_empty()
+        return ""
+    if inner.len() == 1
+        first := inner[0].char_at(0) else return none
+        if ident_start(first)
+            return inner[0]
+    none
+
 ## The type of one parameter, with or without a name after it; none for `void`.
 fn param_type(toks List[str], aliases Map[str, str], windows bool) CType?
+    if fn_pointer_name(toks) != none
+        return CType(text: "*u8")
+    if toks.contains("(")
+        return none
     mut ts := toks
     mut extra := 0
     if ts.len() > 0 and ts[ts.len() - 1] == "]"
@@ -355,7 +789,7 @@ fn prototype(decl List[str], aliases Map[str, str], windows bool) CFn?
     mut floats := 0
     if not (inner.is_empty() or (inner.len() == 1 and inner[0] == "void"))
         for part in split_params(inner)
-            if part.contains("(") or part.contains(".")
+            if part.contains(".")
                 return none
             t := param_type(part, aliases, windows) else return none
             if t.text == "f32" or t.text == "float"
@@ -371,6 +805,10 @@ fn prototype(decl List[str], aliases Map[str, str], windows bool) CFn?
 ## Record `typedef T name;` when `T` is a type the FFI carries.
 fn add_typedef(decl List[str], mut aliases Map[str, str], windows bool)
     d := clean(decl[1..])
+    if name := fn_pointer_name(d)
+        if name != ""
+            aliases[name] = "*u8"
+        return
     if d.len() < 2 or d.contains("(")
         return
     name := d[d.len() - 1]
@@ -387,15 +825,20 @@ pub fn module_text(src str, windows bool) str
     toks := tokens(src)
     n := toks.len()
     mut aliases := base_aliases(windows)
+    mut ints := Map[str, int]()
     mut seen := Set[str]()
     mut lines := List[str]()
     mut i := 0
     while i < n
         mut decl := List[str]()
         mut depth := 0
-        mut braced := false
         while i < n
             t := toks[i]
+            if t == "#define"
+                end := directive_end(toks, i)
+                add_define(toks[i + 1], toks[(i + 2)..end], mut ints, mut seen, mut lines)
+                i = end + 1
+                continue
             if depth == 0 and t == "}"
                 i += 1
                 break
@@ -412,8 +855,24 @@ pub fn module_text(src str, windows bool) str
                     i += 1
                     decl = List[str]()
                     continue
-                braced = true
-                i = after_group(toks, i)
+                close := after_group(toks, i)
+                if is_enum_head(decl)
+                    add_enum(toks[(i + 1)..(close - 1)], mut ints, mut seen, mut lines)
+                    # The declarators after the body: `typedef enum \{ A } name;` names a type.
+                    mut tail := List[str]()
+                    i = close
+                    while i < n and toks[i] != ";" and toks[i] != "\{" and toks[i] != "}"
+                        if toks[i] == "#define"
+                            i = directive_end(toks, i) + 1
+                        else
+                            tail.push(toks[i])
+                            i += 1
+                    if i < n and toks[i] == ";"
+                        i += 1
+                    if decl[0] == "typedef" and not tail.is_empty()
+                        aliases[tail[tail.len() - 1]] = "i32"
+                else
+                    i = close
                 break
             decl.push(t)
             i += 1
@@ -429,6 +888,22 @@ pub fn module_text(src str, windows bool) str
     if lines.is_empty()
         return ""
     "{lines.join("\n")}\n"
+
+## The index of the `#end` that closes the `#define` at `at`.
+fn directive_end(toks List[str], at int) int
+    mut j := at
+    while j < toks.len() and toks[j] != "#end"
+        j += 1
+    j
+
+## Whether `decl` (the tokens before a `\{`) is `enum`, `enum Name`, `typedef enum` or `typedef enum Name`.
+fn is_enum_head(decl List[str]) bool
+    d := clean(decl)
+    if d.is_empty()
+        return false
+    if d[0] == "enum"
+        return d.len() <= 2
+    d[0] == "typedef" and d.len() >= 2 and d.len() <= 3 and d[1] == "enum"
 
 ## ---- The module a `use c "header.h" as name` stands for ----
 
@@ -557,3 +1032,40 @@ pub fn module_for(header str, dir str) str?
         assert(is_use([name]))
         assert(not name.contains("."))
         assert_eq(header_of(name), h)
+
+@test fn defines_become_constants()
+    src := "#define N 4\n#define MASK (1 << 3 | 0x10)\n#define NEG -2\n#define PI 3.5\n#define NAME \"lib\"\n#define SUM (N + MASK * 2)\n#define EMPTY\n#define F(x) ((x) + 1)\n#define NOPE (int)5\n"
+    out := module_text(src, false)
+    assert(out.contains("pub N := 4\n"))
+    assert(out.contains("pub MASK := 24\n"))
+    assert(out.contains("pub NEG := -2\n"))
+    assert(out.contains("pub PI := 3.5\n"))
+    assert(out.contains("pub NAME := \"lib\"\n"))
+    assert(out.contains("pub SUM := 52\n"))
+    assert(not out.contains("EMPTY"))
+    assert(not out.contains("NOPE"))
+    assert(not out.contains("pub F"))
+
+@test fn enums_become_constants()
+    src := "enum color \{ RED, GREEN = 5, BLUE, };\ntypedef enum \{ A = 1 << 2, B } mode_t2;\nint paint(enum color c, mode_t2 m);\n"
+    out := module_text(src, false)
+    assert(out.contains("pub RED := 0\n"))
+    assert(out.contains("pub GREEN := 5\n"))
+    assert(out.contains("pub BLUE := 6\n"))
+    assert(out.contains("pub A := 4\n"))
+    assert(out.contains("pub B := 5\n"))
+    assert(out.contains("pub extern c fn paint(a0 i32, a1 i32) i32\n"))
+
+@test fn function_pointers_are_opaque_pointers()
+    src := "typedef int (*cmp_t)(const void *, const void *);\nvoid sort(void *base, int n, cmp_t cmp);\nvoid each(int (*cb)(int), void *user);\nint (*pick(void))(int);\n"
+    out := module_text(src, false)
+    assert(out.contains("pub extern c fn sort(a0 *u8, a1 i32, a2 *u8)\n"))
+    assert(out.contains("pub extern c fn each(a0 *u8, a1 *u8)\n"))
+    assert(not out.contains("pick"))
+
+@test fn unions_stay_behind_pointers()
+    src := "union u \{ int i; float f; };\ntypedef union u u_t;\nvoid put(union u *p, u_t *q);\nunion u make(void);\nstruct bits \{ unsigned a : 3; unsigned b : 5; };\nint use_bits(struct bits *b);\n"
+    out := module_text(src, false)
+    assert(out.contains("pub extern c fn put(a0 *u8, a1 *u8)\n"))
+    assert(out.contains("pub extern c fn use_bits(a0 *u8) i32\n"))
+    assert(not out.contains("make"))

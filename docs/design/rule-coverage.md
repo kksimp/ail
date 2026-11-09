@@ -43,7 +43,7 @@ A rule is tested when its id appears in a case, example or Rust test; spec examp
 - **11-concurrency.md** (10): `conc.atomic.1` `conc.atomic.2` `conc.atomic.6` `conc.mm.1` `conc.par.6` `conc.par.7` `conc.race.1` `conc.task.2` `conc.task.3` `conc.task.9`
 - **12-modules.md** (2): `mod.pkg.1` `mod.vis.3`
 - **13-unsafe.md** (6): `unsafe.block.1` `unsafe.block.2` `unsafe.block.3` `unsafe.block.4` `unsafe.op.1` `unsafe.op.2`
-- **14-ffi.md** (5): `ffi.call.1` `ffi.decl.1` `ffi.decl.2` `ffi.decl.3` `ffi.link.1`
+- **14-ffi.md** (7): `ffi.call.1` `ffi.decl.1` `ffi.decl.2` `ffi.decl.3` `ffi.decl.4` `ffi.decl.5` `ffi.link.1`
 - **15-compile-time.md** (4): `ct.eval.1` `ct.eval.3` `ct.eval.4`
 - **16-reflection.md** (3): `refl.info.2` `refl.info.3` `refl.run.1`
 - **17-std.md** (5): `std.random.1` `std.ui.10` `std.ui.11` `std.ui.13` `std.ui.9`

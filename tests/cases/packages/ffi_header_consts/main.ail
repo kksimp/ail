@@ -1,0 +1,11 @@
+use c "consts.h" as k
+
+fn main()
+    unsafe
+        print(k.BUF)
+        print(k.FLAGS)
+        print(k.abs(k.NEG.to_i32()))
+        print(k.PI)
+        print(k.GREETING)
+        print(k.BLUE)
+        print(k.FAST)
