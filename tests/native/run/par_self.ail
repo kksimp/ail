@@ -17,9 +17,12 @@ fn Grid.total(self) int
         s += weigh(cells[i]) + k
     s
 
+## A written `par for` that writes `cells[i]` may read only `cells[i]` of
+## `self` (conc.par.3), so `k` is copied to a local first.
 fn Grid.double(mut self)
+    add := k
     par for i in 0..n
-        cells[i] = cells[i] * 2 + k
+        cells[i] = cells[i] * 2 + add
 
 fn main()
     mut cells := List[int]()
