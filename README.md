@@ -21,7 +21,8 @@ the std and the tools are written in AIL by AI agents under the direction of a
 human designer, who makes the serious design calls; every test gate runs
 on the designer's own machines (there is no hosted CI). What is implemented is listed,
 with its tests, in [docs/status.md](docs/status.md); experimental or not yet
-built: Windows ARM64, GPU compute (`std.gfx`), NPUs and `std.audio`. The TLS and
+built: Windows ARM64, GPU compute (`std.gfx`) and NPUs. `std.audio` decodes FLAC and
+Opus (CELT) but is young and not gated on every host. The TLS and
 cryptography are AIL's own and have had **no third-party audit**
 ([SECURITY.md](SECURITY.md)).
 
@@ -48,13 +49,15 @@ Linux, Windows, and macOS are all first-class.
 
 | | x86-64 (v3) | ARM64 (v8.2-A) |
 |---|---|---|
-| Linux | ✓ | ✓ |
+| Linux | ✓ | ✓² |
 | Windows | ✓ | experimental¹ |
 | macOS | — | ✓ |
 
 ¹ The compiler emits Windows ARM64 executables, but they have not been run on
 Windows ARM64 hardware and there is no seed for that host
 ([ADR 0968](docs/decisions/0968-aarch64-windows-target.md)).
+
+² Linux ARM64 is tested under `qemu-aarch64` user emulation, not on hardware.
 
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For

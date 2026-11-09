@@ -1,6 +1,6 @@
 # 0896. `ail test --mutate`: which tests never notice a break
 
-- **Status:** Proposed
+- **Status:** Superseded by [1022](1022-mutation-testing.md)
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0395](0395-ail-test-update-rewrites-snapshots.md), [ADR 0871](0871-native-instrumentation-layer.md)
