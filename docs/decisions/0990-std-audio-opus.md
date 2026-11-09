@@ -29,6 +29,6 @@ Part 2 (2026-11-09): CELT decoding (std.opus.4-5). It was first written as a
 Python model of RFC 6716 §4.3 and checked against libopus 1.5.2 on stereo,
 mono, 10 ms, 20 ms and transient clips (within 1 LSB at 16 bits, 104-108 dB
 SNR), then ported; the test's expected samples come from that model. The
-inverse MDCT is a direct DCT-IV over a cosine table (O(n²) per block); an FFT
-is the first speed step. Tables carried from libopus (band edges, allocation,
+inverse MDCT is a DCT-IV through a mixed-radix FFT of n/2 (radices 4, 2, 3,
+5), with its plans computed once as constants. Tables carried from libopus (band edges, allocation,
 energy model, pulse cache) keep its BSD-3-Clause notice in `NOTICE`.

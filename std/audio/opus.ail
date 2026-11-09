@@ -3065,26 +3065,127 @@ fn window_at(i int) float
     t := (0.5 * PI * (i.to_float() + 0.5) / OVERLAP.to_float()).sin()
     (0.5 * PI * t * t).sin()
 
-## The DCT-IV of `n` coefficients taken every `stride` from `from`:
-## y[u] = sum x[k] cos(pi/n (u + 1/2)(k + 1/2)), over a cosine table of 8n
-## steps (the argument is pi (2u + 1)(2k + 1) / 4n).
-fn dct4(x List[float], from int, stride int, n int, table List[float]) List[float]
-    period := 8 * n
-    mut y := [0.0 for _ in 0..n]
-    for u in 0..n
-        mut acc := 0.0
-        step := 2 * (2 * u + 1)
-        mut at := 2 * u + 1
-        for k in 0..n
-            acc += x[from + k * stride] * table[at]
-            at += step
-            if at >= period
-                at -= period
-        y[u] = acc
-    y
+## The window, once.
+WINDOW := [window_at(i) for i in 0..OVERLAP]
 
-fn cos_table(n int) List[float]
-    [(PI * j.to_float() / (4 * n).to_float()).cos() for j in 0..8 * n]
+## What a DCT-IV of size `n` needs, computed once: a mixed-radix FFT of
+## size n/2 (its radices, input order and twiddles) and the pre- and
+## post-rotations that turn it into the DCT-IV.
+struct Dct4Plan
+    n int
+    radices List[int]
+    order List[int]
+    tw_cos List[float]
+    tw_sin List[float]
+    pre_cos List[float]
+    pre_sin List[float]
+    post_cos List[float]
+    post_sin List[float]
+
+fn dct4_plan(n int) Dct4Plan
+    h := n / 2
+    mut radices := List[int]()
+    mut rest := h
+    for p in [4, 2, 3, 5]
+        while rest % p == 0
+            radices.push(p)
+            rest = rest / p
+    ## The input order: split into interleaved subsequences, outer radix
+    ## first, down to single samples.
+    mut groups := [[i for i in 0..h]]
+    for p2 in radices
+        mut next := List[List[int]]()
+        for g in groups
+            for q in 0..p2
+                mut sub := List[int]()
+                mut j := q
+                while j < g.len()
+                    sub.push(g[j])
+                    j += p2
+                next.push(sub)
+        groups = next
+    mut order := List[int]()
+    for g2 in groups
+        order.extend(g2)
+    hf := h.to_float()
+    nf := n.to_float()
+    Dct4Plan(
+        n: n,
+        radices: radices,
+        order: order,
+        tw_cos: [(2.0 * PI * j.to_float() / hf).cos() for j in 0..h],
+        tw_sin: [(2.0 * PI * j.to_float() / hf).sin() for j in 0..h],
+        pre_cos: [(PI * (4 * k + 1).to_float() / (4.0 * nf)).cos() for k in 0..h],
+        pre_sin: [(PI * (4 * k + 1).to_float() / (4.0 * nf)).sin() for k in 0..h],
+        post_cos: [(PI * u.to_float() / nf).cos() for u in 0..h],
+        post_sin: [(PI * u.to_float() / nf).sin() for u in 0..h],
+    )
+
+## The plans for the four CELT block sizes, by LM.
+PLANS := [dct4_plan(120), dct4_plan(240), dct4_plan(480), dct4_plan(960)]
+
+## The FFT of `re`/`im` in place: decimation in time over the plan's
+## radices, innermost first; W = cos - i sin.
+fn fft(mut re List[float], mut im List[float], pl Dct4Plan)
+    h := pl.n / 2
+    mut tr := [0.0, 0.0, 0.0, 0.0, 0.0]
+    mut ti := [0.0, 0.0, 0.0, 0.0, 0.0]
+    mut m := 1
+    mut r := pl.radices.len() - 1
+    while r >= 0
+        p := pl.radices[r]
+        pm := p * m
+        step := h / pm
+        span := h / p
+        mut g := 0
+        while g < h
+            for k in 0..m
+                for q in 0..p
+                    a := re[g + q * m + k]
+                    b := im[g + q * m + k]
+                    t := (q * k * step) % h
+                    c := pl.tw_cos[t]
+                    s := pl.tw_sin[t]
+                    tr[q] = a * c + b * s
+                    ti[q] = b * c - a * s
+                for o in 0..p
+                    mut ar := 0.0
+                    mut ai := 0.0
+                    for q2 in 0..p
+                        t2 := (q2 * o * span) % h
+                        c2 := pl.tw_cos[t2]
+                        s2 := pl.tw_sin[t2]
+                        ar += tr[q2] * c2 + ti[q2] * s2
+                        ai += ti[q2] * c2 - tr[q2] * s2
+                    re[g + k + m * o] = ar
+                    im[g + k + m * o] = ai
+            g += pm
+        m = pm
+        r -= 1
+
+## The DCT-IV of `n` coefficients taken every `stride` from `from`:
+## y[u] = sum x[k] cos(pi/n (u + 1/2)(k + 1/2)), through an FFT of n/2.
+fn dct4(x List[float], from int, stride int, pl Dct4Plan) List[float]
+    n := pl.n
+    h := n / 2
+    mut re := [0.0 for _ in 0..h]
+    mut im := [0.0 for _ in 0..h]
+    for k2 in 0..h
+        j := pl.order[k2]
+        a2 := x[from + 2 * j * stride]
+        b2 := x[from + (n - 1 - 2 * j) * stride]
+        c2 := pl.pre_cos[j]
+        s2 := pl.pre_sin[j]
+        re[k2] = a2 * c2 + b2 * s2
+        im[k2] = b2 * c2 - a2 * s2
+    fft(mut re, mut im, pl)
+    mut y := [0.0 for _ in 0..n]
+    for u in 0..h
+        c3 := pl.post_cos[u]
+        s3 := pl.post_sin[u]
+        y[2 * u] = re[u] * c3 + im[u] * s3
+        y[n - 1 - 2 * u] = re[u] * s3 - im[u] * c3
+    y
 
 ## Adds the windowed inverse MDCT of one block into `out` from `at`: the
 ## 2n-sample output's windowed middle n + 120 samples (RFC 6716 §4.3.7).
@@ -3094,10 +3195,10 @@ fn imdct_add(
     coefs List[float],
     from int,
     stride int,
-    n int,
-    table List[float],
+    pl Dct4Plan,
 )
-    y := dct4(coefs, from, stride, n, table)
+    n := pl.n
+    y := dct4(coefs, from, stride, pl)
     z := (n - OVERLAP) / 2
     half := n / 2
     for t in 0..n + OVERLAP
@@ -3111,9 +3212,9 @@ fn imdct_add(
             v = 0.0 - y[u - 2 * n]
         mut w := 1.0
         if t < OVERLAP
-            w = window_at(t)
+            w = WINDOW[t]
         elif t >= n
-            w = window_at(n + OVERLAP - 1 - t)
+            w = WINDOW[n + OVERLAP - 1 - t]
         out[at + t] += v * w
 
 ## The pitch post-filter over x[at..at + n], cross-faded from the old
@@ -3133,7 +3234,7 @@ fn comb(mut x List[float], at int, n int, t0 int, t1 int, g0 float, g1 float, ta
         mut f0 := 0.0
         mut f1 := 1.0
         if i < OVERLAP
-            w := window_at(i)
+            w := WINDOW[i]
             f1 = w * w
             f0 = 1.0 - f1
         mut y := x[p]
@@ -3230,7 +3331,7 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
     if silence
         for k in 0..2 * NB_BANDS
             st.energy[k] = -28.0
-    tables := cos_table(if transient then 120 else n)
+    plan := PLANS[if transient then 0 else lm]
     blocks := if transient then m else 1
     nb := if transient then 120 else n
     base := HIST - n
@@ -3242,7 +3343,7 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
             h[j2] = 0.0
         freq := denormalise(xs[ch], st, ch, start, end.min(21), m, silence)
         for bl in 0..blocks
-            imdct_add(mut h, base + nb * bl, freq, bl, blocks, nb, tables)
+            imdct_add(mut h, base + nb * bl, freq, bl, blocks, plan)
         st.hist[ch] = h
     st.seed = d.rng
     for ch2 in 0..c
