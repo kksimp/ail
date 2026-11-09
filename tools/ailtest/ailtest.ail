@@ -2714,7 +2714,12 @@ fn run_mutants(
         mut body := src
         body[m.at_line - 1] = m.newl
         fs.write_text(copy, "{body.join("\n")}\n")? "writing {copy}"
-        r := proc.run(ail_path(), ["test", "--json", "--timeout", limit_ms, copy], none, 120000) else continue
+        r := proc.run(
+            ail_path(),
+            ["test", "--json", "--timeout", limit_ms, copy],
+            none,
+            120000,
+        ) else continue
         if r.status == 1
             killed += 1
         elif r.status == 0 and count_passed(r.out) == base_pass
