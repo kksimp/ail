@@ -1442,6 +1442,10 @@ fn Gen.prim(mut self, i mir.Inst)
             a.ud2()
             a.bind(parent)
             put_gpr(i.dst, RAX)
+        "win_arg0" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RCX)
+            put_gpr(i.dst, d)
         "sigreturn" =>
             # Entered by the handler's `ret`, so the signal frame starts at
             # the slot above the saved rbp (the prologue is push rbp; mov rbp, rsp).

@@ -14,14 +14,14 @@
 ## Linux x86-64 and ARM64 install the handler with `rt_sigaction`; x86-64 also
 ## needs a return function (`sig_ret`, ending in the `sigreturn` intrinsic).
 ## macOS calls libSystem's `signal`. Windows registers a console control
-## handler (`sig_win_ctrl`); the event number is not readable there, so every
-## console event (Ctrl-C, Ctrl-Break, close, logoff, shutdown) is INT.
+## handler (`sig_win_ctrl`), which reads the event with the `win_arg0` intrinsic:
+## INT is Ctrl-C and Ctrl-Break, TERM is the console closing, logoff and shutdown.
 ##
 ## Global slot 66 is the table, made by the first `os.signals` (ADR 1011):
 ##   +0    count of all signals (the word sleepers wait on)
 ##   +8*N  count of signal N (1-31)
 ##   +256+8*N  channels watching N (the handler is restored at zero)
-##   +512  Windows: console events so far
+##   +512  Windows: counts by console event number (0-6)
 ##   +584  1 once the Windows handler is registered
 
 SIG_TAB := 66
@@ -91,8 +91,11 @@ fn sig_handler(sg int)
 ## How many times signal `sg` has arrived.
 fn sig_count(t int, sg int) int
     if target() == 3
+        w := t + ST_WIN
         if sg == 2
-            return atomic_load(t + ST_WIN)
+            return atomic_load(w) + atomic_load(w + 8)
+        if sg == 15
+            return atomic_load(w + 16) + atomic_load(w + 40) + atomic_load(w + 48)
         return 0
     atomic_load(t + 8 * sg)
 
@@ -102,13 +105,14 @@ fn sig_ret()
     sigreturn()
 
 ## Windows: the console control handler, run on a thread the system makes.
-## Its argument (the event) is in a register this convention does not read,
-## so every event counts as INT. It ends its thread with exit code 1 (TRUE:
-## handled) instead of returning into the system with registers changed.
+## It reads the event number (0 Ctrl-C, 1 Ctrl-Break, 2 close, 5 logoff, 6
+## shutdown) first, then ends its thread with exit code 1 (TRUE: handled)
+## instead of returning into the system with registers changed.
 fn sig_win_ctrl() int
+    ev := win_arg0()
     t := load64(global(SIG_TAB))
-    if t != 0
-        atomic_add(t + ST_WIN, 1)
+    if t != 0 and ev >= 0 and ev < 7
+        atomic_add(t + ST_WIN + 8 * ev, 1)
     import_call("ExitThread", 1, 0, 0, 0)
     1
 
