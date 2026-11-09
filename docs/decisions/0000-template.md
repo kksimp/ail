@@ -1,6 +1,6 @@
 # NNNN. Title in imperative form
 
-- **Status:** Proposed | Accepted | Superseded by [NNNN](NNNN-file.md) | Rejected
+- **Status:** Proposed | Accepted | Deferred | Superseded by [NNNN](NNNN-file.md) | Rejected
 - **Date:** YYYY-MM-DD
 - **Decided by:** designer name or role
 - **Topic:** which of the design topics in [status.md](../status.md) this belongs to

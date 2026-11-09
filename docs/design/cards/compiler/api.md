@@ -15,6 +15,7 @@ pub struct api.Impact  ## What an edit touches.
     pub affected List[str]  ## Functions that are, or reach, a changed declaration.
     pub tests List[str]  ## The affected `@test` functions, in source order.
     pub effects List[api.EffectChange]  ## Functions whose effects differ, with the effects before and after.
+    pub untested List[str]  ## Changed functions that no `@test` function reaches (ADR 1024), in source order.
     pub via List[(str, str)]  ## For each affected function, the declaration it names or calls on the way to
     pub reaches List[(str, List[str])]  ## For each affected test, the changed declarations it reaches.
     pub partial bool  ## The new version has check errors, so the impact is read from the graph as far as it resolves.
@@ -50,7 +51,8 @@ pub struct api.Found  ## Every reference of `prog` unsorted, without the prelude
     pub refs List[api.Ref]
     pub names List[(ast.Pos, str)]
 pub fn api.collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) api.Found
+pub fn api.review_command(args List[str], std str) int [clock env fs io proc]  ## `ail review ARGS`; the exit status: 0 the report was printed, 1 with `--deny-new`
 pub fn api.semantic_diff_command(args List[str], std str) int [clock env fs io proc]  ## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
 ```
 
-trimmed to fit 2000 tokens (~1566); dropped: private items
+trimmed to fit 2000 tokens (~1657); dropped: private items

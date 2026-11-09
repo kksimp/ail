@@ -1,0 +1,8 @@
+pub fn price(n int) int
+    n * 2
+
+pub fn total(n int) int
+    price(n) + 1
+
+@test fn prices()
+    assert_eq(price(2), 4)

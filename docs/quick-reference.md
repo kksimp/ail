@@ -16,6 +16,7 @@
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
 ./ail ask FILE who writes field F   # also: who reads F, what calls f, what does f call, which effects reach f, who uses T
 ./ail context FILE f --budget 800   # what an edit to f needs: body, callee and caller signatures, types, tests, rules; cut to 800 tokens
+./ail review main..HEAD --budget 400   # a change by meaning: new capabilities, API breaks, contracts, untested code
 ./ail infer --contracts f FILE [--apply]   # proposes up to 3 requires/ensures lines for f from the calls its tests make (patch for ail edit)
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
@@ -644,7 +645,7 @@ dep json git "https://example.com/json.git" tag v1.2 caps fs
 
 A `git` dep needs `rev COMMIT` or `tag TAG`; it is fetched into `~/.ail/deps`
 (or `$AIL_HOME/deps`) and pinned in `ail.lock` (commit it). `ail pkg update [NAME]`
-re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`).
+re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`). User guide: `docs/packages.md`.
 
 ## Files, processes and the system
 
