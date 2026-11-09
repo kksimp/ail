@@ -1,6 +1,17 @@
 ## std.fs.27 to std.fs.33: mode, set_mode, set_modified, read_link, symlink, truncate, write_at.
 ## A link may be refused on Windows (permission or other), so the link check
 ## prints the same line either way.
+## The error kind of a failing read_link or mode call ("none" when it works).
+fn link_kind(p str) str
+    t := fs.read_link(p) else err
+        return err.kind
+    if t == "" then "empty" else "none"
+
+fn mode_kind(p str) str
+    m := fs.mode(p) else err
+        return err.kind
+    if m < 0 then "negative" else "none"
+
 fn main() !
     base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-fs-attrs-case"
     fs.make_dir(base)?
@@ -30,10 +41,8 @@ fn main() !
         link_ok = fs.read_link(l)? == "a.txt" and fs.read_bytes(l)?.len() == 9
         fs.remove(l)?
     print("link {if link_ok then "ok" else "wrong"}")
-    fs.read_link(f) else err
-        print(err.kind)
-    fs.mode("{base}/missing") else err
-        print(err.kind)
+    print(link_kind(f))
+    print(mode_kind("{base}/missing"))
     fs.set_modified("{base}/missing", 0) else err
         print(err.kind)
     fs.truncate("{base}/missing", 0) else err
