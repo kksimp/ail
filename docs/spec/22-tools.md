@@ -657,7 +657,7 @@ for the same program and arguments.
 
 **api.ctx.5** — A rule ID is a word in a `#` comment of the body, or in the doc
 comment, spelled as three or more lowercase parts and a number last
-(`api.ask.3`, `own.defer.4`). Each is listed once, in the order it appears.
+(`api.ask.3`, `api.ask.4`). Each is listed once, in the order it appears.
 
 **api.ctx.6** — A program that has errors can't be read for context: the errors
 are shown and the status is 2. A SYMBOL that names no function, or fits several,
