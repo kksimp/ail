@@ -198,6 +198,8 @@ agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are bui
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
 
+**std.app.30** — A host sends `appearance` (`text` is `dark` or `light`) once right after `start`, and again whenever the system's dark or light setting changes. An app may answer with a new view, as for any event. A host that cannot read the setting sends none, so a program must not depend on it and keeps a default theme. *(ADR 1008)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -310,6 +312,31 @@ fn main()
     s.update(c)
     print(s.lines())
     print(app.outline(s.view()))
+```
+
+```ail rules=std.app.30
+use std.app
+
+## A view that follows the system theme: `appearance` picks the background.
+struct Themed
+    dark bool
+
+impl app.App for Themed
+    fn update(mut self, ev app.Event)
+        if ev.kind == "appearance"
+            dark = ev.text == "dark"
+
+    fn view(self) app.Node
+        bg := if dark then 0x1f1f1f else 0xffffff
+        app.canvas("c", 0.0, 0.0, [app.draw_rect(0.0, 0.0, 10.0, 10.0, bg)])
+
+fn main()
+    mut t := Themed(dark: false)
+    mut ev := app.event("appearance")
+    ev.text = "dark"
+    print(app.step(mut t, ev))
+    ev.text = "light"
+    print(app.step(mut t, ev))
 ```
 
 ```ail rules=std.app.27
