@@ -1,0 +1,10 @@
+# std.app.3: a real TrueType file (tests/fonts, SIL OFL) goes out as a Font op
+# in base64 (the working directory is the repository root).
+use std.app
+
+fn main()
+    raw := fs.read_bytes("tests/fonts/inconsolata-ascii.ttf") else b""
+    print(raw.len() == 17816)
+    data := raw.base64()
+    print(data.len() == 23756)
+    print(app.outline(app.canvas("c", 100.0, 40.0, [app.Op.Font(id: "mono2", data: data)])))

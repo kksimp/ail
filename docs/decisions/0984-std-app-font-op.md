@@ -1,10 +1,10 @@
-# 1006. `std.app` `Font`: web fonts in the display list, kept by the host under an id
+# 0984. `std.app` `Font`: web fonts in the display list, kept by the host under an id
 
 - **Status:** Accepted
-- **Date:** 2026-11-09
+- **Date:** 2026-11-08
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; GUI
-- **Spec rules:** `std.app.3`, `std.app.29` ([std-app.md](../spec/std-app.md))
+- **Spec rules:** `std.app.3` ([std-app.md](../spec/std-app.md))
 - **Amends:** [ADR 0838](0838-std-app-native-windows.md), [ADR 0905](0905-std-app-serif-font.md)
 
 ## Context
@@ -28,3 +28,5 @@
 ## Consequences
 
 A font file costs 4/3 of its size once per session in the pipe. The host never evicts. The Swift, C and C# sides are checked on the gates of their own machines only.
+
+Tests use a real font, `tests/fonts/inconsolata-ascii.ttf` (Inconsolata, SIL OFL 1.1, subset to ASCII), so no test needs the network. Font-family lists are ADR 1005's; this ADR adds no second fallback path.

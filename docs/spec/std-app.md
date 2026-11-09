@@ -32,7 +32,7 @@ is `0.0` fills the space left in that direction. The builders
 **std.app.3** — `enum Op` is a canvas's display list, drawn in order, in
 points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
-`mono`, `sans`, `serif` (ADR 0905) or `web:` and the `id` of a `Font`, ADR 1006; `(x, y)` is the text's top-left corner),
+`mono`, `sans`, `serif` (ADR 0905) or `web:` and the `id` of a `Font`, ADR 0984; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
 `Pic(x, y, w, h, src)` (an image file path or URL),
 `Bitmap(x, y, w, h, id, pw, ph, data)` (a `pw` by `ph` image scaled to the
@@ -43,7 +43,7 @@ empty `data` draws the one already sent, and a host that has none under that
 TrueType or OpenType file in standard base64; the host keeps it under `id`, and
 a `Str` whose `font` is `web:` and that `id` is drawn and measured in it; an
 empty `data` keeps the font already sent; a host without the font, or that
-cannot read it, draws in `sans`; the op draws nothing itself, ADR 1006), `Clip(x, y, w, h)`
+cannot read it, draws in `sans`; the op draws nothing itself, ADR 0984), `Clip(x, y, w, h)`
 (limits later steps) and `Unclip` (ends the latest `Clip`).
 `draw_text(x, y, s, fg)` is a `Str` in `mono` at size 13, and
 `draw_rect(x, y, w, h, color)` a `Fill`. *(ADR 0838)*
@@ -201,8 +201,6 @@ program must not depend on `paste`. *(ADR 0978)*
 agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are built
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
-
-**std.app.29** — `Op.Font(id, data)` keeps a web font in the host under `id`: `data` is a TrueType or OpenType file in standard base64, and an empty `data` keeps the font already sent. A `Str` whose `font` is `web:` followed by that `id` is drawn and measured in it; a host that has no font under the `id`, or cannot read the bytes, draws `sans`. The op draws nothing, and a program sends the bytes once and the `id` alone afterwards. *(ADR 1006)*
 
 ## Examples
 
@@ -587,7 +585,7 @@ fn main()
     print(pad.popup() != none)
 ```
 
-```ail rules=std.app.29
+```ail rules=std.app.3
 use std.app
 
 struct Face
