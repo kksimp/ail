@@ -126,7 +126,11 @@ fn rv_contract_items(a List[DiffFlat], b List[DiffFlat]) List[RvItem]
                 was = o.get(k)
             now := d.get(k)
             if was != now
-                out.push(rv_item("contracts", "{d.id} {k}: {rv_shown(was)} -> {rv_shown(now)}", false))
+                out.push(rv_item(
+                    "contracts",
+                    "{d.id} {k}: {rv_shown(was)} -> {rv_shown(now)}",
+                    false,
+                ))
     out
 
 ## api.rev.10: loops whose `ail perf --explain` verdict changed. The hook for
