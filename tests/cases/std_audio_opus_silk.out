@@ -1,0 +1,8 @@
+silk_nb_mono: 5760 samples, 0 of 109 off by more than 1
+silk_mb_mono: 2880 samples, 0 of 55 off by more than 1
+silk_wb_10ms: 2880 samples, 0 of 55 off by more than 1
+silk_wb_60ms: 5760 samples, 0 of 109 off by more than 1
+silk_wb_stereo: 7680 samples, 0 of 145 off by more than 1
+silk_wb_stereo_from_24: 9600 samples, 0 of 182 off by more than 1
+hybrid_swb_mono_from_22: 5760 samples, 0 of 109 off by more than 1
+hybrid_fb_stereo: 7680 samples, 0 of 145 off by more than 1
