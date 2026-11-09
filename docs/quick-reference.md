@@ -642,7 +642,7 @@ dep json git "https://example.com/json.git" tag v1.2 caps fs
 
 A `git` dep needs `rev COMMIT` or `tag TAG`; it is fetched into `~/.ail/deps`
 (or `$AIL_HOME/deps`) and pinned in `ail.lock` (commit it). `ail pkg update [NAME]`
-re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`).
+re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`). User guide: `docs/packages.md`.
 
 ## Files, processes and the system
 

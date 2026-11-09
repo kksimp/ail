@@ -41,6 +41,8 @@ fn main()
 The first run downloads the published seed compiler, checks it, and builds the
 native `ail` with it into `.native/`. On Windows use `.\ail.ps1 run examples\hello.ail`.
 Seeds are published for macOS ARM64, Linux x86-64, Linux ARM64 and Windows x86-64.
+Windows notes (PowerShell 5.1 and 7, execution policy, where files go, `ail test`
+needs `mktemp`): [docs/windows.md](docs/windows.md).
 
 ## Targets
 
@@ -106,6 +108,8 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Vision and philosophy](docs/vision.md)
 - [Design decisions](docs/decisions/README.md)
 - [Language card](docs/language-card.md): the whole language in one short read
+- [Packages](docs/packages.md): `ail.pkg`, path and git dependencies, `ail.lock`, capability grants
+- [AIL on Windows](docs/windows.md): install and day-to-day notes for PowerShell
 - [Language specification](docs/spec/README.md)
 - [Open questions](docs/open-questions.md)
 - [Roadmap](docs/roadmap.md)

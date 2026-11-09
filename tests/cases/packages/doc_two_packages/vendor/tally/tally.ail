@@ -1,0 +1,14 @@
+# The root module of package `tally`; it uses the package `textkit`.
+use textkit
+
+pub struct Summary
+    pub total int
+    pub longest str
+
+pub fn summarize(text str) Summary
+    ws := textkit.words(text)
+    mut best := ""
+    for w in ws
+        if w.len() > best.len()
+            best = w
+    Summary(total: ws.len(), longest: best)
