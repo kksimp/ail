@@ -3331,7 +3331,8 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
     if silence
         for k in 0..2 * NB_BANDS
             st.energy[k] = -28.0
-    plan := PLANS[if transient then 0 else lm]
+    plan_at := if transient then 0 else lm
+    plan := PLANS[plan_at]
     blocks := if transient then m else 1
     nb := if transient then 120 else n
     base := HIST - n
