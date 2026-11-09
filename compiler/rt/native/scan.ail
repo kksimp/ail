@@ -49,6 +49,24 @@ SC_BUF_SIZE := 70144
 ## The `dispatch` id of a job.
 SC_TASK := 1073741825
 
+## Global slot 65 (ADR 0992): the counter block of `fs.scan_count` (std.fs.27),
+## +0 entries and +8 bytes listed by every scan so far, or 0 before the first
+## scan, so a program that never scans pays nothing. Each word is atomic.
+SC_COUNT := 65
+
+## The counter block, made by the first scan. Two scans that start at once may
+## both reserve one; the loser's page is left unused.
+fn sc_counter() int
+    g := global(SC_COUNT)
+    c := atomic_load(g)
+    if c != 0
+        return c
+    p := heap_reserve(16)
+    if p < 0
+        return 0
+    old := atomic_cas(g, 0, p)
+    if old == 0 then p else old
+
 fn sc_u32(p int) int
     load8(p) + 256 * load8(p + 1) + 65536 * load8(p + 2) + 16777216 * load8(p + 3)
 
@@ -339,6 +357,27 @@ fn sc_root(ws int, root str) int
 
 # ---- the walk ----
 
+## Add a directory's entries and their allocated bytes to the counters (std.fs.27).
+fn sc_note(ents List[int])
+    c := load64(global(SC_COUNT))
+    if c == 0
+        return
+    mut b := 0
+    for i in 0..ents.len()
+        b += load64(ents[i] + 16)
+    atomic_add(c, ents.len())
+    atomic_add(c + 8, b)
+
+## `fs.scan_count()` (std.fs.27): an `fs.ScanCount` of the entries and bytes
+## listed so far. The two words are read one after the other, not as one snapshot.
+fn fs_scan_count() int
+    m := obj_new(16, 4)
+    c := atomic_load(global(SC_COUNT))
+    if c != 0
+        store64(m, atomic_load(c))
+        store64(m + 8, atomic_load(c + 8))
+    m
+
 ## List `dir` and what lies below it, in pre-order, into the walker's lists.
 ## A directory at depth `SW_SPLIT` has its subdirectories handed to the pool
 ## instead. 0, or -errno when `dir` itself can't be read (nothing is listed).
@@ -349,6 +388,7 @@ fn sc_walk(ws int, dir str, depth int) int
         return r
     q := list_addr(ents)
     sc_sort(load64(q + 16), load64(q))
+    sc_note(ents)
     mut out := list_at(load64(ws + SW_ENTS))
     mut skip := list_at(load64(ws + SW_SKIP))
     same := load64(ws + SW_SAME) != 0
@@ -441,6 +481,7 @@ fn sc_merge(ws int)
 ## `fs.scan(root, same_device)` (std.fs.23): an `fs.Scan` of `entries` and
 ## `skipped`; a `root` that can't be read fails with its own path.
 fn fs_scan(root str, same_device bool, at str) int
+    sc_counter()
     ws := env_new(14)
     store64(ws, alloc_raw(SC_BUF_SIZE, KIND_BYTES))
     store64(ws + SW_SAME, if same_device then 1 else 0)
