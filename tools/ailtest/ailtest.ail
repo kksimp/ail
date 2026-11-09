@@ -1248,7 +1248,7 @@ fn shrink_input(
     tys List[Ty],
     first List[Node],
     first_fail str,
-) (List[Node], str)
+)(List[Node], str)
     mut args := first
     mut fail := first_fail
     mut budget := 2000
@@ -1545,15 +1545,7 @@ struct FuzzRun
     ids Set[int]
 
 ## One run of the instrumented binary: the failure line, if any, and the ids of the statements it ran.
-fn fuzz_case(
-    w World,
-    lead int,
-    exe str,
-    slot int,
-    tys List[Ty],
-    args List[Node],
-    hits str,
-) !FuzzRun
+fn fuzz_case(w World, lead int, exe str, slot int, tys List[Ty], args List[Node], hits str) !FuzzRun
     fs.write_text(hits, "")?
     fail := try_case_in(w, lead, exe, slot, tys, args, ["AIL_INSTRUMENT_OUT={hits}"])
     FuzzRun(fail: fail, ids: hit_ids(hits))
