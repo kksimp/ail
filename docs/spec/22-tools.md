@@ -1,6 +1,6 @@
-# 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
+# 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots, infer
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -1685,3 +1685,135 @@ could be cut it writes nothing and prints `nothing to cut`. Both exit 0.
 ```ail tool=replay,--shrink,nosuch.json status=2 expect=shrink.run.1 rules=shrink.run.1,shrink.run.2,shrink.run.3,shrink.run.4
 ```
 
+## Inferred contracts
+
+`ail infer --contracts FN FILE` proposes `requires` and `ensures` lines for one
+function from the calls the tests make
+([ADR 1023](../decisions/1023-ail-infer-contracts.md), which builds
+[ADR 0895](../decisions/0895-ail-infer.md)). The conditions are observed, not
+proved; [contract.fuzz.1](20-contracts.md) fuzzes them afterwards.
+
+**infer.cand.1** — `ail infer --contracts FN FILE [--apply] [--min N] [--cases N] [--json]`
+runs the tests of FILE (the property tests too, `--cases N` of them) against a copy
+of FILE in which FN records each call. A call is one row: the value of each `int`
+argument, the length of each `str` and `List` argument, and the same for the result.
+Other types are not recorded. FN is a top-level function of FILE whose signature is on
+one line; a generic or fallible function, one with a `mut`, `move` or default
+parameter, or none of that name, is an error with status 2 that cites this rule.
+
+**infer.cand.2** — A condition is proposed only when at least N calls were seen
+(default 20). With fewer, nothing is proposed and the answer says how many were seen.
+
+**infer.cand.3** — A condition is kept only when every call satisfies it. The forms are,
+for a recorded value `v`: `v > 0`, `v >= 0` (an `int`), `v != 0` (an `int` seen with
+both signs); and for two recorded values `a` and `b`: `a < b`, `a <= b`, `a > b`,
+`a >= b`. A value that took one value in every call is not proposed. The conditions
+about parameters are `requires`; those about `result` are `ensures`, and a function
+with a parameter named `result` gets none.
+
+**infer.cand.4** — The conditions are ordered: `requires` on two parameters,
+`requires` on one, `ensures` on `result`, `ensures` comparing `result` with a
+parameter. A range on `result` that a comparison already gives, as `result > n` with
+`n > 0` does, is left out.
+
+**infer.cand.5** — At most 3 conditions are proposed: the first 3 of that order.
+
+**infer.cand.6** — A condition already written as a `requires` or `ensures` line under
+the signature is not proposed again.
+
+**infer.out.1** — The patch goes to standard output in `ail edit` hunk form (`edit.in.3`):
+the function's name, its signature line as context and a `+` line for each condition, so
+`ail edit FILE < patch` applies it. Standard error has one line per condition with its
+call count. With `--json` the answer is one object: `infer`, `fn`, `calls`, `min`,
+`applied`, `note`, `proposals` (each with `kind`, `cond` and `calls`) and `patch`.
+
+**infer.out.2** — Before anything is shown the patch is dry-run through
+`ail edit --dry-run`. If the edited program does not check, nothing is proposed, the
+errors are shown and the status is 2.
+
+**infer.out.3** — With `--apply` the patch is given to `ail edit FILE`, which formats the
+file, checks it and writes it; the answer is its answer. Without `--apply` nothing is
+written.
+
+**infer.out.4** — The answer says the conditions are observed in tests, not proved. The
+status is 0 when the tests ran, whether or not anything was proposed, and 2 for a usage
+error or an error in FILE.
+
+```ail tool=infer,--contracts,pay,FILE,--json expect="kind":"requires" rules=infer.cand.1,infer.cand.3,infer.cand.4,infer.out.1
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE,--json expect="cond":"result rules=infer.cand.3,infer.cand.4,infer.cand.5
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE expect=proved rules=infer.out.2,infer.out.4
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE,--apply expect=edited rules=infer.out.3
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE,--min,100 expect=needed rules=infer.cand.2
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE expect=holds rules=infer.cand.6
+fn pay(n int) int
+    requires n > 0
+    ensures result > n
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE status=2 expect=infer.cand.1 rules=infer.cand.1
+fn pay[T](n T) T
+    n
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,nosuch,FILE status=2 expect=infer.cand.1 rules=infer.cand.1
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```

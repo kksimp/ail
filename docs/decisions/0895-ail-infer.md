@@ -1,6 +1,6 @@
 # 0895. `ail infer`: suggested `requires` and `ensures`
 
-- **Status:** Proposed
+- **Status:** Accepted (built by [ADR 1023](1023-ail-infer-contracts.md), which amends the command's form)
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0398](0398-record-and-replay.md), [property tests](0199-property-seeds-and-shrinking.md), contracts (wishlist 6.1)

@@ -471,6 +471,11 @@ if [ "${1:-}" = leak ]; then
     exit "$leak_rc"
 fi
 
+# `ail infer --contracts FN FILE` (ADR 1023): proposes requires/ensures from the calls the tests make, tools/infer/infer.ail.
+if [ "${1:-}" = infer ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/infer/infer.ail" "${@:2}"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"
