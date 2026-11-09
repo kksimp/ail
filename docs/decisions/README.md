@@ -4,7 +4,7 @@ Each design decision has its own file (see [ADR 0001](0001-record-decisions-as-a
 New ADRs copy [0000-template.md](0000-template.md) and take the next free number.
 ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 
-Status legend: **Accepted** is decided; the spec and code may still be catching up (see [status.md](../status.md)). **Proposed** is not decided or not built: *planned, not implemented* means the direction is chosen but no code exists, so do not read it as shipped behaviour. **Superseded** and **Rejected** are kept for history.
+Status legend: **Accepted** is decided; the spec and code may still be catching up (see [status.md](../status.md)). **Proposed** is not decided or not built: *planned, not implemented* means the direction is chosen but no code exists, so do not read it as shipped behaviour. **Deferred**: direction chosen, not built, not in 0.1.0. **Superseded** and **Rejected** are kept for history.
 
 | # | Title | Status | Date |
 |---|---|---|---|
@@ -511,7 +511,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0572](0572-native-stable-sort.md) | Native stable sort over a list of indices *(delegated)* | Accepted | 2026-10-20 |
 | [0573](0573-native-function-values.md) | Function values in native code: the address of a declared function *(delegated)* | Accepted | 2026-10-20 |
 | [draft 0573a](0573a-native-function-values-deferred.md) | Function values in native code wait for the language *(delegated)* | Superseded by 0573 | 2026-10-20 |
-| [—](pending-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted (number pending) | 2026-10-24 |
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
@@ -740,7 +739,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0913](0913-http2-client-over-alpn.md) | An HTTP/2 client over ALPN in the native `std.net` *(delegated)* | Accepted | 2026-10-26 |
 | [0914](0914-automatic-fork-join-of-independent-calls.md) | Run independent pure calls in a straight-line block as a fork-join, when each is worth it | Accepted | 2026-10-26 |
 | [0915](0915-http-retry-any-method-on-stale-pooled-connection.md) | The HTTP client resends any method once when a pooled connection dies before a response byte | Accepted | 2026-10-26 |
-| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Deferred past 0.1.0 | 2026-10-26 |
+| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Accepted (harness on main; full runs pending) | 2026-10-26 |
 | [0917](0917-ail-task-protocol.md) | `ail task`: start, status, verify and finish one change with a recorded base and a stated next step *(delegated)* | Accepted | 2026-10-26 |
 | [0918](0918-ail-mcp-compiler-tools.md) | `ail mcp`: the compiler's own tools (check, test, ask, impact, task) as an MCP server on stdio *(delegated)* | Accepted | 2026-10-26 |
 | [0919](0919-attach-input-opt-in.md) | `ail run --attach-input`: an opt-in `input` request so an agent can click and type in a running app | Accepted | 2026-10-26 |
@@ -801,3 +800,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
+| [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
