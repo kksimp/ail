@@ -64,3 +64,15 @@ Position-independent output is the hard part of S1: shared libraries need PIC co
 - Generating C and calling a C compiler: breaks ADR 0010 (no external backend).
 - Closures as C callbacks: hides a GC root behind a raw pointer.
 - No-GC mode, freestanding targets and `asm fn`: declined by the designer (2026-11-05).
+
+## Lane state (handoff, 2026-11-10)
+
+Parked after the FX gate. Designer rulings: no no-GC mode, no 32-bit, no `asm fn` (intrinsics only), Windows exports after the Windows release gate.
+
+- **Landed:** S1 front end (#1051: `pub export c fn`, `ffi.export.1-3`, `ail header`, ADR 0950), ADR 0952 (#1076, `@layout(c)` design), ADR 0975 (library entry rule, serialised first slice).
+- **In flight:** #1117 variadic C calls (ADR 1031, `ffi.var.1-4`), head 8408029b, in the integrator's FX chain. Never compiled before the gate; fix whatever FX reports. Entry point for the C-header import lane: `Lower.lower_variadic` in `compiler/mir/lower_ffi.ail`.
+- **Not started (in order):**
+  1. Library output (ADR 0975): `rt/native/libentry.ail` (prefix `libentry_`), `mir/lower_export.ail` (one dispatch line in `lower.ail`), `.dynsym` and real `DT_HASH` in `obj/elf.ail` (code is already PC-relative), Mach-O export trie, `ail build --lib static|shared`, `--header`. Static `.a` needs a relocatable `.o` writer. Then the parallel-entry second slice (own ADR).
+  2. `@layout(c)` code (ADR 0952): struct attribute path in the parser (the `export c` attribute trick does not cover structs; adding a `layout` field to `StructDecl` changes `api --ast` goldens), checker rules `ffi.layout.1-4`, `*P` field access via the `pload`/`pstore` prims, by-value passing up to 16 bytes.
+  3. Callbacks (ADR 0951 number reserved): named top-level functions only, no closures.
+- **Known gaps:** `f32` variadic arguments are refused rather than promoted; Windows export ABI; the `variadic c` and `export c` attribute names are synthesized and cannot be written by users.
