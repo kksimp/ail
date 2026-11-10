@@ -99,8 +99,10 @@ fn rules_in(out str) List[str]
     for l in out.lines()
         t := l.trim()
         for p in ["error[", "warning[", "trap["]
-            if t.starts_with(p)
-                rest := t.slice(p.len(), t.len())
+            # A diagnostic line is `FILE:L:C: error[R]: ...` (a trap has no prefix).
+            from := if t.starts_with(p) then 0 else (t.find(": {p}") else -1) + 2
+            if from >= 0 and (t.starts_with(p) or from > 1)
+                rest := t.slice(from + p.len(), t.len())
                 at := rest.find("]") else continue
                 r := rest.slice(0, at)
                 if not r.is_empty()
