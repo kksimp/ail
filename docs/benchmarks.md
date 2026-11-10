@@ -6,7 +6,7 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
 ## Environment
 
 - date: 2026-11-10
-- AIL commit: 3d250df2b (ail 0.1.0 (seed-2026.11.08g-174-g3d250df2b, native))
+- AIL commit: b8b80494d (ail 0.1.0 (seed-2026.11.08g-178-gb8b80494d, native))
 - host: Linux x86_64, 3 logical cores,  Intel(R) Core(TM) i5-7500T CPU @ 2.70GHz
 - gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
 - clang: Ubuntu clang version 18.1.3 (1ubuntu1)
@@ -24,7 +24,7 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - The size argument of each program is in its `NAME.args`.
 
-Reproduce:
+Reproduce (needs gcc, clang and python3; Debian/Ubuntu also python3-venv):
 
     tools/bench/publish.sh                       # everything on this page
     python3 -I tools/perfbench/race.py --no-run --native --c --python --programs tools/perfbench/programs/nbody.ail
@@ -33,25 +33,25 @@ Reproduce:
 
 | program | AIL | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL / Python |
 |---|---:|---:|---:|---:|---:|---:|
-| collatz | 0.026 | 0.023 | 0.013 | 1.027 | 1.15 | 0.03 |
-| nbody | 0.006 | 0.005 | 0.005 | 0.448 | 1.13 | 0.01 |
-| spectralnorm | 0.004 | 0.005 | 0.004 | 0.704 | 0.80 | 0.01 |
-| mandelbrot | 0.013 | 0.008 | 0.008 | 0.273 | 1.71 | 0.05 |
-| fannkuch | 0.028 | 0.023 | 0.025 | 0.799 | 1.19 | 0.03 |
-| binarytrees | 0.019 | 0.015 | 0.016 | 0.716 | 1.31 | 0.03 |
-| fasta | 0.010 | 0.006 | 0.005 | 0.192 | 1.54 | 0.05 |
-| wordfreq | 0.021 | 0.016 | 0.023 | 0.270 | 1.33 | 0.08 |
-| matmul | 0.004 | 0.008 | 0.007 | 0.559 | 0.51 | 0.01 |
-| sieve | 0.013 | 0.014 | 0.012 | 0.572 | 0.94 | 0.02 |
+| collatz | 0.026 | 0.023 | 0.013 | 1.036 | 1.13 | 0.03 |
+| nbody | 0.006 | 0.005 | 0.005 | 0.449 | 1.13 | 0.01 |
+| spectralnorm | 0.004 | 0.005 | 0.004 | 0.702 | 0.80 | 0.01 |
+| mandelbrot | 0.014 | 0.008 | 0.008 | 0.273 | 1.79 | 0.05 |
+| fannkuch | 0.028 | 0.023 | 0.025 | 0.800 | 1.22 | 0.03 |
+| binarytrees | 0.019 | 0.015 | 0.016 | 0.715 | 1.30 | 0.03 |
+| fasta | 0.010 | 0.006 | 0.006 | 0.190 | 1.54 | 0.05 |
+| wordfreq | 0.021 | 0.016 | 0.023 | 0.271 | 1.31 | 0.08 |
+| matmul | 0.004 | 0.008 | 0.007 | 0.556 | 0.50 | 0.01 |
+| sieve | 0.013 | 0.015 | 0.012 | 0.574 | 0.92 | 0.02 |
 
 ## Speed: larger programs (AIL against C)
 
 | program | AIL | gcc -O2 | clang -O2 | AIL / gcc |
 |---|---:|---:|---:|---:|
-| lzr | 4.106 | 2.248 | 2.369 | 1.83 |
-| vm | 2.960 | 1.673 | 1.363 | 1.77 |
-| raytrace | 1.710 | 1.790 | 1.498 | 0.96 |
-| matmul1400 | 0.706 | 5.986 | 5.739 | 0.12 |
+| lzr | 4.108 | 2.252 | 2.365 | 1.82 |
+| vm | 2.957 | 1.673 | 1.361 | 1.77 |
+| raytrace | 1.705 | 1.789 | 1.501 | 0.95 |
+| matmul1400 | 0.706 | 6.035 | 5.844 | 0.12 |
 
 ## Tokens
 
