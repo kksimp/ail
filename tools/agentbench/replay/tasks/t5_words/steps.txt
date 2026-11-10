@@ -1,0 +1,9 @@
+# The draft passes; the study's flow still makes the one edit it was written for.
+write t5.ail draft.ail.txt
+run ail test t5.ail
+run ail edit t5.ail --test <<E
+word_count
+-line.words().len()
++line.split(" ").len()
+E
+run ail run t5.ail
