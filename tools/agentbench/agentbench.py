@@ -172,7 +172,8 @@ def toolchain_metrics(ws, tokens=True):
 
 def score_ws(t, arm, ws):
     task = load_task(t); lang = LANG[arm]
-    r = subprocess.run(task["build"][lang], cwd=ws, capture_output=True, text=True)
+    cmd = [real_ail() if (lang == "ail" and x == "ail") else x for x in task["build"][lang]]  # honours AIL=, as the shims do
+    r = subprocess.run(cmd, cwd=ws, capture_output=True, text=True)
     if r.returncode: return {"built": False, "passed": 0, "total": len(jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))), "failed": []}
     res = [run_case(os.path.join(ws, task["exe"]), c) for c in jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))]
     return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]]}
@@ -250,7 +251,7 @@ def cmd_validate(a):
             ws = os.path.join(tmp, "ws"); prep(a.task, task, arm, ws)
             shutil.copytree(os.path.join(task_dir(sol_task), "solution", lang), ws, dirs_exist_ok=True)
             env = agent_env(ws); rcs = []
-            if lang == "ail": rcs.append(subprocess.run(["ail", "check", "src/main.ail"], cwd=ws, env=env, capture_output=True).returncode)
+            if lang == "ail": rcs.append(subprocess.run([os.path.join(ws, ".bench", "bin", "ail"), "check", "src/main.ail"], cwd=ws, env=env, capture_output=True).returncode)
             rcs += [subprocess.run([os.path.join(ws, x)], cwd=ws, env=env, capture_output=True).returncode for x in ("build", "test")]
             m = toolchain_metrics(ws); names = set(m["tool_calls"])
             want = {"./build", "./test"} | ({"ail check"} if lang == "ail" else set())
