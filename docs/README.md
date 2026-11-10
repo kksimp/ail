@@ -5,6 +5,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | Document | What it's for |
 |---|---|
 | [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
+| [tutorial.md](tutorial.md) | A first hour with AIL, for people: run, write a tool, test, `check`, `explain`, `fix`, `fmt` |
 | [language-card.md](language-card.md) | The whole language in one read, under 8,000 tokens, for AI agents (non-normative) |
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [packages.md](packages.md) | Using packages: `ail.pkg`, path and git dependencies, `ail.lock`, capability grants, a worked example |
