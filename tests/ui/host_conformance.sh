@@ -6,11 +6,12 @@ here="$(cd "$(dirname "$0")" && pwd)"
 plat="$1"; shift
 [ -n "$plat" ] && [ $# -ge 1 ] || { echo "usage: host_conformance.sh PLATFORM HOST [ARGS...]"; exit 2; }
 script="$here/host_conformance.txt"
-out="$(mktemp)"; trap 'rm -f "$out"' EXIT
-coproc HOST { "$@" 2>/dev/null; }
-exec 3>&"${HOST[1]}"
-cat <&"${HOST[0]}" > "$out" &
-reader=$!
+# No coproc: the Mac's /bin/bash is 3.2. The host reads a fifo and writes a file.
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+out="$tmp/out"; : > "$out"; mkfifo "$tmp/in"
+"$@" < "$tmp/in" > "$out" 2>/dev/null &
+HOST_PID=$!
+exec 3> "$tmp/in"
 want() { case ",$1," in *,all,*|*",$plat,"*) return 0;; esac; return 1; }
 expects=(); absents=(); firsts=(); orders=()
 while IFS= read -r line; do
