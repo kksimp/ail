@@ -813,6 +813,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1016](1016-fs-map.md) | `fs.map`: a read-only memory-mapped `bytes` view of a file *(delegated)* | Accepted | 2026-11-09 |
 | [1017](1017-std-app-screen-size-and-scale.md) | `std.app` reports the display's size and scale on `start` and `resize` *(delegated)* | Accepted | 2026-11-09 |
 | [1018](1018-task-set-threads.md) | `task.threads()` and `task.set_threads(n)`: the pool's cap at run time *(delegated)* | Accepted | 2026-11-09 |
+| [1019](1019-ail-merge-driver.md) | `ail merge`: a git merge driver that merges `.ail` files by declaration; `--check` reports semantic conflicts *(delegated)* | Accepted | 2026-11-09 |
 | [1020](1020-ail-context.md) | `ail context`: a token-budgeted bundle for an edit; amends ADR 0891 *(delegated)* | Accepted | 2026-11-09 |
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
@@ -828,5 +829,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
 | [1051](1051-core-card-and-std-lookup.md) | Core card, `ail card` and `ail ask std` *(delegated)* | Accepted | 2026-11-10 |
 | [1052](1052-change-certificate.md) | Change certificate: `ail verify --diff --attest` and `--check` *(delegated)* | Accepted | 2026-11-10 |
+| [1054](1054-ail-edit-refactors.md) | `ail edit` refactors: `change_sig`, `extract` and `move` *(delegated)* | Accepted | 2026-11-10 |
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |

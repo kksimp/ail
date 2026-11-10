@@ -1059,6 +1059,81 @@ fn main()
 ```ail pkg=task_red tool=task,verify status=1 expect=red rules=task.state.1,task.verify.1,task.verify.2,task.verify.3
 ```
 
+## Merge by declaration
+
+`ail merge` is a three-way merge for `.ail` files that works on declarations, so
+two branches that change different functions never conflict
+([ADR 1019](../decisions/1019-ail-merge-driver.md)).
+
+**merge.split.1** — A file is cut into declarations. A line at column 0 starts one; the indented lines after it, and blank lines followed by an indented line, belong to it. Comment (`#`) and attribute (`@`) lines at column 0 belong to the declaration after them, unless a blank line separates them. Blank lines after a declaration are kept as its gap.
+
+**merge.split.2** — A declaration's key is its kind and name (`fn Point.sum`, `struct Point`, `const NAME`); `pub`, `unique` and `error` are not part of it. Any other declaration (`use`, `impl`, `test`, a loose comment) is keyed by its first line. A repeated key gets `#2`, `#3`. A rename is a removal and an addition.
+
+**merge.decl.1** — A declaration whose text differs from the base on one side only takes that side's text, or is dropped if that side removed it. Text is compared exactly.
+
+**merge.decl.2** — A declaration that is the same on both sides, added, changed or removed, appears once.
+
+**merge.order.1** — The merged file keeps the order of OURS. A declaration only THEIRS has goes after the declaration before it in THEIRS.
+
+**merge.line.1** — A declaration changed on both sides is merged line by line as `git merge-file` would. If that merges cleanly, the result is used.
+
+**merge.conflict.1** — Otherwise the declaration is one hunk: `<<<<<<< ours`, OURS's text, `||||||| base`, the base text, `=======`, THEIRS's text and `>>>>>>> theirs`, with a section empty for a side that lacks the declaration. Each one is reported on standard error as `conflict: KEY (merge.conflict.1)`, and the exit status is 1. Every other declaration is merged.
+
+**merge.cli.1** — `ail merge BASE OURS THEIRS` writes the result to OURS, the way a git merge driver is called; further arguments (git's `%L` and `%P`) are ignored. `--stdout` prints it instead and writes nothing. The exit status is 0 for a clean merge, 1 for conflicts, 2 for an error.
+
+**merge.cli.2** — A file that can't be read is an error: exit status 2.
+
+**merge.cli.3** — With `--json` the answer is one object on standard output, `{"merged":BOOL,"conflicts":[KEY...]}`.
+
+**merge.install.1** — `ail merge --install` adds `*.ail merge=ail` to `.gitattributes` unless it is there, and sets `merge.ail.driver` to `ail merge %O %A %B %L %P` (`./ail` when the current directory has one) in the repository's git config. Outside a git repository it is an error: exit status 2.
+
+```ail pkg=merge_disjoint tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=quadruple rules=merge.split.1,merge.split.2,merge.decl.1,merge.order.1,merge.cli.1
+```
+
+```ail pkg=merge_same tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=two rules=merge.decl.2
+```
+
+```ail pkg=merge_lines tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=60 rules=merge.line.1
+```
+
+```ail pkg=merge_conflict tool=merge,base.ail,ours.ail,theirs.ail status=1 expect=conflict: rules=merge.conflict.1,merge.cli.1
+```
+
+```ail pkg=merge_conflict tool=merge,--stdout,--json,base.ail,ours.ail,theirs.ail status=1 expect="merged":false rules=merge.cli.3
+```
+
+```ail pkg=merge_conflict tool=merge,nosuch.ail,ours.ail,theirs.ail status=2 expect=merge.cli.2 rules=merge.cli.2
+```
+
+```ail pkg=merge_disjoint tool=merge,--check,base.ail,ours.ail,theirs.ail status=0 expect=ok: rules=merge.check.1
+```
+
+```ail pkg=merge_conflict tool=merge,--check,base.ail,ours.ail,theirs.ail status=1 expect=conflict: rules=merge.check.1
+```
+
+One side adds a parameter to `add` and updates its caller; the other adds a new caller with the old arity. Git and merge.decl.1 merge both cleanly; the check does not.
+
+```ail pkg=merge_semantic tool=merge,--check,base.ail,ours.ail,theirs.ail status=1 expect=(ours): rules=merge.check.2
+```
+
+```ail pkg=merge_semantic tool=merge,--check,--json,base.ail,ours.ail,theirs.ail status=1 expect="semantic":[{ rules=merge.check.4
+```
+
+**merge.check.1** — `ail merge --check BASE OURS THEIRS`, when BASE names a file, merges as above and writes nothing. If the merge has conflict hunks they are reported (merge.conflict.1) and nothing is checked. Otherwise OURS, THEIRS and the merged text are each checked as a program with `ail check`, and an error the merge has that neither side has is a *semantic conflict*. Errors are compared by file, rule and message with digits removed, so an error that only moved lines is not new. A clean result prints `ok: merged and checked, no new errors (merge.check.1)`.
+
+**merge.check.2** — Each semantic conflict is reported on standard error as `semantic: FILE:LINE: KEY (SIDE) with KEY2 (SIDE2), ...: RULE message (merge.check.2)`. KEY is the declaration that holds the error in the merged text and SIDE the side that changed it (`ours`, `theirs`, `both`, or `base` when neither did). The `with` list names the declarations the other side added, changed or removed whose name appears in KEY's text or in the message; it is left out when there are none. The exit status is 1 for any conflict, textual or semantic.
+
+**merge.check.3** — `ail merge --check OURS_REV THEIRS_REV [PATH]`, when the first argument is not a file, merges two git revisions: it adds scratch worktrees of OURS_REV, THEIRS_REV and their merge (made by `git merge` with this driver for `*.ail`), checks PATH (default `.`) in each, and reports as merge.check.2 with paths relative to the repository. A file git can't merge is reported as `conflict: FILE`. The worktrees are removed after; the repository's branches, index and files are unchanged. A revision that isn't one, or two with no common ancestor, is an error: exit status 2.
+
+**merge.check.4** — With `--json` the `--check` answer is one object on standard output, `{"merged":BOOL,"conflicts":[KEY...],"semantic":[{"file","line","decl","side","with":[KEY...],"rule","message"}...]}`.
+
+`--install` changes the git configuration of the repository it runs in, and the revision form needs a git repository, so their examples are counted, not run.
+
+```ail skip=context rules=merge.install.1,merge.check.3
+fn main()
+    print(1)
+```
+
 ## MCP server
 
 `ail mcp` serves the compiler's tools to an agent
@@ -1545,8 +1620,8 @@ fn main()
 **edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
 object) from standard input and applies them in order to the file or
 package directory `PATH`. Each edit has an `"op"`: `replace_body`,
-`replace`, `insert`, `delete`, `rename` or `import`, with the keys of
-`edit.op.1–6`. Input that isn't such JSON is an error (exit 2)
+`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`
+or `move`, with the keys of `edit.op.1–6` and `edit.op.8–10`. Input that isn't such JSON is an error (exit 2)
 ([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
 **edit.in.3** — Input that doesn't start with `[` or `{` is the compact
 form: hunks (`edit.op.7`), each under a line holding an id, and
@@ -1597,6 +1672,48 @@ the found line's depth. A hunk of one `-` line and one `+` line whose `-`
 text is no whole line replaces that text where it occurs exactly once in
 the declaration. A hunk that matches nowhere, or in more than one place, is
 an error.
+**edit.op.8** — `{"op":"change_sig","id":ID,"params":[...],"args":{NAME:EXPR}}`
+changes a function's or method's parameters and every call to it that
+`ail api --symbols` reports. `params` is the new list in order, `self` left
+out (it stays first): an old parameter's name keeps it, `NAME Type` with an
+old name changes its type, and `NAME Type` with a new name adds one, whose
+argument at every call is `args[NAME]`. An old parameter not listed is
+removed, and so is its argument at every call. Each call's arguments are
+written positionally in the new order, without labels (`expr.call.3`). The
+program as edited so far must check, as for `edit.op.5`; a reference that is
+not a call (a function value), or a call with a comment inside its
+parentheses, fails the edit
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.9** — `{"op":"extract","id":ID,"from":LINE,"to":LINE,"name":NAME}`
+moves body lines into a new function `NAME` after the declaration and puts a
+call in their place. `from` is the trimmed text of exactly one line of the
+body; `to` (default: `from`) is the first line at or after it with that
+text. The lines must be whole statements of one block, must not `return`,
+and must not `break` or `continue` a loop that starts before them. The
+parameters are the locals the lines use that are in scope before them, with
+the checker's types (`api.loc.1`), in order of first use; a `mut` local the
+lines may change is a `mut` parameter, passed as `mut x`. A name the lines
+declare at their own depth and that is used after them is returned (several
+as a tuple) and bound by the call (`x := NAME(...)`). Lines that end the
+body of a function with a result become its result. When the enclosing
+function can fail and the lines use `?`, the new one can fail (`!T`) and the
+call has `?`. In a method with `self`, the new function is a method with the
+same receiver. The program as edited so far must check
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.10** — `{"op":"move","id":ID,"to":MODULE}`, for a package, moves a
+function, constant or type (a type with its `fn Type.name` methods,
+`mod.unit.4`) to the end of a file of module `MODULE` (`"file"` picks one;
+the default is its first file). Every reference is requalified: inside
+`MODULE` unqualified, elsewhere as `m.name` under the file's import of
+`MODULE`, which is added when missing (`mod.use.1–2`). In the moved text,
+names of the old module get its qualifier and the new file gets the `use`
+lines the text needs. The moved declarations are made `pub` when a reference
+is outside `MODULE`. A `use` of the old module that no longer qualifies
+anything is removed. A type with an `impl`, a moved body that names a
+declaration of its old module that isn't `pub` or of the root module, and a
+`MODULE` with no file fail the edit; an import cycle it makes is reported by
+the check (`mod.use.5`)
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
 **edit.out.1** — Every changed file is rewritten in canonical layout
 (`ail fmt`) when it parses.
 **edit.out.2** — The program is then checked and its diagnostics are
@@ -1616,6 +1733,8 @@ can see the edited text. Writes go to a temporary file beside the target and
 are renamed over it.
 **edit.out.4** — `--test` runs `ail test PATH` after an edit that was
 written without errors, and its report and exit status follow the summary.
+For a package, `PATH` is its root file: `main.ail`, or else its first file at
+the top.
 
 **edit.out.5** — `--impact` adds the edit's impact (`api.impact.1-4`) after the
 summary: the declarations it changed, the tests it can affect and the
@@ -1633,6 +1752,18 @@ has an `impact` member.
 ```
 
 ```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=sig.json expect=passed, rules=edit.op.8,edit.out.4
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=extract.json expect=passed, rules=edit.op.9
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=value.json expect=passed, rules=edit.op.9
+```
+
+```ail pkg=refactor_move tool=edit,--test,DIR stdin=move.json expect=passed, rules=edit.op.10,mod.use.1
 ```
 
 ```ail pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4

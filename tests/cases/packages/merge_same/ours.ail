@@ -1,0 +1,7 @@
+use std.csv
+
+fn one() int
+    1
+
+fn two() int
+    2

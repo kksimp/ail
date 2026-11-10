@@ -1,0 +1,5 @@
+pub fn double(n int) int
+    n * 2
+
+pub fn quad(n int) int
+    double(double(n))

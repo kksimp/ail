@@ -6,7 +6,7 @@ conc 53 1
 contract 24 2
 ct 18 0
 diff 9 0
-edit 18 0
+edit 21 0
 eff 15 0
 err 40 5
 explain 6 0
@@ -21,6 +21,7 @@ json 22 0
 lex 24 7
 lsp 15 0
 mcp 11 0
+merge 15 0
 mod 29 2
 native 46 0
 own 39 2
@@ -43,4 +44,4 @@ try 9 0
 type 123 10
 unsafe 21 0
 verify 9 0
-all 1311 54
+all 1329 54

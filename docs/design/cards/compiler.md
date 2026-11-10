@@ -24,7 +24,7 @@ tests: 10 (`ail test` lists them)
 
 ## doc (18 items)
 
-## edit (51 items)
+## edit (97 items)
 
 ## explain (37 items)
 
