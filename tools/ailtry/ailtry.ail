@@ -51,17 +51,17 @@ fn last_part(path str) str
     at := p.rfind("/") else return p
     p.slice(at + 1, p.len())
 
-## The first line of `text` that starts with `prefix`, or an empty string.
-fn first_with(text str, prefix str) str
+## The first line of `text` that holds `part`, or an empty string.
+fn first_with(text str, part str) str
     for l in text.lines()
-        if l.starts_with(prefix)
-            return l
+        if l.contains(part)
+            return l.trim()
     ""
 
-fn count_with(text str, prefix str) int
+fn count_with(text str, part str) int
     mut n := 0
     for l in text.lines()
-        if l.starts_with(prefix)
+        if l.contains(part)
             n += 1
     n
 
@@ -102,8 +102,8 @@ fn remove_tree(p str)
 ## A patch set that wasn't applied: an edit that doesn't apply (try.verdict.3) or a result that doesn't check (try.verdict.1).
 fn try_failed(ed proc.Output, cost str) Verdict
     if ed.out.starts_with("not written")
-        errs := count_with(ed.err, "error")
-        first := first_with(ed.err, "error")
+        errs := count_with("{ed.err}{ed.out}", "error[")
+        first := first_with("{ed.err}{ed.out}", "error[")
         return Verdict(
             clean: false,
             line: "check {plural(errs, "error", "errors")}; tests skipped; {cost}",
@@ -120,7 +120,6 @@ fn try_failed(ed proc.Output, cost str) Verdict
 fn try_tests(copy_to str, cost str) Verdict
     t := ail(["test", copy_to], "")
     text := "{t.out}{t.err}"
-    summary := first_with(text, "")
     mut passed := ""
     for l in text.lines()
         if l.contains(" passed, ")
@@ -129,7 +128,7 @@ fn try_tests(copy_to str, cost str) Verdict
         shown := if passed != "" then passed else "ok"
         return Verdict(clean: true, line: "check ok; tests {shown}; {cost}", detail: "")
     shown := if passed != "" then passed else "exit {t.status}"
-    first := first_with(text, "FAIL")
+    first := first_with(text, "FAIL ")
     Verdict(clean: false, line: "check ok; tests {shown}; {cost}", detail: first)
 
 struct Sets
