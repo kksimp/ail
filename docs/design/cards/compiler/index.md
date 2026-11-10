@@ -10,7 +10,7 @@ check  438 items
 codegen  55 items
 derive  40 items
 doc  18 items
-edit  51 items
+edit  97 items
 explain  37 items
 fix  54 items
 fixrun  17 items
