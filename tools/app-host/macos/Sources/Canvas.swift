@@ -12,10 +12,14 @@ func color(_ c: Int) -> NSColor {
             blue: CGFloat(c & 0xff) / 255, alpha: 1)
 }
 
-func font(_ family: String, _ size: Double, bold: Bool, italic: Bool) -> NSFont {
+func font(_ family0: String, _ size: Double, bold: Bool, italic: Bool) -> NSFont {
+    let family = family0.hasPrefix("web:") ? "sans" : family0
     let s = CGFloat(size > 0 ? size : 13)
     let w: NSFont.Weight = bold ? .bold : .regular
     var f: NSFont
+    if family0.hasPrefix("web:"), let wf = WebFonts.font(String(family0.dropFirst(4)), s) {
+        return wf
+    }
     switch family {
     case "sans": f = NSFont.systemFont(ofSize: s, weight: w)
     case "serif":
@@ -160,6 +164,8 @@ final class CanvasView: NSView {
                 g.clip(to: CGRect(x: x, y: y, width: w, height: h))
             case .unclip:
                 g.restoreGState()
+            case .font:
+                break
             }
         }
         Surfaces.draw(canvasId, in: g, bounds: bounds)

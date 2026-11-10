@@ -7,7 +7,7 @@
 
 ## One drawing step of a `Canvas`. Coordinates are in points, colors `0xRRGGBB`.
 pub enum Op
-    ## Text whose top-left corner is at `x`, `y`; `font` is `mono` or `sans`.
+    ## Text whose top-left corner is at `x`, `y`; `font` is `mono`, `sans`, `serif` or `web:` and the `id` of a `Font`.
     Str(
         x float,
         y float,
@@ -50,6 +50,11 @@ pub enum Op
     ## An open polyline through `points` with round caps and joins,
     ## anti-aliased; fewer than 2 points draw nothing (std.app.32).
     Line(points List[float], color int, width float)
+    ## A web font: `data` is the bytes of a TrueType or OpenType file in
+    ## standard base64. The host keeps the font under `id`; a `Str` whose
+    ## `font` is `web:` followed by `id` is drawn in it (an empty `data` keeps
+    ## the font already sent). Draws nothing itself.
+    Font(id str, data str)
     ## Limits later steps to a rectangle, until the matching `Unclip`.
     Clip(x float, y float, w float, h float)
     Unclip
@@ -173,6 +178,7 @@ impl ToJson for Op
                     member("color", Json.Num(color.to_float())),
                     member("width", num(width)),
                 ])
+            Font(id, data) => tagged("Font", [member("id", txt(id)), member("data", txt(data))])
             Clip(x, y, w, h) =>
                 tagged("Clip", [
                     member("x", num(x)),
@@ -509,6 +515,7 @@ fn op_text(op Op) str
         Round(x, y, w, h, r, color, alpha, stroke) => "round {x},{y} {w}x{h} r{r} {color.to_hex()} {alpha} {stroke}"
         Poly(points, color, alpha) => "poly {points.len() / 2} {color.to_hex()} {alpha}"
         Line(points, color, width) => "line {points.len() / 2} {color.to_hex()} {width}"
+        Font(id, data) => "font {id} {data.len()}"
         Clip(x, y, w, h) => "clip {x},{y} {w}x{h}"
         Unclip => "unclip"
 

@@ -16,6 +16,7 @@ enum Op {
     case round(x: Double, y: Double, w: Double, h: Double, r: Double, color: Int, alpha: Double, stroke: Double)
     case poly(points: [Double], color: Int, alpha: Double)
     case line(points: [Double], color: Int, width: Double)
+    case font
     case clip(x: Double, y: Double, w: Double, h: Double)
     case unclip
 }
@@ -75,6 +76,9 @@ func decodeOp(_ any: Any) -> Op? {
                       alpha: num(d, "alpha"), stroke: num(d, "stroke"))
     case "Poly": return .poly(points: points(d), color: int(d, "color"), alpha: num(d, "alpha"))
     case "Line": return .line(points: points(d), color: int(d, "color"), width: num(d, "width"))
+    case "Font":
+        WebFonts.store(text(d, "id"), base64: text(d, "data"))
+        return .font
     case "Clip": return .clip(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"))
     case "Unclip": return .unclip
     default: return nil
@@ -107,6 +111,26 @@ enum Bitmaps {
         else { return }
         lock.lock(); defer { lock.unlock() }
         images[id] = NSImage(cgImage: cg, size: NSSize(width: w, height: h))
+    }
+}
+
+/// Web fonts sent as `Font` ops, kept by id; a `Str` whose font is `web:<id>` is drawn in one (std.app.3).
+enum WebFonts {
+    private static var descriptors: [String: CTFontDescriptor] = [:]
+    private static let lock = NSLock()
+
+    /// Registers the TrueType/OpenType bytes under `id`; empty or unreadable data keeps what `id` has.
+    static func store(_ id: String, base64: String) {
+        guard !base64.isEmpty, let data = Data(base64Encoded: base64),
+              let d = CTFontManagerCreateFontDescriptorFromData(data as CFData) else { return }
+        lock.lock(); defer { lock.unlock() }
+        descriptors[id] = d
+    }
+
+    static func font(_ id: String, _ size: CGFloat) -> NSFont? {
+        lock.lock(); defer { lock.unlock() }
+        guard let d = descriptors[id] else { return nil }
+        return CTFontCreateWithFontDescriptor(d, size, nil) as NSFont
     }
 }
 

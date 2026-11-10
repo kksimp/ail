@@ -102,6 +102,7 @@ pub fn of_ops(ops List[app.Op], ox float, oy float) List[screen.Item]
             Line(points, c, width) =>
                 if points.len() >= 4
                     out.push(points_item(6000000, "line", points, c, width, ox, oy))
+            Font(_, _) => out = out
             Clip(_, _, _, _) => out = out
             Unclip => out = out
     out

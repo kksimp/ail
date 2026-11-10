@@ -275,6 +275,9 @@ class Node
                 string id = Json.Text(Json.Get(d, "id"));
                 Bitmaps.Store(id, (int)Json.Num(Json.Get(d, "pw")), (int)Json.Num(Json.Get(d, "ph")), Json.Text(Json.Get(d, "data")));
                 return new BitmapOp { X = X, Y = Y, W = W, H = H, Id = id };
+            case "Font":
+                Fonts.Store(Json.Text(Json.Get(d, "id")), Json.Text(Json.Get(d, "data")));
+                return null;
             case "Clip": return new ClipOp { X = X, Y = Y, W = W, H = H };
             case "Unclip": return new UnclipOp();
         }
@@ -376,6 +379,30 @@ static class Fonts
     /// in bold and italic, so the static Segoe UI stays.
     public const string Sans = "Segoe UI";
 
+    /// Web fonts sent as `Font` ops (std.app.3): the file bytes live in memory for the process,
+    /// and `web:<id>` draws in the family found in them.
+    static readonly PrivateFontCollection web = new PrivateFontCollection();
+    static readonly Dictionary<string, FontFamily> webFamilies = new Dictionary<string, FontFamily>();
+
+    public static void Store(string id, string b64)
+    {
+        if (b64.Length == 0) return;
+        try
+        {
+            byte[] bytes = Convert.FromBase64String(b64);
+            lock (web)
+            {
+                int before = web.Families.Length;
+                IntPtr mem = Marshal.AllocCoTaskMem(bytes.Length);
+                Marshal.Copy(bytes, 0, mem, bytes.Length);
+                web.AddMemoryFont(mem, bytes.Length);
+                FontFamily[] all = web.Families;
+                if (all.Length > before) webFamilies[id] = all[all.Length - 1];
+            }
+        }
+        catch (Exception) { }
+    }
+
     public static Font Get(string family, double size, bool bold, bool italic, bool underline)
     {
         float s = size > 0 ? (float)size : 13;
@@ -384,7 +411,14 @@ static class Fonts
         if (!cache.TryGetValue(key, out f))
         {
             FontStyle st = (bold ? FontStyle.Bold : 0) | (italic ? FontStyle.Italic : 0) | (underline ? FontStyle.Underline : 0);
-            f = new Font(family == "sans" ? Sans : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
+            FontFamily wf = null;
+            if (family.StartsWith("web:")) lock (web) { webFamilies.TryGetValue(family.Substring(4), out wf); }
+            if (wf != null)
+            {
+                FontStyle ws = wf.IsStyleAvailable(st) ? st : (FontStyle.Regular | (underline ? FontStyle.Underline : 0));
+                f = new Font(wf, s, ws, GraphicsUnit.Pixel);
+            }
+            else f = new Font(family == "sans" || family.StartsWith("web:") ? Sans : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
             cache[key] = f;
         }
         return f;

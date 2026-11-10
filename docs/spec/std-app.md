@@ -32,7 +32,7 @@ is `0.0` fills the space left in that direction. The builders
 **std.app.3** — `enum Op` is a canvas's display list, drawn in order, in
 points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
-`mono`, `sans` or `serif`, ADR 0905; `(x, y)` is the text's top-left corner),
+`mono`, `sans`, `serif` (ADR 0905) or `web:` and the `id` of a `Font`, ADR 0984; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
 `Round`, `Poly` and `Line` (anti-aliased shapes, std.app.32),
 `Pic(x, y, w, h, src)` (an image file path or URL),
@@ -40,7 +40,11 @@ points from the canvas's top-left corner, colors `0xRRGGBB`:
 rectangle; `data` is its `R, G, B, A` bytes in standard base64, which
 `bitmap_data(rgba List[int])` makes; the host keeps the image under `id`, so an
 empty `data` draws the one already sent, and a host that has none under that
-`id` draws a placeholder), `Clip(x, y, w, h)`
+`id` draws a placeholder), `Font(id, data)` (a web font: `data` is the bytes of a
+TrueType or OpenType file in standard base64; the host keeps it under `id`, and
+a `Str` whose `font` is `web:` and that `id` is drawn and measured in it; an
+empty `data` keeps the font already sent; a host without the font, or that
+cannot read it, draws in `sans`; the op draws nothing itself, ADR 0984), `Clip(x, y, w, h)`
 (limits later steps) and `Unclip` (ends the latest `Clip`).
 `draw_text(x, y, s, fg)` is a `Str` in `mono` at size 13, and
 `draw_rect(x, y, w, h, color)` a `Fill`. *(ADR 0838)*
@@ -663,4 +667,21 @@ fn main()
         app.Op.Line(points: [0.0, 0.0, 5.0, 5.0, 10.0, 0.0], color: 0, width: 2.0),
     ]
     print(app.outline(app.canvas("c", 20.0, 20.0, ops)))
+```ail rules=std.app.3
+use std.app
+
+struct Face
+    n int
+
+impl app.App for Face
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        data := if n == 0 then "AAEAAAAA" else ""
+        app.canvas("c", 0.0, 0.0, [app.Op.Font(id: "f", data: data), app.Op.Str(x: 0.0, y: 0.0, text: "Hi", font: "web:f", size: 20.0, fg: 0xffffff, bold: false, italic: false, underline: false)])
+
+fn main()
+    mut p := Face(n: 0)
+    print(app.outline(p.view()))
 ```

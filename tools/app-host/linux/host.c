@@ -7,11 +7,13 @@
  */
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
+#include <fontconfig/fontconfig.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* ---- JSON (std.app.7-8): just enough to read a view line ---- */
 
@@ -305,6 +307,33 @@ static void bitmap_store(const char *id, int w, int h, const char *b64) {
     g_free(data);
 }
 
+/* Web fonts are kept by id: the bytes go to a temp file that fontconfig loads
+   for this process, and `web:<id>` draws in the family name found in it (std.app.3). */
+static GHashTable *webfonts; /* id -> family name (char*) */
+
+static void webfont_store(const char *id, const char *b64) {
+    if (!*b64) return;
+    gsize len;
+    guchar *data = g_base64_decode(b64, &len);
+    if (len > 0) {
+        char *path = g_strdup_printf("%s/ail-webfont-%d-%u.ttf", g_get_tmp_dir(), (int)getpid(), g_str_hash(id));
+        if (g_file_set_contents(path, (const char *)data, (gssize)len, NULL)) {
+            FcFontSet *set = FcFontSetCreate();
+            FcFileScan(set, NULL, NULL, NULL, (const FcChar8 *)path, FcFalse);
+            if (set->nfont > 0) {
+                FcChar8 *fam = NULL;
+                if (FcPatternGetString(set->fonts[0], FC_FAMILY, 0, &fam) == FcResultMatch && fam) {
+                    FcConfigAppFontAddFile(NULL, (const FcChar8 *)path);
+                    g_hash_table_replace(webfonts, g_strdup(id), g_strdup((const char *)fam));
+                }
+            }
+            FcFontSetDestroy(set);
+        }
+        g_free(path);
+    }
+    g_free(data);
+}
+
 static Node *decode_node(const JVal *d) {
     Node *n = calloc(1, sizeof *n);
     n->id = strdup(""); n->text = strdup(""); n->hint = strdup("");
@@ -375,6 +404,10 @@ static Node *decode_node(const JVal *d) {
                         for (int k = 0; k < pa->n; k++) op.pts[k] = pa->vals[k]->kind == J_NUM ? pa->vals[k]->num : 0;
                         op.npts = pa->n / 2;
                     }
+                } else if (!strcmp(ok, "Font")) {
+                    webfont_store(jstr(o, "id"), jstr(o, "data"));
+                    free(op.text); free(op.font);
+                    continue;
                 } else if (!strcmp(ok, "Clip")) {
                     op.kind = O_CLIP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
                 } else if (!strcmp(ok, "Unclip")) {
@@ -427,7 +460,10 @@ static void ctx_setup(PangoContext *pc) {
 
 static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
     PangoFontDescription *d = pango_font_description_new();
-    pango_font_description_set_family(d, !strcmp(family, "sans") ? sans_family : !strcmp(family, "serif") ? SERIF_LIST : MONO_LIST);
+    /* std.app.3: `web:<id>` is the family found in the font; one not sent yet falls back to `sans`. */
+    gboolean is_web = !strncmp(family, "web:", 4);
+    const char *web = is_web ? (const char *)g_hash_table_lookup(webfonts, family + 4) : NULL;
+    pango_font_description_set_family(d, web ? web : is_web || !strcmp(family, "sans") ? sans_family : !strcmp(family, "serif") ? SERIF_LIST : MONO_LIST);
     pango_font_description_set_absolute_size(d, (size > 0 ? size : 13) * PANGO_SCALE);
     pango_font_description_set_weight(d, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
     pango_font_description_set_style(d, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
@@ -1283,6 +1319,7 @@ static gboolean on_delete(GtkWidget *w, GdkEvent *e, gpointer d) {
 
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
+    webfonts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     bitmaps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
     reduced = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
     fonts_init();
