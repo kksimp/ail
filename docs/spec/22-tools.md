@@ -1098,7 +1098,7 @@ changed. *(ADR 0903)*
 **tool.new.2** — The generated `main.ail` passes `ail check`, `ail fmt --check`
 and its own `@test`. *(ADR 0903)*
 
-```ail rules=tool.new.1,tool.new.2
+```ail rules=tool.new.1,tool.new.2,tool.new.3,tool.new.4
 ## demo: say what this program does.
 
 ## The greeting for `who`.
@@ -1111,6 +1111,17 @@ fn main()
 @test fn greets()
     assert_eq(greet("ail"), "Hello, ail!")
 ```
+
+**tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
+`NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 350 tokens: where
+the language card is (`ail api --card .`), the loop (`ail task start`, `ail
+context FN`, edit, `ail task verify`, `ail task finish`), `ail explain RULE` for
+any diagnostic, and `ail ask` instead of grep. `.mcp.json` registers `ail mcp`
+on stdio under `mcpServers.ail`. The `agent_tools` suite checks both files.
+*(ADR 1046)*
+
+**tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
+the flag may come before or after `NAME`. *(ADR 1046)*
 
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the

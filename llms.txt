@@ -1,0 +1,25 @@
+# AIL
+
+> AIL (AI-First Language, pronounced "ale") is a native, garbage-collected, memory-safe systems language that humans and AI agents both program in. Source files are `.ail`; the CLI is `ail`.
+
+Load the card first. It holds the whole language. Run `ail explain RULE` for any diagnostic.
+
+## Read first
+
+- [Language card](docs/language-card.md): the whole language in one short read
+- [Quick reference](docs/quick-reference.md): the CLI and std on one page
+- [AGENTS.md](AGENTS.md): how to work on AIL itself
+
+## Look up
+
+- [Tutorial](docs/tutorial.md): a first program to a working one
+- [Packages](docs/packages.md): `ail.pkg`, dependencies, `ail.lock`, capability grants
+- [Language specification](docs/spec/README.md): normative rules with IDs
+- [Tools](docs/spec/22-tools.md): `ail new`, `task`, `context`, `ask`, `mcp`, `fix`, `edit`
+- [Windows](docs/windows.md): install and day-to-day notes for PowerShell
+
+## Optional
+
+- [Design decisions](docs/decisions/README.md)
+- [Benchmarks](docs/benchmarks.md)
+- [Open questions](docs/open-questions.md)
