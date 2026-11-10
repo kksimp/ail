@@ -57,7 +57,12 @@ struct Surface
 ## buffers of `w` by `h` pixels, held open until the process ends so the host
 ## can open it by name (std.gfx.8, ADR 1044). Nothing is unlinked.
 fn make_win_surface(w int, h int) Surface ! GfxError
-    name := "Local\\ail-gfx-{GetCurrentProcessId().to_int()}-{GetTickCount64()}"
+    mut pid := 0
+    mut tick := 0
+    unsafe
+        pid = GetCurrentProcessId().to_int()
+        tick = GetTickCount64()
+    name := "Local\\ail-gfx-{pid}-{tick}"
     stride := w * 4
     total := GUARD + stride * h * 2 + GUARD
     unsafe
