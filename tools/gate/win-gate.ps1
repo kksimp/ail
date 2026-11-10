@@ -46,7 +46,7 @@ if (Test-Path $native) {
     $env:NATIVE_COMPILER = (Join-Path $out 'native-compiler.exe') -replace '\\', '/'
 }
 # The program suites.
-$suites = 'examples cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm snapshot budget replay'.Split(' ')
+$suites = 'examples cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm snapshot budget replay cert'.Split(' ')
 if ($args.Count -gt 0) { $suites = $args }
 Run 'gate_ail' (@('run', 'tools/gate/gate.ail') + $suites)
 # Every native binary must start.

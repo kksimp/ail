@@ -1,6 +1,9 @@
 ## `ail verify --diff` (ADR 0909, verify.run.1-5): what a change proved, what the
 ## tests exercised and what nothing looked at.
 ##   ail run tools/verify/verify.ail --diff [--rev REV] [--json] FILE
+##   ail run tools/verify/verify.ail --diff [--rev REV] [--mutate [--max N]] --attest OUT FILE
+##   ail run tools/verify/verify.ail --check CERT
+## `--attest` writes the change certificate and `--check` re-runs it (ADR 1052, verify.cert.1-4).
 ## It composes the commands that exist: `ail ask FILE --affected` for the changes
 ## and the tests they reach (api.impact.1-4), `ail check FILE` for the proof and
 ## `ail test FILE --affected` for the tests. The exit status is 0 when the program
@@ -11,7 +14,7 @@ fn ail_path() str
     env.get("AIL") else "./ail"
 
 fn usage() int
-    io.eprint("usage: ail verify --diff [--rev REV] [--json] FILE")
+    io.eprint("usage: ail verify --diff [--rev REV] [--json] [--mutate [--max N]] [--attest OUT] FILE | ail verify --check CERT")
     io.exit(2)
     2
 
@@ -26,6 +29,10 @@ fn strs(doc Json, key str) List[str]
 
 fn obj(members List[(str, Json)]) Json
     Json.Obj([JsonMember(m.0, m.1) for m in members])
+
+## The number member `key` of `doc`, 0 when it is missing.
+fn num_of(doc Json, key str) float
+    doc.num(key) else 0.0
 
 fn text_list(xs List[str]) Json
     Json.Arr([Json.Str(x) for x in xs])
@@ -52,25 +59,142 @@ fn failing_at(file str, rev str) List[str]
     _ := proc.run("rm", ["-rf", tmp]) else return names
     names
 
+## The paths changed since `rev` (tracked changes and new files) with the git hash of each (verify.cert.1).
+fn changed_files(rev str) Json
+    mut paths := List[str]()
+    tracked := proc.run("git", ["diff", "--name-only", "--relative", rev, "--"]) else return Json.Arr([])
+    for l in tracked.out.lines()
+        if not l.trim().is_empty()
+            paths.push(l.trim())
+    fresh := proc.run("git", ["ls-files", "--others", "--exclude-standard"]) else return Json.Arr([])
+    for l in fresh.out.lines()
+        if not l.trim().is_empty() and not paths.contains(l.trim())
+            paths.push(l.trim())
+    paths.sort()
+    mut out := List[Json]()
+    for p in paths
+        h := proc.run("git", ["hash-object", "--", p]) else continue
+        hash := if h.status == 0 then h.out.trim() else "deleted"
+        out.push(obj([("path", Json.Str(p)), ("hash", Json.Str(hash))]))
+    Json.Arr(out)
+
+## Whether the declaration id `id` is the function `name`.
+fn names_fn(id str, name str) bool
+    id == name or id.ends_with(".{name}") or id.ends_with(" {name}") or id.contains(".{name}(")
+
+## The mutation score of `file` and the surviving mutants in the changed declarations (verify.cert.1, ADR 1022).
+fn mutation(file str, changed List[str], max str) Json
+    ran := proc.run(ail_path(), ["test", "--mutate", "--json", "--max", max, file]) else
+        return obj([("error", Json.Str("could not run ail test --mutate"))])
+    mut survivors := List[str]()
+    mut summary := obj([("error", Json.Str("no mutation summary: {ran.err.trim()}"))])
+    for m in parse_json_lines(ran.out)
+        if m.flag("mutate", false)
+            summary = obj([
+                ("mutants", Json.Num(num_of(m, "mutants"))),
+                ("killed", Json.Num(num_of(m, "killed"))),
+                ("survived", Json.Num(num_of(m, "survived"))),
+                ("invalid", Json.Num(num_of(m, "invalid"))),
+            ])
+        elif m.text("status", "") == "survived"
+            name := m.text("fn", "")
+            mut hit := false
+            for c in changed
+                if names_fn(c, name)
+                    hit = true
+            if hit
+                survivors.push("{m.text("file", file)}:{num_of(m, "line").to_int()}: {m.text("mutation", "")} (in {name})")
+    obj([("max", Json.Str(max)), ("score", summary), ("survivors_in_changed", text_list(survivors))])
+
+## The members of a certificate that a re-run must reproduce, in order. `rev` is left out: `base` names the revision.
+fn cert_keys() List[str]
+    ["cert", "base", "file", "compiler", "files", "proved", "tested", "unverified", "failures", "effects", "mutation"]
+
+## `ail verify --check CERT` (verify.cert.3-4): re-run the certificate against its base and name every member that differs.
+fn check_cert(path str) int
+    text := fs.read_text(path) else
+        io.eprint("error: can't read {path}")
+        return 2
+    cert := parse_json(text.trim()) else err
+        io.eprint("error: {path} is not a certificate: {err.message}")
+        return 2
+    if num_of(cert, "cert") != 1.0
+        io.eprint("error: {path} is not a change certificate")
+        return 2
+    file := cert.text("file", "")
+    base := cert.text("base", "")
+    if file.is_empty() or base.is_empty()
+        io.eprint("error: {path} lacks `file` or `base`")
+        return 2
+    made := proc.run("mktemp", ["-d"])? "running mktemp"
+    tmp := made.out.trim()
+    out := "{tmp}/cert.json"
+    mut args := ["verify", "--diff", "--rev", base, "--attest", out]
+    if m := cert.get("mutation")
+        args.push("--mutate")
+        args.push("--max")
+        args.push(m.text("max", "50"))
+    args.push(file)
+    _ := proc.run(ail_path(), args)? "running ail verify"
+    fresh_text := fs.read_text(out) else
+        _ := proc.run("rm", ["-rf", tmp]) else return 2
+        io.eprint("error: the re-run wrote no certificate")
+        return 2
+    _ := proc.run("rm", ["-rf", tmp]) else return 2
+    fresh := parse_json(fresh_text.trim()) else
+        io.eprint("error: the re-run wrote no certificate")
+        return 2
+    mut differs := List[str]()
+    for k in cert_keys()
+        old_v := if v := cert.get(k) then v.to_text() else "absent"
+        new_v := if v := fresh.get(k) then v.to_text() else "absent"
+        if old_v != new_v
+            differs.push(k)
+            print("differs: {k}")
+            print("  certificate: {old_v}")
+            print("  now:         {new_v}")
+    if differs.is_empty()
+        print("certificate holds: {cert_keys().len()} members reproduce")
+        return 0
+    print("certificate differs in {differs.len()} members")
+    1
+
 fn main() !
     mut rev := "HEAD"
     mut json := false
     mut diff := false
     mut want := ""
     mut files := List[str]()
+    mut attest := ""
+    mut check := ""
+    mut mutate := false
+    mut max := "50"
     for a in env.args()
         if want == "--rev"
             rev = a
             want = ""
-        elif a == "--rev"
+        elif want == "--attest"
+            attest = a
+            want = ""
+        elif want == "--check"
+            check = a
+            want = ""
+        elif want == "--max"
+            max = a
+            want = ""
+        elif a == "--rev" or a == "--attest" or a == "--check" or a == "--max"
             want = a
+        elif a == "--mutate"
+            mutate = true
         elif a == "--diff"
             diff = true
         elif a == "--json"
             json = true
         else
             files.push(a)
-    if not want.is_empty() or not diff or files.len() != 1
+    if not check.is_empty() and want.is_empty() and not diff and files.is_empty() and attest.is_empty()
+        io.exit(check_cert(check))
+    if not want.is_empty() or not diff or files.len() != 1 or not check.is_empty() or (mutate and attest.is_empty())
         io.exit(usage())
     file := files[0]
     # verify.run.1: the changes since REV, and the tests they can reach.
@@ -186,4 +310,33 @@ fn main() !
         print("failures: {failures.len()}")
         for f in failures
             print("  {f}")
+    # verify.cert.1: the certificate is the same evidence plus what it was made from.
+    if not attest.is_empty()
+        base := proc.run("git", ["rev-parse", rev]) else
+            io.eprint("error: can't resolve {rev}")
+            io.exit(2)
+            return
+        ver := proc.run(ail_path(), ["version"]) else
+            io.eprint("error: can't run ail version")
+            io.exit(2)
+            return
+        mut members := [
+            ("cert", Json.Num(1.0)),
+            ("base", Json.Str(base.out.trim())),
+            ("rev", Json.Str(rev)),
+            ("file", Json.Str(file)),
+            ("compiler", Json.Str(ver.out.trim())),
+            ("files", changed_files(rev)),
+            ("proved", obj([("check", Json.Str(if check_ok then "ok" else "errors")), ("changed", text_list(changed))])),
+            ("tested", obj([("passed", text_list(passed)), ("failed", text_list(failed))])),
+            ("unverified", text_list(unverified)),
+            ("failures", text_list(failures)),
+            ("effects", text_list(effects)),
+        ]
+        if mutate and check_ok
+            members.push(("mutation", mutation(file, changed, max)))
+        fs.write_text(attest, "{obj(members).to_text()}\n") else
+            io.eprint("error: can't write {attest}")
+            io.exit(2)
+            return
     io.exit(if blocking == 0 then 0 else 1)
