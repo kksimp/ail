@@ -2456,7 +2456,12 @@ fn mcp_session(d str, msgs List[str]) proc.Output
     for m in msgs
         input = "{input}{m}\n"
     script := "cd \"$0\" && AIL=\"$1\" exec \"$1\" mcp"
-    proc.run("sh", ["-c", script, d, "{repo_root()}/ail"], input) else return proc.Output(status: 127, out: "", err: "could not start sh")
+    r := proc.run("sh", ["-c", script, d, "{repo_root()}/ail"], input) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
 
 fn mcp_call(id int, name str, args str) str
     jreq(id, "tools/call", "~'name':'{name}','arguments':~{args}^^")
@@ -2872,7 +2877,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "~'textDocument':~'uri':'{u3}'^,'range':~'start':~'line':0,'character':0^,'end':~'line':5,'character':0^^,'context':~'diagnostics':[]^^",
     )])
     want("lsp code actions", s3.out, ["\"quickfix\"", "mut ", "source.fixAll.ail"])
-    # mcp.tools.1, mcp.call.3, mcp.call.4 (ADR 0918, amended 2026-11-10): the six tools added to `ail mcp`
+    # mcp.tools.1, mcp.call.3, mcp.call.4 (ADR 0918, amended): the tools added to `ail mcp`
     fs.write_text("{base}/mcp/prog.ail", ctx) else return
     listed := mcp_session("{base}/mcp", [jreq(1, "tools/list", "~^")])
     want("mcp tools/list", listed.out, [
@@ -2903,7 +2908,11 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     want("mcp fix is not an error", m1.out, [jm("'id':7,'result':~'content'")])
     m2 := mcp_session("{base}/mcp", [
-        mcp_call(2, "ail_edit", "'program':'prog.ail','edits':'rename show display','test':true,'impact':true"),
+        mcp_call(
+            2,
+            "ail_edit",
+            "'program':'prog.ail','edits':'rename show display','test':true,'impact':true",
+        ),
     ])
     want("mcp edit with test and impact", m2.out, ["passed", "tests", "\"isError\":false"])
     if not slurp("{base}/mcp/prog.ail").contains("display")
