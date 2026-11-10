@@ -406,5 +406,20 @@ if ($cmd -eq 'selftest') {
     exit $LASTEXITCODE
 }
 
+# `ail version` / `ail --version`: the line ./ail prints.
+if ($cmd -eq 'version' -or $cmd -eq '--version') {
+    $verFile = Join-Path $root 'tools\release\VERSION'
+    $ver = '0.0.0'
+    if (Test-Path -LiteralPath $verFile) { $first = Get-Content -LiteralPath $verFile -TotalCount 1; if ($first) { $ver = "$first".Trim() } }
+    $desc = 'unknown'
+    try {
+        $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $d = & git -C $root describe --tags --always --dirty 2>$null
+        if ($LASTEXITCODE -eq 0 -and $d) { $desc = "$d".Trim() }
+    } catch { } finally { $ErrorActionPreference = $prevEap }
+    [Console]::Out.WriteLine("ail $ver ($desc, native)")
+    exit 0
+}
+
 # Everything else has no native form.
 Fail "``ail $cmd`` has no native form; run ``.\ail.ps1`` with a command from docs/quick-reference.md"

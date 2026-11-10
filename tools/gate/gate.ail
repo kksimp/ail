@@ -2232,10 +2232,29 @@ fn has_call(text str, needle str) bool
         from = i + 1
     false
 
+## Every file below `dir` whose name ends in one of `exts`, sorted, with `/` separators (std.fs.8). Done in AIL
+## because `find` and `sort` on Windows are other programs.
+fn walk_ext(dir str, exts List[str]) List[str]
+    all := fs.walk(dir) else []
+    mut out := []
+    for p in all
+        path := p.replace("\\", "/")
+        for e in exts
+            if path.ends_with(e)
+                out.push(path)
+                break
+    out.sort()
+    out
+
 fn Gate.std(mut self, tmp str)
     root := "std"
-    listing := sh_run("cd {root} && find . -name '*.ail' | sed 's|^./||' | sort")
-    files := listing.out.lines()
+    prefix := "{root}/"
+    mut files := []
+    for p in walk_ext(root, [".ail"])
+        files.push(if p.starts_with(prefix) then p.slice(prefix.len(), p.len()) else p)
+    if files.is_empty()
+        self.red("std", "no std files found: the listing is broken")
+        return
     for n in STD_NATIVE_ONLY
         r := sh_run("./ail check {root}/{n} 2>&1 | grep 'error\\[' | grep -v 'mod.main.1'")
         if not r.out.is_empty()
@@ -2258,8 +2277,10 @@ fn Gate.std(mut self, tmp str)
     if m.status != 0
         self.red("std layout", "run `./ail fmt {root}`: {m.out}{m.err}")
     # Callers: tests, the token corpus and the examples.
-    all := sh_run("cat $(find tests tools/tokbench/corpus examples \\( -name '*.ail' -o -name '*.rs' -o -name '*.test' \\) -type f | sort)")
-    callers := all.out
+    mut callers := ""
+    for d in ["tests", "tools/tokbench/corpus", "examples"]
+        for f in walk_ext(d, [".ail", ".rs", ".test"])
+            callers = "{callers}{slurp(f)}\n"
     mut seen := 0
     for f in files
         stem := f.slice(0, f.len() - 4).split("/").last() else ""
