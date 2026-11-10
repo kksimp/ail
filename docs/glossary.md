@@ -6,6 +6,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | Term | Definition |
 |---|---|
 | **Task ledger** | `.ail/task-log.jsonl`: one line per `ail task verify` (stage, result, tokens printed, fixes, rules hit, wall ms); nothing leaves the machine ([ADR 1048](decisions/1048-task-ledger.md)). |
+| **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
 | **Task (agent)** | One change from `ail task start` to `finish`: a base revision, a goal and the last verify result, kept in `.ail-task` ([ADR 0917](decisions/0917-ail-task-protocol.md)). |
 | **`ail mcp`** | The compiler's own tools served over MCP on stdio ([ADR 0918](decisions/0918-ail-mcp-compiler-tools.md)); not `ail serve --mcp`, which serves a program's `@tool` functions. |
 | **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
@@ -220,6 +221,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Seed** | A native `ail` binary published as a release asset for one host (`ail-seed-ARCH-OS`). `./ail` downloads it, checks its SHA-256 against `tools/release/seeds.sha256` and uses it to build the compiler from source; only the designer publishes seeds ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md), [ADR 0976](decisions/0976-public-release-and-seed-trust.md)). |
 | **Context pack** | `ail context PROGRAM FN --budget N`: the body, callee and caller signatures, types, tests and cited spec rules that an edit to `FN` needs, cut to N tokens (ADR 1020). |
 | **Review report** | `ail review BASE..HEAD`: effects, public API, contracts, performance and untested code of a change, cut to a token budget (ADR 1024). |
+| **Proved contract** | A `requires` at a call, or an `ensures` at every return, that the checker shows holds from interval facts; its run-time check is left out. `ail prove` lists them (ADR 1055). |
 | **Inferred contract** | A `requires` or `ensures` line that `ail infer --contracts FN FILE` proposes from the calls the tests make: observed, not proved, at most 3, applied only with `--apply` (ADR 1023). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |

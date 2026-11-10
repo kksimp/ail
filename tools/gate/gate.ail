@@ -854,6 +854,58 @@ fn Gate.contracts(mut self)
         "contract_trait_inherit",
         ["requires k > 0 (inherited)"],
     )
+    proved_contracts()
+
+## contract.prove.1-3, prove.cmd.1-2 (ADR 1055). A proved check is left out of the build, so a
+## prover bug would remove a check silently: every contract case must run the same with proving
+## on and with `AIL_OPT_OFF=prove`, which keeps every check (same status, output and traps).
+fn Gate.proved_contracts(mut self)
+    mut names := fs.list_dir("tests/cases") else []
+    names.sort()
+    for name in names
+        if not name.ends_with(".ail")
+            continue
+        if not (name.starts_with("contract_") or name.starts_with("prove_"))
+            continue
+        at := "tests/cases/{name}"
+        lean := ail_run(["run", at]) else return
+        kept := ail_env("AIL_OPT_OFF=prove", ["run", at]) else return
+        if lean.status != kept.status or lean.out != kept.out or lean.err != kept.err
+            red(
+                "proved checks {name}",
+                "proving on: exit {lean.status}\n{lean.out}{lean.err}\nAIL_OPT_OFF=prove: exit {kept.status}\n{kept.out}{kept.err}",
+            )
+    p := ail_run(["prove", case_path("prove_contracts")]) else return
+    if p.status != 0
+        red("ail prove", "exit {p.status}\n{p.err}")
+    want("ail prove", p.out, [
+        "requires `i < xs.len()` of `at` in `total`: proved\n",
+        "requires `i < xs.len()` of `at` in `main`: proved\n",
+        "ensures `result < 10` of `digit`: proved\n",
+        "ensures `result >= 0` of `clamp_low`: proved\n",
+        "8 of 8 contract checks proved\n",
+    ])
+    # The negative cases: a `mut` name, a call into another file, and a contract the facts
+    # don't settle keep their checks (they trap in the cases suite, both ways above).
+    m := ail_run(["prove", case_path("prove_mut_trap")]) else return
+    want("ail prove mut", m.out, [
+        "requires `n >= 0` of `half` in `main`: checked\n",
+        "0 of 2 contract checks proved\n",
+    ])
+    x := ail_run(["prove", case_path("prove_module_trap")]) else return
+    want("ail prove other file", x.out, [
+        "requires `n > 0` of `go` in `main`: proved\n",
+        "2 of 2 contract checks proved\n",
+    ])
+    j := ail_run(["prove", "--json", case_path("prove_unproved_trap")]) else return
+    want("ail prove --json", j.out, [
+        "\"ail_api\":1,\"prove\":1,\"proved\":1,\"total\":2,",
+        "\"kind\":\"requires\",\"fn\":\"half\",\"cond\":\"n >= 0\",",
+        "\"in\":\"half_less\",\"proved\":false}",
+    ])
+    u := ail_run(["prove"]) else return
+    if u.status != 2
+        red("ail prove usage", "exit {u.status}, want 2")
 
 ## `ail test --update` (snap.update.1-6).
 fn Gate.snapshot(mut self, tmp str)
@@ -2475,6 +2527,81 @@ fn reply_of(out str, id int) str
 fn mcp_call(id int, name str, args str) str
     jreq(id, "tools/call", "~'name':'{name}','arguments':~{args}^^")
 
+## ---- cert: `ail verify --diff --attest` and `--check` (ADR 1052, verify.cert.1-4)
+
+fn Gate.cert(mut self, tmp str)
+    base := "{tmp}/cert"
+    sh_run("rm -rf {base}; mkdir -p {base}")
+    git := "git -c user.name=gate -c user.email=gate@example.com"
+    fs.write_text("{base}/prog.ail", src_of([
+        "fn sign(n int) int",
+        "    if n > 0",
+        "        return 1",
+        "    0",
+        "",
+        "@test fn positive()",
+        "    assert(sign(5) == 1)",
+        "",
+        "fn main()",
+        "    print(\"x\")",
+    ])) else return
+    sh_run("cd {base} && git init -q . && git add prog.ail && {git} commit -q -m base")
+    fs.write_text("{base}/prog.ail", src_of([
+        "fn sign(n int) int",
+        "    if n > 0",
+        "        return 1",
+        "    if n < 0",
+        "        return -1",
+        "    0",
+        "",
+        "@test fn positive()",
+        "    assert(sign(5) == 1)",
+        "",
+        "fn main()",
+        "    print(\"x\")",
+    ])) else return
+    tool(
+        "attest",
+        base,
+        ["verify", "--diff", "--mutate", "--attest", "cert.json", "prog.ail"],
+        0,
+        [],
+    )
+    doc := fs.read_text("{base}/cert.json") else
+        red("cert", "no certificate written")
+        return
+    want("cert members", doc, [
+        "\"cert\":1",
+        "\"base\":\"",
+        "\"hash\":\"",
+        "\"compiler\":\"ail ",
+        "\"mutation\":",
+        "\"survivors_in_changed\":",
+    ])
+    tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
+    fs.write_text("{base}/prog.ail", src_of([
+        "fn sign(n int) int",
+        "    if n > 0",
+        "        return 1",
+        "    if n < 0",
+        "        return -2",
+        "    0",
+        "",
+        "@test fn positive()",
+        "    assert(sign(5) == 1)",
+        "",
+        "fn main()",
+        "    print(\"x\")",
+    ])) else return
+    tool(
+        "check differs",
+        base,
+        ["verify", "--check", "cert.json"],
+        1,
+        ["differs: files", "certificate differs"],
+    )
+    tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
@@ -3032,6 +3159,7 @@ fn main() !
         "std",
         "sched",
         "agent_tools",
+        "cert",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3071,6 +3199,7 @@ fn main() !
             "selfhost" => g.selfhost()
             "std" => g.std(tmp)
             "agent_tools" => g.agent_tools(tmp)
+            "cert" => g.cert(tmp)
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)

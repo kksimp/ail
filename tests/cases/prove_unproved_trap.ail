@@ -1,0 +1,13 @@
+# contract.prove.3 (ADR 1055): a `requires` the facts don't settle stays checked
+# at run time, and traps.
+fn half(n int) int
+    requires n >= 0
+    ensures result >= 0
+    n / 2
+
+fn half_less(n int) int
+    half(n - 10)
+
+fn main()
+    print(half_less(14))
+    print(half_less(4))

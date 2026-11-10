@@ -5,14 +5,15 @@ Chapter key: `contract`
 > **Status:** Drafted (partial). Specified: `requires` and `ensures` lines,
 > their typing and purity, `result`, `old(e)`, contracts on trait methods and
 > their inheritance, struct `invariant` lines, the runtime checks and their
-> traps, `--no-contracts`, and contracts in `ail api`. Not yet designed: loop
-> invariants and static proof (see [open-questions.md](../open-questions.md),
-> OQ-060).
+> traps, `--no-contracts`, static proof of simple contracts, and contracts in
+> `ail api`. Not yet designed: loop invariants (see
+> [open-questions.md](../open-questions.md), OQ-060).
 
 A contract states what a function needs and what it promises, in the
 function's signature, as ordinary `bool` expressions. The bootstrap checks
-them at run time. A later compiler may prove a contract statically and drop
-its check; that changes nothing observable except that the trap can't occur.
+them at run time. The compiler proves some contracts statically and drops
+their checks (`contract.prove.1`); that changes nothing observable except that
+the trap can't occur.
 
 ## Declaration
 
@@ -266,6 +267,73 @@ fn half(n int) int
 
 fn main()
     print(half(-4))
+```
+
+## Static proof
+
+**contract.prove.1** — The checker proves a `requires` of a top-level function
+at a call that names it, `f(args)`, in the same file, and an `ensures` of a
+top-level function that is not generic and can't fail, at every return of its
+body. A proved check is not evaluated at run time. `ail run --trace` evaluates
+every check, so its contract events don't change, and `AIL_OPT_OFF=prove`
+keeps every check. Because a proved condition is true and can't trap, leaving
+it out changes nothing a program can show. `ail prove` lists what was proved
+(`prove.cmd.1`). *(ADR 1055)*
+
+```ail rules=contract.prove.1
+fn at(xs List[int], i int) int
+    requires i >= 0
+    requires i < xs.len()
+    xs[i]
+
+fn main()
+    xs := [3, 1, 4]
+    mut sum := 0
+    for i in 0..xs.len()
+        sum += at(xs, i)
+    print(sum)
+```
+
+**contract.prove.2** — A condition is proved when it holds for every value
+these facts allow: integer literals; the function's own `requires`, which held
+at the call (`contract.run.1`); an immutable `x := e` of an `int`; the
+condition of an `if` or `elif` in its block, the negation of the conditions
+before it in later branches and `else`, and that negation after an `if` whose
+every branch leaves (`return`, `break`, `continue`); `for i in a..b` and
+`a..=b`, for an immutable `i`; `len()` of a parameter or binding that is a
+`List`, `Map`, `Set` or `str`, which is between 0 and 2^57; the `ensures` of a
+top-level function called in `x := f(args)`; and `+`, `-`, `*`, `/` and `%`
+(the last two by a positive constant), unary `-`, `and`, `or` and `not`. A
+`mut` name, a field, an element, a method call other than `len()`, a call in a
+condition, a float and a sized number carry no facts. In a condition an
+arithmetic term counts only when its bounds are known, so a proved condition
+can't overflow. *(ADR 1055)*
+
+```ail tool=prove,FILE expect=proved rules=contract.prove.2
+fn digit(n int) int
+    requires n >= 0
+    ensures result >= 0
+    ensures result < 10
+    n % 10
+
+fn main()
+    print(digit(42))
+```
+
+**contract.prove.3** — There is no solver: the result depends only on the
+file, and is the same on every run. A check that isn't proved stays, evaluated
+at run time (`contract.req.1`, `contract.ens.1`) and fuzzed by
+`ail test --contracts` (`contract.fuzz.1`). *(ADR 1055)*
+
+```ail tool=prove,FILE expect=checked rules=contract.prove.3
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    mut k := 4
+    k -= 6
+    print(half(k))
 ```
 
 ## Tools

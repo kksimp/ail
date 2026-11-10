@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots, infer
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`, `prove`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -643,6 +643,89 @@ struct Cart
     total int
 fn main()
     print(missing)
+```
+
+## Cards and std lookup
+
+`ail card` prints the core card or one topic of the full card, and `ail ask std`
+finds a standard-library function by words or by shape, so an agent can look up
+what it would otherwise recall from memory
+([ADR 1051](../decisions/1051-core-card-and-std-lookup.md)).
+
+**api.find.1** — `ail ask std WORDS...` prints at most ten lines, best first,
+each `MODULE.SIGNATURE   (RULE)` with the signature as the spec writes it
+(`fs.read_text(path str) str ! IoError   (std.fs.1)`). Exit status is 0 when
+there are lines, 1 when there are none, 2 for an error.
+
+**api.find.2** — The words are matched against the standard library's rules in
+the spec: a rule `**std.M.N**` whose text starts with a backticked signature
+`name(params) ret ! Error` describes one function `M.name`. A function scores 6
+for each word that is its name, 3 for each word its name contains (of three
+letters or more), 2 for each word that is its module, and 1 for each word (or
+its plural or singular) in the rule's text. Filler words (`a`, `the`, `of`,
+`to`, `by`, `in`, `from`, `and`, `std`, ...) say nothing.
+
+**api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
+names are optional (`(path str)` and `(str)` are the same), spaces say nothing
+and `! Error` is ignored. A function scores 6 when its parameter types equal
+the asked ones in order, else 1 for each asked type among its parameters, and 4
+when its result type equals the asked one.
+
+**api.find.4** — A query that matches nothing prints nothing and exits 1. No
+words, or an unknown option, is a usage error (status 2). The index is read from
+the repository's `docs/spec`, found as `ail explain` finds it.
+
+**tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
+the syntax, the ten rules diagnostics cite most often, and where to look up the
+rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+same.
+
+**tool.card.2** — `ail card TOPIC` prints the section of the full card
+(`docs/language-card.md`) whose `##` heading contains the topic, ignoring case
+(`ail card errors`). `ail card std.MODULE` prints the signatures of that std
+module, as `api.find.1` writes them.
+
+**tool.card.3** — A topic that names no section or module prints an error that
+lists the topics and exits 1. A missing card file is an error (status 2).
+
+```ail tool=ask,std,read,text,file expect=read_text(path rules=api.find.1,api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(str)bytes expect=read_bytes(path rules=api.find.3
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std status=2 expect=usage: rules=api.find.4
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,zzqqxx status=1 rules=api.find.4
+fn main()
+    print(1)
+```
+
+```ail tool=card expect=Ten rules=tool.card.1
+fn main()
+    print(1)
+```
+
+```ail tool=card,errors expect=Absence rules=tool.card.2
+fn main()
+    print(1)
+```
+
+```ail tool=card,std.fs expect=read_text(path rules=tool.card.2
+fn main()
+    print(1)
+```
+
+```ail tool=card,nosuchtopic status=1 expect=topics rules=tool.card.3
+fn main()
+    print(1)
 ```
 
 ## Context for an edit
@@ -1730,6 +1813,31 @@ fn main()
     print("hi")
 ```
 
+**verify.cert.1** — `ail verify --diff [--rev REV] [--mutate [--max N]] --attest OUT FILE` runs
+`verify.run.1-5` and writes one JSON object to `OUT`, ending with a newline: `cert` (1), `base` (the
+commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `files` (every path
+changed since REV and every untracked path, sorted, each `{"path","hash"}` with the `git hash-object`
+hash or `"deleted"`), `proved`, `tested`, `unverified`, `failures` (as in `verify.run.2-5`),
+`effects` (the effect changes, `api.impact.4`) and, with `--mutate` and a program that checks,
+`mutation`: `max`, `score` (`mutants`, `killed`, `survived`, `invalid` of `test.mutate.5`) and
+`survivors_in_changed`, the surviving mutants whose function is a changed declaration
+([ADR 1052](../decisions/1052-change-certificate.md)).
+**verify.cert.2** — The exit status of `--attest` is that of `verify.run.1`. `--attest` without
+`--diff`, and `--mutate` without `--attest`, are usage errors (exit 2).
+**verify.cert.3** — `ail verify --check CERT` re-runs the certificate: `ail verify --diff --rev BASE`
+with `--mutate --max N` when `CERT` has `mutation`, on `file`. It compares `cert`, `base`, `file`,
+`compiler`, `files`, `proved`, `tested`, `unverified`, `failures`, `effects` and `mutation`
+member by member, as compact JSON text. `rev` is not compared.
+**verify.cert.4** — `--check` prints `differs: KEY` with both values for each member that differs
+and exits 1; with none it prints `certificate holds` and exits 0. A file that is missing or not a
+certificate, or a program that cannot be re-run, exits 2. A certificate is evidence that
+reproduces, not identity: nothing is signed.
+
+```ail tool=verify,--check,nosuch.json status=2 expect=can't rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4
+fn main()
+    print("hi")
+```
+
 ## Shrinking a failure bundle
 
 **shrink.run.1** — `ail replay --shrink [--time MS] [-o OUT] BUNDLE` takes a failure
@@ -1883,4 +1991,48 @@ fn pay(n int) int
         assert_eq(pay(i), i + 1)
 fn main()
     print(pay(1))
+```
+
+## Proved contracts
+
+`ail prove` lists the contract checks the checker proves and leaves out
+([contract.prove.1-3](20-contracts.md),
+[ADR 1055](../decisions/1055-contracts-proved-by-interval-facts.md)).
+
+**prove.cmd.1** — `ail prove [--json] FILE|DIR` loads and checks the program as
+`ail check` does; a program with errors prints them and exits 2, as does any
+other flag or a missing operand. Otherwise it prints one line per check the
+prover looked at, function by function in the order they are written: for a
+`requires` at a call, ``FILE:LINE:COL requires `COND` of `F` in `G`: VERDICT``
+at the call, where `G` is the calling function; then for each `ensures` of a
+top-level function, ``FILE:LINE:COL ensures `COND` of `F`: VERDICT`` at the
+condition. `VERDICT` is
+`proved` or `checked` (still evaluated at run time). The last line is
+`N of M contract checks proved`. The status is 0.
+
+```ail tool=prove,FILE expect=proved rules=prove.cmd.1
+fn at(xs List[int], i int) int
+    requires i < xs.len()
+    xs[i]
+
+fn main()
+    xs := [3, 1, 4]
+    for i in 0..xs.len()
+        print(at(xs, i))
+```
+
+**prove.cmd.2** — With `--json` the answer is one object: `ail_api` (1),
+`prove` (1), `proved`, `total`, and `contracts`, a list with, for each line of
+`prove.cmd.1`, `kind` (`requires` or `ensures`), `fn`, `cond`, `at` (the call
+or the condition), `contract` (the condition), `in` (the calling function) and
+`proved`.
+
+```ail tool=prove,--json,FILE expect="proved":true rules=prove.cmd.2
+fn digit(n int) int
+    requires n >= 0
+    ensures result < 10
+    n % 10
+
+fn main()
+    print(digit(7))
 ```

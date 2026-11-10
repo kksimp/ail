@@ -1,0 +1,4 @@
+# The callee of prove_module_trap.ail, in a file of its own (contract.prove.1).
+pub fn half(n int) int
+    requires n >= 0
+    n / 2
