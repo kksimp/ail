@@ -142,7 +142,8 @@ fn prop_type(tool str, p str) str
 
 fn tool_json(t Tool) Json
     props := obj([
-        member(p, obj([member("type", Json.Str(prop_type(t.name, p)))])) for p in t.props
+        member(p, obj([member("type", Json.Str(prop_type(t.name, p)))]))
+        for p in t.props
     ])
     schema := obj([
         member("type", Json.Str("object")),

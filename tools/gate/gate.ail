@@ -2456,11 +2456,11 @@ fn mcp_session(d str, msgs List[str]) proc.Output
     for m in msgs
         input = "{input}{m}\n"
     script := "cd \"$0\" && AIL=\"$1\" exec \"$1\" mcp"
-    r := proc.run("sh", ["-c", script, d, "{repo_root()}/ail"], input) else return proc.Output(
-        status: 127,
-        out: "",
-        err: "could not start sh",
-    )
+    r := proc.run(
+        "sh",
+        ["-c", script, d, "{repo_root()}/ail"],
+        input,
+    ) else return proc.Output(status: 127, out: "", err: "could not start sh")
     r
 
 fn mcp_call(id int, name str, args str) str
@@ -2907,19 +2907,19 @@ fn Gate.agent_tools(mut self, tmp str)
         "must not start with - (mcp.call.4)",
     ])
     want("mcp fix is not an error", m1.out, [jm("'id':7,'result':~'content'")])
-    m2 := mcp_session("{base}/mcp", [
-        mcp_call(
-            2,
-            "ail_edit",
-            "'program':'prog.ail','edits':'rename show display','test':true,'impact':true",
-        ),
-    ])
+    m2 := mcp_session("{base}/mcp", [mcp_call(
+        2,
+        "ail_edit",
+        "'program':'prog.ail','edits':'rename show display','test':true,'impact':true",
+    )])
     want("mcp edit with test and impact", m2.out, ["passed", "tests", "\"isError\":false"])
     if not slurp("{base}/mcp/prog.ail").contains("display")
         red("mcp edit wrote the file", slurp("{base}/mcp/prog.ail"))
-    m3 := mcp_session(repo_root(), [
-        mcp_call(2, "ail_review", "'range':'HEAD..HEAD','path':'examples/hello.ail'"),
-    ])
+    m3 := mcp_session(repo_root(), [mcp_call(
+        2,
+        "ail_review",
+        "'range':'HEAD..HEAD','path':'examples/hello.ail'",
+    )])
     want("mcp review", m3.out, ["\"isError\":false"])
     sh_run("rm -rf {base}")
 
