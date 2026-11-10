@@ -852,6 +852,52 @@ fn Gate.contracts(mut self)
         "contract_trait_inherit",
         ["requires k > 0 (inherited)"],
     )
+    proved_contracts()
+
+## contract.prove.1-3, prove.cmd.1-2 (ADR 1055). A proved check is left out of the build, so a
+## prover bug would remove a check silently: every contract case must run the same with proving
+## on and with `AIL_OPT_OFF=prove`, which keeps every check (same status, output and traps).
+fn Gate.proved_contracts(mut self)
+    mut names := fs.list_dir("tests/cases") else []
+    names.sort()
+    for name in names
+        if not name.ends_with(".ail")
+            continue
+        if not (name.starts_with("contract_") or name.starts_with("prove_"))
+            continue
+        at := "tests/cases/{name}"
+        lean := ail_run(["run", at]) else return
+        kept := ail_env("AIL_OPT_OFF=prove", ["run", at]) else return
+        if lean.status != kept.status or lean.out != kept.out or lean.err != kept.err
+            red(
+                "proved checks {name}",
+                "proving on: exit {lean.status}\n{lean.out}{lean.err}\nAIL_OPT_OFF=prove: exit {kept.status}\n{kept.out}{kept.err}",
+            )
+    p := ail_run(["prove", case_path("prove_contracts")]) else return
+    if p.status != 0
+        red("ail prove", "exit {p.status}\n{p.err}")
+    want("ail prove", p.out, [
+        "requires `i < xs.len()` of `at` in `total`: proved\n",
+        "requires `i < xs.len()` of `at` in `main`: proved\n",
+        "ensures `result < 10` of `digit`: proved\n",
+        "ensures `result >= 0` of `clamp_low`: proved\n",
+        "8 of 8 contract checks proved\n",
+    ])
+    # The negative cases: a `mut` name, a call into another file, and a contract the facts
+    # don't settle keep their checks (they trap in the cases suite, both ways above).
+    m := ail_run(["prove", case_path("prove_mut_trap")]) else return
+    want("ail prove mut", m.out, ["requires `n >= 0` of `half` in `main`: checked\n", "0 of 2 contract checks proved\n"])
+    x := ail_run(["prove", case_path("prove_module_trap")]) else return
+    want("ail prove other file", x.out, ["requires `n > 0` of `go` in `main`: proved\n", "2 of 2 contract checks proved\n"])
+    j := ail_run(["prove", "--json", case_path("prove_unproved_trap")]) else return
+    want("ail prove --json", j.out, [
+        "\"ail_api\":1,\"prove\":1,\"proved\":1,\"total\":2,",
+        "\"kind\":\"requires\",\"fn\":\"half\",\"cond\":\"n >= 0\",",
+        "\"in\":\"half_less\",\"proved\":false}",
+    ])
+    u := ail_run(["prove"]) else return
+    if u.status != 2
+        red("ail prove usage", "exit {u.status}, want 2")
 
 ## `ail test --update` (snap.update.1-6).
 fn Gate.snapshot(mut self, tmp str)

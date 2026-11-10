@@ -222,8 +222,9 @@ Items (1) `old(x)`, (2) inherited trait contracts and (3) type invariants are
 ([ADRs 0210–0213](decisions/0210-contract-syntax.md)). Still open: (a) loop
 invariants (recommended: wait; `assert` inside the loop covers the run-time
 case and a prover is the only reason to name one); (b) static proof, and
-whether an optimising build keeps the checks it can't prove (recommended:
-keep them, so `--no-contracts` stays an explicit choice); (c) invariants on
+whether an optimising build keeps the checks it can't prove: **resolved** by
+[ADR 1055](decisions/1055-contracts-proved-by-interval-facts.md) (interval facts
+prove simple contracts and drop their checks; unproved checks stay); (c) invariants on
 enums, and checks for writes through `mut` parameters outside the type's
 methods (recommended: revisit with (b), since both need a prover to be cheap).
 *Owner: AI under ADR 0076.*

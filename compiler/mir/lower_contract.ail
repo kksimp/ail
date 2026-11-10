@@ -9,7 +9,11 @@
 ## A condition calls functions without checking their contracts
 ## (contract.run.2): it calls their `.nc` copies, which are lowered with no
 ## checks and call `.nc` copies in turn (`gen_unchecked`).
+##
+## A check the prover settled (contract.prove.1, ADR 1055, `compiler/check/prove.ail`) is
+## left out, except under `--trace` and with `AIL_OPT_OFF=prove`.
 use ast
+use check
 
 ## A name and the variable key it stands for.
 struct NameKey
@@ -42,6 +46,42 @@ struct Inherit
                 inh.of[key] = tf
                 contracted[key] = f
                 return
+
+# ---- proved contracts ----
+
+## The contracts proved in each file, by file index, computed the first time a check there asks.
+struct ProofCache
+    done Map[int, check.Proofs]
+
+## Whether proved checks may be left out: not under `--trace`, whose contract events would
+## change, nor with `AIL_OPT_OFF=prove`, which keeps every check to compare against.
+fn Lower.proving(self) bool
+    not instr.trace and not is_rt and not opt_off("prove")
+
+fn Lower.proofs_here(mut self) check.Proofs
+    if p := proofs.done.get(file)
+        return p
+    mut fns := List[ast.FnDecl]()
+    for k in fn_decl.keys()
+        if (fn_file.get(k) else -1) == file
+            fns.push(fn_decl[k])
+    found := check.prove_fns(fns)
+    proofs.done[file] = found
+    found
+
+## contract.prove.1: the `requires` `c` of `key` holds at the call at `pos`, so it isn't checked.
+fn Lower.req_proved(mut self, key str, c ast.Contract, pos ast.Pos) bool
+    if not proving() or (fn_file.get(key) else -1) != file or inh.of.contains(key)
+        return false
+    f := fn_decl.get(key) else return false
+    proofs_here().req.contains(check.site_key(f.name, pos, c.pos))
+
+## contract.prove.1: the `ensures` `c` of the function being lowered holds at every return.
+fn Lower.ens_proved(mut self, c ast.Contract) bool
+    if not proving() or (fn_file.get(ens_label) else -1) != file
+        return false
+    f := fn_decl.get(ens_label) else return false
+    proofs_here().ens.contains(check.ens_key(f.name, c.pos))
 
 # ---- positions ----
 
@@ -316,7 +356,7 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     f := contracted.get(key) else return
     mut reqs := List[ast.Contract]()
     for c in f.contracts
-        if not c.is_ensures
+        if not c.is_ensures and not req_proved(key, c, pos)
             reqs.push(c)
     mut theirs := List[ast.Contract]()
     tf := inh.of.get(key)
@@ -477,6 +517,8 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
     unchecked = true
     for i in 0..ens.len()
         c := ens[i]
+        if i >= inh.ens_n and ens_proved(c)
+            continue
         scopes = if i < inh.ens_n then their_scope else own_scope
         v := lower_value(c.cond, Ty.Bool) else break
         trace_contract(ens_label, "ensures", c, v.id)

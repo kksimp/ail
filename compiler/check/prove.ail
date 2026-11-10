@@ -1,0 +1,1036 @@
+## Static proof of contracts (contract.prove.1, contract.prove.2, contract.prove.3; ADR 1055).
+## One pass over each function's body keeps facts about its immutable `int` names and the
+## lengths of its built-in collections: an interval for each, and bounds `a - b <= c` between
+## two of them. A `requires` at a call is proved when its condition holds for every value the
+## facts allow; an `ensures` when it holds at every return. No solver (ADR 0009): what isn't
+## proved stays checked at run time. The lowering skips the checks proved here
+## (`compiler/mir/lower_contract.ail`); `ail prove` lists them.
+use ast
+
+## Bounds at or past +-PV_INF (2^62 - 1) are unknown, so sums of two known bounds can't
+## overflow the pass's own `int`s.
+PV_INF := 4611686018427387903
+
+## The most elements or bytes a built-in collection can hold: 2^57 is past the address
+## space of both targets.
+PV_LEN_MAX := 144115188075855872
+
+## An offset from a term past this is dropped, keeping the interval only.
+PV_OFF_MAX := 1099511627776
+
+## The relations kept in one scope, so the pass stays linear in the program.
+PV_REL_MAX := 64
+
+## One contract check the pass looked at, for `ail prove` (prove.cmd.1).
+pub struct ProofRow
+    ## `requires` or `ensures`.
+    pub kind str
+    ## The function the contract belongs to.
+    pub func str
+    pub cond str
+    ## Where the condition is written.
+    pub at ast.Pos
+    ## The call, for a `requires`; the condition, for an `ensures`.
+    pub site ast.Pos
+    ## The function the call is in (the contract's own for an `ensures`).
+    pub caller str
+    pub proved bool
+
+## What the pass proved in one file.
+pub struct Proofs
+    ## `site_key` of each proved `requires` at a call.
+    pub req Set[str]
+    ## `ens_key` of each proved `ensures`.
+    pub ens Set[str]
+    pub rows List[ProofRow]
+
+## The key of the `requires` at `cond` of `func`, at the call whose name is at `call`.
+pub fn site_key(func str, call ast.Pos, cond ast.Pos) str
+    "{func}@{call.line}:{call.col}@{cond.line}:{cond.col}"
+
+## The key of the `ensures` at `cond` of `func`.
+pub fn ens_key(func str, cond ast.Pos) str
+    "{func}@{cond.line}:{cond.col}"
+
+## Prove what can be proved among one file's functions `fns` (contract.prove.1).
+pub fn prove_fns(fns List[ast.FnDecl]) Proofs
+    mut pr := PvProver(
+        callees: {},
+        owned: Set[str](),
+        found: Proofs(req: Set[str](), ens: Set[str](), rows: List[ProofRow]()),
+        in_method: false,
+        name_now: "",
+        proving: false,
+        goals: List[ast.Contract](),
+        holds: List[bool](),
+        ret_int: false,
+        params_now: List[ast.Param](),
+    )
+    for fd in fns
+        if pv_top(fd)
+            pr.callees[fd.name] = fd
+        else
+            pr.owned.add(fd.name)
+    for fd in fns
+        pr.walk_fn(fd)
+    pr.found
+
+# ---- values ----
+
+struct PvIv
+    lo int
+    hi int
+
+## `a - b <= c` for two terms.
+struct PvRel
+    a str
+    b str
+    c int
+
+## An `int` value: `key + off` when `key` names a term, and within `lo..=hi` (each
+## unknown at +-PV_INF). `safe`: computing it can't trap.
+struct PvVal
+    key str
+    off int
+    lo int
+    hi int
+    safe bool
+
+## What a contract's parameter stands for at a call or a return.
+enum PvBound
+    IntB(v PvVal)
+    CollB(key str)
+
+## The facts at one point of a function.
+struct PvFacts
+    ivs Map[str, PvIv]
+    rels List[PvRel]
+    ## Immutable names: their value can't change while they are visible.
+    terms Set[str]
+    ## Terms known to be `int`s.
+    ints Set[str]
+    ## Terms known to be built-in collections, whose `len()` is a term.
+    colls Set[str]
+    ## Every local in scope, so a call of one isn't taken for a function.
+    locals Set[str]
+
+## How a condition's names are read: as the function's own (`direct`), or through `env`.
+struct PvCtx
+    direct bool
+    env Map[str, PvBound]
+
+## A condition's verdict: 1 true, 0 false, -1 unknown; `safe`: evaluating it can't trap.
+struct PvDec
+    v int
+    safe bool
+
+fn pv_none() PvFacts
+    PvFacts(
+        ivs: {},
+        rels: List[PvRel](),
+        terms: Set[str](),
+        ints: Set[str](),
+        colls: Set[str](),
+        locals: Set[str](),
+    )
+
+fn pv_direct() PvCtx
+    PvCtx(direct: true, env: {})
+
+fn pv_lo_known(n int) bool
+    n > 0 - PV_INF
+
+fn pv_hi_known(n int) bool
+    n < PV_INF
+
+## A lower bound kept in range: rounding it down is sound.
+fn pv_low(n int) int
+    if n <= 0 - PV_INF
+        return 0 - PV_INF
+    if n >= PV_INF
+        return PV_INF - 1
+    n
+
+## An upper bound kept in range: rounding it up is sound.
+fn pv_high(n int) int
+    if n >= PV_INF
+        return PV_INF
+    if n <= 0 - PV_INF
+        return 1 - PV_INF
+    n
+
+fn pv_unknown() PvVal
+    PvVal(key: "", off: 0, lo: 0 - PV_INF, hi: PV_INF, safe: false)
+
+fn pv_exact(n int) PvVal
+    if n <= 0 - PV_INF or n >= PV_INF
+        return pv_unknown()
+    PvVal(key: "", off: 0, lo: n, hi: n, safe: true)
+
+## A value with no term; safe when its inputs were and both bounds are known.
+fn pv_span(lo int, hi int, safe bool) PvVal
+    PvVal(key: "", off: 0, lo: lo, hi: hi, safe: safe and pv_lo_known(lo) and pv_hi_known(hi))
+
+fn pv_is_const(v PvVal) bool
+    v.key == "" and pv_lo_known(v.lo) and v.lo == v.hi
+
+fn pv_iv(f PvFacts, k str) PvIv
+    if v := f.ivs.get(k)
+        return v
+    if k.ends_with(".len()")
+        return PvIv(lo: 0, hi: PV_LEN_MAX)
+    PvIv(lo: 0 - PV_INF, hi: PV_INF)
+
+## The value of term `k`: reading a name can't trap.
+fn pv_term(f PvFacts, k str) PvVal
+    iv := pv_iv(f, k)
+    PvVal(key: k, off: 0, lo: iv.lo, hi: iv.hi, safe: true)
+
+## `v + c` for a constant `c`.
+fn pv_shift(v PvVal, c int, safe bool) PvVal
+    lo := if pv_lo_known(v.lo) then pv_low(v.lo + c) else 0 - PV_INF
+    hi := if pv_hi_known(v.hi) then pv_high(v.hi + c) else PV_INF
+    mut key := v.key
+    mut off := v.off + c
+    if off >= PV_OFF_MAX or off <= 0 - PV_OFF_MAX
+        key = ""
+    if key == ""
+        off = 0
+    ok := v.safe and safe and pv_lo_known(lo) and pv_hi_known(hi)
+    PvVal(key: key, off: off, lo: lo, hi: hi, safe: ok)
+
+fn pv_add(a PvVal, b PvVal) PvVal
+    if pv_is_const(b)
+        return pv_shift(a, b.lo, b.safe)
+    if pv_is_const(a)
+        return pv_shift(b, a.lo, a.safe)
+    lo := if pv_lo_known(a.lo) and pv_lo_known(b.lo) then pv_low(a.lo + b.lo) else 0 - PV_INF
+    hi := if pv_hi_known(a.hi) and pv_hi_known(b.hi) then pv_high(a.hi + b.hi) else PV_INF
+    pv_span(lo, hi, a.safe and b.safe)
+
+fn pv_sub(f PvFacts, a PvVal, b PvVal) PvVal
+    if pv_is_const(b)
+        return pv_shift(a, 0 - b.lo, b.safe)
+    d := pv_diff(f, a, b)
+    pv_span(d.lo, d.hi, a.safe and b.safe)
+
+fn pv_neg(a PvVal) PvVal
+    lo := if pv_hi_known(a.hi) then pv_low(0 - a.hi) else 0 - PV_INF
+    hi := if pv_lo_known(a.lo) then pv_high(0 - a.lo) else PV_INF
+    pv_span(lo, hi, a.safe)
+
+## Within +-2^31, so a product of two can't overflow.
+fn pv_small(v PvVal) bool
+    v.lo >= -2147483648 and v.hi <= 2147483648
+
+fn pv_mul(a PvVal, b PvVal) PvVal
+    if not (pv_small(a) and pv_small(b))
+        return pv_unknown()
+    p1 := a.lo * b.lo
+    p2 := a.lo * b.hi
+    p3 := a.hi * b.lo
+    p4 := a.hi * b.hi
+    pv_span(p1.min(p2).min(p3).min(p4), p1.max(p2).max(p3).max(p4), a.safe and b.safe)
+
+## `a / k` for a constant `k > 0`: division by it is monotone, so the bounds divide.
+fn pv_div(a PvVal, b PvVal) PvVal
+    if not pv_is_const(b) or b.lo <= 0
+        return pv_unknown()
+    lo := if pv_lo_known(a.lo) then a.lo / b.lo else 0 - PV_INF
+    hi := if pv_hi_known(a.hi) then a.hi / b.lo else PV_INF
+    pv_span(lo, hi, a.safe and b.safe)
+
+## `a % k` for a constant `k > 0`: within `-(k-1)..=k-1`, and `0..=k-1` for `a >= 0`.
+fn pv_rem(a PvVal, b PvVal) PvVal
+    if not pv_is_const(b) or b.lo <= 0
+        return pv_unknown()
+    k := b.lo
+    if pv_lo_known(a.lo) and a.lo >= 0
+        top := if pv_hi_known(a.hi) then a.hi.min(k - 1) else k - 1
+        return pv_span(0, top, a.safe and b.safe)
+    pv_span(1 - k, k - 1, a.safe and b.safe)
+
+## The least `c` with `x - y <= c` the relations give, directly or through one term.
+fn pv_rel(f PvFacts, x str, y str) int?
+    mut best := PV_INF
+    for r in f.rels
+        if r.a != x
+            continue
+        if r.b == y
+            best = best.min(r.c)
+            continue
+        for s in f.rels
+            if s.a == r.b and s.b == y
+                best = best.min(r.c + s.c)
+    if best >= PV_INF
+        return none
+    best
+
+## The bounds of `a - b`.
+fn pv_diff(f PvFacts, a PvVal, b PvVal) PvIv
+    if a.key != "" and a.key == b.key
+        return PvIv(lo: a.off - b.off, hi: a.off - b.off)
+    mut lo := 0 - PV_INF
+    mut hi := PV_INF
+    if pv_hi_known(a.hi) and pv_lo_known(b.lo)
+        hi = pv_high(a.hi - b.lo)
+    if pv_lo_known(a.lo) and pv_hi_known(b.hi)
+        lo = pv_low(a.lo - b.hi)
+    if a.key != "" and b.key != ""
+        if up := pv_rel(f, a.key, b.key)
+            hi = hi.min(pv_high(up + a.off - b.off))
+        if down := pv_rel(f, b.key, a.key)
+            lo = lo.max(pv_low(a.off - b.off - down))
+    PvIv(lo: lo, hi: hi)
+
+fn pv_cap_hi(f PvFacts, k str, n int) PvFacts
+    if not pv_hi_known(n)
+        return f
+    cur := pv_iv(f, k)
+    mut g := f
+    g.ivs[k] = PvIv(lo: cur.lo, hi: cur.hi.min(pv_high(n)))
+    g
+
+fn pv_cap_lo(f PvFacts, k str, n int) PvFacts
+    if not pv_lo_known(n)
+        return f
+    cur := pv_iv(f, k)
+    mut g := f
+    g.ivs[k] = PvIv(lo: cur.lo.max(pv_low(n)), hi: cur.hi)
+    g
+
+## Add the fact `a - b <= c`.
+fn pv_le(f PvFacts, a PvVal, b PvVal, c int) PvFacts
+    if a.key != "" and a.key == b.key
+        return f
+    mut g := f
+    if a.key != "" and b.key != "" and g.rels.len() < PV_REL_MAX
+        g.rels.push(PvRel(a: a.key, b: b.key, c: c - a.off + b.off))
+    if a.key != "" and pv_hi_known(b.hi)
+        g = pv_cap_hi(g, a.key, c + b.hi - a.off)
+    if b.key != "" and pv_lo_known(a.lo)
+        g = pv_cap_lo(g, b.key, a.lo - c - b.off)
+    g
+
+## `n` goes out of the facts: a new local, or one that isn't a term.
+fn pv_forget(f PvFacts, n str) PvFacts
+    lk := "{n}.len()"
+    mut g := f
+    g.locals.add(n)
+    g.terms.remove(n)
+    g.ints.remove(n)
+    g.colls.remove(n)
+    g.ivs.remove(n)
+    g.ivs.remove(lk)
+    g.rels = [r for r in f.rels if r.a != n and r.b != n and r.a != lk and r.b != lk]
+    g
+
+# ---- reading conditions ----
+
+fn pv_env_int(cx PvCtx, n str) PvVal?
+    if b := cx.env.get(n)
+        match b
+            IntB(v) => return v
+            CollB(_) => return none
+    none
+
+## The term naming the collection `e`, when it is one.
+@allow("expr.match.3") fn pv_coll_key(f PvFacts, e ast.Expr, cx PvCtx) str?
+    n := match e
+        Name(x, _) => x
+        _ => return none
+    if cx.direct
+        if f.colls.contains(n)
+            return n
+        return none
+    if b := cx.env.get(n)
+        match b
+            CollB(k) => return k
+            IntB(_) => return none
+    none
+
+@allow("expr.match.3") fn pv_arith(op ast.BinOp) bool
+    match op
+        Add | Sub | Mul | Div | Rem => true
+        _ => false
+
+## Whether `e` is known to be an `int`: a literal alone isn't, since its type follows the
+## other operand (type.num.10, type.num.13).
+@allow("expr.match.3") fn pv_is_int(f PvFacts, e ast.Expr, cx PvCtx) bool
+    match e
+        Name(n, _) =>
+            if cx.direct
+                return f.ints.contains(n)
+            pv_env_int(cx, n) != none
+        Method(recv, name, _, args) => name == "len" and args.len() == 0 and pv_coll_key(f, recv, cx) != none
+        Unary(op, x, _) =>
+            match op
+                Neg => pv_is_int(f, x, cx)
+                _ => false
+        Binary(op, l, r, _) => pv_arith(op) and (pv_is_int(f, l, cx) or pv_is_int(f, r, cx))
+        _ => false
+
+## Integer literals and arithmetic on them, which are `int` with nothing else to go by
+## (type.num.3).
+@allow("expr.match.3") fn pv_lit_only(e ast.Expr) bool
+    match e
+        Int(_, _) => true
+        Unary(op, x, _) =>
+            match op
+                Neg => pv_lit_only(x)
+                _ => false
+        Binary(op, l, r, _) => pv_arith(op) and pv_lit_only(l) and pv_lit_only(r)
+        _ => false
+
+@allow("expr.match.3") fn pv_value(f PvFacts, e ast.Expr, cx PvCtx) PvVal
+    match e
+        Int(text, _) =>
+            n := text.to_int() else return pv_unknown()
+            pv_exact(n)
+        Name(n, _) =>
+            if cx.direct
+                if f.terms.contains(n)
+                    return pv_term(f, n)
+                return pv_unknown()
+            pv_env_int(cx, n) else pv_unknown()
+        Method(recv, name, _, args) =>
+            if name != "len" or args.len() > 0
+                return pv_unknown()
+            k := pv_coll_key(f, recv, cx) else return pv_unknown()
+            pv_term(f, "{k}.len()")
+        Unary(op, x, _) =>
+            match op
+                Neg => pv_neg(pv_value(f, x, cx))
+                _ => pv_unknown()
+        Binary(op, l, r, _) =>
+            a := pv_value(f, l, cx)
+            b := pv_value(f, r, cx)
+            match op
+                Add => pv_add(a, b)
+                Sub => pv_sub(f, a, b)
+                Mul => pv_mul(a, b)
+                Div => pv_div(a, b)
+                Rem => pv_rem(a, b)
+                _ => pv_unknown()
+        _ => pv_unknown()
+
+fn pv_pick(yes bool, no bool) int
+    if yes
+        return 1
+    if no
+        return 0
+    -1
+
+## The verdict of `a OP b` from the bounds `d` of `a - b`.
+@allow("expr.match.3") fn pv_verdict(op ast.BinOp, d PvIv) int
+    lk := pv_lo_known(d.lo)
+    hk := pv_hi_known(d.hi)
+    zero := lk and hk and d.lo == 0 and d.hi == 0
+    apart := (lk and d.lo >= 1) or (hk and d.hi <= -1)
+    match op
+        Lt => pv_pick(hk and d.hi <= -1, lk and d.lo >= 0)
+        Le => pv_pick(hk and d.hi <= 0, lk and d.lo >= 1)
+        Gt => pv_pick(lk and d.lo >= 1, hk and d.hi <= 0)
+        Ge => pv_pick(lk and d.lo >= 0, hk and d.hi <= -1)
+        Eq => pv_pick(zero, apart)
+        Ne => pv_pick(apart, zero)
+        _ => -1
+
+fn pv_no_dec() PvDec
+    PvDec(v: -1, safe: false)
+
+fn pv_compare(f PvFacts, op ast.BinOp, l ast.Expr, r ast.Expr, cx PvCtx) PvDec
+    if not (pv_is_int(f, l, cx) or pv_is_int(f, r, cx))
+        return pv_no_dec()
+    a := pv_value(f, l, cx)
+    b := pv_value(f, r, cx)
+    PvDec(v: pv_verdict(op, pv_diff(f, a, b)), safe: a.safe and b.safe)
+
+## Whether condition `e` holds under the facts (contract.prove.2).
+@allow("expr.match.3") fn pv_decide(f PvFacts, e ast.Expr, cx PvCtx) PvDec
+    match e
+        Bool(b, _) => PvDec(v: if b then 1 else 0, safe: true)
+        Unary(op, x, _) =>
+            match op
+                Not =>
+                    d := pv_decide(f, x, cx)
+                    PvDec(v: if d.v < 0 then -1 else 1 - d.v, safe: d.safe)
+                _ => pv_no_dec()
+        Binary(op, l, r, _) =>
+            match op
+                And =>
+                    x := pv_decide(f, l, cx)
+                    if x.v == 0
+                        return PvDec(v: 0, safe: x.safe)
+                    y := pv_decide(f, r, cx)
+                    if x.v == 1 and y.v >= 0
+                        return PvDec(v: y.v, safe: x.safe and y.safe)
+                    pv_no_dec()
+                Or =>
+                    x := pv_decide(f, l, cx)
+                    if x.v == 1
+                        return PvDec(v: 1, safe: x.safe)
+                    y := pv_decide(f, r, cx)
+                    if x.safe and y.v == 1
+                        return PvDec(v: 1, safe: y.safe)
+                    if x.v == 0 and y.v == 0
+                        return PvDec(v: 0, safe: x.safe and y.safe)
+                    pv_no_dec()
+                Lt | Le | Gt | Ge | Eq | Ne => pv_compare(f, op, l, r, cx)
+                _ => pv_no_dec()
+        _ => pv_no_dec()
+
+@allow("expr.match.3") fn pv_flip(op ast.BinOp, keep bool) ast.BinOp
+    if keep
+        return op
+    match op
+        Lt => ast.BinOp.Ge
+        Le => ast.BinOp.Gt
+        Gt => ast.BinOp.Le
+        Ge => ast.BinOp.Lt
+        Eq => ast.BinOp.Ne
+        Ne => ast.BinOp.Eq
+        _ => op
+
+@allow("expr.match.3") fn pv_assume_cmp(f PvFacts, op ast.BinOp, l ast.Expr, r ast.Expr, cx PvCtx) PvFacts
+    if not (pv_is_int(f, l, cx) or pv_is_int(f, r, cx))
+        return f
+    a := pv_value(f, l, cx)
+    b := pv_value(f, r, cx)
+    match op
+        Lt => pv_le(f, a, b, -1)
+        Le => pv_le(f, a, b, 0)
+        Gt => pv_le(f, b, a, -1)
+        Ge => pv_le(f, b, a, 0)
+        Eq => pv_le(pv_le(f, a, b, 0), b, a, 0)
+        _ => f
+
+## The facts once `e` is known to be `positive` (true) or false.
+@allow("expr.match.3") fn pv_assume(f PvFacts, e ast.Expr, positive bool, cx PvCtx) PvFacts
+    match e
+        Unary(op, x, _) =>
+            match op
+                Not => pv_assume(f, x, not positive, cx)
+                _ => f
+        Binary(op, l, r, _) =>
+            match op
+                And =>
+                    if positive
+                        return pv_assume(pv_assume(f, l, true, cx), r, true, cx)
+                    f
+                Or =>
+                    if positive
+                        return f
+                    pv_assume(pv_assume(f, l, false, cx), r, false, cx)
+                Lt | Le | Gt | Ge | Eq | Ne => pv_assume_cmp(f, pv_flip(op, positive), l, r, cx)
+                _ => f
+        _ => f
+
+# ---- types and declarations ----
+
+@allow("expr.match.3") fn pv_int_type(t ast.TypeRef) bool
+    match t.shape
+        Named(name, args) => name == "int" and args.len() == 0
+        _ => false
+
+@allow("expr.match.3") fn pv_coll_type(t ast.TypeRef) bool
+    match t.shape
+        Named(name, _) => name == "List" or name == "Map" or name == "Set" or name == "str"
+        _ => false
+
+@allow("expr.match.3") fn pv_fallible(t ast.TypeRef) bool
+    match t.shape
+        Fallible(_, _) => true
+        _ => false
+
+fn pv_ret_int(r ast.TypeRef?) bool
+    t := r else return false
+    pv_int_type(t)
+
+@allow("expr.match.3") fn pv_top_level(fd ast.FnDecl) bool
+    match fd.within
+        TopLevel => true
+        _ => false
+
+## A top-level free function: its calls by name and its `ensures` are in reach.
+fn pv_top(fd ast.FnDecl) bool
+    fd.owner == none and pv_top_level(fd)
+
+## Its `ensures` can be proved: top-level, not generic, can't fail, has a body.
+fn pv_provable(fd ast.FnDecl) bool
+    if not pv_top(fd) or fd.generics.len() > 0 or fd.body == none or fd.ext != none
+        return false
+    if r := fd.ret
+        if pv_fallible(r)
+            return false
+    true
+
+@allow("expr.match.3") fn pv_is_coll(f PvFacts, e ast.Expr) bool
+    match e
+        Name(n, _) => f.colls.contains(n)
+        Str(_, _) => true
+        Interp(_, _) => true
+        ListLit(_, _) => true
+        MapLit(_, _) => true
+        SetLit(_, _) => true
+        Comp(_, _, _, _, _) => true
+        _ => false
+
+fn pv_param(f PvFacts, p ast.Param) PvFacts
+    mut g := pv_forget(f, p.name)
+    if p.mutable or p.moved
+        return g
+    g.terms.add(p.name)
+    if pv_int_type(p.ty)
+        g.ints.add(p.name)
+    elif pv_coll_type(p.ty)
+        g.colls.add(p.name)
+    g
+
+## `for VAR in a..b` (and `a..=b`): `a <= VAR` and `VAR < b` (`<= b`) for an immutable `VAR`.
+@allow("expr.match.3") fn pv_loop(f PvFacts, var str, mutable bool, iter ast.Expr) PvFacts
+    mut g := pv_forget(f, var)
+    if mutable
+        return g
+    match iter
+        Range(lo, hi, inclusive, _) =>
+            first := lo else return g
+            last := hi else return g
+            if not (pv_is_int(f, first, pv_direct()) or pv_lit_only(first))
+                return g
+            if not (pv_is_int(f, last, pv_direct()) or pv_lit_only(last))
+                return g
+            g.terms.add(var)
+            g.ints.add(var)
+            x := pv_term(g, var)
+            g = pv_le(g, pv_value(f, first, pv_direct()), x, 0)
+            pv_le(g, x, pv_value(f, last, pv_direct()), if inclusive then 0 else -1)
+        _ => g
+
+## The names a pattern binds go out of the facts.
+@allow("expr.match.3") fn pv_pattern(f PvFacts, p ast.Pattern) PvFacts
+    match p
+        Variant(_, _, bindings, _) =>
+            mut g1 := f
+            if bs := bindings
+                for b in bs
+                    g1 = pv_forget(g1, b.name)
+            g1
+        Alt(alts, _) =>
+            mut g2 := f
+            for q in alts
+                g2 = pv_pattern(g2, q)
+            g2
+        TuplePat(elems, _) =>
+            mut g3 := f
+            for q in elems
+                g3 = pv_pattern(g3, q)
+            g3
+        BindName(name, _) => pv_forget(f, name)
+        _ => f
+
+## Whether a block always leaves: it ends in `return`, `break` or `continue`, or in an
+## `if` whose every branch and `else` does.
+@allow("expr.match.3") fn pv_leaves(stmts List[ast.Stmt]) bool
+    last := stmts.last() else return false
+    match last
+        Return(_, _) => true
+        Break(_) => true
+        Continue(_) => true
+        Eval(e) =>
+            match e
+                If(branches, els, _, _) =>
+                    rest := els else return false
+                    pv_all_leave(branches) and pv_leaves(rest)
+                _ => false
+        _ => false
+
+fn pv_all_leave(branches List[ast.Branch]) bool
+    for b in branches
+        if not pv_leaves(b.body)
+            return false
+    true
+
+## The arguments of a call of `callee`, as its parameters' values; `none` when they don't
+## line up with its parameters one by one.
+fn pv_call_env(f PvFacts, callee ast.FnDecl, args List[ast.Arg]) Map[str, PvBound]?
+    if callee.receiver != none or args.len() != callee.params.len()
+        return none
+    mut env := Map[str, PvBound]()
+    for i in 0..args.len()
+        a := args[i]
+        p := callee.params[i]
+        if a.label != none or a.param != none or a.mutable or a.moved
+            return none
+        if pv_int_type(p.ty)
+            mut v := pv_value(f, a.value, pv_direct())
+            # The argument is already computed when the condition runs.
+            v.safe = true
+            env[p.name] = PvBound.IntB(v: v)
+        elif pv_coll_type(p.ty)
+            if k := pv_coll_key(f, a.value, pv_direct())
+                env[p.name] = PvBound.CollB(key: k)
+    env
+
+# ---- the walk ----
+
+struct PvProver
+    ## The file's top-level free functions, by name.
+    callees Map[str, ast.FnDecl]
+    ## The names of its methods: in a method, a bare call may mean one.
+    owned Set[str]
+    found Proofs
+    in_method bool
+    name_now str
+    ## The function walked has `ensures` lines being proved: `goals`, and whether each
+    ## still `holds` at every return seen.
+    proving bool
+    goals List[ast.Contract]
+    holds List[bool]
+    ret_int bool
+    params_now List[ast.Param]
+
+fn PvProver.walk_fn(mut self, fd ast.FnDecl)
+    body := fd.body else return
+    in_method = not pv_top(fd)
+    name_now = if o := fd.owner then "{o.name}.{fd.name}" else fd.name
+    mut f := pv_none()
+    if fd.receiver != none
+        f = pv_forget(f, "self")
+    for p in fd.params
+        f = pv_param(f, p)
+    # A function's own `requires` held at the call (contract.run.1); an `impl` method's are
+    # weakened by its trait's (contract.inh.1), so they may not.
+    if pv_top_level(fd)
+        for c in fd.contracts
+            if not c.is_ensures
+                f = pv_assume(f, c.cond, true, pv_direct())
+    goals = [c for c in fd.contracts if c.is_ensures]
+    holds = [c.olds.len() == 0 for c in goals]
+    proving = goals.len() > 0 and pv_provable(fd)
+    params_now = fd.params
+    ret_int = pv_ret_int(fd.ret)
+    unit := fd.ret == none
+    end := walk_block(body, f, proving and not unit)
+    if proving and unit
+        see_return(end, none)
+    if pv_top(fd)
+        for k in 0..goals.len()
+            g := goals[k]
+            ok := proving and holds[k]
+            if ok
+                found.ens.add(ens_key(fd.name, g.pos))
+            found.rows.push(ProofRow(
+                kind: "ensures",
+                func: fd.name,
+                cond: g.text,
+                at: g.pos,
+                site: g.pos,
+                caller: fd.name,
+                proved: ok,
+            ))
+    proving = false
+
+fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool) PvFacts
+    mut f := start
+    for i in 0..stmts.len()
+        f = walk_stmt(stmts[i], f, tail and i == stmts.len() - 1)
+    f
+
+@allow("expr.match.3") fn PvProver.walk_stmt(mut self, s ast.Stmt, f PvFacts, tail bool) PvFacts
+    match s
+        Let(name, _, mutable, value, otherwise) =>
+            walk_expr(value, f)
+            if o := otherwise
+                walk_else(o, f)
+                return pv_forget(f, name)
+            bind_let(f, name, mutable, value)
+        Assign(target, _, value, _) =>
+            walk_expr(target, f)
+            walk_expr(value, f)
+            f
+        While(cond, body, _) =>
+            walk_expr(cond, f)
+            walk_block(body, pv_assume(f, cond, true, pv_direct()), false)
+            f
+        For(_, var, _, mutable, iter, body, _) =>
+            walk_expr(iter, f)
+            walk_block(body, pv_loop(f, var, mutable, iter), false)
+            f
+        Return(value, _) =>
+            if e := value
+                walk_expr(e, f)
+            see_return(f, value)
+            f
+        Eval(e) =>
+            if tail
+                return walk_tail(e, f)
+            match e
+                If(branches, els, else_err, _) =>
+                    rest := walk_if(branches, els, else_err, f, false)
+                    if pv_all_leave(branches)
+                        return rest
+                    f
+                _ =>
+                    walk_expr(e, f)
+                    f
+        Handle(value, otherwise) =>
+            walk_expr(value, f)
+            walk_else(otherwise, f)
+            f
+        Defer(inner, _) =>
+            walk_stmt(inner, f, false)
+            f
+        With(mutex, var, _, body, _) =>
+            walk_expr(mutex, f)
+            walk_block(body, pv_forget(f, var), false)
+            f
+        Unsafe(body, _) =>
+            walk_block(body, f, tail)
+            f
+        LetTuple(names, value, _) =>
+            walk_expr(value, f)
+            mut g := f
+            for b in names
+                g = pv_forget(g, b.name)
+            g
+        _ => f
+
+## `name := value`: an immutable `int` gets its value's facts, and those of the `ensures`
+## of a function it calls, which held when it returned.
+@allow("expr.match.3") fn PvProver.bind_let(mut self, f PvFacts, name str, mutable bool, value ast.Expr) PvFacts
+    mut g := pv_forget(f, name)
+    if mutable
+        return g
+    g.terms.add(name)
+    if pv_is_coll(f, value)
+        g.colls.add(name)
+        return g
+    called := called_fn(value, f)
+    from_call := if c := called then pv_ret_int(c.ret) else false
+    if not (pv_is_int(f, value, pv_direct()) or pv_lit_only(value) or from_call)
+        return g
+    g.ints.add(name)
+    v := pv_value(f, value, pv_direct())
+    g.ivs[name] = PvIv(lo: v.lo, hi: v.hi)
+    x := pv_term(g, name)
+    if v.key != ""
+        g = pv_le(pv_le(g, x, v, 0), v, x, 0)
+    cf := called else return g
+    args := match value
+        Call(_, a, _) => a
+        _ => return g
+    m := pv_call_env(f, cf, args) else return g
+    mut env := m
+    env["result"] = PvBound.IntB(v: pv_term(g, name))
+    for c in cf.contracts
+        if c.is_ensures and c.olds.len() == 0
+            g = pv_assume(g, c.cond, true, PvCtx(direct: false, env: env))
+    g
+
+## The top-level function a call `name(...)` reaches, if `e` is one.
+@allow("expr.match.3") fn PvProver.called_fn(self, e ast.Expr, f PvFacts) ast.FnDecl?
+    callee := match e
+        Call(c, _, _) => c
+        _ => return none
+    name := match callee
+        Name(n, _) => n
+        _ => return none
+    if f.locals.contains(name) or (in_method and owned.contains(name))
+        return none
+    cf := callees.get(name)?
+    if r := cf.ret
+        if pv_fallible(r)
+            return none
+    cf
+
+@allow("expr.match.3") fn PvProver.walk_tail(mut self, e ast.Expr, f PvFacts) PvFacts
+    match e
+        If(branches, els, else_err, _) => walk_if(branches, els, else_err, f, true)
+        Match(scrutinee, arms, _) =>
+            walk_expr(scrutinee, f)
+            for a in arms
+                g := pv_pattern(f, a.pat)
+                if gd := a.guard
+                    walk_expr(gd, g)
+                walk_block(a.body, g, true)
+            f
+        _ =>
+            walk_expr(e, f)
+            see_return(f, e)
+            f
+
+## Walk an `if`: each branch under its condition and the negation of those before it.
+## Returns the facts when no branch is taken.
+@allow("expr.match.3") fn PvProver.walk_if(
+    mut self,
+    branches List[ast.Branch],
+    els List[ast.Stmt]?,
+    else_err ast.Ident?,
+    f PvFacts,
+    tail bool,
+) PvFacts
+    mut rest := f
+    for b in branches
+        match b.cond
+            Test(c) =>
+                walk_expr(c, rest)
+                walk_block(b.body, pv_assume(rest, c, true, pv_direct()), tail)
+                rest = pv_assume(rest, c, false, pv_direct())
+            Bind(name, _, value) =>
+                walk_expr(value, rest)
+                walk_block(b.body, pv_forget(rest, name), tail)
+    if es := els
+        mut g := rest
+        if who := else_err
+            g = pv_forget(g, who.name)
+        walk_block(es, g, tail)
+    elif tail
+        see_return(rest, none)
+    rest
+
+fn PvProver.walk_else(mut self, o ast.Else, f PvFacts)
+    match o
+        Fallback(value) => walk_expr(value, f)
+        Leave(st) => walk_stmt(st, f, false)
+        Handler(who, body, _) =>
+            mut g := f
+            if w := who
+                g = pv_forget(g, w.name)
+            walk_block(body, g, false)
+    return
+
+@allow("expr.match.3") fn PvProver.walk_expr(mut self, e ast.Expr, f PvFacts)
+    match e
+        Call(callee, args, _) =>
+            walk_args(args, f)
+            match callee
+                Name(name, at) => see_call(name, at, args, f)
+                _ => walk_expr(callee, f)
+        Method(recv, _, _, args) =>
+            walk_expr(recv, f)
+            walk_args(args, f)
+        Member(recv, _, _) => walk_expr(recv, f)
+        Index(recv, index, _) =>
+            walk_expr(recv, f)
+            walk_expr(index, f)
+        Unary(_, x, _) => walk_expr(x, f)
+        Binary(op, l, r, _) =>
+            walk_expr(l, f)
+            match op
+                And => walk_expr(r, pv_assume(f, l, true, pv_direct()))
+                Or => walk_expr(r, pv_assume(f, l, false, pv_direct()))
+                _ => walk_expr(r, f)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                walk_expr(x, f)
+            if y := hi
+                walk_expr(y, f)
+        ListLit(items, _) =>
+            for x in items
+                walk_expr(x, f)
+        SetLit(items, _) =>
+            for x in items
+                walk_expr(x, f)
+        TupleLit(items, _) =>
+            for x in items
+                walk_expr(x, f)
+        MapLit(entries, _) =>
+            for en in entries
+                walk_expr(en.key, f)
+                walk_expr(en.value, f)
+        Interp(parts, _) =>
+            for part in parts
+                match part
+                    Hole(v) => walk_expr(v, f)
+                    Fmt(v, _) => walk_expr(v, f)
+                    Lit(_) => continue
+        If(branches, els, else_err, _) => walk_if(branches, els, else_err, f, false)
+        Match(scrutinee, arms, _) =>
+            walk_expr(scrutinee, f)
+            for a in arms
+                g := pv_pattern(f, a.pat)
+                if gd := a.guard
+                    walk_expr(gd, g)
+                walk_block(a.body, g, false)
+        Try(x, context, _) =>
+            walk_expr(x, f)
+            if c := context
+                walk_expr(c, f)
+        Comp(_, elem, value, clauses, _) =>
+            mut g := f
+            for cl in clauses
+                walk_expr(cl.iter, g)
+                g = pv_loop(g, cl.var, false, cl.iter)
+                for b in cl.unpack
+                    g = pv_forget(g, b.name)
+                if c := cl.cond
+                    walk_expr(c, g)
+                    g = pv_assume(g, c, true, pv_direct())
+            walk_expr(elem, g)
+            if v := value
+                walk_expr(v, g)
+        OrElse(value, otherwise, _) =>
+            walk_expr(value, f)
+            walk_else(otherwise, f)
+        NewRef(value, _) => walk_expr(value, f)
+        _ => return
+    return
+
+## The arguments of a call; a key function `|x| e` (expr.key.1) binds `x` in `e`.
+fn PvProver.walk_args(mut self, args List[ast.Arg], f PvFacts)
+    for a in args
+        if p := a.param
+            walk_expr(a.value, pv_forget(f, p.name))
+        else
+            walk_expr(a.value, f)
+
+## A call `name(args)` at `at`: try each `requires` of the function it reaches.
+fn PvProver.see_call(mut self, name str, at ast.Pos, args List[ast.Arg], f PvFacts)
+    if f.locals.contains(name) or (in_method and owned.contains(name))
+        return
+    callee := callees.get(name) else return
+    env := pv_call_env(f, callee, args)
+    for c in callee.contracts
+        if c.is_ensures
+            continue
+        mut ok := false
+        if m := env
+            d := pv_decide(f, c.cond, PvCtx(direct: false, env: m))
+            ok = d.v == 1 and d.safe
+        if ok
+            found.req.add(site_key(callee.name, at, c.pos))
+        found.rows.push(ProofRow(
+            kind: "requires",
+            func: callee.name,
+            cond: c.text,
+            at: c.pos,
+            site: at,
+            caller: name_now,
+            proved: ok,
+        ))
+
+## A return of `value` (`none`: no value, or one the pass can't read) with facts `f`:
+## each `ensures` still proved must hold for it.
+fn PvProver.see_return(mut self, f PvFacts, value ast.Expr?)
+    if not proving
+        return
+    mut env := Map[str, PvBound]()
+    for p in params_now
+        if p.mutable or p.moved
+            continue
+        if pv_int_type(p.ty)
+            env[p.name] = PvBound.IntB(v: pv_term(f, p.name))
+        elif pv_coll_type(p.ty)
+            env[p.name] = PvBound.CollB(key: p.name)
+    if e := value
+        if ret_int
+            mut r := pv_value(f, e, pv_direct())
+            r.safe = true
+            env["result"] = PvBound.IntB(v: r)
+    cx := PvCtx(direct: false, env: env)
+    for k in 0..goals.len()
+        if holds[k]
+            d := pv_decide(f, goals[k].cond, cx)
+            if d.v != 1 or not d.safe
+                holds[k] = false
