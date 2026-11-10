@@ -1,6 +1,6 @@
 # std.app host parity: macOS, Linux, Windows
 
-Status: working table for v0.1.0 slice P6 (2026-11-10, ail main). One row per op, node, protocol line and event of the macOS host's `tools/app-host/macos/Sources/Protocol.swift`, with what `tools/app-host/linux/host.c` and `tools/app-host/windows/Host.cs` do. **Linux owners add the Linux column; the Windows lane owns the Windows column.** "yes" means implemented and covered by `tests/ui/host_conformance.txt` or a manual check named in the notes; "no" is a gap to fill before the tag; "chain" means the rule is in the 0.1.0 chain of PRs and not yet on main.
+Status: working table for v0.1.0 slice P6 (2026-11-10, ail main). One row per op, node, protocol line and event of the macOS host's `tools/app-host/macos/Sources/Protocol.swift`, with what `tools/app-host/linux/host.c` and `tools/app-host/windows/Host.cs` do. **Linux owners add the Linux column; the Windows lane owns the Windows column.** "yes" means implemented and covered by `tests/ui/host_conformance.txt` or a manual check named in the notes; "no" is a gap to fill before the tag; "merged" means the rule landed with the 0.1.0 chain.
 
 Conformance: `tests/ui/host_conformance.txt` is the script every host must pass without an AIL toolchain. `tests/ui/host_conformance.sh PLATFORM HOST...` plays it on macOS and Linux; `tools/app-host/windows/smoke.ps1` plays it on Windows and adds the Windows-only checks (surface mapping).
 
@@ -20,7 +20,7 @@ Conformance: `tests/ui/host_conformance.txt` is the script every host must pass 
 |---|---|---|---|---|
 | `view` (title, focus) | std.app.7 | yes | | yes |
 | `view` `hover` | std.app.16 | yes | | yes |
-| `view` `edge` | std.app.25 | yes | | yes (ADR 1033) |
+| `view` `edge` | std.app.25 | yes | | merged (ADR 1033) |
 | `measure` | std.app.13 | yes | | yes |
 | `popup` | std.app.18 | yes | | yes (ContextMenuStrip) |
 | `pick` (file and folder) | std.app.22 | yes | | yes (OpenFileDialog, FolderBrowserDialog) |
@@ -53,17 +53,17 @@ Conformance: `tests/ui/host_conformance.txt` is the script every host must pass 
 | `pad` | std.gfx.11 | yes (GameController) | | yes (XInput) |
 | `close` | std.app.8 | yes | | yes |
 
-## In the 0.1.0 chain (std.app.28, .29, .32, .33, .34)
+## The 0.1.0 chain (std.app.28, .29, .32, .33, .34), merged as batch GZ
 
-Pulled into 0.1.0 on 2026-11-10; they land as one chain (order .32, .29, .28, .33, .34), each with all three hosts. Until a rule merges its cells read "chain".
+Pulled into 0.1.0 on 2026-11-10 and merged as one chain (order .32, .29, .28, .33, .34), each with all three hosts. "merged" means the chain's code is on main; the conformance script does not exercise these ops.
 
 | Rule | What | macOS | Linux | Windows |
 |---|---|---|---|---|
-| std.app.28 | font-family lists | chain | chain | chain |
-| std.app.29 | web fonts `Font` op | chain | chain | chain |
-| std.app.32 | `Round`, `Poly`, `Line` ops | chain | chain | chain |
-| std.app.33 | `inset_right` (ADR 1033) | n/a (sends 0) | chain | chain |
-| std.app.34 | `sans_line`, `Str` placement | chain | chain | chain |
+| std.app.28 | font-family lists | merged | chain | merged |
+| std.app.29 | web fonts `Font` op | merged | chain | merged |
+| std.app.32 | `Round`, `Poly`, `Line` ops | merged | chain | merged |
+| std.app.33 | `inset_right` (ADR 1033) | n/a (sends 0) | merged | chain |
+| std.app.34 | `sans_line`, `Str` placement | merged | chain | merged |
 
 ## Windows notes
 
