@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Print the changelog entry for a release: the merged pull-request titles on
-# main since the previous tag (ADR pending-versioning). Nothing is written or tagged.
+# main since the previous tag (ADR 1043). Nothing is written or tagged.
 #   tools/release/changelog.sh VERSION [FROM_REF] [TO_REF]
 # VERSION is like 0.1.0. FROM_REF defaults to the newest v* tag, or the first commit
 # when there is none. TO_REF defaults to HEAD. Prepend the output to CHANGELOG.md.

@@ -18,7 +18,7 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - The size argument of each program is in its `NAME.args`.
 
-Reproduce:
+Reproduce (needs gcc, clang and python3; Debian/Ubuntu also python3-venv):
 
     tools/bench/publish.sh                       # everything on this page
     python3 -I tools/perfbench/race.py --no-run --native --c --python --programs tools/perfbench/programs/nbody.ail

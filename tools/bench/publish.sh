@@ -20,6 +20,14 @@ while [ $# -gt 0 ]; do
     esac
 done
 cd "$root"
+missing=""
+for tool in gcc clang python3; do
+    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+if [ -n "$missing" ]; then
+    echo "error: missing${missing}; install them (macOS: xcode-select --install; Debian/Ubuntu: sudo apt install gcc clang python3 python3-venv)" >&2
+    exit 1
+fi
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 ./ail run examples/hello.ail >/dev/null            # builds the native CLI from the seed
 small=""; for n in collatz nbody spectralnorm mandelbrot fannkuch binarytrees fasta wordfreq matmul sieve; do
