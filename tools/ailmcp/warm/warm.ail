@@ -44,10 +44,7 @@ pub fn Warm.run(
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
     # mcp.warm.3: a toolchain newer than the native CLI goes through the launcher, which
     # rebuilds it; the memo is dropped with the old toolchain.
-    stamp := newest([
-        path.join(root, "compiler/**/*.ail"),
-        path.join(root, "std/**/*.ail"),
-    ])
+    stamp := newest([path.join(root, "compiler/**/*.ail"), path.join(root, "std/**/*.ail")])
     built := fs.metadata(native) else
         memo = Map[str, proc.Output]()
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
