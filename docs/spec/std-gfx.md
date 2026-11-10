@@ -55,7 +55,13 @@ sends `{"v":1,"t":"present","id":"gfx","buf":K}`. The host maps the file by
 path, shows buffer K at its next draw, and answers each drawn frame with the
 event `vsync` (`id`, `dx` the seconds since the previous one). The program
 unlinks the file at the first `vsync`. A host skips a `surface` it can't map.
-*(ADR 0957)*
+On Windows, which has no `mkstemp` or `MAP_SHARED` file, the program makes a
+named, pagefile-backed file mapping (`CreateFileMappingA` with name
+`Local\ail-gfx-PID-TICK`, `MapViewOfFile`) with the same layout, sends the
+name as `"name":N` in the `surface` line in place of `"path"`, and keeps the
+mapping for the life of the process; the host opens it with
+`OpenFileMappingA`, and nothing is unlinked. The host sends `vsync` once the
+drawn frame has reached the compositor (`DwmFlush`). *(ADR 0957, ADR 1044)*
 
 **std.gfx.9** — `host.pixels(f Frame) List[int] ! GfxError` draws `f` the way
 `run` does into a fresh surface and returns its pixels as `0xRRGGBB`, row by
@@ -79,7 +85,9 @@ up are positive) and triggers `lt`, `rt` from 0.0 to 1.0. `pad_down`,
 event `pad` (`id` the gamepad's number, `text` the state `buttons,lx,ly,rx,ry,
 lt,rt`, empty when disconnected) when a gamepad's state changes, and
 `pad_event(n, state)` makes one for a test. The macOS host reads gamepads with
-GameController; a host that can't (Linux and Windows hosts today) sends no
+GameController and the Windows host with XInput (polled with each drawn
+frame, connected pads numbered from 0 in slot order); a host that can't (the
+Linux host today) sends no
 `pad` event, so `Input.pads` stays empty and every pad reads as `no_pad()`: a game
 must not need a gamepad. *(ADR 0985)*
 
