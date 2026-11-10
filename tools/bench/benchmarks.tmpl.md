@@ -16,7 +16,10 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   with `-ffp-contract=off`, so floats match. Python is CPython 3 (`python3 -I`), no numpy.
 - Wall time of the whole process, best of the runs shown, on a machine with nothing else running.
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
-- The size argument of each program is in its `NAME.args`.
+- Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
+  fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
+  column shows the size every language ran; the reference output is gcc's at that size. The larger programs
+  in `tools/perfbench/big/` already run for seconds.
 
 Reproduce (needs gcc, clang and python3; Debian/Ubuntu also python3-venv):
 
