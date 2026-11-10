@@ -1804,7 +1804,7 @@ and exits 1; with none it prints `certificate holds` and exits 0. A file that is
 certificate, or a program that cannot be re-run, exits 2. A certificate is evidence that
 reproduces, not identity: nothing is signed.
 
-```ail tool=verify,--check,nosuch.json status=2 expect=can't read rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4
+```ail tool=verify,--check,nosuch.json status=2 expect=can't rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4
 fn main()
     print("hi")
 ```
