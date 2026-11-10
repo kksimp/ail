@@ -2036,3 +2036,51 @@ fn digit(n int) int
 fn main()
     print(digit(7))
 ```
+
+## Trying patches
+
+`ail try PROGRAM [--set FILE]... [--apply]` checks and tests patches without
+touching the program ([ADR 0893](../decisions/0893-ail-try.md)). The first
+slice works on a scratch copy; an in-memory overlay is a later speed-up with
+the same output.
+
+**try.in.1** — A patch set is `ail edit` input (`edit.in.1`, `edit.in.3`).
+Each `--set FILE` is one set, in order; with no `--set` the one set is read from
+standard input. No set, an unknown option or a missing `PROGRAM` is an error:
+exit status 2.
+
+**try.run.1** — Each set is applied to its own copy of `PROGRAM` (a file or a
+directory) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
+check is the one `ail edit` runs. The copies are removed when the set is done,
+and `PROGRAM` is never written.
+
+**try.run.2** — A set that checks is followed by `ail test` on the copy, the whole
+program's tests (the affected set comes with the overlay). Tests that touch the
+disk run against the copy's files.
+
+**try.verdict.1** — One line per set, `set LABEL: check ok|N errors; tests N passed, M failed; patch ~T tokens`,
+with `LABEL` the set's file name (`stdin` for standard input) and `T` the estimate of
+`api.card.3` over the set. A set that doesn't check says `tests skipped`.
+
+**try.verdict.2** — A set that is not clean adds one indented line: its first
+diagnostic or its first failing test.
+
+**try.verdict.3** — A set whose edit can't be applied (`edit.in.2`) says
+`patch does not apply; check and tests skipped`, with the edit's error as the
+detail.
+
+**try.verdict.4** — Exit status is 0 when every set is clean (checks, all tests
+pass) and 1 otherwise.
+
+**try.apply.1** — `--apply` takes exactly one set and writes it to `PROGRAM` with
+`ail edit --if-clean` only when its verdict is clean. Otherwise nothing is
+written, the output says `not applied`, and the exit status is 1. With more than
+one `--set`, exit status 2.
+
+**try.apply.2** — If the real write fails after a clean verdict, the error is
+printed and the exit status is 2.
+
+```ail skip=bootstrap tool=try,--set,FILE rules=try.in.1,try.run.1,try.run.2,try.verdict.1,try.verdict.2,try.verdict.3,try.verdict.4,try.apply.1,try.apply.2
+fn main()
+    print(1)
+```

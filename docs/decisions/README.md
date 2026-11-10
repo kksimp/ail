@@ -712,7 +712,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
 | [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Accepted (built by [1020](1020-ail-context.md)) | 2026-10-24 |
 | [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Deferred past 0.1.0 | 2026-10-24 |
-| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Deferred past 0.1.0 | 2026-10-24 |
+| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Accepted | 2026-10-24 |
 | [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Accepted (built by [1024](1024-ail-review.md)) | 2026-10-24 |
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Accepted (built by [1023](1023-ail-infer-contracts.md)) | 2026-10-24 |
 | [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Superseded by 1022 | 2026-10-24 |
