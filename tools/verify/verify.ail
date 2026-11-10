@@ -61,7 +61,7 @@ fn failing_at(file str, rev str) List[str]
     names
 
 ## The paths changed since `rev` (tracked changes and new files) with the git hash of each (verify.cert.1).
-fn changed_files(rev str) Json
+fn changed_files(rev str, attest str) Json
     mut paths := List[str]()
     tracked := proc.run("git", [
         "diff",
@@ -84,6 +84,9 @@ fn changed_files(rev str) Json
     paths.sort()
     mut out := List[Json]()
     for p in paths
+        # The certificate being written, and the one a `--check` re-run reads, are not part of the change.
+        if p == attest or "{p}.recheck" == attest
+            continue
         h := proc.run("git", ["hash-object", "--", p]) else continue
         hash := if h.status == 0 then h.out.trim() else "deleted"
         out.push(obj([("path", Json.Str(p)), ("hash", Json.Str(hash))]))
@@ -371,7 +374,7 @@ fn main() !
             ("rev", Json.Str(rev)),
             ("file", Json.Str(file)),
             ("compiler", Json.Str(ver.out.trim())),
-            ("files", changed_files(rev)),
+            ("files", changed_files(rev, attest)),
             ("proved", obj([("check", Json.Str(if check_ok then "ok" else "errors")), ("changed", text_list(changed))])),
             ("tested", obj([("passed", text_list(passed)), ("failed", text_list(failed))])),
             ("unverified", text_list(unverified)),
