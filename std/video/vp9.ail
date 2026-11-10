@@ -2895,7 +2895,17 @@ fn Decoder.decode_coefs(mut self, p int, tx int, ctx0 int, at int) int
     c
 
 ## Inverse transform of `co` added to the prediction (VP9 spec 8.7).
-fn Decoder.inverse(mut self, p int, mi_row int, mi_col int, row int, col int, tx int, tt int, eob int)
+fn Decoder.inverse(
+    mut self,
+    p int,
+    mi_row int,
+    mi_col int,
+    row int,
+    col int,
+    tx int,
+    tt int,
+    eob int,
+)
     ss := if p == 0 then 0 else 1
     stride := if p == 0 then ystride else cstride
     x0 := (mi_col * 8).shr(ss) + col * 4
@@ -3472,10 +3482,14 @@ fn Decoder.predict_block(
             else
                 for xx in 0..w
                     qx := q + xx - 3
-                    sum := mem[qx].to_int() * filt[kx] + mem[qx + 1].to_int() * filt[kx + 1] +
-                        mem[qx + 2].to_int() * filt[kx + 2] + mem[qx + 3].to_int() * filt[kx + 3] +
-                        mem[qx + 4].to_int() * filt[kx + 4] + mem[qx + 5].to_int() * filt[kx + 5] +
-                        mem[qx + 6].to_int() * filt[kx + 6] + mem[qx + 7].to_int() * filt[kx + 7]
+                    sum := mem[qx].to_int() * filt[kx]
+                        + mem[qx + 1].to_int() * filt[kx + 1]
+                        + mem[qx + 2].to_int() * filt[kx + 2]
+                        + mem[qx + 3].to_int() * filt[kx + 3]
+                        + mem[qx + 4].to_int() * filt[kx + 4]
+                        + mem[qx + 5].to_int() * filt[kx + 5]
+                        + mem[qx + 6].to_int() * filt[kx + 6]
+                        + mem[qx + 7].to_int() * filt[kx + 7]
                     tmp[t + xx] = clip8((sum + 64).shr(7))
         else
             for xx in 0..w
@@ -3485,7 +3499,14 @@ fn Decoder.predict_block(
                 else
                     mut sum := 0
                     for k in 0..8
-                        sum += ref_px(src, stride, fw, fh, sx + xx + k - 3, sy + yy - 3) * filt[kx + k]
+                        sum += ref_px(
+                            src,
+                            stride,
+                            fw,
+                            fh,
+                            sx + xx + k - 3,
+                            sy + yy - 3,
+                        ) * filt[kx + k]
                     v = clip8((sum + 64).shr(7))
                 tmp[t + xx] = v
     for yy in 0..h
@@ -3495,9 +3516,14 @@ fn Decoder.predict_block(
             mut v2 := tmp[t + 192 + xx]
             if spy != 0
                 q := t + xx
-                sum2 := tmp[q] * filt[ky] + tmp[q + 64] * filt[ky + 1] + tmp[q + 128] * filt[ky + 2] +
-                    tmp[q + 192] * filt[ky + 3] + tmp[q + 256] * filt[ky + 4] + tmp[q + 320] * filt[ky + 5] +
-                    tmp[q + 384] * filt[ky + 6] + tmp[q + 448] * filt[ky + 7]
+                sum2 := tmp[q] * filt[ky]
+                    + tmp[q + 64] * filt[ky + 1]
+                    + tmp[q + 128] * filt[ky + 2]
+                    + tmp[q + 192] * filt[ky + 3]
+                    + tmp[q + 256] * filt[ky + 4]
+                    + tmp[q + 320] * filt[ky + 5]
+                    + tmp[q + 384] * filt[ky + 6]
+                    + tmp[q + 448] * filt[ky + 7]
                 v2 = clip8((sum2 + 64).shr(7))
             if which == 1
                 mem[o + xx] = (mem[o + xx].to_int() + v2 + 1).shr(1).to_u8()
