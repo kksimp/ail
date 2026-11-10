@@ -205,6 +205,9 @@ fn Parser.top_level(mut self)
             use_decl()
         elif tag == "kw" and text == "pub"
             pub_marker()
+        elif tag == "id" and text == "export" and at_export_fn()
+            if f := export_function()
+                fns.push(f)
         elif tag == "sym" and text == "@"
             # `@derive(f) trait Name` (ct.derive.1), or `@name fn ...` (gram.attr.1-2).
             if not derive_trait()
@@ -705,6 +708,47 @@ fn Parser.at_extern_fn(self) bool
     if not at_kw("extern") or tag_at(1) != "id"
         return false
     kw_at(2) == "fn" or tag_at(2) == "str" and kw_at(3) == "fn"
+
+## At `export c ["symbol"] fn` (ffi.export.1).
+fn Parser.at_export_fn(self) bool
+    if tag_at(1) != "id"
+        return false
+    kw_at(2) == "fn" or tag_at(2) == "str" and kw_at(3) == "fn"
+
+## `pub export c ["symbol"] fn name(params) Result` and its body: an ordinary
+## function plus the attribute `@export` (ffi.export.1). The optional string
+## is the C symbol; the default is the AIL name.
+fn Parser.export_function(mut self) ast.FnDecl?
+    had_pub := kw_at(-1) == "pub"
+    kw_pos := bump().pos
+    if not had_pub
+        error_text(
+            "ffi.export.1",
+            kw_pos,
+            "an exported function is public to C, so it needs `pub`",
+            "write `pub export c fn name(params) Result`",
+            "",
+        )
+    lang := take_name("`c` after `export`", "ffi.export.1")?
+    if lang.name != "c"
+        error_text(
+            "ffi.export.1",
+            lang.pos,
+            "`export {lang.name}` is not supported",
+            "write `pub export c fn name(params) Result`",
+            "",
+        )
+        skip_statement()
+        return none
+    mut sym := absent[str]()
+    match peek()
+        Str(text) =>
+            i += 1
+            sym = text
+        Ident(_) | Kw(_) | Sym(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+    mut f := function(ast.Within.TopLevel)?
+    f.attrs.push(ast.Attr(name: "export c", pos: kw_pos, arg: sym))
+    f
 
 fn in_trait(w ast.Within) bool
     match w

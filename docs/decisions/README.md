@@ -780,10 +780,12 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Deferred past 0.1.0 (experimental: compile-only, unverified) | 2026-11-05 |
 | [0969](0969-leak-report.md) | The leak report: `ail leak` shows growth by kind and retention by root on the GC heap *(delegated)* | Accepted | 2026-11-06 |
+| [0950](0950-c-abi-exports.md) | C ABI exports: `pub export c fn` and `ail header` *(delegated)* | Proposed | 2026-11-06 |
 | [0971](0971-std-app-file-chooser.md) | `std.app` native file and folder chooser *(delegated)* | Accepted | 2026-11-06 |
 | [0972](0972-windows-system-zone.md) | Windows system zone: map the Windows zone ID to its IANA name *(delegated)* | Accepted | 2026-11-07 |
 | [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
 | [0974](0974-flac-decoding.md) | std.audio: decode FLAC in AIL, amends ADR 0949 *(delegated)* | Accepted | 2026-11-07 |
+| [0975](0975-library-entry-rule.md) | Library entry: lazy runtime init, caller stack as GC root, serialised first slice *(delegated)* | Accepted | 2026-11-07 |
 | [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
 | [0979](0979-gfx-windows-publish-attach.md) | `std.gfx` windows publish the attach socket (`gfx.watch.run`, `App.shown`) *(delegated)* | Accepted | 2026-11-07 |
