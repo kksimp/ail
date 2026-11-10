@@ -2476,7 +2476,18 @@ fn Gate.try_cmd(mut self, tmp str)
     res := tool(
         "try sets",
         d,
-        ["try", "p.ail", "--set", "good.json", "--set", "broken.json", "--set", "wrong.json", "--set", "nowhere.json"],
+        [
+            "try",
+            "p.ail",
+            "--set",
+            "good.json",
+            "--set",
+            "broken.json",
+            "--set",
+            "wrong.json",
+            "--set",
+            "nowhere.json",
+        ],
         1,
         [
             "set good.json: check ok; tests 1 passed, 0 failed; patch ~",
@@ -2499,10 +2510,22 @@ fn Gate.try_cmd(mut self, tmp str)
     else
         want("try stdin", one.out, ["set stdin: check ok; tests 1 passed, 0 failed"])
     # try.apply.1: a clean set is written, a red one and several sets are not.
-    tool("try apply refuses red", d, ["try", "p.ail", "--set", "wrong.json", "--apply"], 1, ["not applied"])
+    tool(
+        "try apply refuses red",
+        d,
+        ["try", "p.ail", "--set", "wrong.json", "--apply"],
+        1,
+        ["not applied"],
+    )
     if slurp("{d}/p.ail") != prog
         red("try apply refuses red", "p.ail changed")
-    tool("try apply wants one", d, ["try", "p.ail", "--set", "good.json", "--set", "wrong.json", "--apply"], 2, ["try.apply.1"])
+    tool(
+        "try apply wants one",
+        d,
+        ["try", "p.ail", "--set", "good.json", "--set", "wrong.json", "--apply"],
+        2,
+        ["try.apply.1"],
+    )
     tool("try apply", d, ["try", "p.ail", "--set", "good.json", "--apply"], 0, ["applied to p.ail"])
     if not slurp("{d}/p.ail").contains("a + b + 0")
         red("try apply writes", "p.ail lacks the patch\n{slurp("{d}/p.ail")}")

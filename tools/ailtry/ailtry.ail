@@ -121,11 +121,7 @@ fn try_tests(copy_to str, cost str) Verdict
         return Verdict(clean: true, line: "check ok; tests {shown}; {cost}", detail: "")
     shown := if passed != "" then passed else "exit {t.status}"
     first := first_with(text, "FAIL")
-    Verdict(
-        clean: false,
-        line: "check ok; tests {shown}; {cost}",
-        detail: first,
-    )
+    Verdict(clean: false, line: "check ok; tests {shown}; {cost}", detail: first)
 
 struct Sets
     labels List[str]
