@@ -830,6 +830,44 @@ fn main() !
     print(r.text().len() > 0)             # true
 ```
 
+## Signals: `std.os`
+
+**std.os.1** — `signals(names List[str]) Channel[str]` returns a channel that
+receives the name of each listed signal as the operating system delivers it to
+the program. The names are `"HUP"`, `"INT"`, `"QUIT"`, `"TERM"` and `"WINCH"`;
+the value is the same name. Receiving uses the ordinary channel methods
+(`recv`, `try_recv`, `recv_for`, `task.select`) and, like a child's output
+(std.proc.5), needs no task: a receiver that finds the channel empty waits for
+a signal. Signals of one kind that arrive before a receiver looks are delivered as one
+value. Every
+channel that names a signal gets its own copy. While a channel is open, the
+named signals no longer end the program. Needs the `proc` capability.
+*(ADR 1011)*
+
+**std.os.2** — `signals` traps when the list is empty or names a signal other
+than those of std.os.1. *(ADR 1011)*
+
+**std.os.3** — `ch.close()` on a signal channel ends it: queued names can
+still be received, then `recv` gives `none`. When the last open channel naming
+a signal is closed, that signal's default action returns. `ch.send(v)` on a
+signal channel has no effect. `signals` traps if the system refuses the
+handler. *(ADR 1011)*
+
+**std.os.4** — On Windows, `"INT"` is Ctrl-C and Ctrl-Break, and `"TERM"` is
+the console closing, the user logging off and the system shutting down (Windows
+ends the program a few seconds later whatever the program does). `"HUP"`,
+`"QUIT"` and `"WINCH"` are accepted and never delivered there. *(ADR 1011)*
+
+```ail norun rules=std.os.1,std.os.2,std.os.3,std.os.4
+use std.os
+
+fn main()
+    stop := os.signals(["INT", "TERM"])
+    name := stop.recv() else return
+    print("{name}: shutting down")
+    stop.close()
+```
+
 ## Counting: `Map[K, int]`
 
 **std.count.1** — `m[k] += 1` adds one to the count at `k`, and starts the count

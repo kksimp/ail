@@ -107,6 +107,7 @@ fn os_lookup(mod str, name str) OsFn?
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
         "io.write_bytes" => os_fn("rt.io_write_bytes", [Ty.Bytes], Ty.Unit, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
+        "os.signals" => os_fn("rt.os_signals", [Ty.List(s)], Ty.Chan(s), false)
         "tz.offset" => os_fn("rt.tz_offset", [s, Ty.Int], Ty.Opt(Ty.Int), false)
         "tz.system" => os_fn("rt.tz_system", [], s, false)
         "task.cancelled" => os_fn("rt.task_cancelled", [], Ty.Bool, false)
@@ -128,6 +129,7 @@ fn Lower.os_module(self, recv ast.Expr) str
         "compress",
         "bytes",
         "tz",
+        "os",
         "hw",
         "task",
     ]
