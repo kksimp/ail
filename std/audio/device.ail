@@ -24,7 +24,11 @@ pub fn host_path() str ! DeviceError
         message: "std.audio.9: set AIL_AUDIO_HOST to the audio host program",
     )
     base := "{root}/tools/audio-host"
-    for p in ["{base}/macos/build/ail-audio-host", "{base}/linux/build/ail-audio-host", "{base}/windows/build/ail-audio-host.exe"]
+    for p in [
+        "{base}/macos/build/ail-audio-host",
+        "{base}/linux/build/ail-audio-host",
+        "{base}/windows/build/ail-audio-host.exe",
+    ]
         if fs.exists(p)
             return p
     return DeviceError(
