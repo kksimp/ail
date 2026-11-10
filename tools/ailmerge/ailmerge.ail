@@ -135,7 +135,13 @@ fn line_merge(tmp str, ours str, base str, theirs str) str?
     fs.write_text("{tmp}/ours", "{ours}\n") else return none
     fs.write_text("{tmp}/base", "{base}\n") else return none
     fs.write_text("{tmp}/theirs", "{theirs}\n") else return none
-    r := proc.run("git", ["merge-file", "-p", "{tmp}/ours", "{tmp}/base", "{tmp}/theirs"]) else return none
+    r := proc.run("git", [
+        "merge-file",
+        "-p",
+        "{tmp}/ours",
+        "{tmp}/base",
+        "{tmp}/theirs",
+    ]) else return none
     if r.status != 0
         return none
     r.out.trim_end()
@@ -309,7 +315,12 @@ fn errors_of(target str, prefix str, name str) List[Diag]
             if file.starts_with("./")
                 file = file.slice(2, file.len())
         line := d.int("line") else 0
-        out.push(Diag(file: file, line: line, rule: d.text("rule", ""), message: d.text("message", "")))
+        out.push(Diag(
+            file: file,
+            line: line,
+            rule: d.text("rule", ""),
+            message: d.text("message", ""),
+        ))
     out
 
 ## The keys of the declarations `side` added, edited or removed from `base` (merge.decl.1).
@@ -383,7 +394,13 @@ fn side_of(changes List[Change], file str, key str) str
     "base"
 
 ## merge.check.2: each error of the merge that neither side has, with the declaration that holds it, the side that changed that declaration, and the other side's changed declarations it names.
-fn semantic(merged Map[str, str], changes List[Change], ours List[Diag], theirs List[Diag], got List[Diag]) List[Semantic]
+fn semantic(
+    merged Map[str, str],
+    changes List[Change],
+    ours List[Diag],
+    theirs List[Diag],
+    got List[Diag],
+) List[Semantic]
     mut known := List[str]()
     for d in ours
         known.push(sig_of(d))
@@ -403,11 +420,20 @@ fn semantic(merged Map[str, str], changes List[Change], ours List[Diag], theirs 
             if c.side == side or (c.file == d.file and c.key == key)
                 continue
             n := short_name(c.key)
-            label := if c.file == d.file then "{c.key} ({c.side})" else "{c.file}: {c.key} ({c.side})"
+            label := if c.file
+                == d.file then "{c.key} ({c.side})" else "{c.file}: {c.key} ({c.side})"
             if n != "" and names.contains(n) and not causes.contains(label)
                 causes.push(label)
         decl := if key == "" then "(top)" else key
-        out.push(Semantic(file: d.file, line: d.line, decl: decl, side: side, causes: causes, rule: d.rule, message: d.message))
+        out.push(Semantic(
+            file: d.file,
+            line: d.line,
+            decl: decl,
+            side: side,
+            causes: causes,
+            rule: d.rule,
+            message: d.message,
+        ))
     out
 
 fn sem_line(s Semantic) str
@@ -503,7 +529,14 @@ fn check_revs(ours_rev str, theirs_rev str, path str, json bool) int
         io.eprint("error: can't make a scratch directory (merge.cli.2)")
         return 2
     for side, rev in [("ours", o), ("theirs", t), ("merged", o)]
-        added := proc.run("git", ["worktree", "add", "--detach", "--quiet", "{tmp}/{side}", rev]) else err
+        added := proc.run("git", [
+            "worktree",
+            "add",
+            "--detach",
+            "--quiet",
+            "{tmp}/{side}",
+            rev,
+        ]) else err
             io.eprint("error: can't run git: {err} (merge.check.3)")
             drop_worktrees(tmp)
             return 2
@@ -600,7 +633,12 @@ fn main() !
     ours_text := read(files[1])
     theirs_text := read(files[2])
     tmp := temp_dir()
-    result := merge_sides(split_decls(base_text), split_decls(ours_text), split_decls(theirs_text), tmp)
+    result := merge_sides(
+        split_decls(base_text),
+        split_decls(ours_text),
+        split_decls(theirs_text),
+        tmp,
+    )
     clean_tmp(tmp)
     if to_stdout
         print(result.out.strip_suffix("\n") else result.out)
