@@ -2872,7 +2872,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "~'textDocument':~'uri':'{u3}'^,'range':~'start':~'line':0,'character':0^,'end':~'line':5,'character':0^^,'context':~'diagnostics':[]^^",
     )])
     want("lsp code actions", s3.out, ["\"quickfix\"", "mut ", "source.fixAll.ail"])
-    # mcp.tools.1, mcp.call.3, mcp.call.4 (ADR NNNN): the six tools added to `ail mcp`
+    # mcp.tools.1, mcp.call.3, mcp.call.4 (ADR 0918, amended 2026-11-10): the six tools added to `ail mcp`
     fs.write_text("{base}/mcp/prog.ail", ctx) else return
     listed := mcp_session("{base}/mcp", [jreq(1, "tools/list", "~^")])
     want("mcp tools/list", listed.out, [
@@ -2899,7 +2899,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail context",
         "(root)",
         "unknown form bogus",
-        "must not start with -",
+        "must not start with - (mcp.call.4)",
     ])
     want("mcp fix is not an error", m1.out, [jm("'id':7,'result':~'content'")])
     m2 := mcp_session("{base}/mcp", [

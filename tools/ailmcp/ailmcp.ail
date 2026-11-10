@@ -188,7 +188,7 @@ fn command(name str, a Json) Cmd
                 return Cmd(argv: [], why: "{name} needs `{n}`", stdin: "")
         bad := dashed(a, ["program", "symbol", "rule", "range", "path", "module", "form"])
         if bad != ""
-            return Cmd(argv: [], why: "{name}: `{bad}` must not start with -", stdin: "")
+            return Cmd(argv: [], why: "{name}: `{bad}` must not start with - (mcp.call.4)", stdin: "")
         program := a.text("program", "")
         since := a.text("since", "")
         rev := a.text("rev", "")

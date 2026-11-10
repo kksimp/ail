@@ -958,9 +958,9 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
 
-**mcp.call.3** — When the command ran with `--json` (the always-JSON tools `ail_verify`, `ail_impact` and `task_*`, and the others when `json` is true) and its standard output is one JSON object, the result also carries that object as `structuredContent`. The text content is unchanged.
+**mcp.call.3** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — When the command ran with `--json` (the always-JSON tools `ail_verify`, `ail_impact` and `task_*`, and the others when `json` is true) and its standard output is one JSON object, the result also carries that object as `structuredContent`. The text content is unchanged.
 
-**mcp.call.4** — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module` or `form` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
+**mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module` or `form` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
 ```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
 fn main()
