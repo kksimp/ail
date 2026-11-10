@@ -48,6 +48,7 @@ pub fn registers() codegen.Target
         float_callee: [FB + 8, FB + 9, FB + 10, FB + 11, FB + 12, FB + 13, FB + 14, FB + 15],
         int_args: [0, 1, 2, 3, 4, 5, 6, 7],
         float_args: [FB, FB + 1, FB + 2, FB + 3, FB + 4, FB + 5, FB + 6, FB + 7],
+        div_regs: [],
     )
 
 ## Operating systems: the `target()` primitive's values (native-abi.md §4).

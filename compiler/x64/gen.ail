@@ -7,21 +7,23 @@
 use mir
 use codegen
 
-## Scratch registers, never allocated (native-abi.md §3).
+## Scratch registers, never allocated (native-abi.md §1): r10 and rax
+## (ADR 1049; `S1` is rax, the register a result passes through anyway).
 S0 := 10
-S1 := 11
+S1 := 0
 X0 := 14
 X1 := 15
 
 ## Allocatable registers, best first.
 pub fn registers() codegen.Target
     codegen.Target(
-        int_caller: [RSI, RDI, R8, R9, RCX],
+        int_caller: [RSI, RDI, R8, R9, RCX, RDX, 11],
         int_callee: [RBX, 12, 13, 14, 15],
         float_caller: [32, 33, 34, 35, 36, 37, 38, 39],
         float_callee: [40, 41, 42, 43, 44, 45],
         int_args: INT_ARGS,
         float_args: [32, 33, 34, 35, 36, 37, 38, 39],
+        div_regs: [RDX],
     )
 
 INT_ARGS := [7, 6, 2, 1, 8, 9]
@@ -379,9 +381,29 @@ fn Gen.parallel(mut self, moves List[Move])
             emit_move(pending[done])
             pending.remove_at(done)
             continue
-        # A cycle: save the first destination's value and read it from there.
+        # A cycle. Between two general registers, `xchg` does the first move
+        # and leaves the destination's old value in the source: the moves
+        # that read either one read the other instead.
         d := pending[0].dst
-        tmp := if pending[0].float then X1 + codegen.FLOAT_BASE else S1
+        src := pending[0].src
+        if not pending[0].float and is_reg(d) and is_reg(src)
+            a.xchg_rr(d, src)
+            pending.remove_at(0)
+            mut left := List[Move]()
+            for mv0 in pending
+                mut mv := mv0
+                if mv.src == d
+                    mv.src = src
+                elif mv.src == src
+                    mv.src = d
+                if mv.dst != mv.src
+                    left.push(mv)
+            pending = left
+            continue
+        # Otherwise save the first destination's value and read it from
+        # there: rax for a general register (a cycle through a slot only
+        # comes from block parameters, whose moves never write rax).
+        tmp := if pending[0].float then X1 + codegen.FLOAT_BASE else RAX
         emit_move(Move(dst: tmp, src: d, imm: 0, sym: "", float: pending[0].float))
         for j in 0..pending.len()
             if pending[j].src == d
@@ -1026,15 +1048,18 @@ fn Gen.divide(mut self, i mir.Inst)
         if k > 2 and k < 2147483648
             magic_divide(i, k)
             return
-        a.mov_ri(S1, k)
+        a.mov_ri(S0, k)
     else
-        rb := gpr(y, S1)
-        a.mov_rr(S1, rb)
+        # The divisor in r10, the dividend in rax. A value in rdx is the
+        # division's own operand or result: the allocator keeps others out
+        # of it (ADR 1049).
+        rb := gpr(y, S0)
+        a.mov_rr(S0, rb)
         if i.site >= 0
-            a.test_rr(S1, S1)
+            a.test_rr(S0, S0)
             a.jcc(CC_E, stub(1, x, y, i.site, sym))
         go := a.label()
-        a.alu_ri("cmp", S1, -1)
+        a.alu_ri("cmp", S0, -1)
         a.jcc(CC_NE, go)
         if i.op == "rem"
             a.mov_ri(RDX, 0)
@@ -1048,7 +1073,7 @@ fn Gen.divide(mut self, i mir.Inst)
         a.bind(go)
     a.mov_rr(RAX, gpr(x, RAX))
     a.cqo()
-    a.idiv(S1)
+    a.idiv(S0)
     a.bind(done)
     put_gpr(i.dst, if i.op == "div" then RAX else RDX)
 
@@ -1066,8 +1091,10 @@ fn power_of_two(n int) int
 fn Gen.shift_divide(mut self, i mir.Inst, k int)
     x := gpr(i.arg(0), S0)
     if i.op == "div"
-        # Into the result's register; the bias is taken from `x` first.
-        d := out_gpr(i.dst, S1)
+        # Into the result's register (or r10, which `x` may share: it is
+        # read for the last time as `d` is written); the bias is taken from
+        # `x` first, in rax.
+        d := out_gpr(i.dst, S0)
         if k > 0
             a.mov_rr(RAX, x)
             if k > 1
@@ -1079,24 +1106,27 @@ fn Gen.shift_divide(mut self, i mir.Inst, k int)
         a.shift_ri("sar", d, k)
         put_gpr(i.dst, d)
         return
-    a.mov_rr(S1, x)
+    # x - (biased x with the low k bits cleared), all in rax.
+    a.mov_rr(RAX, x)
     if k > 0
-        a.mov_rr(RAX, x)
         if k > 1
             a.shift_ri("sar", RAX, 63)
         a.shift_ri("shr", RAX, 64 - k)
-        a.alu_rr("add", S1, RAX)
-    # x - (biased x with the low k bits cleared)
-    a.shift_ri("sar", S1, k)
-    a.shift_ri("shl", S1, k)
-    a.mov_rr(RAX, x)
-    a.alu_rr("sub", RAX, S1)
+        a.alu_rr("add", RAX, x)
+    a.shift_ri("sar", RAX, k)
+    a.shift_ri("shl", RAX, k)
+    a.neg(RAX)
+    a.alu_rr("add", RAX, x)
     put_gpr(i.dst, RAX)
 
 ## Division and remainder by a constant `k` with a high multiply
 ## (`codegen.div_magic`), not `idiv`.
 fn Gen.magic_divide(mut self, i mir.Inst, k int)
-    x := gpr(i.arg(0), S0)
+    mut x := gpr(i.arg(0), S0)
+    # The high multiply writes rdx, which may hold `x` itself (ADR 1049).
+    if x == RDX
+        a.mov_rr(S0, RDX)
+        x = S0
     mg := codegen.div_magic(k)
     a.mov_ri(RAX, mg[0])
     a.imul1(x)
@@ -1156,15 +1186,16 @@ fn Gen.push(mut self, i mir.Inst)
     if not room
         a.alu_rm("cmp", RAX, at(l, 8))
         a.jcc(CC_E, slow)
-    a.mov_rm(S1, at(l, 16))
+    # The length goes up first, so r10 is free for the elements' address
+    # (nothing runs between the two stores).
+    a.alu_mi("add", at(l, 0), 1)
+    a.mov_rm(S0, at(l, 16))
     v := i.arg(1)
     if f.vals[v].is_float()
-        a.vmovsd_mr(at_index(S1, RAX, 8, 0), xmm(v, X0))
+        a.vmovsd_mr(at_index(S0, RAX, 8, 0), xmm(v, X0))
     else
         w := mir.push_bytes(i.name)
-        store_w(at_index(S1, RAX, w, 0), v, w)
-    a.alu_ri("add", RAX, 1)
-    a.mov_mr(at(l, 0), RAX)
+        store_at(at_index(S0, RAX, w, 0), v, w)
     if room
         return
     a.jmp(done)
@@ -1337,9 +1368,9 @@ fn Gen.prim(mut self, i mir.Inst)
             a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            store_word(address(i), i.arg(i.argc() - 1))
+            store_at(address(i), i.arg(i.argc() - 1), 8)
         "store8" =>
-            store_byte(address(i), i.arg(i.argc() - 1))
+            store_at(address(i), i.arg(i.argc() - 1), 1)
         "storef" =>
             v := xmm(i.arg(i.argc() - 1), X0)
             a.vmovsd_mr(address(i), v)
@@ -1376,7 +1407,7 @@ fn Gen.prim(mut self, i mir.Inst)
             elif i.name == "pstore64"
                 store_word(mem, i.arg(1))
             else
-                v := gpr(i.arg(1), RDX)
+                v := gpr(i.arg(1), RAX)
                 if i.name == "pstore16"
                     a.mov16_mr(mem, v)
                 else
@@ -1415,9 +1446,17 @@ fn Gen.prim(mut self, i mir.Inst)
             put_gpr(i.dst, RAX)
         "atomic_cas" =>
             cell := at(gpr(i.arg(0), S0), 0)
-            new := gpr(i.arg(2), S1)
             parallel([move_of(RAX, i.arg(1))])
-            a.lock_cmpxchg(cell, new)
+            nv := i.arg(2)
+            if is_reg(loc[nv])
+                a.lock_cmpxchg(cell, loc[nv])
+            else
+                # Both scratch registers are taken: borrow one that is not
+                # the cell's, kept on the stack around the exchange.
+                tmp := if cell.base == 11 then RDX else 11
+                a.push(tmp)
+                a.lock_cmpxchg(cell, gpr(nv, tmp))
+                a.pop(tmp)
             put_gpr(i.dst, RAX)
         "sp" =>
             d := out_gpr(i.dst, S1)
@@ -1502,23 +1541,23 @@ fn Gen.prim(mut self, i mir.Inst)
             put_xmm(i.dst, d)
         _ => unreachable("x64: unknown primitive {i.name}")
 
-## `xs[i]`: the list in S0, the index in S1, the elements' address in rax.
-## The element's address, after the bounds check. A `List[bool]` holds one
-## byte per element, other lists 8 (native-abi.md §2).
+## `xs[i]`: the list in r10, the index in rax, then the elements' address
+## in r10. The element's address, after the bounds check. A `List[bool]`
+## holds one byte per element, other lists 8 (native-abi.md §2).
 fn Gen.list_index(mut self, i mir.Inst, size int) Mem
     l := gpr(i.arg(0), S0)
     if k := imm32(i.arg(1))
         if i.site >= 0
             a.alu_mi("cmp", at(l, 0), k)
             a.jcc(CC_BE, stub(3, i.arg(1), i.arg(0), i.site, ""))
-        a.mov_rm(RAX, at(l, 16))
-        return at(RAX, size * k)
-    x := gpr(i.arg(1), S1)
+        a.mov_rm(S0, at(l, 16))
+        return at(S0, size * k)
+    x := gpr(i.arg(1), RAX)
     if i.site >= 0
         a.alu_rm("cmp", x, at(l, 0))
         a.jcc(CC_AE, stub(3, i.arg(1), i.arg(0), i.site, ""))
-    a.mov_rm(RAX, at(l, 16))
-    at_index(RAX, x, size, 0)
+    a.mov_rm(S0, at(l, 16))
+    at_index(S0, x, size, 0)
 
 ## `bounds idx, len`: the check of a `get` or `set` whose list header was
 ## hoisted out of a loop (ADR 0890): trap at `site` unless `0 <= idx < len`.
@@ -1555,7 +1594,7 @@ fn Gen.list_set(mut self, i mir.Inst)
         a.vmovsd_mr(list_index(i, 8), x)
     else
         w := t.elem_bytes()
-        store_w(list_index(i, w), v, w)
+        store_at(list_index(i, w), v, w)
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577).
 fn Gen.indexed_mem(mut self, i mir.Inst) Mem
@@ -1581,7 +1620,7 @@ fn Gen.indexed_store(mut self, i mir.Inst)
     if f.vals[v].is_float()
         a.vmovsd_mr(mem, xmm(v, X0))
     else
-        store_w(mem, v, i.imm)
+        store_at(mem, v, i.imm)
 
 ## An element of `w` bytes (1, 2, 4 or 8): a load zero-extends it.
 fn Gen.load_w(mut self, d int, mem Mem, w int)
@@ -1594,13 +1633,36 @@ fn Gen.load_w(mut self, d int, mem Mem, w int)
     else
         a.mov_rm(d, mem)
 
+## Store `v` (`w` bytes) at `mem`, through rax when it is in no register.
+## An address that uses rax itself (a spilled index) is first put in r10
+## (ADR 1049).
+fn Gen.store_at(mut self, mem Mem, v int, w int)
+    mut m := mem
+    if needs_reg(v, w) and (m.base == RAX or m.index == RAX)
+        a.lea(S0, m)
+        m = at(S0, 0)
+    store_w(m, v, w)
+
+## Whether storing `v` in `w` bytes takes a register: it is in none and no
+## immediate stands for it.
+fn Gen.needs_reg(self, v int, w int) bool
+    if is_reg(loc[v])
+        return false
+    if w == 1
+        return imm(v) == none
+    if w == 8
+        return imm32(v) == none
+    true
+
+## The store itself; `mem` does not use rax unless `v` is in a register or
+## an immediate.
 fn Gen.store_w(mut self, mem Mem, v int, w int)
     if w == 1
         store_byte(mem, v)
     elif w == 2
-        a.mov16_mr(mem, gpr(v, RDX))
+        a.mov16_mr(mem, gpr(v, RAX))
     elif w == 4
-        a.mov32_mr(mem, gpr(v, RDX))
+        a.mov32_mr(mem, gpr(v, RAX))
     else
         store_word(mem, v)
 
@@ -1610,13 +1672,13 @@ fn Gen.store_word(mut self, mem Mem, v int)
     if k := imm32(v)
         a.mov_mi(mem, k)
     else
-        a.mov_mr(mem, gpr(v, RDX))
+        a.mov_mr(mem, gpr(v, RAX))
 
 fn Gen.store_byte(mut self, mem Mem, v int)
     if k := imm(v)
         a.mov8_mi(mem, k.bit_and(255))
     else
-        a.mov8_mr(mem, gpr(v, RDX))
+        a.mov8_mr(mem, gpr(v, RAX))
 
 # ---- trap stubs ----
 
