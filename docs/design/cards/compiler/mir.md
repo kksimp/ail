@@ -19,6 +19,7 @@ pub fn mir.inline_call(mut mir.Func, int, int, mir.Func, mut List[mir.Site]) [mu
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub fn mir.merge_blocks_in(mut mir.Func) [mutates]
 pub fn mir.interchange(mir.Func) mir.Func [env]
+pub fn mir.iv_sums(mir.Func) mir.Func [env]
 pub struct mir.Def
 pub fn mir.defs_of(mir.Func) List[mir.Def]
 pub fn mir.inst_of(mir.Func, List[mir.Def], int) mir.Inst?
@@ -105,4 +106,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1638); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1656); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

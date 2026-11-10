@@ -75,6 +75,31 @@ def expected_out(prog):
     return open(f, "rb").read() if os.path.isfile(f) else None
 
 
+# How the size argument grows when the C twin is too quick (drag.size.1): most programs double;
+# these are factorial or exponential in the argument, so one step is enough.
+GROW_BY_ONE = ("fannkuch", "binarytrees")
+
+
+def calibrate(prog, tmp, secs, timeout):
+    """Smallest size in NAME.args, doubled (or +1) until gcc -O2 runs for at least `secs` seconds.
+
+    Returns (size args, gcc output at that size), or (None, None) without a gcc, C twin or size argument.
+    Runs under 0.3 s sit inside the 10% noise band, so a ratio there says nothing (drag.size.1)."""
+    args, src = size_args(prog), twin(prog, ".c")
+    exe = build_c(src, tmp, "gcc") if src and shutil.which("gcc") else None
+    if not exe or len(args) != 1 or not args[0].isdigit():
+        return None, None
+    n, name = int(args[0]), os.path.splitext(os.path.basename(prog))[0]
+    for _ in range(40):
+        dt, out = run_once([exe, str(n)], timeout)
+        if dt is None:
+            return None, None
+        if dt >= secs:
+            return [str(n)], out
+        n = n + 1 if name in GROW_BY_ONE else n * 2
+    return None, None
+
+
 def tool_version(cmd):
     try:
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -138,6 +163,9 @@ def main():
     ap.add_argument("--no-run", action="store_true", help="skip the `ail run` column (programs too big for it)")
     ap.add_argument("--json", metavar="FILE", help="also write the raw numbers as JSON (tools/bench/publish.sh)")
     ap.add_argument("--md", metavar="FILE", help="also write the table and environment as Markdown")
+    ap.add_argument("--calibrate", type=float, metavar="SECS", default=0,
+                    help="raise each program's size until gcc -O2 takes at least SECS (drag.size.1); "
+                         "the gcc output at that size is the reference, NAME.out is not used")
     ap.add_argument("--programs", nargs="*", help="programs to race (default: the interpreter set)")
     a = ap.parse_args()
     runs = a.runs or a.runs_pos or 5
@@ -172,9 +200,15 @@ def main():
     try:
         for p in progs:
             name = os.path.splitext(os.path.basename(p))[0]
-            extra = size_args(p)
+            extra, cal_ref = size_args(p), None
+            if a.calibrate:
+                got, cal_ref = calibrate(p, tmp, a.calibrate, a.timeout)
+                if got:
+                    extra = got
+                else:
+                    sys.stderr.write("  %s: not calibrated (no gcc, C twin or size); using NAME.args\n" % name)
             res = {} if a.no_run else {"ail": measure([AIL, "run", p] + extra, runs, a.timeout)}
-            ref = expected_out(p)
+            ref = cal_ref if cal_ref is not None else expected_out(p)
             if ref is None and "ail" in res:
                 ref = res["ail"].get("out")
             if a.native and native_ok:
@@ -196,7 +230,7 @@ def main():
             for c, r in res.items():
                 if "out" in r and ref is not None and r["out"].replace(b"\r\n", b"\n") != ref.replace(b"\r\n", b"\n"):
                     res[c] = {"err": "DIFF"}  # drag.out.1
-            rows.append((name, res))
+            rows.append((name, res, " ".join(extra)))
             sys.stderr.write("  %s done\n" % name)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -212,7 +246,7 @@ def main():
                     ratio_cols.append((c, ref))
     head += ["%s/%s" % rc for rc in ratio_cols]
     table = [head]
-    for name, res in rows:
+    for name, res, _size in rows:
         line = [name]
         for c in cols:
             r = res.get(c, {})
@@ -225,7 +259,7 @@ def main():
     for r in table:
         print("  ".join(v.ljust(widths[0]) if i == 0 else v.rjust(widths[i]) for i, v in enumerate(r)))
 
-    if os.path.isfile(os.path.join(HERE, "programs", "parsum.ail")) and "parsum" in [n for n, _ in rows]:
+    if os.path.isfile(os.path.join(HERE, "programs", "parsum.ail")) and "parsum" in [r[0] for r in rows]:
         def pool(env):
             e = dict(os.environ, **env)
             ts = []
@@ -241,8 +275,8 @@ def main():
         import json
         with open(a.json, "w") as f:
             json.dump({"runs": runs, "columns": cols, "rows": [
-                {"program": n, "cells": {c: {k: v for k, v in r.items() if k != "out"} for c, r in res.items()}}
-                for n, res in rows]}, f, indent=1)
+                {"program": n, "size": size, "cells": {c: {k: v for k, v in r.items() if k != "out"} for c, r in res.items()}}
+                for n, res, size in rows]}, f, indent=1)
     if a.md:
         write_md(a.md, table, cols, runs, cols_c, py)
 

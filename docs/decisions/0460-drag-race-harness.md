@@ -43,6 +43,10 @@ place, one output, nothing to misread; **speed** of the harness doesn't matter.
 - **`drag.native.1`** `--native` runs `ail build FILE -o OUT` (arguments in
   `AIL_BUILD_ARGS`); if the command isn't there yet, the column says `-` and the
   run goes on.
+- **`drag.size.1`** `--calibrate SECS` (used by `tools/bench/publish.sh` with 0.3) starts from the size in
+  `NAME.args` and doubles it (adds one for fannkuch and binarytrees) until `gcc -O2` runs at least SECS;
+  every column runs that size and gcc's output is the reference. Runs under 0.3 s are inside the noise band
+  (`tools/perfbench/README.md`), so a published ratio there says nothing. Added 2026-11-10 (slice F1).
 - C is built once per program with `-O2 -lm`; a missing compiler drops its column.
 - `--md FILE` writes the table, the environment (commit, OS, CPU, compiler and Python
   versions, runs) and the date; `docs/design/drag-race.md` is its output.

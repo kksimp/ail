@@ -22,7 +22,7 @@ lex 24 7
 lsp 15 0
 mcp 11 0
 mod 29 2
-native 45 0
+native 46 0
 own 39 2
 plat 8 0
 probe 4 0
@@ -39,7 +39,8 @@ test 35 0
 tool 7 0
 trace 22 0
 trait 45 4
+try 9 0
 type 123 10
 unsafe 21 0
 verify 9 0
-all 1301 54
+all 1311 54

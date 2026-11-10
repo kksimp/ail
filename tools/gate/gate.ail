@@ -2602,6 +2602,86 @@ fn Gate.cert(mut self, tmp str)
     )
     tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
 
+## ---- try: `ail try` (ADR 0893, try.*), several patch sets in one call on scratch copies
+
+fn Gate.try_cmd(mut self, tmp str)
+    d := "{tmp}/try"
+    sh_run("rm -rf {d}; mkdir -p {d}")
+    prog := src_of([
+        "fn add(a int, b int) int",
+        "    a + b",
+        "@test fn adds()",
+        "    assert_eq(add(1, 2), 3)",
+        "fn main()",
+        "    print(add(1, 2))",
+    ])
+    fs.write_text("{d}/p.ail", prog) else return
+    good := "[\{\"op\":\"replace_body\",\"id\":\"fn:add\",\"body\":\"a + b + 0\"}]"
+    broken := "[\{\"op\":\"replace_body\",\"id\":\"fn:add\",\"body\":\"a + nope\"}]"
+    wrong := "[\{\"op\":\"replace_body\",\"id\":\"fn:add\",\"body\":\"a - b\"}]"
+    nowhere := "[\{\"op\":\"delete\",\"id\":\"fn:missing\"}]"
+    fs.write_text("{d}/good.json", good) else return
+    fs.write_text("{d}/broken.json", broken) else return
+    fs.write_text("{d}/wrong.json", wrong) else return
+    fs.write_text("{d}/nowhere.json", nowhere) else return
+    # try.in.1, try.run.1, try.verdict.1-4: one line per set, nothing on disk changes, status 1 when any set is not clean.
+    res := tool(
+        "try sets",
+        d,
+        [
+            "try",
+            "p.ail",
+            "--set",
+            "good.json",
+            "--set",
+            "broken.json",
+            "--set",
+            "wrong.json",
+            "--set",
+            "nowhere.json",
+        ],
+        1,
+        [
+            "set good.json: check ok; tests 1 passed, 0 failed; patch ~",
+            "set broken.json: check 1 error; tests skipped; patch ~",
+            "error[expr.name.1]",
+            "set wrong.json: check ok; tests 0 passed, 1 failed; patch ~",
+            "FAIL adds",
+            "set nowhere.json: patch does not apply; check and tests skipped; patch ~",
+        ],
+    )
+    if slurp("{d}/p.ail") != prog
+        red("try writes nothing", "p.ail changed\n{res.out}")
+    left := sh_run("test -e {d}/.ail/try/0 && echo left")
+    if left.out.contains("left")
+        red("try removes its copies", "{d}/.ail/try/0 is still there")
+    # try.in.1: one set on standard input; try.verdict.4: status 0 when clean.
+    one := sh_run("cd {d} && AIL=\"{repo_root()}/ail\" \"{repo_root()}/ail\" try p.ail < good.json")
+    if one.status != 0
+        red("try stdin", "exit {one.status}\n{one.out}{one.err}")
+    else
+        want("try stdin", one.out, ["set stdin: check ok; tests 1 passed, 0 failed"])
+    # try.apply.1: a clean set is written, a red one and several sets are not.
+    tool(
+        "try apply refuses red",
+        d,
+        ["try", "p.ail", "--set", "wrong.json", "--apply"],
+        1,
+        ["not applied"],
+    )
+    if slurp("{d}/p.ail") != prog
+        red("try apply refuses red", "p.ail changed")
+    tool(
+        "try apply wants one",
+        d,
+        ["try", "p.ail", "--set", "good.json", "--set", "wrong.json", "--apply"],
+        2,
+        ["try.apply.1"],
+    )
+    tool("try apply", d, ["try", "p.ail", "--set", "good.json", "--apply"], 0, ["applied to p.ail"])
+    if not slurp("{d}/p.ail").contains("a + b + 0")
+        red("try apply writes", "p.ail lacks the patch\n{slurp("{d}/p.ail")}")
+
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
@@ -3160,6 +3240,7 @@ fn main() !
         "sched",
         "agent_tools",
         "cert",
+        "try",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3200,6 +3281,7 @@ fn main() !
             "std" => g.std(tmp)
             "agent_tools" => g.agent_tools(tmp)
             "cert" => g.cert(tmp)
+            "try" => g.try_cmd(tmp)
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
