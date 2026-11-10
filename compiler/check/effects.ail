@@ -48,6 +48,7 @@ STD_EFFECTS := [
             "trash",
             "scan",
             "scan_count",
+            "map",
         ],
         effects: ["fs", "io"],
     ),
