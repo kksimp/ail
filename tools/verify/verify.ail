@@ -176,7 +176,7 @@ fn check_cert(path str) int
     fresh_text := fs.read_text(out) else
         io.eprint("error[verify.cert.4]: the re-run wrote no certificate")
         return 2
-    _ := fs.remove(out) else return 2
+    fs.remove(out) else return 2
     fresh := parse_json(fresh_text.trim()) else
         io.eprint("error[verify.cert.4]: the re-run wrote no certificate")
         return 2
