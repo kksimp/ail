@@ -229,10 +229,10 @@ static void send_id(const char *kind, const char *id) { Ev e = ev_new(kind); ev_
 
 /* ---- The view tree (std.app.2-3) ---- */
 
-typedef enum { O_STR, O_FILL, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP } OpKind;
+typedef enum { O_STR, O_FILL, O_SHADE, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP } OpKind;
 typedef struct {
     OpKind kind;
-    double x, y, w, h, x2, y2, size, width;
+    double x, y, w, h, x2, y2, size, width, alpha;
     int color;
     char *text, *font;   /* O_STR: text, font; O_PIC: text is src; O_BITMAP: text is the id */
     gboolean bold, italic, underline;
@@ -267,6 +267,17 @@ static gboolean debug = FALSE; /* AIL_HOST_DEBUG=FILE logs canvas sizes and clip
 static FILE *dbg;
 
 static GHashTable *bitmaps; /* id -> cairo_surface_t* */
+static GHashTable *reduced; /* "kind:src|WxH" -> cairo_surface_t*: an image already shrunk by halving (L1) */
+
+/* Forget the shrunk copies of bitmap `id` (its pixels changed). */
+static void reduced_forget(const char *id) {
+    char *prefix = g_strdup_printf("b:%s|", id);
+    GHashTableIter it;
+    gpointer k;
+    g_hash_table_iter_init(&it, reduced);
+    while (g_hash_table_iter_next(&it, &k, NULL)) if (g_str_has_prefix(k, prefix)) g_hash_table_iter_remove(&it);
+    g_free(prefix);
+}
 
 static void bitmap_store(const char *id, int w, int h, const char *b64) {
     if (!*b64 || w <= 0 || h <= 0) return;
@@ -287,6 +298,7 @@ static void bitmap_store(const char *id, int w, int h, const char *b64) {
         }
         cairo_surface_mark_dirty(s);
         g_hash_table_replace(bitmaps, g_strdup(id), s);
+        reduced_forget(id);
     }
     g_free(data);
 }
@@ -335,6 +347,10 @@ static Node *decode_node(const JVal *d) {
                     op.bold = jflag(o, "bold"); op.italic = jflag(o, "italic"); op.underline = jflag(o, "underline");
                 } else if (!strcmp(ok, "Fill")) {
                     op.kind = O_FILL; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h"); op.color = (int)jnum(o, "color");
+                } else if (!strcmp(ok, "Shade")) {
+                    /* std.app.19: a translucent fill; alpha is clamped to 0..1. */
+                    op.kind = O_SHADE; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h"); op.color = (int)jnum(o, "color");
+                    op.alpha = CLAMP(jnum(o, "alpha"), 0.0, 1.0);
                 } else if (!strcmp(ok, "Stroke")) {
                     op.kind = O_STROKE; op.x = jnum(o, "x1"); op.y = jnum(o, "y1"); op.x2 = jnum(o, "x2"); op.y2 = jnum(o, "y2");
                     op.color = (int)jnum(o, "color"); op.width = jnum(o, "width");
@@ -359,9 +375,45 @@ static Node *decode_node(const JVal *d) {
 
 /* ---- Fonts (std.app.5, std.app.13) ---- */
 
+/* The families behind `sans`, `serif` and `mono`: a Pango family list, first match wins. `sans` is
+ * the desktop's UI font unless that is DejaVu or a bitmap face (set up in main). */
+static char *sans_family = NULL;
+#define SANS_LIST "Inter, Noto Sans, Cantarell, Ubuntu, Liberation Sans, DejaVu Sans, sans-serif"
+#define SERIF_LIST "Noto Serif, Liberation Serif, DejaVu Serif, serif"
+#define MONO_LIST "JetBrains Mono, Noto Sans Mono, Liberation Mono, DejaVu Sans Mono, monospace"
+
+static void fonts_init(void) {
+    char *name = NULL;
+    g_object_get(gtk_settings_get_default(), "gtk-font-name", &name, NULL);
+    PangoFontDescription *d = name ? pango_font_description_from_string(name) : NULL;
+    const char *f = d ? pango_font_description_get_family(d) : NULL;
+    gboolean ok = f && *f && g_ascii_strncasecmp(f, "DejaVu", 6) != 0 && g_ascii_strcasecmp(f, "Sans") != 0 &&
+                  g_ascii_strcasecmp(f, "fixed") != 0 && g_ascii_strcasecmp(f, "misc") != 0 && g_ascii_strcasecmp(f, "terminal") != 0 &&
+                  !strchr(f, ',');
+    sans_family = ok ? g_strdup_printf("%s, " SANS_LIST, f) : g_strdup(SANS_LIST);
+    if (d) pango_font_description_free(d);
+    g_free(name);
+}
+
+/* One set of font options for drawing and measuring, so both agree at fractional positions. */
+static cairo_font_options_t *fopts = NULL;
+
+static void ctx_setup(PangoContext *pc) {
+    if (!fopts) {
+        fopts = cairo_font_options_create();
+        cairo_font_options_set_antialias(fopts, CAIRO_ANTIALIAS_GRAY);
+        cairo_font_options_set_hint_style(fopts, CAIRO_HINT_STYLE_SLIGHT);
+        cairo_font_options_set_hint_metrics(fopts, CAIRO_HINT_METRICS_OFF);
+    }
+    pango_cairo_context_set_font_options(pc, fopts);
+#if PANGO_VERSION_CHECK(1, 44, 0)
+    pango_context_set_round_glyph_positions(pc, FALSE);
+#endif
+}
+
 static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
     PangoFontDescription *d = pango_font_description_new();
-    pango_font_description_set_family(d, !strcmp(family, "sans") ? "Sans" : !strcmp(family, "serif") ? "Serif" : "Monospace");
+    pango_font_description_set_family(d, !strcmp(family, "sans") ? sans_family : !strcmp(family, "serif") ? SERIF_LIST : MONO_LIST);
     pango_font_description_set_absolute_size(d, (size > 0 ? size : 13) * PANGO_SCALE);
     pango_font_description_set_weight(d, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
     pango_font_description_set_style(d, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
@@ -370,6 +422,7 @@ static PangoFontDescription *font_desc(const char *family, double size, gboolean
 
 /* The size of one character of `mono` at 13 points (std.app.5). */
 static void cell_size(PangoContext *pc, double *w, double *h) {
+    ctx_setup(pc);
     PangoFontDescription *d = font_desc("mono", 13, FALSE, FALSE);
     PangoFontMetrics *m = pango_context_get_metrics(pc, d, NULL);
     *w = pango_font_metrics_get_approximate_char_width(m) / (double)PANGO_SCALE;
@@ -382,6 +435,7 @@ static void cell_size(PangoContext *pc, double *w, double *h) {
 static void answer_measure(const JVal *runs) {
     GtkWidget *w = gtk_label_new("");
     PangoContext *pc = gtk_widget_get_pango_context(w);
+    ctx_setup(pc);
     GString *out = g_string_new("");
     for (int i = 0; runs && runs->kind == J_ARR && i < runs->n; i++) {
         const JVal *r = runs->vals[i];
@@ -424,6 +478,35 @@ static GdkPixbuf *load_pic(const char *src) {
     return pb;
 }
 
+/* Images drawn at under half their size shimmer when one filter step samples sparsely, so they are
+ * shrunk first by halving (a 2x2 average per step) down to between 1x and 2x the target and cached
+ * per target size; the final step is CAIRO_FILTER_GOOD. Returns `src` when no reduction is needed. */
+static cairo_surface_t *shrink(cairo_surface_t *src, const char *key, int tw, int th) {
+    int cw = cairo_image_surface_get_width(src), ch = cairo_image_surface_get_height(src);
+    if (tw < 1 || th < 1 || (cw < tw * 2 && ch < th * 2)) return src;
+    char *k = g_strdup_printf("%s|%dx%d", key, tw, th);
+    cairo_surface_t *hit = g_hash_table_lookup(reduced, k);
+    if (hit) { g_free(k); return hit; }
+    cairo_surface_t *cur = cairo_surface_reference(src);
+    for (;;) {
+        int nw = cw / 2 >= tw ? cw / 2 : cw, nh = ch / 2 >= th ? ch / 2 : ch;
+        if (nw == cw && nh == ch) break;
+        cairo_surface_t *next = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, nw, nh);
+        cairo_t *c = cairo_create(next);
+        cairo_scale(c, (double)nw / cw, (double)nh / ch);
+        cairo_set_source_surface(c, cur, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(c), CAIRO_FILTER_BILINEAR);
+        cairo_pattern_set_extend(cairo_get_source(c), CAIRO_EXTEND_PAD);
+        cairo_paint(c);
+        cairo_destroy(c);
+        cairo_surface_destroy(cur);
+        cur = next; cw = nw; ch = nh;
+    }
+    if (g_hash_table_size(reduced) > 256) g_hash_table_remove_all(reduced);
+    g_hash_table_insert(reduced, k, cur);
+    return cur;
+}
+
 static void placeholder(cairo_t *cr, const Op *op) {
     cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.25);
     cairo_rectangle(cr, op->x, op->y, op->w, op->h);
@@ -434,8 +517,18 @@ static const char *cid(GtkWidget *w);
 
 static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
     Node *n = data;
-    gtk_render_background(gtk_widget_get_style_context(wd), cr, 0, 0, gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd));
+    /* The canvas's own first fill is its background (so a dark app has no light flash); else the theme's. */
+    gboolean painted = FALSE;
+    for (int i = 0; i < n->nops && !painted; i++) {
+        if (n->ops[i].kind != O_FILL) continue;
+        set_color(cr, n->ops[i].color);
+        cairo_paint(cr);
+        painted = TRUE;
+    }
+    if (!painted) gtk_render_background(gtk_widget_get_style_context(wd), cr, 0, 0, gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd));
     PangoContext *pc = gtk_widget_get_pango_context(wd);
+    ctx_setup(pc);
+    int sf = gtk_widget_get_scale_factor(wd);
     int depth = 0;
     if (debug) {
         double cx1, cy1, cx2, cy2;
@@ -448,6 +541,11 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
         switch (op->kind) {
         case O_FILL:
             set_color(cr, op->color);
+            cairo_rectangle(cr, op->x, op->y, op->w, op->h);
+            cairo_fill(cr);
+            break;
+        case O_SHADE:
+            cairo_set_source_rgba(cr, ((op->color >> 16) & 0xff) / 255.0, ((op->color >> 8) & 0xff) / 255.0, (op->color & 0xff) / 255.0, op->alpha);
             cairo_rectangle(cr, op->x, op->y, op->w, op->h);
             cairo_fill(cr);
             break;
@@ -479,22 +577,39 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
         case O_PIC: {
             GdkPixbuf *pb = load_pic(op->text);
             if (!pb || gdk_pixbuf_get_width(pb) <= 0 || gdk_pixbuf_get_height(pb) <= 0) { placeholder(cr, op); break; }
+            int tw = (int)(op->w * sf + 0.5), th = (int)(op->h * sf + 0.5);
+            cairo_surface_t *img;
+            if (gdk_pixbuf_get_width(pb) >= tw * 2 || gdk_pixbuf_get_height(pb) >= th * 2) {
+                char *key = g_strdup_printf("p:%s", op->text);
+                cairo_surface_t *full = gdk_cairo_surface_create_from_pixbuf(pb, 1, NULL);
+                img = shrink(full, key, tw, th);
+                if (img != full) cairo_surface_reference(img);
+                cairo_surface_destroy(full);
+                g_free(key);
+            } else {
+                img = gdk_cairo_surface_create_from_pixbuf(pb, 1, NULL);
+            }
             cairo_save(cr);
             cairo_translate(cr, op->x, op->y);
-            cairo_scale(cr, op->w / gdk_pixbuf_get_width(pb), op->h / gdk_pixbuf_get_height(pb));
-            gdk_cairo_set_source_pixbuf(cr, pb, 0, 0);
+            cairo_scale(cr, op->w / cairo_image_surface_get_width(img), op->h / cairo_image_surface_get_height(img));
+            cairo_set_source_surface(cr, img, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
             cairo_paint(cr);
             cairo_restore(cr);
+            cairo_surface_destroy(img);
             break;
         }
         case O_BITMAP: {
             cairo_surface_t *s = g_hash_table_lookup(bitmaps, op->text);
             if (!s) { placeholder(cr, op); break; }
+            char *key = g_strdup_printf("b:%s", op->text);
+            s = shrink(s, key, (int)(op->w * sf + 0.5), (int)(op->h * sf + 0.5));
+            g_free(key);
             cairo_save(cr);
             cairo_translate(cr, op->x, op->y);
             cairo_scale(cr, op->w / cairo_image_surface_get_width(s), op->h / cairo_image_surface_get_height(s));
             cairo_set_source_surface(cr, s, 0, 0);
-            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
             cairo_paint(cr);
             cairo_restore(cr);
             break;
@@ -547,25 +662,56 @@ static gboolean canvas_press(GtkWidget *w, GdkEventButton *e, gpointer d) {
     return TRUE;
 }
 
+static void mv_send(void);
 static gboolean canvas_release(GtkWidget *w, GdkEventButton *e, gpointer d) {
     (void)d;
+    mv_send(); /* a waiting move goes before the up */
     pointer_ev("up", w, e);
     return TRUE;
 }
 
-/* `move` while a button is held (std.app.27), at most once per 16 ms. */
+/* `move` (std.app.16, std.app.27): while a button is held, or while the app asked for hover, at most
+ * once per 16 ms; a move that comes sooner waits for a timer so the last position is always sent. */
+static gboolean hover_on = FALSE;
+static char *mv_id = NULL;
+static double mv_x, mv_y;
+static guint mv_timer = 0;
+static gint64 mv_last = 0; /* microseconds, monotonic */
+
+static void mv_send(void) {
+    if (mv_timer) { g_source_remove(mv_timer); mv_timer = 0; }
+    if (!mv_id) return;
+    Ev ev = ev_new("move");
+    ev_str(&ev, "id", mv_id);
+    ev_num(&ev, "x", mv_x);
+    ev_num(&ev, "y", mv_y);
+    ev_send(&ev);
+    mv_last = g_get_monotonic_time();
+    g_free(mv_id);
+    mv_id = NULL;
+}
+
+static gboolean mv_fire(gpointer d) { (void)d; mv_timer = 0; mv_send(); return G_SOURCE_REMOVE; }
+
 static gboolean canvas_drag(GtkWidget *w, GdkEventMotion *e, gpointer d) {
     (void)d;
-    static guint32 last = 0;
-    if (!(e->state & (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK))) return FALSE;
-    if (e->time - last < 16) return TRUE;
-    last = e->time;
-    Ev ev = ev_new("move");
-    ev_str(&ev, "id", cid(w));
-    ev_num(&ev, "x", e->x);
-    ev_num(&ev, "y", e->y);
-    ev_send(&ev);
+    gboolean held = (e->state & (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK)) != 0;
+    if (!held && !hover_on) return FALSE;
+    g_free(mv_id);
+    mv_id = g_strdup(cid(w));
+    mv_x = e->x; mv_y = e->y;
+    gint64 age = (g_get_monotonic_time() - mv_last) / 1000;
+    if (age >= 16) mv_send();
+    else if (!mv_timer) mv_timer = g_timeout_add((guint)(16 - age), mv_fire, NULL);
     return TRUE;
+}
+
+static gboolean canvas_leave(GtkWidget *w, GdkEventCrossing *e, gpointer d) {
+    (void)d;
+    if (!hover_on || e->detail == GDK_NOTIFY_INFERIOR) return FALSE;
+    mv_send();
+    send_id("leave", cid(w));
+    return FALSE;
 }
 
 static gboolean canvas_scroll(GtkWidget *w, GdkEventScroll *e, gpointer d) {
@@ -827,13 +973,14 @@ static GtkWidget *build(Node *n) {
         w = gtk_drawing_area_new();
         set_id(w, n->id);
         gtk_widget_set_can_focus(w, TRUE);
-        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK);
+        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK | GDK_POINTER_MOTION_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK);
         gtk_style_context_add_class(gtk_widget_get_style_context(w), "view");
         canvas_size(w, n);
         g_signal_connect(w, "draw", G_CALLBACK(canvas_draw), n);
         g_signal_connect(w, "button-press-event", G_CALLBACK(canvas_press), NULL);
         g_signal_connect(w, "button-release-event", G_CALLBACK(canvas_release), NULL);
         g_signal_connect(w, "motion-notify-event", G_CALLBACK(canvas_drag), NULL);
+        g_signal_connect(w, "leave-notify-event", G_CALLBACK(canvas_leave), NULL);
         g_signal_connect(w, "scroll-event", G_CALLBACK(canvas_scroll), NULL);
         g_signal_connect(w, "key-press-event", G_CALLBACK(canvas_key), NULL);
         g_signal_connect(w, "size-allocate", G_CALLBACK(canvas_alloc), NULL);
@@ -889,9 +1036,31 @@ static void update_in_place(Node *a, Node *b) {
 
 static char *last_focus = NULL;
 
+/* The colour of the first Fill in the tree, if any. */
+static gboolean first_fill(const Node *n, int *c) {
+    if (n->kind == N_CANVAS) {
+        for (int i = 0; i < n->nops; i++) if (n->ops[i].kind == O_FILL) { *c = n->ops[i].color; return TRUE; }
+    }
+    for (int i = 0; i < n->nkids; i++) if (first_fill(n->kids[i], c)) return TRUE;
+    return FALSE;
+}
+
+/* A dark first fill (luma under 50 %) puts GTK in its dark theme, so the window frame matches. */
+static void follow_dark(const Node *tree) {
+    static int dark = -1;
+    int c;
+    if (!first_fill(tree, &c)) return;
+    double luma = (0.2126 * ((c >> 16) & 0xff) + 0.7152 * ((c >> 8) & 0xff) + 0.0722 * (c & 0xff)) / 255.0;
+    int want = luma < 0.5;
+    if (want == dark) return;
+    dark = want;
+    g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", want ? TRUE : FALSE, NULL);
+}
+
 static void show_view(const char *title, const char *focus, Node *tree) {
     gtk_window_set_title(GTK_WINDOW(window), title);
     sync_fields(tree);
+    follow_dark(tree);
     if (current && same_shape(current, tree)) {
         update_in_place(current, tree);
         node_free(current);
@@ -926,6 +1095,64 @@ static void show_view(const char *title, const char *focus, Node *tree) {
     }
 }
 
+/* ---- System appearance (std.app.30, ADR 1008) ---- */
+
+static char last_appearance[8] = "";
+
+/* "dark" when GNOME's color-scheme says so, else when GTK's theme is dark. */
+static const char *appearance_now(void) {
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *sc = src ? g_settings_schema_source_lookup(src, "org.gnome.desktop.interface", TRUE) : NULL;
+    if (sc) {
+        const char *dark = NULL;
+        if (g_settings_schema_has_key(sc, "color-scheme")) {
+            GSettings *st = g_settings_new("org.gnome.desktop.interface");
+            gchar *v = g_settings_get_string(st, "color-scheme");
+            if (!strcmp(v, "prefer-dark")) dark = "dark";
+            else if (!strcmp(v, "prefer-light")) dark = "light";
+            g_free(v);
+            g_object_unref(st);
+        }
+        g_settings_schema_unref(sc);
+        if (dark) return dark;
+    }
+    gboolean prefer = FALSE;
+    gchar *theme = NULL;
+    g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", &prefer, "gtk-theme-name", &theme, NULL);
+    gboolean dark = prefer || (theme && strstr(theme, "dark") != NULL) || (theme && strstr(theme, "Dark") != NULL);
+    g_free(theme);
+    return dark ? "dark" : "light";
+}
+
+static void send_appearance(void) {
+    const char *now = appearance_now();
+    if (!strcmp(now, last_appearance)) return;
+    snprintf(last_appearance, sizeof last_appearance, "%s", now);
+    Ev e = ev_new("appearance");
+    ev_str(&e, "text", now);
+    ev_send(&e);
+}
+
+static void on_appearance_change(GObject *o, GParamSpec *p, gpointer d) {
+    (void)o; (void)p; (void)d;
+    send_appearance();
+}
+
+static void watch_appearance(void) {
+    GtkSettings *gs = gtk_settings_get_default();
+    g_signal_connect(gs, "notify::gtk-theme-name", G_CALLBACK(on_appearance_change), NULL);
+    g_signal_connect(gs, "notify::gtk-application-prefer-dark-theme", G_CALLBACK(on_appearance_change), NULL);
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *sc = src ? g_settings_schema_source_lookup(src, "org.gnome.desktop.interface", TRUE) : NULL;
+    if (sc) {
+        if (g_settings_schema_has_key(sc, "color-scheme")) {
+            GSettings *st = g_settings_new("org.gnome.desktop.interface");
+            g_signal_connect(st, "changed::color-scheme", G_CALLBACK(on_appearance_change), NULL);
+        }
+        g_settings_schema_unref(sc);
+    }
+}
+
 /* ---- Reading views from standard input (std.app.7) ---- */
 
 static gboolean first_view = TRUE, started = FALSE;
@@ -957,11 +1184,14 @@ static void handle_line(const char *line) {
             }
         }
         JVal *title = jget(obj, "title");
+        hover_on = jflag(obj, "hover");
         Node *tree = decode_node(jget(obj, "tree"));
         show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree);
         if (!started) {
             started = TRUE;
             { Ev se = ev_new("start"); ev_screen(&se); ev_send(&se); }
+            send_appearance();
+            watch_appearance();
         }
     }
     jfree(obj);
@@ -995,6 +1225,8 @@ static gboolean on_delete(GtkWidget *w, GdkEvent *e, gpointer d) {
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
     bitmaps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
+    reduced = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
+    fonts_init();
     pics = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, unref_pic);
     reported = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     field_text = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -1010,6 +1242,8 @@ int main(int argc, char **argv) {
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "AIL");
     gtk_window_set_default_size(GTK_WINDOW(window), 1000, 720);
+    const char *icon = g_getenv("AIL_APP_ICON"); /* a PNG; run.sh sets it for Garlic */
+    if (icon && *icon) gtk_window_set_icon_from_file(GTK_WINDOW(window), icon, NULL);
     GdkGeometry g = { .min_width = 320, .min_height = 200 };
     gtk_window_set_geometry_hints(GTK_WINDOW(window), NULL, &g, GDK_HINT_MIN_SIZE);
     gtk_container_set_border_width(GTK_CONTAINER(window), 8);

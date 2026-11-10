@@ -1,6 +1,6 @@
 # compiler
 entry: main in main.ail
-tests: 6 (`ail test` lists them)
+tests: 10 (`ail test` lists them)
 
 ## (root) (62 items)
 
@@ -14,7 +14,7 @@ tests: 6 (`ail test` lists them)
 
 ## budget (27 items)
 
-## cheader (30 items)
+## cheader (55 items)
 
 ## check (367 items)
 

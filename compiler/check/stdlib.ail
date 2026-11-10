@@ -35,6 +35,7 @@ STD_FUNCTIONS := [
         "rename",
         "scan",
         "scan_count",
+        "map",
         "walk",
         "volume",
         "read_range",
@@ -94,7 +95,7 @@ STD_FUNCTIONS := [
         "split",
     ],
     ["tensor", "from", "from_fn", "zeros"],
-    ["task", "cancelled", "check", "select"],
+    ["task", "cancelled", "check", "select", "set_threads", "threads"],
     ["time", "now_ms", "sleep_ms"],
     ["tz", "offset", "system"],
     ["ui", "clipboard_get", "clipboard_set", "open"],
@@ -237,6 +238,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Volume")))
     if key == "fs.read_range"
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: fails_with("fs.IoError", Ty.Bytes))
+    if key == "fs.map"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.trash"
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.scan"
@@ -386,6 +389,11 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: Ty.Bool)
     if key == "task.check"
         return StdSig(params: [], ret: Ty.Res(Ty.Unit, Errs.ErrSet([std_struct("Cancelled")])))
+    # conc.par.18
+    if key == "task.threads"
+        return StdSig(params: [], ret: Ty.Int)
+    if key == "task.set_threads"
+        return StdSig(params: [Ty.Int], ret: Ty.Unit)
     if key == "time.now_ms"
         return StdSig(params: [], ret: Ty.Int)
     if key == "time.sleep_ms"

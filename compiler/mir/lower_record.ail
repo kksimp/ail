@@ -37,6 +37,7 @@ RECORDED := [
     "fs_volume",
     "fs_read_range",
     "fs_trash",
+    "fs_map",
     "fs_scan",
     "fs_scan_count",
     "env_vars",

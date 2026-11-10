@@ -1,0 +1,24 @@
+## std.app.30: `run_host` delivers `appearance` after `start` and each change,
+## and the app's new view follows each one.
+use std.app
+
+struct Themed
+    seen List[str]
+    dark bool
+
+impl app.App for Themed
+    fn update(mut self, ev app.Event)
+        if ev.kind == "appearance"
+            seen.push(ev.text)
+            dark = ev.text == "dark"
+
+    fn view(self) app.Node
+        bg := if dark then 0x1f1f1f else 0xffffff
+        app.canvas("c", 0.0, 0.0, [app.draw_rect(0.0, 0.0, 10.0, 10.0, bg)])
+
+fn main() !
+    mut t := Themed(seen: [], dark: false)
+    host := "tests/app/appearance_host.ail"
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
+    app.run_host(mut t, ail, ["run", host])?
+    print(t.seen.join(" "))

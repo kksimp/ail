@@ -713,6 +713,30 @@ class HostForm : Form
         Outbox.Send("close");
     }
 
+    // std.app.30 (ADR 1008): "dark" or "light" from the apps theme setting, once after `start`
+    // and on every change.
+    string appearance = "";
+
+    static string SystemAppearance()
+    {
+        try
+        {
+            object v = Microsoft.Win32.Registry.GetValue(
+                @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+            if (v is int && (int)v == 0) return "dark";
+        }
+        catch (Exception) { }
+        return "light";
+    }
+
+    void SendAppearance()
+    {
+        string now = SystemAppearance();
+        if (now == appearance) return;
+        appearance = now;
+        Outbox.Send("appearance", "text", now);
+    }
+
     public void ShowView(string title, string focus, Node tree)
     {
         Text = title;
@@ -724,6 +748,8 @@ class HostForm : Form
         {
             started = true;
             Outbox.Send("start", "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
+            SendAppearance();
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate { SendAppearance(); };
         }
         if (s != shape)
         {

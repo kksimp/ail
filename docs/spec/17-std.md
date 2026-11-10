@@ -207,6 +207,27 @@ while a scan runs, to show its progress. The two counts are read one after the
 other, not as one snapshot, so `bytes` may already include entries that
 `entries` does not yet. *(ADR 0992)*
 
+**std.fs.36** — `map(path str) bytes ! IoError` returns the whole file as a
+read-only `bytes` view onto the file's pages, with no copy and no read up
+front: the system pages in only what the program touches, so a file larger
+than memory can be searched or indexed. The view reads exactly like
+`read_bytes` (`len`, `b[i]`, slices, `find`, `==`) and fails like it, with kind
+`not_found`, `permission` or `is_dir`. The mapping is private and lasts to the
+end of the process; the collector never scans or frees it. A file changed by
+another process while mapped may show the change, and one truncated while
+mapped may stop the program on access (like C `mmap`), so map files that
+other programs are not writing. An empty file gives an empty `bytes`. Where
+the platform cannot map (Windows for now), the result is an ordinary copy
+with the same contents. *(ADR 1016)*
+
+```ail norun rules=std.fs.36
+use std.fs
+
+fn main() !
+    log := fs.map("big.log")?                 # no read yet
+    print(log.find(b"ERROR"))                 # pages in what the search touches
+```
+
 ```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26,std.fs.27
 use std.fs
 
