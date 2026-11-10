@@ -1,0 +1,11 @@
+# Division by zero on an empty list; only the tests show it.
+write t3.ail draft.ail
+run ail test t3.ail
+run ail edit t3.ail --test <<E
+average
+-mut total := 0
++if xs.len() == 0
++    return 0
++mut total := 0
+E
+run ail run t3.ail

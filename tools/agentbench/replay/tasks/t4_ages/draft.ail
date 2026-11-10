@@ -1,0 +1,12 @@
+fn ages_of(names List[str]) List[int]
+    ages := {"ada": 36, "bo": 41}
+    [ages[n] for n in names]
+
+@test fn looks_up()
+    assert_eq(ages_of(["ada", "bo"]), [36, 41])
+
+@test fn unknown_is_zero()
+    assert_eq(ages_of(["cy"]), [0])
+
+fn main()
+    print(ages_of(["ada", "cy"]))

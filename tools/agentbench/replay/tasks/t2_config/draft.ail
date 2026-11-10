@@ -1,0 +1,14 @@
+fn attempts(text str) !int
+    doc := parse_json(text)?
+    retries := doc.num("retries") else 2.0
+    retries + 1
+
+@test fn default_retries()
+    assert_eq(attempts("{}") else 0, 3)
+
+@test fn explicit_retries()
+    assert_eq(attempts("{\"retries\": 3}") else 0, 4)
+
+fn main() !
+    n := attempts("{\"retries\": 5}")?
+    print("attempts {n}")

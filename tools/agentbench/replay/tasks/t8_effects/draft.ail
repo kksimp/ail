@@ -1,0 +1,13 @@
+fn bonus(points int) int
+    if time.now_ms() % 2 == 0
+        return 1
+    0
+
+fn score(points int) int
+    points * 2 + bonus(points)
+
+@test fn doubles()
+    assert_eq(score(3) >= 6, true)
+
+fn main()
+    print("score {score(10)}")

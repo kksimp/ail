@@ -1,0 +1,5 @@
+# Review a colleague's change: half-up tax rounding, and a test expectation changed by one cent.
+put t7_old.ail old.ail
+put t7_new.ail new.ail
+run ail diff t7_old.ail t7_new.ail
+run ail test t7_new.ail

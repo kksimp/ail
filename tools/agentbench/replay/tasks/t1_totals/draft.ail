@@ -1,0 +1,14 @@
+fn totals(csv str) Map[str, float]
+    mut out := {}
+    for line in csv.lines()
+        cells := line.split(",")
+        out[cells[0]] += cells[1]
+    out
+
+@test fn sums_per_customer()
+    assert_eq(totals("a,1.5\na,2.0\nb,3"), {"a": 3.5, "b": 3.0})
+
+fn main()
+    t := totals("a,1.5\na,2.0\nb,3.0\n")
+    for name in t.keys().sorted()
+        print("{name} {t[name]}")
