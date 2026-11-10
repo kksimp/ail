@@ -9,12 +9,10 @@ fn report(xs List[int]) int
     print("total {total}")
     doubled + area(2, 3)
 
-@test
-fn area_by_name()
+@test fn area_by_name()
     assert_eq(area(4, h: 5), 45)
 
-@test
-fn report_adds()
+@test fn report_adds()
     assert_eq(report([1, 2, 3]), 35)
 
 fn main()
