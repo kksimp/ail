@@ -12,7 +12,7 @@ tests: 10 (`ail test` lists them)
 
 ## attachcli (6 items)
 
-## budget (27 items)
+## budget (28 items)
 
 ## cheader (55 items)
 
