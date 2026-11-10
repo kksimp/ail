@@ -1,6 +1,6 @@
 # std.app host parity: macOS, Linux, Windows
 
-Status: working table for v0.1.0 slice P6 (2026-11-10, ail main). One row per op, node, protocol line and event of the macOS host's `tools/app-host/macos/Sources/Protocol.swift`, with what `tools/app-host/linux/host.c` and `tools/app-host/windows/Host.cs` do. **Linux owners add the Linux column; the Windows lane owns the Windows column.** "yes" means implemented and covered by `tests/ui/host_conformance.txt` or a manual check named in the notes; "no" is a gap to fill before the tag; "not on main" means the rule is not in `docs/spec/` (std.app.28, .29, .32, .34 are 0.2 work, [ADR 1035](../decisions/1035-v0-1-0-freeze-and-release-candidate.md)).
+Status: working table for v0.1.0 slice P6 (2026-11-10, ail main). One row per op, node, protocol line and event of the macOS host's `tools/app-host/macos/Sources/Protocol.swift`, with what `tools/app-host/linux/host.c` and `tools/app-host/windows/Host.cs` do. **Linux owners add the Linux column; the Windows lane owns the Windows column.** "yes" means implemented and covered by `tests/ui/host_conformance.txt` or a manual check named in the notes; "no" is a gap to fill before the tag; "chain" means the rule is in the 0.1.0 chain of PRs and not yet on main.
 
 Conformance: `tests/ui/host_conformance.txt` is the script every host must pass without an AIL toolchain. `tests/ui/host_conformance.sh PLATFORM HOST...` plays it on macOS and Linux; `tools/app-host/windows/smoke.ps1` plays it on Windows and adds the Windows-only checks (surface mapping).
 
@@ -53,16 +53,17 @@ Conformance: `tests/ui/host_conformance.txt` is the script every host must pass 
 | `pad` | std.gfx.11 | yes (GameController) | | yes (XInput) |
 | `close` | std.app.8 | yes | | yes |
 
-## Not on main (0.2)
+## In the 0.1.0 chain (std.app.28, .29, .32, .33, .34)
+
+Pulled into 0.1.0 on 2026-11-10; they land as one chain (order .32, .29, .28, .33, .34), each with all three hosts. Until a rule merges its cells read "chain".
 
 | Rule | What | macOS | Linux | Windows |
 |---|---|---|---|---|
-| std.app.28 | font-family lists | not on main | not on main | not on main |
-| std.app.29 | web fonts `Font` op | not on main | not on main | not on main |
-| std.app.32 | `Round`, `Poly`, `Line` ops | not on main | not on main | not on main |
-| std.app.34 | `sans_line`, `Str` placement | not on main | not on main | not on main |
-
-If these are pulled into 0.1.0 they land as one change per rule with all three hosts at once.
+| std.app.28 | font-family lists | chain | chain | chain |
+| std.app.29 | web fonts `Font` op | chain | chain | chain |
+| std.app.32 | `Round`, `Poly`, `Line` ops | chain | chain | chain |
+| std.app.33 | `inset_right` (ADR 1033) | n/a (sends 0) | chain | chain |
+| std.app.34 | `sans_line`, `Str` placement | chain | chain | chain |
 
 ## Windows notes
 
