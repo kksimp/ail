@@ -5,7 +5,7 @@ struct Line
     name str
     cents int
 
-fn parse_line(text str) Line!BadAmount
+fn parse_line(text str) Line ! BadAmount
     parts := text.split(",")
     cents := parts[1].to_int() else return BadAmount(text: parts[1])
     Line(name: parts[0], cents: cents)
