@@ -170,7 +170,7 @@ fn find_strip(s str) str
 
 ## The parameter types and the result type of a signature, spaces removed
 ## (api.find.3). `name(a str, b int) str ! E` and `(str, int) str` both work.
-fn find_shape(sig str) (List[str], str)
+fn find_shape(sig str)(List[str], str)
     mut params := List[str]()
     start := sig.find("(") else
         return (params, "")
