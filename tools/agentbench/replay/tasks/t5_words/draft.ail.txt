@@ -1,0 +1,11 @@
+fn word_count(text str) int
+    mut n := 0
+    for line in text.lines()
+        n += line.words().len()
+    n
+
+@test fn counts_words()
+    assert_eq(word_count("a b\nc\n"), 3)
+
+fn main()
+    print("words {word_count("one two\nthree")}")

@@ -1,0 +1,13 @@
+# Sum per customer: a map literal with no type, and a str where a float belongs.
+write t1.ail draft.ail.txt
+run ail test t1.ail
+run ail fix t1.ail
+run ail edit t1.ail --test <<E
+totals
+-mut out := {}
++mut out := Map[str, float]()
+totals
+-out[cells[0]] += cells[1]
++out[cells[0]] += cells[1].to_float() else 0.0
+E
+run ail run t1.ail
