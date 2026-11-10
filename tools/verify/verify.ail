@@ -63,11 +63,21 @@ fn failing_at(file str, rev str) List[str]
 ## The paths changed since `rev` (tracked changes and new files) with the git hash of each (verify.cert.1).
 fn changed_files(rev str) Json
     mut paths := List[str]()
-    tracked := proc.run("git", ["diff", "--name-only", "--relative", rev, "--"]) else return Json.Arr([])
+    tracked := proc.run("git", [
+        "diff",
+        "--name-only",
+        "--relative",
+        rev,
+        "--",
+    ]) else return Json.Arr([])
     for l in tracked.out.lines()
         if not l.trim().is_empty()
             paths.push(l.trim())
-    fresh := proc.run("git", ["ls-files", "--others", "--exclude-standard"]) else return Json.Arr([])
+    fresh := proc.run("git", [
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+    ]) else return Json.Arr([])
     for l in fresh.out.lines()
         if not l.trim().is_empty() and not paths.contains(l.trim())
             paths.push(l.trim())
@@ -106,7 +116,11 @@ fn mutation(file str, changed List[str], limit str) Json
             if hit
                 at := "{m.text("file", file)}:{num_of(m, "line").to_int()}"
                 survivors.push("{at}: {m.text("mutation", "")} (in {name})")
-    obj([("max", Json.Str(limit)), ("score", summary), ("survivors_in_changed", text_list(survivors))])
+    obj([
+        ("max", Json.Str(limit)),
+        ("score", summary),
+        ("survivors_in_changed", text_list(survivors)),
+    ])
 
 ## The compact text of member `key` of `doc`, or `absent`.
 fn member_text(doc Json, key str) str
@@ -214,10 +228,18 @@ fn main() !
             json = true
         else
             files.push(a)
-    if not check.is_empty() and want.is_empty() and not diff and files.is_empty() and attest.is_empty()
+    if not check.is_empty()
+        and want.is_empty()
+        and not diff
+        and files.is_empty()
+        and attest.is_empty()
         io.exit(check_cert(check))
     # verify.cert.2: `--attest` needs `--diff`, and `--mutate` needs `--attest`.
-    if not want.is_empty() or not diff or files.len() != 1 or not check.is_empty() or (mutate and attest.is_empty())
+    if not want.is_empty()
+        or not diff
+        or files.len() != 1
+        or not check.is_empty()
+        or (mutate and attest.is_empty())
         io.exit(usage())
     file := files[0]
     # verify.run.1: the changes since REV, and the tests they can reach.

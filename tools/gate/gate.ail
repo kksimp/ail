@@ -2483,22 +2483,24 @@ fn Gate.cert(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("attest", base, ["verify", "--diff", "--mutate", "--attest", "cert.json", "prog.ail"], 0, [])
+    tool(
+        "attest",
+        base,
+        ["verify", "--diff", "--mutate", "--attest", "cert.json", "prog.ail"],
+        0,
+        [],
+    )
     doc := fs.read_text("{base}/cert.json") else
         red("cert", "no certificate written")
         return
-    want(
-        "cert members",
-        doc,
-        [
-            "\"cert\":1",
-            "\"base\":\"",
-            "\"hash\":\"",
-            "\"compiler\":\"ail ",
-            "\"mutation\":",
-            "\"survivors_in_changed\":",
-        ],
-    )
+    want("cert members", doc, [
+        "\"cert\":1",
+        "\"base\":\"",
+        "\"hash\":\"",
+        "\"compiler\":\"ail ",
+        "\"mutation\":",
+        "\"survivors_in_changed\":",
+    ])
     tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
     fs.write_text("{base}/prog.ail", src_of([
         "fn sign(n int) int",
@@ -2514,7 +2516,13 @@ fn Gate.cert(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool("check differs", base, ["verify", "--check", "cert.json"], 1, ["differs: files", "certificate differs"])
+    tool(
+        "check differs",
+        base,
+        ["verify", "--check", "cert.json"],
+        1,
+        ["differs: files", "certificate differs"],
+    )
     tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
 
 fn Gate.agent_tools(mut self, tmp str)
