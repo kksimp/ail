@@ -1,0 +1,4 @@
+canvas #c 0.0x0.0 ops=1
+  font f 8
+{"v":1,"t":"view","title":"Face","focus":"","tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Font","id":"f","data":"AAEAAAAA"}]}}
+{"v":1,"t":"view","title":"Face","focus":"","tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Font","id":"f","data":""}]}}

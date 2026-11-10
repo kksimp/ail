@@ -7,11 +7,13 @@
  */
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
+#include <fontconfig/fontconfig.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* ---- JSON (std.app.7-8): just enough to read a view line ---- */
 
@@ -224,15 +226,28 @@ static void ev_screen(Ev *e) {
     ev_num(e, "screen_h", g.height);
     ev_num(e, "scale", gdk_monitor_get_scale_factor(m));
 }
+/* std.app.25, std.app.33: in edge mode the window has no title bar and the host's own controls sit
+   at the top-right, so `start` and `resize` carry what they take. */
+#define EDGE_CTL_W 138.0 /* three buttons of 46 points */
+#define EDGE_CTL_H 32.0
+static gboolean edge_mode = FALSE;
+static void ev_insets(Ev *e) {
+    if (!edge_mode) return;
+    ev_num(e, "inset_left", 0);
+    ev_num(e, "inset_top", EDGE_CTL_H);
+    ev_num(e, "inset_right", EDGE_CTL_W);
+}
 static void send_simple(const char *kind) { Ev e = ev_new(kind); ev_send(&e); }
 static void send_id(const char *kind, const char *id) { Ev e = ev_new(kind); ev_str(&e, "id", id); ev_send(&e); }
 
 /* ---- The view tree (std.app.2-3) ---- */
 
-typedef enum { O_STR, O_FILL, O_SHADE, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP } OpKind;
+typedef enum { O_STR, O_FILL, O_SHADE, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP, O_ROUND, O_POLY, O_LINE } OpKind;
 typedef struct {
     OpKind kind;
     double x, y, w, h, x2, y2, size, width, alpha;
+    double r, stroke;        /* O_ROUND (std.app.32) */
+    double *pts; int npts;   /* O_POLY, O_LINE: x0, y0, x1, y1, ...; npts is the number of points */
     int color;
     char *text, *font;   /* O_STR: text, font; O_PIC: text is src; O_BITMAP: text is the id */
     gboolean bold, italic, underline;
@@ -255,7 +270,7 @@ struct Node {
 static void node_free(Node *n) {
     if (!n) return;
     free(n->id); free(n->text); free(n->hint);
-    for (int i = 0; i < n->nops; i++) { free(n->ops[i].text); free(n->ops[i].font); }
+    for (int i = 0; i < n->nops; i++) { free(n->ops[i].text); free(n->ops[i].font); free(n->ops[i].pts); }
     free(n->ops);
     for (int i = 0; i < n->nkids; i++) node_free(n->kids[i]);
     free(n->kids);
@@ -299,6 +314,33 @@ static void bitmap_store(const char *id, int w, int h, const char *b64) {
         cairo_surface_mark_dirty(s);
         g_hash_table_replace(bitmaps, g_strdup(id), s);
         reduced_forget(id);
+    }
+    g_free(data);
+}
+
+/* Web fonts are kept by id: the bytes go to a temp file that fontconfig loads
+   for this process, and `web:<id>` draws in the family name found in it (std.app.3). */
+static GHashTable *webfonts; /* id -> family name (char*) */
+
+static void webfont_store(const char *id, const char *b64) {
+    if (!*b64) return;
+    gsize len;
+    guchar *data = g_base64_decode(b64, &len);
+    if (len > 0) {
+        char *path = g_strdup_printf("%s/ail-webfont-%d-%u.ttf", g_get_tmp_dir(), (int)getpid(), g_str_hash(id));
+        if (g_file_set_contents(path, (const char *)data, (gssize)len, NULL)) {
+            FcFontSet *set = FcFontSetCreate();
+            FcFileScan(set, NULL, NULL, NULL, (const FcChar8 *)path, FcFalse);
+            if (set->nfont > 0) {
+                FcChar8 *fam = NULL;
+                if (FcPatternGetString(set->fonts[0], FC_FAMILY, 0, &fam) == FcResultMatch && fam) {
+                    FcConfigAppFontAddFile(NULL, (const FcChar8 *)path);
+                    g_hash_table_replace(webfonts, g_strdup(id), g_strdup((const char *)fam));
+                }
+            }
+            FcFontSetDestroy(set);
+        }
+        g_free(path);
     }
     g_free(data);
 }
@@ -361,6 +403,22 @@ static Node *decode_node(const JVal *d) {
                     op.kind = O_BITMAP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
                     free(op.text); op.text = strdup(jstr(o, "id"));
                     bitmap_store(op.text, (int)jnum(o, "pw"), (int)jnum(o, "ph"), jstr(o, "data"));
+                } else if (!strcmp(ok, "Round")) {
+                    op.kind = O_ROUND; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
+                    op.r = jnum(o, "r"); op.color = (int)jnum(o, "color"); op.alpha = jnum(o, "alpha"); op.stroke = jnum(o, "stroke");
+                } else if (!strcmp(ok, "Poly") || !strcmp(ok, "Line")) {
+                    op.kind = ok[0] == 'P' ? O_POLY : O_LINE;
+                    op.color = (int)jnum(o, "color"); op.alpha = jnum(o, "alpha"); op.width = jnum(o, "width");
+                    JVal *pa = jget(o, "points");
+                    if (pa && pa->kind == J_ARR) {
+                        op.pts = calloc(pa->n ? pa->n : 1, sizeof *op.pts);
+                        for (int k = 0; k < pa->n; k++) op.pts[k] = pa->vals[k]->kind == J_NUM ? pa->vals[k]->num : 0;
+                        op.npts = pa->n / 2;
+                    }
+                } else if (!strcmp(ok, "Font")) {
+                    webfont_store(jstr(o, "id"), jstr(o, "data"));
+                    free(op.text); free(op.font);
+                    continue;
                 } else if (!strcmp(ok, "Clip")) {
                     op.kind = O_CLIP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
                 } else if (!strcmp(ok, "Unclip")) {
@@ -411,13 +469,67 @@ static void ctx_setup(PangoContext *pc) {
 #endif
 }
 
-static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
+static GHashTable *installed; /* lower-cased family name -> family name (std.app.28) */
+
+static void load_installed(void) {
+    if (installed) return;
+    installed = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    PangoFontFamily **fams = NULL;
+    int n = 0;
+    pango_font_map_list_families(pango_cairo_font_map_get_default(), &fams, &n);
+    for (int i = 0; i < n; i++) {
+        const char *name = pango_font_family_get_name(fams[i]);
+        g_hash_table_insert(installed, g_utf8_strdown(name, -1), g_strdup(name));
+    }
+    g_free(fams);
+}
+
+/* std.app.28: resolves a CSS `font-family` list to the first installed family, else the list's
+   first generic (`serif`, `mono`, `sans`), else `sans`. The result is owned by the caller. */
+static char *resolve_family(const char *list) {
+    load_installed();
+    const char *generic = NULL;
+    char **parts = g_strsplit(list, ",", -1);
+    for (int i = 0; parts[i]; i++) {
+        char *f = g_strstrip(parts[i]);
+        size_t n = strlen(f);
+        if (n >= 2 && (f[0] == '"' || f[0] == '\'') && f[n - 1] == f[0]) { f[n - 1] = 0; f = g_strstrip(f + 1); }
+        if (!*f) continue;
+        char *low = g_utf8_strdown(f, -1);
+        if (!strcmp(low, "serif")) { if (!generic) generic = "serif"; }
+        else if (!strcmp(low, "monospace") || !strcmp(low, "ui-monospace") || !strcmp(low, "mono")) { if (!generic) generic = "mono"; }
+        else if (!strcmp(low, "sans-serif") || !strcmp(low, "system-ui") || !strcmp(low, "ui-sans-serif") || !strcmp(low, "sans")) { if (!generic) generic = "sans"; }
+        else {
+            const char *name = g_hash_table_lookup(installed, low);
+            if (name) { char *r = g_strdup(name); g_free(low); g_strfreev(parts); return r; }
+        }
+        g_free(low);
+    }
+    g_strfreev(parts);
+    return g_strdup(generic ? generic : "sans");
+}
+
+/* The font description of `family` (std.app.3, std.app.28); `used`, when given, gets the host face
+   or installed family chosen, owned by the caller. */
+static PangoFontDescription *font_desc_used(const char *family, double size, gboolean bold, gboolean italic, char **used) {
     PangoFontDescription *d = pango_font_description_new();
-    pango_font_description_set_family(d, !strcmp(family, "sans") ? sans_family : !strcmp(family, "serif") ? SERIF_LIST : MONO_LIST);
+    const char *web = !strncmp(family, "web:", 4) ? (const char *)g_hash_table_lookup(webfonts, family + 4) : NULL;
+    char *chosen = NULL;
+    if (web) chosen = g_strdup(family);
+    else if (!strncmp(family, "web:", 4)) chosen = g_strdup("sans"); /* a web font not sent yet */
+    else if (!strcmp(family, "sans") || !strcmp(family, "serif") || !strcmp(family, "mono")) chosen = g_strdup(family);
+    else chosen = resolve_family(family);
+    const char *pango = web ? web : !strcmp(chosen, "sans") ? sans_family : !strcmp(chosen, "serif") ? SERIF_LIST : !strcmp(chosen, "mono") ? MONO_LIST : chosen;
+    pango_font_description_set_family(d, pango);
+    if (used) *used = chosen; else g_free(chosen);
     pango_font_description_set_absolute_size(d, (size > 0 ? size : 13) * PANGO_SCALE);
     pango_font_description_set_weight(d, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
     pango_font_description_set_style(d, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
     return d;
+}
+
+static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
+    return font_desc_used(family, size, bold, italic, NULL);
 }
 
 /* The size of one character of `mono` at 13 points (std.app.5). */
@@ -437,9 +549,15 @@ static void answer_measure(const JVal *runs) {
     PangoContext *pc = gtk_widget_get_pango_context(w);
     ctx_setup(pc);
     GString *out = g_string_new("");
+    GString *fonts = g_string_new("");
     for (int i = 0; runs && runs->kind == J_ARR && i < runs->n; i++) {
         const JVal *r = runs->vals[i];
-        PangoFontDescription *d = font_desc(jstr(r, "font"), jnum(r, "size"), jflag(r, "bold"), jflag(r, "italic"));
+        char *used = NULL;
+        PangoFontDescription *d = font_desc_used(jstr(r, "font"), jnum(r, "size"), jflag(r, "bold"), jflag(r, "italic"), &used);
+        if (i) g_string_append_c(fonts, ',');
+        for (char *p = used; *p; p++) if (*p == ',') *p = ' ';
+        g_string_append(fonts, used);
+        g_free(used);
         PangoLayout *l = pango_layout_new(pc);
         pango_layout_set_font_description(l, d);
         pango_layout_set_text(l, jstr(r, "text"), -1);
@@ -453,8 +571,10 @@ static void answer_measure(const JVal *runs) {
     }
     Ev e = ev_new("measured");
     ev_str(&e, "text", out->str);
+    ev_str(&e, "fonts", fonts->str); /* std.app.28 */
     ev_send(&e);
     g_string_free(out, TRUE);
+    g_string_free(fonts, TRUE);
     g_object_ref_sink(w);
     g_object_unref(w);
 }
@@ -574,6 +694,51 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
             set_color(cr, op->color);
             cairo_stroke(cr);
             break;
+        case O_ROUND: {
+            /* std.app.32: radius at most half the shorter side; a stroke is centred on the edge. */
+            double rr = op->r < 0 ? 0 : op->r, lim = (op->w < op->h ? op->w : op->h) / 2;
+            if (rr > lim) rr = lim;
+            double a = op->alpha < 0 ? 0 : op->alpha > 1 ? 1 : op->alpha;
+            if (rr <= 0) cairo_rectangle(cr, op->x, op->y, op->w, op->h);
+            else {
+                cairo_new_sub_path(cr);
+                cairo_arc(cr, op->x + op->w - rr, op->y + rr, rr, -G_PI / 2, 0);
+                cairo_arc(cr, op->x + op->w - rr, op->y + op->h - rr, rr, 0, G_PI / 2);
+                cairo_arc(cr, op->x + rr, op->y + op->h - rr, rr, G_PI / 2, G_PI);
+                cairo_arc(cr, op->x + rr, op->y + rr, rr, G_PI, 3 * G_PI / 2);
+                cairo_close_path(cr);
+            }
+            cairo_set_source_rgba(cr, ((op->color >> 16) & 0xff) / 255.0, ((op->color >> 8) & 0xff) / 255.0, (op->color & 0xff) / 255.0, a);
+            if (op->stroke > 0) { cairo_set_line_width(cr, op->stroke); cairo_stroke(cr); }
+            else cairo_fill(cr);
+            break;
+        }
+        case O_POLY:
+            if (op->npts >= 3) {
+                double a = op->alpha < 0 ? 0 : op->alpha > 1 ? 1 : op->alpha;
+                cairo_new_path(cr);
+                cairo_move_to(cr, op->pts[0], op->pts[1]);
+                for (int k = 1; k < op->npts; k++) cairo_line_to(cr, op->pts[k * 2], op->pts[k * 2 + 1]);
+                cairo_close_path(cr);
+                cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
+                cairo_set_source_rgba(cr, ((op->color >> 16) & 0xff) / 255.0, ((op->color >> 8) & 0xff) / 255.0, (op->color & 0xff) / 255.0, a);
+                cairo_fill(cr);
+            }
+            break;
+        case O_LINE:
+            if (op->npts >= 2) {
+                cairo_new_path(cr);
+                cairo_move_to(cr, op->pts[0], op->pts[1]);
+                for (int k = 1; k < op->npts; k++) cairo_line_to(cr, op->pts[k * 2], op->pts[k * 2 + 1]);
+                cairo_set_line_width(cr, op->width > 0 ? op->width : 1);
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+                cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+                set_color(cr, op->color);
+                cairo_stroke(cr);
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+                cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
+            }
+            break;
         case O_PIC: {
             GdkPixbuf *pb = load_pic(op->text);
             if (!pb || gdk_pixbuf_get_width(pb) <= 0 || gdk_pixbuf_get_height(pb) <= 0) { placeholder(cr, op); break; }
@@ -653,9 +818,14 @@ static void pointer_ev(const char *kind, GtkWidget *w, GdkEventButton *e) {
 
 /* std.app.27 (ADR 0983): `down` before `click`; GTK's implicit grab keeps the
    motion and the release on this canvas until the button is released. */
+/* The last press, for the `drag` line (std.app.25): GTK moves a window from a press. */
+static struct { guint button, time; gdouble x_root, y_root; gboolean valid; } last_press;
+
 static gboolean canvas_press(GtkWidget *w, GdkEventButton *e, gpointer d) {
     (void)d;
     if (e->type != GDK_BUTTON_PRESS) return TRUE;
+    last_press.button = e->button; last_press.time = e->time;
+    last_press.x_root = e->x_root; last_press.y_root = e->y_root; last_press.valid = TRUE;
     gtk_widget_grab_focus(w);
     pointer_ev("down", w, e);
     pointer_ev("click", w, e);
@@ -795,6 +965,21 @@ static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
 /* Last size reported per canvas id, so a rebuilt canvas does not repeat it. */
 static GHashTable *reported; /* id -> double[2] */
 
+/* std.app.34: the natural line height of `sans` at 13 points, whole points, as drawn: a layout's
+   logical height is the line box a `Str` is placed in, so the glyph box is centred in it. */
+static double sans_line_height(PangoContext *pc) {
+    ctx_setup(pc);
+    PangoFontDescription *d = font_desc("sans", 13, FALSE, FALSE);
+    PangoLayout *l = pango_layout_new(pc);
+    pango_layout_set_font_description(l, d);
+    pango_layout_set_text(l, "Mg", -1);
+    PangoRectangle r;
+    pango_layout_get_extents(l, NULL, &r);
+    g_object_unref(l);
+    pango_font_description_free(d);
+    return ceil(r.height / (double)PANGO_SCALE);
+}
+
 static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
     (void)d;
     const char *id = cid(w);
@@ -814,6 +999,8 @@ static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
     ev_num(&ev, "cell_w", cw);
     ev_num(&ev, "cell_h", ch);
     ev_screen(&ev);
+    ev_insets(&ev);
+    ev_num(&ev, "sans_line", sans_line_height(gtk_widget_get_pango_context(w)));
     ev_send(&ev);
 }
 
@@ -1057,8 +1244,75 @@ static void follow_dark(const Node *tree) {
     g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", want ? TRUE : FALSE, NULL);
 }
 
-static void show_view(const char *title, const char *focus, Node *tree) {
+static GtkWidget *overlay, *ctl_box, *grips[3];
+
+/* std.app.25: edge mode drops the title bar and shows the host's controls and resize edges. */
+static void set_edge(gboolean on) {
+    if (edge_mode == on) return;
+    edge_mode = on;
+    gtk_window_set_decorated(GTK_WINDOW(window), !on);
+    gtk_widget_set_visible(ctl_box, on);
+    for (int i = 0; i < 3; i++) gtk_widget_set_visible(grips[i], on);
+    g_hash_table_remove_all(reported); /* the next size-allocate sends `resize` with the insets */
+}
+
+static void on_minimize(GtkButton *b, gpointer d) { (void)b; (void)d; gtk_window_iconify(GTK_WINDOW(window)); }
+static void toggle_max(void) {
+    if (gtk_window_is_maximized(GTK_WINDOW(window))) gtk_window_unmaximize(GTK_WINDOW(window));
+    else gtk_window_maximize(GTK_WINDOW(window));
+}
+static void on_maximize(GtkButton *b, gpointer d) { (void)b; (void)d; toggle_max(); }
+static void on_close(GtkButton *b, gpointer d) { (void)b; (void)d; gtk_window_close(GTK_WINDOW(window)); }
+
+static gboolean on_grip(GtkWidget *w, GdkEventButton *e, gpointer edge) {
+    (void)w;
+    if (e->type != GDK_BUTTON_PRESS || e->button != 1 || gtk_window_is_maximized(GTK_WINDOW(window))) return FALSE;
+    gtk_window_begin_resize_drag(GTK_WINDOW(window), (GdkWindowEdge)GPOINTER_TO_INT(edge), e->button, (gint)e->x_root, (gint)e->y_root, e->time);
+    return TRUE;
+}
+
+/* The overlay holds the app's content, the controls at the top-right (46 by 32 points each) and
+   thin edges that resize an undecorated window. Both stay hidden outside edge mode. */
+static void build_edge_chrome(void) {
+    overlay = gtk_overlay_new();
+    gtk_container_add(GTK_CONTAINER(window), overlay);
+    ctl_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    const char *icons[3] = { "window-minimize-symbolic", "window-maximize-symbolic", "window-close-symbolic" };
+    GCallback cbs[3] = { G_CALLBACK(on_minimize), G_CALLBACK(on_maximize), G_CALLBACK(on_close) };
+    for (int i = 0; i < 3; i++) {
+        GtkWidget *b = gtk_button_new_from_icon_name(icons[i], GTK_ICON_SIZE_MENU);
+        gtk_button_set_relief(GTK_BUTTON(b), GTK_RELIEF_NONE);
+        gtk_widget_set_size_request(b, (int)(EDGE_CTL_W / 3), (int)EDGE_CTL_H);
+        gtk_widget_set_can_focus(b, FALSE);
+        g_signal_connect(b, "clicked", cbs[i], NULL);
+        gtk_box_pack_start(GTK_BOX(ctl_box), b, FALSE, FALSE, 0);
+    }
+    gtk_widget_set_halign(ctl_box, GTK_ALIGN_END);
+    gtk_widget_set_valign(ctl_box, GTK_ALIGN_START);
+    gtk_widget_set_no_show_all(ctl_box, TRUE);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), ctl_box);
+    /* left, right and bottom edges, 5 points wide */
+    GtkAlign ha[3] = { GTK_ALIGN_START, GTK_ALIGN_END, GTK_ALIGN_FILL };
+    GtkAlign va[3] = { GTK_ALIGN_FILL, GTK_ALIGN_FILL, GTK_ALIGN_END };
+    GdkWindowEdge ed[3] = { GDK_WINDOW_EDGE_WEST, GDK_WINDOW_EDGE_EAST, GDK_WINDOW_EDGE_SOUTH };
+    for (int i = 0; i < 3; i++) {
+        GtkWidget *g = gtk_event_box_new();
+        gtk_event_box_set_visible_window(GTK_EVENT_BOX(g), FALSE);
+        gtk_widget_add_events(g, GDK_BUTTON_PRESS_MASK);
+        gtk_widget_set_size_request(g, i < 2 ? 5 : -1, i < 2 ? -1 : 5);
+        gtk_widget_set_halign(g, ha[i]);
+        gtk_widget_set_valign(g, va[i]);
+        gtk_widget_set_no_show_all(g, TRUE);
+        g_signal_connect(g, "button-press-event", G_CALLBACK(on_grip), GINT_TO_POINTER(ed[i]));
+        gtk_overlay_add_overlay(GTK_OVERLAY(overlay), g);
+        grips[i] = g;
+    }
+    gtk_widget_show_all(overlay);
+}
+
+static void show_view(const char *title, const char *focus, Node *tree, gboolean want_edge) {
     gtk_window_set_title(GTK_WINDOW(window), title);
+    set_edge(want_edge && edge(tree));
     sync_fields(tree);
     follow_dark(tree);
     if (current && same_shape(current, tree)) {
@@ -1075,7 +1329,7 @@ static void show_view(const char *title, const char *focus, Node *tree) {
         edge_tree = edge(tree);
         gtk_container_set_border_width(GTK_CONTAINER(window), edge_tree ? 0 : 8);
         content = build(tree);
-        gtk_container_add(GTK_CONTAINER(window), content);
+        gtk_container_add(GTK_CONTAINER(overlay), content);
         gtk_widget_show_all(content);
         if (fid) {
             GtkWidget *w = g_hash_table_lookup(by_id, fid);
@@ -1167,6 +1421,13 @@ static void handle_line(const char *line) {
     } else if (!strcmp(t, "clipboard")) {
         /* std.app.26 (ADR 0982): the app puts text on the system clipboard. */
         gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), jstr(obj, "text"), -1);
+    } else if (!strcmp(t, "drag") || !strcmp(t, "zoom")) {
+        /* std.app.25: the app's own strip moves the window (a press began it) or toggles maximise. */
+        if (edge_mode && !strcmp(t, "zoom")) toggle_max();
+        else if (edge_mode && last_press.valid) {
+            last_press.valid = FALSE;
+            gtk_window_begin_move_drag(GTK_WINDOW(window), (gint)last_press.button, (gint)last_press.x_root, (gint)last_press.y_root, last_press.time);
+        }
     } else if (!strcmp(t, "pick")) {
         /* std.app.22: no native chooser on this host yet; say so rather than hang. */
         Ev e = ev_new("pick_error");
@@ -1186,10 +1447,10 @@ static void handle_line(const char *line) {
         JVal *title = jget(obj, "title");
         hover_on = jflag(obj, "hover");
         Node *tree = decode_node(jget(obj, "tree"));
-        show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree);
+        show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree, jflag(obj, "edge"));
         if (!started) {
             started = TRUE;
-            { Ev se = ev_new("start"); ev_screen(&se); ev_send(&se); }
+            { Ev se = ev_new("start"); ev_screen(&se); ev_insets(&se); ev_num(&se, "sans_line", sans_line_height(gtk_widget_get_pango_context(window))); ev_send(&se); }
             send_appearance();
             watch_appearance();
         }
@@ -1224,6 +1485,7 @@ static gboolean on_delete(GtkWidget *w, GdkEvent *e, gpointer d) {
 
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
+    webfonts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     bitmaps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
     reduced = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
     fonts_init();
@@ -1249,6 +1511,7 @@ int main(int argc, char **argv) {
     gtk_container_set_border_width(GTK_CONTAINER(window), 8);
     g_signal_connect(window, "delete-event", G_CALLBACK(on_delete), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    build_edge_chrome();
     gtk_widget_show(window);
 
     GIOChannel *in = g_io_channel_unix_new(0);
