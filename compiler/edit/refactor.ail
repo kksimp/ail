@@ -204,7 +204,7 @@ fn paren_after(cs List[char], i int) int
     if j < cs.len() and cs[j] == '(' then j else -1
 
 ## A parameter or argument split into its `mut ` or `move ` and the rest.
-fn split_mode(piece str) (str, str)
+fn split_mode(piece str)(str, str)
     mut pre := ""
     mut rest := piece.trim()
     for w in ["mut ", "move "]
@@ -248,7 +248,7 @@ struct SigPlan
     new_args List[str]
 
 ## The list of the call or declaration whose name is reported at `i`.
-fn list_at(cs List[char], i int, name str, where str) (int, Brackets, str)
+fn list_at(cs List[char], i int, name str, where str)(int, Brackets, str)
     none_found := Brackets(close: -1, commas: [], comment: false)
     start := name_at(cs, i, name)
     if start < 0
