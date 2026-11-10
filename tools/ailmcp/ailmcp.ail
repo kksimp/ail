@@ -45,6 +45,42 @@ fn tools() List[Tool]
             needs: ["program"],
         ),
         Tool(
+            name: "ail_context",
+            about: "The smallest bundle of a program an edit to one function needs (signature, body, effects, callees, callers, types, tests, rules), cut to `budget` tokens (default 2000). One call replaces the file reads before an edit.",
+            props: ["program", "symbol", "budget", "json"],
+            needs: ["program", "symbol"],
+        ),
+        Tool(
+            name: "ail_edit",
+            about: "Apply structured edits to a file or package and check the result. `edits` is a JSON list of edit objects or the compact hunk form (edit.in.1, edit.in.3). With `test` also runs the tests; with `impact` adds what the edit touches; with `dry_run` writes nothing and returns a diff. Edits apply all or none.",
+            props: ["program", "edits", "test", "impact", "dry_run", "budget"],
+            needs: ["program", "edits"],
+        ),
+        Tool(
+            name: "ail_fix",
+            about: "Apply every machine fix the checker offers, to a fixed point; with `dry_run` print the diff and write nothing.",
+            props: ["program", "dry_run", "budget"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_explain",
+            about: "The text of one spec rule and its example (`rule`, e.g. expr.match.2); without `rule` the list of every rule.",
+            props: ["rule", "budget", "json"],
+            needs: [],
+        ),
+        Tool(
+            name: "ail_api",
+            about: "The program's public API. `form` is card (default), index (one line per module), outline, symbols, text or pretty; `module` limits a card to one module; `budget` trims a card to that many tokens.",
+            props: ["program", "form", "module", "budget", "json"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_review",
+            about: "A change summarised by meaning: effects, API, contracts, performance and untested code between two git revisions (`range` is BASE..HEAD), cut to `budget` tokens (default 500).",
+            props: ["range", "path", "budget", "json"],
+            needs: ["range"],
+        ),
+        Tool(
             name: "task_start",
             about: "Open the task: record the goal and the base revision (ADR 0917).",
             props: ["program", "goal", "rev"],
@@ -85,8 +121,27 @@ fn obj(members List[JsonMember]) Json
 fn strs(xs List[str]) Json
     Json.Arr([Json.Str(x) for x in xs])
 
+## The property names of a tool that are booleans (mcp.tools.1); `budget` is an integer, the rest strings.
+fn flags(name str) List[str]
+    match name
+        "ail_context" => ["json"]
+        "ail_edit" => ["test", "impact", "dry_run"]
+        "ail_fix" => ["dry_run"]
+        "ail_explain" => ["json"]
+        "ail_api" => ["json"]
+        "ail_review" => ["json"]
+        _ => []
+
+fn prop_type(tool str, p str) str
+    if p == "budget"
+        return "integer"
+    for f in flags(tool)
+        if f == p
+            return "boolean"
+    "string"
+
 fn tool_json(t Tool) Json
-    props := obj([member(p, obj([member("type", Json.Str("string"))])) for p in t.props])
+    props := obj([member(p, obj([member("type", Json.Str(prop_type(t.name, p)))])) for p in t.props])
     schema := obj([
         member("type", Json.Str("object")),
         member("properties", props),
@@ -102,15 +157,38 @@ fn tool_json(t Tool) Json
 struct Cmd
     argv List[str]
     why str
+    stdin str
+
+## A boolean argument: a JSON `true` or the text "true".
+fn on(a Json, key str) bool
+    a.flag(key, false) or a.text(key, "") == "true"
+
+## The `--budget N` pair for a call that gave `budget` as a number or as text, else nothing.
+fn budget_args(a Json) List[str]
+    n := a.int("budget") else
+        t := a.text("budget", "")
+        return if t == "" then [] else ["--budget", t]
+    ["--budget", "{n}"]
+
+## The first argument that would be read as an option, or "" (mcp.call.4).
+fn dashed(a Json, keys List[str]) str
+    for k in keys
+        if a.text(k, "").starts_with("-")
+            return k
+    ""
 
 fn command(name str, a Json) Cmd
     mut out := List[str]()
+    mut stdin := ""
     for t in tools()
         if t.name != name
             continue
         for n in t.needs
             if (a.str(n) else "") == ""
-                return Cmd(argv: [], why: "{name} needs `{n}`")
+                return Cmd(argv: [], why: "{name} needs `{n}`", stdin: "")
+        bad := dashed(a, ["program", "symbol", "rule", "range", "path", "module", "form"])
+        if bad != ""
+            return Cmd(argv: [], why: "{name}: `{bad}` must not start with -", stdin: "")
         program := a.text("program", "")
         since := a.text("since", "")
         rev := a.text("rev", "")
@@ -119,7 +197,7 @@ fn command(name str, a Json) Cmd
             "ail_test" =>
                 bundle := a.text("bundle", "")
                 if program == "" and bundle == ""
-                    return Cmd(argv: [], why: "ail_test needs `program` or `bundle`")
+                    return Cmd(argv: [], why: "ail_test needs `program` or `bundle`", stdin: "")
                 if bundle != ""
                     out = ["test", "--bundle", bundle]
                 else
@@ -145,13 +223,64 @@ fn command(name str, a Json) Cmd
                 "--rev",
                 if rev == "" then "HEAD" else rev,
             ]
+            "ail_context" =>
+                out = ["context", program, a.text("symbol", "")]
+                out.extend(budget_args(a))
+                if on(a, "json")
+                    out.push("--json")
+            "ail_edit" =>
+                out = ["edit"]
+                out.extend(budget_args(a))
+                for f in ["test", "impact", "dry_run"]
+                    if on(a, f)
+                        out.push("--{f.replace("_", "-")}")
+                out.push(program)
+                # The edits may arrive as text or, leniently, as a JSON value (mcp.tools.2).
+                e := a.get("edits") else Json.Null
+                stdin = e.as_str() else e.to_text()
+            "ail_fix" =>
+                out = ["fix"]
+                out.extend(budget_args(a))
+                if on(a, "dry_run")
+                    out.push("--dry-run")
+                out.push(program)
+            "ail_explain" =>
+                out = ["explain"]
+                out.extend(budget_args(a))
+                if on(a, "json")
+                    out.push("--json")
+                if a.text("rule", "") != ""
+                    out.push(a.text("rule", ""))
+            "ail_api" =>
+                form := a.text("form", "card")
+                match form
+                    "card" => out = ["api", "--card"]
+                    "index" => out = ["api", "--card", "--index"]
+                    "outline" => out = ["api", "--outline"]
+                    "symbols" => out = ["api", "--symbols"]
+                    "text" => out = ["api", "--text"]
+                    "pretty" => out = ["api", "--pretty"]
+                    _ => return Cmd(argv: [], why: "ail_api: unknown form {form}", stdin: "")
+                if a.text("module", "") != ""
+                    out.extend(["--module", a.text("module", "")])
+                out.extend(budget_args(a))
+                if on(a, "json")
+                    out.push("--json")
+                out.push(program)
+            "ail_review" =>
+                out = ["review", a.text("range", "")]
+                if a.text("path", "") != ""
+                    out.push(a.text("path", ""))
+                out.extend(budget_args(a))
+                if on(a, "json")
+                    out.push("--json")
             "task_start" =>
                 out = ["task", "start", program, a.text("goal", ""), "--json"]
                 if rev != ""
                     out.extend(["--rev", rev])
             _ => out = ["task", name.slice(5, name.len()), "--json"]
-        return Cmd(argv: out, why: "")
-    Cmd(argv: [], why: "unknown tool {name}")
+        return Cmd(argv: out, why: "", stdin: stdin)
+    Cmd(argv: [], why: "unknown tool {name}", stdin: "")
 
 fn reply(id Json, result Json)
     print(
@@ -169,9 +298,28 @@ fn failure(id Json, code int, message str)
     )
 
 ## A tool result (mcp.call.1): the text and whether the command failed (mcp.call.1).
-fn tool_result(text str, bad bool) Json
+## When the command ran with `--json` and printed one JSON object, that object also goes
+## out as `structuredContent` (mcp.call.3).
+fn tool_result(text str, bad bool, structured Json?) Json
     content := Json.Arr([obj([member("type", Json.Str("text")), member("text", Json.Str(text))])])
-    obj([member("content", content), member("isError", Json.Bool(bad))])
+    mut members := [member("content", content), member("isError", Json.Bool(bad))]
+    if s := structured
+        members.push(member("structuredContent", s))
+    obj(members)
+
+fn has_json(argv List[str]) bool
+    for x in argv
+        if x == "--json"
+            return true
+    false
+
+## The parsed standard output of a `--json` command when it is exactly one object, else none.
+fn structured_of(cmd Cmd, out str) Json?
+    if not has_json(cmd.argv)
+        return none
+    v := parse_json(out.trim()) else return none
+    _ := v.as_obj() else return none
+    v
 
 fn call(id Json, params Json)
     name := params.text("name", "")
@@ -180,13 +328,13 @@ fn call(id Json, params Json)
     if cmd.why != ""
         failure(id, -32602, cmd.why)
         return
-    ran := proc.run(env.get("AIL") else "./ail", cmd.argv) else err
-        reply(id, tool_result("can't run ail: {err}", true))
+    ran := proc.run(env.get("AIL") else "./ail", cmd.argv, cmd.stdin) else err
+        reply(id, tool_result("can't run ail: {err}", true, none))
         return
     text := "{ran.out}{ran.err}"
     # A clean check prints nothing; say so (mcp.call.1).
     shown := if text.trim() == "" then "ok (exit {ran.status})" else text
-    reply(id, tool_result(shown, ran.status != 0))
+    reply(id, tool_result(shown, ran.status != 0, structured_of(cmd, ran.out)))
 
 ## One message (mcp.proto.1: `initialize`, `ping`, `tools/list`, `tools/call`; anything else is -32601).
 fn handle(req Json)
