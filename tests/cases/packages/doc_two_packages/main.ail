@@ -1,0 +1,7 @@
+use tally
+use textkit
+
+fn main()
+    r := tally.summarize("The quick brown fox jumps")
+    print("{r.total} words, longest {r.longest}")
+    print(textkit.shout(r.longest))

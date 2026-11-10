@@ -2,6 +2,7 @@
 ## written from RFC 6716. Part 1: packet framing (RFC 6716 §3) and the range
 ## decoder every layer reads with (§4.1). The CELT layer follows, then SILK
 ## and hybrid.
+use std.audio
 
 ## Why a packet could not be decoded (std.opus.1).
 pub error struct OpusError "opus: {why}"
@@ -331,3 +332,3101 @@ pub fn RangeDecoder.size(self) int
 
 fn lsh(v int, n int) int
     v.shl(n)
+
+## CELT (RFC 6716 §4.3)
+
+## The tables below are the normative constants of RFC 6716 as libopus
+## carries them (BSD-3-Clause, Xiph.Org and contributors; notice in NOTICE).
+
+## Band edges in 2.5 ms MDCT bins (RFC 6716 Table 55).
+EBANDS := [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 34, 40, 48, 60, 78, 100]
+
+## Bits per band in 1/32 bit per sample, 11 rows of 21 (RFC 6716 Table 57).
+BAND_ALLOC := [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    90,
+    80,
+    75,
+    69,
+    63,
+    56,
+    49,
+    40,
+    34,
+    29,
+    20,
+    18,
+    10,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    110,
+    100,
+    90,
+    84,
+    78,
+    71,
+    65,
+    58,
+    51,
+    45,
+    39,
+    32,
+    26,
+    20,
+    12,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    118,
+    110,
+    103,
+    93,
+    86,
+    80,
+    75,
+    70,
+    65,
+    59,
+    53,
+    47,
+    40,
+    31,
+    23,
+    15,
+    4,
+    0,
+    0,
+    0,
+    0,
+    126,
+    119,
+    112,
+    104,
+    95,
+    89,
+    83,
+    78,
+    72,
+    66,
+    60,
+    54,
+    47,
+    39,
+    32,
+    25,
+    17,
+    12,
+    1,
+    0,
+    0,
+    134,
+    127,
+    120,
+    114,
+    103,
+    97,
+    91,
+    85,
+    78,
+    72,
+    66,
+    60,
+    54,
+    47,
+    41,
+    35,
+    29,
+    23,
+    16,
+    10,
+    1,
+    144,
+    137,
+    130,
+    124,
+    113,
+    107,
+    101,
+    95,
+    88,
+    82,
+    76,
+    70,
+    64,
+    57,
+    51,
+    45,
+    39,
+    33,
+    26,
+    15,
+    1,
+    152,
+    145,
+    138,
+    132,
+    123,
+    117,
+    111,
+    105,
+    98,
+    92,
+    86,
+    80,
+    74,
+    67,
+    61,
+    55,
+    49,
+    43,
+    36,
+    20,
+    1,
+    162,
+    155,
+    148,
+    142,
+    133,
+    127,
+    121,
+    115,
+    108,
+    102,
+    96,
+    90,
+    84,
+    77,
+    71,
+    65,
+    59,
+    53,
+    46,
+    30,
+    1,
+    172,
+    165,
+    158,
+    152,
+    143,
+    137,
+    131,
+    125,
+    118,
+    112,
+    106,
+    100,
+    94,
+    87,
+    81,
+    75,
+    69,
+    63,
+    56,
+    45,
+    20,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    198,
+    193,
+    188,
+    183,
+    178,
+    173,
+    168,
+    163,
+    158,
+    153,
+    148,
+    129,
+    104,
+]
+
+## Coarse energy Laplace parameters: [frame size][inter, intra][band] pairs of P(0) and decay (RFC 6716 Table 58).
+E_PROB := [
+    72,
+    127,
+    65,
+    129,
+    66,
+    128,
+    65,
+    128,
+    64,
+    128,
+    62,
+    128,
+    64,
+    128,
+    64,
+    128,
+    92,
+    78,
+    92,
+    79,
+    92,
+    78,
+    90,
+    79,
+    116,
+    41,
+    115,
+    40,
+    114,
+    40,
+    132,
+    26,
+    132,
+    26,
+    145,
+    17,
+    161,
+    12,
+    176,
+    10,
+    177,
+    11,
+    24,
+    179,
+    48,
+    138,
+    54,
+    135,
+    54,
+    132,
+    53,
+    134,
+    56,
+    133,
+    55,
+    132,
+    55,
+    132,
+    61,
+    114,
+    70,
+    96,
+    74,
+    88,
+    75,
+    88,
+    87,
+    74,
+    89,
+    66,
+    91,
+    67,
+    100,
+    59,
+    108,
+    50,
+    120,
+    40,
+    122,
+    37,
+    97,
+    43,
+    78,
+    50,
+    83,
+    78,
+    84,
+    81,
+    88,
+    75,
+    86,
+    74,
+    87,
+    71,
+    90,
+    73,
+    93,
+    74,
+    93,
+    74,
+    109,
+    40,
+    114,
+    36,
+    117,
+    34,
+    117,
+    34,
+    143,
+    17,
+    145,
+    18,
+    146,
+    19,
+    162,
+    12,
+    165,
+    10,
+    178,
+    7,
+    189,
+    6,
+    190,
+    8,
+    177,
+    9,
+    23,
+    178,
+    54,
+    115,
+    63,
+    102,
+    66,
+    98,
+    69,
+    99,
+    74,
+    89,
+    71,
+    91,
+    73,
+    91,
+    78,
+    89,
+    86,
+    80,
+    92,
+    66,
+    93,
+    64,
+    102,
+    59,
+    103,
+    60,
+    104,
+    60,
+    117,
+    52,
+    123,
+    44,
+    138,
+    35,
+    133,
+    31,
+    97,
+    38,
+    77,
+    45,
+    61,
+    90,
+    93,
+    60,
+    105,
+    42,
+    107,
+    41,
+    110,
+    45,
+    116,
+    38,
+    113,
+    38,
+    112,
+    38,
+    124,
+    26,
+    132,
+    27,
+    136,
+    19,
+    140,
+    20,
+    155,
+    14,
+    159,
+    16,
+    158,
+    18,
+    170,
+    13,
+    177,
+    10,
+    187,
+    8,
+    192,
+    6,
+    175,
+    9,
+    159,
+    10,
+    21,
+    178,
+    59,
+    110,
+    71,
+    86,
+    75,
+    85,
+    84,
+    83,
+    91,
+    66,
+    88,
+    73,
+    87,
+    72,
+    92,
+    75,
+    98,
+    72,
+    105,
+    58,
+    107,
+    54,
+    115,
+    52,
+    114,
+    55,
+    112,
+    56,
+    129,
+    51,
+    132,
+    40,
+    150,
+    33,
+    140,
+    29,
+    98,
+    35,
+    77,
+    42,
+    42,
+    121,
+    96,
+    66,
+    108,
+    43,
+    111,
+    40,
+    117,
+    44,
+    123,
+    32,
+    120,
+    36,
+    119,
+    33,
+    127,
+    33,
+    134,
+    34,
+    139,
+    21,
+    147,
+    23,
+    152,
+    20,
+    158,
+    25,
+    154,
+    26,
+    166,
+    21,
+    173,
+    16,
+    184,
+    13,
+    184,
+    10,
+    150,
+    13,
+    139,
+    15,
+    22,
+    178,
+    63,
+    114,
+    74,
+    82,
+    84,
+    83,
+    92,
+    82,
+    103,
+    62,
+    96,
+    72,
+    96,
+    67,
+    101,
+    73,
+    107,
+    72,
+    113,
+    55,
+    118,
+    52,
+    125,
+    52,
+    118,
+    52,
+    117,
+    55,
+    135,
+    49,
+    137,
+    39,
+    157,
+    32,
+    145,
+    29,
+    97,
+    33,
+    77,
+    40,
+]
+
+## log2 in eighth bits of 1..24, for the intensity reservation.
+LOG2_FRAC := [
+    0,
+    8,
+    13,
+    16,
+    19,
+    21,
+    23,
+    24,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    32,
+    33,
+    34,
+    34,
+    35,
+    36,
+    36,
+    37,
+    37,
+]
+
+## The time-frequency change of each band: [frame size][transient, select, flag] (RFC 6716 Table 60).
+TF_SELECT := [
+    0,
+    -1,
+    0,
+    -1,
+    0,
+    -1,
+    0,
+    -1,
+    0,
+    -1,
+    0,
+    -2,
+    1,
+    0,
+    1,
+    -1,
+    0,
+    -2,
+    0,
+    -3,
+    2,
+    0,
+    1,
+    -1,
+    0,
+    -2,
+    0,
+    -3,
+    3,
+    0,
+    1,
+    -1,
+]
+
+## Where each band's pulse cache starts in CACHE_BITS, for LM -1..3.
+CACHE_INDEX := [
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    -1,
+    0,
+    0,
+    0,
+    0,
+    41,
+    41,
+    41,
+    82,
+    82,
+    123,
+    164,
+    200,
+    222,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    41,
+    41,
+    41,
+    41,
+    123,
+    123,
+    123,
+    164,
+    164,
+    240,
+    266,
+    283,
+    295,
+    41,
+    41,
+    41,
+    41,
+    41,
+    41,
+    41,
+    41,
+    123,
+    123,
+    123,
+    123,
+    240,
+    240,
+    240,
+    266,
+    266,
+    305,
+    318,
+    328,
+    336,
+    123,
+    123,
+    123,
+    123,
+    123,
+    123,
+    123,
+    123,
+    240,
+    240,
+    240,
+    240,
+    305,
+    305,
+    305,
+    318,
+    318,
+    343,
+    351,
+    358,
+    364,
+    240,
+    240,
+    240,
+    240,
+    240,
+    240,
+    240,
+    240,
+    305,
+    305,
+    305,
+    305,
+    343,
+    343,
+    343,
+    351,
+    351,
+    370,
+    376,
+    382,
+    387,
+]
+
+## Bits needed for K pulses, minus one, per cached band size.
+CACHE_BITS := [
+    40,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    40,
+    15,
+    23,
+    28,
+    31,
+    34,
+    36,
+    38,
+    39,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    47,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    55,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    63,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    71,
+    40,
+    20,
+    33,
+    41,
+    48,
+    53,
+    57,
+    61,
+    64,
+    66,
+    69,
+    71,
+    73,
+    75,
+    76,
+    78,
+    80,
+    82,
+    85,
+    87,
+    89,
+    91,
+    92,
+    94,
+    96,
+    98,
+    101,
+    103,
+    105,
+    107,
+    108,
+    110,
+    112,
+    114,
+    117,
+    119,
+    121,
+    123,
+    124,
+    126,
+    128,
+    40,
+    23,
+    39,
+    51,
+    60,
+    67,
+    73,
+    79,
+    83,
+    87,
+    91,
+    94,
+    97,
+    100,
+    102,
+    105,
+    107,
+    111,
+    115,
+    118,
+    121,
+    124,
+    126,
+    129,
+    131,
+    135,
+    139,
+    142,
+    145,
+    148,
+    150,
+    153,
+    155,
+    159,
+    163,
+    166,
+    169,
+    172,
+    174,
+    177,
+    179,
+    35,
+    28,
+    49,
+    65,
+    78,
+    89,
+    99,
+    107,
+    114,
+    120,
+    126,
+    132,
+    136,
+    141,
+    145,
+    149,
+    153,
+    159,
+    165,
+    171,
+    176,
+    180,
+    185,
+    189,
+    192,
+    199,
+    205,
+    211,
+    216,
+    220,
+    225,
+    229,
+    232,
+    239,
+    245,
+    251,
+    21,
+    33,
+    58,
+    79,
+    97,
+    112,
+    125,
+    137,
+    148,
+    157,
+    166,
+    174,
+    182,
+    189,
+    195,
+    201,
+    207,
+    217,
+    227,
+    235,
+    243,
+    251,
+    17,
+    35,
+    63,
+    86,
+    106,
+    123,
+    139,
+    152,
+    165,
+    177,
+    187,
+    197,
+    206,
+    214,
+    222,
+    230,
+    237,
+    250,
+    25,
+    31,
+    55,
+    75,
+    91,
+    105,
+    117,
+    128,
+    138,
+    146,
+    154,
+    161,
+    168,
+    174,
+    180,
+    185,
+    190,
+    200,
+    208,
+    215,
+    222,
+    229,
+    235,
+    240,
+    245,
+    255,
+    16,
+    36,
+    65,
+    89,
+    110,
+    128,
+    144,
+    159,
+    173,
+    185,
+    196,
+    207,
+    217,
+    226,
+    234,
+    242,
+    250,
+    11,
+    41,
+    74,
+    103,
+    128,
+    151,
+    172,
+    191,
+    209,
+    225,
+    241,
+    255,
+    9,
+    43,
+    79,
+    110,
+    138,
+    163,
+    186,
+    207,
+    227,
+    246,
+    12,
+    39,
+    71,
+    99,
+    123,
+    144,
+    164,
+    182,
+    198,
+    214,
+    228,
+    241,
+    253,
+    9,
+    44,
+    81,
+    113,
+    142,
+    168,
+    192,
+    214,
+    235,
+    255,
+    7,
+    49,
+    90,
+    127,
+    160,
+    191,
+    220,
+    247,
+    6,
+    51,
+    95,
+    134,
+    170,
+    203,
+    234,
+    7,
+    47,
+    87,
+    123,
+    155,
+    184,
+    212,
+    237,
+    6,
+    52,
+    97,
+    137,
+    174,
+    208,
+    240,
+    5,
+    57,
+    106,
+    151,
+    192,
+    231,
+    5,
+    59,
+    111,
+    158,
+    202,
+    243,
+    5,
+    55,
+    103,
+    147,
+    187,
+    224,
+    5,
+    60,
+    113,
+    161,
+    206,
+    248,
+    4,
+    65,
+    122,
+    175,
+    224,
+    4,
+    67,
+    127,
+    182,
+    234,
+]
+
+## The most bits a band can use, per frame size and channel count.
+CACHE_CAPS := [
+    224,
+    224,
+    224,
+    224,
+    224,
+    224,
+    224,
+    224,
+    160,
+    160,
+    160,
+    160,
+    185,
+    185,
+    185,
+    178,
+    178,
+    168,
+    134,
+    61,
+    37,
+    224,
+    224,
+    224,
+    224,
+    224,
+    224,
+    224,
+    224,
+    240,
+    240,
+    240,
+    240,
+    207,
+    207,
+    207,
+    198,
+    198,
+    183,
+    144,
+    66,
+    40,
+    160,
+    160,
+    160,
+    160,
+    160,
+    160,
+    160,
+    160,
+    185,
+    185,
+    185,
+    185,
+    193,
+    193,
+    193,
+    183,
+    183,
+    172,
+    138,
+    64,
+    38,
+    240,
+    240,
+    240,
+    240,
+    240,
+    240,
+    240,
+    240,
+    207,
+    207,
+    207,
+    207,
+    204,
+    204,
+    204,
+    193,
+    193,
+    180,
+    143,
+    66,
+    40,
+    185,
+    185,
+    185,
+    185,
+    185,
+    185,
+    185,
+    185,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    183,
+    183,
+    172,
+    138,
+    65,
+    39,
+    207,
+    207,
+    207,
+    207,
+    207,
+    207,
+    207,
+    207,
+    204,
+    204,
+    204,
+    204,
+    201,
+    201,
+    201,
+    188,
+    188,
+    176,
+    141,
+    66,
+    40,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    193,
+    194,
+    194,
+    194,
+    184,
+    184,
+    173,
+    139,
+    65,
+    39,
+    204,
+    204,
+    204,
+    204,
+    204,
+    204,
+    204,
+    204,
+    201,
+    201,
+    201,
+    201,
+    198,
+    198,
+    198,
+    187,
+    187,
+    175,
+    140,
+    66,
+    40,
+]
+
+E_MEANS := [
+    6.4375,
+    6.25,
+    5.75,
+    5.3125,
+    5.0625,
+    4.8125,
+    4.5,
+    4.375,
+    4.875,
+    4.6875,
+    4.5625,
+    4.4375,
+    4.875,
+    4.625,
+    4.3125,
+    4.5,
+    4.375,
+    4.625,
+    4.75,
+    4.4375,
+    3.75,
+    3.75,
+    3.75,
+    3.75,
+    3.75,
+]
+
+PRED_COEF := [29440.0 / 32768.0, 26112.0 / 32768.0, 21248.0 / 32768.0, 16384.0 / 32768.0]
+BETA_COEF := [30147.0 / 32768.0, 22282.0 / 32768.0, 12124.0 / 32768.0, 6554.0 / 32768.0]
+BETA_INTRA := 4915.0 / 32768.0
+SPREAD_ICDF := [25, 23, 2, 0]
+TRIM_ICDF := [126, 124, 119, 109, 87, 41, 19, 9, 4, 2, 0]
+TAPSET_ICDF := [2, 1, 0]
+SMALL_ENERGY_ICDF := [2, 1, 0]
+
+TAPS := [
+    0.3066406250,
+    0.2170410156,
+    0.1296386719,
+    0.4638671875,
+    0.2680664062,
+    0.0,
+    0.7998046875,
+    0.1000976562,
+    0.0,
+]
+
+NB_BANDS := 21
+BITRES := 3
+OVERLAP := 120
+PREEMPH := 0.8500061035
+INV_SQRT2 := 0.70710678
+
+HADAMARD_ORDER := [
+    1,
+    0,
+    3,
+    0,
+    2,
+    1,
+    7,
+    0,
+    4,
+    3,
+    6,
+    1,
+    5,
+    2,
+    15,
+    0,
+    8,
+    7,
+    12,
+    3,
+    11,
+    4,
+    14,
+    1,
+    9,
+    6,
+    13,
+    2,
+    10,
+    5,
+]
+
+BIT_INTERLEAVE := [0, 1, 1, 1, 2, 3, 3, 3, 2, 3, 3, 3, 2, 3, 3, 3]
+BIT_DEINTERLEAVE := [0, 3, 12, 15, 48, 51, 60, 63, 192, 195, 204, 207, 240, 243, 252, 255]
+
+## Integer helpers
+
+## `v` shifted right by `n` with the sign kept: floor(v / 2^n), as C's `>>`
+## on a negative int behaves on every target CELT runs on.
+fn asr(v int, n int) int
+    if v >= 0
+        return v.shr(n)
+    0 - (0 - v - 1).shr(n) - 1
+
+## `a * b` in Q15 with both taken as 16-bit signed values (RFC 6716's
+## FRAC_MUL16).
+fn frac_mul16(a int, b int) int
+    sa := (a + 32768).bit_and(0xFFFF) - 32768
+    sb := (b + 32768).bit_and(0xFFFF) - 32768
+    asr(16384 + sa * sb, 15)
+
+## C's integer division, rounding toward zero (AIL's `/` already does).
+fn cdiv(a int, b int) int
+    a / b
+
+## The noise generator CELT folds and fills with (RFC 6716 §4.3.4.3).
+fn lcg(seed int) int
+    (1664525 * seed + 1013904223).bit_and(MASK32)
+
+fn bitexact_cos(x int) int
+    t := asr(4096 + x * x, 13)
+    inner := 8277 + frac_mul16(-626, t)
+    x2 := (32767 - t) + frac_mul16(t, -7651 + frac_mul16(t, inner))
+    1 + x2
+
+fn bitexact_log2tan(isin int, icos int) int
+    lc := ilog(icos)
+    ls := ilog(isin)
+    c := icos.shl(15 - lc)
+    s := isin.shl(15 - ls)
+    a := frac_mul16(s, frac_mul16(s, -2597) + 7932)
+    b := frac_mul16(c, frac_mul16(c, -2597) + 7932)
+    (ls - lc) * 2048 + a - b
+
+## log2(val) in 1/2^frac units, rounded as the bit allocation needs.
+fn log2_frac(value int, frac int) int
+    mut l := ilog(value)
+    mut v := value
+    if v.bit_and(v - 1) == 0
+        return (l - 1).shl(frac)
+    if l > 16
+        v = (v - 1).shr(l - 16) + 1
+    else
+        v = v.shl(16 - l)
+    l = (l - 1).shl(frac)
+    mut f := frac
+    while true
+        b := v.shr(16)
+        l += b.shl(f)
+        v = (v + b).shr(b)
+        v = (v * v + 0x7FFF).shr(15)
+        if f <= 0
+            break
+        f -= 1
+    if v > 0x8000
+        return l + 1
+    l
+
+fn band_width(i int) int
+    EBANDS[i + 1] - EBANDS[i]
+
+fn band_logn(i int) int
+    log2_frac(band_width(i), BITRES)
+
+## 2^x for a float.
+fn exp2(x float) float
+    two := 2.0
+    two.pow(x)
+
+## The Laplace-like coarse energy symbol (RFC 6716 §4.3.2.1).
+fn laplace(mut d RangeDecoder, fs0 int, decay int) int
+    mut fs := fs0
+    fm := d.decode_bin(15)
+    mut v := 0
+    mut fl := 0
+    if fm >= fs
+        v += 1
+        fl = fs
+        fs = ((32768 - 32 - fs) * (16384 - decay)).shr(15) + 1
+        while fs > 1 and fm >= fl + 2 * fs
+            fs *= 2
+            fl += fs
+            fs = ((fs - 2) * decay).shr(15) + 1
+            v += 1
+        if fs <= 1
+            di := (fm - fl).shr(1)
+            v += di
+            fl += 2 * di
+        if fm < fl + fs
+            v = 0 - v
+        else
+            fl += fs
+    d.update(fl, (fl + fs).min(32768), 32768)
+    v
+
+## The CELT state kept from frame to frame (std.opus.4): band energies of
+## this and the two previous frames, the overlap and post-filter history
+## of each channel, the de-emphasis memory and the noise seed.
+pub struct CeltState
+    channels int
+    energy List[float]
+    prev1 List[float]
+    prev2 List[float]
+    hist List[List[float]]
+    deemph List[float]
+    seed int
+    pf_period int
+    pf_gain float
+    pf_tapset int
+    pf_old_period int
+    pf_old_gain float
+    pf_old_tapset int
+
+fn zeros(n int) List[float]
+    [0.0 for _ in 0..n]
+
+## The history each channel keeps: the post-filter looks back up to 1024
+## samples and the overlap runs 120 past the frame.
+HIST := 2048
+
+## A CELT decoder for `channels` channels (std.opus.4).
+pub fn celt_state(channels int) CeltState
+    CeltState(
+        channels: channels,
+        energy: [0.0 for _ in 0..2 * NB_BANDS],
+        prev1: [-28.0 for _ in 0..2 * NB_BANDS],
+        prev2: [-28.0 for _ in 0..2 * NB_BANDS],
+        hist: [zeros(HIST + OVERLAP), zeros(HIST + OVERLAP)],
+        deemph: [0.0, 0.0],
+        seed: 0,
+        pf_period: 0,
+        pf_gain: 0.0,
+        pf_tapset: 0,
+        pf_old_period: 0,
+        pf_old_gain: 0.0,
+        pf_old_tapset: 0,
+    )
+
+## Coarse band energies (RFC 6716 §4.3.2.1): a Laplace-coded residual on a
+## prediction from the previous frame and the band below.
+fn coarse_energy(
+    mut d RangeDecoder,
+    mut st CeltState,
+    start int,
+    end int,
+    intra bool,
+    lm int,
+    c int,
+    total int,
+)
+    row := (lm * 2 + (if intra then 1 else 0)) * 42
+    coef := if intra then 0.0 else PRED_COEF[lm]
+    beta := if intra then BETA_INTRA else BETA_COEF[lm]
+    mut prev := [0.0, 0.0]
+    for i in start..end
+        for ch in 0..c
+            budget := total - d.tell()
+            mut q := 0
+            if budget >= 15
+                pi := 2 * i.min(20)
+                q = laplace(mut d, E_PROB[row + pi].shl(7), E_PROB[row + pi + 1].shl(6))
+            elif budget >= 2
+                s := d.icdf(SMALL_ENERGY_ICDF, 2)
+                q = s.shr(1).bit_xor(0 - s.bit_and(1))
+            elif budget >= 1
+                q = if d.bit_logp(1) then -1 else 0
+            else
+                q = -1
+            k := ch * NB_BANDS + i
+            old := st.energy[k].max(-9.0)
+            qf := q.to_float()
+            st.energy[k] = coef * old + prev[ch] + qf
+            prev[ch] = prev[ch] + qf - beta * qf
+
+## Each band's time-frequency change (RFC 6716 §4.3.4.5).
+fn tf_decode(mut d RangeDecoder, start int, end int, transient bool, lm int, total int) List[int]
+    mut res := [0 for _ in 0..NB_BANDS]
+    mut budget := total
+    mut tell := d.tell()
+    mut logp := if transient then 2 else 4
+    reserve := lm > 0 and tell + logp + 1 <= budget
+    if reserve
+        budget -= 1
+    mut curr := 0
+    mut changed := 0
+    for i in start..end
+        if tell + logp <= budget
+            if d.bit_logp(logp)
+                curr = curr.bit_xor(1)
+            tell = d.tell()
+            changed = changed.bit_or(curr)
+        res[i] = curr
+        logp = if transient then 4 else 5
+    t := if transient then 4 else 0
+    mut select := 0
+    if reserve and TF_SELECT[lm * 8 + t + changed] != TF_SELECT[lm * 8 + t + 2 + changed]
+        select = if d.bit_logp(1) then 1 else 0
+    for i in start..end
+        res[i] = TF_SELECT[lm * 8 + t + 2 * select + res[i]]
+    res
+
+## The most bits each band can take (RFC 6716 §4.3.3).
+fn band_caps(lm int, c int) List[int]
+    [
+        (CACHE_CAPS[NB_BANDS * (2 * lm + c - 1) + i] + 64) * c * band_width(i).shl(lm) / 4
+        for i in 0..NB_BANDS
+    ]
+
+## The pulse cache entry `k` of band `band` at LM + 1 = `lm1`.
+fn cache_at(band int, lm1 int, k int) int
+    CACHE_BITS[CACHE_INDEX[lm1 * NB_BANDS + band] + k]
+
+## The most pulses a band can take for `bits` eighth bits.
+fn bits2pulses(band int, lm int, b int) int
+    mut lo := 0
+    mut hi := cache_at(band, lm + 1, 0)
+    want := b - 1
+    for _ in 0..6
+        mid := (lo + hi + 1).shr(1)
+        if cache_at(band, lm + 1, mid) >= want
+            hi = mid
+        else
+            lo = mid
+    lo_bits := if lo == 0 then -1 else cache_at(band, lm + 1, lo)
+    if want - lo_bits <= cache_at(band, lm + 1, hi) - want
+        return lo
+    hi
+
+fn pulses2bits(band int, lm int, pulses int) int
+    if pulses == 0
+        return 0
+    cache_at(band, lm + 1, pulses) + 1
+
+fn get_pulses(i int) int
+    if i < 8
+        return i
+    (8 + i.bit_and(7)).shl(i.shr(3) - 1)
+
+## Dynamic allocation boosts (RFC 6716 §4.3.3): returns the boost per band
+## and what is left of the total, in eighth bits.
+fn dynalloc(
+    mut d RangeDecoder,
+    start int,
+    end int,
+    lm int,
+    c int,
+    caps List[int],
+    total_bits int,
+)(List[int], int)
+    mut offsets := [0 for _ in 0..NB_BANDS]
+    mut logp := 6
+    mut total := total_bits.shl(BITRES)
+    mut tell := d.tell_frac()
+    for i in start..end
+        width := c * band_width(i).shl(lm)
+        quanta := width.shl(BITRES).min(width.max(48))
+        mut loop_logp := logp
+        mut boost := 0
+        while tell + loop_logp.shl(BITRES) < total and boost < caps[i]
+            flag := d.bit_logp(loop_logp)
+            tell = d.tell_frac()
+            if not flag
+                break
+            boost += quanta
+            total -= quanta
+            loop_logp = 1
+        offsets[i] = boost
+        if boost > 0
+            logp = (logp - 1).max(2)
+    (offsets, total)
+
+## What the bit allocation decides for a frame (RFC 6716 §4.3.3).
+struct Allocation
+    coded int
+    pulses List[int]
+    fine List[int]
+    priority List[int]
+    intensity int
+    dual bool
+    balance int
+
+## The bit allocation (RFC 6716 §4.3.3): `total` in eighth bits after the
+## anti-collapse reservation; reads the skip, intensity and dual-stereo
+## symbols on the way.
+fn allocate(
+    mut d RangeDecoder,
+    start int,
+    end int,
+    offsets List[int],
+    caps List[int],
+    trim int,
+    total0 int,
+    lm int,
+    c int,
+) Allocation
+    mut total := total0.max(0)
+    alloc_floor := c.shl(BITRES)
+    skip_rsv := if total >= 8 then 8 else 0
+    total -= skip_rsv
+    mut intensity_rsv := 0
+    mut dual_rsv := 0
+    if c == 2
+        intensity_rsv = LOG2_FRAC[end - start]
+        if intensity_rsv > total
+            intensity_rsv = 0
+        else
+            total -= intensity_rsv
+            dual_rsv = if total >= 8 then 8 else 0
+            total -= dual_rsv
+    mut thresh := [0 for _ in 0..NB_BANDS]
+    mut trim_off := [0 for _ in 0..NB_BANDS]
+    for j in start..end
+        nt := band_width(j)
+        thresh[j] = c.shl(BITRES).max((3 * nt).shl(lm).shl(BITRES).shr(4))
+        trim_off[j] = asr(c * nt * (trim - 5 - lm) * (end - j - 1) * lsh(1, lm + BITRES), 6)
+        if nt.shl(lm) == 1
+            trim_off[j] -= c.shl(BITRES)
+    mut lo := 1
+    mut hi := 10
+    mut psum := 0
+    mut done := false
+    mut k := 0
+    while lo <= hi
+        mid := (lo + hi).shr(1)
+        psum = 0
+        done = false
+        k = end - 1
+        while k >= start
+            nk := band_width(k)
+            mut b := (c * nk * BAND_ALLOC[mid * NB_BANDS + k]).shl(lm).shr(2)
+            if b > 0
+                b = (b + trim_off[k]).max(0)
+            b += offsets[k]
+            if b >= thresh[k] or done
+                done = true
+                psum += b.min(caps[k])
+            elif b >= c.shl(BITRES)
+                psum += c.shl(BITRES)
+            k -= 1
+        if psum > total
+            hi = mid - 1
+        else
+            lo = mid + 1
+    hi = lo
+    lo -= 1
+    mut bits1 := [0 for _ in 0..NB_BANDS]
+    mut bits2 := [0 for _ in 0..NB_BANDS]
+    mut skip_start := start
+    for j in start..end
+        nj := band_width(j)
+        mut b1 := (c * nj * BAND_ALLOC[lo * NB_BANDS + j]).shl(lm).shr(2)
+        mut b2 := 0
+        if hi >= 11
+            b2 = caps[j]
+        else
+            b2 = (c * nj * BAND_ALLOC[hi * NB_BANDS + j]).shl(lm).shr(2)
+        if b1 > 0
+            b1 = (b1 + trim_off[j]).max(0)
+        if b2 > 0
+            b2 = (b2 + trim_off[j]).max(0)
+        if lo > 0
+            b1 += offsets[j]
+        b2 += offsets[j]
+        if offsets[j] > 0
+            skip_start = j
+        bits1[j] = b1
+        bits2[j] = (b2 - b1).max(0)
+    lo = 0
+    hi = 64
+    for _ in 0..6
+        step := (lo + hi).shr(1)
+        psum = 0
+        done = false
+        k = end - 1
+        while k >= start
+            tk := bits1[k] + (step * bits2[k]).shr(6)
+            if tk >= thresh[k] or done
+                done = true
+                psum += tk.min(caps[k])
+            elif tk >= alloc_floor
+                psum += alloc_floor
+            k -= 1
+        if psum > total
+            hi = step
+        else
+            lo = step
+    psum = 0
+    done = false
+    mut bits := [0 for _ in 0..NB_BANDS]
+    k = end - 1
+    while k >= start
+        mut t := bits1[k] + (lo * bits2[k]).shr(6)
+        if t < thresh[k] and not done
+            t = if t >= alloc_floor then alloc_floor else 0
+        else
+            done = true
+        t = t.min(caps[k])
+        bits[k] = t
+        psum += t
+        k -= 1
+    mut coded := end
+    while true
+        top := coded - 1
+        if top <= skip_start
+            total += skip_rsv
+            break
+        mut left := total - psum
+        span := EBANDS[coded] - EBANDS[start]
+        percoeff := cdiv(left, span)
+        left -= span * percoeff
+        rem := (left - (EBANDS[top] - EBANDS[start])).max(0)
+        width := EBANDS[coded] - EBANDS[top]
+        mut band_bits := bits[top] + percoeff * width + rem
+        if band_bits >= thresh[top].max(alloc_floor + 8)
+            if d.bit_logp(1)
+                break
+            psum += 8
+            band_bits -= 8
+        psum -= bits[top] + intensity_rsv
+        if intensity_rsv > 0
+            intensity_rsv = LOG2_FRAC[top - start]
+        psum += intensity_rsv
+        if band_bits >= alloc_floor
+            psum += alloc_floor
+            bits[top] = alloc_floor
+        else
+            bits[top] = 0
+        coded -= 1
+    mut intensity := 0
+    if intensity_rsv > 0
+        intensity = start + d.uint(coded + 1 - start)
+    if intensity <= start
+        total += dual_rsv
+        dual_rsv = 0
+    dual := dual_rsv > 0 and d.bit_logp(1)
+    mut spare := total - psum
+    all_span := EBANDS[coded] - EBANDS[start]
+    per := cdiv(spare, all_span)
+    spare -= all_span * per
+    for j in start..coded
+        bits[j] += per * band_width(j)
+    for j in start..coded
+        extra_coef := spare.min(band_width(j))
+        bits[j] += extra_coef
+        spare -= extra_coef
+    mut fine := [0 for _ in 0..NB_BANDS]
+    mut prio := [0 for _ in 0..NB_BANDS]
+    stereo := if c > 1 then 1 else 0
+    logm := lm.shl(BITRES)
+    mut balance := 0
+    for j in start..coded
+        n := band_width(j).shl(lm)
+        bit := bits[j] + balance
+        mut excess := 0
+        if n > 1
+            excess = (bit - caps[j]).max(0)
+            bits[j] = bit - excess
+            mut den := c * n
+            if c == 2 and n > 2 and not dual and j < intensity
+                den += 1
+            nclogn := den * (band_logn(j) + logm)
+            mut offset := nclogn.shr(1) - den * 21
+            if n == 2
+                offset += den.shl(BITRES).shr(2)
+            if bits[j] + offset < (den * 2).shl(BITRES)
+                offset += nclogn.shr(2)
+            elif bits[j] + offset < (den * 3).shl(BITRES)
+                offset += nclogn.shr(3)
+            mut e := (bits[j] + offset + den.shl(BITRES - 1)).max(0)
+            e = (e / den).shr(BITRES)
+            if c * e > bits[j].shr(BITRES)
+                e = bits[j].shr(stereo).shr(BITRES)
+            e = e.min(8)
+            prio[j] = if e * den.shl(BITRES) >= bits[j] + offset then 1 else 0
+            bits[j] -= (c * e).shl(BITRES)
+            fine[j] = e
+        else
+            excess = (bit - c.shl(BITRES)).max(0)
+            bits[j] = bit - excess
+            fine[j] = 0
+            prio[j] = 1
+        if excess > 0
+            extra := excess.shr(stereo + BITRES).min(8 - fine[j])
+            fine[j] += extra
+            extra_bits := (extra * c).shl(BITRES)
+            prio[j] = if extra_bits >= excess - balance then 1 else 0
+            excess -= extra_bits
+        balance = excess
+    for j in coded..end
+        fine[j] = bits[j].shr(stereo).shr(BITRES)
+        bits[j] = 0
+        prio[j] = if fine[j] < 1 then 1 else 0
+    Allocation(
+        coded: coded,
+        pulses: bits,
+        fine: fine,
+        priority: prio,
+        intensity: intensity,
+        dual: dual,
+        balance: balance,
+    )
+
+## Pulse vectors (RFC 6716 §4.3.4.2)
+
+## U(n, k): V(n, k) = U(n, k) + U(n, k + 1) counts the integer vectors of n
+## dimensions with k pulses. Built once per band by the recurrence
+## U(n, k) = U(n - 1, k) + U(n, k - 1) + U(n - 1, k - 1).
+fn u_table(n int, k int) List[List[int]]
+    mut rows := List[List[int]]()
+    mut first := [0 for _ in 0..k + 2]
+    first[0] = 1
+    rows.push(first)
+    for i in 1..n + 1
+        mut row := [0 for _ in 0..k + 2]
+        for j in 1..k + 2
+            row[j] = rows[i - 1][j] + row[j - 1] + rows[i - 1][j - 1]
+        rows.push(row)
+    rows
+
+## The vector with index `index` among those of n dimensions and k pulses:
+## per dimension the sign splits the index at U(n, k + 1), then the pulses
+## left are the largest k' with U(n, k') <= index.
+fn pvq_vector(n0 int, k0 int, index int, u List[List[int]]) List[int]
+    mut y := List[int]()
+    mut n := n0
+    mut k := k0
+    mut i := index
+    while n > 1
+        neg := i >= u[n][k + 1]
+        if neg
+            i -= u[n][k + 1]
+        mut kk := k
+        while kk > 0 and u[n][kk] > i
+            kk -= 1
+        i -= u[n][kk]
+        v := k - kk
+        y.push(if neg then 0 - v else v)
+        k = kk
+        n -= 1
+    y.push(if i != 0 then 0 - k else k)
+    y
+
+fn decode_pulses(mut d RangeDecoder, n int, k int) List[int]
+    u := u_table(n, k)
+    count := u[n][k] + u[n][k + 1]
+    pvq_vector(n, k, d.uint(count), u)
+
+## One pass of the spreading rotation over `x[start..start + n]`.
+fn rotate_pass(mut x List[float], start int, n int, stride int, c float, s float)
+    for i in start..start + n - stride
+        a := x[i]
+        b := x[i + stride]
+        x[i + stride] = c * b + s * a
+        x[i] = c * a - s * b
+    mut j := start + n - 2 * stride - 1
+    while j >= start
+        a2 := x[j]
+        b2 := x[j + stride]
+        x[j + stride] = c * b2 + s * a2
+        x[j] = c * a2 - s * b2
+        j -= 1
+
+## Undoes the encoder's spreading rotation (RFC 6716 §4.3.4.3).
+fn spread_rotation(mut x List[float], n int, blocks int, k int, spread int)
+    if 2 * k >= n or spread == 0
+        return
+    factor := [15, 10, 5][spread - 1]
+    gain := n.to_float() / (n + factor * k).to_float()
+    theta := 0.5 * gain * gain
+    half_pi := 1.5707963267948966
+    c := (half_pi * theta).cos()
+    s := (half_pi * (1.0 - theta)).cos()
+    mut stride2 := 0
+    if n >= 8 * blocks
+        stride2 = 1
+        while (stride2 * stride2 + stride2) * blocks + blocks.shr(2) < n
+            stride2 += 1
+    length := n / blocks
+    for i in 0..blocks
+        if stride2 > 0
+            rotate_pass(mut x, i * length, length, stride2, s, c)
+        rotate_pass(mut x, i * length, length, 1, c, s)
+
+## A band of decoded pulses, normalised to `gain` and unrotated, with its
+## collapse mask: bit i set when short block i got a pulse.
+fn pvq_unquant(
+    mut d RangeDecoder,
+    n int,
+    k int,
+    spread int,
+    blocks int,
+    gain float,
+)(List[float], int)
+    y := decode_pulses(mut d, n, k)
+    mut ryy := 0
+    for v in y
+        ryy += v * v
+    g := gain / ryy.to_float().sqrt()
+    mut x := [g * v.to_float() for v in y]
+    spread_rotation(mut x, n, blocks, k, spread)
+    if blocks <= 1
+        return (x, 1)
+    n0 := n / blocks
+    mut cm := 0
+    for i in 0..blocks
+        for j in 0..n0
+            if y[i * n0 + j] != 0
+                cm = cm.bit_or(lsh(1, i))
+    (x, cm)
+
+fn renormalise(x List[float], gain float) List[float]
+    mut e := 1e-15
+    for v in x
+        e += v * v
+    g := gain / e.sqrt()
+    [v * g for v in x]
+
+## Splits and recursion (RFC 6716 §4.3.4.4)
+
+## The bands' coding context for one frame.
+struct BandCtx
+    band int
+    intensity int
+    spread int
+    tf_change int
+    remaining int
+    seed int
+
+## A band split: the angle, the mid and side gains in Q15, the bits the
+## angle took and what is left.
+struct Split
+    inv bool
+    imid int
+    iside int
+    delta int
+    itheta int
+    qalloc int
+    b int
+    fill int
+
+EXP2_8 := [16384, 17866, 19483, 21247, 23170, 25267, 27554, 30048]
+
+fn compute_qn(n int, b int, offset int, pulse_cap int, stereo bool) int
+    mut n2 := 2 * n - 1
+    if stereo and n == 2
+        n2 -= 1
+    mut qb := cdiv(b + n2 * offset, n2)
+    qb = qb.min(b - pulse_cap - 32)
+    qb = qb.min(64)
+    if qb < 4
+        return 1
+    qn := EXP2_8[qb.bit_and(7)].shr(14 - qb.shr(BITRES))
+    (qn + 1).shr(1).shl(1)
+
+fn isqrt(v int) int
+    mut r := v.to_float().sqrt().to_int()
+    while r * r > v
+        r -= 1
+    while (r + 1) * (r + 1) <= v
+        r += 1
+    r
+
+fn decode_theta(
+    mut d RangeDecoder,
+    mut ctx BandCtx,
+    n int,
+    b int,
+    blocks int,
+    b0 int,
+    lm int,
+    stereo bool,
+    fill0 int,
+) Split
+    i := ctx.band
+    pulse_cap := band_logn(i) + lm.shl(BITRES)
+    offset := pulse_cap.shr(1) - (if stereo and n == 2 then 16 else 4)
+    mut qn := compute_qn(n, b, offset, pulse_cap, stereo)
+    if stereo and i >= ctx.intensity
+        qn = 1
+    tell := d.tell_frac()
+    mut itheta := 0
+    mut inv := false
+    if qn != 1
+        if stereo and n > 2
+            p0 := 3
+            x0 := qn / 2
+            ft := p0 * (x0 + 1) + x0
+            fs := d.decode(ft)
+            mut x := 0
+            if fs < (x0 + 1) * p0
+                x = fs / p0
+            else
+                x = x0 + 1 + (fs - (x0 + 1) * p0)
+            mut lo := 0
+            mut hi := 0
+            if x <= x0
+                lo = p0 * x
+                hi = p0 * (x + 1)
+            else
+                lo = (x - 1 - x0) + (x0 + 1) * p0
+                hi = (x - x0) + (x0 + 1) * p0
+            d.update(lo, hi, ft)
+            itheta = x
+        elif b0 > 1 or stereo
+            itheta = d.uint(qn + 1)
+        else
+            half := qn.shr(1)
+            ft := (half + 1) * (half + 1)
+            fm := d.decode(ft)
+            mut fs := 0
+            mut fl := 0
+            if fm < (half * (half + 1)).shr(1)
+                itheta = (isqrt(8 * fm + 1) - 1).shr(1)
+                fs = itheta + 1
+                fl = (itheta * (itheta + 1)).shr(1)
+            else
+                itheta = (2 * (qn + 1) - isqrt(8 * (ft - fm - 1) + 1)).shr(1)
+                fs = qn + 1 - itheta
+                fl = ft - ((qn + 1 - itheta) * (qn + 2 - itheta)).shr(1)
+            d.update(fl, fl + fs, ft)
+        itheta = itheta * 16384 / qn
+    elif stereo
+        if b > 16 and ctx.remaining > 16
+            inv = d.bit_logp(2)
+        itheta = 0
+    qalloc := d.tell_frac() - tell
+    mut s := Split(
+        inv: inv,
+        imid: 0,
+        iside: 0,
+        delta: 0,
+        itheta: itheta,
+        qalloc: qalloc,
+        b: b - qalloc,
+        fill: fill0,
+    )
+    if itheta == 0
+        s.imid = 32767
+        s.delta = -16384
+        s.fill = s.fill.bit_and(lsh(1, blocks) - 1)
+    elif itheta == 16384
+        s.iside = 32767
+        s.delta = 16384
+        s.fill = s.fill.bit_and((lsh(1, blocks) - 1).shl(blocks))
+    else
+        s.imid = bitexact_cos(itheta)
+        s.iside = bitexact_cos(16384 - itheta)
+        s.delta = frac_mul16((n - 1).shl(7), bitexact_log2tan(s.iside, s.imid))
+    s
+
+fn haar(x0 List[float], n0 int, stride int) List[float]
+    mut x := x0
+    for i in 0..stride
+        for j in 0..n0.shr(1)
+            a := INV_SQRT2 * x[stride * 2 * j + i]
+            b := INV_SQRT2 * x[stride * (2 * j + 1) + i]
+            x[stride * 2 * j + i] = a + b
+            x[stride * (2 * j + 1) + i] = a - b
+    x
+
+## Where short block `i` of `stride` goes in a Hadamard (de)interleave.
+fn block_order(stride int, i int, hadamard bool) int
+    if hadamard
+        return HADAMARD_ORDER[stride - 2 + i]
+    i
+
+fn deinterleave(x List[float], n0 int, stride int, hadamard bool) List[float]
+    mut out := [0.0 for _ in 0..n0 * stride]
+    for i in 0..stride
+        o := block_order(stride, i, hadamard)
+        for j in 0..n0
+            out[o * n0 + j] = x[j * stride + i]
+    out
+
+fn interleave(x List[float], n0 int, stride int, hadamard bool) List[float]
+    mut out := [0.0 for _ in 0..n0 * stride]
+    for i in 0..stride
+        o := block_order(stride, i, hadamard)
+        for j in 0..n0
+            out[j * stride + i] = x[o * n0 + j]
+    out
+
+## Copies `src` into row `r` of `rows` from `at`.
+fn put_row(mut rows List[List[float]], r int, at int, src List[float])
+    for i in 0..src.len()
+        rows[r][at + i] = src[i]
+
+## A band of one coefficient per channel: only signs.
+fn band_n1(mut d RangeDecoder, mut ctx BandCtx, count int) List[float]
+    mut out := List[float]()
+    for _ in 0..count
+        mut sign := 0
+        if ctx.remaining >= lsh(1, BITRES)
+            sign = d.bits(1)
+            ctx.remaining -= lsh(1, BITRES)
+        out.push(if sign == 1 then -1.0 else 1.0)
+    out
+
+## Mid bits of a split: (b - delta) / 2 kept within 0..b.
+fn split_bits(b int, delta int) int
+    ((b - delta) / 2).min(b).max(0)
+
+## A mono partition: split in two by an angle, or code its pulses. An empty
+## `lowband` means no folding source.
+fn partition(
+    mut d RangeDecoder,
+    mut ctx BandCtx,
+    n0 int,
+    b0 int,
+    blocks0 int,
+    lowband List[float],
+    lm0 int,
+    gain float,
+    fill0 int,
+)(List[float], int)
+    i := ctx.band
+    mut n := n0
+    mut b := b0
+    mut blocks := blocks0
+    mut lm := lm0
+    mut fill := fill0
+    if lm != -1 and n > 2 and b > cache_at(i, lm + 1, cache_at(i, lm + 1, 0)) + 12
+        n = n.shr(1)
+        lm -= 1
+        if blocks == 1
+            fill = fill.bit_and(1).bit_or(fill.shl(1))
+        blocks = (blocks + 1).shr(1)
+        s := decode_theta(mut d, mut ctx, n, b, blocks, blocks0, lm, false, fill)
+        b = s.b
+        fill = s.fill
+        mid := s.imid.to_float() / 32768.0
+        side := s.iside.to_float() / 32768.0
+        mut delta := s.delta
+        if blocks0 > 1 and s.itheta.bit_and(0x3FFF) != 0
+            if s.itheta > 8192
+                delta -= asr(delta, 4 - lm)
+            else
+                delta = (delta + n.shl(BITRES).shr(5 - lm)).min(0)
+        mut mbits := split_bits(b, delta)
+        mut sbits := b - mbits
+        ctx.remaining -= s.qalloc
+        low1 := if lowband.is_empty() then lowband else lowband[..n]
+        low2 := if lowband.is_empty() then lowband else lowband[n..]
+        before := ctx.remaining
+        if mbits >= sbits
+            pm := partition(mut d, mut ctx, n, mbits, blocks, low1, lm, gain * mid, fill)
+            rebalance := mbits - (before - ctx.remaining)
+            if rebalance > 24 and s.itheta != 0
+                sbits += rebalance - 24
+            ps := partition(
+                mut d,
+                mut ctx,
+                n,
+                sbits,
+                blocks,
+                low2,
+                lm,
+                gain * side,
+                fill.shr(blocks),
+            )
+            mut xa := pm.0
+            xa.extend(ps.0)
+            return (xa, pm.1.bit_or(ps.1.shl(blocks0.shr(1))))
+        ps2 := partition(mut d, mut ctx, n, sbits, blocks, low2, lm, gain * side, fill.shr(blocks))
+        rebalance2 := sbits - (before - ctx.remaining)
+        if rebalance2 > 24 and s.itheta != 16384
+            mbits += rebalance2 - 24
+        pm2 := partition(mut d, mut ctx, n, mbits, blocks, low1, lm, gain * mid, fill)
+        mut xb := pm2.0
+        xb.extend(ps2.0)
+        return (xb, pm2.1.bit_or(ps2.1.shl(blocks0.shr(1))))
+    mut q := bits2pulses(i, lm, b)
+    mut curr := pulses2bits(i, lm, q)
+    ctx.remaining -= curr
+    while ctx.remaining < 0 and q > 0
+        ctx.remaining += curr
+        q -= 1
+        curr = pulses2bits(i, lm, q)
+        ctx.remaining -= curr
+    if q != 0
+        return pvq_unquant(mut d, n, get_pulses(q), ctx.spread, blocks, gain)
+    mask := lsh(1, blocks) - 1
+    fill = fill.bit_and(mask)
+    if fill == 0
+        return ([0.0 for _ in 0..n], 0)
+    mut x := List[float]()
+    if lowband.is_empty()
+        for _ in 0..n
+            ctx.seed = lcg(ctx.seed)
+            v := if ctx.seed < 0x80000000 then ctx.seed else ctx.seed - 0x100000000
+            x.push(asr(v, 20).to_float())
+        return (renormalise(x, gain), mask)
+    for j in 0..n
+        ctx.seed = lcg(ctx.seed)
+        x.push(lowband[j] + (if ctx.seed.bit_and(0x8000) != 0 then 1.0 / 256.0 else -1.0 / 256.0))
+    (renormalise(x, gain), fill)
+
+## A mono band with its time-frequency change (RFC 6716 §4.3.4.5): the
+## coefficients, the collapse mask and, when `want_out`, the folding source
+## for later bands (empty otherwise).
+fn band_mono(
+    mut d RangeDecoder,
+    mut ctx BandCtx,
+    n int,
+    b int,
+    blocks0 int,
+    lowband0 List[float],
+    lm int,
+    gain float,
+    fill0 int,
+    want_out bool,
+)(List[float], int, List[float])
+    if n == 1
+        one := band_n1(mut d, mut ctx, 1)
+        return (one, 1, if want_out then one else List[float]())
+    mut tf := ctx.tf_change
+    long_blocks := blocks0 == 1
+    mut blocks := blocks0
+    mut n_b := n / blocks
+    recombine := tf.max(0)
+    mut lowband := lowband0
+    mut fill := fill0
+    for k in 0..recombine
+        if not lowband.is_empty()
+            lowband = haar(lowband, n.shr(k), lsh(1, k))
+        fill = BIT_INTERLEAVE[fill.bit_and(0xF)].bit_or(BIT_INTERLEAVE[fill.shr(4)].shl(2))
+    blocks = blocks.shr(recombine)
+    n_b = n_b.shl(recombine)
+    mut time_divide := 0
+    while n_b.bit_and(1) == 0 and tf < 0
+        if not lowband.is_empty()
+            lowband = haar(lowband, n_b, blocks)
+        fill = fill.bit_or(fill.shl(blocks))
+        blocks = blocks.shl(1)
+        n_b = n_b.shr(1)
+        time_divide += 1
+        tf += 1
+    split_blocks := blocks
+    split_nb := n_b
+    if split_blocks > 1 and not lowband.is_empty()
+        lowband = deinterleave(
+            lowband,
+            n_b.shr(recombine),
+            split_blocks.shl(recombine),
+            long_blocks,
+        )
+    pr := partition(mut d, mut ctx, n, b, blocks, lowband, lm, gain, fill)
+    mut x := pr.0
+    mut cm := pr.1
+    if split_blocks > 1
+        x = interleave(x, n_b.shr(recombine), split_blocks.shl(recombine), long_blocks)
+    n_b = split_nb
+    blocks = split_blocks
+    for _ in 0..time_divide
+        blocks = blocks.shr(1)
+        n_b = n_b.shl(1)
+        cm = cm.bit_or(cm.shr(blocks))
+        x = haar(x, n_b, blocks)
+    for k2 in 0..recombine
+        cm = BIT_DEINTERLEAVE[cm]
+        x = haar(x, n.shr(k2), lsh(1, k2))
+    blocks = blocks.shl(recombine)
+    mut out := List[float]()
+    if want_out
+        root := n.to_float().sqrt()
+        out = [root * v for v in x]
+    (x, cm.bit_and(lsh(1, blocks) - 1), out)
+
+## A stereo band: mid and side split by an angle, then merged back to left
+## and right (RFC 6716 §4.3.4.4).
+fn band_stereo(
+    mut d RangeDecoder,
+    mut ctx BandCtx,
+    n int,
+    b0 int,
+    blocks int,
+    lowband List[float],
+    lm int,
+    fill0 int,
+    want_out bool,
+)(List[float], List[float], int, List[float])
+    if n == 1
+        xy := band_n1(mut d, mut ctx, 2)
+        return ([xy[0]], [xy[1]], 1, if want_out then [xy[0]] else List[float]())
+    s := decode_theta(mut d, mut ctx, n, b0, blocks, blocks, lm, true, fill0)
+    b := s.b
+    fill := s.fill
+    mid := s.imid.to_float() / 32768.0
+    side := s.iside.to_float() / 32768.0
+    mut xs := List[float]()
+    mut ys := List[float]()
+    mut cm := 0
+    mut out := List[float]()
+    if n == 2
+        sbits := if s.itheta != 0 and s.itheta != 16384 then lsh(1, BITRES) else 0
+        mbits := b - sbits
+        swap := s.itheta > 8192
+        ctx.remaining -= s.qalloc + sbits
+        mut sign := 1.0
+        if sbits != 0 and d.bits(1) == 1
+            sign = -1.0
+        m2 := band_mono(mut d, mut ctx, n, mbits, blocks, lowband, lm, 1.0, fill0, want_out)
+        x2 := m2.0
+        cm = m2.1
+        out = m2.2
+        y2 := [0.0 - sign * x2[1], sign * x2[0]]
+        a := if swap then y2 else x2
+        c := if swap then x2 else y2
+        l0 := mid * a[0] - side * c[0]
+        l1 := mid * a[1] - side * c[1]
+        r0 := mid * a[0] + side * c[0]
+        r1 := mid * a[1] + side * c[1]
+        xs = [l0, l1]
+        ys = [r0, r1]
+    else
+        mut mbits2 := split_bits(b, s.delta)
+        mut sbits2 := b - mbits2
+        ctx.remaining -= s.qalloc
+        before := ctx.remaining
+        mut cs := 0
+        if mbits2 >= sbits2
+            mm := band_mono(mut d, mut ctx, n, mbits2, blocks, lowband, lm, 1.0, fill, want_out)
+            rebalance := mbits2 - (before - ctx.remaining)
+            if rebalance > 24 and s.itheta != 0
+                sbits2 += rebalance - 24
+            ms := band_mono(
+                mut d,
+                mut ctx,
+                n,
+                sbits2,
+                blocks,
+                List[float](),
+                lm,
+                side,
+                fill.shr(blocks),
+                false,
+            )
+            xs = mm.0
+            cm = mm.1
+            out = mm.2
+            ys = ms.0
+            cs = ms.1
+        else
+            ms2 := band_mono(
+                mut d,
+                mut ctx,
+                n,
+                sbits2,
+                blocks,
+                List[float](),
+                lm,
+                side,
+                fill.shr(blocks),
+                false,
+            )
+            rebalance2 := sbits2 - (before - ctx.remaining)
+            if rebalance2 > 24 and s.itheta != 16384
+                mbits2 += rebalance2 - 24
+            mm2 := band_mono(mut d, mut ctx, n, mbits2, blocks, lowband, lm, 1.0, fill, want_out)
+            xs = mm2.0
+            cm = mm2.1
+            out = mm2.2
+            ys = ms2.0
+            cs = ms2.1
+        cm = cm.bit_or(cs)
+        mut xp := 0.0
+        mut side_e := 0.0
+        for j in 0..n
+            xp += ys[j] * xs[j]
+            side_e += ys[j] * ys[j]
+        xp = mid * xp
+        el := mid * mid + side_e - 2.0 * xp
+        er := mid * mid + side_e + 2.0 * xp
+        if er < 6e-4 or el < 6e-4
+            ys = xs
+        else
+            lg := 1.0 / el.sqrt()
+            rg := 1.0 / er.sqrt()
+            left := [lg * (mid * xs[j] - ys[j]) for j in 0..n]
+            right := [rg * (mid * xs[j] + ys[j]) for j in 0..n]
+            xs = left
+            ys = right
+    if s.inv
+        ys = [0.0 - v for v in ys]
+    (xs, ys, cm, out)
+
+## The shape of every band (RFC 6716 §4.3.4): the normalised coefficients
+## of each channel and the collapse masks, flat by channel then band.
+fn all_bands(
+    mut d RangeDecoder,
+    mut st CeltState,
+    start int,
+    end int,
+    c int,
+    lm int,
+    short_blocks bool,
+    spread int,
+    dual0 bool,
+    intensity int,
+    tf_res List[int],
+    total_bits int,
+    balance0 int,
+    al Allocation,
+)(List[List[float]], List[int])
+    m := lsh(1, lm)
+    blocks := if short_blocks then m else 1
+    norm_offset := m * EBANDS[start]
+    span := m * EBANDS[NB_BANDS - 1] - norm_offset
+    mut norm := [zeros(span), zeros(span)]
+    mut xs := [zeros(m * EBANDS[NB_BANDS]) for _ in 0..c]
+    mut masks := [0 for _ in 0..2 * NB_BANDS]
+    mut ctx := BandCtx(
+        band: start,
+        intensity: intensity,
+        spread: spread,
+        tf_change: 0,
+        remaining: 0,
+        seed: st.seed,
+    )
+    mut dual := dual0
+    mut balance := balance0
+    mut lowband_offset := 0
+    mut update_lowband := true
+    for i in start..end
+        ctx.band = i
+        last := i == end - 1
+        n := m * band_width(i)
+        tell := d.tell_frac()
+        if i != start
+            balance -= tell
+        remaining := total_bits - tell - 1
+        ctx.remaining = remaining
+        mut b := 0
+        if i <= al.coded - 1
+            cb := balance / (al.coded - i).min(3)
+            b = (remaining + 1).min(al.pulses[i] + cb).min(16383).max(0)
+        if (m * EBANDS[i] - n >= m * EBANDS[start] or i == start + 1)
+            and (update_lowband or lowband_offset == 0)
+            lowband_offset = i
+        if i == start + 1
+            n1 := m * band_width(start)
+            n2 := m * band_width(start + 1)
+            for ch in 0..(if dual then 2 else 1)
+                for j in 0..n2 - n1
+                    norm[ch][n1 + j] = norm[ch][2 * n1 - n2 + j]
+        ctx.tf_change = tf_res[i]
+        mut effective := -1
+        mut x_cm := lsh(1, blocks) - 1
+        mut y_cm := x_cm
+        if lowband_offset != 0 and (spread != 3 or blocks > 1 or tf_res[i] < 0)
+            effective = (m * EBANDS[lowband_offset] - norm_offset - n).max(0)
+            mut fs := lowband_offset - 1
+            while m * EBANDS[fs] > effective + norm_offset
+                fs -= 1
+            mut fe := lowband_offset
+            while fe < i and m * EBANDS[fe] < effective + norm_offset + n
+                fe += 1
+            x_cm = 0
+            y_cm = 0
+            for f in fs..fe.max(fs + 1)
+                x_cm = x_cm.bit_or(masks[f])
+                y_cm = y_cm.bit_or(masks[(c - 1) * NB_BANDS + f])
+        if dual and i == intensity
+            dual = false
+            for j in 0..m * EBANDS[i] - norm_offset
+                norm[0][j] = 0.5 * (norm[0][j] + norm[1][j])
+        at := m * EBANDS[i] - norm_offset
+        low0 := if effective == -1 then List[float]() else norm[0][effective..effective + n]
+        if dual
+            low1 := if effective == -1 then List[float]() else norm[1][effective..effective + n]
+            bx := band_mono(mut d, mut ctx, n, b / 2, blocks, low0, lm, 1.0, x_cm, not last)
+            by := band_mono(mut d, mut ctx, n, b / 2, blocks, low1, lm, 1.0, y_cm, not last)
+            put_row(mut xs, 0, m * EBANDS[i], bx.0)
+            put_row(mut xs, 1, m * EBANDS[i], by.0)
+            x_cm = bx.1
+            y_cm = by.1
+            if not last
+                put_row(mut norm, 0, at, bx.2)
+                put_row(mut norm, 1, at, by.2)
+        elif c == 2
+            bs := band_stereo(mut d, mut ctx, n, b, blocks, low0, lm, x_cm.bit_or(y_cm), not last)
+            put_row(mut xs, 0, m * EBANDS[i], bs.0)
+            put_row(mut xs, 1, m * EBANDS[i], bs.1)
+            x_cm = bs.2
+            y_cm = x_cm
+            if not last
+                put_row(mut norm, 0, at, bs.3)
+        else
+            bm := band_mono(
+                mut d,
+                mut ctx,
+                n,
+                b,
+                blocks,
+                low0,
+                lm,
+                1.0,
+                x_cm.bit_or(y_cm),
+                not last,
+            )
+            put_row(mut xs, 0, m * EBANDS[i], bm.0)
+            x_cm = bm.1
+            y_cm = x_cm
+            if not last
+                put_row(mut norm, 0, at, bm.2)
+        masks[i] = x_cm.bit_and(0xFF)
+        masks[(c - 1) * NB_BANDS + i] = y_cm.bit_and(0xFF)
+        balance += al.pulses[i] + tell
+        update_lowband = b > n.shl(BITRES)
+    st.seed = ctx.seed
+    (xs, masks)
+
+## Fine energy (RFC 6716 §4.3.2.2): `fine[i]` raw bits per band and channel.
+fn fine_energy(mut d RangeDecoder, mut st CeltState, start int, end int, fine List[int], c int)
+    for i in start..end
+        if fine[i] > 0
+            for ch in 0..c
+                q := d.bits(fine[i])
+                step := lsh(1, 14 - fine[i]).to_float() / 16384.0
+                st.energy[ch * NB_BANDS + i] += (q.to_float() + 0.5) * step - 0.5
+
+## The leftover bits refine the energies once more, by priority (§4.3.2.2).
+fn finalise_energy(
+    mut d RangeDecoder,
+    mut st CeltState,
+    start int,
+    end int,
+    al Allocation,
+    bits_left0 int,
+    c int,
+)
+    mut bits_left := bits_left0
+    for p in 0..2
+        for i in start..end
+            if bits_left >= c and al.fine[i] < 8 and al.priority[i] == p
+                for ch in 0..c
+                    q := d.bits(1)
+                    half := lsh(1, 13 - al.fine[i]).to_float() / 16384.0
+                    st.energy[ch * NB_BANDS + i] += (q.to_float() - 0.5) * half
+                    bits_left -= 1
+
+## Fills the short blocks a transient left empty with noise at a level from
+## the band's energy history (RFC 6716 §4.3.5).
+fn anti_collapse(
+    mut xs List[List[float]],
+    masks List[int],
+    lm int,
+    c int,
+    start int,
+    end int,
+    st CeltState,
+    pulses List[int],
+    seed0 int,
+) int
+    mut seed := seed0
+    for i in start..end
+        n0 := band_width(i)
+        depth := ((1 + pulses[i]) / n0).shr(lm)
+        thresh := 0.5 * exp2(-0.125 * depth.to_float())
+        sqrt_1 := 1.0 / n0.shl(lm).to_float().sqrt()
+        for ch in 0..c
+            mut p1 := st.prev1[ch * NB_BANDS + i]
+            mut p2 := st.prev2[ch * NB_BANDS + i]
+            if c == 1
+                p1 = p1.max(st.prev1[NB_BANDS + i])
+                p2 = p2.max(st.prev2[NB_BANDS + i])
+            ediff := (st.energy[ch * NB_BANDS + i] - p1.min(p2)).max(0.0)
+            mut r := 2.0 * exp2(0.0 - ediff)
+            if lm == 3
+                r *= 1.41421356
+            r = r.min(thresh) * sqrt_1
+            base := EBANDS[i].shl(lm)
+            mut refill := false
+            for k in 0..lsh(1, lm)
+                if masks[ch * NB_BANDS + i].bit_and(lsh(1, k)) == 0
+                    for j in 0..n0
+                        seed = lcg(seed)
+                        xs[ch][base + j.shl(lm) + k] = if seed.bit_and(0x8000)
+                            != 0 then r else 0.0 - r
+                    refill = true
+            if refill
+                width := n0.shl(lm)
+                put_row(mut xs, ch, base, renormalise(xs[ch][base..base + width], 1.0))
+    seed
+
+## Scales each band back to its energy: x * 2^(log energy + mean).
+fn denormalise(
+    x List[float],
+    st CeltState,
+    ch int,
+    start int,
+    end int,
+    m int,
+    silence bool,
+) List[float]
+    mut f := [0.0 for _ in 0..m * 120]
+    if silence
+        return f
+    for i in start..end
+        g := exp2((st.energy[ch * NB_BANDS + i] + E_MEANS[i]).min(32.0))
+        for j in m * EBANDS[i]..m * EBANDS[i + 1]
+            f[j] = x[j] * g
+    f
+
+## Synthesis (RFC 6716 §4.3.6-4.3.7)
+
+PI := 3.141592653589793
+
+## The low-overlap window: sin(pi/2 sin^2(pi/2 (i + 0.5) / 120)).
+fn window_at(i int) float
+    t := (0.5 * PI * (i.to_float() + 0.5) / OVERLAP.to_float()).sin()
+    (0.5 * PI * t * t).sin()
+
+## The window, once.
+WINDOW := [window_at(i) for i in 0..OVERLAP]
+
+## What a DCT-IV of size `n` needs, computed once: a mixed-radix FFT of
+## size n/2 (its radices, input order and twiddles) and the pre- and
+## post-rotations that turn it into the DCT-IV.
+struct Dct4Plan
+    n int
+    radices List[int]
+    order List[int]
+    tw_cos List[float]
+    tw_sin List[float]
+    pre_cos List[float]
+    pre_sin List[float]
+    post_cos List[float]
+    post_sin List[float]
+
+fn dct4_plan(n int) Dct4Plan
+    h := n / 2
+    mut radices := List[int]()
+    mut rest := h
+    for p in [4, 2, 3, 5]
+        while rest % p == 0
+            radices.push(p)
+            rest = rest / p
+    ## The input order: split into interleaved subsequences, outer radix
+    ## first, down to single samples.
+    mut groups := [[i for i in 0..h]]
+    for p2 in radices
+        mut next := List[List[int]]()
+        for g in groups
+            for q in 0..p2
+                mut sub := List[int]()
+                mut j := q
+                while j < g.len()
+                    sub.push(g[j])
+                    j += p2
+                next.push(sub)
+        groups = next
+    mut order := List[int]()
+    for g2 in groups
+        order.extend(g2)
+    hf := h.to_float()
+    nf := n.to_float()
+    Dct4Plan(
+        n: n,
+        radices: radices,
+        order: order,
+        tw_cos: [(2.0 * PI * j.to_float() / hf).cos() for j in 0..h],
+        tw_sin: [(2.0 * PI * j.to_float() / hf).sin() for j in 0..h],
+        pre_cos: [(PI * (4 * k + 1).to_float() / (4.0 * nf)).cos() for k in 0..h],
+        pre_sin: [(PI * (4 * k + 1).to_float() / (4.0 * nf)).sin() for k in 0..h],
+        post_cos: [(PI * u.to_float() / nf).cos() for u in 0..h],
+        post_sin: [(PI * u.to_float() / nf).sin() for u in 0..h],
+    )
+
+## The plans for the four CELT block sizes, by LM.
+PLANS := [dct4_plan(120), dct4_plan(240), dct4_plan(480), dct4_plan(960)]
+
+## The FFT of `re`/`im` in place: decimation in time over the plan's
+## radices, innermost first; W = cos - i sin.
+fn fft(mut re List[float], mut im List[float], pl Dct4Plan)
+    h := pl.n / 2
+    mut tr := [0.0, 0.0, 0.0, 0.0, 0.0]
+    mut ti := [0.0, 0.0, 0.0, 0.0, 0.0]
+    mut m := 1
+    mut r := pl.radices.len() - 1
+    while r >= 0
+        p := pl.radices[r]
+        pm := p * m
+        step := h / pm
+        span := h / p
+        mut g := 0
+        while g < h
+            for k in 0..m
+                for q in 0..p
+                    a := re[g + q * m + k]
+                    b := im[g + q * m + k]
+                    t := (q * k * step) % h
+                    c := pl.tw_cos[t]
+                    s := pl.tw_sin[t]
+                    tr[q] = a * c + b * s
+                    ti[q] = b * c - a * s
+                for o in 0..p
+                    mut ar := 0.0
+                    mut ai := 0.0
+                    for q2 in 0..p
+                        t2 := (q2 * o * span) % h
+                        c2 := pl.tw_cos[t2]
+                        s2 := pl.tw_sin[t2]
+                        ar += tr[q2] * c2 + ti[q2] * s2
+                        ai += ti[q2] * c2 - tr[q2] * s2
+                    re[g + k + m * o] = ar
+                    im[g + k + m * o] = ai
+            g += pm
+        m = pm
+        r -= 1
+
+## The DCT-IV of `n` coefficients taken every `stride` from `from`:
+## y[u] = sum x[k] cos(pi/n (u + 1/2)(k + 1/2)), through an FFT of n/2.
+fn dct4(x List[float], from int, stride int, pl Dct4Plan) List[float]
+    n := pl.n
+    h := n / 2
+    mut re := [0.0 for _ in 0..h]
+    mut im := [0.0 for _ in 0..h]
+    for k2 in 0..h
+        j := pl.order[k2]
+        a2 := x[from + 2 * j * stride]
+        b2 := x[from + (n - 1 - 2 * j) * stride]
+        c2 := pl.pre_cos[j]
+        s2 := pl.pre_sin[j]
+        re[k2] = a2 * c2 + b2 * s2
+        im[k2] = b2 * c2 - a2 * s2
+    fft(mut re, mut im, pl)
+    mut y := [0.0 for _ in 0..n]
+    for u in 0..h
+        c3 := pl.post_cos[u]
+        s3 := pl.post_sin[u]
+        y[2 * u] = re[u] * c3 + im[u] * s3
+        y[n - 1 - 2 * u] = re[u] * s3 - im[u] * c3
+    y
+
+## Adds the windowed inverse MDCT of one block into `out` from `at`: the
+## 2n-sample output's windowed middle n + 120 samples (RFC 6716 §4.3.7).
+fn imdct_add(mut out List[float], at int, coefs List[float], from int, stride int, pl Dct4Plan)
+    n := pl.n
+    y := dct4(coefs, from, stride, pl)
+    z := (n - OVERLAP) / 2
+    half := n / 2
+    for t in 0..n + OVERLAP
+        u := z + t + half
+        mut v := 0.0
+        if u < n
+            v = y[u]
+        elif u < 2 * n
+            v = 0.0 - y[2 * n - 1 - u]
+        else
+            v = 0.0 - y[u - 2 * n]
+        mut w := 1.0
+        if t < OVERLAP
+            w = WINDOW[t]
+        elif t >= n
+            w = WINDOW[n + OVERLAP - 1 - t]
+        out[at + t] += v * w
+
+## The pitch post-filter over x[at..at + n], cross-faded from the old
+## (period, gain, tapset) to the new over the first 120 samples
+## (RFC 6716 §4.3.7.1). It runs in place, so it feeds back on itself.
+fn comb(mut x List[float], at int, n int, t0 int, t1 int, g0 float, g1 float, tap0 int, tap1 int)
+    if g0 == 0.0 and g1 == 0.0
+        return
+    a00 := g0 * TAPS[tap0 * 3]
+    a01 := g0 * TAPS[tap0 * 3 + 1]
+    a02 := g0 * TAPS[tap0 * 3 + 2]
+    a10 := g1 * TAPS[tap1 * 3]
+    a11 := g1 * TAPS[tap1 * 3 + 1]
+    a12 := g1 * TAPS[tap1 * 3 + 2]
+    for i in 0..n
+        p := at + i
+        mut f0 := 0.0
+        mut f1 := 1.0
+        if i < OVERLAP
+            w := WINDOW[i]
+            f1 = w * w
+            f0 = 1.0 - f1
+        mut y := x[p]
+        if f0 != 0.0
+            q := p - t0
+            y += f0 * (a00 * x[q] + a01 * (x[q + 1] + x[q - 1]) + a02 * (x[q + 2] + x[q - 2]))
+        r := p - t1
+        y += f1 * (a10 * x[r] + a11 * (x[r + 1] + x[r - 1]) + a12 * (x[r + 2] + x[r - 2]))
+        x[p] = y
+
+## The last CELT band coded at each Opus bandwidth (RFC 6716 §4.3).
+fn end_band(bandwidth int) int
+    if bandwidth <= 4000
+        return 13
+    if bandwidth <= 8000
+        return 17
+    if bandwidth <= 12000
+        return 19
+    21
+
+## One CELT frame of `c` coded channels and 120 << lm samples (std.opus.5):
+## the samples of each channel at the int16 scale.
+fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[float]]
+    start := 0
+    m := lsh(1, lm)
+    n := 120 * m
+    mut d := decoder(frame)
+    total := frame.len() * 8
+    if c == 1
+        for i in 0..NB_BANDS
+            st.energy[i] = st.energy[i].max(st.energy[NB_BANDS + i])
+    mut tell := d.tell()
+    mut silence := false
+    if tell >= total
+        silence = true
+    elif tell == 1
+        silence = d.bit_logp(15)
+    if silence
+        d.total += total - d.tell()
+        tell = total
+    mut pf_pitch := 0
+    mut pf_g := 0.0
+    mut pf_tap := 0
+    if start == 0 and tell + 16 <= total
+        if d.bit_logp(1)
+            octave := d.uint(6)
+            pf_pitch = lsh(16, octave) + d.bits(4 + octave) - 1
+            qg := d.bits(3)
+            if d.tell() + 2 <= total
+                pf_tap = d.icdf(TAPSET_ICDF, 2)
+            pf_g = 0.09375 * (qg + 1).to_float()
+        tell = d.tell()
+    mut transient := false
+    if lm > 0 and tell + 3 <= total
+        transient = d.bit_logp(3)
+        tell = d.tell()
+    intra := tell + 3 <= total and d.bit_logp(3)
+    coarse_energy(mut d, mut st, start, end, intra, lm, c, total)
+    tf := tf_decode(mut d, start, end, transient, lm, total)
+    mut spread := 2
+    if d.tell() + 4 <= total
+        spread = d.icdf(SPREAD_ICDF, 5)
+    caps := band_caps(lm, c)
+    da := dynalloc(mut d, start, end, lm, c, caps, total)
+    mut trim := 5
+    if d.tell_frac() + 48 <= da.1
+        trim = d.icdf(TRIM_ICDF, 7)
+    mut bits := total.shl(BITRES) - d.tell_frac() - 1
+    rsv := if transient and lm >= 2 and bits >= (lm + 2).shl(BITRES) then lsh(1, BITRES) else 0
+    bits -= rsv
+    al := allocate(mut d, start, end, da.0, caps, trim, bits, lm, c)
+    fine_energy(mut d, mut st, start, end, al.fine, c)
+    ab := all_bands(
+        mut d,
+        mut st,
+        start,
+        end,
+        c,
+        lm,
+        transient,
+        spread,
+        al.dual,
+        al.intensity,
+        tf,
+        total.shl(BITRES) - rsv,
+        al.balance,
+        al,
+    )
+    mut xs := ab.0
+    anti := rsv > 0 and d.bits(1) == 1
+    finalise_energy(mut d, mut st, start, end, al, total - d.tell(), c)
+    if anti
+        st.seed = anti_collapse(mut xs, ab.1, lm, c, start, end, st, al.pulses, st.seed)
+    if silence
+        for k in 0..2 * NB_BANDS
+            st.energy[k] = -28.0
+    plan_at := if transient then 0 else lm
+    plan := PLANS[plan_at]
+    blocks := if transient then m else 1
+    nb := if transient then 120 else n
+    base := HIST - n
+    for ch in 0..c
+        mut h := st.hist[ch]
+        for j in 0..HIST - n + OVERLAP
+            h[j] = h[j + n]
+        for j2 in HIST - n + OVERLAP..HIST + OVERLAP
+            h[j2] = 0.0
+        freq := denormalise(xs[ch], st, ch, start, end.min(21), m, silence)
+        for bl in 0..blocks
+            imdct_add(mut h, base + nb * bl, freq, bl, blocks, plan)
+        st.hist[ch] = h
+    st.seed = d.rng
+    for ch2 in 0..c
+        mut hp := st.hist[ch2]
+        t0 := st.pf_old_period.max(15)
+        t1 := st.pf_period.max(15)
+        comb(mut hp, base, 120, t0, t1, st.pf_old_gain, st.pf_gain, st.pf_old_tapset, st.pf_tapset)
+        if lm != 0
+            comb(
+                mut hp,
+                base + 120,
+                n - 120,
+                t1,
+                pf_pitch.max(15),
+                st.pf_gain,
+                pf_g,
+                st.pf_tapset,
+                pf_tap,
+            )
+        st.hist[ch2] = hp
+    st.pf_old_period = st.pf_period
+    st.pf_old_gain = st.pf_gain
+    st.pf_old_tapset = st.pf_tapset
+    st.pf_period = pf_pitch
+    st.pf_gain = pf_g
+    st.pf_tapset = pf_tap
+    if lm != 0
+        st.pf_old_period = pf_pitch
+        st.pf_old_gain = pf_g
+        st.pf_old_tapset = pf_tap
+    if c == 1
+        for i2 in 0..NB_BANDS
+            st.energy[NB_BANDS + i2] = st.energy[i2]
+    for k2 in 0..2 * NB_BANDS
+        if transient
+            st.prev1[k2] = st.prev1[k2].min(st.energy[k2])
+        else
+            st.prev2[k2] = st.prev1[k2]
+            st.prev1[k2] = st.energy[k2]
+    for ch3 in 0..2
+        for i3 in 0..NB_BANDS
+            if i3 < start or i3 >= end
+                k3 := ch3 * NB_BANDS + i3
+                st.energy[k3] = 0.0
+                st.prev1[k3] = -28.0
+                st.prev2[k3] = -28.0
+    mut pcm := List[List[float]]()
+    for ch4 in 0..c
+        mut mem := st.deemph[ch4]
+        mut y := [0.0 for _ in 0..n]
+        for i4 in 0..n
+            v := st.hist[ch4][base + i4] + mem
+            mem = PREEMPH * v
+            y[i4] = v
+        st.deemph[ch4] = mem
+        pcm.push(y)
+    pcm
+
+## Decodes one Opus packet with `st` (std.opus.5): interleaved samples at
+## 48 kHz in -1..1, `st.channels` per frame. A mono stream feeds both
+## channels of a stereo state; a stereo stream is averaged for a mono one.
+## SILK and hybrid packets fail for now.
+pub fn decode(mut st CeltState, b bytes) audio.Clip ! OpusError
+    pk := parse_packet(b) else e
+        return e
+    celt := match pk.mode
+        Celt => true
+        Silk => false
+        Hybrid => false
+    if not celt
+        return OpusError(why: "SILK and hybrid frames are not decoded yet")
+    lm := match pk.samples
+        120 => 0
+        240 => 1
+        480 => 2
+        _ => 3
+    c := if pk.stereo then 2 else 1
+    out_c := st.channels
+    mut samples := List[float]()
+    for frame in pk.frames
+        pcm := celt_frame(mut st, frame, c, lm, end_band(pk.bandwidth))
+        for i in 0..pk.samples
+            if out_c == c
+                for ch in 0..c
+                    samples.push(pcm[ch][i] / 32768.0)
+            elif out_c == 2
+                v := pcm[0][i] / 32768.0
+                samples.push(v)
+                samples.push(v)
+            else
+                samples.push(0.5 * (pcm[0][i] + pcm[1][i]) / 32768.0)
+    audio.Clip(rate: 48000, channels: out_c, samples: samples)

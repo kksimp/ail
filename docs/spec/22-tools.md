@@ -1,6 +1,6 @@
-# 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
+# 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots, infer
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -618,6 +618,234 @@ struct Cart
     total int
 fn main()
     print(missing)
+```
+
+## Context for an edit
+
+`ail context PROGRAM SYMBOL` prints the smallest bundle of the program that an
+edit to one function needs, cut to a token budget
+([ADR 1020](../decisions/1020-ail-context.md), which implements
+[ADR 0891](../decisions/0891-ail-context-budgeted-pack.md)). One call replaces
+the file reads before an edit. It reads the same graph as `ail ask`.
+
+**api.ctx.1** — `ail context PROGRAM SYMBOL [--budget N] [--json]`. SYMBOL names
+one function or method as `api.ask.1` does: by its id (`fn:pay`), its qualified
+name (`Cart.add`) or its bare name. A bare name that fits several functions is an
+error that lists their ids. N is a positive number of tokens; a bare `--budget`
+and no `--budget` both mean 2000.
+
+**api.ctx.2** — The pack has these sections, each of whole items: `signature`
+(where the function is declared, its signature, contracts and doc comment), `body`
+(its lines as written, comments included), `effects` (each effect with the chain
+of calls that carries it, as `api.ask.4`), `callees` (the signatures of the
+functions it calls), `callers` (the signatures of the functions that call it, tests
+excluded), `types` (the types its signature and body name, with their fields,
+at most 12 lines each), `tests` (the signatures of the `@test` functions that reach
+it, directly or through callers) and `rules` (the spec rule IDs its comments and
+doc cite). Standard modules and generated code are not part of a pack.
+
+**api.ctx.3** — Items are kept in the order the sections are listed in
+`api.ctx.2`; within a section, in source order.
+
+**api.ctx.4** — The pack is counted with the same estimate as `ail api --card`.
+It keeps the longest prefix of the items, in the order of `api.ctx.3`, that fits
+the budget, so what is cut is always the least needed. An item is never cut in
+the middle. The signature is shown even when it alone is over the budget. When
+anything is cut, the last line says what: `cut: callers 2, tests 3; --budget N
+shows all`, where N is the budget that shows everything. The output is the same
+for the same program and arguments.
+
+**api.ctx.5** — A rule ID is a word in a `#` comment of the body, or in the doc
+comment, spelled as three or more lowercase parts and a number last
+(`api.ask.3`, `api.ask.4`). Each is listed once, in the order it appears.
+
+**api.ctx.6** — A program that has errors can't be read for context: the errors
+are shown and the status is 2. A SYMBOL that names no function, or fits several,
+is an error with status 2. A pack that is printed has status 0.
+
+**api.ctx.7** — With `--json` the pack is one object: `target` (the function id),
+`budget`, `needs` (the budget that shows everything), `sections` (the section
+names that are shown, each with the array of its items, an item's lines joined
+with newlines) and `cut` (each section with items left out, with their count).
+
+```ail tool=context,FILE,pay expect=callees rules=api.ctx.1,api.ctx.2,api.ctx.3
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,fn:pay,--budget,1 expect=cut: rules=api.ctx.4
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay,--budget,1,--json expect="cut":{"body":1,"callees":1,"callers":1} rules=api.ctx.4,api.ctx.7
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,log expect=effects rules=api.ctx.2
+fn log(s str)
+    print(s)
+fn main()
+    log("hi")
+```
+
+```ail tool=context,FILE,total expect=types rules=api.ctx.2
+struct Cart
+    n int
+fn total(c Cart) int
+    c.n
+fn main()
+    print(total(Cart(n: 1)))
+```
+
+```ail tool=context,FILE,pay expect=pays_one rules=api.ctx.2
+fn pay(n int) int
+    n + 1
+@test fn pays_one()
+    assert_eq(pay(1), 2)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay,--json expect="rules":["api.ask.3"] rules=api.ctx.5
+fn pay(n int) int
+    # api.ask.3: callers are listed once.
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,nosuch status=2 expect=api.ctx.6 rules=api.ctx.6
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay,--budget,0 status=2 expect=positive rules=api.ctx.1
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=context,FILE,pay status=2 expect=api.ctx.6 rules=api.ctx.6
+fn pay(n int) int
+    n + 1
+fn main()
+    print(missing)
+```
+
+## Review of a change
+
+`ail review BASE..HEAD` summarises a change by meaning, in one budgeted report
+([ADR 1024](../decisions/1024-ail-review.md), which builds the Proposed
+[ADR 0894](../decisions/0894-effect-changes-in-ail-diff.md)). A reviewer, human
+or agent, judges a pull request from a few hundred tokens instead of reading its
+diff. It compares two versions the way `ail diff` does and reads them through the
+same checker graph as `ail ask`.
+
+**api.rev.1** — `ail review BASE..HEAD [PATH] [--budget N] [--json] [--deny-new]`
+compares `PATH` (a program file or a directory with `.ail` files at its top; default `.`) as git has it at revision `BASE` with `PATH` at
+`HEAD`, each copied out as `diff.out.5` does. `ail review --files OLD NEW` compares
+two files or two package directories instead. An argument that is not `BASE..HEAD`,
+an unknown revision or path and an unknown option are errors with status 2.
+
+**api.rev.2** — N is a positive number of tokens; a bare `--budget` and no
+`--budget` both mean 500.
+
+**api.rev.3** — The report has these sections, each of whole lines: `effects`,
+`api`, `contracts`, `perf` and `untested`; a section with no lines is left out.
+Within a section the lines that matter most come first (`NEW CAPABILITY`, then the
+rest; `BREAKING`, then the rest). The report keeps the longest prefix of its lines,
+in that order, that fits the budget, counted with the estimate of `ail api --card`
+(`api.card.3`). A line is never cut in the middle. When anything is cut, the last line
+says what: `cut: untested 2; --budget N shows all`, where N is the budget that
+shows everything. The output is the same for the same program and arguments.
+
+**api.rev.4** — The first line is always shown: `review RANGE: effects N (C new
+capability), api N (B breaking), contracts N, perf N, untested N`, with
+`; partial, a version has check errors` added when either version has check errors
+(it is then read as far as it resolves, as `api.impact.5` does). A version with
+syntax or load errors can't be compared: the errors are shown and the status is 2.
+
+**api.rev.5** — With `--json` the report is one object: `range`, `budget`, `needs`
+(the budget that shows everything), `new_capabilities`, `breaking`, `untested` (the
+counts), `partial`, `sections` (each shown section with the array of its lines) and
+`cut` (each section with lines left out, with their count).
+
+**api.rev.6** — The status is 0 when the report was printed. With `--deny-new` it is 1
+instead when `effects` has a `NEW CAPABILITY` line, so a gate without hosted CI
+([ADR 0085](../decisions/0085-interim-local-testing-gate.md)) can refuse a change that widens what
+a program can do. Status 2 is an error.
+
+**api.rev.7** — `effects` has a line `ID: +net -fs` for each function whose inferred
+effect set differs (`eff.infer.*`), callers that inherit the change included, since
+their sets differ too. A function that is `main` or `pub` and gains an effect widens
+what the program can do: its line starts `NEW CAPABILITY`.
+
+**api.rev.8** — `api` has one line for each public declaration that was added
+(`+ ID SIGNATURE`), removed (`- ID`) or changed (`~ ID: KEYS`), as
+`api.diff.1-3` find them. A line that can break a caller ends `BREAKING`, followed
+for an addition or a removal by the reason.
+
+**api.rev.9** — `contracts` has a line `ID requires: OLD -> NEW` or `ID ensures: OLD
+-> NEW` for each function or method whose precondition or postcondition differs or
+is new. `(none)` stands for an absent one.
+
+**api.rev.10** — `perf` has a line for each loop whose `ail perf --explain` verdict
+(ADR 1021) differs between the versions. It is
+empty until that command exists.
+
+**api.rev.11** — `untested` has the id of each changed or new function, other than
+`main` and `@test` functions, that no `@test` function reaches by calls or by
+naming it (`api.impact.2`).
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=CAPABILITY rules=api.rev.1,api.rev.4,api.rev.7
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--deny-new status=1 expect=CAPABILITY rules=api.rev.6
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=BREAKING rules=api.rev.3,api.rev.8
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=requires: rules=api.rev.9
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail status=0 expect=fn:helper rules=api.rev.11
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--budget,1 status=0 expect=cut: rules=api.rev.2,api.rev.3
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--json status=0 expect="new_capabilities":1 rules=api.rev.5
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,old/a.ail status=0 expect=perf rules=api.rev.10
+```
+
+```ail pkg=review_pair tool=review,nosuch status=2 expect=BASE..HEAD rules=api.rev.1
+```
+
+```ail pkg=review_pair tool=review,--files,old/a.ail,new/a.ail,--budget,0 status=2 expect=positive rules=api.rev.2
 ```
 
 ## Edit impact
@@ -1457,3 +1685,135 @@ could be cut it writes nothing and prints `nothing to cut`. Both exit 0.
 ```ail tool=replay,--shrink,nosuch.json status=2 expect=shrink.run.1 rules=shrink.run.1,shrink.run.2,shrink.run.3,shrink.run.4
 ```
 
+## Inferred contracts
+
+`ail infer --contracts FN FILE` proposes `requires` and `ensures` lines for one
+function from the calls the tests make
+([ADR 1023](../decisions/1023-ail-infer-contracts.md), which builds
+[ADR 0895](../decisions/0895-ail-infer.md)). The conditions are observed, not
+proved; [contract.fuzz.1](20-contracts.md) fuzzes them afterwards.
+
+**infer.cand.1** — `ail infer --contracts FN FILE [--apply] [--min N] [--cases N] [--json]`
+runs the tests of FILE (the property tests too, `--cases N` of them) against a copy
+of FILE in which FN records each call. A call is one row: the value of each `int`
+argument, the length of each `str` and `List` argument, and the same for the result.
+Other types are not recorded. FN is a top-level function of FILE whose signature is on
+one line; a generic or fallible function, one with a `mut`, `move` or default
+parameter, or none of that name, is an error with status 2 that cites this rule.
+
+**infer.cand.2** — A condition is proposed only when at least N calls were seen
+(default 20). With fewer, nothing is proposed and the answer says how many were seen.
+
+**infer.cand.3** — A condition is kept only when every call satisfies it. The forms are,
+for a recorded value `v`: `v > 0`, `v >= 0` (an `int`), `v != 0` (an `int` seen with
+both signs); and for two recorded values `a` and `b`: `a < b`, `a <= b`, `a > b`,
+`a >= b`. A value that took one value in every call is not proposed. The conditions
+about parameters are `requires`; those about `result` are `ensures`, and a function
+with a parameter named `result` gets none.
+
+**infer.cand.4** — The conditions are ordered: `requires` on two parameters,
+`requires` on one, `ensures` on `result`, `ensures` comparing `result` with a
+parameter. A range on `result` that a comparison already gives, as `result > n` with
+`n > 0` does, is left out.
+
+**infer.cand.5** — At most 3 conditions are proposed: the first 3 of that order.
+
+**infer.cand.6** — A condition already written as a `requires` or `ensures` line under
+the signature is not proposed again.
+
+**infer.out.1** — The patch goes to standard output in `ail edit` hunk form (`edit.in.3`):
+the function's name, its signature line as context and a `+` line for each condition, so
+`ail edit FILE < patch` applies it. Standard error has one line per condition with its
+call count. With `--json` the answer is one object: `infer`, `fn`, `calls`, `min`,
+`applied`, `note`, `proposals` (each with `kind`, `cond` and `calls`) and `patch`.
+
+**infer.out.2** — Before anything is shown the patch is dry-run through
+`ail edit --dry-run`. If the edited program does not check, nothing is proposed, the
+errors are shown and the status is 2.
+
+**infer.out.3** — With `--apply` the patch is given to `ail edit FILE`, which formats the
+file, checks it and writes it; the answer is its answer. Without `--apply` nothing is
+written.
+
+**infer.out.4** — The answer says the conditions are observed in tests, not proved. The
+status is 0 when the tests ran, whether or not anything was proposed, and 2 for a usage
+error or an error in FILE.
+
+```ail tool=infer,--contracts,pay,FILE,--json expect="kind":"requires" rules=infer.cand.1,infer.cand.3,infer.cand.4,infer.out.1
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE,--json expect="cond":"result rules=infer.cand.3,infer.cand.4,infer.cand.5
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE expect=proved rules=infer.out.2,infer.out.4
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE,--apply expect=edited rules=infer.out.3
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE,--min,100 expect=needed rules=infer.cand.2
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE expect=holds rules=infer.cand.6
+fn pay(n int) int
+    requires n > 0
+    ensures result > n
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,pay,FILE status=2 expect=infer.cand.1 rules=infer.cand.1
+fn pay[T](n T) T
+    n
+fn main()
+    print(pay(1))
+```
+
+```ail tool=infer,--contracts,nosuch,FILE status=2 expect=infer.cand.1 rules=infer.cand.1
+fn pay(n int) int
+    n + 1
+@test fn pays()
+    for i in 1..30
+        assert_eq(pay(i), i + 1)
+fn main()
+    print(pay(1))
+```

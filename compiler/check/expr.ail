@@ -192,6 +192,8 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
         return enum_value(e, none, expect, at, n)
     if variant_owners(n).len() > 0
         return Ty.Unknown
+    if is_const_param(n)
+        return Ty.Int
     if module_as_value(n, at)
         return Ty.Unknown
     if i := fns.get(n)

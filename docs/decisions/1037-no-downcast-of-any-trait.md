@@ -1,6 +1,6 @@
-# NNNN. No downcasting of `any Trait`
+# 1037. No downcasting of `any Trait`
 
-- **Status:** Accepted (number pending from the integrator; rename this file then)
+- **Status:** Accepted
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24)
 - **Resolves:** OQ-094

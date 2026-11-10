@@ -40,12 +40,14 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.metadata" => os_fn("rt.fs_metadata", [s], Ty.Struct(FS_METADATA), true)
         "fs.volume" => os_fn("rt.fs_volume", [s], Ty.Struct(FS_VOLUME), true)
         "fs.read_range" => os_fn("rt.fs_read_range", [s, Ty.Int, Ty.Int], Ty.Bytes, true)
+        "fs.map" => os_fn("rt.fs_map", [s], Ty.Bytes, true)
         "fs.trash" => os_fn("rt.fs_trash", [s], Ty.Unit, true)
         "fs.append_bytes" => os_fn("rt.fs_append_bytes", [s, Ty.Bytes], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
         "fs.copy" => os_fn("rt.fs_copy", [s, s], Ty.Unit, true)
         "fs.glob" => os_fn("rt.fs_glob", [s], Ty.List(s), false)
         "fs.scan" => os_fn("rt.fs_scan", [s, Ty.Bool], Ty.Struct(FS_SCAN), true)
+        "fs.scan_count" => os_fn("rt.fs_scan_count", [], Ty.Struct(FS_SCAN_COUNT), false)
         "fs.walk" => os_fn("rt.fs_walk", [s], Ty.List(s), true)
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
@@ -104,11 +106,15 @@ fn os_lookup(mod str, name str) OsFn?
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_bytes" => os_fn("rt.io_read_bytes", [], Ty.Bytes, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
+        "io.write_bytes" => os_fn("rt.io_write_bytes", [Ty.Bytes], Ty.Unit, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
+        "os.signals" => os_fn("rt.os_signals", [Ty.List(s)], Ty.Chan(s), false)
         "tz.offset" => os_fn("rt.tz_offset", [s, Ty.Int], Ty.Opt(Ty.Int), false)
         "tz.system" => os_fn("rt.tz_system", [], s, false)
         "task.cancelled" => os_fn("rt.task_cancelled", [], Ty.Bool, false)
         "task.check" => os_fn("rt.task_check", [], Ty.Unit, true)
+        "task.threads" => os_fn("rt.task_threads", [], Ty.Int, false)
+        "task.set_threads" => os_fn("rt.task_set_threads", [Ty.Int], Ty.Unit, false)
         "time.now_ms" => os_fn("rt.time_now_ms", [], Ty.Int, false)
         "time.sleep_ms" => os_fn("rt.time_sleep_ms", [Ty.Int], Ty.Unit, false)
         _ => none
@@ -126,6 +132,7 @@ fn Lower.os_module(self, recv ast.Expr) str
         "compress",
         "bytes",
         "tz",
+        "os",
         "hw",
         "task",
     ]

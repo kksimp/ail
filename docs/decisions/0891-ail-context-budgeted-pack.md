@@ -1,6 +1,6 @@
 # 0891. `ail context SYM --budget N`: the smallest useful context pack
 
-- **Status:** Proposed
+- **Status:** Accepted (built and amended by [ADR 1020](1020-ail-context.md))
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0868](0868-ai-first-tooling-after-rust-removal.md), [ADR 0394](0394-token-budgets-on-every-command.md), [ADR 0880](0880-budgeted-diagnostic-forms.md)

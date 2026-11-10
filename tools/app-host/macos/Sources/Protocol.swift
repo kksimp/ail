@@ -228,10 +228,19 @@ enum Edge {
 
     /// The window controls' room in points: their right edge plus a gap, and the title bar's height.
     static func insets(_ w: NSWindow?) -> [String: Any] {
-        guard applied, let w = w else { return ["inset_left": 0, "inset_top": 0] }
+        var f = screen()
+        guard applied, let w = w else { f["inset_left"] = 0; f["inset_top"] = 0; return f }
         let right = w.standardWindowButton(.zoomButton)?.frame.maxX ?? 70
         let top = w.frame.height - w.contentLayoutRect.height
-        return ["inset_left": right + 8, "inset_top": max(top, 0)]
+        f["inset_left"] = right + 8
+        f["inset_top"] = max(top, 0)
+        return f
+    }
+
+    /// The main display: size in points and scale (std.app.31, ADR 1017).
+    static func screen() -> [String: Any] {
+        guard let s = NSScreen.main else { return [:] }
+        return ["screen_w": s.frame.width, "screen_h": s.frame.height, "scale": s.backingScaleFactor]
     }
 
     /// The app's window: ours in edge mode, else the one a canvas sits in, the key or first visible one.

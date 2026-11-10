@@ -306,9 +306,10 @@ fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                 [r.id, konst(16 + 7, Ty.Int)],
                 npos,
             )
-            return Val(id: r.id, ty: Ty.Int)
+            return Val(id: op("copy", [r.id], Ty.Int), ty: Ty.Int)
         if r.ty.is_sized()
-            return Val(id: r.id, ty: Ty.Int)
+            # A new `int` value, as for `u8.to_int()` in lower_bytes.ail.
+            return Val(id: op("copy", [r.id], Ty.Int), ty: Ty.Int)
         return none
     if target == "f32"
         if from_u64
@@ -321,7 +322,7 @@ fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val])
     if target == "u64"
         # Every value of an unsigned type fits; a signed one must not be negative.
         if r.ty.is_sized() and sized_lo(sized_kind(r.ty)) == 0
-            return Val(id: r.id, ty: t)
+            return Val(id: op("copy", [r.id], t), ty: t)
         sized_trap_unless(
             op("ge", [r.id, konst(0, Ty.Int)], Ty.Bool),
             "type.num.15",
@@ -352,7 +353,7 @@ fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val])
         and sized_lo(sized_kind(r.ty)) >= sized_lo(target)
         and sized_hi(sized_kind(r.ty)) <= sized_hi(target)
         # Every value of the source type is in range: only the type changes.
-        return Val(id: r.id, ty: t)
+        return Val(id: op("copy", [r.id], t), ty: t)
     sized_trap_unless(
         op("ge", [r.id, konst(sized_lo(target), Ty.Int)], Ty.Bool),
         "type.num.15",

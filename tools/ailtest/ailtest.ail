@@ -16,6 +16,8 @@
 ## functions), and shrinks a failing input. A parameter of another type
 ## (`bytes`, a type from another module) makes the test `skip`. The exit status is 0 if every test that ran passed.
 ##   ail run tools/ailtest/ailtest.ail [--json] [--cases N] [--seed S] FILE
+## `--fuzz NAME [--time MS] [--corpus DIR]` fuzzes the property test NAME with coverage guidance (test.fuzz.1-5).
+## `--mutate [--max N]` changes the reached lines of the program one way at a time and reports the changes no test notices (test.mutate.1-5).
 ## `--contracts` fuzzes every function's `requires` and `ensures` and reports a counterexample (contract.fuzz.1).
 ## `--affected [--since REV]` runs only the tests that the changes since git revision REV
 ## (default `HEAD`) can reach, from `ail ask FILE --affected` (test.affected.1).
@@ -1200,10 +1202,29 @@ struct Prop
 
 ## Runs the binary on one input: none when it passes, else the failure line.
 fn try_case(w World, lead int, exe str, slot int, t TestFn, tys List[Ty], args List[Node]) str?
+    try_case_in(w, lead, exe, slot, tys, args, List[str]())
+
+## `try_case` with the environment variables `envs` set for the run (`NAME=VALUE` each).
+fn try_case_in(
+    w World,
+    lead int,
+    exe str,
+    slot int,
+    tys List[Ty],
+    args List[Node],
+    envs List[str],
+) str?
     mut all := [["x" for _ in 0..slot].join("")]
     for i in 0..args.len()
         all.push(tokens(w, tys[i], args[i]).join("\u{1f}"))
-    r := proc.run(exe, all, none, RUN_LIMIT_MS) else
+    mut prog := exe
+    mut argv := all
+    if not envs.is_empty()
+        prog = "env"
+        argv = envs
+        argv.push(exe)
+        argv.extend(all)
+    r := proc.run(prog, argv, none, RUN_LIMIT_MS) else
         return "error: can't start the test binary"
     if r.status == 0
         return none
@@ -1211,45 +1232,408 @@ fn try_case(w World, lead int, exe str, slot int, t TestFn, tys List[Ty], args L
         return "error: no such test"
     describe(r.err, lead)
 
-fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int) Prop
-    mut rng := Rng(state: seed)
+## The parsed parameter types of `t`, or none when one is not generatable.
+fn param_tys(w World, t TestFn) List[Ty]?
     mut tys := List[Ty]()
     for p in t.params
-        tys.push(parse_ty(p.ty, w.decls) else return Prop(
-            status: "fail",
-            message: "error: unsupported type",
-            cases: 0,
-            input: "",
-        ))
+        tys.push(parse_ty(p.ty, w.decls) else return none)
+    tys
+
+## Shrinks a failing input (test.prop.5): the smallest `args` that still fail, and the failure line.
+fn shrink_input(
+    w World,
+    lead int,
+    exe str,
+    slot int,
+    t TestFn,
+    tys List[Ty],
+    first List[Node],
+    first_fail str,
+)(List[Node], str)
+    mut args := first
+    mut fail := first_fail
+    mut budget := 2000
+    mut again := true
+    while again and budget > 0
+        again = false
+        for i in 0..args.len()
+            if again or budget == 0
+                break
+            for cand in shrinks(w, tys[i], args[i])
+                if budget == 0
+                    break
+                budget -= 1
+                mut trial := args
+                trial[i] = cand
+                if f := try_case(w, lead, exe, slot, t, tys, trial)
+                    args = trial
+                    fail = f
+                    again = true
+                    break
+    (args, fail)
+
+fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int) Prop
+    mut rng := Rng(state: seed)
+    tys := param_tys(w, t) else return Prop(
+        status: "fail",
+        message: "error: unsupported type",
+        cases: 0,
+        input: "",
+    )
     for n in 1..cases + 1
         size := 1 + (n - 1) * 99 / (cases.max(2) - 1)
         mut args := List[Node]()
         for ty in tys
             args.push(gen(w, ty, mut rng, size, 0))
-        mut fail := try_case(w, lead, exe, slot, t, tys, args) else continue
-        mut budget := 2000
-        mut again := true
-        while again and budget > 0
-            again = false
-            for i in 0..args.len()
-                if again or budget == 0
-                    break
-                for cand in shrinks(w, tys[i], args[i])
-                    if budget == 0
-                        break
-                    budget -= 1
-                    mut trial := args
-                    trial[i] = cand
-                    if f := try_case(w, lead, exe, slot, t, tys, trial)
-                        args = trial
-                        fail = f
-                        again = true
-                        break
+        fail := try_case(w, lead, exe, slot, t, tys, args) else continue
+        small := shrink_input(w, lead, exe, slot, t, tys, args, fail)
         mut shown := List[str]()
-        for i in 0..args.len()
-            shown.push("{t.params[i].name} = {show(w, tys[i], args[i])}")
-        return Prop(status: "fail", message: fail, cases: n, input: shown.join(", "))
+        for i in 0..small.0.len()
+            shown.push("{t.params[i].name} = {show(w, tys[i], small.0[i])}")
+        return Prop(status: "fail", message: small.1, cases: n, input: shown.join(", "))
     Prop(status: "pass", message: "", cases: cases, input: "")
+
+## ---- Coverage-guided fuzzing of a property test (test.fuzz.1-5, ADR 1015) ----
+
+## A mutated copy of `v` (test.fuzz.2): a small step on a number, an edit of a string, an element
+## added, dropped or changed in a collection, one field of a struct changed.
+fn mutate(w World, ty Ty, v Node, mut rng Rng, depth int) Node
+    k := ty.kind
+    if k == "int"
+        edge := [0, 1, -1, 255, 256, 65535, 2147483647, -2147483648, 4294967295]
+        picks := [
+            v.n.wrapping_add(1),
+            v.n.wrapping_sub(1),
+            v.n.wrapping_mul(2),
+            0.wrapping_sub(v.n),
+            v.n / 2,
+            rng.range(-256, 256),
+            v.n.wrapping_add(rng.range(-16, 16)),
+            edge[rng.below(edge.len())],
+        ]
+        return num_node(picks[rng.below(picks.len())])
+    if k == "float"
+        picks := [
+            v.x + 1.0,
+            v.x - 1.0,
+            0.0 - v.x,
+            0.0,
+            v.x / 2.0,
+            rng.range(-100000, 100000).to_float() / 100.0,
+        ]
+        return flt_node(picks[rng.below(picks.len())])
+    if k == "bool"
+        return num_node(1 - v.n)
+    if k == "char"
+        return txt_node("{gen_char(mut rng)}")
+    if k == "str"
+        cs := v.s.chars()
+        r := rng.below(3)
+        if cs.len() > 200 or (r == 1 and not cs.is_empty())
+            cut := rng.below(cs.len())
+            return txt_node("{chars_text(cs, 0, cut)}{chars_text(cs, cut + 1, cs.len())}")
+        if r == 2 and not cs.is_empty()
+            cut := rng.below(cs.len())
+            head := chars_text(cs, 0, cut)
+            return txt_node("{head}{gen_char(mut rng)}{chars_text(cs, cut + 1, cs.len())}")
+        at := rng.below(cs.len() + 1)
+        return txt_node("{chars_text(cs, 0, at)}{gen_char(mut rng)}{chars_text(cs, at, cs.len())}")
+    if k == "bytes"
+        mut octets := v.kids
+        if octets.is_empty() or rng.below(3) == 0
+            octets.push(num_node(rng.below(256)))
+        elif rng.below(2) == 0
+            octets.remove_at(rng.below(octets.len()))
+        else
+            at := rng.below(octets.len())
+            octets[at] = num_node(rng.below(256))
+        return kid_node(octets)
+    if k == "list" or k == "set" or k == "map"
+        stride := if k == "map" then 2 else 1
+        count := v.kids.len() / stride
+        r := rng.below(4)
+        if count == 0 or r == 0 or depth >= 3
+            mut grown := v.kids
+            fresh := gen(w, ty.kids[0], mut rng, 20, depth + 1)
+            if k == "list"
+                grown.push(fresh)
+            elif k == "set"
+                put(w, ty.kids[0], mut grown, 1, fresh, num_node(0))
+            else
+                put(w, ty.kids[0], mut grown, 2, fresh, gen(w, ty.kids[1], mut rng, 20, depth + 1))
+            return kid_node(grown)
+        i := rng.below(count)
+        mut units := List[Node]()
+        for j in 0..count * stride
+            if j / stride != i
+                units.push(v.kids[j])
+        if r == 1
+            return rebuilt(w, ty, units)
+        if k == "list"
+            mut same := v.kids
+            moved := mutate(w, ty.kids[0], v.kids[i], mut rng, depth + 1)
+            same[i] = moved
+            return kid_node(same)
+        if k == "map" and rng.below(2) == 0
+            mut same := v.kids
+            moved := mutate(w, ty.kids[1], v.kids[i * 2 + 1], mut rng, depth + 1)
+            same[i * 2 + 1] = moved
+            return kid_node(same)
+        moved := mutate(w, ty.kids[0], v.kids[i * stride], mut rng, depth + 1)
+        mut rest := units
+        put(
+            w,
+            ty.kids[0],
+            mut rest,
+            stride,
+            moved,
+            if stride == 2 then v.kids[i * 2 + 1] else num_node(0),
+        )
+        return kid_node(rest)
+    if k == "opt"
+        if v.kids.is_empty()
+            return kid_node([gen(w, ty.kids[0], mut rng, 20, depth + 1)])
+        if rng.below(4) == 0
+            return kid_node([])
+        return kid_node([mutate(w, ty.kids[0], v.kids[0], mut rng, depth + 1)])
+    if k == "tuple"
+        mut same := v.kids
+        j := rng.below(same.len())
+        moved := mutate(w, ty.kids[j], v.kids[j], mut rng, depth + 1)
+        same[j] = moved
+        return kid_node(same)
+    if k == "enum" and rng.below(4) == 0
+        return gen(w, ty, mut rng, 20, depth)
+    fts := fields_of(w, ty, v.n)
+    if fts.is_empty()
+        return v
+    j := rng.below(fts.len())
+    mut same := v.kids
+    moved := mutate(w, fts[j], v.kids[j], mut rng, depth + 1)
+    same[j] = moved
+    Node(n: v.n, x: 0.0, s: "", kids: same)
+
+## A corpus token (test.fuzz.3): `\`, a newline and a return are written as `\\`, `\n` and `\r`.
+fn tok_escape(s str) str
+    mut out := ""
+    for c in s.chars()
+        t := "{c}"
+        if t == "\\"
+            out = "{out}\\\\"
+        elif t == "\n"
+            out = "{out}\\n"
+        elif t == "\r"
+            out = "{out}\\r"
+        else
+            out = "{out}{t}"
+    out
+
+fn tok_unescape(s str) str
+    mut out := ""
+    mut esc := false
+    for c in s.chars()
+        t := "{c}"
+        if esc
+            if t == "n"
+                out = "{out}\n"
+            elif t == "r"
+                out = "{out}\r"
+            else
+                out = "{out}{t}"
+            esc = false
+        elif t == "\\"
+            esc = true
+        else
+            out = "{out}{t}"
+    out
+
+## A corpus file (test.fuzz.3): one `=TOKEN` line per token of the arguments, in order.
+fn corpus_text(w World, tys List[Ty], args List[Node]) str
+    mut out := ""
+    for i in 0..args.len()
+        for t in tokens(w, tys[i], args[i])
+            out = "{out}={tok_escape(t)}\n"
+    out
+
+## The octets of a hex text, or none.
+fn hex_octets(h str) List[Node]?
+    cs := h.chars()
+    if cs.len() % 2 != 0
+        return none
+    mut out := List[Node]()
+    mut i := 0
+    while i < cs.len()
+        hi := cs[i].to_digit(16) else return none
+        lo := cs[i + 1].to_digit(16) else return none
+        out.push(num_node(hi * 16 + lo))
+        i += 2
+    out
+
+## The value of type `ty` that the tokens `t` hold from `at` on (the inverse of `tokens`), or none.
+fn untokens(w World, ty Ty, t List[str], mut at int) Node?
+    if at >= t.len()
+        return none
+    k := ty.kind
+    if k == "int"
+        n := t[at].to_int() else return none
+        at += 1
+        return num_node(n)
+    if k == "float"
+        x := t[at].to_float() else return none
+        at += 1
+        return flt_node(x)
+    if k == "bool"
+        b := t[at] == "true"
+        at += 1
+        return num_node(if b then 1 else 0)
+    if k == "char" or k == "str"
+        text := t[at]
+        at += 1
+        return txt_node(text)
+    if k == "bytes"
+        octets := hex_octets(t[at]) else return none
+        at += 1
+        return kid_node(octets)
+    if k == "list" or k == "set" or k == "map"
+        count := t[at].to_int() else return none
+        if count < 0 or count > 100000
+            return none
+        at += 1
+        mut kids := List[Node]()
+        for _ in 0..count
+            kids.push(untokens(w, ty.kids[0], t, mut at) else return none)
+            if k == "map"
+                kids.push(untokens(w, ty.kids[1], t, mut at) else return none)
+        return kid_node(kids)
+    if k == "opt"
+        flag := t[at]
+        at += 1
+        if flag != "1"
+            return kid_node([])
+        return kid_node([untokens(w, ty.kids[0], t, mut at) else return none])
+    if k == "tuple"
+        mut kids := List[Node]()
+        for kt in ty.kids
+            kids.push(untokens(w, kt, t, mut at) else return none)
+        return kid_node(kids)
+    mut v := 0
+    if k == "enum"
+        v = t[at].to_int() else return none
+        if v < 0 or v >= w.decls[ty.name].variants.len()
+            return none
+        at += 1
+    mut kids := List[Node]()
+    for ft in fields_of(w, ty, v)
+        kids.push(untokens(w, ft, t, mut at) else return none)
+    Node(n: v, x: 0.0, s: "", kids: kids)
+
+## The arguments a corpus file holds, or none when it does not fit the parameters.
+fn corpus_args(w World, tys List[Ty], text str) List[Node]?
+    mut toks := List[str]()
+    for l in text.lines()
+        if l.starts_with("=")
+            toks.push(tok_unescape(l.slice(1, l.len())))
+    mut at := 0
+    mut args := List[Node]()
+    for ty in tys
+        args.push(untokens(w, ty, toks, mut at) else return none)
+    if at != toks.len()
+        return none
+    args
+
+struct FuzzRun
+    fail str?
+    ids Set[int]
+
+## One run of the instrumented binary: the failure line, if any, and the ids of the statements it ran.
+fn fuzz_case(w World, lead int, exe str, slot int, tys List[Ty], args List[Node], hits str) !FuzzRun
+    fs.write_text(hits, "")?
+    fail := try_case_in(w, lead, exe, slot, tys, args, ["AIL_INSTRUMENT_OUT={hits}"])
+    FuzzRun(fail: fail, ids: hit_ids(hits))
+
+## Fuzzes the property test `t` (test.fuzz.1-5): inputs that reach a statement no earlier input did
+## are kept (and written to `dir` when there is one), the next inputs are mutations of the kept ones,
+## and the first failure is shrunk (test.prop.5) and written to `dir`. Stops after `max_ms`
+## milliseconds or `max_runs` runs (when above 0).
+fn run_fuzz(
+    w World,
+    lead int,
+    exe str,
+    slot int,
+    t TestFn,
+    hits str,
+    dir str,
+    max_ms int,
+    max_runs int,
+    seed int,
+) !Prop
+    tys := param_tys(w, t) else return Prop(
+        status: "fail",
+        message: "error: unsupported type",
+        cases: 0,
+        input: "",
+    )
+    mut rng := Rng(state: seed)
+    mut seen := Set[int]()
+    mut corpus := List[List[Node]]()
+    mut queue := List[List[Node]]()
+    mut known := Set[str]()
+    if not dir.is_empty()
+        fs.make_dir(dir)?
+        for name in fs.list_dir(dir)?.sorted()
+            body := fs.read_text("{dir}/{name}") else continue
+            if a := corpus_args(w, tys, body)
+                queue.push(a)
+                known.add(body)
+    mut first := List[Node]()
+    for ty in tys
+        first.push(minimal(w, ty))
+    queue.push(first)
+    start := time.now_ms()
+    mut runs := 0
+    while true
+        if max_runs > 0 and runs >= max_runs
+            break
+        if time.now_ms() - start >= max_ms
+            break
+        mut args := List[Node]()
+        if runs < queue.len()
+            args = queue[runs]
+        elif corpus.is_empty() or rng.below(10) == 0
+            for ty in tys
+                args.push(gen(w, ty, mut rng, 1 + rng.below(100), 0))
+        else
+            args = corpus[rng.below(corpus.len())]
+            for _ in 0..1 + rng.below(3)
+                j := rng.below(args.len())
+                moved := mutate(w, tys[j], args[j], mut rng, 0)
+                args[j] = moved
+        runs += 1
+        res := fuzz_case(w, lead, exe, slot, tys, args, hits)?
+        if fail := res.fail
+            small := shrink_input(w, lead, exe, slot, t, tys, args, fail)
+            body := corpus_text(w, tys, small.0)
+            if not dir.is_empty() and not known.contains(body)
+                path := "{dir}/crash-{unsigned_text(default_seed(body))}"
+                fs.write_text(path, body)?
+                io.eprint("fuzz: wrote {path}")
+            mut shown := List[str]()
+            for i in 0..small.0.len()
+                shown.push("{t.params[i].name} = {show(w, tys[i], small.0[i])}")
+            return Prop(status: "fail", message: small.1, cases: runs, input: shown.join(", "))
+        mut fresh := false
+        for id in res.ids.sorted()
+            if not seen.contains(id)
+                seen.add(id)
+                fresh = true
+        if fresh
+            corpus.push(args)
+            body := corpus_text(w, tys, args)
+            if not dir.is_empty() and not known.contains(body)
+                fs.write_text("{dir}/id-{unsigned_text(default_seed(body))}", body)?
+                known.add(body)
+    io.eprint("fuzz {t.name}: {runs} runs, {corpus.len()} kept, {seen.len()} statements reached")
+    Prop(status: "pass", message: "", cases: runs, input: "")
 
 ## Run the test binary on `arg`, with the trace limit `lim` (trace.run.4) when there is one.
 fn started(exe str, arg str, envs List[str]) !proc.Output
@@ -2105,6 +2489,255 @@ fn print_cover(c FileCover, json bool, detail bool)
 
 ## One event of a test's trace, from a line the run wrote to `EXE.trace`
 ## (`call<TAB>FN<TAB>LINE<TAB>COL<TAB>NAME=VALUE...`), as JSON; "" for a line that isn't the program's.
+## ---- Mutation testing (test.mutate.1-5, ADR 1022) ----
+
+struct Mutant
+    at_line int
+    shown str
+    newl str
+    owner str
+
+fn ident_char(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+## The line with the characters `a` to `b` replaced by `repl`.
+fn splice(cs List[char], a int, b int, repl str) str
+    "{chars_text(cs, 0, a)}{repl}{chars_text(cs, b, cs.len())}"
+
+## The name of the function a top-level `fn` or `pub fn` line declares, or "".
+fn decl_name(l str) str
+    mut s := l
+    if s.starts_with("pub ")
+        s = s.slice(4, s.len())
+    if not s.starts_with("fn ")
+        return ""
+    rest := s.slice(3, s.len())
+    cut := rest.find("(") else rest.len()
+    rest.slice(0, cut).trim()
+
+## The replacement of an operator at `i` (test.mutate.2): its text, and the length it replaces, or none.
+fn op_swap(cs List[char], i int)(str, int)?
+    c := cs[i]
+    nxt := if i + 1 < cs.len() then cs[i + 1] else ' '
+    prv := if i > 0 then cs[i - 1] else ' '
+    if nxt == '='
+        if c == '=' and prv != '=' and prv != '!' and prv != '<' and prv != '>' and prv != ':'
+            return ("!=", 2)
+        if c == '!'
+            return ("==", 2)
+        if c == '<' and prv != '<'
+            return ("<", 2)
+        if c == '>' and prv != '>' and prv != '-' and prv != '='
+            return (">", 2)
+        if c == '+'
+            return ("-=", 2)
+        if c == '-'
+            return ("+=", 2)
+        return none
+    if c == '<' and nxt != '<' and prv != '<' and nxt != '-'
+        return ("<=", 1)
+    if c == '>' and nxt != '>' and prv != '>' and prv != '-' and prv != '='
+        return (">=", 1)
+    if c == '+' and nxt != '+' and prv != '+'
+        return ("-", 1)
+    if c == '-' and nxt != '>' and prv != '-'
+        return ("+", 1)
+    if c == '*' and nxt != '*' and prv != '*'
+        return ("+", 1)
+    if c == '/' and nxt != '/' and prv != '/'
+        return ("*", 1)
+    none
+
+## The mutants of one source line, in column order (test.mutate.2): a branch condition negated,
+## a comparison, arithmetic or boolean operator flipped, `true` and `false` swapped, `not`
+## dropped, and a whole number changed by one. Strings, comments, declarations and checks are left alone.
+fn line_mutants(l str, ln int, owner str) List[Mutant]
+    mut out := List[Mutant]()
+    cs := l.chars()
+    mut lead := 0
+    while lead < cs.len() and cs[lead] == ' '
+        lead += 1
+    if lead == 0 or lead >= cs.len()
+        return out
+    trimmed := l.trim()
+    for skip in ["#", "@", "assert", "requires", "ensures", "use "]
+        if trimmed.starts_with(skip)
+            return out
+    for kw in ["if ", "elif "]
+        if trimmed.starts_with(kw) and not trimmed.contains(" then ") and not trimmed.contains("#")
+            cond := trimmed.slice(kw.len(), trimmed.len())
+            now := "{kw}not ({cond})"
+            out.push(Mutant(
+                at_line: ln,
+                shown: "{trimmed} -> {now}",
+                newl: "{l.slice(0, lead)}{now}",
+                owner: owner,
+            ))
+    mut i := lead
+    while i < cs.len()
+        c := cs[i]
+        if c == '#'
+            break
+        if c == '"' or c == '\''
+            e := literal_end(cs, i)
+            if e < 0
+                break
+            i = e
+            continue
+        if c.is_alpha() or c == '_'
+            mut j := i
+            while j < cs.len() and ident_char(cs[j])
+                j += 1
+            word := chars_text(cs, i, j)
+            mut now := ""
+            if word == "and"
+                now = "or"
+            elif word == "or"
+                now = "and"
+            elif word == "true"
+                now = "false"
+            elif word == "false"
+                now = "true"
+            if not now.is_empty()
+                out.push(Mutant(
+                    at_line: ln,
+                    shown: "{word} -> {now}",
+                    newl: splice(cs, i, j, now),
+                    owner: owner,
+                ))
+            elif word == "not" and j < cs.len() and cs[j] == ' '
+                out.push(Mutant(
+                    at_line: ln,
+                    shown: "not -> removed",
+                    newl: splice(cs, i, j + 1, ""),
+                    owner: owner,
+                ))
+            i = j
+            continue
+        if c.is_digit()
+            mut j := i
+            while j < cs.len() and (cs[j].is_digit() or cs[j] == '_')
+                j += 1
+            before := i > 0 and (ident_char(cs[i - 1]) or cs[i - 1] == '.')
+            frac := j + 1 < cs.len() and cs[j] == '.' and cs[j + 1].is_digit()
+            tail := j < cs.len() and cs[j].is_alpha()
+            if not before and not frac and not tail
+                digits := chars_text(cs, i, j)
+                if n := digits.replace("_", "").to_int()
+                    now := if n == 0 then "1" else "{n + 1}"
+                    out.push(Mutant(
+                        at_line: ln,
+                        shown: "{digits} -> {now}",
+                        newl: splice(cs, i, j, now),
+                        owner: owner,
+                    ))
+            i = j
+            continue
+        if sw := op_swap(cs, i)
+            out.push(Mutant(
+                at_line: ln,
+                shown: "{chars_text(cs, i, i + sw.1)} -> {sw.0}",
+                newl: splice(cs, i, i + sw.1, sw.0),
+                owner: owner,
+            ))
+            i += sw.1
+            continue
+        i += 1
+    out
+
+## At most `limit` of the mutants, spread evenly and in order (test.mutate.3).
+fn pick_mutants(cands List[Mutant], limit int) List[Mutant]
+    if limit <= 0 or cands.len() <= limit
+        return cands
+    mut out := List[Mutant]()
+    for i in 0..limit
+        out.push(cands[i * cands.len() / limit])
+    out
+
+## How many `"status":"pass"` lines a `--json` run printed.
+fn count_passed(out str) int
+    mut n := 0
+    for l in out.lines()
+        if l.contains("\"status\":\"pass\"")
+            n += 1
+    n
+
+## Runs the tests against each mutant of the reached lines of `file` and reports the survivors
+## (test.mutate.1-5). `base` is the baseline exit status and `base_pass` its passing tests.
+fn run_mutants(
+    file str,
+    text str,
+    tests List[TestFn],
+    reached Set[int],
+    limit int,
+    timeout str,
+    json bool,
+    base_pass int,
+    built bool,
+    base int,
+) !int
+    if not built
+        io.eprint("error[test.mutate.1]: the tests did not build, so no mutant can be judged")
+        return 2
+    if base != 0
+        io.eprint("error[test.mutate.1]: the tests fail, so no mutant can be judged; fix them first")
+        return base
+    if base_pass == 0
+        io.eprint("error[test.mutate.1]: no test passed, so no mutant can be killed")
+        return 2
+    src := text.lines()
+    mut owners := List[str]()
+    mut cur := ""
+    for l in src
+        if not l.is_empty() and not l.starts_with(" ") and not l.starts_with("#")
+            cur = decl_name(l)
+        owners.push(cur)
+    mut cands := List[Mutant]()
+    for ln in reached.sorted()
+        if ln < 1 or ln > src.len() or owners[ln - 1] == "main" or owners[ln - 1].is_empty()
+            continue
+        mut in_test := false
+        for t in tests
+            if ln - 1 >= t.first and ln - 1 <= t.last
+                in_test = true
+        if in_test
+            continue
+        for m in line_mutants(src[ln - 1], ln, owners[ln - 1])
+            cands.push(m)
+    chosen := pick_mutants(cands, limit)
+    dir := path.dir(file)
+    copy := if dir.is_empty() then ".ail-mutant-{path.stem(file)}.ail" else "{dir}/.ail-mutant-{path.stem(file)}.ail"
+    limit_ms := if timeout.is_empty() then "5000" else timeout
+    mut killed := 0
+    mut survived := 0
+    for m in chosen
+        mut body := src
+        body[m.at_line - 1] = m.newl
+        fs.write_text(copy, "{body.join("\n")}\n")? "writing {copy}"
+        r := proc.run(
+            ail_path(),
+            ["test", "--json", "--timeout", limit_ms, copy],
+            none,
+            120000,
+        ) else continue
+        if r.status == 1
+            killed += 1
+        elif r.status == 0 and count_passed(r.out) == base_pass
+            survived += 1
+            if json
+                print("\{\"mutant\":true,\"file\":{json_str(file)},\"line\":{m.at_line},\"fn\":{json_str(m.owner)},\"mutation\":{json_str(m.shown)},\"status\":\"survived\"}")
+            else
+                print("survived {file}:{m.at_line}: {m.shown} (in {m.owner})")
+    _ := proc.run("rm", ["-f", copy]) else return 2
+    invalid := chosen.len() - killed - survived
+    if json
+        print("\{\"mutate\":true,\"mutants\":{chosen.len()},\"killed\":{killed},\"survived\":{survived},\"invalid\":{invalid}}")
+    else
+        judged := killed + survived
+        score := if judged == 0 then 100 else killed * 100 / judged
+        print("mutants: {chosen.len()} run, {killed} killed, {survived} survived, {invalid} invalid, score {score}%")
+    if survived > 0 then 1 else 0
+
 fn trace_json(line str) str
     c := line.split("\t")
     if c.len() == 1
@@ -2246,7 +2879,7 @@ fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
     a
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] FILE")
     io.exit(2)
     2
 
@@ -2272,6 +2905,12 @@ fn main() !
     mut rec_file := ""
     mut bundle_dir := ""
     mut bundle_run := ""
+    mut fuzz := ""
+    mut corpus_dir := ""
+    mut fuzz_ms := 0
+    mut cases_given := false
+    mut mutating := false
+    mut mutate_max := 50
     for a in env.args()
         if want == "--since"
             since = a
@@ -2284,7 +2923,26 @@ fn main() !
             want = a
         elif want == "--cases"
             cases = a.to_int() else usage()
+            cases_given = true
             want = ""
+        elif a == "--mutate"
+            mutating = true
+        elif want == "--max"
+            mutate_max = a.to_int() else usage()
+            want = ""
+        elif a == "--max"
+            want = a
+        elif want == "--fuzz"
+            fuzz = a
+            want = ""
+        elif want == "--corpus"
+            corpus_dir = a
+            want = ""
+        elif want == "--time"
+            fuzz_ms = a.to_int() else usage()
+            want = ""
+        elif a == "--fuzz" or a == "--corpus" or a == "--time"
+            want = a
         elif want == "--seed"
             seed_given = a.to_int() else usage()
             has_seed = true
@@ -2356,6 +3014,9 @@ fn main() !
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
+    if mutating and coverage.is_empty()
+        # test.mutate.1: the build counts the statements run, to leave out code no test reaches.
+        coverage = "lines"
     mut own_rec := false
     if not bundle_dir.is_empty() and rec_mode.is_empty()
         # bundle.write.1: the failures are recorded as `--record` does, into a file of ours.
@@ -2423,6 +3084,22 @@ fn main() !
         lines.extend(made.lines)
         synth = made.names
     mut found := find_tests(lines)
+    if not fuzz.is_empty()
+        # test.fuzz.1: only the named property test is built and run.
+        mut only := List[TestFn]()
+        for t in found.tests
+            if t.name == fuzz
+                only.push(t)
+            else
+                found.left_out.push(Span(first: t.first, last: t.last))
+        found.tests = only
+        found.skipped = [k for k in found.skipped if k.name == fuzz]
+        if only.is_empty() and found.skipped.is_empty()
+            io.eprint("error[test.fuzz.1]: no property test named {fuzz} in {file}")
+            io.exit(2)
+        if not only.is_empty() and only[0].params.is_empty()
+            io.eprint("error[test.fuzz.1]: {fuzz} has no parameters, so there is nothing to generate")
+            io.exit(2)
     if contracts
         # contract.fuzz.1: only the generated checks run.
         mut only := List[TestFn]()
@@ -2459,7 +3136,7 @@ fn main() !
         verdicts.push(plain("doc examples", "skip", doc_note))
     dir := path.dir(file)
     mut mf := module_tests(lines, dir)
-    if contracts
+    if contracts or not fuzz.is_empty()
         mf = ModFiles(tests: [], skipped: [], lines: Map[str, List[str]]())
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
@@ -2515,7 +3192,7 @@ fn main() !
         modes := [
             m
             for m in [
-                if coverage.is_empty() then "" else "lines",
+                if coverage.is_empty() and fuzz.is_empty() then "" else "lines",
                 if trace then "tests" else "",
                 if rec_mode.is_empty() then "" else "record",
                 if max_steps.is_empty() then "" else "steps",
@@ -2675,15 +3352,36 @@ fn main() !
                     shown: v.shown,
                 ))
             else
-                p := run_prop(
-                    w,
-                    last_lead,
-                    exe,
-                    slot,
-                    t,
-                    cases,
-                    seed_for(t.name, has_seed, seed_given),
-                )
+                mut p := Prop(status: "pass", message: "", cases: 0, input: "")
+                if fuzz.is_empty()
+                    p = run_prop(
+                        w,
+                        last_lead,
+                        exe,
+                        slot,
+                        t,
+                        cases,
+                        seed_for(t.name, has_seed, seed_given),
+                    )
+                else
+                    # test.fuzz.1: the time allowance is 10 s unless `--time` or `--cases` says otherwise.
+                    mut allowance := 10000
+                    if fuzz_ms > 0
+                        allowance = fuzz_ms
+                    elif cases_given
+                        allowance = 3600000
+                    p = run_fuzz(
+                        w,
+                        last_lead,
+                        exe,
+                        slot,
+                        t,
+                        "{exe}.fuzz",
+                        corpus_dir,
+                        allowance,
+                        if cases_given then cases else 0,
+                        seed_for(t.name, has_seed, seed_given),
+                    )?
                 verdicts.push(Verdict(
                     name: t.name,
                     status: p.status,
@@ -2766,6 +3464,11 @@ fn main() !
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
     code := report(verdicts, json, text.lines(), traces, at_pos)
+    mut reached := Set[int]()
+    mut base_pass := 0
+    for v in verdicts
+        if v.status == "pass"
+            base_pass += 1
     if not coverage.is_empty() and built
         mut skip := Set[str]()
         for t in found.tests
@@ -2783,7 +3486,25 @@ fn main() !
             dir,
             skip,
         )
-            print_cover(c, json, coverage == "lines")
+            if mutating
+                if c.file == file
+                    reached = c.hit_lines
+            else
+                print_cover(c, json, coverage == "lines")
+    mut exit_code := code
+    if mutating
+        exit_code = run_mutants(
+            file,
+            text,
+            found.tests,
+            reached,
+            mutate_max,
+            timeout,
+            json,
+            base_pass,
+            built,
+            code,
+        )?
     if scratch.is_empty()
         _ := proc.run("rm", [
             "-f",
@@ -2791,9 +3512,10 @@ fn main() !
             exe,
             "{exe}.sites",
             "{exe}.hits",
+            "{exe}.fuzz",
             "{exe}.trace",
             "{exe}.rec",
-        ]) else io.exit(code)
+        ]) else io.exit(exit_code)
     else
-        _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)
-    io.exit(code)
+        _ := proc.run("rm", ["-rf", scratch]) else io.exit(exit_code)
+    io.exit(exit_code)

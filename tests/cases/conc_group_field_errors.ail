@@ -1,0 +1,12 @@
+# conc.task.10: a `TaskGroup` field needs a `unique` struct, and the field
+# can't be assigned.
+
+struct Loose
+    tasks TaskGroup
+
+unique struct Owner
+    tasks TaskGroup
+
+fn main()
+    mut o := Owner(tasks: TaskGroup())
+    o.tasks = TaskGroup()

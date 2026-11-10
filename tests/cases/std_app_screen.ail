@@ -1,0 +1,10 @@
+use std.app
+
+## std.app.31: `start` and `resize` carry the display's size and scale; a
+## headless event has them 0, and JSON members are read like any other.
+fn main()
+    e := app.event("start")
+    print("{e.screen_w} {e.screen_h} {e.scale}")
+    j := parse_json("\{\"kind\":\"resize\",\"screen_w\":1512,\"screen_h\":982,\"scale\":2}") else Json.Null
+    r := app.event_from_json(j)
+    print("{r.kind} {r.screen_w} {r.screen_h} {r.scale}")

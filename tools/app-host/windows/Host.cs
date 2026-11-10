@@ -127,6 +127,21 @@ static class Json
 
 // ---- Protocol ------------------------------------------------------------
 
+/// std.app.31 (ADR 1017): the primary display's size in points and its scale.
+static class ScreenInfo
+{
+    public static double W { get { return Screen.PrimaryScreen.Bounds.Width * 96.0 / Dpi; } }
+    public static double H { get { return Screen.PrimaryScreen.Bounds.Height * 96.0 / Dpi; } }
+    public static double Scale { get { return Dpi / 96.0; } }
+    static double Dpi
+    {
+        get
+        {
+            using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) return g.DpiX;
+        }
+    }
+}
+
 /// Writes events to standard output, one JSON object per line (std.app.8).
 static class Outbox
 {
@@ -397,7 +412,7 @@ class CanvasView : Control
             reported = Size;
             double cw, ch;
             CellMetrics(out cw, out ch);
-            Outbox.Send("resize", "id", CanvasId, "dx", Width / Dpi.Scale, "dy", Height / Dpi.Scale, "cell_w", cw, "cell_h", ch);
+            Outbox.Send("resize", "id", CanvasId, "dx", Width / Dpi.Scale, "dy", Height / Dpi.Scale, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
         }
     }
 
@@ -853,6 +868,30 @@ class HostForm : Form
         Outbox.Send("close");
     }
 
+    // std.app.30 (ADR 1008): "dark" or "light" from the apps theme setting, once after `start`
+    // and on every change.
+    string appearance = "";
+
+    static string SystemAppearance()
+    {
+        try
+        {
+            object v = Microsoft.Win32.Registry.GetValue(
+                @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+            if (v is int && (int)v == 0) return "dark";
+        }
+        catch (Exception) { }
+        return "light";
+    }
+
+    void SendAppearance()
+    {
+        string now = SystemAppearance();
+        if (now == appearance) return;
+        appearance = now;
+        Outbox.Send("appearance", "text", now);
+    }
+
     public void ShowView(string title, string focus, Node tree, bool hover)
     {
         Dpi.Hover = hover;
@@ -864,7 +903,9 @@ class HostForm : Form
         if (!started)
         {
             started = true;
-            Outbox.Send("start");
+            Outbox.Send("start", "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
+            SendAppearance();
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate { SendAppearance(); };
         }
         if (s != shape)
         {

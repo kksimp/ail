@@ -804,11 +804,40 @@ fn rec_fs_volume(path str, at str) int
         rec_end(s)
     m
 
+fn rec_fs_scan_count() int
+    if rec_mode() == 2
+        p := rec_next("fs.scan_count")
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        m := obj_new(16, 4)
+        store64(m, rec_c_int())
+        rec_c_next()
+        store64(m + 8, rec_c_int())
+        return m
+    m := fs_scan_count()
+    s := rec_begin("fs.scan_count", 1)
+    if s != 0
+        rec_text(s, "\{\"struct\":\"fs.ScanCount\",\"fields\":[")
+        rec_int(s, load64(m))
+        rec_byte(s, 44)
+        rec_int(s, load64(m + 8))
+        rec_text(s, "]}")
+        rec_end(s)
+    m
+
 fn rec_fs_read_range(path str, off int, len int, at str) str
     if rec_mode() == 2
         return rec_r_bytes("fs.read_range", at)
     r := fs_read_range(path, off, len, at)
     rec_w_bytes("fs.read_range", r)
+    r
+
+fn rec_fs_map(path str, at str) str
+    if rec_mode() == 2
+        return rec_r_bytes("fs.map", at)
+    r := fs_map(path, at)
+    rec_w_bytes("fs.map", r)
     r
 
 fn rec_fs_trash(path str, at str)

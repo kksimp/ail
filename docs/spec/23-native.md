@@ -195,8 +195,9 @@ deadlock the main task is not part of, or one reached through `t.wait()`,
 hangs as before. *(ADR 0599, ADR 0186)*
 
 **native.task.1** — Native code runs tasks and `par for` iterations in
-parallel on a pool of threads, at most 8 and no more than the cores the
-process may use, unless the environment variable `AIL_THREADS` (a whole
+parallel on a pool of threads, at most 64 and no more than the cores the
+process may use, each region using only the workers its work repays
+(`conc.par.17`), unless the environment variable `AIL_THREADS` (a whole
 number, 1 to 64; anything else is ignored) sets the size (`conc.par.9`,
 `conc.par.7`). `spawn f(args)` takes a free
 function of the subset's types and copies a list argument (`conc.share.1`);

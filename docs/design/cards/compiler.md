@@ -1,12 +1,12 @@
 # compiler
 entry: main in main.ail
-tests: 6 (`ail test` lists them)
+tests: 10 (`ail test` lists them)
 
 ## (root) (62 items)
 
 ## a64 (81 items)
 
-## api (217 items)
+## api (258 items)
 
 ## ast (142 items)
 
@@ -14,9 +14,9 @@ tests: 6 (`ail test` lists them)
 
 ## budget (27 items)
 
-## cheader (30 items)
+## cheader (55 items)
 
-## check (366 items)
+## check (367 items)
 
 ## codegen (55 items)
 
@@ -34,9 +34,9 @@ tests: 6 (`ail test` lists them)
 
 ## fmt (64 items)
 
-## load (103 items)
+## load (111 items)
 
-## mir (602 items)
+## mir (607 items)
 
 ## obj (66 items)
 

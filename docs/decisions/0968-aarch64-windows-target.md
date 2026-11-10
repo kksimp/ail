@@ -1,6 +1,6 @@
 # 0968. Native: the aarch64-windows target (windows-arm64)
 
-- **Status:** Proposed
+- **Status:** Deferred past 0.1.0 (experimental: compile-only, unverified)
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 24 — Cross-platform

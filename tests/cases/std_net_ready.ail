@@ -1,0 +1,47 @@
+## std.net.32: a server with many parked connections answers whichever one
+## has a request, in any order, and a connection that stays quiet holds up
+## none of them.
+use std.net
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            return
+        ex.respond(net.Response(status: 200, headers: {}, body: "ok {ex.request.path}\n"))?
+
+fn line_of(c net.Conn) str
+    l := c.read_line() else err
+        return "error"
+    l else "(closed)"
+
+fn ask(c net.Conn, i int) str
+    c.write("GET /r{i} HTTP/1.1\r\nHost: x\r\n\r\n") else err
+        return err.kind
+    mut l := line_of(c)
+    while l != "" and l != "error" and l != "(closed)"
+        l = line_of(c)
+    line_of(c)
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn worker(srv)
+    port := srv.addr().split(":")[1].to_int() else 0
+    quiet := net.connect("127.0.0.1", port)?
+    mut cs := []
+    for i in 0..40
+        cs.push(net.connect("127.0.0.1", port)?)
+    mut right := 0
+    for i in 0..40
+        if ask(cs[i], i) == "ok /r{i}"
+            right += 1
+    print("first round: {right} of 40")
+    mut back := 0
+    for k in 0..40
+        i := 39 - k
+        if ask(cs[i], i + 100) == "ok /r{i + 100}"
+            back += 1
+    print("second round, reversed: {back} of 40")
+    print("the quiet one: {ask(quiet, 7)}")
+    srv.close()
+    w.wait()?
+    print("done")

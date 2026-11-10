@@ -1,0 +1,21 @@
+# A widened sized value stored into a list of wider elements keeps every
+# element whole (type.num.15): `ints[i] = bs[k].to_int()` once stored one byte.
+fn main()
+    mut bs := List[u8]()
+    for i in 0..16
+        bs.push((i * 17).to_u8())
+    mut ints := [129 for _ in 0..4]
+    for i in 0..4
+        ints[i] = bs[i * 4 + 1].to_int()
+    print(ints)
+    mut wide := [0.to_u64() for _ in 0..3]
+    for i in 0..3
+        wide[i] = bs[i + 13].to_u64()
+    print(wide)
+    mut hw := List[u16]()
+    for i in 0..3
+        hw.push((i * 1000).to_u16())
+    mut back := [7 for _ in 0..3]
+    for i in 0..3
+        back[i] = hw[i].to_int()
+    print(back)

@@ -1,0 +1,30 @@
+# conc.share.8: `try_recv` never waits; `recv_for` waits at most its time,
+# and a timed wait alone is never a deadlock (ADR 0996).
+
+fn produce(out Channel[int])
+    for i in 1..=3
+        out.send(i * 10)
+    out.close()
+
+fn main() !
+    ch := Channel[int](4)
+    a := ch.try_recv() else -1
+    print("empty: {a}")
+    ch.send(5)
+    b := ch.try_recv() else -1
+    print("queued: {b}")
+    c := ch.recv_for(20) else -1
+    print("timed out: {c}")
+    d := ch.recv_for(-3) else -1
+    print("no wait: {d}")
+    src := Channel[int](1)
+    p := spawn produce(src)
+    mut total := 0
+    while true
+        v := src.recv_for(5000) else break
+        total += v
+    p.wait()?
+    print("received {total}")
+    e := src.try_recv() else -1
+    f := src.recv_for(1000) else -1
+    print("closed: {e} {f}")

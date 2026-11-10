@@ -39,6 +39,11 @@ struct Scan
     entries List[fs.Entry]
     skipped List[str]
 
+## std.fs.27 (ADR 0992): what every `fs.scan` has listed so far.
+struct ScanCount
+    entries int
+    bytes int
+
 ## std.proc
 struct Output
     status int

@@ -1,0 +1,407 @@
+## `ail context PROGRAM SYMBOL [--budget N] [--json]` (api.ctx.1-6, ADR 1020):
+## the smallest bundle of the program that an edit to one function needs, cut to
+## a token budget. It reads the same checker graph as `ail ask`, so one call
+## replaces the file reads before an edit.
+##
+##     ail context app.ail pay --budget 800
+use ast
+use check
+use load
+
+CONTEXT_USAGE := "usage: ail context PROGRAM SYMBOL [--budget N] [--json]   e.g. ail context app.ail pay --budget 800"
+
+## The budget when `--budget` is absent or has no number (api.ctx.1).
+CONTEXT_DEFAULT := 2000
+
+## One whole item of the pack: it is shown or cut as a unit (api.ctx.4).
+struct Piece
+    ## `signature`, `body`, `effects`, `callees`, `callers`, `types`, `tests` or `rules`.
+    section str
+    lines List[str]
+
+fn piece(section str, lines List[str]) Piece
+    Piece(section: section, lines: lines)
+
+fn indent_of_line(l str) int
+    l.len() - l.trim_start().len()
+
+## `line` without its leading attributes: `@test fn f` is `fn f`.
+fn ctx_head(line str) str
+    mut rest := line.trim()
+    while rest.starts_with("@")
+        cut := rest.find(" ") else rest.len()
+        rest = rest.slice(cut, rest.len()).trim_start()
+    rest
+
+## The non-blank lines after the first of the declaration at `line` of `text`,
+## comments included; a signature written over several lines is skipped.
+fn decl_rest(text str, line int) List[str]
+    lines := text.lines()
+    mut out := List[str]()
+    i := line - 1
+    if i < 0 or i >= lines.len()
+        return out
+    base := indent_of_line(lines[i])
+    mut j := i + 1
+    if lines[i].trim_end().ends_with("(")
+        while j < lines.len()
+            closes := indent_of_line(lines[j]) == base and lines[j].trim_start().starts_with(")")
+            j += 1
+            if closes
+                break
+    while j < lines.len()
+        l := lines[j]
+        j += 1
+        if l.trim() == ""
+            continue
+        if indent_of_line(l) <= base
+            break
+        out.push(l.trim_end())
+    out
+
+fn ctx_has_letter(s str) bool
+    for c in s.chars()
+        k := c.code()
+        if k >= 97 and k <= 122
+            return true
+    false
+
+## Whether `w` is spelled like a spec rule ID: `part.part.N`, lowercase parts and
+## a number last (api.ctx.5).
+fn is_rule_id(w str) bool
+    parts := w.split(".")
+    if parts.len() < 3 or not ctx_has_letter(parts[0])
+        return false
+    for i in 0..parts.len()
+        p := parts[i]
+        if p == ""
+            return false
+        last := i == parts.len() - 1
+        for c in p.chars()
+            k := c.code()
+            is_digit := k >= 48 and k <= 57
+            is_low := k >= 97 and k <= 122
+            if last
+                if not is_digit
+                    return false
+            elif not (is_digit or is_low or k == 95)
+                return false
+    true
+
+## The rule IDs written in the comments of `lines`, each once, in order (api.ctx.5).
+fn cited_rules(lines List[str]) List[str]
+    mut out := List[str]()
+    for l in lines
+        at := l.find("#") else continue
+        mut t := l.slice(at, l.len())
+        for p in [",", ";", ":", "(", ")", "`", "\"", "'", "[", "]", "#"]
+            t = t.replace(p, " ")
+        for w in t.split(" ")
+            mut x := w
+            while x.ends_with(".")
+                x = x.slice(0, x.len() - 1)
+            if is_rule_id(x) and not out.contains(x)
+                out.push(x)
+    out
+
+## Whether the function at `i` is a `@test`.
+fn ctx_is_test(prog ast.Program, i int) bool
+    for a in prog.fns[i].attrs
+        if a.name == "test"
+            return true
+    false
+
+## Whether `line` is in a standard module or generated code: those are not the
+## program's own and are left out of the pack.
+fn ctx_foreign(prog ast.Program, line int) bool
+    if line >= 1073741824
+        return true
+    mut at := -1
+    for i in 0..prog.files.len()
+        if prog.files[i].base < line
+            at = i
+    if at < 0
+        return false
+    m := prog.files[at].module
+    m == "std" or m.starts_with("std.")
+
+fn ctx_loc(prog ast.Program, line int, path str) str
+    where := query_file_of(prog, line)
+    file := if where.0 == "" then path else where.0
+    "{file}:{where.1}"
+
+## The text of the file that holds `line`, and the line within that file.
+fn ctx_text_at(prog ast.Program, texts List[str], line int)(str, int)
+    mut at := -1
+    for i in 0..prog.files.len()
+        if prog.files[i].base < line
+            at = i
+    if at < 0 or at >= texts.len()
+        return ("", 0)
+    (texts[at], line - prog.files[at].base)
+
+fn ctx_fn_line(prog ast.Program, j int, path str) str
+    "{ctx_loc(prog, prog.fns[j].pos.line, path)}  {fn_signature(prog.fns[j])}"
+
+## The tokens `p` costs; `first` when it opens its section, which adds the section line.
+fn piece_cost(p Piece, first bool) int
+    mut n := 0
+    if first
+        n += estimate_tokens("{p.section}\n")
+    for l in p.lines
+        n += estimate_tokens("  {l}\n")
+    n
+
+## Every piece, in the order they are kept, most needed first: the sections of
+## api.ctx.2 in the order of api.ctx.3, each in source order.
+fn context_pieces(g Graph, texts List[str], id str, path str) List[Piece]
+    prog := g.prog
+    mut pieces := List[Piece]()
+    i := g.fn_index(id) else return pieces
+    f := prog.fns[i]
+    here := ctx_text_at(prog, texts, f.pos.line)
+    rest := decl_rest(here.0, here.1)
+    api := new_whole_api(prog, Facts(
+        effects: g.analysis.effects,
+        errors: g.analysis.errors,
+        symbols: g.analysis.symbols,
+        weak_symbols: g.analysis.weak_symbols,
+    ))
+    item := api.fn_item(i)
+    # The signature, its contracts and its doc.
+    mut sig := ["{ctx_loc(prog, f.pos.line, path)}  {item.signature}"]
+    for c in item.extra_strs("requires")
+        sig.push("    requires {c}")
+    for c in item.extra_strs("ensures")
+        sig.push("    ensures {c}")
+    mut written := List[str]()
+    if d := item.doc
+        for l in d.split("\n")
+            sig.push("    ## {l}")
+            written.push("# {l}")
+    pieces.push(piece("signature", sig))
+    # The body, as written.
+    if rest.len() > 0
+        pieces.push(piece("body", rest))
+    # Its effects, each with the chain of callees that carries it.
+    for e in g.effects_of(id)
+        mut seen := Set[str]()
+        chain := g.effect_chain(id, e, mut seen)
+        pieces.push(piece("effects", ["{e}: {chain.join(" > ")}"]))
+    # The signatures of what it calls.
+    mut named := List[str]()
+    for s in g.callees(id)
+        if named.contains(s.target)
+            continue
+        named.push(s.target)
+        if j := g.fn_index(s.target)
+            if not ctx_foreign(prog, prog.fns[j].pos.line)
+                pieces.push(piece("callees", [ctx_fn_line(prog, j, path)]))
+    # The signatures of what calls it; a test is listed under `tests`.
+    mut callers := List[int]()
+    for s in g.sites(id, Ask.Callers)
+        if s.within == "" or s.within == id
+            continue
+        if j := g.fn_index(s.within)
+            if not callers.contains(j) and not ctx_is_test(prog, j)
+                callers.push(j)
+    for j in callers.sorted(by: |x| prog.fns[x].pos.line)
+        if not ctx_foreign(prog, prog.fns[j].pos.line)
+            pieces.push(piece("callers", [ctx_fn_line(prog, j, path)]))
+    # The types it names, as declared.
+    mut types := List[str]()
+    for r in g.refs
+        if r.within == i and r.id.starts_with("type:") and not types.contains(r.id)
+            types.push(r.id)
+    for t in types
+        for d in g.decls
+            if d.1 != t or ctx_foreign(prog, d.0.line)
+                continue
+            there := ctx_text_at(prog, texts, d.0.line)
+            tl := there.0.lines()
+            if there.1 < 1 or there.1 > tl.len()
+                continue
+            fields := decl_rest(there.0, there.1)
+            mut lines := ["{ctx_loc(prog, d.0.line, path)}  {ctx_head(tl[there.1 - 1])}"]
+            for k in 0..fields.len()
+                if k >= 12
+                    lines.push("    ...")
+                    break
+                lines.push(fields[k])
+            pieces.push(piece("types", lines))
+    # The tests that reach it, directly or through callers.
+    mut users := Map[str, List[str]]()
+    for r in g.refs
+        if r.within >= 0 and r.within < g.fn_ids.len()
+            mut list := users.get(r.id) else []
+            if not list.contains(g.fn_ids[r.within])
+                list.push(g.fn_ids[r.within])
+            users[r.id] = list
+    mut reached := Set[str]()
+    mut queue := [id]
+    mut at := 0
+    while at < queue.len()
+        for u in users.get(queue[at]) else []
+            if not reached.contains(u)
+                reached.add(u)
+                queue.push(u)
+        at += 1
+    mut tests := List[int]()
+    for j in 0..prog.fns.len()
+        if j < g.fn_ids.len() and reached.contains(g.fn_ids[j]) and ctx_is_test(prog, j)
+            if not ctx_foreign(prog, prog.fns[j].pos.line)
+                tests.push(j)
+    for j in tests
+        pieces.push(piece("tests", [ctx_fn_line(prog, j, path)]))
+    # The spec rules its comments cite.
+    mut scan := rest
+    scan.extend(written)
+    for rule in cited_rules(scan)
+        pieces.push(piece("rules", [rule]))
+    pieces
+
+## The sections of `pieces[from..]` that were left out, as `name N`, in order.
+fn dropped_text(pieces List[Piece], from int) str
+    mut names := List[str]()
+    mut counts := Map[str, int]()
+    for k in from..pieces.len()
+        s := pieces[k].section
+        if not counts.contains(s)
+            names.push(s)
+        counts[s] = (counts.get(s) else 0) + 1
+    ["{n} {counts.get(n) else 0}" for n in names].join(", ")
+
+fn cut_line(pieces List[Piece], from int, needs int) str
+    "cut: {dropped_text(pieces, from)}; --budget {needs} shows all"
+
+## `ail context PROGRAM SYMBOL [--budget N] [--json]`; the exit status: 0 the
+## pack was printed, 2 an error (api.ctx.6).
+pub fn context_command(args List[str], std str) int
+    mut json := false
+    mut tokens := CONTEXT_DEFAULT
+    mut rest := List[str]()
+    mut k := 0
+    while k < args.len()
+        a := args[k]
+        k += 1
+        if a == "--json"
+            json = true
+        elif a == "--budget"
+            # A bare `--budget` takes the default (api.ctx.1).
+            if k < args.len()
+                if n := args[k].to_int()
+                    tokens = n
+                    k += 1
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}`\n{CONTEXT_USAGE}")
+            return 2
+        else
+            rest.push(a)
+    if rest.len() != 2
+        io.eprint(CONTEXT_USAGE)
+        return 2
+    if tokens < 1
+        io.eprint("error: `--budget` needs a positive number of tokens (api.ctx.1)")
+        return 2
+    path := rest[0]
+    loaded := load.load(path, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.eprint("error: {path} has errors, so it can't be read for context; fix them first (api.ctx.6)")
+            return 2
+    prog := loaded.program
+    api := new_whole_api(prog, Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    ))
+    mut decls := List[(ast.Pos, str)]()
+    flatten_decls(api.items(), mut decls)
+    g := Graph(
+        prog: prog,
+        analysis: analysis,
+        refs: collect_refs(prog, analysis.symbols, analysis.weak_symbols).refs,
+        decls: decls,
+        fn_ids: api.fn_ids,
+        writes: Set[int](),
+    )
+    ids := g.candidates(rest[1], ["fn:", "method:"])
+    if ids.len() == 0
+        io.eprint("error: no function named `{rest[1]}` in {path} (api.ctx.6)")
+        return 2
+    if ids.len() > 1
+        io.eprint("error: `{rest[1]}` names {ids.len()} functions: {ids.join(", ")}; use one of these ids (api.ctx.6)")
+        return 2
+    id := ids[0]
+    pieces := context_pieces(g, loaded.texts, id, path)
+    title := "context {id}"
+    # The pack's full cost, and the most the trailer can cost, which is kept free (api.ctx.4).
+    mut needs := estimate_tokens("{title}\n")
+    mut last := ""
+    for p in pieces
+        needs += piece_cost(p, p.section != last)
+        last = p.section
+    reserve := if needs <= tokens then 0 else estimate_tokens("{cut_line(pieces, 1, 99999)}\n")
+    # The most pieces, in order, that fit: a prefix, so what is cut is always the least needed.
+    mut room := tokens - estimate_tokens("{title}\n") - reserve
+    mut shown := 0
+    last = ""
+    for p in pieces
+        c := piece_cost(p, p.section != last)
+        # The signature is always shown (api.ctx.4).
+        if c > room and shown > 0
+            break
+        room -= c
+        last = p.section
+        shown += 1
+    # api.ctx.7: the pack as one JSON object.
+    if json
+        mut names := List[str]()
+        for p in pieces[..shown]
+            if not names.contains(p.section)
+                names.push(p.section)
+        mut sections := List[Kv]()
+        for n in names
+            items := [J.Str(p.lines.join("\n")) for p in pieces[..shown] if p.section == n]
+            sections.push(kv(n, J.Arr(items)))
+        mut cut_names := List[str]()
+        mut counts := Map[str, int]()
+        for p in pieces[shown..]
+            if not counts.contains(p.section)
+                cut_names.push(p.section)
+            counts[p.section] = (counts.get(p.section) else 0) + 1
+        mut cut := List[Kv]()
+        for n in cut_names
+            cut.push(kv(n, J.Int(counts.get(n) else 0)))
+        print(write_json(
+            J.Obj([
+                kv("target", J.Str(id)),
+                kv("budget", J.Int(tokens)),
+                kv("needs", J.Int(needs)),
+                kv("sections", J.Obj(sections)),
+                kv("cut", J.Obj(cut)),
+            ]),
+            false,
+            0,
+        ))
+        return 0
+    mut out := [title]
+    last = ""
+    for p in pieces[..shown]
+        if p.section != last
+            out.push(p.section)
+            last = p.section
+        for l in p.lines
+            out.push("  {l}")
+    if shown < pieces.len()
+        out.push(cut_line(pieces, shown, needs))
+    print(out.join("\n"))
+    0

@@ -1,0 +1,4 @@
+# The worked example of docs/packages.md: two path dependencies, no capabilities.
+package wordtool caps none
+dep tally path vendor/tally
+dep textkit path vendor/textkit

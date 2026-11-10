@@ -1,6 +1,6 @@
 # 0958. SPIR-V and MSL compute first, then rendering
 
-- **Status:** Proposed
+- **Status:** Deferred past 0.1.0
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library; GUI; GPU

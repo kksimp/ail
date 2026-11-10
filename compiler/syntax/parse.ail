@@ -205,6 +205,9 @@ fn Parser.top_level(mut self)
             use_decl()
         elif tag == "kw" and text == "pub"
             pub_marker()
+        elif tag == "id" and text == "export" and at_export_fn()
+            if f := export_function()
+                fns.push(f)
         elif tag == "sym" and text == "@"
             # `@derive(f) trait Name` (ct.derive.1), or `@name fn ...` (gram.attr.1-2).
             if not derive_trait()
@@ -706,6 +709,47 @@ fn Parser.at_extern_fn(self) bool
         return false
     kw_at(2) == "fn" or tag_at(2) == "str" and kw_at(3) == "fn"
 
+## At `export c ["symbol"] fn` (ffi.export.1).
+fn Parser.at_export_fn(self) bool
+    if tag_at(1) != "id"
+        return false
+    kw_at(2) == "fn" or tag_at(2) == "str" and kw_at(3) == "fn"
+
+## `pub export c ["symbol"] fn name(params) Result` and its body: an ordinary
+## function plus the attribute `@export` (ffi.export.1). The optional string
+## is the C symbol; the default is the AIL name.
+fn Parser.export_function(mut self) ast.FnDecl?
+    had_pub := kw_at(-1) == "pub"
+    kw_pos := bump().pos
+    if not had_pub
+        error_text(
+            "ffi.export.1",
+            kw_pos,
+            "an exported function is public to C, so it needs `pub`",
+            "write `pub export c fn name(params) Result`",
+            "",
+        )
+    lang := take_name("`c` after `export`", "ffi.export.1")?
+    if lang.name != "c"
+        error_text(
+            "ffi.export.1",
+            lang.pos,
+            "`export {lang.name}` is not supported",
+            "write `pub export c fn name(params) Result`",
+            "",
+        )
+        skip_statement()
+        return none
+    mut sym := absent[str]()
+    match peek()
+        Str(text) =>
+            i += 1
+            sym = text
+        Ident(_) | Kw(_) | Sym(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+    mut f := function(ast.Within.TopLevel)?
+    f.attrs.push(ast.Attr(name: "export c", pos: kw_pos, arg: sym))
+    f
+
 fn in_trait(w ast.Within) bool
     match w
         InTrait(_) => true
@@ -898,13 +942,20 @@ fn Parser.generic_params(mut self) List[ast.GenericParam]?
     bump()
     mut params := List[ast.GenericParam]()
     while not at_sym("]")
+        # gen.const.1: `const N int`, a const parameter.
+        is_const := tag_at(0) == "id"
+            and tok_text(peek()) == "const"
+            and tag_at(1) == "id"
+            and tag_at(2) == "id"
+        if is_const
+            bump()
         n := take_name("a type parameter name", "gen.decl.1")?
         mut bounds := List[ast.Ident]()
         if tag_at(0) == "id"
             bounds.push(dotted_name("a trait", "gen.bound.1")?)
             while eat_sym("+")
                 bounds.push(dotted_name("a trait after `+`", "gen.bound.1")?)
-        params.push(ast.GenericParam(name: n.name, pos: n.pos, bounds: bounds))
+        params.push(ast.GenericParam(name: n.name, pos: n.pos, bounds: bounds, is_const: is_const))
         if not eat_sym(",")
             break
     expect_sym("]", "`]` or `,` in the type parameters", "gen.decl.1")?
@@ -1185,7 +1236,7 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         return none
     if eat_sym("[")
         while true
-            args.push(type_ref("a type argument", "gram.generic.1")?)
+            args.push(type_arg("gram.generic.1")?)
             if not eat_sym(",") or at_sym("]")
                 break
         expect_sym("]", "`]` after the type arguments", "gram.generic.1")?
@@ -1934,12 +1985,26 @@ fn name_pos(e ast.Expr) ast.Pos
             col: 0,
         )
 
+## A type argument, or a const argument: an int literal, kept as a `Named`
+## whose name is the digits (`4`, never a type name; gen.const.1).
+fn Parser.type_arg(mut self, rule str) ast.TypeRef?
+    if tag_at(0) == "int"
+        v := match peek()
+            Int(x) => "{x}"
+            Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
+        cpos := bump().pos
+        return ast.TypeRef(
+            shape: ast.TypeShape.Named(name: v, args: List[ast.TypeRef]()),
+            pos: cpos,
+        )
+    type_ref("a type argument", rule)
+
 ## Type arguments after `[`, through `]` (gen.infer.2).
 fn Parser.type_args(mut self) List[ast.TypeRef]?
     bump()
     mut args := List[ast.TypeRef]()
     while not at_sym("]")
-        args.push(type_ref("a type argument", "gen.infer.2")?)
+        args.push(type_arg("gen.infer.2")?)
         if not eat_sym(",")
             break
     expect_sym("]", "`]` or `,` in the type arguments", "gen.infer.2")?

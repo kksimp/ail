@@ -1,0 +1,14 @@
+error struct Bad "bad"
+
+fn f(x int) int? ! Bad
+    if x > 5
+        return Bad()
+    if x > 2
+        return none
+    x
+
+fn main()
+    v := f(3) else err
+        print("failed {err}")
+        return
+    print(v)

@@ -14,8 +14,12 @@ fn main() !
     out := Channel[str](10)
     start(out)
     out.close()
+    # The tasks send in any order: print the lines sorted.
+    mut got := List[str]()
     while true
         s := out.recv() else break
+        got.push(s)
+    for s in got.sorted()
         print(s)
     g := TaskGroup()
     g.add(spawn work(4, out2()))

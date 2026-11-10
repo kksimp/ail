@@ -33,6 +33,21 @@ pub struct Input
     pub y float
     pub buttons int
     pub wheel float
+    pub pads List[Pad]
+
+## One gamepad's state (std.gfx.11). `buttons` has a bit per held button (`pad_bit`),
+## `pressed` and `released` the buttons that changed since the previous frame.
+## Sticks run -1.0 to 1.0 (right and up are positive), triggers 0.0 to 1.0.
+pub struct Pad
+    pub buttons int
+    pub pressed int
+    pub released int
+    pub lx float
+    pub ly float
+    pub rx float
+    pub ry float
+    pub lt float
+    pub rt float
 
 pub trait Game
     ## Advances the state by `dt` seconds with this frame's input.
@@ -42,7 +57,17 @@ pub trait Game
 
 ## An input with nothing held or typed.
 pub fn idle() Input
-    Input(down: [], pressed: [], released: [], text: "", x: 0.0, y: 0.0, buttons: 0, wheel: 0.0)
+    Input(
+        down: [],
+        pressed: [],
+        released: [],
+        text: "",
+        x: 0.0,
+        y: 0.0,
+        buttons: 0,
+        wheel: 0.0,
+        pads: [],
+    )
 
 pub fn new_frame(w int, h int) Frame
     Frame(w: w, h: h, cmds: [])
@@ -64,6 +89,80 @@ pub fn key_up(key str) app.Event
     mut e := app.event("keyup")
     e.text = key
     e
+
+## A gamepad with nothing held and the sticks centred.
+pub fn no_pad() Pad
+    Pad(buttons: 0, pressed: 0, released: 0, lx: 0.0, ly: 0.0, rx: 0.0, ry: 0.0, lt: 0.0, rt: 0.0)
+
+## The bit of button `name` (std.gfx.11): `a` 1, `b` 2, `x` 4, `y` 8, `lb` 16,
+## `rb` 32, `back` 64, `start` 128, `l3` 256, `r3` 512, `up` 1024, `down` 2048,
+## `left` 4096, `right` 8192; 0 for any other name.
+pub fn pad_bit(name str) int
+    names := [
+        "a",
+        "b",
+        "x",
+        "y",
+        "lb",
+        "rb",
+        "back",
+        "start",
+        "l3",
+        "r3",
+        "up",
+        "down",
+        "left",
+        "right",
+    ]
+    for k in 0..names.len()
+        if names[k] == name
+            return 1.shl(k)
+    0
+
+## Gamepad `n` (from 0); one that isn't connected is `no_pad()`.
+pub fn pad(i Input, n int) Pad
+    if n < 0 or n >= i.pads.len()
+        return no_pad()
+    i.pads[n]
+
+## Whether `button` of gamepad `n` is held.
+pub fn pad_down(i Input, n int, button str) bool
+    pad(i, n).buttons.bit_and(pad_bit(button)) != 0
+
+## Whether `button` of gamepad `n` went down this frame.
+pub fn pad_pressed(i Input, n int, button str) bool
+    pad(i, n).pressed.bit_and(pad_bit(button)) != 0
+
+## Whether `button` of gamepad `n` went up this frame.
+pub fn pad_released(i Input, n int, button str) bool
+    pad(i, n).released.bit_and(pad_bit(button)) != 0
+
+## The `pad` host event for gamepad `n` with state `buttons,lx,ly,rx,ry,lt,rt`;
+## an empty `state` says it was disconnected (std.gfx.11).
+pub fn pad_event(n int, state str) app.Event
+    mut e := app.event("pad")
+    e.id = "{n}"
+    e.text = state
+    e
+
+fn pad_from(old Pad, state str) Pad
+    if state == ""
+        return no_pad()
+    parts := state.split(",")
+    if parts.len() != 7
+        return old
+    buttons := parts[0].to_int() else 0
+    Pad(
+        buttons: buttons,
+        pressed: buttons.bit_and(old.buttons.bit_not()),
+        released: old.buttons.bit_and(buttons.bit_not()),
+        lx: parts[1].to_float() else 0.0,
+        ly: parts[2].to_float() else 0.0,
+        rx: parts[3].to_float() else 0.0,
+        ry: parts[4].to_float() else 0.0,
+        lt: parts[5].to_float() else 0.0,
+        rt: parts[6].to_float() else 0.0,
+    )
 
 ## Whether `key` is held (std.gfx.2).
 pub fn down(i Input, key str) bool
@@ -96,6 +195,20 @@ pub fn next_input(prev Input, events List[app.Event]) Input
     mut y := prev.y
     mut buttons := prev.buttons
     mut wheel := 0.0
+    # A gamepad's changes last one frame: keep the buttons held, clear the rest.
+    mut pads := List[Pad]()
+    for old in prev.pads
+        pads.push(Pad(
+            buttons: old.buttons,
+            pressed: 0,
+            released: 0,
+            lx: old.lx,
+            ly: old.ly,
+            rx: old.rx,
+            ry: old.ry,
+            lt: old.lt,
+            rt: old.rt,
+        ))
     for ev in events
         if ev.kind == "key"
             if not held.contains(ev.text)
@@ -114,6 +227,12 @@ pub fn next_input(prev Input, events List[app.Event]) Input
                 buttons = 1
         elif ev.kind == "scroll"
             wheel = wheel + ev.dy
+        elif ev.kind == "pad"
+            n := ev.id.to_int() else -1
+            if n >= 0 and n < 8
+                while pads.len() <= n
+                    pads.push(no_pad())
+                pads[n] = pad_from(pads[n], ev.text)
     Input(
         down: held,
         pressed: went_down,
@@ -123,6 +242,7 @@ pub fn next_input(prev Input, events List[app.Event]) Input
         y: y,
         buttons: buttons,
         wheel: wheel,
+        pads: pads,
     )
 
 ## One command as a line of text (std.gfx.4).

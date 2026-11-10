@@ -4,6 +4,8 @@ Chapter key: `ffi`
 
 > **Status:** Drafted (partial). Specified and implemented: `extern c fn`
 > declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926), the
+> type mapping, loading, and calls on Linux, macOS and Windows. Exports are specified (`ffi.export.1-3`); the library output is not built yet. Not yet specified: callbacks,
+> declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926; constants, enums and function-pointer types `ffi.decl.4-5`, ADR 1010), the
 > type mapping, loading, and calls on Linux, macOS and Windows. Not yet specified: callbacks, exporting AIL functions to C,
 > structs by value, variadic functions, and header search configuration.
 
@@ -41,6 +43,61 @@ extern c "libm" fn hypot(a float, b float) float
 extern c fn abs(x i32) i32
 extern c fn strlen(s *u8) int
 ```
+
+## Exports
+
+**ffi.export.1** — `pub export c fn name(params) Result` followed by a body
+declares an AIL function that C can call. `export c "symbol" fn` names the C
+symbol; without a string it is the AIL name. The declaration is at the top
+level and starts with `pub`; `export` with anything but `c`, or without `pub`,
+is error `ffi.export.1`. Inside AIL it is an ordinary function. *(ADR 0950)*
+
+**ffi.export.2** — An exported function has the signature of an `extern c fn`
+(`ffi.decl.3`): C-layout types only, no `mut` parameter, at most six
+integer-like and eight float parameters, and no type, `self` or type
+parameters. *(ADR 0950)*
+
+```ail error=ffi.export.2
+pub export c fn total(xs List[int]) int
+    xs.len()
+
+fn main()
+    print(total([1, 2]))
+```
+
+```ail tool=run,FILE expect=7 rules=ffi.export.1
+pub export c "ail_add" fn add(a i32, b i32) i32
+    a + b
+
+fn main()
+    print(add(3, 4))
+```
+
+**ffi.export.3** — `ail header FILE [-o OUT.h]` prints a C header of the
+exported functions in source order: `int` is `int64_t`, `float` is `double`,
+`bool` is `bool`, sized numbers are the `<stdint.h>` types, a pointer to a
+scalar is a pointer to its C type and any other pointer is `void *`. The
+program is checked first. Building the library itself (`ail build --lib`)
+is not yet specified. *(ADR 0950)*
+**ffi.decl.4** — A header import also reads constants. An object-like
+`#define NAME body` whose body is an integer expression, a float literal or a
+string literal becomes `pub NAME := value`, and each enumerator of an `enum`
+(also `typedef enum`) becomes an integer constant, numbered as C numbers it.
+An integer expression may use integer and character literals, constants read
+earlier in the same header, parentheses, unary `-`, `+` and `~`, and the
+binary `*`, `/`, `%`, `+`, `-`, `<<`, `>>`, `&`, `^` and `|`, with C's
+precedence. An integer constant is an `int` (use `.to_i32()` where a C
+parameter is `i32`). A function-like macro, a body that needs a cast, `sizeof`
+or a name the header does not define, a value beyond 2^61 and an enumerator
+after one that could not be read are left out, like a prototype the FFI cannot
+carry. *(ADR 1010)*
+**ffi.decl.5** — A function-pointer parameter (`int (*cb)(int)`) and a
+`typedef` of a function-pointer type are `*u8`. Calling a function that takes
+one is as unsafe as any C call (`ffi.call.1`); AIL does not yet make a C
+callback, so the value is a pointer the program got from C or `0`. A union
+behind a pointer is `*u8` like a struct. A union or struct by value, a bit-field
+struct's fields and a function that returns a function pointer are left out
+until `@layout(c)` (ADR 0952) maps struct fields. *(ADR 1010)*
 
 ## Calls
 
@@ -264,6 +321,34 @@ fn main()
     unsafe
         print(lib.abs(-5))
         print(lib.hypot(3.0, 4.0))
+```
+
+```c
+/* consts.h */
+#define BUF 4096
+#define FLAGS (1 << 3 | 0x10)
+#define NEG -7
+#define PI 3.5
+#define GREETING "hi"
+enum color { RED, GREEN = 5, BLUE };
+typedef enum { SLOW = 1, FAST = 1 << 1 } speed_t2;
+typedef int (*visit_fn)(int);
+int abs(int x);
+void walk(visit_fn f, void *user);   /* visit_fn is *u8 */
+```
+
+```ail tool=run,DIR pkg=ffi_header_consts expect=4096 rules=ffi.decl.4,ffi.decl.5
+use c "consts.h" as k
+
+fn main()
+    unsafe
+        print(k.BUF)
+        print(k.FLAGS)
+        print(k.abs(k.NEG.to_i32()))
+        print(k.PI)
+        print(k.GREETING)
+        print(k.BLUE)
+        print(k.FAST)
 ```
 
 ```ail tool=check,DIR pkg=ffi_header_missing status=2 expect=ffi.decl.1 rules=ffi.decl.1

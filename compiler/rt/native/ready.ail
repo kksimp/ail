@@ -1,0 +1,136 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Readiness sets (std.net.32, ADR 1009): `epoll` on Linux and `kqueue` on
+## macOS. A set holds descriptors that a task waits on; `rdy_wait` returns the
+## tags of the ones that became readable, in time independent of how many are
+## registered. The HTTP server (net_serve.ail) keeps one per listener for its
+## parked connections, where `poll` would copy and scan every one of them on
+## every wait. A single wait on one descriptor stays `poll` (net.ail): a set
+## costs two system calls to build.
+##
+## A tag is a non-negative number below 2^32. A descriptor armed with
+## `rdy_arm` is reported once, then disarmed (EPOLLONESHOT, EV_ONESHOT), so
+## that two tasks waiting on the same set never both take one connection and a
+## connection a task is reading is not reported again. `rdy_listen` registers
+## a descriptor that is reported every time it is readable. Windows has no
+## set yet (IOCP is the second slice of ADR 1009): `rdy_new` returns -38.
+##
+## Linux x86-64 and ARM64 differ in `struct epoll_event`: 12 bytes packed
+## (events at 0, data at 4) and 16 bytes (events at 0, data at 8).
+
+# The most events one `rdy_wait` returns.
+RDY_MAX := 64
+
+## A new readiness set: its descriptor, or a negative `errno`.
+fn rdy_new() int
+    t := target()
+    if t == 3
+        return -38
+    if t == 2
+        return syscall(362, 0, 0, 0, 0, 0, 0)
+    # epoll_create1(EPOLL_CLOEXEC)
+    syscall(os_pick(291, 20, 0), 524288, 0, 0, 0, 0, 0)
+
+## Register `fd` to be reported with `tag` whenever it is readable; 0 or a
+## negative `errno`.
+fn rdy_listen(ep int, fd int, tag int) int
+    rdy_ctl(ep, fd, tag, false)
+
+## Arm `fd` to be reported once with `tag` when it is readable (at once if it
+## already is); 0 or a negative `errno`. Arming an armed descriptor is harmless.
+fn rdy_arm(ep int, fd int, tag int) int
+    rdy_ctl(ep, fd, tag, true)
+
+fn rdy_ctl(ep int, fd int, tag int, once bool) int
+    if target() == 2
+        # struct kevent: ident 0, filter (i16) 8, flags (u16) 10, fflags 12,
+        # data 16, udata 24. EVFILT_READ is -1; EV_ADD 1, EV_ONESHOT 16.
+        ke := alloc_raw(32, KIND_BYTES)
+        store64(ke, fd)
+        store64(ke + 8, 65535.bit_or((if once then 17 else 1).shl(16)))
+        store64(ke + 16, 0)
+        store64(ke + 24, tag)
+        return syscall(363, ep, ke, 1, 0, 0, 0)
+    ev := alloc_raw(16, KIND_BYTES)
+    store64(ev + 8, 0)
+    # EPOLLIN, plus EPOLLONESHOT (1 << 30) when armed once.
+    bits := if once then 1073741825 else 1
+    if target() == 1
+        store64(ev, bits)
+        store64(ev + 8, tag)
+    else
+        store64(ev, bits.bit_or(tag.shl(32)))
+    # EPOLL_CTL_MOD (3) re-arms; a descriptor not yet in the set is added (1).
+    if once
+        r := syscall(os_pick(233, 21, 0), ep, 3, fd, ev, 0, 0)
+        if r != -2
+            return r
+    syscall(os_pick(233, 21, 0), ep, 1, fd, ev, 0, 0)
+
+## Wait up to `ms` (negative: forever) for tags: up to `RDY_MAX` of them are
+## stored as words at `out`; the count (0 on a timeout) or a negative `errno`.
+## On a deterministic schedule the other tasks run between short waits, as in
+## `net_wait`.
+fn rdy_wait(ep int, out int, ms int) int
+    if not det_on()
+        return rdy_wait_blocked(ep, out, ms)
+    deadline := if ms < 0 then -1 else time_mono_ms() + ms
+    while true
+        r := rdy_wait_raw(ep, out, 0)
+        if r != 0 or ms == 0
+            return r
+        if deadline >= 0 and time_mono_ms() >= deadline
+            return 0
+        if det_relax()
+            continue
+        r2 := rdy_wait_raw(ep, out, 1)
+        if r2 != 0
+            return r2
+    0
+
+## `rdy_wait_raw` on a pool worker, counted as blocked (see `net_poll_blocked`).
+fn rdy_wait_blocked(ep int, out int, ms int) int
+    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
+        return rdy_wait_raw(ep, out, ms)
+    wait_enter()
+    s := blocked_enter()
+    r := rdy_wait_raw(ep, out, ms)
+    blocked_leave(s)
+    wait_leave()
+    r
+
+fn rdy_wait_raw(ep int, out int, ms int) int
+    t := target()
+    stride := if t == 0 then 12 else 16
+    buf := alloc_raw(RDY_MAX * 32, KIND_BYTES)
+    ts := alloc_raw(16, KIND_BYTES)
+    while true
+        mut r := 0
+        if t == 2
+            store64(ts, if ms < 0 then 0 else ms / 1000)
+            store64(ts + 8, if ms < 0 then 0 else ms % 1000 * 1000000)
+            r = syscall(363, ep, 0, 0, buf, RDY_MAX, if ms < 0 then 0 else ts)
+        else
+            # epoll_pwait(ep, events, max, ms, no sigmask, 8)
+            r = syscall(os_pick(281, 22, 0), ep, buf, RDY_MAX, ms, 0, 8)
+        if r == -4
+            continue
+        if r <= 0
+            return r
+        mut n := 0
+        for i in 0..r
+            mut tag := 0
+            if t == 2
+                # An EV_ERROR event (flags 0x4000) carries no readiness.
+                if load64(buf + 32 * i + 8).shr(16).bit_and(16384) != 0
+                    continue
+                tag = load64(buf + 32 * i + 24)
+            elif t == 1
+                tag = load64(buf + stride * i + 8)
+            else
+                tag = load64(buf + stride * i + 4).bit_and(4294967295)
+            store64(out + 8 * n, tag)
+            n += 1
+        return n
+    0

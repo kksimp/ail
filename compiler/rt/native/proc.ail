@@ -633,12 +633,28 @@ fn ps_poll_ms(ps int) int
 ## has ended on either stream of the child that channel `ch` belongs to.
 fn chan_pump(ch int)
     ps := load64(ch + CH_SOURCE)
+    if sig_is(ps)
+        sig_pump(ch, -1)
+        return
     seen := load64(ps + PS_PROG)
     while load64(ps + PS_PROG) == seen
         if ps_reap(ps)
             return
         ps_check_deadline(ps)
         ps_round(ps, false, ps_poll_ms(ps))
+
+## One round of `chan_pump` that waits at most `ms` milliseconds
+## (`recv_for`, conc.share.8, ADR 0996).
+fn chan_pump_ms(ch int, ms int)
+    ps := load64(ch + CH_SOURCE)
+    if sig_is(ps)
+        sig_pump(ch, ms)
+        return
+    if ps_reap(ps)
+        return
+    ps_check_deadline(ps)
+    p := ps_poll_ms(ps)
+    ps_round(ps, false, if ms < p then ms else p)
 
 ## Whether `recv` on `ch` would return at once (std.ui, ADR 0863): a value is
 ## queued or the channel is closed. A child's output is read first, without
@@ -649,7 +665,10 @@ fn chan_ready(ch int) bool
     unlock(ch + C_LOCK)
     if ready or load64(ch + CH_SOURCE) == 0
         return ready
-    ps_round(load64(ch + CH_SOURCE), false, 0)
+    if sig_is(load64(ch + CH_SOURCE))
+        sig_poll(load64(ch + CH_SOURCE), ch)
+    else
+        ps_round(load64(ch + CH_SOURCE), false, 0)
     lock(ch + C_LOCK)
     ready = load64(ch + C_COUNT) > 0 or load64(ch + C_CLOSED) != 0
     unlock(ch + C_LOCK)
@@ -660,6 +679,8 @@ fn chan_ready(ch int) bool
 ## has gone is not an error.
 fn chan_source_send(ch int, s int)
     ps := load64(ch + CH_SOURCE)
+    if sig_is(ps)
+        return
     p := s
     n := load64(p)
     lock(ps + PS_INLOCK)
@@ -689,6 +710,9 @@ fn chan_source_send(ch int, s int)
 ## `c.stdin.close()`: end the child's input.
 fn chan_source_close(ch int)
     ps := load64(ch + CH_SOURCE)
+    if sig_is(ps)
+        sig_close(ch)
+        return
     if ch != load64(ps + PS_INCH)
         return
     lock(ps + PS_INLOCK)

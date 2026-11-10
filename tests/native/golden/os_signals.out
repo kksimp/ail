@@ -1,0 +1,10 @@
+idle none
+sent INT true
+got INT
+sent TERM true
+got TERM
+sent WINCH true
+got WINCH
+both INT INT
+other closed
+ch closed

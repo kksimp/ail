@@ -1,0 +1,6 @@
+# A package without a manifest: no dependencies, no capabilities.
+pub fn words(s str) List[str]
+    s.to_lower().words()
+
+pub fn shout(s str) str
+    "{s.to_upper()}!"

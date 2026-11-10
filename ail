@@ -275,7 +275,7 @@ native_errors=
 if [ "${1:-}" = check ]; then
     for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
 fi
-if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ] || { [ "${1:-}" = replay ] && [ "${2:-}" = --shrink ]; }; }; then
+if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = header ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = context ] || [ "${1:-}" = review ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ] || { [ "${1:-}" = replay ] && [ "${2:-}" = --shrink ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed is stage 0: it builds the native CLI (ADR 0855).
@@ -305,7 +305,7 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
     if [ "$1" = diff ]; then shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" diff "$@"; fi
-    if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ] || [ "$1" = attach ] || [ "$1" = new ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
+    if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ] || [ "$1" = context ] || [ "$1" = review ] || [ "$1" = attach ] || [ "$1" = new ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
     if [ "$1" = api ]; then
         shift
@@ -334,6 +334,7 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"
     fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
+    if [ "$1" = header ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" header "$@"; fi
     if [ "$1" = test ] && [ -n "$has_budget" ]; then
         # `ail test --budget [N] [--from K] [--json] FILE`: the native runner under the budget (budget.out.3).
         bopts=(); copts=(); prev=
@@ -471,12 +472,17 @@ if [ "${1:-}" = leak ]; then
     exit "$leak_rc"
 fi
 
+# `ail infer --contracts FN FILE` (ADR 1023): proposes requires/ensures from the calls the tests make, tools/infer/infer.ail.
+if [ "${1:-}" = infer ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/infer/infer.ail" "${@:2}"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"
 fi
 
-if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail 0.1.0 (native)"; exit 0; fi
+if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail $(head -n 1 "$root/tools/release/VERSION" 2>/dev/null || echo 0.0.0) ($(git -C "$root" describe --tags --always --dirty 2>/dev/null || echo unknown), native)"; exit 0; fi
 
 # Everything else has no native form.
 die "\`ail ${1:-}\` has no native form; run \`./ail\` with a command from docs/quick-reference.md"

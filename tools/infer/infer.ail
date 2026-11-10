@@ -1,0 +1,561 @@
+## `ail infer --contracts FN FILE` (ADR 1023, infer.cand.1-6, infer.out.1-4): proposes
+## `requires` and `ensures` lines for one function from the calls the tests make.
+##   ail run tools/infer/infer.ail --contracts FN FILE [--apply] [--min N] [--cases N] [--json]
+## FN is a top-level function of FILE. The tool writes a copy of FILE beside it in which
+## FN is renamed and a function of the same signature stands in its place: it calls the
+## original, appends one row of numbers (the int arguments, the length of each `str`
+## and `List` argument, and the same for the result) to a scratch file, and returns
+## the result. `ail test` runs the copy, so every call a test makes is a row (the
+## property tests of the file count: their inputs are the fuzzing, infer.cand.1).
+## A condition is kept only when every row satisfies it (infer.cand.3), at least `--min`
+## rows were seen (infer.cand.2), and at most 3 are shown (infer.cand.5).
+## The answer is a patch in `ail edit` form (infer.out.1); `--apply` gives it to
+## `ail edit` (infer.out.3), which checks the result.
+
+## The compiler to drive: `$AIL`, else `./ail`.
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+INFER_USAGE := "usage: ail infer --contracts FN FILE [--apply] [--min N] [--cases N] [--json]"
+
+## The calls that must be seen before a condition is proposed (infer.cand.2).
+MIN_CALLS := 20
+
+## The most conditions shown (infer.cand.5).
+MAX_CANDS := 3
+
+LB := "\{"
+RB := "}"
+
+struct Param
+    name str
+    ty str
+
+struct Sig
+    name str
+    ## Index of the declaration's line in the file.
+    line int
+    ## Everything between the parentheses of the signature.
+    inner str
+    ## Everything after the closing parenthesis, as written (a space, then the return type).
+    after str
+    ret str
+    params List[Param]
+
+struct Found
+    ok bool
+    why str
+    sig Sig
+
+## One value the rows carry: the text of the expression, and `int` (the value) or `len` (the
+## length of a `str` or `List`); `` for a value that is not recorded.
+struct Col
+    expr str
+    kind str
+
+struct Cand
+    kind str
+    cond str
+    ## The column the condition is about, the other column it compares with (-1 for a range),
+    ## and the operator or range form (`>0`, `>=0`, `!=0`, `<`, `<=`, `>`, `>=`).
+    col int
+    other int
+    op str
+
+fn indent(l str) int
+    l.len() - l.trim_start().len()
+
+## The last line of the block starting at `first` (a column-0 header).
+fn block_end(lines List[str], first int) int
+    mut last := first
+    for j in first + 1..lines.len()
+        l := lines[j]
+        if l.trim().is_empty() or (l.trim_start().starts_with("#") and indent(l) == 0)
+            continue
+        if indent(l) == 0
+            break
+        last = j
+    last
+
+## The parts of `text` between top-level commas (outside brackets and parentheses).
+fn split_top(text str) List[str]
+    mut out := List[str]()
+    mut depth := 0
+    mut start := 0
+    cs := text.chars()
+    for j in 0..cs.len() + 1
+        if j == cs.len() or (cs[j] == ',' and depth == 0)
+            part := text.slice(start, j).trim()
+            if not part.is_empty()
+                out.push(part)
+            start = j + 1
+        elif cs[j] == '(' or cs[j] == '['
+            depth += 1
+        elif cs[j] == ')' or cs[j] == ']'
+            depth -= 1
+    out
+
+fn blank_sig() Sig
+    Sig(name: "", line: 0, inner: "", after: "", ret: "", params: [])
+
+fn refused(why str) Found
+    Found(ok: false, why: why, sig: blank_sig())
+
+## `int` for a value the rows record as it is, `len` for one they record as its length (infer.cand.1).
+fn kind_of(ty str) str
+    if ty == "int"
+        return "int"
+    if ty == "str" or ty.starts_with("List[")
+        return "len"
+    ""
+
+## The signature of the top-level function `name`, or why it can't be observed (infer.cand.1).
+fn find_sig(lines List[str], name str) Found
+    for i in 0..lines.len()
+        l := lines[i]
+        head := if l.starts_with("pub fn ") then l.slice(4, l.len()) else l
+        if not head.starts_with("fn ")
+            continue
+        rest := head.slice(3, head.len())
+        if rest.starts_with("{name}[")
+            return refused("`{name}` is generic")
+        if not rest.starts_with("{name}(")
+            continue
+        open := name.len()
+        mut depth := 0
+        mut close := -1
+        cs := rest.chars()
+        for j in open..cs.len()
+            if cs[j] == '('
+                depth += 1
+            elif cs[j] == ')'
+                depth -= 1
+                if depth == 0
+                    close = j
+                    break
+        if close < 0
+            return refused("`{name}` has a signature over several lines")
+        inner := rest.slice(open + 1, close)
+        after := rest.slice(close + 1, rest.len())
+        trimmed := after.trim()
+        if trimmed == "!"
+            or trimmed.starts_with("! ")
+            or trimmed.ends_with(" !")
+            or trimmed.contains(" ! ")
+            return refused("`{name}` can fail (`!`)")
+        mut params := List[Param]()
+        for part in split_top(inner)
+            sp := part.find(" ") else
+                return refused("`{name}` has a parameter `{part}` that is not `NAME TYPE`")
+            pname := part.slice(0, sp)
+            if pname == "mut" or pname == "move" or pname == "ref" or part.contains("=")
+                return refused("`{name}` has a `mut`, `move` or default parameter")
+            params.push(Param(name: pname, ty: part.slice(sp, part.len()).trim()))
+        return Found(ok: true, why: "", sig: Sig(
+            name: name,
+            line: i,
+            inner: inner,
+            after: after,
+            ret: trimmed,
+            params: params,
+        ))
+    refused("no top-level function `{name}` in the file")
+
+## The columns of the rows: each parameter, then the result (infer.cand.1).
+fn columns(sig Sig) List[Col]
+    mut cols := List[Col]()
+    for p in sig.params
+        k := kind_of(p.ty)
+        cols.push(Col(expr: if k == "len" then "{p.name}.len()" else p.name, kind: k))
+    k := kind_of(sig.ret)
+    cols.push(Col(expr: if k == "len" then "result.len()" else "result", kind: k))
+    cols
+
+## The text of the stand-in for `sig`, and the helper that writes a row (infer.cand.1).
+fn stand_in(sig Sig, pub_fn bool, out_path str) List[str]
+    cols := columns(sig)
+    names := [p.name for p in sig.params]
+    mut cells := List[str]()
+    for i in 0..sig.params.len()
+        c := cols[i]
+        cells.push(if c.kind == "" then "-" else "{LB}{c.expr}{RB}")
+    has_ret := sig.ret != ""
+    res := cols[cols.len() - 1]
+    if has_ret
+        mut last_cell := "-"
+        if res.kind == "int"
+            last_cell = "{LB}infer_res{RB}"
+        elif res.kind == "len"
+            last_cell = "{LB}infer_res.len(){RB}"
+        cells.push(last_cell)
+    call := "infer_orig_{sig.name}({names.join(", ")})"
+    mut out := List[str]()
+    out.push("{if pub_fn then "pub " else ""}fn {sig.name}({sig.inner}){sig.after}")
+    if has_ret
+        out.push("    infer_res := {call}")
+        out.push("    infer_note(\"{cells.join(" ")}\")")
+        out.push("    infer_res")
+    else
+        out.push("    {call}")
+        out.push("    infer_note(\"{cells.join(" ")}\")")
+    out.push("")
+    out.push("fn infer_note(infer_row str)")
+    out.push("    fs.append_text(\"{out_path}\", \"{LB}infer_row{RB}\\n\") else return")
+    out
+
+## Statistics of one column: smallest, largest, how many different values.
+struct Stat
+    lo int
+    hi int
+    distinct int
+
+fn stat_of(vs List[int]) Stat
+    mut lo := vs[0]
+    mut hi := vs[0]
+    mut seen := Set[int]()
+    for v in vs
+        if v < lo
+            lo = v
+        if v > hi
+            hi = v
+        seen.add(v)
+    Stat(lo: lo, hi: hi, distinct: seen.len())
+
+## How the first column compares with the second on every row: `<`, `>`, `<=`, `>=`, or ``
+## when no single one holds (infer.cand.3). Equal columns give ``: they are one fact.
+fn relation(a List[int], b List[int]) str
+    mut lt := true
+    mut gt := true
+    mut le := true
+    mut ge := true
+    mut same := true
+    for i in 0..a.len()
+        if a[i] >= b[i]
+            lt = false
+        if a[i] <= b[i]
+            gt = false
+        if a[i] > b[i]
+            le = false
+        if a[i] < b[i]
+            ge = false
+        if a[i] != b[i]
+            same = false
+    if same
+        return ""
+    if lt
+        return "<"
+    if gt
+        return ">"
+    if le
+        return "<="
+    if ge
+        return ">="
+    ""
+
+## The range a column keeps: `>0`, `>=0`, `!=0`, or `` (infer.cand.3). A `len` column is only `>0`.
+fn range_of(s Stat, kind str) str
+    if s.distinct < 2
+        return ""
+    if s.lo > 0
+        return ">0"
+    if kind == "len"
+        return ""
+    if s.lo == 0
+        return ">=0"
+    if s.lo < 0 and s.hi > 0
+        return ""
+    ""
+
+## A column that is never zero and has both signs: `!=0`.
+fn never_zero(vs List[int], s Stat) bool
+    if s.distinct < 2 or s.lo >= 0 or s.hi <= 0
+        return false
+    for v in vs
+        if v == 0
+            return false
+    true
+
+fn range_cond(expr str, op str) str
+    if op == ">0"
+        return "{expr} > 0"
+    if op == ">=0"
+        return "{expr} >= 0"
+    "{expr} != 0"
+
+## The conditions every row satisfies, in the order they are shown (infer.cand.4).
+fn candidates(sig Sig, cols List[Col], data List[List[int]], allow_ensures bool) List[Cand]
+    np := sig.params.len()
+    res := cols.len() - 1
+    mut stats := Map[int, Stat]()
+    mut ops := Map[int, str]()
+    for c in 0..cols.len()
+        if cols[c].kind != "" and data[c].len() > 0
+            s := stat_of(data[c])
+            stats[c] = s
+            mut op := range_of(s, cols[c].kind)
+            if op == "" and cols[c].kind == "int" and never_zero(data[c], s)
+                op = "!=0"
+            ops[c] = op
+    mut reqs := List[Cand]()
+    mut ranges := List[Cand]()
+    mut ens_ranges := List[Cand]()
+    mut ens_rels := List[Cand]()
+    for i in 0..np
+        if not stats.contains(i) or stats[i].distinct < 2
+            continue
+        for j in i + 1..np
+            if not stats.contains(j) or stats[j].distinct < 2
+                continue
+            op := relation(data[i], data[j])
+            if op != ""
+                reqs.push(Cand(
+                    kind: "requires",
+                    cond: "{cols[i].expr} {op} {cols[j].expr}",
+                    col: i,
+                    other: j,
+                    op: op,
+                ))
+    for i in 0..np
+        if ops.contains(i) and ops[i] != ""
+            ranges.push(Cand(
+                kind: "requires",
+                cond: range_cond(cols[i].expr, ops[i]),
+                col: i,
+                other: -1,
+                op: ops[i],
+            ))
+    if allow_ensures and stats.contains(res)
+        if ops[res] != ""
+            ens_ranges.push(Cand(
+                kind: "ensures",
+                cond: range_cond(cols[res].expr, ops[res]),
+                col: res,
+                other: -1,
+                op: ops[res],
+            ))
+        for i in 0..np
+            if not stats.contains(i) or stats[i].distinct < 2
+                continue
+            # The result compared with the parameter: `relation` is read as result OP param.
+            op := relation(data[res], data[i])
+            if op != ""
+                ens_rels.push(Cand(
+                    kind: "ensures",
+                    cond: "{cols[res].expr} {op} {cols[i].expr}",
+                    col: res,
+                    other: i,
+                    op: op,
+                ))
+    # A result range a relation already gives (`result > n` with `n >= 0`) is dropped.
+    mut kept_ens := List[Cand]()
+    for e in ens_ranges
+        mut implied := false
+        for r in ens_rels
+            if r.op != ">" and r.op != ">="
+                continue
+            mut low := -1
+            if cols[r.other].kind == "len"
+                low = 0
+            for q in ranges
+                if q.col == r.other and q.op != "!=0"
+                    low = if q.op == ">0" then 1 else 0
+            if low >= 0
+                bound := low + (if r.op == ">" then 1 else 0)
+                if bound >= 1 or e.op == ">=0"
+                    implied = true
+        if not implied
+            kept_ens.push(e)
+    mut out := List[Cand]()
+    out.extend(reqs)
+    out.extend(ranges)
+    out.extend(kept_ens)
+    out.extend(ens_rels)
+    out
+
+## The condition of each contract line already under the signature at `line` (infer.cand.6).
+fn existing_conds(lines List[str], line int) List[str]
+    mut out := List[str]()
+    for j in line + 1..lines.len()
+        t := lines[j].trim()
+        if t.starts_with("requires ")
+            out.push(t.slice(9, t.len()).trim())
+        elif t.starts_with("ensures ")
+            out.push(t.slice(8, t.len()).trim())
+        else
+            break
+    out
+
+fn obj(members List[(str, Json)]) Json
+    Json.Obj([JsonMember(m.0, m.1) for m in members])
+
+fn die(why str) int
+    io.eprint("error: {why}")
+    2
+
+fn run(args List[str]) int
+    mut apply := false
+    mut json := false
+    mut contracts := false
+    mut min_calls := MIN_CALLS
+    mut cases := ""
+    mut want := ""
+    mut pos := List[str]()
+    for a in args
+        if want == "--min"
+            if n := a.to_int()
+                min_calls = n
+            else
+                return die("`--min` needs a number (infer.cand.2)")
+            want = ""
+        elif want == "--cases"
+            if a.to_int() == none
+                return die("`--cases` needs a number")
+            cases = a
+            want = ""
+        elif a == "--min" or a == "--cases"
+            want = a
+        elif a == "--contracts"
+            contracts = true
+        elif a == "--apply"
+            apply = true
+        elif a == "--json"
+            json = true
+        elif a.starts_with("--")
+            io.eprint(INFER_USAGE)
+            return 2
+        else
+            pos.push(a)
+    if not want.is_empty() or not contracts or pos.len() != 2
+        io.eprint(INFER_USAGE)
+        return 2
+    name := pos[0]
+    file := pos[1]
+    text := fs.read_text(file) else err
+        return die("can't read {file}: {err.kind}")
+    lines := text.lines()
+    found := find_sig(lines, name)
+    if not found.ok
+        return die("{found.why} (infer.cand.1)")
+    sig := found.sig
+    cols := columns(sig)
+    has_result_param := [p.name for p in sig.params if p.name == "result"].len() > 0
+    # infer.cand.1: the copy, and the scratch file the rows go to.
+    made := proc.run("mktemp", ["-d"]) else err
+        return die("can't run mktemp: {err}")
+    scratch := made.out.trim()
+    rows_path := "{scratch}/rows.txt"
+    dir := path.dir(file)
+    copy := if dir.is_empty() then ".ail-infer-{path.stem(file)}.ail" else "{dir}/.ail-infer-{path.stem(file)}.ail"
+    last := block_end(lines, sig.line)
+    mut body := List[str]()
+    for i in 0..lines.len()
+        if i == sig.line
+            pre := lines[i].slice(0, lines[i].find("fn ") else 0)
+            body.push("{pre}fn infer_orig_{name}({sig.inner}){sig.after}")
+        else
+            body.push(lines[i])
+        if i == last
+            body.push("")
+            body.extend(stand_in(sig, lines[sig.line].starts_with("pub "), rows_path))
+    fs.write_text(copy, "{body.join("\n")}\n") else err
+        return die("can't write {copy}: {err.kind}")
+    mut test_args := ["test", copy]
+    if not cases.is_empty()
+        test_args.extend(["--cases", cases])
+    ran := proc.run(ail_path(), test_args) else err
+        gone1 := proc.run("rm", ["-rf", scratch, copy]) else return 2
+        return die("can't run the tests: {err}")
+    seen := fs.read_text(rows_path) else ""
+    gone2 := proc.run("rm", ["-rf", scratch, copy]) else return 2
+    # infer.cand.1: each row is one call; a row with the wrong number of cells is not read.
+    mut data := List[List[int]]()
+    for _ in 0..cols.len()
+        data.push(List[int]())
+    mut calls := 0
+    for row in seen.lines()
+        cells := row.split(" ")
+        if cells.len() != cols.len()
+            continue
+        mut vals := List[int]()
+        mut good := true
+        for k in 0..cells.len()
+            if cols[k].kind == ""
+                vals.push(0)
+            else
+                mut v := 0
+                if x := cells[k].to_int()
+                    v = x
+                else
+                    good = false
+                vals.push(v)
+        if good
+            calls += 1
+            for k in 0..cols.len()
+                if cols[k].kind != ""
+                    data[k].push(vals[k])
+    mut cands := List[Cand]()
+    mut note := ""
+    if calls < min_calls
+        note = "{calls} calls seen, fewer than the {min_calls} needed; add tests that call `{name}` (infer.cand.2)"
+    else
+        have := existing_conds(lines, sig.line)
+        for c in candidates(sig, cols, data, not has_result_param)
+            if have.contains(c.cond) or cands.len() >= MAX_CANDS
+                continue
+            cands.push(c)
+    # infer.out.1: the patch is `ail edit` hunk text.
+    mut hunk := List[str]()
+    if not cands.is_empty()
+        hunk.push(name)
+        hunk.push(" {lines[sig.line]}")
+        for c in cands
+            hunk.push("+    {c.kind} {c.cond}")
+    patch_text := hunk.join("\n")
+    mut check_out := ""
+    if not cands.is_empty()
+        # infer.out.2: the patch must check before it is shown; a dry run of `ail edit` says so.
+        dry := proc.run(ail_path(), ["edit", file, "--dry-run"], "{patch_text}\n") else err
+            return die("can't run ail edit: {err}")
+        if dry.status != 0
+            io.eprint("error: the proposed contracts don't check, so nothing is proposed (infer.out.2)")
+            io.eprint(dry.err)
+            return 2
+        if apply
+            # infer.out.3: `--apply` hands the patch to `ail edit`.
+            done := proc.run(ail_path(), ["edit", file], "{patch_text}\n") else err
+                return die("can't run ail edit: {err}")
+            check_out = done.out.trim()
+            if done.status != 0
+                io.eprint(done.err)
+                return done.status
+    if json
+        print(
+            obj([
+                ("infer", Json.Num(1.0)),
+                ("fn", Json.Str(name)),
+                ("calls", Json.Num(calls.to_float())),
+                ("min", Json.Num(min_calls.to_float())),
+                ("applied", Json.Bool(apply and not cands.is_empty())),
+                ("note", Json.Str(if note.is_empty() then "observed, not proved: a test run showed these, so check them with `ail test --contracts`" else note)),
+                ("proposals", Json.Arr([obj([("kind", Json.Str(c.kind)), ("cond", Json.Str(c.cond)), ("calls", Json.Num(calls.to_float()))]) for c in cands])),
+                ("patch", Json.Str(patch_text)),
+            ]).to_text(),
+        )
+        return 0
+    if not note.is_empty()
+        io.eprint("infer {name}: {note}")
+        return 0
+    if cands.is_empty()
+        io.eprint("infer {name}: {calls} calls seen, no new condition holds on all of them")
+        return 0
+    for c in cands
+        io.eprint("infer {name}: {c.kind} {c.cond}  ({calls} calls)")
+    io.eprint("note: observed in tests, not proved; `ail test --contracts {file}` fuzzes them (infer.out.4)")
+    if apply
+        print(check_out)
+    else
+        print(patch_text)
+    0
+
+fn main() !
+    io.exit(run(env.args()))

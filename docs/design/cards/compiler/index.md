@@ -1,12 +1,12 @@
 # compiler
 (root)  62 items
 a64  81 items
-api  217 items
+api  258 items
 ast  142 items
 attachcli  6 items
 budget  27 items
-cheader  30 items
-check  366 items
+cheader  55 items
+check  367 items
 codegen  55 items
 derive  40 items
 doc  18 items
@@ -15,8 +15,8 @@ explain  37 items
 fix  54 items
 fixrun  17 items
 fmt  64 items
-load  103 items
-mir  602 items
+load  111 items
+mir  607 items
 obj  66 items
 pkg  44 items
 scaffold  2 items

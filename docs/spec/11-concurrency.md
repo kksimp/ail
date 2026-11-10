@@ -201,6 +201,36 @@ fn main() !
     g.wait_all()?
 ```
 
+**conc.task.10** — A field of a `unique` struct (`own.uniq.1`) may be a
+`TaskGroup`; a field of a struct that isn't `unique`, or of an enum variant,
+can't. The struct owns the group: tasks added through the field run until
+the struct is released (`own.uniq.3`, `own.uniq.7`), and its release waits for
+them as the end of a group's block does (`conc.task.8`), so every task is
+waited exactly once (`conc.task.5`). The field can't be assigned. A task added
+to a group whose owner was already released, through a copy of the group made
+before, is waited at once. *(ADR 0996)*
+
+```ail rules=conc.task.10
+unique struct Pool
+    tasks TaskGroup
+    out Channel[int]
+
+fn work(n int, out Channel[int])
+    out.send(n * n)
+
+fn Pool.start(mut self, n int)
+    ch := self.out
+    self.tasks.add(spawn work(n, ch))
+
+fn main()
+    mut p := Pool(tasks: TaskGroup(), out: Channel[int](4))
+    p.start(3)
+    p.start(4)
+    a := p.out.recv() else 0
+    b := p.out.recv() else 0
+    print(a + b)
+```
+
 ## Cancellation
 
 **conc.cancel.1** — `t.cancel()` asks task `t` to stop, and `g.cancel()`
@@ -396,6 +426,26 @@ fn main() !
     p.wait()?
 ```
 
+**conc.share.8** — `ch.try_recv()` returns `T?`: the oldest value if one is
+waiting now, else `none`, at once, whether the channel is open or closed.
+`ch.recv_for(ms)` waits as `recv` does for at most `ms` milliseconds (`ms`
+below 0 counts as 0) and returns `none` when the time runs out or the channel
+is closed and empty. Neither ever reports a deadlock (`conc.task.7`). Under
+`--deterministic` no time passes: `recv_for` waits as `recv` does, and when
+every other task is blocked, where `recv` would report a deadlock, its time
+is up and it returns `none`. A cancelled
+task's `recv_for` returns `none` as `recv` does (`conc.cancel.4`). *(ADR 0996)*
+
+```ail rules=conc.share.8
+fn main()
+    ch := Channel[int](2)
+    a := ch.try_recv() else -1
+    ch.send(7)
+    b := ch.try_recv() else -1
+    c := ch.recv_for(10) else -1
+    print("{a} {b} {c}")
+```
+
 **conc.select.1** — `task.select(chans List[Channel[T]]) int?` waits until
 one of the channels has a value waiting and returns its index in `chans`;
 when several do, the lowest index. It takes no value: `chans[i].recv()` then
@@ -507,27 +557,46 @@ thread pool. So does every loop `conc.par.2–4` prove independent, unless
 `AIL_PARALLEL=0` or the run is deterministic (`conc.par.9`). A loop on the pool
 must also write only list elements, `int` accumulators, each accumulator by
 one `+=` outside nested loops, and lists it builds (`conc.par.16`); any other loop, a loop that captures a handle
-or a `ref`, and a loop with fewer than twice as many iterations as the pool has
-threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
+or a `ref`, and a loop with fewer than twice as many iterations as the workers
+it would use (`conc.par.17`), runs in order. *(ADR 0272, ADR 0275, ADR 0911, ADR 0946)*
 
-**conc.par.14** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
+**conc.par.14** — A loop the compiler chose (not a written `par for`) runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
 a call 8 plus the cost of the function it names, found the same way; a function that
 reaches itself, or has a loop, counts at least 4096). An iteration of at least 4096 operations sends any loop of two or more
 iterations to the pool, whatever the worker count. A written `par for` whose body calls a
 function counts as that heavy, so it goes to the pool from two iterations. The result and the trap are
-the sequential ones either way. *(ADR 0911)*
+the sequential ones either way. Such a loop may sit inside a loop that runs in order
+(a `for` the compiler didn't choose, or a `while`): each run of the outer body tests the
+inner loop's work again, and a loop inside a loop on the pool runs in order in its chunk.
+*(ADR 0911, ADR 0987)*
+
+```ail rules=conc.par.14
+fn main()
+    mut grid := List[int]()
+    for _ in 0..1000
+        grid.push(1)
+    mut next := grid
+    mut step := 0
+    while step < 3
+        for i in 0..1000
+            next[i] = grid[i] + grid[(i + 1) % 1000]
+        grid = next
+        step += 1
+    print("{grid[0]} {grid[999]}")
+```
 
 **conc.par.13** — A written `par for` that the native compiler runs in order, because its
 body has a construct the chunked version doesn't take (a `match`, a constructor, a method on a
-captured list, a field of `self`, and so on), prints
+captured list, an assignment to a field of `self`, and so on), prints
 `FILE:LINE:COL: warning[conc.par.13]: `par for V` runs in order: REASON` on standard error
 when the program is built, and `ail check` warns the same way. The result is the sequential one. A loop the compiler chose
 says nothing. *(ADR 0911)*
 
-**conc.par.9** — The pool has one thread per hardware thread, at most 8,
-unless the environment variable `AIL_THREADS` sets the number. With one
+**conc.par.9** — The pool has at most one thread per hardware thread, up to 64,
+unless the environment variable `AIL_THREADS` sets the number. A region
+uses only as many of them as its work repays (`conc.par.17`). With one
 thread, or under `--deterministic`, every loop and task runs as if there
 were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
 how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
@@ -544,6 +613,33 @@ in such a run has a second copy for the calls made in order, which never forks; 
 traps are the same. `AIL_PARALLEL=0` and
 `--deterministic` run the calls one after the other. `ail effects --parallel` lists the runs
 that qualify. *(ADR 0914)*
+
+**conc.par.17** — The native pool is sized to the machine, not to a fixed
+number: up to 64 threads, one per hardware thread. A parallel loop or tensor
+kernel uses one worker per 65536 operations of its work (the cost model of
+`conc.par.14`), at least 2 and at most the pool's size, split into four
+chunks per worker, so a loop that scales runs on 16 cores rather than 8 and a
+small one stays on few. A body with a loop, or a call of a function that has one
+or reaches itself, has work the count only bounds from below: such a region uses
+the whole pool. `AIL_THREADS` still sets the pool's size. With
+`AIL_PAR_LOG` set, each region prints `par: N iterations of about W operations
+-> K of T workers, C chunks (conc.par.17)` on standard error. Results never
+depend on the number of workers (`conc.par.1`). *(ADR 0946)*
+
+**conc.par.18** — `task.threads()` returns the pool's cap: at the start
+`AIL_THREADS`, or the cores the process may use (`conc.par.17`).
+`task.set_threads(n)` sets the cap to `n`, clamped to 1 to 64, from the next
+parallel loop, tensor kernel or task that starts. Workers already past the cap
+finish what they run and take nothing more. A cap of 1 runs every loop in
+order (`conc.par.9`). Calling it while a parallel loop runs traps.
+`set_threads` has the `io` effect, so no independent loop or pure function
+calls it. Results never depend on the cap (`conc.par.1`). *(ADR 1018)*
+
+```ail rules=conc.par.18
+fn main()
+    task.set_threads(2)
+    print(task.threads())
+```
 
 **conc.par.16** — A loop *builds* an outer list `out` when the only mention of
 `out` in its body is one statement `out.push(e)` at the top of the body (not

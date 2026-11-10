@@ -45,3 +45,10 @@ timecodes, one SimpleBlock per frame in the order given, and a new cluster at
 each video key frame and whenever a block's time would not fit 16 bits.
 `read(write(t, f))` gives back `t`'s fields that WebM carries and `f` at
 millisecond precision.
+
+```ail skip=context
+mut d := webm.new()
+for f in d.push(chunk)?
+    if (d.track(f.track)?).codec == "A_OPUS"
+        audio_frames.push(f.data)
+```

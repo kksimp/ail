@@ -935,6 +935,7 @@ fn win_ps_round(ps int, ms int)
 # word is polling it (`win_wait`): kernel32 has no futex, and `WaitOnAddress`
 # lives in another DLL the PE writer does not import from yet.
 
+# 128 bytes per thread slot, 65 slots, to 29056 (the pool block is 32768).
 P_WTMP := 20736
 # The task pool block's `P_LIVE` (task.ail), which this file may not name: it is linked without the tasks.
 WP_LIVE := 32
@@ -963,8 +964,8 @@ fn win_tmp() int
     if p == 0
         return os_scratch(OS_WIN_T)
     mut k := thread_slot()
-    if k > 29
-        k = 29
+    if k > MAXW
+        k = MAXW
     p + P_WTMP + 128 * k
 
 ## Milliseconds from a clock that needs no out-parameter, for timeouts.

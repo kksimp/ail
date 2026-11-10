@@ -172,7 +172,7 @@ impl ToJson for Node
             ])
 
 ## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
-## `click`, `scroll`, `key`, `keyup` (key release, std.app.20), `resize`, `close`, `external` (std.app.14), `move`, `leave` (std.app.16) or `popup` (std.app.18); the other
+## `click`, `scroll`, `key`, `keyup` (key release, std.app.20), `resize`, `close`, `external` (std.app.14), `move`, `leave` (std.app.16), `popup` (std.app.18) or `appearance` (std.app.30; `text` is `dark` or `light`); the other
 ## fields are zero or empty when they don't apply.
 pub struct Event
     pub kind str
@@ -200,6 +200,12 @@ pub struct Event
     ## host's window controls take at the window's top-left, in points.
     pub inset_left float
     pub inset_top float
+    ## For `start` and `resize` (std.app.31): the main display's size in
+    ## points and its scale, device pixels per point; `0` from a host that
+    ## does not report them.
+    pub screen_w float
+    pub screen_h float
+    pub scale float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
 ## is `mono` or `sans`.
@@ -324,6 +330,9 @@ pub fn event(kind str) Event
         meta: false,
         inset_left: 0.0,
         inset_top: 0.0,
+        screen_w: 0.0,
+        screen_h: 0.0,
+        scale: 0.0,
     )
 
 ## A button press, for tests.
@@ -483,6 +492,9 @@ pub fn event_from_json(j Json) Event
         clicks: (j.num("clicks") else 0.0).to_int(),
         inset_left: j.num("inset_left") else 0.0,
         inset_top: j.num("inset_top") else 0.0,
+        screen_w: j.num("screen_w") else 0.0,
+        screen_h: j.num("screen_h") else 0.0,
+        scale: j.num("scale") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.

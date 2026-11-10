@@ -78,7 +78,7 @@ sources = ([root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rgl
            + list((root / "tools" / "ailtest").rglob("*.ail")) + list((root / "tools" / "ailtask").rglob("*.ail"))
            + list((root / "tools" / "ailmcp").rglob("*.ail"))
            + list((root / "tools" / "ailsp").rglob("*.ail")) + list((root / "tools" / "ailsan").rglob("*.ail"))
-           + list((root / "tools" / "verify").rglob("*.ail")) + list((root / "tools" / "shrink").rglob("*.ail")))
+           + list((root / "tools" / "verify").rglob("*.ail")) + list((root / "tools" / "infer").rglob("*.ail")) + list((root / "tools" / "shrink").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -133,7 +133,7 @@ for line in section.splitlines():
         if not owner or not reason:
             incomplete.append(rule)
 report(
-    "2. spec rules never cited in compiler/, std/, tools/ailtest/, tools/verify/ or tools/shrink/ (after exemptions)",
+    "2. spec rules never cited in compiler/, std/, tools/ailtest/, tools/verify/, tools/infer/ or tools/shrink/ (after exemptions)",
     [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed) if r not in exempt],
 )
 report("2a. exemptions for rules that are now cited (remove the row)", sorted(r for r in exempt if r in cited))

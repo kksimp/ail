@@ -12,6 +12,7 @@ STD_MODULES := [
     "fs",
     "io",
     "net",
+    "os",
     "path",
     "proc",
     "random",
@@ -51,6 +52,7 @@ pub STD_AIL := [
     "std.toml",
     "std.ui",
     "std.ui.widgets",
+    "std.video.vp9",
 ]
 
 ## The imports of a file: the name each makes available, to the module's

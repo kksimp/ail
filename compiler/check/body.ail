@@ -265,6 +265,8 @@ fn Checker.check_fn(mut self, idx int)
         check_extern(idx, f)
         end_fn(idx)
         return
+    if [a for a in f.attrs if a.name == "export c"].len() > 0
+        check_export(idx, f)
     if f.body == none
         if f.contracts.len() > 0
             check_bodyless_contracts(idx, f)
@@ -1164,6 +1166,9 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             "a grid's `rows`, `cols` and `cells` can't be assigned",
             "assign elements with `g[i, j] = v`, or build a new grid with `Grid.fill` or `Grid.from`",
         )
+        expr(value, none, true)
+        return
+    if group_field_assign(target, tt)
         expr(value, none, true)
         return
     require_mutable(target, none, "assigned")

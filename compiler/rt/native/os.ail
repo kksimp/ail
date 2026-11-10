@@ -909,6 +909,13 @@ fn os_io_read_line() str
 fn io_read_all() str
     os_lossy(str_addr(io_read_bytes()))
 
+## `io.write_bytes(b)` (std.io.6): the bytes of `b`, undecoded, on standard
+## output, in order with what `print` wrote.
+fn io_write_bytes(b str)
+    out_lock()
+    out_str(b)
+    out_unlock()
+
 ## `io.read_bytes()`: the rest of standard input, undecoded (std.io.1).
 fn io_read_bytes() str
     mut cap := 4096
@@ -1373,6 +1380,69 @@ fn fs_read_range(path str, off int, len int, at str) str
         return ""
     store64(s, n)
     store64(s + 8, n)
+    os_succeed()
+    str_at(s)
+
+## `fs.map(path)` (std.fs.36, ADR 1016): the file as a read-only `bytes` view
+## onto its pages, with no copy. The view is a string object laid out in
+## place: 16 header bytes (length, character count) sit at the end of an
+## anonymous page block, and the file is mapped `MAP_PRIVATE | MAP_FIXED`
+## right after it, so the data starts where `str + 16` points. The collector
+## ignores it (the address is outside its heap) and the mapping lives to the
+## end of the process. The block is 16384 bytes (a macOS page; a multiple of
+## the 4096-byte Linux page). An empty file, and Windows (no fixed-address
+## mapping), give an ordinary `bytes` copy.
+fn fs_map(path str, at str) str
+    if target() == 3
+        return fs_read_bytes(path, at)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return ""
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        os_error(path, os_kind(), at)
+        return ""
+    st := os_scratch(OS_TMP)
+    r := os_fstat(fd, st)
+    if r < 0
+        os_close(fd)
+        os_fail_errno(r)
+        os_error(path, os_kind(), at)
+        return ""
+    moff := os_pick(24, 16, 8)
+    mode := (load8(st + moff) + load8(st + moff + 1) * 256).bit_and(61440)
+    size := load64(st + os_pick(48, 48, 72))
+    if mode == 16384
+        os_close(fd)
+        os_fail_kind(K_IS_DIR)
+        os_error(path, K_IS_DIR, at)
+        return ""
+    if size <= 0
+        os_close(fd)
+        return fs_read_bytes(path, at)
+    head := 16384
+    span := (size + 16383) / 16384 * 16384
+    base := sys_mmap(head + span)
+    if base < 0
+        os_close(fd)
+        os_fail_kind(K_OTHER)
+        os_error(path, K_OTHER, at)
+        return ""
+    k := os_pick(9, 222, 197)
+    # PROT_READ, MAP_PRIVATE | MAP_FIXED over the anonymous block.
+    m := syscall(k, base + head, size, 1, 18, fd, 0)
+    os_close(fd)
+    if m < 0
+        syscall(os_pick(11, 215, 73), base, head + span, 0, 0, 0, 0)
+        os_fail_errno(m)
+        os_error(path, os_kind(), at)
+        return ""
+    s := base + head - 16
+    store64(s, size)
+    store64(s + 8, size)
     os_succeed()
     str_at(s)
 

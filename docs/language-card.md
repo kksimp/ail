@@ -472,6 +472,7 @@ g := TaskGroup()            # tasks returning nothing; waited at block end
 g.add(spawn work(2))
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
+w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
 for v in ch                 # receives until closed and empty
     print(v)
 m := Mutex(0)               # get, set, swap

@@ -46,6 +46,9 @@ struct ParSite
     ## Static work of one iteration in operations (`ParScan.work`), for the
     ## cost model of a loop the compiler chose to run in parallel (conc.par.14).
     work int
+    ## `work` is only a floor: the body has a loop or calls a heavy function, so
+    ## the region uses the whole pool rather than one worker per 65536 (conc.par.17).
+    open bool
     ## The body calls a function (`ParScan.calls`): a written `par for` over
     ## such a body goes to the pool from two iterations (conc.par.14).
     calls bool
@@ -123,6 +126,8 @@ pub fn uses_tasks(text str) bool
         or text.contains("Channel")
         or text.contains("Mutex")
         or text.contains("TaskGroup")
+        or text.contains("task.threads")
+        or text.contains("task.set_threads")
         or text.contains("proc.start")
         or text.contains("std.app")
         or text.contains("tensor.")
@@ -480,16 +485,26 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     for n in sc.names.sorted()
         if n == var or has_build(builds, n)
             continue
-        key := lookup(n) else
-            # A field of `self` is not in the chunk's scope: run in order.
-            if self_slot(n) >= 0
-                return decline("the body reads the field `{n}` of `self`; copy it to a local first")
-            continue
-        ty := var_ty[key]
+        mut ty := Ty.Unknown
+        mut field := false
+        if key := lookup(n)
+            ty = var_ty[key]
+            if tk.rets.contains(key)
+                return decline("the body uses `{n}`, whose type or kind a chunk can't capture")
+        else
+            # A field of `self` the body names bare: the chunk gets its value,
+            # read when the loop starts, as it gets a local's (`cap_value`).
+            k := self_slot(n)
+            if k < 0
+                continue
+            ty = structs[self_ty][k].ty
+            field = true
         if sc.decls.contains(n)
             return decline("the body declares `{n}`, which an outer variable also has")
-        if ty.is_unknown() or ty.is_unit() or tk.rets.contains(key)
+        if ty.is_unknown() or ty.is_unit()
             return decline("the body uses `{n}`, whose type or kind a chunk can't capture")
+        if field and (sc.adds.contains(n) or sc.other.contains(n))
+            return decline("the body assigns the field `{n}` of `self`")
         if sc.mutated.contains(n) and ty.elem() != none
             return decline("the body changes the captured list `{n}` (`push` or a `mut` argument)")
         n_adds := sc.adds.get(n) else 0
@@ -508,6 +523,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     if by_list
         key := lookup(root_of(iter)) else return decline("the list is not a local")
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
+    cw := callee_work(sc, prefix, 0)
     ParSite(
         var: var,
         by_list: by_list,
@@ -521,7 +537,8 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         file: file,
         aliases: aliases,
         self_ty: self_ty,
-        work: sc.work + 1 + callee_work(sc, prefix, 0),
+        work: sc.work + 1 + cw,
+        open: sc.looped or cw >= 4096,
         # A built list's `push` is not a call that makes an iteration heavy (conc.par.14).
         calls: sc.calls and (sc.callees.len() > 0 or builds.len() == 0),
         builds: builds,
@@ -554,7 +571,7 @@ fn Lower.lower_par_for(
                 tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
         return
-    if auto and cheap_build(plan)
+    if auto and (cheap_build(plan) or loops.len() > 0 and short_range(iter, plan.work))
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
@@ -603,6 +620,8 @@ fn Lower.lower_par_for(
     # compiler chose also needs enough work to repay the pool (conc.par.14).
     # 4096 is `PAR_HEAVY` in rt/native/task.ail.
     weight := konst(if not auto and plan.calls then 4096 else plan.work, Ty.Int)
+    if auto and loops.len() > 0
+        nested_par_test(lo, hi, plan.work, seq)
     chosen := konst(if auto then 1 else 0, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
@@ -610,16 +629,16 @@ fn Lower.lower_par_for(
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
     for i in 0..ncaps
         c := plan.caps[i]
-        key := lookup(c.name) else
-            problem(pos, "internal error: lost `{c.name}`")
-            continue
+        v := cap_value(c, pos) else continue
         at := op("add", [env, konst(8 * i, Ty.Int)], Ty.Int)
-        prim_op(if c.ty.is_float() then "storef" else "store64", [at, read_var(key, cur)], Ty.Unit)
+        prim_op(if c.ty.is_float() then "storef" else "store64", [at, v], Ty.Unit)
     for a in 0..plan.accs.len()
         key := lookup(plan.accs[a]) else continue
         at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
         prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
-    grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi], Ty.Int)
+    # A floor of the work (a loop or a heavy call inside) spreads over the whole pool.
+    width := if plan.open then konst(65536, Ty.Int) else weight
+    grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi, width], Ty.Int)
     waited := call("rt.par_wait", [grp], Ty.Bool)
     if plan.atomic
         broke := new_block()
@@ -655,6 +674,53 @@ fn Lower.lower_par_for(
     cur = join
     scopes.pop()
 
+## A loop the compiler chose inside a loop run in order (conc.par.14): compare
+## its iteration count with the count its work needs inline, so a short inner
+## run costs one compare and no call on each run of the outer body. The numbers
+## are `PAR_MIN_WORK` and `PAR_HEAVY` of rt/native/task.ail; `rt.par_worth`
+## still decides past this test.
+fn Lower.nested_par_test(mut self, lo int, hi int, work int, seq int)
+    need := par_need(work)
+    test := new_block()
+    n := op("sub", [hi, lo], Ty.Int)
+    branch(op("ge", [n, konst(need, Ty.Int)], Ty.Bool), test, [], seq, [])
+    seal(test)
+    cur = test
+
+## The iterations a loop the compiler chose needs before it goes to the pool.
+fn par_need(work int) int
+    per := if work < 1 then 1 else work
+    if per >= 4096 then 2 else (65536 + per - 1) / per
+
+## A range of literal bounds too short to repay the pool (conc.par.14): an inner
+## loop like `0..4` stays a plain loop, with no test and no call in the outer body.
+@allow("expr.match.3") fn short_range(iter ast.Expr, work int) bool
+    match iter
+        Range(a, b, _, _) =>
+            x := a else return false
+            y := b else return false
+            match x
+                Int(u, _) =>
+                    lo := u.to_int() else return false
+                    match y
+                        Int(v, _) =>
+                            hi := v.to_int() else return false
+                            hi - lo < par_need(work)
+                        _ => false
+                _ => false
+        _ => false
+
+## The value a chunk captures for `c`: a local's, or a bare field of `self`
+## read from its slot when the loop starts (conc.par.8).
+fn Lower.cap_value(mut self, c Cap, pos ast.Pos) int?
+    if key := lookup(c.name)
+        return read_var(key, cur)
+    k := self_slot(c.name)
+    if k < 0
+        problem(pos, "internal error: lost `{c.name}`")
+        return none
+    load(self_value(), k, c.ty)
+
 ## Word `n` of the arguments of the task record `rec`.
 fn Lower.rec_word(mut self, rec int, n int) int
     at := op("add", [rec, konst(T_ARGS + 8 * n, Ty.Int)], Ty.Int)
@@ -682,6 +748,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         aliases: aliases,
         self_ty: self_ty,
         work: 0,
+        open: false,
         calls: false,
         builds: [],
     )

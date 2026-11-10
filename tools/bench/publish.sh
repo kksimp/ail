@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Regenerate docs/benchmarks.md (the public speed and token tables) in one command:
+#
+#   tools/bench/publish.sh                 # 5 timed runs per cell, writes docs/benchmarks.md
+#   tools/bench/publish.sh --runs 11       # more runs
+#   tools/bench/publish.sh --out FILE      # write somewhere else
+#
+# Needs a quiet machine (no other build or benchmark running), gcc and clang, and python3
+# (measurement only, ADR 0070). It builds AIL with ./ail, times `ail build` output against
+# gcc -O2, clang -O2 and CPython (tools/perfbench/race.py), counts tokens with tools/tokbench,
+# and fills tools/bench/benchmarks.tmpl.md. The environment block records host, commit and tool versions.
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+runs=5; out="$root/docs/benchmarks.md"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --runs) runs="$2"; shift 2 ;;
+        --out) out="$2"; shift 2 ;;
+        *) echo "usage: tools/bench/publish.sh [--runs N] [--out FILE]" >&2; exit 2 ;;
+    esac
+done
+cd "$root"
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+./ail run examples/hello.ail >/dev/null            # builds the native CLI from the seed
+small=""; for n in collatz nbody spectralnorm mandelbrot fannkuch binarytrees fasta wordfreq matmul sieve; do
+    small="$small tools/perfbench/programs/$n.ail"; done
+bigp=""; for n in lzr vm raytrace matmul1400; do bigp="$bigp tools/perfbench/big/$n.ail"; done
+# shellcheck disable=SC2086
+python3 -I tools/perfbench/race.py --no-run --native --c --python --runs "$runs" --timeout 900 \
+    --json "$tmp/small.json" --programs $small >/dev/null
+# shellcheck disable=SC2086
+python3 -I tools/perfbench/race.py --no-run --native --c --runs "$runs" --timeout 900 \
+    --json "$tmp/big.json" --programs $bigp >/dev/null
+files=""; for n in collatz nbody spectralnorm mandelbrot fannkuch binarytrees fasta wordfreq matmul sieve; do
+    for e in ail c py; do files="$files tools/perfbench/programs/$n.$e"; done; done
+# shellcheck disable=SC2086
+tools/tokbench/run.sh --json $files > "$tmp/tokens.json"
+{
+    echo "- date: $(date -u +%Y-%m-%d)"
+    echo "- AIL commit: $(git rev-parse --short HEAD) ($(./ail --version 2>/dev/null | head -1 || true))"
+    echo "- host: $(uname -sm), $(nproc 2>/dev/null || sysctl -n hw.ncpu) logical cores, $( (grep -m1 'model name' /proc/cpuinfo | cut -d: -f2) 2>/dev/null || sysctl -n machdep.cpu.brand_string)"
+    echo "- gcc: $(gcc --version | head -1)"
+    echo "- clang: $(clang --version | head -1)"
+    echo "- python: $(python3 --version)"
+    echo "- runs per cell: $runs (best of; wall seconds)"
+} > "$tmp/env.txt"
+python3 -I tools/bench/publish.py "$tmp/small.json" "$tmp/big.json" "$tmp/tokens.json" \
+    tools/bench/benchmarks.tmpl.md "$out" "$tmp/env.txt"
+echo "wrote $out"

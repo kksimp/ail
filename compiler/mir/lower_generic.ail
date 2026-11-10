@@ -128,6 +128,8 @@ fn Lower.generic_type(mut self, name str, args List[ast.TypeRef]) Ty?
     if args.len() == 0
         if t := gen.tsubst.get(name)
             return t
+        if is_const_arg(name)
+            return Ty.Struct(name)
         # A trait written as a type means `any Trait` (trait.any.1).
         return any_type(name)
     g := generic_type_key(name)?

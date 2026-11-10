@@ -23,7 +23,7 @@ NET_TAB := 40
 # Global slot 41: the pool of idle HTTP connections (net_http.ail, std.net.19).
 NET_POOL := 41
 
-# A socket object: eleven words.
+# A socket object: fifteen words.
 NET_FD := 0
 NET_TIMEOUT := 8
 NET_BUF := 16
@@ -37,7 +37,11 @@ NET_CAP := 72
 NET_TLS := 80
 NET_STREAM := 88
 NET_DEADLINE := 96
-NET_BYTES := 104
+NET_BYTES := 120
+# The handle of the object itself, and (a listener's) its readiness set
+# (ready.ail, std.net.32): 0 none, negative unavailable.
+NET_HANDLE := 104
+NET_POLLER := 112
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -270,6 +274,8 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_TLS, 0)
     store64(o + NET_STREAM, 0)
     store64(o + NET_DEADLINE, 0)
+    store64(o + NET_HANDLE, 0)
+    store64(o + NET_POLLER, 0)
     # The table is shared by every thread: entry 0 holds the lock word that
     # serialises additions.
     mut t := load64(global(NET_TAB))
@@ -282,6 +288,7 @@ fn net_add(fd int, kind int, peer str, addr str) int
     lock(lk)
     list_push(list_at(t), o)
     n := load64(t) - 1
+    store64(o + NET_HANDLE, n)
     unlock(lk)
     n
 
@@ -661,6 +668,9 @@ fn net_close(h int)
     if o != 0
         net_sys_close(load64(o + NET_FD))
         store64(o + NET_FD, -1)
+        ep := load64(o + NET_POLLER)
+        if ep > 0 and atomic_cas(o + NET_POLLER, ep, -1) == ep
+            net_sys_close(ep)
 
 ## `c.set_timeout(ms)`; a failure unless `ms` is at least 1.
 fn net_set_timeout(h int, ms int, at str)

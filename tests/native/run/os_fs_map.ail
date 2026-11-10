@@ -1,0 +1,44 @@
+## `fs.map` (std.fs.36, ADR 1016): a read-only view of a file's pages. It reads
+## like `fs.read_bytes`, survives collections, matches a later `read_bytes`,
+## and fails like it for a missing path and a directory. An empty file maps to
+## an empty view.
+fn churn() int
+    mut n := 0
+    for i in 0..20000
+        s := "row {i} ".repeat(8)
+        n += s.len()
+    n
+
+fn main()
+    base := env.get("AIL_TEST_DIR") else return
+    root := "{base}/map"
+    fs.make_dir(root) else return
+    f := "{root}/map.bin"
+    fs.write_text(f, "ab".repeat(10000)) else return
+    b := fs.map(f) else err
+        print("failed {err.kind}")
+        return
+    print("len {b.len()}")
+    print("first {b[0] == 97} last {b[19999] == 98}")
+    print("head {b[0..4].hex()}")
+    print("churn {churn() > 0}")
+    print("after {b.len()} {b[1] == 98} {b[19998] == 97}")
+    again := fs.read_bytes(f) else return
+    print("same {again == b}")
+    e := "{root}/empty.bin"
+    fs.write_text(e, "") else return
+    z := fs.map(e) else err
+        print("failed {err.kind}")
+        return
+    print("empty {z.len()}")
+    n := fs.map("{root}/no-such-file") else err
+        print("missing {err.kind}")
+        b""
+    print(n.len())
+    d := fs.map(root) else err
+        print("dir {err.kind}")
+        b""
+    print(d.len())
+    fs.remove(f) else return
+    fs.remove(e) else return
+    fs.remove(root) else return

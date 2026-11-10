@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Proposed
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; still missing: the full AIL-versus-C runs with logged debug rounds, and published results)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)

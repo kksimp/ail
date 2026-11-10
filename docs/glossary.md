@@ -53,7 +53,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
 | **Generator** | A function with `yield` that returns `Seq[T]`, a lazy single-use sequence compiled to a state machine. Proposed in [ADR 0965](decisions/0965-generators.md). |
-| **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md). |
+| **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, const N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md). |
 | **Constant time (cryptography)** | Code whose branches and memory indexes never depend on secret data, so its timing reveals nothing about keys or plaintext. Required of the TLS primitives (ADRs 0360, 0366). |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
 | **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed at compile time (before `main` in the bootstrap); visible in the whole module (ADR 0132, ADR 0225). |
@@ -101,6 +101,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
 | **Function value** | A declared function used as a value, of type `fn(A, B) R`, that can be stored, passed and called; no closures (`type.fn.1-3`, ADRs 0455, 0456). |
 | **Fused instruction** | A bytecode instruction that does several steps of a loop body at once, cutting dispatch cost ([ADR 0619](decisions/0619-bytecode-calls-loops-and-fusion.md)). |
+| **Coverage-guided fuzzing** | `ail test --fuzz NAME`: a property test run on mutated inputs, keeping those that reach a new statement, with an optional corpus directory ([ADR 1015](decisions/1015-user-fuzzing.md)). |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
 | **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (own repository kksimp/garlic): text mode first, with a page model for agents. See garlic-browser.md in that repository. |
@@ -122,6 +123,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
 | **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
+| **I420** | A picture as three planes: full-size luma (`y`) and half-width, half-height chroma (`u`, `v`), each a byte per sample; what `std.video.vp9` returns (`std.vpx.3`, ADR 0989). |
 | **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236), or pushes one element per iteration to a built list (`conc.par.16`, ADR 0938). |
 | **In-place reuse** | Reusing a uniquely owned value's memory at its last use for a new value, avoiding the allocator (Perceus-style). See ADR 0012. |
 | **Insertion order** | The iteration order of maps and sets: the order keys were first added. Updating a key keeps its place (ADR 0131). |
@@ -147,6 +149,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190); a `move self` method moves its receiver (ADR 0317). |
 | **`move self`** | A method receiver that takes ownership: `fn Conn.close(move self)`; `c.close()` moves `c`, with no mark at the call (ADR 0317). |
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
+| **Mutation testing** | `ail test --mutate`: changes the reached lines of a program one way at a time, runs the tests on each change and reports the changes (mutants) that no test fails on ([ADR 1022](decisions/1022-mutation-testing.md)). |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
 | **Native subset** | The constructs the native backend compiles (native.subset.1): free functions over numbers, string literals and lists of numbers; anything else is reported before code is made (ADR 0384). |
@@ -214,6 +217,9 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Second-class borrow** | Temporary access to an argument that lasts only for a call and can't be stored or returned, so no lifetimes are needed (ADR 0062). |
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
 | **Seed** | A native `ail` binary published as a release asset for one host (`ail-seed-ARCH-OS`). `./ail` downloads it, checks its SHA-256 against `tools/release/seeds.sha256` and uses it to build the compiler from source; only the designer publishes seeds ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md), [ADR 0976](decisions/0976-public-release-and-seed-trust.md)). |
+| **Context pack** | `ail context PROGRAM FN --budget N`: the body, callee and caller signatures, types, tests and cited spec rules that an edit to `FN` needs, cut to N tokens (ADR 1020). |
+| **Review report** | `ail review BASE..HEAD`: effects, public API, contracts, performance and untested code of a change, cut to a token budget (ADR 1024). |
+| **Inferred contract** | A `requires` or `ensures` line that `ail infer --contracts FN FILE` proposes from the calls the tests make: observed, not proved, at most 3, applied only with `--apply` (ADR 1023). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0904; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
@@ -227,6 +233,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **String object** | The native layout of a `str`: a byte count, a character count and UTF-8 data, so `len()` is O(1) (ADR 0404). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
 | **Structured edit** | An edit named by declaration id instead of by text: `ail edit` applies a JSON list of them (replace_body, replace, insert, delete, rename, import), then formats and checks (ADR 0397). The compact form is hunks under a declaration's name (ADR 0399). |
+| **Superframe** | A VP9 packet holding several frames, with an index of their sizes in its last bytes; usually a hidden alternate reference and a shown frame (`std.vpx.2`, ADR 0989). |
 | **Supertrait** | A trait another trait requires: `trait Ord Eq`. Implementing the subtrait needs the supertrait's `impl`, and a bound on the subtrait provides it (ADR 0348). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
@@ -262,6 +269,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
 | **View tree** | The `app.Node` value an app's `view` returns: labels, buttons, fields, toggles, rows, columns and canvases, as plain data a host draws (`std.app.2`, ADR 0838). |
+| **VP9** | A royalty-free video codec from the WebM Project, what YouTube sends open-source Chromium; decoded by `std.video.vp9` (ADR 0989). |
 | **Vtable** | A table of function pointers for one type's implementation of a trait, used to call a method through `any Trait` at run time. Planned by ADR 0616 (lane 120, not yet landed). |
 | **Walk** | `fs.walk(dir)`: every file below a directory at any depth, as paths, sorted (`std.fs.8`, ADR 0281). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |

@@ -31,6 +31,11 @@ PCM; other chunks are skipped; 32-bit float is refused for now.
 **std.audio.8** — `to_pcm16(c) bytes` is the clip as raw little-endian 16-bit
 PCM, interleaved, clamped; `from_pcm16(b, rate, channels) Clip` is the reverse.
 
+**std.audio.11** — `decode_flac(b bytes) Clip ! AudioError` reads a FLAC file
+of 8 to 24 bits per sample: constant, verbatim, fixed and LPC subframes,
+rice residuals, and the stereo modes (left/side, side/right, mid/side). The
+CRCs and the MD5 are not checked. Other data fails with `AudioError`. *(ADR 0974)*
+
 ## Devices
 
 **std.audio.9** — `use std.audio.device` plays and records through a host
@@ -122,8 +127,17 @@ fn main() !
     device.close(move c)
 ```
 
+```ail rules=std.audio.11
+use std.audio
+
+fn main() !
+    c := audio.decode_flac(b"RIFF") else err
+        print("error: {err}")
+        return
+    print(audio.frames(c))
+```
+
 ## Open for Fable
 
-MP3/OGG/FLAC decoders (FLAC first, lossless and simple, then
-Vorbis, then MP3); spatial audio; f32 sample storage for tokens and speed
+Vorbis and MP3 decoders (FLAC is done, ADR 0974); spatial audio; f32 sample storage for tokens and speed
 once `List[f32]` is native-fast.

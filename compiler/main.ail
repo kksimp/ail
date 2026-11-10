@@ -140,6 +140,8 @@ fn main() !
             check_cmd(args[1..])
         "pkg" =>
             io.exit(pkg.command(args[1..]))
+        "header" =>
+            io.exit(load.header_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "check-errors" =>
@@ -155,6 +157,10 @@ fn main() !
             io.exit(attachcli.command(args[1..]))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "context" =>
+            io.exit(api.context_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "review" =>
+            io.exit(api.review_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
             cli_run(args[1..])
         "prepare" =>

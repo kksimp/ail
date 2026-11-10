@@ -34,6 +34,8 @@ STD_FUNCTIONS := [
         "remove",
         "rename",
         "scan",
+        "scan_count",
+        "map",
         "walk",
         "volume",
         "read_range",
@@ -59,7 +61,7 @@ STD_FUNCTIONS := [
     ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
-    ["io", "eprint", "exit", "read_all", "read_bytes", "read_line"],
+    ["io", "eprint", "exit", "read_all", "read_bytes", "read_line", "write_bytes"],
     [
         "net",
         "connect",
@@ -75,6 +77,7 @@ STD_FUNCTIONS := [
         "request_bytes",
         "serve",
     ],
+    ["os", "signals"],
     ["path", "base", "dir", "ext", "join", "stem"],
     ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
     ["random", "float", "int", "seed", "shuffle"],
@@ -92,7 +95,7 @@ STD_FUNCTIONS := [
         "split",
     ],
     ["tensor", "from", "from_fn", "zeros"],
-    ["task", "cancelled", "check", "select"],
+    ["task", "cancelled", "check", "select", "set_threads", "threads"],
     ["time", "now_ms", "sleep_ms"],
     ["tz", "offset", "system"],
     ["ui", "clipboard_get", "clipboard_set", "open"],
@@ -235,10 +238,14 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Volume")))
     if key == "fs.read_range"
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: fails_with("fs.IoError", Ty.Bytes))
+    if key == "fs.map"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.trash"
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.scan"
         return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
+    if key == "fs.scan_count"
+        return StdSig(params: [], ret: std_struct("fs.ScanCount"))
     if key == "fs.rename" or key == "fs.copy"
         return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
     # std.crypto.1-4 (ADR 0959): `bytes` in, `bytes` out.
@@ -279,6 +286,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "io.read_bytes"
         return StdSig(params: [], ret: Ty.Bytes)
+    # std.io.6: `write_bytes` writes raw bytes to standard output.
+    if key == "io.write_bytes"
+        return StdSig(params: [Ty.Bytes], ret: Ty.Unit)
     # std.io.4: `exit` never returns.
     if key == "io.exit"
         return StdSig(params: [Ty.Int], ret: Ty.Never)
@@ -379,10 +389,17 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: Ty.Bool)
     if key == "task.check"
         return StdSig(params: [], ret: Ty.Res(Ty.Unit, Errs.ErrSet([std_struct("Cancelled")])))
+    # conc.par.18
+    if key == "task.threads"
+        return StdSig(params: [], ret: Ty.Int)
+    if key == "task.set_threads"
+        return StdSig(params: [Ty.Int], ret: Ty.Unit)
     if key == "time.now_ms"
         return StdSig(params: [], ret: Ty.Int)
     if key == "time.sleep_ms"
         return StdSig(params: [Ty.Int], ret: Ty.Unit)
+    if key == "os.signals"
+        return StdSig(params: [Ty.ListOf(text)], ret: Ty.Conc("Channel", text))
     if key == "tz.offset"
         return StdSig(params: [text, Ty.Int], ret: Ty.Opt(Ty.Int))
     if key == "tz.system"

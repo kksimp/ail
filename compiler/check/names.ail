@@ -58,6 +58,7 @@ pub STD_MODULES := [
     "mem",
     "io",
     "net",
+    "os",
     "path",
     "proc",
     "random",
@@ -94,6 +95,7 @@ pub AIL_STD_MODULES := [
     "std.time.date",
     "std.toml",
     "std.ui.widgets",
+    "std.video.vp9",
 ]
 
 ## Positions from here on are the prelude's.

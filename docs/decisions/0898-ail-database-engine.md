@@ -1,6 +1,6 @@
 # 0898. A database engine and its shell, as a showcase program
 
-- **Status:** Proposed
+- **Status:** Deferred past 0.1.0
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the program on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0874](0874-purity-driven-speed-optimizations.md), [ADR 0891](0891-ail-context-budgeted-pack.md), [ADR 0896](0896-ail-test-mutate.md), [ADR 0897](0897-ail-check-perf.md)

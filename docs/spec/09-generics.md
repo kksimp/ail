@@ -5,7 +5,7 @@ Chapter key: `gen`
 > **Status:** Drafted (partial). Specified: bracket syntax (`gram.generic.1`),
 > generic types, constraints, methods on generic types, inference, anonymous
 > generic parameters, and the compilation-strategy freedom. Not yet designed:
-> variance, const generics, and methods for one instantiation only. Because
+> variance, const generics beyond `gen.const.1-3`, and methods for one instantiation only. Because
 > user code can't declare such methods, `xs.sum()` (`List[int]` and
 > `List[float]` only) is a built-in special case (`type.coll.12`, ADR 0136).
 > `Hash` is now a usable bound (`trait.auto.5`, ADR 0133).
@@ -332,4 +332,50 @@ fn main()
     # Generic code behaves the same whether or not an instance is specialised; the
     # observable behaviour is the same program output shown in the examples above.
     print("instances")
+```
+
+## Const generics
+
+**gen.const.1** — A struct or function MAY declare a const parameter as a name
+preceded by `const` and followed by `int`: `struct Vec[T, const N int]`, `fn dot[const N int](...)`. A const
+argument is an int literal (`Vec[float, 3]`) or a const parameter in scope. A
+call that uses one const parameter twice, as `dot` does, needs the same value
+in both places; lengths that differ (`Vec[float, 3]` against `Vec[float, 4]`)
+are an ordinary argument type mismatch (`expr.call.2`). *(ADR 0954)*
+
+**gen.const.2** — A const parameter MUST get an int literal or a const parameter
+in scope, and a type parameter MUST NOT get one. *(ADR 0954)*
+
+```ail error=gen.const.2
+struct Vec[T, const N int]
+    data List[T]
+
+fn f(v Vec[float, int])
+    print(1)
+
+fn main()
+    print(1)
+```
+
+**gen.const.3** — Inside the declaration a const parameter is an `int` value,
+fixed per instance. *(ADR 0954)*
+
+```ail rules=gen.const.1,gen.const.3
+struct Vec[T, const N int]
+    data List[T]
+
+fn Vec.size(self) int
+    N
+
+fn dot[const N int](a Vec[float, N], b Vec[float, N]) float
+    mut s := 0.0
+    for i in 0..N
+        s += a.data[i] * b.data[i]
+    s
+
+fn main()
+    a := Vec[float, 3](data: [1.0, 2.0, 3.0])
+    b := Vec[float, 3](data: [4.0, 5.0, 6.0])
+    print(a.size())
+    print(dot(a, b))
 ```

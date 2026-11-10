@@ -187,6 +187,14 @@ to that canvas (so possibly negative or past its size). A host may omit
 `down` and `up` (then it sends neither), so a program must not depend on
 them. *(ADR 0983)*
 
+**std.app.31** — `start` and every `resize` carry `screen_w` and `screen_h`
+(floats, points: the main display's size) and `scale` (float: device pixels
+per point, `2` on a Retina display). A host reports the display it draws on
+by default (macOS `NSScreen.main`, Linux the primary GDK monitor, Windows the
+primary screen with its DPI); a headless event has all three `0`, and
+`app.event_from_json` reads them like any member. A host that cannot tell
+reports `0`, so a program must treat `scale == 0` as `1`. *(ADR 1017)*
+
 **std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
 clipboard's text) when the paste key (Command-V on macOS, Control-V
 elsewhere) is pressed in a canvas, instead of the `key` event for it; a
@@ -197,6 +205,8 @@ program must not depend on `paste`. *(ADR 0978)*
 agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are built
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
+
+**std.app.30** — A host sends `appearance` (`text` is `dark` or `light`) once right after `start`, and again whenever the system's dark or light setting changes. An app may answer with a new view, as for any event. A host that cannot read the setting sends none, so a program must not depend on it and keeps a default theme. *(ADR 1008)*
 
 ## Examples
 
@@ -310,6 +320,49 @@ fn main()
     s.update(c)
     print(s.lines())
     print(app.outline(s.view()))
+```
+
+```ail rules=std.app.31
+use std.app
+
+## A page's `screen` and `devicePixelRatio`, from the display the host reports.
+struct Page
+    w float
+    h float
+    ratio float
+
+impl app.App for Page
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            w = ev.screen_w
+            h = ev.screen_h
+            ratio = if ev.scale == 0.0 then 1.0 else ev.scale
+
+    fn view(self) app.Node
+        app.label("{w}x{h} @{ratio}")
+
+fn main()
+    mut p := Page(w: 0.0, h: 0.0, ratio: 1.0)
+    mut start := app.event("start")
+    start.screen_w = 1512.0
+    start.screen_h = 982.0
+    start.scale = 2.0
+    print(app.step(mut p, start))
+```ail rules=std.app.30
+## A view that follows the system theme: `appearance` picks the background.
+struct Themed
+    dark bool
+impl app.App for Themed
+        if ev.kind == "appearance"
+            dark = ev.text == "dark"
+        bg := if dark then 0x1f1f1f else 0xffffff
+        app.canvas("c", 0.0, 0.0, [app.draw_rect(0.0, 0.0, 10.0, 10.0, bg)])
+    mut t := Themed(dark: false)
+    mut ev := app.event("appearance")
+    ev.text = "dark"
+    print(app.step(mut t, ev))
+    ev.text = "light"
+    print(app.step(mut t, ev))
 ```
 
 ```ail rules=std.app.27

@@ -115,6 +115,29 @@ fn tlsprim_chain(args str) str
     e := tv_chain(chain, roots, w[0], str_to_int(w[1]))
     if e == "" then "ok" else e
 
+## `serverhello BODY`: the ServerHello body (hex, without its 4-byte handshake
+## header) through `tc_server_hello` with the session id `e0 e1 .. ff` echoed
+## (the id of tests/data/net/tls/illustrated-tls13.txt). "ok", "retry" for a
+## HelloRetryRequest, or the client's message. Used by tools/native-tls/fuzz.ail.
+fn tlsprim_serverhello(args str) str
+    f := tlsprim_fields(args)
+    st := obj_new(TS_BYTES, 4)
+    for i in 0..TS_BYTES / 8
+        store64(st + 8 * i, 0)
+    sid := alloc_raw(40, KIND_BYTES)
+    for i in 0..32
+        store8(sid + i, 224 + i)
+    share := alloc_raw(40, KIND_BYTES)
+    ck := alloc_raw(32, KIND_BYTES)
+    for i in 0..4
+        store64(ck + 8 * i, 0)
+    e := tc_server_hello(st, f[0][0], f[0][1], sid, share, ck)
+    if e == 0
+        return "ok"
+    if e == 1
+        return "retry"
+    str_at(load64(st + TS_MSG))
+
 ## `aesbench MIB`: seal then open `MIB` MiB of zeros with AES-128-GCM, timed by
 ## the caller (tools/native-tls/aes-bench.sh); "ok" when the open succeeds.
 fn tlsprim_aesbench(args str) str
@@ -141,6 +164,8 @@ fn tlsprim_call(op str, args str) str
         return tlsprim_chain(args)
     if op == "aesbench"
         return tlsprim_aesbench(args)
+    if op == "serverhello"
+        return tlsprim_serverhello(args)
     f := tlsprim_fields(args)
     if op == "poly1305"
         out := alloc_raw(16, KIND_BYTES)

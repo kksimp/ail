@@ -1,0 +1,49 @@
+## std.gfx.11: gamepad state per frame, with pressed and released edges.
+use std.app
+use std.gfx
+use std.gfx.host
+
+struct Jumper
+    jumps int
+    held bool
+
+impl gfx.Game for Jumper
+    fn update(mut self, input gfx.Input, dt float)
+        if gfx.pad_pressed(input, 0, "a")
+            jumps += 1
+        held = gfx.pad_down(input, 0, "a")
+
+    fn draw(self, mut f gfx.Frame)
+        gfx.clear(mut f, 0)
+
+fn show(i gfx.Input)
+    p := gfx.pad(i, 0)
+    print("{gfx.pad_down(i, 0, "a")} {gfx.pad_pressed(i, 0, "a")} {gfx.pad_released(i, 0, "a")} {p.lx} {p.ly} {p.rt}")
+
+fn main()
+    assert(gfx.no_pad().buttons == 0)
+    i0 := gfx.idle()
+    show(i0)
+    i1 := gfx.next_input(i0, [gfx.pad_event(0, "1,0.5,-0.5,0,0,0,1.0")])
+    show(i1)
+    i2 := gfx.next_input(i1, [])
+    show(i2)
+    i3 := gfx.next_input(i2, [gfx.pad_event(0, "0,0,0,0,0,0,0")])
+    show(i3)
+    print(gfx.pad_bit("start"))
+    print(gfx.pad_down(i3, 3, "a"))
+    i4 := gfx.next_input(i3, [gfx.pad_event(0, "")])
+    print(gfx.pad(i4, 0).buttons)
+
+    # The same events through the window loop, as the host would send them.
+    mut g := Jumper(jumps: 0, held: false)
+    mut l := host.new_loop(g, "pad", 8, 8)
+    l.update(gfx.pad_event(0, "1,0,0,0,0,0,0"))
+    f1 := host.advance(mut l, 0.1)
+    f2 := host.advance(mut l, 0.1)
+    l.update(gfx.pad_event(0, "0,0,0,0,0,0,0"))
+    l.update(gfx.pad_event(0, "1,0,0,0,0,0,0"))
+    f3 := host.advance(mut l, 0.1)
+    host.finish(mut g, l) else err
+        print(err.why)
+    print("{g.jumps} {g.held}")

@@ -1,0 +1,32 @@
+# conc.task.10: a `unique` struct owns a `TaskGroup` field; tasks added
+# through it are waited when the struct is released, here at the end of
+# `fill`, so all three have sent before `main` closes the channel (ADR 0996).
+
+unique struct Pool
+    tasks TaskGroup
+    out Channel[int]
+
+fn work(n int, out Channel[int])
+    out.send(n * n)
+
+fn new_pool(out Channel[int]) Pool
+    Pool(tasks: TaskGroup(), out: out)
+
+fn Pool.start(mut self, n int)
+    ch := self.out
+    self.tasks.add(spawn work(n, ch))
+
+fn fill(out Channel[int])
+    mut p := new_pool(out)
+    for i in 1..=3
+        p.start(i)
+    print("fill returns")
+
+fn main()
+    out := Channel[int](10)
+    fill(out)
+    out.close()
+    mut total := 0
+    for v in out
+        total += v
+    print(total)

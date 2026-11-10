@@ -205,3 +205,230 @@ pub fn from_pcm16(b bytes, rate int, channels int) Clip
         out.push(s.to_float() / 32768.0)
         i += 2
     Clip(rate: rate, channels: channels, samples: out)
+
+## `v` shifted left by `n` bits.
+fn lsh(v int, n int) int
+    v.shl(n)
+
+## Reads bits from `data`, most significant first (a FLAC stream).
+struct Bits
+    data bytes
+    pos int
+
+fn Bits.take(mut self, n int) int ! AudioError
+    if self.pos + n > self.data.len() * 8
+        return AudioError(why: "flac: the data ends early")
+    mut v := 0
+    mut left := n
+    while left > 0
+        byte := self.data[self.pos / 8].to_int()
+        used := self.pos % 8
+        avail := 8 - used
+        k := if left < avail then left else avail
+        part := byte.shr(avail - k).bit_and(lsh(1, k) - 1)
+        v = v.shl(k).bit_or(part)
+        self.pos += k
+        left -= k
+    v
+
+fn Bits.signed(mut self, n int) int ! AudioError
+    if n == 0
+        return 0
+    v := self.take(n)?
+    if v >= lsh(1, n - 1)
+        return v - lsh(1, n)
+    v
+
+fn Bits.unary(mut self) int ! AudioError
+    mut n := 0
+    while self.take(1)? == 0
+        n += 1
+    n
+
+## The rice-coded residual of a subframe with `order` warm-up samples.
+fn flac_residual(mut b Bits, size int, order int) List[int] ! AudioError
+    method := b.take(2)?
+    if method > 1
+        return AudioError(why: "flac: bad residual coding")
+    porder := b.take(4)?
+    mut out := List[int]()
+    for part in 0..lsh(1, porder)
+        n := size.shr(porder)
+        count := if part == 0 then n - order else n
+        k := b.take(if method == 0 then 4 else 5)?
+        escape := if method == 0 then 15 else 31
+        if k == escape
+            bits := b.take(5)?
+            for _ in 0..count
+                out.push(b.signed(bits)?)
+        else
+            for _ in 0..count
+                q := b.unary()?
+                r := b.take(k)?
+                u := q.shl(k).bit_or(r)
+                out.push(u.shr(1).bit_xor(0 - u.bit_and(1)))
+    out
+
+## One subframe of `size` samples at `bps` bits.
+fn flac_subframe(mut b Bits, size int, bps int) List[int] ! AudioError
+    if b.take(1)? != 0
+        return AudioError(why: "flac: bad subframe")
+    kind := b.take(6)?
+    mut wasted := 0
+    if b.take(1)? == 1
+        wasted = b.unary()? + 1
+    bits := bps - wasted
+    mut s := List[int]()
+    if kind == 0
+        v := b.signed(bits)?
+        for _ in 0..size
+            s.push(v)
+    elif kind == 1
+        for _ in 0..size
+            s.push(b.signed(bits)?)
+    elif kind >= 8 and kind <= 12
+        order := kind - 8
+        for _ in 0..order
+            s.push(b.signed(bits)?)
+        res := flac_residual(mut b, size, order)?
+        for i in 0..res.len()
+            n := s.len()
+            mut p := 0
+            if order == 1
+                p = s[n - 1]
+            elif order == 2
+                p = 2 * s[n - 1] - s[n - 2]
+            elif order == 3
+                p = 3 * s[n - 1] - 3 * s[n - 2] + s[n - 3]
+            elif order == 4
+                p = 4 * s[n - 1] - 6 * s[n - 2] + 4 * s[n - 3] - s[n - 4]
+            s.push(res[i] + p)
+    elif kind >= 32
+        order := kind - 31
+        for _ in 0..order
+            s.push(b.signed(bits)?)
+        precision := b.take(4)? + 1
+        shift := b.signed(5)?
+        mut coef := List[int]()
+        for _ in 0..order
+            coef.push(b.signed(precision)?)
+        res := flac_residual(mut b, size, order)?
+        for i in 0..res.len()
+            n := s.len()
+            mut acc := 0
+            for j in 0..order
+                acc += coef[j] * s[n - 1 - j]
+            s.push(res[i] + acc.shr(shift))
+    else
+        return AudioError(why: "flac: unsupported subframe type {kind}")
+    if wasted > 0
+        return [v.shl(wasted) for v in s]
+    s
+
+## A FLAC file as a clip (std.audio.11). Reads 8 to 24 bit streams; the CRCs
+## and the MD5 are not checked.
+pub fn decode_flac(data bytes) Clip ! AudioError
+    if data.len() < 42 or not data[0..4].starts_with(b"fLaC")
+        return AudioError(why: "not a FLAC file")
+    mut b := Bits(data: data, pos: 32)
+    mut rate := 0
+    mut channels := 0
+    mut sbps := 0
+    mut last := false
+    while not last
+        last = b.take(1)? == 1
+        kind := b.take(7)?
+        len := b.take(24)?
+        if kind == 0
+            b.take(32)?
+            b.take(24)?
+            b.take(24)?
+            rate = b.take(20)?
+            channels = b.take(3)? + 1
+            sbps = b.take(5)? + 1
+            b.take(36)?
+            b.take(128)?
+        else
+            b.pos += len * 8
+    if rate == 0
+        return AudioError(why: "flac: no STREAMINFO")
+    mut out := List[float]()
+    while b.pos + 16 <= data.len() * 8
+        if b.take(14)? != 16382
+            return AudioError(why: "flac: lost frame sync")
+        b.take(2)?
+        bcode := b.take(4)?
+        rcode := b.take(4)?
+        assign := b.take(4)?
+        scode := b.take(3)?
+        b.take(1)?
+        first := b.take(8)?
+        if first >= 192
+            mut more := 1
+            if first >= 254
+                more = 6
+            elif first >= 252
+                more = 5
+            elif first >= 248
+                more = 4
+            elif first >= 240
+                more = 3
+            elif first >= 224
+                more = 2
+            for _ in 0..more
+                b.take(8)?
+        mut size := 0
+        if bcode == 1
+            size = 192
+        elif bcode >= 2 and bcode <= 5
+            size = lsh(576, bcode - 2)
+        elif bcode == 6
+            size = b.take(8)? + 1
+        elif bcode == 7
+            size = b.take(16)? + 1
+        elif bcode >= 8
+            size = lsh(256, bcode - 8)
+        else
+            return AudioError(why: "flac: bad block size")
+        if rcode == 12
+            b.take(8)?
+        elif rcode == 13 or rcode == 14
+            b.take(16)?
+        b.take(8)?
+        mut bps := sbps
+        if scode == 1
+            bps = 8
+        elif scode == 2
+            bps = 12
+        elif scode == 4
+            bps = 16
+        elif scode == 5
+            bps = 20
+        elif scode == 6
+            bps = 24
+        n := if assign < 8 then assign + 1 else 2
+        mut chans := List[List[int]]()
+        for c in 0..n
+            side := (assign == 8 and c == 1)
+                or (assign == 9 and c == 0)
+                or (assign == 10 and c == 1)
+            chans.push(flac_subframe(mut b, size, if side then bps + 1 else bps)?)
+        if assign >= 8
+            for i in 0..size
+                a := chans[0][i]
+                d := chans[1][i]
+                if assign == 8
+                    chans[1][i] = a - d
+                elif assign == 9
+                    chans[0][i] = a + d
+                else
+                    m := a.shl(1).bit_or(d.bit_and(1))
+                    chans[0][i] = (m + d).shr(1)
+                    chans[1][i] = (m - d).shr(1)
+        b.pos = (b.pos + 7) / 8 * 8 + 16
+        scale := lsh(1, bps - 1).to_float()
+        for i in 0..size
+            for c in 0..n
+                out.push(chans[c][i].to_float() / scale)
+        channels = n
+    Clip(rate: rate, channels: channels, samples: out)

@@ -28,6 +28,8 @@ FS_VOLUME := "fs.Volume"
 ## The result of `fs.scan` (std.fs.23) and its entries.
 FS_SCAN := "fs.Scan"
 FS_ENTRY := "fs.Entry"
+## The result of `fs.scan_count` (std.fs.27).
+FS_SCAN_COUNT := "fs.ScanCount"
 
 ## The child of `proc.start` (std.proc.4): pid and the three streams.
 PROC_CHILD := "proc.Child"
@@ -66,6 +68,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[FS_VOLUME] = []
     structs[FS_SCAN] = []
     structs[FS_ENTRY] = []
+    structs[FS_SCAN_COUNT] = []
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
@@ -172,6 +175,7 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "skipped", ty: Ty.List(Ty.Str)),
     ]
     structs[FS_VOLUME] = [Slot(name: "total", ty: Ty.Int), Slot(name: "free", ty: Ty.Int)]
+    structs[FS_SCAN_COUNT] = [Slot(name: "entries", ty: Ty.Int), Slot(name: "bytes", ty: Ty.Int)]
     structs[PROC_RAW] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "out", ty: Ty.Bytes),
@@ -270,6 +274,7 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         for k in 0..vs.len()
             if vs[k] < 0
                 vs[k] = new_table(slots[k].ty)
+    own_groups(slots, vs)
     t := Ty.Struct(n)
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()

@@ -37,6 +37,9 @@ fn Lower.gen_drop(mut self, name str, t Ty)
             while k >= 0
                 if is_uniq(slots[k].ty)
                     drop_call(load(x, k, slots[k].ty), slots[k].ty)
+                elif slots[k].ty == Ty.Group
+                    # conc.task.10: the struct's release waits for the group's tasks.
+                    call("rt.group_release", [load(x, k, Ty.Group)], Ty.Unit)
                 k -= 1
         Enum(n) =>
             if m := uniq.drops.get(n)
