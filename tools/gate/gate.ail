@@ -2865,11 +2865,15 @@ fn Gate.agent_tools(mut self, tmp str)
     sh_run("mkdir -p {base}/new")
     tool("new writes the kit", "{base}/new", ["new", "kit"], 0, ["AGENTS.md", ".mcp.json"])
     kit := fs.read_text("{base}/new/kit/AGENTS.md") else return
-    want(
-        "new AGENTS.md",
-        kit,
-        ["ail task start", "ail context", "ail task verify", "ail task finish", "ail explain", "ail ask", "Never grep"],
-    )
+    want("new AGENTS.md", kit, [
+        "ail task start",
+        "ail context",
+        "ail task verify",
+        "ail task finish",
+        "ail explain",
+        "ail ask",
+        "Never grep",
+    ])
     if kit.len() > 1400
         red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 350 tokens")
     mcp := fs.read_text("{base}/new/kit/.mcp.json") else return
