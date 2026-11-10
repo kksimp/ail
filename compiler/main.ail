@@ -49,6 +49,8 @@ fn main() !
     # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
     if args.len() == 1 and args[0] == "new"
         io.exit(scaffold.command([]))
+    if args.len() == 1 and args[0] == "card"
+        io.exit(api.card_topic_command([]))
     if args.len() == 0
         or (args.len() < 2 and args[0] != "explain" and args[0] != "diff" and args[0] != "attach")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
@@ -159,6 +161,8 @@ fn main() !
             io.exit(attachcli.command(args[1..]))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "card" =>
+            io.exit(api.card_topic_command(args[1..]))
         "context" =>
             io.exit(api.context_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "review" =>

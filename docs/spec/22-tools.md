@@ -645,6 +645,89 @@ fn main()
     print(missing)
 ```
 
+## Cards and std lookup
+
+`ail card` prints the core card or one topic of the full card, and `ail ask std`
+finds a standard-library function by words or by shape, so an agent can look up
+what it would otherwise recall from memory
+([ADR 1051](../decisions/1051-core-card-and-std-lookup.md)).
+
+**api.find.1** — `ail ask std WORDS...` prints at most ten lines, best first,
+each `MODULE.SIGNATURE   (RULE)` with the signature as the spec writes it
+(`fs.read_text(path str) str ! IoError   (std.fs.1)`). Exit status is 0 when
+there are lines, 1 when there are none, 2 for an error.
+
+**api.find.2** — The words are matched against the standard library's rules in
+the spec: a rule `**std.M.N**` whose text starts with a backticked signature
+`name(params) ret ! Error` describes one function `M.name`. A function scores 6
+for each word that is its name, 3 for each word its name contains (of three
+letters or more), 2 for each word that is its module, and 1 for each word (or
+its plural or singular) in the rule's text. Filler words (`a`, `the`, `of`,
+`to`, `by`, `in`, `from`, `and`, `std`, ...) say nothing.
+
+**api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
+names are optional (`(path str)` and `(str)` are the same), spaces say nothing
+and `! Error` is ignored. A function scores 6 when its parameter types equal
+the asked ones in order, else 1 for each asked type among its parameters, and 4
+when its result type equals the asked one.
+
+**api.find.4** — A query that matches nothing prints nothing and exits 1. No
+words, or an unknown option, is a usage error (status 2). The index is read from
+the repository's `docs/spec`, found as `ail explain` finds it.
+
+**tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
+the syntax, the ten rules diagnostics cite most often, and where to look up the
+rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+same.
+
+**tool.card.2** — `ail card TOPIC` prints the section of the full card
+(`docs/language-card.md`) whose `##` heading contains the topic, ignoring case
+(`ail card errors`). `ail card std.MODULE` prints the signatures of that std
+module, as `api.find.1` writes them.
+
+**tool.card.3** — A topic that names no section or module prints an error that
+lists the topics and exits 1. A missing card file is an error (status 2).
+
+```ail tool=ask,std,read,text,file expect=read_text(path rules=api.find.1,api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(str)bytes expect=read_bytes(path rules=api.find.3
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std status=2 expect=usage: rules=api.find.4
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,zzqqxx status=1 rules=api.find.4
+fn main()
+    print(1)
+```
+
+```ail tool=card expect=Ten rules=tool.card.1
+fn main()
+    print(1)
+```
+
+```ail tool=card,errors expect=Absence rules=tool.card.2
+fn main()
+    print(1)
+```
+
+```ail tool=card,std.fs expect=read_text(path rules=tool.card.2
+fn main()
+    print(1)
+```
+
+```ail tool=card,nosuchtopic status=1 expect=topics rules=tool.card.3
+fn main()
+    print(1)
+```
+
 ## Context for an edit
 
 `ail context PROGRAM SYMBOL` prints the smallest bundle of the program that an

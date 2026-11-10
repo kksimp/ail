@@ -203,7 +203,7 @@ $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'mcp', 'leak', 'header', 'prove'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'mcp', 'leak', 'header', 'prove'
 $route = (
     $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -255,7 +255,7 @@ if ($route) {
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
     if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
     switch ($cmd) {
-        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'header', 'diff', 'explain', 'edit', 'ask', 'attach', 'new', 'prove' } { & $native $cmd @rest; exit $LASTEXITCODE }
+        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'header', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'new', 'prove' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'check' {
             if ($checkErrors) { & $native check-errors @rest; exit $LASTEXITCODE }
             if ($checkBudget) {
