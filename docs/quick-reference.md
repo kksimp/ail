@@ -20,6 +20,8 @@
 ./ail infer --contracts f FILE [--apply]   # proposes up to 3 requires/ensures lines for f from the calls its tests make (patch for ail edit)
 ./ail prove FILE                # each requires/ensures check the checker proves (and leaves out of the build) or keeps
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer; `task verify --fix`; `task log` reads `.ail/task-log.jsonl`)
+./ail merge BASE OURS THEIRS       # merge by declaration (a git merge driver; `ail merge --install`); exit 1 on a conflict hunk
+./ail merge --check OURS THEIRS [PATH]   # merge two branches in scratch worktrees and check: an error neither side had is a `semantic:` conflict (also BASE OURS THEIRS files)
 ./ail verify --diff --attest C.json FILE   # change certificate; `ail verify --check C.json` re-runs it, exit 1 on a difference
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail try FILE --set A.edit --set B.edit   # check and test patch sets on scratch copies, one verdict line each; --apply writes one clean set
