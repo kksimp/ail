@@ -2465,6 +2465,13 @@ fn mcp_session(d str, msgs List[str]) proc.Output
     ) else return proc.Output(status: 127, out: "", err: "could not start sh")
     r
 
+## The line of an MCP session's output that answers request `id`, or "".
+fn reply_of(out str, id int) str
+    for line in out.lines()
+        if line.contains("\"id\":{id},")
+            return line
+    ""
+
 fn mcp_call(id int, name str, args str) str
     jreq(id, "tools/call", "~'name':'{name}','arguments':~{args}^^")
 
@@ -2943,6 +2950,32 @@ fn Gate.agent_tools(mut self, tmp str)
         "'range':'HEAD..HEAD','path':'examples/hello.ail'",
     )])
     want("mcp review", m3.out, ["\"isError\":false"])
+    # mcp.warm.1-4 (E14): a repeated read-only call comes from the memo, a changed file is
+    # checked again, and `AIL_MCP_COLD` goes through the launcher.
+    fs.write_text("{base}/mcp/warm.ail", ctx) else return
+    w1 := mcp_session("{base}/mcp", [
+        mcp_call(2, "ail_check", "'program':'warm.ail'"),
+        mcp_call(3, "ail_check", "'program':'warm.ail'"),
+        mcp_call(4, "ail_edit", "'program':'warm.ail','edits':'rename show shown'"),
+        mcp_call(5, "ail_check", "'program':'warm.ail'"),
+        mcp_call(6, "ail_test", "'program':'warm.ail'"),
+    ])
+    want("mcp warm first call", reply_of(w1.out, 2), [jm("'ail/warm':'direct'")])
+    want("mcp warm repeat", reply_of(w1.out, 3), [jm("'ail/warm':'memo'")])
+    want("mcp warm after an edit", reply_of(w1.out, 5), [jm("'ail/warm':'direct'")])
+    want("mcp warm test keeps the launcher", reply_of(w1.out, 6), [jm("'ail/warm':'launcher'")])
+    warm_again := mcp_call(3, "ail_check", "'program':'warm.ail'")
+    cold := proc.run(
+        "sh",
+        [
+            "-c",
+            "cd \"$0\" && AIL_MCP_COLD=1 AIL=\"$1\" exec \"$1\" mcp",
+            "{base}/mcp",
+            "{repo_root()}/ail",
+        ],
+        "{warm_again}\n{warm_again}\n",
+    ) else proc.Output(status: 127, out: "", err: "could not start sh")
+    want("mcp cold", reply_of(cold.out, 3), [jm("'ail/warm':'launcher'")])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and

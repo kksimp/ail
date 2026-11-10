@@ -431,8 +431,9 @@ if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
 fi
 
 # `ail mcp` (ADR 0918): the compiler's tools as an MCP server on stdio, tools/ailmcp/ailmcp.ail.
+# AIL_MCP_NATIVE names the native CLI, which `run` keeps fresh, for the warm path (mcp.warm.1).
 if [ "${1:-}" = mcp ]; then
-    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
+    AIL_MCP_NATIVE="$root/.native/ail" AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
 fi
 
 # `ail lsp` (ADR 0966): the compiler's semantic API as a language server on stdio, tools/ailsp/ailsp.ail.

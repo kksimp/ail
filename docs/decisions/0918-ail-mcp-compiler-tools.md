@@ -5,6 +5,7 @@
 - **Decided by:** Designer (2026-10-25, backlog "agent task protocol over MCP"); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0917](0917-ail-task-protocol.md) (`ail task`), [ADR 0892](0892-tool-functions-mcp-server.md) (MCP for user programs)
 - **Topic:** 20 — AI semantic API
+- **Amended by:** [ADR 1056](1056-warm-ail-mcp.md) (warm calls)
 
 ## Context
 
