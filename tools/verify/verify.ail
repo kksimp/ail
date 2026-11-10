@@ -113,18 +113,18 @@ fn cert_keys() List[str]
 ## `ail verify --check CERT` (verify.cert.3-4): re-run the certificate against its base and name every member that differs.
 fn check_cert(path str) int
     text := fs.read_text(path) else
-        io.eprint("error: can't read {path}")
+        io.eprint("error[verify.cert.4]: can't read {path}")
         return 2
     cert := parse_json(text.trim()) else err
-        io.eprint("error: {path} is not a certificate: {err.message}")
+        io.eprint("error[verify.cert.4]: {path} is not a certificate: {err.message}")
         return 2
     if num_of(cert, "cert") != 1.0
-        io.eprint("error: {path} is not a change certificate")
+        io.eprint("error[verify.cert.4]: {path} is not a change certificate")
         return 2
     file := cert.text("file", "")
     base := cert.text("base", "")
     if file.is_empty() or base.is_empty()
-        io.eprint("error: {path} lacks `file` or `base`")
+        io.eprint("error[verify.cert.4]: {path} lacks `file` or `base`")
         return 2
     made := proc.run("mktemp", ["-d"])? "running mktemp"
     tmp := made.out.trim()
@@ -138,11 +138,11 @@ fn check_cert(path str) int
     _ := proc.run(ail_path(), args)? "running ail verify"
     fresh_text := fs.read_text(out) else
         _ := proc.run("rm", ["-rf", tmp]) else return 2
-        io.eprint("error: the re-run wrote no certificate")
+        io.eprint("error[verify.cert.4]: the re-run wrote no certificate")
         return 2
     _ := proc.run("rm", ["-rf", tmp]) else return 2
     fresh := parse_json(fresh_text.trim()) else
-        io.eprint("error: the re-run wrote no certificate")
+        io.eprint("error[verify.cert.4]: the re-run wrote no certificate")
         return 2
     mut differs := List[str]()
     for k in cert_keys()
@@ -194,6 +194,7 @@ fn main() !
             files.push(a)
     if not check.is_empty() and want.is_empty() and not diff and files.is_empty() and attest.is_empty()
         io.exit(check_cert(check))
+    # verify.cert.2: `--attest` needs `--diff`, and `--mutate` needs `--attest`.
     if not want.is_empty() or not diff or files.len() != 1 or not check.is_empty() or (mutate and attest.is_empty())
         io.exit(usage())
     file := files[0]
@@ -313,7 +314,7 @@ fn main() !
     # verify.cert.1: the certificate is the same evidence plus what it was made from.
     if not attest.is_empty()
         base := proc.run("git", ["rev-parse", rev]) else
-            io.eprint("error: can't resolve {rev}")
+            io.eprint("error[verify.cert.1]: can't resolve {rev}")
             io.exit(2)
             return
         ver := proc.run(ail_path(), ["version"]) else
@@ -336,7 +337,7 @@ fn main() !
         if mutate and check_ok
             members.push(("mutation", mutation(file, changed, max)))
         fs.write_text(attest, "{obj(members).to_text()}\n") else
-            io.eprint("error: can't write {attest}")
+            io.eprint("error[verify.cert.1]: can't write {attest}")
             io.exit(2)
             return
     io.exit(if blocking == 0 then 0 else 1)
