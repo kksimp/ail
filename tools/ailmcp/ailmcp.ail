@@ -123,7 +123,7 @@ fn obj(members List[JsonMember]) Json
 fn strs(xs List[str]) Json
     Json.Arr([Json.Str(x) for x in xs])
 
-## The property names of a tool that are booleans (mcp.tools.1); `budget` is an integer, the rest strings.
+## The boolean properties of a tool (mcp.tools.1); `budget` is an integer, the rest strings.
 fn flags(name str) List[str]
     match name
         "ail_context" => ["json"]
@@ -143,7 +143,10 @@ fn prop_type(tool str, p str) str
     "string"
 
 fn tool_json(t Tool) Json
-    props := obj([member(p, obj([member("type", Json.Str(prop_type(t.name, p)))])) for p in t.props])
+    props := obj([
+        member(p, obj([member("type", Json.Str(prop_type(t.name, p)))]))
+        for p in t.props
+    ])
     schema := obj([
         member("type", Json.Str("object")),
         member("properties", props),
@@ -190,7 +193,11 @@ fn command(name str, a Json) Cmd
                 return Cmd(argv: [], why: "{name} needs `{n}`", stdin: "")
         bad := dashed(a, ["program", "symbol", "rule", "range", "path", "module", "form"])
         if bad != ""
-            return Cmd(argv: [], why: "{name}: `{bad}` must not start with - (mcp.call.4)", stdin: "")
+            return Cmd(
+                argv: [],
+                why: "{name}: `{bad}` must not start with - (mcp.call.4)",
+                stdin: "",
+            )
         program := a.text("program", "")
         since := a.text("since", "")
         rev := a.text("rev", "")
