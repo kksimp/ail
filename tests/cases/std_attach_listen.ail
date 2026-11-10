@@ -42,7 +42,10 @@ fn client(addr str, token str, out Channel[str])
     refused := ask(c, "\{\"v\":1,\"q\":\"observe\",\"token\":\"wrong\"}")
     out.send("{refused.contains("wrong token")}")
     # The press changes the view, on which the host closes the window.
-    out.send(ask(c, "\{\"v\":1,\"q\":\"input\",\"token\":\"{token}\",\"kind\":\"press\",\"id\":\"pay\"}"))
+    out.send(ask(
+        c,
+        "\{\"v\":1,\"q\":\"input\",\"token\":\"{token}\",\"kind\":\"press\",\"id\":\"pay\"}",
+    ))
     c.close()
     out.close()
 
