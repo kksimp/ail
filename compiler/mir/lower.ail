@@ -547,6 +547,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             and a.name != "allow"
             and a.name != "deprecated"
             and a.name != "test"
+            and a.name != "export c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
@@ -1188,10 +1189,9 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
-            # A loop the compiler chose is an outermost one: inside another loop it
-            # would pay the dispatch on every run of the outer body (conc.par.14).
-            if is_par
-                or loops.len() == 0 and auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
+            # A loop the compiler chose may sit inside a loop run in order; there it
+            # tests its work inline before it asks the pool (conc.par.14, lower_task.ail).
+            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return

@@ -129,6 +129,60 @@ fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
             "return `int`, `float`, `bool`, a sized number or a raw pointer, or nothing",
         )
 
+## ffi.export.2: a `pub export c fn` has the signature of an `extern c fn`
+## (ffi.decl.3): C-layout types, no `mut`, six integer-like and eight float
+## arguments, and it is a plain function. Its body is checked as usual.
+fn Checker.check_export(mut self, idx int, f ast.FnDecl)
+    sig := sigs[idx]
+    if f.generics.len() > 0 or f.owner != none or f.receiver != none
+        err_help(
+            "ffi.export.2",
+            f.pos,
+            "`{f.name}` is exported to C, so it is a plain function: no type, `self` or type parameters",
+            "export a plain wrapper that calls the generic function or method",
+        )
+        return
+    mut ints := 0
+    mut floats := 0
+    for i in 0..f.params.len().min(sig.params.len())
+        p := f.params[i]
+        t := sig.params[i].ty
+        if p.mutable
+            err_help(
+                "ffi.export.2",
+                p.pos,
+                "an exported parameter is passed by value, not `mut`",
+                "take a raw pointer `*T` to let the C caller see writes",
+            )
+        if not c_layout(t) and t != Ty.Unknown
+            err_help(
+                "ffi.export.2",
+                p.ty.pos,
+                "{show(t)} has no C layout, so it can't be a parameter of an exported function",
+                "use `int`, `float`, `bool`, a sized number such as `i32` or `u8`, or a raw pointer `*T`",
+            )
+        if t == Ty.Float or t == Ty.Num("f32")
+            floats += 1
+        else
+            ints += 1
+    if ints > 6 or floats > 8
+        err_help(
+            "ffi.export.2",
+            f.pos,
+            "`{f.name}` takes {ints} integer-like and {floats} float arguments; an export takes at most 6 and 8",
+            "pass a pointer to a buffer instead of the extra arguments",
+        )
+    if not c_layout(sig.ret) and sig.ret != Ty.Unknown and sig.ret != Ty.Unit
+        mut at := f.pos
+        if r := f.ret
+            at = r.pos
+        err_help(
+            "ffi.export.2",
+            at,
+            "{show(sig.ret)} has no C layout, so it can't be the result of an exported function",
+            "return `int`, `float`, `bool`, a sized number or a raw pointer, or nothing",
+        )
+
 ## The methods of a raw pointer `*T` (unsafe.ptr.2-3), sorted.
 PTR_METHODS := ["is_null", "offset", "read", "read_volatile", "write", "write_volatile"]
 

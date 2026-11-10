@@ -34,9 +34,9 @@ tests: 6 (`ail test` lists them)
 
 ## fmt (64 items)
 
-## load (103 items)
+## load (111 items)
 
-## mir (605 items)
+## mir (607 items)
 
 ## obj (66 items)
 

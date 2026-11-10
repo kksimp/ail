@@ -1,0 +1,9 @@
+## std.io.6: write_bytes writes raw bytes to standard output, in order with `print`.
+use std.io
+
+fn main()
+    io.write_bytes(b"he")
+    io.write_bytes(b"llo\n")
+    print("mid")
+    io.write_bytes(b"\x41\x42\n")
+    io.write_bytes(b"")

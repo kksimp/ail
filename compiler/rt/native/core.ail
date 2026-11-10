@@ -199,10 +199,10 @@ fn thread_slot() int
     worker_index() + 1
 
 ## Where each thread's text builder lives in the pool block (fmt.ail).
-P_SB := 8192
+P_SB := 9344
 
 ## Each worker's pending failure (err.ail): three words per thread slot.
-P_ERR := 9216
+P_ERR := 10944
 
 ## A number for the running thread: 1 for the main thread, 2 and up for
 ## workers.
