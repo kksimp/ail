@@ -56,6 +56,28 @@ A rule is tested when its id appears in a case, example or compiler test, or in 
 - **std-audio.md** (1): `std.audio.10`
 - **std-gfx.md** (2): `std.gfx.6` `std.gfx.8`
 - **std-opus.md** (1): `std.opus.1`
+- **01-platforms.md** (8): `plat.endian.1` `plat.isa.1` `plat.isa.2` `plat.isa.3` `plat.ptr.1` `plat.ptr.2` `plat.ptr.3` `plat.target.1`
+- **02-lexical.md** (1): `lex.name.1`
+- **03-grammar.md** (1): `gram.rec.2`
+- **04-types.md** (26): `type.char.1` `type.coll.1` `type.coll.11` `type.coll.14` `type.coll.15` `type.coll.5` `type.coll.6` `type.coll.7` `type.coll.8` `type.coll.9` `type.enum.4` `type.map.1` `type.map.4` `type.map.6` `type.num.12` `type.num.2` `type.num.3` `type.num.4` `type.num.5` `type.opt.1` `type.opt.5` `type.opt.7` `type.opt.8` `type.str.1` `type.str.12` `type.str.3`
+- **05-expressions.md** (8): `expr.arith.2` `expr.arith.4` `expr.arith.5` `expr.block.1` `expr.cmp.3` `expr.loop.7` `expr.name.2` `expr.op.2`
+- **07-ownership.md** (9): `own.borrow.1` `own.borrow.2` `own.copy.1` `own.excl.1` `own.move.5` `own.place.1` `own.uniq.7` `own.val.1` `own.val.2`
+- **08-errors.md** (10): `err.ctx.1` `err.ctx.3` `err.fix.1` `err.model.1` `err.text.1` `err.trap.2` `err.trap.3` `err.type.4` `err.type.6`
+- **09-generics.md** (3): `gen.anon.2` `gen.bound.4` `gen.impl.1`
+- **10-traits.md** (4): `trait.method.2` `trait.method.4` `trait.res.2`
+- **11-concurrency.md** (10): `conc.atomic.1` `conc.atomic.2` `conc.atomic.6` `conc.mm.1` `conc.par.6` `conc.par.7` `conc.race.1` `conc.task.2` `conc.task.3` `conc.task.9`
+- **12-modules.md** (2): `mod.pkg.1` `mod.vis.3`
+- **13-unsafe.md** (6): `unsafe.block.1` `unsafe.block.2` `unsafe.block.3` `unsafe.block.4` `unsafe.op.1` `unsafe.op.2`
+- **14-ffi.md** (7): `ffi.call.1` `ffi.decl.1` `ffi.decl.2` `ffi.decl.3` `ffi.decl.4` `ffi.decl.5` `ffi.link.1`
+- **15-compile-time.md** (4): `ct.eval.1` `ct.eval.3` `ct.eval.4`
+- **16-reflection.md** (3): `refl.info.2` `refl.info.3` `refl.run.1`
+- **17-std.md** (5): `std.random.1` `std.ui.10` `std.ui.11` `std.ui.13` `std.ui.9`
+- **18-effects.md** (9): `eff.cap.3` `eff.det.1` `eff.det.2` `eff.det.3` `eff.infer.1` `eff.infer.2` `eff.infer.3` `eff.infer.4` `eff.infer.5`
+- **19-testing.md** (8): `test.doc.1` `test.doc.3` `test.prop.4` `test.prop.5` `test.run.2` `test.run.3` `test.run.4` `test.run.6`
+- **20-contracts.md** (2): `contract.run.1` `contract.run.2`
+- **21-trace.md** (5): `trace.run.5` `trace.val.1` `trace.val.2` `trace.watch.2` `trace.watch.3`
+- **22-tools.md** (6): `api.doc.1` `api.id.1` `explain.list.1` `explain.show.1` `fix.edit.1` `fix.edit.6`
+- **std-json.md** (2): `json.query.4` `json.type.1`
 
 ## Documentation snippets (lane 198, 2026-10-21)
 

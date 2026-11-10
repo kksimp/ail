@@ -805,6 +805,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1007](1007-std-io-write-bytes.md) | `io.write_bytes`: raw bytes to standard output *(delegated)* | Accepted | 2026-11-09 |
 | [1008](1008-std-app-appearance.md) | `std.app`: an `appearance` event (`dark` or `light`) after start and on every system change *(delegated)* | Accepted | 2026-11-09 |
 | [1009](1009-readiness-io.md) | Readiness I/O: `epoll` and `kqueue` sets for the HTTP server's parked connections *(delegated)* | Accepted | 2026-11-09 |
+| [1010](1010-c-header-constants-enums-fnptr.md) | C header import breadth: `#define` constants, enums and function-pointer types *(delegated)* | Accepted | 2026-11-09 |
 | [1011](1011-os-signals.md) | `os.signals`: SIGINT, SIGTERM, SIGHUP, SIGQUIT and SIGWINCH as a `Channel[str]`; the Windows console Ctrl-C handler *(delegated)* | Accepted | 2026-11-09 |
 | [1012](1012-std-term.md) | `std.term`: raw mode, key, mouse and resize events, the alternate screen and colours, in AIL over libc *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
