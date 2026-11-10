@@ -15,11 +15,46 @@ impl app.App for Shapes
     fn view(self) app.Node
         app.canvas("shapes", 360.0, 140.0, [
             app.draw_rect(0.0, 0.0, 360.0, 140.0, 0xf4f4f4),
-            app.Op.Round(x: 20.0, y: 20.0, w: 100.0, h: 100.0, r: 50.0, color: 0x3478f6, alpha: 1.0, stroke: 0.0),
-            app.Op.Round(x: 140.0, y: 20.0, w: 100.0, h: 100.0, r: 50.0, color: 0x3478f6, alpha: 1.0, stroke: 6.0),
-            app.Op.Round(x: 260.0, y: 20.0, w: 80.0, h: 50.0, r: 12.0, color: 0xe5484d, alpha: 0.8, stroke: 0.0),
-            app.Op.Poly(points: [260.0, 120.0, 300.0, 80.0, 340.0, 120.0], color: 0x30a46c, alpha: 1.0),
-            app.Op.Line(points: [150.0, 110.0, 175.0, 60.0, 190.0, 100.0, 215.0, 40.0], color: 0x202020, width: 4.0),
+            app.Op.Round(
+                x: 20.0,
+                y: 20.0,
+                w: 100.0,
+                h: 100.0,
+                r: 50.0,
+                color: 0x3478f6,
+                alpha: 1.0,
+                stroke: 0.0,
+            ),
+            app.Op.Round(
+                x: 140.0,
+                y: 20.0,
+                w: 100.0,
+                h: 100.0,
+                r: 50.0,
+                color: 0x3478f6,
+                alpha: 1.0,
+                stroke: 6.0,
+            ),
+            app.Op.Round(
+                x: 260.0,
+                y: 20.0,
+                w: 80.0,
+                h: 50.0,
+                r: 12.0,
+                color: 0xe5484d,
+                alpha: 0.8,
+                stroke: 0.0,
+            ),
+            app.Op.Poly(
+                points: [260.0, 120.0, 300.0, 80.0, 340.0, 120.0],
+                color: 0x30a46c,
+                alpha: 1.0,
+            ),
+            app.Op.Line(
+                points: [150.0, 110.0, 175.0, 60.0, 190.0, 100.0, 215.0, 40.0],
+                color: 0x202020,
+                width: 4.0,
+            ),
         ])
 
     fn title(self) str

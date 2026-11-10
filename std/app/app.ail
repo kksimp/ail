@@ -34,16 +34,7 @@ pub enum Op
     ## A rounded rectangle, anti-aliased (std.app.32). `r` is clamped to half
     ## the shorter side, so a circle is `r = w / 2`. `stroke` 0 fills; above 0
     ## it outlines with that width, centred on the edge. `alpha` is 0 to 1.
-    Round(
-        x float,
-        y float,
-        w float,
-        h float,
-        r float,
-        color int,
-        alpha float,
-        stroke float,
-    )
+    Round(x float, y float, w float, h float, r float, color int, alpha float, stroke float)
     ## A filled polygon through `points` (`x0, y0, x1, y1, ...`), non-zero
     ## winding, anti-aliased; fewer than 3 points draw nothing (std.app.32).
     Poly(points List[float], color int, alpha float)
@@ -556,7 +547,16 @@ fn op_text(op Op) str
         Pic(x, y, w, h, src) => "pic {x},{y} {w}x{h} {src}"
         Bitmap(x, y, w, h, id, pw, ph, _) => "bitmap {x},{y} {w}x{h} {id} {pw}x{ph}"
         Shade(x, y, w, h, color, alpha) => "shade {x},{y} {w}x{h} {color.to_hex()} {alpha}"
-        Round(x, y, w, h, r, color, alpha, stroke) => "round {x},{y} {w}x{h} r{r} {color.to_hex()} {alpha} {stroke}"
+        Round(
+            x,
+            y,
+            w,
+            h,
+            r,
+            color,
+            alpha,
+            stroke,
+        ) => "round {x},{y} {w}x{h} r{r} {color.to_hex()} {alpha} {stroke}"
         Poly(points, color, alpha) => "poly {points.len() / 2} {color.to_hex()} {alpha}"
         Line(points, color, width) => "line {points.len() / 2} {color.to_hex()} {width}"
         Font(id, data) => "font {id} {data.len()}"

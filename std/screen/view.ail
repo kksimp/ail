@@ -123,7 +123,15 @@ fn extent(points List[float], off int, largest bool) float
     best
 
 ## The item of a polygon or polyline: its bounding box, grown by `width`.
-fn points_item(base int, role str, points List[float], c int, width float, ox float, oy float) screen.Item
+fn points_item(
+    base int,
+    role str,
+    points List[float],
+    c int,
+    width float,
+    ox float,
+    oy float,
+) screen.Item
     x0 := extent(points, 0, false)
     y0 := extent(points, 1, false)
     screen.item(
