@@ -650,7 +650,7 @@ WRAPPER_COMMANDS := [
 ## The `--flag` words in the arm heads of `run`'s option loop in `ail` (between `run_args=("$@")` and `run_skip=$k`),
 ## without a trailing `)` or an `=VALUE`.
 fn run_flags(wp_text str) List[str]
-    mut wp_flags := []
+    mut wp_flags := List[str]()
     mut wp_in := false
     for wp_line in wp_text.lines()
         if wp_line.contains("run_args=(\"$@\")")
@@ -683,13 +683,16 @@ fn Gate.wrapper_parity(mut self)
         self.red("wrapper parity", "could not read ail or ail.ps1")
         return
     for wp_cmd in WRAPPER_COMMANDS
-        if not (wp_sh.contains("= {wp_cmd} ]") or wp_sh.contains("{wp_cmd})") or wp_sh.contains("{wp_cmd} |"))
+        mut wp_known := wp_sh.contains("= {wp_cmd} ]") or wp_sh.contains("{wp_cmd} |")
+        if wp_sh.contains("{wp_cmd})")
+            wp_known = true
+        if not wp_known
             self.red("wrapper parity: ail", "`{wp_cmd}` is not dispatched in ail")
         if not wp_ps.contains("'{wp_cmd}'")
             self.red("wrapper parity: ail.ps1", "`{wp_cmd}` is not dispatched in ail.ps1")
     wp_flags := run_flags(wp_sh)
     if wp_flags.len() < 20
-        self.red("wrapper parity", "found only {wp_flags.len()} run flags in ail: the option loop moved")
+        self.red("wrapper parity", "only {wp_flags.len()} run flags found in ail")
     for wp_flag in wp_flags
         if not wp_ps.contains(wp_flag)
             self.red("wrapper parity: ail.ps1", "`run {wp_flag}` is in ail but not in ail.ps1")
