@@ -208,10 +208,11 @@ fn merge_sides(base Side, ours Side, theirs Side, tmp str) Merged
 
 ## A file's text, or exit 2 (merge.cli.2).
 fn read(path str) str
-    fs.read_text(path) else err
+    text := fs.read_text(path) else err
         io.eprint("error: can't read {path}: {err} (merge.cli.2)")
         io.exit(2)
-        ""
+        return ""
+    text
 
 fn quote(s str) str
     "\"{s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
