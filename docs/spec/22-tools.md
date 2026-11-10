@@ -265,6 +265,31 @@ unified diff and leaves the file unchanged. It prints each applied fix; with
 `--json`, one `{"api":1,"applied":...}` object each, then a summary
 ([ADR 0203](../decisions/0203-ail-fix-command.md)).
 
+**fix.check.1** — `ail check --fix FILE` applies every safe fix to a fixed point
+as `ail fix` does (`fix.apply.1-3`), writes the file, then checks it as `ail check`
+does. It prints no per-fix lines; when at least one fix applied it prints one line
+first, `fixed N: RULE, RULE xM` (the rules in first-seen order, `xM` when a rule
+fixed more than once), on standard output. With `--json` that line is one object
+`{"api":1,"fixed":N,"line":"..."}`. The diagnostics that remain and the exit status are
+those of the check after the fixes. Plain `ail check` never writes a file
+([ADR 1047](../decisions/1047-ail-check-fix.md)).
+
+**fix.check.2** — `ail task verify --fix` runs its check stage as
+`ail check --fix PROGRAM`, shows the `fixed` line first and reports it as `fixed`
+(`--json`). The MCP tools `ail_check` and `task_verify` take an optional `fix`
+argument; `true` adds the flag ([ADR 1047](../decisions/1047-ail-check-fix.md)).
+
+```ail tool=check,--fix,FILE expect=expr.op.1 rules=fix.check.1
+fn main()
+    a := true
+    b := false
+    if a && b
+        print("both")
+```
+
+```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
+```
+
 ## Explain
 
 **explain.show.1** — `ail explain RULE` prints the rule's text from
@@ -934,6 +959,15 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
+**task.log.1** — `ail task verify` appends one line to `.ail/task-log.jsonl`, creating it: the object `{"stage","result","tokens","fixed","rules","ms"}` with `rules` the rule IDs named by the toolchain output (`error[R]`, `warning[R]`, `trap[R]`) and their counts in first-seen order, `tokens` the estimate of `api.card.3` of what `verify` printed, `fixed` the fixes `--fix` applied and `ms` last. Every field but `ms` is the same for the same change. Nothing is sent anywhere ([ADR 1048](../decisions/1048-task-ledger.md)).
+
+**task.log.2** — `.ail-task` records `mark`, the lines the ledger held at `start`. `ail task finish --json` adds `summary`, `{"rounds","red","fixed","tokens","rules"}`, over the lines after `mark`; the text answer ends with the same object.
+
+**task.log.3** — `ail task log [--json]` prints the ledger lines after `mark` (all of them when no task is open), then their summary; `--json` prints `{"log":[...],"summary":{...}}`.
+
+```ail pkg=task_log tool=task,log,--json status=0 expect="rounds":2,"red":1,"fixed":1,"tokens":50,"rules":{"expr.op.1":1,"expr.name.1":1} rules=task.log.1,task.log.2,task.log.3
+```
+
 ```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
@@ -963,6 +997,24 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 **mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module` or `form` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
 ```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+fn main()
+    print(1)
+```
+
+### Warm calls
+
+`ail mcp` keeps no compiler in memory; it saves the launcher's start and repeated answers
+([ADR 1056](../decisions/1056-warm-ail-mcp.md), amending ADR 0918).
+
+**mcp.warm.1** — A call whose command the launcher would only hand to the native CLI (`check` without `--budget`, `--from` or `--errors`, as `check-program`; `api` without `--budget`, `--from` or `--diff`; `ask`, `context`, `explain`, `edit`, `fix` and `review`) runs that CLI directly, the one named by `AIL_MCP_NATIVE`, which the `ail mcp` launcher sets. Every other call runs `ail` as `mcp.call.1` says. The answer is the same either way.
+
+**mcp.warm.2** — `ail_check`, `ail_ask`, `ail_context`, `ail_api`, `ail_explain` and `ail_fix` with `dry_run` are read-only. A read-only call with the same command line as an earlier one in the session, while the toolchain and the program's inputs are unchanged, gets that call's answer without running anything. The inputs are the contents of the `.ail` and `.h` files under the program's root (its directory, or the package), its `ail.pkg` and its `ail.lock`; for `ail_explain`, the spec. A package whose `ail.pkg` names a path with `..`, or a root with more than 4000 such files, is not memoized.
+
+**mcp.warm.3** — When a file under `compiler/` or `std/` is newer than the native CLI, the call goes through `ail`, which rebuilds it, and the memo is emptied.
+
+**mcp.warm.4** — Each tool result carries `_meta` with `ail/warm`: `memo`, `direct` or `launcher`. With `AIL_MCP_COLD` set, every call goes through `ail` and nothing is memoized.
+
+```ail tool=mcp rules=mcp.warm.1,mcp.warm.2,mcp.warm.3,mcp.warm.4
 fn main()
     print(1)
 ```

@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; still missing: the full AIL-versus-C runs with logged debug rounds, and published results)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; still missing: the full AIL-versus-C runs with logged debug rounds, and published results)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -54,3 +54,31 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 - **Different docs per arm at whatever size is natural:** confounds tokens with docs size; parity makes the comparison about the language.
 - **Partial-credit correctness only:** hides the reliability gap this benchmark exists to test; the count is kept as a secondary figure.
 - **Rust or Python as the mature arm:** the designer asked for C; memory-unsafe C is the strongest test of the reliability claim.
+
+## Amendment (2026-11-10): three arms, wrapper-logged tooling metrics, scripted replays
+
+**Decided by:** AI (delegated, ADR 0076); the AI-first edge plan (`lanes/ai-first-edge-2026-11-10.md`, slice E3) asked for it. No rule IDs: tooling only.
+
+**Context.** The decision above compares AIL with C. It cannot say how much of AIL's result is the language and how much is the agent tooling (`ail task`, `ail context`, `ail edit --test`, MCP), and every tooling slice on the 0.1.0 and 0.2 lists needs a number before and after. Counted trials call a paid model and wait for the designer's go-ahead, so most slices need a cheaper gate too.
+
+**Decision.**
+1. **The AIL arm splits in two.** Arms are `ail-plain`, `ail-tools` and `c` (`ail` in old results means `ail-plain`). `ail-plain` is the arm described above: `./build`, `./test`, the card. `ail-tools` is the same plus `AGENTS.md`, `CLAUDE.md` (which imports it) and `.mcp.json` in the workspace, from `tools/agentbench/arms/ail-tools/`. The MCP server runs behind a logging proxy (`agentbench.py mcpproxy`). The prompt is identical in all three arms apart from the language name (rule 3 still holds): the difference between `ail-plain` and `ail-tools` is only what the tooling gives an agent that is not told to use it. `AGENTS.md` is a stand-in for what E1's `ail new` writes and is replaced by it when E1 lands. Both AIL arms use the same card, seeds, build line and hidden cases.
+2. **Doc parity (rule 4) is checked against the card only.** The arm's instruction file is the treatment, so it does not count toward the C card's size; `agentbench.py docs` prints its tokens beside the check.
+3. **New wrapper-logged metrics** in `metrics.json`, written by the shims, not self-reported: `first_check_clean` (whether the first `ail check` or `./build` the agent ran passed; null if none), `tool_calls` (counts by name: `./build`, `./test`, `ail SUBCOMMAND`, `mcp:TOOL`), `calls_total`, `toolchain_tokens` (tokbench mean of everything the toolchain printed back, summed per call) and `turns_to_green` (logged calls up to and including the first passing `./test`; null if never). A `ail` shim on the agent's `PATH` logs each call; `./test` no longer logs the build it runs inside itself, so a failed build counts as one debug round, not two.
+4. **Scripted replays, `tools/agentbench/replay/`.** A session is a fixed list of `write`, `put` and `run` steps for one task; `replay/run.sh` runs each against today's `ail`, counts tokens written and read and calls, requires each session to end green, and prints one table. The eight whole-task tasks (t1 to t8 of the 2026-10-20 study) are rewritten for today's commands. `--save` and `--compare` print a slice's before and after. A flow with a newer tool is a variant, `steps.NAME.txt`, reported as `task/NAME`. Replays cost no model spend and run on a designer machine like everything else (ADR 0842).
+5. **Validation covers the new parts.** `agentbench.py validate` builds each of the three arms' solutions and then drives each arm's workspace through its shims (`ail check`, `./build`, `./test`), failing if a log line, an output file or an arm-specific file is missing.
+
+**Rationale.** A third arm costs one more trial set but isolates the tooling's contribution, which is what the benchmark must show if AIL's claim is the whole cycle. Wrapper-logged metrics keep the rule of the original decision: nothing the agent says counts. Replays give each slice a number the day it lands and keep the paid batches for the runs that need a model.
+
+**Consequences.**
+- Counted trials of `ail-tools` need E1 and E2 to have landed to be the final arm; until then the stand-in `AGENTS.md` and the existing MCP tools are what is measured, and the trial is labelled by commit.
+- The `ail-core` arm of slice E6 is one more entry in `ARMS` and an `arms/` directory.
+- The replay sessions are single flows: they measure the tools' tokens and calls, not whether a model would choose the flow.
+- Old `metrics.json` files lack the new fields; `report` shows `-` for them.
+
+**Rejected alternatives.**
+- **One `ail` arm with tooling always on:** the language and the tooling stay confounded.
+- **Telling the `ail-tools` agent in the prompt to use the tools:** the prompt must match; the share of trials that use them unprompted is itself a result.
+- **Counting `AGENTS.md` toward doc parity:** it is the treatment; counting it would either weaken the C card or hide the treatment's cost.
+- **Parsing tokens and calls out of the transcript:** depends on the model's output format; the shims are exact.
+- **A replay driven by a model for variety:** costs spend and loses determinism; a deterministic script is the point.

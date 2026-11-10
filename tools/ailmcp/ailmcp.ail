@@ -2,6 +2,8 @@
 ##   ail mcp
 ## One JSON-RPC message per line in, one per line out. Each tool runs the matching `ail` command in
 ## the current directory and returns its output as text; it adds no analysis of its own.
+## `warm` (mcp.warm.1-4) skips the launcher and answers repeated read-only calls from a memo.
+use warm
 
 PROTOCOL := "2025-03-26"
 
@@ -16,8 +18,8 @@ fn tools() List[Tool]
     [
         Tool(
             name: "ail_check",
-            about: "Check a program; the diagnostics are the answer (exit 0 means clean).",
-            props: ["program"],
+            about: "Check a program; the diagnostics are the answer (exit 0 means clean). With `fix` set to `true` the compiler's safe fixes are applied first and one line names them (`fixed 3: expr.not.1`).",
+            props: ["program", "fix"],
             needs: ["program"],
         ),
         Tool(
@@ -94,8 +96,8 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "task_verify",
-            about: "Check, then run the affected tests; record green or red.",
-            props: [],
+            about: "Check, then run the affected tests; record green or red. With `fix` set to `true` the check applies the compiler's safe fixes first.",
+            props: ["fix"],
             needs: [],
         ),
         Tool(
@@ -200,7 +202,11 @@ fn command(name str, a Json) Cmd
         since := a.text("since", "")
         rev := a.text("rev", "")
         match name
-            "ail_check" => out = ["check", program]
+            "ail_check" => out = if a.text("fix", "") == "true" then [
+                "check",
+                "--fix",
+                program,
+            ] else ["check", program]
             "ail_test" =>
                 bundle := a.text("bundle", "")
                 if program == "" and bundle == ""
@@ -285,6 +291,10 @@ fn command(name str, a Json) Cmd
                 out = ["task", "start", program, a.text("goal", ""), "--json"]
                 if rev != ""
                     out.extend(["--rev", rev])
+            "task_verify" =>
+                out = ["task", "verify", "--json"]
+                if a.text("fix", "") == "true"
+                    out.push("--fix")
             _ => out = ["task", name.slice(5, name.len()), "--json"]
         return Cmd(argv: out, why: "", stdin: stdin)
     Cmd(argv: [], why: "unknown tool {name}", stdin: "")
@@ -307,11 +317,13 @@ fn failure(id Json, code int, message str)
 ## A tool result (mcp.call.1): the text and whether the command failed (mcp.call.1).
 ## When the command ran with `--json` and printed one JSON object, that object also goes
 ## out as `structuredContent` (mcp.call.3).
-fn tool_result(text str, bad bool, structured Json?) Json
+## `_meta` says how the call was answered (mcp.warm.4).
+fn tool_result(text str, bad bool, structured Json?, how str) Json
     content := Json.Arr([obj([member("type", Json.Str("text")), member("text", Json.Str(text))])])
     mut members := [member("content", content), member("isError", Json.Bool(bad))]
     if s := structured
         members.push(member("structuredContent", s))
+    members.push(member("_meta", obj([member("ail/warm", Json.Str(how))])))
     obj(members)
 
 fn has_json(argv List[str]) bool
@@ -328,23 +340,34 @@ fn structured_of(cmd Cmd, out str) Json?
     _ := v.as_obj() else return none
     v
 
-fn call(id Json, params Json)
+## The tools that only read their program and the toolchain, so an unchanged call can be
+## answered from the memo (mcp.warm.2).
+fn pure(name str, a Json) bool
+    match name
+        "ail_check" | "ail_ask" | "ail_context" | "ail_api" | "ail_explain" => true
+        "ail_fix" => on(a, "dry_run")
+        _ => false
+
+fn call(mut w warm.Warm, id Json, params Json)
     name := params.text("name", "")
     args := params.get("arguments") else obj([])
     cmd := command(name, args)
     if cmd.why != ""
         failure(id, -32602, cmd.why)
         return
-    ran := proc.run(env.get("AIL") else "./ail", cmd.argv, cmd.stdin) else err
-        reply(id, tool_result("can't run ail: {err}", true, none))
+    ail := env.get("AIL") else "./ail"
+    program := args.text("program", "")
+    got := w.run(ail, cmd.argv, cmd.stdin, pure(name, args), program) else err
+        reply(id, tool_result("can't run ail: {err}", true, none, "launcher"))
         return
+    ran := got.out
     text := "{ran.out}{ran.err}"
     # A clean check prints nothing; say so (mcp.call.1).
     shown := if text.trim() == "" then "ok (exit {ran.status})" else text
-    reply(id, tool_result(shown, ran.status != 0, structured_of(cmd, ran.out)))
+    reply(id, tool_result(shown, ran.status != 0, structured_of(cmd, ran.out), got.how))
 
 ## One message (mcp.proto.1: `initialize`, `ping`, `tools/list`, `tools/call`; anything else is -32601).
-fn handle(req Json)
+fn handle(mut w warm.Warm, req Json)
     method := req.text("method", "")
     id := req.get("id") else
         # A notification (`notifications/initialized`) has no id and gets no reply (mcp.proto.2).
@@ -361,10 +384,11 @@ fn handle(req Json)
             ]))
         "ping" => reply(id, obj([]))
         "tools/list" => reply(id, obj([member("tools", Json.Arr([tool_json(t) for t in tools()]))]))
-        "tools/call" => call(id, params)
+        "tools/call" => call(mut w, id, params)
         _ => failure(id, -32601, "unknown method {method}")
 
 fn main() !
+    mut w := warm.start()
     while true
         line := io.read_line() else break
         if line.trim() == ""
@@ -372,4 +396,4 @@ fn main() !
         req := parse_json(line) else err
             failure(Json.Null, -32700, err.message)
             continue
-        handle(req)
+        handle(mut w, req)

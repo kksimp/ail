@@ -823,3 +823,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
 | [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |
 | [1046](1046-agent-kit-in-ail-new.md) | `ail new` writes an agent kit: `AGENTS.md` and `.mcp.json`, `--no-agent` to skip *(delegated)* | Accepted | 2026-11-10 |
+| [1047](1047-ail-check-fix.md) | `ail check --fix`: repair, then check, in one command *(delegated)* | Accepted | 2026-11-10 |
+| [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
+| [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |

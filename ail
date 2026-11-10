@@ -242,6 +242,8 @@ fi
 # `ail check --deny/--deterministic/--unsafe ...` is native too (eff.cap.1, eff.det.1, unsafe.hw.1).
 native_check=
 if [ "${1:-}" = check ]; then case "${2:-}" in --deny | --deterministic | --unsafe) native_check=1 ;; esac; fi
+# `ail check --fix FILE` applies the safe fixes first, then checks (fix.check.1).
+if [ "${1:-}" = check ]; then for a in "${@:2}"; do [ "$a" = --fix ] && native_check=1; done; fi
 # `ail effects [--json] FILE` is native too (#695).
 native_effects=
 if [ "${1:-}" = effects ]; then
@@ -429,8 +431,9 @@ if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
 fi
 
 # `ail mcp` (ADR 0918): the compiler's tools as an MCP server on stdio, tools/ailmcp/ailmcp.ail.
+# AIL_MCP_NATIVE names the native CLI, which `run` keeps fresh, for the warm path (mcp.warm.1).
 if [ "${1:-}" = mcp ]; then
-    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
+    AIL_MCP_NATIVE="$root/.native/ail" AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
 fi
 
 # `ail lsp` (ADR 0966): the compiler's semantic API as a language server on stdio, tools/ailsp/ailsp.ail.

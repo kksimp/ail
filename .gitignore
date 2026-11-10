@@ -11,5 +11,6 @@ tools/fuzz/failures/
 .ail-test-*
 tools/agentbench/results/
 .ail-task
+/.ail/
 !/tests/cases/packages/*/.ail-task
 tools/agentbench/demo/runs/

@@ -743,6 +743,8 @@ fn Gate.mistakes(mut self, tmp str)
             )
     sh_run("rm -rf {scratch}")
     # The targets of ADR 0262: at least 60 mistakes, 60% fixed.
+    # The coverage figure is printed here so it can't drift from the corpus (fix.check.1, ADR 1047).
+    print("mistakes: `ail fix` resolves {fixed_count} of {total} ({fixed_count * 100 / total}%)")
     if total < 60
         red("mistakes", "the corpus has {total} programs")
     if fixed_count * 100 < total * 60
@@ -2463,12 +2465,39 @@ fn mcp_session(d str, msgs List[str]) proc.Output
     ) else return proc.Output(status: 127, out: "", err: "could not start sh")
     r
 
+## The line of an MCP session's output that answers request `id`, or "".
+fn reply_of(out str, id int) str
+    for line in out.lines()
+        if line.contains("\"id\":{id},")
+            return line
+    ""
+
 fn mcp_call(id int, name str, args str) str
     jreq(id, "tools/call", "~'name':'{name}','arguments':~{args}^^")
 
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
+    # task.log.1, fix.check.1-2 (ADRs 1047, 1048): verify --fix repairs, and the ledger line is the same on a rerun but for `ms`.
+    sh_run("mkdir -p {base}/ledger && cp -R {repo_root()}/tests/cases/packages/task_fix/. {base}/ledger/")
+    tool("verify --fix", "{base}/ledger", ["task", "verify", "--fix"], 1, ["fixed 1: expr.op.1"])
+    first := slurp("{base}/ledger/.ail/task-log.jsonl")
+    for piece in ["\"stage\":\"check\",\"result\":\"red\"", "\"fixed\":1", "\"expr.name.1\":1"]
+        if not first.contains(piece)
+            red("task ledger line", "no {piece}\n{first}")
+    if slurp("{base}/ledger/main.ail").contains("&&")
+        red("check --fix", "the file still has `&&`")
+    sh_run("cd {base}/ledger && rm -rf .ail && printf 'fn main()\\n    a := true\\n    b := false\\n    if a && b\\n        print(undefined_name)\\n' > main.ail")
+    tool(
+        "verify --fix again",
+        "{base}/ledger",
+        ["task", "verify", "--fix"],
+        1,
+        ["fixed 1: expr.op.1"],
+    )
+    second := slurp("{base}/ledger/.ail/task-log.jsonl")
+    if first.split(",\"ms\":")[0] != second.split(",\"ms\":")[0]
+        red("task ledger is stable", "two runs differ\n{first}{second}")
     # api.ctx.1-7 (ADR 1020)
     ctx := src_of([
         "fn show(n int) str",
@@ -2921,6 +2950,32 @@ fn Gate.agent_tools(mut self, tmp str)
         "'range':'HEAD..HEAD','path':'examples/hello.ail'",
     )])
     want("mcp review", m3.out, ["\"isError\":false"])
+    # mcp.warm.1-4 (E14): a repeated read-only call comes from the memo, a changed file is
+    # checked again, and `AIL_MCP_COLD` goes through the launcher.
+    fs.write_text("{base}/mcp/warm.ail", ctx) else return
+    w1 := mcp_session("{base}/mcp", [
+        mcp_call(2, "ail_check", "'program':'warm.ail'"),
+        mcp_call(3, "ail_check", "'program':'warm.ail'"),
+        mcp_call(4, "ail_edit", "'program':'warm.ail','edits':'rename show shown'"),
+        mcp_call(5, "ail_check", "'program':'warm.ail'"),
+        mcp_call(6, "ail_test", "'program':'warm.ail'"),
+    ])
+    want("mcp warm first call", reply_of(w1.out, 2), [jm("'ail/warm':'direct'")])
+    want("mcp warm repeat", reply_of(w1.out, 3), [jm("'ail/warm':'memo'")])
+    want("mcp warm after an edit", reply_of(w1.out, 5), [jm("'ail/warm':'direct'")])
+    want("mcp warm test keeps the launcher", reply_of(w1.out, 6), [jm("'ail/warm':'launcher'")])
+    warm_again := mcp_call(3, "ail_check", "'program':'warm.ail'")
+    cold := proc.run(
+        "sh",
+        [
+            "-c",
+            "cd \"$0\" && AIL_MCP_COLD=1 AIL=\"$1\" exec \"$1\" mcp",
+            "{base}/mcp",
+            "{repo_root()}/ail",
+        ],
+        "{warm_again}\n{warm_again}\n",
+    ) else proc.Output(status: 127, out: "", err: "could not start sh")
+    want("mcp cold", reply_of(cold.out, 3), [jm("'ail/warm':'launcher'")])
     # tool.new.1-4 (ADR 1046): the agent kit that `ail new` writes, and `--no-agent`.
     sh_run("mkdir -p {base}/new")
     tool("new writes the kit", "{base}/new", ["new", "kit"], 0, ["AGENTS.md", ".mcp.json"])
