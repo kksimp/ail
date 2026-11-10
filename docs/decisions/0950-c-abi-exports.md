@@ -1,6 +1,6 @@
 # 0950. C ABI exports: `pub export c fn` and `ail header`
 
-- **Status:** Proposed
+- **Status:** Accepted (front end and `ail header` built, `ffi.export.1-3`; the shared-library output is deferred past 0.1.0)
 - **Date:** 2026-11-06
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 14 — FFI

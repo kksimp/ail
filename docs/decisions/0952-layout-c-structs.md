@@ -1,6 +1,6 @@
 # 0952. `@layout(c)` structs: raw memory behind `*P`, not GC objects
 
-- **Status:** Proposed
+- **Status:** Deferred (past 0.1.0: design only, no spec rules or code yet)
 - **Date:** 2026-11-08
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 14 — FFI

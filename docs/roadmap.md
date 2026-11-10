@@ -144,7 +144,7 @@ std API still needs its own ADR first.
 
 ## Toward 0.2 (2026-11-09)
 
-v0.1.0 is the first public tag: the compiler builds itself from a published seed, runs on macOS ARM64, Linux x86-64 and Windows x86-64, and carries a launch set of docs. Until the tag, only launch changes and pull requests already green on the gate land; everything else targets 0.2.
+v0.1.0 is the first public tag: the compiler builds itself from a published seed, runs on macOS ARM64, Linux x86-64 and Windows x86-64, and carries a launch set of docs. `main` is frozen for it ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)): after the release candidate only docs change, and everything else targets 0.2.
 
 Planned for 0.2 (none of it is a promise; status.md says what exists):
 

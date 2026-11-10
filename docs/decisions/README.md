@@ -780,8 +780,8 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Deferred past 0.1.0 (experimental: compile-only, unverified) | 2026-11-05 |
 | [0969](0969-leak-report.md) | The leak report: `ail leak` shows growth by kind and retention by root on the GC heap *(delegated)* | Accepted | 2026-11-06 |
-| [0950](0950-c-abi-exports.md) | C ABI exports: `pub export c fn` and `ail header` *(delegated)* | Proposed | 2026-11-06 |
-| [0952](0952-layout-c-structs.md) | `@layout(c)` structs: raw memory behind `*P`, not GC objects *(delegated)* | Proposed | 2026-11-08 |
+| [0950](0950-c-abi-exports.md) | C ABI exports: `pub export c fn` and `ail header` *(delegated)* | Accepted (library output deferred) | 2026-11-06 |
+| [0952](0952-layout-c-structs.md) | `@layout(c)` structs: raw memory behind `*P`, not GC objects *(delegated)* | Deferred | 2026-11-08 |
 | [0971](0971-std-app-file-chooser.md) | `std.app` native file and folder chooser *(delegated)* | Accepted | 2026-11-06 |
 | [0972](0972-windows-system-zone.md) | Windows system zone: map the Windows zone ID to its IANA name *(delegated)* | Accepted | 2026-11-07 |
 | [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
@@ -814,4 +814,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
 | [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
+| [1035](1035-v0-1-0-freeze-and-release-candidate.md) | v0.1.0: freeze after the lanes in flight, one release candidate gated on three hosts | Accepted | 2026-11-09 |
 | [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
+| [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |
