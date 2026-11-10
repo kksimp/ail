@@ -44,6 +44,7 @@ native `ail` with it into `.native/`. On Windows use `.\ail.ps1 run examples\hel
 Seeds are published for macOS ARM64, Linux x86-64, Linux ARM64 and Windows x86-64.
 Windows notes (PowerShell 5.1 and 7, execution policy, where files go, `ail test`
 needs `mktemp`): [docs/windows.md](docs/windows.md).
+New to AIL? Start with the [tutorial](docs/tutorial.md).
 
 ## Targets
 
