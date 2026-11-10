@@ -32,7 +32,7 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 366 1
+std 351 1
 task 12 0
 test 35 0
 tool 2 0
@@ -41,4 +41,4 @@ trait 45 4
 type 123 10
 unsafe 21 0
 verify 5 0
-all 1283 54
+all 1268 54
