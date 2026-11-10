@@ -626,6 +626,21 @@ the whole pool. `AIL_THREADS` still sets the pool's size. With
 -> K of T workers, C chunks (conc.par.17)` on standard error. Results never
 depend on the number of workers (`conc.par.1`). *(ADR 0946)*
 
+**conc.par.18** — `task.threads()` returns the pool's cap: at the start
+`AIL_THREADS`, or the cores the process may use (`conc.par.17`).
+`task.set_threads(n)` sets the cap to `n`, clamped to 1 to 64, from the next
+parallel loop, tensor kernel or task that starts. Workers already past the cap
+finish what they run and take nothing more. A cap of 1 runs every loop in
+order (`conc.par.9`). Calling it while a parallel loop runs traps.
+`set_threads` has the `io` effect, so no independent loop or pure function
+calls it. Results never depend on the cap (`conc.par.1`). *(ADR 1018)*
+
+```ail rules=conc.par.18
+fn main()
+    task.set_threads(2)
+    print(task.threads())
+```
+
 **conc.par.16** — A loop *builds* an outer list `out` when the only mention of
 `out` in its body is one statement `out.push(e)` at the top of the body (not
 under `if`, `match` or a nested loop), the `push` is the built-in one, and no

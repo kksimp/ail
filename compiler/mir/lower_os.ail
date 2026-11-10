@@ -120,6 +120,8 @@ fn os_lookup(mod str, name str) OsFn?
         "tz.system" => os_fn("rt.tz_system", [], s, false)
         "task.cancelled" => os_fn("rt.task_cancelled", [], Ty.Bool, false)
         "task.check" => os_fn("rt.task_check", [], Ty.Unit, true)
+        "task.threads" => os_fn("rt.task_threads", [], Ty.Int, false)
+        "task.set_threads" => os_fn("rt.task_set_threads", [Ty.Int], Ty.Unit, false)
         "time.now_ms" => os_fn("rt.time_now_ms", [], Ty.Int, false)
         "time.sleep_ms" => os_fn("rt.time_sleep_ms", [Ty.Int], Ty.Unit, false)
         _ => none

@@ -722,6 +722,7 @@ ch.send(1)
 v := ch.recv() else break     # none once closed and empty
 w := ch.try_recv() else 0     # none if nothing is waiting now
 u := ch.recv_for(50) else 0   # waits at most 50 ms
+task.set_threads(4)           # cap the pool from the next loop; task.threads() reads it
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions
