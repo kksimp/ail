@@ -113,7 +113,6 @@ aren't run.
 | std | [Standard library: WebM demuxing](std-webm.md) | `std` | Drafted |
 | std | [Standard library: Opus decoding](std-opus.md) | `std` | Drafted |
 | std | [Standard library: VP9 decoding](std-vp9.md) | `std` | Drafted |
-| std | [Standard library: terminal control](std-term.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).
