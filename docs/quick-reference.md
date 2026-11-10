@@ -20,6 +20,7 @@
 ./ail infer --contracts f FILE [--apply]   # proposes up to 3 requires/ensures lines for f from the calls its tests make (patch for ail edit)
 ./ail prove FILE                # each requires/ensures check the checker proves (and leaves out of the build) or keeps
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer; `task verify --fix`; `task log` reads `.ail/task-log.jsonl`)
+./ail verify --diff --attest C.json FILE   # change certificate; `ail verify --check C.json` re-runs it, exit 1 on a difference
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail mcp                       # the compiler's tools as an MCP stdio server (16 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, task_*)
 ./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)

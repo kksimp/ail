@@ -1701,6 +1701,31 @@ fn main()
     print("hi")
 ```
 
+**verify.cert.1** — `ail verify --diff [--rev REV] [--mutate [--max N]] --attest OUT FILE` runs
+`verify.run.1-5` and writes one JSON object to `OUT`, ending with a newline: `cert` (1), `base` (the
+commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `files` (every path
+changed since REV and every untracked path, sorted, each `{"path","hash"}` with the `git hash-object`
+hash or `"deleted"`), `proved`, `tested`, `unverified`, `failures` (as in `verify.run.2-5`),
+`effects` (the effect changes, `api.impact.4`) and, with `--mutate` and a program that checks,
+`mutation`: `max`, `score` (`mutants`, `killed`, `survived`, `invalid` of `test.mutate.5`) and
+`survivors_in_changed`, the surviving mutants whose function is a changed declaration
+([ADR 1052](../decisions/1052-change-certificate.md)).
+**verify.cert.2** — The exit status of `--attest` is that of `verify.run.1`. `--attest` without
+`--diff`, and `--mutate` without `--attest`, are usage errors (exit 2).
+**verify.cert.3** — `ail verify --check CERT` re-runs the certificate: `ail verify --diff --rev BASE`
+with `--mutate --max N` when `CERT` has `mutation`, on `file`. It compares `cert`, `base`, `file`,
+`compiler`, `files`, `proved`, `tested`, `unverified`, `failures`, `effects` and `mutation`
+member by member, as compact JSON text. `rev` is not compared.
+**verify.cert.4** — `--check` prints `differs: KEY` with both values for each member that differs
+and exits 1; with none it prints `certificate holds` and exits 0. A file that is missing or not a
+certificate, or a program that cannot be re-run, exits 2. A certificate is evidence that
+reproduces, not identity: nothing is signed.
+
+```ail tool=verify,--check,nosuch.json status=2 expect=can't read rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4
+fn main()
+    print("hi")
+```
+
 ## Shrinking a failure bundle
 
 **shrink.run.1** — `ail replay --shrink [--time MS] [-o OUT] BUNDLE` takes a failure

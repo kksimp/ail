@@ -30,7 +30,7 @@ fi
 # The parallel suite checked the interpreter's thread-pool log (AIL_PAR_LOG) and is dropped with the interpreter; native `par` is
 # nativex's par_basic and par_overflow.
 # D3/D5: every suite runs on ./ail; there is no Rust binary and no cargo.
-native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm api_queries misc limits native_misc nativex globals snapshot budget replay std agent_tools crypto"
+native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm api_queries misc limits native_misc nativex globals snapshot budget replay std agent_tools cert crypto"
 run gate_native perl -e 'alarm 4800; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then

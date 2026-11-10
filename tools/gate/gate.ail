@@ -2520,6 +2520,81 @@ fn mcp_session(d str, msgs List[str]) proc.Output
 fn mcp_call(id int, name str, args str) str
     jreq(id, "tools/call", "~'name':'{name}','arguments':~{args}^^")
 
+## ---- cert: `ail verify --diff --attest` and `--check` (ADR 1052, verify.cert.1-4)
+
+fn Gate.cert(mut self, tmp str)
+    base := "{tmp}/cert"
+    sh_run("rm -rf {base}; mkdir -p {base}")
+    git := "git -c user.name=gate -c user.email=gate@example.com"
+    fs.write_text("{base}/prog.ail", src_of([
+        "fn sign(n int) int",
+        "    if n > 0",
+        "        return 1",
+        "    0",
+        "",
+        "@test fn positive()",
+        "    assert(sign(5) == 1)",
+        "",
+        "fn main()",
+        "    print(\"x\")",
+    ])) else return
+    sh_run("cd {base} && git init -q . && git add prog.ail && {git} commit -q -m base")
+    fs.write_text("{base}/prog.ail", src_of([
+        "fn sign(n int) int",
+        "    if n > 0",
+        "        return 1",
+        "    if n < 0",
+        "        return -1",
+        "    0",
+        "",
+        "@test fn positive()",
+        "    assert(sign(5) == 1)",
+        "",
+        "fn main()",
+        "    print(\"x\")",
+    ])) else return
+    tool(
+        "attest",
+        base,
+        ["verify", "--diff", "--mutate", "--attest", "cert.json", "prog.ail"],
+        0,
+        [],
+    )
+    doc := fs.read_text("{base}/cert.json") else
+        red("cert", "no certificate written")
+        return
+    want("cert members", doc, [
+        "\"cert\":1",
+        "\"base\":\"",
+        "\"hash\":\"",
+        "\"compiler\":\"ail ",
+        "\"mutation\":",
+        "\"survivors_in_changed\":",
+    ])
+    tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
+    fs.write_text("{base}/prog.ail", src_of([
+        "fn sign(n int) int",
+        "    if n > 0",
+        "        return 1",
+        "    if n < 0",
+        "        return -2",
+        "    0",
+        "",
+        "@test fn positive()",
+        "    assert(sign(5) == 1)",
+        "",
+        "fn main()",
+        "    print(\"x\")",
+    ])) else return
+    tool(
+        "check differs",
+        base,
+        ["verify", "--check", "cert.json"],
+        1,
+        ["differs: files", "certificate differs"],
+    )
+    tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
@@ -3030,6 +3105,7 @@ fn main() !
         "std",
         "sched",
         "agent_tools",
+        "cert",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3069,6 +3145,7 @@ fn main() !
             "selfhost" => g.selfhost()
             "std" => g.std(tmp)
             "agent_tools" => g.agent_tools(tmp)
+            "cert" => g.cert(tmp)
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
