@@ -1,0 +1,13 @@
+# A check passed on one path, but a `pop` on the other path shortens the
+# list, so the second access keeps its check and traps (native.fwd.1,
+# type.coll.4).
+fn twice(mut xs List[int], i int, cut bool) int
+    a := xs[i]
+    if cut
+        xs.pop()
+    a + xs[i]
+
+fn main()
+    mut xs := [1, 2, 3]
+    print(twice(mut xs, 2, false))
+    print(twice(mut xs, 2, true))

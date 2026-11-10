@@ -1,0 +1,12 @@
+# Only one path to the second access checks it first, so the check stays
+# and traps on the other path (native.fwd.3, type.coll.4).
+fn maybe(xs List[int], i int, look bool) int
+    mut t := 0
+    if look
+        t = xs[i]
+    t + xs[i]
+
+fn main()
+    xs := [1, 2, 3]
+    print(maybe(xs, 1, true))
+    print(maybe(xs, 5, false))

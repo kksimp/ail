@@ -490,6 +490,72 @@ fn main()
     print(c[1][1])
 ```
 
+**native.fwd.1** — An access `xs[i]` or `xs[i] = v` may run without its bounds
+check when an access to the same list with the same index value is on every
+path to it, and nothing on those paths can shorten a list: only element
+writes, field writes, arithmetic, reads, `push` and allocation come between.
+A call, a write to the list itself or a raw store ends this. Where an access
+is not covered so, its check stays, and traps with the same message
+(native.build.1). Unlike native.bce.2, this holds in a program that shortens
+lists. *(ADR 1050)*
+
+```ail rules=native.fwd.1
+struct Coder
+    rng int
+    probs List[int]
+
+fn Coder.bit(mut self, idx int) int
+    p := self.probs[idx]
+    self.rng = self.rng / 2 + p
+    self.probs[idx] = p + 1
+    self.rng % 2
+
+fn main()
+    mut c := Coder(rng: 100, probs: [5, 6, 7])
+    print(c.bit(1) + c.bit(1))
+    print(c.probs)
+```
+
+**native.fwd.2** — A write to a field of a struct, tuple or enum value
+changes only that field's word, in whichever value it reaches: another field,
+a list's length or elements, read before it, may be reused after it. A write
+through anything else, and any call, may change any memory. *(ADR 1050)*
+
+```ail rules=native.fwd.2
+struct Bag
+    items List[int]
+    n int
+
+fn fill(mut b Bag) int
+    a := b.items.len()
+    b.n = a
+    a + b.items.len()
+
+fn main()
+    mut b := Bag(items: [1, 2], n: 0)
+    print(fill(mut b))
+    print(b.n)
+```
+
+**native.fwd.3** — A value read from memory, or a check passed, on every
+path into a block whose paths join (after an `if`) counts as read or passed
+in the block when all paths agree on it (native.fwd.1-2). Nothing read inside
+a loop counts on its next iteration. *(ADR 1050)*
+
+```ail rules=native.fwd.3
+fn pick(xs List[int], i int, up bool) int
+    mut t := 0
+    if up
+        t = xs[i] + 1
+    else
+        t = xs[i] - 1
+    t + xs[i]
+
+fn main()
+    print(pick([4, 5, 6], 2, true))
+    print(pick([4, 5, 6], 0, false))
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes

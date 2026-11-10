@@ -73,6 +73,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Generators (ADR 0965, proposed, spec rules planned): `yield` in a function returning `Seq[T]`, state-machine lowering, no colour; spec and design only.
 - Time zones (ADR 0924): AIL ships the IANA tz database, so zones answer the same on every OS, Windows included; the Windows system zone maps to its IANA name (ADR 0972).
 - Data-range guards and interchange (ADR 0941, native.bce.12-13): a scan of the lists a nest only reads bounds their elements, so the nest's overflow checks go, and `for j: s := s0; for k: s += t; row.push(s)` runs as k outside, j inside, behind a guard; bit-identical for `int` and `float`.
+- Dominated checks and field alias classes (ADR 1050, native.fwd.1-3): load forwarding carries loads and passed bounds checks across joins, a field store forgets only its offset, and a `get`/`set` whose list and index already passed a check on every path, with nothing between that can shorten a list, loses its check.
 - Vector axpy kernels (ADR 0942, native.vec.1): the swapped nest's inner loop is one AVX2 or NEON kernel call per `k`; matmul-1400 on ail-linux 11.35 s → 1.95 s (gcc -O2 6.82 s).
 - Vector escape loops (ADR 0945, native.vec.2): a Mandelbrot-style escape loop in a counted `for` becomes one AVX2 (8 points a pass) masked kernel call per row; opt out with `AIL_OPT_OFF=vec` or `vecloop`. Written without a build; awaiting runner results.
 - Windows releases (ADR 0925): the gate stays Unix-shaped; `native`, `examples` and `run` must be green on ail-win before each release.
