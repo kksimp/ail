@@ -216,9 +216,10 @@ than memory can be searched or indexed. The view reads exactly like
 end of the process; the collector never scans or frees it. A file changed by
 another process while mapped may show the change, and one truncated while
 mapped may stop the program on access (like C `mmap`), so map files that
-other programs are not writing. An empty file gives an empty `bytes`. Where
-the platform cannot map (Windows for now), the result is an ordinary copy
-with the same contents. *(ADR 1016)*
+other programs are not writing. On Windows the system refuses to truncate or
+delete a file while it is mapped. An empty file gives an empty `bytes`. If the
+system refuses the mapping, the result is an ordinary copy with the same
+contents. *(ADR 1016)*
 
 ```ail norun rules=std.fs.36
 use std.fs
@@ -1275,7 +1276,7 @@ fn main()
     print(r.status)
 ```
 
-**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux and a `kqueue` set on macOS, so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. On Windows the server keeps its `poll` loop (IOCP is a later slice). The native runtime only. *(ADR 1009)*
+**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux, a `kqueue` set on macOS and a completion port on Windows, so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. If the system gives no set, the server falls back to a `poll` loop over its connections. The native runtime only. *(ADR 1009)*
 
 ```ail norun rules=std.net.32
 use std.net

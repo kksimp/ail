@@ -1,8 +1,8 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## Readiness sets (std.net.32, ADR 1009): `epoll` on Linux and `kqueue` on
-## macOS. A set holds descriptors that a task waits on; `rdy_wait` returns the
+## Readiness sets (std.net.32, ADR 1009): `epoll` on Linux, `kqueue` on
+## macOS and a completion port on Windows (`win_ready.ail`). A set holds descriptors that a task waits on; `rdy_wait` returns the
 ## tags of the ones that became readable, in time independent of how many are
 ## registered. The HTTP server (net_serve.ail) keeps one per listener for its
 ## parked connections, where `poll` would copy and scan every one of them on
@@ -13,8 +13,8 @@
 ## `rdy_arm` is reported once, then disarmed (EPOLLONESHOT, EV_ONESHOT), so
 ## that two tasks waiting on the same set never both take one connection and a
 ## connection a task is reading is not reported again. `rdy_listen` registers
-## a descriptor that is reported every time it is readable. Windows has no
-## set yet (IOCP is the second slice of ADR 1009): `rdy_new` returns -38.
+## a descriptor that is reported every time it is readable. A set is closed
+## with `rdy_close`, not as a descriptor: on Windows it is an address.
 ##
 ## Linux x86-64 and ARM64 differ in `struct epoll_event`: 12 bytes packed
 ## (events at 0, data at 4) and 16 bytes (events at 0, data at 8).
@@ -26,7 +26,7 @@ RDY_MAX := 64
 fn rdy_new() int
     t := target()
     if t == 3
-        return -38
+        return wrdy_new()
     if t == 2
         return syscall(362, 0, 0, 0, 0, 0, 0)
     # epoll_create1(EPOLL_CLOEXEC)
@@ -42,7 +42,16 @@ fn rdy_listen(ep int, fd int, tag int) int
 fn rdy_arm(ep int, fd int, tag int) int
     rdy_ctl(ep, fd, tag, true)
 
+## Close the set `ep`.
+fn rdy_close(ep int)
+    if target() == 3
+        wrdy_close(ep)
+        return
+    os_close(ep)
+
 fn rdy_ctl(ep int, fd int, tag int, once bool) int
+    if target() == 3
+        return wrdy_ctl(ep, fd, tag, once)
     if target() == 2
         # struct kevent: ident 0, filter (i16) 8, flags (u16) 10, fflags 12,
         # data 16, udata 24. EVFILT_READ is -1; EV_ADD 1, EV_ONESHOT 16.
@@ -102,6 +111,8 @@ fn rdy_wait_blocked(ep int, out int, ms int) int
 
 fn rdy_wait_raw(ep int, out int, ms int) int
     t := target()
+    if t == 3
+        return wrdy_wait(ep, out, ms)
     stride := if t == 0 then 12 else 16
     buf := alloc_raw(RDY_MAX * 32, KIND_BYTES)
     ts := alloc_raw(16, KIND_BYTES)
