@@ -801,6 +801,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0989](0989-std-video-vp9.md) | `std.video.vp9`: a VP9 profile 0 decoder in AIL, I420 frames and RGBA *(delegated)* | Accepted | 2026-11-08 |
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
+| [0994](0994-overflow-facts-in-multi-exit-loops.md) | Native: drop overflow checks that bounds and index uses rule out, in loops that leave in more than one place *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
 | [1007](1007-std-io-write-bytes.md) | `io.write_bytes`: raw bytes to standard output *(delegated)* | Accepted | 2026-11-09 |
 | [1008](1008-std-app-appearance.md) | `std.app`: an `appearance` event (`dark` or `light`) after start and on every system change *(delegated)* | Accepted | 2026-11-09 |
