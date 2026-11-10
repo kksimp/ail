@@ -237,7 +237,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |
 | **String object** | The native layout of a `str`: a byte count, a character count and UTF-8 data, so `len()` is O(1) (ADR 0404). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
-| **Structured edit** | An edit named by declaration id instead of by text: `ail edit` applies a JSON list of them (replace_body, replace, insert, delete, rename, import), then formats and checks (ADR 0397). The compact form is hunks under a declaration's name (ADR 0399). |
+| **Structured edit** | An edit named by declaration id instead of by text: `ail edit` applies a JSON list of them (replace_body, replace, insert, delete, rename, import, and the refactors change_sig, extract and move of ADR 1054), then formats and checks (ADR 0397). The compact form is hunks under a declaration's name (ADR 0399). |
 | **Superframe** | A VP9 packet holding several frames, with an index of their sizes in its last bytes; usually a hidden alternate reference and a shown frame (`std.vpx.2`, ADR 0989). |
 | **Supertrait** | A trait another trait requires: `trait Ord Eq`. Implementing the subtrait needs the supertrait's `impl`, and a bound on the subtrait provides it (ADR 0348). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |

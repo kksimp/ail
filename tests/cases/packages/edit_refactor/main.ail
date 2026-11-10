@@ -1,0 +1,20 @@
+fn area(w int, h int) int
+    w * 10 + h
+
+fn report(xs List[int]) int
+    mut total := 0
+    for x in xs
+        total += x
+    doubled := total * 2
+    print("total {total}")
+    doubled + area(2, 3)
+
+@test fn area_by_name()
+    assert_eq(area(4, h: 5), 45)
+
+@test fn report_adds()
+    assert_eq(report([1, 2, 3]), 35)
+
+fn main()
+    print(area(4, h: 5))
+    print(report([1, 2, 3]))

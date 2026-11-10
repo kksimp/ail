@@ -829,5 +829,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
 | [1051](1051-core-card-and-std-lookup.md) | Core card, `ail card` and `ail ask std` *(delegated)* | Accepted | 2026-11-10 |
 | [1052](1052-change-certificate.md) | Change certificate: `ail verify --diff --attest` and `--check` *(delegated)* | Accepted | 2026-11-10 |
+| [1054](1054-ail-edit-refactors.md) | `ail edit` refactors: `change_sig`, `extract` and `move` *(delegated)* | Accepted | 2026-11-10 |
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
