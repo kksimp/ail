@@ -2450,9 +2450,25 @@ fn lsp_session(d str, uri str, text str, msgs List[str]) proc.Output
     ) else return proc.Output(status: 127, out: "", err: "could not start sh")
     r
 
+## One `ail mcp` session in `d`: the requests in order, one per line. Returns the server's lines.
+fn mcp_session(d str, msgs List[str]) proc.Output
+    mut input := ""
+    for m in msgs
+        input = "{input}{m}\n"
+    script := "cd \"$0\" && AIL=\"$1\" exec \"$1\" mcp"
+    r := proc.run(
+        "sh",
+        ["-c", script, d, "{repo_root()}/ail"],
+        input,
+    ) else return proc.Output(status: 127, out: "", err: "could not start sh")
+    r
+
+fn mcp_call(id int, name str, args str) str
+    jreq(id, "tools/call", "~'name':'{name}','arguments':~{args}^^")
+
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
-    sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3")
+    sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
     # api.ctx.1-7 (ADR 1020)
     ctx := src_of([
         "fn show(n int) str",
@@ -2861,6 +2877,50 @@ fn Gate.agent_tools(mut self, tmp str)
         "~'textDocument':~'uri':'{u3}'^,'range':~'start':~'line':0,'character':0^,'end':~'line':5,'character':0^^,'context':~'diagnostics':[]^^",
     )])
     want("lsp code actions", s3.out, ["\"quickfix\"", "mut ", "source.fixAll.ail"])
+    # mcp.tools.1, mcp.call.3, mcp.call.4 (ADR 0918, amended): the tools added to `ail mcp`
+    fs.write_text("{base}/mcp/prog.ail", ctx) else return
+    listed := mcp_session("{base}/mcp", [jreq(1, "tools/list", "~^")])
+    want("mcp tools/list", listed.out, [
+        "ail_context",
+        "ail_edit",
+        "ail_fix",
+        "ail_explain",
+        "ail_api",
+        "ail_review",
+        "task_abort",
+    ])
+    m1 := mcp_session("{base}/mcp", [
+        mcp_call(2, "ail_context", "'program':'prog.ail','symbol':'pay','budget':400"),
+        mcp_call(3, "ail_context", "'program':'prog.ail','symbol':'pay','json':true"),
+        mcp_call(4, "ail_explain", "'rule':'api.ctx.1'"),
+        mcp_call(5, "ail_api", "'program':'prog.ail','form':'index'"),
+        mcp_call(6, "ail_api", "'program':'prog.ail','form':'bogus'"),
+        mcp_call(7, "ail_fix", "'program':'prog.ail','dry_run':true"),
+        mcp_call(8, "ail_context", "'program':'--files','symbol':'pay'"),
+    ])
+    want("mcp context, explain, api, fix", m1.out, [
+        "signature",
+        "structuredContent",
+        "ail context",
+        "(root)",
+        "unknown form bogus",
+        "must not start with - (mcp.call.4)",
+    ])
+    want("mcp fix is not an error", m1.out, [jm("'id':7,'result':~'content'")])
+    m2 := mcp_session("{base}/mcp", [mcp_call(
+        2,
+        "ail_edit",
+        "'program':'prog.ail','edits':'rename show display','test':true,'impact':true",
+    )])
+    want("mcp edit with test and impact", m2.out, ["passed", "tests", "\"isError\":false"])
+    if not slurp("{base}/mcp/prog.ail").contains("display")
+        red("mcp edit wrote the file", slurp("{base}/mcp/prog.ail"))
+    m3 := mcp_session(repo_root(), [mcp_call(
+        2,
+        "ail_review",
+        "'range':'HEAD..HEAD','path':'examples/hello.ail'",
+    )])
+    want("mcp review", m3.out, ["\"isError\":false"])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
