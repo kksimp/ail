@@ -244,53 +244,6 @@ fn main() !
     fs.trash("old.bin")?
 ```
 
-**std.fs.27** — `mode(path str) int ! IoError` returns the permission bits of
-the file (0 to 4095, the low twelve bits of `st_mode`), links followed. On
-Windows a read-only file is 292 (`0o444`) and any other file 438 (`0o666`).
-*(ADR 0977)*
-
-**std.fs.28** — `set_mode(path str, mode int) ! IoError` sets the permission
-bits; a `mode` outside 0 to 4095 traps. On Windows only the owner's write bit
-(128) acts: without it the file becomes read-only, with it that attribute is
-cleared. *(ADR 0977)*
-
-**std.fs.29** — `set_modified(path str, ms int) ! IoError` sets the
-modification time to `ms` milliseconds since 1970-01-01T00:00:00Z, so that
-`metadata(path).modified_ms` reads it back; the access time is unchanged.
-*(ADR 0977)*
-
-**std.fs.30** — `read_link(path str) str ! IoError` returns the text a symbolic
-link holds, as it was written and not resolved. A path that is not a link
-fails with kind `other`; on Windows the call is not written yet and fails with
-kind `other`. *(ADR 0977)*
-
-**std.fs.31** — `symlink(target str, path str) ! IoError` makes a symbolic link
-at `path` holding `target` as written; `path` existing fails with kind
-`exists`. On Windows it needs the privilege or developer mode and otherwise
-fails with kind `permission`. *(ADR 0977)*
-
-**std.fs.32** — `truncate(path str, len int) ! IoError` makes the file end at
-byte `len`: bytes past it are dropped and a shorter file grows with zero
-bytes. A negative `len` traps. *(ADR 0977)*
-
-**std.fs.33** — `write_at(path str, offset int, data bytes) ! IoError` writes
-`data` over the bytes of the file from `offset`, making the file when it is
-missing and growing it with zero bytes when it is shorter than `offset`; the
-rest of the file is unchanged. A negative `offset` traps. *(ADR 0977)*
-
-```ail norun rules=std.fs.27,std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33
-use std.fs
-
-fn main() !
-    m := fs.mode("tool.sh")?
-    fs.set_mode("tool.sh", m.bit_or(73))?
-    fs.set_modified("tool.sh", 1700000000000)?
-    fs.symlink("tool.sh", "run")?
-    print(fs.read_link("run")?)
-    fs.truncate("archive.bin", 1048576)?
-    fs.write_at("out.bin", 4096, b"tail")?
-```
-
 ```ail rules=std.fs.20
 use std.fs
 
