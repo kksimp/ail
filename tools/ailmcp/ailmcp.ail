@@ -18,8 +18,8 @@ fn tools() List[Tool]
     [
         Tool(
             name: "ail_check",
-            about: "Check a program; the diagnostics are the answer (exit 0 means clean).",
-            props: ["program"],
+            about: "Check a program; the diagnostics are the answer (exit 0 means clean). With `fix` set to `true` the compiler's safe fixes are applied first and one line names them (`fixed 3: expr.not.1`).",
+            props: ["program", "fix"],
             needs: ["program"],
         ),
         Tool(
@@ -96,8 +96,8 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "task_verify",
-            about: "Check, then run the affected tests; record green or red.",
-            props: [],
+            about: "Check, then run the affected tests; record green or red. With `fix` set to `true` the check applies the compiler's safe fixes first.",
+            props: ["fix"],
             needs: [],
         ),
         Tool(
@@ -202,7 +202,11 @@ fn command(name str, a Json) Cmd
         since := a.text("since", "")
         rev := a.text("rev", "")
         match name
-            "ail_check" => out = ["check", program]
+            "ail_check" => out = if a.text("fix", "") == "true" then [
+                "check",
+                "--fix",
+                program,
+            ] else ["check", program]
             "ail_test" =>
                 bundle := a.text("bundle", "")
                 if program == "" and bundle == ""
@@ -287,6 +291,10 @@ fn command(name str, a Json) Cmd
                 out = ["task", "start", program, a.text("goal", ""), "--json"]
                 if rev != ""
                     out.extend(["--rev", rev])
+            "task_verify" =>
+                out = ["task", "verify", "--json"]
+                if a.text("fix", "") == "true"
+                    out.push("--fix")
             _ => out = ["task", name.slice(5, name.len()), "--json"]
         return Cmd(argv: out, why: "", stdin: stdin)
     Cmd(argv: [], why: "unknown tool {name}", stdin: "")

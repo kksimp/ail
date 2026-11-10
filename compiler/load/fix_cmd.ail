@@ -57,3 +57,36 @@ pub fn fix_command(rest List[str], std str) int
             break
     fixrun.canonicalize(mut r)
     fixrun.finish(mut r, diagnose(r.path, r.src, json, std))
+
+## What `check --fix` did (fix.check.1): the rules of the fixes applied, in order, and
+## the status (0, or 2 when the file can't be read or written).
+pub struct Repair
+    pub rules List[str]
+    pub code int
+
+## `fixed 3: expr.not.1, gram.fn.4 x2` (fix.check.1): the rules in first-seen order with a count when more than one.
+pub fn fixed_line(rules List[str]) str
+    mut order := List[str]()
+    for r in rules
+        if not order.contains(r)
+            order.push(r)
+    mut parts := List[str]()
+    for r in order
+        n := [x for x in rules if x == r].len()
+        parts.push(if n > 1 then "{r} x{n}" else r)
+    "fixed {rules.len()}: {parts.join(", ")}"
+
+## Fixes `path` to a fixed point as `ail fix` does, writing it and printing nothing (fix.check.1).
+pub fn repair(path str, std str) Repair
+    mut r := fixrun.begin([path])
+    if r.code >= 0
+        return Repair(rules: [], code: r.code)
+    for _ in 0..MAX_ROUNDS
+        if not fixrun.step(mut r, diagnose(r.path, r.src, false, std))
+            break
+    fixrun.canonicalize(mut r)
+    if r.rules.len() > 0
+        fs.write_text(r.path, r.src) else err
+            io.eprint("error: can't write {r.path}: {err.kind}")
+            return Repair(rules: [], code: 2)
+    Repair(rules: r.rules, code: 0)

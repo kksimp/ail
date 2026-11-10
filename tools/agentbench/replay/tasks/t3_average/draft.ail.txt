@@ -1,0 +1,14 @@
+fn average(xs List[int]) int
+    mut total := 0
+    for x in xs
+        total += x
+    total / xs.len()
+
+@test fn averages()
+    assert_eq(average([2, 4, 6]), 4)
+
+@test fn empty_is_zero()
+    assert_eq(average([]), 0)
+
+fn main()
+    print("avg {average([3, 4, 8])}")

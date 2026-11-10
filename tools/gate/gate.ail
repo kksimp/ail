@@ -743,6 +743,8 @@ fn Gate.mistakes(mut self, tmp str)
             )
     sh_run("rm -rf {scratch}")
     # The targets of ADR 0262: at least 60 mistakes, 60% fixed.
+    # The coverage figure is printed here so it can't drift from the corpus (fix.check.1, ADR 1047).
+    print("mistakes: `ail fix` resolves {fixed_count} of {total} ({fixed_count * 100 / total}%)")
     if total < 60
         red("mistakes", "the corpus has {total} programs")
     if fixed_count * 100 < total * 60
@@ -2476,6 +2478,26 @@ fn mcp_call(id int, name str, args str) str
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
+    # task.log.1, fix.check.1-2 (ADRs 1047, 1048): verify --fix repairs, and the ledger line is the same on a rerun but for `ms`.
+    sh_run("mkdir -p {base}/ledger && cp -R {repo_root()}/tests/cases/packages/task_fix/. {base}/ledger/")
+    tool("verify --fix", "{base}/ledger", ["task", "verify", "--fix"], 1, ["fixed 1: expr.op.1"])
+    first := slurp("{base}/ledger/.ail/task-log.jsonl")
+    for piece in ["\"stage\":\"check\",\"result\":\"red\"", "\"fixed\":1", "\"expr.name.1\":1"]
+        if not first.contains(piece)
+            red("task ledger line", "no {piece}\n{first}")
+    if slurp("{base}/ledger/main.ail").contains("&&")
+        red("check --fix", "the file still has `&&`")
+    sh_run("cd {base}/ledger && rm -rf .ail && printf 'fn main()\\n    a := true\\n    b := false\\n    if a && b\\n        print(undefined_name)\\n' > main.ail")
+    tool(
+        "verify --fix again",
+        "{base}/ledger",
+        ["task", "verify", "--fix"],
+        1,
+        ["fixed 1: expr.op.1"],
+    )
+    second := slurp("{base}/ledger/.ail/task-log.jsonl")
+    if first.split(",\"ms\":")[0] != second.split(",\"ms\":")[0]
+        red("task ledger is stable", "two runs differ\n{first}{second}")
     # api.ctx.1-7 (ADR 1020)
     ctx := src_of([
         "fn show(n int) str",
