@@ -1,0 +1,55 @@
+# Sums in loops that leave in more than one place lose their overflow checks
+# where a bound or an index use holds on every path back (native.bce.14).
+fn match_len(data List[int], a int, b int, n int) int
+    mut l := 0
+    while l < 66 and a + l < n and data[b + l] == data[a + l]
+        l += 1
+    l
+
+fn skip_to(s List[int], start int, c int) int
+    mut j := start
+    while j < s.len() and s[j] != c
+        j += 1
+    j
+
+fn count_after(xs List[int], k int) int
+    mut total := 0
+    mut l := 0
+    while l < 10
+        if k + l >= xs.len()
+            break
+        total += xs[k + l]
+        l += 1
+    total
+
+## Near the top of `int` the bound still stops the loop before a sum
+## overflows: `a + 1` is the bound itself.
+fn near_top(a int, n int) int
+    mut l := 0
+    while l < 4 and a + l < n
+        l += 1
+    l
+
+## `code[pc * 2]` bounds `pc` too, so `pc * 2 + 1` and `pc + 1` fit.
+fn pairs(code List[int]) int
+    mut pc := 0
+    mut t := 0
+    while true
+        op := code[pc * 2]
+        arg := code[pc * 2 + 1]
+        pc += 1
+        if op == 0
+            break
+        t += op * arg
+    t
+
+fn main()
+    data := [1, 2, 3, 1, 2, 3, 1, 2, 4, 5]
+    print(match_len(data, 3, 0, data.len()))
+    print(match_len(data, 6, 0, data.len()))
+    print(skip_to(data, 0, 4))
+    print(skip_to(data, 2, 9))
+    print(count_after(data, 5))
+    print(count_after(data, 20))
+    print(near_top(9223372036854775806, 9223372036854775807))
+    print(pairs([1, 2, 3, 4, 0, 0]))
