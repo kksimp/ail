@@ -1,0 +1,47 @@
+## std.term.1-4, 8: styles and cursor moves, the input decoder, and `open` without a terminal.
+use std.term
+
+fn show(e term.Event) str
+    match e
+        Key(k, c, a, s) => "key {k} ctrl={c} alt={a} shift={s}"
+        Mouse(col, row, b, kind) => "mouse {col},{row} {b} {kind}"
+        Scroll(n) => "scroll {n}"
+        Resize(c, r) => "resize {c}x{r}"
+
+fn esc(s str) str
+    s.replace("\u{1b}", "^[")
+
+fn dump(data bytes)
+    for e in term.parse(data)
+        print(show(e))
+
+fn main()
+    print(esc(term.fg(196)))
+    print(esc(term.fg(300)))
+    print(esc(term.bg(0 - 5)))
+    print(esc(term.rgb(1, 2, 3)))
+    print(esc(term.bg_rgb(255, 256, 0)))
+    print(esc("{term.bold()}{term.underline()}{term.reverse()}{term.reset()}"))
+    print(esc(term.goto(0, 0)))
+    print(esc(term.goto(4, 2)))
+    print(esc("{term.clear()}{term.clear_line()}"))
+    print(esc("{term.hide_cursor()}{term.show_cursor()}"))
+    print(esc("{term.enter_alt()}{term.leave_alt()}"))
+    dump(b"a")
+    dump(b"A")
+    dump(b"\r\x03\x7f\t")
+    dump(b"\x1b[A\x1b[B\x1b[C\x1b[D")
+    dump(b"\x1b[1;5C\x1b[1;2A\x1b[1;3D")
+    dump(b"\x1b[3~\x1b[15~\x1bOP\x1b[Z\x1b[H\x1bOF")
+    dump(b"\x1b")
+    dump(b"\x1bx")
+    dump(b"\xc3\xa9")
+    dump(b"\x1b[<0;10;5M\x1b[<0;10;5m\x1b[<32;11;5M\x1b[<2;1;1M")
+    dump(b"\x1b[<64;1;1M\x1b[<65;1;1M\x1b[<35;1;1M")
+    dump(b"\x1b[24;80R")
+    dump(b"a\x1b[")
+    mut t := term.open(false) else err
+        print(err.why.starts_with("std.term."))
+        return
+    t.close()
+    print("opened")
