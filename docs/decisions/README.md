@@ -767,6 +767,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
 | [0945](0945-vector-escape-loops.md) | Native: vector kernel for escape-time loops, mandelbrot-style (ADR 0845 stage 2) *(delegated)* | Accepted | 2026-11-05 |
+| [0946](0946-adaptive-thread-pool.md) | Native: a pool sized to every core (up to 64), and each region uses the workers its work repays *(delegated)* | Accepted | 2026-11-05 |
 | [0949](0949-std-audio.md) | std.audio: sound as data, devices through a host program *(delegated)* | Accepted | 2026-11-05 |
 | [0954](0954-const-generics.md) | Const generics: `int` parameters on types and functions (`struct Vec[T, const N int]`), by monomorphisation *(delegated)* | Accepted | 2026-11-05 |
 | [0955](0955-custom-hash-names-fields.md) | Custom hashing: `impl Hash` names the fields that take part (amends 0133, resolves OQ-042) | Accepted | 2026-11-05 |
@@ -791,6 +792,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
 | [0985](0985-gfx-gamepad-input.md) | `std.gfx` gamepad input: `Input.pads`, the `pad` event, GameController on the Mac *(delegated)* | Accepted | 2026-11-08 |
+| [0987](0987-auto-parallel-inner-loops.md) | Native: a proven loop inside a loop run in order may go to the pool (amends 0911) *(delegated)* | Accepted | 2026-11-08 |
 | [0988](0988-std-media-webm.md) | `std.media.webm`: WebM and Matroska demuxing in AIL, fed in pieces for Media Source Extensions *(delegated)* | Accepted | 2026-11-08 |
 | [0989](0989-std-video-vp9.md) | `std.video.vp9`: a VP9 profile 0 decoder in AIL, I420 frames and RGBA *(delegated)* | Accepted | 2026-11-08 |
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
