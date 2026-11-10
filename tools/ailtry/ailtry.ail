@@ -78,7 +78,7 @@ fn ail(args List[str], input str) proc.Output
 ## `--if-clean`, and runs the tests on a clean result. The program on disk is never written.
 fn try_set(path str, n int, patch str) Verdict
     root := "{SCRATCH}/{n}"
-    _ := proc.run("rm", ["-rf", root]) else proc.Output(status: 127, out: "", err: "")
+    remove_tree(root)
     copy_to := "{root}/{last_part(path)}"
     fs.make_dir(root) else err
         return Verdict(clean: false, line: "scratch: {err}", detail: "")
@@ -87,8 +87,17 @@ fn try_set(path str, n int, patch str) Verdict
     cost := "patch ~{estimate_tokens(patch)} tokens"
     ed := ail(["edit", copy_to, "--if-clean"], patch)
     verdict := if ed.status == 0 then try_tests(copy_to, cost) else try_failed(ed, cost)
-    _ := proc.run("rm", ["-rf", root]) else proc.Output(status: 127, out: "", err: "")
+    remove_tree(root)
     verdict
+
+## Removes the file or directory tree at `p`; a missing path is fine (no `rm`, so it works on Windows too).
+fn remove_tree(p str)
+    m := fs.metadata(p) else return
+    if m.is_dir
+        names := fs.list_dir(p) else return
+        for n in names
+            remove_tree("{p}/{n}")
+    fs.remove(p) else return
 
 ## A patch set that wasn't applied: an edit that doesn't apply (try.verdict.3) or a result that doesn't check (try.verdict.1).
 fn try_failed(ed proc.Output, cost str) Verdict
