@@ -79,7 +79,7 @@ up are positive) and triggers `lt`, `rt` from 0.0 to 1.0. `pad_down`,
 event `pad` (`id` the gamepad's number, `text` the state `buttons,lx,ly,rx,ry,
 lt,rt`, empty when disconnected) when a gamepad's state changes, and
 `pad_event(n, state)` makes one for a test. The macOS host reads gamepads with
-GameController; a host that can't (Linux and Windows hosts today) sends no
+GameController and the Linux host with evdev; a host that can't sends no
 `pad` event, so `Input.pads` stays empty and every pad reads as `no_pad()`: a game
 must not need a gamepad. *(ADR 0985)*
 
