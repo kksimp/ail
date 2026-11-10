@@ -125,7 +125,7 @@ AI agents: read [AGENTS.md](AGENTS.md) first.
 ## Contributing and security
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): how a change gets tested without hosted CI, and what a PR needs.
-- [SECURITY.md](SECURITY.md): report vulnerabilities privately through GitHub.
+- [SECURITY.md](SECURITY.md): report vulnerabilities as GitHub issues with the Security report template (public while the project is small).
 
 ## License
 
