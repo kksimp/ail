@@ -178,6 +178,7 @@ static class Outbox
 abstract class Op { }
 class StrOp : Op { public double X, Y, Size; public string Text, Font; public int Fg; public bool Bold, Italic, Underline; }
 class FillOp : Op { public double X, Y, W, H; public int Color; }
+class ShadeOp : Op { public double X, Y, W, H, Alpha; public int Color; }
 class StrokeOp : Op { public double X1, Y1, X2, Y2, Width; public int Color; }
 class PicOp : Op { public double X, Y, W, H; public string Src; }
 class BitmapOp : Op { public double X, Y, W, H; public string Id; }
@@ -246,6 +247,8 @@ class Node
                     Size = Json.Num(Json.Get(d, "size")), Fg = (int)Json.Num(Json.Get(d, "fg")), Bold = Json.Flag(Json.Get(d, "bold")),
                     Italic = Json.Flag(Json.Get(d, "italic")), Underline = Json.Flag(Json.Get(d, "underline")) };
             case "Fill": return new FillOp { X = X, Y = Y, W = W, H = H, Color = color };
+            case "Shade": // std.app.19: opacity 0..1, clamped
+                return new ShadeOp { X = X, Y = Y, W = W, H = H, Color = color, Alpha = Math.Max(0, Math.Min(1, Json.Num(Json.Get(d, "alpha")))) };
             case "Stroke":
                 return new StrokeOp { X1 = Json.Num(Json.Get(d, "x1")), Y1 = Json.Num(Json.Get(d, "y1")), X2 = Json.Num(Json.Get(d, "x2")),
                     Y2 = Json.Num(Json.Get(d, "y2")), Color = color, Width = Json.Num(Json.Get(d, "width")) };
@@ -308,6 +311,44 @@ static class Bitmaps
 
 // ---- Canvas --------------------------------------------------------------
 
+/// The window's scale: device pixels per point (dpi / 96). The canvas works in points.
+static class Dpi
+{
+    public static double Scale = 1;
+    public static bool Hover; // std.app.16: the last `view` carried "hover":true
+
+    [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
+    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    /// Per-monitor v2 where Windows has it (10 1703+), else system DPI awareness.
+    public static void Aware()
+    {
+        try { if (SetProcessDpiAwarenessContext((IntPtr)(-4))) { Refresh(IntPtr.Zero); return; } }
+        catch (EntryPointNotFoundException) { }
+        catch (DllNotFoundException) { }
+        try { SetProcessDPIAware(); } catch (Exception) { }
+        Refresh(IntPtr.Zero);
+    }
+
+    /// Reads the scale for a window (or the screen when `hwnd` is zero).
+    public static void Refresh(IntPtr hwnd)
+    {
+        double dpi = 0;
+        try { if (hwnd != IntPtr.Zero) dpi = GetDpiForWindow(hwnd); }
+        catch (EntryPointNotFoundException) { }
+        catch (DllNotFoundException) { }
+        if (dpi < 48)
+        {
+            using (var bmp = new Bitmap(1, 1))
+            using (var g = Graphics.FromImage(bmp)) dpi = g.DpiX;
+        }
+        Scale = Math.Max(1, dpi / 96.0);
+    }
+
+    public static int Px(double points) { return (int)Math.Round(points * Scale); }
+}
+
 static class Fonts
 {
     static readonly Dictionary<string, Font> cache = new Dictionary<string, Font>();
@@ -343,7 +384,7 @@ class CanvasView : Control
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer |
                  ControlStyles.Selectable | ControlStyles.ResizeRedraw, true);
         TabStop = true;
-        BackColor = Color.White;
+        BackColor = Color.White; // replaced by the tree's first fill when the canvas is built
     }
 
     public static Color Rgb(int c) { return Color.FromArgb((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff); }
@@ -360,6 +401,9 @@ class CanvasView : Control
         }
     }
 
+    /// Forgets the reported size so the next layout reports again (after a scale change).
+    public void ReportAgain() { reported = Size.Empty; OnSizeChanged(EventArgs.Empty); }
+
     protected override void OnSizeChanged(EventArgs e)
     {
         base.OnSizeChanged(e);
@@ -368,27 +412,54 @@ class CanvasView : Control
             reported = Size;
             double cw, ch;
             CellMetrics(out cw, out ch);
-            Outbox.Send("resize", "id", CanvasId, "dx", Width, "dy", Height, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
+            Outbox.Send("resize", "id", CanvasId, "dx", Width / Dpi.Scale, "dy", Height / Dpi.Scale, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale);
         }
+    }
+
+    /// Fills the device-pixel rectangle a point rectangle covers: edges rounded, smoothing off, so
+    /// neighbouring fills never leave a seam and never blur.
+    static void FillSnapped(Graphics g, Brush b, double x, double y, double w, double h, double s)
+    {
+        int l = (int)Math.Round(x * s), t = (int)Math.Round(y * s);
+        int r = (int)Math.Round((x + w) * s), bt = (int)Math.Round((y + h) * s);
+        if (r <= l || bt <= t) return;
+        g.ResetTransform(); // the clip is in device space already
+        g.FillRectangle(b, l, t, r - l, bt - t);
+        g.ScaleTransform((float)s, (float)s);
+    }
+
+    /// An axis-aligned stroke centred on the device pixels its width covers, so it stays crisp.
+    static double SnapLine(double v, double width, double s)
+    {
+        double d = v * s;
+        return (Math.Max(1, Math.Round(width * s)) % 2 == 1 ? Math.Floor(d) + 0.5 : Math.Round(d)) / s;
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         Graphics g = e.Graphics;
         g.Clear(BackColor);
-        // ClearType text; rectangles stay pixel-exact, slanted lines are anti-aliased.
+        double s = Dpi.Scale;
+        // ClearType text; fills snap to device pixels, strokes are anti-aliased.
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.SmoothingMode = SmoothingMode.None;
         g.PixelOffsetMode = PixelOffsetMode.Half;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.ScaleTransform((float)s, (float)s);
         var saved = new Stack<GraphicsState>();
         foreach (Op op in Ops)
         {
             var fill = op as FillOp;
             if (fill != null)
             {
-                using (var b = new SolidBrush(Rgb(fill.Color)))
-                    g.FillRectangle(b, (float)fill.X, (float)fill.Y, (float)fill.W, (float)fill.H);
+                using (var b = new SolidBrush(Rgb(fill.Color))) FillSnapped(g, b, fill.X, fill.Y, fill.W, fill.H, s);
+                continue;
+            }
+            var shade = op as ShadeOp;
+            if (shade != null)
+            {
+                Color c = Rgb(shade.Color);
+                using (var b = new SolidBrush(Color.FromArgb((int)Math.Round(shade.Alpha * 255), c))) FillSnapped(g, b, shade.X, shade.Y, shade.W, shade.H, s);
                 continue;
             }
             var str = op as StrOp;
@@ -402,11 +473,14 @@ class CanvasView : Control
             var stroke = op as StrokeOp;
             if (stroke != null)
             {
-                using (var p = new Pen(Rgb(stroke.Color), stroke.Width > 0 ? (float)stroke.Width : 1))
+                double sw = stroke.Width > 0 ? stroke.Width : 1;
+                double x1 = stroke.X1, y1 = stroke.Y1, x2 = stroke.X2, y2 = stroke.Y2;
+                if (y1 == y2) { y1 = y2 = SnapLine(y1, sw, s); }
+                else if (x1 == x2) { x1 = x2 = SnapLine(x1, sw, s); }
+                using (var p = new Pen(Rgb(stroke.Color), (float)sw))
                 {
-                    bool slanted = stroke.X1 != stroke.X2 && stroke.Y1 != stroke.Y2;
-                    g.SmoothingMode = slanted ? SmoothingMode.AntiAlias : SmoothingMode.None;
-                    g.DrawLine(p, (float)stroke.X1, (float)stroke.Y1, (float)stroke.X2, (float)stroke.Y2);
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.DrawLine(p, (float)x1, (float)y1, (float)x2, (float)y2);
                     g.SmoothingMode = SmoothingMode.None;
                 }
                 continue;
@@ -418,9 +492,16 @@ class CanvasView : Control
                 double x = pic != null ? pic.X : bm.X, y = pic != null ? pic.Y : bm.Y;
                 double w = pic != null ? pic.W : bm.W, h = pic != null ? pic.H : bm.H;
                 Image img = pic != null ? Bitmaps.Pic(pic.Src, this) : Bitmaps.Get(bm.Id);
-                if (img != null) g.DrawImage(img, new RectangleF((float)x, (float)y, (float)w, (float)h));
+                if (img != null)
+                {
+                    // Pixel art blown up by a whole number of 4x or more stays sharp; everything else is smoothed.
+                    double rx = w * s / img.Width, ry = h * s / img.Height;
+                    bool crisp = rx >= 4 && ry >= 4 && Math.Abs(rx - Math.Round(rx)) < 0.001 && Math.Abs(ry - Math.Round(ry)) < 0.001;
+                    g.InterpolationMode = crisp ? InterpolationMode.NearestNeighbor : InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(img, new RectangleF((float)x, (float)y, (float)w, (float)h));
+                }
                 else using (var b = new SolidBrush(Color.FromArgb(0xe8, 0xe8, 0xe8)))
-                    g.FillRectangle(b, (float)x, (float)y, (float)w, (float)h);
+                    FillSnapped(g, b, x, y, w, h, s);
                 continue;
             }
             var clip = op as ClipOp;
@@ -457,24 +538,51 @@ class CanvasView : Control
         base.OnMouseDown(e);
         Focus();
         Capture = true;
-        Outbox.Send("down", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
-        Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
+        Outbox.Send("down", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
+        Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
         Capture = false;
-        Outbox.Send("up", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", 0));
+        Outbox.Send("up", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", 0));
     }
 
-    DateTime lastDrag = DateTime.MinValue;
+    // `move` while a button is held (std.app.27) or while the app asked for hover (std.app.16):
+    // at most one per 16 ms, carrying the last position.
+    DateTime lastMove = DateTime.MinValue;
+    Point pending;
+    bool hasPending;
+    System.Windows.Forms.Timer flush;
+
+    void SendMove(Point p)
+    {
+        lastMove = DateTime.Now;
+        hasPending = false;
+        Outbox.Send("move", "id", CanvasId, "x", p.X / Dpi.Scale, "y", p.Y / Dpi.Scale);
+    }
+
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (e.Button == MouseButtons.None || (DateTime.Now - lastDrag).TotalMilliseconds < 16) return;
-        lastDrag = DateTime.Now;
-        Outbox.Send("move", "id", CanvasId, "x", e.X, "y", e.Y);
+        if (e.Button == MouseButtons.None && !Dpi.Hover) return;
+        if ((DateTime.Now - lastMove).TotalMilliseconds >= 16) { SendMove(e.Location); return; }
+        pending = e.Location;
+        hasPending = true;
+        if (flush == null)
+        {
+            flush = new System.Windows.Forms.Timer { Interval = 16 };
+            flush.Tick += delegate { flush.Stop(); if (hasPending) SendMove(pending); };
+        }
+        if (!flush.Enabled) flush.Start();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        hasPending = false;
+        if (Dpi.Hover) Outbox.Send("leave", "id", CanvasId);
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -606,16 +714,16 @@ class FieldBox : Panel
     {
         look = l;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        Height = 32;
-        Margin = new Padding(4, 0, 8, 0);
+        Height = Dpi.Px(32);
+        Margin = new Padding(Dpi.Px(4), 0, Dpi.Px(8), 0);
         Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Box.BorderStyle = BorderStyle.None;
-        Box.Font = new Font(fontFamily, 14, FontStyle.Regular, GraphicsUnit.Pixel);
+        Box.Font = new Font(fontFamily, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
         Box.BackColor = l.FieldBg;
         Box.ForeColor = l.Fg;
         Box.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        Box.Left = 12;
-        Box.Width = Width - 24;
+        Box.Left = Dpi.Px(12);
+        Box.Width = Width - Dpi.Px(24);
         Box.Top = (Height - Box.Height) / 2;
         Box.Enter += delegate { Invalidate(); };
         Box.Leave += delegate { Invalidate(); };
@@ -674,20 +782,67 @@ class HostForm : Form
     public HostForm()
     {
         Text = "AIL";
-        ClientSize = new Size(1000, 720);
-        MinimumSize = new Size(340, 240);
-        Font = new Font(Fonts.Sans, 14, FontStyle.Regular, GraphicsUnit.Pixel);
+        ClientSize = new Size(Dpi.Px(1000), Dpi.Px(720));
+        MinimumSize = new Size(Dpi.Px(340), Dpi.Px(240));
+        Font = new Font(Fonts.Sans, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
+        SetIcon();
         StartPosition = FormStartPosition.CenterScreen;
-        Padding = new Padding(8);
+        Padding = new Padding(Dpi.Px(8));
         BackColor = look.Bg;
         ForeColor = look.Fg;
+    }
+
+    /// AIL_APP_ICON names a PNG for the window and the taskbar.
+    void SetIcon()
+    {
+        string path = Environment.GetEnvironmentVariable("AIL_APP_ICON");
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        try { using (var bmp = new Bitmap(path)) Icon = Icon.FromHandle(bmp.GetHicon()); }
+        catch (Exception) { }
     }
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        double before = Dpi.Scale;
+        Dpi.Refresh(Handle);
+        if (Math.Abs(Dpi.Scale - before) > 0.001)
+        {
+            // The window is on a monitor with another scale than the primary one.
+            ClientSize = new Size(Dpi.Px(1000), Dpi.Px(720));
+            MinimumSize = new Size(Dpi.Px(340), Dpi.Px(240));
+            Font = new Font(Fonts.Sans, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
+        }
         Chrome();
     }
+
+    // WM_DPICHANGED: take the suggested rectangle, rebuild at the new scale, report the new sizes.
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == 0x02E0)
+        {
+            Dpi.Refresh(Handle);
+            var r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+            SetBounds(r.L, r.T, r.R - r.L, r.B - r.T);
+            MinimumSize = new Size(Dpi.Px(340), Dpi.Px(240));
+            Font = new Font(Fonts.Sans, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
+            if (current != null)
+            {
+                shape = ""; // rebuild the controls at the new scale
+                ShowView(Text, "", current, Dpi.Hover);
+            }
+            foreach (Control c in byId.Values)
+            {
+                var cv = c as CanvasView;
+                if (cv != null) { cv.ReportAgain(); cv.Invalidate(); }
+            }
+            return;
+        }
+        base.WndProc(ref m);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT { public int L, T, R, B; }
 
     /// Dark or light title bar in the window's own color (Windows 10 1809+ and 11; ignored elsewhere).
     void Chrome()
@@ -737,8 +892,9 @@ class HostForm : Form
         Outbox.Send("appearance", "text", now);
     }
 
-    public void ShowView(string title, string focus, Node tree)
+    public void ShowView(string title, string focus, Node tree, bool hover)
     {
+        Dpi.Hover = hover;
         Text = title;
         Look next = Look.From(tree);
         string s = tree.Shape() + "|" + next.Key();
@@ -759,7 +915,7 @@ class HostForm : Form
             look = next;
             BackColor = look.Bg;
             ForeColor = look.Fg;
-            Padding = Look.Edge(tree) ? new Padding(0) : new Padding(8);
+            Padding = Look.Edge(tree) ? new Padding(0) : new Padding(Dpi.Px(8));
             Chrome();
             var old = new Control[Controls.Count];
             Controls.CopyTo(old, 0);
@@ -895,8 +1051,10 @@ class HostForm : Form
                 return c;
             case "Canvas":
                 var cv = new CanvasView { CanvasId = n.Id, Tag = n.Id, Ops = n.Ops, Margin = new Padding(0) };
-                if (n.W > 0) cv.Width = (int)n.W;
-                if (n.H > 0) cv.Height = (int)n.H;
+                Color? first = Look.FirstFill(n);
+                cv.BackColor = first.HasValue ? first.Value : look.Bg;
+                if (n.W > 0) cv.Width = Dpi.Px(n.W);
+                if (n.H > 0) cv.Height = Dpi.Px(n.H);
                 cv.Dock = n.W > 0 && n.H > 0 ? DockStyle.None : DockStyle.Fill;
                 byId[n.Id] = cv;
                 leaves.Add(cv);
@@ -961,8 +1119,6 @@ class HostForm : Form
 
 static class Program
 {
-    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
-
     /// std.app.13: the advance width of each requested run, in the font a `Str` op of the
     /// same family, size and weight is drawn in, answered as one `measured` event.
     static void AnswerMeasure(List<object> runs)
@@ -989,7 +1145,7 @@ static class Program
     [STAThread]
     static void Main()
     {
-        try { SetProcessDPIAware(); } catch (Exception) { }
+        Dpi.Aware();
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         var form = new HostForm();
@@ -1028,8 +1184,9 @@ static class Program
                 }
                 string title = Json.Text(Json.Get(obj, "title"));
                 string focus = Json.Text(Json.Get(obj, "focus"));
+                bool hover = Json.Flag(Json.Get(obj, "hover"));
                 Node tree = Node.Decode(Json.Get(obj, "tree"));
-                form.BeginInvoke((Action)delegate { form.ShowView(title.Length > 0 ? title : "AIL", focus, tree); });
+                form.BeginInvoke((Action)delegate { form.ShowView(title.Length > 0 ? title : "AIL", focus, tree, hover); });
             }
             form.BeginInvoke((Action)delegate { Application.Exit(); });
         });
