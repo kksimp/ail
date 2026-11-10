@@ -1,5 +1,5 @@
 # Division by zero on an empty list; only the tests show it.
-write t3.ail draft.ail
+write t3.ail draft.ail.txt
 run ail test t3.ail
 run ail edit t3.ail --test <<E
 average

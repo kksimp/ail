@@ -1,5 +1,5 @@
 # A field failure: the clock has not moved a whole second, so the divisor is zero. Record it, replay it, fix it.
-write t6.ail draft.ail
+write t6.ail draft.ail.txt
 run ail run --record r6.txt t6.ail
 run ail run --replay r6.txt t6.ail
 run ail edit t6.ail --test <<E

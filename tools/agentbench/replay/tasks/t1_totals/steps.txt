@@ -1,5 +1,5 @@
 # Sum per customer: a map literal with no type, and a str where a float belongs.
-write t1.ail draft.ail
+write t1.ail draft.ail.txt
 run ail test t1.ail
 run ail fix t1.ail
 run ail edit t1.ail --test <<E

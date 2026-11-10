@@ -1,4 +1,4 @@
 # A claim that `score` is pure: which functions reach the clock?
-write t8.ail draft.ail
+write t8.ail draft.ail.txt
 run ail effects t8.ail
 run ail test t8.ail
