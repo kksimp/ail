@@ -41,3 +41,4 @@ win expect "inset_top":32
 linux send {"v":1,"t":"view","title":"edge","focus":"","edge":true,"tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Fill","x":0,"y":0,"w":20,"h":20,"color":2105376}]}}
 linux expect "inset_right":138
 linux expect "inset_top":32
+win expect "sans_line"
