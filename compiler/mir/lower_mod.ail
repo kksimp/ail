@@ -12,6 +12,7 @@ STD_MODULES := [
     "fs",
     "io",
     "net",
+    "os",
     "path",
     "proc",
     "random",

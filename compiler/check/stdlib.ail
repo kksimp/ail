@@ -76,6 +76,7 @@ STD_FUNCTIONS := [
         "request_bytes",
         "serve",
     ],
+    ["os", "signals"],
     ["path", "base", "dir", "ext", "join", "stem"],
     ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
     ["random", "float", "int", "seed", "shuffle"],
@@ -389,6 +390,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: Ty.Int)
     if key == "time.sleep_ms"
         return StdSig(params: [Ty.Int], ret: Ty.Unit)
+    if key == "os.signals"
+        return StdSig(params: [Ty.ListOf(text)], ret: Ty.Conc("Channel", text))
     if key == "tz.offset"
         return StdSig(params: [text, Ty.Int], ret: Ty.Opt(Ty.Int))
     if key == "tz.system"

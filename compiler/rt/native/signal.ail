@@ -1,0 +1,249 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `os.signals` (std.os.1-3, ADR 1011): operating-system signals as a
+## `Channel[str]`. The channel is fed from outside like a child's streams
+## (chan.ail): a receiver that finds it empty calls `chan_pump` (proc.ail),
+## which asks `sig_pump` here. The handler the system calls does no more than
+## count the signal in a table and wake sleepers on the table's first word, so
+## it is safe at any point of the program (it allocates nothing and takes no
+## lock). Each channel remembers how many of each signal it has seen and queues
+## a name when a count has moved: signals that arrive between two looks merge
+## into one value per kind.
+##
+## Linux x86-64 and ARM64 install the handler with `rt_sigaction`; x86-64 also
+## needs a return function (`sig_ret`, ending in the `sigreturn` intrinsic).
+## macOS calls libSystem's `signal`. Windows registers a console control
+## handler (`sig_win_ctrl`), which reads the event with the `win_arg0` intrinsic:
+## INT is Ctrl-C and Ctrl-Break, TERM is the console closing, logoff and shutdown.
+##
+## Global slot 66 is the table, made by the first `os.signals` (ADR 1011):
+##   +0    count of all signals (the word sleepers wait on)
+##   +8*N  count of signal N (1-31)
+##   +256+8*N  channels watching N (the handler is restored at zero)
+##   +512  Windows: counts by console event number (0-6)
+##   +584  1 once the Windows handler is registered
+
+SIG_TAB := 66
+SIG_MAGIC := 91368264820
+ST_WATCH := 256
+ST_WIN := 512
+ST_WON := 584
+
+# The state of one channel (its `source` word, chan.ail).
+SS_MASK := 8
+SS_CLOSED := 16
+SS_LOCK := 24
+SS_SEEN := 32
+SS_SIZE := 288
+
+## The number of signal `name`, or 0.
+fn sig_number(name str) int
+    if str_eq(name, "HUP")
+        return 1
+    if str_eq(name, "INT")
+        return 2
+    if str_eq(name, "QUIT")
+        return 3
+    if str_eq(name, "TERM")
+        return 15
+    if str_eq(name, "WINCH")
+        return 28
+    0
+
+fn sig_name(n int) str
+    if n == 1
+        return "HUP"
+    if n == 2
+        return "INT"
+    if n == 3
+        return "QUIT"
+    if n == 15
+        return "TERM"
+    "WINCH"
+
+## Whether the source `ss` of a channel is a signal state, not a child's.
+fn sig_is(ss int) bool
+    ss != 0 and load64(ss) == SIG_MAGIC
+
+## The table, made by the first call (two racing callers keep one).
+fn sig_table() int
+    g := global(SIG_TAB)
+    c := atomic_load(g)
+    if c != 0
+        return c
+    p := heap_reserve(4096)
+    if p < 0
+        return 0
+    old := atomic_cas(g, 0, p)
+    if old == 0 then p else old
+
+## The system calls this with the signal number. Windows never does; its
+## stub bumps the table directly.
+fn sig_handler(sg int)
+    t := load64(global(SIG_TAB))
+    if t == 0 or sg < 1 or sg > 31
+        return
+    atomic_add(t + 8 * sg, 1)
+    atomic_add(t, 1)
+    futex_wake(t, 1000000)
+
+## How many times signal `sg` has arrived.
+fn sig_count(t int, sg int) int
+    if target() == 3
+        w := t + ST_WIN
+        if sg == 2
+            return atomic_load(w) + atomic_load(w + 8)
+        if sg == 15
+            return atomic_load(w + 16) + atomic_load(w + 40) + atomic_load(w + 48)
+        return 0
+    atomic_load(t + 8 * sg)
+
+## Linux x86-64: the function the kernel returns to from the handler
+## (`SA_RESTORER`); it ends in `rt_sigreturn`.
+fn sig_ret()
+    sigreturn()
+
+## Windows: the console control handler, run on a thread the system makes.
+## It reads the event number (0 Ctrl-C, 1 Ctrl-Break, 2 close, 5 logoff, 6
+## shutdown) first, then ends its thread with exit code 1 (TRUE: handled)
+## instead of returning into the system with registers changed.
+fn sig_win_ctrl() int
+    ev := win_arg0()
+    t := load64(global(SIG_TAB))
+    if t != 0 and ev >= 0 and ev < 7
+        atomic_add(t + ST_WIN + 8 * ev, 1)
+    import_call("ExitThread", 1, 0, 0, 0)
+    1
+
+## Make signal `sg` reach the table. True when it can.
+fn sig_install(t int, sg int) bool
+    k := target()
+    if k == 3
+        if atomic_cas(t + ST_WON, 0, 1) != 0
+            return true
+        return import_call("SetConsoleCtrlHandler", fn_addr("rt.sig_win_ctrl"), 1, 0, 0) != 0
+    h := fn_addr("rt.sig_handler")
+    if k == 2
+        import_call("_signal", sg, h, 0, 0)
+        return true
+    a := alloc(64, KIND_BYTES)
+    store64(a, h)
+    if k == 0
+        r := fn_addr("rt.sig_ret")
+        # SA_RESTART | SA_RESTORER
+        store64(a + 8, 335544320)
+        store64(a + 16, r)
+    else
+        store64(a + 8, 268435456)
+    syscall(os_pick(13, 134, 0), sg, a, 0, 8, 0, 0)
+    true
+
+## Put signal `sg` back to its default action.
+fn sig_default(t int, sg int)
+    k := target()
+    if k == 3
+        if sig_count_watch(t, 2) + sig_count_watch(t, 15) == 0
+            if atomic_cas(t + ST_WON, 1, 0) == 1
+                import_call("SetConsoleCtrlHandler", fn_addr("rt.sig_win_ctrl"), 0, 0, 0)
+        return
+    if k == 2
+        import_call("_signal", sg, 0, 0, 0)
+        return
+    a := alloc(64, KIND_BYTES)
+    syscall(os_pick(13, 134, 0), sg, a, 0, 8, 0, 0)
+
+fn sig_count_watch(t int, sg int) int
+    atomic_load(t + ST_WATCH + 8 * sg)
+
+## `os.signals(names)` (std.os.1): a channel that receives the name of each
+## signal in `names` as it arrives.
+fn os_signals(names List[int]) int
+    al := list_addr(names)
+    n := load64(al)
+    data := load64(al + 16)
+    if n == 0
+        os_usage_trap("std.os.2", "`os.signals` needs at least one signal name")
+    mut mask := 0
+    for i in 0..n
+        nm := str_at(load64(data + 8 * i))
+        sg := sig_number(nm)
+        if sg == 0
+            os_usage_trap("std.os.2", str_cat3(
+                "unknown signal `",
+                nm,
+                "`; the names are HUP, INT, QUIT, TERM and WINCH",
+            ))
+        one := 1
+        mask = mask.bit_or(one.shl(sg))
+    t := sig_table()
+    if t == 0
+        os_usage_trap("std.os.3", "signals are not available here")
+    ss := alloc(SS_SIZE, KIND_BYTES)
+    store64(ss, SIG_MAGIC)
+    store64(ss + SS_MASK, mask)
+    ch := chan_new()
+    store64(ch + C_SOURCE, ss)
+    for sg in 1..32
+        if mask.shr(sg).bit_and(1) != 0
+            store64(ss + SS_SEEN + 8 * sg, sig_count(t, sg))
+            if atomic_add(t + ST_WATCH + 8 * sg, 1) == 0
+                if not sig_install(t, sg)
+                    os_usage_trap("std.os.3", "signals are not available here")
+    ch
+
+## Queue a name for each signal of the channel `ch` whose count has moved;
+## how many were queued.
+fn sig_poll(ss int, ch int) int
+    if load64(ss + SS_CLOSED) != 0
+        return 0
+    t := load64(global(SIG_TAB))
+    mask := load64(ss + SS_MASK)
+    mut queued := 0
+    lock(ss + SS_LOCK)
+    for sg in 1..32
+        if mask.shr(sg).bit_and(1) != 0
+            c := sig_count(t, sg)
+            if c != load64(ss + SS_SEEN + 8 * sg)
+                store64(ss + SS_SEEN + 8 * sg, c)
+                chan_push(ch, sig_name(sg))
+                queued += 1
+    unlock(ss + SS_LOCK)
+    queued
+
+## One round of waiting for a signal on `ch`: at most `ms` milliseconds (and
+## at most 100, so a cancelled task is noticed); a negative `ms` is no limit.
+fn sig_pump(ch int, ms int)
+    ss := load64(ch + CH_SOURCE)
+    t := load64(global(SIG_TAB))
+    seen := atomic_load(t).bit_and(4294967295)
+    if sig_poll(ss, ch) > 0 or load64(ss + SS_CLOSED) != 0
+        return
+    slice := if ms < 0 or ms > 100 then 100 else ms
+    if slice <= 0
+        return
+    if target() == 3
+        multi := load64(global(MULTI)) != 0
+        mut parked := 0
+        if multi
+            parked = blocked_enter()
+        win_sleep_ms(if slice > 20 then 20 else slice)
+        if multi
+            blocked_leave(parked)
+    else
+        futex_wait_timed(t, seen, slice)
+    sig_poll(ss, ch)
+
+## `ch.close()` of a signal channel: stop watching, and put a signal nobody
+## else watches back to its default action.
+fn sig_close(ch int)
+    ss := load64(ch + CH_SOURCE)
+    if atomic_cas(ss + SS_CLOSED, 0, 1) != 0
+        return
+    t := load64(global(SIG_TAB))
+    mask := load64(ss + SS_MASK)
+    for sg in 1..32
+        if mask.shr(sg).bit_and(1) != 0
+            if atomic_add(t + ST_WATCH + 8 * sg, -1) == 1
+                sig_default(t, sg)
+    chan_mark_closed(ch)

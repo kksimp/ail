@@ -1,0 +1,118 @@
+# Mutation fuzzer for the native TLS parsers: X.509 certificates (DER parsing,
+# signature and chain checks) and the ServerHello. Built with the test hook of
+# tools/native-tls/prim-check.sh by tools/native-tls/fuzz-check.sh, which gives it
+# the iteration range; run it through that script (or `ail selftest crypto`).
+#
+#   fuzz START COUNT SEED CHAIN_FILE TLS_FILE
+#
+# Iteration `it` seeds the generator with SEED and `it`, so a failure is
+# reproduced by START=it COUNT=1. Properties:
+#   1. no input traps or hangs the parsers (a trap ends the program non-zero);
+#   2. a changed leaf or intermediate certificate never verifies against the
+#      test root (the root itself is a trust anchor, so it is never mutated).
+# Prints one summary line and exits 1 if property 2 fails.
+use std.hash
+
+HEXD := "0123456789abcdef"
+
+fn hexd() str
+    i := random.int(0, 15)
+    HEXD.slice(i, i + 1)
+
+fn rbyte() str
+    "{hexd()}{hexd()}"
+
+fn upto(a int, b int) int
+    if a < b then a else b
+
+## `hex` (whole bytes) with one random edit: a digit, a byte, a run, or the tail.
+fn mutate(hex str) str
+    n := hex.len() / 2
+    if n == 0
+        return rbyte()
+    i := random.int(0, n - 1) * 2
+    run := upto(i + 2 * random.int(1, 8), hex.len())
+    kind := random.int(0, 7)
+    if kind == 0
+        j := i + random.int(0, 1)
+        return "{hex.slice(0, j)}{hexd()}{hex.slice(j + 1, hex.len())}"
+    if kind == 1
+        return "{hex.slice(0, i)}{hex.slice(i + 2, hex.len())}"
+    if kind == 2
+        return "{hex.slice(0, i)}{rbyte()}{hex.slice(i, hex.len())}"
+    if kind == 3
+        return hex.slice(0, i)
+    if kind == 4
+        fill := if random.int(0, 1) == 0 then "00" else "ff"
+        return "{hex.slice(0, i)}{fill}{hex.slice(i + 2, hex.len())}"
+    if kind == 5
+        return "{hex.slice(0, run)}{hex.slice(i, run)}{hex.slice(run, hex.len())}"
+    if kind == 6
+        return "{hex.slice(0, i)}{hex.slice(run, hex.len())}"
+    "{hex.slice(0, i)}{rbyte()}{hex.slice(i + 2, hex.len())}"
+
+## The lines of `path` that are not comments or empty.
+fn data_lines(path str) List[str]
+    mut out := List[str]()
+    text := fs.read_text(path) else ""
+    for line in text.lines()
+        if not line.starts_with("#") and line != ""
+            out.push(line)
+    out
+
+fn main()
+    a := env.args()
+    start := a[0].to_int() else 0
+    count := a[1].to_int() else 0
+    seed := a[2].to_int() else 1
+    mut certs := Map[str, str]()
+    for line in data_lines(a[3])
+        kv := line.split(" ")
+        certs[kv[0]] = kv[1]
+    # The recorded server flight: record header (5 bytes), handshake header
+    # (4 bytes, type 02, length 000076), then the 118-byte ServerHello body.
+    flight := data_lines(a[4])[1]
+    hello := flight.slice(18, 18 + 2 * 118)
+    cases := [
+        "leaf,inter|example.test",
+        "rsa_leaf,inter|rsa.test",
+        "pss_signed,inter|pss.test",
+        "sha512_leaf,inter|example.test",
+    ]
+    base := hash.hmac_sha256("serverhello", hello)
+    mut chain_rejected := 0
+    mut chain_same := 0
+    mut hello_ok := 0
+    mut hello_rejected := 0
+    mut bad := 0
+    for it in start..start + count
+        random.seed(seed * 40503 + it)
+        if it % 2 == 0
+            part := cases[random.int(0, cases.len() - 1)].split("|")
+            names := part[0].split(",")
+            k := random.int(0, names.len() - 1)
+            mut m := mutate(certs[names[k]])
+            if random.int(0, 3) == 0
+                m = mutate(m)
+            mut args := "{part[1]} 1798761600 {certs["root"]}"
+            for j in 0..names.len()
+                cert := if j == k then m else certs[names[j]]
+                args = "{args} {cert}"
+            got := hash.hmac_sha256("chain", args)
+            if m == certs[names[k]]
+                chain_same += 1
+            elif got == "ok"
+                bad += 1
+                print("FAIL a changed certificate verified: seed {seed} iteration {it}")
+            else
+                chain_rejected += 1
+        else
+            m := mutate(hello)
+            got := hash.hmac_sha256("serverhello", m)
+            if got == "ok" or got == "retry"
+                hello_ok += 1
+            else
+                hello_rejected += 1
+    print("fuzz tls: iterations {start}..{start + count - 1} seed {seed}: unmodified ServerHello {base}; chains rejected {chain_rejected} (unchanged {chain_same}); ServerHello accepted {hello_ok}, rejected {hello_rejected}; failures {bad}")
+    if bad > 0
+        io.exit(1)
