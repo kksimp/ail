@@ -886,9 +886,15 @@ fn Gate.proved_contracts(mut self)
     # The negative cases: a `mut` name, a call into another file, and a contract the facts
     # don't settle keep their checks (they trap in the cases suite, both ways above).
     m := ail_run(["prove", case_path("prove_mut_trap")]) else return
-    want("ail prove mut", m.out, ["requires `n >= 0` of `half` in `main`: checked\n", "0 of 2 contract checks proved\n"])
+    want("ail prove mut", m.out, [
+        "requires `n >= 0` of `half` in `main`: checked\n",
+        "0 of 2 contract checks proved\n",
+    ])
     x := ail_run(["prove", case_path("prove_module_trap")]) else return
-    want("ail prove other file", x.out, ["requires `n > 0` of `go` in `main`: proved\n", "2 of 2 contract checks proved\n"])
+    want("ail prove other file", x.out, [
+        "requires `n > 0` of `go` in `main`: proved\n",
+        "2 of 2 contract checks proved\n",
+    ])
     j := ail_run(["prove", "--json", case_path("prove_unproved_trap")]) else return
     want("ail prove --json", j.out, [
         "\"ail_api\":1,\"prove\":1,\"proved\":1,\"total\":2,",

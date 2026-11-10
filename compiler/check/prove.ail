@@ -362,7 +362,12 @@ fn pv_env_int(cx PvCtx, n str) PvVal?
             if cx.direct
                 return f.ints.contains(n)
             pv_env_int(cx, n) != none
-        Method(recv, name, _, args) => name == "len" and args.len() == 0 and pv_coll_key(f, recv, cx) != none
+        Method(
+            recv,
+            name,
+            _,
+            args,
+        ) => name == "len" and args.len() == 0 and pv_coll_key(f, recv, cx) != none
         Unary(op, x, _) =>
             match op
                 Neg => pv_is_int(f, x, cx)
@@ -492,7 +497,8 @@ fn pv_compare(f PvFacts, op ast.BinOp, l ast.Expr, r ast.Expr, cx PvCtx) PvDec
         Ne => ast.BinOp.Eq
         _ => op
 
-@allow("expr.match.3") fn pv_assume_cmp(f PvFacts, op ast.BinOp, l ast.Expr, r ast.Expr, cx PvCtx) PvFacts
+@allow("expr.match.3")
+fn pv_assume_cmp(f PvFacts, op ast.BinOp, l ast.Expr, r ast.Expr, cx PvCtx) PvFacts
     if not (pv_is_int(f, l, cx) or pv_is_int(f, r, cx))
         return f
     a := pv_value(f, l, cx)
@@ -798,7 +804,8 @@ fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool)
 
 ## `name := value`: an immutable `int` gets its value's facts, and those of the `ensures`
 ## of a function it calls, which held when it returned.
-@allow("expr.match.3") fn PvProver.bind_let(mut self, f PvFacts, name str, mutable bool, value ast.Expr) PvFacts
+@allow("expr.match.3")
+fn PvProver.bind_let(mut self, f PvFacts, name str, mutable bool, value ast.Expr) PvFacts
     mut g := pv_forget(f, name)
     if mutable
         return g
@@ -862,7 +869,8 @@ fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool)
 
 ## Walk an `if`: each branch under its condition and the negation of those before it.
 ## Returns the facts when no branch is taken.
-@allow("expr.match.3") fn PvProver.walk_if(
+@allow("expr.match.3")
+fn PvProver.walk_if(
     mut self,
     branches List[ast.Branch],
     els List[ast.Stmt]?,
