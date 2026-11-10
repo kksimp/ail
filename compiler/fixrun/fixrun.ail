@@ -145,6 +145,8 @@ pub struct Run
     applied int
     rounds int
     out str
+    ## The rule of every fix applied, in order (check.fix.1).
+    pub rules List[str]
 
 ## Read the command line (after the command word) and the file.
 pub fn begin(args List[str]) Run
@@ -159,6 +161,7 @@ pub fn begin(args List[str]) Run
         applied: 0,
         rounds: 0,
         out: "",
+        rules: [],
     )
     for a in args
         if a.starts_with("--") and a != "--dry-run" and a != "--json"
@@ -193,6 +196,7 @@ pub fn step(mut r Run, d Diagnosis) bool
     r.rounds += 1
     for c in chosen
         r.applied += 1
+        r.rules.push(c.rule)
         if r.json
             r.out = "{r.out}\{\"api\":1,\"applied\":\{\"round\":{r.rounds},\"rule\":{quote(c.rule)},\"line\":{c.pos.line},\"col\":{c.pos.col},\"title\":{quote(c.title)}}}\n"
         else
