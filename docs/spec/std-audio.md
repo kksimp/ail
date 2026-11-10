@@ -48,14 +48,14 @@ host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
 host. `DeviceError` has `kind` (`no_host`, `start`, `version`, `host_exited`,
 `device`, `protocol`) and `message`. The host speaks one text line per message:
 `play RATE CH BASE64`, `rec MS RATE CH`, then `done`, `data RATE CH BASE64` or
-`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio) and Linux (ALSA, `tools/audio-host/linux/host.c`; `AIL_ALSA_DEVICE` picks the device). Where no host is built `open` fails with kind `no_host`
+`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio), Linux (ALSA, `tools/audio-host/linux/host.c`; `AIL_ALSA_DEVICE` picks the device) and Windows (WASAPI in shared mode, with the engine's sample-rate and channel conversion, so any clip format plays). Where no host is built `open` fails with kind `no_host`
 and a message naming this rule; it never crashes.
 
 **std.audio.10** — `record(mut d, ms, rate, channels) Clip ! DeviceError` records
 from the default input. The clip has the rate and channels the device gave,
 which may differ from those asked for; `resample` and `to_mono` adapt it.
 
-**Planned (no rule ID yet):** a WASAPI host; streaming output
+**Planned (no rule ID yet):** a PipeWire host; streaming output
 (`open_output` with `write`) with a ring buffer in the host and under 20 ms
 latency; mixing several plays in a task off the audio thread.
 
