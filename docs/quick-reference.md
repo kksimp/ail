@@ -26,7 +26,7 @@
 ./ail leak FILE                  # run with the leak report: growth by kind and the roots that hold it (san.leak.1-2); AIL_LEAK works on any native exe
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
 ./ail diff OLD NEW                  # what changed by meaning
-./ail edit FILE.ail [--test] < EDITS
+./ail edit FILE.ail [--test] < EDITS    # also change_sig, extract, move (edit.op.8-10)
 ./ail fmt [--check] FILE.ail
 ```
 

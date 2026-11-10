@@ -1,0 +1,10 @@
+use geo
+use num
+
+@test
+fn quads()
+    assert_eq(geo.quad(2), 8)
+
+fn main()
+    print(geo.quad(num.one()))
+    print(geo.double(4))

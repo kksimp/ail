@@ -1395,8 +1395,8 @@ fn main()
 **edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
 object) from standard input and applies them in order to the file or
 package directory `PATH`. Each edit has an `"op"`: `replace_body`,
-`replace`, `insert`, `delete`, `rename` or `import`, with the keys of
-`edit.op.1–6`. Input that isn't such JSON is an error (exit 2)
+`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`
+or `move`, with the keys of `edit.op.1–6` and `edit.op.8–10`. Input that isn't such JSON is an error (exit 2)
 ([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
 **edit.in.3** — Input that doesn't start with `[` or `{` is the compact
 form: hunks (`edit.op.7`), each under a line holding an id, and
@@ -1447,6 +1447,48 @@ the found line's depth. A hunk of one `-` line and one `+` line whose `-`
 text is no whole line replaces that text where it occurs exactly once in
 the declaration. A hunk that matches nowhere, or in more than one place, is
 an error.
+**edit.op.8** — `{"op":"change_sig","id":ID,"params":[...],"args":{NAME:EXPR}}`
+changes a function's or method's parameters and every call to it that
+`ail api --symbols` reports. `params` is the new list in order, `self` left
+out (it stays first): an old parameter's name keeps it, `NAME Type` with an
+old name changes its type, and `NAME Type` with a new name adds one, whose
+argument at every call is `args[NAME]`. An old parameter not listed is
+removed, and so is its argument at every call. Each call's arguments are
+written positionally in the new order, without labels (`expr.call.3`). The
+program as edited so far must check, as for `edit.op.5`; a reference that is
+not a call (a function value), or a call with a comment inside its
+parentheses, fails the edit
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.9** — `{"op":"extract","id":ID,"from":LINE,"to":LINE,"name":NAME}`
+moves body lines into a new function `NAME` after the declaration and puts a
+call in their place. `from` is the trimmed text of exactly one line of the
+body; `to` (default: `from`) is the first line at or after it with that
+text. The lines must be whole statements of one block, must not `return`,
+and must not `break` or `continue` a loop that starts before them. The
+parameters are the locals the lines use that are in scope before them, with
+the checker's types (`api.loc.1`), in order of first use; a `mut` local the
+lines may change is a `mut` parameter, passed as `mut x`. A name the lines
+declare at their own depth and that is used after them is returned (several
+as a tuple) and bound by the call (`x := NAME(...)`). Lines that end the
+body of a function with a result become its result. When the enclosing
+function can fail and the lines use `?`, the new one can fail (`!T`) and the
+call has `?`. In a method with `self`, the new function is a method with the
+same receiver. The program as edited so far must check
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.10** — `{"op":"move","id":ID,"to":MODULE}`, for a package, moves a
+function, constant or type (a type with its `fn Type.name` methods,
+`mod.unit.4`) to the end of a file of module `MODULE` (`"file"` picks one;
+the default is its first file). Every reference is requalified: inside
+`MODULE` unqualified, elsewhere as `m.name` under the file's import of
+`MODULE`, which is added when missing (`mod.use.1–2`). In the moved text,
+names of the old module get its qualifier and the new file gets the `use`
+lines the text needs. The moved declarations are made `pub` when a reference
+is outside `MODULE`. A `use` of the old module that no longer qualifies
+anything is removed. A type with an `impl`, a moved body that names a
+declaration of its old module that isn't `pub` or of the root module, and a
+`MODULE` with no file fail the edit; an import cycle it makes is reported by
+the check (`mod.use.5`)
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
 **edit.out.1** — Every changed file is rewritten in canonical layout
 (`ail fmt`) when it parses.
 **edit.out.2** — The program is then checked and its diagnostics are
@@ -1483,6 +1525,18 @@ has an `impact` member.
 ```
 
 ```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=sig.json expect=passed, rules=edit.op.8,edit.out.4
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=extract.json expect=passed, rules=edit.op.9
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=value.json expect=passed, rules=edit.op.9
+```
+
+```ail pkg=refactor_move tool=edit,--test,DIR stdin=move.json expect=passed, rules=edit.op.10,mod.use.1
 ```
 
 ```ail pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
