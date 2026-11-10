@@ -7,7 +7,7 @@
 
 ## One drawing step of a `Canvas`. Coordinates are in points, colors `0xRRGGBB`.
 pub enum Op
-    ## Text whose top-left corner is at `x`, `y`; `font` is `mono` or `sans`.
+    ## Text whose top-left corner is at `x`, `y`; `font` is `mono`, `sans`, `serif` or `web:` and the `id` of a `Font`.
     Str(
         x float,
         y float,
@@ -31,6 +31,21 @@ pub enum Op
     Bitmap(x float, y float, w float, h float, id str, pw int, ph int, data str)
     ## A rectangle filled with opacity `alpha`, 0 to 1 (std.app.19).
     Shade(x float, y float, w float, h float, color int, alpha float)
+    ## A rounded rectangle, anti-aliased (std.app.32). `r` is clamped to half
+    ## the shorter side, so a circle is `r = w / 2`. `stroke` 0 fills; above 0
+    ## it outlines with that width, centred on the edge. `alpha` is 0 to 1.
+    Round(x float, y float, w float, h float, r float, color int, alpha float, stroke float)
+    ## A filled polygon through `points` (`x0, y0, x1, y1, ...`), non-zero
+    ## winding, anti-aliased; fewer than 3 points draw nothing (std.app.32).
+    Poly(points List[float], color int, alpha float)
+    ## An open polyline through `points` with round caps and joins,
+    ## anti-aliased; fewer than 2 points draw nothing (std.app.32).
+    Line(points List[float], color int, width float)
+    ## A web font: `data` is the bytes of a TrueType or OpenType file in
+    ## standard base64. The host keeps the font under `id`; a `Str` whose
+    ## `font` is `web:` followed by `id` is drawn in it (an empty `data` keeps
+    ## the font already sent). Draws nothing itself.
+    Font(id str, data str)
     ## Limits later steps to a rectangle, until the matching `Unclip`.
     Clip(x float, y float, w float, h float)
     Unclip
@@ -131,6 +146,30 @@ impl ToJson for Op
                     member("color", Json.Num(color.to_float())),
                     member("alpha", num(alpha)),
                 ])
+            Round(x, y, w, h, r, color, alpha, stroke) =>
+                tagged("Round", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("w", num(w)),
+                    member("h", num(h)),
+                    member("r", num(r)),
+                    member("color", Json.Num(color.to_float())),
+                    member("alpha", num(alpha)),
+                    member("stroke", num(stroke)),
+                ])
+            Poly(points, color, alpha) =>
+                tagged("Poly", [
+                    member("points", Json.Arr([num(v) for v in points])),
+                    member("color", Json.Num(color.to_float())),
+                    member("alpha", num(alpha)),
+                ])
+            Line(points, color, width) =>
+                tagged("Line", [
+                    member("points", Json.Arr([num(v) for v in points])),
+                    member("color", Json.Num(color.to_float())),
+                    member("width", num(width)),
+                ])
+            Font(id, data) => tagged("Font", [member("id", txt(id)), member("data", txt(data))])
             Clip(x, y, w, h) =>
                 tagged("Clip", [
                     member("x", num(x)),
@@ -206,9 +245,19 @@ pub struct Event
     pub screen_w float
     pub screen_h float
     pub scale float
+    ## For `measured`: the font family the host used for each run, joined
+    ## by commas; empty from a host that does not say (std.app.28).
+    pub fonts str
+    ## For `start` and `resize` in edge mode: the room the window controls
+    ## take at the top-right, `0` when none are there (std.app.33).
+    pub inset_right float
+    ## For `start` and `resize` (std.app.34): the natural line height of `sans` at 13 points, `0` when the host does not say.
+    pub sans_line float
 
 ## A run of text whose advance width the host measures (std.app.13); `font`
-## is `mono` or `sans`.
+## is `mono`, `sans`, `serif`, `web:` and a `Font` id, or a CSS
+## `font-family` list, which the host measures in its first installed
+## family (std.app.28).
 pub struct Measure
     pub text str
     pub font str
@@ -333,7 +382,37 @@ pub fn event(kind str) Event
         screen_w: 0.0,
         screen_h: 0.0,
         scale: 0.0,
+        fonts: "",
+        inset_right: 0.0,
+        sans_line: 0.0,
     )
+
+## The families of a CSS `font-family` list, in order, unquoted and trimmed
+## (std.app.28); a plain host face (`mono`, `sans`, `serif`, `web:` and an
+## id) is a list of one.
+pub fn family_list(font str) List[str]
+    mut out := List[str]()
+    for part in font.split(",")
+        mut f := part.trim()
+        if f.len() >= 2 and (f.starts_with("\"") or f.starts_with("'"))
+            f = f.slice(1, f.len() - 1).trim()
+        if f != ""
+            out.push(f)
+    out
+
+## The host face a `font-family` list falls back to when none of its
+## families is installed (std.app.28): `serif` for `serif`, `mono` for
+## `monospace` and `ui-monospace`, else `sans`.
+pub fn generic_of(font str) str
+    for f in family_list(font)
+        low := f.to_lower()
+        if low == "serif"
+            return "serif"
+        if low == "monospace" or low == "ui-monospace" or low == "mono"
+            return "mono"
+        if low == "sans-serif" or low == "system-ui" or low == "ui-sans-serif" or low == "sans"
+            return "sans"
+    "sans"
 
 ## A button press, for tests.
 pub fn press(id str) Event
@@ -398,6 +477,10 @@ pub trait App
     ## It is `view`, unless the app draws somewhere the tree doesn't show.
     fn shown(self) Node
         self.view()
+    ## The font family the host used for each of `runs`, when it says
+    ## (std.app.28); called after `measured`.
+    fn fonts_used(mut self, runs List[Measure], used List[str])
+        return
     ## Extra protocol lines for the host, sent after each `update` and
     ## cleared by this call (std.app.21).
     fn lines(mut self) List[str]
@@ -464,6 +547,19 @@ fn op_text(op Op) str
         Pic(x, y, w, h, src) => "pic {x},{y} {w}x{h} {src}"
         Bitmap(x, y, w, h, id, pw, ph, _) => "bitmap {x},{y} {w}x{h} {id} {pw}x{ph}"
         Shade(x, y, w, h, color, alpha) => "shade {x},{y} {w}x{h} {color.to_hex()} {alpha}"
+        Round(
+            x,
+            y,
+            w,
+            h,
+            r,
+            color,
+            alpha,
+            stroke,
+        ) => "round {x},{y} {w}x{h} r{r} {color.to_hex()} {alpha} {stroke}"
+        Poly(points, color, alpha) => "poly {points.len() / 2} {color.to_hex()} {alpha}"
+        Line(points, color, width) => "line {points.len() / 2} {color.to_hex()} {width}"
+        Font(id, data) => "font {id} {data.len()}"
         Clip(x, y, w, h) => "clip {x},{y} {w}x{h}"
         Unclip => "unclip"
 
@@ -495,6 +591,9 @@ pub fn event_from_json(j Json) Event
         screen_w: j.num("screen_w") else 0.0,
         screen_h: j.num("screen_h") else 0.0,
         scale: j.num("scale") else 0.0,
+        fonts: j.text("fonts", ""),
+        inset_right: j.num("inset_right") else 0.0,
+        sans_line: j.num("sans_line") else 0.0,
     )
 
 ## The message that shows `a` (std.app.7): its title, focus and view tree.
@@ -594,17 +693,23 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
                 break
             c.stdin.send("{measure_line(want)}\n")
             mut widths := List[float]()
+            mut used := List[str]()
             while true
                 got := inbox.ch.recv() else return gone(move c)
                 if got.kind == "exited"
                     return gone(move c)
                 if got.kind == "measured"
                     widths = [w.to_float() else 0.0 for w in got.text.split(",")]
+                    if got.fonts != ""
+                        used = got.fonts.split(",")
                     break
                 queued.push(got)
             if widths.len() != want.len()
                 break
             a.measured(want, widths)
+            # std.app.28: the families the host chose, when it says.
+            if used.len() == want.len()
+                a.fonts_used(want, used)
             rounds += 1
         # std.app.21: protocol lines the app asks to send as they are.
         for extra in a.lines()

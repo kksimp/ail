@@ -20,7 +20,7 @@ infer 10 0
 json 22 0
 lex 24 7
 lsp 15 0
-mcp 7 0
+mcp 9 0
 mod 29 2
 native 45 0
 own 39 2
@@ -33,13 +33,13 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 351 1
+std 355 1
 task 15 0
 test 35 0
-tool 5 0
+tool 7 0
 trace 22 0
 trait 45 4
 type 123 10
 unsafe 21 0
 verify 9 0
-all 1291 54
+all 1299 54

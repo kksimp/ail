@@ -1084,6 +1084,24 @@ fn main()
     print(1)
 ```
 
+### Warm calls
+
+`ail mcp` keeps no compiler in memory; it saves the launcher's start and repeated answers
+([ADR 1056](../decisions/1056-warm-ail-mcp.md), amending ADR 0918).
+
+**mcp.warm.1** — A call whose command the launcher would only hand to the native CLI (`check` without `--budget`, `--from` or `--errors`, as `check-program`; `api` without `--budget`, `--from` or `--diff`; `ask`, `context`, `explain`, `edit`, `fix` and `review`) runs that CLI directly, the one named by `AIL_MCP_NATIVE`, which the `ail mcp` launcher sets. Every other call runs `ail` as `mcp.call.1` says. The answer is the same either way.
+
+**mcp.warm.2** — `ail_check`, `ail_ask`, `ail_context`, `ail_api`, `ail_explain` and `ail_fix` with `dry_run` are read-only. A read-only call with the same command line as an earlier one in the session, while the toolchain and the program's inputs are unchanged, gets that call's answer without running anything. The inputs are the contents of the `.ail` and `.h` files under the program's root (its directory, or the package), its `ail.pkg` and its `ail.lock`; for `ail_explain`, the spec. A package whose `ail.pkg` names a path with `..`, or a root with more than 4000 such files, is not memoized.
+
+**mcp.warm.3** — When a file under `compiler/` or `std/` is newer than the native CLI, the call goes through `ail`, which rebuilds it, and the memo is emptied.
+
+**mcp.warm.4** — Each tool result carries `_meta` with `ail/warm`: `memo`, `direct` or `launcher`. With `AIL_MCP_COLD` set, every call goes through `ail` and nothing is memoized.
+
+```ail tool=mcp rules=mcp.warm.1,mcp.warm.2,mcp.warm.3,mcp.warm.4
+fn main()
+    print(1)
+```
+
 ## Language server
 
 `ail lsp` serves the semantic API to any editor as a Language Server
@@ -1215,7 +1233,7 @@ changed. *(ADR 0903)*
 **tool.new.2** — The generated `main.ail` passes `ail check`, `ail fmt --check`
 and its own `@test`. *(ADR 0903)*
 
-```ail rules=tool.new.1,tool.new.2
+```ail rules=tool.new.1,tool.new.2,tool.new.3,tool.new.4
 ## demo: say what this program does.
 
 ## The greeting for `who`.
@@ -1228,6 +1246,17 @@ fn main()
 @test fn greets()
     assert_eq(greet("ail"), "Hello, ail!")
 ```
+
+**tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
+`NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 350 tokens: where
+the language card is (`ail api --card .`), the loop (`ail task start`, `ail
+context FN`, edit, `ail task verify`, `ail task finish`), `ail explain RULE` for
+any diagnostic, and `ail ask` instead of grep. `.mcp.json` registers `ail mcp`
+on stdio under `mcpServers.ail`. The `agent_tools` suite checks both files.
+*(ADR 1046)*
+
+**tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
+the flag may come before or after `NAME`. *(ADR 1046)*
 
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the

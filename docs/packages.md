@@ -14,7 +14,7 @@ manifest. Nothing is hosted, and there is no version solver.
 
 `ail run DIR` makes `DIR` a package. Its `.ail` files are its root module and
 its subdirectories are modules (`use a.b`). A single file needs no manifest;
-`ail new NAME` makes a directory with an `ail.pkg` and a first program.
+`ail new NAME` makes a directory with an `ail.pkg`, a first program, and an agent kit (`AGENTS.md`, `.mcp.json`; `--no-agent` skips the kit).
 
 ## The manifest: `ail.pkg`
 

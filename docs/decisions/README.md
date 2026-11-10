@@ -796,6 +796,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
 | [0985](0985-gfx-gamepad-input.md) | `std.gfx` gamepad input: `Input.pads`, the `pad` event, GameController on the Mac *(delegated)* | Accepted | 2026-11-08 |
 | [0987](0987-auto-parallel-inner-loops.md) | Native: a proven loop inside a loop run in order may go to the pool (amends 0911) *(delegated)* | Accepted | 2026-11-08 |
+| [0984](0984-std-app-font-op.md) | `std.app` `Font`: web fonts in the display list, kept by the host under an id | Accepted | 2026-11-08 |
 | [0988](0988-std-media-webm.md) | `std.media.webm`: WebM and Matroska demuxing in AIL, fed in pieces for Media Source Extensions *(delegated)* | Accepted | 2026-11-08 |
 | [0989](0989-std-video-vp9.md) | `std.video.vp9`: a VP9 profile 0 decoder in AIL, I420 frames and RGBA *(delegated)* | Accepted | 2026-11-08 |
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
@@ -806,6 +807,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1009](1009-readiness-io.md) | Readiness I/O: `epoll` and `kqueue` sets for the HTTP server's parked connections *(delegated)* | Accepted | 2026-11-09 |
 | [1010](1010-c-header-constants-enums-fnptr.md) | C header import breadth: `#define` constants, enums and function-pointer types *(delegated)* | Accepted | 2026-11-09 |
 | [1011](1011-os-signals.md) | `os.signals`: SIGINT, SIGTERM, SIGHUP, SIGQUIT and SIGWINCH as a `Channel[str]`; the Windows console Ctrl-C handler *(delegated)* | Accepted | 2026-11-09 |
+| [1005](1005-std-app-font-family-list.md) | `std.app` font-family lists: the host measures and draws in the first installed family and says which *(delegated)* | Accepted | 2026-11-08 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
 | [1016](1016-fs-map.md) | `fs.map`: a read-only memory-mapped `bytes` view of a file *(delegated)* | Accepted | 2026-11-09 |
 | [1017](1017-std-app-screen-size-and-scale.md) | `std.app` reports the display's size and scale on `start` and `resize` *(delegated)* | Accepted | 2026-11-09 |
@@ -814,11 +816,16 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
 | [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
+| [1032](1032-std-app-vector-ops.md) | `std.app` vector ops: `Round`, `Poly`, `Line` *(delegated)* | Accepted | 2026-11-09 |
+| [1033](1033-std-app-inset-right.md) | `std.app` edge mode: `inset_right` for window controls at the top-right (Windows, Linux); amends ADR 0981 *(delegated)* | Accepted | 2026-11-09 |
+| [1034](1034-std-app-text-placement.md) | `std.app` text placement and `sans_line`; Windows font table *(delegated)* | Accepted | 2026-11-09 |
 | [1035](1035-v0-1-0-freeze-and-release-candidate.md) | v0.1.0: freeze after the lanes in flight, one release candidate gated on three hosts | Accepted | 2026-11-09 |
 | [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
 | [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |
+| [1046](1046-agent-kit-in-ail-new.md) | `ail new` writes an agent kit: `AGENTS.md` and `.mcp.json`, `--no-agent` to skip *(delegated)* | Accepted | 2026-11-10 |
 | [1047](1047-ail-check-fix.md) | `ail check --fix`: repair, then check, in one command *(delegated)* | Accepted | 2026-11-10 |
 | [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
 | [1051](1051-core-card-and-std-lookup.md) | Core card, `ail card` and `ail ask std` *(delegated)* | Accepted | 2026-11-10 |
 | [1052](1052-change-certificate.md) | Change certificate: `ail verify --diff --attest` and `--check` *(delegated)* | Accepted | 2026-11-10 |
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
+| [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
