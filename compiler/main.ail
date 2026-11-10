@@ -157,6 +157,8 @@ fn main() !
             io.exit(attachcli.command(args[1..]))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "card" =>
+            io.exit(api.card_command(args[1..]))
         "context" =>
             io.exit(api.context_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "review" =>

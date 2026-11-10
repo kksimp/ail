@@ -5,6 +5,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
 | **Task (agent)** | One change from `ail task start` to `finish`: a base revision, a goal and the last verify result, kept in `.ail-task` ([ADR 0917](decisions/0917-ail-task-protocol.md)). |
 | **`ail mcp`** | The compiler's own tools served over MCP on stdio ([ADR 0918](decisions/0918-ail-mcp-compiler-tools.md)); not `ail serve --mcp`, which serves a program's `@tool` functions. |
 | **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
