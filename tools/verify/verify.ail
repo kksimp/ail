@@ -14,7 +14,8 @@ fn ail_path() str
     env.get("AIL") else "./ail"
 
 fn usage() int
-    io.eprint("usage: ail verify --diff [--rev REV] [--json] [--mutate [--max N]] [--attest OUT] FILE | ail verify --check CERT")
+    io.eprint("usage: ail verify --diff [--rev REV] [--json] [--mutate [--max N]] [--attest OUT] FILE")
+    io.eprint("       ail verify --check CERT")
     io.exit(2)
     2
 
@@ -83,8 +84,8 @@ fn names_fn(id str, name str) bool
     id == name or id.ends_with(".{name}") or id.ends_with(" {name}") or id.contains(".{name}(")
 
 ## The mutation score of `file` and the surviving mutants in the changed declarations (verify.cert.1, ADR 1022).
-fn mutation(file str, changed List[str], max str) Json
-    ran := proc.run(ail_path(), ["test", "--mutate", "--json", "--max", max, file]) else
+fn mutation(file str, changed List[str], limit str) Json
+    ran := proc.run(ail_path(), ["test", "--mutate", "--json", "--max", limit, file]) else
         return obj([("error", Json.Str("could not run ail test --mutate"))])
     mut survivors := List[str]()
     mut summary := obj([("error", Json.Str("no mutation summary: {ran.err.trim()}"))])
@@ -103,12 +104,30 @@ fn mutation(file str, changed List[str], max str) Json
                 if names_fn(c, name)
                     hit = true
             if hit
-                survivors.push("{m.text("file", file)}:{num_of(m, "line").to_int()}: {m.text("mutation", "")} (in {name})")
-    obj([("max", Json.Str(max)), ("score", summary), ("survivors_in_changed", text_list(survivors))])
+                at := "{m.text("file", file)}:{num_of(m, "line").to_int()}"
+                survivors.push("{at}: {m.text("mutation", "")} (in {name})")
+    obj([("max", Json.Str(limit)), ("score", summary), ("survivors_in_changed", text_list(survivors))])
+
+## The compact text of member `key` of `doc`, or `absent`.
+fn member_text(doc Json, key str) str
+    v := doc.get(key) else return "absent"
+    v.to_text()
 
 ## The members of a certificate that a re-run must reproduce, in order. `rev` is left out: `base` names the revision.
 fn cert_keys() List[str]
-    ["cert", "base", "file", "compiler", "files", "proved", "tested", "unverified", "failures", "effects", "mutation"]
+    [
+        "cert",
+        "base",
+        "file",
+        "compiler",
+        "files",
+        "proved",
+        "tested",
+        "unverified",
+        "failures",
+        "effects",
+        "mutation",
+    ]
 
 ## `ail verify --check CERT` (verify.cert.3-4): re-run the certificate against its base and name every member that differs.
 fn check_cert(path str) int
@@ -126,28 +145,31 @@ fn check_cert(path str) int
     if file.is_empty() or base.is_empty()
         io.eprint("error[verify.cert.4]: {path} lacks `file` or `base`")
         return 2
-    made := proc.run("mktemp", ["-d"])? "running mktemp"
-    tmp := made.out.trim()
-    out := "{tmp}/cert.json"
+    # The re-run's certificate goes beside CERT, so no scratch directory is needed.
+    out := "{path}.recheck"
     mut args := ["verify", "--diff", "--rev", base, "--attest", out]
     if m := cert.get("mutation")
         args.push("--mutate")
         args.push("--max")
         args.push(m.text("max", "50"))
     args.push(file)
-    _ := proc.run(ail_path(), args)? "running ail verify"
+    ran := proc.run(ail_path(), args) else
+        io.eprint("error[verify.cert.4]: can't run ail verify")
+        return 2
+    if ran.status == 2
+        io.eprint("error[verify.cert.4]: the re-run failed: {ran.err.trim()}")
+        return 2
     fresh_text := fs.read_text(out) else
-        _ := proc.run("rm", ["-rf", tmp]) else return 2
         io.eprint("error[verify.cert.4]: the re-run wrote no certificate")
         return 2
-    _ := proc.run("rm", ["-rf", tmp]) else return 2
+    _ := fs.remove(out) else return 2
     fresh := parse_json(fresh_text.trim()) else
         io.eprint("error[verify.cert.4]: the re-run wrote no certificate")
         return 2
     mut differs := List[str]()
     for k in cert_keys()
-        old_v := if v := cert.get(k) then v.to_text() else "absent"
-        new_v := if v := fresh.get(k) then v.to_text() else "absent"
+        old_v := member_text(cert, k)
+        new_v := member_text(fresh, k)
         if old_v != new_v
             differs.push(k)
             print("differs: {k}")
@@ -168,7 +190,7 @@ fn main() !
     mut attest := ""
     mut check := ""
     mut mutate := false
-    mut max := "50"
+    mut limit := "50"
     for a in env.args()
         if want == "--rev"
             rev = a
@@ -180,7 +202,7 @@ fn main() !
             check = a
             want = ""
         elif want == "--max"
-            max = a
+            limit = a
             want = ""
         elif a == "--rev" or a == "--attest" or a == "--check" or a == "--max"
             want = a
@@ -335,7 +357,7 @@ fn main() !
             ("effects", text_list(effects)),
         ]
         if mutate and check_ok
-            members.push(("mutation", mutation(file, changed, max)))
+            members.push(("mutation", mutation(file, changed, limit)))
         fs.write_text(attest, "{obj(members).to_text()}\n") else
             io.eprint("error[verify.cert.1]: can't write {attest}")
             io.exit(2)

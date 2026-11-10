@@ -2487,7 +2487,18 @@ fn Gate.cert(mut self, tmp str)
     doc := fs.read_text("{base}/cert.json") else
         red("cert", "no certificate written")
         return
-    want("cert members", doc, ["\"cert\":1", "\"base\":\"", "\"hash\":\"", "\"compiler\":\"ail ", "\"mutation\":", "\"survivors_in_changed\":"])
+    want(
+        "cert members",
+        doc,
+        [
+            "\"cert\":1",
+            "\"base\":\"",
+            "\"hash\":\"",
+            "\"compiler\":\"ail ",
+            "\"mutation\":",
+            "\"survivors_in_changed\":",
+        ],
+    )
     tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
     fs.write_text("{base}/prog.ail", src_of([
         "fn sign(n int) int",
