@@ -334,9 +334,7 @@ fn verify(json bool, fix bool) !int
     printed := if json then "\{{fields.join(",")}}" else text
     nfixed := fixed_count(fixed)
     # task.log.1: the wall time is the one field that differs between two runs of the same change.
-    append_log(
-        "\{\"stage\":{quote(stage)},\"result\":\"{result}\",\"tokens\":{estimate_tokens(printed)},\"fixed\":{nfixed},\"rules\":{counts_json(rules_in(raw))},\"ms\":{time.now_ms() - t0}}",
-    )?
+    append_log("\{\"stage\":{quote(stage)},\"result\":\"{result}\",\"tokens\":{estimate_tokens(printed)},\"fixed\":{nfixed},\"rules\":{counts_json(rules_in(raw))},\"ms\":{time.now_ms() - t0}}")?
     print(printed)
     # task.verify.2
     if ok then 0 else 1

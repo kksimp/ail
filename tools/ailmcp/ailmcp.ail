@@ -115,7 +115,11 @@ fn command(name str, a Json) Cmd
         since := a.text("since", "")
         rev := a.text("rev", "")
         match name
-            "ail_check" => out = if a.text("fix", "") == "true" then ["check", "--fix", program] else ["check", program]
+            "ail_check" => out = if a.text("fix", "") == "true" then [
+                "check",
+                "--fix",
+                program,
+            ] else ["check", program]
             "ail_test" =>
                 bundle := a.text("bundle", "")
                 if program == "" and bundle == ""
