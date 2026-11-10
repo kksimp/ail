@@ -1,0 +1,654 @@
+## std.media.webm (spec std.webm.1-8, ADR 0988): WebM and Matroska demuxing.
+## A `Demuxer` takes the file's bytes in pieces, as a network or Media Source
+## Extensions feed delivers them, and gives back the coded frames of every
+## track with their times. Nothing is decoded here: a VP9 frame or an Opus
+## packet comes out as the bytes the codec reads. `write` builds a WebM file
+## from tracks and frames, for tests and for programs that make media.
+
+## Why the bytes could not be read (std.webm.1).
+pub error struct WebmError "webm: {why}"
+    pub why str
+
+## One track of the file (std.webm.2). `kind` is "video", "audio" or
+## "other"; `codec` is the Matroska codec ID ("V_VP9", "A_OPUS", "V_AV1").
+pub struct Track
+    pub number int
+    pub kind str
+    pub codec str
+    ## CodecPrivate: the Opus header for Opus, empty for VP9.
+    pub private bytes
+    pub width int
+    pub height int
+    pub rate float
+    pub channels int
+    ## DefaultDuration, CodecDelay and SeekPreRoll in nanoseconds (0 if absent).
+    pub default_ns int
+    pub delay_ns int
+    pub preroll_ns int
+    ## Encrypted frames (ContentEncryption): the demuxer passes them on as read.
+    pub encrypted bool
+
+## One coded frame (std.webm.3): `ns` is the presentation time in nanoseconds;
+## `key` marks a frame that decodes without earlier ones.
+pub struct Frame
+    pub track int
+    pub ns int
+    pub key bool
+    pub data bytes
+
+## A seek point from the Cues (std.webm.5): a key frame of `track` at `ns`,
+## in the cluster that starts `pos` bytes after the start of the segment's data.
+pub struct Cue
+    pub ns int
+    pub track int
+    pub pos int
+
+## A whole file, read at once (std.webm.6).
+pub struct Media
+    pub tracks List[Track]
+    pub duration_ns int
+    pub cues List[Cue]
+    pub frames List[Frame]
+
+## The demuxer's state (std.webm.4). `ready` turns true once the Tracks
+## element is read: for Media Source Extensions that ends the init segment.
+pub struct Demuxer
+    pub ready bool
+    pub scale int
+    pub duration_ns int
+    pub tracks List[Track]
+    pub cues List[Cue]
+    ## Bytes taken in so far, from the start of the stream.
+    pub consumed int
+    ## Offset of the segment's data in the stream, -1 before the Segment.
+    pub segment_at int
+    buf bytes
+    pos int
+    skip int
+    cluster_ns int
+    seen_header bool
+
+ID_EBML := 0x1A45DFA3
+ID_DOCTYPE := 0x4282
+ID_SEGMENT := 0x18538067
+ID_INFO := 0x1549A966
+ID_SCALE := 0x2AD7B1
+ID_DURATION := 0x4489
+ID_TRACKS := 0x1654AE6B
+ID_ENTRY := 0xAE
+ID_NUMBER := 0xD7
+ID_TYPE := 0x83
+ID_CODEC := 0x86
+ID_PRIVATE := 0x63A2
+ID_DEFAULT := 0x23E383
+ID_DELAY := 0x56AA
+ID_PREROLL := 0x56BB
+ID_VIDEO := 0xE0
+ID_WIDTH := 0xB0
+ID_HEIGHT := 0xBA
+ID_AUDIO := 0xE1
+ID_RATE := 0xB5
+ID_CHANNELS := 0x9F
+ID_ENCODINGS := 0x6D80
+ID_ENCODING := 0x6240
+ID_ENCRYPTION := 0x5035
+ID_CUES := 0x1C53BB6B
+ID_CUEPOINT := 0xBB
+ID_CUETIME := 0xB3
+ID_CUEPOS := 0xB7
+ID_CUETRACK := 0xF7
+ID_CUECLUSTER := 0xF1
+ID_CLUSTER := 0x1F43B675
+ID_TIMECODE := 0xE7
+ID_SIMPLE := 0xA3
+ID_GROUP := 0xA0
+ID_BLOCK := 0xA1
+ID_REFERENCE := 0xFB
+
+## A size field whose bits are all ones: the element runs to its parent's end.
+UNKNOWN := -1
+
+## An element header: `len` is 0 when the bytes end inside it, -1 when it is
+## malformed; `size` is UNKNOWN for an unknown-size element.
+struct Head
+    id int
+    size int
+    len int
+
+## A variable-length integer at `p` (RFC 8794 §4): `len` 0 if `b` ends first.
+struct Vint
+    value int
+    len int
+
+fn vint(b bytes, p int, keep_marker bool) Vint
+    if p >= b.len()
+        return Vint(value: 0, len: 0)
+    first := b[p].to_int()
+    if first == 0
+        return Vint(value: 0, len: -1)
+    mut n := 1
+    while first.bit_and(rsh(0x80, n - 1)) == 0
+        n += 1
+    if p + n > b.len()
+        return Vint(value: 0, len: 0)
+    mut v := if keep_marker then first else first.bit_and(rsh(0xFF, n))
+    mut all_ones := v == rsh(0xFF, n)
+    for i in 1..n
+        byte := b[p + i].to_int()
+        if byte != 0xFF
+            all_ones = false
+        v = v.shl(8).bit_or(byte)
+    if all_ones and not keep_marker
+        return Vint(value: UNKNOWN, len: n)
+    Vint(value: v, len: n)
+
+fn head(b bytes, p int) Head
+    id := vint(b, p, true)
+    if id.len <= 0
+        return Head(id: 0, size: 0, len: id.len)
+    if id.len > 4
+        return Head(id: 0, size: 0, len: -1)
+    sz := vint(b, p + id.len, false)
+    if sz.len <= 0
+        return Head(id: 0, size: 0, len: sz.len)
+    Head(id: id.value, size: sz.value, len: id.len + sz.len)
+
+## `v` shifted by `n` bits; a function, so a literal is never a method's receiver.
+fn lsh(v int, n int) int
+    v.shl(n)
+
+fn rsh(v int, n int) int
+    v.shr(n)
+
+fn pow2(e float) float
+    two := 2.0
+    two.pow(e)
+
+## A big-endian unsigned integer of `n` bytes.
+fn be_uint(b bytes, p int, n int) int
+    mut v := 0
+    for i in 0..n
+        v = v.shl(8).bit_or(b[p + i].to_int())
+    v
+
+## A big-endian signed integer of `n` bytes.
+fn be_int(b bytes, p int, n int) int
+    if n == 0
+        return 0
+    v := be_uint(b, p, n)
+    if n < 8 and v >= lsh(1, 8 * n - 1)
+        return v - lsh(1, 8 * n)
+    v
+
+## A big-endian IEEE 754 float of 4 or 8 bytes (std.webm.7).
+fn be_float(b bytes, p int, n int) float
+    if n == 4
+        v := be_uint(b, p, 4)
+        e := v.shr(23).bit_and(0xFF)
+        m := v.bit_and(0x7FFFFF).to_float()
+        mag := if e
+            == 0 then m * pow2(-149.0) else (1.0 + m / 8388608.0) * pow2((e - 127).to_float())
+        return if v.shr(31) == 1 then -mag else mag
+    if n == 8
+        hi := be_uint(b, p, 4)
+        lo := be_uint(b, p + 4, 4)
+        e := hi.shr(20).bit_and(0x7FF)
+        m := hi.bit_and(0xFFFFF).to_float() * 4294967296.0 + lo.to_float()
+        mag := if e
+            == 0 then m * pow2(-1074.0) else (1.0 + m / 4503599627370496.0) * pow2((e - 1023).to_float())
+        return if hi.shr(31) == 1 then -mag else mag
+    0.0
+
+## A child element: its id and where its data lies in the buffer.
+struct Child
+    id int
+    at int
+    size int
+
+## The children of the element whose data is `b[start..end]`.
+fn children(b bytes, start int, end int) List[Child] ! WebmError
+    mut out := List[Child]()
+    mut p := start
+    while p < end
+        h := head(b, p)
+        if h.len <= 0 or h.size == UNKNOWN or p + h.len + h.size > end
+            return WebmError(why: "bad element at byte {p}")
+        out.push(Child(id: h.id, at: p + h.len, size: h.size))
+        p += h.len + h.size
+    out
+
+fn text(b bytes, c Child) str
+    mut n := c.size
+    while n > 0 and b[c.at + n - 1].to_int() == 0
+        n -= 1
+    data := b[c.at..c.at + n]
+    data.text()
+
+## A track with every field empty.
+pub fn blank_track() Track
+    Track(
+        number: 0,
+        kind: "other",
+        codec: "",
+        private: b"",
+        width: 0,
+        height: 0,
+        rate: 0.0,
+        channels: 1,
+        default_ns: 0,
+        delay_ns: 0,
+        preroll_ns: 0,
+        encrypted: false,
+    )
+
+## A new demuxer, before any bytes (std.webm.4).
+pub fn new() Demuxer
+    Demuxer(
+        ready: false,
+        scale: 1000000,
+        duration_ns: 0,
+        tracks: [],
+        cues: [],
+        consumed: 0,
+        segment_at: -1,
+        buf: b"",
+        pos: 0,
+        skip: 0,
+        cluster_ns: 0,
+        seen_header: false,
+    )
+
+## The track with number `n`.
+pub fn Demuxer.track(self, n int) Track?
+    for t in self.tracks
+        if t.number == n
+            return t
+    none
+
+## Takes the next bytes of the stream and gives back the frames now complete,
+## in stream order (std.webm.4). Bytes that end inside an element wait for the
+## next call. Segment and Cluster are entered without needing their whole data,
+## so their sizes may be unknown, as in live streams.
+pub fn Demuxer.push(mut self, chunk bytes) List[Frame] ! WebmError
+    mut frames := List[Frame]()
+    mut c := chunk
+    if self.skip > 0
+        if self.skip >= c.len()
+            self.skip -= c.len()
+            self.consumed += c.len()
+            return frames
+        c = c[self.skip..]
+        self.consumed += self.skip
+        self.skip = 0
+    self.buf = self.buf[self.pos..] + c
+    self.pos = 0
+    while true
+        h := head(self.buf, self.pos)
+        if h.len == 0
+            break
+        if h.len < 0
+            return WebmError(why: "bad element header at byte {self.consumed}")
+        if not self.seen_header and h.id != ID_EBML
+            return WebmError(why: "not a WebM or Matroska file")
+        if h.id == ID_SEGMENT
+            self.step(h.len)
+            self.segment_at = self.consumed
+            continue
+        if h.id == ID_CLUSTER
+            self.step(h.len)
+            self.cluster_ns = 0
+            continue
+        if h.size == UNKNOWN
+            return WebmError(why: "unknown size for element {h.id.to_hex()}")
+        wanted := h.id == ID_EBML
+            or h.id == ID_INFO
+            or h.id == ID_TRACKS
+            or h.id == ID_CUES
+            or h.id == ID_TIMECODE
+            or h.id == ID_SIMPLE
+            or h.id == ID_GROUP
+        if not wanted
+            have := self.buf.len() - self.pos
+            if h.len + h.size > have
+                self.skip = h.len + h.size - have
+                self.consumed += have
+                self.buf = b""
+                self.pos = 0
+                break
+            self.step(h.len + h.size)
+            continue
+        if self.pos + h.len + h.size > self.buf.len()
+            break
+        at := self.pos + h.len
+        end := at + h.size
+        if h.id == ID_EBML
+            self.read_header(at, end)?
+        elif h.id == ID_INFO
+            self.read_info(at, end)?
+        elif h.id == ID_TRACKS
+            self.read_tracks(at, end)?
+            self.ready = true
+        elif h.id == ID_CUES
+            self.read_cues(at, end)?
+        elif h.id == ID_TIMECODE
+            self.cluster_ns = be_uint(self.buf, at, h.size) * self.scale
+        elif h.id == ID_SIMPLE
+            self.read_block(at, end, true, false, mut frames)?
+        else
+            mut block := Child(id: 0, at: 0, size: -1)
+            mut referenced := false
+            for k in children(self.buf, at, end)?
+                if k.id == ID_BLOCK
+                    block = k
+                elif k.id == ID_REFERENCE
+                    referenced = true
+            if block.size >= 0
+                self.read_block(block.at, block.at + block.size, false, not referenced, mut frames)?
+        self.step(h.len + h.size)
+    frames
+
+fn Demuxer.step(mut self, n int)
+    self.pos += n
+    self.consumed += n
+
+fn Demuxer.read_header(mut self, at int, end int) ! WebmError
+    for k in children(self.buf, at, end)?
+        if k.id == ID_DOCTYPE
+            doc := text(self.buf, k)
+            if doc != "webm" and doc != "matroska"
+                return WebmError(why: "unsupported document type {doc}")
+    self.seen_header = true
+
+fn Demuxer.read_info(mut self, at int, end int) ! WebmError
+    mut duration := 0.0
+    for k in children(self.buf, at, end)?
+        if k.id == ID_SCALE
+            self.scale = be_uint(self.buf, k.at, k.size)
+        elif k.id == ID_DURATION
+            duration = be_float(self.buf, k.at, k.size)
+    self.duration_ns = (duration * self.scale.to_float()).to_int()
+
+fn Demuxer.read_tracks(mut self, at int, end int) ! WebmError
+    for e in children(self.buf, at, end)?
+        if e.id != ID_ENTRY
+            continue
+        mut t := blank_track()
+        for k in children(self.buf, e.at, e.at + e.size)?
+            if k.id == ID_NUMBER
+                t.number = be_uint(self.buf, k.at, k.size)
+            elif k.id == ID_TYPE
+                kind := be_uint(self.buf, k.at, k.size)
+                t.kind = kind_name(kind)
+            elif k.id == ID_CODEC
+                t.codec = text(self.buf, k)
+            elif k.id == ID_PRIVATE
+                t.private = self.buf[k.at..k.at + k.size]
+            elif k.id == ID_DEFAULT
+                t.default_ns = be_uint(self.buf, k.at, k.size)
+            elif k.id == ID_DELAY
+                t.delay_ns = be_uint(self.buf, k.at, k.size)
+            elif k.id == ID_PREROLL
+                t.preroll_ns = be_uint(self.buf, k.at, k.size)
+            elif k.id == ID_VIDEO
+                for v in children(self.buf, k.at, k.at + k.size)?
+                    if v.id == ID_WIDTH
+                        t.width = be_uint(self.buf, v.at, v.size)
+                    elif v.id == ID_HEIGHT
+                        t.height = be_uint(self.buf, v.at, v.size)
+            elif k.id == ID_AUDIO
+                for a in children(self.buf, k.at, k.at + k.size)?
+                    if a.id == ID_RATE
+                        t.rate = be_float(self.buf, a.at, a.size)
+                    elif a.id == ID_CHANNELS
+                        t.channels = be_uint(self.buf, a.at, a.size)
+            elif k.id == ID_ENCODINGS
+                t.encrypted = has_encryption(self.buf, k.at, k.at + k.size)?
+        self.tracks.push(t)
+
+## Whether a ContentEncodings element holds a ContentEncryption.
+fn has_encryption(b bytes, at int, end int) bool ! WebmError
+    for k in children(b, at, end)?
+        if k.id == ID_ENCRYPTION
+            return true
+        if k.id == ID_ENCODING and has_encryption(b, k.at, k.at + k.size)?
+            return true
+    false
+
+fn Demuxer.read_cues(mut self, at int, end int) ! WebmError
+    for pt in children(self.buf, at, end)?
+        if pt.id != ID_CUEPOINT
+            continue
+        mut ns := 0
+        for k in children(self.buf, pt.at, pt.at + pt.size)?
+            if k.id == ID_CUETIME
+                ns = be_uint(self.buf, k.at, k.size) * self.scale
+            elif k.id == ID_CUEPOS
+                mut track := 0
+                mut cluster_pos := 0
+                for q in children(self.buf, k.at, k.at + k.size)?
+                    if q.id == ID_CUETRACK
+                        track = be_uint(self.buf, q.at, q.size)
+                    elif q.id == ID_CUECLUSTER
+                        cluster_pos = be_uint(self.buf, q.at, q.size)
+                self.cues.push(Cue(ns: ns, track: track, pos: cluster_pos))
+
+## A Block or SimpleBlock at `buf[at..end]`, split by its lacing (std.webm.3).
+fn Demuxer.read_block(
+    mut self,
+    at int,
+    end int,
+    simple bool,
+    group_key bool,
+    mut out List[Frame],
+) ! WebmError
+    tn := vint(self.buf, at, false)
+    if tn.len <= 0 or at + tn.len + 3 > end
+        return WebmError(why: "bad block at byte {self.consumed}")
+    mut p := at + tn.len
+    rel := be_int(self.buf, p, 2)
+    flags := self.buf[p + 2].to_int()
+    p += 3
+    key := if simple then flags.bit_and(0x80) != 0 else group_key
+    ns := self.cluster_ns + rel * self.scale
+    lacing := flags.shr(1).bit_and(3)
+    lace_ns := (self.track(tn.value) else blank_track()).default_ns
+    if lacing == 0
+        out.push(Frame(track: tn.value, ns: ns, key: key, data: self.buf[p..end]))
+        return
+    if p >= end
+        return WebmError(why: "bad lacing at byte {self.consumed}")
+    count := self.buf[p].to_int() + 1
+    p += 1
+    mut sizes := List[int]()
+    if lacing == 1
+        for _ in 0..count - 1
+            mut s := 0
+            while true
+                if p >= end
+                    return WebmError(why: "bad Xiph lacing at byte {self.consumed}")
+                byte := self.buf[p].to_int()
+                p += 1
+                s += byte
+                if byte < 255
+                    break
+            sizes.push(s)
+    elif lacing == 3
+        first := vint(self.buf, p, false)
+        if first.len <= 0
+            return WebmError(why: "bad EBML lacing at byte {self.consumed}")
+        p += first.len
+        sizes.push(first.value)
+        mut prev := first.value
+        for _ in 0..count - 2
+            d := vint(self.buf, p, false)
+            if d.len <= 0
+                return WebmError(why: "bad EBML lacing at byte {self.consumed}")
+            p += d.len
+            prev += d.value - (lsh(1, 7 * d.len - 1) - 1)
+            sizes.push(prev)
+    else
+        each := (end - p) / count
+        for _ in 0..count - 1
+            sizes.push(each)
+    mut used := 0
+    for s in sizes
+        used += s
+    if used > end - p or used < 0
+        return WebmError(why: "lace sizes overrun the block at byte {self.consumed}")
+    sizes.push(end - p - used)
+    for i, s in sizes.enumerate()
+        out.push(Frame(track: tn.value, ns: ns + i * lace_ns, key: key, data: self.buf[p..p + s]))
+        p += s
+
+## A whole file at once: its tracks, duration, cues and frames (std.webm.6).
+pub fn read(data bytes) Media ! WebmError
+    mut d := new()
+    frames := d.push(data)?
+    if not d.ready
+        return WebmError(why: "no Tracks element")
+    Media(tracks: d.tracks, duration_ns: d.duration_ns, cues: d.cues, frames: frames)
+
+## The frames of `m` from track `n` only.
+pub fn Media.of(self, n int) List[Frame]
+    [f for f in self.frames if f.track == n]
+
+## The first track of `kind` ("video" or "audio").
+pub fn Media.first(self, kind str) Track?
+    for t in self.tracks
+        if t.kind == kind
+            return t
+    none
+
+## Writing
+
+## The TrackType number of a track kind, and back (std.webm.2).
+fn kind_code(kind str) int
+    if kind == "video"
+        return 1
+    if kind == "audio"
+        return 2
+    0x11
+
+fn kind_name(code int) str
+    if code == 1
+        return "video"
+    if code == 2
+        return "audio"
+    "other"
+
+fn id_bytes(id int) List[int]
+    mut n := 1
+    while n < 4 and id.shr(8 * n) != 0
+        n += 1
+    [id.shr(8 * (n - 1 - i)).bit_and(0xFF) for i in 0..n]
+
+fn size_bytes(v int) List[int]
+    mut n := 1
+    while n < 8 and v >= lsh(1, 7 * n) - 1
+        n += 1
+    mut out := [v.shr(8 * (n - 1 - i)).bit_and(0xFF) for i in 0..n]
+    out[0] = out[0].bit_or(rsh(0x80, n - 1))
+    out
+
+fn uint_bytes(v int) List[int]
+    mut n := 1
+    while n < 8 and v.shr(8 * n) != 0
+        n += 1
+    [v.shr(8 * (n - 1 - i)).bit_and(0xFF) for i in 0..n]
+
+fn el(id int, data bytes) bytes
+    mut pre := id_bytes(id)
+    pre.extend(size_bytes(data.len()))
+    bytes.from_list([x.to_u8() for x in pre]) + data
+
+fn el_uint(id int, v int) bytes
+    body := uint_bytes(v)
+    el(id, bytes.from_list([x.to_u8() for x in body]))
+
+fn el_text(id int, s str) bytes
+    el(id, s.to_bytes())
+
+## An 8-byte float element for the whole number `v` (rates such as 48000).
+fn el_whole_float(id int, v int) bytes
+    mut hi := 0
+    mut lo := 0
+    if v > 0
+        mut e := 0
+        while lsh(1, e + 1) <= v
+            e += 1
+        ## The 52 fraction bits of v / 2^e, split 20 high and 32 low.
+        frac := v - lsh(1, e)
+        mant_hi := if e <= 20 then frac.shl(20 - e) else frac.shr(e - 20)
+        mant_lo := if e <= 20 then 0 else frac.bit_and(lsh(1, e - 20) - 1).shl(52 - e)
+        hi = (e + 1023).shl(20).bit_or(mant_hi)
+        lo = mant_lo
+    mut body := [hi.shr(24 - 8 * i).bit_and(0xFF) for i in 0..4]
+    body.extend([lo.shr(24 - 8 * i).bit_and(0xFF) for i in 0..4])
+    el(id, bytes.from_list([x.to_u8() for x in body]))
+
+## A WebM file of `tracks` and `frames` (std.webm.8): the frames go into
+## clusters in the order given, with millisecond timecodes; a cluster starts at
+## each video key frame and whenever a time would not fit the block's 16 bits.
+pub fn write(tracks List[Track], frames List[Frame]) bytes
+    header := el(
+        ID_EBML,
+        el_uint(0x4286, 1) + el_uint(0x42F7, 1) + el_uint(0x42F2, 4) + el_uint(0x42F3, 8) + el_text(
+            ID_DOCTYPE,
+            "webm",
+        ) + el_uint(0x4287, 4) + el_uint(0x4285, 2),
+    )
+    info := el(
+        ID_INFO,
+        el_uint(ID_SCALE, 1000000) + el_text(
+            0x4D80,
+            "ail std.media.webm",
+        ) + el_text(0x5741, "ail std.media.webm"),
+    )
+    mut entries := b""
+    for t in tracks
+        mut e := el_uint(ID_NUMBER, t.number) + el_uint(0x73C5, t.number)
+        kind := kind_code(t.kind)
+        e = e + el_uint(ID_TYPE, kind) + el_text(ID_CODEC, t.codec)
+        if t.private.len() > 0
+            e = e + el(ID_PRIVATE, t.private)
+        if t.default_ns > 0
+            e = e + el_uint(ID_DEFAULT, t.default_ns)
+        if t.delay_ns > 0
+            e = e + el_uint(ID_DELAY, t.delay_ns)
+        if t.preroll_ns > 0
+            e = e + el_uint(ID_PREROLL, t.preroll_ns)
+        if t.kind == "video"
+            e = e + el(ID_VIDEO, el_uint(ID_WIDTH, t.width) + el_uint(ID_HEIGHT, t.height))
+        elif t.kind == "audio"
+            e = e + el(
+                ID_AUDIO,
+                el_whole_float(ID_RATE, t.rate.to_int()) + el_uint(ID_CHANNELS, t.channels),
+            )
+        entries = entries + el(ID_ENTRY, e)
+    mut body := info + el(ID_TRACKS, entries)
+    mut video := Set[int]()
+    for t in tracks
+        if t.kind == "video"
+            video.add(t.number)
+    mut cluster := b""
+    mut start_ms := -1
+    for f in frames
+        ms := f.ns / 1000000
+        fresh := start_ms < 0
+            or ms - start_ms > 32767
+            or ms < start_ms
+            or (f.key and video.contains(f.track))
+        if fresh
+            if start_ms >= 0
+                body = body + el(ID_CLUSTER, cluster)
+            start_ms = ms
+            cluster = el_uint(ID_TIMECODE, ms)
+        rel := ms - start_ms
+        mut pre := size_bytes(f.track)
+        pre.push(rel.shr(8).bit_and(0xFF))
+        pre.push(rel.bit_and(0xFF))
+        pre.push(if f.key then 0x80 else 0)
+        cluster = cluster + el(ID_SIMPLE, bytes.from_list([x.to_u8() for x in pre]) + f.data)
+    if start_ms >= 0
+        body = body + el(ID_CLUSTER, cluster)
+    header + el(ID_SEGMENT, body)

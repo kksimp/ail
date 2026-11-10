@@ -1,0 +1,90 @@
+struct Row
+    date str
+    account str
+    amount int
+    memo str
+
+error enum LineError
+    Fields "expected 4 fields"
+    Date "bad date"
+    Account "empty account"
+    Amount "bad amount"
+
+fn money(c int) str
+    "{c / 100}.{c.abs() % 100:0>2}"
+
+fn all_digits(s str) bool
+    if s.is_empty()
+        return false
+    for ch in s.chars()
+        if ch.code() < 48 or ch.code() > 57
+            return false
+    true
+
+fn valid_date(d str) bool
+    parts := d.split("-")
+    if parts.len() != 3
+        return false
+    if parts[0].len() != 4 or parts[1].len() != 2 or parts[2].len() != 2
+        return false
+    if not (all_digits(parts[0]) and all_digits(parts[1]) and all_digits(parts[2]))
+        return false
+    month := parts[1].to_int() else 0
+    day := parts[2].to_int() else 0
+    month >= 1 and month <= 12 and day >= 1 and day <= 30
+
+fn parse_amount(s str) int?
+    digits := if s.starts_with("-") then s.slice(1, s.len()) else s
+    if not all_digits(digits)
+        return none
+    s.to_int()
+
+fn parse_row(line str) Row ! LineError
+    f := line.split(",")
+    if f.len() != 4
+        return Fields
+    if not valid_date(f[0])
+        return Date
+    if f[1].is_empty()
+        return Account
+    amount := parse_amount(f[2]) else return Amount
+    Row(date: f[0], account: f[1], amount: amount, memo: f[3])
+
+fn valid_args(args List[str]) bool
+    if args.len() == 1
+        return args[0] == "balance" or args[0] == "monthly"
+    args.len() == 2 and args[0] == "top" and all_digits(args[1])
+
+fn main()
+    args := env.args()
+    if not valid_args(args)
+        io.eprint("usage: ledger balance|top N|monthly")
+        io.exit(1)
+    mut lines := io.read_all().split("\n")
+    if (lines.last() else "x") == ""
+        lines.pop()
+    if lines.is_empty() or lines[0] != "date,account,amount_cents,memo"
+        io.eprint("error: line 1: bad header")
+        io.exit(2)
+    mut rows := []
+    mut bad := 0
+    for k in 1..lines.len()
+        row := parse_row(lines[k]) else err
+            io.eprint("error: line {k + 1}: {err}")
+            bad += 1
+            continue
+        rows.push(row)
+    cmd := args[0]
+    if cmd == "top"
+        n := args[1].to_int() else 1000000000000
+        for r in rows.sorted(by: |r| -r.amount.abs()).take(n)
+            print("{r.date}\t{r.account}\t{money(r.amount)}\t{r.memo}")
+    else
+        mut tot := {}
+        for r in rows
+            key := if cmd == "balance" then r.account else r.date.slice(0, 7)
+            tot[key] += r.amount
+        for key in tot.keys().sorted()
+            print("{key}\t{money(tot[key])}")
+    if bad > 0
+        io.exit(2)

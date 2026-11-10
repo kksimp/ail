@@ -199,17 +199,26 @@ Recycle Bin on Windows. On Linux the `.trashinfo` records the deletion time in U
 never copies or deletes: when no trash on the volume can be written, it fails
 with kind `other`. *(ADR 0929)*
 
-```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26
+**std.fs.27** — `scan_count() ScanCount` returns `struct ScanCount { entries
+int, bytes int }`: how many entries every `fs.scan` (std.fs.23) in the program
+has listed so far, and the sum of their `alloc`. Both only grow, a directory's
+entries at a time, from `0` before the first scan; another task may read them
+while a scan runs, to show its progress. The two counts are read one after the
+other, not as one snapshot, so `bytes` may already include entries that
+`entries` does not yet. *(ADR 0992)*
+
+```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26,std.fs.27
 use std.fs
 
 fn main() !
     s := fs.scan("/Users/me/Library/Caches", true)?
+    seen := fs.scan_count()                  # from another task, for a progress bar
     mut total := 0
     for e in s.entries
         if not e.is_dir and not e.is_link
             total += e.alloc
     v := fs.volume("/")?
-    print("{total} of {v.total} bytes, {v.free} free, {s.skipped.len()} skipped")
+    print("{total} of {v.total} bytes, {v.free} free, {s.skipped.len()} skipped, {seen.bytes} seen")
     head := fs.read_range("a.bin", 0, 4096)?
     fs.trash("old.bin")?
 ```
@@ -671,6 +680,22 @@ use std.io
 
 fn main()
     print(io.read_bytes().len())
+```
+
+**std.io.6** — `write_bytes(data bytes)` writes the bytes of `data` to
+standard output, undecoded and with no newline added, and on Windows too with no `\n` to
+`\r\n` translation. Output from `print` and
+`write_bytes` reaches standard output in the order the calls ran; `exit`
+flushes it (`std.io.4`). `io.read_bytes` (`std.io.5`) is the matching read, so
+a filter reads all of standard input as bytes and writes bytes back. *(ADR 1007)*
+
+```ail rules=std.io.6
+use std.io
+
+fn main()
+    io.write_bytes(b"he")
+    io.write_bytes(b"llo\n")
+    print("mid")
 ```
 
 ## Processes: `std.proc`

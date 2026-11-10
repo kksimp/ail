@@ -4,6 +4,7 @@
 - **Date:** 2026-10-25
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25
 - **Scope amended by:** [ADR 0938](0938-auto-parallel-push-builder-loops.md) (push-builder loops, conc.par.16)
+- **Amended by:** [ADR 0987](0987-auto-parallel-inner-loops.md) (proven loops inside loops run in order)
 - **Topic:** 11 — Concurrency; 25 — Optimization strategy
 - **Spec rules:** conc.par.8, conc.par.14, conc.par.13
 - **Builds on:** [ADR 0236](0236-automatic-parallel-loops.md), [ADR 0601](0601-native-par-for.md), [ADR 0239](0239-float-sum-fixed-tree.md)

@@ -141,12 +141,32 @@ final class CanvasView: NSView {
         Edge.lastEvent = e
         // A drag moves the window only once the app asks (std.app.25).
         if Edge.applied { window?.isMovable = false }
-        click(e, "left")
+        press(e, "left")
     }
-    override func rightMouseDown(with e: NSEvent) { click(e, "right") }
-    override func otherMouseDown(with e: NSEvent) { click(e, "other") }
+    override func rightMouseDown(with e: NSEvent) { press(e, "right") }
+    override func otherMouseDown(with e: NSEvent) { press(e, "other") }
 
-    private func click(_ e: NSEvent, _ button: String) {
+    // std.app.27 (ADR 0983): `down` before `click`, `up` on release, `move` while held.
+    // AppKit delivers the drag and the release to the view that got the press.
+    private func press(_ e: NSEvent, _ button: String) {
+        Outbox.shared.send("down", pointer(e, button))
+        Outbox.shared.send("click", pointer(e, button))
+    }
+    override func mouseUp(with e: NSEvent) { Outbox.shared.send("up", pointer(e, "left")) }
+    override func rightMouseUp(with e: NSEvent) { Outbox.shared.send("up", pointer(e, "right")) }
+    override func otherMouseUp(with e: NSEvent) { Outbox.shared.send("up", pointer(e, "other")) }
+    override func mouseDragged(with e: NSEvent) { dragged(e) }
+    override func rightMouseDragged(with e: NSEvent) { dragged(e) }
+    override func otherMouseDragged(with e: NSEvent) { dragged(e) }
+
+    private func dragged(_ e: NSEvent) {
+        guard Date().timeIntervalSince(lastMove) >= 0.016 else { return }
+        lastMove = Date()
+        let p = convert(e.locationInWindow, from: nil)
+        Outbox.shared.send("move", ["id": canvasId, "x": p.x, "y": p.y])
+    }
+
+    private func pointer(_ e: NSEvent, _ button: String) -> [String: Any] {
         let p = convert(e.locationInWindow, from: nil)
         var f = mods(e)
         f["id"] = canvasId
@@ -154,7 +174,7 @@ final class CanvasView: NSView {
         f["y"] = p.y
         f["text"] = button
         f["clicks"] = min(max(e.clickCount, 1), 3)
-        Outbox.shared.send("click", f)
+        return f
     }
 
     // std.app.16: pointer position, at most once per 16 ms, only while the program asks.

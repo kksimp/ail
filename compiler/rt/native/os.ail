@@ -909,6 +909,13 @@ fn os_io_read_line() str
 fn io_read_all() str
     os_lossy(str_addr(io_read_bytes()))
 
+## `io.write_bytes(b)` (std.io.6): the bytes of `b`, undecoded, on standard
+## output, in order with what `print` wrote.
+fn io_write_bytes(b str)
+    out_lock()
+    out_str(b)
+    out_unlock()
+
 ## `io.read_bytes()`: the rest of standard input, undecoded (std.io.1).
 fn io_read_bytes() str
     mut cap := 4096

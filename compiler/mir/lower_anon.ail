@@ -23,6 +23,7 @@ fn Lower.anon_generic(self, f ast.FnDecl) ast.FnDecl
             name: name,
             pos: p.pos,
             bounds: [ast.Ident(name: t, pos: p.pos)],
+            is_const: false,
         ))
         params.push(ast.Param(
             name: p.name,

@@ -157,6 +157,10 @@ fn main() !
             io.exit(attachcli.command(args[1..]))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "context" =>
+            io.exit(api.context_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "review" =>
+            io.exit(api.review_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -391,8 +395,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
-    # A loop the pool may take (conc.par.8) needs it, and only then: with the
-    # task runtime a trap no longer runs the program's cleanups (unwind_live).
+    # A loop the pool may take (conc.par.8) needs it, and only then.
     tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on() and par_keys(
         path,
         "{dir}/../../../std",

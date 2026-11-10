@@ -1,6 +1,6 @@
-# 0573. Function values in native code wait for the language
+# 0573a. Function values in native code wait for the language
 
-- **Status:** Accepted
+- **Status:** Superseded by [0573](0573-native-function-values.md) (this earlier draft shared the number 0573; renamed 0573a, no links point here)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture

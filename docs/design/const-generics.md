@@ -8,7 +8,7 @@ Fixed-size arrays, matrices, SIMD vectors and ring buffers need a length in the 
 
 ## Proposed rules (slice 1)
 
-- A type parameter list may hold const parameters: `struct Vec[T, N int]`, `fn dot[N int](a Vec[float, N], b Vec[float, N]) float`. A const parameter is named, then its type. Slice 1 allows `int` only.
+- A type parameter list may hold const parameters: `struct Vec[T, const N int]`, `fn dot[const N int](a Vec[float, N], b Vec[float, N]) float`. A const parameter is named, then its type. Slice 1 allows `int` only.
 - A const argument is an int literal or a module constant: `Vec[float, 4]`, `Vec[float, DIM]`. No arithmetic on arguments in slice 1 (`N + 1` is rejected, with a diagnostic naming the rule).
 - Inside the declaration `N` is a compile-time `int` value, usable in expressions and in other types' arguments (`Vec[T, N]`).
 - Inference unifies const arguments: `dot(a, b)` fixes `N` from `a` and requires `b` to match; a mismatch is a type error that names both values (`expected Vec[float, 4], found Vec[float, 3]`).
@@ -16,6 +16,8 @@ Fixed-size arrays, matrices, SIMD vectors and ring buffers need a length in the 
 - Fixed arrays are then library code: `Array[T, N]` is a std struct with `N` slots, constant-indexed access is bounds-checked at compile time, and a literal `[a, b, c]` types as `Array[T, 3]` where an `Array` is expected.
 
 ## Rejected alternatives
+
+- Bare `N int` without `const`: hides the bad-bound error `gen.bound.1` for `[T int]`. See ADR 0954.
 
 - Const expressions in arguments (`Vec[T, N * 2]`): needs a solver for equality of expressions. Deferred to a later slice; no program needs it yet.
 - Runtime-checked length (`List` plus assert): no compile-time dimension errors and no register-resident vectors. This is the status quo.

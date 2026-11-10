@@ -15,6 +15,9 @@
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
 ./ail ask FILE who writes field F   # also: who reads F, what calls f, what does f call, which effects reach f, who uses T
+./ail context FILE f --budget 800   # what an edit to f needs: body, callee and caller signatures, types, tests, rules; cut to 800 tokens
+./ail review main..HEAD --budget 400   # a change by meaning: new capabilities, API breaks, contracts, untested code
+./ail infer --contracts f FILE [--apply]   # proposes up to 3 requires/ensures lines for f from the calls its tests make (patch for ail edit)
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail mcp                       # the compiler's tools as an MCP stdio server (check, test, ask, impact, task_*)
@@ -642,7 +645,7 @@ dep json git "https://example.com/json.git" tag v1.2 caps fs
 
 A `git` dep needs `rev COMMIT` or `tag TAG`; it is fetched into `~/.ail/deps`
 (or `$AIL_HOME/deps`) and pinned in `ail.lock` (commit it). `ail pkg update [NAME]`
-re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`).
+re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`). User guide: `docs/packages.md`.
 
 ## Files, processes and the system
 
@@ -653,10 +656,10 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
 | `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
 | `std.crypto` | `ct_eq(a, b) bool` (constant time; use it, never `==`, for MACs and tags), `random_bytes(n) bytes` (system generator, effect `random`), `hkdf_sha256(ikm, salt, info, len) bytes`, `pbkdf2_sha256(password, salt, iterations, len) bytes` (all `bytes`) |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `trash(p)` (recoverable delete; never permanent), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists` and `glob` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `trash(p)` (recoverable delete; never permanent), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob` and `scan_count` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
-| `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
+| `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `write_bytes(b)` (raw bytes to stdout), `eprint(value)`, `exit(code)` |
 | `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
 | `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
@@ -711,9 +714,12 @@ p := t.wait()?                # its result; fails with Trapped if it trapped
 g := TaskGroup()              # tasks that return nothing
 g.add(spawn work(2))          # waited when g's block ends, or:
 g.wait_all()?
+# a `unique struct` may hold a `TaskGroup` field: its release waits the tasks
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty
+w := ch.try_recv() else 0     # none if nothing is waiting now
+u := ch.recv_for(50) else 0   # waits at most 50 ms
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions

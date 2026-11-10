@@ -75,13 +75,16 @@ pub AIL_STD_MODULES := [
     "std.args",
     "std.audio",
     "std.audio.device",
+    "std.audio.opus",
     "std.bigint",
     "std.attach",
     "std.attach.serve",
     "std.csv",
     "std.gfx",
     "std.gfx.host",
+    "std.gfx.watch",
     "std.log",
+    "std.media.webm",
     "std.net.http",
     "std.screen",
     "std.screen.pixels",
@@ -91,6 +94,7 @@ pub AIL_STD_MODULES := [
     "std.time.date",
     "std.toml",
     "std.ui.widgets",
+    "std.video.vp9",
 ]
 
 ## Positions from here on are the prelude's.

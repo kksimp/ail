@@ -1,0 +1,118 @@
+# Stack VM: assembles a trial-division prime counter into bytecode and runs it.
+# Ops are (op, arg) pairs: 0 PUSH, 1 LOAD, 2 STORE, 3 ADD, 4 MUL, 5 MOD, 6 LT,
+# 7 JMP, 8 JZ (pops), 9 HALT. Variables: 0 n, 1 count, 2 d. N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn emit(mut code List[int], op int, arg int)
+    code.push(op)
+    code.push(arg)
+
+fn here(code List[int]) int
+    code.len() / 2
+
+fn build(limit int) List[int]
+    mut c := List[int]()
+    emit(mut c, 0, 2)
+    emit(mut c, 2, 0)
+    emit(mut c, 0, 0)
+    emit(mut c, 2, 1)
+    top := here(c)
+    emit(mut c, 1, 0)
+    emit(mut c, 0, limit)
+    emit(mut c, 6, 0)
+    jz_end := here(c)
+    emit(mut c, 8, 0)
+    emit(mut c, 0, 2)
+    emit(mut c, 2, 2)
+    inner := here(c)
+    emit(mut c, 1, 2)
+    emit(mut c, 1, 2)
+    emit(mut c, 4, 0)
+    emit(mut c, 1, 0)
+    emit(mut c, 0, 1)
+    emit(mut c, 3, 0)
+    emit(mut c, 6, 0)
+    jz_prime := here(c)
+    emit(mut c, 8, 0)
+    emit(mut c, 1, 0)
+    emit(mut c, 1, 2)
+    emit(mut c, 5, 0)
+    jz_next := here(c)
+    emit(mut c, 8, 0)
+    emit(mut c, 1, 2)
+    emit(mut c, 0, 1)
+    emit(mut c, 3, 0)
+    emit(mut c, 2, 2)
+    emit(mut c, 7, inner)
+    prime := here(c)
+    emit(mut c, 1, 1)
+    emit(mut c, 0, 1)
+    emit(mut c, 3, 0)
+    emit(mut c, 2, 1)
+    next := here(c)
+    emit(mut c, 1, 0)
+    emit(mut c, 0, 1)
+    emit(mut c, 3, 0)
+    emit(mut c, 2, 0)
+    emit(mut c, 7, top)
+    end := here(c)
+    emit(mut c, 9, 0)
+    c[jz_end * 2 + 1] = end
+    c[jz_prime * 2 + 1] = prime
+    c[jz_next * 2 + 1] = next
+    c
+
+fn run(code List[int], mut vars List[int]) int
+    mut st := [0 for _ in 0..64]
+    mut sp := 0
+    mut pc := 0
+    mut steps := 0
+    while true
+        op := code[pc * 2]
+        arg := code[pc * 2 + 1]
+        pc += 1
+        steps += 1
+        match op
+            0 =>
+                st[sp] = arg
+                sp += 1
+            1 =>
+                st[sp] = vars[arg]
+                sp += 1
+            2 =>
+                sp -= 1
+                vars[arg] = st[sp]
+            3 =>
+                sp -= 1
+                st[sp - 1] = st[sp - 1] + st[sp]
+            4 =>
+                sp -= 1
+                st[sp - 1] = st[sp - 1] * st[sp]
+            5 =>
+                sp -= 1
+                st[sp - 1] = st[sp - 1] % st[sp]
+            6 =>
+                sp -= 1
+                st[sp - 1] = if st[sp - 1] < st[sp] then 1 else 0
+            7 => pc = arg
+            8 =>
+                sp -= 1
+                if st[sp] == 0
+                    pc = arg
+            9 => break
+            _ => unreachable("bad op")
+    steps
+
+fn main()
+    limit := size(200000)
+    code := build(limit)
+    mut vars := [0, 0, 0]
+    steps := run(code, mut vars)
+    print("primes {vars[1]}")
+    print("steps {steps}")

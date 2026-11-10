@@ -74,6 +74,8 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
         Named(n, args) => return resolve_named(n, args, t.pos)
 
 fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
+    if n.len() > 0 and "0123456789".contains(n.slice(0, 1))
+        return Ty.ConstVal(n.to_int() else 0)
     for k in 0..scope.len()
         s := scope[scope.len() - 1 - k]
         if s.name == n
@@ -189,9 +191,32 @@ fn Checker.generic_type(mut self, d Def, args List[ast.TypeRef], at ast.Pos) Ty
         no_unique(tys[k], args[k].pos, "a type argument")
     for k in 0..params.len()
         p := params[k]
+        pname := tparams[p].name
+        if tparams[p].is_const and not is_const_arg_ty(tys[k])
+            err_help(
+                "gen.const.2",
+                args[k].pos,
+                "`{pname}` is a const parameter of `{n}`, so it takes an int literal or a const parameter",
+                "write a number, e.g. `{n}[..., 3]`",
+            )
+        elif not tparams[p].is_const and tys[k] != Ty.Unknown and is_const_arg_ty(tys[k])
+            err_help(
+                "gen.const.2",
+                args[k].pos,
+                "`{pname}` is a type parameter of `{n}`, so it takes a type, not a const",
+                "write a type in its place",
+            )
         for b in tparams[p].bounds
             require(tys[k], b, at, "`{n}`'s parameter `{tparams[p].name}`")
     def_ty(d, tys)
+
+## Whether `t` can fill a const parameter: a literal or a const parameter (gen.const.2).
+@allow("expr.match.3") fn Checker.is_const_arg_ty(self, t Ty) bool
+    match t
+        ConstVal => true
+        Param(p) => tparams[p].is_const
+        Unknown => true
+        _ => false
 
 ## Report if `t` doesn't implement trait `tr`, which `what` requires
 ## (gen.bound.3); while declarations are collected, the check waits.
@@ -271,6 +296,7 @@ fn Checker.ty_name(self, t Ty) str
             args := [ty_name(p) for p in ps].join(", ")
             if r == Ty.Unit then "fn({args})" else "fn({args}) {ty_name(r)}"
         Tuple(xs) => "({[ty_name(x) for x in xs].join(", ")})"
+        ConstVal(v) => "{v}"
 
 fn Checker.with_args(self, n str, args List[Ty]) str
     if args.len() == 0 then n else "{n}[{[ty_name(a) for a in args].join(", ")}]"

@@ -30,13 +30,16 @@ pub STD_AIL := [
     "std.args",
     "std.audio",
     "std.audio.device",
+    "std.audio.opus",
     "std.bigint",
     "std.attach",
     "std.attach.serve",
     "std.csv",
     "std.gfx",
     "std.gfx.host",
+    "std.gfx.watch",
     "std.log",
+    "std.media.webm",
     "std.net.http",
     "std.screen",
     "std.screen.pixels",
@@ -48,6 +51,7 @@ pub STD_AIL := [
     "std.toml",
     "std.ui",
     "std.ui.widgets",
+    "std.video.vp9",
 ]
 
 ## The imports of a file: the name each makes available, to the module's

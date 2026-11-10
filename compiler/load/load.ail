@@ -39,13 +39,16 @@ STD_MODULES := [
     ("std.args", "args/args.ail"),
     ("std.audio", "audio/audio.ail"),
     ("std.audio.device", "audio/device.ail"),
+    ("std.audio.opus", "audio/opus.ail"),
     ("std.bigint", "bigint/bigint.ail"),
     ("std.attach", "attach/attach.ail"),
     ("std.attach.serve", "attach/serve.ail"),
     ("std.csv", "csv/csv.ail"),
     ("std.gfx", "gfx/gfx.ail"),
     ("std.gfx.host", "gfx/host.ail"),
+    ("std.gfx.watch", "gfx/watch.ail"),
     ("std.log", "log/log.ail"),
+    ("std.media.webm", "media/webm.ail"),
     ("std.net.http", "net/http.ail"),
     ("std.screen", "screen/screen.ail"),
     ("std.screen.pixels", "screen/pixels.ail"),
@@ -55,6 +58,7 @@ STD_MODULES := [
     ("std.time.date", "time/date.ail"),
     ("std.toml", "toml/toml.ail"),
     ("std.ui.widgets", "ui/widgets.ail"),
+    ("std.video.vp9", "video/vp9.ail"),
 ]
 
 ## Each type of a standard module, declared in `std/types.ail`, and its module.
@@ -65,6 +69,7 @@ STD_TYPES := {
     "Volume": "fs",
     "Entry": "fs",
     "Scan": "fs",
+    "ScanCount": "fs",
     "Response": "net",
     "RawResponse": "net",
     "RawOutput": "proc",

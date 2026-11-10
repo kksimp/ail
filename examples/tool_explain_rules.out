@@ -3,6 +3,6 @@ expr.name.1 0 expr.name.1 (05-expressions.md:47)
 test.assert.1 0 test.assert.1 (19-testing.md:116)
 eff.infer.6 0 eff.infer.6 (18-effects.md:50)
 diff.out.1 0 diff.out.1 (22-tools.md:388)
-edit.op.1 0 edit.op.1 (22-tools.md:1194)
+edit.op.1 0 edit.op.1 (22-tools.md:1422)
 fix.edit.6 0 fix.edit.6 (22-tools.md:224)
 nope.rule.9 2 error: unknown rule `nope.rule.9`

@@ -99,6 +99,11 @@ The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/
 
 ## Attribution
 
+The `.rs`, `.go`, `.ts`, `.c` and `.swift` files under `corpus/` are measurement
+twins, not part of the toolchain: the Rust bootstrap is gone
+([ADR 0904](../../docs/decisions/0904-rust-bootstrap-deleted.md)) and nothing builds them.
+
+
 `attribute.py` (measurement only) says where the tokens of the
 `corpus/programs/` go: for each construct class (signature types, `fn`,
 `self`, `:=`, `mut`, `use`, `else`, `?`, indentation, ...) it deletes that
