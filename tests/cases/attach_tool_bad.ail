@@ -4,8 +4,5 @@ struct Shop
 @tool fn Shop.add_all(mut self, xs List[int])
     n += xs.len()
 
-@tool fn loose(a int) int
-    a
-
 fn main()
-    print(loose(1))
+    print(Shop(n: 0).n)

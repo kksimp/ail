@@ -1,0 +1,28 @@
+## attach.tool.3-4: the protocol helpers the generated `tools` and `call` use, called directly.
+use std.attach
+
+fn main()
+    t := attach.tool("add", "Adds.", ["qty"], ["int"], "int")
+    assert_eq(attach.tools_reply([t]), "\{\"v\":1,\"tools\":[\{\"name\":\"add\",\"doc\":\"Adds.\",\"params\":[\{\"name\":\"qty\",\"type\":\"int\"}],\"result\":\"int\"}]}")
+    assert_eq(attach.query("\{\"q\":\"tools\"}"), "tools")
+    assert_eq(attach.query("not json"), "")
+    line := "\{\"q\":\"call\",\"token\":\"k\",\"name\":\"add\"}"
+    assert_eq(attach.call_refusal(line, "k", true), "")
+    assert(attach.call_refusal(line, "k", false).contains("call is off"))
+    assert(attach.call_refusal(line, "x", true).contains("wrong token"))
+    assert(attach.call_refusal("\{\"q\":\"call\",\"token\":\"k\"}", "k", true).contains("needs `name`"))
+    assert_eq(attach.called("3"), "\{\"v\":1,\"result\":3}")
+    assert_eq(attach.call_failed("no"), "\{\"v\":1,\"error\":\"no\"}")
+    assert(attach.no_tool("zap").contains("no tool `zap`"))
+    assert(attach.bad_arg("add", "qty", "int").contains("needs `qty` as int"))
+    a := parse_json("\{\"s\":\"hi\",\"i\":2,\"is\":\"7\",\"f\":1.5,\"fs\":\"2.5\",\"b\":true,\"bs\":\"false\"}") else Json.Obj([])
+    assert_eq(attach.arg_str(a, "s") else "", "hi")
+    assert_eq(attach.arg_int(a, "i") else 0, 2)
+    assert_eq(attach.arg_int(a, "is") else 0, 7)
+    assert(attach.arg_int(a, "f") == none)
+    assert_eq(attach.arg_float(a, "f") else 0.0, 1.5)
+    assert_eq(attach.arg_float(a, "fs") else 0.0, 2.5)
+    assert(attach.arg_bool(a, "b") else false)
+    assert(not (attach.arg_bool(a, "bs") else true))
+    assert(attach.arg_bool(a, "s") == none)
+    print("ok")
