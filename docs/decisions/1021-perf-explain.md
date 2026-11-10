@@ -33,6 +33,20 @@ as is) and the calls that stay in the loop with the reason they were not inlined
 - **Vector kernels** are reported for the whole function (the kernels it calls);
   attributing a kernel to one loop needs the passes to name the loop they rewrote.
 
+## Revived for 0.1.0 (2026-11-10)
+
+The slice was dropped on 2026-11-09 and revived from its tip for v0.1.0 (AI-first
+plan E11). The remark list was agreed with the slow-spots plan so that each
+remark names a cause one of its optimizer slices removes:
+
+- **Cause classes are named once** in `remarks.ail` (`RK_*` constants and
+  `rk_*` wording functions). A slice that removes a cause (multi-exit
+  versioning, wide inlining) rewords or deletes it in one place.
+- **List headers.** A loop over hoist.ail's `MAX_BLOCKS` keeps reloading list
+  lengths and data pointers (native.bce.11); the remark is read from the same
+  constant, so it changes when the limit does.
+- Overflow-check and reload remarks wait for the passes that would decide them.
+
 ## Not in this slice
 
 `--json` output, `perf.*` notes inside `ail check` (ADR 0897 stays Proposed), and

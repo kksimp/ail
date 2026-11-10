@@ -6,7 +6,7 @@
 ##
 ## A note line is `perf`, the source file, the line, a kind and a text, joined
 ## by tabs. Kinds: `func` (line 0: facts about the whole function), `loop`,
-## `bce`, `fix`, `vec`, `inline`. The command (compiler/main.ail) adds the
+## `bce`, `fix`, `hoist`, `vec`, `inline`. The command (compiler/main.ail) adds the
 ## `par` facts from the checker and prints the lines grouped by loop.
 
 ## What stops one checked list access from losing its check.
@@ -32,6 +32,31 @@ struct RkPlace
     rk_file int
     rk_line int
 
+## Cause classes. Each reason a pass declines is named once here, so the
+## optimizer lane that removes a cause (multi-exit versioning, wide inlining,
+## hoisting in big loops) deletes or rewords it in one place.
+RK_NO_ENTRY := "the loop has no single entry edge"
+RK_NOT_COUNTED := "the loop is not `for i in a..b` or `while i < n` stepping by a constant"
+RK_NOT_LEAF := "it calls other functions; only leaf functions are inlined"
+RK_LOOPS := "it loops"
+RK_RECURSIVE := "it is recursive"
+RK_EXTERNAL := "its body isn't in the program (an external or runtime call)"
+
+## The loop leaves in more than one place (native.bce.1).
+fn rk_multi_exit(n int) str
+    "the loop leaves in {n} places (`break` or `return` inside it); bounds checks are removed in loops that leave only through their condition"
+
+fn rk_too_big(n int) str
+    "it has {n} instructions, over the limit of {INLINE_LIMIT}"
+
+fn rk_budget_spent() str
+    "the caller's inline budget ({INLINE_BUDGET} calls) was spent"
+
+## The loop is over hoist.ail's `MAX_BLOCKS`, so list headers are not kept in
+## registers (native.bce.11).
+fn rk_headers_reloaded(n int) str
+    "reloaded at every access: the loop has {n} blocks, over the {MAX_BLOCKS} for which list lengths and data pointers are kept in registers (native.bce.11)"
+
 ## The function asked about, from `AIL_PERF_EXPLAIN`; empty in every other build.
 pub fn rk_target() str
     env.get("AIL_PERF_EXPLAIN") else ""
@@ -51,10 +76,10 @@ pub fn rk_key(f Func, lp LoopInfo) int
 ## Why `lp` is not a counted loop (native.bce.1).
 pub fn rk_uncounted(lp LoopInfo) str
     if lp.pre < 0
-        return "the loop has no single entry edge"
+        return RK_NO_ENTRY
     if lp.exits != 1
-        return "the loop has {lp.exits} exits (`break` or `return` inside it); bounds checks are removed in loops that leave only through their condition"
-    "the loop is not `for i in a..b` or `while i < n` stepping by a constant"
+        return rk_multi_exit(lp.exits)
+    RK_NOT_COUNTED
 
 fn rk_name(f Func, v int) str
     if f.names[v] != ""
@@ -222,7 +247,7 @@ fn rk_kernels(f Func) List[str]
 ## Why a call that stays in a loop was not inlined (ADR 0391).
 fn rk_inline_why(funcs List[Func], caller str, name str) str
     if name == caller
-        return "it is recursive"
+        return RK_RECURSIVE
     for g in funcs
         if g.name != name
             continue
@@ -238,13 +263,13 @@ fn rk_inline_why(funcs List[Func], caller str, name str) str
                 if t == 0
                     loops = true
         if calls
-            return "it calls other functions; only leaf functions are inlined"
+            return RK_NOT_LEAF
         if loops
-            return "it loops"
+            return RK_LOOPS
         if n > INLINE_LIMIT
-            return "it has {n} instructions, over the limit of {INLINE_LIMIT}"
-        return "the caller's inline budget ({INLINE_BUDGET} calls) was spent"
-    "its body isn't in the program (an external or runtime call)"
+            return rk_too_big(n)
+        return rk_budget_spent()
+    RK_EXTERNAL
 
 ## The note lines for the loops of `fin`, the function as the optimizer ends
 ## with it. `xf` is the function as the bounds-check pass saw it; `orig` is it
@@ -295,6 +320,9 @@ pub fn rk_explain(
             out.push(rk_line_of(files, place, "bce", "outer loop: checks are removed in the innermost loops (native.bce.1)"))
         else
             out.push(rk_line_of(files, place, "bce", "not analysed (AIL_OPT_OFF names bce, or this loop is a copy the optimizer made)"))
+        # List headers (native.bce.11): hoist.ail skips loops over MAX_BLOCKS.
+        if rk_accesses(xf, lp) > 0 and lp.blocks.len() > MAX_BLOCKS and not opt_off("hoist")
+            out.push(rk_line_of(files, place, "hoist", rk_headers_reloaded(lp.blocks.len())))
         # Vector kernels (native.vec.1-2).
         if inner and kernels.is_empty()
             if swapped

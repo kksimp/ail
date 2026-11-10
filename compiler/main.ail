@@ -259,6 +259,8 @@ fn perf_command(rest List[str]) int
                 print("  bounds checks: {l.text}")
             elif l.path == s.path and l.line == s.line and l.kind == "fix"
                 print("    fix: {l.text}")
+            elif l.path == s.path and l.line == s.line and l.kind == "hoist"
+                print("  list headers: {l.text}")
         for l in found
             if l.path == s.path and l.line == s.line and l.kind == "vec"
                 print("  vectorised: {l.text}")
