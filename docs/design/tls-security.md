@@ -1,6 +1,6 @@
 # TLS security note
 
-Non-normative. What the in-house TLS 1.3 client (ADR 0360) has and hasn't
+Non-normative. See also [crypto-assurance.md](crypto-assurance.md), the one-page list of what is checked. What the in-house TLS 1.3 client (ADR 0360) has and hasn't
 been verified to do. Update it in the same change as the code.
 
 ## Status
