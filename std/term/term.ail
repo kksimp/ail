@@ -108,7 +108,7 @@ fn mk_key(k str, c bool, a bool, s bool) Event
 
 ## Control, Alt and Shift from the modifier parameter `m` of a sequence
 ## (1 plus: Shift 1, Alt 2, Ctrl 4).
-fn mods(m int) (bool, bool, bool)
+fn mods(m int)(bool, bool, bool)
     v := if m > 1 then m - 1 else 0
     (v.bit_and(4) != 0, v.bit_and(2) != 0, v.bit_and(1) != 0)
 

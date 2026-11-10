@@ -170,7 +170,9 @@ fn lex_define(cs List[char], start int, mut out List[str]) int
                 if ident_char(ch) or ch == '.'
                     word = "{word}{ch}"
                     i += 1
-                elif (ch == '+' or ch == '-') and (word.ends_with("e") or word.ends_with("E")) and not (word.starts_with("0x") or word.starts_with("0X"))
+                elif (ch == '+' or ch == '-')
+                    and (word.ends_with("e") or word.ends_with("E"))
+                    and not (word.starts_with("0x") or word.starts_with("0X"))
                     word = "{word}{ch}"
                     i += 1
                 else
@@ -411,7 +413,8 @@ fn ev_fail() Ev
 ## The value of an integer literal such as `42`, `0x2A`, `052`, `0b101` or `42UL`.
 fn number_value(word str) int?
     mut cs := word.chars()
-    while cs.len() > 1 and (cs[cs.len() - 1] == 'u' or cs[cs.len() - 1] == 'U' or cs[cs.len() - 1] == 'l' or cs[cs.len() - 1] == 'L')
+    while cs.len() > 1
+        and (cs[cs.len() - 1] == 'u' or cs[cs.len() - 1] == 'U' or cs[cs.len() - 1] == 'l' or cs[cs.len() - 1] == 'L')
         cs = cs[..(cs.len() - 1)]
     mut radix := 10
     mut k := 0
@@ -613,7 +616,8 @@ fn c_string(raw str) str?
 ## `3.25` from `3.25`, `3.25f` or `3.25L`: a float literal the lexer reads back, or none.
 fn float_text(word str) str?
     mut cs := word.chars()
-    if cs.len() > 1 and (cs[cs.len() - 1] == 'f' or cs[cs.len() - 1] == 'F' or cs[cs.len() - 1] == 'l' or cs[cs.len() - 1] == 'L')
+    if cs.len() > 1
+        and (cs[cs.len() - 1] == 'f' or cs[cs.len() - 1] == 'F' or cs[cs.len() - 1] == 'l' or cs[cs.len() - 1] == 'L')
         cs = cs[..(cs.len() - 1)]
     mut dots := 0
     mut before := 0
@@ -646,7 +650,10 @@ fn unparen(body List[str]) List[str]
 ## Whether `name` can be a module constant of the generated module.
 fn const_name_ok(name str, seen Set[str]) bool
     first := name.char_at(0) else return false
-    ident_start(first) and not RESERVED.contains(name) and not name.starts_with("__") and not seen.contains(name)
+    ident_start(first)
+        and not RESERVED.contains(name)
+        and not name.starts_with("__")
+        and not seen.contains(name)
 
 ## Write `pub NAME := v` for an integer constant.
 fn emit_int(name str, v int, mut ints Map[str, int], mut seen Set[str], mut lines List[str])
@@ -657,7 +664,13 @@ fn emit_int(name str, v int, mut ints Map[str, int], mut seen Set[str], mut line
     lines.push("pub {name} := {v}")
 
 ## One `#define NAME body`: an integer, float or string constant is kept, anything else is left out.
-fn add_define(name str, body List[str], mut ints Map[str, int], mut seen Set[str], mut lines List[str])
+fn add_define(
+    name str,
+    body List[str],
+    mut ints Map[str, int],
+    mut seen Set[str],
+    mut lines List[str],
+)
     if body.is_empty() or not const_name_ok(name, seen)
         return
     b := unparen(body)
