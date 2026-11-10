@@ -32,7 +32,14 @@ pub fn start() Warm
 
 ## Run `ail ARGV` with `stdin` as its input; `ail` is the launcher. `pure` says the call only
 ## reads `program` and the toolchain (mcp.warm.2).
-pub fn Warm.run(mut self, ail str, argv List[str], stdin str, pure bool, program str) !Ran
+pub fn Warm.run(
+    mut self,
+    ail str,
+    argv List[str],
+    stdin str,
+    pure bool,
+    program str,
+) Ran ! proc.ProcError
     if native == ""
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
     # mcp.warm.3: a toolchain newer than the native CLI goes through the launcher, which

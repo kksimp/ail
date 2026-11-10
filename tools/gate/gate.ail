@@ -2942,11 +2942,16 @@ fn Gate.agent_tools(mut self, tmp str)
     want("mcp warm repeat", reply_of(w1.out, 3), [jm("'ail/warm':'memo'")])
     want("mcp warm after an edit", reply_of(w1.out, 5), [jm("'ail/warm':'direct'")])
     want("mcp warm test keeps the launcher", reply_of(w1.out, 6), [jm("'ail/warm':'launcher'")])
-    again := mcp_call(3, "ail_check", "'program':'warm.ail'")
+    warm_again := mcp_call(3, "ail_check", "'program':'warm.ail'")
     cold := proc.run(
         "sh",
-        ["-c", "cd \"$0\" && AIL_MCP_COLD=1 AIL=\"$1\" exec \"$1\" mcp", "{base}/mcp", "{repo_root()}/ail"],
-        "{again}\n{again}\n",
+        [
+            "-c",
+            "cd \"$0\" && AIL_MCP_COLD=1 AIL=\"$1\" exec \"$1\" mcp",
+            "{base}/mcp",
+            "{repo_root()}/ail",
+        ],
+        "{warm_again}\n{warm_again}\n",
     ) else proc.Output(status: 127, out: "", err: "could not start sh")
     want("mcp cold", reply_of(cold.out, 3), [jm("'ail/warm':'launcher'")])
     sh_run("rm -rf {base}")

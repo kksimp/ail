@@ -348,7 +348,8 @@ fn call(mut w warm.Warm, id Json, params Json)
         failure(id, -32602, cmd.why)
         return
     ail := env.get("AIL") else "./ail"
-    got := w.run(ail, cmd.argv, cmd.stdin, pure(name, args), args.text("program", "")) else err
+    program := args.text("program", "")
+    got := w.run(ail, cmd.argv, cmd.stdin, pure(name, args), program) else err
         reply(id, tool_result("can't run ail: {err}", true, none, "launcher"))
         return
     ran := got.out
