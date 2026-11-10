@@ -95,7 +95,9 @@ those two directories.
 
 The native gate is `.\ail.ps1 selftest` (the same as `tools\gate\win-gate.ps1`).
 It needs the Git for Windows tools above on `PATH`, prints only failures, and
-ends with `GATE GREEN` or `GATE RED`. The harness is Unix-shaped, so Windows
+ends with `GATE GREEN` or `GATE RED`. It runs several suites at once, one per
+core up to 4 (`GATE_JOBS=N` sets the number; 1 runs them one after another),
+and writes each suite's seconds to `%TEMP%\ail-gate\times.log`. The harness is Unix-shaped, so Windows
 is tracked rather than gating each change; the `native`, `examples` and `run`
 suites must be green on Windows x86-64 before every release
 ([ADR 0925](decisions/0925-windows-release-gate.md)).
