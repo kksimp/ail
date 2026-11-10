@@ -1,0 +1,64 @@
+## `ail prove FILE|DIR [--json]` (prove.cmd.1, prove.cmd.2; ADR 1055): the program loaded and
+## checked as `ail check` does, then each contract check the prover looked at
+## (contract.prove.1), `proved` or `checked`, and the total. A program with errors prints
+## them on stderr and exits 2.
+use ast
+use check
+
+pub fn prove_command(rest List[str], std str) int
+    json := rest.contains("--json")
+    paths := [a for a in rest if not a.starts_with("--")]
+    flags := [a for a in rest if a.starts_with("--") and a != "--json"]
+    if paths.len() != 1 or flags.len() > 0
+        io.eprint("usage: ail prove [--json] FILE|DIR (prove.cmd.1)")
+        return 2
+    loaded := load(paths[0], std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [shown_syntax(d) for d in loaded.diags]
+    if loaded.diags.len() == 0
+        found = [shown_check(d) for d in check.check_program(loaded.program).diags]
+    if found.len() > 0
+        io.eprint(report(loaded.program.files, loaded.texts, found, json))
+        for d in found
+            if not d.warning
+                return 2
+    print(prove_report(loaded.program, paths[0], json).trim_end())
+    0
+
+## The rows of every file, in file order: the prover sees one file at a time, as the
+## lowering does, so a call reaches only a function of its own file.
+fn prove_rows(prog ast.Program) List[check.ProofRow]
+    mut groups := Map[int, List[ast.FnDecl]]()
+    for f in prog.fns
+        if f.pos.line >= PRELUDE_LINE
+            continue
+        k := index_of(prog.files, f.pos)
+        mut g := groups.get(k) else List[ast.FnDecl]()
+        g.push(f)
+        groups[k] = g
+    mut rows := List[check.ProofRow]()
+    for k in 0..prog.files.len().max(1)
+        if g := groups.get(k)
+            for r in check.prove_fns(g).rows
+                rows.push(r)
+    rows
+
+fn prove_report(prog ast.Program, path str, json bool) str
+    rows := prove_rows(prog)
+    files := prog.files
+    proved := [r for r in rows if r.proved].len()
+    if json
+        items := [
+            "\{\"kind\":\"{r.kind}\",\"fn\":{Json.Str(r.func).to_text()},\"cond\":{Json.Str(r.cond).to_text()},\"at\":{Json.Str(place(files, path, r.site)).to_text()},\"contract\":{Json.Str(place(files, path, r.at)).to_text()},\"in\":{Json.Str(r.caller).to_text()},\"proved\":{r.proved}}"
+            for r in rows
+        ]
+        return "\{\"ail_api\":1,\"prove\":1,\"proved\":{proved},\"total\":{rows.len()},\"contracts\":[{items.join(",")}]}\n"
+    mut out := ""
+    for r in rows
+        verdict := if r.proved then "proved" else "checked"
+        if r.kind == "requires"
+            out = "{out}{place(files, path, r.site)} requires `{r.cond}` of `{r.func}` in `{r.caller}`: {verdict}\n"
+        else
+            out = "{out}{place(files, path, r.site)} ensures `{r.cond}` of `{r.func}`: {verdict}\n"
+    "{out}{proved} of {rows.len()} contract checks proved\n"

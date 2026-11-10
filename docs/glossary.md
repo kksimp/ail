@@ -220,6 +220,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Seed** | A native `ail` binary published as a release asset for one host (`ail-seed-ARCH-OS`). `./ail` downloads it, checks its SHA-256 against `tools/release/seeds.sha256` and uses it to build the compiler from source; only the designer publishes seeds ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md), [ADR 0976](decisions/0976-public-release-and-seed-trust.md)). |
 | **Context pack** | `ail context PROGRAM FN --budget N`: the body, callee and caller signatures, types, tests and cited spec rules that an edit to `FN` needs, cut to N tokens (ADR 1020). |
 | **Review report** | `ail review BASE..HEAD`: effects, public API, contracts, performance and untested code of a change, cut to a token budget (ADR 1024). |
+| **Proved contract** | A `requires` at a call, or an `ensures` at every return, that the checker shows holds from interval facts; its run-time check is left out. `ail prove` lists them (ADR 1055). |
 | **Inferred contract** | A `requires` or `ensures` line that `ail infer --contracts FN FILE` proposes from the calls the tests make: observed, not proved, at most 3, applied only with `--apply` (ADR 1023). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |

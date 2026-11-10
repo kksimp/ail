@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots, infer
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`, `prove`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -1854,4 +1854,48 @@ fn pay(n int) int
         assert_eq(pay(i), i + 1)
 fn main()
     print(pay(1))
+```
+
+## Proved contracts
+
+`ail prove` lists the contract checks the checker proves and leaves out
+([contract.prove.1-3](20-contracts.md),
+[ADR 1055](../decisions/1055-contracts-proved-by-interval-facts.md)).
+
+**prove.cmd.1** — `ail prove [--json] FILE|DIR` loads and checks the program as
+`ail check` does; a program with errors prints them and exits 2, as does any
+other flag or a missing operand. Otherwise it prints one line per check the
+prover looked at, function by function in the order they are written: for a
+`requires` at a call, ``FILE:LINE:COL requires `COND` of `F` in `G`: VERDICT``
+at the call, where `G` is the calling function; then for each `ensures` of a
+top-level function, ``FILE:LINE:COL ensures `COND` of `F`: VERDICT`` at the
+condition. `VERDICT` is
+`proved` or `checked` (still evaluated at run time). The last line is
+`N of M contract checks proved`. The status is 0.
+
+```ail tool=prove,FILE expect=proved rules=prove.cmd.1
+fn at(xs List[int], i int) int
+    requires i < xs.len()
+    xs[i]
+
+fn main()
+    xs := [3, 1, 4]
+    for i in 0..xs.len()
+        print(at(xs, i))
+```
+
+**prove.cmd.2** — With `--json` the answer is one object: `ail_api` (1),
+`prove` (1), `proved`, `total`, and `contracts`, a list with, for each line of
+`prove.cmd.1`, `kind` (`requires` or `ensures`), `fn`, `cond`, `at` (the call
+or the condition), `contract` (the condition), `in` (the calling function) and
+`proved`.
+
+```ail tool=prove,--json,FILE expect="proved":true rules=prove.cmd.2
+fn digit(n int) int
+    requires n >= 0
+    ensures result < 10
+    n % 10
+
+fn main()
+    print(digit(7))
 ```

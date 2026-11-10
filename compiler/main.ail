@@ -144,6 +144,8 @@ fn main() !
             io.exit(load.header_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "prove" =>
+            io.exit(load.prove_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "check-errors" =>
             io.exit(api.errors_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "api" =>

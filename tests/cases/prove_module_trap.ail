@@ -1,0 +1,11 @@
+# contract.prove.1 (ADR 1055): a call into another file isn't proved here, so its
+# check stays and traps.
+use provelib as lib
+
+fn go(n int) int
+    requires n > 0
+    lib.half(n - 5)
+
+fn main()
+    print(go(9))
+    print(go(1))
