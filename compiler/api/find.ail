@@ -12,7 +12,27 @@ FIND_USAGE := "usage: ail ask std WORDS...   e.g. ail ask std read a file by lin
 FIND_LIMIT := 10
 
 ## Words a query may have that say nothing.
-FIND_FILLER := ["a", "an", "the", "of", "to", "by", "in", "from", "and", "or", "for", "with", "as", "is", "it", "how", "do", "i", "std"]
+FIND_FILLER := [
+    "a",
+    "an",
+    "the",
+    "of",
+    "to",
+    "by",
+    "in",
+    "from",
+    "and",
+    "or",
+    "for",
+    "with",
+    "as",
+    "is",
+    "it",
+    "how",
+    "do",
+    "i",
+    "std",
+]
 
 struct StdFn
     ## `fs`, `time.date`, ...
@@ -124,6 +144,12 @@ fn find_index() List[StdFn]
             find_add(mut out, rule, para)
     out
 
+## Does the doc hold `w`, or its plural or singular?
+fn find_has_word(f StdFn, w str) bool
+    if f.words.contains(w) or f.words.contains("{w}s")
+        return true
+    w.ends_with("s") and f.words.contains(w.slice(0, w.len() - 1))
+
 ## How well a function fits the words (api.find.2): its name equal to a word is
 ## worth 6, containing one 3, its module 2, and each word of its doc 1.
 fn find_score_words(f StdFn, query List[str]) int
@@ -135,7 +161,7 @@ fn find_score_words(f StdFn, query List[str]) int
             score += 3
         if f.owner == w
             score += 2
-        if f.words.contains(w) or f.words.contains("{w}s") or (w.ends_with("s") and f.words.contains(w.slice(0, w.len() - 1)))
+        if find_has_word(f, w)
             score += 1
     score
 

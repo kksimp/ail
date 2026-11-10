@@ -34,7 +34,7 @@ fn card_section(text str, topic str) str
     out
 
 ## `ail card ...`: 0 printed, 1 nothing known by that topic, 2 an error.
-pub fn card_command(args List[str]) int
+pub fn card_topic_command(args List[str]) int
     if args.len() > 1
         io.eprint(CARD_TOPIC_USAGE)
         return 2
