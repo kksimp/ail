@@ -42,19 +42,20 @@ CRCs and the MD5 are not checked. Other data fails with `AudioError`. *(ADR 0974
 program that owns the platform's audio API, as `std.app` does (ADR 0838), so no
 AIL code runs on an audio callback. `open() proc.Child ! DeviceError` (or `open_at(cmd)` with a given program) starts the
 host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
-`tools/audio-host/macos/run.sh`) and waits for its `ready` line;
+`tools/audio-host/macos/run.sh`, `tools/audio-host/linux/run.sh` or
+`tools/audio-host/windows/run.ps1`) and waits for its `ready` line;
 `play(mut d, clip)` blocks until the clip has played; `close(move d)` stops the
 host. `DeviceError` has `kind` (`no_host`, `start`, `version`, `host_exited`,
 `device`, `protocol`) and `message`. The host speaks one text line per message:
 `play RATE CH BASE64`, `rec MS RATE CH`, then `done`, `data RATE CH BASE64` or
-`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio). Elsewhere `open` fails with kind `no_host`
+`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio) and Linux (ALSA, `tools/audio-host/linux/host.c`; `AIL_ALSA_DEVICE` picks the device). Where no host is built `open` fails with kind `no_host`
 and a message naming this rule; it never crashes.
 
 **std.audio.10** — `record(mut d, ms, rate, channels) Clip ! DeviceError` records
 from the default input. The clip has the rate and channels the device gave,
 which may differ from those asked for; `resample` and `to_mono` adapt it.
 
-**Planned (no rule ID yet):** WASAPI and PipeWire/ALSA hosts; streaming output
+**Planned (no rule ID yet):** a WASAPI host; streaming output
 (`open_output` with `write`) with a ring buffer in the host and under 20 ms
 latency; mixing several plays in a task off the audio thread.
 

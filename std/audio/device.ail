@@ -14,7 +14,8 @@ pub error struct DeviceError "{kind}: {message}"
     pub message str
 
 ## The audio host program: `AIL_AUDIO_HOST`, else the one built under the
-## toolchain's directory (`AIL_ROOT`) by `tools/audio-host/macos/run.sh`.
+## toolchain's directory (`AIL_ROOT`) by `tools/audio-host/macos/run.sh`,
+## `tools/audio-host/linux/run.sh` or `tools/audio-host/windows/run.ps1`.
 pub fn host_path() str ! DeviceError
     if p := env.get("AIL_AUDIO_HOST")
         return p
@@ -22,13 +23,18 @@ pub fn host_path() str ! DeviceError
         kind: "no_host",
         message: "std.audio.9: set AIL_AUDIO_HOST to the audio host program",
     )
-    p := "{root}/tools/audio-host/macos/build/ail-audio-host"
-    if not fs.exists(p)
-        return DeviceError(
-            kind: "no_host",
-            message: "std.audio.9: no audio host is built for this platform; macOS has one (tools/audio-host/macos/run.sh)",
-        )
-    p
+    base := "{root}/tools/audio-host"
+    for p in [
+        "{base}/macos/build/ail-audio-host",
+        "{base}/linux/build/ail-audio-host",
+        "{base}/windows/build/ail-audio-host.exe",
+    ]
+        if fs.exists(p)
+            return p
+    return DeviceError(
+        kind: "no_host",
+        message: "std.audio.9: no audio host is built; run tools/audio-host/macos/run.sh (macOS), tools/audio-host/linux/run.sh (Linux) or tools/audio-host/windows/run.ps1 (Windows)",
+    )
 
 ## Starts the audio host, the `proc.Child` the other functions take, and waits for it to be ready (std.audio.9).
 pub fn open() proc.Child ! DeviceError
