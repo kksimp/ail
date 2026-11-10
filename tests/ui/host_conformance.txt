@@ -1,0 +1,40 @@
+# Conformance script for a std.app host (docs/design/app-host-parity.md, ADR 1044).
+# Every real host must pass it with no AIL toolchain: tests/ui/host_conformance.sh
+# (macOS, Linux) and tools/app-host/windows/smoke.ps1 (Windows) play it.
+#
+# Each line is `PLATFORMS KIND TEXT`. PLATFORMS is `all` or a comma list of
+# mac, linux, win. KIND is:
+#   send    a line written to the host's standard input, in order
+#   expect  some output line contains TEXT (any order)
+#   absent  no output line contains TEXT
+#   first   the first output line contains TEXT
+#   order   TEXT is `A|B`: the first line with A comes before the first with B
+# After the sends the runner waits up to 20 s for every expect, closes standard
+# input and requires the host to exit within 10 s.
+
+# std.app.7-8: the first line carries v 1; `start` comes before any resize.
+all send {"v":1,"t":"view","title":"conformance","focus":"","tree":{"kind":"Column","kids":[{"kind":"Label","text":"hi"},{"kind":"Field","id":"f","value":"x","hint":"h"},{"kind":"Button","id":"b","caption":"Go"},{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Fill","x":0,"y":0,"w":20,"h":20,"color":16711680},{"kind":"Shade","x":0,"y":0,"w":10,"h":10,"color":0,"alpha":0.5},{"kind":"Str","x":4,"y":4,"text":"A","font":"mono","size":13,"fg":0}]}]}}
+all first "v":1
+all expect "kind":"start"
+all order "kind":"start"|"kind":"resize"
+# std.app.31: display size and scale on start.
+all expect "screen_w"
+all expect "scale"
+# std.app.8: a line that is not JSON is skipped.
+all send not json
+# std.app.13: measure answered with one width per run.
+all send {"v":1,"t":"measure","runs":[{"text":"hello","font":"mono","size":13,"bold":false,"italic":false},{"text":"hi","font":"sans","size":13,"bold":true,"italic":false}]}
+all expect "kind":"measured"
+# std.app.30: appearance once after start.
+all expect "kind":"appearance"
+# std.app.18: a popup for a canvas that does not exist is answered dismissed.
+all send {"v":1,"t":"popup","id":"nope","x":1,"y":1,"items":["a","b"]}
+all expect "kind":"popup"
+all expect "id":"nope"
+# std.app.26: the clipboard line is accepted silently; an unknown line is skipped.
+all send {"v":1,"t":"clipboard","text":"conformance"}
+all send {"v":1,"t":"no_such_line"}
+# std.app.25 and .33: edge mode reports insets (controls at the left on macOS, at the right on Windows).
+win send {"v":1,"t":"view","title":"edge","focus":"","edge":true,"tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Fill","x":0,"y":0,"w":20,"h":20,"color":2105376}]}}
+win expect "inset_right":138
+win expect "inset_top":32
