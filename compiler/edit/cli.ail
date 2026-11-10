@@ -182,7 +182,9 @@ pub fn command(args List[str], std str) int
         exe := env.get("AIL") else
             io.eprint("error: can't run the tests: AIL names no `ail` to run")
             return 2
-        ran := proc.run(exe, if json then ["test", path, "--json"] else ["test", path]) else err
+        # `ail test` takes a file: a package's tests are its root module's (mod.unit.5).
+        target := if package then root_file(path) else path
+        ran := proc.run(exe, if json then ["test", target, "--json"] else ["test", target]) else err
             io.eprint("error: can't run the tests: {err}")
             return 2
         if ran.out != ""
@@ -191,6 +193,16 @@ pub fn command(args List[str], std str) int
             io.eprint(ran.err.strip_suffix("\n") else ran.err)
         return ran.status
     0
+
+## A package's root file: `main.ail` when it has one, else its first `.ail` file at the top.
+fn root_file(dir str) str
+    pre := if dir.ends_with("/") then dir else "{dir}/"
+    if fs.exists("{pre}main.ail")
+        return "{pre}main.ail"
+    for f in files_of(dir)
+        if not (f.strip_prefix(pre) else f).contains("/")
+            return f
+    dir
 
 fn plural(n int, w str) str
     "{n} {w}{if n == 1 then "" else "s"}"

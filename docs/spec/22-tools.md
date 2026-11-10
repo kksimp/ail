@@ -1508,6 +1508,8 @@ can see the edited text. Writes go to a temporary file beside the target and
 are renamed over it.
 **edit.out.4** — `--test` runs `ail test PATH` after an edit that was
 written without errors, and its report and exit status follow the summary.
+For a package, `PATH` is its root file: `main.ail`, or else its first file at
+the top.
 
 **edit.out.5** — `--impact` adds the edit's impact (`api.impact.1-4`) after the
 summary: the declarations it changed, the tests it can affect and the
