@@ -20,6 +20,7 @@
 ./ail infer --contracts f FILE [--apply]   # proposes up to 3 requires/ensures lines for f from the calls its tests make (patch for ail edit)
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
+./ail try FILE --set A.edit --set B.edit   # check and test patch sets on scratch copies, one verdict line each; --apply writes one clean set
 ./ail mcp                       # the compiler's tools as an MCP stdio server (check, test, ask, impact, task_*)
 ./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)
 ./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)

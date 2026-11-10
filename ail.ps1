@@ -203,7 +203,7 @@ $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'mcp', 'leak', 'header'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'mcp', 'leak', 'header'
 $route = (
     $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -275,6 +275,7 @@ if ($route) {
         'verify' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\verify\verify.ail')) @rest; exit $LASTEXITCODE }
         'infer' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\infer\infer.ail')) @rest; exit $LASTEXITCODE }
         'task' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) @rest; exit $LASTEXITCODE }
+        'try' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtry\ailtry.ail')) @rest; exit $LASTEXITCODE }
         'mcp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) @rest; exit $LASTEXITCODE }
         'lsp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) @rest; exit $LASTEXITCODE }
         'sanitize' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) @rest; exit $LASTEXITCODE }
