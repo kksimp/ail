@@ -1,5 +1,7 @@
 ## A host for std.app that answers `measure` requests (std.app.13): each
-## run is `size / 2` points per character.
+## run is `size / 2` points per character, measured in the generic face of
+## its font list (std.app.28), as a host with no fonts installed would.
+use std.app
 
 fn send(line str)
     print(line)
@@ -15,11 +17,13 @@ fn main()
         match j.text("t", "")
             "measure" =>
                 mut out := List[str]()
+                mut faces := List[str]()
                 for r in j.arr("runs") else []
                     n := r.text("text", "").chars().len().to_float()
                     out.push("{n * (r.num("size") else 0.0) / 2.0}")
+                    faces.push(app.generic_of(r.text("font", "")))
                     asked += 1
-                send("\{\"kind\":\"measured\",\"text\":\"{out.join(",")}\"}")
+                send("\{\"kind\":\"measured\",\"text\":\"{out.join(",")}\",\"fonts\":\"{faces.join(",")}\"}")
             "view" =>
                 send("\{\"kind\":\"close\"}")
                 break

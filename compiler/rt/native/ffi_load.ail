@@ -145,12 +145,10 @@ fn ffi_f32_res(r float) float
 fn ffi_status() int
     load64(global(FFI_ST))
 
-## The message of a failed bind (ffi.load.1-3).
+## The message of a failed bind (ffi.load.1-2; Windows binds the same way, ffi.load.3).
 fn ffi_load_msg(st int, lib str, has_lib bool, name str) int
     sb_reset()
-    if st == 3
-        sb_text("C calls are not supported on Windows yet (ffi.load.3)")
-    elif st == 1
+    if st == 1
         sb_text("can't load the library `")
         sb_text(lib)
         sb_text("`")

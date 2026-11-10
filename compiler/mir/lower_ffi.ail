@@ -33,14 +33,6 @@ fn Lower.ffi_bound(mut self, lib str?, name str, pos ast.Pos) int
     cur = lib_block
     ffi_trap("ffi.load.1", msg, pos)
     cur = rest
-    win_block := new_block()
-    sym_block := new_block()
-    branch(op("eq", [st, konst(3, Ty.Int)], Ty.Bool), win_block, [], sym_block, [])
-    seal(win_block)
-    seal(sym_block)
-    cur = win_block
-    ffi_trap("ffi.load.3", msg, pos)
-    cur = sym_block
     ffi_trap("ffi.load.2", msg, pos)
     cur = good
     a
