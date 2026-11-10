@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-09_
+_Last updated: 2026-11-10_
 
 **Current stage:** 2 — native self-hosting. The Rust bootstrap and interpreter are
 deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the compiler, checker
@@ -11,7 +11,7 @@ Linux and Windows are tested on the designer's VMs, and the Windows `native`,
 `examples` and `run` suites must pass before every release ([ADR 0925](decisions/0925-windows-release-gate.md)).
 The repository is being prepared to go public (target 2026-11-14 to 2026-11-17, the
 designer's call): seed trust is proposed in [ADR 0976](decisions/0976-public-release-and-seed-trust.md),
-with [SECURITY.md](../SECURITY.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) at the root. Landed 2026-11-08 and 2026-11-09: FLAC decoding and Opus CELT (`std.audio`), the VP9 decoder (`std.video.vp9`), gamepad input, `try_recv`/`recv_for`, coverage-guided `ail test --fuzz`, `ail test --mutate`, `ail context` and `ail infer --contracts` (the last three still ungated, see Tooling). See
+with [SECURITY.md](../SECURITY.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) at the root. Landed 2026-11-08 and 2026-11-09: FLAC decoding and Opus CELT (`std.audio`), the VP9 decoder (`std.video.vp9`), gamepad input, `try_recv`/`recv_for`, coverage-guided `ail test --fuzz`, `ail test --mutate`, `ail context` and `ail infer --contracts` (the last three still ungated, see Tooling). `main` is frozen for v0.1.0 and a release candidate is being gated on the three hosts ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)); versions and the changelog follow [ADR 1043](decisions/1043-versions-tags-changelog.md). See
 [language-card.md](language-card.md) for the supported subset, and [roadmap.md](roadmap.md) for what comes next.
 
 ## What is implemented

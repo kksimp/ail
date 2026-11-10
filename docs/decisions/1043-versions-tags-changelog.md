@@ -1,6 +1,6 @@
-# NNNN. Pre-1.0 versions, release tags and the changelog
+# 1043. Pre-1.0 versions, release tags and the changelog
 
-- **Status:** Proposed (number pending from the integrator; rename this file then)
+- **Status:** Accepted
 - **Date:** 2026-11-09
 - **Decided by:** AI (delegated, ADR 0076). Tagging `v0.1.0` needs the designer's own OK.
 - **Topic:** 23 — Compiler architecture
