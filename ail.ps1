@@ -208,6 +208,7 @@ $route = (
     $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
+        ($rest -contains '--fix') -or
         (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
     ($cmd -eq 'test' -and $rest.Count -gt 0) -or
     ($cmd -eq 'effects' -and (@($rest | Where-Object { & $isFile $_ }).Count -eq 1)))
