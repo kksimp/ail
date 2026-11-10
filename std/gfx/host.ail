@@ -18,7 +18,16 @@ extern c fn mmap(addr *u8, len int, prot i32, flags i32, fd i32, offset int) *u8
 extern c fn unlink(path *u8) i32
 extern c fn close(fd i32) i32
 extern c fn munmap(addr *u8, len int) i32
-extern c "kernel32" fn CreateFileMappingA(file int, attrs *u8, protect i32, hi i32, lo i32, name *u8) int
+
+extern c "kernel32" fn CreateFileMappingA(
+    file int,
+    attrs *u8,
+    protect i32,
+    hi i32,
+    lo i32,
+    name *u8,
+) int
+
 extern c "kernel32" fn MapViewOfFile(map int, access i32, hi i32, lo i32, bytes int) *u8
 extern c "kernel32" fn GetCurrentProcessId() i32
 extern c "kernel32" fn GetTickCount64() int
