@@ -988,9 +988,31 @@ two branches that change different functions never conflict
 ```ail pkg=merge_conflict tool=merge,nosuch.ail,ours.ail,theirs.ail status=2 expect=merge.cli.2 rules=merge.cli.2
 ```
 
-`--install` changes the git configuration of the repository it runs in, so its example is counted, not run.
+```ail pkg=merge_disjoint tool=merge,--check,base.ail,ours.ail,theirs.ail status=0 expect=ok: rules=merge.check.1
+```
 
-```ail skip=context rules=merge.install.1
+```ail pkg=merge_conflict tool=merge,--check,base.ail,ours.ail,theirs.ail status=1 expect=conflict: rules=merge.check.1
+```
+
+One side adds a parameter to `add` and updates its caller; the other adds a new caller with the old arity. Git and merge.decl.1 merge both cleanly; the check does not.
+
+```ail pkg=merge_semantic tool=merge,--check,base.ail,ours.ail,theirs.ail status=1 expect=(ours): rules=merge.check.2
+```
+
+```ail pkg=merge_semantic tool=merge,--check,--json,base.ail,ours.ail,theirs.ail status=1 expect="semantic":[{ rules=merge.check.4
+```
+
+**merge.check.1** — `ail merge --check BASE OURS THEIRS`, when BASE names a file, merges as above and writes nothing. If the merge has conflict hunks they are reported (merge.conflict.1) and nothing is checked. Otherwise OURS, THEIRS and the merged text are each checked as a program with `ail check`, and an error the merge has that neither side has is a *semantic conflict*. Errors are compared by file, rule and message with digits removed, so an error that only moved lines is not new. A clean result prints `ok: merged and checked, no new errors (merge.check.1)`.
+
+**merge.check.2** — Each semantic conflict is reported on standard error as `semantic: FILE:LINE: KEY (SIDE) with KEY2 (SIDE2), ...: RULE message (merge.check.2)`. KEY is the declaration that holds the error in the merged text and SIDE the side that changed it (`ours`, `theirs`, `both`, or `base` when neither did). The `with` list names the declarations the other side added, changed or removed whose name appears in KEY's text or in the message; it is left out when there are none. The exit status is 1 for any conflict, textual or semantic.
+
+**merge.check.3** — `ail merge --check OURS_REV THEIRS_REV [PATH]`, when the first argument is not a file, merges two git revisions: it adds scratch worktrees of OURS_REV, THEIRS_REV and their merge (made by `git merge` with this driver for `*.ail`), checks PATH (default `.`) in each, and reports as merge.check.2 with paths relative to the repository. A file git can't merge is reported as `conflict: FILE`. The worktrees are removed after; the repository's branches, index and files are unchanged. A revision that isn't one, or two with no common ancestor, is an error: exit status 2.
+
+**merge.check.4** — With `--json` the `--check` answer is one object on standard output, `{"merged":BOOL,"conflicts":[KEY...],"semantic":[{"file","line","decl","side","with":[KEY...],"rule","message"}...]}`.
+
+`--install` changes the git configuration of the repository it runs in, and the revision form needs a git repository, so their examples are counted, not run.
+
+```ail skip=context rules=merge.install.1,merge.check.3
 fn main()
     print(1)
 ```

@@ -1,0 +1,6 @@
+## Sums.
+fn add(a int, b int) int
+    a + b
+
+fn main()
+    print(add(1, 2))

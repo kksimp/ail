@@ -1,9 +1,12 @@
 ## `ail merge` in AIL (ADR 1019, merge.*): a three-way merge by declaration, for use as a git merge driver.
 ##   ail run tools/ailmerge/ailmerge.ail BASE OURS THEIRS [--stdout] [--json]
+##   ail run tools/ailmerge/ailmerge.ail --check BASE OURS THEIRS | --check OURS_REV THEIRS_REV [PATH]  [--json]
 ##   ail run tools/ailmerge/ailmerge.ail --install
 ## A source file is cut into declarations (merge.split.1). Two sides that change different
 ## declarations never conflict; one that changes a declaration both sides changed is merged
 ## line by line, and only if that fails it is one conflict hunk with both bodies and the base.
+## `--check` also checks the merge and reports each error neither side had alone as a conflict
+## between the declaration that holds it and the other side's changes it names (merge.check.*).
 
 MARK_OURS := "<<<<<<< ours"
 MARK_BASE := "||||||| base"
@@ -22,7 +25,7 @@ struct Merged
     conflicts List[str]
 
 fn usage() int
-    io.eprint("usage: ail merge BASE OURS THEIRS [--stdout] [--json]   (writes the result to OURS; exit 1 on conflict)\n       ail merge --install   (use this merge for *.ail in the current git repository)")
+    io.eprint("usage: ail merge BASE OURS THEIRS [--stdout] [--json]   (writes the result to OURS; exit 1 on conflict)\n       ail merge --check BASE OURS THEIRS | --check OURS_REV THEIRS_REV [PATH]  [--json]   (merge and check; writes nothing)\n       ail merge --install   (use this merge for *.ail in the current git repository)")
     2
 
 ## The leading word of a declaration line, up to the first character that is not part of a name.
@@ -226,6 +229,343 @@ fn install() !int
     print("installed: *.ail merges by declaration (.gitattributes, merge.ail.driver = {cmd} merge %O %A %B %L %P)")
     0
 
+## ---- the check (merge.check.*)
+
+## One error of `ail check --json`: where it is and what it says.
+struct Diag
+    file str
+    line int
+    rule str
+    message str
+
+## A declaration one side changed from the base: added, edited or removed.
+struct Change
+    file str
+    key str
+    side str
+
+## An error the merge has and neither side has alone (merge.check.2).
+struct Semantic
+    file str
+    line int
+    decl str
+    side str
+    causes List[str]
+    rule str
+    message str
+
+fn ail_cmd() str
+    env.get("AIL") else "./ail"
+
+## A new empty directory for scratch files, or "" if none can be made; no `mktemp`, so it works on Windows.
+fn temp_dir() str
+    root := env.get("TMPDIR") else (env.get("TEMP") else "/tmp")
+    top := root.replace("\\", "/")
+    dir := "{top.strip_suffix("/") else top}/ailmerge-{time.now_ms()}-{random.int(0, 999999)}"
+    fs.make_dir(dir) else return ""
+    dir
+
+## Removes a scratch directory from `temp_dir` and everything in it.
+fn clean_tmp(tmp str)
+    if tmp == ""
+        return
+    names := fs.list_dir(tmp) else return
+    for n in names
+        p := "{tmp}/{n}"
+        meta := fs.metadata(p) else continue
+        if meta.is_dir
+            clean_tmp(p)
+        else
+            fs.remove(p) else continue
+    fs.remove(tmp) else return
+
+## An error's identity across the three programs: its file, rule and message with the digits taken out, so an error that only moved lines is the same error (merge.check.1).
+fn sig_of(d Diag) str
+    mut kept := List[char]()
+    for c in d.message.chars()
+        if not c.is_digit()
+            kept.push(c)
+    "{d.file}|{d.rule}|{kept.join("")}"
+
+## The errors `ail check --json TARGET` reports; `prefix` is cut from each file name, or every file is `name` when one is given. Exits 2 if `ail check` can't run (merge.cli.2).
+fn errors_of(target str, prefix str, name str) List[Diag]
+    r := proc.run(ail_cmd(), ["check", "--json", target]) else err
+        io.eprint("error: can't run `{ail_cmd()} check`: {err} (merge.cli.2)")
+        io.exit(2)
+        return []
+    mut out := List[Diag]()
+    for l in "{r.out}\n{r.err}".lines()
+        t := l.trim()
+        if not t.starts_with("\{")
+            continue
+        d := parse_json(t) else continue
+        if d.text("severity", "error") != "error" or d.text("rule", "") == ""
+            continue
+        mut file := name
+        if file == ""
+            file = d.text("file", "").replace("\\", "/")
+            if file.starts_with(prefix)
+                file = file.slice(prefix.len(), file.len())
+            if file.starts_with("./")
+                file = file.slice(2, file.len())
+        line := d.int("line") else 0
+        out.push(Diag(file: file, line: line, rule: d.text("rule", ""), message: d.text("message", "")))
+    out
+
+## The keys of the declarations `side` added, edited or removed from `base` (merge.decl.1).
+fn changed_keys(base str, side str) List[str]
+    b := split_decls(base)
+    s := split_decls(side)
+    mut out := List[str]()
+    for k in s.order
+        if text_of(b, k) != s.texts[k]
+            out.push(k)
+    for k in b.order
+        if not s.texts.contains(k)
+            out.push(k)
+    out
+
+## The key of the declaration that holds line `line` (from 1) of `src`, or "" before the first one (merge.split.1).
+fn decl_at(src str, line int) str
+    mut head := ""
+    mut n := 0
+    for l in src.lines()
+        n += 1
+        if n > line
+            break
+        if l.trim() == "" or l.starts_with(" ") or l.starts_with("\t") or is_prefix(l)
+            continue
+        head = l
+    if head == ""
+        return ""
+    key_of([head])
+
+## The name a declaration is used by: the last part of its key's name (`fn Point.sum` is `sum`); "" for a declaration with no name.
+fn short_name(key str) str
+    if key.starts_with("text ")
+        return ""
+    words := key.split(" ")
+    if words.len() < 2
+        return ""
+    parts := words[1].split(".")
+    parts[parts.len() - 1]
+
+## The identifiers in `s`.
+fn words_of(s str) List[str]
+    mut out := List[str]()
+    mut cur := List[char]()
+    for c in "{s} ".chars()
+        if c.is_alnum() or c == '_'
+            cur.push(c)
+        elif not cur.is_empty()
+            w := cur.join("")
+            if not out.contains(w)
+                out.push(w)
+            cur = []
+    out
+
+## Which side changed declaration `key` of `file`: `ours`, `theirs`, `both` or `base`.
+fn side_of(changes List[Change], file str, key str) str
+    mut ours := false
+    mut theirs := false
+    for c in changes
+        if c.file == file and c.key == key
+            if c.side == "ours"
+                ours = true
+            else
+                theirs = true
+    if ours and theirs
+        return "both"
+    if ours
+        return "ours"
+    if theirs
+        return "theirs"
+    "base"
+
+## merge.check.2: each error of the merge that neither side has, with the declaration that holds it, the side that changed that declaration, and the other side's changed declarations it names.
+fn semantic(merged Map[str, str], changes List[Change], ours List[Diag], theirs List[Diag], got List[Diag]) List[Semantic]
+    mut known := List[str]()
+    for d in ours
+        known.push(sig_of(d))
+    for d in theirs
+        known.push(sig_of(d))
+    mut out := List[Semantic]()
+    for d in got
+        if known.contains(sig_of(d))
+            continue
+        src := merged.get(d.file) else ""
+        key := decl_at(src, d.line)
+        side := side_of(changes, d.file, key)
+        body := split_decls(src).texts.get(key) else ""
+        names := words_of("{body} {d.message}")
+        mut causes := List[str]()
+        for c in changes
+            if c.side == side or (c.file == d.file and c.key == key)
+                continue
+            n := short_name(c.key)
+            label := if c.file == d.file then "{c.key} ({c.side})" else "{c.file}: {c.key} ({c.side})"
+            if n != "" and names.contains(n) and not causes.contains(label)
+                causes.push(label)
+        decl := if key == "" then "(top)" else key
+        out.push(Semantic(file: d.file, line: d.line, decl: decl, side: side, causes: causes, rule: d.rule, message: d.message))
+    out
+
+fn sem_line(s Semantic) str
+    with_part := if s.causes.is_empty() then "" else " with {s.causes.join(", ")}"
+    "semantic: {s.file}:{s.line}: {s.decl} ({s.side}){with_part}: {s.rule} {s.message} (merge.check.2)"
+
+fn sem_json(s Semantic) str
+    causes := [quote(c) for c in s.causes].join(",")
+    "\{\"file\":{quote(s.file)},\"line\":{s.line},\"decl\":{quote(s.decl)},\"side\":{quote(s.side)},\"with\":[{causes}],\"rule\":{quote(s.rule)},\"message\":{quote(s.message)}}"
+
+## The answer: conflict lines on standard error (merge.conflict.1, merge.check.2), or one JSON object (merge.cli.3, merge.check.4).
+fn report(conflicts List[str], sems List[Semantic], json bool, check bool)
+    if json
+        keys := [quote(c) for c in conflicts].join(",")
+        if check
+            print("\{\"merged\":{conflicts.is_empty()},\"conflicts\":[{keys}],\"semantic\":[{[sem_json(s) for s in sems].join(",")}]}")
+        else
+            print("\{\"merged\":{conflicts.is_empty()},\"conflicts\":[{keys}]}")
+        return
+    for c in conflicts
+        io.eprint("conflict: {c} (merge.conflict.1)")
+    for s in sems
+        io.eprint(sem_line(s))
+    if check and conflicts.is_empty() and sems.is_empty()
+        print("ok: merged and checked, no new errors (merge.check.1)")
+
+## merge.check.1: merge three files without writing anything, then check OURS, THEIRS and the merge, each as a program.
+fn check_files(files List[str], json bool) int
+    base := read(files[0])
+    ours := read(files[1])
+    theirs := read(files[2])
+    tmp := temp_dir()
+    if tmp == ""
+        io.eprint("error: can't make a scratch directory (merge.cli.2)")
+        return 2
+    result := merge_sides(split_decls(base), split_decls(ours), split_decls(theirs), tmp)
+    if not result.conflicts.is_empty()
+        clean_tmp(tmp)
+        report(result.conflicts, [], json, true)
+        return 1
+    # Each program is `main.ail` in its own directory, so the three check alike.
+    for side, text in [("ours", ours), ("theirs", theirs), ("merged", result.out)]
+        fs.make_dir("{tmp}/{side}") else err
+            io.eprint("error: can't make {tmp}/{side}: {err} (merge.cli.2)")
+            clean_tmp(tmp)
+            return 2
+        fs.write_text("{tmp}/{side}/main.ail", text) else err
+            io.eprint("error: can't write {tmp}/{side}/main.ail: {err} (merge.cli.2)")
+            clean_tmp(tmp)
+            return 2
+    name := files[1]
+    e_ours := errors_of("{tmp}/ours/main.ail", "", name)
+    e_theirs := errors_of("{tmp}/theirs/main.ail", "", name)
+    e_merged := errors_of("{tmp}/merged/main.ail", "", name)
+    clean_tmp(tmp)
+    mut changes := List[Change]()
+    for k in changed_keys(base, ours)
+        changes.push(Change(file: name, key: k, side: "ours"))
+    for k in changed_keys(base, theirs)
+        changes.push(Change(file: name, key: k, side: "theirs"))
+    sems := semantic({name: result.out}, changes, e_ours, e_theirs, e_merged)
+    report([], sems, json, true)
+    if sems.is_empty() then 0 else 1
+
+## `git ARGS`: its standard output, trimmed, or "" if it fails.
+fn git_out(args List[str]) str
+    r := proc.run("git", args) else return ""
+    if r.status != 0
+        return ""
+    r.out.trim()
+
+## Removes the scratch worktrees of `check_revs` and their directory.
+fn drop_worktrees(tmp str)
+    for side in ["ours", "theirs", "merged"]
+        if fs.exists("{tmp}/{side}")
+            gone := proc.run("git", ["worktree", "remove", "--force", "{tmp}/{side}"]) else continue
+    clean_tmp(tmp)
+    pruned := proc.run("git", ["worktree", "prune"]) else return
+
+## merge.check.3: merge THEIRS_REV into OURS_REV in a scratch worktree with this driver, check PATH there and in worktrees of both sides, and report as merge.check.2. The repository's branches, index and files are left as they were.
+fn check_revs(ours_rev str, theirs_rev str, path str, json bool) int
+    o := git_out(["rev-parse", "--verify", "--quiet", ours_rev])
+    t := git_out(["rev-parse", "--verify", "--quiet", theirs_rev])
+    if o == "" or t == ""
+        io.eprint("error: `{if o == "" then ours_rev else theirs_rev}` is not a file or a git revision here (merge.check.3)")
+        return 2
+    b := git_out(["merge-base", o, t])
+    if b == ""
+        io.eprint("error: {ours_rev} and {theirs_rev} have no common ancestor (merge.check.3)")
+        return 2
+    tmp := temp_dir()
+    if tmp == ""
+        io.eprint("error: can't make a scratch directory (merge.cli.2)")
+        return 2
+    for side, rev in [("ours", o), ("theirs", t), ("merged", o)]
+        added := proc.run("git", ["worktree", "add", "--detach", "--quiet", "{tmp}/{side}", rev]) else err
+            io.eprint("error: can't run git: {err} (merge.check.3)")
+            drop_worktrees(tmp)
+            return 2
+        if added.status != 0
+            io.eprint("error: `git worktree add` failed: {added.err.trim()} (merge.check.3)")
+            drop_worktrees(tmp)
+            return 2
+    attrs := "{tmp}/attributes"
+    fs.write_text(attrs, "*.ail merge=ail\n") else err
+        io.eprint("error: can't write {attrs}: {err} (merge.cli.2)")
+        drop_worktrees(tmp)
+        return 2
+    m := proc.run("git", [
+        "-C",
+        "{tmp}/merged",
+        "-c",
+        "core.attributesFile={attrs}",
+        "-c",
+        "merge.ail.name=AIL declaration merge",
+        "-c",
+        "merge.ail.driver=\"{ail_cmd()}\" merge %O %A %B %L %P",
+        "merge",
+        "--no-commit",
+        "--no-ff",
+        "--quiet",
+        t,
+    ]) else err
+        io.eprint("error: can't run git: {err} (merge.check.3)")
+        drop_worktrees(tmp)
+        return 2
+    if m.status != 0
+        unmerged := git_out(["-C", "{tmp}/merged", "diff", "--name-only", "--diff-filter=U"])
+        conflicts := [f for f in unmerged.lines() if f.trim() != ""]
+        drop_worktrees(tmp)
+        if conflicts.is_empty()
+            io.eprint("error: `git merge` failed: {m.err.trim()} (merge.check.3)")
+            return 2
+        report(conflicts, [], json, true)
+        return 1
+    mut changes := List[Change]()
+    for side, rev in [("ours", o), ("theirs", t)]
+        for f in git_out(["diff", "--name-only", b, rev]).lines()
+            if not f.ends_with(".ail")
+                continue
+            before := proc.run("git", ["show", "{b}:{f}"]) else continue
+            was := if before.status == 0 then before.out else ""
+            now := fs.read_text("{tmp}/{side}/{f}") else ""
+            for k in changed_keys(was, now)
+                changes.push(Change(file: f, key: k, side: side))
+    sub := if path == "." or path == "" then "" else "/{path}"
+    e_ours := errors_of("{tmp}/ours{sub}", "{tmp}/ours/", "")
+    e_theirs := errors_of("{tmp}/theirs{sub}", "{tmp}/theirs/", "")
+    e_merged := errors_of("{tmp}/merged{sub}", "{tmp}/merged/", "")
+    mut merged := Map[str, str]()
+    for d in e_merged
+        if not merged.contains(d.file)
+            merged[d.file] = fs.read_text("{tmp}/merged/{d.file}") else ""
+    drop_worktrees(tmp)
+    sems := semantic(merged, changes, e_ours, e_theirs, e_merged)
+    report([], sems, json, true)
+    if sems.is_empty() then 0 else 1
+
 fn main() !
     args := env.args()
     if args.contains("--install")
@@ -233,37 +573,39 @@ fn main() !
     mut files := List[str]()
     mut to_stdout := false
     mut json := false
+    mut check := false
     for a in args
         if a == "--stdout"
             to_stdout = true
         elif a == "--json"
             json = true
+        elif a == "--check"
+            check = true
         elif a.starts_with("--")
             io.exit(usage())
         else
             files.push(a)
+    if check
+        # merge.check.1 when BASE names a file, merge.check.3 for two revisions.
+        if files.len() >= 3 and fs.exists(files[0])
+            io.exit(check_files(files, json))
+        if files.len() == 2 or files.len() == 3
+            path := if files.len() == 3 then files[2] else "."
+            io.exit(check_revs(files[0], files[1], path, json))
+        io.exit(usage())
     # git passes the marker size and the path after the three files (merge.cli.1).
     if files.len() < 3
         io.exit(usage())
     base_text := read(files[0])
     ours_text := read(files[1])
     theirs_text := read(files[2])
-    mut tmp := ""
-    if mk := proc.run("mktemp", ["-d"])
-        if mk.status == 0
-            tmp = mk.out.trim()
+    tmp := temp_dir()
     result := merge_sides(split_decls(base_text), split_decls(ours_text), split_decls(theirs_text), tmp)
-    if tmp != ""
-        gone := proc.run("rm", ["-rf", tmp]) else return
+    clean_tmp(tmp)
     if to_stdout
         print(result.out.strip_suffix("\n") else result.out)
     else
         fs.write_text(files[1], result.out)? "writing {files[1]}"
-    # merge.cli.3
-    if json
-        print("\{\"merged\":{result.conflicts.is_empty()},\"conflicts\":[{[quote(c) for c in result.conflicts].join(",")}]}")
-    else
-        for c in result.conflicts
-            io.eprint("conflict: {c} (merge.conflict.1)")
+    report(result.conflicts, [], json, false)
     code := if result.conflicts.is_empty() then 0 else 1
     io.exit(code)
