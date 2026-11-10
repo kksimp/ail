@@ -4,19 +4,24 @@
 #
 #   tools/ailmcp/bench.sh [PROGRAM.ail] [CALLS]
 #
-# Three sessions of CALLS `ail_check` calls each: cold; warm with a different file per call
-# (the direct path); warm with the same file every call (the memo after the first).
+# Three sessions of CALLS `ail_check` calls each, run in the program's own directory so its
+# modules are found: cold; warm with the file spelt differently per call (`./` prefixes, so
+# the memo misses and each call takes the direct path); warm with the same spelling every
+# call (the memo after the first).
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 prog="${1:-$root/examples/hello.ail}"
 n="${2:-10}"
+prog="$(cd "$(dirname "$prog")" && pwd)/$(basename "$prog")"
+dir="$(dirname "$prog")"
+base="$(basename "$prog")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-for i in $(seq 1 "$n"); do cp "$prog" "$work/p$i.ail"; done
 now() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
 calls() {
     for i in $(seq 1 "$n"); do
-        f="p1.ail"; [ "$1" = many ] && f="p$i.ail"
+        f="$base"
+        if [ "$1" = many ]; then for _ in $(seq 1 "$i"); do f="./$f"; done; fi
         printf '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"ail_check","arguments":{"program":"%s"}}}\n' "$i" "$f"
     done
 }
@@ -26,9 +31,9 @@ session() {
     calls "$2" > "$work/in.txt"
     t0="$(now)"
     if [ "$1" = cold ]; then
-        (cd "$work" && AIL_MCP_COLD=1 "$root/ail" mcp < in.txt > out.txt)
+        (cd "$dir" && AIL_MCP_COLD=1 "$root/ail" mcp < "$work/in.txt" > "$work/out.txt")
     else
-        (cd "$work" && "$root/ail" mcp < in.txt > out.txt)
+        (cd "$dir" && "$root/ail" mcp < "$work/in.txt" > "$work/out.txt")
     fi
     t1="$(now)"
     grep -c '"isError":false' "$work/out.txt" > "$work/ok.txt" || true
