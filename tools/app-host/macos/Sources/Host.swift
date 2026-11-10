@@ -28,6 +28,7 @@ final class Model: ObservableObject {
         if !started {
             started = true
             Outbox.shared.send("start", Edge.insets(Edge.window(nil)))
+            Appearance.begin()
         }
     }
 

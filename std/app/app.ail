@@ -172,7 +172,7 @@ impl ToJson for Node
             ])
 
 ## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
-## `click`, `scroll`, `key`, `keyup` (key release, std.app.20), `resize`, `close`, `external` (std.app.14), `move`, `leave` (std.app.16) or `popup` (std.app.18); the other
+## `click`, `scroll`, `key`, `keyup` (key release, std.app.20), `resize`, `close`, `external` (std.app.14), `move`, `leave` (std.app.16), `popup` (std.app.18) or `appearance` (std.app.30; `text` is `dark` or `light`); the other
 ## fields are zero or empty when they don't apply.
 pub struct Event
     pub kind str

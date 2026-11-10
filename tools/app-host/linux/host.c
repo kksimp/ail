@@ -926,6 +926,64 @@ static void show_view(const char *title, const char *focus, Node *tree) {
     }
 }
 
+/* ---- System appearance (std.app.30, ADR 1008) ---- */
+
+static char last_appearance[8] = "";
+
+/* "dark" when GNOME's color-scheme says so, else when GTK's theme is dark. */
+static const char *appearance_now(void) {
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *sc = src ? g_settings_schema_source_lookup(src, "org.gnome.desktop.interface", TRUE) : NULL;
+    if (sc) {
+        const char *dark = NULL;
+        if (g_settings_schema_has_key(sc, "color-scheme")) {
+            GSettings *st = g_settings_new("org.gnome.desktop.interface");
+            gchar *v = g_settings_get_string(st, "color-scheme");
+            if (!strcmp(v, "prefer-dark")) dark = "dark";
+            else if (!strcmp(v, "prefer-light")) dark = "light";
+            g_free(v);
+            g_object_unref(st);
+        }
+        g_settings_schema_unref(sc);
+        if (dark) return dark;
+    }
+    gboolean prefer = FALSE;
+    gchar *theme = NULL;
+    g_object_get(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", &prefer, "gtk-theme-name", &theme, NULL);
+    gboolean dark = prefer || (theme && strstr(theme, "dark") != NULL) || (theme && strstr(theme, "Dark") != NULL);
+    g_free(theme);
+    return dark ? "dark" : "light";
+}
+
+static void send_appearance(void) {
+    const char *now = appearance_now();
+    if (!strcmp(now, last_appearance)) return;
+    snprintf(last_appearance, sizeof last_appearance, "%s", now);
+    Ev e = ev_new("appearance");
+    ev_str(&e, "text", now);
+    ev_send(&e);
+}
+
+static void on_appearance_change(GObject *o, GParamSpec *p, gpointer d) {
+    (void)o; (void)p; (void)d;
+    send_appearance();
+}
+
+static void watch_appearance(void) {
+    GtkSettings *gs = gtk_settings_get_default();
+    g_signal_connect(gs, "notify::gtk-theme-name", G_CALLBACK(on_appearance_change), NULL);
+    g_signal_connect(gs, "notify::gtk-application-prefer-dark-theme", G_CALLBACK(on_appearance_change), NULL);
+    GSettingsSchemaSource *src = g_settings_schema_source_get_default();
+    GSettingsSchema *sc = src ? g_settings_schema_source_lookup(src, "org.gnome.desktop.interface", TRUE) : NULL;
+    if (sc) {
+        if (g_settings_schema_has_key(sc, "color-scheme")) {
+            GSettings *st = g_settings_new("org.gnome.desktop.interface");
+            g_signal_connect(st, "changed::color-scheme", G_CALLBACK(on_appearance_change), NULL);
+        }
+        g_settings_schema_unref(sc);
+    }
+}
+
 /* ---- Reading views from standard input (std.app.7) ---- */
 
 static gboolean first_view = TRUE, started = FALSE;
@@ -962,6 +1020,8 @@ static void handle_line(const char *line) {
         if (!started) {
             started = TRUE;
             { Ev se = ev_new("start"); ev_screen(&se); ev_send(&se); }
+            send_appearance();
+            watch_appearance();
         }
     }
     jfree(obj);
