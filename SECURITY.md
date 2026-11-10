@@ -40,7 +40,10 @@ X.509 path validation, AES-GCM, ChaCha20-Poly1305, X25519, SHA-2, SHA-3,
 HMAC and HKDF (`compiler/rt/native/crypto.ail`, `hash.ail`). **This code has had no
 third-party security audit.** It is checked against published test vectors
 (`tools/native-tls/`), which shows it computes the right answers, not that it
-resists side channels or hostile input. Review and reports are welcome.
+resists side channels or hostile input. What is checked, fuzzed and
+constant time, and what is not, is listed in
+[docs/design/crypto-assurance.md](docs/design/crypto-assurance.md). Review and
+reports are welcome.
 
 Out of scope: the apps built with AIL (Garlic, Clove, Garlic Press, the editor)
 live in their own repositories; programs that use `unsafe` blocks incorrectly

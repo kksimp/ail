@@ -1973,12 +1973,12 @@ fn Decoder.decode_block(mut self, mi_row int, mi_col int, bsize int, bwl int, bh
                         tt := if p > 0 or lossless then 0 else MODE_TX_TYPE[mode]
                         eob := tokens(p, mi_row, mi_col, row, col, tx, tt)
                         if eob > 0
-                            inverse(p, mi_row, mi_col, row, col, tx, tt)
+                            inverse(p, mi_row, mi_col, row, col, tx, tt, eob)
                 elif m_skip == 0
                     eob2 := tokens(p, mi_row, mi_col, row, col, tx, 0)
                     eobtotal += eob2
                     if eob2 > 0
-                        inverse(p, mi_row, mi_col, row, col, tx, 0)
+                        inverse(p, mi_row, mi_col, row, col, tx, 0, eob2)
                 col += step
             row += step
     if is_inter and m_skip == 0 and bsize >= B8X8 and eobtotal == 0
@@ -2832,8 +2832,7 @@ fn Decoder.decode_coefs(mut self, p int, tx int, ctx0 int, at int) int
     dc_q := if p == 0 then dq[m_seg * 4] else dq[m_seg * 4 + 2]
     ac_q := if p == 0 then dq[m_seg * 4 + 1] else dq[m_seg * 4 + 3]
     shift := if tx == 3 then 1 else 0
-    for i in 0..maxeob
-        co[i] = 0
+    # `co` is all zero here: `inverse` clears what it used.
     mut ctx := ctx0
     mut c := 0
     mut dqv := dc_q
@@ -2896,36 +2895,59 @@ fn Decoder.decode_coefs(mut self, p int, tx int, ctx0 int, at int) int
     c
 
 ## Inverse transform of `co` added to the prediction (VP9 spec 8.7).
-fn Decoder.inverse(mut self, p int, mi_row int, mi_col int, row int, col int, tx int, tt int)
+fn Decoder.inverse(
+    mut self,
+    p int,
+    mi_row int,
+    mi_col int,
+    row int,
+    col int,
+    tx int,
+    tt int,
+    eob int,
+)
     ss := if p == 0 then 0 else 1
     stride := if p == 0 then ystride else cstride
     x0 := (mi_col * 8).shr(ss) + col * 4
     y0 := (mi_row * 8).shr(ss) + row * 4
     n := (4).shl(tx)
+    base := plane_at(cur, p) + y0 * stride + x0
+    sh := [4, 5, 6, 6][tx]
+    if eob == 1 and tt == 0 and not lossless
+        # Only the DC coefficient: one value for the whole block (libvpx
+        # vpx_idct*_1_add).
+        dc := rs14(rs14(co[0] * 11585) * 11585)
+        a1 := (dc + (1).shl(sh - 1)).shr(sh)
+        co[0] = 0
+        for y in 0..n
+            o := base + y * stride
+            for x in 0..n
+                mem[o + x] = clip8(mem[o + x].to_int() + a1).to_u8()
+        return
     if lossless
         iwht()
     else
         row_adst := tt == 2 or tt == 3
         col_adst := tt == 1 or tt == 3
+        # A row of zeros transforms to zeros (libvpx's partial idcts).
         for i in 0..n
-            mut nonzero := tx < 3
-            if tx == 3
-                for j in 0..n
-                    if co[i * n + j] != 0
-                        nonzero = true
+            mut nonzero := false
+            for j in 0..n
+                if co[i * n + j] != 0
+                    nonzero = true
+                    break
             if nonzero
                 tx1d(tx, row_adst, i * n, 1)
         for i in 0..n
             tx1d(tx, col_adst, i, n)
-        sh := [4, 5, 6, 6][tx]
         half := (1).shl(sh - 1)
         for i in 0..n * n
             co[i] = (co[i] + half).shr(sh)
-    base := plane_at(cur, p) + y0 * stride + x0
     for y in 0..n
         o := base + y * stride
         for x in 0..n
             mem[o + x] = clip8(mem[o + x].to_int() + co[y * n + x]).to_u8()
+            co[y * n + x] = 0
 
 fn clip8(v int) int
     if v < 0
@@ -3435,30 +3457,79 @@ fn Decoder.predict_block(
     dst := plane_at(cur, p) + y0 * stride + x0
     kx := kern + spx * 8
     ky := kern + spy * 8
-    for yy in 0..h + 7
-        for xx in 0..w
-            mut v := 0
+    inside := sx >= 3 and sy >= 3 and sx + w + 4 <= fw and sy + h + 4 <= fh
+    if spx == 0 and spy == 0 and inside
+        # Whole-pixel motion inside the frame: a copy.
+        for yy in 0..h
+            o := dst + yy * stride
+            q := src + (sy + yy) * stride + sx
+            for xx in 0..w
+                if which == 1
+                    mem[o + xx] = (mem[o + xx].to_int() + mem[q + xx].to_int() + 1).shr(1).to_u8()
+                else
+                    mem[o + xx] = mem[q + xx]
+        return
+    # Rows the vertical filter needs: 3 above and 4 below, or just the block.
+    y_lo := if spy == 0 then 3 else 0
+    y_hi := if spy == 0 then h + 3 else h + 7
+    for yy in y_lo..y_hi
+        t := yy * 64
+        if inside
+            q := src + (sy + yy - 3) * stride + sx
             if spx == 0
-                v = ref_px(src, stride, fw, fh, sx + xx, sy + yy - 3)
+                for xx in 0..w
+                    tmp[t + xx] = mem[q + xx].to_int()
             else
-                mut sum := 0
-                for k in 0..8
-                    sum += ref_px(src, stride, fw, fh, sx + xx + k - 3, sy + yy - 3) * filt[kx + k]
-                v = clip8((sum + 64).shr(7))
-            tmp[yy * 64 + xx] = v
+                for xx in 0..w
+                    qx := q + xx - 3
+                    sum := mem[qx].to_int() * filt[kx]
+                        + mem[qx + 1].to_int() * filt[kx + 1]
+                        + mem[qx + 2].to_int() * filt[kx + 2]
+                        + mem[qx + 3].to_int() * filt[kx + 3]
+                        + mem[qx + 4].to_int() * filt[kx + 4]
+                        + mem[qx + 5].to_int() * filt[kx + 5]
+                        + mem[qx + 6].to_int() * filt[kx + 6]
+                        + mem[qx + 7].to_int() * filt[kx + 7]
+                    tmp[t + xx] = clip8((sum + 64).shr(7))
+        else
+            for xx in 0..w
+                mut v := 0
+                if spx == 0
+                    v = ref_px(src, stride, fw, fh, sx + xx, sy + yy - 3)
+                else
+                    mut sum := 0
+                    for k in 0..8
+                        sum += ref_px(
+                            src,
+                            stride,
+                            fw,
+                            fh,
+                            sx + xx + k - 3,
+                            sy + yy - 3,
+                        ) * filt[kx + k]
+                    v = clip8((sum + 64).shr(7))
+                tmp[t + xx] = v
     for yy in 0..h
         o := dst + yy * stride
+        t := yy * 64
         for xx in 0..w
-            mut v2 := tmp[(yy + 3) * 64 + xx]
+            mut v2 := tmp[t + 192 + xx]
             if spy != 0
-                mut sum2 := 0
-                for k in 0..8
-                    sum2 += tmp[(yy + k) * 64 + xx] * filt[ky + k]
+                q := t + xx
+                sum2 := tmp[q] * filt[ky]
+                    + tmp[q + 64] * filt[ky + 1]
+                    + tmp[q + 128] * filt[ky + 2]
+                    + tmp[q + 192] * filt[ky + 3]
+                    + tmp[q + 256] * filt[ky + 4]
+                    + tmp[q + 320] * filt[ky + 5]
+                    + tmp[q + 384] * filt[ky + 6]
+                    + tmp[q + 448] * filt[ky + 7]
                 v2 = clip8((sum2 + 64).shr(7))
             if which == 1
                 mem[o + xx] = (mem[o + xx].to_int() + v2 + 1).shr(1).to_u8()
             else
                 mem[o + xx] = v2.to_u8()
+
 # ---------------------------------------------------------------- loop filter
 
 ## Filter levels per segment, reference and mode, and the limits per level

@@ -212,6 +212,18 @@ static void ev_send(Ev *e) {
     fflush(stdout);
     g_string_free(e->s, TRUE);
 }
+/* std.app.31: the primary monitor's size in points and its scale. */
+static void ev_screen(Ev *e) {
+    GdkDisplay *d = gdk_display_get_default();
+    GdkMonitor *m = d ? gdk_display_get_primary_monitor(d) : NULL;
+    if (!m && d && gdk_display_get_n_monitors(d) > 0) m = gdk_display_get_monitor(d, 0);
+    if (!m) return;
+    GdkRectangle g;
+    gdk_monitor_get_geometry(m, &g);
+    ev_num(e, "screen_w", g.width);
+    ev_num(e, "screen_h", g.height);
+    ev_num(e, "scale", gdk_monitor_get_scale_factor(m));
+}
 static void send_simple(const char *kind) { Ev e = ev_new(kind); ev_send(&e); }
 static void send_id(const char *kind, const char *id) { Ev e = ev_new(kind); ev_str(&e, "id", id); ev_send(&e); }
 
@@ -655,6 +667,7 @@ static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
     ev_num(&ev, "dy", a->height);
     ev_num(&ev, "cell_w", cw);
     ev_num(&ev, "cell_h", ch);
+    ev_screen(&ev);
     ev_send(&ev);
 }
 
@@ -948,7 +961,7 @@ static void handle_line(const char *line) {
         show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree);
         if (!started) {
             started = TRUE;
-            send_simple("start");
+            { Ev se = ev_new("start"); ev_screen(&se); ev_send(&se); }
         }
     }
     jfree(obj);

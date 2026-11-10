@@ -1,6 +1,6 @@
 # 0420. Network waits are cooperative: non-blocking sockets, yield, back off
 
-- **Status:** Accepted
+- **Status:** Accepted (option B in part by [1009](1009-readiness-io.md))
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** standard library
