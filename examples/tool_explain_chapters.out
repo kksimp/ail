@@ -11,7 +11,7 @@ eff 15 0
 err 40 5
 explain 6 0
 expr 65 18
-ffi 17 0
+ffi 21 0
 fix 11 0
 gen 17 0
 gram 17 2
@@ -44,4 +44,4 @@ try 9 0
 type 123 10
 unsafe 21 0
 verify 9 0
-all 1329 54
+all 1333 54

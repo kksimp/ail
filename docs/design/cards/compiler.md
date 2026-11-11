@@ -1,6 +1,6 @@
 # compiler
 entry: main in main.ail
-tests: 10 (`ail test` lists them)
+tests: 11 (`ail test` lists them)
 
 ## (root) (62 items)
 
