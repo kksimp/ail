@@ -38,7 +38,11 @@ const CASES = [
   ["    s := b\"\\x41\"", "\\x41", "constant.character.escape.ail"],
   ["    c := 'x'", "'x'", "string.quoted.single.ail"],
   ["# see lex.kw.1 here", "lex.kw.1", "constant.other.rule-id.ail"],
-  ["## doc comment", "## doc comment", "comment.block.documentation.ail"],
+  // begin/end rules tokenize the marker and the body separately; both carry the scope
+  ["## doc comment", "##", "comment.block.documentation.ail"],
+  ["## doc comment", " doc comment", "comment.block.documentation.ail"],
+  ["# plain", " plain", "comment.line.number-sign.ail"],
+  ["struct Vec[T, const N int]", "const", "storage.modifier.const.ail"],
   ["@test", "@test", "entity.other.attribute-name.ail"],
   ["    if x and not y", "and", "keyword.operator.word.ail"],
   ["    return none", "none", "constant.language.ail"],

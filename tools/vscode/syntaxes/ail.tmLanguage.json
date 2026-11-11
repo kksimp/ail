@@ -320,6 +320,10 @@
           "match": "\\b(?:break|continue|elif|else|for|if|match|return|while|defer|spawn|par|with)\\b"
         },
         {
+          "name": "storage.modifier.const.ail",
+          "match": "\\bconst\\b"
+        },
+        {
           "name": "storage.modifier.ail",
           "match": "\\b(?:pub|mut|ref|move|unique|unsafe|extern|any)\\b"
         },

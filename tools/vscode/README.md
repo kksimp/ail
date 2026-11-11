@@ -25,10 +25,12 @@ npm test        # tokenizes the scope cases and every examples/*.ail with the gr
 Smoke test in VS Code (examples/json.ail): break a line and see a squiggle whose code is a rule ID
 (for example `lex.kw.1`); hover a call; F12 on a function; Shift+F12 for references; F2 rename; Ctrl+. for a quick fix.
 
-## Package
+## Package and install locally
 
 ```sh
-npx vsce package    # writes ail-0.1.0.vsix; install with: code --install-extension ail-0.1.0.vsix
+cd tools/vscode && npm install
+npx vsce package                              # writes ail-0.1.0.vsix
+code --install-extension ail-0.1.0.vsix
 ```
 
 Not published to the Marketplace (that is a publishing decision for the designer).
