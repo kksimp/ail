@@ -3254,10 +3254,18 @@ fn Gate.agent_tools(mut self, tmp str)
         "{td}/ail-attach-{tport}.json",
         "\{\"addr\":\"127.0.0.1:{tport}\",\"token\":\"tok\"}",
     ) else return
-    tpid := net_start("python3 -I tools/gate/attach_server.py {tport} {td}/req.txt {td}/reply.json", tport)
+    tpid := net_start(
+        "python3 -I tools/gate/attach_server.py {tport} {td}/req.txt {td}/reply.json",
+        tport,
+    )
     tl := sh_run("cd {repo_root()} && printf '%s\\n' '{jreq(1, "tools/list", "~^")}' '{mcp_call(2, "add", "'n':2")}' | TMPDIR={td} ./ail attach mcp")
     net_stop(tpid)
-    want("attach mcp tools/list", tl.out, ["app_observe", "app_input", "\"name\":\"add\"", "\"integer\""])
+    want("attach mcp tools/list", tl.out, [
+        "app_observe",
+        "app_input",
+        "\"name\":\"add\"",
+        "\"integer\"",
+    ])
     want("attach mcp call", reply_of(tl.out, 2), ["\"isError\":false"])
     want("attach mcp call request", slurp("{td}/req.txt"), [
         "\"q\":\"call\"",
