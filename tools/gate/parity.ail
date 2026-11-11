@@ -275,7 +275,11 @@ fn Probe.runtime(mut self)
         lines.push("std.os.signals.delivery works")
 
 fn main() !
-    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
+    # TMPDIR as the gate sets it; by hand on Windows only TEMP is set, and `/tmp` is no directory there.
+    mut tmp := env.get("TMPDIR") else ""
+    if tmp.is_empty()
+        tmp = env.get("TEMP") else "/tmp"
+    base := tmp.replace("\\", "/")
     root := if base.len() > 1 and base.ends_with("/") then base.slice(0, base.len() - 1) else base
     dir := "{root}/ail-parity"
     made := sh("rm -rf {dir}; mkdir -p {dir}")
