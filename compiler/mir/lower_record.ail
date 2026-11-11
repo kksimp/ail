@@ -37,6 +37,8 @@ RECORDED := [
     "fs_volume",
     "fs_read_range",
     "fs_trash",
+    "fs_temp_dir",
+    "fs_make_temp_dir",
     "fs_map",
     "fs_mode",
     "fs_set_mode",

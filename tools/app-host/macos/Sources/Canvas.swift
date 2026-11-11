@@ -119,6 +119,12 @@ final class CanvasView: NSView {
         }
     }
 
+    /// A canvas that joins a window reports again: its first size came before it had one.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil && reported != .zero { reportSize() }
+    }
+
     /// `resize` (std.app.5) with the edge-mode insets (std.app.25).
     func reportSize() {
         let size = reported

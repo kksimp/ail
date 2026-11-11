@@ -18,7 +18,7 @@ if [ ! -x "$exe" ] || [ "$here/host.c" -nt "$exe" ] || [ "$here/run.sh" -nt "$ex
     echo "audio-host: building $exe" >&2
     mkdir -p "$here/build"
     # shellcheck disable=SC2046
-    gcc -O2 -Wall -Wextra -o "$exe" "$here/host.c" $(pkg-config --cflags --libs alsa)
+    gcc -O2 -Wall -Wextra -pthread -o "$exe" "$here/host.c" $(pkg-config --cflags --libs alsa)
 fi
 case "${1:-}" in
 --beep)
@@ -32,6 +32,12 @@ case "${1:-}" in
     [ "$(printf '%s\n' "$out" | sed -n 2p)" = done ] || { echo "audio-host: play did not finish" >&2; exit 1; }
     printf '%s\n' "$out" | sed -n 3p | grep -q '^data 8000 1 ' || { echo "audio-host: bad rec reply" >&2; exit 1; }
     printf '%s\n' "$out" | sed -n 4p | grep -q '^error unknown request' || { echo "audio-host: bad error reply" >&2; exit 1; }
+    # Streaming on the silent clock (`--null`): 4 frames, then the status lines.
+    out="$(printf 'open_stream 8000 1\nwrite AAAAAAAAAAA=\nflush\nclose_stream\nclock\n' | "$exe" --null)"
+    [ "$(printf '%s\n' "$out" | sed -n 2p)" = ok ] || { echo "audio-host: open_stream failed" >&2; exit 1; }
+    printf '%s\n' "$out" | sed -n 3p | grep -q '^played [0-9]* buffered [0-9]*$' || { echo "audio-host: bad write reply" >&2; exit 1; }
+    [ "$(printf '%s\n' "$out" | sed -n 4p)" = "played 0 buffered 0" ] || { echo "audio-host: flush did not zero the clock" >&2; exit 1; }
+    [ "$(printf '%s\n' "$out" | sed -n 5p)" = ok ] || { echo "audio-host: close_stream failed" >&2; exit 1; }
     echo "audio-host: protocol ok"
     ;;
 esac

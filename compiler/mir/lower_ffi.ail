@@ -91,3 +91,68 @@ fn Lower.ffi_result(mut self, r int, t Ty) int
         Bool => op("ne", [op("band", [r, konst(255, Ty.Int)], Ty.Int), konst(0, Ty.Int)], Ty.Bool)
         Sized(k) => sized_wrap(k, r)
         _ => r
+
+## Whether the function declared as `key` is a variadic `extern c fn` (ffi.var.1).
+fn Lower.variadic_decl(self, key str) bool
+    d := fn_decl.get(key) else return false
+    [a for a in d.attrs if a.name == "variadic c"].len() > 0
+
+## A call of a variadic `extern c fn` (ffi.var.2-5, ADR 1031): bound like any C
+## function, then called with the named arguments and every further argument as
+## its own type. The call is named `cv<N>`, `N` the named arguments, so the code
+## generators apply the platform's variadic convention: `al` holds the vector
+## register count on System V, Win64 repeats a float in the paired integer
+## register, and Apple arm64 passes all variadic arguments on the stack. Other
+## targets use the plain C convention. This is the entry for any variadic
+## prototype, including one imported from a C header (`ffi.decl.1`).
+fn Lower.lower_variadic(
+    mut self,
+    key str,
+    sig Sig,
+    args List[ast.Arg],
+    pos ast.Pos,
+    npos ast.Pos,
+) Val?
+    f := fn_decl.get(key) else return unsupported(npos, "this call")
+    nfixed := sig.params.len()
+    if args.len() < nfixed
+        return unsupported(pos, "this call")
+    if ffi_k >= FFI_CELLS
+        return unsupported(pos, "more than {FFI_CELLS} C functions")
+    mut vs := List[int]()
+    mut floats := 0
+    for k in 0..args.len()
+        a := args[k]
+        if a.label != none
+            return unsupported(pos, "labelled arguments")
+        mut v := Val(id: -1, ty: Ty.Unit)
+        if k < nfixed
+            v = lower_value(a.value, sig.params[k])?
+            retype_arg(a.value, v, sig.params[k])
+            v = Val(id: convert(v, sig.params[k], expr_pos(a.value)), ty: v.ty)
+        else
+            v = lower_value(a.value, none)?
+        if v.ty == Ty.Float or v.ty == Ty.F32
+            floats += 1
+        # A named C `float` takes the single in its register (ffi.map.1).
+        if k < nfixed and sig.params[k] == Ty.F32
+            vs.push(call("rt.ffi_f32_arg", [v.id], Ty.Float))
+        else
+            vs.push(v.id)
+    if floats > 8
+        return unsupported(pos, "more than 8 float arguments in a C call")
+    lib := if e := f.ext then e.lib else none
+    mut cargs := [ffi_bound(lib, f.name, f.pos)]
+    cargs.extend(vs)
+    mut i := inst(-1, "icall", cargs)
+    i.name = "cv{nfixed}"
+    if not is_rt
+        i.imm = call_pos(file, pos.line, pos.col)
+    if sig.ret.is_unit()
+        emit_void(i)
+        return Val(id: -1, ty: Ty.Unit)
+    if sig.ret == Ty.F32
+        r := emit(i, Ty.Float)
+        return Val(id: call("rt.ffi_f32_res", [r], Ty.F32), ty: Ty.F32)
+    r := emit(i, sig.ret)
+    Val(id: ffi_result(r, sig.ret), ty: sig.ret)

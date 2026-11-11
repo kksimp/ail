@@ -1,0 +1,36 @@
+# The gate's suites, one per line, in start order: mac-gate.sh (Mac and Linux) and win-gate.ps1 both read this file,
+# so the three hosts run the same list (ADR 0925). `docs` is first: the first suite runs alone and builds gate.ail.
+docs
+cases
+spec
+api_card
+examples
+agent_tools
+explain
+fmt
+cli
+mistakes
+sched
+diff
+build_cache
+git_deps
+fix
+contracts
+edit
+net
+pe
+asm
+api_queries
+misc
+limits
+native_misc
+nativex
+globals
+snapshot
+budget
+replay
+std
+cert
+crypto
+try
+parity
