@@ -135,9 +135,15 @@ fn Gate.parity(mut self)
         seen += 1
         want_state := expected.get(w[0]) else "works"
         if w[1] != want_state and want_state == "works"
-            red("parity {w[0]}", "{l}\nnot the same as on the other hosts, and not in tests/parity/expected-differences.txt for {host}")
+            red(
+                "parity {w[0]}",
+                "{l}\nnot the same as on the other hosts, and not in tests/parity/expected-differences.txt for {host}",
+            )
         elif w[1] != want_state
-            red("parity {w[0]}", "{l}\ntests/parity/expected-differences.txt says `{want_state}` for {host}: update or delete that line")
+            red(
+                "parity {w[0]}",
+                "{l}\ntests/parity/expected-differences.txt says `{want_state}` for {host}: update or delete that line",
+            )
     if last != "PARITY {seen} features" or seen < 50
         red("parity", "the probe printed {seen} feature lines and ended with `{last}`")
 

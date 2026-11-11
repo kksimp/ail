@@ -164,7 +164,10 @@ fn Probe.commands(mut self)
     other := write("other.ail", "fn main()\n    print(\"ho\")\n")
     bad := write("bad.ail", "fn main()\n    prnt(1)\n")
     tests := write("t.ail", "@test fn a()\n    assert(1 == 1)\n")
-    echo := write("echo.ail", "use std.env\n\nfn main()\n    for a in env.args()\n        print(a)\n")
+    echo := write(
+        "echo.ail",
+        "use std.env\n\nfn main()\n    for a in env.args()\n        print(a)\n",
+    )
     expect("cmd.run", ail(["run", hello]), 0, ["hi\n"])
     expect("cmd.run.args", ail(["run", echo, "x", "y"]), 0, ["x\ny\n"])
     expect("cmd.check", ail(["check", hello]), 0, [])
@@ -176,8 +179,18 @@ fn Probe.commands(mut self)
     expect("cmd.test.budget", ail(["test", "--budget", "100000", tests]), 0, ["1 passed"])
     expect("cmd.fmt", ail(["fmt", "--check", hello]), 0, [])
     expect("cmd.explain", ail(["explain", "expr.hole.2"]), 0, ["expr.hole.2 (05-expressions.md:"])
-    expect("cmd.explain.json", ail(["explain", "--json", "expr.bind.4"]), 0, ["\"rule\":\"expr.bind.4\""])
-    expect("cmd.effects", ail(["effects", "examples/commands.ail"]), 0, [lf(slurp("tests/effects/commands.effects"))])
+    expect(
+        "cmd.explain.json",
+        ail(["explain", "--json", "expr.bind.4"]),
+        0,
+        ["\"rule\":\"expr.bind.4\""],
+    )
+    expect(
+        "cmd.effects",
+        ail(["effects", "examples/commands.ail"]),
+        0,
+        [lf(slurp("tests/effects/commands.effects"))],
+    )
     expect("cmd.api", ail(["api", "--json", hello]), 0, [])
     expect("cmd.diff", ail(["diff", hello, other]), 1, ["fn:main"])
     expect("cmd.context", ail(["context", hello, "main"]), 0, ["main"])
@@ -187,31 +200,59 @@ fn Probe.commands(mut self)
     # `ail build`, for this host and across to the other two systems.
     exe := "{dir}/hello_exe"
     expect("cmd.build", ail(["build", hello, "-o", exe]), 0, [])
-    ran := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else failed("could not run the executable")
+    ran := proc.run("perl", [
+        "-e",
+        "alarm 60; exec @ARGV",
+        exe,
+    ]) else failed("could not run the executable")
     expect("cmd.build.runs", ran, 0, ["hi\n"])
     for tgt in ["x86_64-linux", "aarch64-linux", "aarch64-macos", "x86_64-windows"]
-        expect("cmd.build.target.{tgt}", ail(["build", hello, "-o", "{dir}/cross_{tgt}", "--target", tgt]), 0, [])
+        expect(
+            "cmd.build.target.{tgt}",
+            ail(["build", hello, "-o", "{dir}/cross_{tgt}", "--target", tgt]),
+            0,
+            [],
+        )
 
 fn Probe.run_flags(mut self)
     hello := "{dir}/hello.ail"
     echo := "{dir}/echo.ail"
     limits := "tests/limits"
-    expect("run.timeout", ail(["run", "--timeout", "200", "{limits}/limit_endless.ail"]), 1, ["trap[run.limit.1]"])
-    expect("run.max-steps", ail(["run", "--max-steps", "1000", "{limits}/limit_endless.ail"]), 1, [
-        "trap[run.limit.3]",
-    ])
-    expect("run.max-memory", ail(["run", "--max-memory", "100", "{limits}/limit_memory.ail"]), 1, [
-        "trap[run.limit.2]",
-    ])
-    expect("run.watch", ail(["run", "--watch", "n", "{limits}/watch_when.ail"]), 0, ["watch: n = 0 at 5:5\n"])
+    expect(
+        "run.timeout",
+        ail(["run", "--timeout", "200", "{limits}/limit_endless.ail"]),
+        1,
+        ["trap[run.limit.1]"],
+    )
+    expect(
+        "run.max-steps",
+        ail(["run", "--max-steps", "1000", "{limits}/limit_endless.ail"]),
+        1,
+        ["trap[run.limit.3]"],
+    )
+    expect(
+        "run.max-memory",
+        ail(["run", "--max-memory", "100", "{limits}/limit_memory.ail"]),
+        1,
+        ["trap[run.limit.2]"],
+    )
+    expect(
+        "run.watch",
+        ail(["run", "--watch", "n", "{limits}/watch_when.ail"]),
+        0,
+        ["watch: n = 0 at 5:5\n"],
+    )
     expect("run.trace", ail(["run", "--trace=calls", hello]), 0, ["hi\n"])
     expect("run.deny", ail(["run", "--deny", "all", "examples/hello.ail"]), 0, [])
     expect("run.deterministic", ail(["run", "--deterministic", "examples/hello.ail"]), 0, [])
     expect("run.seed", ail(["run", "--seed", "7", hello]), 0, ["hi\n"])
     expect("run.values", ail(["run", "--values", hello]), 0, ["hi\n"])
-    expect("run.budget", ail(["run", "--budget", "1", echo, "x", "--budget", "y"]), 0, [
-        "x\n[budget 1: records 1-1 of 3",
-    ])
+    expect(
+        "run.budget",
+        ail(["run", "--budget", "1", echo, "x", "--budget", "y"]),
+        0,
+        ["x\n[budget 1: records 1-1 of 3"],
+    )
     rec := "{dir}/hello.rec"
     expect("run.record", ail(["run", "--record", rec, hello]), 0, ["hi\n"])
     expect("run.replay", ail(["run", "--replay", rec]), 0, ["hi\n"])
