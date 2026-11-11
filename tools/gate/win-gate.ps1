@@ -2,8 +2,8 @@
 #   tools\gate\win-gate.ps1            from the repository root, on the branch under test (or: .\ail.ps1 selftest)
 # Runs gate.ail's suites, which build and run everything with the native compiler, and prints one line per failing
 # suite plus the first lines of its message. Silence means green: the last line is `GATE GREEN` or `GATE RED (N failures)`.
-# Full logs stay in $env:TEMP\ail-gate\*.log. Windows is tracked, not gating: some suites need Unix tools (sh, tar,
-# git behaviour) and fail here for that reason, which the failure list says by cause.
+# Full logs stay in $env:TEMP\ail-gate\*.log. The suites are tools\gate\suites.txt, the list mac-gate.sh runs: this gate
+# gates a release like the other two (ADR 0925). The suites need sh, perl and friends from Git for Windows.
 $ErrorActionPreference = 'Continue'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
@@ -56,11 +56,11 @@ if (Test-Path $native) {
     Run 'selfhost1' @('build', 'compiler/main.ail', '-o', (Join-Path $out 'native-compiler.exe'))
     $env:NATIVE_COMPILER = (Join-Path $out 'native-compiler.exe') -replace '\\', '/'
 }
-# The program suites, GATE_JOBS at a time (default: one per core, at most 4; GATE_JOBS=1 is one after another). Each suite
+# The program suites (tools\gate\suites.txt), GATE_JOBS at a time (default: one per core, at most 4; GATE_JOBS=1 is one after another). Each suite
 # is its own gate.ail run with its own TMPDIR and log (gate_NAME.log), so no two share a scratch tree. The first suite
 # runs alone, so gate.ail is built once and the rest start from the build cache. nativex starts one process per core
 # itself, so it runs alone after the others. times.log has the seconds each suite took, slowest first.
-$suites = 'docs examples cases explain fix cli mistakes contracts misc sched fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm snapshot budget replay cert try'.Split(' ')
+$suites = @(Get-Content (Join-Path $PSScriptRoot 'suites.txt') | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
 if ($args.Count -gt 0) { $suites = $args }
 $jobs = if ("$env:GATE_JOBS" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS } else { [Math]::Min(4, [Math]::Max(1, [int]$env:NUMBER_OF_PROCESSORS)) }
 $tmpBase = $env:TMPDIR.TrimEnd('/')

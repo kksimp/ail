@@ -65,8 +65,8 @@ Windows ARM64 hardware and there is no seed for that host
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
 now, testing is local: the gate runs on macOS and Linux
-([ADR 0842](docs/decisions/0842-mac-first-gate.md)), and the native, examples
-and run suites must pass on Windows x86-64 before every release
+([ADR 0842](docs/decisions/0842-mac-first-gate.md)), and the same suites must
+pass on Windows x86-64 before every release
 ([ADR 0925](docs/decisions/0925-windows-release-gate.md)).
 
 ## Install

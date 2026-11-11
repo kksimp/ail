@@ -23,7 +23,7 @@ fi
 # The parallel suite checked the interpreter's thread-pool log (AIL_PAR_LOG) and is dropped with the interpreter; native `par` is
 # nativex's par_basic and par_overflow.
 # D3/D5: every suite runs on ./ail; there is no Rust binary and no cargo.
-native_suites="docs cases mistakes sched fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm api_queries misc limits native_misc nativex globals snapshot budget replay std agent_tools cert crypto try"
+native_suites=$(grep -v '^#' tools/gate/suites.txt | tr '\n' ' ')
 # The suites, GATE_JOBS at a time (default: one per core, at most 4; GATE_JOBS=1 is one after another). Each suite is its
 # own gate.ail run with its own TMPDIR and log (gate_NAME.log), so no two share a scratch tree. The first runs alone, so
 # gate.ail is built once and the rest start from the build cache. nativex starts one process per core itself, so it runs

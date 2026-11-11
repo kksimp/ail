@@ -7,8 +7,8 @@ deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the compiler, ch
 and tools are written in AIL and `ail` builds itself from the published seed. The
 Stage 1 core design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
 The Mac gate ([ADR 0842](decisions/0842-mac-first-gate.md)) gates every change;
-Linux and Windows are tested on the designer's VMs, and the Windows `native`,
-`examples` and `run` suites must pass before every release ([ADR 0925](decisions/0925-windows-release-gate.md)).
+Linux and Windows are tested on the designer's VMs, and the full gate (the same
+suite list, `tools/gate/suites.txt`) must pass on Windows before every release ([ADR 0925](decisions/0925-windows-release-gate.md)).
 The repository is being prepared to go public (target 2026-11-14 to 2026-11-17, the
 designer's call): seed trust is proposed in [ADR 0976](decisions/0976-public-release-and-seed-trust.md),
 with [SECURITY.md](../SECURITY.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) at the root. Landed 2026-11-08 and 2026-11-09: FLAC decoding and Opus CELT (`std.audio`), the VP9 decoder (`std.video.vp9`), gamepad input, `try_recv`/`recv_for`, coverage-guided `ail test --fuzz`, `ail test --mutate`, `ail context` and `ail infer --contracts` (the last three still ungated, see Tooling). `main` is frozen for v0.1.0 and a release candidate is being gated on the three hosts ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)); versions and the changelog follow [ADR 1043](decisions/1043-versions-tags-changelog.md). See
@@ -76,7 +76,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Overflow facts (ADR 0994, native.bce.14): in loops of any shape, a checked `x + 1` after `x < y`, index sums after a checked index use, and `a + l` (with `l` stepping from 0) bounded on every path back lose their checks; lzr's match loop drops two `jo` per pass.
 - Vector axpy kernels (ADR 0942, native.vec.1): the swapped nest's inner loop is one AVX2 or NEON kernel call per `k`; matmul-1400 on ail-linux 11.35 s → 1.95 s (gcc -O2 6.82 s).
 - Vector escape loops (ADR 0945, native.vec.2): a Mandelbrot-style escape loop in a counted `for` becomes one AVX2 (8 points a pass) masked kernel call per row; opt out with `AIL_OPT_OFF=vec` or `vecloop`. Written without a build; awaiting runner results.
-- Windows releases (ADR 0925): the gate stays Unix-shaped; `native`, `examples` and `run` must be green on ail-win before each release.
+- Windows releases (ADR 0925, amended 2026-11-11): the full gate (`win-gate.ps1`, the suites of `tools/gate/suites.txt`, with the `parity` probe) and the fixed point (`tools/self-host/run.ps1`) must be green on ail-win before each release.
 - C headers (ADR 0926, ffi.decl.1): `use c "header.h" as name` reads the header's function prototypes (`compiler/cheader/`) and imports them as a module of `pub extern c fn`; what the FFI cannot carry is left out.
 - C header breadth (ADR 1010, ffi.decl.4-5): object-like `#define` integer, float and string constants, enum enumerators and function-pointer types import too; unions and bit-field structs by value wait for `@layout(c)`.
 - Struct scalar replacement (ADR 0923, native.sroa.1): a struct that never leaves its function has no object, and constructors that only build their result are inlined; raytrace N=4000 9.7 s → 3.6 s on ail-linux (gcc -O2 1.75 s).
@@ -244,7 +244,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Stage 2 entry criteria; Hello World milestone | D | [0086](decisions/0086-finish-core-design-before-stage-2.md) |
 | Private, pinned Rust toolchain for the bootstrap | D; moot since the Rust bootstrap was deleted | [0087](decisions/0087-private-rust-toolchain.md), [0904](decisions/0904-rust-bootstrap-deleted.md) |
 | Mac gate: `tools/gate/mac-gate.sh` gates every change | D, implemented | [0842](decisions/0842-mac-first-gate.md) |
-| Windows `native`, `examples`, `run` green before every release | D | [0925](decisions/0925-windows-release-gate.md) |
+| The full gate green on Windows before every release | D | [0925](decisions/0925-windows-release-gate.md) |
 | Seeds: designer-built, hash-pinned in the tree | D, implemented | [0855](decisions/0855-retire-the-rust-bootstrap.md) |
 | Public release and seed trust; SECURITY.md, CONTRIBUTING.md, issue and PR templates | Proposed (until the designer approves going public) | [0976](decisions/0976-public-release-and-seed-trust.md) |
 

@@ -1,0 +1,251 @@
+## The parity probe (ADR 0925): one line per feature, found by trying the feature on this host.
+##   ail run tools/gate/parity.ail      from the repository root
+## Each line is `FEATURE works`, `FEATURE missing DETAIL` (the host refuses it) or `FEATURE differs DETAIL` (it runs
+## and the result is not the expected one). The last line is `PARITY N features`. The lines are the same on macOS,
+## Linux and Windows but for the ones tests/parity/expected-differences.txt lists; the gate's `parity` suite
+## (tools/gate/gate.ail) checks that. No probe opens a window or plays a sound.
+## A std probe is a program the `cases` or `nativex` suite already has, with its expected output: the probe names
+## the feature it stands for. A command probe runs `ail` on a tiny input.
+
+## Feature, then the stem of tests/cases/STEM.ail, whose output must equal tests/cases/STEM.out.
+CASES := [
+    ["std.fs", "std_fs"],
+    ["std.fs.walk", "std_fs_walk"],
+    ["std.fs.attrs", "fs_attrs"],
+    ["std.fs.copy_tree", "fs_copy_tree"],
+    ["std.env", "std_env"],
+    ["std.io", "std_io"],
+    ["std.path", "std_path"],
+    ["std.proc", "std_proc"],
+    ["std.proc.stream", "std_proc_stream"],
+    ["std.proc.which", "std_proc_which"],
+    ["std.proc.control", "std_proc_control"],
+    ["std.time", "std_time"],
+    ["std.date", "std_date"],
+    ["std.tz", "std_tz"],
+    ["std.json", "json_roundtrip"],
+    ["std.csv", "std_csv"],
+    ["std.toml", "std_toml"],
+    ["std.regex", "std_regex"],
+    ["std.bigint", "std_bigint"],
+    ["std.hash", "std_hash"],
+    ["std.crypto", "std_crypto"],
+    ["std.compress", "std_compress"],
+    ["std.compress.files", "std_compress_files"],
+    ["std.random", "random_seeded"],
+    ["std.args", "std_args"],
+    ["std.tensor", "tensor_basics"],
+    ["std.net.serve", "std_net_serve"],
+    ["std.net.tcp", "std_net_tcp"],
+    ["std.net.keepalive", "std_net_keepalive"],
+    ["std.net.stream", "std_net_stream"],
+    ["std.net.gzip", "std_net_gzip"],
+    ["std.net.jar", "std_net_jar"],
+    ["std.net.ready", "std_net_ready"],
+    ["std.app", "std_app_calls"],
+    ["std.app.clipboard", "std_app_clipboard"],
+    ["std.app.vector", "std_app_vector"],
+    ["std.app.screen", "std_app_screen"],
+    ["std.app.pick", "std_app_pick"],
+    ["std.gfx.script", "std_gfx_script"],
+    ["std.gfx.pixels", "std_gfx_pixels"],
+    ["std.gfx.text", "std_gfx_text"],
+    ["std.gfx.pad", "std_gfx_pad"],
+    ["std.gfx.attach", "std_gfx_attach"],
+    ["std.audio", "std_audio"],
+    ["std.audio.device", "std_audio_device"],
+    ["std.audio.flac", "std_audio_flac"],
+    ["std.audio.opus", "std_audio_opus"],
+    ["std.media.webm", "std_media_webm"],
+    ["std.video.vp9", "std_video_vp9"],
+    ["std.ui", "std_ui"],
+    ["std.ui.widgets", "std_ui_widgets"],
+    ["std.attach.listen", "std_attach_listen"],
+    ["attach.observe", "attach_observe_ok"],
+]
+
+## Feature, then the stem of tests/native/run/STEM.ail, whose output must equal tests/native/golden/STEM.out.
+NATIVE := [
+    ["par", "par_basic"],
+    ["tasks", "task_basic"],
+    ["channels", "chan_basic"],
+    ["ffi.libc", "ffi_libc"],
+    ["std.fs.metadata", "fs_metadata"],
+    ["std.os.signals", "os_signals"],
+]
+
+struct Probe
+    lines List[str]
+    dir str
+
+fn slurp(p str) str
+    fs.read_text(p) else ""
+
+## `text` with CRLF line ends as LF: Windows may hand a program's lines back that way.
+fn lf(text str) str
+    text.replace("\r\n", "\n")
+
+fn cat(a List[str], b List[str]) List[str]
+    mut r := a
+    r.extend(b)
+    r
+
+fn failed(why str) proc.Output
+    proc.Output(status: 127, out: "", err: why)
+
+## `ail ARGS` from the repository root, under a 300 second alarm so one hang is one line, not a stuck probe.
+fn ail(args List[str]) proc.Output
+    r := proc.run("sh", cat(
+        ["-c", "exec perl -e 'alarm 300; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"],
+        args,
+    )) else return failed("could not start sh")
+    r
+
+fn sh(script str) proc.Output
+    r := proc.run("sh", ["-c", script]) else return failed("could not start sh")
+    r
+
+fn on_windows() bool
+    (env.get("OS") else "") == "Windows_NT"
+
+## What a wrapper or the native CLI says when this host has no form of a command or option.
+fn refused(text str) bool
+    for mark in [
+        "not native",
+        "no native form",
+        "not supported on",
+        "not available on",
+        "Not available on",
+        "unknown command",
+    ]
+        if text.contains(mark)
+            return true
+    false
+
+fn first_line(text str) str
+    for l in lf(text).lines()
+        if not l.trim().is_empty()
+            return l.trim()
+    "no output"
+
+## One line for `feature`: `r` must exit with `status` and its output (out, then err) must hold every want.
+fn Probe.expect(mut self, feature str, r proc.Output, status int, wants List[str])
+    text := lf("{r.out}{r.err}")
+    mut ok := r.status == status
+    for w in wants
+        if not text.contains(w)
+            ok = false
+    if ok
+        lines.push("{feature} works")
+    elif refused(text)
+        lines.push("{feature} missing {first_line(r.err)}")
+    else
+        lines.push("{feature} differs exit {r.status}, want {status}")
+
+## One line for `feature`: `ail run SRC` must exit 0 and print the text of the file `golden`.
+fn Probe.golden(mut self, feature str, src str, want_file str)
+    r := ail(["run", src])
+    if r.status == 0 and lf(r.out) == lf(slurp(want_file))
+        lines.push("{feature} works")
+    elif refused(r.err)
+        lines.push("{feature} missing {first_line(r.err)}")
+    elif r.status != 0
+        lines.push("{feature} differs exit {r.status}")
+    else
+        lines.push("{feature} differs output is not {want_file}")
+
+fn Probe.write(self, name str, text str) str
+    p := "{dir}/{name}"
+    fs.write_text(p, text) else return p
+    p
+
+fn Probe.commands(mut self)
+    hello := write("hello.ail", "fn main()\n    print(\"hi\")\n")
+    other := write("other.ail", "fn main()\n    print(\"ho\")\n")
+    bad := write("bad.ail", "fn main()\n    prnt(1)\n")
+    tests := write("t.ail", "@test fn a()\n    assert(1 == 1)\n")
+    echo := write("echo.ail", "use std.env\n\nfn main()\n    for a in env.args()\n        print(a)\n")
+    expect("cmd.run", ail(["run", hello]), 0, ["hi\n"])
+    expect("cmd.run.args", ail(["run", echo, "x", "y"]), 0, ["x\ny\n"])
+    expect("cmd.check", ail(["check", hello]), 0, [])
+    expect("cmd.check.json", ail(["check", "--json", bad]), 2, ["\"api\":1"])
+    expect("cmd.check.budget", ail(["check", "--budget", "100000", hello]), 0, [])
+    expect("cmd.check.deny", ail(["check", "--deny", "fs,proc", hello]), 0, [])
+    expect("cmd.test", ail(["test", tests]), 0, ["1 passed"])
+    expect("cmd.test.json", ail(["test", "--json", tests]), 0, ["\"status\":\"pass\""])
+    expect("cmd.test.budget", ail(["test", "--budget", "100000", tests]), 0, ["1 passed"])
+    expect("cmd.fmt", ail(["fmt", "--check", hello]), 0, [])
+    expect("cmd.explain", ail(["explain", "expr.hole.2"]), 0, ["expr.hole.2 (05-expressions.md:"])
+    expect("cmd.explain.json", ail(["explain", "--json", "expr.bind.4"]), 0, ["\"rule\":\"expr.bind.4\""])
+    expect("cmd.effects", ail(["effects", "examples/commands.ail"]), 0, [lf(slurp("tests/effects/commands.effects"))])
+    expect("cmd.api", ail(["api", "--json", hello]), 0, [])
+    expect("cmd.diff", ail(["diff", hello, other]), 1, ["fn:main"])
+    expect("cmd.context", ail(["context", hello, "main"]), 0, ["main"])
+    expect("cmd.sanitize", ail(["sanitize", hello]), 0, ["0 differ from the fixed schedule"])
+    expect("cmd.leak", ail(["leak", hello]), 0, ["hi\n"])
+    expect("cmd.prove", ail(["prove", "tests/cases/prove_contracts.ail"]), 0, [])
+    # `ail build`, for this host and across to the other two systems.
+    exe := "{dir}/hello_exe"
+    expect("cmd.build", ail(["build", hello, "-o", exe]), 0, [])
+    ran := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else failed("could not run the executable")
+    expect("cmd.build.runs", ran, 0, ["hi\n"])
+    for tgt in ["x86_64-linux", "aarch64-linux", "aarch64-macos", "x86_64-windows"]
+        expect("cmd.build.target.{tgt}", ail(["build", hello, "-o", "{dir}/cross_{tgt}", "--target", tgt]), 0, [])
+
+fn Probe.run_flags(mut self)
+    hello := "{dir}/hello.ail"
+    echo := "{dir}/echo.ail"
+    limits := "tests/limits"
+    expect("run.timeout", ail(["run", "--timeout", "200", "{limits}/limit_endless.ail"]), 1, ["trap[run.limit.1]"])
+    expect("run.max-steps", ail(["run", "--max-steps", "1000", "{limits}/limit_endless.ail"]), 1, [
+        "trap[run.limit.3]",
+    ])
+    expect("run.max-memory", ail(["run", "--max-memory", "100", "{limits}/limit_memory.ail"]), 1, [
+        "trap[run.limit.2]",
+    ])
+    expect("run.watch", ail(["run", "--watch", "n", "{limits}/watch_when.ail"]), 0, ["watch: n = 0 at 5:5\n"])
+    expect("run.trace", ail(["run", "--trace=calls", hello]), 0, ["hi\n"])
+    expect("run.deny", ail(["run", "--deny", "all", "examples/hello.ail"]), 0, [])
+    expect("run.deterministic", ail(["run", "--deterministic", "examples/hello.ail"]), 0, [])
+    expect("run.seed", ail(["run", "--seed", "7", hello]), 0, ["hi\n"])
+    expect("run.values", ail(["run", "--values", hello]), 0, ["hi\n"])
+    expect("run.budget", ail(["run", "--budget", "1", echo, "x", "--budget", "y"]), 0, [
+        "x\n[budget 1: records 1-1 of 3",
+    ])
+    rec := "{dir}/hello.rec"
+    expect("run.record", ail(["run", "--record", rec, hello]), 0, ["hi\n"])
+    expect("run.replay", ail(["run", "--replay", rec]), 0, ["hi\n"])
+
+fn Probe.runtime(mut self)
+    for pair in NATIVE
+        golden(pair[0], "tests/native/run/{pair[1]}.ail", "tests/native/golden/{pair[1]}.out")
+    for pair in CASES
+        golden(pair[0], "tests/cases/{pair[1]}.ail", "tests/cases/{pair[1]}.out")
+    # std.net.32 (ADR 1009): the server's parked connections wait in a readiness set (epoll, kqueue, a completion
+    # port). The case above passes on the poll loop too, so say which one this host's runtime has.
+    if on_windows() and slurp("compiler/rt/native/win_ready.ail").contains("\nWRDY_OFF := true\n")
+        lines.push("std.net.ready.set missing the server polls until the next seed (ADR 1009)")
+    else
+        lines.push("std.net.ready.set works")
+    # std.os.4: Windows delivers INT and TERM from the console only, which no program can send itself.
+    if on_windows()
+        lines.push("std.os.signals.delivery differs console events only (std.os.4)")
+    else
+        lines.push("std.os.signals.delivery works")
+
+fn main() !
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
+    root := if base.len() > 1 and base.ends_with("/") then base.slice(0, base.len() - 1) else base
+    dir := "{root}/ail-parity"
+    made := sh("rm -rf {dir}; mkdir -p {dir}")
+    if made.status != 0
+        io.eprint("parity: can't make {dir}")
+        io.exit(2)
+    mut p := Probe(lines: [], dir: dir)
+    p.commands()
+    p.run_flags()
+    p.runtime()
+    gone := sh("rm -rf {dir}")
+    for l in p.lines
+        print(l)
+    print("PARITY {p.lines.len()} features")
