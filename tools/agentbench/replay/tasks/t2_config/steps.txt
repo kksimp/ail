@@ -1,0 +1,10 @@
+# A float where the function returns int, plus unescaped braces in strings.
+write t2.ail draft.ail.txt
+run ail fix t2.ail
+run ail test t2.ail
+run ail edit t2.ail --test <<E
+attempts
+-retries + 1
++retries.to_int() + 1
+E
+run ail run t2.ail

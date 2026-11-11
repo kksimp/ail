@@ -75,7 +75,7 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
 sources = ([root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rglob("*.ail")) + list((root / "std").rglob("*.ail"))
-           + list((root / "tools" / "ailtest").rglob("*.ail")) + list((root / "tools" / "ailtask").rglob("*.ail"))
+           + list((root / "tools" / "ailtest").rglob("*.ail")) + list((root / "tools" / "ailtask").rglob("*.ail")) + list((root / "tools" / "ailtry").rglob("*.ail")) + list((root / "tools" / "ailmerge").rglob("*.ail"))
            + list((root / "tools" / "ailmcp").rglob("*.ail"))
            + list((root / "tools" / "ailsp").rglob("*.ail")) + list((root / "tools" / "ailsan").rglob("*.ail"))
            + list((root / "tools" / "verify").rglob("*.ail")) + list((root / "tools" / "infer").rglob("*.ail")) + list((root / "tools" / "shrink").rglob("*.ail")))

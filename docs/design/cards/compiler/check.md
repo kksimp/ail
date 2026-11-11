@@ -100,6 +100,11 @@ pub fn check.each_block(ast.Stmt) List[List[ast.Stmt]]
 pub struct check.ParRow
 pub struct check.ForkRow
 pub struct check.ForkSite
+pub struct check.ProofRow
+pub struct check.Proofs
+pub fn check.site_key(str, ast.Pos, ast.Pos) str
+pub fn check.ens_key(str, ast.Pos) str
+pub fn check.prove_fns(List[ast.FnDecl]) check.Proofs
 pub struct check.SigFix
 pub fn check.std_module_names() List[str]
 pub enum check.Ty
@@ -110,4 +115,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1411); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1481); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

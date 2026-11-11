@@ -27,7 +27,7 @@ import tempfile
 
 DECLS = ("struct ", "enum ", "error ", "unique ", "fn ", "unsafe fn ", "extern ",
          "trait ", "impl ", "const ", "use ", "type ", "@", "pub ", "#")
-SKIP_FILES = {"docs/quick-reference.md", "docs/language-card.md"}
+SKIP_FILES = {"docs/quick-reference.md", "docs/language-card.md", "docs/language-card-core.md"}
 FENCE = re.compile(r"^```ail(?: (fragment))?\s*$")
 
 

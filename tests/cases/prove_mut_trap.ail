@@ -1,0 +1,11 @@
+# contract.prove.2 (ADR 1055): a `mut` name carries no facts, so the check stays
+# and the second call traps.
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    mut k := 4
+    print(half(k))
+    k = -2
+    print(half(k))

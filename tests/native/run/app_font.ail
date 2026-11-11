@@ -1,0 +1,22 @@
+use std.app
+
+struct Face
+    n int
+
+impl app.App for Face
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        data := if n == 0 then "AAEAAAAA" else ""
+        app.canvas("c", 0.0, 0.0, [app.Op.Font(id: "f", data: data)])
+
+    fn title(self) str
+        "Face"
+
+fn main()
+    mut p := Face(n: 0)
+    print(app.outline(p.view()))
+    print(app.frame(p))
+    p.update(app.event("key"))
+    print(app.frame(p))

@@ -138,6 +138,8 @@ struct Lower
     contracted Map[str, ast.FnDecl]
     ## What an impl method inherits from its trait's method (contract.inh.1-3).
     inh Inherit
+    ## Contracts proved per file (contract.prove.1, lower_contract.ail).
+    proofs ProofCache
     ## The structs with `invariant` lines, and the file of each.
     invariants Map[str, List[ast.Contract]]
     inv_file Map[str, int]
@@ -310,6 +312,7 @@ pub fn lower_package_par(
         problem_files: [],
         contracted: {},
         inh: Inherit(of: {}, label: {}, ens_from: none, ens_n: 0, ens_origin: ""),
+        proofs: ProofCache(done: {}),
         invariants: {},
         inv_file: {},
         inv_key: "",

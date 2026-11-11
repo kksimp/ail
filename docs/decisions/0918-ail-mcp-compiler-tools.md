@@ -5,6 +5,7 @@
 - **Decided by:** Designer (2026-10-25, backlog "agent task protocol over MCP"); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0917](0917-ail-task-protocol.md) (`ail task`), [ADR 0892](0892-tool-functions-mcp-server.md) (MCP for user programs)
 - **Topic:** 20 — AI semantic API
+- **Amended by:** [ADR 1056](1056-warm-ail-mcp.md) (warm calls)
 
 ## Context
 
@@ -31,3 +32,21 @@ Tools shell out, so a call costs a process start; this keeps the server free of 
 - **Call the checker in process:** faster, but a second code path to keep equal to the CLI.
 - **Reuse `ail serve --mcp` for both:** it takes a program path and derives tools from it; the compiler tools have no program.
 - **One generic `ail_run` tool taking argv:** untyped, and it lets an agent run any command.
+
+## Amendment (2026-11-10): every agent tool is one MCP call
+
+**Decided by:** AI (delegated, ADR 0076). Slice E2 of `lanes/ai-first-edge-2026-11-10.md`; in 0.1.0 by the designer's decision of 2026-11-10.
+
+Six commands an agent drove only through the shell now have tools: `ail_context` (ADR 1020), `ail_edit` (with `test`, `impact` and `dry_run`, so one call edits, checks and runs the affected tests), `ail_fix`, `ail_explain`, `ail_api` (`form` card, index, outline, symbols, text or pretty, plus `module`) and `ail_review` (ADR 1024). The server lists 16 tools. Each new tool passes `budget` through as `--budget N` and otherwise uses the command's own default.
+
+- `inputSchema` types now include `integer` (`budget`) and `boolean` (`json`, `test`, `impact`, `dry_run`); a boolean is also accepted as the text `"true"`.
+- **`mcp.call.3`:** when a command ran with `--json` and printed one JSON object, the result also carries it as `structuredContent`. Always-JSON tools (`ail_verify`, `ail_impact`, `task_*`) get it on every call; the others when the caller sets `json`. The text content is unchanged.
+- **`mcp.call.4`:** a positional value (`program`, `symbol`, `rule`, `range`, `path`, `module`, `form`) that starts with `-` is refused, so it can never be read as an option.
+- `ail_edit` sends `edits` on standard input; the compact hunk form and a JSON edit list both work.
+- Existing rule IDs keep their numbers; `mcp.tools.1` lists the new names.
+
+Rejected alternatives:
+
+- **One generic `ail_run` tool taking a command line:** no schema, so the agent guesses flags (the rejection above stands).
+- **A `json` default of true on every tool:** JSON costs more tokens than the text forms of `context`, `api` and `explain`; the agent asks for it when it wants fields.
+- **Separate `ail_edit_test` and `ail_edit_impact` tools:** one call with two flags removes a turn from every edit-then-test pair and adds one row to the table instead of three.

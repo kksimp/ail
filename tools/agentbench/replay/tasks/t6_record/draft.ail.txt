@@ -1,0 +1,13 @@
+fn rate(done int, start int, end int) int
+    (done * 1000) / (end - start)
+
+@test fn computes_per_second()
+    assert_eq(rate(10, 0, 1000), 10)
+
+fn main()
+    start := time.now_ms() / 1000
+    mut done := 0
+    for i in 0..200
+        done += i % 3
+    end := time.now_ms() / 1000
+    print("rate {rate(done, start, end)} per second")

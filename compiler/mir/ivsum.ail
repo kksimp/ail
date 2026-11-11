@@ -1,0 +1,245 @@
+## Overflow checks that facts on every path rule out (native.bce.14, ADR 0994).
+## The counted-loop guards (ranges.ail) only cover loops that leave from their
+## header; a scan such as `while l < 66 and i + l < n and xs[c + l] == xs[i + l]`
+## leaves in three places, so its sums kept a check each. Two facts bound a
+## value from above where they hold:
+##
+## - `x < y` on the edge taken when it is true (`lt`, `gt` swapped, or the
+##   false edge of `ge` and `le`): `x` is at most 2^63 - 2, so `x + 1` fits.
+## - `x` (or `x` in `x * c`, `c >= 1`) used as a checked list index (`get`,
+##   `set`, `bounds`) before: `0 <= x < len`,
+##   and no list holds 2^62 elements, so `x + c` and `x - c` fit for a
+##   constant `c` from 0 to 2^62, and so does the sum of two such indexes.
+##
+## And a sum `a + l`, where `a` doesn't change in a loop and `l` starts at 0
+## and steps by 1 on every path back, fits on every iteration when one of
+## those facts holds for `a + l` at the end of every path back: the first is
+## `a`, and each next one is the last plus 1.
+##
+## Only 64-bit `int` sums count: a narrower type's check fires at its own
+## width. Only checks that can't fire go, so no program traps in a different place.
+## `AIL_OPT_OFF=ivsum` keeps them all.
+
+## A fact that bounds a value from above: an edge's `x < y` (`at` is -1 and
+## `block` is the target the edge alone enters), or an index use of `x` at
+## instruction `at` of `block`.
+struct IvsFact
+    block int
+    at int
+
+IVS_BIG := 4611686018427387904
+
+## An instruction index past the end of any block.
+IVS_END := 1073741824
+
+pub fn iv_sums(f Func) Func
+    if opt_off("ivsum") or f.name.starts_with("rt.")
+        return f
+    defs := defs_of(f)
+    nb := f.blocks.len()
+    mut preds := [List[int]() for _ in 0..nb]
+    for b in 0..nb
+        for t in f.blocks[b].term.targets
+            preds[t].push(b)
+    mut facts := Map[int, List[IvsFact]]()
+    mut any_check := false
+    for b in 0..nb
+        blk := f.blocks[b]
+        for k in 0..blk.insts.len()
+            i := blk.insts[k]
+            if (i.op == "add" or i.op == "sub") and i.site >= 0
+                any_check = true
+            ix := ivs_index_of(f, i)
+            if ix >= 0
+                ivs_note(mut facts, ix, IvsFact(block: b, at: k))
+                # `xs[x * c]` for a constant `c >= 1`: `0 <= x < 2^62` too.
+                if m := inst_of(f, defs, ix)
+                    if m.op == "mul" and m.n == 2
+                        c1 := const_of(f, defs, m.arg(1)) else 0
+                        c0 := const_of(f, defs, m.arg(0)) else 0
+                        if c1 >= 1
+                            ivs_note(mut facts, m.arg(0), IvsFact(block: b, at: k))
+                        elif c0 >= 1
+                            ivs_note(mut facts, m.arg(1), IvsFact(block: b, at: k))
+        t := blk.term
+        if t.kind != "branch" or t.targets.len() != 2 or t.targets[0] == t.targets[1]
+            continue
+        cmp := inst_of(f, defs, t.cond) else continue
+        if cmp.n != 2 or f.vals[cmp.arg(0)] != Ty.Int or f.vals[cmp.arg(1)] != Ty.Int
+            continue
+        # The value that is below the other, and the edge on which it is.
+        mut low := -1
+        mut side := 0
+        if cmp.op == "lt" or cmp.op == "ge"
+            low = cmp.arg(0)
+        elif cmp.op == "gt" or cmp.op == "le"
+            low = cmp.arg(1)
+        else
+            continue
+        if cmp.op == "ge" or cmp.op == "le"
+            side = 1
+        into := t.targets[side]
+        if preds[into].len() == 1
+            ivs_note(mut facts, low, IvsFact(block: into, at: -1))
+    if not any_check
+        return f
+    dom := dominators(f)
+    mut g := f
+    mut touched := false
+    for b in 0..nb
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            if i.op != "add" and i.op != "sub"
+                continue
+            if i.site < 0 or i.n != 2 or f.vals[i.dst] != Ty.Int
+                continue
+            if ivs_fits(f, defs, facts, dom, i, b, k)
+                g.blocks[b].insts[k].site = -1
+                touched = true
+    for lp in find_loops(f)
+        for v in ivs_loop_sums(f, defs, facts, dom, preds, lp)
+            d := defs[v]
+            if g.blocks[d.block].insts[d.at].site >= 0
+                g.blocks[d.block].insts[d.at].site = -1
+                touched = true
+    if touched then g else f
+
+fn ivs_note(mut facts Map[int, List[IvsFact]], v int, fact IvsFact)
+    if not facts.contains(v)
+        facts[v] = []
+    facts[v].push(fact)
+
+## The index operand of a checked list access, else -1. An unchecked one may
+## be a runtime access the lowering made (`xs[len - 1]` behind its own test).
+fn ivs_index_of(f Func, i Inst) int
+    if i.site < 0
+        return -1
+    if (i.op == "get" or i.op == "set") and i.n >= 2 and ivs_listy(f.vals[i.arg(0)])
+        return i.arg(1)
+    if i.op == "bounds" and i.n >= 1
+        return i.arg(0)
+    -1
+
+fn ivs_listy(t Ty) bool
+    match t
+        List(_) => true
+        _ => false
+
+## How `v` is bounded before instruction `at` of block `b` (a large `at`: at
+## the block's end): 2 an index (0 <= v < 2^62), 1 below some `int`, 0 not.
+fn ivs_level(facts Map[int, List[IvsFact]], dom List[List[bool]], v int, b int, at int) int
+    fs := facts.get(v) else return 0
+    mut best := 0
+    for fa in fs
+        if fa.at < 0
+            if dom[b][fa.block] and best < 1
+                best = 1
+        elif (fa.block == b and fa.at < at) or (fa.block != b and dom[b][fa.block])
+            return 2
+    best
+
+## Whether the checked `add` or `sub` `i` at instruction `k` of block `b`
+## can't overflow by the facts alone.
+fn ivs_fits(
+    f Func,
+    defs List[Def],
+    facts Map[int, List[IvsFact]],
+    dom List[List[bool]],
+    i Inst,
+    b int,
+    k int,
+) bool
+    x := i.arg(0)
+    y := i.arg(1)
+    lx := ivs_level(facts, dom, x, b, k)
+    if i.op == "sub"
+        c := const_of(f, defs, y) else return false
+        return lx == 2 and c >= 0 and c <= IVS_BIG
+    ly := ivs_level(facts, dom, y, b, k)
+    if lx == 2 and ly == 2
+        return true
+    if cy := const_of(f, defs, y)
+        if (cy == 1 and lx >= 1) or (lx == 2 and cy >= 0 and cy <= IVS_BIG)
+            return true
+    if cx := const_of(f, defs, x)
+        if (cx == 1 and ly >= 1) or (ly == 2 and cx >= 0 and cx <= IVS_BIG)
+            return true
+    false
+
+## The checked sums `a + l` in loop `lp` that fit on every iteration: `l` a
+## header parameter that enters as 0 and steps by 1 without wrapping, `a`
+## defined outside the loop, and the sum bounded at the end of every latch.
+fn ivs_loop_sums(
+    f Func,
+    defs List[Def],
+    facts Map[int, List[IvsFact]],
+    dom List[List[bool]],
+    preds List[List[int]],
+    lp LoopInfo,
+) List[int]
+    mut out := List[int]()
+    h := f.blocks[lp.header]
+    mut counts := Set[int]()
+    for pk in 0..h.params.len()
+        p := h.params[pk]
+        if f.vals[p] != Ty.Int
+            continue
+        mut ok := true
+        for src in preds[lp.header]
+            ft := f.blocks[src].term
+            for e in 0..ft.targets.len()
+                if ft.targets[e] != lp.header
+                    continue
+                arg := ft.args[e][pk]
+                if lp.member[src]
+                    ok = ok and ivs_steps(f, defs, facts, dom, p, arg)
+                else
+                    ok = ok and const_of(f, defs, arg) == 0
+        if ok
+            counts.add(p)
+    if counts.len() == 0
+        return out
+    for b in lp.blocks
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            if i.op != "add" or i.site < 0 or i.n != 2 or f.vals[i.dst] != Ty.Int
+                continue
+            mut base := -1
+            if counts.contains(i.arg(1))
+                base = i.arg(0)
+            elif counts.contains(i.arg(0))
+                base = i.arg(1)
+            if base < 0 or f.vals[base] != Ty.Int
+                continue
+            db := defs[base].block
+            if db >= 0 and lp.member[db]
+                continue
+            mut every := true
+            for lb in lp.latches
+                every = every and ivs_level(facts, dom, i.dst, lb, IVS_END) >= 1
+            if every
+                out.push(i.dst)
+    out
+
+## Whether `s`, passed back to the header parameter `p`, is `p + 1` that
+## can't wrap: checked, or with `p` bounded where it is computed.
+fn ivs_steps(
+    f Func,
+    defs List[Def],
+    facts Map[int, List[IvsFact]],
+    dom List[List[bool]],
+    p int,
+    s int,
+) bool
+    si := inst_of(f, defs, s) else return false
+    if si.op != "add" or si.n != 2
+        return false
+    mut other := -1
+    if si.arg(0) == p
+        other = si.arg(1)
+    elif si.arg(1) == p
+        other = si.arg(0)
+    if other < 0 or const_of(f, defs, other) != 1
+        return false
+    d := defs[s]
+    si.site >= 0 or ivs_level(facts, dom, p, d.block, d.at) >= 1

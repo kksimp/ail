@@ -5,12 +5,20 @@ Harness for [ADR 0916](../../docs/decisions/0916-agent-end-to-end-benchmark.md).
 ```sh
 tools/agentbench/agentbench.py gen ledger          # expected outputs from tasks/ledger/ref.py
 tools/agentbench/agentbench.py docs ledger         # doc-size parity check
-tools/agentbench/agentbench.py run ledger ail 1    # one trial -> results/ledger/ail-1/
+tools/agentbench/agentbench.py run ledger ail-plain 1   # one trial -> results/ledger/ail-plain-1/
+tools/agentbench/agentbench.py run ledger ail-tools 1   # the same plus AGENTS.md, CLAUDE.md and the MCP server
 tools/agentbench/agentbench.py run ledger c 1
+tools/agentbench/agentbench.py validate ledger     # solutions pass and every arm's shims log (no model)
 tools/agentbench/agentbench.py report
 ```
 
-`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked.
+`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` (files in `arms/ail-tools/`) and `c`; `ail` means `ail-plain`.
+
+`metrics.json` also holds wrapper-logged `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (ADR 0916, amended 2026-11-10).
+
+## Scripted replays: tools, no model
+
+`replay/run.sh [--only TASK] [--json] [--save FILE] [--compare FILE]` runs the fixed sessions in `replay/tasks/*/steps*.txt` (the eight whole-task tasks) against the current `ail`, and prints tokens written, tokens read and calls per session. Run it before and after a tooling change (`--save`, then `--compare`). It costs no model spend; run it on a designer machine. Format and variants: top of `replay/replay.py`.
 
 ## Demo: an agent resolves a real issue
 

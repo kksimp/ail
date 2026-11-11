@@ -7,24 +7,77 @@ import SwiftUI
 /// The monospace font a canvas's cell size is measured in (std.app.5).
 let cellFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
+/// The natural line height of `sans` at 13 points, whole points (std.app.34).
+func sansLine() -> Double {
+    let f = NSFont.systemFont(ofSize: 13, weight: .regular)
+    return Double(ceil(f.ascender - f.descender + f.leading))
+}
+
 func color(_ c: Int) -> NSColor {
     NSColor(srgbRed: CGFloat((c >> 16) & 0xff) / 255, green: CGFloat((c >> 8) & 0xff) / 255,
             blue: CGFloat(c & 0xff) / 255, alpha: 1)
 }
 
-func font(_ family: String, _ size: Double, bold: Bool, italic: Bool) -> NSFont {
+func font(_ family0: String, _ size: Double, bold: Bool, italic: Bool) -> NSFont {
+    return fontUsed(family0, size, bold: bold, italic: italic).0
+}
+
+/// The installed font families, lower-cased, for std.app.28.
+private let installedFamilies: Set<String> = Set(NSFontManager.shared.availableFontFamilies.map { $0.lowercased() })
+
+/// Resolves a CSS `font-family` list (std.app.28): the first installed family wins,
+/// else the list's first generic (`serif`, `mono` for monospace, `sans` otherwise).
+/// Returns the host face or the installed family's name.
+func resolveFamily(_ list: String) -> String {
+    var generic = ""
+    for part in list.split(separator: ",") {
+        var f = part.trimmingCharacters(in: .whitespaces)
+        if f.count >= 2, let q = f.first, (q == "\"" || q == "'"), f.last == q {
+            f = String(f.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        if f.isEmpty { continue }
+        let low = f.lowercased()
+        switch low {
+        case "serif": if generic.isEmpty { generic = "serif" }
+        case "monospace", "ui-monospace", "mono": if generic.isEmpty { generic = "mono" }
+        case "sans-serif", "system-ui", "ui-sans-serif", "sans", "-apple-system", "blinkmacsystemfont":
+            if generic.isEmpty { generic = "sans" }
+        default:
+            if installedFamilies.contains(low) {
+                return NSFontManager.shared.availableFontFamilies.first { $0.lowercased() == low } ?? f
+            }
+        }
+    }
+    return generic.isEmpty ? "sans" : generic
+}
+
+/// The font a `Str` of this family is drawn in and the family the host chose (std.app.28).
+func fontUsed(_ family0: String, _ size: Double, bold: Bool, italic: Bool) -> (NSFont, String) {
     let s = CGFloat(size > 0 ? size : 13)
     let w: NSFont.Weight = bold ? .bold : .regular
     var f: NSFont
+    if family0.hasPrefix("web:") {
+        if let wf = WebFonts.font(String(family0.dropFirst(4)), s) { return (wf, family0) }
+        return (NSFont.systemFont(ofSize: s, weight: w), "sans")
+    }
+    let family = (family0 == "mono" || family0 == "sans" || family0 == "serif") ? family0 : resolveFamily(family0)
     switch family {
     case "sans": f = NSFont.systemFont(ofSize: s, weight: w)
     case "serif":
         let sys = NSFont.systemFont(ofSize: s, weight: w)
         f = sys.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: s) } ?? sys
-    default: f = NSFont.monospacedSystemFont(ofSize: s, weight: w)
+    case "mono": f = NSFont.monospacedSystemFont(ofSize: s, weight: w)
+    default:
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if bold { traits.insert(.bold) }
+        if italic { traits.insert(.italic) }
+        let d = NSFontDescriptor(fontAttributes: [.family: family]).withSymbolicTraits(traits)
+        f = NSFont(descriptor: d, size: s) ?? NSFont(descriptor: NSFontDescriptor(fontAttributes: [.family: family]), size: s)
+            ?? NSFont.systemFont(ofSize: s, weight: w)
+        return (f, family)
     }
     if italic { f = NSFontManager.shared.convert(f, toHaveTrait: .italicFontMask) }
-    return f
+    return (f, family)
 }
 
 struct CanvasRep: NSViewRepresentable {
@@ -77,6 +130,7 @@ final class CanvasView: NSView {
         f["dy"] = size.height
         f["cell_w"] = cell.width
         f["cell_h"] = lineH
+        f["sans_line"] = sansLine()
         Outbox.shared.send("resize", f)
     }
 
@@ -121,11 +175,47 @@ final class CanvasView: NSView {
                 // std.app.19: a fill with opacity `a`, clamped to 0...1.
                 color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1))).setFill()
                 NSRect(x: x, y: y, width: w, height: h).fill(using: .sourceOver)
+            case let .round(x, y, w, h, r, c, a, stroke):
+                // std.app.32: a rounded rectangle; the radius is at most half the shorter side.
+                let rr = CGFloat(min(max(r, 0), min(w, h) / 2))
+                let p = NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h), xRadius: rr, yRadius: rr)
+                let tint = color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1)))
+                if stroke > 0 {
+                    p.lineWidth = CGFloat(stroke)
+                    tint.setStroke()
+                    p.stroke()
+                } else {
+                    tint.setFill()
+                    p.fill()
+                }
+            case let .poly(pts, c, a):
+                if pts.count >= 6 {
+                    let p = NSBezierPath()
+                    p.windingRule = .nonZero
+                    p.move(to: NSPoint(x: pts[0], y: pts[1]))
+                    for k in 1..<(pts.count / 2) { p.line(to: NSPoint(x: pts[k * 2], y: pts[k * 2 + 1])) }
+                    p.close()
+                    color(c).withAlphaComponent(CGFloat(min(max(a, 0), 1))).setFill()
+                    p.fill()
+                }
+            case let .line(pts, c, width):
+                if pts.count >= 4 {
+                    let p = NSBezierPath()
+                    p.move(to: NSPoint(x: pts[0], y: pts[1]))
+                    for k in 1..<(pts.count / 2) { p.line(to: NSPoint(x: pts[k * 2], y: pts[k * 2 + 1])) }
+                    p.lineWidth = CGFloat(width > 0 ? width : 1)
+                    p.lineCapStyle = .round
+                    p.lineJoinStyle = .round
+                    color(c).setStroke()
+                    p.stroke()
+                }
             case let .clip(x, y, w, h):
                 g.saveGState()
                 g.clip(to: CGRect(x: x, y: y, width: w, height: h))
             case .unclip:
                 g.restoreGState()
+            case .font:
+                break
             }
         }
         Surfaces.draw(canvasId, in: g, bounds: bounds)
