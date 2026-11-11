@@ -42,3 +42,25 @@ Option A, in `compiler/rt/native/ready.ail` (`rdy_new`, `rdy_listen`, `rdy_arm`,
 - A set for every wait (option B): a set costs more than `poll` on one descriptor.
 - Edge-triggered sets (option C): a missed edge hangs a connection.
 - Keeping `poll` and only trimming the table scan: the kernel still copies and scans every parked descriptor on each wait.
+
+## Amendment (2026-11-10): the Windows set
+
+- **Decided by:** AI (delegated, ADR 0076). **Criterion:** speed at many connections; feature parity of the three hosts for 0.1.0.
+
+The second slice. On Windows a set is an I/O completion port (`compiler/rt/native/win_ready.ail`). Each armed socket gets one `IOCTL_AFD_POLL` request, issued with `NtDeviceIoControlFile` on a helper handle (`\Device\Afd\Ail`, opened with `NtCreateFile`) that is bound to the port. The socket driver completes the request when the socket is readable, has a connection to accept, was shut down or was closed, and `GetQueuedCompletionStatusEx` returns the completions, so a wait is O(ready) as on the other hosts. A request completes once, which is the one-shot arming; the listener's request is issued again at the start of each wait, and a request on a socket that is already readable completes at once, so the listener is level-triggered. A socket closed while armed completes with `AFD_POLL_LOCAL_CLOSE` and is not reported.
+
+Consequences:
+
+- A Windows program that serves imports two functions from `ntdll.dll` (`compiler/obj/pe.ail` lists the DLL). Programs that do not serve import nothing new.
+- The interface is the one `select` uses inside Winsock and that libuv, wepoll and mio build on; Microsoft does not document it. If `NtCreateFile` fails, `rdy_new` fails and the server keeps the `WSAPoll` loop (std.net.32).
+- Records the kernel writes into live in the process heap, not the collected heap. A set is closed with `rdy_close`; on Windows it is an address, not a descriptor. Closing cancels the outstanding requests and collects them; the 96-byte set itself is kept, because another task may be inside a wait.
+- A wait sits in the system for at most 100 ms at a time, so a set closed by another task ends it.
+- `tools/native-net/ready_many.ail` parks N connections (default 1,000) for the measurement.
+
+Rejected for Windows:
+
+- **A zero-byte overlapped `WSARecv` per parked connection.** Documented, but a listening socket cannot take one: the listener would need `AcceptEx` (a second DLL and a different accept path from the other hosts) or a second wait that the port cannot join.
+- **`WSAPoll` over all parked connections** (what Windows did until now): O(parked) on every wait, the cost this ADR removes.
+- **`WSAEventSelect` with `WaitForMultipleObjects`:** 64 handles per wait.
+- **Registered I/O (RIO):** a different send and receive path for every socket, not a readiness question.
+
