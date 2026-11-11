@@ -1,0 +1,42 @@
+## std.audio.12: streaming output on the host's silent device. Two seconds of a generated tone are written in 20 ms chunks; `played` rises, never passes the frames written, and `flush` zeroes both counts. With no audio host built the case has nothing to check and passes.
+use std.audio
+use std.audio.device
+use std.time
+
+fn main() !
+    ok := run() else err
+        print(err.message)
+        return
+    print(ok)
+
+fn run() bool ! device.DeviceError
+    mut c := device.open_null() else err
+        if err.kind == "no_host"
+            return true
+        return err
+    device.stream_open(mut c, 8000, 1)?
+    tone := audio.tone(440.0, 20, 8000, 0.25)
+    mut sent := 0
+    mut sane := true
+    for _ in 0..100
+        st := device.stream_write(mut c, tone)?
+        sent += audio.frames(tone)
+        if st.played > sent or st.played < 0 or st.buffered != sent - st.played
+            sane = false
+    time.sleep_ms(300)
+    a := device.stream_status(mut c)?
+    time.sleep_ms(300)
+    b := device.stream_status(mut c)?
+    rising := b.played > a.played and a.played > 0
+    if b.played > sent
+        sane = false
+    p1 := device.stream_pause(mut c)?
+    time.sleep_ms(200)
+    p2 := device.stream_status(mut c)?
+    held := p1.played == p2.played
+    r := device.stream_resume(mut c)?
+    f := device.stream_flush(mut c)?
+    zeroed := f.played == 0 and f.buffered == 0 and r.played >= p2.played
+    device.stream_close(mut c)?
+    device.close(move c)
+    sane and rising and held and zeroed

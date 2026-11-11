@@ -32,3 +32,20 @@ SNR), then ported; the test's expected samples come from that model. The
 inverse MDCT is a DCT-IV through a mixed-radix FFT of n/2 (radices 4, 2, 3,
 5), with its plans computed once as constants. Tables carried from libopus (band edges, allocation,
 energy model, pulse cache) keep its BSD-3-Clause notice in `NOTICE`.
+
+Part 3 (2026-11-09): SILK, hybrid and mode switches (std.opus.4-6). The
+decoder state becomes `Stream`, which holds the CELT and SILK states; the
+CELT-only `CeltState` API of part 2 is gone. SILK follows libopus's
+fixed-point decoder (the 64-bit forms of its multiply macros, 32-bit wrapping
+kept explicitly), so it can match bit for bit: a Python model of it matched
+libopus 1.5.2 exactly on narrow, medium and wide band, 10, 20 and 60 ms mono
+clips, and within 1 LSB on stereo and hybrid clips, before the port. SILK's
+tables are stored as hex strings decoded once as constants, because the
+formatter puts each element of a long list literal on its own line.
+Low-bitrate redundancy (LBRR) is read and skipped: it only matters for loss
+recovery. A switch with no redundant CELT frame fails instead of running
+packet-loss concealment; libopus's encoder sends that frame on most switches,
+so normal streams rarely hit this.
+Rejected: SILK in floating point. It is shorter, but it can't match libopus
+exactly, and the fixed-point form makes the tests deterministic down to the
+bit.

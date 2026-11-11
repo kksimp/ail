@@ -55,6 +55,10 @@ KEYWORDS := {
     "with",
 }
 
+## The reserved words, sorted: what `ail help --keywords` prints for editors (tool.help.3).
+pub fn keywords() List[str]
+    KEYWORDS.sorted()
+
 ## Symbols of two characters, and of one. `..=` is checked first, then `..`,
 ## then these, so the longest spelling wins (`..=` over `..` over `.`).
 TWO_SYMBOLS := {"->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||"}

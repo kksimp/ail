@@ -4,7 +4,8 @@
 ## `cli`, `mistakes`, `contracts`, `snapshot`, `misc`, `docs`, `fmt`, `budget`, `limits`, `diff`, `build_cache`,
 ## `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net` (starts tools/gate/net_server.py), `spec` (runs
 ## tools/gate/spec.ail), `crypto` (the TLS and crypto vectors, and the parser fuzzers, of tools/native-tls), `tools` (the editor, Garlic and the PDF reader), `std` (the AIL std sources check, format and are
-## called), `agent_tools` (context, infer, probes, sanitize, leak, fuzz, mutate and the language server), `selfhost` (tools/self-host/run.sh, only when named).
+## called), `agent_tools` (context, infer, probes, sanitize, leak, fuzz, mutate and the language server), `parity` (tools/gate/parity.ail:
+## one line per feature, the same on the three hosts but for tests/parity/expected-differences.txt), `selfhost` (tools/self-host/run.sh, or run.ps1 on Windows; only when named).
 ## The native run programs are tools/gate/goldens.ail and nativex.
 ## Run it through tools/gate/mac-gate.sh, or with AIL_APP_HOST set to a missing path: a std.app program
 ## (examples/app_todo.ail) would otherwise open the host's window and wait for ever.
@@ -90,11 +91,61 @@ fn Gate.examples(mut self, tmp str)
             )
 
 fn Gate.selfhost(mut self)
-    r := proc.run("tools/self-host/run.sh", [], none, 3600000) else
-        red("selfhost", "could not start tools/self-host/run.sh")
+    # Windows has the fixed point in PowerShell (stages 1 to 3); its native test programs are nativex's.
+    mut cmd := "tools/self-host/run.sh"
+    mut cmd_args := List[str]()
+    if (env.get("OS") else "") == "Windows_NT"
+        cmd = "powershell"
+        cmd_args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools/self-host/run.ps1"]
+    r := proc.run(cmd, cmd_args, none, 3600000) else
+        red("selfhost", "could not start {cmd}")
         return
     if r.status != 0
         red("selfhost", r.out.lines().last() else "failed")
+
+## The parity probe (ADR 0925): tools/gate/parity.ail prints one line per feature, and every line must be
+## `FEATURE works` but for the ones tests/parity/expected-differences.txt lists for this host (`HOST FEATURE STATE`,
+## then the reason). A listed line that works again is red too, so the file never keeps a difference that is gone.
+## The lines are printed, so the three hosts' logs can be laid side by side.
+fn Gate.parity(mut self)
+    mut host := "linux"
+    if (env.get("OS") else "") == "Windows_NT"
+        host = "windows"
+    elif sh_run("uname -s").out.trim() == "Darwin"
+        host = "macos"
+    mut expected := Map[str, str]()
+    for l in slurp("tests/parity/expected-differences.txt").lines()
+        w := l.words()
+        if w.len() >= 3 and w[0] == host
+            expected[w[1]] = w[2]
+    r := proc.run("./ail", ["run", "tools/gate/parity.ail"], "", 3600000) else
+        red("parity", "could not start tools/gate/parity.ail")
+        return
+    out_lines := lf(r.out).lines()
+    last := out_lines.last() else ""
+    if r.status != 0 or not last.starts_with("PARITY ")
+        red("parity", "parity.ail exit {r.status}\n{r.out}{r.err}")
+        return
+    mut seen := 0
+    for l in out_lines
+        print(l)
+        w := l.words()
+        if w.len() < 2 or w[0] == "PARITY"
+            continue
+        seen += 1
+        want_state := expected.get(w[0]) else "works"
+        if w[1] != want_state and want_state == "works"
+            red(
+                "parity {w[0]}",
+                "{l}\nnot the same as on the other hosts, and not in tests/parity/expected-differences.txt for {host}",
+            )
+        elif w[1] != want_state
+            red(
+                "parity {w[0]}",
+                "{l}\ntests/parity/expected-differences.txt says `{want_state}` for {host}: update or delete that line",
+            )
+    if last != "PARITY {seen} features" or seen < 50
+        red("parity", "the probe printed {seen} feature lines and ended with `{last}`")
 
 ## The tools written in AIL. Each check
 ## runs `ail` from `root` (the repository) and compares its output.
@@ -617,6 +668,8 @@ fn Gate.fix(mut self, tmp str)
 ## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
 ## flag, that one wrapper has and the other lacks is red. A text check, not a behaviour check.
 WRAPPER_COMMANDS := [
+    "help",
+    "doctor",
     "run",
     "build",
     "check",
@@ -696,6 +749,54 @@ fn Gate.wrapper_parity(mut self)
     for wp_flag in wp_flags
         if not wp_ps.contains(wp_flag)
             self.red("wrapper parity: ail.ps1", "`run {wp_flag}` is in ail but not in ail.ps1")
+
+## `ail help` (tool.help.1-3, ADR 1057): its table is the list of commands both launchers route, `CMD --help` answers for
+## each, and a symlinked `ail` finds the toolchain (tool.path.1, ADR 1058). A text check of the launchers, as the
+## wrapper parity check is, plus one run per command.
+fn Gate.cli_help(mut self, tmp str)
+    h := ail_run(["help", "--json"]) else return
+    if h.status != 0
+        red("help --json", "exit {h.status}\n{h.err}")
+        return
+    sh_text := slurp("ail")
+    ps_text := slurp("ail.ps1")
+    parsed := parse_json(h.out) else
+        red("help --json", "not JSON:\n{h.out}")
+        return
+    mut listed := 0
+    for item in parsed.as_arr() else []
+        n := item.text("name", "")
+        listed += 1
+        known := sh_text.contains("= {n} ]")
+            or sh_text.contains("{n} |")
+            or sh_text.contains("| {n}")
+            or sh_text.contains("{n})")
+        if not known
+            red("help routes: ail", "`{n}` is listed by `ail help` but not routed in ail")
+        if not ps_text.contains("'{n}'")
+            red("help routes: ail.ps1", "`{n}` is listed by `ail help` but not routed in ail.ps1")
+        r := ail_run([n, "--help"]) else return
+        if r.status != 0 or not r.out.contains("usage: ail {n}")
+            red("{n} --help", "exit {r.status}\n{r.out}{r.err}")
+    if listed < 30
+        red("help --json", "only {listed} commands listed")
+    bare := ail_run([]) else return
+    if bare.status != 0 or not bare.out.contains("Build and run")
+        red("ail with no arguments", "exit {bare.status}\n{bare.out}{bare.err}")
+    u := ail_run(["nosuchcommand"]) else return
+    if u.status != 2 or not u.err.contains("unknown command nosuchcommand; run `ail help`")
+        red("unknown command", "exit {u.status}\n{u.err}")
+    # tool.path.1: a symlink to `ail` runs the same toolchain (a link needs no privilege off Windows).
+    if (env.get("OS") else "") != "Windows_NT"
+        link := "{tmp}/ail-link"
+        sh_run("rm -f {link}; ln -s \"{repo_root()}/ail\" {link}")
+        l := proc.run(link, ["help", "run"]) else return
+        if l.status != 0 or not l.out.contains("usage: ail run")
+            red("symlinked ail", "exit {l.status}\n{l.out}{l.err}")
+        d := proc.run(link, ["doctor", "--path"]) else return
+        if d.status != 0 or not d.out.contains(repo_root())
+            red("symlinked ail doctor --path", "exit {d.status}\n{d.out}{d.err}")
+        sh_run("rm -f {link}")
 
 ## `ail effects` and `--deny` (effects.rs), `check --errors` and `fails_with`
 ## (error_paths.rs), and the process-level diagnostics of cli_errors.rs.
@@ -2180,7 +2281,7 @@ fn Gate.net(mut self)
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
         red("attach none", "exit {nobody.status}\n{nobody.err}")
     bad := sh_run("TMPDIR={ad} ./ail attach set x=1")
-    if bad.status != 2 or not bad.err.contains("the queries are observe, screen and heap")
+    if bad.status != 2 or not bad.err.contains("the queries are observe, screen, heap and tools")
         red("attach unknown query", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {ad}")
     # std.net.5, std.net.13: https and a raw TLS Conn against `openssl s_server`.
@@ -2789,6 +2890,33 @@ fn Gate.agent_tools(mut self, tmp str)
     second := slurp("{base}/ledger/.ail/task-log.jsonl")
     if first.split(",\"ms\":")[0] != second.split(",\"ms\":")[0]
         red("task ledger is stable", "two runs differ\n{first}{second}")
+    # task.finish.3 (ADR 1046): `finish` writes the change certificate and names it.
+    sh_run("mkdir -p {base}/cert")
+    fs.write_text("{base}/cert/main.ail", "fn main()\n    print(1)\n") else return
+    sh_run("cd {base}/cert && git init -q && git add -A && git -c user.name=g -c user.email=g@g commit -qm seed")
+    tool(
+        "task start for finish",
+        "{base}/cert",
+        ["task", "start", "main.ail", "print", "two"],
+        0,
+        ["task open"],
+    )
+    fs.write_text("{base}/cert/main.ail", "fn main()\n    print(2)\n") else return
+    tool("task verify for finish", "{base}/cert", ["task", "verify"], 0, ["green"])
+    tool(
+        "task finish certificate",
+        "{base}/cert",
+        ["task", "finish", "--json"],
+        0,
+        ["\"certificate\":\".ail/cert.json\""],
+    )
+    want(
+        "task finish writes the certificate",
+        slurp("{base}/cert/.ail/cert.json"),
+        ["\"cert\"", "main.ail"],
+    )
+    if fs.exists("{base}/cert/.ail-task")
+        red("task finish", "the task is still open")
     # api.ctx.1-7 (ADR 1020)
     ctx := src_of([
         "fn show(n int) str",
@@ -3208,7 +3336,20 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail_api",
         "ail_review",
         "task_abort",
+        "ail_card",
+        "ail_find",
+        "ail_try",
+        "ail_prove",
+        "ail_infer",
+        "ail_merge_check",
+        "ail_verify_check",
     ])
+    # mcp.tools.3: the whole `tools/list` answer stays under 1,500 tokens (about 4 bytes each).
+    if listed.out.len() > 6000
+        red(
+            "mcp tools/list size",
+            "{listed.out.len()} bytes; mcp.tools.3 allows about 1,500 tokens",
+        )
     m1 := mcp_session("{base}/mcp", [
         mcp_call(2, "ail_context", "'program':'prog.ail','symbol':'pay','budget':400"),
         mcp_call(3, "ail_context", "'program':'prog.ail','symbol':'pay','json':true"),
@@ -3241,6 +3382,86 @@ fn Gate.agent_tools(mut self, tmp str)
         "'range':'HEAD..HEAD','path':'examples/hello.ail'",
     )])
     want("mcp review", m3.out, ["\"isError\":false"])
+    # mcp.tools.1 (round 2): one real session per added tool.
+    fs.write_text("{base}/mcp/prove.ail", src_of([
+        "fn at(xs List[int], i int) int",
+        "    requires i < xs.len()",
+        "    xs[i]",
+        "",
+        "fn main()",
+        "    xs := [3, 1, 4]",
+        "    for i in 0..xs.len()",
+        "        print(at(xs, i))",
+    ])) else return
+    fs.write_text("{base}/mcp/try.ail", ctx) else return
+    fs.write_text("{base}/mcp/ours.ail", ctx) else return
+    fs.write_text("{base}/mcp/theirs.ail", ctx) else return
+    r2 := mcp_session("{base}/mcp", [
+        mcp_call(2, "ail_card", "'topic':''"),
+        mcp_call(3, "ail_card", "'topic':''"),
+        mcp_call(4, "ail_card", "'topic':'errors'"),
+        mcp_call(5, "ail_find", "'words':'read text file'"),
+        mcp_call(6, "ail_find", "'sig':'(str) bytes'"),
+        mcp_call(7, "ail_find", "'words':''"),
+        mcp_call(
+            8,
+            "ail_try",
+            "'program':'try.ail','sets':['rename show shown','rename nosuch other']",
+        ),
+        mcp_call(9, "ail_prove", "'program':'prove.ail'"),
+        mcp_call(10, "ail_infer", "'program':'try.ail','function':'pay'"),
+        mcp_call(11, "ail_merge_check", "'base':'prog.ail','ours':'ours.ail','theirs':'theirs.ail'"),
+        mcp_call(12, "ail_verify_check", "'cert':'-x'"),
+    ])
+    want("mcp card", reply_of(r2.out, 2), ["AIL core card", "\"isError\":false"])
+    want("mcp card repeat is memoised", reply_of(r2.out, 3), [jm("'ail/warm':'memo'")])
+    want("mcp card topic", reply_of(r2.out, 4), ["\"isError\":false"])
+    want("mcp find by words", reply_of(r2.out, 5), ["fs.read_text(path"])
+    want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
+    want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
+    want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
+    if slurp("{base}/mcp/try.ail") != ctx
+        red("mcp try", "wrote the program")
+    want("mcp prove", reply_of(r2.out, 9), ["proved", "\"isError\":false"])
+    want("mcp infer", reply_of(r2.out, 10), ["\"isError\":false"])
+    if slurp("{base}/mcp/try.ail") != ctx
+        red("mcp infer", "wrote the program")
+    want("mcp merge check", reply_of(r2.out, 11), ["merged and checked", "\"isError\":false"])
+    want("mcp verify check refuses an option", reply_of(r2.out, 12), ["-32602", "cert"])
+    r3 := mcp_session("{base}/cert", [mcp_call(2, "ail_verify_check", "'cert':'.ail/cert.json'")])
+    want("mcp verify check", reply_of(r3.out, 2), ["certificate holds", "\"isError\":false"])
+    # attach.tool.3-5 (ADR 0986): `ail attach mcp` lists an app's `@tool` next to the fixed tools, and a call
+    # reaches the app as a `call` request with the tool's name and arguments.
+    td := "{base}/attach_mcp"
+    sh_run("rm -rf {td}; mkdir -p {td}")
+    tport := net_port(3)
+    fs.write_text(
+        "{td}/reply.json",
+        jm("~'v':1,'tools':[~'name':'add','doc':'Adds n.','params':[~'name':'n','type':'int'^],'result':'int'^]^"),
+    ) else return
+    fs.write_text(
+        "{td}/ail-attach-{tport}.json",
+        "\{\"addr\":\"127.0.0.1:{tport}\",\"token\":\"tok\"}",
+    ) else return
+    tpid := net_start(
+        "python3 -I tools/gate/attach_server.py {tport} {td}/req.txt {td}/reply.json",
+        tport,
+    )
+    tl := sh_run("cd {repo_root()} && printf '%s\\n' '{jreq(1, "tools/list", "~^")}' '{mcp_call(2, "add", "'n':2")}' | TMPDIR={td} ./ail attach mcp")
+    net_stop(tpid)
+    want("attach mcp tools/list", tl.out, [
+        "app_observe",
+        "app_input",
+        "\"name\":\"add\"",
+        "\"integer\"",
+    ])
+    want("attach mcp call", reply_of(tl.out, 2), ["\"isError\":false"])
+    want("attach mcp call request", slurp("{td}/req.txt"), [
+        "\"q\":\"call\"",
+        "\"name\":\"add\"",
+        "\"token\":\"tok\"",
+        "\"n\":2",
+    ])
     # mcp.warm.1-4 (E14): a repeated read-only call comes from the memo, a changed file is
     # checked again, and `AIL_MCP_COLD` goes through the launcher.
     fs.write_text("{base}/mcp/warm.ail", ctx) else return
@@ -3279,7 +3500,14 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail explain",
         "ail ask",
         "Never grep",
+        "ail card",
+        "ail ask std",
+        "ail check --fix",
+        "ail try",
+        "cert.json",
     ])
+    if kit.contains("ail api --card")
+        red("new AGENTS.md", "still sends the agent to the full card")
     if kit.len() > 1400
         red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 350 tokens")
     mcp := fs.read_text("{base}/new/kit/.mcp.json") else return
@@ -3288,6 +3516,24 @@ fn Gate.agent_tools(mut self, tmp str)
     if fs.exists("{base}/new/bare/AGENTS.md") or fs.exists("{base}/new/bare/.mcp.json")
         red("new --no-agent", "the kit was written")
     tool("new refuses an existing name", "{base}/new", ["new", "kit"], 2, ["tool.new.1"])
+    # tool.new.5: `ail new .` writes only the kit, into a project that already has `.ail` files, and overwrites nothing.
+    sh_run("mkdir -p {base}/here {base}/empty")
+    tool("new . outside a project", "{base}/empty", ["new", "."], 2, ["tool.new.5"])
+    fs.write_text("{base}/here/main.ail", "fn main()\n    print(1)\n") else return
+    tool("new .", "{base}/here", ["new", "."], 0, ["wrote AGENTS.md, .mcp.json"])
+    want("new . kit", slurp("{base}/here/AGENTS.md"), ["ail card", "ail task finish"])
+    fs.write_text("{base}/here/AGENTS.md", "mine\n") else return
+    fs.remove("{base}/here/.mcp.json") else return
+    tool(
+        "new . keeps AGENTS.md",
+        "{base}/here",
+        ["new", "."],
+        0,
+        ["left alone", "ail task start", "wrote .mcp.json"],
+    )
+    if slurp("{base}/here/AGENTS.md") != "mine\n"
+        red("new .", "changed an existing AGENTS.md")
+    tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
@@ -3325,6 +3571,7 @@ fn main() !
         "agent_tools",
         "cert",
         "try",
+        "parity",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3336,7 +3583,9 @@ fn main() !
             "cases" => g.cases()
             "explain" => g.explain_coverage()
             "fix" => g.fix(tmp)
-            "cli" => g.cli_effects(tmp)
+            "cli" =>
+                g.cli_effects(tmp)
+                g.cli_help(tmp)
             "mistakes" => g.mistakes(tmp)
             "contracts" => g.contracts()
             "snapshot" => g.snapshot(tmp)
@@ -3366,6 +3615,7 @@ fn main() !
             "agent_tools" => g.agent_tools(tmp)
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
+            "parity" => g.parity()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)

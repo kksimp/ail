@@ -40,6 +40,8 @@ STD_FUNCTIONS := [
         "volume",
         "read_range",
         "trash",
+        "temp_dir",
+        "make_temp_dir",
         "mode",
         "set_mode",
         "set_modified",
@@ -249,6 +251,10 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.trash"
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.temp_dir"
+        return StdSig(params: [], ret: text)
+    if key == "fs.make_temp_dir"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
     if key == "fs.mode"
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Int))
     if key == "fs.set_mode" or key == "fs.set_modified" or key == "fs.truncate"
