@@ -4,6 +4,8 @@
 ## added to a launcher and not listed here (or the reverse) is red. Internal commands (`check-program`, `prepare`,
 ## `build-many`, `diagnose`, `pe-sample`, and the other bootstrap-era dumps of compiler/main.ail) are not listed.
 
+use syntax
+
 ## One command: its name, its group (an entry of `GROUPS`), a one-line summary, its usage line, and the rule IDs
 ## whose text `ail explain` prints.
 struct Cmd
@@ -249,7 +251,7 @@ fn commands() List[Cmd]
             "help",
             "Project",
             "this list, or one command's usage (also `ail --help`, `ail -h`)",
-            "ail help [COMMAND] [--json]",
+            "ail help [COMMAND | --keywords] [--json]",
             "tool.help.1,tool.help.2,tool.help.3",
         ),
     ]
@@ -293,12 +295,22 @@ fn table_json(cmds List[Cmd]) str
 ## The exit status of `ail help ARGS` (also `--help`, `-h`, and no command at all).
 pub fn command(args List[str]) int
     mut json := false
+    mut keywords := false
     mut words := List[str]()
     for a in args
         if a == "--json"
             json = true
+        elif a == "--keywords"
+            keywords = true
         else
             words.push(a)
+    # tool.help.3: the reserved words, for editors: one JSON array with `--json`, else one per line.
+    if keywords
+        if json
+            print("[{[ q(w) for w in syntax.keywords() ].join(",")}]")
+        else
+            print(syntax.keywords().join("\n"))
+        return 0
     cmds := commands()
     if words.len() == 0
         if json
@@ -307,7 +319,7 @@ pub fn command(args List[str]) int
             print(overview(cmds))
         return 0
     if words.len() > 1
-        io.eprint("usage: ail help [COMMAND] [--json]")
+        io.eprint("usage: ail help [COMMAND | --keywords] [--json]")
         return 2
     for k in cmds
         if k.name == words[0]

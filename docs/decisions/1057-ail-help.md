@@ -21,9 +21,11 @@ no answer, and the release plan's wiki check against `ail --help` could not run.
    `ail run FILE --help` still passes `--help` to the program.
 3. `ail help --json` prints the table as one JSON array; `ail help --json CMD` one object
    (tool.help.3).
-4. The table is one file, `compiler/help/help.ail`. Internal commands are not listed. The `cli`
+4. `ail help --keywords [--json]` prints the reserved words, so editors (ail-edit) read them from the
+   toolchain instead of keeping a copy (tool.help.3).
+5. The table is one file, `compiler/help/help.ail`. Internal commands are not listed. The `cli`
    gate suite fails when a listed command has no route in `ail` or in `ail.ps1`.
-5. An unknown command prints "unknown command X; run `ail help`" and exits 2.
+6. An unknown command prints "unknown command X; run `ail help`" and exits 2.
 
 ## Rejected alternatives
 

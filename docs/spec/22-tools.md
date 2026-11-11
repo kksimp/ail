@@ -1347,7 +1347,9 @@ program. *(ADR 1057)*
 
 **tool.help.3** — `ail help --json` prints the table as one JSON array of objects with `name`,
 `group`, `summary`, `usage` and `rules`; `ail help --json CMD` prints the object of one command.
-The `cli` gate suite fails when a listed command has no route in `ail` or in `ail.ps1`. *(ADR 1057)*
+`ail help --keywords` prints the language's reserved words (`lex.kw.1`), one per line, or with `--json`
+one JSON array, so an editor reads them from the toolchain. The `cli` gate suite fails when a listed command has
+no route in `ail` or in `ail.ps1`. *(ADR 1057)*
 
 ```ail tool=help expect=Agent rules=tool.help.1
 fn main()
@@ -1360,6 +1362,11 @@ fn main()
 ```
 
 ```ail tool=help,--json expect="group":"Agent rules=tool.help.3
+fn main()
+    print(1)
+```
+
+```ail tool=help,--keywords,--json expect="fn" rules=tool.help.3
 fn main()
     print(1)
 ```
