@@ -621,7 +621,12 @@ fn Lower.lower_par_for(
     # 4096 is `PAR_HEAVY` in rt/native/task.ail.
     weight := konst(if not auto and plan.calls then 4096 else plan.work, Ty.Int)
     if auto and loops.len() > 0
-        nested_par_test(lo, hi, if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work), seq)
+        nested_par_test(
+            lo,
+            hi,
+            if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work),
+            seq,
+        )
     chosen := konst(if auto then 1 else 0, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
