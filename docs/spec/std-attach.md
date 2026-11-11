@@ -91,10 +91,14 @@ fn main()
 
 **attach.wire.1** — `attach.serve.run(mut app)` listens on `127.0.0.1` only,
 on a free port, and publishes `{"addr":"127.0.0.1:PORT","token":"..."}` in
-`$TMPDIR/ail-attach-PORT.json` (`/tmp` without `TMPDIR`), created empty,
-restricted to mode 0600, then filled; the file is removed when the window
-closes. The token is 24 random bytes in hex. Nothing listens until `run` is
-called. *(ADR 0884)*
+`ail-attach-PORT.json`, created empty, restricted to mode 0600, then filled.
+The file's directory is `$TMPDIR`; without `TMPDIR` it is `/tmp`, or on Windows
+`%TEMP%`, the temporary folder inside the user's profile, whose access list
+takes the place of the mode. The token is 24 random bytes in hex. Nothing
+listens until `run` is called. `serve.open()` is the first half of `run` (the
+listener and its file, as a `Served`) and `serve.run_on(s, mut app, cmd, args,
+input)` the second, with the host program `cmd` as `app.run_with` takes it.
+*(ADR 0884, ADR 1045)*
 
 **attach.wire.6** — The listener thread never reads program state. It posts
 each request line to the app's inbox as an `external` event from `attach`,
@@ -102,7 +106,13 @@ and the app answers between its other events with the observed values (the
 `Observe` trait), the screen of its view tree (`std.screen.view`) and the
 protocol reply. A client that sends nothing for 5 seconds is dropped. *(ADR 0884)*
 
-```ail norun rules=attach.observe.4,attach.wire.1,attach.wire.6
+**attach.wire.7** — When the window closes, or its host can't start, the
+listener stops before `run` returns: a request not yet answered gets an empty
+line, the connection in progress is closed after its reply, the socket is
+closed and the discovery file is removed. This holds on Linux, macOS and
+Windows. *(ADR 1045)*
+
+```ail norun rules=attach.observe.4,attach.wire.1,attach.wire.6,attach.wire.7
 use std.app
 use std.attach
 use std.attach.serve
@@ -205,14 +215,14 @@ result with `observe` or `screen`. *(ADR 0919)*
 ## The client
 
 **attach.cli.1** — `ail attach` with no argument prints `127.0.0.1:PORT` for each
-program whose discovery file (`attach.wire.1`) is in `$TMPDIR` (`/tmp` without it),
-one per line; exit status 1 with a message when there is none. `ail attach
+program whose discovery file is in the directory of `attach.wire.1` (`$TMPDIR`, else
+`/tmp`, or `%TEMP%` on Windows), one per line; exit status 1 with a message when there is none. `ail attach
 [--port N] observe|screen|heap|input [key=value ...]` sends that query to the program,
 with the token from its discovery file, and prints the reply line. The pairs are
 the request's members: `x`, `y`, `w`, `h`, `dx`, `dy`, `budget` and `since` are numbers,
 `ctrl`, `alt`, `shift` and `meta` are `true` or `false`,
 `names` is a comma-separated list, anything else is a string (`role`, `color`,
-`text`, `kind`, `id`). *(ADR 0884)*
+`text`, `kind`, `id`). *(ADR 0884, ADR 1045)*
 
 **attach.cli.2** — With several programs published, `--port N` names one; without it
 the command stops with exit status 2 and says so. A connection or protocol error is

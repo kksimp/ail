@@ -3,7 +3,8 @@
 ## ends. The program signals itself through `sh` (its parent is this program).
 ## Windows has no `kill` for a console program, so there the lines of the
 ## expected output are printed without sending: Ctrl-C and Ctrl-Break are tried
-## by hand there (ADR 1011).
+## by hand there (ADR 1011). What can be checked there is std.os.4: every name
+## is accepted, the console handler registers, and nothing arrives unasked.
 fn send(sig str) bool
     r := proc.run("sh", ["-c", "kill -{sig} $PPID"]) else return false
     r.ok()
@@ -18,14 +19,27 @@ fn main()
     print("idle {idle}")
     for sig in ["INT", "TERM", "WINCH"]
         if win
-            print("sent {sig} true")
+            # std.os.4: accepted, and quiet until the console sends an event.
+            one := os.signals([sig])
+            quiet := one.try_recv() else "none"
+            one.close()
+            closed := one.recv() else "closed"
+            ok := quiet == "none" and closed == "closed"
+            print("sent {sig} {ok}")
             print("got {sig}")
         else
             print("sent {sig} {send(sig)}")
             print("got {next(ch)}")
     other := os.signals(["INT"])
     if win
-        print("both INT INT")
+        # HUP and QUIT are accepted too, and never delivered (std.os.4).
+        rest := os.signals(["HUP", "QUIT"])
+        r := rest.recv_for(50) else "none"
+        rest.close()
+        if r == "none"
+            print("both INT INT")
+        else
+            print("both {r}")
     else
         send("INT")
         a := next(ch)
