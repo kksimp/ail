@@ -52,6 +52,18 @@ missed most lookups and ran 9% more instructions; the slot from the
 multiplied address and the hit written out in `map_find` fixed both.
 Stage-2 self-build 26.2 s to 26.6 s (noise range).
 
+**Amended 2026-11-11 (delegated, ADR 0076):** the slot is now `address >> 5`
+modulo 32, not the top five bits of the address times an odd constant. With
+the hash, which of a vocabulary's literals collided depended on where the
+linker put them: an x86-64 register change (ADR 1049) that only moved code
+made wordfreq run 11.7% more instructions, all of it in the probe and hash
+paths. String objects are at least 32 bytes and 16-byte aligned, so `>> 5`
+puts keys made one after another in different slots until they span 1 KB.
+The first version's `>> 4` over 16 slots used every other slot, which is why
+it missed. Rejected: keeping the hash (layout decides speed); a hash of the
+1 KB block added to `>> 5` (protects keys exactly 1 KB apart, a rare
+pattern, at the cost of collisions across a block boundary).
+
 ## Rejected alternatives
 
 - **The hash in the string object, in the top 32 bits of `chars`** (the

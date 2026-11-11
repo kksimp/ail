@@ -299,7 +299,7 @@ fn map_find(m int, k int) int
     if kind == 1
         # The key cache (ADR 0936), written out here so that the hit makes no
         # call once `map_find` is inlined into the caller.
-        e := load64(m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31))
+        e := load64(m + MAP_KCACHE + 8 * k.shr(5).bit_and(31))
         if e != 0 and load64(e + 8) == k
             store64(m + 72, k)
             store64(m + 80, e)
@@ -309,16 +309,21 @@ fn map_find(m int, k int) int
         return map_probe(m, k, map_hash(kind, k))
     map_probe(m, k, map_hash_int(k))
 
-## The key cache slot of string object `k` (ADR 0936): the top five bits of
-## the address times an odd constant (`map_find` and `map_probe` write it
-## out). A program looks up the same string objects again and again
-## (literals, the words of a vocabulary, names held in a tree), so a key
+## The key cache slot of string object `k` (ADR 0936): the address in
+## 32-byte units, modulo 32 (`map_find` and `map_probe` write it out). String
+## objects are 16-byte aligned and, unless empty, at least 32 bytes long, so
+## keys made one after another (a vocabulary's literals, strings split from
+## one text) get different slots until together they span 1 KB, wherever the
+## program's code and data sit. A hash of the address left the collisions to
+## layout: wordfreq's 12 words ran 11.7% more instructions after an unrelated
+## change moved them. A program looks up the same string objects again and
+## again (literals, the words of a vocabulary, names held in a tree), so a key
 ## object's entry is remembered and found without hashing its bytes. A slot is
 ## trusted only when its entry holds this very object: the entry keeps the
 ## object alive, so no other string can have its address, and strings never
 ## change. A removal clears the entry's key; a rebuild or copy clears the cache.
 fn map_kslot(m int, k int) int
-    m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31)
+    m + MAP_KCACHE + 8 * k.shr(5).bit_and(31)
 
 ## The probe of `map_find`, apart from the hash so that only `m` and `k` live
 ## across the hash call. A hit in the first slot, the usual case, makes no
@@ -336,7 +341,7 @@ fn map_probe(m int, k int, h int) int
         store64(m + 72, k)
         store64(m + 80, e)
         if load64(m + 32) == 1
-            store64(m + MAP_KCACHE + 8 * (k * -7046029254386353131).shr(59).bit_and(31), e)
+            store64(m + MAP_KCACHE + 8 * k.shr(5).bit_and(31), e)
         return e
     map_probe_from(m, k, h, j)
 
