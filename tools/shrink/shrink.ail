@@ -120,7 +120,9 @@ fn main() !
                     at += chunk
             chunk = chunk / 2
     if fs.exists(scratch)
-        fs.remove(scratch) else io.exit(2)
+        fs.remove(scratch) else err
+            io.eprint("error: can't remove {scratch}: {err.kind}")
+            io.exit(2)
     if cuts == 0
         print("nothing to cut in {path}")
         io.exit(0)
