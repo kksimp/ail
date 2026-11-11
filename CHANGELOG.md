@@ -12,18 +12,18 @@ Seeds keep their dated tags (`seed-YYYY.MM.DD[a-z]`) and are not releases.
 
 AIL (AI-First Language, "ale") is a native, garbage-collected, memory-safe systems language built so that people and AI agents are both first-class programmers. v0.1.0 is the first public release: the compiler is written in AIL and builds itself from a published seed.
 
-**Language.** Mutable value semantics: values are independent, `mut` is marked at call sites, shared mutation goes only through `ref T`. Errors are values (`error` types, `?`, `else`). Traits and generics, enums with data and `match`, tasks and channels without async/await, `defer`, `requires`/`ensures` contracts that tools can check or fuzz, and effects and capabilities that `ail check --deny` can enforce. One canonical format (`ail fmt`).
+**Language.** Mutable value semantics: values are independent, `mut` is marked at call sites, shared mutation goes only through `ref T`. Errors are values (`error` types, `?`, `else`). Traits and generics, enums with data and `match`, tasks and channels without async/await, `defer`, `requires`/`ensures` contracts that tools can check or fuzz, and effects and capabilities that `ail check --deny` can enforce. Calls to variadic C functions such as `printf` ([ADR 1031](docs/decisions/1031-variadic-c-calls.md)). One canonical format (`ail fmt`).
 
-**Toolchain.** A native compiler, linker and runtime written in AIL, with no LLVM and no C. It runs on macOS ARM64, Linux x86-64 and Windows x86-64, builds optimised code with auto-parallel loops and SIMD, and has a stop-the-world collector.
+**Toolchain.** A native compiler, linker and runtime written in AIL, with no LLVM and no C. It runs on macOS ARM64, Linux x86-64 and Windows x86-64, builds optimised code with auto-parallel loops and SIMD, and has a stop-the-world collector. Its memory model is specified in [spec chapter 06](docs/spec/06-memory.md). The Mac, Linux and Windows gates run the same suite list before every release.
 
-**Agent tools, one loop.** `ail task start`, `ail context`, `ail edit`, `ail check --fix`, `ail test --affected`, `ail task verify`, `ail task finish`. `ail ask` answers who calls what, `ail explain RULE` gives the text of any rule a diagnostic cites, `ail card` prints the language card, `ail review` summarises a change by meaning, `ail try` checks a patch in memory, and `ail mcp` and `ail lsp` serve the same tools to agents and editors. Diagnostics are structured and cost-bounded with `--budget`.
+**Agent tools, one loop.** `ail task start`, `ail context`, `ail edit`, `ail check --fix`, `ail test --affected`, `ail task verify`, `ail task finish`. `ail ask` answers who calls what, `ail explain RULE` gives the text of any rule a diagnostic cites, `ail card` prints the language card, `ail review` summarises a change by meaning, `ail try` checks a patch in memory, and `ail mcp` and `ail lsp` serve the same tools to agents and editors. Diagnostics are structured and cost-bounded with `--budget`. A running app can offer its `@tool` methods to agents as typed actions through `ail attach mcp` ([ADR 0986](docs/decisions/0986-app-tools-and-attach-mcp.md)). `ail help` lists every command with its usage and rules, and `ail doctor` reports what is wrong with an install ([ADRs 1057](docs/decisions/1057-ail-help.md), [1058](docs/decisions/1058-ail-on-path-and-doctor.md)). Shipped commands call no Unix tools, so they behave the same on Windows ([ADR 1059](docs/decisions/1059-no-unix-tools-in-shipped-commands.md)). A VS Code extension and grammar are in `tools/vscode/`, installed locally (not on the marketplace).
 
 **Standard library by area.**
 - Text and data: strings, `bytes`, `std.json`, `std.regex` (linear time), `std.path`, `std.time`.
-- Files, processes and OS: `std.fs`, `std.env`, `std.io`, `std.proc`.
+- Files, processes and OS: `std.fs`, `std.env`, `std.io`, `std.proc`, `std.term` (raw input, cursor and colour for text interfaces).
 - Network: `std.net` HTTP/1.1 client, HTTPS over in-house TLS 1.3, an HTTP server.
 - Crypto and compression: `std.hash`, `std.compress` (DEFLATE, gzip, zip), in-house crypto.
-- Media: `std.audio` (FLAC, Opus CELT), `std.video.vp9`, `std.media.webm`.
+- Media: `std.audio` (FLAC, Opus CELT, SILK and hybrid, streaming playback on macOS, Linux and Windows), `std.video.vp9`, `std.media.webm`.
 - Apps and graphics: `std.app` windows, `std.gfx` real-time frame loop, gamepad input.
 - Numeric: `std.tensor` on the CPU.
 
@@ -35,7 +35,8 @@ AIL (AI-First Language, "ale") is a native, garbage-collected, memory-safe syste
 - The TLS and cryptography are AIL's own and have had no third-party audit ([SECURITY.md](SECURITY.md)).
 - There is no package registry, by decision: dependencies are git URLs pinned in `ail.lock`.
 - The first run builds the compiler from the seed; there is no prebuilt `ail` per release yet.
-- `std.audio` is young. SILK and hybrid Opus, VP9 profiles 1-3 and a TLS server are not included.
+- `std.audio` is young. VP9 profiles 1-3 and a TLS server are not included.
+- No editor extension is on a marketplace yet.
 - The planned list for the next release is in [docs/roadmap.md](docs/roadmap.md).
 <!-- highlights:end -->
 
