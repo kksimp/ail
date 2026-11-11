@@ -322,7 +322,7 @@ fn cached_copy(exe str, out str, target str) bool
     data := fs.read_bytes(exe) else return false
     fs.write_bytes(out, data) else return false
     if not target.ends_with("windows")
-        _ := proc.run("chmod", ["755", out]) else return false
+        fs.set_mode(out, 493) else return false
     true
 
 ## `compile_to` without the cache.
@@ -356,7 +356,7 @@ fn finish_build(m mir.Module, file str, out str, target str)
         io.exit(2)
         return
     if not target.ends_with("windows")
-        _ := proc.run("chmod", ["755", out]) else err
+        fs.set_mode(out, 493) else err
             io.eprint("error[native.build.3]: can't make {out} executable: {err}")
             io.exit(2)
 
@@ -823,7 +823,7 @@ fn run_generators(
         io.exit(2)
         return []
     if ext.is_empty()
-        _ := proc.run("chmod", ["755", file]) else err
+        fs.set_mode(file, 493) else err
             io.eprint("error[native.build.3]: can't run the generators: {err}")
             io.exit(2)
             return []

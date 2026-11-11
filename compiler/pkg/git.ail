@@ -264,10 +264,12 @@ fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
                 "set `AIL_HOME` to a writable directory",
             )
         # Read-only files, writable directories, so the cache can be cleared (mod.pkg.7).
-        # No std call changes a mode yet: where the tools exist (not Windows), `find` and `chmod` do it.
+        # `a-w` on every file (std.fs.28-29); Windows keeps them writable, so the cache can be cleared there.
         if (env.get("OS") else "") != "Windows_NT"
-            _f := proc.run("find", [dir, "-type", "f", "-exec", "chmod", "a-w", "\{}", "+"]) else _e3
-                return Fetched(commit: commit, dir: dir, msg: "", "")
+            files := fs.walk(dir) else return Fetched(commit: commit, dir: dir, msg: "", "")
+            for f in files
+                m := fs.mode(f) else continue
+                fs.set_mode(f, m.bit_and(4095 - 146)) else continue
     Fetched(commit: commit, dir: dir, msg: "", "")
 
 ## Remove `target`, a file or a tree inside the scratch directory `root` that this program made (ADR 1059): it
