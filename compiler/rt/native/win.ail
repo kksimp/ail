@@ -304,7 +304,13 @@ fn win_unlink(path int, dir bool) int
     if a >= 0 and a.bit_and(16) != 0
         return -21
     if import_call("DeleteFileW", w, 0, 0, 0) == 0
-        return win_err_at(w)
+        e := win_err_at(w)
+        # A read-only file (git's objects are): clear the attribute, as `rm -f` does, and try once more (ADR 1059).
+        if a >= 0 and a.bit_and(1) != 0
+            if import_call("SetFileAttributesW", w, a.bit_and(-2), 0, 0) != 0
+                if import_call("DeleteFileW", w, 0, 0, 0) != 0
+                    return 0
+        return e
     0
 
 ## Replaces an existing `to`, as `rename` does.

@@ -3,7 +3,9 @@
 ## which the macOS app host maps by path and shows without JSON on the path;
 ## each `present` is answered by a `vsync` that paces the next frame. The
 ## program's own mapping comes from the C library's `mkstemp`, `ftruncate`,
-## `mmap` and `unlink`, so no runtime piece is needed for it.
+## `mmap` and `unlink`, so no runtime piece is needed for it. On Windows it is
+## a named file mapping from kernel32 (`CreateFileMappingA`, `MapViewOfFile`),
+## which the host opens by name (std.gfx.8, ADR 1044).
 
 use std.app
 use std.attach
@@ -16,6 +18,19 @@ extern c fn mmap(addr *u8, len int, prot i32, flags i32, fd i32, offset int) *u8
 extern c fn unlink(path *u8) i32
 extern c fn close(fd i32) i32
 extern c fn munmap(addr *u8, len int) i32
+
+extern c "kernel32" fn CreateFileMappingA(
+    file int,
+    attrs *u8,
+    protect i32,
+    hi i32,
+    lo i32,
+    name *u8,
+) int
+
+extern c "kernel32" fn MapViewOfFile(map int, access i32, hi i32, lo i32, bytes int) *u8
+extern c "kernel32" fn GetCurrentProcessId() i32
+extern c "kernel32" fn GetTickCount64() int
 
 ## Bytes of unused file before the first buffer and after the last: the
 ## runtime's `std.mem` block check (unsafe.ptr.5) treats an access at the end
@@ -31,15 +46,53 @@ struct Surface
     base *u8
     mapped int
     path str
+    name str
     w int
     h int
     stride int
     count int
     back int
 
+## On Windows: a named, pagefile-backed file mapping (`Local\ail-gfx-PID-TICK`) of two
+## buffers of `w` by `h` pixels, held open until the process ends so the host
+## can open it by name (std.gfx.8, ADR 1044). Nothing is unlinked.
+fn make_win_surface(w int, h int) Surface ! GfxError
+    mut pid := 0
+    mut tick := 0
+    unsafe
+        pid = GetCurrentProcessId().to_int()
+        tick = GetTickCount64()
+    name := "Local\\ail-gfx-{pid}-{tick}"
+    stride := w * 4
+    total := GUARD + stride * h * 2 + GUARD
+    unsafe
+        n := mem.cstr(name)
+        # INVALID_HANDLE_VALUE (-1) asks for a mapping backed by the paging file; PAGE_READWRITE is 4.
+        handle := CreateFileMappingA(0 - 1, mem.null(), 4, 0, total.to_i32(), n)
+        mem.free(n)
+        if handle == 0
+            return GfxError(why: "cannot create the surface mapping")
+        # FILE_MAP_ALL_ACCESS is 0xF001F.
+        mapping := MapViewOfFile(handle, 983071, 0, 0, total)
+        if mapping.is_null()
+            return GfxError(why: "cannot map the surface mapping")
+        Surface(
+            base: mapping.offset(GUARD),
+            mapped: total,
+            path: "",
+            name: name,
+            w: w,
+            h: h,
+            stride: stride,
+            count: 2,
+            back: 0,
+        )
+
 ## Maps two buffers of `w` by `h` pixels in a private file (mode 0600, random
 ## name) under `$TMPDIR`. The file is unlinked once the host has mapped it.
 fn make_surface(w int, h int) Surface ! GfxError
+    if (env.get("OS") else "") == "Windows_NT"
+        return make_win_surface(w, h)?
     dir := env.get("TMPDIR") else "/tmp"
     template := "{dir}/ail-gfx-XXXXXX"
     stride := w * 4
@@ -65,6 +118,7 @@ fn make_surface(w int, h int) Surface ! GfxError
             base: mapping.offset(GUARD),
             mapped: total,
             path: path,
+            name: "",
             w: w,
             h: h,
             stride: stride,
@@ -73,6 +127,8 @@ fn make_surface(w int, h int) Surface ! GfxError
         )
 
 fn drop_file(s Surface)
+    if s.path == ""
+        return
     unsafe
         p := mem.cstr(s.path)
         unlink(p)
@@ -145,6 +201,8 @@ fn raster(s Surface, f gfx.Frame)
 CANVAS := "gfx"
 
 fn surface_line(s Surface) str
+    if s.name != ""
+        return "\{\"v\":1,\"t\":\"surface\",\"id\":\"{CANVAS}\",\"w\":{s.w},\"h\":{s.h},\"stride\":{s.stride},\"offset\":{GUARD},\"count\":{s.count},\"name\":{Json.Str(s.name).to_text()}}"
     "\{\"v\":1,\"t\":\"surface\",\"id\":\"{CANVAS}\",\"w\":{s.w},\"h\":{s.h},\"stride\":{s.stride},\"offset\":{GUARD},\"count\":{s.count},\"path\":\"{s.path}\"}"
 
 fn present_line(buf int) str
@@ -299,6 +357,13 @@ impl attach.Observe for Loop[T gfx.Game + attach.Observe]
         seen.push(attach.observed("gfx.texts", "int", "{st.texts}"))
         seen
 
+    ## The game's `@tool` methods (attach.tool.3).
+    fn tools(self) List[attach.Tool]
+        game.tools()
+
+    fn call(mut self, ail_tool str, ail_args Json) str
+        game.call(ail_tool, ail_args)
+
 ## The loop for `g`, for `std.gfx.watch` (which runs it with the attach
 ## listener); `run` is the same without it.
 pub fn new_loop[T gfx.Game](g T, title str, w int, h int) Loop[T]
@@ -343,6 +408,7 @@ fn private_surface(w int, h int) Surface
             base: block.offset(GUARD),
             mapped: total,
             path: "",
+            name: "",
             w: w,
             h: h,
             stride: stride,

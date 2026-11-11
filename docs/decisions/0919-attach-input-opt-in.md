@@ -6,6 +6,7 @@
 - **Topic:** 17 — Standard library (`std.attach`)
 - **Spec rules:** attach.input.1-3 (new), attach.wire.4 and attach.cli.1-3 (amended)
 - **Builds on:** [ADR 0884](0884-observe-field-and-attach-protocol.md)
+- **Amended by:** [ADR 0986](0986-app-tools-and-attach-mcp.md) (the opt-in also gates `call`)
 
 ## Context
 

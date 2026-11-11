@@ -107,6 +107,7 @@ pub fn check.ens_key(str, ast.Pos) str
 pub fn check.prove_fns(List[ast.FnDecl]) check.Proofs
 pub struct check.SigFix
 pub fn check.std_module_names() List[str]
+pub fn check.check_tools(ast.Program) List[check.Diag]
 pub enum check.Ty
 pub enum check.Errs
 pub enum check.Def
@@ -115,4 +116,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1481); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1501); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

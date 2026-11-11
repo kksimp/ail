@@ -32,9 +32,10 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   container. There is no cargo; `./ail selftest` is the native gate suites
   (ADR 0865) and `ail test` runs a program's tests.
 - **Windows release rule ([ADR 0925](docs/decisions/0925-windows-release-gate.md)):**
-  the gate harness stays Unix-shaped, but before every release (published seed
-  or tag) the `native`, `examples` and `run` suites must be green on ail-win,
-  built with the tree's own stage-2 compiler.
+  before every release (published seed or tag) the full gate must be green on
+  ail-win: `tools\gate\win-gate.ps1` runs the suites of `tools/gate/suites.txt`,
+  the same list as the Mac and Linux gate, built with the tree's own stage-2
+  compiler, and `tools\self-host\run.ps1` must reach the fixed point.
 - **Merging ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)):** when
   the gate passes, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting).
@@ -131,7 +132,7 @@ Style:
 
 ## Repository layout
 
-The apps live in their own repositories (AGPL-3.0, private): [garlic](https://github.com/kksimp/garlic) (browser), [garlic-press](https://github.com/kksimp/garlic-press) (PDF viewer), [ail-edit](https://github.com/kksimp/ail-edit) (code editor) and [clove](https://github.com/kksimp/clove) (compressor). Each pins an ail commit in `.ail-version`. This repo does not test them.
+This repository is the language only. Every app lives in its own repository and project (AGPL-3.0, private): [garlic](https://github.com/kksimp/garlic) (browser), [garlic-press](https://github.com/kksimp/garlic-press) (PDF viewer), [ail-edit](https://github.com/kksimp/ail-edit) (code editor), [clove](https://github.com/kksimp/clove) (compressor), [husk](https://github.com/kksimp/husk) (Mac disk analyzer), [gridrun](https://github.com/kksimp/gridrun) (game) and [ail-kernel](https://github.com/kksimp/ail-kernel) (kernel proof of concept). Each pins an ail commit in `.ail-version`. This repo does not test them, and app bugs and features are filed there; a missing language or std feature is filed here.
 
 ```
 AGENTS.md                 this file
@@ -156,6 +157,9 @@ compiler/                 the front end, checker and native backend written in A
 examples/                 example programs; NAME.out holds the expected output
 tools/
   gate/mac-gate.sh         the Mac gate; prints only failures (ADR 0842)
+  gate/win-gate.ps1        the same gate on Windows (ADR 0925)
+  gate/suites.txt          the suites both gates run, one per line
+  gate/parity.ail          the parity probe: one line per feature, the same on the three hosts (suite `parity`)
   gate/ready-check.sh      what a lane runs before READY: fmt, check, bash -n on the files it changed
   app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
@@ -175,9 +179,10 @@ tools/
   perfbench/              drag-race programs: AIL, C and Python twins
   self-compile/           survey of the native subset over the compiler's own source
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
+  vscode/                 VS Code extension: TextMate grammar and `ail lsp` client (not published)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
   prune-merged.sh         deletes remote branches already merged into main (ADR 0028)
-  self-host/              the three-stage self-host bootstrap and fixed-point check (ADR 0610)
+  self-host/              the three-stage self-host bootstrap and fixed-point check (ADR 0610); run.ps1 on Windows
   rules-audit.sh          audits spec rule IDs against the code and `ail explain` (ADR 0002, ADR 0483)
 ```
 

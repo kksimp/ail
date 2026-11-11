@@ -1,5 +1,6 @@
 """Stands in for a program's attach socket in gate.ail's `net` suite (attach.cli.1): answers every request line
-with a fixed reply and saves the line. Usage: python3 -I tools/gate/attach_server.py PORT REQUEST_FILE"""
+with a fixed reply and saves the line. Usage: python3 -I tools/gate/attach_server.py PORT REQUEST_FILE [REPLY_FILE]
+(the reply is the first line of REPLY_FILE when given, as the agent_tools suite's `ail attach mcp` session needs a `tools` reply)"""
 import socket
 import threading
 import os
@@ -11,6 +12,10 @@ _guard = threading.Timer(1200, lambda: os._exit(0))
 _guard.daemon = True
 _guard.start()
 
+reply = b'{"v":1,"rev":1,"values":{}}\n'
+if len(sys.argv) > 3:
+    reply = open(sys.argv[3], "rb").readline().rstrip(b"\n") + b"\n"
+
 s = socket.socket()
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind(("127.0.0.1", int(sys.argv[1])))
@@ -21,7 +26,7 @@ while True:
         line = c.makefile("rb").readline()
         if line:
             open(sys.argv[2], "wb").write(line)
-            c.sendall(b'{"v":1,"rev":1,"values":{}}\n')
+            c.sendall(reply)
     except OSError:
         pass  # a readiness probe connects and closes
     finally:

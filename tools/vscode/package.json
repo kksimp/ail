@@ -1,0 +1,63 @@
+{
+  "name": "ail",
+  "displayName": "AIL",
+  "description": "AIL (AI-First Language) syntax highlighting and language server client for `ail lsp`.",
+  "version": "0.1.0",
+  "publisher": "voltare",
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/kksimp/ail.git", "directory": "tools/vscode" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages", "Linters"],
+  "activationEvents": ["onLanguage:ail"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ail",
+        "aliases": ["AIL", "ail"],
+        "extensions": [".ail"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      { "language": "ail", "scopeName": "source.ail", "path": "./syntaxes/ail.tmLanguage.json" }
+    ],
+    "configuration": {
+      "title": "AIL",
+      "properties": {
+        "ail.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `ail` executable. Empty: the `ail` script at the workspace root if there is one, else `ail` on PATH."
+        },
+        "ail.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace the messages between VS Code and `ail lsp` in the AIL output channel."
+        },
+        "ail.debug": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Set `AIL_LSP_DEBUG=1`: the server prints each `ail` command it runs, with status and stderr."
+        }
+      }
+    },
+    "commands": [
+      { "command": "ail.restartServer", "title": "AIL: Restart Language Server" },
+      { "command": "ail.showLog", "title": "AIL: Show Server Log" }
+    ]
+  },
+  "scripts": {
+    "test": "node test/grammar.test.js",
+    "package": "vsce package --no-dependencies=false"
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "3.2.1",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.1.0"
+  }
+}

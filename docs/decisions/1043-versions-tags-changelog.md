@@ -22,7 +22,10 @@ there is no changelog. Users cannot say which AIL they run or what changed.
    `tools/release/VERSION`, bumped in the release commit; git-describe gives the tag and commit.
 4. **`CHANGELOG.md`** has one section per release, produced by `tools/release/changelog.sh VERSION`
    from the merged pull-request titles on `main` since the previous `v*` tag. It is prepended by
-   hand in the release commit. Titles are therefore user-facing text.
+   hand in the release commit. Titles are therefore user-facing text. Amended 2026-11-11: each
+   section opens with a hand-written highlights block between `<!-- highlights:begin -->` and
+   `<!-- highlights:end -->`; the script copies that block from the existing section and
+   regenerates only the list under `### Changes`. The same text is the body of the GitHub Release.
 5. **`v0.1.0`** is tagged on the public-flip commit, after the designer approves the flip.
 
 ## Consequences
