@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## Readiness sets (std.net.32, ADR 1009): `epoll` on Linux, `kqueue` on
-## macOS and a completion port on Windows (`win_ready.ail`; off until the next seed, see WRDY_OFF). A set holds descriptors that a task waits on; `rdy_wait` returns the
+## macOS and a completion port on Windows (`win_ready.ail`). A set holds descriptors that a task waits on; `rdy_wait` returns the
 ## tags of the ones that became readable, in time independent of how many are
 ## registered. The HTTP server (net_serve.ail) keeps one per listener for its
 ## parked connections, where `poll` would copy and scan every one of them on

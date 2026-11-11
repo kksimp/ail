@@ -64,14 +64,13 @@ Rejected for Windows:
 - **`WSAEventSelect` with `WaitForMultipleObjects`:** 64 handles per wait.
 - **Registered I/O (RIO):** a different send and receive path for every socket, not a readiness question.
 
-## Amendment (2026-11-11): the Windows set waits for a seed
+## Amendment (2026-11-11): the Windows set needs a seed with the ntdll mapping
 
 **Decided by:** AI (delegated, ADR 0076).
 
-The published seed's PE writer predates the `ntdll.dll` entry in `pe_dll_of`, so it would import `NtCreateFile` and `NtDeviceIoControlFile` from `KERNEL32.dll`, and the seed-built compiler would not load on Windows (0xC0000139). Until a seed that has the mapping is published, `wrdy_new` returns -38 (`WRDY_OFF`) and the two calls are stubbed, so the server takes its `poll` loop on Windows as before. The `pe_dll_of` mapping lands now, so that the next seed carries it; the calls come back in the change that pins that seed.
+The published seed g's PE writer predates the `ntdll.dll` entry in `pe_dll_of`, so a compiler it builds would import `NtCreateFile` and `NtDeviceIoControlFile` from `KERNEL32.dll` and would not load on Windows (0xC0000139). The calls were stubbed for one batch (`WRDY_OFF`). They are restored in the change that pins the first seed with the mapping (`tools/release/SEED_TAG`); the two must land together.
 
 Rejected alternatives:
 
-- **Publishing a seed before this batch:** a seed upload needs the designer's OK and a gate of its own, and that would hold up the rest of the batch.
 - **Looking the calls up at run time with `GetProcAddress`:** the runtime has no indirect C call.
 - **Opening AFD through `CreateFileW` on `\\.\GLOBALROOT\Device\Afd` and using `DeviceIoControl`:** this was not tested on ail-win. It also departs from the design that wepoll, mio and libuv share, and that this ADR chose.
