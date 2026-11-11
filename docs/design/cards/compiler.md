@@ -42,7 +42,7 @@ tests: 10 (`ail test` lists them)
 
 ## pkg (44 items)
 
-## scaffold (4 items)
+## scaffold (6 items)
 
 ## syntax (110 items)
 
