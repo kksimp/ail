@@ -1333,6 +1333,38 @@ on stdio under `mcpServers.ail`. The `agent_tools` suite checks both files.
 **tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
 the flag may come before or after `NAME`. *(ADR 1046)*
 
+## Performance remarks
+
+**tool.perf.1** — `ail perf --explain FN FILE` compiles `FILE` natively and,
+for each loop of the function `FN` (`name`, or `Type.method`), prints where the
+loop is and what the optimizer did with it: whether its list bounds checks were
+removed ([native.bce.1](23-native.md)) and, when they stayed, each access that
+kept its check with the reason and, where one exists, a fix; whether the loop
+runs in a vector kernel ([native.vec.1](23-native.md)); whether its list
+headers are kept in registers ([native.bce.11](23-native.md)); whether the checker
+finds its iterations independent ([conc.par.6](11-concurrency.md)); and each
+call that stays in it with the reason it was not inlined. Every claim cites its
+rule. `FILE` must pass `ail check`. The exit status is 0, or 2 for a bad call,
+a file that does not check, or a `FN` the program does not have, which lists the
+functions it has. The wording is non-normative. *(ADR 1021)*
+
+**tool.perf.2** — The remarks are the decisions the optimizer's own passes
+made, not a second analysis, so they cannot disagree with the executable
+(`ail build` makes the same one). Asking for them changes no code and costs
+nothing in a build that does not ask. With `AIL_OPT_OFF` naming a pass, the
+remark of that pass says it was not analysed. *(ADR 1021)*
+
+```ail tool=perf,--explain,total,FILE expect=removed rules=tool.perf.1,tool.perf.2
+fn total(xs List[int]) int
+    mut sum := 0
+    for i in 0..xs.len()
+        sum += xs[i]
+    sum
+
+fn main()
+    print(total([1, 2, 3]))
+```
+
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that

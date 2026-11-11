@@ -103,6 +103,8 @@ fn main() !
                 print(aug.origin)
         "explain" =>
             io.exit(explain.command(args[1..]))
+        "perf" =>
+            io.exit(perf_command(args[1..]))
         "new" =>
             io.exit(scaffold.command(args[1..]))
         "tokens" =>
@@ -198,6 +200,91 @@ fn main() !
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
+
+PERF_USAGE := "usage: ail perf --explain FN FILE"
+
+## One remark line of `ail perf --explain`, as the lowering leaves it in `Module.notes`.
+struct PerfLine
+    path str
+    line int
+    kind str
+    text str
+
+## `ail perf --explain FN FILE` (tool.perf.1-2, ADR 1021): for each loop of `FN`, whether
+## its bounds checks were removed, whether it runs in a vector kernel, whether the checker
+## finds its iterations independent, and which calls stay in it, each with the rule and,
+## where one exists, a fix. The `ail` launcher sets `AIL_PERF_EXPLAIN=FN` and checks FILE
+## first; the exit status is 0, or 2 for a bad call or a function that isn't there.
+fn perf_command(rest List[str]) int
+    if rest.len() != 3 or rest[0] != "--explain" or rest[1].starts_with("-") or rest[2].starts_with("-")
+        io.eprint(PERF_USAGE)
+        return 2
+    fname := rest[1]
+    file := rest[2]
+    if (env.get("AIL_PERF_EXPLAIN") else "") != fname
+        io.eprint("error[tool.perf.1]: start it as `ail perf --explain FN FILE`")
+        return 2
+    dir := compiler_dir()
+    std := path.join(path.dir(dir), "std")
+    rt := runtime_with(path.join(dir, "rt/native"), file, "0", "0") else err
+        io.eprint("error[native.build.3]: can't read the runtime: {err}")
+        return 2
+    m := lower_file(file, rt, std) else err
+        io.eprint("error[native.build.3]: {err}")
+        return 1
+    loaded := load.load(file, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut names := List[str]()
+    for f in m.funcs
+        if not f.name.starts_with("rt.") and mir.rk_matches(f.name, fname)
+            names.push(f.name)
+    if names.is_empty()
+        known := [f.name for f in m.funcs if not f.name.starts_with("rt.")]
+        io.eprint("error[tool.perf.1]: no function `{fname}` in {file}; functions: {known.sorted().join(", ")}")
+        return 2
+    mut found := List[PerfLine]()
+    for note in m.notes
+        cut := note.split("\t")
+        if cut.len() == 5 and cut[0] == "perf"
+            at := cut[2].to_int() else 0
+            found.push(PerfLine(path: cut[1], line: at, kind: cut[3], text: cut[4]))
+    rows := [r for r in check.parallel_rows(loaded.program) if r.func == "fn:{fname}" or r.func == "method:{fname}"]
+    print("perf {fname} ({file})")
+    for l in found
+        if l.kind == "func"
+            print("  {l.text}")
+    starts := [l for l in found if l.kind == "loop"].sorted(by: |l| l.line)
+    if starts.is_empty()
+        print("  no loops")
+        return 0
+    for s in starts
+        print("{s.path}:{s.line} loop ({s.text})")
+        for l in found
+            if l.path == s.path and l.line == s.line and l.kind == "bce"
+                print("  bounds checks: {l.text}")
+            elif l.path == s.path and l.line == s.line and l.kind == "fix"
+                print("    fix: {l.text}")
+            elif l.path == s.path and l.line == s.line and l.kind == "hoist"
+                print("  list headers: {l.text}")
+        for l in found
+            if l.path == s.path and l.line == s.line and l.kind == "vec"
+                print("  vectorised: {l.text}")
+        for r in rows
+            if r.pos.line == s.line
+                print("  parallel: {perf_par(r)}")
+        for l in found
+            if l.path == s.path and l.line == s.line and l.kind == "inline"
+                print("  calls: {l.text}")
+    0
+
+## The words for one loop's verdict from the checker (conc.par.6).
+fn perf_par(r check.ParRow) str
+    if r.verdict == "sequential"
+        return "no, {r.reason} ({r.rule})"
+    if r.is_par
+        return "yes, written `par for` ({r.rule})"
+    "yes, the iterations are independent; the loop goes to the pool when it is big enough ({r.rule}, conc.par.8)"
 
 BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows (experimental, unverified)] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
@@ -653,7 +740,9 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             notes: [],
         )
     for note in m.notes
-        io.eprint(note)
+        # `ail perf --explain` reads its own lines (tool.perf.1).
+        if not note.starts_with("perf\t")
+            io.eprint(note)
     m
 
 ## Source bytes past which the loop proof is skipped (ADR 0911).

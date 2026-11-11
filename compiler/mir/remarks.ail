@@ -1,0 +1,342 @@
+## Optimisation remarks (ADR 1021, spec tool.perf.1-2): why each loop of one
+## function is fast or slow, in the optimizer's own words. `ail perf --explain
+## FN FILE` sets `AIL_PERF_EXPLAIN=FN`; `inline_module` then keeps what the
+## passes decided for FN's loops and `rk_explain` turns it into note lines.
+## Without the variable nothing here runs (ADR 0868: no cost when unused).
+##
+## A note line is `perf`, the source file, the line, a kind and a text, joined
+## by tabs. Kinds: `func` (line 0: facts about the whole function), `loop`,
+## `bce`, `fix`, `hoist`, `vec`, `inline`. The command (compiler/main.ail) adds the
+## `par` facts from the checker and prints the lines grouped by loop.
+
+## What stops one checked list access from losing its check.
+pub struct RkBlocker
+    pub rk_site int
+    pub rk_what str
+    pub rk_fix str
+
+## What the bounds-check pass decided for one innermost loop. `rk_key` is the
+## smallest site number in the loop, which names the loop across the passes.
+pub struct RkNote
+    pub rk_key int
+    pub rk_counted bool
+    pub rk_fast bool
+    pub rk_why str
+    pub rk_blockers List[RkBlocker]
+
+struct RkShape
+    rk_kind str
+    rk_k int
+
+struct RkPlace
+    rk_file int
+    rk_line int
+
+## Cause classes. Each reason a pass declines is named once here, so the
+## optimizer lane that removes a cause (multi-exit versioning, wide inlining,
+## hoisting in big loops) deletes or rewords it in one place.
+RK_NO_ENTRY := "the loop has no single entry edge"
+RK_NOT_COUNTED := "the loop is not `for i in a..b` or `while i < n` stepping by a constant"
+RK_NOT_LEAF := "it calls other functions; only leaf functions are inlined"
+RK_LOOPS := "it loops"
+RK_RECURSIVE := "it is recursive"
+RK_EXTERNAL := "its body isn't in the program (an external or runtime call)"
+
+## The loop leaves in more than one place (native.bce.1).
+fn rk_multi_exit(n int) str
+    "the loop leaves in {n} places (`break` or `return` inside it); bounds checks are removed in loops that leave only through their condition"
+
+fn rk_too_big(n int) str
+    "it has {n} instructions, over the limit of {INLINE_LIMIT}"
+
+fn rk_budget_spent() str
+    "the caller's inline budget ({INLINE_BUDGET} calls) was spent"
+
+## The loop is over hoist.ail's `MAX_BLOCKS`, so list headers are not kept in
+## registers (native.bce.11).
+fn rk_headers_reloaded(n int) str
+    "reloaded at every access: the loop has {n} blocks, over the {MAX_BLOCKS} for which list lengths and data pointers are kept in registers (native.bce.11)"
+
+## The function asked about, from `AIL_PERF_EXPLAIN`; empty in every other build.
+pub fn rk_target() str
+    env.get("AIL_PERF_EXPLAIN") else ""
+
+pub fn rk_matches(name str, want str) bool
+    name == want or name.ends_with(".{want}")
+
+## The smallest site number of an instruction in the loop, or -1.
+pub fn rk_key(f Func, lp LoopInfo) int
+    mut best := -1
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            if i.site >= 0 and (best < 0 or i.site < best)
+                best = i.site
+    best
+
+## Why `lp` is not a counted loop (native.bce.1).
+pub fn rk_uncounted(lp LoopInfo) str
+    if lp.pre < 0
+        return RK_NO_ENTRY
+    if lp.exits != 1
+        return rk_multi_exit(lp.exits)
+    RK_NOT_COUNTED
+
+fn rk_name(f Func, v int) str
+    if f.names[v] != ""
+        return f.names[v]
+    "a list"
+
+fn rk_index_text(f Func, defs List[Def], v int, depth int) str
+    if f.names[v] != ""
+        return f.names[v]
+    d := inst_of(f, defs, v) else
+        return "the index"
+    if d.op == "const"
+        return "{d.imm}"
+    if depth > 0 and (d.op == "add" or d.op == "sub")
+        sign := if d.op == "add" then "+" else "-"
+        return "{rk_index_text(f, defs, d.arg(0), depth - 1)} {sign} {rk_index_text(f, defs, d.arg(1), depth - 1)}"
+    "an expression"
+
+fn rk_shape(f Func, defs List[Def], ix int) RkShape
+    d := inst_of(f, defs, ix) else
+        return RkShape(rk_kind: "plain", rk_k: 0)
+    if d.op == "add"
+        if k := const_of(f, defs, d.arg(1))
+            return RkShape(rk_kind: "off", rk_k: k)
+        return RkShape(rk_kind: "sum", rk_k: 0)
+    if d.op == "sub"
+        if k := const_of(f, defs, d.arg(1))
+            return RkShape(rk_kind: "off", rk_k: 0 - k)
+        return RkShape(rk_kind: "sum", rk_k: 0)
+    if d.op == "mul" or d.op == "shl"
+        return RkShape(rk_kind: "stride", rk_k: 0)
+    if d.op == "get" or d.op == "ldx"
+        return RkShape(rk_kind: "data", rk_k: 0)
+    if d.op == "call"
+        return RkShape(rk_kind: "call", rk_k: 0)
+    RkShape(rk_kind: "other", rk_k: 0)
+
+## One blocker for the checked access `a` (a `get` or `set` of a list).
+fn rk_blocker(f Func, defs List[Def], lp LoopInfo, a Inst) RkBlocker
+    x := a.arg(0)
+    name := rk_name(f, x)
+    shown := "{name}[{rk_index_text(f, defs, a.arg(1), 2)}]"
+    # A call or push in the loop that gets the list may change its length (native.bce.1).
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            if i.op != "call" and i.op != "prim"
+                continue
+            for o in i.operands()
+                if o != x
+                    continue
+                if is_push(i)
+                    return RkBlocker(
+                        rk_site: a.site,
+                        rk_what: "`{shown}`: `{name}` is pushed to in the loop, so its length isn't fixed (native.bce.1)",
+                        rk_fix: "read from one list and push to another",
+                    )
+                return RkBlocker(
+                    rk_site: a.site,
+                    rk_what: "`{shown}`: `{name}` is passed to `{i.name}`, which may resize it (native.bce.1)",
+                    rk_fix: "pass what the call needs (such as `{name}.len()`) instead of the list, or call it outside the loop",
+                )
+    s := rk_shape(f, defs, a.arg(1))
+    if s.rk_kind == "off" and s.rk_k > 0
+        return RkBlocker(
+            rk_site: a.site,
+            rk_what: "`{shown}` reaches {s.rk_k} past the counter, which the loop bound doesn't cover (native.bce.8)",
+            rk_fix: "stop the loop {s.rk_k} earlier (`for i in 0..n - {s.rk_k}`) so that `i + {s.rk_k}` stays below `n`",
+        )
+    if s.rk_kind == "off" and s.rk_k < 0
+        return RkBlocker(
+            rk_site: a.site,
+            rk_what: "`{shown}` reaches {0 - s.rk_k} below the counter, so the first iterations may be negative (native.bce.8)",
+            rk_fix: "start the loop at {0 - s.rk_k} (`for i in {0 - s.rk_k}..n`)",
+        )
+    if s.rk_kind == "stride"
+        return RkBlocker(
+            rk_site: a.site,
+            rk_what: "`{shown}` multiplies the counter, and only a constant step is tracked (native.bce.9)",
+            rk_fix: "step the counter (`i += s`, with `s` unchanged in the loop) instead of multiplying it",
+        )
+    if s.rk_kind == "data"
+        return RkBlocker(
+            rk_site: a.site,
+            rk_what: "`{shown}`: the index is read from a list, so no bound on it is known",
+            rk_fix: "",
+        )
+    if s.rk_kind == "call"
+        return RkBlocker(rk_site: a.site, rk_what: "`{shown}`: the index is a call's result", rk_fix: "")
+    if s.rk_kind == "sum"
+        return RkBlocker(
+            rk_site: a.site,
+            rk_what: "`{shown}`: the index adds two values that change in the loop",
+            rk_fix: "",
+        )
+    RkBlocker(
+        rk_site: a.site,
+        rk_what: "`{shown}`: the loop's bound isn't tied to the length of `{name}` (native.bce.1)",
+        rk_fix: "bound the loop by the list: `for i in 0..{name}.len()`",
+    )
+
+## The checked accesses of the loop that the pass left with their checks.
+pub fn rk_blockers(f Func, defs List[Def], lp LoopInfo) List[RkBlocker]
+    mut out := List[RkBlocker]()
+    mut seen := Set[int]()
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            if (i.op != "get" and i.op != "set") or i.site < 0 or seen.contains(i.site)
+                continue
+            if not is_list(f.vals[i.arg(0)])
+                continue
+            seen.add(i.site)
+            out.push(rk_blocker(f, defs, lp, i))
+    out
+
+fn rk_accesses(f Func, lp LoopInfo) int
+    mut n := 0
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            if (i.op == "get" or i.op == "set") and is_list(f.vals[i.arg(0)])
+                n += 1
+    n
+
+## The source place of a loop: the smallest line among the sites of `fname`
+## in it (or of any function, when the loop has none of its own).
+fn rk_place(f Func, lp LoopInfo, sites List[Site], fname str) RkPlace?
+    mut own := RkPlace(rk_file: 0, rk_line: 0)
+    mut any := RkPlace(rk_file: 0, rk_line: 0)
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            if i.site < 0
+                continue
+            s := sites[i.site]
+            if s.line <= 0
+                continue
+            if s.func == fname and (own.rk_line == 0 or s.line < own.rk_line)
+                own = RkPlace(rk_file: s.file, rk_line: s.line)
+            if any.rk_line == 0 or s.line < any.rk_line
+                any = RkPlace(rk_file: s.file, rk_line: s.line)
+    if own.rk_line > 0
+        return own
+    if any.rk_line > 0
+        return any
+    none
+
+fn rk_depth(loops List[LoopInfo], lp LoopInfo) int
+    mut n := 0
+    for other in loops
+        if other.header != lp.header and other.member[lp.header]
+            n += 1
+    n
+
+fn rk_line_of(files List[str], p RkPlace, kind str, text str) str
+    path := if p.rk_file >= 0 and p.rk_file < files.len() then files[p.rk_file] else "?"
+    "perf\t{path}\t{p.rk_line}\t{kind}\t{text}"
+
+## The runtime vector kernels a function calls, by name.
+fn rk_kernels(f Func) List[str]
+    mut out := List[str]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name.starts_with("rt.vec_") and not out.contains(i.name)
+                out.push(i.name)
+    out
+
+## Why a call that stays in a loop was not inlined (ADR 0391).
+fn rk_inline_why(funcs List[Func], caller str, name str) str
+    if name == caller
+        return RK_RECURSIVE
+    for g in funcs
+        if g.name != name
+            continue
+        mut n := 0
+        mut calls := false
+        mut loops := false
+        for blk in g.blocks
+            n += blk.insts.len()
+            for i in blk.insts
+                if i.op == "call" or i.op == "icall"
+                    calls = true
+            for t in blk.term.targets
+                if t == 0
+                    loops = true
+        if calls
+            return RK_NOT_LEAF
+        if loops
+            return RK_LOOPS
+        if n > INLINE_LIMIT
+            return rk_too_big(n)
+        return rk_budget_spent()
+    RK_EXTERNAL
+
+## The note lines for the loops of `fin`, the function as the optimizer ends
+## with it. `xf` is the function as the bounds-check pass saw it; `orig` is it
+## before the vector and interchange passes.
+pub fn rk_explain(
+    fname str,
+    orig Func,
+    xf Func,
+    fin Func,
+    notes List[RkNote],
+    sites List[Site],
+    files List[str],
+    funcs List[Func],
+) List[str]
+    mut out := List[str]()
+    kernels := rk_kernels(fin)
+    swapped := xf.blocks.len() != orig.blocks.len() and kernels.is_empty()
+    func_at := RkPlace(rk_file: 0, rk_line: 0)
+    if kernels.len() > 0
+        out.push(rk_line_of(files, func_at, "func", "vector kernels: {kernels.join(", ")} (native.vec.1, native.vec.2); loops that were rewritten run in them"))
+    loops := find_loops(xf)
+    for lp in loops
+        place := rk_place(xf, lp, sites, fname) else continue
+        inner := is_innermost(loops, lp)
+        depth := rk_depth(loops, lp)
+        shape := if inner then "innermost" else "outer"
+        out.push(rk_line_of(files, place, "loop", "{shape}, nesting depth {depth + 1}"))
+        # Bounds checks (native.bce.1).
+        key := rk_key(xf, lp)
+        mut found := -1
+        for k in 0..notes.len()
+            if notes[k].rk_key == key and key >= 0
+                found = k
+        if rk_accesses(xf, lp) == 0 and inner
+            out.push(rk_line_of(files, place, "bce", "none to remove: the loop has no list access"))
+        elif found >= 0 and notes[found].rk_fast
+            out.push(rk_line_of(files, place, "bce", "removed behind one guard; when the guard fails the checked loop runs and traps at the same access (native.bce.1)"))
+        elif found >= 0 and not notes[found].rk_counted
+            out.push(rk_line_of(files, place, "bce", "stay: {notes[found].rk_why}"))
+        elif found >= 0
+            out.push(rk_line_of(files, place, "bce", "stay: no list access in this loop was proven in range"))
+            for bl in notes[found].rk_blockers
+                at := sites[bl.rk_site]
+                out.push(rk_line_of(files, place, "bce", "line {at.line}: {bl.rk_what}"))
+                if bl.rk_fix != ""
+                    out.push(rk_line_of(files, place, "fix", "line {at.line}: {bl.rk_fix}"))
+        elif not inner
+            out.push(rk_line_of(files, place, "bce", "outer loop: checks are removed in the innermost loops (native.bce.1)"))
+        else
+            out.push(rk_line_of(files, place, "bce", "not analysed (AIL_OPT_OFF names bce, or this loop is a copy the optimizer made)"))
+        # List headers (native.bce.11): hoist.ail skips loops over MAX_BLOCKS.
+        if rk_accesses(xf, lp) > 0 and lp.blocks.len() > MAX_BLOCKS and not opt_off("hoist")
+            out.push(rk_line_of(files, place, "hoist", rk_headers_reloaded(lp.blocks.len())))
+        # Vector kernels (native.vec.1-2).
+        if inner and kernels.is_empty()
+            if swapped
+                out.push(rk_line_of(files, place, "vec", "scalar: the loop nest was reordered (native.bce.13) but no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops"))
+            else
+                out.push(rk_line_of(files, place, "vec", "scalar: no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops (native.vec.1, native.vec.2)"))
+        # Calls left in the loop (ADR 0391).
+        mut named := List[str]()
+        for b in lp.blocks
+            for i in xf.blocks[b].insts
+                if i.op == "call" and not i.name.starts_with("rt.") and not named.contains(i.name)
+                    named.push(i.name)
+        if inner and named.is_empty()
+            out.push(rk_line_of(files, place, "inline", "no calls left in the loop"))
+        for callee in named
+            out.push(rk_line_of(files, place, "inline", "`{callee}` is called, not inlined: {rk_inline_why(funcs, fname, callee)} (ADR 0391)"))
+    out
