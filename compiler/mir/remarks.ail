@@ -290,7 +290,7 @@ pub fn rk_explain(
 ) List[str]
     mut out := List[str]()
     kernels := rk_kernels(fin)
-    swapped := xf.blocks.len() != orig.blocks.len() and kernels.is_empty()
+    reordered := xf.blocks.len() != orig.blocks.len() and kernels.is_empty()
     func_at := RkPlace(rk_file: 0, rk_line: 0)
     if kernels.len() > 0
         msg := "vector kernels: {kernels.join(", ")} (native.vec.1, native.vec.2); loops that were rewritten run in them"
@@ -334,7 +334,7 @@ pub fn rk_explain(
             out.push(rk_line_of(files, place, "hoist", rk_headers_reloaded(lp.blocks.len())))
         # Vector kernels (native.vec.1-2).
         if inner and kernels.is_empty()
-            if swapped
+            if reordered
                 msg := "scalar: the loop nest was reordered (native.bce.13) but no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops"
                 out.push(rk_line_of(files, place, "vec", msg))
             else
