@@ -67,7 +67,11 @@ zeroes both counts, for a seek. `stream_write` does not wait for playback and
 the host's queue has no limit, so the caller applies back-pressure: write while
 `buffered` is under about 200 ms of frames and sleep otherwise. The host protocol adds `open_stream RATE CH`,
 `write BASE64`, `clock`, `pause`, `resume`, `flush` and `close_stream`, each
-answered by `played N buffered M` (`ok` for open and close). *(ADR 0993)*
+answered by `played N buffered M` (`ok` for open and close). All three hosts
+(macOS, Linux, Windows) implement it. A host started with `--null` (or with
+`AIL_AUDIO_NULL=1`) streams to a silent device whose clock runs in real time
+and stops while paused; `open_null()` starts it that way, so a test or a
+machine with no sound card can still stream. *(ADR 0993)*
 
 **Planned (no rule ID yet):** a PipeWire host; mixing several
 plays in a task off the audio thread.

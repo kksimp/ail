@@ -24,7 +24,13 @@ video frames can be timed to it, and to pause and seek.
    chunk. `flush` drops the queue and zeroes both counts, for a seek.
 3. `stream_write` is non-blocking and the host's queue is unbounded. The caller
    keeps `buffered` near 200 ms by reading the status the write returns.
-4. PCM stays base64 text: 48 kHz stereo 16-bit is about 256 KB/s, which a pipe
+4. All three hosts implement the protocol: AVAudioEngine (macOS), ALSA with a
+   writer thread (Linux; `played` is frames handed to ALSA minus `snd_pcm_delay`)
+   and WASAPI with a writer thread (Windows; frames written minus the buffer's
+   padding). Each accepts `--null` (or `AIL_AUDIO_NULL=1`): a silent device whose
+   clock runs in real time, so headless tests need no sound card. `open_null()`
+   in `std.audio.device` starts the host that way.
+5. PCM stays base64 text: 48 kHz stereo 16-bit is about 256 KB/s, which a pipe
    carries easily. A binary channel would need a new transport for every host.
 
 ## Rejected alternatives

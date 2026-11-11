@@ -75,6 +75,14 @@ func record(ms: Int, rate: Double, ch: Int) {
 
 /// A running output stream (spec std.audio.12): chunks queue on one player node;
 /// `played` counts frames the device has finished, `scheduled` frames queued.
+/// With `--null` (or AIL_AUDIO_NULL=1) there is no device: the clock runs in real
+/// time, so a test needs no sound hardware.
+let nullMode: Bool = {
+    if CommandLine.arguments.contains("--null") { return true }
+    if let v = ProcessInfo.processInfo.environment["AIL_AUDIO_NULL"], !v.isEmpty, v != "0" { return true }
+    return false
+}()
+
 final class OutStream {
     let engine = AVAudioEngine()
     let node = AVAudioPlayerNode()
@@ -84,11 +92,18 @@ final class OutStream {
     var scheduled = 0
     var played = 0
     var generation = 0
+    let silent = nullMode
+    let rate: Double
+    var paused = false
+    var nplayed = 0.0
+    var last = Date()
 
     init?(rate: Double, ch: Int) {
         guard let f = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: AVAudioChannelCount(ch), interleaved: false) else { return nil }
         fmt = f
         self.ch = ch
+        self.rate = rate
+        if silent { return }
         engine.attach(node)
         engine.connect(node, to: engine.mainMixerNode, format: f)
         do { try engine.start() } catch { return nil }
@@ -99,6 +114,7 @@ final class OutStream {
         guard let buf = makeBuffer(fmt: fmt, ch: ch, data: data) else { return }
         let frames = Int(buf.frameLength)
         lock.lock(); scheduled += frames; let gen = generation; lock.unlock()
+        if silent { return }
         node.scheduleBuffer(buf, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [self] _ in
             lock.lock()
             if gen == generation { played += frames }
@@ -108,17 +124,32 @@ final class OutStream {
 
     /// Drops everything queued and zeroes the clock (for a seek).
     func flush() {
-        node.stop()
-        lock.lock(); generation += 1; scheduled = 0; played = 0; lock.unlock()
-        node.play()
+        if !silent { node.stop() }
+        lock.lock(); generation += 1; scheduled = 0; played = 0; nplayed = 0; lock.unlock()
+        if !silent && !paused { node.play() }
     }
+
+    /// Advances the silent clock to now. Caller holds `lock`.
+    func tick() {
+        let now = Date()
+        if !paused { nplayed += now.timeIntervalSince(last) * rate }
+        last = now
+        nplayed = min(nplayed, Double(scheduled))
+    }
+
+    func pause() { lock.lock(); if silent { tick() }; paused = true; lock.unlock(); if !silent { node.pause() } }
+    func resume() { lock.lock(); if silent { tick() }; paused = false; lock.unlock(); if !silent { node.play() } }
 
     func status() -> String {
         lock.lock(); defer { lock.unlock() }
+        if silent {
+            tick()
+            played = Int(nplayed)
+        }
         return "played \(played) buffered \(scheduled - played)"
     }
 
-    func close() { node.stop(); engine.stop() }
+    func close() { if !silent { node.stop(); engine.stop() } }
 }
 
 var stream: OutStream? = nil
@@ -142,10 +173,10 @@ while let line = readLine() {
     case "clock" where stream != nil:
         reply(stream!.status())
     case "pause" where stream != nil:
-        stream!.node.pause()
+        stream!.pause()
         reply(stream!.status())
     case "resume" where stream != nil:
-        stream!.node.play()
+        stream!.resume()
         reply(stream!.status())
     case "flush" where stream != nil:
         stream!.flush()
@@ -154,6 +185,8 @@ while let line = readLine() {
         stream!.close()
         stream = nil
         reply("ok")
+    case "write", "clock", "pause", "resume", "flush", "close_stream":
+        reply("error no stream open")
     default:
         reply("error unknown request")
     }

@@ -53,6 +53,21 @@ pub fn open_at(cmd str) proc.Child ! DeviceError
         return DeviceError(kind: "version", message: "the audio host said: {hello}")
     c
 
+## Starts the audio host with the silent device (`--null`): streaming works and
+## its clock runs in real time, but nothing is heard. For tests and machines
+## with no sound card (std.audio.12).
+pub fn open_null() proc.Child ! DeviceError
+    mut c := proc.start(host_path()?, ["--null"]) else err
+        return DeviceError(kind: "start", message: "std.audio.9: {err}")
+    hello := c.out.recv() else return DeviceError(
+        kind: "host_exited",
+        message: "the audio host exited before it was ready",
+    )
+    if hello != "ready"
+        proc.kill(move c)
+        return DeviceError(kind: "version", message: "the audio host said: {hello}")
+    c
+
 fn answer(mut c proc.Child) str ! DeviceError
     line := c.out.recv() else return DeviceError(
         kind: "host_exited",
