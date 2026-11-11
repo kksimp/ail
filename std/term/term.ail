@@ -193,7 +193,7 @@ fn mouse_event(ps str, down bool, mut out List[Event])
         kind = "drag"
     elif down
         kind = "down"
-    out.push(Mouse(v[1] - 1, v[2] - 1, button, kind))
+    out.push(Mouse(col: v[1] - 1, row: v[2] - 1, button: button, kind: kind))
 
 ## One sequence `ESC [ ps fin` (std.term.2).
 fn csi_event(ps str, fin int, mut out List[Event])
@@ -204,7 +204,7 @@ fn csi_event(ps str, fin int, mut out List[Event])
     m := if v.len() > 1 then v[1] else 1
     has_ctrl, has_alt, has_shift := mods(m)
     if fin == 82 and v.len() == 2 and v[0] != 1
-        out.push(Resize(v[1], v[0]))
+        out.push(Resize(cols: v[1], rows: v[0]))
         return
     if fin == 90
         out.push(Key("tab", ctrl: false, alt: false, shift: true))
@@ -581,4 +581,4 @@ fn Term.note_size(mut self, c int, r int)
     if c != cols or r != rows
         cols = c
         rows = r
-        queue.push(Resize(c, r))
+        queue.push(Resize(cols: c, rows: r))
