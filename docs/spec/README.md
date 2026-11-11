@@ -1,9 +1,9 @@
 # AIL Language Specification
 
-> **Status:** drafted for v0.1.0. Every chapter marked *Drafted* below holds
-> normative rules with IDs, and the conformance harness checks its examples.
-> *Partial* means the feature is specified as far as it is built; chapters
-> marked *Not started* wait on design decisions (see [status.md](../status.md)).
+> **Status:** drafted for v0.1.0. Every chapter below holds normative rules
+> with IDs, and the conformance harness checks its examples; *skeleton* means
+> only a start. Open design questions are in [open-questions.md](../open-questions.md)
+> and what is built is in [status.md](../status.md).
 
 ## Conventions
 
@@ -86,7 +86,7 @@ aren't run.
 | 03 | [Grammar](03-grammar.md) | `gram` | Drafted (partial) |
 | 04 | [Types](04-types.md) | `type` | Drafted (partial) |
 | 05 | [Expressions and statements](05-expressions.md) | `expr` | Drafted (partial) |
-| 06 | Memory model and allocation | `mem` | Not started |
+| 06 | [Memory model and allocation](06-memory.md) | `mem` | Drafted (partial) |
 | 07 | [Ownership and value semantics](07-ownership.md) | `own` | Drafted (partial) |
 | 08 | [Errors](08-errors.md) | `err` | Drafted (partial) |
 | 09 | [Generics](09-generics.md) | `gen` | Drafted (partial) |
