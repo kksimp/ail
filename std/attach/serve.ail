@@ -212,7 +212,8 @@ fn wake(addr str) bool
     c.close()
     true
 
-## Runs `a` in the window of the host program `cmd` (as `app.run_with`) and
+## Runs `a` in the window of the host program `cmd` with the program's `inbox`
+## (as `app.run_with`) and
 ## answers the attach requests that reach `s`; `input` says whether `input`
 ## requests are applied (attach.input.1). When the window closes, or can't
 ## open, the listener stops and the discovery file is removed (attach.wire.7).
@@ -221,10 +222,10 @@ pub fn run_on[T app.App + attach.Observe](
     mut a T,
     cmd str,
     args List[str],
+    inbox app.Inbox,
     input bool,
 ) ! app.AppError
     hub := Hub.new()
-    inbox := app.new_inbox()
     g := TaskGroup()
     g.add(spawn listen_loop(s.l, inbox, hub))
     mut w := Watched(
@@ -254,12 +255,22 @@ pub fn run_on[T app.App + attach.Observe](
 ## 127.0.0.1 (a free port); its address and token go to `token_path`, which is
 ## removed when the window closes (attach.wire.1, attach.wire.7).
 pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
-    host := app.host_path()?
+    run_with(mut a, app.host_path()?, [], app.new_inbox())?
+
+## Runs `a` as `app.run_with` does, with the host program `cmd`, its arguments
+## and the program's own `inbox`, and with the attach listener on as `run` has
+## it; `ail run` makes each `app.run_with(` call this one (attach.run.1).
+pub fn run_with[T app.App + attach.Observe](
+    mut a T,
+    cmd str,
+    args List[str],
+    inbox app.Inbox,
+) ! app.AppError
     s := open() else err
         if err.kind != "listen"
             return err
         # Without a listener the window still runs, just not drivable.
         io.eprint("attach: {err.message}; running the window without the attach server (attach.wire.1)")
-        app.run(mut a)?
+        app.run_with(mut a, cmd, args, inbox)?
         return
-    run_on(s, mut a, host, [], (env.get("AIL_ATTACH_INPUT") else "") == "1")?
+    run_on(s, mut a, cmd, args, inbox, (env.get("AIL_ATTACH_INPUT") else "") == "1")?

@@ -97,7 +97,8 @@ The file's directory is `$TMPDIR`; without `TMPDIR` it is `/tmp`, or on Windows
 takes the place of the mode. The token is 24 random bytes in hex. Nothing
 listens until `run` is called. `serve.open()` is the first half of `run` (the
 listener and its file, as a `Served`) and `serve.run_on(s, mut app, cmd, args,
-input)` the second, with the host program `cmd` as `app.run_with` takes it.
+inbox, input)` the second, with the host program `cmd` and the `inbox` as
+`app.run_with` takes them; `serve.run_with(mut app, cmd, args, inbox)` is both.
 *(ADR 0884, ADR 1045)*
 
 **attach.wire.6** — The listener thread never reads program state. It posts
@@ -141,7 +142,9 @@ attach on, unless it is given `--no-attach` before the file (the `ail` script pa
 --attach` does the same for a built executable; without `--attach`, `ail build`
 adds nothing. The build rewrites the source text before it is lowered: two
 imports on new first lines, each `app.run(` call made a `std.attach.serve.run(`
-call, and an `impl attach.Observe` added for each non-generic
+call and each `app.run_with(` call a `std.attach.serve.run_with(` call (the same
+arguments: the host program, its arguments and the program's inbox), and an
+`impl attach.Observe` added for each non-generic
 `impl app.App for T` that has none. A program that doesn't run an app, or that already uses the name `attach`
 or `ail_serve` for another module, is built as written. *(ADR 0884)*
 
