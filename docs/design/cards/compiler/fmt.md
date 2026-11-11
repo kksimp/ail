@@ -1,4 +1,5 @@
 # compiler: fmt
+tests: fmt.fmt.keeps_the_space_before_a_variadic_dots
 
 ## fmt
 ```
@@ -12,4 +13,4 @@ pub struct fmt.Formatted  ## The result of `format`: `status` 0 is done and `tex
 pub fn fmt.format(src str) fmt.Formatted  ## The canonical form of `src`.
 ```
 
-trimmed to fit 2000 tokens (~165); dropped: private items
+trimmed to fit 2000 tokens (~180); dropped: private items
