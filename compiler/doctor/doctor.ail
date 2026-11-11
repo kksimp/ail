@@ -1,0 +1,280 @@
+## `ail doctor [--json] [--path]` (spec tool.doctor.1-2, tool.path.1, ADR 1058): one line per check, `ok` or what to
+## run, and the one line that puts `ail` on the shell's PATH. It reads and reports; the only thing it writes is a
+## probe file in the build cache directory, removed at once.
+
+## One check: its name, `ok`, `warn` or `fail`, what was found, the fix to run (empty when ok), and whether a
+## failure is fatal (exit status 1).
+struct Check
+    name str
+    status str
+    detail str
+    fix str
+    required bool
+
+fn good(name str, detail str) Check
+    Check(name: name, status: "ok", detail: detail, fix: "", required: false)
+
+fn bad(name str, status str, detail str, fix str, required bool) Check
+    Check(name: name, status: status, detail: detail, fix: fix, required: required)
+
+## `p` with `/` for each `\`, and no trailing `/`.
+fn norm(p str) str
+    mut s := p.replace("\\", "/")
+    while s.len() > 1 and s.ends_with("/")
+        s = s.slice(0, s.len() - 1)
+    s
+
+fn first_line(p str) str
+    text := fs.read_text(p) else return ""
+    (text.lines().first() else "").trim()
+
+fn windows() bool
+    (env.get("OS") else "") == "Windows_NT"
+
+## The OS word of a target (`aarch64-macos` is `macos`).
+fn os_of(target str) str
+    if target.ends_with("macos")
+        return "macos"
+    if target.ends_with("windows")
+        return "windows"
+    "linux"
+
+## A directory `ail` can write to: made if it is missing, probed with a file.
+fn writable(dir str) bool
+    fs.make_dir(dir) else return false
+    probe := path.join(dir, ".doctor-probe")
+    fs.write_text(probe, "ok") else return false
+    fs.remove(probe) else return false
+    true
+
+## The line for a shell profile (tool.path.1): it adds the toolchain's directory, where `ail` is, to PATH.
+fn path_line(root str) str
+    if windows()
+        return "$env:Path = \"{root.replace("/", "\\")};\" + $env:Path"
+    "export PATH=\"{root}:$PATH\""
+
+## Is `found`, the first `ail` on PATH, this toolchain's? Its directory is `root` (and so is a symlink's
+## target, which the launcher resolves, tool.path.1) or, off Windows, it prints `root` for `doctor --print-root`.
+fn same_toolchain(found str, root str) bool
+    if norm(path.dir(found)) == root
+        return true
+    if windows()
+        return false
+    r := proc.run(found, ["doctor", "--print-root"]) else return false
+    r.status == 0 and norm(r.out.trim()) == root
+
+fn check_root(root str) Check
+    if fs.exists(path.join(root, "compiler/main.ail"))
+        return good("toolchain", root)
+    bad(
+        "toolchain",
+        "fail",
+        "no compiler/main.ail under {root}",
+        "run `ail` from a checkout of the AIL repository (README, Install)",
+        true,
+    )
+
+fn check_version(root str) Check
+    version := first_line(path.join(root, "tools/release/VERSION"))
+    seed := first_line(path.join(root, "tools/release/SEED_TAG"))
+    if version == ""
+        return bad(
+            "version",
+            "warn",
+            "tools/release/VERSION is missing",
+            "check out a release of the AIL repository",
+            false,
+        )
+    good("version", "{version}, seed {if seed == "" then "unknown" else seed}")
+
+fn check_path(root str) Check
+    found := proc.which("ail") else ""
+    if found == ""
+        return bad(
+            "path",
+            "warn",
+            "no `ail` on PATH",
+            "add this line to your shell profile: {path_line(root)}",
+            false,
+        )
+    if same_toolchain(found, root)
+        return good("path", found)
+    bad(
+        "path",
+        "warn",
+        "the first `ail` on PATH is {found}, which is not this toolchain ({root})",
+        "put this toolchain first: {path_line(root)}",
+        false,
+    )
+
+fn check_git() Check
+    found := proc.which("git") else ""
+    if found == ""
+        return bad(
+            "git",
+            "fail",
+            "git is not on PATH",
+            "install git (ail pkg and the version line use it)",
+            true,
+        )
+    good("git", found)
+
+fn check_curl() Check
+    if windows()
+        return good("curl", "not needed: tools\\release\\fetch-seed.ps1 downloads the seed")
+    found := proc.which("curl") else ""
+    if found == ""
+        return bad(
+            "curl",
+            "warn",
+            "curl is not on PATH",
+            "install curl: the first run downloads the seed with it",
+            false,
+        )
+    good("curl", found)
+
+fn check_hash() Check
+    if windows()
+        return good("hash", "not needed: PowerShell hashes the seed")
+    for name in ["sha256sum", "shasum"]
+        found := proc.which(name) else ""
+        if found != ""
+            return good("hash", found)
+    bad(
+        "hash",
+        "warn",
+        "neither sha256sum nor shasum is on PATH",
+        "install coreutils (sha256sum) or perl's shasum: the seed is verified with one",
+        false,
+    )
+
+fn check_cache(cache str) Check
+    if writable(cache)
+        return good("cache", cache)
+    bad(
+        "cache",
+        "fail",
+        "can't write to {cache}",
+        "set AIL_CACHE_DIR to a directory you can write to",
+        true,
+    )
+
+## std.app.10: the host `AIL_APP_HOST` names, else the one built under the toolchain.
+fn check_app_host(root str, target str) Check
+    given := env.get("AIL_APP_HOST") else ""
+    if given != ""
+        if fs.exists(given)
+            return good("app host", given)
+        return bad(
+            "app host",
+            "warn",
+            "AIL_APP_HOST names {given}, which does not exist",
+            "unset AIL_APP_HOST or build the host",
+            false,
+        )
+    host := os_of(target)
+    mut built := path.join(root, "tools/app-host/linux/build/ail-app-host")
+    mut fix := "tools/app-host/linux/run.sh"
+    if host == "macos"
+        built = path.join(
+            root,
+            "tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost",
+        )
+        fix = "tools/app-host/macos/run.sh"
+    elif host == "windows"
+        built = path.join(root, "tools/app-host/windows/build/AILAppHost.exe")
+        fix = "tools\\app-host\\windows\\run.ps1"
+    if fs.exists(built)
+        return good("app host", built)
+    bad(
+        "app host",
+        "warn",
+        "no std.app host is built for {host}",
+        "run {fix} (only programs that use std.app need it)",
+        false,
+    )
+
+## std.audio.9: `AIL_AUDIO_HOST`, else the one built under `tools/audio-host/OS/build`.
+fn check_audio_host(root str, target str) Check
+    given := env.get("AIL_AUDIO_HOST") else ""
+    if given != ""
+        if fs.exists(given)
+            return good("audio host", given)
+        return bad(
+            "audio host",
+            "warn",
+            "AIL_AUDIO_HOST names {given}, which does not exist",
+            "unset AIL_AUDIO_HOST or build the host",
+            false,
+        )
+    host := os_of(target)
+    dir := path.join(root, "tools/audio-host/{host}")
+    ext := if host == "windows" then ".exe" else ""
+    built := path.join(dir, "build/ail-audio-host{ext}")
+    if fs.exists(built)
+        return good("audio host", built)
+    if not fs.exists(dir)
+        return bad(
+            "audio host",
+            "warn",
+            "this toolchain has no std.audio host for {host}",
+            "none: std.audio.device is not available here",
+            false,
+        )
+    bad(
+        "audio host",
+        "warn",
+        "no std.audio host is built for {host}",
+        "run tools/audio-host/{host}/run.sh (only programs that play or record sound need it)",
+        false,
+    )
+
+fn checks(root str, cache str, target str) List[Check]
+    [
+        check_root(root),
+        check_version(root),
+        check_path(root),
+        check_git(),
+        check_curl(),
+        check_hash(),
+        check_cache(cache),
+        check_app_host(root, target),
+        check_audio_host(root, target),
+    ]
+
+fn q(s str) str
+    Json.Str(s).to_text()
+
+fn check_json(k Check) str
+    "\{\"name\":{q(k.name)},\"status\":{q(k.status)},\"detail\":{q(k.detail)},\"fix\":{q(k.fix)},\"required\":{k.required}}"
+
+fn check_text(k Check) str
+    if k.status == "ok"
+        return "ok    {k.name}: {k.detail}"
+    "{k.status.pad_right(5, ' ')} {k.name}: {k.detail}; fix: {k.fix}"
+
+## The exit status of `ail doctor ARGS`: 1 when a required check failed (tool.doctor.1).
+## `root` is the toolchain, `cache` the build cache directory and `target` the host's target, from main.ail.
+pub fn command(args List[str], root_arg str, cache str, target str) int
+    root := norm(root_arg)
+    if args.contains("--print-root")
+        print(root)
+        return 0
+    if args.contains("--path")
+        print(path_line(root))
+        return 0
+    for a in args
+        if a != "--json"
+            io.eprint("usage: ail doctor [--json] [--path]")
+            return 2
+    all := checks(root, cache, target)
+    mut failed := false
+    for k in all
+        if k.required and k.status == "fail"
+            failed = true
+    if args.contains("--json")
+        print("[{[ check_json(k) for k in all ].join(",")}]")
+    else
+        for k in all
+            print(check_text(k))
+    if failed then 1 else 0

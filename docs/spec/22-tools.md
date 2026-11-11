@@ -1079,8 +1079,7 @@ two branches that change different functions never conflict
 
 **merge.line.1** — A declaration changed on both sides is merged line by line as `git merge-file` would. If that merges cleanly, the result is used.
 
-**merge.conflict.1** — Otherwise the declaration is one hunk: `<<<<<<< ours`, OURS's text, `||||||| base`, the base text, `=======`, THEIRS's text and `>>>>>>> theirs`, with a section empty for a side that lacks the declaration. Each one is reported on standard error as `conflict: KEY (merge.conflict.1)`, and the exit status is 1. Every other declaration is merged.
-
+**merge.conflict.1** — Otherwise the declaration is one hunk: `
 **merge.cli.1** — `ail merge BASE OURS THEIRS` writes the result to OURS, the way a git merge driver is called; further arguments (git's `%L` and `%P`) are ignored. `--stdout` prints it instead and writes nothing. The exit status is 0 for a clean merge, 1 for conflicts, 2 for an error.
 
 **merge.cli.2** — A file that can't be read is an error: exit status 2.
@@ -1339,12 +1338,86 @@ checks both files. *(ADR 1046)*
 **tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
 the flag may come before or after `NAME`. *(ADR 1046)*
 
+<<<<<<< HEAD
 **tool.new.5** — `ail new .` writes `AGENTS.md` and `.mcp.json` (the files of
 `tool.new.3`, and nothing else) into the current directory when it holds a
 `.ail` file or `ail.pkg`; any other directory is refused with exit status 2.
 An existing file is never changed or appended to: for `AGENTS.md` the block to
 add is printed instead, and for `.mcp.json` the registration to add. `--no-agent`
 with `.` is a usage error (exit status 2). *(ADR 1046)*
+## Help and the toolchain check
+
+**tool.help.1** — `ail help`, `ail --help`, `ail -h` and `ail` with no arguments print every
+user command, one line each, under the headings Build and run, Check and fix, Ask the compiler,
+Agent loop and Project, and exit 0. Internal commands are not listed. A command word that is not
+listed is refused with "unknown command X; run `ail help`" and exit status 2. *(ADR 1057)*
+
+**tool.help.2** — `ail help CMD` and `ail CMD --help` (or `-h`, as the only argument after `CMD`)
+print the command's usage line and, for each rule that governs it, `rule: ID (ail explain ID)`.
+Longer argument lists keep `--help` for the command: `ail run FILE --help` passes it to the
+program. *(ADR 1057)*
+
+**tool.help.3** — `ail help --json` prints the table as one JSON array of objects with `name`,
+`group`, `summary`, `usage` and `rules`; `ail help --json CMD` prints the object of one command.
+`ail help --keywords` prints the language's reserved words (`lex.kw.1`), one per line, or with `--json`
+one JSON array, so an editor reads them from the toolchain. The `cli` gate suite fails when a listed command has
+no route in `ail` or in `ail.ps1`. *(ADR 1057)*
+
+```ail tool=help expect=Agent rules=tool.help.1
+fn main()
+    print(1)
+```
+
+```ail tool=help,run expect=usage: rules=tool.help.2
+fn main()
+    print(1)
+```
+
+```ail tool=help,--json expect="group":"Agent rules=tool.help.3
+fn main()
+    print(1)
+```
+
+```ail tool=help,--keywords,--json expect="fn" rules=tool.help.3
+fn main()
+    print(1)
+```
+
+```ail tool=help,nosuchcommand status=2 expect=unknown rules=tool.help.1
+fn main()
+    print(1)
+```
+
+**tool.path.1** — `ail` finds its toolchain through symbolic links: the root is the directory of
+the file the link names, so `ln -s /path/to/ail/ail ~/.local/bin/ail` runs the same toolchain as
+`/path/to/ail/ail`. *(ADR 1058)*
+
+```ail skip=bootstrap rules=tool.path.1
+fn main()
+    print(1)
+```
+
+**tool.doctor.1** — `ail doctor [--json]` prints one line per check: `ok NAME: DETAIL`, or
+`warn`/`fail NAME: DETAIL; fix: WHAT TO RUN`. The checks are the toolchain root, the version and seed
+tag, the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
+std.app and std.audio hosts. The exit status is 1 when a required check (root, git, cache) fails.
+With `--json` it is one array of objects with `name`, `status`, `detail`, `fix` and `required`.
+*(ADR 1058)*
+
+**tool.doctor.2** — `ail doctor --path` prints one line to add to the shell profile that puts the
+toolchain's directory on PATH (`export PATH="DIR:$PATH"`, or `$env:Path = "DIR;" + $env:Path` on
+Windows) and changes nothing. `ail new` prints a hint on standard error when `ail` is not on PATH.
+*(ADR 1058)*
+
+```ail tool=doctor expect=toolchain rules=tool.doctor.1
+fn main()
+    print(1)
+```
+
+```ail tool=doctor,--path expect=PATH rules=tool.doctor.2
+fn main()
+    print(1)
+```
 
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the

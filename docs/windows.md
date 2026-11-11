@@ -40,7 +40,8 @@ The first run does three things (`tools\release\fetch-seed.ps1`):
 Later runs rebuild only when a file under `compiler\` or `std\` is newer than
 `.native\ail.exe`. Use the clone's own `ail.ps1`; it is not on `PATH`.
 To run it from another directory, call it by path (`C:\src\ail\ail.ps1 run
-hello.ail`) or put the clone's directory on `PATH` and use `ail.cmd`.
+hello.ail`) or put the clone's directory on `PATH` and use `ail.cmd`; `ail doctor --path` prints the PowerShell line
+that does it for the session (add it to your `$PROFILE` to keep it).
 
 ## Execution policy
 

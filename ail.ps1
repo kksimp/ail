@@ -229,10 +229,12 @@ if ($cmd -eq 'run') {
 $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
+# tool.help.1-3, tool.doctor.1: `help`, `--help`, `-h`, no arguments, `CMD --help` and `doctor` are native, as in ./ail.
+$helpRoute = ($cmd -eq '') -or ($cmd -in 'help', '--help', '-h', 'doctor') -or ((-not "$cmd".StartsWith('-')) -and $args.Count -eq 2 -and ("$($args[1])" -in '--help', '-h'))
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
 $native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
 $route = (
-    $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
+    $helpRoute -or $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
         ($rest -contains '--fix') -or
@@ -290,6 +292,12 @@ if ($route) {
     $env:AIL_COMPILER = Fwd (Join-Path $root 'compiler')
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
     if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
+    if ($helpRoute) {
+        if ($cmd -eq '') { & $native help; exit $LASTEXITCODE }
+        if ($cmd -in 'help', '--help', '-h') { & $native help @rest; exit $LASTEXITCODE }
+        if ($cmd -eq 'doctor') { & $native doctor @rest; exit $LASTEXITCODE }
+        & $native help $cmd; exit $LASTEXITCODE
+    }
     switch ($cmd) {
         'api' {
             # `ail api --diff ... --budget [N] [--from K]`: the native diff under the budget (api.diff.5, budget.out.1-7).
@@ -477,4 +485,4 @@ if ($cmd -eq 'version' -or $cmd -eq '--version') {
 }
 
 # Everything else has no native form.
-Fail "``ail $cmd`` has no native form; run ``.\ail.ps1`` with a command from docs/quick-reference.md"
+Fail "unknown command $cmd; run ``ail help``"
