@@ -93,7 +93,7 @@ fn rewrite_access(
 ## The length of each list made by `rt.list_new` that is built to a known
 ## length and then only read and written.
 fn built_lengths(f Func) Map[int, int]
-    out := Map[int, int]()
+    mut out := Map[int, int]()
     nv := f.vals.len()
     mut cand := [false for _ in 0..nv]
     mut found := false
