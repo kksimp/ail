@@ -1,0 +1,60 @@
+# std.net.32 at scale (ADR 1009): N keep-alive connections parked on one
+# server, each answered in turn, then again in reverse, while one stays
+# quiet. N is the first argument (default 1000). Each connection is two
+# sockets in this process, so raise the descriptor limit on Linux and macOS
+# first (`ulimit -n 4096`); Windows needs nothing. The last line is the time
+# of the two rounds, for a before-and-after of the readiness set.
+#   ./ail build tools/native-net/ready_many.ail -o ready_many && ./ready_many 1000
+use std.net
+use std.time
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            return
+        ex.respond(net.Response(status: 200, headers: {}, body: "ok {ex.request.path}\n"))?
+
+fn line_of(c net.Conn) str
+    l := c.read_line() else err
+        return "error"
+    l else "(closed)"
+
+fn ask(c net.Conn, i int) str
+    c.write("GET /r{i} HTTP/1.1\r\nHost: x\r\n\r\n") else err
+        return err.kind
+    mut l := line_of(c)
+    while l != "" and l != "error" and l != "(closed)"
+        l = line_of(c)
+    line_of(c)
+
+fn main() !
+    a := env.args()
+    mut n := 1000
+    if a.len() > 0
+        n = a[0].to_int() else 1000
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn worker(srv)
+    port := srv.addr().split(":")[1].to_int() else 0
+    quiet := net.connect("127.0.0.1", port)?
+    mut cs := []
+    for i in 0..n
+        cs.push(net.connect("127.0.0.1", port)?)
+    print("connected: {cs.len()}")
+    t0 := time.now_ms()
+    mut right := 0
+    for i in 0..n
+        if ask(cs[i], i) == "ok /r{i}"
+            right += 1
+    print("first round: {right} of {n}")
+    mut back := 0
+    for k in 0..n
+        i := n - 1 - k
+        if ask(cs[i], i + n) == "ok /r{i + n}"
+            back += 1
+    print("second round, reversed: {back} of {n}")
+    ms := time.now_ms() - t0
+    print("the quiet one: {ask(quiet, 7)}")
+    srv.close()
+    w.wait()?
+    print("done")
+    print("rounds ms: {ms}")

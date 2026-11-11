@@ -6,8 +6,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
@@ -862,6 +864,7 @@ class CanvasView : Control
         g.SmoothingMode = SmoothingMode.None;
         g.PixelOffsetMode = PixelOffsetMode.Half;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        Surfaces.Draw(CanvasId, g, ClientSize); // std.gfx.8: the shared frame under the ops (it leaves the transform at identity)
         g.ScaleTransform((float)s, (float)s);
         var saved = new Stack<GraphicsState>();
         foreach (Op op in Ops)
@@ -959,6 +962,13 @@ class CanvasView : Control
                 continue;
             }
             if (op is UnclipOp && saved.Count > 0) g.Restore(saved.Pop());
+        }
+        if (Surfaces.Has(CanvasId))
+        {
+            Surfaces.Text(CanvasId, g, ClientSize);
+            // Once this paint has reached the screen: wait for the compositor, poll the pads, answer `vsync`.
+            string id = CanvasId;
+            BeginInvoke((Action)delegate { Surfaces.Vsync(id); });
         }
     }
 
@@ -1110,9 +1120,39 @@ class CanvasView : Control
         return null;
     }
 
+    // std.app.20 (ADR 0956): `repeat` for a key already held, `code` the platform key code (the virtual key),
+    // and `keyup` on release with the same name.
+    readonly HashSet<int> heldKeys = new HashSet<int>();
+    int lastCode;
+    bool lastRepeat;
+
+    [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
+
+    /// The name of a released key: a special key's name, else its unshifted character.
+    static string ReleasedName(Keys k)
+    {
+        string n = KeyName(k);
+        if (n != null) return n;
+        if (k == Keys.Space) return " ";
+        if (k >= Keys.A && k <= Keys.Z) return ((char)('a' + (k - Keys.A))).ToString();
+        uint c = MapVirtualKey((uint)k, 2) & 0x7fffffff;
+        return c > 0x20 ? char.ToLowerInvariant((char)c).ToString() : null;
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        heldKeys.Remove((int)e.KeyCode);
+        string name = ReleasedName(e.KeyCode);
+        if (name == null) return;
+        Outbox.Send("keyup", ModArgs("id", CanvasId, "text", name, "code", (int)e.KeyCode));
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        lastCode = (int)e.KeyCode;
+        lastRepeat = !heldKeys.Add(lastCode);
         // std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`.
         if (e.Control && !e.Alt && e.KeyCode == Keys.V && Clipboard.ContainsText())
         {
@@ -1133,7 +1173,7 @@ class CanvasView : Control
         if (name == null) return;
         e.SuppressKeyPress = true;
         e.Handled = true;
-        Outbox.Send("key", ModArgs("id", CanvasId, "text", name));
+        Outbox.Send("key", ModArgs("id", CanvasId, "text", name, "repeat", lastRepeat, "code", lastCode));
     }
 
     protected override void OnKeyPress(KeyPressEventArgs e)
@@ -1141,7 +1181,218 @@ class CanvasView : Control
         base.OnKeyPress(e);
         if (e.KeyChar < ' ' || e.KeyChar == 0x7f) return;
         e.Handled = true;
-        Outbox.Send("key", ModArgs("id", CanvasId, "text", e.KeyChar.ToString()));
+        Outbox.Send("key", ModArgs("id", CanvasId, "text", e.KeyChar.ToString(), "repeat", lastRepeat, "code", lastCode));
+    }
+}
+
+// ---- Shared surfaces and gamepads (std.gfx.6-8, std.gfx.11) -------------------
+
+/// A frame buffer the program shares with the host (std.gfx.8, ADR 1044): a named file mapping the
+/// program made; `count` buffers of `stride` by `h` bytes follow `offset` unused bytes.
+class Mapped
+{
+    public IntPtr Base;
+    public int W, H, Stride, Count, Current;
+    public Stopwatch Since = Stopwatch.StartNew();
+    public List<object> Texts = new List<object>();
+}
+
+static class Surfaces
+{
+    static readonly Dictionary<string, Mapped> maps = new Dictionary<string, Mapped>();
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+    static extern IntPtr OpenFileMappingA(uint access, bool inherit, string name);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr MapViewOfFile(IntPtr map, uint access, uint hi, uint lo, UIntPtr bytes);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+    [DllImport("dwmapi.dll")] static extern int DwmFlush();
+
+    public static bool Has(string id) { lock (maps) return maps.ContainsKey(id); }
+    static Mapped Get(string id) { lock (maps) { Mapped m; return maps.TryGetValue(id, out m) ? m : null; } }
+
+    /// `{"t":"surface","id":I,"w":W,"h":H,"stride":S,"offset":O,"count":N,"name":NAME}`: map it.
+    /// False when it cannot be mapped; the program then sees no `vsync` and fails with `no_host`.
+    public static bool Attach(object obj)
+    {
+        string id = Json.Text(Json.Get(obj, "id")), name = Json.Text(Json.Get(obj, "name"));
+        int w = (int)Json.Num(Json.Get(obj, "w")), h = (int)Json.Num(Json.Get(obj, "h"));
+        int stride = (int)Json.Num(Json.Get(obj, "stride")), count = Math.Max((int)Json.Num(Json.Get(obj, "count")), 1);
+        int offset = (int)Json.Num(Json.Get(obj, "offset"));
+        long bytes = (long)stride * h * count + offset;
+        if (name.Length == 0 || w <= 0 || h <= 0 || stride < w * 4 || offset < 0 || bytes <= 0) return false;
+        IntPtr map = OpenFileMappingA(4 /* FILE_MAP_READ */, false, name);
+        if (map == IntPtr.Zero) return false;
+        IntPtr view = MapViewOfFile(map, 4, 0, 0, (UIntPtr)(ulong)bytes);
+        CloseHandle(map); // the view keeps the section alive
+        if (view == IntPtr.Zero) return false;
+        lock (maps) maps[id] = new Mapped { Base = (IntPtr)(view.ToInt64() + offset), W = w, H = h, Stride = stride, Count = count };
+        return true;
+    }
+
+    /// `{"t":"present","id":I,"buf":K}`: show buffer K at the next draw.
+    public static void Present(string id, int buf)
+    {
+        Mapped m = Get(id);
+        if (m == null) return;
+        m.Current = Math.Min(Math.Max(buf, 0), m.Count - 1);
+    }
+
+    /// `{"t":"text","id":I,"items":[...]}` (std.gfx.7): text drawn over the surface.
+    public static void SetText(string id, List<object> items)
+    {
+        Mapped m = Get(id);
+        if (m != null) m.Texts = items ?? new List<object>();
+    }
+
+    // The mapping holds R, G, B, A bytes; GDI+ reads B, G, R, x, so the channels swap while drawing.
+    static ImageAttributes swap;
+    static ImageAttributes Swap()
+    {
+        if (swap == null)
+        {
+            swap = new ImageAttributes();
+            swap.SetColorMatrix(new ColorMatrix(new float[][] {
+                new float[] { 0, 0, 1, 0, 0 }, new float[] { 0, 1, 0, 0, 0 }, new float[] { 1, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 1, 0 }, new float[] { 0, 0, 0, 0, 1 } }));
+        }
+        return swap;
+    }
+
+    /// Draws buffer `Current` as the whole canvas, scaled without smoothing, and leaves `g` unscaled.
+    public static void Draw(string id, Graphics g, Size size)
+    {
+        Mapped m = Get(id);
+        if (m == null) return;
+        g.ResetTransform();
+        IntPtr at = (IntPtr)(m.Base.ToInt64() + (long)m.Current * m.Stride * m.H);
+        using (var img = new Bitmap(m.W, m.H, m.Stride, PixelFormat.Format32bppRgb, at))
+        {
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.DrawImage(img, new Rectangle(0, 0, size.Width, size.Height), 0, 0, m.W, m.H, GraphicsUnit.Pixel, Swap());
+        }
+    }
+
+    /// The text items, positioned in surface pixels and scaled with the canvas.
+    public static void Text(string id, Graphics g, Size size)
+    {
+        Mapped m = Get(id);
+        if (m == null || m.Texts.Count == 0) return;
+        g.ResetTransform();
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        double sx = (double)size.Width / m.W;
+        foreach (object t in m.Texts)
+        {
+            double sz = Json.Num(Json.Get(t, "size")); if (sz <= 0) sz = 12;
+            using (var f = new Font("Consolas", (float)(sz * sx), FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var b = new SolidBrush(CanvasView.Rgb((int)Json.Num(Json.Get(t, "color")))))
+                g.DrawString(Json.Text(Json.Get(t, "s")), f, b, (float)(Json.Num(Json.Get(t, "x")) * sx),
+                             (float)(Json.Num(Json.Get(t, "y")) * sx), StringFormat.GenericTypographic);
+        }
+    }
+
+    /// After a drawn frame: wait for the compositor (so the program is paced by the display), poll the pads,
+    /// and answer `vsync` (`dx` the seconds since the last one, `text` the buffer shown).
+    public static void Vsync(string id)
+    {
+        Mapped m = Get(id);
+        if (m == null) return;
+        long t0 = m.Since.ElapsedMilliseconds;
+        try { if (DwmFlush() != 0) Thread.Sleep(Math.Max(0, 16 - (int)(m.Since.ElapsedMilliseconds - t0))); }
+        catch (Exception) { Thread.Sleep(Math.Max(0, 16 - (int)(m.Since.ElapsedMilliseconds - t0))); }
+        Pads.Poll();
+        double dt = m.Since.Elapsed.TotalSeconds;
+        m.Since.Reset(); m.Since.Start();
+        Outbox.Send("vsync", "id", id, "dx", dt, "text", m.Current.ToString(CultureInfo.InvariantCulture));
+    }
+}
+
+/// Gamepads for std.gfx (std.gfx.11): XInput polled with each drawn frame, and a `pad` event when a
+/// pad's state changes. `text` is `buttons,lx,ly,rx,ry,lt,rt` with the bits of `pad_bit`; sticks are
+/// -1..1 (right and up positive), triggers 0..1. Connected pads are numbered from 0 in slot order.
+static class Pads
+{
+    [StructLayout(LayoutKind.Sequential)]
+    struct XState { public uint Packet; public ushort Buttons; public byte LT, RT; public short LX, LY, RX, RY; }
+
+    [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")] static extern uint Get14(uint user, out XState s);
+    [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")] static extern uint Get910(uint user, out XState s);
+
+    static int dll = 0; // 0 unknown, 1 xinput1_4, 2 xinput9_1_0, -1 none
+    static readonly List<string> last = new List<string>();
+
+    static bool Read(uint slot, out XState s)
+    {
+        s = new XState();
+        if (dll == 0)
+        {
+            try { XState t; Get14(0, out t); dll = 1; }
+            catch (DllNotFoundException) { dll = 2; }
+            catch (EntryPointNotFoundException) { dll = 2; }
+        }
+        if (dll == 2)
+        {
+            try { XState t; Get910(0, out t); }
+            catch (DllNotFoundException) { dll = -1; }
+            catch (EntryPointNotFoundException) { dll = -1; }
+        }
+        if (dll < 0) return false;
+        return (dll == 1 ? Get14(slot, out s) : Get910(slot, out s)) == 0;
+    }
+
+    static double Stick(short v, int dead)
+    {
+        double a = Math.Min(Math.Abs((double)v), 32767);
+        if (a <= dead) return 0;
+        double r = (a - dead) / (32767 - dead);
+        return v < 0 ? -r : r;
+    }
+
+    static int Bits(ushort b)
+    {
+        int o = 0;
+        if ((b & 0x1000) != 0) o |= 1;      // A
+        if ((b & 0x2000) != 0) o |= 2;      // B
+        if ((b & 0x4000) != 0) o |= 4;      // X
+        if ((b & 0x8000) != 0) o |= 8;      // Y
+        if ((b & 0x0100) != 0) o |= 16;     // LB
+        if ((b & 0x0200) != 0) o |= 32;     // RB
+        if ((b & 0x0020) != 0) o |= 64;     // back
+        if ((b & 0x0010) != 0) o |= 128;    // start
+        if ((b & 0x0040) != 0) o |= 256;    // L3
+        if ((b & 0x0080) != 0) o |= 512;    // R3
+        if ((b & 0x0001) != 0) o |= 1024;   // up
+        if ((b & 0x0002) != 0) o |= 2048;   // down
+        if ((b & 0x0004) != 0) o |= 4096;   // left
+        if ((b & 0x0008) != 0) o |= 8192;   // right
+        return o;
+    }
+
+    static double Trigger(byte t) { return t < 30 ? 0 : (t - 30) / 225.0; }
+
+    public static void Poll()
+    {
+        var now = new List<string>();
+        for (uint slot = 0; slot < 4; slot++)
+        {
+            XState s;
+            if (!Read(slot, out s)) continue;
+            now.Add(string.Format(CultureInfo.InvariantCulture, "{0},{1:0.000},{2:0.000},{3:0.000},{4:0.000},{5:0.000},{6:0.000}",
+                Bits(s.Buttons), Stick(s.LX, 7849), Stick(s.LY, 7849), Stick(s.RX, 8689), Stick(s.RY, 8689), Trigger(s.LT), Trigger(s.RT)));
+        }
+        for (int i = 0; i < now.Count; i++)
+        {
+            if (i < last.Count && last[i] == now[i]) continue;
+            if (i < last.Count) last[i] = now[i]; else last.Add(now[i]);
+            Outbox.Send("pad", "id", i.ToString(CultureInfo.InvariantCulture), "text", now[i]);
+        }
+        while (last.Count > now.Count)
+        {
+            int i = last.Count - 1;
+            last.RemoveAt(i);
+            Outbox.Send("pad", "id", i.ToString(CultureInfo.InvariantCulture), "text", "");
+        }
     }
 }
 
@@ -1518,6 +1769,82 @@ class HostForm : Form
         }
     }
 
+    public CanvasView CanvasFor(string id) { return CanvasById(id); }
+
+    CanvasView CanvasById(string id)
+    {
+        Control c;
+        return byId.TryGetValue(id, out c) ? c as CanvasView : null;
+    }
+
+    /// std.app.18: the app's menu at (x, y) of canvas `id`, answered with a `popup` event whose `text` is
+    /// the chosen label, empty if dismissed (or if the canvas does not exist).
+    public void ShowPopup(string id, double x, double y, List<object> items)
+    {
+        CanvasView v = CanvasById(id);
+        if (v == null) { Outbox.Send("popup", "id", id, "text", ""); return; }
+        var menu = new ContextMenuStrip { Font = Font, BackColor = look.FieldBg, ForeColor = look.Fg };
+        string chosen = "";
+        foreach (object o in items)
+        {
+            string label = o as string ?? "";
+            var mi = new ToolStripMenuItem(label);
+            mi.Click += delegate { chosen = label; };
+            menu.Items.Add(mi);
+        }
+        // `Closed` can come before the item's click; answer once both have run.
+        menu.Closed += delegate
+        {
+            BeginInvoke((Action)delegate { Outbox.Send("popup", "id", id, "text", chosen); menu.Dispose(); });
+        };
+        menu.Show(v, new Point(Dpi.Px(x), Dpi.Px(y)));
+    }
+
+    /// std.app.22: a native chooser for a folder or a file, answered with `picked` (`text` empty if cancelled).
+    public void ShowPick(string id, string prompt, bool folders, string start)
+    {
+        string path = "";
+        try
+        {
+            if (folders)
+            {
+                using (var d = new FolderBrowserDialog())
+                {
+                    d.Description = prompt;
+                    if (start.Length > 0 && Directory.Exists(start)) d.SelectedPath = start;
+                    if (d.ShowDialog(this) == DialogResult.OK) path = d.SelectedPath;
+                }
+            }
+            else
+            {
+                using (var d = new OpenFileDialog())
+                {
+                    d.Title = prompt;
+                    if (start.Length > 0 && Directory.Exists(start)) d.InitialDirectory = start;
+                    if (d.ShowDialog(this) == DialogResult.OK) path = d.FileName;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            Outbox.Send("pick_error", "id", id, "text", "the file chooser failed");
+            return;
+        }
+        Outbox.Send("picked", "id", id, "text", path);
+    }
+
+    /// std.gfx.6: the canvas of a shared surface takes the keyboard, and the window is sized so the
+    /// canvas is exactly the surface, one point per pixel.
+    public void FitSurface(string id, int w, int h)
+    {
+        CanvasView v = CanvasById(id);
+        if (v == null) return;
+        v.Focus();
+        int dx = Dpi.Px(w) - v.Width, dy = Dpi.Px(h) - v.Height;
+        if (dx != 0 || dy != 0) ClientSize = new Size(ClientSize.Width + dx, ClientSize.Height + dy);
+        v.Invalidate();
+    }
+
     /// Pushes the new values into the controls of an unchanged shape, in tree order.
     void Apply(Node n, ref int idx)
     {
@@ -1739,8 +2066,38 @@ static class Program
                 string kind = Json.Text(Json.Get(obj, "t"));
                 if (kind == "pick")
                 {
-                    // std.app.22: no native chooser on this host yet; say so rather than hang.
-                    Outbox.Send("pick_error", "id", Json.Text(Json.Get(obj, "id")), "text", "this host has no native file chooser yet");
+                    string pid = Json.Text(Json.Get(obj, "id")), prompt = Json.Text(Json.Get(obj, "prompt")), pstart = Json.Text(Json.Get(obj, "start"));
+                    bool folders = Json.Flag(Json.Get(obj, "folders"));
+                    form.BeginInvoke((Action)delegate { form.ShowPick(pid, prompt, folders, pstart); });
+                    continue;
+                }
+                if (kind == "popup")
+                {
+                    string uid = Json.Text(Json.Get(obj, "id"));
+                    double ux = Json.Num(Json.Get(obj, "x")), uy = Json.Num(Json.Get(obj, "y"));
+                    List<object> items = Json.Get(obj, "items") as List<object> ?? new List<object>();
+                    form.BeginInvoke((Action)delegate { form.ShowPopup(uid, ux, uy, items); });
+                    continue;
+                }
+                if (kind == "surface")
+                {
+                    string sid = Json.Text(Json.Get(obj, "id"));
+                    int sw = (int)Json.Num(Json.Get(obj, "w")), sh = (int)Json.Num(Json.Get(obj, "h"));
+                    if (Surfaces.Attach(obj)) form.BeginInvoke((Action)delegate { form.FitSurface(sid, sw, sh); });
+                    else Console.Error.WriteLine("AIL App Host: cannot map the surface");
+                    continue;
+                }
+                if (kind == "text")
+                {
+                    string tid = Json.Text(Json.Get(obj, "id"));
+                    Surfaces.SetText(tid, Json.Get(obj, "items") as List<object>);
+                    continue;
+                }
+                if (kind == "present")
+                {
+                    string qid = Json.Text(Json.Get(obj, "id"));
+                    Surfaces.Present(qid, (int)Json.Num(Json.Get(obj, "buf")));
+                    form.BeginInvoke((Action)delegate { CanvasView c = form.CanvasFor(qid); if (c != null) c.Invalidate(); });
                     continue;
                 }
                 if (kind == "clipboard")

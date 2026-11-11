@@ -29,6 +29,7 @@ fn budget.continues(body str) bool
 fn budget.records(text str, stderr bool, mut out List[budget.Record]) [mutates]  ## Split one stream into records (budget.out.2).
 fn budget.num(s str) bool
 fn budget.classify(line str) str  ## The kind of a record from its first line (budget.out.2).
+fn budget.has_drive(line str) bool  ## A Windows path starts with a drive (`C:/dir/f.ail:2:5: ...`), whose colon is not a field separator.
 fn budget.splitn(s str, sep str, n int) List[str]  ## At most `n` pieces; the last holds the rest.
 fn budget.is_summary(line str) bool  ## `N passed, M failed` from `ail test`.
 pub fn budget.apply(b budget.Budget, stdout str, stderr str, json bool) List[str]  ## The budgeted stdout and stderr (budget.out.1-4), as `(stdout, stderr)`.
