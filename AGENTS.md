@@ -175,6 +175,7 @@ tools/
   perfbench/              drag-race programs: AIL, C and Python twins
   self-compile/           survey of the native subset over the compiler's own source
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
+  vscode/                 VS Code extension: TextMate grammar and `ail lsp` client (not published)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
   prune-merged.sh         deletes remote branches already merged into main (ADR 0028)
   self-host/              the three-stage self-host bootstrap and fixed-point check (ADR 0610)
