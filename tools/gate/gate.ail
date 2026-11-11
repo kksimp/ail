@@ -3208,6 +3208,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "    for i in 0..xs.len()",
         "        print(at(xs, i))",
     ])) else return
+    fs.write_text("{base}/mcp/try.ail", ctx) else return
     fs.write_text("{base}/mcp/ours.ail", ctx) else return
     fs.write_text("{base}/mcp/theirs.ail", ctx) else return
     r2 := mcp_session("{base}/mcp", [
@@ -3220,10 +3221,10 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(
             8,
             "ail_try",
-            "'program':'prog.ail','sets':['rename show shown','rename nosuch other']",
+            "'program':'try.ail','sets':['rename show shown','rename nosuch other']",
         ),
         mcp_call(9, "ail_prove", "'program':'prove.ail'"),
-        mcp_call(10, "ail_infer", "'program':'prog.ail','function':'pay'"),
+        mcp_call(10, "ail_infer", "'program':'try.ail','function':'pay'"),
         mcp_call(11, "ail_merge_check", "'base':'prog.ail','ours':'ours.ail','theirs':'theirs.ail'"),
         mcp_call(12, "ail_verify_check", "'cert':'-x'"),
     ])
@@ -3234,11 +3235,11 @@ fn Gate.agent_tools(mut self, tmp str)
     want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
     want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
     want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
-    if slurp("{base}/mcp/prog.ail") != ctx
+    if slurp("{base}/mcp/try.ail") != ctx
         red("mcp try", "wrote the program")
     want("mcp prove", reply_of(r2.out, 9), ["proved", "\"isError\":false"])
     want("mcp infer", reply_of(r2.out, 10), ["\"isError\":false"])
-    if slurp("{base}/mcp/prog.ail") != ctx
+    if slurp("{base}/mcp/try.ail") != ctx
         red("mcp infer", "wrote the program")
     want("mcp merge check", reply_of(r2.out, 11), ["merged and checked", "\"isError\":false"])
     want("mcp verify check refuses an option", reply_of(r2.out, 12), ["-32602", "cert"])
