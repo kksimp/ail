@@ -231,7 +231,9 @@ fn main()
 **mem.limit.1** — `ail run --max-memory MB` and `ail test --max-memory MB`
 stop a run that uses more than `MB` megabytes, with `trap[run.limit.2]`
 (`run.limit.2`, `run.limit.4`). A native executable reads the same limit from
-`AIL_MAX_MEMORY_MB`, or from the value `ail build --max-memory` baked in. The
+`AIL_MAX_MEMORY_MB`, or from the value `ail build --max-memory` baked in, and
+prints its trap as `run.limit.5` and `run.limit.6` define (chapter
+[21](21-trace.md)). The
 native check counts heap bytes in use when the heap takes a new chunk, not
 resident memory, so it fires a little later than the interpreter's. A program
 the system cannot give more memory to also traps `run.limit.2`, so a run that
@@ -253,7 +255,7 @@ program prints or returns.
 
 | Variable | Effect | Rule or ADR |
 |---|---|---|
-| `AIL_MAX_MEMORY_MB` | Memory limit in megabytes; a positive whole number, else exit 2 | `run.limit.2`, `run.limit.4`, ADR 0726 |
+| `AIL_MAX_MEMORY_MB` | Memory limit in megabytes; a positive whole number, else exit 2 | `run.limit.2`, `run.limit.4`, `run.limit.5`, ADR 0726 |
 | `AIL_TIMEOUT_MS` | Wall-clock limit in milliseconds | `run.limit.1`, ADR 0726 |
 | `AIL_THREADS` | Size of the task pool, 1 to 64; anything else is ignored | `native.task.1`, `conc.par.17`, ADR 0599 |
 | `AIL_PARALLEL=0` | Runs `par for` and tensor regions in order | `conc.par.8` |
