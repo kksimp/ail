@@ -92,6 +92,10 @@ Option A buys the measured cases at the least risk before RC4.
 - `AIL_OPT_OFF=forward` turns the loads and the checks off together.
 - Follow-up: carrying facts into loops (a fixed point, or hoisting) and a CSE
   rerun after forwarding are left to F9 and later GVN work.
+- Follow-up (F4 extension, after F3's registers): hoist `self.f` and its
+  list header out of a loop that stores no slot at that offset and makes no
+  call; struct-of-lists code (Clove's context mixing) still pays the first
+  load of each iteration.
 - Measurements (perfbench, x86-64 and arm64): see the PR; recorded here when
   it lands.
 
