@@ -1338,13 +1338,13 @@ checks both files. *(ADR 1046)*
 **tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
 the flag may come before or after `NAME`. *(ADR 1046)*
 
-<<<<<<< HEAD
 **tool.new.5** — `ail new .` writes `AGENTS.md` and `.mcp.json` (the files of
 `tool.new.3`, and nothing else) into the current directory when it holds a
 `.ail` file or `ail.pkg`; any other directory is refused with exit status 2.
 An existing file is never changed or appended to: for `AGENTS.md` the block to
 add is printed instead, and for `.mcp.json` the registration to add. `--no-agent`
 with `.` is a usage error (exit status 2). *(ADR 1046)*
+
 ## Help and the toolchain check
 
 **tool.help.1** — `ail help`, `ail --help`, `ail -h` and `ail` with no arguments print every
