@@ -7,8 +7,9 @@
 # If scripts are blocked: powershell -ExecutionPolicy Bypass -File .\ail.ps1 run examples\hello.ail
 #
 # Like ./ail (ADR 0855): the native CLI (compiler\main.ail built into .native\ail.exe) does run, build, check,
-# test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
-# verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --budget`.
+# test FILE, fmt, fix, diff, explain, edit, ask, context, review, api, effects and pkg, and `--budget` on run, test, check
+# and api --diff. The published seed (stage 0), downloaded and verified by tools\release\fetch-seed.ps1, builds it.
+# tools\gate\gate.ail's `cli` suite fails when a command or `run` flag of ./ail is missing here.
 $ErrorActionPreference = 'Stop'
 # A native program's exit status is data (ail run passes it on), never a PowerShell error (PowerShell 7.4+).
 $PSNativeCommandUseErrorActionPreference = $false
@@ -44,6 +45,23 @@ function Esc-Native($list) {
         elseif ($t.Contains('"')) { $t = $t -replace '(\\*)"', '$1$1\"' }
         $t
     }
+}
+
+# `--budget [N] [--from K] [--json]` split from the rest of the arguments, as ./ail does (budget.out.1-7): `bopts` go to
+# the native `budget`, `copts` to the command it runs (`--json` goes to both). `--budget` followed by a non-number is a
+# bare `--budget`. With -DropDiff, `--diff` is left out of `copts` (api --diff).
+function Split-Budget($list, [switch]$DropDiff) {
+    $b = @(); $c = @(); $prev = ''
+    foreach ($a in @($list)) {
+        if ($prev -eq '--budget' -and "$a" -match '^\d+$') { $b += $a; $prev = ''; continue }
+        if ($prev -eq '--from') { $b += $a; $prev = ''; continue }
+        $prev = ''
+        if ("$a" -in '--budget', '--from') { $b += $a; $prev = "$a" }
+        elseif ($DropDiff -and "$a" -eq '--diff') { }
+        elseif ("$a" -eq '--json') { $b += $a; $c += $a }
+        else { $c += $a }
+    }
+    [pscustomobject]@{ B = $b; C = $c }
 }
 
 $cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
@@ -101,7 +119,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 
 # `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
-$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null; $probeAt = $null; $probeShow = $null
+$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null; $probeAt = $null; $probeShow = $null; $budgetOpts = @()
 if ($cmd -eq 'run') {
     $k = 0
     :scan while ($k -lt $rest.Count) {
@@ -112,13 +130,21 @@ if ($cmd -eq 'run') {
                 if ($v -notmatch '^[1-9]\d*$') { Fail "error[run.limit.4]: ``$a`` needs a positive whole number (run.limit.4)" }
                 $runOpts += @($a, $v); $k += 2; continue
             }
-            '^--json$' { $jsonOpt = $true; $k++; continue }
+            '^--json$' { $jsonOpt = $true; $budgetOpts += '--json'; $k++; continue }
             '^--(record|replay)$' {
                 if (-not $v) { Fail "``$a`` needs a recording file, e.g. ``$a r.json`` (replay.rec.1)" }
                 if ($a -eq '--record') { $env:AIL_RECORD = Fwd $v; $recRun = $true } else { $env:AIL_REPLAY = Fwd $v; $repRun = $true }
                 Add-Instrument 'record'; $k += 2; continue
             }
-            '^--(budget|from)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
+            '^--budget$' {
+                if ($v -match '^\d+$') { $budgetOpts += @('--budget', $v); $k += 2 } else { $budgetOpts += '--budget'; $k++ }
+                continue
+            }
+            '^--from$' {
+                if ($v -notmatch '^\d+$') { break scan }
+                $budgetOpts += @('--from', $v); $k += 2; continue
+            }
+            '^--no-attach$' { $runOpts += '--no-attach'; $k++; continue }
             '^--max-steps$' {
                 if ($v -notmatch '^[1-9]\d*$') { Fail '`--max-steps` needs a positive number of steps (run.limit.4)' }
                 $env:AIL_MAX_STEPS = $v; Add-Instrument 'steps'; $k += 2; continue
@@ -191,11 +217,12 @@ if ($cmd -eq 'run') {
         Add-Instrument ('probe=' + $probeAt + ':' + ($probeShow -replace ',', '|'))
         $traceRun = $true
     }
-    # trace.run.1: with a trace, `--json` makes the events JSON objects; trace.snap.4: alone, it makes a trap one JSON object.
-    if ($jsonOpt) {
-        if ($traceRun) { $env:AIL_TRACE_JSON = '1'; Add-Instrument 'tracejson' }
-        elseif ($runFile) { $snapJson = $true; Add-Instrument 'values,verbose' }
-    }
+    # trace.run.1: with a trace, `--json` makes the events JSON objects; trace.snap.4: alone, it makes a trap one JSON object;
+    # budget.out.1-7: with `--budget`, the program runs under the native `budget`. Other mixes have no native form.
+    $onlyJson = (@($budgetOpts) -join ' ') -eq '--json'
+    if ($traceRun -and $onlyJson) { $budgetOpts = @(); $env:AIL_TRACE_JSON = '1'; Add-Instrument 'tracejson' }
+    elseif (-not $traceRun -and $onlyJson -and $runFile) { $snapJson = $true; $budgetOpts = @(); Add-Instrument 'values,verbose' }
+    if ($budgetOpts.Count -gt 0 -and $budgetOpts -notcontains '--budget') { $runFile = $null }
 }
 
 # `check --errors` and `--budget`/`--from` anywhere in `check` are native too, as in ./ail.
@@ -203,7 +230,7 @@ $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'merge', 'mcp', 'leak', 'header', 'prove'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
 $route = (
     $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -257,20 +284,23 @@ if ($route) {
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
     if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
     switch ($cmd) {
-        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'header', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'new', 'prove' } { & $native $cmd @rest; exit $LASTEXITCODE }
+        'api' {
+            # `ail api --diff ... --budget [N] [--from K]`: the native diff under the budget (api.diff.5, budget.out.1-7).
+            if ($rest -contains '--diff') {
+                $sp = Split-Budget $rest -DropDiff
+                if ($sp.B -contains '--budget' -or $sp.B -contains '--from') {
+                    & $native budget api --diff @($sp.B) -- $native api --diff @($sp.C); exit $LASTEXITCODE
+                }
+            }
+            & $native api @rest; exit $LASTEXITCODE
+        }
+        { $_ -in 'pkg', 'fmt', 'fix', 'effects', 'header', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'new', 'prove', 'context', 'review' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'check' {
             if ($checkErrors) { & $native check-errors @rest; exit $LASTEXITCODE }
             if ($checkBudget) {
                 # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
-                $bopts = @(); $copts = @(); $prev = ''
-                foreach ($a in $rest) {
-                    if ($prev -eq '--budget' -and "$a" -match '^\d+$') { $bopts += $a; $prev = ''; continue }
-                    if ($prev -eq '--from') { $bopts += $a; $prev = ''; continue }
-                    $prev = ''
-                    if ($a -in '--budget', '--from') { $bopts += $a; $prev = $a }
-                    elseif ($a -eq '--json') { $bopts += $a; $copts += $a }
-                    else { $copts += $a }
-                }
+                $sp = Split-Budget $rest
+                $bopts = @($sp.B); $copts = @($sp.C)
                 & $native budget check @bopts -- $native check-program @copts; exit $LASTEXITCODE
             }
             & $native check-program @rest; exit $LASTEXITCODE
@@ -289,7 +319,14 @@ if ($route) {
                 if ("$a" -like '--watch*') { [Console]::Error.WriteLine("ail test: $a is not native yet"); exit 2 }
                 if ("$a" -eq '--native') { Fail '`ail test --native` is retired: `ail test` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)' }
             }
-            $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
+            $env:AIL_NATIVE_CLI = ''
+            if (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0) {
+                # `ail test --budget [N] [--from K] [--json] FILE`: the native runner under the budget (budget.out.3).
+                # The child is the native CLI running ailtest.ail (an .exe the budget can start; ./ail passes itself).
+                $sp = Split-Budget $rest
+                & $native budget test @($sp.B) -- $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @($sp.C); exit $LASTEXITCODE
+            }
+            & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
         'leak' {
             # ADR 0969: build FILE, run it with AIL_LEAK set (san.leak.3); the exit status is the program's.
             $json = $false; $all = $false; $ops = @($rest)
@@ -380,6 +417,12 @@ if ($route) {
                         Remove-Item -Force $errTmp, $outTmp -ErrorAction SilentlyContinue
                     }
                     exit $rc
+                }
+                if ($budgetOpts.Count -gt 0) {
+                    # budget.out.1-7: `ail run --budget [N] [--from K] [--json] FILE`, the program under the native `budget`.
+                    try { & $native budget run @($budgetOpts) -- $progExe @progArgs }
+                    finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
+                    exit $LASTEXITCODE
                 }
                 try { & $progExe @progArgs }
                 finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
