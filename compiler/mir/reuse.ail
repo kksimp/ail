@@ -128,6 +128,12 @@ fn reuse_in(mut g Func, e Escape)
     for lp in loops
         for p in g.blocks[lp.header].params
             carried.add(e.root(p))
+    # Values that are the constant 0 (an empty list's capacity).
+    mut zeros := Set[int]()
+    for blk in g.blocks
+        for i in blk.insts
+            if i.op == "const" and i.imm == 0 and i.dst >= 0
+                zeros.add(i.dst)
     for b in 0..g.blocks.len()
         mut k := 0
         while k < g.blocks[b].insts.len()
@@ -135,6 +141,11 @@ fn reuse_in(mut g Func, e Escape)
             k += 1
             # A list this pass made (its value is past the analysed ones) stays.
             if i.op != "call" or not MAKERS.contains(i.name) or i.dst < 0 or i.dst >= e.up.len()
+                continue
+            # A list made with room (`list_new(n)`, n not 0) is a buffer the
+            # code may write by index up to n (the vector escape loop's);
+            # an emptied list of capacity 0 can't stand in for it.
+            if i.name == "rt.list_new" and not (i.argc() == 1 and zeros.contains(i.arg(0)))
                 continue
             r := e.root(i.dst)
             if e.escapes[r]

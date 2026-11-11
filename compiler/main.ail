@@ -33,7 +33,9 @@ use doc
 use edit
 use fix
 use fmt
+use help
 use derive
+use doctor
 use explain
 use load
 use mir
@@ -47,6 +49,21 @@ use x64
 fn main() !
     args := env.args()
     # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
+    # tool.help.1-3: `help`, `--help`, `-h` and no command at all are the command list; `CMD --help` is `help CMD`.
+    if args.len() == 0
+        io.exit(help.command([]))
+    if args[0] == "help" or args[0] == "--help" or args[0] == "-h"
+        io.exit(help.command(args[1..]))
+    if args.len() >= 2 and (args[1] == "--help" or args[1] == "-h") and not args[0].starts_with("-")
+        io.exit(help.command([args[0]]))
+    # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
+    if args[0] == "doctor"
+        io.exit(doctor.command(
+            args[1..],
+            env.get("AIL_ROOT") else path.dir(compiler_dir()),
+            cache_dir(),
+            host_target(),
+        ))
     if args.len() == 1 and args[0] == "new"
         io.exit(scaffold.command([]))
     if args.len() == 1 and args[0] == "card"
@@ -650,9 +667,9 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
             if p.rule == "native.subset.1"
-                help := mir.subset_help(p.message)
-                if help != ""
-                    io.eprint("help: {help}")
+                hint := mir.subset_help(p.message)
+                if hint != ""
+                    io.eprint("help: {hint}")
         io.exit(1)
         return mir.Module(
             path: path,
@@ -737,7 +754,7 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
     for s in srcs
         have.add(s.path)
     mut out := List[mir.Source]()
-    for e in derive.expand([s.module for s in srcs], [s.prog for s in srcs])
+    for e in derive.expand([s.module for s in srcs], documented(srcs))
         if have.contains("gen:impl:{e.label}")
             continue
         if e.problem != ""
@@ -1085,17 +1102,21 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     ]
     hash.sha256(parts.join("\n"))
 
-## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
-## without it, as on Windows, the cache just grows).
+## Keep the newest `CACHE_KEEP` executables of `dir` (newest by modification time; ADR 1059 replaced `ls -t`).
 fn cache_trim(dir str)
-    listed := proc.run("ls", ["-t", dir]) else return
-    mut n := 0
-    for name in listed.out.lines()
+    names := fs.list_dir(dir) else return
+    # "AGE NAME" lines, where AGE counts down from 10^14 so that byte order is newest first.
+    mut keyed := List[str]()
+    for name in names
         if name.len() != 64
             continue
+        meta := fs.metadata(path.join(dir, name)) else continue
+        keyed.push("{100000000000000 - meta.modified_ms} {name}")
+    mut n := 0
+    for line in keyed.sorted()
         n += 1
         if n > CACHE_KEEP
-            fs.remove(path.join(dir, name)) else continue
+            fs.remove(path.join(dir, line.slice(line.len() - 64, line.len()))) else continue
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str

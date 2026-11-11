@@ -5,7 +5,15 @@
 > when something is wrong. The [spec](spec/README.md) is authoritative, and the
 > [quick reference](quick-reference.md) is the one-page cheat sheet.
 
-You need a checkout of this repository. Every command runs from its root.
+You need a checkout of this repository. Every command runs from its root. To run `ail` from
+anywhere, link it onto your PATH (`ail doctor` checks the rest, `ail help` lists every command):
+
+```sh
+mkdir -p ~/.local/bin && ln -s "$PWD/ail" ~/.local/bin/ail   # macOS and Linux
+ail doctor --path                                            # the profile line, if ~/.local/bin is not on PATH
+```
+
+On Windows, put the clone's directory on `PATH` (`ail doctor --path` prints the PowerShell line) and use `ail.cmd`.
 
 ## 1. Hello
 

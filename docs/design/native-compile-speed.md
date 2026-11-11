@@ -1,5 +1,7 @@
 # Native compile speed (lane 182)
 
+> **History.** Measured in October 2026 on the Rust front end, which is deleted ([ADR 0904](../decisions/0904-rust-bootstrap-deleted.md)). The numbers are not current; see [native-performance.md](native-performance.md) and [benchmarks.md](../benchmarks.md).
+
 Where the time goes in `ail build FILE`, measured on Linux x86-64 (4 cores,
 16 GB), and what the runtime cache should do about it. Numbers are the
 median of three runs for `ail build tools/perfbench/programs/collatz.ail`

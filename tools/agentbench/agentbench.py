@@ -3,7 +3,7 @@
 
   agentbench.py gen TASK                       # fill cases/{visible,hidden}.jsonl from the task's ref.py
   agentbench.py docs TASK                      # check the two arms' doc bundles are within tolerance
-  agentbench.py run TASK ARM TRIAL --model M   # ARM: ail-plain | ail-tools | c (ail = ail-plain); or AGENTBENCH_MODEL
+  agentbench.py run TASK ARM TRIAL --model M   # ARM: ail-plain | ail-tools | ail-core-card | c (ail = ail-plain); or AGENTBENCH_MODEL
                                                # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
   agentbench.py validate TASK                  # solution/ passes every hidden case in all three arms; a fix task's seed/ fails some
   agentbench.py score DIR                      # re-score a finished trial's workspace against the hidden cases
@@ -14,8 +14,9 @@ import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-ARMS = ("ail-plain", "ail-tools", "c")  # ADR 0916, amended 2026-11-10: the AIL arm is split; "ail" in old results means ail-plain
-LANG = {"ail-plain": "ail", "ail-tools": "ail", "c": "c"}  # seeds, build lines and docs are per language
+ARMS = ("ail-plain", "ail-tools", "ail-core-card", "c")  # ADR 0916, amended 2026-11-10: the AIL arm is split; "ail" in old results means ail-plain
+TOOL_ARMS = ("ail-tools", "ail-core-card")  # arms that get the kit (AGENTS.md, CLAUDE.md, .mcp.json) from arms/ARM/
+LANG = {"ail-plain": "ail", "ail-tools": "ail", "ail-core-card": "ail", "c": "c"}  # seeds, build lines and docs are per language
 ALIAS = {"ail": "ail-plain"}
 def arm_name(a):
     a = ALIAS.get(a, a)
@@ -71,7 +72,7 @@ def cmd_docs(a):
     t = load_task(a.task); n = {l: doc_tokens(t["docs"][l]) for l in ("ail", "c")}
     short = (n["ail"] - n["c"]) / n["ail"]  # C may have more docs than AIL, never fewer (ADR 0916)
     # ail-tools adds the arm's agent files on top of the same card; they are the treatment, so they do not count toward parity (ADR 0916, amended 2026-11-10).
-    n["ail-tools agent files"] = doc_tokens(arm_files("ail-tools"))
+    for arm in TOOL_ARMS: n[f"{arm} agent files"] = doc_tokens(arm_files(arm))
     print(n, f"C shortfall {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
 
 # --- one trial -----------------------------------------------------------
@@ -112,13 +113,15 @@ def prep(t, task, arm, ws):
     os.makedirs(os.path.join(ws, "DOCS"), exist_ok=True); os.makedirs(os.path.join(ws, ".bench", "out"), exist_ok=True)
     if task["kind"] == "fix": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
-    for p in task["docs"][lang]: shutil.copy(os.path.join(ROOT, p), os.path.join(ws, "DOCS", os.path.basename(p)))
+    for p in task["docs"][lang]:
+        if arm == "ail-core-card" and p == "docs/language-card.md": p = "docs/language-card-core.md"  # the one doc this arm loads; the rest is `ail card TOPIC` and `ail ask std`
+        shutil.copy(os.path.join(ROOT, p), os.path.join(ws, "DOCS", os.path.basename(p)))
     shutil.copy(os.path.join(task_dir(t), "cases", "visible.jsonl"), os.path.join(ws, ".bench", "visible.jsonl"))
     cmd = " ".join(task["build"][lang])
     write_exec(os.path.join(ws, "build"), SHIM_BUILD.format(k="build", name="./build", cmd=cmd))
     write_exec(os.path.join(ws, "test"), SHIM_TEST.format(k="test", name="./test", cmd=cmd, me=os.path.abspath(__file__)))
     if lang == "ail": write_exec(os.path.join(ws, ".bench", "bin", "ail"), SHIM_AIL.format(real=real_ail()))
-    if arm == "ail-tools":  # what E1's `ail new` writes, plus the MCP server through the logging proxy; agent files, never the prompt
+    if arm in TOOL_ARMS:  # what `ail new` writes (ADR 1046, amended 2026-11-11), plus the MCP server through the logging proxy; agent files, never the prompt
         d = arm_dir(arm)
         for f in ("AGENTS.md", "CLAUDE.md"): shutil.copy(os.path.join(d, f), os.path.join(ws, f))
         with open(os.path.join(d, ".mcp.json")) as f: mcp = f.read()
@@ -257,7 +260,7 @@ def cmd_validate(a):
             want = {"./build", "./test"} | ({"ail check"} if lang == "ail" else set())
             files = {"AGENTS.md", "CLAUDE.md", ".mcp.json"}
             good = (not any(rcs) and want <= names and m["first_check_clean"] is True and m["turns_to_green"] is not None
-                    and m["toolchain_tokens"] is not None and all(os.path.exists(os.path.join(ws, f)) == (arm == "ail-tools") for f in files))
+                    and m["toolchain_tokens"] is not None and all(os.path.exists(os.path.join(ws, f)) == (arm in TOOL_ARMS) for f in files))
             ok &= good; print(("ok  " if good else "FAIL"), arm, "shims", "rc", rcs, "calls", m["tool_calls"], "first_check_clean", m["first_check_clean"],
                               "turns_to_green", m["turns_to_green"], "toolchain_tokens", m["toolchain_tokens"])
     sys.exit(0 if ok else 1)
