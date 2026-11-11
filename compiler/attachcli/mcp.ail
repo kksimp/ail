@@ -1,0 +1,188 @@
+## `ail attach mcp` (attach.tool.5, ADR 0986): a running app as an MCP server on stdio, so an agent
+## harness gets the app's `@tool` methods as typed tools, next to `app_observe`, `app_screen` and
+## `app_input`. One JSON-RPC message per line in and out, as `ail mcp` (ADR 0918). Each call is one
+## attach request to the program, found afresh, so the server may start before the app does.
+
+use syntax
+
+MCP_PROTOCOL := "2025-03-26"
+
+fn jm(key str, value Json) JsonMember
+    JsonMember(key: key, value: value)
+
+## A JSON Schema property of type `ty` ("string", "integer", "number" or "boolean").
+fn prop(name str, ty str, about str) JsonMember
+    mut ms := [jm("type", Json.Str(ty))]
+    if about != ""
+        ms.push(jm("description", Json.Str(about)))
+    jm(name, Json.Obj(ms))
+
+fn mcp_tool(name str, about str, props List[JsonMember], needs List[str]) Json
+    schema := Json.Obj([
+        jm("type", Json.Str("object")),
+        jm("properties", Json.Obj(props)),
+        jm("required", Json.Arr([Json.Str(n) for n in needs])),
+    ])
+    Json.Obj([
+        jm("name", Json.Str(name)),
+        jm("description", Json.Str(about)),
+        jm("inputSchema", schema),
+    ])
+
+## The fixed tools: the read queries and `input` (attach.wire.4, attach.input.1).
+fn fixed_tools() List[Json]
+    [
+        mcp_tool(
+            "app_observe",
+            "The app's @observe values as JSON; `names` (comma-separated) limits them, `since` gives only those changed after that revision.",
+            [prop("names", "string", ""), prop("since", "integer", "")],
+            [],
+        ),
+        mcp_tool(
+            "app_screen",
+            "What the app shows: find by role, color or text; what is at x,y; or describe the region x,y,w,h. Most important first, within `budget` tokens.",
+            [
+                prop("role", "string", "button, field, label, ..."),
+                prop("color", "string", "a palette name such as red"),
+                prop("text", "string", ""),
+                prop("x", "number", ""),
+                prop("y", "number", ""),
+                prop("w", "number", ""),
+                prop("h", "number", ""),
+                prop("budget", "integer", ""),
+            ],
+            [],
+        ),
+        mcp_tool(
+            "app_input",
+            "Do what a person does at the window: kind press, edit, submit, toggle, click, scroll or key, on control `id` (its own id or the #N app_screen shows). Needs the app started with `ail run --attach-input`.",
+            [
+                prop("kind", "string", ""),
+                prop("id", "string", ""),
+                prop("text", "string", ""),
+                prop("x", "number", ""),
+                prop("y", "number", ""),
+                prop("dx", "number", ""),
+                prop("dy", "number", ""),
+            ],
+            ["kind"],
+        ),
+    ]
+
+## The JSON Schema type of a tool parameter of AIL type `ty` (attach.tool.1).
+fn schema_type(ty str) str
+    match ty
+        "int" => "integer"
+        "float" => "number"
+        "bool" => "boolean"
+        _ => "string"
+
+## The app's own tools, from its `tools` reply (attach.tool.3); none when it can't be reached.
+fn app_tools(port int) List[Json]
+    mut out := List[Json]()
+    app := pick(running(), port) else return out
+    line := send(
+        app,
+        "\{\"v\":1,\"q\":\"tools\",\"token\":{syntax.quote(app.token)}}",
+    ) else return out
+    reply := parse_json(line) else return out
+    for t in reply.arr("tools") else []
+        name := t.str("name") else continue
+        mut props := List[JsonMember]()
+        mut needs := List[str]()
+        for p in t.arr("params") else []
+            pn := p.str("name") else continue
+            pt := p.str("type") else "str"
+            props.push(prop(pn, schema_type(pt), pt))
+            needs.push(pn)
+        result := t.str("result") else ""
+        about := t.str("doc") else ""
+        shown := if result == "" then about else "{about} Returns {result}.".trim()
+        out.push(mcp_tool(name, shown, props, needs))
+    out
+
+## The attach request for MCP tool `name` with `args`, without the token (attach.wire.4, attach.tool.4).
+fn request_for(name str, args Json) List[JsonMember]
+    mut ms := [jm("v", Json.Num(1.0))]
+    if name == "app_observe"
+        ms.push(jm("q", Json.Str("observe")))
+        if names := args.str("names")
+            ms.push(jm("names", Json.Arr([Json.Str(n.trim()) for n in names.split(",")])))
+        if since := args.num("since")
+            ms.push(jm("since", Json.Num(since)))
+        return ms
+    if name != "app_screen" and name != "app_input"
+        ms.extend([jm("q", Json.Str("call")), jm("name", Json.Str(name)), jm("args", args)])
+        return ms
+    ms.push(jm("q", Json.Str(if name == "app_screen" then "screen" else "input")))
+    for m in args.as_obj() else []
+        if m.key != "v" and m.key != "q" and m.key != "token"
+            ms.push(m)
+    ms
+
+fn rpc_reply(id Json, result Json)
+    print(Json.Obj([jm("jsonrpc", Json.Str("2.0")), jm("id", id), jm("result", result)]).to_text())
+
+fn rpc_failure(id Json, code int, message str)
+    e := Json.Obj([jm("code", Json.Num(code.to_float())), jm("message", Json.Str(message))])
+    print(Json.Obj([jm("jsonrpc", Json.Str("2.0")), jm("id", id), jm("error", e)]).to_text())
+
+## A tool result: the reply line as text, an error when it carries `error` (attach.tool.5).
+fn text_result(text str, bad bool) Json
+    content := Json.Arr([Json.Obj([jm("type", Json.Str("text")), jm("text", Json.Str(text))])])
+    Json.Obj([jm("content", content), jm("isError", Json.Bool(bad))])
+
+fn mcp_call(id Json, params Json, port int)
+    name := params.text("name", "")
+    if name == ""
+        rpc_failure(id, -32602, "tools/call needs `name`")
+        return
+    args := params.get("arguments") else Json.Obj([])
+    app := pick(running(), port) else
+        rpc_reply(id, text_result(
+            "no running app publishes an attach socket; start it with `ail run --attach-input`",
+            true,
+        ))
+        return
+    mut ms := request_for(name, args)
+    ms.push(jm("token", Json.Str(app.token)))
+    line := send(app, Json.Obj(ms).to_text()) else err
+        rpc_reply(id, text_result(err.message, true))
+        return
+    reply := parse_json(line) else
+        rpc_reply(id, text_result(line, true))
+        return
+    rpc_reply(id, text_result(line, reply.get("error") != none))
+
+## One message: `initialize`, `ping`, `tools/list`, `tools/call`; a message without an id gets no reply.
+fn mcp_handle(req Json, port int)
+    id := req.get("id") else return
+    params := req.get("params") else Json.Obj([])
+    method := req.text("method", "")
+    match method
+        "initialize" =>
+            info := Json.Obj([jm("name", Json.Str("ail-attach")), jm("version", Json.Str("0.1.0"))])
+            rpc_reply(id, Json.Obj([
+                jm("protocolVersion", Json.Str(params.text("protocolVersion", MCP_PROTOCOL))),
+                jm("capabilities", Json.Obj([jm("tools", Json.Obj([]))])),
+                jm("serverInfo", info),
+            ]))
+        "ping" => rpc_reply(id, Json.Obj([]))
+        "tools/list" =>
+            mut ts := fixed_tools()
+            ts.extend(app_tools(port))
+            rpc_reply(id, Json.Obj([jm("tools", Json.Arr(ts))]))
+        "tools/call" => mcp_call(id, params, port)
+        _ => rpc_failure(id, -32601, "unknown method {method}")
+
+## `ail attach [--port N] mcp`: serves until stdin closes (attach.tool.5).
+pub fn serve_mcp(port int) int
+    while true
+        line := io.read_line() else break
+        if line.trim() == ""
+            continue
+        req := parse_json(line) else err
+            rpc_failure(Json.Null, -32700, err.message)
+            continue
+        mcp_handle(req, port)
+    0

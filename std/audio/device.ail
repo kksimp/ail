@@ -14,7 +14,8 @@ pub error struct DeviceError "{kind}: {message}"
     pub message str
 
 ## The audio host program: `AIL_AUDIO_HOST`, else the one built under the
-## toolchain's directory (`AIL_ROOT`) by `tools/audio-host/macos/run.sh`.
+## toolchain's directory (`AIL_ROOT`) by `tools/audio-host/macos/run.sh`,
+## `tools/audio-host/linux/run.sh` or `tools/audio-host/windows/run.ps1`.
 pub fn host_path() str ! DeviceError
     if p := env.get("AIL_AUDIO_HOST")
         return p
@@ -22,13 +23,18 @@ pub fn host_path() str ! DeviceError
         kind: "no_host",
         message: "std.audio.9: set AIL_AUDIO_HOST to the audio host program",
     )
-    p := "{root}/tools/audio-host/macos/build/ail-audio-host"
-    if not fs.exists(p)
-        return DeviceError(
-            kind: "no_host",
-            message: "std.audio.9: no audio host is built for this platform; macOS has one (tools/audio-host/macos/run.sh)",
-        )
-    p
+    base := "{root}/tools/audio-host"
+    for p in [
+        "{base}/macos/build/ail-audio-host",
+        "{base}/linux/build/ail-audio-host",
+        "{base}/windows/build/ail-audio-host.exe",
+    ]
+        if fs.exists(p)
+            return p
+    return DeviceError(
+        kind: "no_host",
+        message: "std.audio.9: no audio host is built; run tools/audio-host/macos/run.sh (macOS), tools/audio-host/linux/run.sh (Linux) or tools/audio-host/windows/run.ps1 (Windows)",
+    )
 
 ## Starts the audio host, the `proc.Child` the other functions take, and waits for it to be ready (std.audio.9).
 pub fn open() proc.Child ! DeviceError
@@ -37,6 +43,21 @@ pub fn open() proc.Child ! DeviceError
 ## Starts the audio host program `cmd` (std.audio.9).
 pub fn open_at(cmd str) proc.Child ! DeviceError
     mut c := proc.start(cmd, []) else err
+        return DeviceError(kind: "start", message: "std.audio.9: {err}")
+    hello := c.out.recv() else return DeviceError(
+        kind: "host_exited",
+        message: "the audio host exited before it was ready",
+    )
+    if hello != "ready"
+        proc.kill(move c)
+        return DeviceError(kind: "version", message: "the audio host said: {hello}")
+    c
+
+## Starts the audio host with the silent device (`--null`): streaming works and
+## its clock runs in real time, but nothing is heard. For tests and machines
+## with no sound card (std.audio.12).
+pub fn open_null() proc.Child ! DeviceError
+    mut c := proc.start(host_path()?, ["--null"]) else err
         return DeviceError(kind: "start", message: "std.audio.9: {err}")
     hello := c.out.recv() else return DeviceError(
         kind: "host_exited",
@@ -83,3 +104,56 @@ pub fn record(mut c proc.Child, ms int, rate int, channels int) audio.Clip ! Dev
 ## Stops the host (std.audio.9).
 pub fn close(move c proc.Child)
     c.stdin.close()
+
+## What a stream has done so far (std.audio.12): frames the device has played
+## and frames still queued.
+pub struct StreamStatus
+    pub played int
+    pub buffered int
+
+fn status_of(line str) StreamStatus ! DeviceError
+    parts := line.split(" ")
+    if parts.len() != 4 or parts[0] != "played" or parts[2] != "buffered"
+        return DeviceError(kind: "protocol", message: "expected played, got: {line}")
+    p := parts[1].to_int() else return DeviceError(kind: "protocol", message: "bad played")
+    q := parts[3].to_int() else return DeviceError(kind: "protocol", message: "bad buffered")
+    StreamStatus(played: p, buffered: q)
+
+fn ask(mut c proc.Child, line str) StreamStatus ! DeviceError
+    c.stdin.send("{line}\n")
+    status_of(answer(mut c)?)?
+
+## Opens a continuous output at `rate` and `channels` (std.audio.12).
+pub fn stream_open(mut c proc.Child, rate int, channels int) ! DeviceError
+    c.stdin.send("open_stream {rate} {channels}\n")
+    r := answer(mut c)?
+    if r != "ok"
+        return DeviceError(kind: "protocol", message: "expected ok, got: {r}")
+
+## Queues `clip` on the stream, which must have its rate and channels, and
+## returns the stream's status (std.audio.12). It does not wait for the audio to play.
+pub fn stream_write(mut c proc.Child, clip audio.Clip) StreamStatus ! DeviceError
+    ask(mut c, "write {audio.to_pcm16(clip).base64()}")?
+
+## The frames played and queued so far (std.audio.12): the stream's clock.
+pub fn stream_status(mut c proc.Child) StreamStatus ! DeviceError
+    ask(mut c, "clock")?
+
+## Pauses playback; queued audio is kept. Returns the status (std.audio.12).
+pub fn stream_pause(mut c proc.Child) StreamStatus ! DeviceError
+    ask(mut c, "pause")?
+
+## Resumes playback and returns the status (std.audio.12).
+pub fn stream_resume(mut c proc.Child) StreamStatus ! DeviceError
+    ask(mut c, "resume")?
+
+## Drops the queued audio and sets the clock to zero, for a seek; returns the status, both counts 0 (std.audio.12).
+pub fn stream_flush(mut c proc.Child) StreamStatus ! DeviceError
+    ask(mut c, "flush")?
+
+## Ends the stream (std.audio.12).
+pub fn stream_close(mut c proc.Child) ! DeviceError
+    c.stdin.send("close_stream\n")
+    r := answer(mut c)?
+    if r != "ok"
+        return DeviceError(kind: "protocol", message: "expected ok, got: {r}")

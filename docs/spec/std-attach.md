@@ -2,10 +2,11 @@
 
 Chapter key: `attach`
 
-> **Status:** Drafted (ADR 0884, amending ADR 0879). The field attribute, its
+> **Status:** Drafted (ADR 0884, amending ADR 0879; ADR 0986 adds `@tool`). The field attribute, its
 > check, the protocol functions, the listener and the app wrapper are built;
 > the `Observe` generator is built; the `ail run` default and `ail build --attach`
-> (a source shim, `attach.run.1-3`) are built.
+> (a source shim, `attach.run.1-3`) are built; `@tool` methods, `tools`, `call`
+> and `ail attach mcp` (`attach.tool.1-5`) are built.
 
 A running program tells an attached agent its state directly, read-only.
 
@@ -62,13 +63,13 @@ with another one, is answered with an error and does nothing. *(ADR 0884)*
 JSON object on a line, with `"v":1`. A line that is not JSON gets an error
 reply. *(ADR 0884)*
 
-**attach.wire.4** — The queries are `observe`, `screen` and `heap`, and `input`
-(`attach.input.1`). Any other `q` gets an error reply that says the queries are
-those and that all but `input` only read. `screen` answers with the `std.screen` query
+**attach.wire.4** — The queries are `observe`, `screen`, `heap` and `tools`, and
+`input` and `call` (`attach.input.1`, `attach.tool.4`). Any other `q` gets an error reply that says the queries are
+those and that all but `input` and `call` only read. `screen` answers with the `std.screen` query
 named by `x`, `y`, `w`, `h`, `role`, `color`, `text` and `budget`. `heap` gives
 the summary the program supplies, or an error when it has none. `input`
-(`attach.input.1-3`) is the one request that acts; the others only read.
-*(ADR 0884, ADR 0919)*
+(`attach.input.1-3`) and `call` (`attach.tool.4`) are the requests that act; the
+others, `tools` among them, only read. *(ADR 0884, ADR 0919, ADR 0986)*
 
 **attach.wire.5** — `observe` answers `{"v":1,"rev":N,"values":{name:value}}`.
 `names` limits the values; `since` limits them to those that changed after
@@ -91,10 +92,14 @@ fn main()
 
 **attach.wire.1** — `attach.serve.run(mut app)` listens on `127.0.0.1` only,
 on a free port, and publishes `{"addr":"127.0.0.1:PORT","token":"..."}` in
-`$TMPDIR/ail-attach-PORT.json` (`/tmp` without `TMPDIR`), created empty,
-restricted to mode 0600, then filled; the file is removed when the window
-closes. The token is 24 random bytes in hex. Nothing listens until `run` is
-called. *(ADR 0884)*
+`ail-attach-PORT.json`, created empty, restricted to mode 0600, then filled.
+The file's directory is `$TMPDIR`; without `TMPDIR` it is `/tmp`, or on Windows
+`%TEMP%`, the temporary folder inside the user's profile, whose access list
+takes the place of the mode. The token is 24 random bytes in hex. Nothing
+listens until `run` is called. `serve.open()` is the first half of `run` (the
+listener and its file, as a `Served`) and `serve.run_on(s, mut app, cmd, args,
+input)` the second, with the host program `cmd` as `app.run_with` takes it.
+*(ADR 0884, ADR 1045)*
 
 **attach.wire.6** — The listener thread never reads program state. It posts
 each request line to the app's inbox as an `external` event from `attach`,
@@ -102,7 +107,13 @@ and the app answers between its other events with the observed values (the
 `Observe` trait), the screen of its view tree (`std.screen.view`) and the
 protocol reply. A client that sends nothing for 5 seconds is dropped. *(ADR 0884)*
 
-```ail norun rules=attach.observe.4,attach.wire.1,attach.wire.6
+**attach.wire.7** — When the window closes, or its host can't start, the
+listener stops before `run` returns: a request not yet answered gets an empty
+line, the connection in progress is closed after its reply, the socket is
+closed and the discovery file is removed. This holds on Linux, macOS and
+Windows. *(ADR 1045)*
+
+```ail norun rules=attach.observe.4,attach.wire.1,attach.wire.6,attach.wire.7
 use std.app
 use std.attach
 use std.attach.serve
@@ -202,17 +213,95 @@ result with `observe` or `screen`. *(ADR 0919)*
 # ail attach screen role=button
 ```
 
+## Tools
+
+An app offers actions in its own terms (`add(item, qty)`), so an agent need not
+find and press the controls that do them.
+
+**attach.tool.1** — `@tool` before a method `fn T.name(self or mut self, ...)` of a
+non-generic struct `T` offers it to an attached agent. Its parameters are `int`,
+`float`, `bool`, `str` or an enum without payloads; its result is nothing or a
+type `attach.observe.1` allows, and it may fail (`!`). Its `##` doc describes it.
+Without attach the method is an ordinary method. *(ADR 0986)*
+
+**attach.tool.2** — Any other `@tool` function (a free function, one without
+`self`, a generic one, or one with another parameter or result type) is a
+compile-time error whose `help` gives the allowed shape. *(ADR 0986)*
+
+```ail error=attach.tool.2 rules=attach.tool.2
+struct Shop
+    n int
+
+@tool fn Shop.add_all(mut self, xs List[int])
+    n += xs.len()
+
+fn main()
+    print(Shop(n: 0).n)
+```
+
+**attach.tool.3** — The generated `attach.Observe` (`attach.observe.4`) also
+writes `tools(self) List[attach.Tool]`, one `Tool` per `@tool` method of `T` in
+order (name, doc, parameter names and types, result type or `""`), and
+`call(mut self, name, args)`. The defaults offer none. A `tools` request needs
+only the token and answers `{"v":1,"tools":[{"name":N,"doc":D,"params":[{"name":P,"type":T}],"result":R}]}`.
+*(ADR 0986)*
+
+**attach.tool.4** — A `call` request is `{"v":1,"q":"call","token":T,"name":N,"args":{...}}`.
+Like `input`, it is applied only when the program was started with
+`--attach-input` (`attach.input.1`), else it gets an error reply and nothing runs.
+The app runs the method between its events and replies `{"v":1,"result":JSON}`
+(`null` for no result). Each argument is read by its parameter's type: a JSON
+value, or text of it (`"2"` for an `int`, `"true"`, a variant's name); a missing
+or wrong one, an unknown `name`, or a failure of the method gets an error reply
+naming it. *(ADR 0986)*
+
+```ail rules=attach.tool.1,attach.tool.3,attach.tool.4
+use std.attach
+
+struct Cart
+    @observe total int
+
+## Adds `qty` items; gives the new total.
+@tool fn Cart.add(mut self, qty int) int
+    total += qty
+    total
+
+impl attach.Observe for Cart
+
+fn main()
+    mut c := Cart(total: 0)
+    print(c.tools()[0].doc)
+    args := parse_json("\{\"qty\":\"2\"}") else Json.Obj([])
+    print(c.call("add", args))
+```
+
+**attach.tool.5** — `ail attach [--port N] mcp` is an MCP server on stdio
+(`initialize`, `ping`, `tools/list`, `tools/call`, as `ail mcp`) for the running
+program: its tools are `app_observe`, `app_screen` and `app_input` (the queries)
+and each of the program's `@tool` methods, with an input schema from the
+parameter types (`int` an `integer`, `float` a `number`, `bool` a `boolean`,
+others a `string`). A call is one attach request; its reply line is the result
+text, an error result when it has `error`. *(ADR 0986)*
+
+```ail fragment rules=attach.tool.5
+# ail run --attach-input shop.ail
+# ail attach tools
+# ail attach call add qty=2
+# claude mcp add shop -- ail attach mcp
+```
+
 ## The client
 
 **attach.cli.1** — `ail attach` with no argument prints `127.0.0.1:PORT` for each
-program whose discovery file (`attach.wire.1`) is in `$TMPDIR` (`/tmp` without it),
-one per line; exit status 1 with a message when there is none. `ail attach
-[--port N] observe|screen|heap|input [key=value ...]` sends that query to the program,
+program whose discovery file is in the directory of `attach.wire.1` (`$TMPDIR`, else
+`/tmp`, or `%TEMP%` on Windows), one per line; exit status 1 with a message when there is none. `ail attach
+[--port N] observe|screen|heap|tools|input [key=value ...]` sends that query to the program,
 with the token from its discovery file, and prints the reply line. The pairs are
 the request's members: `x`, `y`, `w`, `h`, `dx`, `dy`, `budget` and `since` are numbers,
 `ctrl`, `alt`, `shift` and `meta` are `true` or `false`,
 `names` is a comma-separated list, anything else is a string (`role`, `color`,
-`text`, `kind`, `id`). *(ADR 0884)*
+`text`, `kind`, `id`). `ail attach call TOOL [key=value ...]` sends a `call` whose
+pairs are the arguments, each as text (`attach.tool.4`). *(ADR 0884, ADR 0986, ADR 1045)*
 
 **attach.cli.2** — With several programs published, `--port N` names one; without it
 the command stops with exit status 2 and says so. A connection or protocol error is
@@ -220,7 +309,7 @@ exit status 2.
 
 **attach.cli.3** — The exit status is 1 when the reply is an error reply (it has an
 `"error"` member), otherwise 0. The client sends no query but those of
-`attach.wire.4`; only `input` acts (`attach.input.1`).
+`attach.wire.4`; only `input` and `call` act (`attach.input.1`, `attach.tool.4`).
 
 ```ail fragment rules=attach.cli.1,attach.cli.2,attach.cli.3
 # ail attach                              127.0.0.1:41873

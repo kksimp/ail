@@ -1261,6 +1261,65 @@ fn fs_make_dir(path str, at str)
     if not os_ok()
         os_error(path, os_kind(), at)
 
+## `fs.temp_dir()` (std.fs.35): `TMPDIR`, else `TEMP`, else `/tmp`; a variable
+## that is empty counts as unset.
+fn fs_temp_dir() str
+    a := os_env_get("TMPDIR")
+    if os_ok() and a.len() > 0
+        return a
+    b := os_env_get("TEMP")
+    if os_ok() and b.len() > 0
+        return b
+    os_succeed()
+    "/tmp"
+
+## One new directory, no parents, for the owner only (mode 0700; Windows has
+## no mode here). `-17` (exists) when the name is taken: the exclusive create.
+fn os_mkdir_private(path int) int
+    if target() == 3
+        return win_mkdir(path)
+    if target() == 2
+        return syscall(136, path, 448, 0, 0, 0, 0)
+    syscall(os_pick(258, 34, 0), -100, path, 448, 0, 0, 0)
+
+## `fs.make_temp_dir(prefix)` (std.fs.37): a new empty directory in `fs.temp_dir()`
+## named `prefix` and 12 random hex digits, made with an exclusive create, so
+## two callers never share one. A name already taken is tried again with new
+## digits. The failure's path is the directory it tried last.
+fn fs_make_temp_dir(prefix str, at str) str
+    base := fs_temp_dir()
+    mut last := base
+    mut tries := 0
+    while tries < 64
+        buf := os_scratch(OS_TMP)
+        mut bits := time_now_ms() * 2862933555777941757 + tries
+        if tc_random(buf, 8) == 0
+            bits = load64(buf)
+        sb_reset()
+        sb_text(prefix)
+        for i in 0..12
+            d := bits.shr(4 * i).bit_and(15)
+            sb_byte(if d < 10 then 48 + d else 87 + d)
+        full := path_join(base, sb_str())
+        last = full
+        p := os_cstr(OS_PATH_A, full)
+        if p == 0
+            os_fail_kind(K_NOT_FOUND)
+            os_error(full, K_NOT_FOUND, at)
+            return ""
+        r := os_mkdir_private(p)
+        if r == 0
+            os_succeed()
+            return full
+        if r != -17
+            os_fail_errno(r)
+            os_error(full, os_kind(), at)
+            return ""
+        tries += 1
+    os_fail_kind(K_EXISTS)
+    os_error(last, K_EXISTS, at)
+    ""
+
 ## A failure's path is `from` when `from` is missing, else `to` (std.fs.12).
 fn fs_rename(from str, to str, at str)
     os_fs_rename(from, to)
@@ -1390,11 +1449,9 @@ fn fs_read_range(path str, off int, len int, at str) str
 ## right after it, so the data starts where `str + 16` points. The collector
 ## ignores it (the address is outside its heap) and the mapping lives to the
 ## end of the process. The block is 16384 bytes (a macOS page; a multiple of
-## the 4096-byte Linux page). An empty file, and Windows (no fixed-address
-## mapping), give an ordinary `bytes` copy.
+## the 4096-byte Linux page). An empty file gives an ordinary `bytes` copy.
+## Windows maps a view the same way (`fs_map_win`).
 fn fs_map(path str, at str) str
-    if target() == 3
-        return fs_read_bytes(path, at)
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -1423,6 +1480,13 @@ fn fs_map(path str, at str) str
     if size <= 0
         os_close(fd)
         return fs_read_bytes(path, at)
+    if target() == 3
+        wv := fs_map_win(fd, size)
+        os_close(fd)
+        if wv == 0
+            return fs_read_bytes(path, at)
+        os_succeed()
+        return str_at(wv)
     head := 16384
     span := (size + 16383) / 16384 * 16384
     base := sys_mmap(head + span)
@@ -1445,6 +1509,45 @@ fn fs_map(path str, at str) str
     store64(s + 8, size)
     os_succeed()
     str_at(s)
+
+## `fs.map` on Windows (ADR 1016, amended 2026-11-10): a read-only view of
+## the `size` bytes of the open file `fd`, as the address of a string object,
+## or 0 when the system gave no view (the caller copies the file instead).
+## Views start on a 65536-byte boundary, so the head block is that long.
+## Windows has no `MAP_FIXED` over reserved memory: the block is reserved to
+## find a free range, released, and the view (`MapViewOfFileEx`) and the head
+## (`VirtualAlloc`) are placed in it. Another thread may take the range in
+## between, so the placing is tried up to eight times.
+fn fs_map_win(fd int, size int) int
+    # PAGE_READONLY, the whole file.
+    hm := import_call("CreateFileMappingW", win_h(fd), 0, 2, 0, 0, 0)
+    if hm == 0
+        return 0
+    head := 65536
+    span := (size + 65535) / 65536 * 65536
+    mut s := 0
+    mut tries := 0
+    while s == 0 and tries < 8
+        tries += 1
+        # MEM_RESERVE, PAGE_NOACCESS; then MEM_RELEASE.
+        base := import_call("VirtualAlloc", 0, head + span, 8192, 1)
+        if base == 0
+            break
+        import_call("VirtualFree", base, 0, 32768, 0)
+        # FILE_MAP_READ, from offset 0, to the end of the file.
+        v := import_call("MapViewOfFileEx", hm, 4, 0, 0, 0, base + head)
+        if v == 0
+            continue
+        # MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE.
+        if import_call("VirtualAlloc", base, head, 12288, 4) == 0
+            import_call("UnmapViewOfFile", v, 0, 0, 0)
+            continue
+        s = base + head - 16
+        store64(s, size)
+        store64(s + 8, size)
+    # The view keeps the file open; the mapping handle is not needed again.
+    import_call("CloseHandle", hm, 0, 0, 0)
+    s
 
 ## The decimal digits of `n` (not negative), added to the string builder.
 fn os_sb_dec(n int, width int)

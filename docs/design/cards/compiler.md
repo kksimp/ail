@@ -6,23 +6,25 @@ tests: 10 (`ail test` lists them)
 
 ## a64 (81 items)
 
-## api (281 items)
+## api (284 items)
 
 ## ast (142 items)
 
-## attachcli (6 items)
+## attachcli (23 items)
 
-## budget (27 items)
+## budget (28 items)
 
 ## cheader (55 items)
 
-## check (438 items)
+## check (442 items)
 
 ## codegen (55 items)
 
-## derive (40 items)
+## derive (43 items)
 
 ## doc (18 items)
+
+## doctor (24 items)
 
 ## edit (97 items)
 
@@ -34,20 +36,22 @@ tests: 10 (`ail test` lists them)
 
 ## fmt (64 items)
 
+## help (10 items)
+
 ## load (117 items)
 
 ## mir (619 items)
 
 ## obj (66 items)
 
-## pkg (44 items)
+## pkg (49 items)
 
-## scaffold (4 items)
+## scaffold (6 items)
 
-## syntax (110 items)
+## syntax (111 items)
 
 ## watch (5 items)
 
 ## x64 (115 items)
 
-trimmed to fit 4000 tokens (~251); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~270); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

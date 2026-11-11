@@ -1,0 +1,51 @@
+## std.fs.28 to std.fs.34: mode, set_mode, set_modified, read_link, symlink, truncate, write_at.
+## A link may be refused on Windows (permission or other), so the link check
+## prints the same line either way.
+## The error kind of a failing read_link or mode call ("none" when it works).
+fn link_kind(p str) str
+    t := fs.read_link(p) else err
+        return err.kind
+    if t == "" then "empty" else "none"
+
+fn mode_kind(p str) str
+    m := fs.mode(p) else err
+        return err.kind
+    if m < 0 then "negative" else "none"
+
+fn main() !
+    base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-fs-attrs-case"
+    fs.make_dir(base)?
+    f := "{base}/a.txt"
+    fs.write_text(f, "0123456789")?
+    m := fs.mode(f)?
+    print(m >= 0 and m <= 4095)
+    fs.set_mode(f, m.bit_and(4095 - 128))?
+    print(fs.mode(f)?.bit_and(128) == 0)
+    fs.set_mode(f, m.bit_or(128))?
+    print(fs.mode(f)?.bit_and(128) != 0)
+    fs.set_modified(f, 1700000000000)?
+    print(fs.metadata(f)?.modified_ms)
+    fs.truncate(f, 4)?
+    print(fs.read_text(f)?)
+    fs.truncate(f, 6)?
+    print(fs.read_bytes(f)?.len())
+    fs.write_at(f, 4, b"ab")?
+    fs.write_at(f, 8, b"z")?
+    print(fs.read_bytes(f)?.len())
+    print(fs.read_range(f, 0, 6)?.to_str())
+    l := "{base}/link"
+    mut link_ok := false
+    fs.symlink("a.txt", l) else err
+        link_ok = err.kind == "permission" or err.kind == "other"
+    if not link_ok
+        link_ok = fs.read_link(l)? == "a.txt" and fs.read_bytes(l)?.len() == 9
+        fs.remove(l)?
+    print("link {if link_ok then "ok" else "wrong"}")
+    print(link_kind(f))
+    print(mode_kind("{base}/missing"))
+    fs.set_modified("{base}/missing", 0) else err
+        print(err.kind)
+    fs.truncate("{base}/missing", 0) else err
+        print(err.kind)
+    fs.remove(f)?
+    fs.remove(base)?

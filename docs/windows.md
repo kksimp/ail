@@ -14,10 +14,11 @@ PowerShell 7.
 - Windows PowerShell 5.1 or PowerShell 7, and `git`. Nothing needs
   administrator rights.
 - Internet access on the first run, to download the seed.
-- For `ail test` on a package, and for the gate: `sh`, `mktemp`, `cp`. They
-  come with [Git for Windows](https://git-scm.com/download/win) in
-  `C:\Program Files\Git\usr\bin`; add that directory to `PATH` if `ail test`
-  reports that it can't run `mktemp`.
+- `ail test`, `ail diff`, `ail verify` and `ail infer` need only `git` (ADR 1059):
+  they use no Unix program. Only the gate under `tools/gate/`, which is not a
+  shipped command, needs `sh`, `mktemp` and `cp`, which come with
+  [Git for Windows](https://git-scm.com/download/win) in
+  `C:\Program Files\Git\usr\bin`.
 
 ## Install and first run
 
@@ -40,7 +41,8 @@ The first run does three things (`tools\release\fetch-seed.ps1`):
 Later runs rebuild only when a file under `compiler\` or `std\` is newer than
 `.native\ail.exe`. Use the clone's own `ail.ps1`; it is not on `PATH`.
 To run it from another directory, call it by path (`C:\src\ail\ail.ps1 run
-hello.ail`) or put the clone's directory on `PATH` and use `ail.cmd`.
+hello.ail`) or put the clone's directory on `PATH` and use `ail.cmd`; `ail doctor --path` prints the PowerShell line
+that does it for the session (add it to your `$PROFILE` to keep it).
 
 ## Execution policy
 
@@ -95,9 +97,12 @@ those two directories.
 
 The native gate is `.\ail.ps1 selftest` (the same as `tools\gate\win-gate.ps1`).
 It needs the Git for Windows tools above on `PATH`, prints only failures, and
-ends with `GATE GREEN` or `GATE RED`. The harness is Unix-shaped, so Windows
-is tracked rather than gating each change; the `native`, `examples` and `run`
-suites must be green on Windows x86-64 before every release
+ends with `GATE GREEN` or `GATE RED`. It runs several suites at once, one per
+core up to 4 (`GATE_JOBS=N` sets the number; 1 runs them one after another),
+and writes each suite's seconds to `%TEMP%\ail-gate\times.log`. It runs the suites of
+`tools/gate/suites.txt`, the list the Mac and Linux gate runs, and it must be
+green on Windows x86-64 before every release, with the fixed point of
+`tools\self-host\run.ps1`
 ([ADR 0925](decisions/0925-windows-release-gate.md)).
 
 ## Rejected alternatives

@@ -670,7 +670,7 @@ fn net_close(h int)
         store64(o + NET_FD, -1)
         ep := load64(o + NET_POLLER)
         if ep > 0 and atomic_cas(o + NET_POLLER, ep, -1) == ep
-            net_sys_close(ep)
+            rdy_close(ep)
 
 ## `c.set_timeout(ms)`; a failure unless `ms` is at least 1.
 fn net_set_timeout(h int, ms int, at str)

@@ -1,5 +1,6 @@
 ## `ail try` in AIL (ADR 0893, try.*): check and test patch sets without touching the program.
 ##   ail run tools/ailtry/ailtry.ail PROGRAM [--set FILE]... [--apply]
+##   ail run tools/ailtry/ailtry.ail PROGRAM --sets-json        (stdin: a JSON array of patch sets; try.in.2)
 ## Each patch set is `ail edit` input (edit.in.1, edit.in.3): the `--set` files, or standard input
 ## when there are none. A set is applied to a scratch copy under `.ail/try/`, then `ail check` (inside
 ## `ail edit --if-clean`) and `ail test` run on the copy. It adds no analysis; the verdict is theirs.
@@ -135,6 +136,28 @@ struct Sets
     labels List[str]
     texts List[str]
 
+## The patch sets of `--sets-json` (try.in.2): standard input is a JSON array, one set per element. A string
+## is the set's text; any other value is sent as its JSON text. The labels are `1`, `2`, ...
+fn read_json_sets() Sets
+    text := io.read_all()
+    listed := parse_json(text.trim()) else err
+        io.eprint("error: standard input is not JSON: {err.message} (try.in.2)")
+        io.exit(2)
+        return Sets(labels: [], texts: [])
+    items := listed.as_arr() else
+        io.eprint("error: `--sets-json` needs a JSON array of patch sets (try.in.2)")
+        io.exit(2)
+        return Sets(labels: [], texts: [])
+    mut labels := List[str]()
+    mut texts := List[str]()
+    for it in items
+        labels.push("{labels.len() + 1}")
+        texts.push(it.as_str() else it.to_text())
+    if texts.is_empty()
+        io.eprint("error: no patch set in the array (try.in.2)")
+        io.exit(2)
+    Sets(labels: labels, texts: texts)
+
 ## The patch sets: each `--set FILE`, else standard input (try.in.1).
 fn read_sets(files List[str]) !Sets
     mut labels := List[str]()
@@ -156,12 +179,15 @@ fn main() !
     mut path := ""
     mut files := List[str]()
     mut apply := false
+    mut json_sets := false
     mut i := 0
     while i < args.len()
         a := args[i]
         i += 1
         if a == "--apply"
             apply = true
+        elif a == "--sets-json"
+            json_sets = true
         elif a == "--set"
             if i >= args.len()
                 io.eprint("error: `--set` needs a patch file (try.in.1)")
@@ -181,10 +207,17 @@ fn main() !
         io.eprint("error: {path} does not exist (try.run.1)")
         io.exit(2)
     # try.apply.1: one set is applied, so `--apply` with several sets would have to choose.
+    if json_sets and (apply or not files.is_empty())
+        io.eprint("error: `--sets-json` takes its sets from standard input only, never with `--set` or `--apply` (try.in.2)")
+        io.exit(2)
     if apply and files.len() > 1
         io.eprint("error: `--apply` takes one patch set, not {files.len()} (try.apply.1)")
         io.exit(2)
-    sets := read_sets(files)?
+    mut sets := Sets(labels: [], texts: [])
+    if json_sets
+        sets = read_json_sets()
+    else
+        sets = read_sets(files)?
     mut clean_all := true
     mut n := 0
     for label in sets.labels
