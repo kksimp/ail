@@ -1,0 +1,15 @@
+use std.mem
+
+extern c fn snprintf(buf *u8, size u64, fmt *u8, ...) i32
+
+fn main()
+    unsafe
+        buf := mem.alloc(64, 0.to_u8())
+        fmt := mem.cstr("%d|%.2f|%s|%c")
+        word := mem.cstr("ail")
+        n := snprintf(buf, 64, fmt, 42, 1.5, word, 33)
+        print(n)
+        print(mem.from_cstr(buf))
+        mem.free(word)
+        mem.free(fmt)
+        mem.free(buf)
