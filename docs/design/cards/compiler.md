@@ -10,17 +10,17 @@ tests: 10 (`ail test` lists them)
 
 ## ast (142 items)
 
-## attachcli (6 items)
+## attachcli (23 items)
 
 ## budget (28 items)
 
 ## cheader (55 items)
 
-## check (438 items)
+## check (442 items)
 
 ## codegen (55 items)
 
-## derive (40 items)
+## derive (43 items)
 
 ## doc (18 items)
 
