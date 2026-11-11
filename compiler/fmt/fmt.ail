@@ -994,3 +994,7 @@ fn elements(toks List[FTok], open int, close int) List[Span]
     if start < close
         out.push(Span(from: start, to: close))
     out
+
+@test fn keeps_the_space_before_a_variadic_dots()
+    src := "extern c fn sprintf(buf *u8, fmt *u8, ...) i32\n"
+    assert_eq(format(src).text, src)
