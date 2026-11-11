@@ -523,7 +523,7 @@ is `xs[i]`, `xs[i] = v` or `xs.len()` after them. `xs.len()` is then that
 constant, and an access outside a counted loop may compare its index to the
 constant instead of loading the length. Any other use (a call, a store, a
 return, a later push) rules the list out. A trap names the same site, index
-and length. *(ADR 1057)*
+and length. *(ADR 1061)*
 
 ```ail rules=native.bce.15
 fn main()
