@@ -1,0 +1,35 @@
+# The vector escape loop's two buffers hold a whole row (native.vec.2), so a
+# row wider than a small heap block must not lose their room to list reuse
+# (native.reuse.1): the rows here are 1100, 4096 and 7000 points wide, each
+# made as `mut line := []` in the loop body, the shape that reuse hoists.
+MAX_ITER := 50
+CHARS := " .:-=+*#%@"
+
+fn escape(cr float, ci float) int
+    mut zr := 0.0
+    mut zi := 0.0
+    mut k := 0
+    while k < MAX_ITER
+        if zr * zr + zi * zi > 4.0
+            break
+        t := zr * zr - zi * zi + cr
+        zi = 2.0 * zr * zi + ci
+        zr = t
+        k += 1
+    k
+
+fn main()
+    shades := CHARS.chars()
+    for cols in [1100, 4096, 7000]
+        for y in 0..3
+            ci := -1.2 + 2.4 * y.to_float() / 3.0
+            mut line := []
+            for x in 0..cols
+                cr := -2.0 + 3.0 * x.to_float() / cols.to_float()
+                k := escape(cr, ci)
+                line.push(shades[k * 9 / MAX_ITER])
+            s := line.join("")
+            mut h := 0
+            for c in s.chars()
+                h = (h * 31 + c.code()) % 1000003
+            print("{cols} {y} {s.len()} {h}")

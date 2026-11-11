@@ -131,6 +131,9 @@ fn changed_files(rev str, attest str) Json
         # The certificate being written, and the one a `--check` re-run reads, are not part of the change.
         if p == attest or "{p}.recheck" == attest
             continue
+        # Tool state (`ail task`'s ledger and certificate) is not part of the change either (task.finish.3).
+        if p.starts_with(".ail/") or p == ".ail-task"
+            continue
         h := proc.run("git", ["hash-object", "--", p]) else continue
         hash := if h.status == 0 then h.out.trim() else "deleted"
         out.push(obj([("path", Json.Str(p)), ("hash", Json.Str(hash))]))

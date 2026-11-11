@@ -1,6 +1,7 @@
 ## `ail task` in AIL (ADR 0917, task.*): one open task per directory, kept in `.ail-task`.
 ##   ail run tools/ailtask/ailtask.ail start PROGRAM GOAL... [--rev REV]
 ##   ail run tools/ailtask/ailtask.ail status|verify|finish|abort|log [--json]
+##   finish                  writes the change certificate `.ail/cert.json` (task.finish.3)
 ##   verify --fix            applies the compiler's safe fixes before the check (fix.check.2)
 ## Every `verify` adds a line to `.ail/task-log.jsonl` (task.log.1-3); nothing leaves the machine.
 ## It adds no analysis: `status` is `ail ask PROGRAM --affected --json`, `verify` is `ail check`
@@ -13,6 +14,9 @@ STATE := ".ail-task"
 LOG_DIR := ".ail"
 
 LOG := ".ail/task-log.jsonl"
+
+## The change certificate `finish` writes (task.finish.3, verify.cert.1).
+CERT := ".ail/cert.json"
 
 ## Lines of failing output `verify` shows (task.verify.3).
 TAIL_LINES := 20
@@ -349,6 +353,13 @@ fn finish(json bool) !int
     if got.status != 0
         io.eprint("error: {got.out}")
         return 2
+    # task.finish.3: the change certificate; a failing one keeps the task open.
+    if not fs.exists(LOG_DIR)
+        fs.make_dir(LOG_DIR)? "making {LOG_DIR}"
+    cert := ail(["verify", "--diff", "--rev", t.rev, "--attest", CERT, t.program])
+    if cert.status != 0
+        io.eprint("error: the change certificate failed (task.finish.3); the task stays open\n{tail(cert.out)}")
+        return 1
     sum := summary_json(scope_lines())
     if fs.exists(STATE)
         fs.remove(STATE) else return 2
@@ -359,10 +370,11 @@ fn finish(json bool) !int
             "\"goal\":{quote(t.goal)}",
             "\"verified\":\"green\"",
             "\"impact\":{got.out.trim()}",
+            "\"certificate\":{quote(CERT)}",
             "\"summary\":{sum}",
             "\"next\":\"none\"",
         ],
-        "task done: {t.goal}\nimpact: {got.out.trim()}\nsummary: {sum}",
+        "task done: {t.goal}\nimpact: {got.out.trim()}\ncertificate: {CERT}\nsummary: {sum}",
     )
     0
 

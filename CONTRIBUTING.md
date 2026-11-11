@@ -30,9 +30,9 @@ machines. So a pull request is tested like this:
 3. If the batch is green, each PR is merged through GitHub
    ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)). If it is red,
    the failing PR is sent back with the gate's output.
-4. Before every published seed or release, the `native`, `examples` and `run`
-   suites must also pass on Windows
-   ([ADR 0925](docs/decisions/0925-windows-release-gate.md)).
+4. Before every published seed or release, the same gate must also pass on
+   Windows (`tools\gate\win-gate.ps1`,
+   [ADR 0925](docs/decisions/0925-windows-release-gate.md)).
 
 So expect a PR to wait for the next batch rather than get an instant green
 check. Say in the PR what you ran and on which host.

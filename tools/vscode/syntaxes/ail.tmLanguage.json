@@ -1,0 +1,381 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "AIL",
+  "scopeName": "source.ail",
+  "fileTypes": [
+    "ail"
+  ],
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#code"
+    }
+  ],
+  "repository": {
+    "code": {
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#string"
+        },
+        {
+          "include": "#char"
+        },
+        {
+          "include": "#attribute"
+        },
+        {
+          "include": "#decl"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#keyword"
+        },
+        {
+          "include": "#type"
+        },
+        {
+          "include": "#call"
+        },
+        {
+          "include": "#operator"
+        }
+      ]
+    },
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.ail",
+          "begin": "##",
+          "end": "$",
+          "patterns": [
+            {
+              "include": "#ruleid"
+            }
+          ]
+        },
+        {
+          "name": "comment.line.number-sign.ail",
+          "begin": "#",
+          "end": "$",
+          "patterns": [
+            {
+              "include": "#ruleid"
+            }
+          ]
+        }
+      ]
+    },
+    "ruleid": {
+      "name": "constant.other.rule-id.ail",
+      "match": "\\b[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)*\\.\\d+\\b"
+    },
+    "escape": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.ail",
+          "match": "\\\\(?:[ntr0\\\\\"'{]|u\\{[0-9A-Fa-f]+\\})"
+        },
+        {
+          "name": "invalid.illegal.escape.ail",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "interp": {
+      "name": "meta.interpolation.ail",
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.begin.ail"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.end.ail"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#nested-braces"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "nested-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#nested-braces"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.other.raw.multi.ail",
+          "begin": "\\br\"\"\"",
+          "end": "\"\"\"(?!\")|\"\"\"(?=\"\"\")",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.ail"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.ail"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.other.raw.ail",
+          "begin": "\\br\"",
+          "end": "\"|$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.ail"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.ail"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.other.bytes.ail",
+          "begin": "\\bb\"",
+          "end": "\"|$",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ail",
+              "match": "\\\\(?:x[0-9A-Fa-f]{2}|[ntr0\\\\\"])"
+            },
+            {
+              "name": "invalid.illegal.escape.ail",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.triple.ail",
+          "begin": "\"\"\"",
+          "end": "\"\"\"(?!\")|\"\"\"(?=\"\"\")",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.ail"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.ail"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#escape"
+            },
+            {
+              "include": "#interp"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.ail",
+          "begin": "\"",
+          "end": "\"|$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.ail"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.ail"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#escape"
+            },
+            {
+              "include": "#interp"
+            }
+          ]
+        }
+      ]
+    },
+    "char": {
+      "name": "string.quoted.single.ail",
+      "match": "'(?:\\\\(?:[ntr0\\\\\"'{]|u\\{[0-9A-Fa-f]+\\})|[^'\\\\\\n])'",
+      "captures": {}
+    },
+    "attribute": {
+      "name": "entity.other.attribute-name.ail",
+      "match": "@[A-Za-z_][A-Za-z0-9_]*"
+    },
+    "decl": {
+      "patterns": [
+        {
+          "match": "\\b(fn)\\s+(?:([\\p{Lu}][\\p{L}\\p{N}_]*)\\s*\\.\\s*)?([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.function.ail"
+            },
+            "2": {
+              "name": "entity.name.type.ail"
+            },
+            "3": {
+              "name": "entity.name.function.ail"
+            }
+          }
+        },
+        {
+          "match": "\\b(struct|enum|trait)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.type.ail"
+            },
+            "2": {
+              "name": "entity.name.type.ail"
+            }
+          }
+        },
+        {
+          "match": "\\b(impl)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)(?:\\s+(for)\\s+([\\p{L}_][\\p{L}\\p{N}_]*))?",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.impl.ail"
+            },
+            "2": {
+              "name": "entity.name.type.ail"
+            },
+            "3": {
+              "name": "keyword.control.ail"
+            },
+            "4": {
+              "name": "entity.name.type.ail"
+            }
+          }
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.ail",
+          "match": "\\b0[xX][0-9A-Fa-f_]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.ail",
+          "match": "\\b0[bB][01_]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.ail",
+          "match": "\\b0[oO][0-7_]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.ail",
+          "match": "\\b\\d[\\d_]*(?:\\.\\d[\\d_]*(?:[eE][+-]?\\d+)?|[eE][+-]?\\d+)(?:f32|f64)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.ail",
+          "match": "\\b\\d[\\d_]*(?:[iu](?:8|16|32|64)|f32|f64)?\\b"
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "constant.language.ail",
+          "match": "\\b(?:true|false|none)\\b"
+        },
+        {
+          "name": "variable.language.ail",
+          "match": "\\bself\\b"
+        },
+        {
+          "name": "keyword.other.hole.ail",
+          "match": "\\buhwhatnow\\??"
+        },
+        {
+          "name": "keyword.operator.word.ail",
+          "match": "\\b(?:and|or|not|in|as)\\b"
+        },
+        {
+          "name": "keyword.control.ail",
+          "match": "\\b(?:break|continue|elif|else|for|if|match|return|while|defer|spawn|par|with)\\b"
+        },
+        {
+          "name": "storage.modifier.const.ail",
+          "match": "\\bconst\\b"
+        },
+        {
+          "name": "storage.modifier.ail",
+          "match": "\\b(?:pub|mut|ref|move|unique|unsafe|extern|any)\\b"
+        },
+        {
+          "name": "keyword.other.ail",
+          "match": "\\b(?:use|todo|error|requires|ensures|invariant)\\b"
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.ail",
+          "match": "\\b(?:int|uint|float|bool|str|char|bytes|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|isize|usize)\\b"
+        },
+        {
+          "name": "entity.name.type.ail",
+          "match": "\\b[\\p{Lu}][\\p{L}\\p{N}_]*\\b"
+        }
+      ]
+    },
+    "call": {
+      "name": "entity.name.function.call.ail",
+      "match": "\\b[\\p{Ll}_][\\p{L}\\p{N}_]*(?=\\s*\\()"
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.ail",
+          "match": ":=|\\+=|-=|\\*=|/=|%=|="
+        },
+        {
+          "name": "keyword.operator.arrow.ail",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.range.ail",
+          "match": "\\.\\.=?"
+        },
+        {
+          "name": "keyword.operator.comparison.ail",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.ail",
+          "match": "[-+*/%]"
+        },
+        {
+          "name": "keyword.operator.question.ail",
+          "match": "\\?"
+        }
+      ]
+    }
+  }
+}

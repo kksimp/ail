@@ -50,3 +50,11 @@ Rejected alternatives:
 - **One generic `ail_run` tool taking a command line:** no schema, so the agent guesses flags (the rejection above stands).
 - **A `json` default of true on every tool:** JSON costs more tokens than the text forms of `context`, `api` and `explain`; the agent asks for it when it wants fields.
 - **Separate `ail_edit_test` and `ail_edit_impact` tools:** one call with two flags removes a turn from every edit-then-test pair and adds one row to the table instead of three.
+
+## Amendment 2026-11-11: round 2, the tools that landed after the first round
+
+Decided by: AI (delegated, ADR 0076), gap G5 of the final-gaps review. Token usage ranks first: an agent that works over MCP had no way to look up a std function without loading the full card.
+
+Seven tools join, for 23 in all: `ail_card` (`topic`, optional), `ail_find` (`words` or `sig`; `ail ask std`), `ail_try` (`program`, `sets`, a list of patch sets sent inline; one verdict per set, never `--apply`), `ail_prove`, `ail_infer` (`program`, `function`; never `--apply`), `ail_merge_check` (`ail merge --check`, three files or two revisions) and `ail_verify_check` (`cert`). `ail_card`, `ail_find` and `ail_prove` are read-only and join the warm memo; `ail_try`, `ail_infer` and the two checks that read git state (`ail_merge_check`, `ail_verify_check`) do not. `ail try` gets `--sets-json` (try.in.2) so several sets travel in one call without temp files.
+
+Every description is now one short sentence, and `required` is left out when empty, so the whole `tools/list` answer is 5.0 KB (about 1,250 tokens at 4 bytes a token; the gate fails above 6,000 bytes, rule mcp.tools.3). Rejected: one tool per `ail try` set (the agent compares sets in one call); a `--apply` argument on `ail_try` or `ail_infer` (an MCP call must not write on a guess); memoising the git-reading checks (their inputs are git objects, not the program's files).

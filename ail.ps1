@@ -229,10 +229,12 @@ if ($cmd -eq 'run') {
 $checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
 $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
 
+# tool.help.1-3, tool.doctor.1: `help`, `--help`, `-h`, no arguments, `CMD --help` and `doctor` are native, as in ./ail.
+$helpRoute = ($cmd -eq '') -or ($cmd -in 'help', '--help', '-h', 'doctor') -or ((-not "$cmd".StartsWith('-')) -and $args.Count -eq 2 -and ("$($args[1])" -in '--help', '-h'))
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
 $native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
 $route = (
-    $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
+    $helpRoute -or $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
         ($rest -contains '--fix') -or
@@ -244,10 +246,19 @@ if ($cmd -eq 'build' -and ($rest -contains '--derived-out')) { $route = $false }
 if ($route) {
     $rawRest = $rest
     $rest = @(Esc-Native $rest)
+    # A tool written in AIL (`try`, `mcp`, `lsp`, ...) runs through this script's own `run`, as ./ail's `exec ail run`
+    # does: the program then gets our standard input. The native `ail run` starts it on an empty pipe (try.in.1).
+    function Run-Tool([string]$file) {
+        $env:AIL_NATIVE_CLI = ''
+        & (Join-Path $root 'ail.ps1') run $file @rawRest
+        exit $LASTEXITCODE
+    }
     $nativeDir = Join-Path $root '.native'
     $native = Join-Path $nativeDir "ail$exe"
     $stale = -not (Test-Path $native)
-    if (-not $stale) {
+    # AIL_NATIVE_FRESH=1 (win-gate.ps1 sets it after its first build): the caller says the sources have not changed, so
+    # skip the scan of every .ail file under compiler\ and std\ that each call would otherwise make.
+    if (-not $stale -and $env:AIL_NATIVE_FRESH -ne '1') {
         $t = (Get-Item $native).LastWriteTimeUtc
         $newer = Get-ChildItem -Recurse -File -Filter *.ail -Path (Join-Path $root 'compiler'), (Join-Path $root 'std') -ErrorAction SilentlyContinue |
             Where-Object { $_.LastWriteTimeUtc -gt $t } | Select-Object -First 1
@@ -281,6 +292,12 @@ if ($route) {
     $env:AIL_COMPILER = Fwd (Join-Path $root 'compiler')
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
     if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
+    if ($helpRoute) {
+        if ($cmd -eq '') { & $native help; exit $LASTEXITCODE }
+        if ($cmd -in 'help', '--help', '-h') { & $native help @rest; exit $LASTEXITCODE }
+        if ($cmd -eq 'doctor') { & $native doctor @rest; exit $LASTEXITCODE }
+        & $native help $cmd; exit $LASTEXITCODE
+    }
     switch ($cmd) {
         'api' {
             # `ail api --diff ... --budget [N] [--from K]`: the native diff under the budget (api.diff.5, budget.out.1-7).
@@ -303,15 +320,15 @@ if ($route) {
             }
             & $native check-program @rest; exit $LASTEXITCODE
         }
-        'verify' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\verify\verify.ail')) @rest; exit $LASTEXITCODE }
-        'infer' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\infer\infer.ail')) @rest; exit $LASTEXITCODE }
-        'task' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) @rest; exit $LASTEXITCODE }
-        'try' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtry\ailtry.ail')) @rest; exit $LASTEXITCODE }
-        'merge' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailmerge\ailmerge.ail')) @rest; exit $LASTEXITCODE }
-        'mcp' { $env:AIL_NATIVE_CLI = ''; $env:AIL_MCP_NATIVE = Fwd $native; & $native run (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) @rest; exit $LASTEXITCODE }
-        'lsp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) @rest; exit $LASTEXITCODE }
-        'sanitize' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) @rest; exit $LASTEXITCODE }
-        'replay' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) @rest; exit $LASTEXITCODE }
+        'verify' { Run-Tool (Fwd (Join-Path $root 'tools\verify\verify.ail')) }
+        'infer' { Run-Tool (Fwd (Join-Path $root 'tools\infer\infer.ail')) }
+        'task' { Run-Tool (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) }
+        'try' { Run-Tool (Fwd (Join-Path $root 'tools\ailtry\ailtry.ail')) }
+        'merge' { Run-Tool (Fwd (Join-Path $root 'tools\ailmerge\ailmerge.ail')) }
+        'mcp' { $env:AIL_MCP_NATIVE = Fwd $native; Run-Tool (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) }
+        'lsp' { Run-Tool (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) }
+        'sanitize' { Run-Tool (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) }
+        'replay' { Run-Tool (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) }
         'test' {
             foreach ($a in $rest) {
                 if ("$a" -like '--watch*') { [Console]::Error.WriteLine("ail test: $a is not native yet"); exit 2 }
@@ -468,4 +485,4 @@ if ($cmd -eq 'version' -or $cmd -eq '--version') {
 }
 
 # Everything else has no native form.
-Fail "``ail $cmd`` has no native form; run ``.\ail.ps1`` with a command from docs/quick-reference.md"
+Fail "unknown command $cmd; run ``ail help``"

@@ -1,6 +1,7 @@
 ## `ail new [--no-agent] NAME` (spec tool.new.1-4, ADRs 0903, 1046): a new package directory that
 ## runs and tests at once, with an agent kit (`AGENTS.md`, `.mcp.json`) unless `--no-agent`. NAME starts with a lowercase letter and holds
 ## lowercase letters, digits, `_` and `-`. An existing NAME is never touched.
+## `ail new .` (tool.new.5) writes only the agent kit into the current project and overwrites nothing.
 
 fn valid(name str) bool
     if name.len() == 0
@@ -19,16 +20,18 @@ fn agents_md() str
         "",
         "AIL project: source is `.ail`, the CLI is `ail`.",
         "",
-        "- Read the language card first: `ail api --card .` (the full card is docs/language-card.md in the AIL repo).",
+        "- Load the core card once: `ail card`. More: `ail card TOPIC`, `ail ask std WORDS` (std functions).",
         "- Every change is one loop:",
         "  1. `ail task start main.ail GOAL`",
         "  2. `ail context main.ail FN --budget 800` before you edit FN",
         "  3. edit with `ail edit` or your editor",
-        "  4. `ail task verify`",
-        "  5. `ail task finish`",
-        "- For any diagnostic, run `ail explain RULE` with the rule ID from the message.",
-        "- Never grep to find code. Use `ail ask main.ail what calls FN` (also: who uses T, who writes field F).",
-        "- `ail fmt FILE.ail` formats and `ail test FILE.ail` runs the `@test` functions.",
+        "  4. `ail check --fix main.ail`",
+        "  5. `ail task verify`",
+        "  6. `ail task finish` (writes the certificate `.ail/cert.json`)",
+        "- Two candidate fixes: `ail try main.ail` gives one verdict per set.",
+        "- For any diagnostic, run `ail explain RULE`.",
+        "- Never grep. Use `ail ask main.ail what calls FN` (also: who uses T).",
+        "- `ail fmt FILE.ail` formats; `ail test FILE.ail` runs the `@test` functions.",
         "- `.mcp.json` registers `ail mcp` on stdio; the same tools are MCP calls.",
         "",
     ].join("\n")
@@ -36,6 +39,44 @@ fn agents_md() str
 ## The MCP registration (tool.new.3): `ail mcp` on stdio.
 fn mcp_json() str
     "\{\n  \"mcpServers\": \{\n    \"ail\": \{\n      \"command\": \"ail\",\n      \"args\": [\"mcp\"]\n    }\n  }\n}\n"
+
+## Whether the current directory holds an AIL project: a `.ail` file or `ail.pkg` (tool.new.5).
+fn is_project() bool
+    names := fs.list_dir(".") else return false
+    for n in names
+        if n.ends_with(".ail") or n == "ail.pkg"
+            return true
+    false
+
+## `ail new .` (tool.new.5): writes `AGENTS.md` and `.mcp.json` into the current directory unless they exist.
+## An existing file is never changed or appended to: for `AGENTS.md` the block to add is printed instead.
+fn here(agent bool) int
+    if not agent
+        io.eprint("error[tool.new.5]: `ail new .` only writes the agent kit, so `--no-agent` leaves nothing to do")
+        return 2
+    if not is_project()
+        io.eprint("error[tool.new.5]: this directory holds no `.ail` file or ail.pkg; use `ail new NAME` for a new project")
+        return 2
+    mut wrote := List[str]()
+    if fs.exists("AGENTS.md")
+        print("AGENTS.md exists and was left alone; add this block to it:\n")
+        print(agents_md())
+    else
+        fs.write_text("AGENTS.md", agents_md()) else err
+            io.eprint("error: {err.kind}")
+            return 1
+        wrote.push("AGENTS.md")
+    if fs.exists(".mcp.json")
+        print(".mcp.json exists and was left alone; register `ail mcp` on stdio under mcpServers.ail:\n")
+        print(mcp_json())
+    else
+        fs.write_text(".mcp.json", mcp_json()) else err
+            io.eprint("error: {err.kind}")
+            return 1
+        wrote.push(".mcp.json")
+    if wrote.len() > 0
+        print("wrote {wrote.join(", ")}")
+    0
 
 ## The exit status of `ail new ARGS`.
 pub fn command(args List[str]) int
@@ -50,6 +91,8 @@ pub fn command(args List[str]) int
         io.eprint("usage: ail new [--no-agent] NAME")
         return 2
     name := names[0]
+    if name == "."
+        return here(agent)
     # tool.new.1: the name is a package name and a directory name.
     if not valid(name)
         io.eprint("error[tool.new.1]: `{name}` isn't a package name; use lowercase letters, digits, `_` and `-`, starting with a letter")
@@ -82,4 +125,7 @@ pub fn command(args List[str]) int
     else
         print("created {name}/ (ail.pkg, main.ail)")
     print("next: ail run {name}    ail test {name}/main.ail")
+    # tool.path.1: the kit's `.mcp.json` and `AGENTS.md` run a bare `ail`.
+    if (proc.which("ail") else "") == ""
+        io.eprint("hint: `ail` is not on your PATH, so the kit's commands won't run; `ail doctor --path` prints the line to add")
     0

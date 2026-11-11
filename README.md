@@ -3,9 +3,9 @@
 **AI-First Language**, by Voltare. Pronounced "ale".
 
 AIL is a native, memory-safe, garbage-collected systems programming language
-designed from the ground up for humans **and** AI agents. It aims for C-class
-performance, maximum semantic density per token, canonical formatting, and a
-compiler that answers structured questions about your program.
+designed from the ground up for humans **and** AI agents. It aims for speed
+equal to C, canonical formatting, and AI-first tooling: a compiler that answers
+structured questions about your program and checks an agent's changes.
 
 ```
 main.ail      ail build · ail run · ail test · ail fmt · ail check
@@ -65,8 +65,8 @@ Windows ARM64 hardware and there is no seed for that host
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
 now, testing is local: the gate runs on macOS and Linux
-([ADR 0842](docs/decisions/0842-mac-first-gate.md)), and the native, examples
-and run suites must pass on Windows x86-64 before every release
+([ADR 0842](docs/decisions/0842-mac-first-gate.md)), and the same suites must
+pass on Windows x86-64 before every release
 ([ADR 0925](docs/decisions/0925-windows-release-gate.md)).
 
 ## Install
@@ -87,6 +87,18 @@ git clone --depth 1 https://github.com/kksimp/ail
 cd ail
 .\ail.ps1 run examples\hello.ail
 ```
+
+Put `ail` on your PATH, so a project's agent kit and MCP registration can run a bare `ail`
+([ADR 1058](docs/decisions/1058-ail-on-path-and-doctor.md)). `ail doctor` checks the toolchain and
+`ail doctor --path` prints the line to add to your shell profile; nothing edits your files for you.
+
+```sh
+mkdir -p ~/.local/bin && ln -s "$PWD/ail" ~/.local/bin/ail   # a symlink works: ail finds its root through it
+ail doctor --path                                            # the PATH line for your profile, if ~/.local/bin is not on it
+ail help                                                     # every command; `ail help CMD` for one
+```
+
+On Windows, add the clone's directory to `PATH` (`ail doctor --path` prints the PowerShell line) and use `ail.cmd`.
 
 What the first run does:
 
@@ -125,13 +137,16 @@ AI agents: read [AGENTS.md](AGENTS.md) first, or [llms.txt](llms.txt) for the li
 
 ### Agent kit for your project
 
-`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). For an existing project, add this to your agent file and register `ail mcp` on stdio in your agent's MCP config:
+`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). In an existing project, run `ail new .`: it writes the same two files and never overwrites one (if `AGENTS.md` exists it prints the block to add). The kit is this, and nothing else:
 
 ```
-Language card: `ail api --card .`. Loop: `ail task start FILE GOAL`, `ail context FILE FN --budget 800`,
-edit, `ail task verify`, `ail task finish`. For any diagnostic run `ail explain RULE`.
-Never grep; use `ail ask FILE what calls FN`.
+Core card: `ail card`; more with `ail card TOPIC` and `ail ask std WORDS`. Loop: `ail task start FILE GOAL`,
+`ail context FILE FN --budget 800`, edit, `ail check --fix FILE`, `ail task verify`, `ail task finish`
+(writes the change certificate `.ail/cert.json`). Two candidate fixes: `ail try FILE`.
+For any diagnostic run `ail explain RULE`. Never grep; use `ail ask FILE what calls FN`.
 ```
+
+`.mcp.json` registers `ail mcp` on stdio, so the same tools are MCP calls.
 
 ## Contributing and security
 
