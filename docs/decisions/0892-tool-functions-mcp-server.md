@@ -1,6 +1,6 @@
 # 0892. `@tool` functions served by `ail serve --mcp`
 
-- **Status:** Deferred past 0.1.0
+- **Status:** Accepted (first slice built by [ADR 0986](0986-app-tools-and-attach-mcp.md): `@tool` on an app method, attach `tools`/`call`, `ail attach mcp`; `@tool` on a plain program's function served by `ail serve --mcp` is later)
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0868](0868-ai-first-tooling-after-rust-removal.md), [ADR 0098](0098-pub-visibility.md) (visibility), Garlic agent server (`garlic --serve`)

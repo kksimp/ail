@@ -1,0 +1,69 @@
+use std.attach
+
+enum Size
+    Small
+    Large
+
+error struct ShopError
+    message str
+
+struct Shop
+    @observe items List[str]
+    @observe total int
+    # Fields named like a call's parameters must not clash with the generated `call`.
+    name str
+    args int
+
+## Adds `qty` of `item` to the cart; gives the new total.
+@tool fn Shop.add(mut self, item str, qty int) int
+    for k in 0..qty
+        items.push(item)
+    total += qty
+    total
+
+## Empties the cart.
+@tool fn Shop.clear(mut self)
+    items = []
+    total = 0
+
+## Pays; fails on an empty cart.
+@tool fn Shop.pay(mut self, size Size, tip float, gift bool) str ! ShopError
+    if total == 0
+        return ShopError(message: "the cart is empty")
+    named := match size
+        Small => "small"
+        Large => "large"
+    "paid {total} {named} {tip} {gift}"
+
+impl attach.Observe for Shop
+
+fn js(text str) Json
+    parse_json(text) else Json.Obj([])
+
+fn main()
+    mut s := Shop(items: [], total: 0, name: "shop", args: 0)
+    ts := s.tools()
+    assert_eq(ts.len(), 3)
+    assert_eq(ts[0].name, "add")
+    assert_eq(ts[0].doc, "Adds `qty` of `item` to the cart; gives the new total.")
+    assert_eq(ts[0].params, ["item", "qty"])
+    assert_eq(ts[0].types, ["str", "int"])
+    assert_eq(ts[0].result, "int")
+    assert_eq(ts[1].result, "")
+    assert_eq(ts[2].types, ["Size", "float", "bool"])
+    assert_eq(ts[2].result, "str")
+    # attach.tool.4: numbers and digit strings both work; the result is JSON.
+    assert_eq(s.call("add", js("\{\"item\":\"tea\",\"qty\":2}")), "\{\"v\":1,\"result\":2}")
+    assert_eq(s.call("add", js("\{\"item\":\"jam\",\"qty\":\"1\"}")), "\{\"v\":1,\"result\":3}")
+    assert_eq(s.items, ["tea", "tea", "jam"])
+    assert(s.call("add", js("\{\"item\":\"jam\"}")).contains("needs `qty` as int"))
+    assert(s.call("add", js("\{\"item\":\"jam\",\"qty\":1.5}")).contains("needs `qty`"))
+    assert_eq(s.total, 3)
+    assert_eq(s.call("pay", js("\{\"size\":\"Large\",\"tip\":0.5,\"gift\":\"true\"}")), "\{\"v\":1,\"result\":\"paid 3 large 0.5 true\"}")
+    assert(s.call("pay", js("\{\"size\":\"Huge\",\"tip\":0,\"gift\":false}")).contains("needs `size` as Size"))
+    assert_eq(s.call("clear", js("\{}")), "\{\"v\":1,\"result\":null}")
+    assert_eq(s.total, 0)
+    assert(s.call("pay", js("\{\"size\":\"Small\",\"tip\":0,\"gift\":false}")).contains("the cart is empty"))
+    assert(s.call("refund", js("\{}")).contains("no tool `refund`"))
+    assert_eq(s.observed().len(), 2)
+    print("ok")
