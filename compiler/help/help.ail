@@ -315,8 +315,10 @@ pub fn command(args List[str]) int
     if words.len() > 1
         io.eprint("usage: ail help [COMMAND | --keywords] [--json]")
         return 2
+    # `ail help --help` and `ail help -h` are the usage of `help` itself.
+    want := if words[0] == "--help" or words[0] == "-h" then "help" else words[0]
     for k in cmds
-        if k.name == words[0]
+        if k.name == want
             if json
                 print(one_json(k))
             else
