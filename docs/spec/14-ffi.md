@@ -136,7 +136,9 @@ fn main()
 
 **ffi.var.1** — `...` ends the parameter list of an `extern c fn` and follows
 at least one named parameter: `extern c fn snprintf(buf *u8, size u64, fmt *u8, ...) i32`.
-It is an error anywhere else. *(ADR 1031)*
+It is an error anywhere else. Only a call by the declared name takes the variadic
+path for now; a header-imported variadic called as `lib.f(...)` is not yet
+verified. *(ADR 1031)*
 
 **ffi.var.2** — A call passes the named arguments as in any call and then any
 number of further arguments, by value, with no label and no `mut`. The whole

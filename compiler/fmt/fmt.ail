@@ -606,6 +606,9 @@ fn spaced(before FTok?, a FTok, b FTok) bool
     if a.kind == SYM
         and (a.text == "(" or a.text == "[" or a.text == "\{" or a.text == "." or a.text == "@")
         return false
+    # `, ...` ends an `extern c fn` parameter list (ffi.var.1): keep the space.
+    if a.sym(",") and b.sym("..")
+        return true
     if a.sym("..") or a.sym("..=") or b.sym("..") or b.sym("..=")
         return false
     # `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.

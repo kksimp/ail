@@ -700,7 +700,11 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
         skip_statement()
         return none
     mut f := function(ast.Within.TopLevel)?
-    f.attrs = attrs
+    # Keep the `variadic c` mark the signature added (ffi.var.1).
+    mut all := attrs
+    for a in f.attrs
+        all.push(a)
+    f.attrs = all
     f
 
 ## At `extern c ["lib"] fn`.
