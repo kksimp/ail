@@ -116,19 +116,13 @@ std API still needs its own ADR first.
 4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
    ([ADR 0878](decisions/0878-screen-model-for-std-app.md)), Garlic first, then every
    GUI program; `@observe` and live attach ([ADR 0879](decisions/0879-observe-and-live-attach.md)).
-5. **Garlic interface** (kksimp/garlic window and chrome): closing tabs, and
-   a redesign that looks as polished as Chrome or Firefox but has its own look.
-6. **Garlic agent features** (kksimp/garlic page model and agent server):
-   the agent server and attach channel; watches and scheduled actions; trust
-   rules; grounding; forms as schema; extraction; quiet pages; waiting; intent
-   maps; page memory; opt-in action replay; form diff before submit; site
-   memory. Parity fixes for real sites are interleaved.
-7. **Packages and networking** (`std/net`, packages): done (hardware
+5. **App-side work** (Garlic window, chrome and agent features; ail-edit; the other apps): tracked in each app's own repository and project since 2026-11-11, not in this roadmap. Language and std gaps they find are filed here.
+6. **Packages and networking** (`std/net`, packages): done (hardware
    AES-GCM, proxy support, git dependencies and `ail.lock` in the native
    loader).
-8. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
+7. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
    and Metal, then NPUs; weaker atomic orderings (OQ-097).
-9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
+8. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
    [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
    model, pure-call CSE and hoisting, merging only where it is faster.
    Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
@@ -136,11 +130,7 @@ std API still needs its own ADR first.
    optimizer benchmark against C using contracts, `ail test --mutate` and
    `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
    (SIMD, multi-core and tensor speed; ADR 0899).
-10. **Last:** the Rust-free rebuild of ail-edit compared with
-   editor-baseline.md (in kksimp/ail-edit, `docs/`); a drag race of Garlic
-   against Chrome and Firefox on a fixed set of real sites (page load, first
-   paint, scrolling, memory and tokens per agent task); then the Python
-   on-ramp (OQ-119).
+9. **Last:** the Python on-ramp (OQ-119). The Rust-free rebuild of ail-edit and the drag race of Garlic against Chrome and Firefox moved to those apps' projects.
 
 ## Toward 0.2 (2026-11-10)
 
@@ -153,7 +143,7 @@ Planned for 0.2 (none of it is a promise; status.md says what exists):
 - **Gate:** a gate suite for `ail merge`, and a Linux ARM64 and a Windows ARM64 machine in the gate.
 - **Hardware:** GPU compute (#1104), Linux ARM64 on hardware, Windows ARM64, a TLS server (needs constant-time signing first, ADR 0959).
 - **Agents:** agent-specific kits (`ail new --agent NAME`), once the measured agent runs show whether agents skip the check loop.
-- **Apps** in their own repositories: Garlic (cross-platform look, video, canvas), Clove, ail-edit, Garlic Press, Husk.
+- **Apps** are in their own repositories and projects, not planned here: Garlic, Garlic Press, ail-edit, Clove, Husk, Gridrun and ail-kernel. What they need from the language and std (video, canvas, a window path) is planned here.
 
 ## Documentation roadmap
 

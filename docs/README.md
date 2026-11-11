@@ -82,7 +82,7 @@ Design notes:
   where AIL's tokens go per construct against Python, and the round-3 changes.
 
 Tools:
-- Apps (Garlic browser, Garlic Press PDF viewer, ail-edit code editor, Clove) live in their own repositories: see the repository layout in AGENTS.md.
+- Apps (Garlic, Garlic Press, ail-edit, Clove, Husk, Gridrun, ail-kernel) live in their own repositories: see the repository layout in AGENTS.md.
 - [tools/perfbench/](../tools/perfbench/run.sh): drag-race programs (AIL, C and
   Python twins). Run `tools/perfbench/run.sh [RUNS]`; the older interpreter
   results are history in

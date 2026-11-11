@@ -131,7 +131,7 @@ Style:
 
 ## Repository layout
 
-The apps live in their own repositories (AGPL-3.0, private): [garlic](https://github.com/kksimp/garlic) (browser), [garlic-press](https://github.com/kksimp/garlic-press) (PDF viewer), [ail-edit](https://github.com/kksimp/ail-edit) (code editor) and [clove](https://github.com/kksimp/clove) (compressor). Each pins an ail commit in `.ail-version`. This repo does not test them.
+This repository is the language only. Every app lives in its own repository and project (AGPL-3.0, private): [garlic](https://github.com/kksimp/garlic) (browser), [garlic-press](https://github.com/kksimp/garlic-press) (PDF viewer), [ail-edit](https://github.com/kksimp/ail-edit) (code editor), [clove](https://github.com/kksimp/clove) (compressor), [husk](https://github.com/kksimp/husk) (Mac disk analyzer), [gridrun](https://github.com/kksimp/gridrun) (game) and [ail-kernel](https://github.com/kksimp/ail-kernel) (kernel proof of concept). Each pins an ail commit in `.ail-version`. This repo does not test them, and app bugs and features are filed there; a missing language or std feature is filed here.
 
 ```
 AGENTS.md                 this file
