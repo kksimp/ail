@@ -145,7 +145,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 ### Native heap and collector (lane 171)
 
-`compiler/rt/native/heap.ail`, `gc.ail`: `rt.alloc(n, kind)` with a header word, a 16 KiB-page heap with size-class free lists, and a stop-the-world conservative mark-sweep collector triggered by allocated bytes (ADRs 0562–0564). `binarytrees 17` runs in 11 MiB instead of 896 MiB; `binarytrees 20` in 85 MiB; 10 GB of short-lived lists in 10 MiB. Tests: `tests/native/run/gc_*.ail` (x86-64 and ARM64 under qemu, also with a collection every 4 KiB), `tests/native/heavy/`. Not yet: precise stack maps, a generational collector.
+`compiler/rt/native/heap.ail`, `gc.ail`: `rt.alloc(n, kind)` with a header word, a heap of 16,448-byte pages (a whole page plus one cache line, so a table's rows spread over the cache sets; ADR 0562 amendment) with size-class free lists, and a stop-the-world conservative mark-sweep collector that runs when the bytes allocated since the last collection pass `max(16 MiB, 2 x live bytes)` (ADR 0564 amendments). Peak resident size is about three times the live data: `binarytrees 20` runs in 80 MiB and 10 GB of short-lived lists in 16 MiB (Linux x86-64, ADR 0564). Tests: `tests/native/run/gc_*.ail` (x86-64 and ARM64 under qemu, also with a collection every 4 KiB), `tests/native/heavy/`. Not yet: precise stack maps, a generational collector.
 
 ### Tooling
 
