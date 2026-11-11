@@ -58,7 +58,12 @@ fn main() !
         io.exit(help.command([args[0]]))
     # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
     if args[0] == "doctor"
-        io.exit(doctor.command(args[1..], env.get("AIL_ROOT") else path.dir(compiler_dir()), cache_dir(), host_target()))
+        io.exit(doctor.command(
+            args[1..],
+            env.get("AIL_ROOT") else path.dir(compiler_dir()),
+            cache_dir(),
+            host_target(),
+        ))
     if args.len() == 1 and args[0] == "new"
         io.exit(scaffold.command([]))
     if args.len() == 1 and args[0] == "card"

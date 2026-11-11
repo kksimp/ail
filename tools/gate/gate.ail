@@ -716,7 +716,9 @@ fn Gate.cli_help(mut self, tmp str)
     for item in parsed.as_arr() else []
         n := item.text("name", "")
         listed += 1
-        known := sh_text.contains("= {n} ]") or sh_text.contains("{n} |") or sh_text.contains("| {n}")
+        known := sh_text.contains("= {n} ]")
+            or sh_text.contains("{n} |")
+            or sh_text.contains("| {n}")
             or sh_text.contains("{n})")
         if not known
             red("help routes: ail", "`{n}` is listed by `ail help` but not routed in ail")

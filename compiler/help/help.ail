@@ -211,13 +211,7 @@ fn commands() List[Cmd]
             "ail mcp",
             "mcp.tools.1",
         ),
-        c(
-            "lsp",
-            "Agent loop",
-            "a language server on stdio for any editor",
-            "ail lsp",
-            "lsp.diag.1",
-        ),
+        c("lsp", "Agent loop", "a language server on stdio for any editor", "ail lsp", "lsp.diag.1"),
         c(
             "new",
             "Project",
@@ -285,7 +279,7 @@ fn q(s str) str
 
 ## One command as a JSON object (tool.help.3).
 fn one_json(k Cmd) str
-    rules := [ q(r) for r in k.rules ].join(",")
+    rules := [q(r) for r in k.rules].join(",")
     "\{\"name\":{q(k.name)},\"group\":{q(k.group)},\"summary\":{q(k.summary)},\"usage\":{q(k.usage)},\"rules\":[{rules}]}"
 
 ## The whole table as one JSON array (tool.help.3).

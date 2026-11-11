@@ -66,27 +66,57 @@ fn same_toolchain(found str, root str) bool
 fn check_root(root str) Check
     if fs.exists(path.join(root, "compiler/main.ail"))
         return good("toolchain", root)
-    bad("toolchain", "fail", "no compiler/main.ail under {root}", "run `ail` from a checkout of the AIL repository (README, Install)", true)
+    bad(
+        "toolchain",
+        "fail",
+        "no compiler/main.ail under {root}",
+        "run `ail` from a checkout of the AIL repository (README, Install)",
+        true,
+    )
 
 fn check_version(root str) Check
     version := first_line(path.join(root, "tools/release/VERSION"))
     seed := first_line(path.join(root, "tools/release/SEED_TAG"))
     if version == ""
-        return bad("version", "warn", "tools/release/VERSION is missing", "check out a release of the AIL repository", false)
+        return bad(
+            "version",
+            "warn",
+            "tools/release/VERSION is missing",
+            "check out a release of the AIL repository",
+            false,
+        )
     good("version", "{version}, seed {if seed == "" then "unknown" else seed}")
 
 fn check_path(root str) Check
     found := proc.which("ail") else ""
     if found == ""
-        return bad("path", "warn", "no `ail` on PATH", "add this line to your shell profile: {path_line(root)}", false)
+        return bad(
+            "path",
+            "warn",
+            "no `ail` on PATH",
+            "add this line to your shell profile: {path_line(root)}",
+            false,
+        )
     if same_toolchain(found, root)
         return good("path", found)
-    bad("path", "warn", "the first `ail` on PATH is {found}, which is not this toolchain ({root})", "put this toolchain first: {path_line(root)}", false)
+    bad(
+        "path",
+        "warn",
+        "the first `ail` on PATH is {found}, which is not this toolchain ({root})",
+        "put this toolchain first: {path_line(root)}",
+        false,
+    )
 
 fn check_git() Check
     found := proc.which("git") else ""
     if found == ""
-        return bad("git", "fail", "git is not on PATH", "install git (ail pkg and the version line use it)", true)
+        return bad(
+            "git",
+            "fail",
+            "git is not on PATH",
+            "install git (ail pkg and the version line use it)",
+            true,
+        )
     good("git", found)
 
 fn check_curl() Check
@@ -94,7 +124,13 @@ fn check_curl() Check
         return good("curl", "not needed: tools\\release\\fetch-seed.ps1 downloads the seed")
     found := proc.which("curl") else ""
     if found == ""
-        return bad("curl", "warn", "curl is not on PATH", "install curl: the first run downloads the seed with it", false)
+        return bad(
+            "curl",
+            "warn",
+            "curl is not on PATH",
+            "install curl: the first run downloads the seed with it",
+            false,
+        )
     good("curl", found)
 
 fn check_hash() Check
@@ -104,12 +140,24 @@ fn check_hash() Check
         found := proc.which(name) else ""
         if found != ""
             return good("hash", found)
-    bad("hash", "warn", "neither sha256sum nor shasum is on PATH", "install coreutils (sha256sum) or perl's shasum: the seed is verified with one", false)
+    bad(
+        "hash",
+        "warn",
+        "neither sha256sum nor shasum is on PATH",
+        "install coreutils (sha256sum) or perl's shasum: the seed is verified with one",
+        false,
+    )
 
 fn check_cache(cache str) Check
     if writable(cache)
         return good("cache", cache)
-    bad("cache", "fail", "can't write to {cache}", "set AIL_CACHE_DIR to a directory you can write to", true)
+    bad(
+        "cache",
+        "fail",
+        "can't write to {cache}",
+        "set AIL_CACHE_DIR to a directory you can write to",
+        true,
+    )
 
 ## std.app.10: the host `AIL_APP_HOST` names, else the one built under the toolchain.
 fn check_app_host(root str, target str) Check
@@ -117,19 +165,34 @@ fn check_app_host(root str, target str) Check
     if given != ""
         if fs.exists(given)
             return good("app host", given)
-        return bad("app host", "warn", "AIL_APP_HOST names {given}, which does not exist", "unset AIL_APP_HOST or build the host", false)
+        return bad(
+            "app host",
+            "warn",
+            "AIL_APP_HOST names {given}, which does not exist",
+            "unset AIL_APP_HOST or build the host",
+            false,
+        )
     host := os_of(target)
     mut built := path.join(root, "tools/app-host/linux/build/ail-app-host")
     mut fix := "tools/app-host/linux/run.sh"
     if host == "macos"
-        built = path.join(root, "tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost")
+        built = path.join(
+            root,
+            "tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost",
+        )
         fix = "tools/app-host/macos/run.sh"
     elif host == "windows"
         built = path.join(root, "tools/app-host/windows/build/AILAppHost.exe")
         fix = "tools\\app-host\\windows\\run.ps1"
     if fs.exists(built)
         return good("app host", built)
-    bad("app host", "warn", "no std.app host is built for {host}", "run {fix} (only programs that use std.app need it)", false)
+    bad(
+        "app host",
+        "warn",
+        "no std.app host is built for {host}",
+        "run {fix} (only programs that use std.app need it)",
+        false,
+    )
 
 ## std.audio.9: `AIL_AUDIO_HOST`, else the one built under `tools/audio-host/OS/build`.
 fn check_audio_host(root str, target str) Check
@@ -137,7 +200,13 @@ fn check_audio_host(root str, target str) Check
     if given != ""
         if fs.exists(given)
             return good("audio host", given)
-        return bad("audio host", "warn", "AIL_AUDIO_HOST names {given}, which does not exist", "unset AIL_AUDIO_HOST or build the host", false)
+        return bad(
+            "audio host",
+            "warn",
+            "AIL_AUDIO_HOST names {given}, which does not exist",
+            "unset AIL_AUDIO_HOST or build the host",
+            false,
+        )
     host := os_of(target)
     dir := path.join(root, "tools/audio-host/{host}")
     ext := if host == "windows" then ".exe" else ""
@@ -145,8 +214,20 @@ fn check_audio_host(root str, target str) Check
     if fs.exists(built)
         return good("audio host", built)
     if not fs.exists(dir)
-        return bad("audio host", "warn", "this toolchain has no std.audio host for {host}", "none: std.audio.device is not available here", false)
-    bad("audio host", "warn", "no std.audio host is built for {host}", "run tools/audio-host/{host}/run.sh (only programs that play or record sound need it)", false)
+        return bad(
+            "audio host",
+            "warn",
+            "this toolchain has no std.audio host for {host}",
+            "none: std.audio.device is not available here",
+            false,
+        )
+    bad(
+        "audio host",
+        "warn",
+        "no std.audio host is built for {host}",
+        "run tools/audio-host/{host}/run.sh (only programs that play or record sound need it)",
+        false,
+    )
 
 fn checks(root str, cache str, target str) List[Check]
     [
