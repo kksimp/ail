@@ -63,7 +63,21 @@ fn wrdy_free(p int)
     import_call("HeapFree", import_call("GetProcessHeap", 0, 0, 0, 0), 0, p, 0)
 
 ## A new set: its address, or a negative `errno`.
+## The set is off until the next seed (see `wrdy_new`).
+WRDY_OFF := true
+
+## Stands in for the two ntdll calls while the set is off: STATUS_NOT_IMPLEMENTED.
+fn wrdy_nt_off() int
+    3221225474
+
 fn wrdy_new() int
+    # Off until the published seed has `pe_dll_of`'s ntdll mapping: seed g puts
+    # every import in KERNEL32, so a seed-built compiler that held the
+    # `NtCreateFile` and `NtDeviceIoControlFile` imports would not load on
+    # Windows (0xC0000139). The server takes its `poll` loop meanwhile
+    # (std.net.32). The calls are restored with the next seed (ADR 1009).
+    if WRDY_OFF
+        return -38
     wnet_init()
     # L"\Device\Afd\Ail" as a UNICODE_STRING inside an OBJECT_ATTRIBUTES.
     b := alloc_z(160, KIND_BYTES, 1)
@@ -90,7 +104,7 @@ fn wrdy_new() int
     store64(oa, 48)
     store64(oa + 16, us)
     # SYNCHRONIZE; share read and write; FILE_OPEN.
-    st := import_call("NtCreateFile", b, 1048576, oa, b + 136, 0, 0, 3, 1, 0, 0, 0)
+    st := wrdy_nt_off()
     if st.bit_and(4294967295) != 0
         return -38
     afd := load64(b)
@@ -131,19 +145,7 @@ fn wrdy_submit(set int, e int) int
     store64(e + WE_INFO + 8, 1)
     store64(e + WE_HANDLE, wrdy_base(load64(e + WE_FD)))
     store64(e + WE_EVENTS, WR_EVENTS)
-    st := import_call(
-        "NtDeviceIoControlFile",
-        load64(set + WR_AFD),
-        0,
-        0,
-        e,
-        e,
-        73764,
-        e + WE_INFO,
-        32,
-        e + WE_INFO,
-        32,
-    )
+    st := wrdy_nt_off()
     c := st.bit_and(4294967295)
     # Done already or pending: either way the answer comes through the port.
     if c != 0 and c != 259
