@@ -24,6 +24,8 @@ tests: 10 (`ail test` lists them)
 
 ## doc (18 items)
 
+## doctor (24 items)
+
 ## edit (97 items)
 
 ## explain (37 items)
@@ -33,6 +35,8 @@ tests: 10 (`ail test` lists them)
 ## fixrun (17 items)
 
 ## fmt (64 items)
+
+## help (10 items)
 
 ## load (117 items)
 
@@ -44,10 +48,10 @@ tests: 10 (`ail test` lists them)
 
 ## scaffold (4 items)
 
-## syntax (110 items)
+## syntax (111 items)
 
 ## watch (5 items)
 
 ## x64 (115 items)
 
-trimmed to fit 4000 tokens (~251); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~270); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
