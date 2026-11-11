@@ -412,15 +412,27 @@ fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool
         return
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
-    tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb, attach)
-    fs.rename(tmp, exe) else err
-        io.eprint("error[native.build.5]: can't store {exe}")
-        io.exit(2)
+    cache_store(file, exe, target, ms, mb, attach)
     cache_trim(dir)
     if not cached_copy(exe, out, target)
         io.eprint("error[native.build.5]: can't write {out}")
         io.exit(2)
+
+## Build `file` into the cache entry `exe`. The build goes to a temporary
+## name only this process uses, then is renamed into place, so `ail`
+## processes building the same program at once never share a file; when the
+## rename fails because another one stored the entry first, that entry is
+## the same build (the key names its inputs) and is used (native.build.5).
+fn cache_store(file str, exe str, target str, ms str, mb str, attach bool)
+    tag := crypto.random_bytes(8).hex()
+    tmp := "{exe}.{time.now_ms()}-{tag}.tmp"
+    compile_fresh(file, tmp, target, ms, mb, attach)
+    fs.rename(tmp, exe) else err
+        if not fs.exists(exe)
+            io.eprint("error[native.build.5]: can't store {exe}")
+            io.exit(2)
+        fs.remove(tmp) else e2
+            return
 
 ## Copy the cached executable `exe` to `out`; false when there is none
 ## (native.build.5).
@@ -1210,11 +1222,7 @@ fn cli_prepare_with(file str, ms str, mb str, attach bool) str
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
-    tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb, attach)
-    fs.rename(tmp, exe) else err
-        io.eprint("error[native.build.5]: can't store {exe}")
-        io.exit(2)
+    cache_store(file, exe, target, ms, mb, attach)
     cache_trim(dir)
     exe
 

@@ -54,6 +54,12 @@ fn task_check(at str)
 fn task_block_on(ch int)
     return
 
+fn task_wait_mark(a int, v int)
+    return
+
+fn woken_waiters() bool
+    false
+
 ## Tensor kernels (ADR 0876) run on the calling thread.
 fn tensor_env() int
     alloc(128, KIND_ATOMIC)
