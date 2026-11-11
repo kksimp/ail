@@ -107,6 +107,7 @@ fn chan_sleep(ch int, what str) bool
 fn prog_wait(a int, v int, what str, report bool) bool
     if det_on()
         return det_block(a, v, what, report)
+    task_wait_mark(a, v)
     atomic_add(global(BLOCKED_N), 1)
     mut dead := false
     if worker_index() >= 0
@@ -119,6 +120,7 @@ fn prog_wait(a int, v int, what str, report bool) bool
             blocked := atomic_load(global(BLOCKED_N))
             if atomic_load(global(CHAN_EPOCH)) == e
                 and blocked == atomic_load(global(TASKS_LIVE)) + 1
+                and not woken_waiters()
                 idle += 1
             else
                 idle = 0
@@ -139,6 +141,9 @@ fn prog_wait(a int, v int, what str, report bool) bool
                 sb_text(" blocked")
                 store64(global(CHAN_FAULT), str_addr(sb_str()))
     atomic_add(global(BLOCKED_N), -1)
+    # Unmarked after leaving the count, so a task is never counted blocked
+    # while it looks awake to `woken_waiters` and isn't.
+    task_wait_mark(0, 0)
     dead
 
 ## The deadlock message the last blocking operation found, or 0; clears it.
