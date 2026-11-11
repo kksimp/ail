@@ -266,7 +266,16 @@ fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
         # Read-only files, writable directories, so the cache can be cleared (mod.pkg.7).
         # No std call changes a mode yet: where the tools exist (not Windows), `find` and `chmod` do it.
         if (env.get("OS") else "") != "Windows_NT"
-            _f := proc.run("find", [dir, "-type", "f", "-exec", "chmod", "a-w", "\{}", "+"]) else _e3
+            _f := proc.run("find", [
+                dir,
+                "-type",
+                "f",
+                "-exec",
+                "chmod",
+                "a-w",
+                "\{}",
+                "+",
+            ]) else _e3
                 return Fetched(commit: commit, dir: dir, msg: "", "")
     Fetched(commit: commit, dir: dir, msg: "", "")
 
