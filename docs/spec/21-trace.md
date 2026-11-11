@@ -327,7 +327,7 @@ fn main()
 **run.limit.2** — `--max-memory MB` stops a run whose process uses more than
 `MB` megabytes of resident memory, with `trap[run.limit.2]`, as for run.limit.1.
 A single statement that allocates past the limit may still exhaust the machine
-first. Not available on Windows, where it is rejected before the run. *(ADR 0288)*
+first. The limit works the same on Linux, macOS and Windows. *(ADR 0288, ADR 0726)*
 
 ```ail tool=run,--max-memory,16,FILE status=1 expect=run.limit.2 rules=run.limit.2
 fn main()
@@ -418,7 +418,7 @@ start: `AIL_TIMEOUT_MS` and `AIL_MAX_MEMORY_MB`, each a positive whole number.
 `ail build --timeout MS --max-memory MB` bakes in defaults that the
 environment overrides. An invalid value ends the program with exit code 2
 before `main` runs. With neither set, the program is not checked. Windows
-executables have no native build yet. *(ADR 0728)*
+executables read the same two variables. *(ADR 0728)*
 
 ```ail tool=build,--timeout,1000,FILE rules=run.limit.5
 fn main()

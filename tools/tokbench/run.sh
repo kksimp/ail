@@ -31,21 +31,26 @@ fi
 
 venv_python="$here/.venv/bin/python"
 if [ ! -x "$venv_python" ]; then
-    echo "setting up Python environment in tools/tokbench/.venv ..."
-    "$python" -m venv "$here/.venv"
+    echo "setting up Python environment in tools/tokbench/.venv ..." >&2
+    "$python" -m venv "$here/.venv" 1>&2 || true
+    if ! "$venv_python" -m pip --version >/dev/null 2>&1; then
+        rm -rf "$here/.venv"
+        echo "error: this Python has no venv/pip support (Debian/Ubuntu: sudo apt install python3-venv)" >&2
+        exit 1
+    fi
 fi
 if [ ! -f "$here/.venv/.installed" ] || [ "$here/requirements.txt" -nt "$here/.venv/.installed" ]; then
-    "$venv_python" -m pip install --quiet --upgrade pip
-    "$venv_python" -m pip install --quiet -r "$here/requirements.txt"
+    "$venv_python" -m pip install --quiet --upgrade pip 1>&2
+    "$venv_python" -m pip install --quiet -r "$here/requirements.txt" 1>&2
     touch "$here/.venv/.installed"
 fi
 for arg in "$@"; do
     if [ "$arg" = "--claude" ] && ! "$venv_python" -c 'import anthropic' 2>/dev/null; then
-        "$venv_python" -m pip install --quiet anthropic
+        "$venv_python" -m pip install --quiet anthropic 1>&2
     fi
 done
 if [ ! -f "$here/.cache/.complete" ]; then
-    "$venv_python" "$here/fetch_tokenizers.py"
+    "$venv_python" "$here/fetch_tokenizers.py" 1>&2
 fi
 
 exec "$venv_python" "$here/tokbench.py" "$@"

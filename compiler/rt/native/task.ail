@@ -2,7 +2,8 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## Tasks (conc.task.*, native.task.1, ADRs 0599-0601): a pool of worker threads sized to the
-## cores (at most 8, conc.par.9) that take tasks from one queue; `spawn` puts
+## cores (at most 64, and each region uses only as many as its work repays,
+## conc.par.9, conc.par.17) that take tasks from one queue; `spawn` puts
 ## a task record on the queue and `wait` sleeps on the record's state word.
 ## On Linux a thread is a `clone` with a stack from `mmap` and every sleep is
 ## a futex; on macOS it is a libSystem pthread and a `__ulock_wait`. Only linked into a program that spawns tasks or runs `par for`
@@ -30,16 +31,24 @@ P_LIVE := 32
 P_BLOCKED := 40
 P_IDLE := 48
 P_TARGET := 56
+# `AIL_PAR_LOG` was set (conc.par.17): each parallel region says on standard error how many workers it used.
+P_LOG := 64
+# Parallel regions running now (`par_start` to the end of `par_wait`): `set_threads`
+# traps while one runs (conc.par.18).
+P_REGION := 72
 P_CUR := 128
 # macOS: each worker's restart stack pointer (workers run on pthreads there).
 P_TOP := 1024
 # A thread parked for the collector publishes its stack pointer here, with
 # the callee-saved registers it had (native-abi.md §10).
 P_PARK := 2048
+# 80 bytes per thread slot, 65 slots (`MAXW` workers and the main thread), to 9296.
 P_REGS := 4096
 # The mutexes each thread holds from `lock` (a list through the mutex records).
-P_HELD := 12288
-POOL_SZ := 24576
+# The text builders (`P_SB`, 9344) and failures (`P_ERR`, 10944) of core.ail lie
+# between; each holds 24 bytes per slot (ADR 0946: the layout fits 64 workers).
+P_HELD := 12544
+POOL_SZ := 32768
 # Heap kinds of the blocks tasks use: every word may be a pointer, except an
 # atomic cell, which is `KIND_ATOMIC` (heap.ail).
 KIND_TASK := 12
@@ -67,7 +76,7 @@ T_SIB := 224
 T_RACE := 232
 T_SIZE := 240
 
-## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
+## The cores this process may run on, 1 to `MAXW` (`sched_getaffinity`).
 fn cores() int
     n := env_threads()
     if n > 0
@@ -102,10 +111,10 @@ fn env_threads() int
 fn hw_cores() int
     if target() == 3
         c := import_call("GetActiveProcessorCount", 65535, 0, 0, 0)
-        return if c < 1 then 1 else if c > 8 then 8 else c
+        return if c < 1 then 1 else if c > MAXW then MAXW else c
     if target() == 2
         c := import_call("_sysconf", 58, 0, 0, 0)
-        return if c < 1 then 1 else if c > 8 then 8 else c
+        return if c < 1 then 1 else if c > MAXW then MAXW else c
     buf := alloc(128, KIND_BYTES)
     k := if target() == 0 then 204 else 123
     r := syscall(k, 0, 128, buf, 0, 0, 0)
@@ -118,8 +127,8 @@ fn hw_cores() int
                 b = b.shr(1)
     if n < 1
         n = 1
-    if n > 8
-        n = 8
+    if n > MAXW
+        n = MAXW
     n
 
 ## The pool block, made on first use. From then on the process has more
@@ -133,6 +142,8 @@ fn pool() int
     if q < 0
         fail(1, 0, 0)
     store64(q + P_TARGET, cores())
+    if os_env_get("AIL_PAR_LOG") != ""
+        store64(q + P_LOG, 1)
     # Windows threads run on stacks the system makes (`start_thread`).
     stacks := if target() == 3 then 0 else sys_mmap_lazy(MAXW * STACK_SZ)
     if stacks < 0
@@ -248,7 +259,9 @@ fn worker_main(idx int)
             gc_park()
         lock(p + P_LOCK)
         rec := load64(p + P_HEAD)
-        if rec != 0
+        # Past the cap `set_threads` lowered: take nothing, sleep (conc.par.18).
+        running := load64(p + P_LIVE) - load64(p + P_IDLE) - load64(p + P_BLOCKED)
+        if rec != 0 and running <= load64(p + P_TARGET)
             next := load64(rec + T_NEXT)
             store64(p + P_HEAD, next)
             if next == 0
@@ -500,7 +513,7 @@ fn tensor_par(env int, lo int, hi int, work int) bool
         return false
     if load64(pool() + P_TARGET) < 2
         return false
-    grp := par_start(TENSOR_TASK, env, lo, hi)
+    grp := par_start(TENSOR_TASK, env, lo, hi, work / (hi - lo) + 1)
     par_wait(grp)
     true
 
@@ -561,7 +574,7 @@ PAR_MIN_WORK := 65536
 PAR_HEAVY := 4096
 
 ## Whether `par for lo..hi` goes to the pool: at least twice as many
-## iterations as workers (conc.par.8). A chunk function takes the environment
+## iterations as the workers the region uses (conc.par.8, conc.par.17). A chunk function takes the environment
 ## record, `lo` and `hi` from its task record's arguments 0 to 2, then
 ## 3 words (sum, lowest and highest running sum) per accumulator.
 fn par_worth(lo int, hi int, work int, auto int) bool
@@ -577,7 +590,9 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     # pool even when there are fewer than twice as many as workers.
     if work >= PAR_HEAVY
         return true
-    if n < 2 * t
+    # Twice as many iterations as the workers the region would use (conc.par.17),
+    # so a big pool doesn't send a short heavy loop back in order.
+    if n < 2 * par_width(n, work)
         return false
     # A loop the compiler chose also needs enough work in all.
     auto == 0 or n >= PAR_MIN_WORK / work
@@ -595,16 +610,59 @@ fn fork_ok(n int) bool
 fn env_new(n int) int
     alloc(8 * n + 8, KIND_ENV)
 
-## Split `lo..hi` into chunks, four per worker, queue them, and give back
-## the group: word 0 the chunk count, then the task records in order.
-fn par_start(id int, env int, lo int, hi int) int
+## Operations a worker must have to itself before it joins a region (about 50
+## microseconds, the cost of waking it and joining its result).
+PAR_GRAIN := 65536
+
+## How many workers a region of `n` iterations of about `work` operations uses
+## (conc.par.17): one per `PAR_GRAIN` operations, at least 2 and at most the
+## pool's target, so a region that scales to 16 cores gets 16 and a small one
+## stays on few. The work comes from the compiler's cost model (conc.par.14).
+fn par_width(n int, work int) int
     t := load64(pool() + P_TARGET)
+    per := if work < 1 then 1 else work
+    each := (PAR_GRAIN + per - 1) / per
+    mut w := n / each
+    if w > t
+        w = t
+    if w < 2
+        w = 2
+    w
+
+## `AIL_PAR_LOG` set: one line on standard error for a region (conc.par.17).
+fn par_log(n int, work int, w int, chunks int)
+    p := pool()
+    if load64(p + P_LOG) == 0
+        return
+    out_lock()
+    flush()
+    out_str("par: ")
+    out_int(n)
+    out_str(" iterations of about ")
+    out_int(work)
+    out_str(" operations -> ")
+    out_int(w)
+    out_str(" of ")
+    out_int(load64(p + P_TARGET))
+    out_str(" workers, ")
+    out_int(chunks)
+    out_str(" chunks (conc.par.17)\n")
+    flush_to(2)
+    out_unlock()
+
+## Split `lo..hi` into chunks, four per worker the region uses (`par_width`),
+## queue them, and give back the group: word 0 the chunk count, then the
+## task records in order. `work` is the operations of one iteration.
+fn par_start(id int, env int, lo int, hi int, work int) int
+    atomic_add(pool() + P_REGION, 1)
     n := hi - lo
-    mut chunks := 4 * t
+    w := par_width(n, work)
+    mut chunks := 4 * w
     if chunks > n
         chunks = n
     size := (n + chunks - 1) / chunks
     chunks = (n + size - 1) / size
+    par_log(n, work, w, chunks)
     grp := alloc(8 * chunks + 8, KIND_ENV)
     store64(grp, chunks)
     for c in 0..chunks
@@ -626,7 +684,24 @@ fn par_wait(grp int) bool
         wait_done(rec)
         if atomic_load(rec + T_STATE) != 2
             ok = false
+    atomic_add(pool() + P_REGION, -1)
     ok
+
+## `task.threads()` (conc.par.18, ADR 1018): the pool's cap now, `AIL_THREADS`
+## or the cores at the start, then what `set_threads` last set.
+fn task_threads() int
+    load64(pool() + P_TARGET)
+
+## `task.set_threads(n)` (conc.par.18): the cap for the regions and tasks that
+## start from now on, `n` clamped to 1 to `MAXW`. Workers past the cap finish
+## what they run and then sleep; a raised cap wakes them. A parallel region
+## that is running makes it trap.
+fn task_set_threads(n int)
+    p := pool()
+    if atomic_load(p + P_REGION) > 0
+        os_usage_trap("conc.par.18", "`task.set_threads` while a parallel loop runs")
+    store64(p + P_TARGET, if n < 1 then 1 else if n > MAXW then MAXW else n)
+    futex_wake(p + P_SEQ, MAXW)
 
 ## A chunk of a loop that can't be run again trapped: report the first
 ## such trap as `trap` does, and end the process (conc.atomic.6).

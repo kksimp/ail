@@ -4,7 +4,7 @@ Each design decision has its own file (see [ADR 0001](0001-record-decisions-as-a
 New ADRs copy [0000-template.md](0000-template.md) and take the next free number.
 ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 
-Status legend: **Accepted** is decided; the spec and code may still be catching up (see [status.md](../status.md)). **Proposed** is not decided or not built: *planned, not implemented* means the direction is chosen but no code exists, so do not read it as shipped behaviour. **Superseded** and **Rejected** are kept for history.
+Status legend: **Accepted** is decided; the spec and code may still be catching up (see [status.md](../status.md)). **Proposed** is not decided or not built: *planned, not implemented* means the direction is chosen but no code exists, so do not read it as shipped behaviour. **Deferred**: direction chosen, not built, not in 0.1.0. **Superseded** and **Rejected** are kept for history.
 
 | # | Title | Status | Date |
 |---|---|---|---|
@@ -507,6 +507,10 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0568](0568-native-map-and-set-layout.md) | Native `Map` and `Set`: one insertion-ordered table with a hash index *(delegated)* | Accepted | 2026-10-20 |
 | [0569](0569-native-map-lowering.md) | Lowering `Map` and `Set` operations to runtime calls, with the interpreter's trap *(delegated)* | Accepted | 2026-10-20 |
 | [0570](0570-native-constant-lists.md) | Constant lists are built once, on first use, in a global slot *(delegated)* | Superseded by 0604 | 2026-10-20 |
+| [0571](0571-key-functions-inline.md) | Key functions are lowered inline, with no closure object *(delegated)* | Accepted | 2026-10-20 |
+| [0572](0572-native-stable-sort.md) | Native stable sort over a list of indices *(delegated)* | Accepted | 2026-10-20 |
+| [0573](0573-native-function-values.md) | Function values in native code: the address of a declared function *(delegated)* | Accepted | 2026-10-20 |
+| [draft 0573a](0573a-native-function-values-deferred.md) | Function values in native code wait for the language *(delegated)* | Superseded by 0573 | 2026-10-20 |
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
@@ -707,14 +711,14 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
 | [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Accepted (built by [1020](1020-ail-context.md)) | 2026-10-24 |
-| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed (planned, not implemented) | 2026-10-24 |
-| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed (planned, not implemented) | 2026-10-24 |
-| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed (planned, not implemented) | 2026-10-24 |
+| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Deferred past 0.1.0 | 2026-10-24 |
+| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Accepted | 2026-10-24 |
+| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Accepted (built by [1024](1024-ail-review.md)) | 2026-10-24 |
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Accepted (built by [1023](1023-ail-infer-contracts.md)) | 2026-10-24 |
-| [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Proposed (planned, not implemented) | 2026-10-24 |
-| [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed (planned, not implemented) | 2026-10-24 |
-| [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Proposed (planned, not implemented) | 2026-10-24 |
-| [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Proposed (planned, not implemented) | 2026-10-24 |
+| [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Superseded by 1022 | 2026-10-24 |
+| [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Deferred past 0.1.0 | 2026-10-24 |
+| [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Deferred past 0.1.0 | 2026-10-24 |
+| [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Deferred past 0.1.0 | 2026-10-24 |
 | [0900](0900-refuse-rust-only-routes.md) | `./ail` refuses `test --native` and `selftest --test` (Rust-only routes) | Accepted | 2026-10-24 |
 | [0901](0901-std-toml.md) | `std.toml`: TOML read into the `Json` value *(delegated)* | Accepted | 2026-10-25 |
 | [0902](0902-std-bigint.md) | `std.bigint`: integers of any size *(delegated)* | Accepted | 2026-10-25 |
@@ -735,9 +739,9 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0913](0913-http2-client-over-alpn.md) | An HTTP/2 client over ALPN in the native `std.net` *(delegated)* | Accepted | 2026-10-26 |
 | [0914](0914-automatic-fork-join-of-independent-calls.md) | Run independent pure calls in a straight-line block as a fork-join, when each is worth it | Accepted | 2026-10-26 |
 | [0915](0915-http-retry-any-method-on-stale-pooled-connection.md) | The HTTP client resends any method once when a pooled connection dies before a response byte | Accepted | 2026-10-26 |
-| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Proposed (planned, not implemented) | 2026-10-26 |
+| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Accepted (harness on main; full runs pending) | 2026-10-26 |
 | [0917](0917-ail-task-protocol.md) | `ail task`: start, status, verify and finish one change with a recorded base and a stated next step *(delegated)* | Accepted | 2026-10-26 |
-| [0918](0918-ail-mcp-compiler-tools.md) | `ail mcp`: the compiler's own tools (check, test, ask, impact, task) as an MCP server on stdio *(delegated)* | Accepted | 2026-10-26 |
+| [0918](0918-ail-mcp-compiler-tools.md) | `ail mcp`: the compiler's own tools (check, test, ask, impact, context, edit, fix, explain, api, review, task; amended 2026-11-10) as an MCP server on stdio *(delegated)* | Accepted | 2026-10-26 |
 | [0919](0919-attach-input-opt-in.md) | `ail run --attach-input`: an opt-in `input` request so an agent can click and type in a running app | Accepted | 2026-10-26 |
 | [0920](0920-replay-shrink.md) | `ail replay --shrink`: the smallest recording that still fails the same way | Accepted | 2026-10-26 |
 | [0921](0921-replay-probes.md) | Probes: `--at FILE:LINE --show a,b` prints chosen values each time a line runs | Accepted | 2026-10-26 |
@@ -763,23 +767,28 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
 | [0944](0944-parallel-gc-marking.md) | Native: the parked threads help mark on heaps of 32 MB and more *(delegated)* | Accepted | 2026-11-04 |
 | [0945](0945-vector-escape-loops.md) | Native: vector kernel for escape-time loops, mandelbrot-style (ADR 0845 stage 2) *(delegated)* | Accepted | 2026-11-05 |
+| [0946](0946-adaptive-thread-pool.md) | Native: a pool sized to every core (up to 64), and each region uses the workers its work repays *(delegated)* | Accepted | 2026-11-05 |
 | [0949](0949-std-audio.md) | std.audio: sound as data, devices through a host program *(delegated)* | Accepted | 2026-11-05 |
-| [0954](0954-const-generics.md) | Const generics: `int` parameters on types and functions (`struct Vec[T, N int]`), by monomorphisation *(delegated)* | Proposed | 2026-11-05 |
+| [0954](0954-const-generics.md) | Const generics: `int` parameters on types and functions (`struct Vec[T, const N int]`), by monomorphisation *(delegated)* | Accepted | 2026-11-05 |
 | [0955](0955-custom-hash-names-fields.md) | Custom hashing: `impl Hash` names the fields that take part (amends 0133, resolves OQ-042) | Accepted | 2026-11-05 |
 | [0956](0956-std-gfx-frame-loop.md) | `std.gfx`: the frame loop for real-time programs (key-up, vsync, `Input` snapshots) *(delegated)* | Accepted | 2026-11-05 |
 | [0957](0957-shared-surface-transport.md) | Shared-surface transport for `std.gfx` (no JSON on the hot path) *(delegated)* | Accepted | 2026-11-05 |
-| [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Proposed (planned, not implemented) | 2026-11-05 |
+| [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Deferred past 0.1.0 | 2026-11-05 |
 | [0959](0959-std-crypto.md) | std.hash and std.crypto: in-house, constant-time, vector-checked primitives; HMAC-SHA-384/512 first *(delegated)* | Accepted | 2026-11-05 |
-| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Proposed | 2026-11-05 |
+| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Deferred past 0.1.0 | 2026-11-05 |
 | [0966](0966-ail-lsp-language-server.md) | `ail lsp`: the semantic API as a language server on stdio *(delegated)* | Accepted | 2026-11-05 |
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
-| [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Proposed (experimental: compile-only, unverified) | 2026-11-05 |
+| [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Deferred past 0.1.0 (experimental: compile-only, unverified) | 2026-11-05 |
 | [0969](0969-leak-report.md) | The leak report: `ail leak` shows growth by kind and retention by root on the GC heap *(delegated)* | Accepted | 2026-11-06 |
+| [0950](0950-c-abi-exports.md) | C ABI exports: `pub export c fn` and `ail header` *(delegated)* | Accepted (library output deferred) | 2026-11-06 |
+| [0952](0952-layout-c-structs.md) | `@layout(c)` structs: raw memory behind `*P`, not GC objects *(delegated)* | Deferred | 2026-11-08 |
 | [0971](0971-std-app-file-chooser.md) | `std.app` native file and folder chooser *(delegated)* | Accepted | 2026-11-06 |
 | [0972](0972-windows-system-zone.md) | Windows system zone: map the Windows zone ID to its IANA name *(delegated)* | Accepted | 2026-11-07 |
 | [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
 | [0974](0974-flac-decoding.md) | std.audio: decode FLAC in AIL, amends ADR 0949 *(delegated)* | Accepted | 2026-11-07 |
+| [0975](0975-library-entry-rule.md) | Library entry: lazy runtime init, caller stack as GC root, serialised first slice *(delegated)* | Accepted | 2026-11-07 |
 | [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
+| [0977](0977-fs-attributes.md) | `std.fs` gets `mode`, `set_mode`, `set_modified`, `read_link`, `symlink`, `truncate` and `write_at`, for archivers *(delegated)* | Accepted | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
 | [0979](0979-gfx-windows-publish-attach.md) | `std.gfx` windows publish the attach socket (`gfx.watch.run`, `App.shown`) *(delegated)* | Accepted | 2026-11-07 |
 | [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
@@ -787,12 +796,42 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
 | [0985](0985-gfx-gamepad-input.md) | `std.gfx` gamepad input: `Input.pads`, the `pad` event, GameController on the Mac *(delegated)* | Accepted | 2026-11-08 |
+| [0987](0987-auto-parallel-inner-loops.md) | Native: a proven loop inside a loop run in order may go to the pool (amends 0911) *(delegated)* | Accepted | 2026-11-08 |
+| [0984](0984-std-app-font-op.md) | `std.app` `Font`: web fonts in the display list, kept by the host under an id | Accepted | 2026-11-08 |
 | [0988](0988-std-media-webm.md) | `std.media.webm`: WebM and Matroska demuxing in AIL, fed in pieces for Media Source Extensions *(delegated)* | Accepted | 2026-11-08 |
 | [0989](0989-std-video-vp9.md) | `std.video.vp9`: a VP9 profile 0 decoder in AIL, I420 frames and RGBA *(delegated)* | Accepted | 2026-11-08 |
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
+| [0994](0994-overflow-facts-in-multi-exit-loops.md) | Native: drop overflow checks that bounds and index uses rule out, in loops that leave in more than one place *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
+| [1007](1007-std-io-write-bytes.md) | `io.write_bytes`: raw bytes to standard output *(delegated)* | Accepted | 2026-11-09 |
+| [1008](1008-std-app-appearance.md) | `std.app`: an `appearance` event (`dark` or `light`) after start and on every system change *(delegated)* | Accepted | 2026-11-09 |
+| [1009](1009-readiness-io.md) | Readiness I/O: `epoll` and `kqueue` sets for the HTTP server's parked connections *(delegated)* | Accepted | 2026-11-09 |
+| [1010](1010-c-header-constants-enums-fnptr.md) | C header import breadth: `#define` constants, enums and function-pointer types *(delegated)* | Accepted | 2026-11-09 |
+| [1011](1011-os-signals.md) | `os.signals`: SIGINT, SIGTERM, SIGHUP, SIGQUIT and SIGWINCH as a `Channel[str]`; the Windows console Ctrl-C handler *(delegated)* | Accepted | 2026-11-09 |
+| [1005](1005-std-app-font-family-list.md) | `std.app` font-family lists: the host measures and draws in the first installed family and says which *(delegated)* | Accepted | 2026-11-08 |
+| [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
+| [1016](1016-fs-map.md) | `fs.map`: a read-only memory-mapped `bytes` view of a file *(delegated)* | Accepted | 2026-11-09 |
+| [1017](1017-std-app-screen-size-and-scale.md) | `std.app` reports the display's size and scale on `start` and `resize` *(delegated)* | Accepted | 2026-11-09 |
+| [1018](1018-task-set-threads.md) | `task.threads()` and `task.set_threads(n)`: the pool's cap at run time *(delegated)* | Accepted | 2026-11-09 |
+| [1019](1019-ail-merge-driver.md) | `ail merge`: a git merge driver that merges `.ail` files by declaration; `--check` reports semantic conflicts *(delegated)* | Accepted | 2026-11-09 |
 | [1020](1020-ail-context.md) | `ail context`: a token-budgeted bundle for an edit; amends ADR 0891 *(delegated)* | Accepted | 2026-11-09 |
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
-| [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
+| [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
+| [1032](1032-std-app-vector-ops.md) | `std.app` vector ops: `Round`, `Poly`, `Line` *(delegated)* | Accepted | 2026-11-09 |
+| [1033](1033-std-app-inset-right.md) | `std.app` edge mode: `inset_right` for window controls at the top-right (Windows, Linux); amends ADR 0981 *(delegated)* | Accepted | 2026-11-09 |
+| [1034](1034-std-app-text-placement.md) | `std.app` text placement and `sans_line`; Windows font table *(delegated)* | Accepted | 2026-11-09 |
+| [1035](1035-v0-1-0-freeze-and-release-candidate.md) | v0.1.0: freeze after the lanes in flight, one release candidate gated on three hosts | Accepted | 2026-11-09 |
+| [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
+| [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |
+| [1045](1045-attach-listener-on-windows.md) | The attach listener on Windows: `%TEMP%` discovery directory, and the listener stops when the window closes *(delegated)* | Accepted | 2026-11-10 |
+| [1046](1046-agent-kit-in-ail-new.md) | `ail new` writes an agent kit: `AGENTS.md` and `.mcp.json`, `--no-agent` to skip *(delegated)* | Accepted | 2026-11-10 |
+| [1047](1047-ail-check-fix.md) | `ail check --fix`: repair, then check, in one command *(delegated)* | Accepted | 2026-11-10 |
+| [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
+| [1051](1051-core-card-and-std-lookup.md) | Core card, `ail card` and `ail ask std` *(delegated)* | Accepted | 2026-11-10 |
+| [1052](1052-change-certificate.md) | Change certificate: `ail verify --diff --attest` and `--check` *(delegated)* | Accepted | 2026-11-10 |
+| [1054](1054-ail-edit-refactors.md) | `ail edit` refactors: `change_sig`, `extract` and `move` *(delegated)* | Accepted | 2026-11-10 |
+| [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
+| [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
+| [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |

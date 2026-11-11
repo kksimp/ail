@@ -42,6 +42,8 @@ pub enum Ty
     FnTy(params List[Ty], ret Ty)
     ## `(A, B, ...)`, two or more elements (type.tuple.1).
     Tuple(elems List[Ty])
+    ## A const generic argument: the value `4` in `Vec[float, 4]` (gen.const.1).
+    ConstVal(v int)
 
 ## The error part of `T ! E`: a written set, or a function's inferred set.
 pub enum Errs

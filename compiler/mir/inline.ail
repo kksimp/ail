@@ -58,7 +58,7 @@ pub fn inline_module(mut out Module)
         else
             f = forwarded(hoist_headers(fill_loops(
                 kept_lengths(
-                    bce(mark_nonneg(interchange(vec_loops(f))), reserve, grow_only),
+                    iv_sums(bce(mark_nonneg(interchange(vec_loops(f))), reserve, grow_only)),
                     reserve and grow_only,
                 ),
                 fills and not opt_off("fill"),

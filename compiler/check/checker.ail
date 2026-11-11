@@ -9,6 +9,8 @@ use fix
 pub struct TParam
     pub name str
     pub bounds List[int]
+    ## A const generic parameter, `const N int` (gen.const.1).
+    pub is_const bool
 
 ## A type parameter name in scope.
 pub struct Scoped
@@ -308,7 +310,7 @@ fn Checker.unsupported(mut self, at ast.Pos, text str)
     diags.push(new_diag("bootstrap.unsupported", at, text))
 
 fn Checker.new_param(mut self, n str, bounds List[int]) int
-    tparams.push(TParam(name: n, bounds: bounds))
+    tparams.push(TParam(name: n, bounds: bounds, is_const: false))
     tparams.len() - 1
 
 fn Checker.scope_of(self, ids List[int]) List[Scoped]
@@ -516,9 +518,29 @@ fn Checker.declare_generics(mut self, gs List[ast.GenericParam]) List[int]
                 "`{n}` is a trait, so it can't name a type parameter",
                 "to require the trait, write `[T {n}]`",
             )
+        if g.is_const
+            if g.bounds.len() != 1 or g.bounds[0].name != "int"
+                err_help(
+                    "gen.const.1",
+                    g.pos,
+                    "the const parameter `{n}` must have type `int`",
+                    "write `const {n} int`",
+                )
+            id := new_param(n, [])
+            tparams[id].is_const = true
+            ids.push(id)
+            continue
         bounds := resolve_bounds(g.bounds)
         ids.push(new_param(n, bounds))
     ids
+
+## Whether `n` names a const generic parameter in scope (gen.const.3).
+fn Checker.is_const_param(self, n str) bool
+    for k in 0..scope.len()
+        s := scope[scope.len() - 1 - k]
+        if s.name == n
+            return tparams[s.id].is_const
+    false
 
 fn Checker.resolve_bounds(mut self, bounds List[ast.Ident]) List[int]
     mut out := List[int]()
@@ -584,14 +606,17 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
     for k in 0..declared.len()
         mut bounds := tparams[declared[k]].bounds
         mut n := names[k]
+        is_const := tparams[declared[k]].is_const
         if given := owner.params
-            if matching
+            if matching and not is_const
                 for b in resolve_bounds(given[k].bounds)
                     if not bounds.contains(b)
                         bounds.push(b)
             if given.len() == names.len()
                 n = given[k].name
-        ids.push(new_param(n, bounds))
+        id := new_param(n, bounds)
+        tparams[id].is_const = is_const
+        ids.push(id)
     ids
 
 ## ---- Functions ----
@@ -920,7 +945,7 @@ fn Checker.check_main(mut self)
         for a in f.attrs
             if a.name == "test"
                 is_test = true
-            if not KNOWN_ATTRS.contains(a.name)
+            if a.name != "export c" and not KNOWN_ATTRS.contains(a.name)
                 known := ["`@{k}`" for k in KNOWN_ATTRS].join(", ")
                 err_help(
                     "test.attr.1",

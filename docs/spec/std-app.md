@@ -32,14 +32,19 @@ is `0.0` fills the space left in that direction. The builders
 **std.app.3** — `enum Op` is a canvas's display list, drawn in order, in
 points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
-`mono`, `sans` or `serif`, ADR 0905; `(x, y)` is the text's top-left corner),
+`mono`, `sans`, `serif` (ADR 0905) or `web:` and the `id` of a `Font`, ADR 0984; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
+`Round`, `Poly` and `Line` (anti-aliased shapes, std.app.32),
 `Pic(x, y, w, h, src)` (an image file path or URL),
 `Bitmap(x, y, w, h, id, pw, ph, data)` (a `pw` by `ph` image scaled to the
 rectangle; `data` is its `R, G, B, A` bytes in standard base64, which
 `bitmap_data(rgba List[int])` makes; the host keeps the image under `id`, so an
 empty `data` draws the one already sent, and a host that has none under that
-`id` draws a placeholder), `Clip(x, y, w, h)`
+`id` draws a placeholder), `Font(id, data)` (a web font: `data` is the bytes of a
+TrueType or OpenType file in standard base64; the host keeps it under `id`, and
+a `Str` whose `font` is `web:` and that `id` is drawn and measured in it; an
+empty `data` keeps the font already sent; a host without the font, or that
+cannot read it, draws in `sans`; the op draws nothing itself, ADR 0984), `Clip(x, y, w, h)`
 (limits later steps) and `Unclip` (ends the latest `Clip`).
 `draw_text(x, y, s, fg)` is a `Str` in `mono` at size 13, and
 `draw_rect(x, y, w, h, color)` a `Fill`. *(ADR 0838)*
@@ -116,8 +121,8 @@ and `view` without a window. *(ADR 0838)*
 
 **std.app.13** — `trait App` also has `measures(self) List[Measure]` (default
 empty) and `measured(mut self, runs List[Measure], widths List[float])`
-(default does nothing). `struct Measure` is `text`, `font` (`mono`, `sans` or `serif`),
-`size`, `bold` and `italic`. After each `update`, while `measures()` is not
+(default does nothing). `struct Measure` is `text`, `font` (`mono`, `sans`, `serif`,
+`web:` and a `Font` id, or a `font-family` list, std.app.28), `size`, `bold` and `italic`. After each `update`, while `measures()` is not
 empty (at most 4 rounds), `run` sends `{"v":1,"t":"measure","runs":[...]}` with
 the same fields per run, and waits for the host's `{"kind":"measured","text":W}`
 event, where `W` is each run's advance width in points in the font a `Str` op
@@ -169,6 +174,15 @@ there. A host that cannot hide its title bar keeps its decorations and
 reports both insets as `0`, so a program must not depend on edge mode.
 *(ADR 0981)*
 
+**std.app.33** — While `edge` is `true` (std.app.25), `start` and every
+`resize` also carry `inset_right` (float, points): the room the host's
+window controls take at the window's top-right, `0` when it draws none
+there. `Event.inset_right` is `0.0` for every other kind and when the host
+omits it. A host with its controls on the right (Windows, Linux) reports
+`inset_right` and an `inset_left` of `0`; the macOS host reports
+`inset_left` and `0`. An app keeps its strip between `inset_left` and
+`width - inset_right`. *(ADR 1033, amends ADR 0981)*
+
 **std.app.26** — An app puts text on the system clipboard by sending the
 line `{"v":1,"t":"clipboard","text":T}` through `lines()` (std.app.21);
 `app.clipboard(text)` is that line. The host copies `T` exactly as given
@@ -187,6 +201,14 @@ to that canvas (so possibly negative or past its size). A host may omit
 `down` and `up` (then it sends neither), so a program must not depend on
 them. *(ADR 0983)*
 
+**std.app.31** — `start` and every `resize` carry `screen_w` and `screen_h`
+(floats, points: the main display's size) and `scale` (float: device pixels
+per point, `2` on a Retina display). A host reports the display it draws on
+by default (macOS `NSScreen.main`, Linux the primary GDK monitor, Windows the
+primary screen with its DPI); a headless event has all three `0`, and
+`app.event_from_json` reads them like any member. A host that cannot tell
+reports `0`, so a program must treat `scale == 0` as `1`. *(ADR 1017)*
+
 **std.app.23** — A host sends `paste` (a canvas's `id`, `text` is the system
 clipboard's text) when the paste key (Command-V on macOS, Control-V
 elsewhere) is pressed in a canvas, instead of the `key` event for it; a
@@ -197,6 +219,49 @@ program must not depend on `paste`. *(ADR 0978)*
 agent's screen model and `input` ids (`attach.wire.4`, `attach.input.2`) are built
 from `shown`, so an app that draws somewhere its tree doesn't show, as a
 `std.gfx` game does, can say what is on screen. *(ADR 0979)*
+
+**std.app.28** — `Measure.font` and `Str.font` may be a CSS `font-family`
+list: family names separated by commas, each optionally quoted. The host
+measures and draws the text in the first family of the list that is
+installed (matched without regard to case); when none is, in the list's
+first generic family (`serif` is `serif`; `monospace` and `ui-monospace`
+are `mono`; `sans-serif`, `system-ui` and `ui-sans-serif` are `sans`), and
+with no generic either, in `sans`. All three hosts choose this way. The
+`measured` event may carry `"fonts":F`, each run's chosen family in the same
+order, joined by commas (a host that does not say omits it); `Event` has
+`fonts` and `trait App` has `fonts_used(mut self, runs List[Measure], used List[str])`
+(default does nothing), called after `measured` when the host said.
+`family_list(font) List[str]` is the list's families, unquoted and in order,
+and `generic_of(font) str` the face the list falls back to. *(ADR 1005)*
+
+**std.app.30** — A host sends `appearance` (`text` is `dark` or `light`) once right after `start`, and again whenever the system's dark or light setting changes. An app may answer with a new view, as for any event. A host that cannot read the setting sends none, so a program must not depend on it and keeps a default theme. *(ADR 1008)*
+
+**std.app.32** — Three ops draw anti-aliased vector shapes, in points, colors
+`0xRRGGBB`. `Round(x, y, w, h, r, color, alpha, stroke float)` is a rounded
+rectangle: `r` is clamped to 0 up to half the shorter side (so a circle is
+`r = w / 2`), `stroke` 0 fills it and `stroke` above 0 outlines it with that
+width, centred on its edge; `alpha` (0 to 1, clamped) is its opacity.
+`Poly(points, color, alpha)` fills the polygon through `points`
+(`x0, y0, x1, y1, ...`) with the non-zero winding rule; fewer than 3 points
+draw nothing and a trailing odd value is ignored. `Line(points, color, width)`
+strokes an open polyline with round caps and round joins; fewer than 2 points
+draw nothing, and a `width` of 0 or less is 1. A host draws all three
+with its platform's anti-aliasing at device resolution, and the display list
+(the `view` JSON and `outline`) is the same on every host. A host that does not
+know an op skips it (std.app.19). `app.outline` prints
+`round X,Y WxH rR COLOR ALPHA STROKE`, `poly N COLOR ALPHA` and
+`line N COLOR WIDTH` (`N` is the point count), and `std.screen` shows `Round`
+and `Poly` as a `box` and `Line` as a `line` over their bounding boxes
+(std.screen.12). *(ADR 1032)*
+
+**std.app.34** — A `Str` at `y` is drawn with the ascent-to-descent box of its
+glyphs centred in the line box whose top is `y` and whose height is the host
+font's natural line height at that size, on every host. `start` and every
+`resize` carry `sans_line` (float, points, whole): the natural line height of
+`sans` at size 13, as `cell_h` is for `mono`, so an app centres text in a row of
+height `h` at `y + (h - sans_line * size / 13) / 2` with no per-platform
+constant; `0` when the host does not say, and an app then uses its own
+constant. `event(kind)` makes it `0`. *(ADR 1034)*
 
 ## Examples
 
@@ -312,6 +377,80 @@ fn main()
     print(app.outline(s.view()))
 ```
 
+```ail rules=std.app.31
+use std.app
+
+## A page's `screen` and `devicePixelRatio`, from the display the host reports.
+struct Page
+    w float
+    h float
+    ratio float
+
+impl app.App for Page
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            w = ev.screen_w
+            h = ev.screen_h
+            ratio = if ev.scale == 0.0 then 1.0 else ev.scale
+
+    fn view(self) app.Node
+        app.label("{w}x{h} @{ratio}")
+
+fn main()
+    mut p := Page(w: 0.0, h: 0.0, ratio: 1.0)
+    mut start := app.event("start")
+    start.screen_w = 1512.0
+    start.screen_h = 982.0
+    start.scale = 2.0
+    print(app.step(mut p, start))
+```ail rules=std.app.30
+## A view that follows the system theme: `appearance` picks the background.
+struct Themed
+    dark bool
+impl app.App for Themed
+        if ev.kind == "appearance"
+            dark = ev.text == "dark"
+        bg := if dark then 0x1f1f1f else 0xffffff
+        app.canvas("c", 0.0, 0.0, [app.draw_rect(0.0, 0.0, 10.0, 10.0, bg)])
+    mut t := Themed(dark: false)
+    mut ev := app.event("appearance")
+    ev.text = "dark"
+    print(app.step(mut t, ev))
+    ev.text = "light"
+    print(app.step(mut t, ev))
+```
+
+```ail rules=std.app.33
+use std.app
+
+## A tab strip that stops left of the window controls on the right.
+struct Tabs
+    room float
+
+impl app.App for Tabs
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            room = ev.dx - ev.inset_right
+
+    fn view(self) app.Node
+        app.canvas("tabs", 0.0, 0.0, [app.draw_rect(0.0, 0.0, room, 32.0, 0x202124)])
+
+    fn edge(self) bool
+        true
+
+fn main()
+    mut t := Tabs(room: 0.0)
+    mut r := app.event("resize")
+    r.dx = 1000.0
+    r.inset_right = 138.0
+    r.inset_top = 32.0
+    t.update(r)
+    print(app.outline(t.view()))
+    j := parse_json("\{\"kind\":\"resize\",\"dx\":900,\"inset_right\":138}") else Json.Null
+    print(app.event_from_json(j).inset_right)
+    print(app.event("start").inset_right)
+```
+
 ```ail rules=std.app.27
 use std.app
 
@@ -353,6 +492,44 @@ fn main()
     u.x = 50.0
     s.update(u)
     print((s.from, s.to, s.held))
+
+```ail rules=std.app.28
+use std.app
+
+## A page's heading font: the host draws it in Georgia when that is
+## installed, else in its serif face.
+fn main()
+    heading := "\"Nope Display 9z\", Georgia, serif"
+    print(app.family_list(heading).join("|"))
+    print(app.generic_of(heading))
+    print(app.generic_of("ui-monospace, Menlo"))
+    print(app.generic_of("Inter"))
+```
+
+```ail rules=std.app.34
+use std.app
+
+## A row label centred by the host's `sans` line height.
+struct Row
+    line float
+    top float
+
+impl app.App for Row
+    fn update(mut self, ev app.Event)
+        if ev.kind == "start" or ev.kind == "resize"
+            line = ev.sans_line
+            top = (32.0 - (if line > 0.0 then line else 16.0)) / 2.0
+
+    fn view(self) app.Node
+        app.canvas("row", 0.0, 0.0, [app.draw_text(8.0, top, "Tab", 0xffffff)])
+
+fn main()
+    mut r := Row(line: 0.0, top: 0.0)
+    r.update(app.event("start"))
+    print(r.top)
+    j := parse_json("\{\"kind\":\"resize\",\"sans_line\":18}") else Json.Null
+    r.update(app.event_from_json(j))
+    print(r.top)
 ```
 
 ```ail rules=std.app.26
@@ -579,4 +756,33 @@ fn main()
     print(c.clicks)
     pad.update(c)
     print(pad.popup() != none)
+```
+
+```ail rules=std.app.32
+use std.app
+
+fn main()
+    ops := [
+        app.Op.Round(x: 0.0, y: 0.0, w: 20.0, h: 20.0, r: 10.0, color: 0xff0000, alpha: 1.0, stroke: 0.0),
+        app.Op.Poly(points: [0.0, 0.0, 10.0, 0.0, 5.0, 8.0], color: 0x00ff00, alpha: 0.5),
+        app.Op.Line(points: [0.0, 0.0, 5.0, 5.0, 10.0, 0.0], color: 0, width: 2.0),
+    ]
+    print(app.outline(app.canvas("c", 20.0, 20.0, ops)))
+```ail rules=std.app.3
+use std.app
+
+struct Face
+    n int
+
+impl app.App for Face
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        data := if n == 0 then "AAEAAAAA" else ""
+        app.canvas("c", 0.0, 0.0, [app.Op.Font(id: "f", data: data), app.Op.Str(x: 0.0, y: 0.0, text: "Hi", font: "web:f", size: 20.0, fg: 0xffffff, bold: false, italic: false, underline: false)])
+
+fn main()
+    mut p := Face(n: 0)
+    print(app.outline(p.view()))
 ```

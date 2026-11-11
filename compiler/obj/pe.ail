@@ -267,10 +267,21 @@ fn pe_dll_of(name str) str
         return "SHELL32.dll"
     if name == "ProcessPrng"
         return "bcryptprimitives.dll"
+    # The readiness set's socket-driver calls (ADR 1009, win_ready.ail).
+    if name == "NtCreateFile" or name == "NtDeviceIoControlFile"
+        return "ntdll.dll"
     "KERNEL32.dll"
 
 ## The DLLs `pe_dll_of` can return, in the order their descriptors are written.
-PE_DLLS := ["KERNEL32.dll", "WS2_32.dll", "bcryptprimitives.dll", "crypt32.dll", "iphlpapi.dll", "SHELL32.dll"]
+PE_DLLS := [
+    "KERNEL32.dll",
+    "WS2_32.dll",
+    "bcryptprimitives.dll",
+    "crypt32.dll",
+    "iphlpapi.dll",
+    "ntdll.dll",
+    "SHELL32.dll",
+]
 
 ## The code with its relocations resolved, for `.text` at RVA `code_rva`,
 ## `.rdata` at `rdata` and `.bss` at `bss`.

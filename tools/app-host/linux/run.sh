@@ -22,8 +22,21 @@ if [ ! -x "$exe" ] || [ "$here/host.c" -nt "$exe" ] || [ "$here/run.sh" -nt "$ex
     echo "app-host: building $exe" >&2
     mkdir -p "$here/build"
     # shellcheck disable=SC2046
-    gcc -O2 -Wall -Wextra -o "$exe" "$here/host.c" $(pkg-config --cflags --libs gtk+-3.0) -lm
+    gcc -O2 -Wall -Wextra -o "$exe" "$here/host.c" $(pkg-config --cflags --libs gtk+-3.0 fontconfig) -lm
 fi
+
+# Fonts the host prefers for text (Inter) and for colour emoji; a missing one only costs looks.
+if ! fc-list : family 2>/dev/null | grep -qi '^Inter\b' || ! fc-list : family 2>/dev/null | grep -qi 'Noto Color Emoji'; then
+    echo "app-host: installing fonts-inter fonts-noto-core fonts-noto-color-emoji (sudo)" >&2
+    sudo apt-get install -y fonts-inter fonts-noto-core fonts-noto-color-emoji >&2 || echo "app-host: font install failed; continuing with the fonts present" >&2
+fi
+
+# Garlic's window icon (../garlic/icon); the host reads AIL_APP_ICON.
+for a in "$@"; do
+    case "$a" in
+        */garlic/garlic.ail|garlic.ail) export AIL_APP_ICON="$root/../garlic/icon/garlic-256.png" ;;
+    esac
+done
 
 if [ "${1:-}" = "--native" ]; then
     # Build the program natively (ADR 0022) and run it against this host.

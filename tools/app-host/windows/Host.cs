@@ -6,8 +6,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
@@ -127,6 +129,21 @@ static class Json
 
 // ---- Protocol ------------------------------------------------------------
 
+/// std.app.31 (ADR 1017): the primary display's size in points and its scale.
+static class ScreenInfo
+{
+    public static double W { get { return Screen.PrimaryScreen.Bounds.Width * 96.0 / Dpi; } }
+    public static double H { get { return Screen.PrimaryScreen.Bounds.Height * 96.0 / Dpi; } }
+    public static double Scale { get { return Dpi / 96.0; } }
+    static double Dpi
+    {
+        get
+        {
+            using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) return g.DpiX;
+        }
+    }
+}
+
 /// Writes events to standard output, one JSON object per line (std.app.8).
 static class Outbox
 {
@@ -163,7 +180,11 @@ static class Outbox
 abstract class Op { }
 class StrOp : Op { public double X, Y, Size; public string Text, Font; public int Fg; public bool Bold, Italic, Underline; }
 class FillOp : Op { public double X, Y, W, H; public int Color; }
+class ShadeOp : Op { public double X, Y, W, H, Alpha; public int Color; }
 class StrokeOp : Op { public double X1, Y1, X2, Y2, Width; public int Color; }
+class RoundOp : Op { public double X, Y, W, H, R, Alpha, Stroke; public int Color; }
+class PolyOp : Op { public float[] Points; public double Alpha; public int Color; }
+class LineOp : Op { public float[] Points; public double Width; public int Color; }
 class PicOp : Op { public double X, Y, W, H; public string Src; }
 class BitmapOp : Op { public double X, Y, W, H; public string Id; }
 class ClipOp : Op { public double X, Y, W, H; }
@@ -220,6 +241,16 @@ class Node
         return n;
     }
 
+    // The `points` array of a Poly or Line (std.app.32).
+    static float[] Pts(object d)
+    {
+        var l = Json.Get(d, "points") as List<object>;
+        if (l == null) return new float[0];
+        var a = new float[l.Count];
+        for (int i = 0; i < a.Length; i++) a[i] = (float)Json.Num(l[i]);
+        return a;
+    }
+
     static Op DecodeOp(object d)
     {
         double X = Json.Num(Json.Get(d, "x")), Y = Json.Num(Json.Get(d, "y")), W = Json.Num(Json.Get(d, "w")), H = Json.Num(Json.Get(d, "h"));
@@ -231,14 +262,24 @@ class Node
                     Size = Json.Num(Json.Get(d, "size")), Fg = (int)Json.Num(Json.Get(d, "fg")), Bold = Json.Flag(Json.Get(d, "bold")),
                     Italic = Json.Flag(Json.Get(d, "italic")), Underline = Json.Flag(Json.Get(d, "underline")) };
             case "Fill": return new FillOp { X = X, Y = Y, W = W, H = H, Color = color };
+            case "Shade": // std.app.19: opacity 0..1, clamped
+                return new ShadeOp { X = X, Y = Y, W = W, H = H, Color = color, Alpha = Math.Max(0, Math.Min(1, Json.Num(Json.Get(d, "alpha")))) };
             case "Stroke":
                 return new StrokeOp { X1 = Json.Num(Json.Get(d, "x1")), Y1 = Json.Num(Json.Get(d, "y1")), X2 = Json.Num(Json.Get(d, "x2")),
                     Y2 = Json.Num(Json.Get(d, "y2")), Color = color, Width = Json.Num(Json.Get(d, "width")) };
+            case "Round":
+                return new RoundOp { X = X, Y = Y, W = W, H = H, R = Json.Num(Json.Get(d, "r")), Color = color,
+                    Alpha = Json.Num(Json.Get(d, "alpha")), Stroke = Json.Num(Json.Get(d, "stroke")) };
+            case "Poly": return new PolyOp { Points = Pts(d), Color = color, Alpha = Json.Num(Json.Get(d, "alpha")) };
+            case "Line": return new LineOp { Points = Pts(d), Color = color, Width = Json.Num(Json.Get(d, "width")) };
             case "Pic": return new PicOp { X = X, Y = Y, W = W, H = H, Src = Json.Text(Json.Get(d, "src")) };
             case "Bitmap":
                 string id = Json.Text(Json.Get(d, "id"));
                 Bitmaps.Store(id, (int)Json.Num(Json.Get(d, "pw")), (int)Json.Num(Json.Get(d, "ph")), Json.Text(Json.Get(d, "data")));
                 return new BitmapOp { X = X, Y = Y, W = W, H = H, Id = id };
+            case "Font":
+                Fonts.Store(Json.Text(Json.Get(d, "id")), Json.Text(Json.Get(d, "data")));
+                return null;
             case "Clip": return new ClipOp { X = X, Y = Y, W = W, H = H };
             case "Unclip": return new UnclipOp();
         }
@@ -293,27 +334,460 @@ static class Bitmaps
 
 // ---- Canvas --------------------------------------------------------------
 
+/// The window's scale: device pixels per point (dpi / 96). The canvas works in points.
+static class Dpi
+{
+    public static double Scale = 1;
+    public static bool Hover; // std.app.16: the last `view` carried "hover":true
+
+    [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
+    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    /// Per-monitor v2 where Windows has it (10 1703+), else system DPI awareness.
+    public static void Aware()
+    {
+        try { if (SetProcessDpiAwarenessContext((IntPtr)(-4))) { Refresh(IntPtr.Zero); return; } }
+        catch (EntryPointNotFoundException) { }
+        catch (DllNotFoundException) { }
+        try { SetProcessDPIAware(); } catch (Exception) { }
+        Refresh(IntPtr.Zero);
+    }
+
+    /// Reads the scale for a window (or the screen when `hwnd` is zero).
+    public static void Refresh(IntPtr hwnd)
+    {
+        double dpi = 0;
+        try { if (hwnd != IntPtr.Zero) dpi = GetDpiForWindow(hwnd); }
+        catch (EntryPointNotFoundException) { }
+        catch (DllNotFoundException) { }
+        if (dpi < 48)
+        {
+            using (var bmp = new Bitmap(1, 1))
+            using (var g = Graphics.FromImage(bmp)) dpi = g.DpiX;
+        }
+        Scale = Math.Max(1, dpi / 96.0);
+    }
+
+    public static int Px(double points) { return (int)Math.Round(points * Scale); }
+}
+
 static class Fonts
 {
     static readonly Dictionary<string, Font> cache = new Dictionary<string, Font>();
     public const float CellSize = 13;
+    static string sans;
+    static string mono;
 
-    /// The UI face. Segoe UI Variable is a variable font that GDI+ measures and draws at different widths
-    /// in bold and italic, so the static Segoe UI stays.
-    public const string Sans = "Segoe UI";
-
-    public static Font Get(string family, double size, bool bold, bool italic, bool underline)
+    static bool Installed(string face)
     {
+        using (var fonts = new InstalledFontCollection())
+            foreach (FontFamily f in fonts.Families)
+                if (string.Equals(f.Name, face, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    /// The UI face (std.app.34): Segoe UI Variable Text when it is installed and the chosen renderer draws its
+    /// bold and italic at the widths it measures (GDI+ did not for the variable font, ADR 1034), else Segoe UI.
+    public static string Sans
+    {
+        get
+        {
+            if (sans == null)
+            {
+                sans = "Segoe UI";
+                try { if (Installed("Segoe UI Variable Text") && TextMode.Agrees("Segoe UI Variable Text")) sans = "Segoe UI Variable Text"; }
+                catch (Exception) { }
+            }
+            return sans;
+        }
+    }
+
+    /// Cascadia Mono when it is installed, else Consolas.
+    static string Mono
+    {
+        get
+        {
+            if (mono == null)
+            {
+                mono = "Consolas";
+                try { if (Installed("Cascadia Mono")) mono = "Cascadia Mono"; } catch (Exception) { }
+            }
+            return mono;
+        }
+    }
+
+    /// Web fonts sent as `Font` ops (std.app.3): the file bytes live in memory for the process,
+    /// and `web:<id>` draws in the family found in them.
+    static readonly PrivateFontCollection web = new PrivateFontCollection();
+    static readonly Dictionary<string, FontFamily> webFamilies = new Dictionary<string, FontFamily>();
+
+    public static void Store(string id, string b64)
+    {
+        if (b64.Length == 0) return;
+        try
+        {
+            byte[] bytes = Convert.FromBase64String(b64);
+            lock (web)
+            {
+                int before = web.Families.Length;
+                IntPtr mem = Marshal.AllocCoTaskMem(bytes.Length);
+                Marshal.Copy(bytes, 0, mem, bytes.Length);
+                web.AddMemoryFont(mem, bytes.Length);
+                FontFamily[] all = web.Families;
+                if (all.Length > before) webFamilies[id] = all[all.Length - 1];
+            }
+        }
+        catch (Exception) { }
+    }
+
+    static Dictionary<string, string> installed;
+
+    /// The installed families, lower-cased, for std.app.28.
+    static Dictionary<string, string> Installed()
+    {
+        if (installed == null)
+        {
+            var d = new Dictionary<string, string>();
+            using (var all = new InstalledFontCollection())
+                foreach (FontFamily ff in all.Families) d[ff.Name.ToLowerInvariant()] = ff.Name;
+            installed = d;
+        }
+        return installed;
+    }
+
+    /// std.app.28: the host face (`mono`, `sans`, `serif`, `web:` id) or installed family a
+    /// `font` names: a CSS `font-family` list resolves to its first installed family, else its
+    /// first generic, else `sans`.
+    public static string Resolve(string family)
+    {
+        if (family == "mono" || family == "sans" || family == "serif" || family.StartsWith("web:")) return family;
+        string generic = null;
+        foreach (string part in family.Split(','))
+        {
+            string f = part.Trim();
+            if (f.Length >= 2 && (f[0] == '"' || f[0] == '\'') && f[f.Length - 1] == f[0]) f = f.Substring(1, f.Length - 2).Trim();
+            if (f.Length == 0) continue;
+            string low = f.ToLowerInvariant();
+            if (low == "serif") { if (generic == null) generic = "serif"; }
+            else if (low == "monospace" || low == "ui-monospace" || low == "mono") { if (generic == null) generic = "mono"; }
+            else if (low == "sans-serif" || low == "system-ui" || low == "ui-sans-serif" || low == "sans") { if (generic == null) generic = "sans"; }
+            else
+            {
+                string name;
+                if (Installed().TryGetValue(low, out name)) return name;
+            }
+        }
+        return generic ?? "sans";
+    }
+
+    public static Font Get(string family0, double size, bool bold, bool italic, bool underline)
+    {
+        string family = Resolve(family0);
         float s = size > 0 ? (float)size : 13;
         string key = family + "|" + s + "|" + bold + italic + underline;
         Font f;
         if (!cache.TryGetValue(key, out f))
         {
             FontStyle st = (bold ? FontStyle.Bold : 0) | (italic ? FontStyle.Italic : 0) | (underline ? FontStyle.Underline : 0);
-            f = new Font(family == "sans" ? Sans : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
+            FontFamily wf = null;
+            if (family.StartsWith("web:")) lock (web) { webFamilies.TryGetValue(family.Substring(4), out wf); }
+            if (wf != null)
+            {
+                FontStyle ws = wf.IsStyleAvailable(st) ? st : (FontStyle.Regular | (underline ? FontStyle.Underline : 0));
+                f = new Font(wf, s, ws, GraphicsUnit.Pixel);
+            }
+            else
+            {
+                string name = family == "sans" || family.StartsWith("web:") ? Sans : family == "serif" ? "Georgia" : family == "mono" ? Mono : family;
+                try { f = new Font(name, s, st, GraphicsUnit.Pixel); }
+                catch (ArgumentException) { f = new Font(name, s, FontStyle.Regular | (underline ? FontStyle.Underline : 0), GraphicsUnit.Pixel); }
+            }
             cache[key] = f;
         }
         return f;
+    }
+
+    public static Font Make(string face, float px, FontStyle st)
+    {
+        string key = "face|" + face + "|" + px + "|" + (int)st;
+        Font f;
+        if (!cache.TryGetValue(key, out f))
+        {
+            f = new Font(face, px, st, GraphicsUnit.Pixel);
+            cache[key] = f;
+        }
+        return f;
+    }
+
+    /// The natural line height of `sans` at 13 points, whole points (std.app.34), like `cell_h` for `mono`.
+    public static double SansLine()
+    {
+        Font f = Get("sans", CellSize, false, false, false);
+        using (var bmp = new Bitmap(1, 1))
+        using (var g = Graphics.FromImage(bmp))
+            return Math.Ceiling(f.GetHeight(g));
+    }
+}
+
+/// How text is drawn and measured (std.app.34). AIL_HOST_TEXT picks the variant while the choice is made by
+/// capture: a = GDI+ ClearTypeGridFit (the first host), b = GDI+ AntiAliasGridFit, c = GDI+ AntiAlias with
+/// TextContrast 0, d = GDI TextRenderer (what native Win32 programs get; whole-pixel positions).
+static class TextMode
+{
+    public static readonly char Mode = Pick();
+
+    static char Pick()
+    {
+        string v = Environment.GetEnvironmentVariable("AIL_HOST_TEXT");
+        if (!string.IsNullOrEmpty(v) && "abcd".IndexOf(char.ToLowerInvariant(v[0])) >= 0) return char.ToLowerInvariant(v[0]);
+        return 'a';
+    }
+
+    const TextFormatFlags Flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping |
+                                  TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.SingleLine;
+
+    public static void Apply(Graphics g)
+    {
+        switch (Mode)
+        {
+            case 'b': g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit; break;
+            case 'c': g.TextRenderingHint = TextRenderingHint.AntiAlias; g.TextContrast = 0; break;
+            default: g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit; break;
+        }
+    }
+
+    /// The advance width in points, trailing spaces counted.
+    public static float Width(Graphics g, string text, Font f)
+    {
+        if (Mode == 'd')
+            return TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), Flags).Width;
+        var fmt = new StringFormat(StringFormat.GenericTypographic);
+        fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+        return g.MeasureString(text, f, 100000, fmt).Width;
+    }
+
+    /// Top of the ascent line for a `Str` at y: the ascent-to-descent box is centred in the line box (std.app.34).
+    public static float Lead(Font f)
+    {
+        FontFamily ff = f.FontFamily;
+        FontStyle st = f.Style;
+        float em = ff.GetEmHeight(st);
+        if (em <= 0) return 0;
+        float line = ff.GetLineSpacing(st), glyphs = ff.GetCellAscent(st) + ff.GetCellDescent(st);
+        return Math.Max(0, (line - glyphs) / 2 * f.Size / em);
+    }
+
+    /// Draw `text` with its line box's top at (x, y) in the graphics' world space.
+    public static void Draw(Graphics g, string text, Font f, Color c, float x, float y)
+    {
+        y += Lead(f);
+        if (Mode != 'd')
+        {
+            using (var b = new SolidBrush(c))
+                g.DrawString(text, f, b, x, y, StringFormat.GenericTypographic);
+            return;
+        }
+        // TextRenderer ignores the world transform: draw in device space with a font of the device size.
+        var p = new[] { new PointF(x, y) };
+        g.TransformPoints(CoordinateSpace.Device, CoordinateSpace.World, p);
+        float sc = g.Transform.Elements[0];
+        Font df = Math.Abs(sc - 1) < 0.001f ? f : Fonts.Make(f.Name, f.Size * sc, f.Style);
+        GraphicsState st = g.Save();
+        g.ResetTransform();
+        TextRenderer.DrawText(g, text, df, new Point((int)Math.Round(p[0].X), (int)Math.Round(p[0].Y)), c, Flags);
+        g.Restore(st);
+    }
+
+    /// The width in px of the dark pixels of `text` drawn in `face`.
+    static int Ink(string face, string text, FontStyle st, out float advance)
+    {
+        Font f = Fonts.Make(face, 13, st);
+        using (var bmp = new Bitmap(300, 40))
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.White);
+            Apply(g);
+            advance = Width(g, text, f);
+            Draw(g, text, f, Color.Black, 10, 8);
+            int lo = int.MaxValue, hi = -1;
+            for (int x = 0; x < bmp.Width; x++)
+                for (int y = 0; y < bmp.Height; y++)
+                    if (bmp.GetPixel(x, y).R < 200) { if (x < lo) lo = x; if (x > hi) hi = x; break; }
+            return hi < lo ? 0 : hi - lo + 1;
+        }
+    }
+
+    /// True when `face` is drawn at the widths it is measured at: how far the advance width exceeds the ink width
+    /// (the side bearings) must be within 1 px for bold and italic of what it is for regular.
+    public static bool Agrees(string face)
+    {
+        const string probe = "Hamburgefonstiv";
+        float adv;
+        int ink = Ink(face, probe, FontStyle.Regular, out adv);
+        float regular = adv - ink;
+        foreach (FontStyle st in new[] { FontStyle.Bold, FontStyle.Italic })
+        {
+            int w = Ink(face, probe, st, out adv);
+            if (w == 0 || Math.Abs((adv - w) - regular) > 1) return false;
+        }
+        return ink > 0;
+    }
+}
+
+// ---- Edge mode (std.app.25, std.app.33) ---------------------------------
+
+/// What the host tells the app about its window controls while the app asks for edge mode:
+/// three 46 x 32 point buttons at the top-right, so 138 points of room on the right.
+static class EdgeMode
+{
+    public static bool On;
+    public const double Right = 138, Top = 32;
+
+    /// The `inset_*` members of `start` and `resize`; none outside edge mode (they read as 0).
+    public static object[] Insets()
+    {
+        if (!On) return new object[0];
+        return new object[] { "inset_left", 0.0, "inset_top", Top, "inset_right", Right };
+    }
+
+    public static object[] Cat(object[] a, object[] b)
+    {
+        var l = new List<object>(a);
+        l.AddRange(b);
+        return l.ToArray();
+    }
+}
+
+/// Minimise, maximise or restore, and close, drawn in the Windows 11 style at the window's top-right
+/// while the app owns the title bar (std.app.33). Glyphs come from Segoe Fluent Icons (Segoe MDL2
+/// Assets before Windows 11), or are drawn as lines when neither is installed.
+class CaptionButtons : Control
+{
+    readonly Form form;
+    readonly Look look;
+    readonly string iconFont;
+    readonly float scale;
+    readonly int bw, bh;
+    int hot = -1, down = -1;
+
+    static readonly char[] Glyphs = { '', '', '', '' }; // minimise, maximise, restore, close
+
+    public CaptionButtons(Form f, Look l)
+    {
+        form = f;
+        look = l;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        TabStop = false;
+        scale = (float)Dpi.Scale;
+        bw = Dpi.Px(46);
+        bh = Dpi.Px(32);
+        Size = new Size(bw * 3, bh);
+        Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        BackColor = l.Bg;
+        iconFont = FindIconFont();
+    }
+
+    static string FindIconFont()
+    {
+        using (var fc = new InstalledFontCollection())
+        {
+            foreach (string want in new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" })
+                foreach (FontFamily ff in fc.Families) if (ff.Name == want) return want;
+        }
+        return null;
+    }
+
+    int At(Point p) { return p.X < 0 || p.X >= Width || p.Y < 0 || p.Y >= Height ? -1 : p.X / bw; }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int i = At(e.Location);
+        if (i != hot) { hot = i; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        hot = -1;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button == MouseButtons.Left) { down = At(e.Location); Invalidate(); }
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        int i = At(e.Location), was = down;
+        down = -1;
+        Invalidate();
+        if (e.Button != MouseButtons.Left || i < 0 || i != was) return;
+        if (i == 0) form.WindowState = FormWindowState.Minimized;
+        else if (i == 1) form.WindowState = form.WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+        else form.Close();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.Clear(look.Bg);
+        bool max = form.WindowState == FormWindowState.Maximized;
+        for (int i = 0; i < 3; i++)
+        {
+            var cell = new Rectangle(i * bw, 0, bw, bh);
+            Color glyph = look.Fg;
+            if (i == hot || i == down)
+            {
+                bool press = i == down && i == hot;
+                if (i == 2)
+                {
+                    using (var b = new SolidBrush(Color.FromArgb(press ? 230 : 255, 0xC4, 0x2B, 0x1C))) g.FillRectangle(b, cell);
+                    glyph = Color.White;
+                }
+                else using (var b = new SolidBrush(Color.FromArgb(press ? 15 : 26, look.Fg))) g.FillRectangle(b, cell);
+            }
+            DrawGlyph(g, cell, i == 1 && max ? 2 : i == 2 ? 3 : i, glyph);
+        }
+    }
+
+    /// `kind`: 0 minimise, 1 maximise, 2 restore, 3 close.
+    void DrawGlyph(Graphics g, Rectangle cell, int kind, Color c)
+    {
+        if (iconFont != null)
+        {
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            using (var f = new Font(iconFont, 10f, FontStyle.Regular, GraphicsUnit.Point))
+            using (var b = new SolidBrush(c))
+            using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                g.DrawString(Glyphs[kind].ToString(), f, b, cell, fmt);
+            return;
+        }
+        // No icon font: lines, 10 points across, one device pixel wide.
+        int s = (int)Math.Round(10 * scale) , cx = cell.X + cell.Width / 2, cy = cell.Y + cell.Height / 2;
+        int x0 = cx - s / 2, y0 = cy - s / 2;
+        using (var p = new Pen(c, 1f))
+        {
+            g.SmoothingMode = SmoothingMode.None;
+            if (kind == 0) g.DrawLine(p, x0, cy, x0 + s, cy);
+            else if (kind == 1) g.DrawRectangle(p, x0, y0, s, s);
+            else if (kind == 2)
+            {
+                int d = (int)Math.Round(2 * scale);
+                g.DrawRectangle(p, x0, y0 + d, s - d, s - d);
+                g.DrawLines(p, new[] { new Point(x0 + d, y0 + d), new Point(x0 + d, y0), new Point(x0 + s, y0), new Point(x0 + s, y0 + s - d), new Point(x0 + s - d, y0 + s - d) });
+            }
+            else
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.DrawLine(p, x0, y0, x0 + s, y0 + s);
+                g.DrawLine(p, x0 + s, y0, x0, y0 + s);
+            }
+        }
     }
 }
 
@@ -328,7 +802,7 @@ class CanvasView : Control
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer |
                  ControlStyles.Selectable | ControlStyles.ResizeRedraw, true);
         TabStop = true;
-        BackColor = Color.White;
+        BackColor = Color.White; // replaced by the tree's first fill when the canvas is built
     }
 
     public static Color Rgb(int c) { return Color.FromArgb((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff); }
@@ -340,10 +814,14 @@ class CanvasView : Control
         using (var bmp = new Bitmap(1, 1))
         using (var g = Graphics.FromImage(bmp))
         {
-            w = g.MeasureString("M", f, 10000, StringFormat.GenericTypographic).Width;
+            TextMode.Apply(g);
+            w = TextMode.Width(g, "M", f);
             h = Math.Ceiling(f.GetHeight(g));
         }
     }
+
+    /// Forgets the reported size so the next layout reports again (after a scale change).
+    public void ReportAgain() { reported = Size.Empty; OnSizeChanged(EventArgs.Empty); }
 
     protected override void OnSizeChanged(EventArgs e)
     {
@@ -353,47 +831,108 @@ class CanvasView : Control
             reported = Size;
             double cw, ch;
             CellMetrics(out cw, out ch);
-            Outbox.Send("resize", "id", CanvasId, "dx", Width, "dy", Height, "cell_w", cw, "cell_h", ch);
+            Outbox.Send("resize", EdgeMode.Cat(new object[] { "id", CanvasId, "dx", Width / Dpi.Scale, "dy", Height / Dpi.Scale, "cell_w", cw, "cell_h", ch, "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale, "sans_line", Fonts.SansLine() }, EdgeMode.Insets()));
         }
+    }
+
+    /// Fills the device-pixel rectangle a point rectangle covers: edges rounded, smoothing off, so
+    /// neighbouring fills never leave a seam and never blur.
+    static void FillSnapped(Graphics g, Brush b, double x, double y, double w, double h, double s)
+    {
+        int l = (int)Math.Round(x * s), t = (int)Math.Round(y * s);
+        int r = (int)Math.Round((x + w) * s), bt = (int)Math.Round((y + h) * s);
+        if (r <= l || bt <= t) return;
+        g.ResetTransform(); // the clip is in device space already
+        g.FillRectangle(b, l, t, r - l, bt - t);
+        g.ScaleTransform((float)s, (float)s);
+    }
+
+    /// An axis-aligned stroke centred on the device pixels its width covers, so it stays crisp.
+    static double SnapLine(double v, double width, double s)
+    {
+        double d = v * s;
+        return (Math.Max(1, Math.Round(width * s)) % 2 == 1 ? Math.Floor(d) + 0.5 : Math.Round(d)) / s;
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         Graphics g = e.Graphics;
         g.Clear(BackColor);
-        // ClearType text; rectangles stay pixel-exact, slanted lines are anti-aliased.
-        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        double s = Dpi.Scale;
+        // Rectangles stay pixel-exact, slanted lines are anti-aliased; text per TextMode (std.app.34).
+        TextMode.Apply(g);
         g.SmoothingMode = SmoothingMode.None;
         g.PixelOffsetMode = PixelOffsetMode.Half;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        Surfaces.Draw(CanvasId, g, ClientSize); // std.gfx.8: the shared frame under the ops (it leaves the transform at identity)
+        g.ScaleTransform((float)s, (float)s);
         var saved = new Stack<GraphicsState>();
         foreach (Op op in Ops)
         {
             var fill = op as FillOp;
             if (fill != null)
             {
-                using (var b = new SolidBrush(Rgb(fill.Color)))
-                    g.FillRectangle(b, (float)fill.X, (float)fill.Y, (float)fill.W, (float)fill.H);
+                using (var b = new SolidBrush(Rgb(fill.Color))) FillSnapped(g, b, fill.X, fill.Y, fill.W, fill.H, s);
+                continue;
+            }
+            var shade = op as ShadeOp;
+            if (shade != null)
+            {
+                Color c = Rgb(shade.Color);
+                using (var b = new SolidBrush(Color.FromArgb((int)Math.Round(shade.Alpha * 255), c))) FillSnapped(g, b, shade.X, shade.Y, shade.W, shade.H, s);
                 continue;
             }
             var str = op as StrOp;
             if (str != null)
             {
-                using (var b = new SolidBrush(Rgb(str.Fg)))
-                    g.DrawString(str.Text, Fonts.Get(str.Font, str.Size, str.Bold, str.Italic, str.Underline), b,
-                                 (float)str.X, (float)str.Y, StringFormat.GenericTypographic);
+                TextMode.Draw(g, str.Text, Fonts.Get(str.Font, str.Size, str.Bold, str.Italic, str.Underline), Rgb(str.Fg),
+                              (float)str.X, (float)str.Y);
                 continue;
             }
             var stroke = op as StrokeOp;
             if (stroke != null)
             {
-                using (var p = new Pen(Rgb(stroke.Color), stroke.Width > 0 ? (float)stroke.Width : 1))
+                double sw = stroke.Width > 0 ? stroke.Width : 1;
+                double x1 = stroke.X1, y1 = stroke.Y1, x2 = stroke.X2, y2 = stroke.Y2;
+                if (y1 == y2) { y1 = y2 = SnapLine(y1, sw, s); }
+                else if (x1 == x2) { x1 = x2 = SnapLine(x1, sw, s); }
+                using (var p = new Pen(Rgb(stroke.Color), (float)sw))
                 {
-                    bool slanted = stroke.X1 != stroke.X2 && stroke.Y1 != stroke.Y2;
-                    g.SmoothingMode = slanted ? SmoothingMode.AntiAlias : SmoothingMode.None;
-                    g.DrawLine(p, (float)stroke.X1, (float)stroke.Y1, (float)stroke.X2, (float)stroke.Y2);
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.DrawLine(p, (float)x1, (float)y1, (float)x2, (float)y2);
                     g.SmoothingMode = SmoothingMode.None;
                 }
+                continue;
+            }
+            // std.app.32: anti-aliased shapes, pixel corners at integer coordinates as in cairo and AppKit.
+            var rnd = op as RoundOp;
+            var poly = op as PolyOp;
+            var line = op as LineOp;
+            if (rnd != null || poly != null || line != null)
+            {
+                var smoothing = g.SmoothingMode;
+                var offset = g.PixelOffsetMode;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.None;
+                if (rnd != null) DrawRound(g, rnd);
+                else if (poly != null && poly.Points.Length >= 6)
+                {
+                    var pts = new PointF[poly.Points.Length / 2];
+                    for (int i = 0; i < pts.Length; i++) pts[i] = new PointF(poly.Points[i * 2], poly.Points[i * 2 + 1]);
+                    using (var b = new SolidBrush(Tint(poly.Color, poly.Alpha))) g.FillPolygon(b, pts, FillMode.Winding);
+                }
+                else if (line != null && line.Points.Length >= 4)
+                {
+                    var pts = new PointF[line.Points.Length / 2];
+                    for (int i = 0; i < pts.Length; i++) pts[i] = new PointF(line.Points[i * 2], line.Points[i * 2 + 1]);
+                    using (var p = new Pen(Rgb(line.Color), line.Width > 0 ? (float)line.Width : 1))
+                    {
+                        p.StartCap = LineCap.Round; p.EndCap = LineCap.Round; p.LineJoin = LineJoin.Round;
+                        g.DrawLines(p, pts);
+                    }
+                }
+                g.SmoothingMode = smoothing;
+                g.PixelOffsetMode = offset;
                 continue;
             }
             var pic = op as PicOp;
@@ -403,9 +942,16 @@ class CanvasView : Control
                 double x = pic != null ? pic.X : bm.X, y = pic != null ? pic.Y : bm.Y;
                 double w = pic != null ? pic.W : bm.W, h = pic != null ? pic.H : bm.H;
                 Image img = pic != null ? Bitmaps.Pic(pic.Src, this) : Bitmaps.Get(bm.Id);
-                if (img != null) g.DrawImage(img, new RectangleF((float)x, (float)y, (float)w, (float)h));
+                if (img != null)
+                {
+                    // Pixel art blown up by a whole number of 4x or more stays sharp; everything else is smoothed.
+                    double rx = w * s / img.Width, ry = h * s / img.Height;
+                    bool crisp = rx >= 4 && ry >= 4 && Math.Abs(rx - Math.Round(rx)) < 0.001 && Math.Abs(ry - Math.Round(ry)) < 0.001;
+                    g.InterpolationMode = crisp ? InterpolationMode.NearestNeighbor : InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(img, new RectangleF((float)x, (float)y, (float)w, (float)h));
+                }
                 else using (var b = new SolidBrush(Color.FromArgb(0xe8, 0xe8, 0xe8)))
-                    g.FillRectangle(b, (float)x, (float)y, (float)w, (float)h);
+                    FillSnapped(g, b, x, y, w, h, s);
                 continue;
             }
             var clip = op as ClipOp;
@@ -416,6 +962,44 @@ class CanvasView : Control
                 continue;
             }
             if (op is UnclipOp && saved.Count > 0) g.Restore(saved.Pop());
+        }
+        if (Surfaces.Has(CanvasId))
+        {
+            Surfaces.Text(CanvasId, g, ClientSize);
+            // Once this paint has reached the screen: wait for the compositor, poll the pads, answer `vsync`.
+            string id = CanvasId;
+            BeginInvoke((Action)delegate { Surfaces.Vsync(id); });
+        }
+    }
+
+    static Color Tint(int rgb, double alpha)
+    {
+        double a = Math.Min(Math.Max(alpha, 0), 1);
+        Color c = Rgb(rgb);
+        return Color.FromArgb((int)Math.Round(a * 255), c.R, c.G, c.B);
+    }
+
+    // A rounded rectangle, radius at most half the shorter side; a stroke is centred on the edge (std.app.32).
+    static void DrawRound(Graphics g, RoundOp r)
+    {
+        float x = (float)r.X, y = (float)r.Y, w = (float)r.W, h = (float)r.H;
+        float rr = (float)Math.Min(Math.Max(r.R, 0), Math.Min(r.W, r.H) / 2);
+        float d = rr * 2;
+        using (var path = new GraphicsPath())
+        {
+            if (rr <= 0) path.AddRectangle(new RectangleF(x, y, w, h));
+            else
+            {
+                path.AddArc(x, y, d, d, 180, 90);
+                path.AddArc(x + w - d, y, d, d, 270, 90);
+                path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+                path.AddArc(x, y + h - d, d, d, 90, 90);
+                path.CloseFigure();
+            }
+            if (r.Stroke > 0)
+                using (var p = new Pen(Tint(r.Color, r.Alpha), (float)r.Stroke)) g.DrawPath(p, path);
+            else
+                using (var b = new SolidBrush(Tint(r.Color, r.Alpha))) g.FillPath(b, path);
         }
     }
 
@@ -437,29 +1021,74 @@ class CanvasView : Control
 
     // std.app.27 (ADR 0983): `down` before `click`, `up` on release, `move` while held;
     // Capture keeps them on this canvas until the button is released.
+    /// The canvas whose pressed button has not been released yet, and which button (for `BeginDrag`).
+    public static CanvasView Held;
+    MouseButtons heldButton;
+
+    /// The window manager took over a press (a window drag from the app's strip) and swallowed the
+    /// release, so say it to the app: its `down` needs an `up` (std.app.27).
+    public void ReleaseHeld()
+    {
+        if (Held != this) return;
+        Held = null;
+        Capture = false;
+        Point p = PointToClient(Cursor.Position);
+        Outbox.Send("up", ModArgs("id", CanvasId, "x", p.X / Dpi.Scale, "y", p.Y / Dpi.Scale, "text", ButtonName(heldButton), "clicks", 0));
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
         Focus();
         Capture = true;
-        Outbox.Send("down", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
-        Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
+        Held = this;
+        heldButton = e.Button;
+        Outbox.Send("down", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
+        Outbox.Send("click", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", Math.Min(Math.Max(e.Clicks, 1), 3)));
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
         Capture = false;
-        Outbox.Send("up", ModArgs("id", CanvasId, "x", e.X, "y", e.Y, "text", ButtonName(e.Button), "clicks", 0));
+        if (Held == this) Held = null;
+        Outbox.Send("up", ModArgs("id", CanvasId, "x", e.X / Dpi.Scale, "y", e.Y / Dpi.Scale, "text", ButtonName(e.Button), "clicks", 0));
     }
 
-    DateTime lastDrag = DateTime.MinValue;
+    // `move` while a button is held (std.app.27) or while the app asked for hover (std.app.16):
+    // at most one per 16 ms, carrying the last position.
+    DateTime lastMove = DateTime.MinValue;
+    Point pending;
+    bool hasPending;
+    System.Windows.Forms.Timer flush;
+
+    void SendMove(Point p)
+    {
+        lastMove = DateTime.Now;
+        hasPending = false;
+        Outbox.Send("move", "id", CanvasId, "x", p.X / Dpi.Scale, "y", p.Y / Dpi.Scale);
+    }
+
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (e.Button == MouseButtons.None || (DateTime.Now - lastDrag).TotalMilliseconds < 16) return;
-        lastDrag = DateTime.Now;
-        Outbox.Send("move", "id", CanvasId, "x", e.X, "y", e.Y);
+        if (e.Button == MouseButtons.None && !Dpi.Hover) return;
+        if ((DateTime.Now - lastMove).TotalMilliseconds >= 16) { SendMove(e.Location); return; }
+        pending = e.Location;
+        hasPending = true;
+        if (flush == null)
+        {
+            flush = new System.Windows.Forms.Timer { Interval = 16 };
+            flush.Tick += delegate { flush.Stop(); if (hasPending) SendMove(pending); };
+        }
+        if (!flush.Enabled) flush.Start();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        hasPending = false;
+        if (Dpi.Hover) Outbox.Send("leave", "id", CanvasId);
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -491,9 +1120,39 @@ class CanvasView : Control
         return null;
     }
 
+    // std.app.20 (ADR 0956): `repeat` for a key already held, `code` the platform key code (the virtual key),
+    // and `keyup` on release with the same name.
+    readonly HashSet<int> heldKeys = new HashSet<int>();
+    int lastCode;
+    bool lastRepeat;
+
+    [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
+
+    /// The name of a released key: a special key's name, else its unshifted character.
+    static string ReleasedName(Keys k)
+    {
+        string n = KeyName(k);
+        if (n != null) return n;
+        if (k == Keys.Space) return " ";
+        if (k >= Keys.A && k <= Keys.Z) return ((char)('a' + (k - Keys.A))).ToString();
+        uint c = MapVirtualKey((uint)k, 2) & 0x7fffffff;
+        return c > 0x20 ? char.ToLowerInvariant((char)c).ToString() : null;
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        heldKeys.Remove((int)e.KeyCode);
+        string name = ReleasedName(e.KeyCode);
+        if (name == null) return;
+        Outbox.Send("keyup", ModArgs("id", CanvasId, "text", name, "code", (int)e.KeyCode));
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        lastCode = (int)e.KeyCode;
+        lastRepeat = !heldKeys.Add(lastCode);
         // std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`.
         if (e.Control && !e.Alt && e.KeyCode == Keys.V && Clipboard.ContainsText())
         {
@@ -514,7 +1173,7 @@ class CanvasView : Control
         if (name == null) return;
         e.SuppressKeyPress = true;
         e.Handled = true;
-        Outbox.Send("key", ModArgs("id", CanvasId, "text", name));
+        Outbox.Send("key", ModArgs("id", CanvasId, "text", name, "repeat", lastRepeat, "code", lastCode));
     }
 
     protected override void OnKeyPress(KeyPressEventArgs e)
@@ -522,7 +1181,218 @@ class CanvasView : Control
         base.OnKeyPress(e);
         if (e.KeyChar < ' ' || e.KeyChar == 0x7f) return;
         e.Handled = true;
-        Outbox.Send("key", ModArgs("id", CanvasId, "text", e.KeyChar.ToString()));
+        Outbox.Send("key", ModArgs("id", CanvasId, "text", e.KeyChar.ToString(), "repeat", lastRepeat, "code", lastCode));
+    }
+}
+
+// ---- Shared surfaces and gamepads (std.gfx.6-8, std.gfx.11) -------------------
+
+/// A frame buffer the program shares with the host (std.gfx.8, ADR 1044): a named file mapping the
+/// program made; `count` buffers of `stride` by `h` bytes follow `offset` unused bytes.
+class Mapped
+{
+    public IntPtr Base;
+    public int W, H, Stride, Count, Current;
+    public Stopwatch Since = Stopwatch.StartNew();
+    public List<object> Texts = new List<object>();
+}
+
+static class Surfaces
+{
+    static readonly Dictionary<string, Mapped> maps = new Dictionary<string, Mapped>();
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+    static extern IntPtr OpenFileMappingA(uint access, bool inherit, string name);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr MapViewOfFile(IntPtr map, uint access, uint hi, uint lo, UIntPtr bytes);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+    [DllImport("dwmapi.dll")] static extern int DwmFlush();
+
+    public static bool Has(string id) { lock (maps) return maps.ContainsKey(id); }
+    static Mapped Get(string id) { lock (maps) { Mapped m; return maps.TryGetValue(id, out m) ? m : null; } }
+
+    /// `{"t":"surface","id":I,"w":W,"h":H,"stride":S,"offset":O,"count":N,"name":NAME}`: map it.
+    /// False when it cannot be mapped; the program then sees no `vsync` and fails with `no_host`.
+    public static bool Attach(object obj)
+    {
+        string id = Json.Text(Json.Get(obj, "id")), name = Json.Text(Json.Get(obj, "name"));
+        int w = (int)Json.Num(Json.Get(obj, "w")), h = (int)Json.Num(Json.Get(obj, "h"));
+        int stride = (int)Json.Num(Json.Get(obj, "stride")), count = Math.Max((int)Json.Num(Json.Get(obj, "count")), 1);
+        int offset = (int)Json.Num(Json.Get(obj, "offset"));
+        long bytes = (long)stride * h * count + offset;
+        if (name.Length == 0 || w <= 0 || h <= 0 || stride < w * 4 || offset < 0 || bytes <= 0) return false;
+        IntPtr map = OpenFileMappingA(4 /* FILE_MAP_READ */, false, name);
+        if (map == IntPtr.Zero) return false;
+        IntPtr view = MapViewOfFile(map, 4, 0, 0, (UIntPtr)(ulong)bytes);
+        CloseHandle(map); // the view keeps the section alive
+        if (view == IntPtr.Zero) return false;
+        lock (maps) maps[id] = new Mapped { Base = (IntPtr)(view.ToInt64() + offset), W = w, H = h, Stride = stride, Count = count };
+        return true;
+    }
+
+    /// `{"t":"present","id":I,"buf":K}`: show buffer K at the next draw.
+    public static void Present(string id, int buf)
+    {
+        Mapped m = Get(id);
+        if (m == null) return;
+        m.Current = Math.Min(Math.Max(buf, 0), m.Count - 1);
+    }
+
+    /// `{"t":"text","id":I,"items":[...]}` (std.gfx.7): text drawn over the surface.
+    public static void SetText(string id, List<object> items)
+    {
+        Mapped m = Get(id);
+        if (m != null) m.Texts = items ?? new List<object>();
+    }
+
+    // The mapping holds R, G, B, A bytes; GDI+ reads B, G, R, x, so the channels swap while drawing.
+    static ImageAttributes swap;
+    static ImageAttributes Swap()
+    {
+        if (swap == null)
+        {
+            swap = new ImageAttributes();
+            swap.SetColorMatrix(new ColorMatrix(new float[][] {
+                new float[] { 0, 0, 1, 0, 0 }, new float[] { 0, 1, 0, 0, 0 }, new float[] { 1, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 1, 0 }, new float[] { 0, 0, 0, 0, 1 } }));
+        }
+        return swap;
+    }
+
+    /// Draws buffer `Current` as the whole canvas, scaled without smoothing, and leaves `g` unscaled.
+    public static void Draw(string id, Graphics g, Size size)
+    {
+        Mapped m = Get(id);
+        if (m == null) return;
+        g.ResetTransform();
+        IntPtr at = (IntPtr)(m.Base.ToInt64() + (long)m.Current * m.Stride * m.H);
+        using (var img = new Bitmap(m.W, m.H, m.Stride, PixelFormat.Format32bppRgb, at))
+        {
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.DrawImage(img, new Rectangle(0, 0, size.Width, size.Height), 0, 0, m.W, m.H, GraphicsUnit.Pixel, Swap());
+        }
+    }
+
+    /// The text items, positioned in surface pixels and scaled with the canvas.
+    public static void Text(string id, Graphics g, Size size)
+    {
+        Mapped m = Get(id);
+        if (m == null || m.Texts.Count == 0) return;
+        g.ResetTransform();
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        double sx = (double)size.Width / m.W;
+        foreach (object t in m.Texts)
+        {
+            double sz = Json.Num(Json.Get(t, "size")); if (sz <= 0) sz = 12;
+            using (var f = new Font("Consolas", (float)(sz * sx), FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var b = new SolidBrush(CanvasView.Rgb((int)Json.Num(Json.Get(t, "color")))))
+                g.DrawString(Json.Text(Json.Get(t, "s")), f, b, (float)(Json.Num(Json.Get(t, "x")) * sx),
+                             (float)(Json.Num(Json.Get(t, "y")) * sx), StringFormat.GenericTypographic);
+        }
+    }
+
+    /// After a drawn frame: wait for the compositor (so the program is paced by the display), poll the pads,
+    /// and answer `vsync` (`dx` the seconds since the last one, `text` the buffer shown).
+    public static void Vsync(string id)
+    {
+        Mapped m = Get(id);
+        if (m == null) return;
+        long t0 = m.Since.ElapsedMilliseconds;
+        try { if (DwmFlush() != 0) Thread.Sleep(Math.Max(0, 16 - (int)(m.Since.ElapsedMilliseconds - t0))); }
+        catch (Exception) { Thread.Sleep(Math.Max(0, 16 - (int)(m.Since.ElapsedMilliseconds - t0))); }
+        Pads.Poll();
+        double dt = m.Since.Elapsed.TotalSeconds;
+        m.Since.Reset(); m.Since.Start();
+        Outbox.Send("vsync", "id", id, "dx", dt, "text", m.Current.ToString(CultureInfo.InvariantCulture));
+    }
+}
+
+/// Gamepads for std.gfx (std.gfx.11): XInput polled with each drawn frame, and a `pad` event when a
+/// pad's state changes. `text` is `buttons,lx,ly,rx,ry,lt,rt` with the bits of `pad_bit`; sticks are
+/// -1..1 (right and up positive), triggers 0..1. Connected pads are numbered from 0 in slot order.
+static class Pads
+{
+    [StructLayout(LayoutKind.Sequential)]
+    struct XState { public uint Packet; public ushort Buttons; public byte LT, RT; public short LX, LY, RX, RY; }
+
+    [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")] static extern uint Get14(uint user, out XState s);
+    [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")] static extern uint Get910(uint user, out XState s);
+
+    static int dll = 0; // 0 unknown, 1 xinput1_4, 2 xinput9_1_0, -1 none
+    static readonly List<string> last = new List<string>();
+
+    static bool Read(uint slot, out XState s)
+    {
+        s = new XState();
+        if (dll == 0)
+        {
+            try { XState t; Get14(0, out t); dll = 1; }
+            catch (DllNotFoundException) { dll = 2; }
+            catch (EntryPointNotFoundException) { dll = 2; }
+        }
+        if (dll == 2)
+        {
+            try { XState t; Get910(0, out t); }
+            catch (DllNotFoundException) { dll = -1; }
+            catch (EntryPointNotFoundException) { dll = -1; }
+        }
+        if (dll < 0) return false;
+        return (dll == 1 ? Get14(slot, out s) : Get910(slot, out s)) == 0;
+    }
+
+    static double Stick(short v, int dead)
+    {
+        double a = Math.Min(Math.Abs((double)v), 32767);
+        if (a <= dead) return 0;
+        double r = (a - dead) / (32767 - dead);
+        return v < 0 ? -r : r;
+    }
+
+    static int Bits(ushort b)
+    {
+        int o = 0;
+        if ((b & 0x1000) != 0) o |= 1;      // A
+        if ((b & 0x2000) != 0) o |= 2;      // B
+        if ((b & 0x4000) != 0) o |= 4;      // X
+        if ((b & 0x8000) != 0) o |= 8;      // Y
+        if ((b & 0x0100) != 0) o |= 16;     // LB
+        if ((b & 0x0200) != 0) o |= 32;     // RB
+        if ((b & 0x0020) != 0) o |= 64;     // back
+        if ((b & 0x0010) != 0) o |= 128;    // start
+        if ((b & 0x0040) != 0) o |= 256;    // L3
+        if ((b & 0x0080) != 0) o |= 512;    // R3
+        if ((b & 0x0001) != 0) o |= 1024;   // up
+        if ((b & 0x0002) != 0) o |= 2048;   // down
+        if ((b & 0x0004) != 0) o |= 4096;   // left
+        if ((b & 0x0008) != 0) o |= 8192;   // right
+        return o;
+    }
+
+    static double Trigger(byte t) { return t < 30 ? 0 : (t - 30) / 225.0; }
+
+    public static void Poll()
+    {
+        var now = new List<string>();
+        for (uint slot = 0; slot < 4; slot++)
+        {
+            XState s;
+            if (!Read(slot, out s)) continue;
+            now.Add(string.Format(CultureInfo.InvariantCulture, "{0},{1:0.000},{2:0.000},{3:0.000},{4:0.000},{5:0.000},{6:0.000}",
+                Bits(s.Buttons), Stick(s.LX, 7849), Stick(s.LY, 7849), Stick(s.RX, 8689), Stick(s.RY, 8689), Trigger(s.LT), Trigger(s.RT)));
+        }
+        for (int i = 0; i < now.Count; i++)
+        {
+            if (i < last.Count && last[i] == now[i]) continue;
+            if (i < last.Count) last[i] = now[i]; else last.Add(now[i]);
+            Outbox.Send("pad", "id", i.ToString(CultureInfo.InvariantCulture), "text", now[i]);
+        }
+        while (last.Count > now.Count)
+        {
+            int i = last.Count - 1;
+            last.RemoveAt(i);
+            Outbox.Send("pad", "id", i.ToString(CultureInfo.InvariantCulture), "text", "");
+        }
     }
 }
 
@@ -591,16 +1461,16 @@ class FieldBox : Panel
     {
         look = l;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        Height = 32;
-        Margin = new Padding(4, 0, 8, 0);
+        Height = Dpi.Px(32);
+        Margin = new Padding(Dpi.Px(4), 0, Dpi.Px(8), 0);
         Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Box.BorderStyle = BorderStyle.None;
-        Box.Font = new Font(fontFamily, 14, FontStyle.Regular, GraphicsUnit.Pixel);
+        Box.Font = new Font(fontFamily, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
         Box.BackColor = l.FieldBg;
         Box.ForeColor = l.Fg;
         Box.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        Box.Left = 12;
-        Box.Width = Width - 24;
+        Box.Left = Dpi.Px(12);
+        Box.Width = Width - Dpi.Px(24);
         Box.Top = (Height - Box.Height) / 2;
         Box.Enter += delegate { Invalidate(); };
         Box.Leave += delegate { Invalidate(); };
@@ -652,6 +1522,18 @@ class HostForm : Form
     readonly Dictionary<string, Control> byId = new Dictionary<string, Control>();
     readonly List<Control> leaves = new List<Control>();
     Look look = Look.From(new Node());
+    CaptionButtons caption; // only in edge mode (std.app.25, std.app.33)
+
+    const int WM_NCCALCSIZE = 0x0083, WM_NCHITTEST = 0x0084, WM_NCLBUTTONDOWN = 0x00A1;
+    const int HTCLIENT = 1, HTCAPTION = 2, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14;
+    const int SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
+    const int GRIP = 6; // the top edge that still resizes while the app owns the title bar
+    const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_FRAMECHANGED = 0x20;
+
+    [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] static extern bool ReleaseCapture();
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
 
     [DllImport("dwmapi.dll")]
     static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -659,20 +1541,67 @@ class HostForm : Form
     public HostForm()
     {
         Text = "AIL";
-        ClientSize = new Size(1000, 720);
-        MinimumSize = new Size(340, 240);
-        Font = new Font(Fonts.Sans, 14, FontStyle.Regular, GraphicsUnit.Pixel);
+        ClientSize = new Size(Dpi.Px(1000), Dpi.Px(720));
+        MinimumSize = new Size(Dpi.Px(340), Dpi.Px(240));
+        Font = new Font(Fonts.Sans, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
+        SetIcon();
         StartPosition = FormStartPosition.CenterScreen;
-        Padding = new Padding(8);
+        Padding = new Padding(Dpi.Px(8));
         BackColor = look.Bg;
         ForeColor = look.Fg;
+    }
+
+    /// AIL_APP_ICON names a PNG for the window and the taskbar.
+    void SetIcon()
+    {
+        string path = Environment.GetEnvironmentVariable("AIL_APP_ICON");
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        try { using (var bmp = new Bitmap(path)) Icon = Icon.FromHandle(bmp.GetHicon()); }
+        catch (Exception) { }
     }
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        double before = Dpi.Scale;
+        Dpi.Refresh(Handle);
+        if (Math.Abs(Dpi.Scale - before) > 0.001)
+        {
+            // The window is on a monitor with another scale than the primary one.
+            ClientSize = new Size(Dpi.Px(1000), Dpi.Px(720));
+            MinimumSize = new Size(Dpi.Px(340), Dpi.Px(240));
+            Font = new Font(Fonts.Sans, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
+        }
         Chrome();
     }
+
+    // WM_DPICHANGED: take the suggested rectangle, rebuild at the new scale, report the new sizes.
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == 0x02E0)
+        {
+            Dpi.Refresh(Handle);
+            var r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+            SetBounds(r.L, r.T, r.R - r.L, r.B - r.T);
+            MinimumSize = new Size(Dpi.Px(340), Dpi.Px(240));
+            Font = new Font(Fonts.Sans, (float)(14 * Dpi.Scale), FontStyle.Regular, GraphicsUnit.Pixel);
+            if (current != null)
+            {
+                shape = ""; // rebuild the controls at the new scale
+                ShowView(Text, "", current, Dpi.Hover, EdgeMode.On);
+            }
+            foreach (Control c in byId.Values)
+            {
+                var cv = c as CanvasView;
+                if (cv != null) { cv.ReportAgain(); cv.Invalidate(); }
+            }
+            return;
+        }
+        EdgeProc(ref m);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT { public int L, T, R, B; }
 
     /// Dark or light title bar in the window's own color (Windows 10 1809+ and 11; ignored elsewhere).
     void Chrome()
@@ -692,23 +1621,111 @@ class HostForm : Form
         catch (EntryPointNotFoundException) { }
     }
 
+    /// Edge mode keeps the frame (shadow, snapping, resize edges, rounded corners) but gives the client
+    /// area the title bar's room: WM_NCCALCSIZE leaves the top at the window's top.
+    void EdgeProc(ref Message m)
+    {
+        if (EdgeMode.On && m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
+        {
+            int top = Marshal.ReadInt32(m.LParam, 4); // rgrc[0].top: left, top, right, bottom
+            base.WndProc(ref m);
+            int inset = WindowState == FormWindowState.Maximized ? GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER) : 0;
+            Marshal.WriteInt32(m.LParam, 4, top + inset);
+            return;
+        }
+        base.WndProc(ref m);
+        if (EdgeMode.On && m.Msg == WM_NCHITTEST && (int)m.Result == HTCLIENT && WindowState == FormWindowState.Normal)
+        {
+            long l = m.LParam.ToInt64();
+            Point p = PointToClient(new Point((short)(l & 0xffff), (short)((l >> 16) & 0xffff)));
+            if (p.Y >= 0 && p.Y < GRIP)
+            {
+                int right = ClientSize.Width - (caption != null ? caption.Width : 0);
+                if (p.X < GRIP) m.Result = (IntPtr)HTTOPLEFT;
+                else if (p.X >= ClientSize.Width - GRIP) m.Result = (IntPtr)HTTOPRIGHT;
+                else if (p.X < right) m.Result = (IntPtr)HTTOP; // the buttons keep their top rows
+            }
+        }
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (caption != null) caption.Invalidate(); // maximise or restore glyph
+    }
+
+    void SetEdge(bool on)
+    {
+        if (EdgeMode.On == on) return;
+        EdgeMode.On = on;
+        // Make Windows ask for the client area again, with or without the title bar.
+        if (IsHandleCreated)
+            SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    /// `{"t":"drag"}` (std.app.25): the press in the app's strip moves the window, as a title bar would.
+    public void BeginDrag()
+    {
+        CanvasView held = CanvasView.Held;
+        if (held != null && (Control.MouseButtons & MouseButtons.Left) != 0)
+        {
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        }
+        if (held != null) held.ReleaseHeld();
+    }
+
+    /// `{"t":"zoom"}`: maximise, or restore.
+    public void Zoom()
+    {
+        WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
         Outbox.Send("close");
     }
 
-    public void ShowView(string title, string focus, Node tree)
+    // std.app.30 (ADR 1008): "dark" or "light" from the apps theme setting, once after `start`
+    // and on every change.
+    string appearance = "";
+
+    static string SystemAppearance()
     {
+        try
+        {
+            object v = Microsoft.Win32.Registry.GetValue(
+                @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+            if (v is int && (int)v == 0) return "dark";
+        }
+        catch (Exception) { }
+        return "light";
+    }
+
+    void SendAppearance()
+    {
+        string now = SystemAppearance();
+        if (now == appearance) return;
+        appearance = now;
+        Outbox.Send("appearance", "text", now);
+    }
+
+    public void ShowView(string title, string focus, Node tree, bool hover, bool edge)
+    {
+        Dpi.Hover = hover;
         Text = title;
+        SetEdge(edge && Look.Edge(tree));
         Look next = Look.From(tree);
-        string s = tree.Shape() + "|" + next.Key();
+        string s = tree.Shape() + "|" + next.Key() + (EdgeMode.On ? "|edge" : "");
         string wantFocus = focus;
         // The first line to the program is `start`, ahead of any `resize` the layout causes.
         if (!started)
         {
             started = true;
-            Outbox.Send("start");
+            Outbox.Send("start", EdgeMode.Cat(new object[] { "screen_w", ScreenInfo.W, "screen_h", ScreenInfo.H, "scale", ScreenInfo.Scale, "sans_line", Fonts.SansLine() }, EdgeMode.Insets()));
+            SendAppearance();
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate { SendAppearance(); };
         }
         if (s != shape)
         {
@@ -718,7 +1735,7 @@ class HostForm : Form
             look = next;
             BackColor = look.Bg;
             ForeColor = look.Fg;
-            Padding = Look.Edge(tree) ? new Padding(0) : new Padding(8);
+            Padding = Look.Edge(tree) ? new Padding(0) : new Padding(Dpi.Px(8));
             Chrome();
             var old = new Control[Controls.Count];
             Controls.CopyTo(old, 0);
@@ -729,6 +1746,14 @@ class HostForm : Form
             Control root = Build(tree, true);
             root.Dock = DockStyle.Fill;
             Controls.Add(root);
+            caption = null;
+            if (EdgeMode.On)
+            {
+                caption = new CaptionButtons(this, look);
+                caption.Location = new Point(ClientSize.Width - caption.Width, 0);
+                Controls.Add(caption);
+                caption.BringToFront();
+            }
             ResumeLayout(true);
             shape = s;
         }
@@ -742,6 +1767,82 @@ class HostForm : Form
             Control c;
             if (byId.TryGetValue(wantFocus, out c) && !c.Focused) c.Focus();
         }
+    }
+
+    public CanvasView CanvasFor(string id) { return CanvasById(id); }
+
+    CanvasView CanvasById(string id)
+    {
+        Control c;
+        return byId.TryGetValue(id, out c) ? c as CanvasView : null;
+    }
+
+    /// std.app.18: the app's menu at (x, y) of canvas `id`, answered with a `popup` event whose `text` is
+    /// the chosen label, empty if dismissed (or if the canvas does not exist).
+    public void ShowPopup(string id, double x, double y, List<object> items)
+    {
+        CanvasView v = CanvasById(id);
+        if (v == null) { Outbox.Send("popup", "id", id, "text", ""); return; }
+        var menu = new ContextMenuStrip { Font = Font, BackColor = look.FieldBg, ForeColor = look.Fg };
+        string chosen = "";
+        foreach (object o in items)
+        {
+            string label = o as string ?? "";
+            var mi = new ToolStripMenuItem(label);
+            mi.Click += delegate { chosen = label; };
+            menu.Items.Add(mi);
+        }
+        // `Closed` can come before the item's click; answer once both have run.
+        menu.Closed += delegate
+        {
+            BeginInvoke((Action)delegate { Outbox.Send("popup", "id", id, "text", chosen); menu.Dispose(); });
+        };
+        menu.Show(v, new Point(Dpi.Px(x), Dpi.Px(y)));
+    }
+
+    /// std.app.22: a native chooser for a folder or a file, answered with `picked` (`text` empty if cancelled).
+    public void ShowPick(string id, string prompt, bool folders, string start)
+    {
+        string path = "";
+        try
+        {
+            if (folders)
+            {
+                using (var d = new FolderBrowserDialog())
+                {
+                    d.Description = prompt;
+                    if (start.Length > 0 && Directory.Exists(start)) d.SelectedPath = start;
+                    if (d.ShowDialog(this) == DialogResult.OK) path = d.SelectedPath;
+                }
+            }
+            else
+            {
+                using (var d = new OpenFileDialog())
+                {
+                    d.Title = prompt;
+                    if (start.Length > 0 && Directory.Exists(start)) d.InitialDirectory = start;
+                    if (d.ShowDialog(this) == DialogResult.OK) path = d.FileName;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            Outbox.Send("pick_error", "id", id, "text", "the file chooser failed");
+            return;
+        }
+        Outbox.Send("picked", "id", id, "text", path);
+    }
+
+    /// std.gfx.6: the canvas of a shared surface takes the keyboard, and the window is sized so the
+    /// canvas is exactly the surface, one point per pixel.
+    public void FitSurface(string id, int w, int h)
+    {
+        CanvasView v = CanvasById(id);
+        if (v == null) return;
+        v.Focus();
+        int dx = Dpi.Px(w) - v.Width, dy = Dpi.Px(h) - v.Height;
+        if (dx != 0 || dy != 0) ClientSize = new Size(ClientSize.Width + dx, ClientSize.Height + dy);
+        v.Invalidate();
     }
 
     /// Pushes the new values into the controls of an unchanged shape, in tree order.
@@ -854,8 +1955,10 @@ class HostForm : Form
                 return c;
             case "Canvas":
                 var cv = new CanvasView { CanvasId = n.Id, Tag = n.Id, Ops = n.Ops, Margin = new Padding(0) };
-                if (n.W > 0) cv.Width = (int)n.W;
-                if (n.H > 0) cv.Height = (int)n.H;
+                Color? first = Look.FirstFill(n);
+                cv.BackColor = first.HasValue ? first.Value : look.Bg;
+                if (n.W > 0) cv.Width = Dpi.Px(n.W);
+                if (n.H > 0) cv.Height = Dpi.Px(n.H);
                 cv.Dock = n.W > 0 && n.H > 0 ? DockStyle.None : DockStyle.Fill;
                 byId[n.Id] = cv;
                 leaves.Add(cv);
@@ -920,35 +2023,35 @@ class HostForm : Form
 
 static class Program
 {
-    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
-
     /// std.app.13: the advance width of each requested run, in the font a `Str` op of the
     /// same family, size and weight is drawn in, answered as one `measured` event.
     static void AnswerMeasure(List<object> runs)
     {
         var widths = new List<string>();
+        var fonts = new List<string>();
         using (var bmp = new Bitmap(1, 1))
         using (var g = Graphics.FromImage(bmp))
         {
-            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            TextMode.Apply(g);
             // A run that ends in a space (the text before a bold or linked word) must count it.
-            var fmt = new StringFormat(StringFormat.GenericTypographic);
-            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
             foreach (object r in runs)
             {
-                Font f = Fonts.Get(Json.Text(Json.Get(r, "font")), Json.Num(Json.Get(r, "size")),
+                string font = Json.Text(Json.Get(r, "font"));
+                Font f = Fonts.Get(font, Json.Num(Json.Get(r, "size")),
                                    Json.Flag(Json.Get(r, "bold")), Json.Flag(Json.Get(r, "italic")), false);
-                float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, fmt).Width;
+                float w = TextMode.Width(g, Json.Text(Json.Get(r, "text")), f);
                 widths.Add(w.ToString("0.000", CultureInfo.InvariantCulture));
+                fonts.Add(Fonts.Resolve(font).Replace(',', ' '));
             }
         }
-        Outbox.Send("measured", "text", string.Join(",", widths.ToArray()));
+        // std.app.28: the family each run was measured in.
+        Outbox.Send("measured", "text", string.Join(",", widths.ToArray()), "fonts", string.Join(",", fonts.ToArray()));
     }
 
     [STAThread]
     static void Main()
     {
-        try { SetProcessDPIAware(); } catch (Exception) { }
+        Dpi.Aware();
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         var form = new HostForm();
@@ -963,8 +2066,38 @@ static class Program
                 string kind = Json.Text(Json.Get(obj, "t"));
                 if (kind == "pick")
                 {
-                    // std.app.22: no native chooser on this host yet; say so rather than hang.
-                    Outbox.Send("pick_error", "id", Json.Text(Json.Get(obj, "id")), "text", "this host has no native file chooser yet");
+                    string pid = Json.Text(Json.Get(obj, "id")), prompt = Json.Text(Json.Get(obj, "prompt")), pstart = Json.Text(Json.Get(obj, "start"));
+                    bool folders = Json.Flag(Json.Get(obj, "folders"));
+                    form.BeginInvoke((Action)delegate { form.ShowPick(pid, prompt, folders, pstart); });
+                    continue;
+                }
+                if (kind == "popup")
+                {
+                    string uid = Json.Text(Json.Get(obj, "id"));
+                    double ux = Json.Num(Json.Get(obj, "x")), uy = Json.Num(Json.Get(obj, "y"));
+                    List<object> items = Json.Get(obj, "items") as List<object> ?? new List<object>();
+                    form.BeginInvoke((Action)delegate { form.ShowPopup(uid, ux, uy, items); });
+                    continue;
+                }
+                if (kind == "surface")
+                {
+                    string sid = Json.Text(Json.Get(obj, "id"));
+                    int sw = (int)Json.Num(Json.Get(obj, "w")), sh = (int)Json.Num(Json.Get(obj, "h"));
+                    if (Surfaces.Attach(obj)) form.BeginInvoke((Action)delegate { form.FitSurface(sid, sw, sh); });
+                    else Console.Error.WriteLine("AIL App Host: cannot map the surface");
+                    continue;
+                }
+                if (kind == "text")
+                {
+                    string tid = Json.Text(Json.Get(obj, "id"));
+                    Surfaces.SetText(tid, Json.Get(obj, "items") as List<object>);
+                    continue;
+                }
+                if (kind == "present")
+                {
+                    string qid = Json.Text(Json.Get(obj, "id"));
+                    Surfaces.Present(qid, (int)Json.Num(Json.Get(obj, "buf")));
+                    form.BeginInvoke((Action)delegate { CanvasView c = form.CanvasFor(qid); if (c != null) c.Invalidate(); });
                     continue;
                 }
                 if (kind == "clipboard")
@@ -974,6 +2107,8 @@ static class Program
                     form.BeginInvoke((Action)delegate { try { if (t.Length > 0) Clipboard.SetText(t); else Clipboard.Clear(); } catch (Exception) { } });
                     continue;
                 }
+                if (kind == "drag") { form.BeginInvoke((Action)form.BeginDrag); continue; }
+                if (kind == "zoom") { form.BeginInvoke((Action)form.Zoom); continue; }
                 if (kind == "measure") { AnswerMeasure(Json.Get(obj, "runs") as List<object> ?? new List<object>()); continue; }
                 if (kind != "view") continue;
                 if (first)
@@ -987,8 +2122,10 @@ static class Program
                 }
                 string title = Json.Text(Json.Get(obj, "title"));
                 string focus = Json.Text(Json.Get(obj, "focus"));
+                bool hover = Json.Flag(Json.Get(obj, "hover"));
+                bool edge = Json.Flag(Json.Get(obj, "edge"));
                 Node tree = Node.Decode(Json.Get(obj, "tree"));
-                form.BeginInvoke((Action)delegate { form.ShowView(title.Length > 0 ? title : "AIL", focus, tree); });
+                form.BeginInvoke((Action)delegate { form.ShowView(title.Length > 0 ? title : "AIL", focus, tree, hover, edge); });
             }
             form.BeginInvoke((Action)delegate { Application.Exit(); });
         });

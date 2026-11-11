@@ -27,7 +27,10 @@ final class Model: ObservableObject {
         Edge.own?.title = title
         if !started {
             started = true
-            Outbox.shared.send("start", Edge.insets(Edge.window(nil)))
+            var f = Edge.insets(Edge.window(nil))
+            f["sans_line"] = sansLine()
+            Outbox.shared.send("start", f)
+            Appearance.begin()
         }
     }
 

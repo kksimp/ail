@@ -1,0 +1,307 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The Windows readiness set (std.net.32, ADR 1009, amended 2026-11-10): what
+## `epoll` and `kqueue` are in `ready.ail`, built on an I/O completion port.
+## Winsock has no readiness call that scales, so the set asks the socket
+## driver directly, as `select` does inside Winsock: one `IOCTL_AFD_POLL`
+## per armed socket, issued on a helper handle (`\Device\Afd\Ail`) that is
+## bound to the port. The driver completes the request when the socket is
+## readable, has a connection to accept, was shut down or was closed, and the
+## completion arrives on the port, so a wait costs O(ready).
+##
+## A poll request completes once, which is the one-shot arming `rdy_arm`
+## promises. `rdy_listen` keeps its record and issues the request again at
+## the start of each wait; a request on a socket that is already readable
+## completes at once, so that is level-triggered. A socket closed while armed
+## completes with `AFD_POLL_LOCAL_CLOSE` and is dropped without a report.
+## Arming an armed socket issues a second request and may report it twice;
+## the server treats a report as a hint (`serve_idle_take`).
+##
+## The kernel writes into a record until its request completes, so records
+## and the set live in the process heap (`HeapAlloc`), outside the collector.
+## A set is never freed, only its records and handles: a task may still be
+## waiting on it when another closes the server.
+##
+## No global slots.
+
+# The set.
+WR_LOCK := 0
+WR_PORT := 8
+WR_AFD := 16
+WR_PEND := 24
+WR_WAITERS := 32
+WR_CLOSED := 40
+WR_NLISTEN := 48
+WR_LISTEN := 56
+WR_SIZE := 96
+WR_MAX_LISTEN := 4
+
+# A record: IO_STATUS_BLOCK at 0, AFD_POLL_INFO at 16 (timeout, the count 1,
+# the socket's base handle at 32, the events asked and found at 40), then
+# the tag, the state (0 idle, 1 in the driver), the socket and 1 for a
+# listener's record.
+WE_INFO := 16
+WE_HANDLE := 32
+WE_EVENTS := 40
+WE_TAG := 48
+WE_STATE := 56
+WE_FD := 64
+WE_KEEP := 72
+WE_SIZE := 80
+
+# AFD_POLL_RECEIVE 1, DISCONNECT 8, ABORT 16, LOCAL_CLOSE 32, ACCEPT 128.
+WR_EVENTS := 185
+WR_LOCAL_CLOSE := 32
+# The longest one wait sits in the system, so a closed set is noticed.
+WR_SLICE_MS := 100
+
+fn wrdy_alloc(n int) int
+    import_call("HeapAlloc", import_call("GetProcessHeap", 0, 0, 0, 0), 8, n, 0)
+
+fn wrdy_free(p int)
+    import_call("HeapFree", import_call("GetProcessHeap", 0, 0, 0, 0), 0, p, 0)
+
+## A new set: its address, or a negative `errno`.
+## The set is off until the next seed (see `wrdy_new`).
+WRDY_OFF := true
+
+## Stands in for the two ntdll calls while the set is off: STATUS_NOT_IMPLEMENTED.
+fn wrdy_nt_off() int
+    3221225474
+
+fn wrdy_new() int
+    # Off until the published seed has `pe_dll_of`'s ntdll mapping: seed g puts
+    # every import in KERNEL32, so a seed-built compiler that held the
+    # `NtCreateFile` and `NtDeviceIoControlFile` imports would not load on
+    # Windows (0xC0000139). The server takes its `poll` loop meanwhile
+    # (std.net.32). The calls are restored with the next seed (ADR 1009).
+    if WRDY_OFF
+        return -38
+    wnet_init()
+    # L"\Device\Afd\Ail" as a UNICODE_STRING inside an OBJECT_ATTRIBUTES.
+    b := alloc_z(160, KIND_BYTES, 1)
+    name := b + 96
+    win_put16(name, 0, 92)
+    win_put16(name, 1, 68)
+    win_put16(name, 2, 101)
+    win_put16(name, 3, 118)
+    win_put16(name, 4, 105)
+    win_put16(name, 5, 99)
+    win_put16(name, 6, 101)
+    win_put16(name, 7, 92)
+    win_put16(name, 8, 65)
+    win_put16(name, 9, 102)
+    win_put16(name, 10, 100)
+    win_put16(name, 11, 92)
+    win_put16(name, 12, 65)
+    win_put16(name, 13, 105)
+    win_put16(name, 14, 108)
+    us := b + 64
+    store64(us, 30 + 30 * 65536)
+    store64(us + 8, name)
+    oa := b + 16
+    store64(oa, 48)
+    store64(oa + 16, us)
+    # SYNCHRONIZE; share read and write; FILE_OPEN.
+    st := wrdy_nt_off()
+    if st.bit_and(4294967295) != 0
+        return -38
+    afd := load64(b)
+    port := import_call("CreateIoCompletionPort", -1, 0, 0, 0)
+    if port == 0
+        import_call("CloseHandle", afd, 0, 0, 0)
+        return -38
+    if import_call("CreateIoCompletionPort", afd, port, 0, 0) == 0
+        import_call("CloseHandle", afd, 0, 0, 0)
+        import_call("CloseHandle", port, 0, 0, 0)
+        return -38
+    set := wrdy_alloc(WR_SIZE)
+    if set == 0
+        import_call("CloseHandle", afd, 0, 0, 0)
+        import_call("CloseHandle", port, 0, 0, 0)
+        return -12
+    store64(set + WR_PORT, port)
+    store64(set + WR_AFD, afd)
+    set
+
+## The handle the socket driver knows `s` by (`SIO_BASE_HANDLE`): a layered
+## provider may have wrapped it. `s` itself when the question fails.
+fn wrdy_base(s int) int
+    t := win_tmp()
+    store64(t, 0)
+    r := import_call("WSAIoctl", s, 1207959586, 0, 0, t, 8, t + 8, 0, 0)
+    if wnet_i32(r) != 0 or load64(t) == 0
+        return s
+    load64(t)
+
+## Hand record `e` to the driver. The set's lock is held. 0, or a negative
+## `errno` (the socket is gone, mostly).
+fn wrdy_submit(set int, e int) int
+    # STATUS_PENDING until the driver answers; no timeout; one handle.
+    store64(e, 259)
+    store64(e + 8, 0)
+    store64(e + WE_INFO, 9223372036854775807)
+    store64(e + WE_INFO + 8, 1)
+    store64(e + WE_HANDLE, wrdy_base(load64(e + WE_FD)))
+    store64(e + WE_EVENTS, WR_EVENTS)
+    st := wrdy_nt_off()
+    c := st.bit_and(4294967295)
+    # Done already or pending: either way the answer comes through the port.
+    if c != 0 and c != 259
+        return -9
+    store64(e + WE_STATE, 1)
+    store64(set + WR_PEND, load64(set + WR_PEND) + 1)
+    0
+
+## `rdy_listen` and `rdy_arm` on Windows.
+fn wrdy_ctl(set int, fd int, tag int, once bool) int
+    lock(set + WR_LOCK)
+    if load64(set + WR_CLOSED) != 0
+        unlock(set + WR_LOCK)
+        return -9
+    n := load64(set + WR_NLISTEN)
+    if not once and n >= WR_MAX_LISTEN
+        unlock(set + WR_LOCK)
+        return -28
+    e := wrdy_alloc(WE_SIZE)
+    if e == 0
+        unlock(set + WR_LOCK)
+        return -12
+    store64(e + WE_TAG, tag)
+    store64(e + WE_FD, fd)
+    store64(e + WE_KEEP, if once then 0 else 1)
+    r := wrdy_submit(set, e)
+    if r < 0
+        wrdy_free(e)
+    elif not once
+        store64(set + WR_LISTEN + 8 * n, e)
+        store64(set + WR_NLISTEN, n + 1)
+    unlock(set + WR_LOCK)
+    r
+
+## Forget the listener's record `e`. The set's lock is held.
+fn wrdy_unlisten(set int, e int)
+    n := load64(set + WR_NLISTEN)
+    mut k := 0
+    for i in 0..n
+        x := load64(set + WR_LISTEN + 8 * i)
+        if x != e
+            store64(set + WR_LISTEN + 8 * k, x)
+            k += 1
+    store64(set + WR_NLISTEN, k)
+    wrdy_free(e)
+
+## Issue the request of every listener whose last one was reported. The set's
+## lock is held.
+fn wrdy_relisten(set int)
+    mut i := 0
+    while i < load64(set + WR_NLISTEN)
+        e := load64(set + WR_LISTEN + 8 * i)
+        if load64(e + WE_STATE) == 0 and wrdy_submit(set, e) < 0
+            wrdy_unlisten(set, e)
+            continue
+        i += 1
+
+## Take up to `RDY_MAX` completions from the port, waiting at most `ms`
+## (not negative): the tags to report are stored as words at `out`; their
+## count, or a negative `errno`.
+fn wrdy_take(set int, out int, ms int) int
+    buf := alloc_raw(RDY_MAX * 32, KIND_BYTES)
+    lock(set + WR_LOCK)
+    if load64(set + WR_CLOSED) != 0 and out != 0
+        unlock(set + WR_LOCK)
+        return -9
+    if out != 0
+        wrdy_relisten(set)
+    port := load64(set + WR_PORT)
+    store64(set + WR_WAITERS, load64(set + WR_WAITERS) + 1)
+    unlock(set + WR_LOCK)
+    t := win_tmp()
+    store64(t, 0)
+    ok := import_call("GetQueuedCompletionStatusEx", port, buf, RDY_MAX, t, ms, 0)
+    got := if ok.bit_and(4294967295) == 0 then 0 else win_u32(t)
+    mut err := 0
+    if got == 0
+        code := import_call("GetLastError", 0, 0, 0, 0)
+        # WAIT_TIMEOUT is no error; a port closed under the wait is.
+        if ok.bit_and(4294967295) == 0 and code != 258
+            err = -9
+    lock(set + WR_LOCK)
+    store64(set + WR_WAITERS, load64(set + WR_WAITERS) - 1)
+    closed := load64(set + WR_CLOSED) != 0
+    mut n := 0
+    for i in 0..got
+        # OVERLAPPED_ENTRY: the key, then the record the request named.
+        e := load64(buf + 32 * i + 8)
+        if e == 0
+            continue
+        store64(e + WE_STATE, 0)
+        store64(set + WR_PEND, load64(set + WR_PEND) - 1)
+        status := load64(e).bit_and(4294967295)
+        found := win_u32(e + WE_EVENTS)
+        keep := load64(e + WE_KEEP) != 0
+        # A request that failed or was cancelled, and a socket closed here,
+        # report nothing and are not asked again.
+        gone := closed or status != 0 or found.bit_and(WR_LOCAL_CLOSE) != 0
+        if not gone and out != 0
+            store64(out + 8 * n, load64(e + WE_TAG))
+            n += 1
+        if keep and gone
+            wrdy_unlisten(set, e)
+        elif not keep
+            wrdy_free(e)
+    unlock(set + WR_LOCK)
+    if closed and out != 0
+        return -9
+    if n == 0 and err < 0
+        return err
+    n
+
+## `rdy_wait_raw` on Windows: in slices, so a set closed by another task ends
+## the wait.
+fn wrdy_wait(set int, out int, ms int) int
+    deadline := if ms < 0 then -1 else win_tick() + ms
+    while true
+        mut slice := WR_SLICE_MS
+        if deadline >= 0
+            left := deadline - win_tick()
+            if left < slice
+                slice = if left < 0 then 0 else left
+        r := wrdy_take(set, out, slice)
+        if r != 0 or (deadline >= 0 and win_tick() >= deadline)
+            return r
+    0
+
+## Close the set: cancel what the driver holds, collect the cancelled
+## requests, and close the handles once no task waits on the port.
+fn wrdy_close(set int)
+    lock(set + WR_LOCK)
+    if load64(set + WR_CLOSED) != 0
+        unlock(set + WR_LOCK)
+        return
+    store64(set + WR_CLOSED, 1)
+    import_call("CancelIoEx", load64(set + WR_AFD), 0, 0, 0)
+    unlock(set + WR_LOCK)
+    mut rounds := 0
+    while rounds < 400
+        lock(set + WR_LOCK)
+        busy := load64(set + WR_PEND) > 0 or load64(set + WR_WAITERS) > 0
+        unlock(set + WR_LOCK)
+        if not busy
+            break
+        wrdy_take(set, 0, 5)
+        rounds += 1
+    lock(set + WR_LOCK)
+    idle := load64(set + WR_WAITERS) == 0
+    while load64(set + WR_NLISTEN) > 0
+        e := load64(set + WR_LISTEN)
+        # A record still in the driver is left to it.
+        if load64(e + WE_STATE) != 0
+            store64(set + WR_NLISTEN, 0)
+            break
+        wrdy_unlisten(set, e)
+    unlock(set + WR_LOCK)
+    if idle
+        import_call("CloseHandle", load64(set + WR_AFD), 0, 0, 0)
+        import_call("CloseHandle", load64(set + WR_PORT), 0, 0, 0)

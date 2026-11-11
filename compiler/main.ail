@@ -49,6 +49,8 @@ fn main() !
     # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
     if args.len() == 1 and args[0] == "new"
         io.exit(scaffold.command([]))
+    if args.len() == 1 and args[0] == "card"
+        io.exit(api.card_topic_command([]))
     if args.len() == 0
         or (args.len() < 2 and args[0] != "explain" and args[0] != "diff" and args[0] != "attach")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
@@ -140,8 +142,12 @@ fn main() !
             check_cmd(args[1..])
         "pkg" =>
             io.exit(pkg.command(args[1..]))
+        "header" =>
+            io.exit(load.header_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "prove" =>
+            io.exit(load.prove_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "check-errors" =>
             io.exit(api.errors_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "api" =>
@@ -155,8 +161,12 @@ fn main() !
             io.exit(attachcli.command(args[1..]))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "card" =>
+            io.exit(api.card_topic_command(args[1..]))
         "context" =>
             io.exit(api.context_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "review" =>
+            io.exit(api.review_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -1171,9 +1181,10 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--deny LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--fix] [--deny LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
+    mut repair := false
     mut deny := List[str]()
     mut paths := List[str]()
     mut i := 0
@@ -1182,6 +1193,8 @@ fn check_cmd(rest List[str])
         has := i + 1 < rest.len()
         if a == "--json"
             json = true
+        elif a == "--fix"
+            repair = true
         elif a == "--unsafe" and has and rest[i + 1] == "driver"
             driver = true
             i += 1
@@ -1204,6 +1217,17 @@ fn check_cmd(rest List[str])
         io.eprint(usage)
         io.exit(2)
     std := path.join(path.dir(compiler_dir()), "std")
+    if repair
+        # fix.check.1: apply every safe fix to a fixed point, then check what is left.
+        done := load.repair(paths[0], std)
+        if done.code != 0
+            io.exit(done.code)
+        if done.rules.len() > 0
+            line := load.fixed_line(done.rules)
+            if json
+                print("\{\"api\":1,\"fixed\":{done.rules.len()},\"line\":{Json.Str(line).to_text()}}")
+            else
+                print(line)
     mut loaded := load.load(paths[0], std) else err
         io.eprint("error: {err.message}")
         io.exit(2)

@@ -2,12 +2,16 @@
 
 ## Reporting a vulnerability
 
-Report security problems **privately** through GitHub: open the repository's
-**Security** tab, choose **Advisories**, then **Report a vulnerability**. Only
-the maintainers see the report.
+While AIL is small, security problems are reported **in the open**: open a
+GitHub issue with the **Security report** template. The maintainers triage it
+like any other bug, in public, and the fix lands through the normal gate. The
+designer decided this on 2026-11-09; it moves to private reporting with a
+disclosure window when the language has users who need one.
 
-Please do not open a public issue, pull request or discussion for a
-vulnerability until it is fixed or the disclosure window below has passed.
+If a problem would put real users at risk while it is open (a certificate
+that is wrongly accepted, a key that leaks), say so in the issue title with
+`[critical]` and keep the proof-of-concept out of the issue until a fix is
+published. The maintainers will reply in the issue with a way to send it.
 
 A useful report has:
 
@@ -20,12 +24,10 @@ A useful report has:
 
 ## What happens next
 
-- We acknowledge the report within **7 days**.
+- We acknowledge the issue within **7 days** and label it `security`.
 - We confirm or reject it and share a plan within **30 days**.
-- We aim to release a fix within **90 days** of the report. After 90 days, or
-  once a fix is published, whichever comes first, you may disclose the issue.
-  If a fix needs longer, we will say why and agree a new date with you.
-- With your permission we credit you in the fix's commit and advisory.
+- We aim to land a fix within **90 days**; the fix's PR links the issue.
+- With your permission we credit you in the fix's commit.
 
 ## Scope
 
@@ -38,7 +40,10 @@ X.509 path validation, AES-GCM, ChaCha20-Poly1305, X25519, SHA-2, SHA-3,
 HMAC and HKDF (`compiler/rt/native/crypto.ail`, `hash.ail`). **This code has had no
 third-party security audit.** It is checked against published test vectors
 (`tools/native-tls/`), which shows it computes the right answers, not that it
-resists side channels or hostile input. Review and reports are welcome.
+resists side channels or hostile input. What is checked, fuzzed and
+constant time, and what is not, is listed in
+[docs/design/crypto-assurance.md](docs/design/crypto-assurance.md). Review and
+reports are welcome.
 
 Out of scope: the apps built with AIL (Garlic, Clove, Garlic Press, the editor)
 live in their own repositories; programs that use `unsafe` blocks incorrectly

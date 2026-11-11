@@ -1,6 +1,6 @@
 # 0899. A media player or image editor, as a showcase program
 
-- **Status:** Proposed
+- **Status:** Deferred past 0.1.0
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-24, chose the program on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0838](0838-std-app-native-windows.md), [ADR 0878](0878-screen-model-for-std-app.md), [ADR 0854](0854-std-app-bitmap-op.md), [ADR 0893](0893-ail-try.md)

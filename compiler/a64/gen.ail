@@ -1323,6 +1323,14 @@ fn Gen.prim(mut self, i mir.Inst)
             a.brk()
             a.bind(parent)
             put_gpr(i.dst, 0)
+        "win_arg0" =>
+            # Only the x86-64 Windows target calls back with the Win64 convention.
+            d := out_gpr(i.dst, S1)
+            a.mov_ri(d, 0)
+            put_gpr(i.dst, d)
+        "sigreturn" =>
+            # Linux ARM64 returns from a handler through the kernel's own stub.
+            a.brk()
         "restart" =>
             parallel([move_of(S0, i.arg(0)), move_of(0, i.arg(1))])
             a.mov_rr(SP, S0)

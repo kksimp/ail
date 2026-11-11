@@ -16,16 +16,23 @@
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
 ./ail ask FILE who writes field F   # also: who reads F, what calls f, what does f call, which effects reach f, who uses T
 ./ail context FILE f --budget 800   # what an edit to f needs: body, callee and caller signatures, types, tests, rules; cut to 800 tokens
+./ail review main..HEAD --budget 400   # a change by meaning: new capabilities, API breaks, contracts, untested code
 ./ail infer --contracts f FILE [--apply]   # proposes up to 3 requires/ensures lines for f from the calls its tests make (patch for ail edit)
-./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer)
+./ail prove FILE                # each requires/ensures check the checker proves (and leaves out of the build) or keeps
+./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer; `task verify --fix`; `task log` reads `.ail/task-log.jsonl`)
+./ail merge BASE OURS THEIRS       # merge by declaration (a git merge driver; `ail merge --install`); exit 1 on a conflict hunk
+./ail merge --check OURS THEIRS [PATH]   # merge two branches in scratch worktrees and check: an error neither side had is a `semantic:` conflict (also BASE OURS THEIRS files)
+./ail verify --diff --attest C.json FILE   # change certificate; `ail verify --check C.json` re-runs it, exit 1 on a difference
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
-./ail mcp                       # the compiler's tools as an MCP stdio server (check, test, ask, impact, task_*)
+./ail try FILE --set A.edit --set B.edit   # check and test patch sets on scratch copies, one verdict line each; --apply writes one clean set
+./ail mcp                       # the compiler's tools as an MCP stdio server (16 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, task_*)
+./ail new [--no-agent] NAME     # a package with a first program, AGENTS.md and .mcp.json (the agent kit)
 ./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)
 ./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)
 ./ail leak FILE                  # run with the leak report: growth by kind and the roots that hold it (san.leak.1-2); AIL_LEAK works on any native exe
-./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
+./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; `ail check --fix FILE` fixes, then checks, in one call
 ./ail diff OLD NEW                  # what changed by meaning
-./ail edit FILE.ail [--test] < EDITS
+./ail edit FILE.ail [--test] < EDITS    # also change_sig, extract, move (edit.op.8-10)
 ./ail fmt [--check] FILE.ail
 ```
 
@@ -644,7 +651,7 @@ dep json git "https://example.com/json.git" tag v1.2 caps fs
 
 A `git` dep needs `rev COMMIT` or `tag TAG`; it is fetched into `~/.ail/deps`
 (or `$AIL_HOME/deps`) and pinned in `ail.lock` (commit it). `ail pkg update [NAME]`
-re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`).
+re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`). User guide: `docs/packages.md`.
 
 ## Files, processes and the system
 
@@ -655,10 +662,10 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
 | `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
 | `std.crypto` | `ct_eq(a, b) bool` (constant time; use it, never `==`, for MACs and tags), `random_bytes(n) bytes` (system generator, effect `random`), `hkdf_sha256(ikm, salt, info, len) bytes`, `pbkdf2_sha256(password, salt, iterations, len) bytes` (all `bytes`) |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `trash(p)` (recoverable delete; never permanent), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob` and `scan_count` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob` and `scan_count` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
-| `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
+| `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `write_bytes(b)` (raw bytes to stdout), `eprint(value)`, `exit(code)` |
 | `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
 | `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
@@ -670,6 +677,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.tensor` | `from(xs)`, `from(xs, shape)`, `from_fn(shape, \|i\| e)` (`i` is the flat index), `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side (`t * 2.0`); `Tensor[f32]` (`to_f32()`, `to_float()`; mixing with `float` is an error); `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()`, `softmax()` (float; softmax along the last axis); `transpose()`, `matmul(b)` (2-D), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)`, `date.parse_in(text, zone)`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); zones `"UTC"`, `"+05:30"`, `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)`, `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format(p)` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
+| `std.os` | `signals(names) Channel[str]` (`"HUP"`, `"INT"`, `"QUIT"`, `"TERM"`, `"WINCH"`); effect `proc` |
 | `std.tz` | `offset(zone, secs) int?`, `system() str`; effects `fs`, `env` |
 | `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://`, `https://` (TLS 1.3, system roots or `SSL_CERT_FILE`; kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data`, `o.timeout_ms`, `o.max_redirects`, `o.connect_ms`, `o.total_ms`; `o.headers["Connection"] = "close"` opens a fresh connection; `"Transfer-Encoding": "chunked"` sends chunks; connections are kept alive); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?`, `j.request(method, url, o)?`, `j.header(url)`, `j.header_from(url, from_page, navigation)`, `j.set_cookie(url, line)`, `j.store(url, r)`, `j.value(url, name)`; gzip and deflate are decoded unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` (`net.Body`: `b.status`, `b.headers`, `b.read_bytes(max)?`, `b.close()`); server: `srv := net.serve(addr)?` (`srv.addr()`, `srv.close()`, `srv.shutdown()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`; `ex.request.data` is the body as bytes), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (repeated headers, e.g. `set-cookie`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response`; `r.stop()` ends the server after its answer; `http.serve_dir(addr, dir)` / `http.run_dir(srv, dir)` serve files |
 | `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size()`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(..., ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar\|Block\|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers()`, `set_font_size(px)` (10 to 40), `font_size()`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.RED` and nine others |
@@ -719,6 +727,7 @@ ch.send(1)
 v := ch.recv() else break     # none once closed and empty
 w := ch.try_recv() else 0     # none if nothing is waiting now
 u := ch.recv_for(50) else 0   # waits at most 50 ms
+task.set_threads(4)           # cap the pool from the next loop; task.threads() reads it
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions

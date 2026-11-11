@@ -1,0 +1,350 @@
+## `ail review BASE..HEAD [PATH] [--budget N] [--json] [--deny-new]` (api.rev.1-11, ADR 1024):
+## a semantic summary of a change in one budgeted report, so that a reviewer judges a
+## pull request in a few hundred tokens instead of reading its diff. It reads two
+## versions of the program through the same checker graph as `ail diff` and `ail ask`:
+## effect changes (ADR 0894), the public API change (`ail api --diff`), changed
+## contracts, performance remarks that changed (the hook for ADR 1021) and new code
+## no test reaches.
+##
+##     ail review main..HEAD --budget 400
+use check
+use load
+
+REVIEW_USAGE := "usage: ail review BASE..HEAD [PATH] [--budget N] [--json] [--deny-new]   e.g. ail review main..HEAD\n       ail review --files OLD NEW [--budget N] [--json] [--deny-new]   (two files, or two package directories)"
+
+## The budget when `--budget` is absent or has no number (api.rev.2).
+REVIEW_DEFAULT := 500
+
+## One whole line of the report: it is shown or cut as a unit (api.rev.3).
+struct RvItem
+    ## `effects`, `api`, `contracts`, `perf` or `untested`.
+    section str
+    text str
+    ## Listed before the others of its section: a new capability or a breaking change.
+    hot bool
+
+fn rv_item(section str, text str, hot bool) RvItem
+    RvItem(section: section, text: text, hot: hot)
+
+fn rv_shown(v str) str
+    if v == "" then "(none)" else v
+
+## The facts the public API of a version is read with (the same as `ail api --diff`).
+fn rv_facts(analysis check.Analysis) Facts
+    Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: Map[int, str](),
+        weak_symbols: Map[int, str](),
+    )
+
+## Every declaration of a version, public or not, with its compared properties.
+fn rv_decls(loaded load.Loaded, analysis check.Analysis, whole bool) List[DiffFlat]
+    facts := rv_facts(analysis)
+    api := if whole then new_whole_api(loaded.program, facts) else new_api(loaded.program, facts)
+    mut out := List[DiffFlat]()
+    for item in api.items()
+        flatten(loaded.program, item, false, mut out)
+    out
+
+## The effects gained and lost, as `+net -fs`.
+fn rv_delta(was List[str], now List[str]) List[str]
+    mut out := List[str]()
+    for e in now.sorted(by: |x| x)
+        if not was.contains(e)
+            out.push("+{e}")
+    for e in was.sorted(by: |x| x)
+        if not now.contains(e)
+            out.push("-{e}")
+    out
+
+## api.rev.7: a function whose effects changed. One that gains an effect and is
+## `main` or `pub` widens what the program can do: `NEW CAPABILITY`, listed first.
+fn rv_effect_items(imp Impact, exposed Set[str]) List[RvItem]
+    mut hot := List[RvItem]()
+    mut cold := List[RvItem]()
+    for e in imp.effects
+        delta := rv_delta(e.old, e.new)
+        gained := [d for d in delta if d.starts_with("+")]
+        if gained.len() > 0 and (e.id == "fn:main" or exposed.contains(e.id))
+            hot.push(rv_item("effects", "NEW CAPABILITY {e.id}: {delta.join(" ")}", true))
+        else
+            cold.push(rv_item("effects", "{e.id}: {delta.join(" ")}", false))
+    for x in cold
+        hot.push(x)
+    hot
+
+## api.rev.8: the public API change, one line per declaration, breaking ones first.
+fn rv_api_items(a List[Decl], b List[Decl]) List[RvItem]
+    mut old_by := Map[str, Decl]()
+    for d in a
+        old_by[d.id] = d
+    mut new_ids := Set[str]()
+    for d in b
+        new_ids.add(d.id)
+    mut hot := List[RvItem]()
+    mut cold := List[RvItem]()
+    for d in b
+        if o := old_by.get(d.id)
+            mut keys := List[str]()
+            mut why := List[str]()
+            for k in DIFF_KEYS
+                if o.get(k) != d.get(k)
+                    keys.push(k)
+                    if breaks(k, o.get(k), d.get(k))
+                        why.push(k)
+            if why.len() > 0
+                hot.push(rv_item("api", "~ {d.id}: {keys.join(", ")}  BREAKING", true))
+            elif keys.len() > 0
+                cold.push(rv_item("api", "~ {d.id}: {keys.join(", ")}", false))
+        else
+            reason := added_breaks(d)
+            if reason != ""
+                hot.push(rv_item("api", "+ {d.id}  BREAKING: {reason}", true))
+            else
+                cold.push(rv_item("api", "+ {d.id} {d.get("signature")}", false))
+    for d in a
+        if not new_ids.contains(d.id)
+            hot.push(rv_item("api", "- {d.id}  BREAKING: removed", true))
+    for x in cold
+        hot.push(x)
+    hot
+
+## api.rev.9: functions and methods whose `requires` or `ensures` differ, or are new.
+fn rv_contract_items(a List[DiffFlat], b List[DiffFlat]) List[RvItem]
+    mut old_by := Map[str, Decl]()
+    for f in a
+        old_by[f.decl.id] = f.decl
+    mut out := List[RvItem]()
+    for f in b
+        d := f.decl
+        if d.kind != "fn" and d.kind != "method"
+            continue
+        for k in ["requires", "ensures"]
+            mut was := ""
+            if o := old_by.get(d.id)
+                was = o.get(k)
+            now := d.get(k)
+            if was != now
+                out.push(rv_item(
+                    "contracts",
+                    "{d.id} {k}: {rv_shown(was)} -> {rv_shown(now)}",
+                    false,
+                ))
+    out
+
+## api.rev.10: loops whose `ail perf --explain` verdict changed. The hook for
+## ADR 1021: when `perf --explain` is on main this compares its remarks for the two
+## versions and returns one line per loop whose verdict differs. Until then it is empty.
+fn rv_perf_items() List[RvItem]
+    []
+
+## api.rev.11: changed or new functions that no `@test` function reaches.
+fn rv_untested_items(imp Impact) List[RvItem]
+    [rv_item("untested", id, false) for id in imp.untested]
+
+## Both versions, loaded and checked, and the report lines of every section in order
+## (api.rev.1); `none` after the error is shown. The flag is true when either version
+## has check errors, so it was read as far as it resolves.
+fn rv_items(old_path str, new_path str, std str)(List[RvItem], bool)?
+    before := checked(old_path, std, true) else return none
+    after := checked(new_path, std, true) else return none
+    whole := not new_path.ends_with(".ail")
+    old_all := rv_decls(before.0, before.1, whole)
+    new_all := rv_decls(after.0, after.1, whole)
+    imp := impact_between(before.0, before.1, after.0, after.1)
+    mut exposed := Set[str]()
+    for f in new_all
+        if f.public
+            exposed.add(f.decl.id)
+    api_old := public_decls(before.0.program, rv_facts(before.1), whole)
+    api_new := public_decls(after.0.program, rv_facts(after.1), whole)
+    mut items := rv_effect_items(imp, exposed)
+    for x in rv_api_items(api_old, api_new)
+        items.push(x)
+    for x in rv_contract_items(old_all, new_all)
+        items.push(x)
+    for x in rv_perf_items()
+        items.push(x)
+    for x in rv_untested_items(imp)
+        items.push(x)
+    (items, before.2 or after.2)
+
+fn rv_count(items List[RvItem], section str) int
+    mut n := 0
+    for it in items
+        if it.section == section
+            n += 1
+    n
+
+fn rv_count_hot(items List[RvItem], section str) int
+    mut n := 0
+    for it in items
+        if it.section == section and it.hot
+            n += 1
+    n
+
+## The first line (api.rev.4): every section's count, always shown.
+fn rv_head(label str, items List[RvItem], partial bool) str
+    caps := rv_count_hot(items, "effects")
+    breaking := rv_count_hot(items, "api")
+    mut s := "review {label}: effects {rv_count(items, "effects")} ({caps} new capability), api {rv_count(items, "api")} ({breaking} breaking), contracts {rv_count(items, "contracts")}, perf {rv_count(items, "perf")}, untested {rv_count(items, "untested")}"
+    if partial
+        s = "{s}; partial, a version has check errors"
+    s
+
+fn rv_cost(it RvItem, first bool) int
+    head := if first then estimate_tokens("{it.section}\n") else 0
+    head + estimate_tokens("  {it.text}\n")
+
+## What is left out, as a count per section.
+fn rv_cut_line(items List[RvItem], from int, needs int) str
+    mut names := List[str]()
+    mut counts := Map[str, int]()
+    for k in from..items.len()
+        s := items[k].section
+        if not counts.contains(s)
+            names.push(s)
+        counts[s] = (counts.get(s) else 0) + 1
+    parts := ["{n} {counts.get(n) else 0}" for n in names]
+    "cut: {parts.join(", ")}; --budget {needs} shows all"
+
+## `ail review ARGS`; the exit status: 0 the report was printed, 1 with `--deny-new`
+## when a new capability was found, 2 for an error (api.rev.6).
+pub fn review_command(args List[str], std str) int
+    mut json := false
+    mut deny := false
+    mut files := false
+    mut tokens := REVIEW_DEFAULT
+    mut rest := List[str]()
+    mut k := 0
+    while k < args.len()
+        a := args[k]
+        k += 1
+        if a == "--json"
+            json = true
+        elif a == "--deny-new"
+            deny = true
+        elif a == "--files"
+            files = true
+        elif a == "--budget"
+            # A bare `--budget` takes the default (api.rev.2).
+            if k < args.len()
+                if n := args[k].to_int()
+                    tokens = n
+                    k += 1
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}`\n{REVIEW_USAGE}")
+            return 2
+        else
+            rest.push(a)
+    if tokens < 1
+        io.eprint("error: `--budget` needs a positive number of tokens (api.rev.2)")
+        return 2
+    mut old_path := ""
+    mut new_path := ""
+    mut label := ""
+    mut scrap_old := ""
+    mut scrap_new := ""
+    if files
+        if rest.len() != 2
+            io.eprint(REVIEW_USAGE)
+            return 2
+        old_path = rest[0]
+        new_path = rest[1]
+        label = "{old_path}..{new_path}"
+    else
+        if rest.len() < 1 or rest.len() > 2
+            io.eprint(REVIEW_USAGE)
+            return 2
+        ends := rest[0].split("..")
+        if ends.len() != 2 or ends[0] == "" or ends[1] == ""
+            io.eprint("error: `{rest[0]}` is not BASE..HEAD (api.rev.1)\n{REVIEW_USAGE}")
+            return 2
+        target := if rest.len() == 2 then rest[1] else "."
+        base := at_revision(ends[0], target) else err
+            io.eprint("error: {err.message} (api.rev.1)")
+            return 2
+        old_path = base.0
+        scrap_old = base.1
+        tip := at_revision(ends[1], target) else err
+            remove_scrap(scrap_old)
+            io.eprint("error: {err.message} (api.rev.1)")
+            return 2
+        new_path = tip.0
+        scrap_new = tip.1
+        label = rest[0]
+    got := rv_items(old_path, new_path, std)
+    remove_scrap(scrap_old)
+    remove_scrap(scrap_new)
+    built := got else
+        if not files
+            io.eprint("hint: PATH must be a program file or a directory with .ail files at its top (default `.`), e.g. ail review main..HEAD compiler (api.rev.1)")
+        return 2
+    items := built.0
+    head := rv_head(label, items, built.1)
+    # The report's full cost, and the most the trailer can cost, which is kept free (api.rev.3).
+    mut needs := estimate_tokens("{head}\n")
+    mut last := ""
+    for it in items
+        needs += rv_cost(it, it.section != last)
+        last = it.section
+    reserve := if needs <= tokens then 0 else estimate_tokens("{rv_cut_line(items, 1, 99999)}\n")
+    # The most lines, in order, that fit: a prefix, so what is cut is always the least needed.
+    mut room := tokens - estimate_tokens("{head}\n") - reserve
+    mut shown := 0
+    last = ""
+    for it in items
+        c := rv_cost(it, it.section != last)
+        if c > room
+            break
+        room -= c
+        last = it.section
+        shown += 1
+    code := if deny and rv_count_hot(items, "effects") > 0 then 1 else 0
+    # api.rev.5: the report as one JSON object.
+    if json
+        mut names := List[str]()
+        for it in items[..shown]
+            if not names.contains(it.section)
+                names.push(it.section)
+        mut sections := List[Kv]()
+        for n in names
+            lines := [J.Str(it.text) for it in items[..shown] if it.section == n]
+            sections.push(kv(n, J.Arr(lines)))
+        mut cut_names := List[str]()
+        mut counts := Map[str, int]()
+        for it in items[shown..]
+            if not counts.contains(it.section)
+                cut_names.push(it.section)
+            counts[it.section] = (counts.get(it.section) else 0) + 1
+        mut cut := List[Kv]()
+        for n in cut_names
+            cut.push(kv(n, J.Int(counts.get(n) else 0)))
+        print(write_json(
+            J.Obj([
+                kv("range", J.Str(label)),
+                kv("budget", J.Int(tokens)),
+                kv("needs", J.Int(needs)),
+                kv("new_capabilities", J.Int(rv_count_hot(items, "effects"))),
+                kv("breaking", J.Int(rv_count_hot(items, "api"))),
+                kv("untested", J.Int(rv_count(items, "untested"))),
+                kv("partial", J.Bool(built.1)),
+                kv("sections", J.Obj(sections)),
+                kv("cut", J.Obj(cut)),
+            ]),
+            false,
+            0,
+        ))
+        return code
+    mut out := [head]
+    last = ""
+    for it in items[..shown]
+        if it.section != last
+            out.push(it.section)
+            last = it.section
+        out.push("  {it.text}")
+    if shown < items.len()
+        out.push(rv_cut_line(items, shown, needs))
+    print(out.join("\n"))
+    code

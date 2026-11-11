@@ -138,6 +138,8 @@ struct Lower
     contracted Map[str, ast.FnDecl]
     ## What an impl method inherits from its trait's method (contract.inh.1-3).
     inh Inherit
+    ## Contracts proved per file (contract.prove.1, lower_contract.ail).
+    proofs ProofCache
     ## The structs with `invariant` lines, and the file of each.
     invariants Map[str, List[ast.Contract]]
     inv_file Map[str, int]
@@ -209,6 +211,8 @@ PRIMS := {
     "sp": "int",
     "clone": "int",
     "restart": "unit",
+    "sigreturn": "unit",
+    "win_arg0": "int",
     "import_call": "int",
     "fn_addr": "int",
     "gc_regs": "int",
@@ -308,6 +312,7 @@ pub fn lower_package_par(
         problem_files: [],
         contracted: {},
         inh: Inherit(of: {}, label: {}, ens_from: none, ens_n: 0, ens_origin: ""),
+        proofs: ProofCache(done: {}),
         invariants: {},
         inv_file: {},
         inv_key: "",
@@ -547,6 +552,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             and a.name != "allow"
             and a.name != "deprecated"
             and a.name != "test"
+            and a.name != "export c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
@@ -1188,10 +1194,9 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
-            # A loop the compiler chose is an outermost one: inside another loop it
-            # would pay the dispatch on every run of the outer body (conc.par.14).
-            if is_par
-                or loops.len() == 0 and auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
+            # A loop the compiler chose may sit inside a loop run in order; there it
+            # tests its work inline before it asks the pool (conc.par.14, lower_task.ail).
+            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return
@@ -1636,6 +1641,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
 fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
     key := lookup(name) else
+        if v := const_param_value(name)
+            return v
         if consts.contains("{prefix}{name}")
             return lower_const("{prefix}{name}", want)
         k := self_slot(name)

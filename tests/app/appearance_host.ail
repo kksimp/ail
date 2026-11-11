@@ -1,0 +1,24 @@
+## A host for std.app that sends `appearance` after `start` (std.app.30): dark,
+## then light, then closes the window, and reports the views it got back.
+
+fn send(line str)
+    print(line)
+
+fn main()
+    io.eprint("fake host: {converse()}")
+
+fn converse() str
+    first := io.read_line() else return "no first line"
+    if (parse_json(first) else Json.Null) == Json.Null
+        return "first line is not JSON"
+    send("\{\"v\":1,\"kind\":\"start\"}")
+    send("\{\"kind\":\"appearance\",\"text\":\"dark\"}")
+    dark := io.read_line() else return "no view after dark"
+    send("\{\"kind\":\"appearance\",\"text\":\"light\"}")
+    light := io.read_line() else return "no view after light"
+    send("\{\"kind\":\"close\"}")
+    while true
+        rest := io.read_line() else break
+        if rest == ""
+            break
+    "dark view {dark.contains("2039583")}, light view {light.contains("16777215")}"

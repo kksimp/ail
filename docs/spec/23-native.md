@@ -195,8 +195,9 @@ deadlock the main task is not part of, or one reached through `t.wait()`,
 hangs as before. *(ADR 0599, ADR 0186)*
 
 **native.task.1** — Native code runs tasks and `par for` iterations in
-parallel on a pool of threads, at most 8 and no more than the cores the
-process may use, unless the environment variable `AIL_THREADS` (a whole
+parallel on a pool of threads, at most 64 and no more than the cores the
+process may use, each region using only the workers its work repays
+(`conc.par.17`), unless the environment variable `AIL_THREADS` (a whole
 number, 1 to 64; anything else is ignored) sets the size (`conc.par.9`,
 `conc.par.7`). `spawn f(args)` takes a free
 function of the subset's types and copies a list argument (`conc.share.1`);
@@ -487,6 +488,31 @@ fn main()
             row.push(s)
         c.push(row)
     print(c[1][1])
+```
+
+**native.bce.14** — The overflow check of an `int` `+` or `-` may be removed
+where a fact on every path to it bounds an operand: on the edge where `x < y`
+holds, `x + 1` can't overflow; after `x` (or `x * c` for a constant `c >= 1`) is a
+checked list index, `0 <= x` and
+`x` is below any list's length (under 2^62), so `x + c` and `x - c` for a
+constant `c` from 0 to 2^62, and the sum of two such indexes, can't overflow.
+In a loop where `l` starts at 0 and every path back adds 1 to it without
+wrapping, the check of `a + l`, for an `a` defined before the loop, may be
+removed where `a + l < y` or an index use of `a + l` holds at the end of every
+path back: each iteration's sum is the last one's plus 1. This holds for
+loops that leave in more than one place, which native.bce.7-9 do not cover.
+Checks with no such fact stay and trap where they did (expr.arith.4).
+*(ADR 0994)*
+
+```ail rules=native.bce.14
+fn match_len(data List[int], a int, b int, n int) int
+    mut l := 0
+    while l < 66 and a + l < n and data[b + l] == data[a + l]
+        l += 1
+    l
+
+fn main()
+    print(match_len([1, 2, 3, 1, 2, 3, 9], 3, 0, 7))
 ```
 
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is

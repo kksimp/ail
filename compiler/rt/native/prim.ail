@@ -116,6 +116,19 @@ fn clone(top int, arg int) int
 fn restart(top int, arg int)
     todo
 
+## Return from a signal handler to the interrupted code: `rt_sigreturn` on
+## Linux x86-64, where the function holding it was entered by a `ret` from the
+## handler (ADR 1011). It restores the stack pointer to the signal frame, then
+## makes the call. Never returns; x86-64 Linux only.
+fn sigreturn()
+    todo
+
+## The first argument the caller passed in `rcx` (the Win64 convention), for a
+## function the system calls back (ADR 1011). Read it first in the function,
+## before anything else can use the register. Windows x86-64 only.
+fn win_arg0() int
+    todo
+
 ## Call the libSystem function `sym` (a string literal, with its leading
 ## underscore) with integer arguments through a pointer the loader binds;
 ## gives its result (native-abi.md §11). Declared with four arguments, but the

@@ -1,0 +1,134 @@
+# Ray tracer: four spheres (one a floor), a directional light, hard shadows and
+# up to two mirror bounces. Prints a checksum of the 8-bit image.
+# The image is N x N pixels; N comes from argv.
+
+struct Vec
+    x float
+    y float
+    z float
+
+fn Vec.add(self, o Vec) Vec
+    Vec(x: x + o.x, y: y + o.y, z: z + o.z)
+
+fn Vec.sub(self, o Vec) Vec
+    Vec(x: x - o.x, y: y - o.y, z: z - o.z)
+
+fn Vec.scale(self, k float) Vec
+    Vec(x: x * k, y: y * k, z: z * k)
+
+fn Vec.dot(self, o Vec) float
+    x * o.x + y * o.y + z * o.z
+
+fn Vec.unit(self) Vec
+    k := 1.0 / self.dot(self).sqrt()
+    self.scale(k)
+
+struct Sphere
+    c Vec
+    r float
+    col Vec
+    refl float
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn hit(s Sphere, o Vec, d Vec) float
+    oc := o.sub(s.c)
+    b := oc.dot(d)
+    c := oc.dot(oc) - s.r * s.r
+    disc := b * b - c
+    if disc < 0.0
+        return -1.0
+    sq := disc.sqrt()
+    t := -b - sq
+    if t > 0.001
+        return t
+    t2 := -b + sq
+    if t2 > 0.001
+        return t2
+    -1.0
+
+fn scene() List[Sphere]
+    [
+        Sphere(c: Vec(x: 0.0, y: 0.0, z: -5.0), r: 1.0, col: Vec(x: 0.9, y: 0.2, z: 0.2), refl: 0.3),
+        Sphere(c: Vec(x: 2.0, y: 0.2, z: -6.0), r: 1.2, col: Vec(x: 0.2, y: 0.8, z: 0.3), refl: 0.5),
+        Sphere(
+            c: Vec(x: -2.2, y: -0.3, z: -4.5),
+            r: 0.7,
+            col: Vec(x: 0.3, y: 0.3, z: 0.9),
+            refl: 0.2,
+        ),
+        Sphere(
+            c: Vec(x: 0.0, y: -1001.0, z: -5.0),
+            r: 1000.0,
+            col: Vec(x: 0.8, y: 0.8, z: 0.8),
+            refl: 0.25,
+        ),
+    ]
+
+fn trace(spheres List[Sphere], light Vec, o Vec, d Vec, depth int) Vec
+    mut best := -1.0
+    mut idx := -1
+    for i in 0..spheres.len()
+        t := hit(spheres[i], o, d)
+        if t > 0.0 and (best < 0.0 or t < best)
+            best = t
+            idx = i
+    if idx < 0
+        k := 0.5 * (d.y + 1.0)
+        return Vec(x: 1.0, y: 1.0, z: 1.0).scale(1.0 - k).add(Vec(x: 0.5, y: 0.7, z: 1.0).scale(k))
+    s := spheres[idx]
+    p := o.add(d.scale(best))
+    n := p.sub(s.c).unit()
+    mut base := s.col
+    if idx == 3
+        parity := ((p.x + 100.0).to_int() + (p.z + 100.0).to_int()) % 2
+        if parity == 0
+            base = Vec(x: 0.2, y: 0.2, z: 0.2)
+    mut lit := false
+    for sp in spheres
+        if hit(sp, p, light) > 0.0
+            lit = true
+    mut diff := n.dot(light)
+    if diff < 0.0 or lit
+        diff = 0.0
+    mut col := base.scale(0.15 + 0.85 * diff)
+    if depth < 2 and s.refl > 0.0
+        r := d.sub(n.scale(2.0 * d.dot(n)))
+        rc := trace(spheres, light, p, r, depth + 1)
+        col = col.scale(1.0 - s.refl).add(rc.scale(s.refl))
+    col
+
+fn chan(v float) int
+    mut c := v
+    if c < 0.0
+        c = 0.0
+    if c > 1.0
+        c = 1.0
+    (c * 255.0).to_int()
+
+fn main()
+    n := size(400)
+    spheres := scene()
+    light := Vec(x: 0.5, y: 1.0, z: 0.3).unit()
+    eye := Vec(x: 0.0, y: 0.0, z: 0.0)
+    mut cks := 0
+    mut total := 0
+    for j in 0..n
+        for i in 0..n
+            u := (i.to_float() + 0.5) / n.to_float() * 2.0 - 1.0
+            v := 1.0 - (j.to_float() + 0.5) / n.to_float() * 2.0
+            d := Vec(x: u, y: v, z: -1.5).unit()
+            c := trace(spheres, light, eye, d, 0)
+            r := chan(c.x)
+            g := chan(c.y)
+            b := chan(c.z)
+            total += r + g + b
+            cks = (cks * 31 + r * 65536 + g * 256 + b) % 1000000007
+    print("size {n}")
+    print("total {total}")
+    print("checksum {cks}")

@@ -23,6 +23,15 @@ if (-not (Test-Path $exe) -or ((Get-Item $src).LastWriteTime -gt (Get-Item $exe)
 
 if ($args.Count -gt 0) {
     $env:AIL_APP_HOST = $exe
+    # Garlic's window and taskbar icon (../garlic/icon); the host reads AIL_APP_ICON.
+    foreach ($a in $args) {
+        if ("$a" -match '(^|[\\/])garlic\.ail$') {
+            foreach ($n in 'garlic-256.png', 'garlic-512.png') {
+                $icon = Join-Path $root "..\garlic\icon\$n"
+                if (Test-Path $icon) { $env:AIL_APP_ICON = (Resolve-Path $icon).Path; break }
+            }
+        }
+    }
     # The run's output also goes to build\last-run.log, for runs without a console.
     $log = Join-Path $here 'build\last-run.log'
     "run: $($args -join ' ')" | Set-Content $log

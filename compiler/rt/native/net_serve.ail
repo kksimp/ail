@@ -29,6 +29,9 @@ SERVE_CONT := 16
 SERVE_FRESH := 32
 ## How long a graceful shutdown waits before closing idle connections.
 SERVE_SHUT_GRACE_MS := 25
+## How often `accept` sweeps parked connections for deadlines, and the longest
+## it waits in the readiness set (so it notices a close or a cancel).
+SERVE_SCAN_MS := 50
 
 ## Append `n` (not negative) in decimal to the text being built.
 fn serve_num(n int)
@@ -578,6 +581,41 @@ fn serve_park(h int, o int, ms int)
     store64(o + NET_KIND, NET_CONN)
     store64(o + NET_TIMEOUT, time_mono_ms() + ms)
     atomic_store(o + NET_STREAM, h)
+    serve_arm(h, o)
+
+## Arm parked connection `o` in its server's readiness set, if it has one
+## (ADR 1009): `accept` is told when bytes arrive on it. A set is reported
+## once per arming, so every way back to parked arms again.
+fn serve_arm(h int, o int)
+    so := net_obj(h)
+    if so == 0
+        return
+    ep := load64(so + NET_POLLER)
+    if ep > 0
+        rdy_arm(ep, load64(o + NET_FD), load64(o + NET_HANDLE))
+
+## The readiness set of server `h` (listener object `o`, descriptor `fd`),
+## made on first use with the listener and every connection already parked
+## on it: the set, or 0 when the system gave none.
+fn serve_poller(h int, o int, fd int) int
+    ep := load64(o + NET_POLLER)
+    if ep != 0
+        return if ep > 0 then ep else 0
+    n := rdy_new()
+    if n <= 0
+        atomic_cas(o + NET_POLLER, 0, -1)
+        return 0
+    rdy_listen(n, fd, 0)
+    if atomic_cas(o + NET_POLLER, 0, n) != 0
+        rdy_close(n)
+        ep2 := load64(o + NET_POLLER)
+        return if ep2 > 0 then ep2 else 0
+    t := load64(global(NET_TAB))
+    for i in 1..load64(t)
+        co := net_obj(i)
+        if co != 0 and load64(co + NET_KIND) == NET_CONN and load64(co + NET_STREAM) == h
+            rdy_arm(n, load64(co + NET_FD), i)
+    n
 
 ## Read what has arrived on parked connection `c` of server `h`: the request
 ## as an exchange when it is complete, else 0 (it stays parked, or is gone).
@@ -587,6 +625,7 @@ fn serve_idle_take(h int, c int) int
         return 0
     if net_wait(load64(o + NET_FD), 1, 0) <= 0
         atomic_store(o + NET_STREAM, h)
+        serve_arm(h, o)
         return 0
     deadline := load64(o + NET_TIMEOUT)
     store64(o + NET_TIMEOUT, 5000)
@@ -618,6 +657,7 @@ fn serve_accept(h int, at str) int
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
     mut shut_at := 0
+    mut scan_at := 0
     while true
         o := net_obj(h)
         if o == 0
@@ -650,6 +690,34 @@ fn serve_accept(h int, at str) int
         # A cancelled task ends its wait (std.net.9).
         if task_cancelled()
             return serve_closed(at)
+        # Readiness set (ADR 1009): wait for the listener or any armed parked
+        # connection without copying them all; parked connections past their
+        # deadline are swept every SERVE_SCAN_MS.
+        ep := if shut then 0 else serve_poller(h, o, fd)
+        if ep > 0
+            now := time_mono_ms()
+            if now - scan_at >= SERVE_SCAN_MS
+                scan_at = now
+                serve_idle_scan(h, alloc_raw(16 + 8 * load64(load64(global(NET_TAB))), KIND_BYTES))
+            tags := alloc_raw(8 * RDY_MAX, KIND_BYTES)
+            w := rdy_wait(ep, tags, SERVE_SCAN_MS)
+            if w < 0
+                if net_obj(h) == 0
+                    return serve_closed(at)
+                return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
+            for k in 0..w
+                tag := load64(tags + 8 * k)
+                if tag != 0
+                    ex := serve_idle_take(h, tag)
+                    if ex != 0
+                        # The tags not taken were disarmed by being reported: arm them again.
+                        nx := k + 1
+                        for j in nx..w
+                            rj := net_obj(load64(tags + 8 * j))
+                            if rj != 0 and load64(rj + NET_STREAM) == h
+                                serve_arm(h, rj)
+                        return ex
+            continue
         t := load64(global(NET_TAB))
         ids := alloc_raw(16 + 8 * load64(t), KIND_BYTES)
         serve_idle_scan(h, ids)

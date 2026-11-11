@@ -89,7 +89,7 @@ def card_duplicates(path):
 
 def card_problems(root):
     out = []
-    for name in ("docs/quick-reference.md", "docs/language-card.md"):
+    for name in ("docs/quick-reference.md", "docs/language-card.md", "docs/language-card-core.md"):
         out += card_duplicates(os.path.join(root, name))
     return out
 

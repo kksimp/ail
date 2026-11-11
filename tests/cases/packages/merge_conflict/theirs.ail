@@ -1,0 +1,5 @@
+fn rate() int
+    30
+
+fn name() str
+    "b"

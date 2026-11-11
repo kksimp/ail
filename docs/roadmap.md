@@ -19,9 +19,9 @@
 | 8 | Complete the AI semantic interface (started in Stage 2) | All brief §12 queries are answerable. | Not started |
 | 9 | Advanced optimisation, profiling, debugging, cross-platform tooling | Profile-guided optimisation, debugger, and profilers on all targets. | Not started |
 
-## Proposed refinements (awaiting designer decision)
+## Proposed refinements (history: decided long ago)
 
-These are recommendations only. Each will be put to the designer as a question.
+History, dated before the Rust removal; each was resolved in an ADR. These were recommendations only. Each will be put to the designer as a question.
 
 1. ~~Start the AI semantic interface in Stage 2.~~ **Accepted** as
    [ADR 0024](decisions/0024-semantic-api-from-stage-2.md).
@@ -46,7 +46,9 @@ below that name the bootstrap, the interpreter, `tools/verify.sh` selftests or t
 bytecode tier are history. The remaining plan is "After Rust removal" and the
 backlog queue below.
 
-## Next milestone (Stage 2, milestone 8; drafted 2026-10-20)
+## Next milestone (history: Stage 2, milestone 8; drafted 2026-10-20)
+
+History: written before the Rust removal and kept for the record. For what comes next, see "Toward 0.2" below.
 
 Drawn from what is still open after the overnight buildout; the order is a
 proposal, not a decision.
@@ -139,6 +141,17 @@ std API still needs its own ADR first.
    against Chrome and Firefox on a fixed set of real sites (page load, first
    paint, scrolling, memory and tokens per agent task); then the Python
    on-ramp (OQ-119).
+
+## Toward 0.2 (2026-11-09)
+
+v0.1.0 is the first public tag: the compiler builds itself from a published seed, runs on macOS ARM64, Linux x86-64 and Windows x86-64, and carries a launch set of docs. `main` is frozen for it ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)): after the release candidate only docs change, and everything else targets 0.2.
+
+Planned for 0.2 (none of it is a promise; status.md says what exists):
+
+- Gate the ungated tools (`ail context`, `ail infer`, probes, `ail lsp` rename and code actions, `ail test --fuzz` and `--mutate`) and add a Linux ARM64 and a Windows ARM64 machine to the gate.
+- The open feature pull requests: const generics (ADR 0954), generators (ADR 0965), `@tool` functions (ADR 0892), `ail merge`, `ail review`, `perf --explain`, variadic C and `export c`, epoll and signals, TLS server (needs constant-time signing first).
+- Speed: the optimizer leftovers and the SIMD slices.
+- Apps in their own repositories: Garlic (cross-platform look, video, canvas), Clove, ail-edit, Garlic Press.
 
 ## Documentation roadmap
 

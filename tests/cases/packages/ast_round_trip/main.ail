@@ -38,7 +38,12 @@ fn main() !
         name: "f",
         pos: p,
         doc: "## doc",
-        generics: [ast.GenericParam(name: "T", pos: p, bounds: [ast.Ident("Ord", p)])],
+        generics: [ast.GenericParam(
+            name: "T",
+            pos: p,
+            bounds: [ast.Ident("Ord", p)],
+            is_const: false,
+        )],
         receiver: none,
         params: [ast.Param(name: "x", pos: p, mutable: false, moved: false, ty: opt_ty)],
         ret: int_ty,

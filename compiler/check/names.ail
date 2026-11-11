@@ -58,6 +58,7 @@ pub STD_MODULES := [
     "mem",
     "io",
     "net",
+    "os",
     "path",
     "proc",
     "random",

@@ -1,0 +1,208 @@
+## `ail try` in AIL (ADR 0893, try.*): check and test patch sets without touching the program.
+##   ail run tools/ailtry/ailtry.ail PROGRAM [--set FILE]... [--apply]
+## Each patch set is `ail edit` input (edit.in.1, edit.in.3): the `--set` files, or standard input
+## when there are none. A set is applied to a scratch copy under `.ail/try/`, then `ail check` (inside
+## `ail edit --if-clean`) and `ail test` run on the copy. It adds no analysis; the verdict is theirs.
+
+## The scratch directory (try.run.1).
+SCRATCH := ".ail/try"
+
+struct Verdict
+    clean bool
+    ## The one verdict line (try.verdict.1).
+    line str
+    ## The first diagnostic or failing test, empty when clean (try.verdict.2).
+    detail str
+
+## The compiler to drive: `$AIL`, else `./ail`.
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+fn usage() int
+    io.eprint("usage: ailtry PROGRAM [--set FILE]... [--apply]   (patch sets are `ail edit` input; stdin when no --set)")
+    io.exit(2)
+    2
+
+## A cheap token estimate, the one `ail api --card` uses (api.card.3, ADR 0311): a run of letters or
+## digits costs one token per five characters, any other non-space character one, a newline one.
+fn estimate_tokens(s str) int
+    mut tokens := 0
+    mut run := 0
+    for c in s.chars()
+        if c.is_alpha() or c.is_digit() or c == '_'
+            run += 1
+            continue
+        if run > 0
+            tokens += (run + 4) / 5
+            run = 0
+        if c == '\n' or not c.is_space()
+            tokens += 1
+    tokens + (run + 4) / 5
+
+## `path` without trailing separators, so its last part is the name to copy.
+fn bare(path str) str
+    mut p := path.replace("\\", "/")
+    while p.len() > 1 and p.ends_with("/")
+        p = p.slice(0, p.len() - 1)
+    p
+
+fn last_part(path str) str
+    p := bare(path)
+    at := p.rfind("/") else return p
+    p.slice(at + 1, p.len())
+
+## The first line of `text` that holds `part`, or an empty string.
+fn first_with(text str, part str) str
+    for l in text.lines()
+        if l.contains(part)
+            return l.trim()
+    ""
+
+fn count_with(text str, part str) int
+    mut n := 0
+    for l in text.lines()
+        if l.contains(part)
+            n += 1
+    n
+
+fn plural(n int, one str, many str) str
+    if n == 1 then "{n} {one}" else "{n} {many}"
+
+## Runs `ail ARGS...` with `input` on its standard input.
+fn ail(args List[str], input str) proc.Output
+    r := proc.run(ail_path(), args, input) else err
+        return proc.Output(status: 127, out: "", err: "can't run ail: {err}")
+    r
+
+## Tries one patch set (try.run.1-4): copies `path` to `{SCRATCH}/{n}`, applies `patch` there with
+## `--if-clean`, and runs the tests on a clean result. The program on disk is never written.
+fn try_set(path str, n int, patch str) Verdict
+    root := "{SCRATCH}/{n}"
+    remove_tree(root)
+    copy_to := "{root}/{last_part(path)}"
+    fs.make_dir(root) else err
+        return Verdict(clean: false, line: "scratch: {err}", detail: "")
+    fs.copy(path, copy_to) else err
+        return Verdict(clean: false, line: "scratch: can't copy {path}: {err}", detail: "")
+    cost := "patch ~{estimate_tokens(patch)} tokens"
+    ed := ail(["edit", copy_to, "--if-clean"], patch)
+    verdict := if ed.status == 0 then try_tests(copy_to, cost) else try_failed(ed, cost)
+    remove_tree(root)
+    verdict
+
+## Removes the file or directory tree at `p`; a missing path is fine (no `rm`, so it works on Windows too).
+fn remove_tree(p str)
+    m := fs.metadata(p) else return
+    if m.is_dir
+        names := fs.list_dir(p) else return
+        for n in names
+            remove_tree("{p}/{n}")
+    fs.remove(p) else return
+
+## A patch set that wasn't applied: an edit that doesn't apply (try.verdict.3) or a result that doesn't check (try.verdict.1).
+fn try_failed(ed proc.Output, cost str) Verdict
+    if ed.out.starts_with("not written")
+        errs := count_with("{ed.err}{ed.out}", "error[")
+        first := first_with("{ed.err}{ed.out}", "error[")
+        return Verdict(
+            clean: false,
+            line: "check {plural(errs, "error", "errors")}; tests skipped; {cost}",
+            detail: first,
+        )
+    first := first_with(ed.err, "error")
+    Verdict(
+        clean: false,
+        line: "patch does not apply; check and tests skipped; {cost}",
+        detail: if first != "" then first else ed.err.trim(),
+    )
+
+## The tests of a patched copy that checks (try.verdict.1).
+fn try_tests(copy_to str, cost str) Verdict
+    t := ail(["test", copy_to], "")
+    text := "{t.out}{t.err}"
+    mut passed := ""
+    for l in text.lines()
+        if l.contains(" passed, ")
+            passed = l.trim()
+    if t.status == 0
+        shown := if passed != "" then passed else "ok"
+        return Verdict(clean: true, line: "check ok; tests {shown}; {cost}", detail: "")
+    shown := if passed != "" then passed else "exit {t.status}"
+    first := first_with(text, "FAIL ")
+    Verdict(clean: false, line: "check ok; tests {shown}; {cost}", detail: first)
+
+struct Sets
+    labels List[str]
+    texts List[str]
+
+## The patch sets: each `--set FILE`, else standard input (try.in.1).
+fn read_sets(files List[str]) !Sets
+    mut labels := List[str]()
+    mut texts := List[str]()
+    if files.is_empty()
+        text := io.read_all()
+        if text.trim() == ""
+            io.eprint("error: no patch set; pass `--set FILE` or `ail edit` input on standard input (try.in.1)")
+            io.exit(2)
+        return Sets(labels: ["stdin"], texts: [text])
+    for f in files
+        text := fs.read_text(f)? "reading {f}"
+        labels.push(last_part(f))
+        texts.push(text)
+    Sets(labels: labels, texts: texts)
+
+fn main() !
+    args := env.args()
+    mut path := ""
+    mut files := List[str]()
+    mut apply := false
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        if a == "--apply"
+            apply = true
+        elif a == "--set"
+            if i >= args.len()
+                io.eprint("error: `--set` needs a patch file (try.in.1)")
+                io.exit(2)
+            files.push(args[i])
+            i += 1
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}` (try.in.1)")
+            io.exit(2)
+        elif path == ""
+            path = a
+        else
+            io.exit(usage())
+    if path == ""
+        io.exit(usage())
+    if not fs.exists(path)
+        io.eprint("error: {path} does not exist (try.run.1)")
+        io.exit(2)
+    # try.apply.1: one set is applied, so `--apply` with several sets would have to choose.
+    if apply and files.len() > 1
+        io.eprint("error: `--apply` takes one patch set, not {files.len()} (try.apply.1)")
+        io.exit(2)
+    sets := read_sets(files)?
+    mut clean_all := true
+    mut n := 0
+    for label in sets.labels
+        v := try_set(path, n, sets.texts[n])
+        print("set {label}: {v.line}")
+        if v.detail != ""
+            print("  {v.detail}")
+        if not v.clean
+            clean_all = false
+        n += 1
+    if not clean_all
+        if apply
+            print("not applied: the verdict was not clean (try.apply.1)")
+        io.exit(1)
+    if apply
+        done := ail(["edit", path, "--if-clean"], sets.texts[0])
+        if done.status != 0
+            io.eprint("error: applying to {path} failed (try.apply.2)\n{done.out}{done.err}")
+            io.exit(2)
+        print("applied to {path}: {done.out.trim()}")
+    io.exit(0)

@@ -21,7 +21,8 @@ the std and the tools are written in AIL by AI agents under the direction of a
 human designer, who makes the serious design calls; every test gate runs
 on the designer's own machines (there is no hosted CI). What is implemented is listed,
 with its tests, in [docs/status.md](docs/status.md); experimental or not yet
-built: Windows ARM64, GPU compute (`std.gfx`), NPUs and `std.audio`. The TLS and
+built: Windows ARM64, GPU compute (`std.gfx`) and NPUs. `std.audio` decodes FLAC and
+Opus (CELT) but is young and not gated on every host. The TLS and
 cryptography are AIL's own and have had **no third-party audit**
 ([SECURITY.md](SECURITY.md)).
 
@@ -41,6 +42,9 @@ fn main()
 The first run downloads the published seed compiler, checks it, and builds the
 native `ail` with it into `.native/`. On Windows use `.\ail.ps1 run examples\hello.ail`.
 Seeds are published for macOS ARM64, Linux x86-64, Linux ARM64 and Windows x86-64.
+Windows notes (PowerShell 5.1 and 7, execution policy, where files go, `ail test`
+needs `mktemp`): [docs/windows.md](docs/windows.md).
+New to AIL? Start with the [tutorial](docs/tutorial.md).
 
 ## Targets
 
@@ -48,13 +52,15 @@ Linux, Windows, and macOS are all first-class.
 
 | | x86-64 (v3) | ARM64 (v8.2-A) |
 |---|---|---|
-| Linux | ✓ | ✓ |
+| Linux | ✓ | ✓² |
 | Windows | ✓ | experimental¹ |
 | macOS | — | ✓ |
 
 ¹ The compiler emits Windows ARM64 executables, but they have not been run on
 Windows ARM64 hardware and there is no seed for that host
 ([ADR 0968](docs/decisions/0968-aarch64-windows-target.md)).
+
+² Linux ARM64 is tested under `qemu-aarch64` user emulation, not on hardware.
 
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
@@ -106,18 +112,31 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Vision and philosophy](docs/vision.md)
 - [Design decisions](docs/decisions/README.md)
 - [Language card](docs/language-card.md): the whole language in one short read
+- [Packages](docs/packages.md): `ail.pkg`, path and git dependencies, `ail.lock`, capability grants
+- [AIL on Windows](docs/windows.md): install and day-to-day notes for PowerShell
 - [Language specification](docs/spec/README.md)
 - [Open questions](docs/open-questions.md)
 - [Roadmap](docs/roadmap.md)
+- [Benchmarks: AIL against C and Python, with commands](docs/benchmarks.md)
 - [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
 - [Research: beating C on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
 
-AI agents: read [AGENTS.md](AGENTS.md) first.
+AI agents: read [AGENTS.md](AGENTS.md) first, or [llms.txt](llms.txt) for the list of docs to load.
+
+### Agent kit for your project
+
+`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). For an existing project, add this to your agent file and register `ail mcp` on stdio in your agent's MCP config:
+
+```
+Language card: `ail api --card .`. Loop: `ail task start FILE GOAL`, `ail context FILE FN --budget 800`,
+edit, `ail task verify`, `ail task finish`. For any diagnostic run `ail explain RULE`.
+Never grep; use `ail ask FILE what calls FN`.
+```
 
 ## Contributing and security
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): how a change gets tested without hosted CI, and what a PR needs.
-- [SECURITY.md](SECURITY.md): report vulnerabilities privately through GitHub.
+- [SECURITY.md](SECURITY.md): report vulnerabilities as GitHub issues with the Security report template (public while the project is small).
 
 ## License
 

@@ -48,6 +48,14 @@ STD_EFFECTS := [
             "trash",
             "scan",
             "scan_count",
+            "map",
+            "mode",
+            "set_mode",
+            "set_modified",
+            "read_link",
+            "symlink",
+            "truncate",
+            "write_at",
         ],
         effects: ["fs", "io"],
     ),
@@ -88,7 +96,7 @@ STD_EFFECTS := [
         names: ["run", "run_bytes", "which", "start", "wait", "kill"],
         effects: ["proc", "io"],
     ),
-    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "eprint", "exit"], effects: ["io"]),
+    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "write_bytes", "eprint", "exit"], effects: ["io"]),
     # std.net.14: a server needs the narrower capability as well.
     StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
     # std.net.1: every request reaches the network.
@@ -116,11 +124,15 @@ STD_EFFECTS := [
         effects: [],
     ),
     StdEffects(module: "time", names: ["now_ms", "sleep_ms"], effects: ["clock"]),
+    # std.os.1 (ADR 1011): watching signals reaches the process.
+    StdEffects(module: "os", names: ["signals"], effects: ["proc"]),
     # std.tz.1-2: reads the tz database files, and `TZ`.
     StdEffects(module: "tz", names: ["offset", "system"], effects: ["fs", "env"]),
     # std.tensor.1: values only. conc.cancel.2: reads the running task's flag.
     StdEffects(module: "tensor", names: ["from", "from_fn", "zeros"], effects: []),
-    StdEffects(module: "task", names: ["cancelled", "check", "select"], effects: []),
+    StdEffects(module: "task", names: ["cancelled", "check", "select", "threads"], effects: []),
+    # conc.par.18: the pool's cap is process state, so a loop or pure function can't set it.
+    StdEffects(module: "task", names: ["set_threads"], effects: ["io"]),
     # std.ui.9: opening a window and every `ui.Window` method.
     StdEffects(module: "ui", names: ["open", "clipboard_get", "clipboard_set", "Window"], effects: ["ui", "io"]),
 ]

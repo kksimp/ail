@@ -4,6 +4,13 @@
 ```
 pub fn load.effects_command(rest List[str], std str) int [clock env fs io proc]
 pub fn load.fix_command(rest List[str], std str) int [clock env fs io proc]
+pub struct load.Repair  ## What `check --fix` did (fix.check.1): the rules of the fixes applied, in order, and
+    pub rules List[str]
+    pub code int
+pub fn load.fixed_line(rules List[str]) str  ## `fixed 3: expr.not.1, gram.fn.4 x2` (fix.check.1): the rules in first-seen order with a count when more than one.
+pub fn load.repair(path str, std str) load.Repair [clock env fs io proc]  ## Fixes `path` to a fixed point as `ail fix` does, writing it and printing nothing (fix.check.1).
+pub fn load.header_command(rest List[str], std str) int [clock env fs io proc]
+pub fn load.c_header(prog ast.Program, source str) str  ## The header text for the exported functions of `prog`, in source order.
 pub struct load.SelfDone  ## What the pass changed: the program with the rewritten functions, and its diagnostics.
     pub program ast.Program
     pub diags List[syntax.Diag]
@@ -19,6 +26,7 @@ pub struct load.Loaded  ## A loaded program with the diagnostics its loading fou
 pub fn load.load(arg str, std str) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## Read the program at `arg`, a file or a package directory, with every module
 pub fn load.load_derived(arg str, std str, user Map[str, str]) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## `load`, with the texts the program's own derive generators wrote, by
 pub fn load.load_with(arg str, std str, over Map[str, str]) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## `load` with the text of some files given instead of read from disk, by
+pub fn load.prove_command(rest List[str], std str) int [clock env fs io proc]
 pub struct load.Shown  ## One diagnostic ready to print, from the loader's or the checker's.
     pub rule str
     pub pos ast.Pos
@@ -34,4 +42,4 @@ pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## Th
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 ```
 
-trimmed to fit 2000 tokens (~772); dropped: private items
+trimmed to fit 2000 tokens (~1029); dropped: private items

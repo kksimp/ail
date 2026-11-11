@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076). The slice is row 1022 of the AI-first plan of 2026-11-09.
 - **Topic:** 22 — Tooling
 - **Spec rules:** test.mutate.1-5
+- **Supersedes:** [0896](0896-ail-test-mutate.md)
 
 ## Context
 

@@ -1,9 +1,7 @@
-## The edit operations (edit.op.1-7) and the compact input form (edit.in.3).
+## The edit operations (edit.op.1-7) and the compact input form (edit.in.3);
+## the refactors (edit.op.8-10) are in refactor.ail.
 ## A port of the second half of `77592931:bootstrap/src/edit.rs`. An operation that
 ## fails leaves `Work.err` set; the caller stops at the first one.
-use api
-use check
-use load
 
 ## The working copy: each file's text, keyed by path (in path order).
 pub struct Work
@@ -388,34 +386,43 @@ pub fn apply(mut work Work, op J, path str)
         f := work.target(op)
         if work.err != ""
             return
-        src := work.texts[f]
-        line := "use {module}"
-        lines := src.split("\n")
-        for l in lines
-            if l.trim_end() == line
-                return
-        mut last_use := -1
-        mut any_use := false
-        for i in 0..lines.len()
-            if lines[i].starts_with("use ")
-                last_use = i
-                any_use = true
-        mut at := 0
-        if any_use
-            at = last_use + 1
-        else
-            mut first_code := 0
-            for i in 0..lines.len()
-                if not lines[i].starts_with("#")
-                    first_code = i
-                    break
-            at = first_code
-        mut block := [line]
-        if not any_use and at < lines.len() and lines[at].trim() != ""
-            block.push("")
-        work.texts[f] = splice(src, at, at, block)
+        work.texts[f] = with_use(work.texts[f], "use {module}")
+    elif kind == "change_sig"
+        change_sig(mut work, op)
+    elif kind == "extract"
+        extract(mut work, op)
+    elif kind == "move"
+        move_decl(mut work, op)
     else
-        work.fail("unknown op `{kind}`; the ops are replace_body, replace, insert, delete, rename and import (edit.in.1)")
+        work.fail("unknown op `{kind}`; the ops are replace_body, replace, insert, delete, rename, import, change_sig, extract and move (edit.in.1)")
+
+## `src` with the `use` line `line` after its last `use` line (or at the
+## top), unless it is there (edit.op.6).
+fn with_use(src str, line str) str
+    lines := src.split("\n")
+    for l in lines
+        if l.trim_end() == line
+            return src
+    mut last_use := -1
+    mut any_use := false
+    for i in 0..lines.len()
+        if lines[i].starts_with("use ")
+            last_use = i
+            any_use = true
+    mut at := 0
+    if any_use
+        at = last_use + 1
+    else
+        mut first_code := 0
+        for i in 0..lines.len()
+            if not lines[i].starts_with("#")
+                first_code = i
+                break
+        at = first_code
+    mut block := [line]
+    if not any_use and at < lines.len() and lines[at].trim() != ""
+        block.push("")
+    splice(src, at, at, block)
 
 fn need(mut work Work, op J, kind str, key str) str
     v := op.str_of(key) else
@@ -519,45 +526,10 @@ fn rename(mut work Work, id str, to str)
     decl := work.declared_at(full)
     if work.err != ""
         return
-    mut over := Map[str, str]()
-    for i in 0..work.paths.len()
-        over[work.paths[i]] = work.texts[i]
-    loaded := load.load_with(work.root, work.std, over) else err
-        work.fail("a rename needs a program that loads: {err.message} (edit.op.5)")
-        return
-    if loaded.diags.len() > 0
-        d := loaded.diags[0]
-        work.fail("a rename needs a program that checks; first error: {d.msg} [{d.rule}] (edit.op.5)")
-        return
-    analysis := check.analyze(loaded.program, true)
-    for d in analysis.report.diags
-        if not d.warning and (work.package or d.rule != "mod.main.1")
-            work.fail("a rename needs a program that checks; first error: {d.message} [{d.rule}] (edit.op.5)")
-            return
+    ck := checked(mut work, "rename", "edit.op.5") else return
     # References name a package's declarations with their module (api.pkg.1).
-    c := full.find(":") else 0
-    kind := full.slice(0, c)
-    bare := full.slice(c + 1, full.chars().len())
-    module := work.module(work.paths[decl.file])
-    mut want := "{kind}:{bare}"
-    if work.package and module != "" and not bare.starts_with("{module}.")
-        want = qualified(full, module)
-    mut spots := List[(int, int, int)]()
-    prog := loaded.program
-    for r in api.collect_refs(prog, analysis.symbols, analysis.weak_symbols).refs
-        if r.id != want
-            continue
-        mut at := -1
-        for i in 0..prog.files.len()
-            if prog.files[i].base < r.pos.line
-                at = i
-        if at < 0
-            continue
-        mut f := work.index(prog.files[at].path)
-        if f < 0 and not work.package
-            f = 0
-        if f >= 0
-            spots.push((f, r.pos.line - prog.files[at].base, r.pos.col))
+    want := want_id(work, full, decl.file)
+    mut spots := [(p.file, p.line, p.col) for p in places(work, ck) if p.id == want]
     spots.push((decl.file, decl.line, decl.col))
     old := decl.name
     for f in 0..work.paths.len()

@@ -207,6 +207,28 @@ while a scan runs, to show its progress. The two counts are read one after the
 other, not as one snapshot, so `bytes` may already include entries that
 `entries` does not yet. *(ADR 0992)*
 
+**std.fs.36** — `map(path str) bytes ! IoError` returns the whole file as a
+read-only `bytes` view onto the file's pages, with no copy and no read up
+front: the system pages in only what the program touches, so a file larger
+than memory can be searched or indexed. The view reads exactly like
+`read_bytes` (`len`, `b[i]`, slices, `find`, `==`) and fails like it, with kind
+`not_found`, `permission` or `is_dir`. The mapping is private and lasts to the
+end of the process; the collector never scans or frees it. A file changed by
+another process while mapped may show the change, and one truncated while
+mapped may stop the program on access (like C `mmap`), so map files that
+other programs are not writing. On Windows the system refuses to truncate or
+delete a file while it is mapped. An empty file gives an empty `bytes`. If the
+system refuses the mapping, the result is an ordinary copy with the same
+contents. *(ADR 1016)*
+
+```ail norun rules=std.fs.36
+use std.fs
+
+fn main() !
+    log := fs.map("big.log")?                 # no read yet
+    print(log.find(b"ERROR"))                 # pages in what the search touches
+```
+
 ```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26,std.fs.27
 use std.fs
 
@@ -221,6 +243,53 @@ fn main() !
     print("{total} of {v.total} bytes, {v.free} free, {s.skipped.len()} skipped, {seen.bytes} seen")
     head := fs.read_range("a.bin", 0, 4096)?
     fs.trash("old.bin")?
+```
+
+**std.fs.28** — `mode(path str) int ! IoError` returns the permission bits of
+the file (0 to 4095, the low twelve bits of `st_mode`), links followed. On
+Windows a read-only file is 292 (`0o444`) and any other file 438 (`0o666`).
+*(ADR 0977)*
+
+**std.fs.29** — `set_mode(path str, mode int) ! IoError` sets the permission
+bits; a `mode` outside 0 to 4095 traps. On Windows only the owner's write bit
+(128) acts: without it the file becomes read-only, with it that attribute is
+cleared. *(ADR 0977)*
+
+**std.fs.30** — `set_modified(path str, ms int) ! IoError` sets the
+modification time to `ms` milliseconds since 1970-01-01T00:00:00Z, so that
+`metadata(path).modified_ms` reads it back; the access time is unchanged.
+*(ADR 0977)*
+
+**std.fs.31** — `read_link(path str) str ! IoError` returns the text a symbolic
+link holds, as it was written and not resolved. A path that is not a link
+fails with kind `other`. On Windows the text has `\` where `/` was written.
+*(ADR 0977)*
+
+**std.fs.32** — `symlink(target str, path str) ! IoError` makes a symbolic link
+at `path` holding `target` as written; `path` existing fails with kind
+`exists`. On Windows it needs the privilege or developer mode and otherwise
+fails with kind `permission`. *(ADR 0977)*
+
+**std.fs.33** — `truncate(path str, len int) ! IoError` makes the file end at
+byte `len`: bytes past it are dropped and a shorter file grows with zero
+bytes. A negative `len` traps. *(ADR 0977)*
+
+**std.fs.34** — `write_at(path str, offset int, data bytes) ! IoError` writes
+`data` over the bytes of the file from `offset`, making the file when it is
+missing and growing it with zero bytes when it is shorter than `offset`; the
+rest of the file is unchanged. A negative `offset` traps. *(ADR 0977)*
+
+```ail norun rules=std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33,std.fs.34
+use std.fs
+
+fn main() !
+    m := fs.mode("tool.sh")?
+    fs.set_mode("tool.sh", m.bit_or(73))?
+    fs.set_modified("tool.sh", 1700000000000)?
+    fs.symlink("tool.sh", "run")?
+    print(fs.read_link("run")?)
+    fs.truncate("archive.bin", 1048576)?
+    fs.write_at("out.bin", 4096, b"tail")?
 ```
 
 ```ail rules=std.fs.20
@@ -682,6 +751,22 @@ fn main()
     print(io.read_bytes().len())
 ```
 
+**std.io.6** — `write_bytes(data bytes)` writes the bytes of `data` to
+standard output, undecoded and with no newline added, and on Windows too with no `\n` to
+`\r\n` translation. Output from `print` and
+`write_bytes` reaches standard output in the order the calls ran; `exit`
+flushes it (`std.io.4`). `io.read_bytes` (`std.io.5`) is the matching read, so
+a filter reads all of standard input as bytes and writes bytes back. *(ADR 1007)*
+
+```ail rules=std.io.6
+use std.io
+
+fn main()
+    io.write_bytes(b"he")
+    io.write_bytes(b"llo\n")
+    print("mid")
+```
+
 ## Processes: `std.proc`
 
 **std.proc.1** — `run(cmd str, args List[str], input str?, timeout_ms int?) Output ! ProcError`
@@ -812,6 +897,44 @@ fn main() !
     r := proc.run("echo", ["hello"])?
     print(r.ok())                         # true
     print(r.text().len() > 0)             # true
+```
+
+## Signals: `std.os`
+
+**std.os.1** — `signals(names List[str]) Channel[str]` returns a channel that
+receives the name of each listed signal as the operating system delivers it to
+the program. The names are `"HUP"`, `"INT"`, `"QUIT"`, `"TERM"` and `"WINCH"`;
+the value is the same name. Receiving uses the ordinary channel methods
+(`recv`, `try_recv`, `recv_for`, `task.select`) and, like a child's output
+(std.proc.5), needs no task: a receiver that finds the channel empty waits for
+a signal. Signals of one kind that arrive before a receiver looks are delivered as one
+value. Every
+channel that names a signal gets its own copy. While a channel is open, the
+named signals no longer end the program. Needs the `proc` capability.
+*(ADR 1011)*
+
+**std.os.2** — `signals` traps when the list is empty or names a signal other
+than those of std.os.1. *(ADR 1011)*
+
+**std.os.3** — `ch.close()` on a signal channel ends it: queued names can
+still be received, then `recv` gives `none`. When the last open channel naming
+a signal is closed, that signal's default action returns. `ch.send(v)` on a
+signal channel has no effect. `signals` traps if the system refuses the
+handler. *(ADR 1011)*
+
+**std.os.4** — On Windows, `"INT"` is Ctrl-C and Ctrl-Break, and `"TERM"` is
+the console closing, the user logging off and the system shutting down (Windows
+ends the program a few seconds later whatever the program does). `"HUP"`,
+`"QUIT"` and `"WINCH"` are accepted and never delivered there. *(ADR 1011)*
+
+```ail norun rules=std.os.1,std.os.2,std.os.3,std.os.4
+use std.os
+
+fn main()
+    stop := os.signals(["INT", "TERM"])
+    name := stop.recv() else return
+    print("{name}: shutting down")
+    stop.close()
 ```
 
 ## Counting: `Map[K, int]`
@@ -1198,6 +1321,18 @@ fn main()
         print(err.kind)
         return
     print(r.status)
+```
+
+**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux, a `kqueue` set on macOS and a completion port on Windows (built, and switched on with the first seed whose PE writer maps `ntdll.dll`; until then Windows takes the `poll` loop below), so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. If the system gives no set, the server falls back to a `poll` loop over its connections. The native runtime only. *(ADR 1009)*
+
+```ail norun rules=std.net.32
+use std.net
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    # Thousands of idle connections cost the next request nothing extra.
+    ex := srv.accept()?
+    ex.respond(net.Response(status: 200, headers: {}, body: "ok"))?
 ```
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
