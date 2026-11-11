@@ -6,7 +6,7 @@ tests: 10 (`ail test` lists them)
 
 ## a64 (81 items)
 
-## api (281 items)
+## api (284 items)
 
 ## ast (142 items)
 
@@ -40,7 +40,7 @@ tests: 10 (`ail test` lists them)
 
 ## obj (66 items)
 
-## pkg (44 items)
+## pkg (49 items)
 
 ## scaffold (4 items)
 

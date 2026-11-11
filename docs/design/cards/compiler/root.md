@@ -3,7 +3,7 @@ entry: main in main.ail
 
 ## (root)
 ```
-fn main() ! [clock env fail fs io net proc]
+fn main() ! [clock env fail fs io net proc random]
     fails with JsonError | fs.IoError
 BUILD_USAGE := ...
 fn positive(v str) bool
@@ -64,7 +64,7 @@ fn tree_stamp(tag str, root str) str [fs io]
 fn sched_points() bool [env]
 fn exe_ext(target str) str
 fn cache_key(file str, target str, ms str, mb str, attach bool) str [env fs io]
-fn cache_trim(dir str) [fs io proc]
+fn cache_trim(dir str) [fs io]
 fn cli_prepare(file str) str [clock env fs io proc]
 fn cli_prepare_with(file str, ms str, mb str, attach bool) str [clock env fs io proc]
 fn cli_prepare_cmd(rest List[str]) [clock env fs io proc]
@@ -73,7 +73,7 @@ fn chop(s str) str
 fn load_dump(files List[str]) [clock env fs io proc]
 fn check_cmd(rest List[str]) [clock env fs io proc]
 fn api_syntax(rest List[str]) [clock env fs io proc]
-fn api_cmd(rest List[str]) [clock env fs io proc]
+fn api_cmd(rest List[str]) [clock env fs io proc random]
 ```
 
-trimmed to fit 2000 tokens (~1310); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1313); dropped: private items, doc comments
