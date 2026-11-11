@@ -238,7 +238,7 @@ pub fn RangeDecoder.decode(mut self, ft int) int
 pub fn RangeDecoder.decode_bin(mut self, bits int) int
     self.ext = self.rng.shr(bits)
     s := self.val / self.ext
-    ft := lsh(1, bits)
+    ft := op_lsh(1, bits)
     ft - (s + 1).min(ft)
 
 ## Consumes the symbol with cumulative range `fl..fh` out of `ft` (§4.1.2).
@@ -303,7 +303,7 @@ pub fn RangeDecoder.bits(mut self, n int) int
         while self.window_bits <= 24
             self.window = self.window.bit_or(self.next_back().shl(self.window_bits))
             self.window_bits += SYM
-    v := self.window.bit_and(lsh(1, n) - 1)
+    v := self.window.bit_and(op_lsh(1, n) - 1)
     self.window = self.window.shr(n)
     self.window_bits -= n
     self.total += n
@@ -330,7 +330,7 @@ pub fn RangeDecoder.tell_frac(self) int
 pub fn RangeDecoder.size(self) int
     data.len()
 
-fn lsh(v int, n int) int
+fn op_lsh(v int, n int) int
     v.shl(n)
 
 ## CELT (RFC 6716 §4.3)
@@ -2066,7 +2066,7 @@ fn allocate(
     for j in start..end
         nt := band_width(j)
         thresh[j] = c.shl(BITRES).max((3 * nt).shl(lm).shl(BITRES).shr(4))
-        trim_off[j] = asr(c * nt * (trim - 5 - lm) * (end - j - 1) * lsh(1, lm + BITRES), 6)
+        trim_off[j] = asr(c * nt * (trim - 5 - lm) * (end - j - 1) * op_lsh(1, lm + BITRES), 6)
         if nt.shl(lm) == 1
             trim_off[j] -= c.shl(BITRES)
     mut lo := 1
@@ -2359,7 +2359,7 @@ fn pvq_unquant(
     for i in 0..blocks
         for j in 0..n0
             if y[i * n0 + j] != 0
-                cm = cm.bit_or(lsh(1, i))
+                cm = cm.bit_or(op_lsh(1, i))
     (x, cm)
 
 fn renormalise(x List[float], gain float) List[float]
@@ -2491,11 +2491,11 @@ fn decode_theta(
     if itheta == 0
         s.imid = 32767
         s.delta = -16384
-        s.fill = s.fill.bit_and(lsh(1, blocks) - 1)
+        s.fill = s.fill.bit_and(op_lsh(1, blocks) - 1)
     elif itheta == 16384
         s.iside = 32767
         s.delta = 16384
-        s.fill = s.fill.bit_and((lsh(1, blocks) - 1).shl(blocks))
+        s.fill = s.fill.bit_and((op_lsh(1, blocks) - 1).shl(blocks))
     else
         s.imid = bitexact_cos(itheta)
         s.iside = bitexact_cos(16384 - itheta)
@@ -2544,9 +2544,9 @@ fn band_n1(mut d RangeDecoder, mut ctx BandCtx, count int) List[float]
     mut out := List[float]()
     for _ in 0..count
         mut sign := 0
-        if ctx.remaining >= lsh(1, BITRES)
+        if ctx.remaining >= op_lsh(1, BITRES)
             sign = d.bits(1)
-            ctx.remaining -= lsh(1, BITRES)
+            ctx.remaining -= op_lsh(1, BITRES)
         out.push(if sign == 1 then -1.0 else 1.0)
     out
 
@@ -2633,7 +2633,7 @@ fn partition(
         ctx.remaining -= curr
     if q != 0
         return pvq_unquant(mut d, n, get_pulses(q), ctx.spread, blocks, gain)
-    mask := lsh(1, blocks) - 1
+    mask := op_lsh(1, blocks) - 1
     fill = fill.bit_and(mask)
     if fill == 0
         return ([0.0 for _ in 0..n], 0)
@@ -2676,7 +2676,7 @@ fn band_mono(
     mut fill := fill0
     for k in 0..recombine
         if not lowband.is_empty()
-            lowband = haar(lowband, n.shr(k), lsh(1, k))
+            lowband = haar(lowband, n.shr(k), op_lsh(1, k))
         fill = BIT_INTERLEAVE[fill.bit_and(0xF)].bit_or(BIT_INTERLEAVE[fill.shr(4)].shl(2))
     blocks = blocks.shr(recombine)
     n_b = n_b.shl(recombine)
@@ -2712,13 +2712,13 @@ fn band_mono(
         x = haar(x, n_b, blocks)
     for k2 in 0..recombine
         cm = BIT_DEINTERLEAVE[cm]
-        x = haar(x, n.shr(k2), lsh(1, k2))
+        x = haar(x, n.shr(k2), op_lsh(1, k2))
     blocks = blocks.shl(recombine)
     mut out := List[float]()
     if want_out
         root := n.to_float().sqrt()
         out = [root * v for v in x]
-    (x, cm.bit_and(lsh(1, blocks) - 1), out)
+    (x, cm.bit_and(op_lsh(1, blocks) - 1), out)
 
 ## A stereo band: mid and side split by an angle, then merged back to left
 ## and right (RFC 6716 §4.3.4.4).
@@ -2746,7 +2746,7 @@ fn band_stereo(
     mut cm := 0
     mut out := List[float]()
     if n == 2
-        sbits := if s.itheta != 0 and s.itheta != 16384 then lsh(1, BITRES) else 0
+        sbits := if s.itheta != 0 and s.itheta != 16384 then op_lsh(1, BITRES) else 0
         mbits := b - sbits
         swap := s.itheta > 8192
         ctx.remaining -= s.qalloc + sbits
@@ -2856,7 +2856,7 @@ fn all_bands(
     balance0 int,
     al Allocation,
 )(List[List[float]], List[int])
-    m := lsh(1, lm)
+    m := op_lsh(1, lm)
     blocks := if short_blocks then m else 1
     norm_offset := m * EBANDS[start]
     span := m * EBANDS[NB_BANDS - 1] - norm_offset
@@ -2899,7 +2899,7 @@ fn all_bands(
                     norm[ch][n1 + j] = norm[ch][2 * n1 - n2 + j]
         ctx.tf_change = tf_res[i]
         mut effective := -1
-        mut x_cm := lsh(1, blocks) - 1
+        mut x_cm := op_lsh(1, blocks) - 1
         mut y_cm := x_cm
         if lowband_offset != 0 and (spread != 3 or blocks > 1 or tf_res[i] < 0)
             effective = (m * EBANDS[lowband_offset] - norm_offset - n).max(0)
@@ -2970,7 +2970,7 @@ fn fine_energy(mut d RangeDecoder, mut st CeltState, start int, end int, fine Li
         if fine[i] > 0
             for ch in 0..c
                 q := d.bits(fine[i])
-                step := lsh(1, 14 - fine[i]).to_float() / 16384.0
+                step := op_lsh(1, 14 - fine[i]).to_float() / 16384.0
                 st.energy[ch * NB_BANDS + i] += (q.to_float() + 0.5) * step - 0.5
 
 ## The leftover bits refine the energies once more, by priority (§4.3.2.2).
@@ -2989,7 +2989,7 @@ fn finalise_energy(
             if bits_left >= c and al.fine[i] < 8 and al.priority[i] == p
                 for ch in 0..c
                     q := d.bits(1)
-                    half := lsh(1, 13 - al.fine[i]).to_float() / 16384.0
+                    half := op_lsh(1, 13 - al.fine[i]).to_float() / 16384.0
                     st.energy[ch * NB_BANDS + i] += (q.to_float() - 0.5) * half
                     bits_left -= 1
 
@@ -3025,8 +3025,8 @@ fn anti_collapse(
             r = r.min(thresh) * sqrt_1
             base := EBANDS[i].shl(lm)
             mut refill := false
-            for k in 0..lsh(1, lm)
-                if masks[ch * NB_BANDS + i].bit_and(lsh(1, k)) == 0
+            for k in 0..op_lsh(1, lm)
+                if masks[ch * NB_BANDS + i].bit_and(op_lsh(1, k)) == 0
                     for j in 0..n0
                         seed = lcg(seed)
                         xs[ch][base + j.shl(lm) + k] = if seed.bit_and(0x8000)
@@ -3259,7 +3259,7 @@ fn celt_frame(
     start int,
     end int,
 ) List[List[float]]
-    m := lsh(1, lm)
+    m := op_lsh(1, lm)
     n := 120 * m
     total := d.data.len() * 8
     if c == 1
@@ -3280,7 +3280,7 @@ fn celt_frame(
     if start == 0 and tell + 16 <= total
         if d.bit_logp(1)
             octave := d.uint(6)
-            pf_pitch = lsh(16, octave) + d.bits(4 + octave) - 1
+            pf_pitch = op_lsh(16, octave) + d.bits(4 + octave) - 1
             qg := d.bits(3)
             if d.tell() + 2 <= total
                 pf_tap = d.icdf(TAPSET_ICDF, 2)
@@ -3302,7 +3302,7 @@ fn celt_frame(
     if d.tell_frac() + 48 <= da.1
         trim = d.icdf(TRIM_ICDF, 7)
     mut bits := total.shl(BITRES) - d.tell_frac() - 1
-    rsv := if transient and lm >= 2 and bits >= (lm + 2).shl(BITRES) then lsh(1, BITRES) else 0
+    rsv := if transient and lm >= 2 and bits >= (lm + 2).shl(BITRES) then op_lsh(1, BITRES) else 0
     bits -= rsv
     al := allocate(mut d, start, end, da.0, caps, trim, bits, lm, c)
     fine_energy(mut d, mut st, start, end, al.fine, c)
@@ -3414,8 +3414,8 @@ fn unhex(text str, size int, signed bool) List[int]
         mut v := 0
         for j in 0..size
             v = v.shl(8) + raw[i + j].to_int()
-        if signed and v >= lsh(1, 8 * size - 1)
-            v -= lsh(1, 8 * size)
+        if signed and v >= op_lsh(1, 8 * size - 1)
+            v -= op_lsh(1, 8 * size)
         out.push(v)
         i += size
     out
@@ -3581,7 +3581,7 @@ fn log2lin(x int) int
         return 0
     if x >= 3967
         return 2147483647
-    out := lsh(1, x.shr(7))
+    out := op_lsh(1, x.shr(7))
     f := x.bit_and(0x7F)
     if x < 2048
         return out + (out * smlawb(f, smulbb(f, 128 - f), -174)).shr(7)
@@ -3787,13 +3787,13 @@ fn inv_pred_gain(a_q12 List[int], order int) int
     mut a := [v.shl(12) for v in a_q12]
     lim := 16773022
     min_inv := 107374
-    mut inv := lsh(1, 30)
+    mut inv := op_lsh(1, 30)
     mut k := order - 1
     while k > 0
         if a[k] > lim or a[k] < 0 - lim
             return 0
         rc := w32(0 - a[k].shl(7))
-        m1 := lsh(1, 30) - smmul(rc, rc)
+        m1 := op_lsh(1, 30) - smmul(rc, rc)
         inv = w32(smmul(inv, m1).shl(2))
         if inv < min_inv
             return 0
@@ -3814,7 +3814,7 @@ fn inv_pred_gain(a_q12 List[int], order int) int
     if a[0] > lim or a[0] < 0 - lim
         return 0
     rc0 := w32(0 - a[0].shl(7))
-    m10 := lsh(1, 30) - smmul(rc0, rc0)
+    m10 := op_lsh(1, 30) - smmul(rc0, rc0)
     inv = w32(smmul(inv, m10).shl(2))
     if inv < min_inv
         return 0
@@ -3845,7 +3845,7 @@ fn nlsf2a(nlsf List[int], d int) List[int]
     mut a := lpc_fit(mut a32, 12, 17, d)
     mut i := 0
     while inv_pred_gain(a, d) == 0 and i < 16
-        bwexpander_32(mut a32, d, 65536 - lsh(2, i))
+        bwexpander_32(mut a32, d, 65536 - op_lsh(2, i))
         a = [w16(rround(v, 5)) for v in a32]
         i += 1
     a
@@ -4223,8 +4223,8 @@ fn decode_core(mut ch SilkChan, ind Indices, ctrl Ctrl, pulses List[int]) List[i
                 sltp_q15[buf_idx] = w32(res[i7].shl(1))
                 buf_idx += 1
         else
-            for i8 in 0..sl
-                res[i8] = exc[k * sl + i8]
+            for j8 in 0..sl
+                res[j8] = exc[k * sl + j8]
         for i9 in 0..sl
             mut acc2 := ch.order.shr(1)
             for j2 in 0..ch.order
@@ -4339,7 +4339,7 @@ fn iir_fir(mut r Resampler, x List[int]) List[int]
     out
 
 ## A frame at the internal rate to 48 kHz, after the decoder's delay.
-fn resample(mut r Resampler, x List[int]) List[int]
+fn op_resample(mut r Resampler, x List[int]) List[int]
     ns := r.fin - r.delay
     for i in 0..ns
         r.dbuf[r.delay + i] = x[i]
@@ -4506,10 +4506,10 @@ fn silk_decode(mut st SilkState, mut d RangeDecoder, internal int, khz int, ms i
             b0[0] = st.smid[0]
             b0[1] = st.smid[1]
             st.smid = [b0[fl], b0[fl + 1]]
-        for v3 in resample(mut st.mid.rs, b0[1..fl + 1])
+        for v3 in op_resample(mut st.mid.rs, b0[1..fl + 1])
             left.push(v3)
         if st.api == 2 and internal == 2
-            for v4 in resample(mut st.side.rs, b1[1..fl + 1])
+            for v4 in op_resample(mut st.side.rs, b1[1..fl + 1])
                 right.push(v4)
         st.prev_mid_only = mid_only
     if st.api == 1
