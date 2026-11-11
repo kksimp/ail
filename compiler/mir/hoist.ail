@@ -1,7 +1,8 @@
 ## Loop-invariant list headers (ADR 0890). `xs[i]` loads the list's length
 ## to check the index and its element pointer to read the element, both from
 ## the list header, at every access. When a loop only reads and writes the
-## elements of a list it didn't build (`xs[i]`, `xs[i] = v`, `xs.len()`), the
+## elements of a list it didn't build (`xs[i]`, `xs[i] = v`, `xs.len()`, and
+## `data`, which constlen.ail's lists read through), the
 ## header can't change under it, so the loop instead reads the length and the
 ## element pointer once, before it: a `get` becomes `bounds i, len` and an
 ## `ldx data, i`, a `set` becomes `bounds` and `stx`. The check runs where it
@@ -70,6 +71,7 @@ fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
         return g
     mut count := [0 for _ in 0..g.vals.len()]
     mut bad := [false for _ in 0..g.vals.len()]
+    mut wants_len := [false for _ in 0..g.vals.len()]
     for b in lp.blocks
         for i in g.blocks[b].insts
             for k in 0..i.argc()
@@ -77,6 +79,11 @@ fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
                 if v >= cand.len() or not cand[v] or lp.member[defs[v].block]
                     continue
                 if k == 0 and (i.op == "get" or i.op == "set" or i.op == "len")
+                    count[v] += 1
+                    wants_len[v] = true
+                elif k == 0 and i.op == "data"
+                    # What a list of known length (constlen.ail) reads its
+                    # elements through; its checks compare to a constant.
                     count[v] += 1
                 else
                     bad[v] = true
@@ -92,18 +99,22 @@ fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
     mut datas := Map[int, int]()
     busy := count
     for x in ok.sorted(by: |v| 0 - busy[v]).take(MAX_LISTS)
-        lv := new_val(mut g, Ty.Int)
-        g.blocks[lp.pre].insts.push(inst(lv, "len", [x]))
-        lens[x] = lv
+        if wants_len[x]
+            lv := new_val(mut g, Ty.Int)
+            g.blocks[lp.pre].insts.push(inst(lv, "len", [x]))
+            lens[x] = lv
         dv := new_val(mut g, Ty.Int)
         g.blocks[lp.pre].insts.push(inst(dv, "data", [x]))
         datas[x] = dv
-    if lens.len() == 0
+    if datas.len() == 0
         return g
     for b in lp.blocks
         mut out := List[Inst]()
         for i in g.blocks[b].insts
             x := i.arg(0)
+            if i.op == "data" and datas.contains(x)
+                out.push(inst(i.dst, "copy", [datas[x]]))
+                continue
             if (i.op != "get" and i.op != "set" and i.op != "len") or not lens.contains(x)
                 out.push(i)
                 continue

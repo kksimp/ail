@@ -56,9 +56,10 @@ pub fn inline_module(mut out Module)
         if f.name.starts_with("rt.")
             f = forwarded(f)
         else
+            shaped := known_lists(mark_nonneg(interchange(vec_loops(f))))
             f = forwarded(hoist_headers(fill_loops(
                 kept_lengths(
-                    iv_sums(bce(mark_nonneg(interchange(vec_loops(f))), reserve, grow_only)),
+                    iv_sums(bce(shaped, reserve, grow_only)),
                     reserve and grow_only,
                 ),
                 fills and not opt_off("fill"),

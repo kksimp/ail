@@ -1524,6 +1524,14 @@ fn Gen.list_index(mut self, i mir.Inst, size int) Mem
 ## hoisted out of a loop (ADR 0890): trap at `site` unless `0 <= idx < len`.
 ## The stub gets the length itself, not the list.
 fn Gen.bounds(mut self, i mir.Inst)
+    # A length that is a constant (a list built with a known count,
+    # native.bce.15) is compared as an immediate.
+    if n := imm32(i.arg(1))
+        if imm(i.arg(0)) == none
+            a.alu_ri("cmp", gpr(i.arg(0), S1), n)
+            a.jcc(CC_AE, stub(3, i.arg(0), i.arg(1), i.site, ""))
+            stubs[stubs.len() - 1].undo = 4
+            return
     l := gpr(i.arg(1), S0)
     if k := imm32(i.arg(0))
         a.alu_ri("cmp", l, k)
