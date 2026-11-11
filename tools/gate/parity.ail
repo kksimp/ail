@@ -1,5 +1,6 @@
 ## The parity probe (ADR 0925): one line per feature, found by trying the feature on this host.
-##   ail run tools/gate/parity.ail      from the repository root
+##   ail run tools/gate/parity.ail      from the repository root, with sh and perl on PATH (on Windows they are in
+##                                      Git for Windows' usr\bin, which win-gate.ps1 adds for the gate)
 ## Each line is `FEATURE works`, `FEATURE missing DETAIL` (the host refuses it) or `FEATURE differs DETAIL` (it runs
 ## and the result is not the expected one). The last line is `PARITY N features`. The lines are the same on macOS,
 ## Linux and Windows but for the ones tests/parity/expected-differences.txt lists; the gate's `parity` suite
@@ -282,9 +283,13 @@ fn main() !
     base := tmp.replace("\\", "/")
     root := if base.len() > 1 and base.ends_with("/") then base.slice(0, base.len() - 1) else base
     dir := "{root}/ail-parity"
+    # The probes start `ail` through sh and perl, as the gate does, and several of the std programs run sh themselves.
+    if proc.which("sh") == none or proc.which("perl") == none
+        io.eprint("parity: needs sh and perl on PATH (on Windows: Git for Windows' usr\\bin)")
+        io.exit(2)
     made := sh("rm -rf {dir}; mkdir -p {dir}")
     if made.status != 0
-        io.eprint("parity: can't make {dir}")
+        io.eprint("parity: can't make {dir}: {first_line(made.err)}")
         io.exit(2)
     mut p := Probe(lines: [], dir: dir)
     p.commands()
