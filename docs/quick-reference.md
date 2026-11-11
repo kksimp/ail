@@ -2,7 +2,7 @@
 
 > **Non-normative.** One page for people and AI agents writing AIL. The
 > [spec](spec/) is authoritative. Items marked **(not yet)** are specified but
-> not supported by the bootstrap interpreter.
+> not built in the native compiler yet.
 
 ## Running programs
 
