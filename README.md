@@ -125,13 +125,16 @@ AI agents: read [AGENTS.md](AGENTS.md) first, or [llms.txt](llms.txt) for the li
 
 ### Agent kit for your project
 
-`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). For an existing project, add this to your agent file and register `ail mcp` on stdio in your agent's MCP config:
+`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). In an existing project, run `ail new .`: it writes the same two files and never overwrites one (if `AGENTS.md` exists it prints the block to add). The kit is this, and nothing else:
 
 ```
-Language card: `ail api --card .`. Loop: `ail task start FILE GOAL`, `ail context FILE FN --budget 800`,
-edit, `ail task verify`, `ail task finish`. For any diagnostic run `ail explain RULE`.
-Never grep; use `ail ask FILE what calls FN`.
+Core card: `ail card`; more with `ail card TOPIC` and `ail ask std WORDS`. Loop: `ail task start FILE GOAL`,
+`ail context FILE FN --budget 800`, edit, `ail check --fix FILE`, `ail task verify`, `ail task finish`
+(writes the change certificate `.ail/cert.json`). Two candidate fixes: `ail try FILE`.
+For any diagnostic run `ail explain RULE`. Never grep; use `ail ask FILE what calls FN`.
 ```
+
+`.mcp.json` registers `ail mcp` on stdio, so the same tools are MCP calls.
 
 ## Contributing and security
 

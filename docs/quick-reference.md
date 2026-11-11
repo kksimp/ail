@@ -25,7 +25,7 @@
 ./ail verify --diff --attest C.json FILE   # change certificate; `ail verify --check C.json` re-runs it, exit 1 on a difference
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail try FILE --set A.edit --set B.edit   # check and test patch sets on scratch copies, one verdict line each; --apply writes one clean set
-./ail mcp                       # the compiler's tools as an MCP stdio server (16 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, task_*)
+./ail mcp                       # the compiler's tools as an MCP stdio server (23 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, card, find, try, prove, infer, merge_check, verify_check, task_*)
 ./ail new [--no-agent] NAME     # a package with a first program, AGENTS.md and .mcp.json (the agent kit)
 ./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)
 ./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)

@@ -7,12 +7,13 @@ tools/agentbench/agentbench.py gen ledger          # expected outputs from tasks
 tools/agentbench/agentbench.py docs ledger         # doc-size parity check
 tools/agentbench/agentbench.py run ledger ail-plain 1   # one trial -> results/ledger/ail-plain-1/
 tools/agentbench/agentbench.py run ledger ail-tools 1   # the same plus AGENTS.md, CLAUDE.md and the MCP server
+tools/agentbench/agentbench.py run ledger ail-core-card 1   # ail-tools, but DOCS holds only the core card (`ail card`)
 tools/agentbench/agentbench.py run ledger c 1
 tools/agentbench/agentbench.py validate ledger     # solutions pass and every arm's shims log (no model)
 tools/agentbench/agentbench.py report
 ```
 
-`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` (files in `arms/ail-tools/`) and `c`; `ail` means `ail-plain`.
+`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names) and `c`; `ail` means `ail-plain`.
 
 `metrics.json` also holds wrapper-logged `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (ADR 0916, amended 2026-11-10).
 

@@ -2705,6 +2705,17 @@ fn Gate.agent_tools(mut self, tmp str)
     second := slurp("{base}/ledger/.ail/task-log.jsonl")
     if first.split(",\"ms\":")[0] != second.split(",\"ms\":")[0]
         red("task ledger is stable", "two runs differ\n{first}{second}")
+    # task.finish.3 (ADR 1046): `finish` writes the change certificate and names it.
+    sh_run("mkdir -p {base}/cert")
+    fs.write_text("{base}/cert/main.ail", "fn main()\n    print(1)\n") else return
+    sh_run("cd {base}/cert && git init -q && git add -A && git -c user.name=g -c user.email=g@g commit -qm seed")
+    tool("task start for finish", "{base}/cert", ["task", "start", "main.ail", "print", "two"], 0, ["task open"])
+    fs.write_text("{base}/cert/main.ail", "fn main()\n    print(2)\n") else return
+    tool("task verify for finish", "{base}/cert", ["task", "verify"], 0, ["green"])
+    tool("task finish certificate", "{base}/cert", ["task", "finish", "--json"], 0, ["\"certificate\":\".ail/cert.json\""])
+    want("task finish writes the certificate", slurp("{base}/cert/.ail/cert.json"), ["\"cert\"", "main.ail"])
+    if fs.exists("{base}/cert/.ail-task")
+        red("task finish", "the task is still open")
     # api.ctx.1-7 (ADR 1020)
     ctx := src_of([
         "fn show(n int) str",
@@ -3124,7 +3135,17 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail_api",
         "ail_review",
         "task_abort",
+        "ail_card",
+        "ail_find",
+        "ail_try",
+        "ail_prove",
+        "ail_infer",
+        "ail_merge_check",
+        "ail_verify_check",
     ])
+    # mcp.tools.3: the whole `tools/list` answer stays under 1,500 tokens (about 4 bytes each).
+    if listed.out.len() > 6000
+        red("mcp tools/list size", "{listed.out.len()} bytes; mcp.tools.3 allows about 1,500 tokens")
     m1 := mcp_session("{base}/mcp", [
         mcp_call(2, "ail_context", "'program':'prog.ail','symbol':'pay','budget':400"),
         mcp_call(3, "ail_context", "'program':'prog.ail','symbol':'pay','json':true"),
@@ -3157,6 +3178,49 @@ fn Gate.agent_tools(mut self, tmp str)
         "'range':'HEAD..HEAD','path':'examples/hello.ail'",
     )])
     want("mcp review", m3.out, ["\"isError\":false"])
+    # mcp.tools.1 (round 2): one real session per added tool.
+    fs.write_text("{base}/mcp/prove.ail", src_of([
+        "fn at(xs List[int], i int) int",
+        "    requires i < xs.len()",
+        "    xs[i]",
+        "",
+        "fn main()",
+        "    xs := [3, 1, 4]",
+        "    for i in 0..xs.len()",
+        "        print(at(xs, i))",
+    ])) else return
+    fs.write_text("{base}/mcp/ours.ail", ctx) else return
+    fs.write_text("{base}/mcp/theirs.ail", ctx) else return
+    r2 := mcp_session("{base}/mcp", [
+        mcp_call(2, "ail_card", "'topic':''"),
+        mcp_call(3, "ail_card", "'topic':''"),
+        mcp_call(4, "ail_card", "'topic':'errors'"),
+        mcp_call(5, "ail_find", "'words':'read text file'"),
+        mcp_call(6, "ail_find", "'sig':'(str) bytes'"),
+        mcp_call(7, "ail_find", "'words':''"),
+        mcp_call(8, "ail_try", "'program':'prog.ail','sets':['rename show shown','rename nosuch other']"),
+        mcp_call(9, "ail_prove", "'program':'prove.ail'"),
+        mcp_call(10, "ail_infer", "'program':'prog.ail','function':'pay'"),
+        mcp_call(11, "ail_merge_check", "'base':'prog.ail','ours':'ours.ail','theirs':'theirs.ail'"),
+        mcp_call(12, "ail_verify_check", "'cert':'-x'"),
+    ])
+    want("mcp card", reply_of(r2.out, 2), ["AIL core card", "\"isError\":false"])
+    want("mcp card repeat is memoised", reply_of(r2.out, 3), [jm("'ail/warm':'memo'")])
+    want("mcp card topic", reply_of(r2.out, 4), ["\"isError\":false"])
+    want("mcp find by words", reply_of(r2.out, 5), ["fs.read_text(path"])
+    want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
+    want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
+    want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
+    if slurp("{base}/mcp/prog.ail") != ctx
+        red("mcp try", "wrote the program")
+    want("mcp prove", reply_of(r2.out, 9), ["proved", "\"isError\":false"])
+    want("mcp infer", reply_of(r2.out, 10), ["\"isError\":false"])
+    if slurp("{base}/mcp/prog.ail") != ctx
+        red("mcp infer", "wrote the program")
+    want("mcp merge check", reply_of(r2.out, 11), ["merged and checked", "\"isError\":false"])
+    want("mcp verify check refuses an option", reply_of(r2.out, 12), ["-32602", "cert"])
+    r3 := mcp_session("{base}/cert", [mcp_call(2, "ail_verify_check", "'cert':'.ail/cert.json'")])
+    want("mcp verify check", reply_of(r3.out, 2), ["certificate holds", "\"isError\":false"])
     # mcp.warm.1-4 (E14): a repeated read-only call comes from the memo, a changed file is
     # checked again, and `AIL_MCP_COLD` goes through the launcher.
     fs.write_text("{base}/mcp/warm.ail", ctx) else return
@@ -3195,7 +3259,14 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail explain",
         "ail ask",
         "Never grep",
+        "ail card",
+        "ail ask std",
+        "ail check --fix",
+        "ail try",
+        "cert.json",
     ])
+    if kit.contains("ail api --card")
+        red("new AGENTS.md", "still sends the agent to the full card")
     if kit.len() > 1400
         red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 350 tokens")
     mcp := fs.read_text("{base}/new/kit/.mcp.json") else return
@@ -3204,6 +3275,18 @@ fn Gate.agent_tools(mut self, tmp str)
     if fs.exists("{base}/new/bare/AGENTS.md") or fs.exists("{base}/new/bare/.mcp.json")
         red("new --no-agent", "the kit was written")
     tool("new refuses an existing name", "{base}/new", ["new", "kit"], 2, ["tool.new.1"])
+    # tool.new.5: `ail new .` writes only the kit, into a project that already has `.ail` files, and overwrites nothing.
+    sh_run("mkdir -p {base}/here {base}/empty")
+    tool("new . outside a project", "{base}/empty", ["new", "."], 2, ["tool.new.5"])
+    fs.write_text("{base}/here/main.ail", "fn main()\n    print(1)\n") else return
+    tool("new .", "{base}/here", ["new", "."], 0, ["wrote AGENTS.md, .mcp.json"])
+    want("new . kit", slurp("{base}/here/AGENTS.md"), ["ail card", "ail task finish"])
+    fs.write_text("{base}/here/AGENTS.md", "mine\n") else return
+    fs.remove("{base}/here/.mcp.json") else return
+    tool("new . keeps AGENTS.md", "{base}/here", ["new", "."], 0, ["left alone", "ail task start", "wrote .mcp.json"])
+    if slurp("{base}/here/AGENTS.md") != "mine\n"
+        red("new .", "changed an existing AGENTS.md")
+    tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
