@@ -617,6 +617,8 @@ fn Gate.fix(mut self, tmp str)
 ## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
 ## flag, that one wrapper has and the other lacks is red. A text check, not a behaviour check.
 WRAPPER_COMMANDS := [
+    "help",
+    "doctor",
     "run",
     "build",
     "check",
