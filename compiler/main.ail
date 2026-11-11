@@ -33,7 +33,9 @@ use doc
 use edit
 use fix
 use fmt
+use help
 use derive
+use doctor
 use explain
 use load
 use mir
@@ -47,6 +49,16 @@ use x64
 fn main() !
     args := env.args()
     # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
+    # tool.help.1-3: `help`, `--help`, `-h` and no command at all are the command list; `CMD --help` is `help CMD`.
+    if args.len() == 0
+        io.exit(help.command([]))
+    if args[0] == "help" or args[0] == "--help" or args[0] == "-h"
+        io.exit(help.command(args[1..]))
+    if args.len() >= 2 and (args[1] == "--help" or args[1] == "-h") and not args[0].starts_with("-")
+        io.exit(help.command([args[0]]))
+    # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
+    if args[0] == "doctor"
+        io.exit(doctor.command(args[1..], env.get("AIL_ROOT") else path.dir(compiler_dir()), cache_dir(), host_target()))
     if args.len() == 1 and args[0] == "new"
         io.exit(scaffold.command([]))
     if args.len() == 1 and args[0] == "card"
@@ -638,9 +650,9 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
             if p.rule == "native.subset.1"
-                help := mir.subset_help(p.message)
-                if help != ""
-                    io.eprint("help: {help}")
+                hint := mir.subset_help(p.message)
+                if hint != ""
+                    io.eprint("help: {hint}")
         io.exit(1)
         return mir.Module(
             path: path,

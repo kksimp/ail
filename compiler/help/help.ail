@@ -1,0 +1,320 @@
+## `ail help` (spec tool.help.1-3, ADR 1057): every user command with one line each, in groups; `ail help COMMAND`
+## for one command's usage and the rule to give `ail explain`; `--json` for the same table as data. The table is
+## this file's `commands()`: `ail`, `ail.ps1` and the `cli` gate suite check their routes against it, so a command
+## added to a launcher and not listed here (or the reverse) is red. Internal commands (`check-program`, `prepare`,
+## `build-many`, `diagnose`, `pe-sample`, and the other bootstrap-era dumps of compiler/main.ail) are not listed.
+
+## One command: its name, its group (an entry of `GROUPS`), a one-line summary, its usage line, and the rule IDs
+## whose text `ail explain` prints.
+struct Cmd
+    name str
+    group str
+    summary str
+    usage str
+    rules List[str]
+
+## The groups, in the order `ail help` prints them (tool.help.1).
+GROUPS := ["Build and run", "Check and fix", "Ask the compiler", "Agent loop", "Project"]
+
+## A table row; `rules` is a comma list.
+fn c(name str, group str, summary str, usage str, rules str) Cmd
+    mut list := List[str]()
+    if rules != ""
+        list = rules.split(",")
+    Cmd(name: name, group: group, summary: summary, usage: usage, rules: list)
+
+## The table (tool.help.1): every command a user types, once.
+fn commands() List[Cmd]
+    [
+        c(
+            "run",
+            "Build and run",
+            "check and run a program",
+            "ail run [--timeout MS] [--max-memory MB] [--trace] [--budget [N]] FILE|DIR [ARGS...]",
+            "run.limit.4",
+        ),
+        c(
+            "build",
+            "Build and run",
+            "make a native executable",
+            "ail build FILE [-o OUT] [--target T] [--no-cache] [--timeout MS] [--max-memory MB]",
+            "native.build.5",
+        ),
+        c(
+            "test",
+            "Build and run",
+            "run the @test functions",
+            "ail test [--json] [--fuzz NAME | --mutate | --contracts] [--budget [N]] FILE|DIR",
+            "test.run.1,test.fuzz.1,test.mutate.1",
+        ),
+        c(
+            "leak",
+            "Build and run",
+            "run with a leak report: what grows and what holds it",
+            "ail leak [--json] [--all] FILE [ARGS...]",
+            "san.leak.1",
+        ),
+        c(
+            "sanitize",
+            "Build and run",
+            "run on several schedules and report results that differ",
+            "ail sanitize [--tests] [--seeds N] [--json] FILE",
+            "san.sched.1",
+        ),
+        c(
+            "check",
+            "Check and fix",
+            "check a program without running it",
+            "ail check [--json] [--fix] [--errors] [--deny CAPS] [--budget [N]] FILE|DIR",
+            "fix.check.1",
+        ),
+        c("fmt", "Check and fix", "format source files", "ail fmt [--check] FILE|DIR", ""),
+        c(
+            "fix",
+            "Check and fix",
+            "apply the fixes that diagnostics carry",
+            "ail fix [--dry-run] FILE",
+            "fix.check.1",
+        ),
+        c(
+            "edit",
+            "Check and fix",
+            "apply structured edits read from standard input",
+            "ail edit FILE [--test] [--if-clean] < EDITS",
+            "edit.op.8",
+        ),
+        c(
+            "effects",
+            "Check and fix",
+            "list each function's effects",
+            "ail effects [--json] [--parallel] FILE",
+            "eff.infer.6",
+        ),
+        c(
+            "prove",
+            "Check and fix",
+            "show which requires/ensures the checker proves",
+            "ail prove FILE",
+            "prove.cmd.1",
+        ),
+        c(
+            "explain",
+            "Check and fix",
+            "print a rule's meaning, ADRs and example",
+            "ail explain [RULE] [--json]",
+            "explain.show.1",
+        ),
+        c(
+            "api",
+            "Ask the compiler",
+            "a program's outline, symbols, cards and trees",
+            "ail api [--json] [--text] [--card [--budget N]] FILE|DIR",
+            "api.id.1",
+        ),
+        c(
+            "ask",
+            "Ask the compiler",
+            "who calls, reads, writes or uses something; std lookup",
+            "ail ask FILE QUESTION | ail ask std WORDS",
+            "api.ask.1",
+        ),
+        c(
+            "card",
+            "Ask the compiler",
+            "the language card, or one topic of it",
+            "ail card [TOPIC]",
+            "tool.card.1",
+        ),
+        c(
+            "context",
+            "Ask the compiler",
+            "what an edit to one function needs, cut to a budget",
+            "ail context FILE FN [--budget N] [--json]",
+            "api.ctx.1",
+        ),
+        c(
+            "review",
+            "Ask the compiler",
+            "a change by meaning: capabilities, API breaks, untested code",
+            "ail review RANGE [--budget N] [--json]",
+            "api.rev.1",
+        ),
+        c(
+            "diff",
+            "Ask the compiler",
+            "what changed between two programs, by meaning",
+            "ail diff OLD NEW",
+            "api.diff.1",
+        ),
+        c(
+            "header",
+            "Ask the compiler",
+            "write a C header for a program's exports",
+            "ail header FILE [-o OUT.h]",
+            "ffi.export.3",
+        ),
+        c(
+            "attach",
+            "Ask the compiler",
+            "read or drive a running std.app program",
+            "ail attach [NAME] [observe | screen | heap | input ...]",
+            "attach.cli.1",
+        ),
+        c(
+            "task",
+            "Agent loop",
+            "one change as a recorded task: start, verify, finish",
+            "ail task start FILE GOAL... | verify [--fix] | status | finish | log",
+            "task.start.1",
+        ),
+        c(
+            "try",
+            "Agent loop",
+            "check and test patch sets on scratch copies",
+            "ail try FILE --set A.edit [--set B.edit] [--apply]",
+            "try.in.1",
+        ),
+        c(
+            "infer",
+            "Agent loop",
+            "propose requires/ensures from the calls the tests make",
+            "ail infer --contracts FN FILE [--apply]",
+            "infer.cand.1",
+        ),
+        c(
+            "merge",
+            "Agent loop",
+            "merge by declaration, or check two branches together",
+            "ail merge BASE OURS THEIRS | --check OURS THEIRS [PATH] | --install",
+            "merge.cli.1",
+        ),
+        c(
+            "verify",
+            "Agent loop",
+            "check and test what a diff affects; change certificates",
+            "ail verify --diff [--attest C.json] FILE | --check C.json",
+            "verify.run.1",
+        ),
+        c(
+            "replay",
+            "Agent loop",
+            "shrink a failure bundle's recorded texts",
+            "ail replay --shrink BUNDLE",
+            "shrink.run.1",
+        ),
+        c(
+            "mcp",
+            "Agent loop",
+            "the compiler's tools as an MCP server on stdio",
+            "ail mcp",
+            "mcp.tools.1",
+        ),
+        c(
+            "lsp",
+            "Agent loop",
+            "a language server on stdio for any editor",
+            "ail lsp",
+            "lsp.diag.1",
+        ),
+        c(
+            "new",
+            "Project",
+            "a new package with a first program and the agent kit",
+            "ail new [--no-agent] NAME",
+            "tool.new.1",
+        ),
+        c(
+            "pkg",
+            "Project",
+            "fetch, lock and list a program's packages",
+            "ail pkg [COMMAND] [ARGS...]",
+            "mod.pkg.1",
+        ),
+        c(
+            "selftest",
+            "Project",
+            "run the gate suites of this toolchain",
+            "ail selftest [SUITE... | --fuzz N [SEED]]",
+            "",
+        ),
+        c(
+            "doctor",
+            "Project",
+            "check this toolchain and say how to fix what is missing",
+            "ail doctor [--json] [--path]",
+            "tool.doctor.1,tool.path.1",
+        ),
+        c("version", "Project", "print the version (also `ail --version`)", "ail version", ""),
+        c(
+            "help",
+            "Project",
+            "this list, or one command's usage (also `ail --help`, `ail -h`)",
+            "ail help [COMMAND] [--json]",
+            "tool.help.1,tool.help.2,tool.help.3",
+        ),
+    ]
+
+## The overview (tool.help.1): one line per command under its group's heading.
+fn overview(cmds List[Cmd]) str
+    mut width := 0
+    for k in cmds
+        width = width.max(k.name.len())
+    mut out := ["ail: the AIL toolchain. usage: ail COMMAND [ARGS...]", ""]
+    for g in GROUPS
+        out.push(g)
+        for k in cmds
+            if k.group == g
+                out.push("  {k.name.pad_right(width, ' ')}  {k.summary}")
+        out.push("")
+    out.push("`ail help COMMAND` shows one command's usage and the rule to give `ail explain`.")
+    out.push("`ail help --json` is the same table as one JSON array.")
+    out.join("\n")
+
+## One command (tool.help.2): its usage line and its rules.
+fn detail(k Cmd) str
+    mut out := ["usage: {k.usage}", "{k.name}: {k.summary}"]
+    for r in k.rules
+        out.push("rule: {r} (ail explain {r})")
+    out.join("\n")
+
+## A JSON string.
+fn q(s str) str
+    Json.Str(s).to_text()
+
+## One command as a JSON object (tool.help.3).
+fn one_json(k Cmd) str
+    rules := [ q(r) for r in k.rules ].join(",")
+    "\{\"name\":{q(k.name)},\"group\":{q(k.group)},\"summary\":{q(k.summary)},\"usage\":{q(k.usage)},\"rules\":[{rules}]}"
+
+## The whole table as one JSON array (tool.help.3).
+fn table_json(cmds List[Cmd]) str
+    "[{[ one_json(k) for k in cmds ].join(",")}]"
+
+## The exit status of `ail help ARGS` (also `--help`, `-h`, and no command at all).
+pub fn command(args List[str]) int
+    mut json := false
+    mut words := List[str]()
+    for a in args
+        if a == "--json"
+            json = true
+        else
+            words.push(a)
+    cmds := commands()
+    if words.len() == 0
+        if json
+            print(table_json(cmds))
+        else
+            print(overview(cmds))
+        return 0
+    if words.len() > 1
+        io.eprint("usage: ail help [COMMAND] [--json]")
+        return 2
+    for k in cmds
+        if k.name == words[0]
+            if json
+                print(one_json(k))
+            else
+                print(detail(k))
+            return 0
+    io.eprint("unknown command {words[0]}; run `ail help`")
+    2

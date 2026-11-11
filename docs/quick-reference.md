@@ -7,10 +7,15 @@
 ## Running programs
 
 ```sh
+./ail help [CMD] [--json]            # every command, or one command's usage and rule (also `ail --help`, `ail CMD --help`)
+./ail doctor [--json] [--path]      # check the toolchain; --path prints the profile line that puts `ail` on PATH
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
 ./ail check [--json] [--budget N [--from K]] FILE|DIR
 ./ail build FILE.ail [-o OUT]       # native executable
-./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass
+./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --fuzz NAME, --mutate, --contracts
+./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
+./ail pkg [COMMAND]                 # a program's packages: fetch, lock, list
+./ail header FILE.ail [-o OUT.h]    # a C header of the exports
 ./ail effects [--json] FILE.ail
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR

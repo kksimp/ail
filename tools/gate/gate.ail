@@ -697,6 +697,52 @@ fn Gate.wrapper_parity(mut self)
         if not wp_ps.contains(wp_flag)
             self.red("wrapper parity: ail.ps1", "`run {wp_flag}` is in ail but not in ail.ps1")
 
+## `ail help` (tool.help.1-3, ADR 1057): its table is the list of commands both launchers route, `CMD --help` answers for
+## each, and a symlinked `ail` finds the toolchain (tool.path.1, ADR 1058). A text check of the launchers, as the
+## wrapper parity check is, plus one run per command.
+fn Gate.cli_help(mut self, tmp str)
+    h := ail_run(["help", "--json"]) else return
+    if h.status != 0
+        red("help --json", "exit {h.status}\n{h.err}")
+        return
+    sh_text := slurp("ail")
+    ps_text := slurp("ail.ps1")
+    parsed := parse_json(h.out) else
+        red("help --json", "not JSON:\n{h.out}")
+        return
+    mut listed := 0
+    for item in parsed.as_arr() else []
+        n := item.text("name", "")
+        listed += 1
+        known := sh_text.contains("= {n} ]") or sh_text.contains("{n} |") or sh_text.contains("| {n}")
+            or sh_text.contains("{n})")
+        if not known
+            red("help routes: ail", "`{n}` is listed by `ail help` but not routed in ail")
+        if not ps_text.contains("'{n}'")
+            red("help routes: ail.ps1", "`{n}` is listed by `ail help` but not routed in ail.ps1")
+        r := ail_run([n, "--help"]) else return
+        if r.status != 0 or not r.out.contains("usage: ail {n}")
+            red("{n} --help", "exit {r.status}\n{r.out}{r.err}")
+    if listed < 30
+        red("help --json", "only {listed} commands listed")
+    bare := ail_run([]) else return
+    if bare.status != 0 or not bare.out.contains("Build and run")
+        red("ail with no arguments", "exit {bare.status}\n{bare.out}{bare.err}")
+    u := ail_run(["nosuchcommand"]) else return
+    if u.status != 2 or not u.err.contains("unknown command nosuchcommand; run `ail help`")
+        red("unknown command", "exit {u.status}\n{u.err}")
+    # tool.path.1: a symlink to `ail` runs the same toolchain (a link needs no privilege off Windows).
+    if (env.get("OS") else "") != "Windows_NT"
+        link := "{tmp}/ail-link"
+        sh_run("rm -f {link}; ln -s \"{repo_root()}/ail\" {link}")
+        l := proc.run(link, ["help", "run"]) else return
+        if l.status != 0 or not l.out.contains("usage: ail run")
+            red("symlinked ail", "exit {l.status}\n{l.out}{l.err}")
+        d := proc.run(link, ["doctor", "--path"]) else return
+        if d.status != 0 or not d.out.contains(repo_root())
+            red("symlinked ail doctor --path", "exit {d.status}\n{d.out}{d.err}")
+        sh_run("rm -f {link}")
+
 ## `ail effects` and `--deny` (effects.rs), `check --errors` and `fails_with`
 ## (error_paths.rs), and the process-level diagnostics of cli_errors.rs.
 fn Gate.cli_effects(mut self, tmp str)
@@ -3336,7 +3382,9 @@ fn main() !
             "cases" => g.cases()
             "explain" => g.explain_coverage()
             "fix" => g.fix(tmp)
-            "cli" => g.cli_effects(tmp)
+            "cli" =>
+                g.cli_effects(tmp)
+                g.cli_help(tmp)
             "mistakes" => g.mistakes(tmp)
             "contracts" => g.contracts()
             "snapshot" => g.snapshot(tmp)

@@ -88,6 +88,18 @@ cd ail
 .\ail.ps1 run examples\hello.ail
 ```
 
+Put `ail` on your PATH, so a project's agent kit and MCP registration can run a bare `ail`
+([ADR 1058](docs/decisions/1058-ail-on-path-and-doctor.md)). `ail doctor` checks the toolchain and
+`ail doctor --path` prints the line to add to your shell profile; nothing edits your files for you.
+
+```sh
+mkdir -p ~/.local/bin && ln -s "$PWD/ail" ~/.local/bin/ail   # a symlink works: ail finds its root through it
+ail doctor --path                                            # the PATH line for your profile, if ~/.local/bin is not on it
+ail help                                                     # every command; `ail help CMD` for one
+```
+
+On Windows, add the clone's directory to `PATH` (`ail doctor --path` prints the PowerShell line) and use `ail.cmd`.
+
 What the first run does:
 
 1. Downloads the **seed** for your host (a native `ail` binary published as a
