@@ -411,27 +411,6 @@ fn win_scan_stat(path int, out int) int
     store64(out + 48, kind)
     0
 
-## `fs.volume` (std.fs.24): the total bytes of the volume holding the
-## NUL-terminated UTF-8 `path` at `out`, and the bytes free to this user at
-## `out` + 8. 0, or `-errno`. `GetDiskFreeSpaceExW` wants a directory; a file
-## (`ERROR_DIRECTORY`) is asked again by the root `GetVolumePathNameW` finds.
-fn win_volume(path int, out int) int
-    w := os_scratch(OS_WIN_A)
-    if not win_wide(w, WIN_PATH_UNITS, path)
-        return -36
-    t := win_tmp()
-    mut ok := import_call("GetDiskFreeSpaceExW", w, t, t + 8, t + 16)
-    if ok == 0 and win_err() == -20
-        root := os_scratch(OS_WIN_B)
-        if import_call("GetVolumePathNameW", w, root, 1000, 0) == 0
-            return win_err()
-        ok = import_call("GetDiskFreeSpaceExW", root, t, t + 8, t + 16)
-    if ok == 0
-        return win_err()
-    store64(out, load64(t + 8))
-    store64(out + 8, load64(t))
-    0
-
 ## `fs.trash` (std.fs.26): the file or directory at the NUL-terminated UTF-8
 ## `path` to the Recycle Bin. 0, or `-errno`. `SHFileOperationW` deletes
 ## outright what is not a full path, so the path is made full first
