@@ -105,7 +105,14 @@ fn Lower.variadic_decl(self, key str) bool
 ## register, and Apple arm64 passes all variadic arguments on the stack. Other
 ## targets use the plain C convention. This is the entry for any variadic
 ## prototype, including one imported from a C header (`ffi.decl.1`).
-fn Lower.lower_variadic(mut self, key str, sig Sig, args List[ast.Arg], pos ast.Pos, npos ast.Pos) Val?
+fn Lower.lower_variadic(
+    mut self,
+    key str,
+    sig Sig,
+    args List[ast.Arg],
+    pos ast.Pos,
+    npos ast.Pos,
+) Val?
     f := fn_decl.get(key) else return unsupported(npos, "this call")
     nfixed := sig.params.len()
     if args.len() < nfixed
