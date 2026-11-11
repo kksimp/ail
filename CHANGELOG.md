@@ -27,7 +27,7 @@ AIL (AI-First Language, "ale") is a native, garbage-collected, memory-safe syste
 - Apps and graphics: `std.app` windows, `std.gfx` real-time frame loop, gamepad input.
 - Numeric: `std.tensor` on the CPU.
 
-**Measured.** On ten small programs AIL runs in 0.5x to 1.8x the time of `gcc -O2`, and in 0.01x to 0.08x the time of CPython. On the larger programs AIL is faster than gcc on matmul and raytrace and about 1.8x slower on lzr and vm. The ten small programs total 14% fewer tokens than C and 25% more than Python. Method, hosts and commands are in [docs/benchmarks.md](docs/benchmarks.md); that page is the only source for these numbers.
+**Speed.** The target is speed equal to optimised C, measured, never just claimed. On ten small programs AIL runs in 0.5x to 1.8x the time of `gcc -O2`; on the larger programs, in 0.12x to 1.82x. Method, hosts and commands are in [docs/benchmarks.md](docs/benchmarks.md); that page is the only source for these numbers.
 
 **Known limits.**
 - No debug info yet (`ail build -g`, DWARF and PDB, is planned for 0.2): no debugger can step an AIL program.

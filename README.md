@@ -3,9 +3,9 @@
 **AI-First Language**, by Voltare. Pronounced "ale".
 
 AIL is a native, memory-safe, garbage-collected systems programming language
-designed from the ground up for humans **and** AI agents. It aims for C-class
-performance, maximum semantic density per token, canonical formatting, and a
-compiler that answers structured questions about your program.
+designed from the ground up for humans **and** AI agents. It aims for speed
+equal to C, canonical formatting, and AI-first tooling: a compiler that answers
+structured questions about your program and checks an agent's changes.
 
 ```
 main.ail      ail build · ail run · ail test · ail fmt · ail check
