@@ -433,6 +433,43 @@ pub fn Asm.table_entry(mut self, table int, l int)
 pub fn Asm.here(self) int
     code.len()
 
+## Pad with the recommended multi-byte `nop`s up to the next multiple of
+## `n` bytes: a loop head on a 16-byte boundary is fetched whole.
+pub fn Asm.nop_pad(mut self, n int)
+    mut left := (n - code.len() % n) % n
+    while left > 0
+        k := if left > 9 then 9 else left
+        match k
+            1 => byte(144)
+            2 =>
+                byte(102)
+                byte(144)
+            _ =>
+                if k == 6 or k == 9
+                    byte(102)
+                byte(15)
+                byte(31)
+                m := if k == 6 or k == 9 then k - 1 else k
+                # 0f 1f 00 / 40 00 / 44 00 00 / 80 0*4 / 84 00 0*4
+                if m == 3
+                    byte(0)
+                elif m == 4
+                    byte(64)
+                    byte(0)
+                elif m == 5
+                    byte(68)
+                    byte(0)
+                    byte(0)
+                elif m == 7
+                    byte(128)
+                    for _ in 0..4
+                        byte(0)
+                else
+                    byte(132)
+                    for _ in 0..5
+                        byte(0)
+        left -= k
+
 pub fn Asm.call_sym(mut self, sym str)
     byte(232)
     fixups.push(Fixup(at: code.len(), label: -1, sym: sym, tail: 0))

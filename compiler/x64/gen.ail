@@ -181,12 +181,28 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         else
             g.saved_ints.push(r)
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
+    # Where each loop's back edge lands starts on a 16-byte boundary, the
+    # function too (native-abi.md §1): the header, or for a loop whose test
+    # is repeated at its bottom (§rotates) the first block of its body.
+    # `AIL_OPT_OFF=align` turns it off.
+    align := not mir.opt_off("align")
+    mut aligned := [false for _ in 0..f.blocks.len()]
+    if align
+        for lp in mir.find_loops(f)
+            if g.rotates(lp.header)
+                for t in f.blocks[lp.header].term.targets
+                    if lp.member[t]
+                        aligned[t] = true
+            else
+                aligned[lp.header] = true
     g.prologue(al.slots)
     # The entry block's parameters arrive in the argument registers.
     g.entry_moves()
     for k in 0..al.order.len()
         b := al.order[k]
         g.next_block = if k + 1 < al.order.len() then al.order[k + 1] else -1
+        if aligned[b]
+            g.a.nop_pad(16)
         g.a.bind(g.blabels[b])
         g.gen_block(b)
     g.gen_stubs()
@@ -197,6 +213,9 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         codegen.add_f64(mut img, x)
     for s in g.stubs
         codegen.add_trap_texts(mut img, m, s.site, s.op)
+    if align
+        while img.code.len() % 16 != 0
+            img.code.push(204.to_u8())
     base := img.code.len()
     for c in g.calls
         img.calls.push(codegen.CallRow(off: c.off + base, pos: c.pos, func: c.func))
