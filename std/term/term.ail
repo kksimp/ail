@@ -103,6 +103,11 @@ pub fn leave_alt() str
 fn skip()
     return
 
+## The text of code point `n`, or "" when it is not a character.
+fn chr(n int) str
+    c := char.from_code(n) else return ""
+    "{c}"
+
 fn mk_key(k str, c bool, a bool, s bool) Event
     Key(k, ctrl: c, alt: a, shift: s)
 
@@ -234,13 +239,13 @@ fn char_key(d List[int], i int, alt bool, mut out List[Event]) int
         out.push(Key(" ", ctrl: true, alt: alt, shift: false))
         return 1
     if c < 27
-        out.push(Key("{char.from_code(c + 96)}", ctrl: true, alt: alt, shift: false))
+        out.push(Key("{chr(c + 96)}", ctrl: true, alt: alt, shift: false))
         return 1
     if c < 32
-        out.push(Key("{char.from_code(c + 64)}", ctrl: true, alt: alt, shift: false))
+        out.push(Key("{chr(c + 64)}", ctrl: true, alt: alt, shift: false))
         return 1
     if c < 127
-        out.push(Key("{char.from_code(c)}", ctrl: false, alt: alt, shift: false))
+        out.push(Key("{chr(c)}", ctrl: false, alt: alt, shift: false))
         return 1
     mut n := 1
     mut mask := 0
@@ -261,7 +266,7 @@ fn char_key(d List[int], i int, alt bool, mut out List[Event]) int
     for k in 1..n
         cp = cp.shl(6).bit_or(d[i + k].bit_and(63))
     if cp <= 1114111 and (cp < 55296 or cp > 57343)
-        out.push(Key("{char.from_code(cp)}", ctrl: false, alt: alt, shift: false))
+        out.push(Key("{chr(cp)}", ctrl: false, alt: alt, shift: false))
     n
 
 ## The escape sequence or Alt key starting at byte `i`; returns its length.
@@ -279,7 +284,7 @@ fn escape_at(d List[int], i int, mut out List[Event]) int
         mut ps := ""
         start := i + 2
         for k in start..j
-            ps = "{ps}{char.from_code(d[k])}"
+            ps = "{ps}{chr(d[k])}"
         csi_event(ps, d[j], mut out)
         return j - i + 1
     if n == 79
