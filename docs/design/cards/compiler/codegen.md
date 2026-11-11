@@ -13,6 +13,7 @@ pub struct codegen.Target  ## The registers a target lets the allocator use, bes
     pub float_callee List[int]
     pub int_args List[int]  ## The registers the first integer and float arguments arrive in.
     pub float_args List[int]
+    pub div_regs List[int]  ## The registers a `div` or `rem` overwrites (x86-64 `idiv` and `mul`
 pub struct codegen.Alloc
     pub loc List[int]  ## The location of each value.
     pub order List[int]  ## The blocks in layout order.
@@ -73,4 +74,4 @@ pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blo
 pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
 
-trimmed to fit 2000 tokens (~1479); dropped: private items
+trimmed to fit 2000 tokens (~1513); dropped: private items
