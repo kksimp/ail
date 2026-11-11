@@ -244,6 +244,13 @@ if ($cmd -eq 'build' -and ($rest -contains '--derived-out')) { $route = $false }
 if ($route) {
     $rawRest = $rest
     $rest = @(Esc-Native $rest)
+    # A tool written in AIL (`try`, `mcp`, `lsp`, ...) runs through this script's own `run`, as ./ail's `exec ail run`
+    # does: the program then gets our standard input. The native `ail run` starts it on an empty pipe (try.in.1).
+    function Run-Tool([string]$file) {
+        $env:AIL_NATIVE_CLI = ''
+        & (Join-Path $root 'ail.ps1') run $file @rawRest
+        exit $LASTEXITCODE
+    }
     $nativeDir = Join-Path $root '.native'
     $native = Join-Path $nativeDir "ail$exe"
     $stale = -not (Test-Path $native)
@@ -303,15 +310,15 @@ if ($route) {
             }
             & $native check-program @rest; exit $LASTEXITCODE
         }
-        'verify' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\verify\verify.ail')) @rest; exit $LASTEXITCODE }
-        'infer' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\infer\infer.ail')) @rest; exit $LASTEXITCODE }
-        'task' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) @rest; exit $LASTEXITCODE }
-        'try' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtry\ailtry.ail')) @rest; exit $LASTEXITCODE }
-        'merge' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailmerge\ailmerge.ail')) @rest; exit $LASTEXITCODE }
-        'mcp' { $env:AIL_NATIVE_CLI = ''; $env:AIL_MCP_NATIVE = Fwd $native; & $native run (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) @rest; exit $LASTEXITCODE }
-        'lsp' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) @rest; exit $LASTEXITCODE }
-        'sanitize' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) @rest; exit $LASTEXITCODE }
-        'replay' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) @rest; exit $LASTEXITCODE }
+        'verify' { Run-Tool (Fwd (Join-Path $root 'tools\verify\verify.ail')) }
+        'infer' { Run-Tool (Fwd (Join-Path $root 'tools\infer\infer.ail')) }
+        'task' { Run-Tool (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) }
+        'try' { Run-Tool (Fwd (Join-Path $root 'tools\ailtry\ailtry.ail')) }
+        'merge' { Run-Tool (Fwd (Join-Path $root 'tools\ailmerge\ailmerge.ail')) }
+        'mcp' { $env:AIL_MCP_NATIVE = Fwd $native; Run-Tool (Fwd (Join-Path $root 'tools\ailmcp\ailmcp.ail')) }
+        'lsp' { Run-Tool (Fwd (Join-Path $root 'tools\ailsp\ailsp.ail')) }
+        'sanitize' { Run-Tool (Fwd (Join-Path $root 'tools\ailsan\ailsan.ail')) }
+        'replay' { Run-Tool (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) }
         'test' {
             foreach ($a in $rest) {
                 if ("$a" -like '--watch*') { [Console]::Error.WriteLine("ail test: $a is not native yet"); exit 2 }
