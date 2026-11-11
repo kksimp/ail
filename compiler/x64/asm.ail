@@ -464,6 +464,11 @@ pub fn Asm.syscall(mut self)
 pub fn Asm.xchg_mr(mut self, m Mem, r int)
     op_rm(false, 135, r, m)
 
+## `xchg a, b` between two registers: one parallel move's cycle, broken
+## without a scratch register (ADR 1049).
+pub fn Asm.xchg_rr(mut self, a int, b int)
+    op_rr(false, 135, a, b)
+
 pub fn Asm.lock_cmpxchg(mut self, m Mem, r int)
     byte(240)
     op_rm(true, 177, r, m)
