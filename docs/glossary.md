@@ -170,6 +170,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
 | **Packed list** | The storage of a `List[int]`, `List[float]` or `List[bool]` in the interpreter: one machine word (one byte for `bool`) per element instead of a 32-byte `Value`. Invisible to programs; any other list is boxed ([ADR 0760](decisions/0760-packed-list-storage.md)). |
 | **Page model** | Garlic's agent-facing view of a page: each perceivable element's role, accessible name and the cells it was drawn in, as `--json` (api 1). See garlic-browser.md in that repository. |
+| **Parity probe** | `tools/gate/parity.ail`, the gate's `parity` suite: one line per feature (`FEATURE works`, `missing` or `differs`), found by trying it. The lines must be the same on macOS, Linux and Windows but for those in `tests/parity/expected-differences.txt` ([ADR 0925](decisions/0925-windows-release-gate.md)). |
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
 | **`par for` comprehension** | `[f(x) par for x in xs]`: a list whose elements are computed on the thread pool, in order, with the sequential result (`conc.par.12`, ADR 0302). |
 | **Peephole** | A small rewrite of adjacent machine or bytecode instructions into a cheaper form ([ADR 0623](decisions/0623-branch-and-codegen-peepholes.md)). |

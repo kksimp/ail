@@ -4,7 +4,8 @@
 ## `cli`, `mistakes`, `contracts`, `snapshot`, `misc`, `docs`, `fmt`, `budget`, `limits`, `diff`, `build_cache`,
 ## `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net` (starts tools/gate/net_server.py), `spec` (runs
 ## tools/gate/spec.ail), `crypto` (the TLS and crypto vectors, and the parser fuzzers, of tools/native-tls), `tools` (the editor, Garlic and the PDF reader), `std` (the AIL std sources check, format and are
-## called), `agent_tools` (context, infer, probes, sanitize, leak, fuzz, mutate and the language server), `selfhost` (tools/self-host/run.sh, only when named).
+## called), `agent_tools` (context, infer, probes, sanitize, leak, fuzz, mutate and the language server), `parity` (tools/gate/parity.ail:
+## one line per feature, the same on the three hosts but for tests/parity/expected-differences.txt), `selfhost` (tools/self-host/run.sh, or run.ps1 on Windows; only when named).
 ## The native run programs are tools/gate/goldens.ail and nativex.
 ## Run it through tools/gate/mac-gate.sh, or with AIL_APP_HOST set to a missing path: a std.app program
 ## (examples/app_todo.ail) would otherwise open the host's window and wait for ever.
@@ -90,11 +91,61 @@ fn Gate.examples(mut self, tmp str)
             )
 
 fn Gate.selfhost(mut self)
-    r := proc.run("tools/self-host/run.sh", [], none, 3600000) else
-        red("selfhost", "could not start tools/self-host/run.sh")
+    # Windows has the fixed point in PowerShell (stages 1 to 3); its native test programs are nativex's.
+    mut cmd := "tools/self-host/run.sh"
+    mut cmd_args := List[str]()
+    if (env.get("OS") else "") == "Windows_NT"
+        cmd = "powershell"
+        cmd_args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools/self-host/run.ps1"]
+    r := proc.run(cmd, cmd_args, none, 3600000) else
+        red("selfhost", "could not start {cmd}")
         return
     if r.status != 0
         red("selfhost", r.out.lines().last() else "failed")
+
+## The parity probe (ADR 0925): tools/gate/parity.ail prints one line per feature, and every line must be
+## `FEATURE works` but for the ones tests/parity/expected-differences.txt lists for this host (`HOST FEATURE STATE`,
+## then the reason). A listed line that works again is red too, so the file never keeps a difference that is gone.
+## The lines are printed, so the three hosts' logs can be laid side by side.
+fn Gate.parity(mut self)
+    mut host := "linux"
+    if (env.get("OS") else "") == "Windows_NT"
+        host = "windows"
+    elif sh_run("uname -s").out.trim() == "Darwin"
+        host = "macos"
+    mut expected := Map[str, str]()
+    for l in slurp("tests/parity/expected-differences.txt").lines()
+        w := l.words()
+        if w.len() >= 3 and w[0] == host
+            expected[w[1]] = w[2]
+    r := proc.run("./ail", ["run", "tools/gate/parity.ail"], "", 3600000) else
+        red("parity", "could not start tools/gate/parity.ail")
+        return
+    out_lines := lf(r.out).lines()
+    last := out_lines.last() else ""
+    if r.status != 0 or not last.starts_with("PARITY ")
+        red("parity", "parity.ail exit {r.status}\n{r.out}{r.err}")
+        return
+    mut seen := 0
+    for l in out_lines
+        print(l)
+        w := l.words()
+        if w.len() < 2 or w[0] == "PARITY"
+            continue
+        seen += 1
+        want_state := expected.get(w[0]) else "works"
+        if w[1] != want_state and want_state == "works"
+            red(
+                "parity {w[0]}",
+                "{l}\nnot the same as on the other hosts, and not in tests/parity/expected-differences.txt for {host}",
+            )
+        elif w[1] != want_state
+            red(
+                "parity {w[0]}",
+                "{l}\ntests/parity/expected-differences.txt says `{want_state}` for {host}: update or delete that line",
+            )
+    if last != "PARITY {seen} features" or seen < 50
+        red("parity", "the probe printed {seen} feature lines and ended with `{last}`")
 
 ## The tools written in AIL. Each check
 ## runs `ail` from `root` (the repository) and compares its output.
@@ -3438,6 +3489,7 @@ fn main() !
         "agent_tools",
         "cert",
         "try",
+        "parity",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3479,6 +3531,7 @@ fn main() !
             "agent_tools" => g.agent_tools(tmp)
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
+            "parity" => g.parity()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)

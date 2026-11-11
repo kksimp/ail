@@ -747,7 +747,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0921](0921-replay-probes.md) | Probes: `--at FILE:LINE --show a,b` prints chosen values each time a line runs | Accepted | 2026-10-26 |
 | [0923](0923-struct-scalar-replacement.md) | Native: scalar replacement of struct objects that stay in one function, and inlining of constructors *(delegated)* | Accepted | 2026-10-26 |
 | [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
-| [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
+| [0925](0925-windows-release-gate.md) | Windows: the full gate green before each release | Accepted | 2026-10-27 |
 | [0926](0926-c-header-import-subset.md) | `use c "header.h"`: a subset C header reader that writes `pub extern c fn` declarations *(delegated)* | Accepted | 2026-10-28 |
 | [0927](0927-fs-scan.md) | `fs.scan`: one bulk walk with allocated size, inode and kind *(delegated)* | Accepted | 2026-11-04 |
 | [0928](0928-fs-volume.md) | `fs.volume`: total and free bytes of a volume *(delegated)* | Accepted | 2026-11-04 |

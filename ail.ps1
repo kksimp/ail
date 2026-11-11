@@ -254,7 +254,9 @@ if ($route) {
     $nativeDir = Join-Path $root '.native'
     $native = Join-Path $nativeDir "ail$exe"
     $stale = -not (Test-Path $native)
-    if (-not $stale) {
+    # AIL_NATIVE_FRESH=1 (win-gate.ps1 sets it after its first build): the caller says the sources have not changed, so
+    # skip the scan of every .ail file under compiler\ and std\ that each call would otherwise make.
+    if (-not $stale -and $env:AIL_NATIVE_FRESH -ne '1') {
         $t = (Get-Item $native).LastWriteTimeUtc
         $newer = Get-ChildItem -Recurse -File -Filter *.ail -Path (Join-Path $root 'compiler'), (Join-Path $root 'std') -ErrorAction SilentlyContinue |
             Where-Object { $_.LastWriteTimeUtc -gt $t } | Select-Object -First 1

@@ -10,10 +10,42 @@ set -euo pipefail
 
 # Git for Windows' sh (the gate's scripts run `./ail` through it): this script can't build or run anything there, so hand
 # the arguments to the PowerShell twin, which does (ail.ps1, like ail.cmd for programs that start `ail` themselves).
-case "$(uname -s 2>/dev/null)" in
-    MINGW* | MSYS* | CYGWIN*)
-        exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -W)/ail.ps1" "$@" ;;
+# OSTYPE first: it is bash's own, so the usual hosts start no `uname`.
+case "${OSTYPE:-}" in
+    msys* | cygwin*) on_windows=1 ;;
+    darwin* | linux*) on_windows= ;;
+    *) case "$(uname -s 2>/dev/null)" in MINGW* | MSYS* | CYGWIN*) on_windows=1 ;; *) on_windows= ;; esac ;;
 esac
+if [ -n "$on_windows" ]; then
+    case "${BASH_SOURCE[0]}" in */*) wdir="${BASH_SOURCE[0]%/*}" ;; *) wdir=. ;; esac
+    wroot="$(cd "$wdir" && pwd -W)"
+    # Inside a gate (AIL_NATIVE_FRESH=1, win-gate.ps1) the commands ail.ps1 only hands on to .native\ail.exe go straight
+    # there: PowerShell takes about a second to start, and the suites make thousands of these calls. Anything ail.ps1
+    # does more for (run, build, test, api, budgets, limits, tracing, package options) still goes through it.
+    if [ "${AIL_NATIVE_FRESH:-}" = 1 ] && [ -x "$wroot/.native/ail.exe" ]; then
+        fast=
+        case "${1:-}" in
+            explain | fmt | fix | card | ask | edit | diff | pkg | header | attach | new | prove | context | review)
+                fast=pass
+                for a in "${@:2}"; do
+                    case "$a" in --trace | --trace=* | --trace-limit | --watch | --watch=* | --verbose | --at | --show | --record | --replay | --deterministic | --deny) fast= ;; esac
+                done ;;
+            check)
+                # `check FILE...` and `check --json FILE...` only: every other option is ail.ps1's.
+                if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then fast=check; fi
+                if [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; then fast=check; fi
+                for a in "${@:2}"; do
+                    case "$a" in --json) ;; -*) fast= ;; esac
+                done ;;
+        esac
+        if [ -n "$fast" ]; then
+            export AIL_ROOT="$wroot" AIL_COMPILER="$wroot/compiler" AIL="${AIL:-$wroot/ail.cmd}"
+            if [ "$fast" = check ]; then shift; exec "$wroot/.native/ail.exe" check-program "$@"; fi
+            exec "$wroot/.native/ail.exe" "$@"
+        fi
+    fi
+    exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$wroot/ail.ps1" "$@"
+fi
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # std.app.10: a program finds the app host built under the toolchain.
@@ -279,7 +311,8 @@ if [ "${1:-}" = check ]; then
 fi
 if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = header ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = card ] || [ "${1:-}" = prove ] || [ "${1:-}" = context ] || [ "${1:-}" = review ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ] || { [ "${1:-}" = replay ] && [ "${2:-}" = --shrink ]; }; }; then
     native="$root/.native/ail"
-    if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
+    # AIL_NATIVE_FRESH=1 (the gate sets it after its first build): the caller says the sources have not changed, so skip the scan.
+    if [ ! -x "$native" ] || { [ "${AIL_NATIVE_FRESH:-}" != 1 ] && [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; }; then
         # The published seed is stage 0: it builds the native CLI (ADR 0855).
         mkdir -p "$root/.native"
         want_tag="$(head -n 1 "$root/tools/release/SEED_TAG" 2>/dev/null || true)"
