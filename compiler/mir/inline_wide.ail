@@ -63,7 +63,8 @@ pub fn wide_candidates(m Module, leaves Set[str]) Wide
 
 ## A function's instruction count, or -1 when it may not be copied: the
 ## runtime's own functions and `main`, an indirect call, a primitive that
-## reads its own frame or makes a thread, a jump back to its entry, or a loop.
+## reads its own frame or makes a thread, or a jump back to its entry. Loops
+## are ruled out by `wide_candidates` (`find_loops`).
 fn wide_size(f Func) int
     if f.name.starts_with("rt.") or f.name == "main"
         return -1
