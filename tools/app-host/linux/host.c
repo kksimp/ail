@@ -8,11 +8,18 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 #include <fontconfig/fontconfig.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/input.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <unistd.h>
 
 /* ---- JSON (std.app.7-8): just enough to read a view line ---- */
@@ -167,6 +174,12 @@ static JVal *jget(const JVal *o, const char *k) {
     for (int i = 0; i < o->n; i++) if (!strcmp(o->keys[i], k)) return o->vals[i];
     return NULL;
 }
+/* Detaches member `k` of `o` so that freeing `o` keeps it; the caller frees it with jfree. */
+static JVal *jtake(JVal *o, const char *k) {
+    if (!o || o->kind != J_OBJ) return NULL;
+    for (int i = 0; i < o->n; i++) if (!strcmp(o->keys[i], k)) { JVal *v = o->vals[i]; o->vals[i] = NULL; return v; }
+    return NULL;
+}
 static double jnum(const JVal *o, const char *k) { JVal *v = jget(o, k); return v && (v->kind == J_NUM || v->kind == J_BOOL) ? v->num : 0; }
 static const char *jstr(const JVal *o, const char *k) { JVal *v = jget(o, k); return v && v->kind == J_STR ? v->str : ""; }
 static gboolean jflag(const JVal *o, const char *k) { return jnum(o, k) != 0; }
@@ -205,6 +218,13 @@ static void ev_str(Ev *e, const char *k, const char *v) { g_string_append_printf
 static void ev_num(Ev *e, const char *k, double v) {
     char b[G_ASCII_DTOSTR_BUF_SIZE];
     g_ascii_formatd(b, sizeof b, "%.3f", v); /* never a decimal comma */
+    g_string_append_printf(e->s, ",\"%s\":%s", k, b);
+}
+static void ev_int(Ev *e, const char *k, long v) { g_string_append_printf(e->s, ",\"%s\":%ld", k, v); }
+/* More digits than ev_num, for times (a `vsync` `dx` is seconds, so 3 places lose a frame's length). */
+static void ev_float(Ev *e, const char *k, double v) {
+    char b[G_ASCII_DTOSTR_BUF_SIZE];
+    g_ascii_formatd(b, sizeof b, "%.6f", v);
     g_string_append_printf(e->s, ",\"%s\":%s", k, b);
 }
 static void ev_bool(Ev *e, const char *k, gboolean v) { g_string_append_printf(e->s, ",\"%s\":%s", k, v ? "true" : "false"); }
@@ -634,6 +654,7 @@ static void placeholder(cairo_t *cr, const Op *op) {
 }
 
 static const char *cid(GtkWidget *w);
+static void surface_draw(cairo_t *cr, GtkWidget *wd);
 
 static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
     Node *n = data;
@@ -792,6 +813,7 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
         }
     }
     while (depth-- > 0) cairo_restore(cr);
+    surface_draw(cr, wd);
     return FALSE;
 }
 
@@ -930,8 +952,34 @@ static const char *key_name(guint kv) {
     return NULL;
 }
 
+/* Hardware key codes now held, so a press of one already down is an auto-repeat (std.app.20). */
+static GHashTable *keys_down;
+
+static gboolean canvas_key_release(GtkWidget *w, GdkEventKey *e, gpointer d) {
+    (void)d;
+    g_hash_table_remove(keys_down, GUINT_TO_POINTER((guint)e->hardware_keycode));
+    const char *name = key_name(e->keyval);
+    char buf[8] = { 0 };
+    if (!name) {
+        guint kv = e->keyval;
+        if (e->state & (GDK_CONTROL_MASK | GDK_SUPER_MASK | GDK_META_MASK)) kv = gdk_keyval_to_lower(kv);
+        gunichar u = gdk_keyval_to_unicode(kv);
+        if (!u) return FALSE;
+        buf[g_unichar_to_utf8(u, buf)] = 0;
+        name = buf;
+    }
+    Ev ev = ev_new("keyup");
+    mods(&ev, e->state);
+    ev_str(&ev, "id", cid(w));
+    ev_str(&ev, "text", name);
+    ev_int(&ev, "code", e->hardware_keycode);
+    ev_send(&ev);
+    return TRUE;
+}
+
 static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
     (void)d;
+    gboolean again = !g_hash_table_add(keys_down, GUINT_TO_POINTER((guint)e->hardware_keycode));
     /* std.app.23 (ADR 0978): Control-V brings the clipboard's text as `paste`. */
     if ((e->state & GDK_CONTROL_MASK) && gdk_keyval_to_lower(e->keyval) == GDK_KEY_v) {
         gchar *s = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
@@ -958,6 +1006,8 @@ static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
     mods(&ev, e->state);
     ev_str(&ev, "id", cid(w));
     ev_str(&ev, "text", name);
+    ev_bool(&ev, "repeat", again);
+    ev_int(&ev, "code", e->hardware_keycode);
     ev_send(&ev);
     return TRUE;
 }
@@ -1160,7 +1210,7 @@ static GtkWidget *build(Node *n) {
         w = gtk_drawing_area_new();
         set_id(w, n->id);
         gtk_widget_set_can_focus(w, TRUE);
-        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK | GDK_POINTER_MOTION_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK);
+        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK | GDK_POINTER_MOTION_MASK | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK);
         gtk_style_context_add_class(gtk_widget_get_style_context(w), "view");
         canvas_size(w, n);
         g_signal_connect(w, "draw", G_CALLBACK(canvas_draw), n);
@@ -1170,6 +1220,7 @@ static GtkWidget *build(Node *n) {
         g_signal_connect(w, "leave-notify-event", G_CALLBACK(canvas_leave), NULL);
         g_signal_connect(w, "scroll-event", G_CALLBACK(canvas_scroll), NULL);
         g_signal_connect(w, "key-press-event", G_CALLBACK(canvas_key), NULL);
+        g_signal_connect(w, "key-release-event", G_CALLBACK(canvas_key_release), NULL);
         g_signal_connect(w, "size-allocate", G_CALLBACK(canvas_alloc), NULL);
         break;
     }
@@ -1244,7 +1295,7 @@ static void follow_dark(const Node *tree) {
     g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", want ? TRUE : FALSE, NULL);
 }
 
-static GtkWidget *overlay, *ctl_box, *grips[3];
+static GtkWidget *overlay, *ctl_box, *grips[8];
 
 /* std.app.25: edge mode drops the title bar and shows the host's controls and resize edges. */
 static void set_edge(gboolean on) {
@@ -1252,7 +1303,7 @@ static void set_edge(gboolean on) {
     edge_mode = on;
     gtk_window_set_decorated(GTK_WINDOW(window), !on);
     gtk_widget_set_visible(ctl_box, on);
-    for (int i = 0; i < 3; i++) gtk_widget_set_visible(grips[i], on);
+    for (int i = 0; i < 8; i++) gtk_widget_set_visible(grips[i], on);
     g_hash_table_remove_all(reported); /* the next size-allocate sends `resize` with the insets */
 }
 
@@ -1291,15 +1342,17 @@ static void build_edge_chrome(void) {
     gtk_widget_set_valign(ctl_box, GTK_ALIGN_START);
     gtk_widget_set_no_show_all(ctl_box, TRUE);
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), ctl_box);
-    /* left, right and bottom edges, 5 points wide */
-    GtkAlign ha[3] = { GTK_ALIGN_START, GTK_ALIGN_END, GTK_ALIGN_FILL };
-    GtkAlign va[3] = { GTK_ALIGN_FILL, GTK_ALIGN_FILL, GTK_ALIGN_END };
-    GdkWindowEdge ed[3] = { GDK_WINDOW_EDGE_WEST, GDK_WINDOW_EDGE_EAST, GDK_WINDOW_EDGE_SOUTH };
-    for (int i = 0; i < 3; i++) {
+    /* left, right, bottom and top edges, 5 points wide, then the four corners, 8 by 8. The controls are
+       raised above them afterwards, so the top-right corner's grip lies under the close button. */
+    GtkAlign ha[8] = { GTK_ALIGN_START, GTK_ALIGN_END, GTK_ALIGN_FILL, GTK_ALIGN_FILL, GTK_ALIGN_START, GTK_ALIGN_END, GTK_ALIGN_START, GTK_ALIGN_END };
+    GtkAlign va[8] = { GTK_ALIGN_FILL, GTK_ALIGN_FILL, GTK_ALIGN_END, GTK_ALIGN_START, GTK_ALIGN_START, GTK_ALIGN_START, GTK_ALIGN_END, GTK_ALIGN_END };
+    GdkWindowEdge ed[8] = { GDK_WINDOW_EDGE_WEST, GDK_WINDOW_EDGE_EAST, GDK_WINDOW_EDGE_SOUTH, GDK_WINDOW_EDGE_NORTH,
+                            GDK_WINDOW_EDGE_NORTH_WEST, GDK_WINDOW_EDGE_NORTH_EAST, GDK_WINDOW_EDGE_SOUTH_WEST, GDK_WINDOW_EDGE_SOUTH_EAST };
+    for (int i = 0; i < 8; i++) {
         GtkWidget *g = gtk_event_box_new();
         gtk_event_box_set_visible_window(GTK_EVENT_BOX(g), FALSE);
         gtk_widget_add_events(g, GDK_BUTTON_PRESS_MASK);
-        gtk_widget_set_size_request(g, i < 2 ? 5 : -1, i < 2 ? -1 : 5);
+        gtk_widget_set_size_request(g, i < 2 || i > 3 ? (i > 3 ? 8 : 5) : -1, i == 2 || i == 3 ? 5 : (i > 3 ? 8 : -1));
         gtk_widget_set_halign(g, ha[i]);
         gtk_widget_set_valign(g, va[i]);
         gtk_widget_set_no_show_all(g, TRUE);
@@ -1307,6 +1360,7 @@ static void build_edge_chrome(void) {
         gtk_overlay_add_overlay(GTK_OVERLAY(overlay), g);
         grips[i] = g;
     }
+    gtk_overlay_reorder_overlay(GTK_OVERLAY(overlay), ctl_box, -1);
     gtk_widget_show_all(overlay);
 }
 
@@ -1407,6 +1461,392 @@ static void watch_appearance(void) {
     }
 }
 
+/* ---- Shared surfaces (std.gfx.6-8, ADR 0957) ---- */
+
+/* The program writes RGBA8 frames into a file-backed shared mapping; the host maps the file by path
+ * and shows the buffer each `present` line names, so pixels never go through JSON. Each drawn frame is
+ * answered by a `vsync` event with the seconds since the previous one. The surface belongs to the
+ * canvas of the same id. */
+typedef struct {
+    guchar *map, *base;       /* the whole mapping, and the first buffer after the guard */
+    size_t bytes;
+    int w, h, stride, count, cur;
+    cairo_surface_t *img;     /* the current buffer as cairo's pixel order, rebuilt on each draw */
+    gint64 last;              /* microseconds, monotonic */
+} Surf;
+
+static GHashTable *surfs;       /* id -> Surf* */
+static GHashTable *surf_texts;  /* id -> JVal* (an array of {x, y, s, size, color}) */
+
+static void pads_poll(void);
+
+static void surface_draw(cairo_t *cr, GtkWidget *wd) {
+    const char *id = cid(wd);
+    Surf *m = id ? g_hash_table_lookup(surfs, id) : NULL;
+    if (!m) return;
+    cairo_surface_flush(m->img);
+    guchar *dst = cairo_image_surface_get_data(m->img);
+    int dstride = cairo_image_surface_get_stride(m->img);
+    for (int y = 0; y < m->h; y++) {
+        const guchar *s = m->base + (size_t)m->cur * m->stride * m->h + (size_t)y * m->stride;
+        guint32 *d = (guint32 *)(dst + (size_t)y * dstride);
+        for (int x = 0; x < m->w; x++, s += 4) d[x] = 0xff000000u | ((guint32)s[0] << 16) | ((guint32)s[1] << 8) | s[2];
+    }
+    cairo_surface_mark_dirty(m->img);
+    double bw = gtk_widget_get_allocated_width(wd), bh = gtk_widget_get_allocated_height(wd);
+    cairo_save(cr);
+    cairo_scale(cr, bw / m->w, bh / m->h);
+    cairo_set_source_surface(cr, m->img, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    /* Text positions are in surface pixels; the canvas may scale them (std.gfx.7). */
+    JVal *items = surf_texts ? g_hash_table_lookup(surf_texts, id) : NULL;
+    double sx = bw / m->w;
+    PangoContext *pc = gtk_widget_get_pango_context(wd);
+    ctx_setup(pc);
+    for (int i = 0; items && items->kind == J_ARR && i < items->n; i++) {
+        const JVal *t = items->vals[i];
+        double size = jnum(t, "size") > 0 ? jnum(t, "size") : 12;
+        PangoFontDescription *d = font_desc("mono", size * sx, FALSE, FALSE);
+        PangoLayout *l = pango_layout_new(pc);
+        pango_layout_set_font_description(l, d);
+        pango_layout_set_text(l, jstr(t, "s"), -1);
+        set_color(cr, (int)jnum(t, "color"));
+        cairo_move_to(cr, jnum(t, "x") * sx, jnum(t, "y") * sx);
+        pango_cairo_show_layout(cr, l);
+        g_object_unref(l);
+        pango_font_description_free(d);
+    }
+    pads_poll();
+    gint64 now = g_get_monotonic_time();
+    double dt = (now - m->last) / 1e6;
+    m->last = now;
+    char cur[16];
+    snprintf(cur, sizeof cur, "%d", m->cur);
+    Ev ev = ev_new("vsync");
+    ev_str(&ev, "id", id);
+    ev_float(&ev, "dx", dt);
+    ev_str(&ev, "text", cur);
+    ev_send(&ev);
+}
+
+static void surf_free(Surf *m) {
+    if (!m) return;
+    munmap(m->map, m->bytes);
+    cairo_surface_destroy(m->img);
+    g_free(m);
+}
+
+/* `AIL_GFX_REPORT=FILE`: appends one line once the window has settled, for tools/app-host/linux/smoke.sh. */
+static gboolean gfx_report(gpointer data) {
+    char *id = data;
+    const char *path = g_getenv("AIL_GFX_REPORT");
+    Surf *m = g_hash_table_lookup(surfs, id);
+    GtkWidget *cv = g_hash_table_lookup(by_id, id);
+    if (path && *path && m && cv) {
+        int sf = gtk_widget_get_scale_factor(cv), cw = gtk_widget_get_allocated_width(cv), ch = gtk_widget_get_allocated_height(cv);
+        FILE *f = fopen(path, "a");
+        if (f) {
+            fprintf(f, "gfx-surface id=%s surface=%dx%d canvas=%dx%d scale=%d pixels=%dx%d\n", id, m->w, m->h, cw, ch, sf, cw * sf, ch * sf);
+            fclose(f);
+        }
+    }
+    g_free(id);
+    return G_SOURCE_REMOVE;
+}
+
+/* `{"t":"surface","id":I,"w":W,"h":H,"stride":S,"offset":O,"count":N,"path":P}` (std.gfx.8): map the file.
+ * A surface that cannot be mapped is skipped, and the program then sees no `vsync` and fails with `no_host`. */
+static void surface_attach(const JVal *obj) {
+    const char *id = jstr(obj, "id"), *path = jstr(obj, "path");
+    int w = (int)jnum(obj, "w"), h = (int)jnum(obj, "h"), stride = (int)jnum(obj, "stride");
+    int count = MAX((int)jnum(obj, "count"), 1), offset = (int)jnum(obj, "offset");
+    size_t bytes = (size_t)stride * h * count + offset;
+    if (w <= 0 || h <= 0 || stride < w * 4 || offset < 0 || bytes == 0) { fprintf(stderr, "AIL App Host: cannot map the surface\n"); return; }
+    int fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) { fprintf(stderr, "AIL App Host: cannot map the surface\n"); return; }
+    void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (p == MAP_FAILED) { fprintf(stderr, "AIL App Host: cannot map the surface\n"); return; }
+    Surf *m = g_new0(Surf, 1);
+    m->map = p; m->base = (guchar *)p + offset; m->bytes = bytes;
+    m->w = w; m->h = h; m->stride = stride; m->count = count;
+    m->img = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
+    m->last = g_get_monotonic_time();
+    Surf *old = g_hash_table_lookup(surfs, id);
+    g_hash_table_replace(surfs, g_strdup(id), m);
+    surf_free(old);
+    /* A game reads the keyboard at once: the canvas takes the focus, and the window is sized so the
+     * canvas is exactly the surface, one point per pixel (std.gfx.6). */
+    GtkWidget *cv = g_hash_table_lookup(by_id, id);
+    if (cv) {
+        gtk_widget_grab_focus(cv);
+        int border = edge_tree ? 0 : 8;
+        gtk_window_resize(GTK_WINDOW(window), w + 2 * border, h + 2 * border);
+        gtk_widget_queue_draw(cv);
+        g_timeout_add(500, gfx_report, g_strdup(id));
+    }
+}
+
+static void surface_present(const JVal *obj) {
+    const char *id = jstr(obj, "id");
+    Surf *m = g_hash_table_lookup(surfs, id);
+    if (!m) return;
+    m->cur = CLAMP((int)jnum(obj, "buf"), 0, m->count - 1);
+    GtkWidget *cv = g_hash_table_lookup(by_id, id);
+    if (cv) gtk_widget_queue_draw(cv);
+}
+
+/* `{"t":"text","id":I,"items":[...]}` (std.gfx.7): replaces the surface's text. */
+static void surface_text(JVal *obj) {
+    const char *id = jstr(obj, "id");
+    if (!surf_texts) surf_texts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)jfree);
+    g_hash_table_replace(surf_texts, g_strdup(id), jtake(obj, "items"));
+    GtkWidget *cv = g_hash_table_lookup(by_id, id);
+    if (cv) gtk_widget_queue_draw(cv);
+}
+
+/* ---- Gamepads (std.gfx.11, ADR 0985) ---- */
+
+/* Gamepads are read from evdev (/dev/input/event*, which needs the `input` group on most systems) and
+ * polled with each drawn frame, as the macOS host does. A `pad` event goes to the program when a pad's
+ * state changes; `text` is `buttons,lx,ly,rx,ry,lt,rt` (buttons as `pad_bit`, sticks -1...1 with right
+ * and up positive, triggers 0...1), and empty once the pad is gone. */
+#define MAX_PADS 4
+typedef struct {
+    int fd;
+    char path[64];
+    int buttons, hatx, haty;
+    int ax[6], lo[6], hi[6];   /* ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ: value and range (hi == lo: absent) */
+    gboolean trig_l, trig_r;   /* digital triggers (BTN_TL2, BTN_TR2) */
+    char last[128];
+} Pad;
+static Pad pads[MAX_PADS];
+static gboolean pads_ready = FALSE;
+static gint64 pads_scanned = 0;
+
+#define BITS_LONG (8 * sizeof(unsigned long))
+static gboolean test_bit(const unsigned long *a, int bit) { return (a[bit / BITS_LONG] >> (bit % BITS_LONG)) & 1; }
+
+/* The `pad_bit` for an evdev button code (0 for one that has no place). */
+static int pad_bit_of(int code) {
+    switch (code) {
+    case BTN_SOUTH: return 1;
+    case BTN_EAST: return 2;
+    case BTN_NORTH: return 4;
+    case BTN_WEST: return 8;
+    case BTN_TL: return 16;
+    case BTN_TR: return 32;
+    case BTN_SELECT: return 64;
+    case BTN_START: return 128;
+    case BTN_THUMBL: return 256;
+    case BTN_THUMBR: return 512;
+    case BTN_DPAD_UP: return 1024;
+    case BTN_DPAD_DOWN: return 2048;
+    case BTN_DPAD_LEFT: return 4096;
+    case BTN_DPAD_RIGHT: return 8192;
+    }
+    return 0;
+}
+
+static void pad_close(int i) {
+    if (pads[i].fd < 0) return;
+    close(pads[i].fd);
+    pads[i].fd = -1;
+    if (pads[i].last[0]) {
+        char id[8];
+        snprintf(id, sizeof id, "%d", i);
+        Ev ev = ev_new("pad");
+        ev_str(&ev, "id", id);
+        ev_str(&ev, "text", "");
+        ev_send(&ev);
+    }
+    pads[i].last[0] = 0;
+}
+
+/* Opens `path` as a gamepad if it looks like one (a south button and a left stick); returns whether it did. */
+static gboolean pad_open(const char *path, int slot) {
+    int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) return FALSE;
+    unsigned long ev[EV_MAX / BITS_LONG + 1] = { 0 }, key[KEY_MAX / BITS_LONG + 1] = { 0 }, abs_[ABS_MAX / BITS_LONG + 1] = { 0 };
+    if (ioctl(fd, EVIOCGBIT(0, sizeof ev), ev) < 0 || !test_bit(ev, EV_KEY) || !test_bit(ev, EV_ABS) ||
+        ioctl(fd, EVIOCGBIT(EV_KEY, sizeof key), key) < 0 || !test_bit(key, BTN_SOUTH) ||
+        ioctl(fd, EVIOCGBIT(EV_ABS, sizeof abs_), abs_) < 0 || !test_bit(abs_, ABS_X)) {
+        close(fd);
+        return FALSE;
+    }
+    Pad *p = &pads[slot];
+    memset(p, 0, sizeof *p);
+    p->fd = fd;
+    snprintf(p->path, sizeof p->path, "%s", path);
+    for (int a = 0; a < 6; a++) {
+        struct input_absinfo ai;
+        if (test_bit(abs_, a) && ioctl(fd, EVIOCGABS(a), &ai) == 0) { p->ax[a] = ai.value; p->lo[a] = ai.minimum; p->hi[a] = ai.maximum; }
+    }
+    struct input_absinfo hat;
+    if (test_bit(abs_, ABS_HAT0X) && ioctl(fd, EVIOCGABS(ABS_HAT0X), &hat) == 0) p->hatx = hat.value;
+    if (test_bit(abs_, ABS_HAT0Y) && ioctl(fd, EVIOCGABS(ABS_HAT0Y), &hat) == 0) p->haty = hat.value;
+    unsigned long held[KEY_MAX / BITS_LONG + 1] = { 0 };
+    if (ioctl(fd, EVIOCGKEY(sizeof held), held) == 0)
+        for (int c = BTN_SOUTH; c <= BTN_DPAD_RIGHT; c++) if (test_bit(held, c)) p->buttons |= pad_bit_of(c);
+    return TRUE;
+}
+
+static void pads_scan(void) {
+    DIR *d = opendir("/dev/input");
+    if (!d) return;
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        if (strncmp(e->d_name, "event", 5)) continue;
+        char path[64];
+        snprintf(path, sizeof path, "/dev/input/%s", e->d_name);
+        int free_slot = -1;
+        gboolean have = FALSE;
+        for (int i = 0; i < MAX_PADS; i++) {
+            if (pads[i].fd >= 0 && !strcmp(pads[i].path, path)) have = TRUE;
+            if (pads[i].fd < 0 && free_slot < 0) free_slot = i;
+        }
+        if (have || free_slot < 0) continue;
+        pad_open(path, free_slot);
+    }
+    closedir(d);
+}
+
+static double axis_unit(const Pad *p, int a, gboolean signed_) {
+    if (p->hi[a] <= p->lo[a]) return 0;
+    double u = (double)(p->ax[a] - p->lo[a]) / (p->hi[a] - p->lo[a]);
+    if (!signed_) return CLAMP(u, 0.0, 1.0);
+    double v = CLAMP(u * 2 - 1, -1.0, 1.0);
+    return fabs(v) < 0.08 ? 0 : v; /* a small dead zone: sticks rarely rest at exactly zero */
+}
+
+static void pads_poll(void) {
+    if (!pads_ready) {
+        pads_ready = TRUE;
+        for (int i = 0; i < MAX_PADS; i++) pads[i].fd = -1;
+    }
+    gint64 now = g_get_monotonic_time();
+    if (now - pads_scanned > 2000000) { pads_scanned = now; pads_scan(); } /* a pad plugged in later */
+    for (int i = 0; i < MAX_PADS; i++) {
+        Pad *p = &pads[i];
+        if (p->fd < 0) continue;
+        struct input_event evs[32];
+        for (;;) {
+            ssize_t n = read(p->fd, evs, sizeof evs);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) {
+                if (n < 0 && errno != EAGAIN) pad_close(i);
+                break;
+            }
+            for (size_t k = 0; k < (size_t)n / sizeof evs[0]; k++) {
+                const struct input_event *e = &evs[k];
+                if (e->type == EV_KEY) {
+                    int bit = pad_bit_of(e->code);
+                    if (bit) { if (e->value) p->buttons |= bit; else p->buttons &= ~bit; }
+                    else if (e->code == BTN_TL2) p->trig_l = e->value != 0;
+                    else if (e->code == BTN_TR2) p->trig_r = e->value != 0;
+                } else if (e->type == EV_ABS) {
+                    if (e->code <= ABS_RZ) p->ax[e->code] = e->value;
+                    else if (e->code == ABS_HAT0X) p->hatx = e->value;
+                    else if (e->code == ABS_HAT0Y) p->haty = e->value;
+                }
+            }
+        }
+        if (p->fd < 0) continue;
+        int b = p->buttons | (p->hatx < 0 ? 4096 : 0) | (p->hatx > 0 ? 8192 : 0) | (p->haty < 0 ? 1024 : 0) | (p->haty > 0 ? 2048 : 0);
+        double lt = p->hi[ABS_Z] > p->lo[ABS_Z] ? axis_unit(p, ABS_Z, FALSE) : (p->trig_l ? 1 : 0);
+        double rt = p->hi[ABS_RZ] > p->lo[ABS_RZ] ? axis_unit(p, ABS_RZ, FALSE) : (p->trig_r ? 1 : 0);
+        double v[6] = { axis_unit(p, ABS_X, TRUE), -axis_unit(p, ABS_Y, TRUE), axis_unit(p, ABS_RX, TRUE), -axis_unit(p, ABS_RY, TRUE), lt, rt };
+        char num[6][G_ASCII_DTOSTR_BUF_SIZE], state[160];
+        for (int k = 0; k < 6; k++) g_ascii_formatd(num[k], sizeof num[k], "%.3f", v[k] == 0 ? 0.0 : v[k]);
+        snprintf(state, sizeof state, "%d,%s,%s,%s,%s,%s,%s", b, num[0], num[1], num[2], num[3], num[4], num[5]);
+        if (!strcmp(state, p->last)) continue;
+        snprintf(p->last, sizeof p->last, "%s", state);
+        char id[8];
+        snprintf(id, sizeof id, "%d", i);
+        Ev ev = ev_new("pad");
+        ev_str(&ev, "id", id);
+        ev_str(&ev, "text", state);
+        ev_send(&ev);
+    }
+}
+
+/* ---- Native menu and chooser (std.app.18, std.app.22) ---- */
+
+typedef struct { char *id, *chosen; } Popup;
+
+static gboolean popup_finish(gpointer d) {
+    Popup *p = d;
+    Ev ev = ev_new("popup");
+    ev_str(&ev, "id", p->id);
+    ev_str(&ev, "text", p->chosen ? p->chosen : "");
+    ev_send(&ev);
+    g_free(p->id); g_free(p->chosen); g_free(p);
+    return G_SOURCE_REMOVE;
+}
+
+static void popup_picked(GtkMenuItem *it, gpointer d) {
+    Popup *p = d;
+    g_free(p->chosen);
+    p->chosen = g_strdup(gtk_menu_item_get_label(it));
+}
+
+/* The menu's selection is done before the item's own `activate` runs, so the answer waits for an idle turn. */
+static void popup_done(GtkMenuShell *m, gpointer d) {
+    (void)m;
+    g_idle_add(popup_finish, d);
+}
+
+/* std.app.18: a native menu at (x, y) of canvas `id`, answered with `popup` (`text` empty if dismissed). */
+static void show_popup(const JVal *obj) {
+    const char *id = jstr(obj, "id");
+    JVal *items = jget(obj, "items");
+    GtkWidget *cv = g_hash_table_lookup(by_id, id);
+    Popup *p = g_new0(Popup, 1);
+    p->id = g_strdup(id);
+    if (!cv || !items || items->kind != J_ARR || items->n == 0) { popup_finish(p); return; }
+    GtkWidget *menu = gtk_menu_new();
+    for (int i = 0; i < items->n; i++) {
+        GtkWidget *mi = gtk_menu_item_new_with_label(items->vals[i]->kind == J_STR ? items->vals[i]->str : "");
+        g_signal_connect(mi, "activate", G_CALLBACK(popup_picked), p);
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+    }
+    gtk_widget_show_all(menu);
+    g_signal_connect(menu, "selection-done", G_CALLBACK(popup_done), p);
+    g_signal_connect(menu, "selection-done", G_CALLBACK(gtk_widget_destroy), NULL);
+    GtkWidget *top = gtk_widget_get_toplevel(cv);
+    gint tx = 0, ty = 0;
+    gtk_widget_translate_coordinates(cv, top, (gint)jnum(obj, "x"), (gint)jnum(obj, "y"), &tx, &ty);
+    GdkRectangle r = { tx, ty, 1, 1 };
+    gtk_menu_popup_at_rect(GTK_MENU(menu), gtk_widget_get_window(top), &r, GDK_GRAVITY_NORTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+}
+
+static void pick_response(GtkDialog *dlg, gint resp, gpointer d) {
+    char *id = d;
+    char *path = resp == GTK_RESPONSE_ACCEPT ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dlg)) : NULL;
+    Ev ev = ev_new("picked");
+    ev_str(&ev, "id", id);
+    ev_str(&ev, "text", path ? path : "");
+    ev_send(&ev);
+    g_free(path);
+    g_free(id);
+    gtk_widget_destroy(GTK_WIDGET(dlg));
+}
+
+/* std.app.22 (ADR 0971): a native open dialog for a file or a folder, answered with `picked`. */
+static void show_pick(const JVal *obj) {
+    gboolean folders = jflag(obj, "folders");
+    const char *prompt = jstr(obj, "prompt"), *start = jstr(obj, "start");
+    GtkWidget *dlg = gtk_file_chooser_dialog_new(*prompt ? prompt : (folders ? "Choose a folder" : "Choose a file"), GTK_WINDOW(window),
+        folders ? GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER : GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Choose", GTK_RESPONSE_ACCEPT, NULL);
+    if (*start) gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dlg), start);
+    g_signal_connect(dlg, "response", G_CALLBACK(pick_response), g_strdup(jstr(obj, "id")));
+    gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
+    gtk_widget_show(dlg);
+}
+
 /* ---- Reading views from standard input (std.app.7) ---- */
 
 static gboolean first_view = TRUE, started = FALSE;
@@ -1429,11 +1869,15 @@ static void handle_line(const char *line) {
             gtk_window_begin_move_drag(GTK_WINDOW(window), (gint)last_press.button, (gint)last_press.x_root, (gint)last_press.y_root, last_press.time);
         }
     } else if (!strcmp(t, "pick")) {
-        /* std.app.22: no native chooser on this host yet; say so rather than hang. */
-        Ev e = ev_new("pick_error");
-        ev_str(&e, "id", jstr(obj, "id"));
-        ev_str(&e, "text", "this host has no native file chooser yet");
-        ev_send(&e);
+        show_pick(obj);
+    } else if (!strcmp(t, "popup")) {
+        show_popup(obj);
+    } else if (!strcmp(t, "surface")) {
+        surface_attach(obj);
+    } else if (!strcmp(t, "present")) {
+        surface_present(obj);
+    } else if (!strcmp(t, "text")) {
+        surface_text(obj);
     } else if (!strcmp(t, "view")) {
         if (first_view) {
             first_view = FALSE;
@@ -1494,6 +1938,8 @@ int main(int argc, char **argv) {
     field_text = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     last_sent = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     by_id = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    keys_down = g_hash_table_new(g_direct_hash, g_direct_equal);
+    surfs = g_hash_table_new(g_str_hash, g_str_equal);
     edits = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
     const char *dv = g_getenv("AIL_HOST_DEBUG");
     debug = dv && *dv;

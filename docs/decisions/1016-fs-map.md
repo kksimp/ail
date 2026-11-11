@@ -41,3 +41,16 @@ Option A costs the language nothing new and keeps every `bytes` use working, whi
 ## Rejected alternatives
 
 Option B costs a second API and lifetime rules the language avoids; Option C is unsafe and larger than one slice.
+
+## Amendment (2026-11-10): a real view on Windows
+
+- **Decided by:** AI (delegated, ADR 0076). **Criterion:** feature parity of the three hosts for 0.1.0; speed and memory on large files.
+
+`fs.map` on Windows now returns a view, not a copy (`fs_map_win` in `compiler/rt/native/os.ail`). The file gets a read-only mapping object (`CreateFileMappingW`, `PAGE_READONLY`). Views start on a 65536-byte boundary there, so the head block is 65536 bytes: the runtime reserves head plus the size rounded up to 65536 to find a free range, releases it, maps the view at `base + 65536` with `MapViewOfFileEx` and commits the head at `base` with `VirtualAlloc`. The string header sits in the last 16 bytes of the head, as on the other hosts. Windows cannot replace part of a reservation in one step with these calls, so another thread may take the range between the release and the two placements; the runtime then tries again, up to eight times, and only then falls back to the `read_bytes` copy. Windows refuses to truncate or delete a mapped file, so the truncation fault of the other hosts cannot happen there.
+
+Rejected:
+
+- **`VirtualAlloc2` and `MapViewOfFile3` with placeholders:** no gap between release and placement, but they need Windows 10 1803 and live in `kernelbase.dll`, a new import for every program that maps. The retry closes the same gap with `kernel32` alone.
+- **A header outside the file's pages (a `bytes` that points elsewhere):** a second `bytes` layout that every `bytes` operation would have to know.
+- **Keeping the copy:** a 1 GiB file costs 1 GiB of heap and a full read before the first byte.
+
