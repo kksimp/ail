@@ -1,0 +1,33 @@
+## std.app.32: the Round, Poly and Line ops, their JSON and outline, and the
+## screen items they give.
+use std.app
+use std.screen.view
+
+struct Gem
+    n int
+
+impl app.App for Gem
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.canvas("gem", 40.0, 20.0, [
+            app.Op.Round(x: 1.0, y: 2.0, w: 10.0, h: 4.0, r: 100.0, color: 255, alpha: 1.0, stroke: 0.0),
+            app.Op.Poly(points: [0.0, 0.0, 8.0, 0.0, 4.0, 6.0], color: 16, alpha: 0.5),
+            app.Op.Line(points: [2.0, 2.0, 6.0, 9.0, 12.0, 3.0], color: 0, width: 2.0),
+        ])
+
+fn main()
+    mut g := Gem(n: 0)
+    print(app.outline(g.view()))
+    print(app.frame(g))
+    screens := app.script(mut g, [app.key("a")])
+    print(screens[0].contains("poly 3 10 0.5"))
+    items := view.of_ops([
+        app.Op.Round(x: 1.0, y: 2.0, w: 10.0, h: 4.0, r: 2.0, color: 255, alpha: 1.0, stroke: 1.0),
+        app.Op.Poly(points: [3.0, 1.0, 9.0, 1.0, 6.0, 7.0], color: 16, alpha: 1.0),
+        app.Op.Line(points: [2.0, 2.0, 6.0, 9.0, 12.0, 3.0], color: 0, width: 2.0),
+        app.Op.Poly(points: [], color: 0, alpha: 1.0),
+    ], 10.0, 20.0)
+    for it in items
+        print("{it.role} {it.x},{it.y} {it.w}x{it.h}")

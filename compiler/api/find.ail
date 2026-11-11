@@ -1,0 +1,284 @@
+## `ail ask std WORDS...` and `ail ask std --sig "(PARAMS) RET"` (api.find.1-4, ADR 1051):
+## ranked std functions, at most ten lines, with no grep. The index is the
+## standard library's rules in `docs/spec/*.md`: a rule `**std.M.N**` whose
+## text starts with a backticked signature `name(params) ret ! Err` is one
+## function, and the rest of its paragraph is the doc the words are matched
+## against. The spec is read from the repository, `AIL_ROOT` or the parent of
+## `AIL_COMPILER`, as `ail explain` does.
+
+FIND_USAGE := "usage: ail ask std WORDS...   e.g. ail ask std read a file by lines\n       ail ask std --sig \"(str) List[str]\""
+
+## Most lines `ail ask std` prints (api.find.1).
+FIND_LIMIT := 10
+
+## Words a query may have that say nothing.
+FIND_FILLER := [
+    "a",
+    "an",
+    "the",
+    "of",
+    "to",
+    "by",
+    "in",
+    "from",
+    "and",
+    "or",
+    "for",
+    "with",
+    "as",
+    "is",
+    "it",
+    "how",
+    "do",
+    "i",
+    "std",
+]
+
+struct StdFn
+    ## `fs`, `time.date`, ...
+    owner str
+    ## `read_text(path str) str ! IoError`
+    sig str
+    rule str
+    ## The function's name, lower case.
+    name str
+    ## The words of the rule's text, lower case.
+    words List[str]
+
+fn find_root() str
+    r := env.get("AIL_ROOT") else ""
+    if r != ""
+        return r
+    c := env.get("AIL_COMPILER") else ""
+    if c != ""
+        d := path.dir(c)
+        if d == ""
+            return "."
+        return d
+    "."
+
+fn find_is_ident(c char) bool
+    k := c.code()
+    (k >= 97 and k <= 122) or (k >= 65 and k <= 90) or (k >= 48 and k <= 57) or k == 95
+
+## The lower-case words of `s`: runs of letters, digits and `_`.
+fn find_words(s str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in s.to_lower().chars()
+        if find_is_ident(c)
+            cur = "{cur}{c}"
+        else
+            if cur != ""
+                out.push(cur)
+            cur = ""
+    if cur != ""
+        out.push(cur)
+    out
+
+## The first backticked text of a rule's paragraph when it is a signature
+## (`name(...)` with a plain name), else "".
+fn find_signature(text str) str
+    a := text.find("`") else
+        return ""
+    rest := text.slice(a + 1, text.len())
+    b := rest.find("`") else
+        return ""
+    code := rest.slice(0, b)
+    p := code.find("(") else
+        return ""
+    if p == 0
+        return ""
+    for c in code.slice(0, p).chars()
+        if not find_is_ident(c) and c != '.'
+            return ""
+    code
+
+## The rule ID that starts `line` (`**std.fs.1** — ...`), else "".
+fn find_rule_id(line str) str
+    rest := line.strip_prefix("**std.") else
+        return ""
+    end := rest.find("**") else
+        return ""
+    "std.{rest.slice(0, end)}"
+
+fn find_add(mut out List[StdFn], rule str, text str)
+    sig := find_signature(text)
+    if sig == ""
+        return
+    parts := rule.split(".")
+    owner := parts[1..parts.len() - 1].join(".")
+    out.push(StdFn(
+        owner: owner,
+        sig: sig,
+        rule: rule,
+        name: sig.slice(0, sig.find("(") else 0).to_lower(),
+        words: find_words(text),
+    ))
+
+## Every std function the spec's rules describe.
+fn find_index() List[StdFn]
+    dir := path.join(find_root(), "docs/spec")
+    names := fs.list_dir(dir) else
+        return []
+    mut out := List[StdFn]()
+    for file in names.sorted()
+        if not file.ends_with(".md")
+            continue
+        text := fs.read_text(path.join(dir, file)) else
+            continue
+        mut rule := ""
+        mut para := ""
+        for line in text.lines()
+            id := find_rule_id(line)
+            if id != "" or line.trim() == ""
+                if rule != ""
+                    find_add(mut out, rule, para)
+                rule = id
+                para = ""
+                if id != ""
+                    para = line.strip_prefix("**{id}**") else ""
+            elif rule != ""
+                para = "{para} {line}"
+        if rule != ""
+            find_add(mut out, rule, para)
+    out
+
+## Does the doc hold `w`, or its plural or singular?
+fn find_has_word(f StdFn, w str) bool
+    if f.words.contains(w) or f.words.contains("{w}s")
+        return true
+    w.ends_with("s") and f.words.contains(w.slice(0, w.len() - 1))
+
+## How well a function fits the words (api.find.2): its name equal to a word is
+## worth 6, containing one 3, its module 2, and each word of its doc 1.
+fn find_score_words(f StdFn, query List[str]) int
+    mut score := 0
+    for w in query
+        if f.name == w
+            score += 6
+        elif w.len() >= 3 and f.name.contains(w)
+            score += 3
+        if f.owner == w
+            score += 2
+        if find_has_word(f, w)
+            score += 1
+    score
+
+fn find_strip(s str) str
+    s.replace(" ", "")
+
+## The parameter types and the result type of a signature, spaces removed
+## (api.find.3). `name(a str, b int) str ! E` and `(str, int) str` both work.
+fn find_shape(sig str)(List[str], str)
+    mut params := List[str]()
+    start := sig.find("(") else
+        return (params, "")
+    mut depth := 0
+    mut cur := ""
+    mut close := sig.len()
+    mut k := start + 1
+    chars := sig.chars()
+    while k < chars.len()
+        c := chars[k]
+        if c == '(' or c == '['
+            depth += 1
+        elif c == ']'
+            depth -= 1
+        if c == ')' and depth == 0
+            close = k
+            break
+        if c == ')'
+            depth -= 1
+        if c == ',' and depth == 0
+            params.push(find_param_type(cur))
+            cur = ""
+        else
+            cur = "{cur}{c}"
+        k += 1
+    if cur.trim() != ""
+        params.push(find_param_type(cur))
+    mut tail := sig.slice(close + 1, sig.len()).trim()
+    tail = tail.strip_prefix("->") else tail
+    cut := tail.find("!") else tail.len()
+    ret := find_strip(tail.slice(0, cut))
+    (params, ret)
+
+## `path str` is a `str`; `List[str]` and `fn(int) int` are themselves.
+fn find_param_type(p str) str
+    t := p.trim()
+    sp := t.find(" ") else
+        return find_strip(t)
+    head := t.slice(0, sp)
+    for c in head.chars()
+        if not find_is_ident(c)
+            return find_strip(t)
+    find_strip(t.slice(sp + 1, t.len()))
+
+## How well a function's shape fits the asked one (api.find.3): equal parameter
+## lists 6, else 1 per asked type the function takes; the result type 4.
+fn find_score_sig(f StdFn, want_params List[str], want_ret str) int
+    got := find_shape(f.sig)
+    mut score := 0
+    if got.0 == want_params
+        score += 6
+    else
+        for t in want_params
+            if got.0.contains(t)
+                score += 1
+    if want_ret != "" and got.1 == want_ret
+        score += 4
+    score
+
+## `ail ask std ...` (api.find.1-4).
+pub fn find_command(args List[str]) int
+    mut sig := false
+    mut rest := List[str]()
+    for a in args
+        if a == "--sig"
+            sig = true
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}`\n{FIND_USAGE}")
+            return 2
+        else
+            rest.push(a)
+    if rest.is_empty()
+        io.eprint(FIND_USAGE)
+        return 2
+    index := find_index()
+    if index.is_empty()
+        io.eprint("error: no std rules found under {path.join(find_root(), "docs/spec")} (api.find.4)")
+        return 2
+    mut query := List[str]()
+    for x in rest
+        for w in find_words(x)
+            if not FIND_FILLER.contains(w)
+                query.push(w)
+    mut scores := List[int]()
+    mut want_params := List[str]()
+    mut want_ret := ""
+    if sig
+        shape := find_shape(rest.join(" "))
+        want_params = shape.0
+        want_ret = shape.1
+    for f in index
+        if sig
+            scores.push(find_score_sig(f, want_params, want_ret))
+        else
+            scores.push(find_score_words(f, query))
+    mut used := List[int]()
+    mut shown := 0
+    while shown < FIND_LIMIT
+        mut best := -1
+        for i in 0..index.len()
+            if scores[i] > 0 and not used.contains(i) and (best < 0 or scores[i] > scores[best])
+                best = i
+        if best < 0
+            break
+        used.push(best)
+        f := index[best]
+        print("{f.owner}.{f.sig}   ({f.rule})")
+        shown += 1
+    if shown == 0
+        return 1
+    0

@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots, infer
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`, `infer`, `prove`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -264,6 +264,31 @@ ran, the result is formatted too ([ADR 0203](../decisions/0203-ail-fix-command.m
 unified diff and leaves the file unchanged. It prints each applied fix; with
 `--json`, one `{"api":1,"applied":...}` object each, then a summary
 ([ADR 0203](../decisions/0203-ail-fix-command.md)).
+
+**fix.check.1** — `ail check --fix FILE` applies every safe fix to a fixed point
+as `ail fix` does (`fix.apply.1-3`), writes the file, then checks it as `ail check`
+does. It prints no per-fix lines; when at least one fix applied it prints one line
+first, `fixed N: RULE, RULE xM` (the rules in first-seen order, `xM` when a rule
+fixed more than once), on standard output. With `--json` that line is one object
+`{"api":1,"fixed":N,"line":"..."}`. The diagnostics that remain and the exit status are
+those of the check after the fixes. Plain `ail check` never writes a file
+([ADR 1047](../decisions/1047-ail-check-fix.md)).
+
+**fix.check.2** — `ail task verify --fix` runs its check stage as
+`ail check --fix PROGRAM`, shows the `fixed` line first and reports it as `fixed`
+(`--json`). The MCP tools `ail_check` and `task_verify` take an optional `fix`
+argument; `true` adds the flag ([ADR 1047](../decisions/1047-ail-check-fix.md)).
+
+```ail tool=check,--fix,FILE expect=expr.op.1 rules=fix.check.1
+fn main()
+    a := true
+    b := false
+    if a && b
+        print("both")
+```
+
+```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
+```
 
 ## Explain
 
@@ -620,6 +645,89 @@ fn main()
     print(missing)
 ```
 
+## Cards and std lookup
+
+`ail card` prints the core card or one topic of the full card, and `ail ask std`
+finds a standard-library function by words or by shape, so an agent can look up
+what it would otherwise recall from memory
+([ADR 1051](../decisions/1051-core-card-and-std-lookup.md)).
+
+**api.find.1** — `ail ask std WORDS...` prints at most ten lines, best first,
+each `MODULE.SIGNATURE   (RULE)` with the signature as the spec writes it
+(`fs.read_text(path str) str ! IoError   (std.fs.1)`). Exit status is 0 when
+there are lines, 1 when there are none, 2 for an error.
+
+**api.find.2** — The words are matched against the standard library's rules in
+the spec: a rule `**std.M.N**` whose text starts with a backticked signature
+`name(params) ret ! Error` describes one function `M.name`. A function scores 6
+for each word that is its name, 3 for each word its name contains (of three
+letters or more), 2 for each word that is its module, and 1 for each word (or
+its plural or singular) in the rule's text. Filler words (`a`, `the`, `of`,
+`to`, `by`, `in`, `from`, `and`, `std`, ...) say nothing.
+
+**api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
+names are optional (`(path str)` and `(str)` are the same), spaces say nothing
+and `! Error` is ignored. A function scores 6 when its parameter types equal
+the asked ones in order, else 1 for each asked type among its parameters, and 4
+when its result type equals the asked one.
+
+**api.find.4** — A query that matches nothing prints nothing and exits 1. No
+words, or an unknown option, is a usage error (status 2). The index is read from
+the repository's `docs/spec`, found as `ail explain` finds it.
+
+**tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
+the syntax, the ten rules diagnostics cite most often, and where to look up the
+rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+same.
+
+**tool.card.2** — `ail card TOPIC` prints the section of the full card
+(`docs/language-card.md`) whose `##` heading contains the topic, ignoring case
+(`ail card errors`). `ail card std.MODULE` prints the signatures of that std
+module, as `api.find.1` writes them.
+
+**tool.card.3** — A topic that names no section or module prints an error that
+lists the topics and exits 1. A missing card file is an error (status 2).
+
+```ail tool=ask,std,read,text,file expect=read_text(path rules=api.find.1,api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(str)bytes expect=read_bytes(path rules=api.find.3
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std status=2 expect=usage: rules=api.find.4
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,zzqqxx status=1 rules=api.find.4
+fn main()
+    print(1)
+```
+
+```ail tool=card expect=Ten rules=tool.card.1
+fn main()
+    print(1)
+```
+
+```ail tool=card,errors expect=Absence rules=tool.card.2
+fn main()
+    print(1)
+```
+
+```ail tool=card,std.fs expect=read_text(path rules=tool.card.2
+fn main()
+    print(1)
+```
+
+```ail tool=card,nosuchtopic status=1 expect=topics rules=tool.card.3
+fn main()
+    print(1)
+```
+
 ## Context for an edit
 
 `ail context PROGRAM SYMBOL` prints the smallest bundle of the program that an
@@ -934,12 +1042,96 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
+**task.log.1** — `ail task verify` appends one line to `.ail/task-log.jsonl`, creating it: the object `{"stage","result","tokens","fixed","rules","ms"}` with `rules` the rule IDs named by the toolchain output (`error[R]`, `warning[R]`, `trap[R]`) and their counts in first-seen order, `tokens` the estimate of `api.card.3` of what `verify` printed, `fixed` the fixes `--fix` applied and `ms` last. Every field but `ms` is the same for the same change. Nothing is sent anywhere ([ADR 1048](../decisions/1048-task-ledger.md)).
+
+**task.log.2** — `.ail-task` records `mark`, the lines the ledger held at `start`. `ail task finish --json` adds `summary`, `{"rounds","red","fixed","tokens","rules"}`, over the lines after `mark`; the text answer ends with the same object.
+
+**task.log.3** — `ail task log [--json]` prints the ledger lines after `mark` (all of them when no task is open), then their summary; `--json` prints `{"log":[...],"summary":{...}}`.
+
+```ail pkg=task_log tool=task,log,--json status=0 expect="rounds":2,"red":1,"fixed":1,"tokens":50,"rules":{"expr.op.1":1,"expr.name.1":1} rules=task.log.1,task.log.2,task.log.3
+```
+
 ```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
 ```
 
 ```ail pkg=task_red tool=task,verify status=1 expect=red rules=task.state.1,task.verify.1,task.verify.2,task.verify.3
+```
+
+## Merge by declaration
+
+`ail merge` is a three-way merge for `.ail` files that works on declarations, so
+two branches that change different functions never conflict
+([ADR 1019](../decisions/1019-ail-merge-driver.md)).
+
+**merge.split.1** — A file is cut into declarations. A line at column 0 starts one; the indented lines after it, and blank lines followed by an indented line, belong to it. Comment (`#`) and attribute (`@`) lines at column 0 belong to the declaration after them, unless a blank line separates them. Blank lines after a declaration are kept as its gap.
+
+**merge.split.2** — A declaration's key is its kind and name (`fn Point.sum`, `struct Point`, `const NAME`); `pub`, `unique` and `error` are not part of it. Any other declaration (`use`, `impl`, `test`, a loose comment) is keyed by its first line. A repeated key gets `#2`, `#3`. A rename is a removal and an addition.
+
+**merge.decl.1** — A declaration whose text differs from the base on one side only takes that side's text, or is dropped if that side removed it. Text is compared exactly.
+
+**merge.decl.2** — A declaration that is the same on both sides, added, changed or removed, appears once.
+
+**merge.order.1** — The merged file keeps the order of OURS. A declaration only THEIRS has goes after the declaration before it in THEIRS.
+
+**merge.line.1** — A declaration changed on both sides is merged line by line as `git merge-file` would. If that merges cleanly, the result is used.
+
+**merge.conflict.1** — Otherwise the declaration is one hunk: `<<<<<<< ours`, OURS's text, `||||||| base`, the base text, `=======`, THEIRS's text and `>>>>>>> theirs`, with a section empty for a side that lacks the declaration. Each one is reported on standard error as `conflict: KEY (merge.conflict.1)`, and the exit status is 1. Every other declaration is merged.
+
+**merge.cli.1** — `ail merge BASE OURS THEIRS` writes the result to OURS, the way a git merge driver is called; further arguments (git's `%L` and `%P`) are ignored. `--stdout` prints it instead and writes nothing. The exit status is 0 for a clean merge, 1 for conflicts, 2 for an error.
+
+**merge.cli.2** — A file that can't be read is an error: exit status 2.
+
+**merge.cli.3** — With `--json` the answer is one object on standard output, `{"merged":BOOL,"conflicts":[KEY...]}`.
+
+**merge.install.1** — `ail merge --install` adds `*.ail merge=ail` to `.gitattributes` unless it is there, and sets `merge.ail.driver` to `ail merge %O %A %B %L %P` (`./ail` when the current directory has one) in the repository's git config. Outside a git repository it is an error: exit status 2.
+
+```ail pkg=merge_disjoint tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=quadruple rules=merge.split.1,merge.split.2,merge.decl.1,merge.order.1,merge.cli.1
+```
+
+```ail pkg=merge_same tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=two rules=merge.decl.2
+```
+
+```ail pkg=merge_lines tool=merge,--stdout,base.ail,ours.ail,theirs.ail status=0 expect=60 rules=merge.line.1
+```
+
+```ail pkg=merge_conflict tool=merge,base.ail,ours.ail,theirs.ail status=1 expect=conflict: rules=merge.conflict.1,merge.cli.1
+```
+
+```ail pkg=merge_conflict tool=merge,--stdout,--json,base.ail,ours.ail,theirs.ail status=1 expect="merged":false rules=merge.cli.3
+```
+
+```ail pkg=merge_conflict tool=merge,nosuch.ail,ours.ail,theirs.ail status=2 expect=merge.cli.2 rules=merge.cli.2
+```
+
+```ail pkg=merge_disjoint tool=merge,--check,base.ail,ours.ail,theirs.ail status=0 expect=ok: rules=merge.check.1
+```
+
+```ail pkg=merge_conflict tool=merge,--check,base.ail,ours.ail,theirs.ail status=1 expect=conflict: rules=merge.check.1
+```
+
+One side adds a parameter to `add` and updates its caller; the other adds a new caller with the old arity. Git and merge.decl.1 merge both cleanly; the check does not.
+
+```ail pkg=merge_semantic tool=merge,--check,base.ail,ours.ail,theirs.ail status=1 expect=(ours): rules=merge.check.2
+```
+
+```ail pkg=merge_semantic tool=merge,--check,--json,base.ail,ours.ail,theirs.ail status=1 expect="semantic":[{ rules=merge.check.4
+```
+
+**merge.check.1** — `ail merge --check BASE OURS THEIRS`, when BASE names a file, merges as above and writes nothing. If the merge has conflict hunks they are reported (merge.conflict.1) and nothing is checked. Otherwise OURS, THEIRS and the merged text are each checked as a program with `ail check`, and an error the merge has that neither side has is a *semantic conflict*. Errors are compared by file, rule and message with digits removed, so an error that only moved lines is not new. A clean result prints `ok: merged and checked, no new errors (merge.check.1)`.
+
+**merge.check.2** — Each semantic conflict is reported on standard error as `semantic: FILE:LINE: KEY (SIDE) with KEY2 (SIDE2), ...: RULE message (merge.check.2)`. KEY is the declaration that holds the error in the merged text and SIDE the side that changed it (`ours`, `theirs`, `both`, or `base` when neither did). The `with` list names the declarations the other side added, changed or removed whose name appears in KEY's text or in the message; it is left out when there are none. The exit status is 1 for any conflict, textual or semantic.
+
+**merge.check.3** — `ail merge --check OURS_REV THEIRS_REV [PATH]`, when the first argument is not a file, merges two git revisions: it adds scratch worktrees of OURS_REV, THEIRS_REV and their merge (made by `git merge` with this driver for `*.ail`), checks PATH (default `.`) in each, and reports as merge.check.2 with paths relative to the repository. A file git can't merge is reported as `conflict: FILE`. The worktrees are removed after; the repository's branches, index and files are unchanged. A revision that isn't one, or two with no common ancestor, is an error: exit status 2.
+
+**merge.check.4** — With `--json` the `--check` answer is one object on standard output, `{"merged":BOOL,"conflicts":[KEY...],"semantic":[{"file","line","decl","side","with":[KEY...],"rule","message"}...]}`.
+
+`--install` changes the git configuration of the repository it runs in, and the revision form needs a git repository, so their examples are counted, not run.
+
+```ail skip=context rules=merge.install.1,merge.check.3
+fn main()
+    print(1)
 ```
 
 ## MCP server
@@ -952,13 +1144,35 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
-**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones. `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead.
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. A `budget` is passed as `--budget N`; without one the command uses its own default.
 
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
 **mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
 
-```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2
+**mcp.call.3** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — When the command ran with `--json` (the always-JSON tools `ail_verify`, `ail_impact` and `task_*`, and the others when `json` is true) and its standard output is one JSON object, the result also carries that object as `structuredContent`. The text content is unchanged.
+
+**mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module` or `form` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
+
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+fn main()
+    print(1)
+```
+
+### Warm calls
+
+`ail mcp` keeps no compiler in memory; it saves the launcher's start and repeated answers
+([ADR 1056](../decisions/1056-warm-ail-mcp.md), amending ADR 0918).
+
+**mcp.warm.1** — A call whose command the launcher would only hand to the native CLI (`check` without `--budget`, `--from` or `--errors`, as `check-program`; `api` without `--budget`, `--from` or `--diff`; `ask`, `context`, `explain`, `edit`, `fix` and `review`) runs that CLI directly, the one named by `AIL_MCP_NATIVE`, which the `ail mcp` launcher sets. Every other call runs `ail` as `mcp.call.1` says. The answer is the same either way.
+
+**mcp.warm.2** — `ail_check`, `ail_ask`, `ail_context`, `ail_api`, `ail_explain` and `ail_fix` with `dry_run` are read-only. A read-only call with the same command line as an earlier one in the session, while the toolchain and the program's inputs are unchanged, gets that call's answer without running anything. The inputs are the contents of the `.ail` and `.h` files under the program's root (its directory, or the package), its `ail.pkg` and its `ail.lock`; for `ail_explain`, the spec. A package whose `ail.pkg` names a path with `..`, or a root with more than 4000 such files, is not memoized.
+
+**mcp.warm.3** — When a file under `compiler/` or `std/` is newer than the native CLI, the call goes through `ail`, which rebuilds it, and the memo is emptied.
+
+**mcp.warm.4** — Each tool result carries `_meta` with `ail/warm`: `memo`, `direct` or `launcher`. With `AIL_MCP_COLD` set, every call goes through `ail` and nothing is memoized.
+
+```ail tool=mcp rules=mcp.warm.1,mcp.warm.2,mcp.warm.3,mcp.warm.4
 fn main()
     print(1)
 ```
@@ -1094,7 +1308,7 @@ changed. *(ADR 0903)*
 **tool.new.2** — The generated `main.ail` passes `ail check`, `ail fmt --check`
 and its own `@test`. *(ADR 0903)*
 
-```ail rules=tool.new.1,tool.new.2
+```ail rules=tool.new.1,tool.new.2,tool.new.3,tool.new.4
 ## demo: say what this program does.
 
 ## The greeting for `who`.
@@ -1107,6 +1321,17 @@ fn main()
 @test fn greets()
     assert_eq(greet("ail"), "Hello, ail!")
 ```
+
+**tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
+`NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 350 tokens: where
+the language card is (`ail api --card .`), the loop (`ail task start`, `ail
+context FN`, edit, `ail task verify`, `ail task finish`), `ail explain RULE` for
+any diagnostic, and `ail ask` instead of grep. `.mcp.json` registers `ail mcp`
+on stdio under `mcpServers.ail`. The `agent_tools` suite checks both files.
+*(ADR 1046)*
+
+**tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
+the flag may come before or after `NAME`. *(ADR 1046)*
 
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
@@ -1395,8 +1620,8 @@ fn main()
 **edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
 object) from standard input and applies them in order to the file or
 package directory `PATH`. Each edit has an `"op"`: `replace_body`,
-`replace`, `insert`, `delete`, `rename` or `import`, with the keys of
-`edit.op.1–6`. Input that isn't such JSON is an error (exit 2)
+`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`
+or `move`, with the keys of `edit.op.1–6` and `edit.op.8–10`. Input that isn't such JSON is an error (exit 2)
 ([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
 **edit.in.3** — Input that doesn't start with `[` or `{` is the compact
 form: hunks (`edit.op.7`), each under a line holding an id, and
@@ -1447,6 +1672,48 @@ the found line's depth. A hunk of one `-` line and one `+` line whose `-`
 text is no whole line replaces that text where it occurs exactly once in
 the declaration. A hunk that matches nowhere, or in more than one place, is
 an error.
+**edit.op.8** — `{"op":"change_sig","id":ID,"params":[...],"args":{NAME:EXPR}}`
+changes a function's or method's parameters and every call to it that
+`ail api --symbols` reports. `params` is the new list in order, `self` left
+out (it stays first): an old parameter's name keeps it, `NAME Type` with an
+old name changes its type, and `NAME Type` with a new name adds one, whose
+argument at every call is `args[NAME]`. An old parameter not listed is
+removed, and so is its argument at every call. Each call's arguments are
+written positionally in the new order, without labels (`expr.call.3`). The
+program as edited so far must check, as for `edit.op.5`; a reference that is
+not a call (a function value), or a call with a comment inside its
+parentheses, fails the edit
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.9** — `{"op":"extract","id":ID,"from":LINE,"to":LINE,"name":NAME}`
+moves body lines into a new function `NAME` after the declaration and puts a
+call in their place. `from` is the trimmed text of exactly one line of the
+body; `to` (default: `from`) is the first line at or after it with that
+text. The lines must be whole statements of one block, must not `return`,
+and must not `break` or `continue` a loop that starts before them. The
+parameters are the locals the lines use that are in scope before them, with
+the checker's types (`api.loc.1`), in order of first use; a `mut` local the
+lines may change is a `mut` parameter, passed as `mut x`. A name the lines
+declare at their own depth and that is used after them is returned (several
+as a tuple) and bound by the call (`x := NAME(...)`). Lines that end the
+body of a function with a result become its result. When the enclosing
+function can fail and the lines use `?`, the new one can fail (`!T`) and the
+call has `?`. In a method with `self`, the new function is a method with the
+same receiver. The program as edited so far must check
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.10** — `{"op":"move","id":ID,"to":MODULE}`, for a package, moves a
+function, constant or type (a type with its `fn Type.name` methods,
+`mod.unit.4`) to the end of a file of module `MODULE` (`"file"` picks one;
+the default is its first file). Every reference is requalified: inside
+`MODULE` unqualified, elsewhere as `m.name` under the file's import of
+`MODULE`, which is added when missing (`mod.use.1–2`). In the moved text,
+names of the old module get its qualifier and the new file gets the `use`
+lines the text needs. The moved declarations are made `pub` when a reference
+is outside `MODULE`. A `use` of the old module that no longer qualifies
+anything is removed. A type with an `impl`, a moved body that names a
+declaration of its old module that isn't `pub` or of the root module, and a
+`MODULE` with no file fail the edit; an import cycle it makes is reported by
+the check (`mod.use.5`)
+([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
 **edit.out.1** — Every changed file is rewritten in canonical layout
 (`ail fmt`) when it parses.
 **edit.out.2** — The program is then checked and its diagnostics are
@@ -1466,6 +1733,8 @@ can see the edited text. Writes go to a temporary file beside the target and
 are renamed over it.
 **edit.out.4** — `--test` runs `ail test PATH` after an edit that was
 written without errors, and its report and exit status follow the summary.
+For a package, `PATH` is its root file: `main.ail`, or else its first file at
+the top.
 
 **edit.out.5** — `--impact` adds the edit's impact (`api.impact.1-4`) after the
 summary: the declarations it changed, the tests it can affect and the
@@ -1483,6 +1752,18 @@ has an `impact` member.
 ```
 
 ```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=sig.json expect=passed, rules=edit.op.8,edit.out.4
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=extract.json expect=passed, rules=edit.op.9
+```
+
+```ail pkg=edit_refactor tool=edit,--test,main.ail stdin=value.json expect=passed, rules=edit.op.9
+```
+
+```ail pkg=refactor_move tool=edit,--test,DIR stdin=move.json expect=passed, rules=edit.op.10,mod.use.1
 ```
 
 ```ail pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
@@ -1663,6 +1944,31 @@ fn main()
     print("hi")
 ```
 
+**verify.cert.1** — `ail verify --diff [--rev REV] [--mutate [--max N]] --attest OUT FILE` runs
+`verify.run.1-5` and writes one JSON object to `OUT`, ending with a newline: `cert` (1), `base` (the
+commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `files` (every path
+changed since REV and every untracked path, sorted, each `{"path","hash"}` with the `git hash-object`
+hash or `"deleted"`), `proved`, `tested`, `unverified`, `failures` (as in `verify.run.2-5`),
+`effects` (the effect changes, `api.impact.4`) and, with `--mutate` and a program that checks,
+`mutation`: `max`, `score` (`mutants`, `killed`, `survived`, `invalid` of `test.mutate.5`) and
+`survivors_in_changed`, the surviving mutants whose function is a changed declaration
+([ADR 1052](../decisions/1052-change-certificate.md)).
+**verify.cert.2** — The exit status of `--attest` is that of `verify.run.1`. `--attest` without
+`--diff`, and `--mutate` without `--attest`, are usage errors (exit 2).
+**verify.cert.3** — `ail verify --check CERT` re-runs the certificate: `ail verify --diff --rev BASE`
+with `--mutate --max N` when `CERT` has `mutation`, on `file`. It compares `cert`, `base`, `file`,
+`compiler`, `files`, `proved`, `tested`, `unverified`, `failures`, `effects` and `mutation`
+member by member, as compact JSON text. `rev` is not compared.
+**verify.cert.4** — `--check` prints `differs: KEY` with both values for each member that differs
+and exits 1; with none it prints `certificate holds` and exits 0. A file that is missing or not a
+certificate, or a program that cannot be re-run, exits 2. A certificate is evidence that
+reproduces, not identity: nothing is signed.
+
+```ail tool=verify,--check,nosuch.json status=2 expect=can't rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4
+fn main()
+    print("hi")
+```
+
 ## Shrinking a failure bundle
 
 **shrink.run.1** — `ail replay --shrink [--time MS] [-o OUT] BUNDLE` takes a failure
@@ -1816,4 +2122,96 @@ fn pay(n int) int
         assert_eq(pay(i), i + 1)
 fn main()
     print(pay(1))
+```
+
+## Proved contracts
+
+`ail prove` lists the contract checks the checker proves and leaves out
+([contract.prove.1-3](20-contracts.md),
+[ADR 1055](../decisions/1055-contracts-proved-by-interval-facts.md)).
+
+**prove.cmd.1** — `ail prove [--json] FILE|DIR` loads and checks the program as
+`ail check` does; a program with errors prints them and exits 2, as does any
+other flag or a missing operand. Otherwise it prints one line per check the
+prover looked at, function by function in the order they are written: for a
+`requires` at a call, ``FILE:LINE:COL requires `COND` of `F` in `G`: VERDICT``
+at the call, where `G` is the calling function; then for each `ensures` of a
+top-level function, ``FILE:LINE:COL ensures `COND` of `F`: VERDICT`` at the
+condition. `VERDICT` is
+`proved` or `checked` (still evaluated at run time). The last line is
+`N of M contract checks proved`. The status is 0.
+
+```ail tool=prove,FILE expect=proved rules=prove.cmd.1
+fn at(xs List[int], i int) int
+    requires i < xs.len()
+    xs[i]
+
+fn main()
+    xs := [3, 1, 4]
+    for i in 0..xs.len()
+        print(at(xs, i))
+```
+
+**prove.cmd.2** — With `--json` the answer is one object: `ail_api` (1),
+`prove` (1), `proved`, `total`, and `contracts`, a list with, for each line of
+`prove.cmd.1`, `kind` (`requires` or `ensures`), `fn`, `cond`, `at` (the call
+or the condition), `contract` (the condition), `in` (the calling function) and
+`proved`.
+
+```ail tool=prove,--json,FILE expect="proved":true rules=prove.cmd.2
+fn digit(n int) int
+    requires n >= 0
+    ensures result < 10
+    n % 10
+
+fn main()
+    print(digit(7))
+```
+
+## Trying patches
+
+`ail try PROGRAM [--set FILE]... [--apply]` checks and tests patches without
+touching the program ([ADR 0893](../decisions/0893-ail-try.md)). The first
+slice works on a scratch copy; an in-memory overlay is a later speed-up with
+the same output.
+
+**try.in.1** — A patch set is `ail edit` input (`edit.in.1`, `edit.in.3`).
+Each `--set FILE` is one set, in order; with no `--set` the one set is read from
+standard input. No set, an unknown option or a missing `PROGRAM` is an error:
+exit status 2.
+
+**try.run.1** — Each set is applied to its own copy of `PROGRAM` (a file or a
+directory) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
+check is the one `ail edit` runs. The copies are removed when the set is done,
+and `PROGRAM` is never written.
+
+**try.run.2** — A set that checks is followed by `ail test` on the copy, the whole
+program's tests (the affected set comes with the overlay). Tests that touch the
+disk run against the copy's files.
+
+**try.verdict.1** — One line per set, `set LABEL: check ok|N errors; tests N passed, M failed; patch ~T tokens`,
+with `LABEL` the set's file name (`stdin` for standard input) and `T` the estimate of
+`api.card.3` over the set. A set that doesn't check says `tests skipped`.
+
+**try.verdict.2** — A set that is not clean adds one indented line: its first
+diagnostic or its first failing test.
+
+**try.verdict.3** — A set whose edit can't be applied (`edit.in.2`) says
+`patch does not apply; check and tests skipped`, with the edit's error as the
+detail.
+
+**try.verdict.4** — Exit status is 0 when every set is clean (checks, all tests
+pass) and 1 otherwise.
+
+**try.apply.1** — `--apply` takes exactly one set and writes it to `PROGRAM` with
+`ail edit --if-clean` only when its verdict is clean. Otherwise nothing is
+written, the output says `not applied`, and the exit status is 1. With more than
+one `--set`, exit status 2.
+
+**try.apply.2** — If the real write fails after a clean verdict, the error is
+printed and the exit status is 2.
+
+```ail skip=bootstrap tool=try,--set,FILE rules=try.in.1,try.run.1,try.run.2,try.verdict.1,try.verdict.2,try.verdict.3,try.verdict.4,try.apply.1,try.apply.2
+fn main()
+    print(1)
 ```

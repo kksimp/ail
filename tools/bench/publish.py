@@ -23,11 +23,11 @@ def ratio(a, b):
 
 
 def speed(race, py):
-    head = ["program", "AIL", "gcc -O2", "clang -O2"] + (["Python"] if py else []) + ["AIL / gcc"] + (["AIL / Python"] if py else [])
+    head = ["program", "size", "AIL", "gcc -O2", "clang -O2"] + (["Python"] if py else []) + ["AIL / gcc"] + (["AIL / Python"] if py else [])
     rows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
     for r in race["rows"]:
         c = r["cells"]
-        line = [r["program"], cell(c.get("native")), cell(c.get("gcc")), cell(c.get("clang"))]
+        line = [r["program"], r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc")), cell(c.get("clang"))]
         if py:
             line.append(cell(c.get("python")))
         line.append(ratio(c.get("native"), c.get("gcc")))

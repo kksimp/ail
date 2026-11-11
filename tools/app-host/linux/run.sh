@@ -22,7 +22,7 @@ if [ ! -x "$exe" ] || [ "$here/host.c" -nt "$exe" ] || [ "$here/run.sh" -nt "$ex
     echo "app-host: building $exe" >&2
     mkdir -p "$here/build"
     # shellcheck disable=SC2046
-    gcc -O2 -Wall -Wextra -o "$exe" "$here/host.c" $(pkg-config --cflags --libs gtk+-3.0) -lm
+    gcc -O2 -Wall -Wextra -o "$exe" "$here/host.c" $(pkg-config --cflags --libs gtk+-3.0 fontconfig) -lm
 fi
 
 # Fonts the host prefers for text (Inter) and for colour emoji; a missing one only costs looks.

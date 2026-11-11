@@ -121,7 +121,17 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
 - [Research: beating C on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
 
-AI agents: read [AGENTS.md](AGENTS.md) first.
+AI agents: read [AGENTS.md](AGENTS.md) first, or [llms.txt](llms.txt) for the list of docs to load.
+
+### Agent kit for your project
+
+`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). For an existing project, add this to your agent file and register `ail mcp` on stdio in your agent's MCP config:
+
+```
+Language card: `ail api --card .`. Loop: `ail task start FILE GOAL`, `ail context FILE FN --budget 800`,
+edit, `ail task verify`, `ail task finish`. For any diagnostic run `ail explain RULE`.
+Never grep; use `ail ask FILE what calls FN`.
+```
 
 ## Contributing and security
 

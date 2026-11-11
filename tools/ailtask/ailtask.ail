@@ -1,11 +1,18 @@
 ## `ail task` in AIL (ADR 0917, task.*): one open task per directory, kept in `.ail-task`.
 ##   ail run tools/ailtask/ailtask.ail start PROGRAM GOAL... [--rev REV]
-##   ail run tools/ailtask/ailtask.ail status|verify|finish|abort [--json]
+##   ail run tools/ailtask/ailtask.ail status|verify|finish|abort|log [--json]
+##   verify --fix            applies the compiler's safe fixes before the check (fix.check.2)
+## Every `verify` adds a line to `.ail/task-log.jsonl` (task.log.1-3); nothing leaves the machine.
 ## It adds no analysis: `status` is `ail ask PROGRAM --affected --json`, `verify` is `ail check`
 ## then `ail test --affected`, and every answer ends with `next`, the one command to run after it.
 
 ## The task file in the current directory (task.state.1).
 STATE := ".ail-task"
+
+## The ledger of verify runs, one JSON object a line (task.log.1).
+LOG_DIR := ".ail"
+
+LOG := ".ail/task-log.jsonl"
 
 ## Lines of failing output `verify` shows (task.verify.3).
 TAIL_LINES := 20
@@ -16,6 +23,8 @@ struct Job
     rev str
     ## `none`, `green` or `red`: the last `verify`.
     last str
+    ## Lines the ledger had when the task opened: the task's own lines come after them (task.log.2).
+    mark int
 
 ## The compiler to drive: `$AIL`, else `./ail`.
 fn ail_path() str
@@ -26,7 +35,7 @@ fn quote(s str) str
 
 fn load_task() Job?
     text := fs.read_text(STATE) else return none
-    mut t := Job(program: "", goal: "", rev: "", last: "none")
+    mut t := Job(program: "", goal: "", rev: "", last: "none", mark: 0)
     for l in text.lines()
         at := l.find("=") else continue
         k := l.slice(0, at)
@@ -39,6 +48,8 @@ fn load_task() Job?
             t.rev = v
         elif k == "last"
             t.last = v
+        elif k == "mark"
+            t.mark = v.to_int() else 0
     if t.program.is_empty()
         return none
     t
@@ -46,7 +57,7 @@ fn load_task() Job?
 fn save_task(t Job) !
     fs.write_text(
         STATE,
-        "program={t.program}\ngoal={t.goal}\nrev={t.rev}\nlast={t.last}\n",
+        "program={t.program}\ngoal={t.goal}\nrev={t.rev}\nlast={t.last}\nmark={t.mark}\n",
     )? "writing {STATE}"
 
 ## The output's last `TAIL_LINES` lines.
@@ -66,8 +77,111 @@ fn ail(args List[str]) Ran
         return Ran(status: 2, out: "can't run ail: {err}")
     Ran(status: r.status, out: "{r.out}{r.err}")
 
+## A cheap token estimate, the one `ail api --card` uses (api.card.3, ADR 0311): a run of letters or digits
+## costs one token per five characters (at least one), any other non-space character one, a newline one.
+fn estimate_tokens(s str) int
+    mut tokens := 0
+    mut run := 0
+    for c in s.chars()
+        if c.is_alpha() or c.is_digit() or c == '_'
+            run += 1
+            continue
+        if run > 0
+            tokens += (run + 4) / 5
+            run = 0
+        if c == '\n' or not c.is_space()
+            tokens += 1
+    tokens + (run + 4) / 5
+
+## The rule IDs a toolchain output names, in order of first appearance: `error[R]`, `warning[R]`, `trap[R]` (task.log.1).
+fn rules_in(out str) List[str]
+    mut found := List[str]()
+    for l in out.lines()
+        t := l.trim()
+        for p in ["error[", "warning[", "trap["]
+            # A diagnostic line is `FILE:L:C: error[R]: ...` (a trap has no prefix).
+            from := if t.starts_with(p) then 0 else (t.find(": {p}") else -1) + 2
+            if from >= 0 and (t.starts_with(p) or from > 1)
+                rest := t.slice(from + p.len(), t.len())
+                at := rest.find("]") else continue
+                r := rest.slice(0, at)
+                if not r.is_empty()
+                    found.push(r)
+    found
+
+## `{"a":2,"b":1}` of the rules with how often each appears, first seen first.
+fn counts_json(rules List[str]) str
+    mut order := List[str]()
+    for r in rules
+        if not order.contains(r)
+            order.push(r)
+    mut parts := List[str]()
+    for r in order
+        parts.push("{quote(r)}:{[x for x in rules if x == r].len()}")
+    "\{{parts.join(",")}}"
+
+fn ledger_lines() List[str]
+    text := fs.read_text(LOG) else return []
+    [l for l in text.lines() if l.trim() != ""]
+
+## Adds one line to the ledger (task.log.1).
+fn append_log(line str) !
+    if not fs.exists(LOG_DIR)
+        fs.make_dir(LOG_DIR)? "making {LOG_DIR}"
+    fs.append_text(LOG, "{line}\n")? "writing {LOG}"
+
+## The text of `"key":` in a ledger line up to the next `,` or `}` (the ledger's own fixed layout, task.log.1).
+fn field(line str, key str) str
+    at := line.find("\"{key}\":") else return ""
+    rest := line.slice(at + key.len() + 3, line.len())
+    if rest.starts_with("\"")
+        return rest.slice(1, rest.len()).split("\"")[0]
+    if rest.starts_with("\{")
+        cut := rest.find("}") else rest.len() - 1
+        return "{rest.slice(0, cut)}}"
+    rest.split(",")[0].split("}")[0]
+
+## The rules `{"a":2}` holds, one entry per count.
+fn rules_of(obj str) List[str]
+    mut out := List[str]()
+    body := obj.trim().strip_prefix("\{") else ""
+    inner := body.strip_suffix("}") else ""
+    if inner.is_empty()
+        return out
+    for pair in inner.split(",")
+        cut := pair.split("\":")
+        if cut.len() != 2
+            continue
+        name := cut[0].trim().strip_prefix("\"") else ""
+        for _ in 0..(cut[1].to_int() else 0)
+            out.push(name)
+    out
+
+## The summary of ledger lines (task.log.2): `rounds`, `red` rounds, `fixed` fixes, toolchain `tokens` and the `rules` hit.
+fn summary_json(lines List[str]) str
+    mut red := 0
+    mut fixed := 0
+    mut tokens := 0
+    mut rules := List[str]()
+    for l in lines
+        if field(l, "result") == "red"
+            red += 1
+        fixed += field(l, "fixed").to_int() else 0
+        tokens += field(l, "tokens").to_int() else 0
+        rules.extend(rules_of(field(l, "rules")))
+    "\{\"rounds\":{lines.len()},\"red\":{red},\"fixed\":{fixed},\"tokens\":{tokens},\"rules\":{counts_json(rules)}}"
+
+## The ledger lines of the open task, or all of them with none open (task.log.2).
+fn scope_lines() List[str]
+    all := ledger_lines()
+    if t := load_task()
+        if t.mark < all.len()
+            return all[t.mark..]
+        return []
+    all
+
 fn usage() int
-    io.eprint("usage: ailtask start PROGRAM GOAL... [--rev REV] | status | verify | finish | abort  [--json]")
+    io.eprint("usage: ailtask start PROGRAM GOAL... [--rev REV] | status | verify [--fix] | finish | abort | log  [--json]")
     io.exit(2)
     2
 
@@ -108,7 +222,13 @@ fn start(args List[str], json bool) !int
     if got.status != 0
         io.eprint("error: {rev} can't be compared with {words[0]} (task.start.1)\n{got.out}")
         return 2
-    t := Job(program: words[0], goal: words[1..].join(" "), rev: rev, last: "none")
+    t := Job(
+        program: words[0],
+        goal: words[1..].join(" "),
+        rev: rev,
+        last: "none",
+        mark: ledger_lines().len(),
+    )
     save_task(t)?
     next := "edit {t.program}, then `ail task verify`"
     answer(
@@ -145,21 +265,42 @@ fn status(json bool) int
     )
     0
 
+## The `fixed N: ...` line `check --fix` printed (fix.check.1), or "".
+fn fixed_line_of(out str) str
+    for l in out.lines()
+        if l.starts_with("fixed ") and "0123456789".contains(l.slice(6, 7))
+            return l.trim()
+    ""
+
+## N of `fixed N: ...`, 0 for no line.
+fn fixed_count(line str) int
+    if line == ""
+        return 0
+    n := line.slice(6, line.len()).split(":")[0]
+    n.to_int() else 0
+
 ## `verify` (task.verify.1-3): check, then the affected tests; records the result for `finish`.
-fn verify(json bool) !int
+## With `fix` the check applies the safe fixes first (fix.check.2). Every run adds a ledger line (task.log.1).
+fn verify(json bool, fix bool) !int
     mut t := load_task() else return no_task()
+    t0 := time.now_ms()
     mut stage := "check"
     mut ok := true
     mut shown := ""
+    mut fixed := ""
+    mut raw := ""
     # The reproducible failure files `ail test --bundle-failure` wrote (task.verify.4).
     mut bundles := List[str]()
-    chk := ail(["check", t.program])
+    chk := ail(if fix then ["check", "--fix", t.program] else ["check", t.program])
+    fixed = fixed_line_of(chk.out)
+    raw = chk.out
     if chk.status != 0
         ok = false
         shown = tail(chk.out)
     else
         stage = "test"
         tst := ail(["test", t.program, "--affected", "--since", t.rev, "--bundle-failure"])
+        raw = "{raw}{tst.out}"
         if tst.status != 0
             ok = false
             shown = tail(tst.out)
@@ -179,18 +320,22 @@ fn verify(json bool) !int
     if bundles.len() > 0
         next = "`ail test --bundle {bundles[0]}` reruns the first failure; fix it, then `ail task verify`"
     result := if ok then "green" else "red"
-    answer(
-        json,
-        [
-            "\"result\":\"{result}\"",
-            "\"stage\":{quote(stage)}",
-            "\"output\":{quote(shown)}",
-            "\"bundles\":[{[quote(b) for b in bundles].join(",")}]",
-            "\"diff\":{report}",
-            "\"next\":{quote(next)}",
-        ],
-        "verify {result} at {stage}\n{shown}\nnext: {next}",
-    )
+    fields := [
+        "\"result\":\"{result}\"",
+        "\"stage\":{quote(stage)}",
+        "\"fixed\":{quote(fixed)}",
+        "\"output\":{quote(shown)}",
+        "\"bundles\":[{[quote(b) for b in bundles].join(",")}]",
+        "\"diff\":{report}",
+        "\"next\":{quote(next)}",
+    ]
+    lead := if fixed == "" then "" else "{fixed}\n"
+    text := "{lead}verify {result} at {stage}\n{shown}\nnext: {next}"
+    printed := if json then "\{{fields.join(",")}}" else text
+    nfixed := fixed_count(fixed)
+    # task.log.1: the wall time is the one field that differs between two runs of the same change.
+    append_log("\{\"stage\":{quote(stage)},\"result\":\"{result}\",\"tokens\":{estimate_tokens(printed)},\"fixed\":{nfixed},\"rules\":{counts_json(rules_in(raw))},\"ms\":{time.now_ms() - t0}}")?
+    print(printed)
     # task.verify.2
     if ok then 0 else 1
 
@@ -204,6 +349,7 @@ fn finish(json bool) !int
     if got.status != 0
         io.eprint("error: {got.out}")
         return 2
+    sum := summary_json(scope_lines())
     gone := proc.run("rm", ["-f", STATE]) else return 2
     if gone.status != 0
         return 2
@@ -214,9 +360,10 @@ fn finish(json bool) !int
             "\"goal\":{quote(t.goal)}",
             "\"verified\":\"green\"",
             "\"impact\":{got.out.trim()}",
+            "\"summary\":{sum}",
             "\"next\":\"none\"",
         ],
-        "task done: {t.goal}\nimpact: {got.out.trim()}",
+        "task done: {t.goal}\nimpact: {got.out.trim()}\nsummary: {sum}",
     )
     0
 
@@ -226,6 +373,18 @@ fn abort() int
     if gone.status != 0
         return 2
     print("task aborted: {t.goal}")
+    0
+
+## `log` (task.log.3): the ledger lines of the open task (all of them with none open), then their summary.
+fn log(json bool) int
+    lines := scope_lines()
+    sum := summary_json(lines)
+    if json
+        print("\{\"log\":[{lines.join(",")}],\"summary\":{sum}}")
+    else
+        for l in lines
+            print(l)
+        print("summary: {sum}")
     0
 
 fn main() !
@@ -238,7 +397,8 @@ fn main() !
     match args[0]
         "start" => code = start(rest, json)?
         "status" => code = status(json)
-        "verify" => code = verify(json)?
+        "verify" => code = verify(json, args.contains("--fix"))?
+        "log" => code = log(json)
         "finish" => code = finish(json)?
         "abort" => code = abort()
         _ => code = usage()

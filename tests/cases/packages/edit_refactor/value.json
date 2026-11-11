@@ -1,0 +1,1 @@
+[{"op":"extract","id":"report","from":"doubled := total * 2","to":"doubled + area(2, 3)","name":"finish"}]

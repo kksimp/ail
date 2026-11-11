@@ -1,0 +1,9 @@
+# A map lookup of a missing key traps.
+write t4.ail draft.ail.txt
+run ail test t4.ail
+run ail edit t4.ail --test <<E
+ages_of
+-[ages[n] for n in names]
++[ages.get(n) else 0 for n in names]
+E
+run ail run t4.ail

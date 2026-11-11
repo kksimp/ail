@@ -1,0 +1,67 @@
+## `ail card [TOPIC]` (tool.card.1-3, ADR 1051): the core card, or one topic of
+## the full card, or the signatures of one std module (`ail card std.fs`). The
+## cards are read from `docs/` in the repository, `AIL_ROOT` or the parent of
+## `AIL_COMPILER`, as `ail explain` reads the spec.
+
+CARD_TOPIC_USAGE := "usage: ail card [TOPIC]   e.g. ail card errors, ail card std.fs"
+
+## The text of a `docs/` file, or "" when it can't be read.
+fn card_doc(name str) str
+    fs.read_text(path.join(find_root(), "docs/{name}")) else ""
+
+## The `## ` headings of the full card, lower case, backticks removed.
+fn card_headings(text str) List[str]
+    mut out := List[str]()
+    for line in text.lines()
+        h := line.strip_prefix("## ") else
+            continue
+        out.push(h.replace("`", "").to_lower())
+    out
+
+## The section of the full card whose heading holds `topic` (tool.card.2).
+fn card_section(text str, topic str) str
+    mut inside := false
+    mut out := ""
+    for line in text.lines()
+        h := line.strip_prefix("## ") else ""
+        if h != ""
+            if inside
+                break
+            if h.replace("`", "").to_lower().contains(topic)
+                inside = true
+        if inside
+            out = "{out}{line}\n"
+    out
+
+## `ail card ...`: 0 printed, 1 nothing known by that topic, 2 an error.
+pub fn card_topic_command(args List[str]) int
+    if args.len() > 1
+        io.eprint(CARD_TOPIC_USAGE)
+        return 2
+    if args.is_empty() or args[0] == "core"
+        core := card_doc("language-card-core.md")
+        if core == ""
+            io.eprint("error: can't read docs/language-card-core.md under {find_root()} (tool.card.1)")
+            return 2
+        print(core.trim_end())
+        return 0
+    topic := args[0].to_lower()
+    owner := topic.strip_prefix("std.") else ""
+    if owner != ""
+        mut found := 0
+        for f in find_index()
+            if f.owner == owner
+                print("{f.owner}.{f.sig}   ({f.rule})")
+                found += 1
+        if found > 0
+            return 0
+    full := card_doc("language-card.md")
+    if full == ""
+        io.eprint("error: can't read docs/language-card.md under {find_root()} (tool.card.2)")
+        return 2
+    section := card_section(full, topic)
+    if section == ""
+        io.eprint("error: no card topic `{args[0]}` (tool.card.3); topics: {card_headings(full).join(", ")}, core, std.MODULE")
+        return 1
+    print(section.trim_end())
+    0
