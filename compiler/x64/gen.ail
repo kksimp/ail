@@ -1186,15 +1186,25 @@ fn Gen.push(mut self, i mir.Inst)
     if not room
         a.alu_rm("cmp", RAX, at(l, 8))
         a.jcc(CC_E, slow)
-    # The length goes up first, so r10 is free for the elements' address
-    # (nothing runs between the two stores).
-    a.alu_mi("add", at(l, 0), 1)
-    a.mov_rm(S0, at(l, 16))
     v := i.arg(1)
-    if f.vals[v].is_float()
-        a.vmovsd_mr(at_index(S0, RAX, 8, 0), xmm(v, X0))
+    fl := f.vals[v].is_float()
+    w := if fl then 8 else mir.push_bytes(i.name)
+    if fl or not needs_reg(v, w)
+        # The elements' address in r10, then the new length from rax; a
+        # list held in r10 itself is loaded again for that store.
+        a.mov_rm(S0, at(l, 16))
+        if fl
+            a.vmovsd_mr(at_index(S0, RAX, 8, 0), xmm(v, X0))
+        else
+            store_w(at_index(S0, RAX, w, 0), v, w)
+        a.alu_ri("add", RAX, 1)
+        a.mov_mr(at(gpr(i.arg(0), S0), 0), RAX)
     else
-        w := mir.push_bytes(i.name)
+        # The value needs rax too: the length goes up in memory first, so
+        # r10 is free for the elements' address (nothing runs between the
+        # two stores).
+        a.alu_mi("add", at(l, 0), 1)
+        a.mov_rm(S0, at(l, 16))
         store_at(at_index(S0, RAX, w, 0), v, w)
     if room
         return
