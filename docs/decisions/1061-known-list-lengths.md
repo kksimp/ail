@@ -1,4 +1,4 @@
-# 1057. Native: lists built to a known count check against that count
+# 1061. Native: lists built to a known count check against that count
 
 - **Status:** Accepted
 - **Date:** 2026-11-11
