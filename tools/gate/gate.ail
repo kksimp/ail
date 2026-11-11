@@ -614,9 +614,93 @@ fn Gate.fix(mut self, tmp str)
         red("fix unfixable", "exit {u.status}\n{u.out}")
     sh_run("rm -rf {scratch}")
 
+## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
+## flag, that one wrapper has and the other lacks is red. A text check, not a behaviour check.
+WRAPPER_COMMANDS := [
+    "run",
+    "build",
+    "check",
+    "test",
+    "fmt",
+    "fix",
+    "diff",
+    "explain",
+    "edit",
+    "ask",
+    "attach",
+    "api",
+    "effects",
+    "pkg",
+    "new",
+    "header",
+    "verify",
+    "infer",
+    "task",
+    "mcp",
+    "lsp",
+    "sanitize",
+    "leak",
+    "replay",
+    "selftest",
+    "version",
+    "context",
+    "review",
+]
+
+## The `--flag` words in the arm heads of `run`'s option loop in `ail` (between `run_args=("$@")` and `run_skip=$k`),
+## without a trailing `)` or an `=VALUE`.
+fn run_flags(wp_text str) List[str]
+    mut wp_flags := List[str]()
+    mut wp_in := false
+    for wp_line in wp_text.lines()
+        if wp_line.contains("run_args=(\"$@\")")
+            wp_in = true
+            continue
+        if wp_line.contains("run_skip=$k")
+            wp_in = false
+        if not wp_in
+            continue
+        for wp_word in wp_line.trim().words()
+            if wp_word == "|"
+                continue
+            if not wp_word.starts_with("--")
+                break
+            mut wp_flag := wp_word
+            if wp_flag.ends_with(")")
+                wp_flag = wp_flag.slice(0, wp_flag.len() - 1)
+            if wp_at := wp_flag.find("=")
+                wp_flag = wp_flag.slice(0, wp_at)
+            if not wp_flags.contains(wp_flag)
+                wp_flags.push(wp_flag)
+            if wp_word.ends_with(")")
+                break
+    wp_flags
+
+fn Gate.wrapper_parity(mut self)
+    wp_sh := slurp("ail")
+    wp_ps := slurp("ail.ps1")
+    if wp_sh.is_empty() or wp_ps.is_empty()
+        self.red("wrapper parity", "could not read ail or ail.ps1")
+        return
+    for wp_cmd in WRAPPER_COMMANDS
+        mut wp_known := wp_sh.contains("= {wp_cmd} ]") or wp_sh.contains("{wp_cmd} |")
+        if wp_sh.contains("{wp_cmd})")
+            wp_known = true
+        if not wp_known
+            self.red("wrapper parity: ail", "`{wp_cmd}` is not dispatched in ail")
+        if not wp_ps.contains("'{wp_cmd}'")
+            self.red("wrapper parity: ail.ps1", "`{wp_cmd}` is not dispatched in ail.ps1")
+    wp_flags := run_flags(wp_sh)
+    if wp_flags.len() < 20
+        self.red("wrapper parity", "only {wp_flags.len()} run flags found in ail")
+    for wp_flag in wp_flags
+        if not wp_ps.contains(wp_flag)
+            self.red("wrapper parity: ail.ps1", "`run {wp_flag}` is in ail but not in ail.ps1")
+
 ## `ail effects` and `--deny` (effects.rs), `check --errors` and `fails_with`
 ## (error_paths.rs), and the process-level diagnostics of cli_errors.rs.
 fn Gate.cli_effects(mut self, tmp str)
+    self.wrapper_parity()
     e := ail_run(["effects", "examples/commands.ail"]) else return
     if e.status != 0 or e.out != slurp("tests/effects/commands.effects")
         red("effects commands.ail", e.out)

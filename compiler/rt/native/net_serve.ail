@@ -596,7 +596,7 @@ fn serve_arm(h int, o int)
 
 ## The readiness set of server `h` (listener object `o`, descriptor `fd`),
 ## made on first use with the listener and every connection already parked
-## on it: its descriptor, or 0 where there is none (Windows).
+## on it: the set, or 0 when the system gave none.
 fn serve_poller(h int, o int, fd int) int
     ep := load64(o + NET_POLLER)
     if ep != 0
@@ -607,7 +607,7 @@ fn serve_poller(h int, o int, fd int) int
         return 0
     rdy_listen(n, fd, 0)
     if atomic_cas(o + NET_POLLER, 0, n) != 0
-        net_sys_close(n)
+        rdy_close(n)
         ep2 := load64(o + NET_POLLER)
         return if ep2 > 0 then ep2 else 0
     t := load64(global(NET_TAB))

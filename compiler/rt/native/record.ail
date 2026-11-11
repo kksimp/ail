@@ -909,6 +909,71 @@ fn rec_c_scan_entry() int
     rec_c_next()
     e
 
+## `fs.mode`: an int that can fail, so the replay checks for a failure first.
+fn rec_fs_mode(path str, at str) int
+    if rec_mode() == 2
+        p := rec_next("fs.mode")
+        if rec_failed(p)
+            rec_raise(p, at)
+            return 0
+        mut i := p
+        mut v := 0
+        while load8(i) >= 48 and load8(i) <= 57
+            v = v * 10 + load8(i) - 48
+            i += 1
+        return v
+    r := fs_mode(path, at)
+    s := rec_begin("fs.mode", 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_int(s, r)
+        rec_end(s)
+    r
+
+fn rec_fs_set_mode(path str, mode int, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.set_mode", at)
+        return
+    fs_set_mode(path, mode, at)
+    rec_w_unit("fs.set_mode", 1)
+
+fn rec_fs_set_modified(path str, ms int, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.set_modified", at)
+        return
+    fs_set_modified(path, ms, at)
+    rec_w_unit("fs.set_modified", 1)
+
+fn rec_fs_read_link(path str, at str) str
+    if rec_mode() == 2
+        return rec_r_str("fs.read_link", at)
+    r := fs_read_link(path, at)
+    rec_w_str("fs.read_link", r, 1)
+    r
+
+fn rec_fs_symlink(to str, path str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.symlink", at)
+        return
+    fs_symlink(to, path, at)
+    rec_w_unit("fs.symlink", 1)
+
+fn rec_fs_truncate(path str, len int, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.truncate", at)
+        return
+    fs_truncate(path, len, at)
+    rec_w_unit("fs.truncate", 1)
+
+fn rec_fs_write_at(path str, off int, data str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.write_at", at)
+        return
+    fs_write_at(path, off, data, at)
+    rec_w_unit("fs.write_at", 1)
+
 fn rec_env_vars() int
     if rec_mode() == 2
         p := rec_next("env.vars")
