@@ -14,10 +14,11 @@ PowerShell 7.
 - Windows PowerShell 5.1 or PowerShell 7, and `git`. Nothing needs
   administrator rights.
 - Internet access on the first run, to download the seed.
-- For `ail test` on a package, and for the gate: `sh`, `mktemp`, `cp`. They
-  come with [Git for Windows](https://git-scm.com/download/win) in
-  `C:\Program Files\Git\usr\bin`; add that directory to `PATH` if `ail test`
-  reports that it can't run `mktemp`.
+- `ail test`, `ail diff`, `ail verify` and `ail infer` need only `git` (ADR 1059):
+  they use no Unix program. Only the gate under `tools/gate/`, which is not a
+  shipped command, needs `sh`, `mktemp` and `cp`, which come with
+  [Git for Windows](https://git-scm.com/download/win) in
+  `C:\Program Files\Git\usr\bin`.
 
 ## Install and first run
 

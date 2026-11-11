@@ -118,5 +118,8 @@ if ($alone.Count -gt 0) { Run-Pool $alone 1 }
 $times | Sort-Object Seconds -Descending | ForEach-Object { "$($_.Seconds)`t$($_.Suite)" } | Set-Content (Join-Path $out 'times.log')
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'ps1-args-test.ps1') *> (Join-Path $out 'ps1_args.log')
 if ($LASTEXITCODE -ne 0) { $fails++; 'RED ps1_args'; Get-Content (Join-Path $out 'ps1_args.log') | Select-Object -First 8 }
+# The shipped commands with only git on PATH (ADR 1059).
+$shipped = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'win-shipped-tools.ps1') 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { $fails++; 'RED shipped tools'; $shipped }
 if ($fails -eq 0) { 'GATE GREEN' } else { "GATE RED ($fails failures); logs in $out" }
 exit ([int]($fails -gt 0))
