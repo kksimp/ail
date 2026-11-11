@@ -21,6 +21,7 @@ json 22 0
 lex 24 7
 lsp 15 0
 mcp 12 0
+mem 18 0
 merge 15 0
 mod 29 2
 native 46 0
@@ -34,7 +35,7 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 365 1
+std 366 1
 task 16 0
 test 35 0
 tool 14 0
@@ -44,4 +45,4 @@ try 10 0
 type 123 10
 unsafe 21 0
 verify 9 0
-all 1355 54
+all 1374 54
