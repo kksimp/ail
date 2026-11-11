@@ -1,0 +1,1 @@
+[{"op":"extract","id":"report","from":"mut total := 0","to":"total += x","name":"sum_of"}]

@@ -1,0 +1,936 @@
+## The refactoring edits `change_sig`, `extract` and `move` (edit.op.8-10,
+## ADR 1054). Like `rename` (edit.op.5) each needs the program as edited so
+## far to check, and rewrites the text at the places the checker's references
+## (`api.collect_refs`, api.ref.1) name. The result is formatted and checked
+## with the rest (edit.out.1-2).
+use api
+use ast
+use check
+use load
+
+## The program as edited so far, loaded and checked, and its references.
+struct Checked
+    prog ast.Program
+    analysis check.Analysis
+    found api.Found
+
+## Load and check the working copy; `none`, with `err` set, when it has
+## errors. `op` and `rule` name the edit in the message.
+fn checked(mut work Work, op str, rule str) Checked?
+    mut over := Map[str, str]()
+    for i in 0..work.paths.len()
+        over[work.paths[i]] = work.texts[i]
+    loaded := load.load_with(work.root, work.std, over) else err
+        work.fail("a {op} needs a program that loads: {err.message} ({rule})")
+        return none
+    if loaded.diags.len() > 0
+        d := loaded.diags[0]
+        work.fail("a {op} needs a program that checks; first error: {d.msg} [{d.rule}] ({rule})")
+        return none
+    analysis := check.analyze(loaded.program, true)
+    for d in analysis.report.diags
+        if not d.warning and (work.package or d.rule != "mod.main.1")
+            work.fail("a {op} needs a program that checks; first error: {d.message} [{d.rule}] ({rule})")
+            return none
+    Checked(
+        prog: loaded.program,
+        analysis: analysis,
+        found: api.collect_refs(loaded.program, analysis.symbols, analysis.weak_symbols),
+    )
+
+## One reference in the working copy: the id it names, the file's index and
+## the 1-based line and column it is written at.
+struct Place
+    id str
+    file int
+    line int
+    col int
+
+fn places(work Work, ck Checked) List[Place]
+    mut out := List[Place]()
+    prog := ck.prog
+    for r in ck.found.refs
+        mut at := -1
+        for i in 0..prog.files.len()
+            if prog.files[i].base < r.pos.line
+                at = i
+        if at < 0
+            continue
+        mut f := work.index(prog.files[at].path)
+        if f < 0 and not work.package
+            f = 0
+        line := r.pos.line - prog.files[at].base
+        if f >= 0
+            out.push(Place(id: r.id, file: f, line: line, col: r.pos.col))
+    out
+
+## The first line of file `f` in the checker's positions.
+fn file_base(work Work, ck Checked, f int) int
+    for pf in ck.prog.files
+        if work.index(pf.path) == f
+            return pf.base
+    if not work.package and ck.prog.files.len() > 0
+        return ck.prog.files[0].base
+    0
+
+## The id the references use for `full`, declared in file `file`: a
+## package's declarations carry their module (api.pkg.1).
+fn want_id(work Work, full str, file int) str
+    c := full.find(":") else 0
+    bare := full.slice(c + 1, full.chars().len())
+    module := work.module(work.paths[file])
+    if work.package and module != "" and not bare.starts_with("{module}.")
+        return qualified(full, module)
+    full
+
+## `id` with its kind: a bare name becomes the id it stands for (edit.id.3).
+fn full_id(mut work Work, id str) str
+    if id.contains(":")
+        return id
+    h := work.find(id)
+    h.decl.id
+
+## The character index of 1-based `line` and `col` in `cs`; -1 past the end.
+fn offset_of(cs List[char], line int, col int) int
+    mut l := 1
+    mut i := 0
+    while l < line and i < cs.len()
+        if cs[i] == '\n'
+            l += 1
+        i += 1
+    if l < line then -1 else i + col - 1
+
+## Where `name` starts at or after `from`: a qualified reference
+## (`geo.origin`) is reported at its qualifier. -1 when it isn't there.
+fn name_at(cs List[char], from int, name str) int
+    mut i := from
+    while i >= 0 and i < cs.len() and not text_at(cs, i, name)
+        mut wlen := 0
+        while i + wlen < cs.len() and ident_char(cs[i + wlen])
+            wlen += 1
+        if wlen == 0 or i + wlen >= cs.len() or cs[i + wlen] != '.'
+            return -1
+        i += wlen + 1
+    n := name.chars().len()
+    if not text_at(cs, i, name) or (i + n < cs.len() and ident_char(cs[i + n]))
+        return -1
+    i
+
+## A bracketed list: the index of its closing bracket (-1 when it isn't
+## closed), its top-level commas, and whether a comment is inside.
+struct Brackets
+    close int
+    commas List[int]
+    comment bool
+
+## The list that opens at `cs[open]`. Strings (with their `{...}` parts),
+## chars and comments are skipped.
+fn brackets(cs List[char], open int) Brackets
+    mut depth := 0
+    # -1: inside a string; k >= 0: inside a `{...}` of a string opened at depth k.
+    mut modes := List[int]()
+    mut commas := List[int]()
+    mut comment := false
+    mut i := open
+    while i < cs.len()
+        ch := cs[i]
+        if modes.len() > 0 and modes[modes.len() - 1] == -1
+            if ch == '\\'
+                i += 2
+                continue
+            if ch == '"'
+                modes.pop()
+            elif ch == '\{'
+                modes.push(depth)
+            i += 1
+            continue
+        if ch == '"'
+            modes.push(-1)
+        elif ch == '\''
+            mut j := i + 1
+            if j < cs.len() and cs[j] == '\\'
+                j += 2
+            while j < cs.len() and cs[j] != '\''
+                j += 1
+            i = j
+        elif ch == '#'
+            comment = true
+            while i < cs.len() and cs[i] != '\n'
+                i += 1
+            continue
+        elif ch == '(' or ch == '[' or ch == '\{'
+            depth += 1
+        elif ch == ')' or ch == ']' or ch == '}'
+            if ch == '}' and modes.len() > 0 and modes[modes.len() - 1] == depth
+                modes.pop()
+            else
+                depth -= 1
+                if depth == 0
+                    return Brackets(close: i, commas: commas, comment: comment)
+        elif ch == ',' and depth == 1 and modes.len() == 0
+            commas.push(i)
+        i += 1
+    Brackets(close: -1, commas: commas, comment: comment)
+
+## The items of the list at `open`, trimmed; a trailing comma adds none.
+fn pieces(cs List[char], open int, b Brackets) List[str]
+    mut out := List[str]()
+    mut from := open + 1
+    mut ends := b.commas
+    ends.push(b.close)
+    for e in ends
+        out.push(cs[from..e].join("").trim())
+        from = e + 1
+    if out.len() > 0 and out[out.len() - 1] == ""
+        out.pop()
+    out
+
+## `cs` with the items of the list from `open` to `close` replaced.
+fn replace_list(cs List[char], open int, close int, items List[str]) List[char]
+    mut out := cs[0..open + 1]
+    out.extend(items.join(", ").chars())
+    out.extend(cs[close..])
+    out
+
+## The index of the `(` after a name that ends before `i`, past a `[...]`
+## of type arguments; -1 when there is none.
+fn paren_after(cs List[char], i int) int
+    mut j := i
+    if j < cs.len() and cs[j] == '['
+        b := brackets(cs, j)
+        if b.close < 0
+            return -1
+        j = b.close + 1
+    if j < cs.len() and cs[j] == '(' then j else -1
+
+## A parameter or argument split into its `mut ` or `move ` and the rest.
+fn split_mode(piece str)(str, str)
+    mut pre := ""
+    mut rest := piece.trim()
+    for w in ["mut ", "move "]
+        if r := rest.strip_prefix(w)
+            pre = w
+            rest = r.trim_start()
+    (pre, rest)
+
+## The name a parameter starts with (`self` for a receiver).
+fn lead_name(piece str) str
+    word(split_mode(piece).1)
+
+## The label of an argument `name: value` (expr.call.3); "" for a positional one.
+fn arg_label(piece str) str
+    rest := split_mode(piece).1
+    n := word(rest)
+    if n == ""
+        return ""
+    after := skip(rest, n.chars().len()).trim_start()
+    if after.starts_with(":") and not after.starts_with(":=") then n else ""
+
+## A labelled argument without its label: `mut v: xs` is `mut xs`.
+fn unlabeled(piece str) str
+    m := split_mode(piece)
+    c := m.1.find(":") else return piece.trim()
+    "{m.0}{skip(m.1, c + 1).trim()}"
+
+## A text edit's outcome: the new characters, or why it can't be made.
+struct Edited
+    cs List[char]
+    err str
+
+## What `change_sig` does to the declaration and to each call.
+struct SigPlan
+    name str
+    old_names List[str]
+    self_piece str
+    new_pieces List[str]
+    ## For each new parameter: the old one it was (-1 when added), and an added one's argument.
+    from_old List[int]
+    new_args List[str]
+
+## The list of the call or declaration whose name is reported at `i`.
+fn list_at(cs List[char], i int, name str, where str)(int, Brackets, str)
+    none_found := Brackets(close: -1, commas: [], comment: false)
+    start := name_at(cs, i, name)
+    if start < 0
+        return (-1, none_found, "{where} doesn't hold `{name}`")
+    open := paren_after(cs, start + name.chars().len())
+    if open < 0
+        msg := "{where} uses `{name}` as a value, not in a call; change it by hand"
+        return (-1, none_found, msg)
+    b := brackets(cs, open)
+    if b.close < 0
+        return (-1, b, "{where}: the `(` after `{name}` isn't closed")
+    if b.comment
+        msg := "{where}: a comment is inside the parentheses after `{name}`; move it out first"
+        return (-1, b, msg)
+    (open, b, "")
+
+## A call reported at `i`, its arguments put in the new order.
+fn rewrite_call(cs List[char], i int, plan SigPlan, where str) Edited
+    found := list_at(cs, i, plan.name, where)
+    if found.2 != ""
+        return Edited(cs: cs, err: found.2)
+    args := pieces(cs, found.0, found.1)
+    if args.len() != plan.old_names.len()
+        return Edited(
+            cs: cs,
+            err: "{where}: the call has {args.len()} arguments; `{plan.name}` takes {plan.old_names.len()}",
+        )
+    mut by_param := ["" for n in plan.old_names]
+    mut positional := 0
+    for a in args
+        lab := arg_label(a)
+        if lab == ""
+            by_param[positional] = a
+            positional += 1
+        else
+            k := plan.old_names.index_of(lab) else
+                return Edited(cs: cs, err: "{where}: `{lab}` is not a parameter of `{plan.name}`")
+            by_param[k] = unlabeled(a)
+    mut out := List[str]()
+    for j in 0..plan.from_old.len()
+        k := plan.from_old[j]
+        out.push(if k >= 0 then by_param[k] else plan.new_args[j])
+    Edited(cs: replace_list(cs, found.0, found.1.close, out), err: "")
+
+## The declaration's own parameter list.
+fn rewrite_sig(cs List[char], i int, plan SigPlan, where str) Edited
+    found := list_at(cs, i, plan.name, where)
+    if found.2 != ""
+        return Edited(cs: cs, err: found.2)
+    mut items := List[str]()
+    if plan.self_piece != ""
+        items.push(plan.self_piece)
+    items.extend(plan.new_pieces)
+    Edited(cs: replace_list(cs, found.0, found.1.close, items), err: "")
+
+## `{"op":"change_sig","id":ID,"params":[...],"args":{NAME:EXPR}}`
+## (edit.op.8): `params` is the new parameter list in order, each an old
+## parameter's name, an old name with a new type (`n int`) or a new
+## `name Type`; an old one left out is removed. Every call is rewritten to
+## match, and an added parameter's argument is its `args` expression.
+@allow("expr.match.3") fn change_sig(mut work Work, op J)
+    id := need(mut work, op, "change_sig", "id")
+    if work.err != ""
+        return
+    mut wanted := List[str]()
+    lv := op.get("params") else
+        work.fail("`change_sig` needs \"params\", a list (edit.op.8)")
+        return
+    match lv
+        Arr(xs) =>
+            for x in xs
+                match x
+                    Str(s) => wanted.push(s.trim())
+                    _ => work.fail("each of `change_sig`'s \"params\" is a string (edit.op.8)")
+        _ => work.fail("`change_sig` needs \"params\", a list (edit.op.8)")
+    if work.err != ""
+        return
+    full := full_id(mut work, id)
+    if work.err != ""
+        return
+    if not (full.starts_with("fn:") or full.starts_with("method:"))
+        work.fail("`{full}` is not a function or method (edit.op.8)")
+        return
+    decl := work.declared_at(full)
+    if work.err != ""
+        return
+    ck := checked(mut work, "change_sig", "edit.op.8") else return
+    sig_cs := work.texts[decl.file].chars()
+    sig_where := "{work.paths[decl.file]}:{decl.line}"
+    sig := list_at(sig_cs, offset_of(sig_cs, decl.line, decl.col), decl.name, sig_where)
+    if sig.2 != ""
+        work.fail("{sig.2} (edit.op.8)")
+        return
+    mut self_piece := ""
+    mut olds := List[str]()
+    for p in pieces(sig_cs, sig.0, sig.1)
+        if lead_name(p) == "self"
+            self_piece = p
+        else
+            olds.push(p)
+    old_names := [lead_name(p) for p in olds]
+    given := op.get("args") else J.Null
+    mut new_pieces := List[str]()
+    mut from_old := List[int]()
+    mut new_args := List[str]()
+    mut seen := Set[str]()
+    for w in wanted
+        n := lead_name(w)
+        if n == "" or n == "self"
+            work.fail("`{w}` is not a parameter; `self` stays as it is (edit.op.8)")
+            return
+        if not seen.add(n)
+            work.fail("`{n}` is listed twice (edit.op.8)")
+            return
+        k := old_names.index_of(n) else -1
+        if k >= 0
+            new_pieces.push(if split_mode(w).1 == n then olds[k] else w)
+            from_old.push(k)
+            new_args.push("")
+        elif not w.contains(" ")
+            work.fail("`{n}` is not a parameter of `{full}`; a new one needs a type, as `{n} int` (edit.op.8)")
+            return
+        else
+            a := given.str_of(n) else
+                work.fail("the new parameter `{n}` needs its argument in \"args\" (edit.op.8)")
+                return
+            new_pieces.push(w)
+            from_old.push(-1)
+            new_args.push(a)
+    plan := SigPlan(
+        name: decl.name,
+        old_names: old_names,
+        self_piece: self_piece,
+        new_pieces: new_pieces,
+        from_old: from_old,
+        new_args: new_args,
+    )
+    want := want_id(work, full, decl.file)
+    mut sites := List[Place]()
+    for p in places(work, ck)
+        if p.id == want and not (p.file == decl.file and p.line == decl.line and p.col == decl.col)
+            sites.push(p)
+    for f in 0..work.paths.len()
+        mut mine := [(p.line, p.col, false) for p in sites if p.file == f]
+        if f == decl.file
+            mine.push((decl.line, decl.col, true))
+        if mine.len() == 0
+            continue
+        # From the last place to the first, so earlier places keep their positions.
+        mut cs := work.texts[f].chars()
+        mut last := (0, 0)
+        for s in mine.sorted(by: |x| (0 - x.0, 0 - x.1))
+            if (s.0, s.1) == last
+                continue
+            last = (s.0, s.1)
+            where := "{work.paths[f]}:{s.0}:{s.1}"
+            at := offset_of(cs, s.0, s.1)
+            r := if s.2 then rewrite_sig(cs, at, plan, where) else rewrite_call(cs, at, plan, where)
+            if r.err != ""
+                work.fail("{r.err}; nothing was changed (edit.op.8)")
+                return
+            cs = r.cs
+        work.texts[f] = cs.join("")
+
+## The one line of `lines[from..to]` whose trimmed text is `text`: -1 for
+## none, -2 for several.
+fn line_of(lines List[str], from int, to int, text str) int
+    mut at := -1
+    for i in from..to
+        if i < lines.len() and lines[i].trim() == text
+            if at >= 0
+                return -2
+            at = i
+    at
+
+## The first line of `lines[from..to]` whose trimmed text is `text`, -1 for none.
+fn first_line_of(lines List[str], from int, to int, text str) int
+    for i in from..to
+        if i < lines.len() and lines[i].trim() == text
+            return i
+    -1
+
+## The code of a line: string literals blanked and the comment cut.
+fn code_of(line str) str
+    mut out := List[char]()
+    mut in_str := false
+    mut prev := ' '
+    for ch in line.chars()
+        if ch == '"' and prev != '\\'
+            in_str = not in_str
+            out.push(' ')
+        elif in_str
+            out.push(' ')
+        elif ch == '#'
+            break
+        else
+            out.push(ch)
+        prev = ch
+    out.join("")
+
+## The identifiers of `s`, in order.
+fn idents(s str) List[str]
+    mut out := List[str]()
+    mut cur := List[char]()
+    for ch in s.chars()
+        if ident_char(ch)
+            cur.push(ch)
+        elif cur.len() > 0
+            out.push(cur.join(""))
+            cur.clear()
+    if cur.len() > 0
+        out.push(cur.join(""))
+    out
+
+fn has_word(line str, w str) bool
+    idents(code_of(line)).contains(w)
+
+## Whether a `for`, `while` or `par for` among `lines[lo..i]` encloses line `i`.
+fn loop_encloses(lines List[str], lo int, i int) bool
+    mut cur := indent_of(lines[i])
+    mut j := i - 1
+    while j >= lo
+        l := lines[j]
+        if l.trim() != "" and indent_of(l) < cur
+            cur = indent_of(l)
+            w := first_word(l)
+            if w == "for" or w == "while" or w == "par"
+                return true
+        j -= 1
+    false
+
+## api.loc.2, as `in_scope` in api/query.ail: whether local `l` is in scope
+## at the start of 0-based line `at` of a file whose positions start after `base`.
+fn visible_at(l check.LocalFact, lines List[str], base int, at int) bool
+    a := l.anchor.line - base
+    line := at + 1
+    if a < 1 or a > lines.len() or line < a
+        return false
+    if line == a and l.decl != none
+        return false
+    ind := indent_of(lines[a - 1])
+    for n in a + 1..line + 1
+        s := lines[n - 1].trim()
+        if s != "" and not s.starts_with("#") and indent_of(lines[n - 1]) < ind
+            return false
+    true
+
+## Whether `lines` may change the local `n`: an assignment to it or to a
+## part of it, `mut n`, or a method call on it.
+fn may_write(lines List[str], n str) bool
+    for l in lines
+        t := code_of(l)
+        if not idents(t).contains(n)
+            continue
+        if t.contains("mut {n}")
+            return true
+        lead := t.trim_start()
+        if lead.starts_with(n) and word(lead) == n
+            for o in [" = ", " += ", " -= ", " *= ", " /= ", " %= "]
+                if lead.contains(o)
+                    return true
+        cs := t.chars()
+        for i in 0..cs.len()
+            if text_at(cs, i, "{n}.") and (i == 0 or not ident_char(cs[i - 1]))
+                mut j := i + n.chars().len() + 1
+                while j < cs.len() and ident_char(cs[j])
+                    j += 1
+                if j < cs.len() and cs[j] == '('
+                    return true
+    false
+
+## `{"op":"extract","id":ID,"from":LINE,"to":LINE,"name":NAME}` (edit.op.9):
+## the body lines from the one whose trimmed text is `from` to the first
+## after it that is `to` become the function `NAME`, inserted after the
+## declaration, and are replaced by a call to it.
+fn extract(mut work Work, op J)
+    id := need(mut work, op, "extract", "id")
+    from_text := need(mut work, op, "extract", "from").trim()
+    name := need(mut work, op, "extract", "name")
+    if work.err != ""
+        return
+    to_text := (op.str_of("to") else from_text).trim()
+    if not is_ident(name)
+        work.fail("`{name}` is not a name (edit.op.9)")
+        return
+    h := work.find(id)
+    if work.err != ""
+        return
+    if not (h.decl.id.starts_with("fn:") or h.decl.id.starts_with("method:"))
+        work.fail("`{h.decl.id}` is not a function or method (edit.op.9)")
+        return
+    for d in decls(work.texts[h.file])
+        if d.name == name and not d.id.starts_with("method:")
+            work.fail("`{name}` is already declared (edit.op.9)")
+            return
+    lines := work.texts[h.file].split("\n")
+    body := h.decl.sig_end + 1
+    lo := line_of(lines, body, h.decl.end, from_text)
+    if lo == -2
+        work.fail("`{from_text}` is more than one line of `{h.decl.id}`; extract from a unique line (edit.op.9)")
+        return
+    if lo < 0
+        work.fail("`{from_text}` is no line of `{h.decl.id}`'s body (edit.op.9)")
+        return
+    hi := first_line_of(lines, lo, h.decl.end, to_text)
+    if hi < 0
+        work.fail("`{to_text}` is no line of `{h.decl.id}` at or after `{from_text}` (edit.op.9)")
+        return
+    base := indent_of(lines[lo])
+    fw := first_word(lines[lo])
+    if fw == "elif" or fw == "else" or starts_directive(fw)
+        work.fail("`{from_text}` doesn't start a statement (edit.op.9)")
+        return
+    for i in lo..hi + 1
+        if lines[i].trim() != "" and indent_of(lines[i]) < base
+            work.fail("line {i + 1} is indented less than `{from_text}`; the lines must be one block (edit.op.9)")
+            return
+        if has_word(lines[i], "return")
+            work.fail("line {i + 1} returns; extracted lines can't return (edit.op.9)")
+            return
+        leaves := has_word(lines[i], "break") or has_word(lines[i], "continue")
+        if leaves and not loop_encloses(lines, lo, i)
+            work.fail("line {i + 1} leaves a loop that starts before the lines (edit.op.9)")
+            return
+    mut after_hi := hi + 1
+    while after_hi < h.decl.end and lines[after_hi].trim() == ""
+        after_hi += 1
+    at_end := after_hi >= h.decl.end
+    if not at_end
+        nw := first_word(lines[after_hi])
+        ni := indent_of(lines[after_hi])
+        if ni > base or (ni == base and (nw == "elif" or nw == "else"))
+            work.fail("`{to_text}` doesn't end a statement; give the last line of it as \"to\" (edit.op.9)")
+            return
+    # The enclosing signature: receiver, type parameters and return type.
+    head := lines[h.decl.head]
+    col := name_column(head, h.decl)
+    if col == 0
+        work.fail("can't find `{h.decl.name}` on its declaration line (edit.op.9)")
+        return
+    sig_cs := lines[h.decl.head..h.decl.sig_end + 1].join("\n").chars()
+    sig := list_at(sig_cs, col - 1, h.decl.name, "{work.paths[h.file]}:{h.decl.head + 1}")
+    if sig.2 != ""
+        work.fail("{sig.2} (edit.op.9)")
+        return
+    generics := sig_cs[col - 1 + h.decl.name.chars().len()..sig.0].join("")
+    ret := code_of(sig_cs[sig.1.close + 1..].join("")).trim()
+    mut self_piece := ""
+    for p in pieces(sig_cs, sig.0, sig.1)
+        if lead_name(p) == "self"
+            self_piece = p
+    mut owner := ""
+    if self_piece != ""
+        fn_at := head.find("fn ") else 0
+        owner = head.chars()[fn_at + 3..col - 1].join("")
+    ck := checked(mut work, "extract", "edit.op.9") else return
+    fbase := file_base(work, ck, h.file)
+    region := lines[lo..hi + 1]
+    # Parameters: the locals the lines use that are in scope before them.
+    mut used := List[str]()
+    for nm in ck.found.names.sorted(by: |x| (x.0.line, x.0.col))
+        if nm.0.line > fbase + lo and nm.0.line <= fbase + hi + 1 and not used.contains(nm.1)
+            used.push(nm.1)
+    mut params := List[str]()
+    mut args := List[str]()
+    for u in used
+        mut hit := false
+        for l in ck.analysis.locals
+            if hit or l.name != u or l.kind == "self" or not visible_at(l, lines, fbase, lo)
+                continue
+            hit = true
+            if l.ty == "?"
+                work.fail("the type of `{u}` isn't known; extract fewer lines (edit.op.9)")
+                return
+            if l.mutable and may_write(region, u)
+                params.push("mut {u} {l.ty}")
+                args.push("mut {u}")
+            else
+                params.push("{u} {l.ty}")
+                args.push(u)
+    # Results: the names the lines declare at their own depth that are used after them.
+    mut outs := List[check.LocalFact]()
+    for l in ck.analysis.locals
+        d := l.decl else continue
+        dl := d.line - fbase - 1
+        if dl < lo or dl > hi or indent_of(lines[dl]) != base
+            continue
+        if [o for o in outs if o.name == l.name].len() > 0
+            continue
+        mut later := false
+        for nm in ck.found.names
+            if nm.1 == l.name and nm.0.line > fbase + hi + 1 and nm.0.line <= fbase + h.decl.end
+                later = true
+        if later
+            if l.ty == "?"
+                work.fail("the type of `{l.name}` isn't known; extract fewer lines (edit.op.9)")
+                return
+            outs.push(l)
+    fails := ret.contains("!") and [l for l in region if code_of(l).contains("?")].len() > 0
+    tail := outs.len() == 0 and at_end and base == 4 and ret != "" and ret != "!"
+    bang := if fails then "!" else ""
+    mut new_ret := ""
+    mut yields := ""
+    if tail
+        new_ret = ret
+    elif outs.len() == 1
+        new_ret = "{bang}{outs[0].ty}"
+        yields = outs[0].name
+    elif outs.len() > 1
+        tys := [o.ty for o in outs].join(", ")
+        names := [o.name for o in outs].join(", ")
+        new_ret = "{bang}({tys})"
+        yields = "({names})"
+    else
+        new_ret = bang
+    mut heading := "fn {owner}{name}{generics}("
+    mut all_params := List[str]()
+    if self_piece != ""
+        all_params.push(self_piece)
+    all_params.extend(params)
+    heading = "{heading}{all_params.join(", ")})"
+    if new_ret != ""
+        heading = "{heading} {new_ret}"
+    mut fresh := ["", heading]
+    fresh.extend(reindent(region.join("\n"), 4))
+    if yields != ""
+        fresh.push("    {yields}")
+    q := if fails and not tail then "?" else ""
+    invoke := "{name}({args.join(", ")}){q}"
+    pad := " ".repeat(base)
+    mut call_line := "{pad}{invoke}"
+    if outs.len() == 1
+        m := if outs[0].mutable then "mut " else ""
+        call_line = "{pad}{m}{outs[0].name} := {invoke}"
+    elif outs.len() > 1
+        if [o for o in outs if o.mutable].len() > 0
+            work.fail("the lines declare several names used after them, one of them `mut`; extract fewer lines (edit.op.9)")
+            return
+        bound := [o.name for o in outs].join(", ")
+        call_line = "{pad}{bound} := {invoke}"
+    src := splice(work.texts[h.file], h.decl.end, h.decl.end, fresh)
+    work.texts[h.file] = splice(src, lo, hi + 1, [call_line])
+
+## The name file text `text` imports module `m` under (mod.use.1), "" when
+## it doesn't import it.
+fn import_name(text str, m str) str
+    for l in text.lines()
+        t := l.trim()
+        if t == "use {m}"
+            return last_segment(m)
+        if r := t.strip_prefix("use {m} as ")
+            return r.trim()
+    ""
+
+fn last_segment(m str) str
+    parts := m.split(".")
+    parts[parts.len() - 1]
+
+## Whether a line of `text` other than its `use` lines qualifies a name with `n.`.
+fn uses_qualifier(text str, n str) bool
+    for l in text.lines()
+        if l.starts_with("use ")
+            continue
+        cs := code_of(l).chars()
+        for i in 0..cs.len()
+            if text_at(cs, i, "{n}.") and (i == 0 or not ident_char(cs[i - 1]))
+                return true
+    false
+
+## `text` without its `use M` line when nothing qualifies a name with it any more.
+fn drop_unused_use(text str, m str) str
+    n := import_name(text, m)
+    if n == "" or uses_qualifier(text, n)
+        return text
+    lines := text.split("\n")
+    for i in 0..lines.len()
+        t := lines[i].trim()
+        if t == "use {m}" or t == "use {m} as {n}"
+            return splice(text, i, i + 1, [])
+    text
+
+## A declaration's line with `pub` before its keyword (mod.vis.1).
+fn make_pub(line str) str
+    mut pre := ""
+    mut rest := line
+    while rest.starts_with("@")
+        sp := rest.find(" ") else return line
+        pre = "{pre}{rest.slice(0, sp + 1)}"
+        rest = skip(rest, sp + 1)
+    if rest.starts_with("pub ")
+        return line
+    "{pre}pub {rest}"
+
+## The module part of a top-level id (`fn:geo.origin` is `geo`); "" for the root.
+fn id_module(id str) str
+    c := id.find(":") else return ""
+    bare := skip(id, c + 1)
+    dot := bare.rfind(".") else return ""
+    bare.slice(0, dot)
+
+fn id_name(id str) str
+    c := id.find(":") else return id
+    bare := skip(id, c + 1)
+    dot := bare.rfind(".") else return bare
+    skip(bare, dot + 1)
+
+fn top_kind(id str) bool
+    ["fn", "type", "const", "trait"].contains(id.split(":")[0])
+
+## A qualifier to change at a reference: `q` empty drops it, else it becomes `q.`.
+struct Requal
+    file int
+    line int
+    col int
+    name str
+    q str
+
+fn requal(p Place, q str) Requal
+    Requal(file: p.file, line: p.line, col: p.col, name: id_name(p.id), q: q)
+
+## `{"op":"move","id":ID,"to":MODULE}` (edit.op.10): moves a function,
+## constant or type (with its methods) to the end of a file of module
+## `MODULE` (`"file"` picks which), and rewrites every reference's qualifier
+## and the `use` lines to match.
+fn move_decl(mut work Work, op J)
+    id := need(mut work, op, "move", "id")
+    to := need(mut work, op, "move", "to")
+    if work.err != ""
+        return
+    if not work.package
+        work.fail("`move` works on a package; give its directory as PATH (edit.op.10)")
+        return
+    h := work.find(id)
+    if work.err != ""
+        return
+    if not ["fn", "const", "type"].contains(h.decl.id.split(":")[0])
+        work.fail("`move` moves a function, constant or type, not `{h.decl.id}` (edit.op.10)")
+        return
+    from_mod := work.module(work.paths[h.file])
+    if from_mod == to
+        work.fail("`{h.decl.id}` is already in module `{to}` (edit.op.10)")
+        return
+    mut tf := -1
+    if f := op.str_of("file")
+        tf = work.index("{work.root}/{f}")
+        if tf < 0 or work.module(work.paths[tf]) != to
+            work.fail("`{f}` is no file of module `{to}` (edit.op.10)")
+            return
+    else
+        for i in 0..work.paths.len()
+            if tf < 0 and work.module(work.paths[i]) == to
+                tf = i
+    if tf < 0
+        work.fail("the package has no module `{to}`; add a file to its directory first (edit.op.10)")
+        return
+    src_lines := work.texts[h.file].split("\n")
+    # The declarations that move: the one named, and a type's methods (mod.unit.4).
+    mut moving := [h.decl]
+    if h.decl.id.starts_with("type:")
+        for l in src_lines
+            t := l.trim()
+            if t.starts_with("impl ") and idents(t).contains(h.decl.name)
+                work.fail("`{h.decl.id}` has an `impl`; move it by hand (edit.op.10)")
+                return
+        for d in decls(work.texts[h.file])
+            if d.id.starts_with("method:{h.decl.name}.")
+                moving.push(d)
+    moving_ids := [want_id(work, d.id, h.file) for d in moving]
+    ck := checked(mut work, "move", "edit.op.10") else return
+    refs_all := places(work, ck)
+    # Which declarations are `pub`, by id: a moved body may only name public ones of its old module.
+    mut public := Set[str]()
+    for f in 0..work.paths.len()
+        file_lines := work.texts[f].split("\n")
+        for d in decls(work.texts[f])
+            if make_pub(file_lines[d.head]) == file_lines[d.head]
+                public.add(want_id(work, d.id, f))
+    mut fixes := List[Requal]()
+    mut needs_to := List[int]()
+    mut needs_from := false
+    mut other_uses := List[str]()
+    mut outside := false
+    for p in refs_all
+        in_range := [d for d in moving if p.line > d.start and p.line <= d.end].len() > 0
+        inside := p.file == h.file and in_range
+        if moving_ids.contains(p.id)
+            if inside or not top_kind(p.id)
+                if work.module(work.paths[p.file]) != to
+                    outside = outside or not inside
+                continue
+            m := work.module(work.paths[p.file])
+            if m != to
+                outside = true
+            if m == to
+                fixes.push(requal(p, ""))
+            else
+                mut q := import_name(work.texts[p.file], to)
+                if q == ""
+                    q = last_segment(to)
+                    if not needs_to.contains(p.file)
+                        needs_to.push(p.file)
+                fixes.push(requal(p, q))
+        elif inside and top_kind(p.id)
+            m := id_module(p.id)
+            if m == from_mod
+                if from_mod == ""
+                    work.fail("`{h.decl.id}` uses `{p.id}` of the root module, which no module can import (edit.op.10)")
+                    return
+                if not public.contains(p.id)
+                    work.fail("`{h.decl.id}` uses `{p.id}`, which isn't `pub`; move it too or make it `pub` first (edit.op.10)")
+                    return
+                mut q := import_name(work.texts[tf], from_mod)
+                if q == ""
+                    q = last_segment(from_mod)
+                    needs_from = true
+                fixes.push(requal(p, q))
+            elif m == to
+                fixes.push(requal(p, ""))
+            elif m != "" and not other_uses.contains(m)
+                other_uses.push(m)
+    # Qualifiers first: they change no line numbers.
+    for f in 0..work.paths.len()
+        mine := [x for x in fixes if x.file == f]
+        if mine.len() == 0
+            continue
+        mut cs := work.texts[f].chars()
+        mut last := (0, 0)
+        for r in mine.sorted(by: |x| (0 - x.line, 0 - x.col))
+            if (r.line, r.col) == last
+                continue
+            last = (r.line, r.col)
+            i := offset_of(cs, r.line, r.col)
+            start := name_at(cs, i, r.name)
+            if i < 0 or start < 0
+                work.fail("{work.paths[f]}:{r.line}:{r.col} doesn't hold `{r.name}`; nothing was moved (edit.op.10)")
+                return
+            mut out := cs[0..i]
+            if r.q != ""
+                out.extend("{r.q}.".chars())
+            out.extend(cs[start..])
+            cs = out
+        work.texts[f] = cs.join("")
+    # Then the declarations themselves, from the last to the first.
+    now := work.texts[h.file].split("\n")
+    mut blocks := List[List[str]]()
+    mut src_text := work.texts[h.file]
+    for d in moving.sorted(by: |x| 0 - x.start)
+        mut block := now[d.start..d.end]
+        if outside
+            block[d.head - d.start] = make_pub(block[d.head - d.start])
+        blocks.insert(0, block)
+        src_text = splice(src_text, d.start, d.end, [])
+    # The `use` lines the moved text needs in its new file.
+    mut needed := List[str]()
+    if needs_from
+        needed.push("use {from_mod}")
+    moved := [b.join("\n") for b in blocks].join("\n")
+    for l in src_lines
+        t := l.trim()
+        if not t.starts_with("use ")
+            continue
+        m := t.strip_prefix("use ") else continue
+        mod_path := m.split(" ")[0]
+        if mod_path == to
+            continue
+        n := import_name(work.texts[h.file], mod_path)
+        wanted_here := other_uses.contains(mod_path) or uses_qualifier(moved, n)
+        if wanted_here and import_name(work.texts[tf], mod_path) == ""
+            needed.push(t)
+    work.texts[h.file] = src_text
+    mut dest := work.texts[tf]
+    while dest.ends_with("\n")
+        dest = dest.slice(0, dest.chars().len() - 1)
+    for b in blocks
+        dest = "{dest}\n\n{b.join("\n")}"
+    for u in needed
+        dest = with_use(dest, u)
+    work.texts[tf] = "{dest}\n"
+    for f in needs_to
+        work.texts[f] = with_use(work.texts[f], "use {to}")
+    # A `use` of the old module that nothing needs any more goes (mod.use.2).
+    if from_mod != ""
+        for f in 0..work.paths.len()
+            if work.module(work.paths[f]) != from_mod
+                work.texts[f] = drop_unused_use(work.texts[f], from_mod)

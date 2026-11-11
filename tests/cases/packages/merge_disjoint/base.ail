@@ -1,0 +1,9 @@
+## Doubles.
+fn double(n int) int
+    n * 2
+
+fn triple(n int) int
+    n * 3
+
+fn main()
+    print(double(2))

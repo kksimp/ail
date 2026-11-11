@@ -1,0 +1,133 @@
+## The warm path of `ail mcp` (mcp.warm.1-4): a call that would start the `ail` launcher
+## runs the native CLI directly, and a read-only call whose inputs have not changed since the
+## same call returns the answer it gave then, without running anything.
+
+## At most this many answers are kept; the memo starts over when it is full.
+MEMO_MAX := 64
+
+## A program root with more files than this is not memoized (its fingerprint would cost
+## more than it saves).
+FILES_MAX := 4000
+
+## The server's state between calls.
+pub struct Warm
+    ## The native CLI the launcher built (`AIL_MCP_NATIVE`), or "" when the server is cold.
+    native str
+    ## The repository the toolchain lives in (`AIL_ROOT`).
+    root str
+    memo Map[str, proc.Output]
+
+## How a call was answered: `memo`, `direct` (the native CLI) or `launcher` (mcp.warm.4).
+pub struct Ran
+    pub out proc.Output
+    pub how str
+
+## The state at start: warm unless `AIL_MCP_COLD` is set or the launcher named no native CLI.
+pub fn start() Warm
+    cold := (env.get("AIL_MCP_COLD") else "") != ""
+    named := env.get("AIL_MCP_NATIVE") else ""
+    native := if cold then "" else named
+    root := env.get("AIL_ROOT") else ""
+    Warm(native: native, root: root, memo: Map[str, proc.Output]())
+
+## Run `ail ARGV` with `stdin` as its input; `ail` is the launcher. `pure` says the call only
+## reads `program` and the toolchain (mcp.warm.2).
+pub fn Warm.run(
+    mut self,
+    ail str,
+    argv List[str],
+    stdin str,
+    pure bool,
+    program str,
+) Ran ! proc.ProcError
+    if native == ""
+        return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
+    # mcp.warm.3: a toolchain newer than the native CLI goes through the launcher, which
+    # rebuilds it; the memo is dropped with the old toolchain.
+    stamp := newest([path.join(root, "compiler/**/*.ail"), path.join(root, "std/**/*.ail")])
+    built := fs.metadata(native) else
+        memo = Map[str, proc.Output]()
+        return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
+    if stamp > built.modified_ms
+        memo = Map[str, proc.Output]()
+        return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
+    mut key := ""
+    if pure
+        inputs := fingerprint(program, argv)
+        if inputs != ""
+            key = "{argv.join("\n")}\n{stamp}\n{hash.hash64(inputs)}"
+            if seen := memo.get(key)
+                return Ran(out: seen, how: "memo")
+    plain := direct(argv) else
+        return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
+    out := proc.run(native, plain, stdin)?
+    if key != ""
+        if memo.len() >= MEMO_MAX
+            memo = Map[str, proc.Output]()
+        memo[key] = out
+    Ran(out: out, how: "direct")
+
+## The native CLI's arguments for `ail ARGV` when the launcher would only pass them on
+## (mcp.warm.1), else none: budgets and diffs of `check` and `api` keep the launcher.
+pub fn direct(argv List[str]) List[str]?
+    if argv.len() == 0
+        return none
+    c := argv[0]
+    if c == "check"
+        if argv.contains("--budget") or argv.contains("--from") or argv.contains("--errors")
+            return none
+        mut out := ["check-program"]
+        out.extend(argv[1..])
+        return out
+    if c == "api"
+        if argv.contains("--budget") or argv.contains("--from") or argv.contains("--diff")
+            return none
+        return argv
+    if ["ask", "context", "explain", "edit", "fix", "review"].contains(c)
+        return argv
+    none
+
+## The newest modification time, in ms, of the files the patterns match (0 for none).
+fn newest(patterns List[str]) int
+    mut n := 0
+    for p in patterns
+        for f in fs.glob(p)
+            m := fs.metadata(f) else continue
+            if m.modified_ms > n
+                n = m.modified_ms
+    n
+
+## What a pure call reads besides the toolchain, as text that changes when any of it
+## changes (mcp.warm.2), or "" when that can't be told: the `.ail` and `.h` files under the
+## program's root and its `ail.pkg` and `ail.lock`; for `explain`, the spec. A package that
+## names a path above its root is not memoized.
+pub fn fingerprint(program str, argv List[str]) str
+    if argv.len() > 0 and argv[0] == "explain"
+        return "spec {newest([path.join(env.get("AIL_ROOT") else ".", "docs/spec/*.md")])}"
+    if program == ""
+        return ""
+    root := root_of(program)
+    at := if root == "." then "" else "{root}/"
+    mut files := fs.glob("{at}**/*.ail")
+    files.extend(fs.glob("{at}**/*.h"))
+    if files.len() == 0 or files.len() > FILES_MAX
+        return ""
+    pkg := fs.read_text("{at}ail.pkg") else ""
+    if pkg.contains("..")
+        return ""
+    lock := fs.read_text("{at}ail.lock") else ""
+    mut parts := ["pkg {hash.hash64(pkg)}", "lock {hash.hash64(lock)}"]
+    for f in files.sorted()
+        text := fs.read_text(f) else ""
+        parts.push("{f} {text.len()} {hash.hash64(text)}")
+    parts.join("\n")
+
+## The directory a program's modules are found under: the package itself, or a file's
+## directory (mod.unit.1, as `load` reads it).
+fn root_of(program str) str
+    if not program.ends_with(".ail")
+        return program
+    cut := program.split("/")
+    if cut.len() > 1
+        return cut[..cut.len() - 1].join("/")
+    "."

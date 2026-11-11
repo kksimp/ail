@@ -13,6 +13,10 @@ enum Op {
     case pic(x: Double, y: Double, w: Double, h: Double, src: String)
     case bitmap(x: Double, y: Double, w: Double, h: Double, id: String)
     case shade(x: Double, y: Double, w: Double, h: Double, color: Int, alpha: Double)
+    case round(x: Double, y: Double, w: Double, h: Double, r: Double, color: Int, alpha: Double, stroke: Double)
+    case poly(points: [Double], color: Int, alpha: Double)
+    case line(points: [Double], color: Int, width: Double)
+    case font
     case clip(x: Double, y: Double, w: Double, h: Double)
     case unclip
 }
@@ -31,6 +35,7 @@ indirect enum Node {
 
 private func num(_ d: [String: Any], _ k: String) -> Double { (d[k] as? NSNumber)?.doubleValue ?? 0 }
 private func int(_ d: [String: Any], _ k: String) -> Int { (d[k] as? NSNumber)?.intValue ?? 0 }
+private func points(_ d: [String: Any]) -> [Double] { (d["points"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue ?? 0 } }
 private func text(_ d: [String: Any], _ k: String) -> String { d[k] as? String ?? "" }
 private func flag(_ d: [String: Any], _ k: String) -> Bool { (d[k] as? NSNumber)?.boolValue ?? false }
 
@@ -66,6 +71,14 @@ func decodeOp(_ any: Any) -> Op? {
         Bitmaps.store(id, w: int(d, "pw"), h: int(d, "ph"), base64: text(d, "data"))
         return .bitmap(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), id: id)
     case "Shade": return .shade(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), color: int(d, "color"), alpha: num(d, "alpha"))
+    case "Round":
+        return .round(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), r: num(d, "r"), color: int(d, "color"),
+                      alpha: num(d, "alpha"), stroke: num(d, "stroke"))
+    case "Poly": return .poly(points: points(d), color: int(d, "color"), alpha: num(d, "alpha"))
+    case "Line": return .line(points: points(d), color: int(d, "color"), width: num(d, "width"))
+    case "Font":
+        WebFonts.store(text(d, "id"), base64: text(d, "data"))
+        return .font
     case "Clip": return .clip(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"))
     case "Unclip": return .unclip
     default: return nil
@@ -101,6 +114,26 @@ enum Bitmaps {
     }
 }
 
+/// Web fonts sent as `Font` ops, kept by id; a `Str` whose font is `web:<id>` is drawn in one (std.app.3).
+enum WebFonts {
+    private static var descriptors: [String: CTFontDescriptor] = [:]
+    private static let lock = NSLock()
+
+    /// Registers the TrueType/OpenType bytes under `id`; empty or unreadable data keeps what `id` has.
+    static func store(_ id: String, base64: String) {
+        guard !base64.isEmpty, let data = Data(base64Encoded: base64),
+              let d = CTFontManagerCreateFontDescriptorFromData(data as CFData) else { return }
+        lock.lock(); defer { lock.unlock() }
+        descriptors[id] = d
+    }
+
+    static func font(_ id: String, _ size: CGFloat) -> NSFont? {
+        lock.lock(); defer { lock.unlock() }
+        guard let d = descriptors[id] else { return nil }
+        return CTFontCreateWithFontDescriptor(d, size, nil) as NSFont
+    }
+}
+
 /// Writes events to standard output, one JSON object per line (std.app.8).
 final class Outbox {
     static let shared = Outbox()
@@ -126,12 +159,15 @@ final class Outbox {
 /// of the same family, size and weight is drawn in, sent back as one `measured` event whose
 /// `text` is the widths joined by commas.
 func answerMeasure(_ runs: [[String: Any]]) {
+    var fonts: [String] = []
     let widths = runs.map { r -> String in
-        let f = font(text(r, "font"), num(r, "size"), bold: flag(r, "bold"), italic: flag(r, "italic"))
+        let (f, used) = fontUsed(text(r, "font"), num(r, "size"), bold: flag(r, "bold"), italic: flag(r, "italic"))
+        fonts.append(used.replacingOccurrences(of: ",", with: " "))
         let w = (text(r, "text") as NSString).size(withAttributes: [.font: f]).width
         return String(format: "%.3f", Double(w))
     }
-    Outbox.shared.send("measured", ["text": widths.joined(separator: ",")])
+    // std.app.28: the family each run was measured in.
+    Outbox.shared.send("measured", ["text": widths.joined(separator: ","), "fonts": fonts.joined(separator: ",")])
 }
 
 /// Reads views from standard input on a background thread and hands each

@@ -7,7 +7,7 @@
 #
 # Needs a quiet machine (no other build or benchmark running), gcc and clang, and python3
 # (measurement only, ADR 0070). It builds AIL with ./ail, times `ail build` output against
-# gcc -O2, clang -O2 and CPython (tools/perfbench/race.py), counts tokens with tools/tokbench,
+# gcc -O2, clang -O2 and CPython, each small program at a size where gcc -O2 takes at least 0.3 s (drag.size.1) (tools/perfbench/race.py), counts tokens with tools/tokbench,
 # and fills tools/bench/benchmarks.tmpl.md. The environment block records host, commit and tool versions.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -34,7 +34,7 @@ small=""; for n in collatz nbody spectralnorm mandelbrot fannkuch binarytrees fa
     small="$small tools/perfbench/programs/$n.ail"; done
 bigp=""; for n in lzr vm raytrace matmul1400; do bigp="$bigp tools/perfbench/big/$n.ail"; done
 # shellcheck disable=SC2086
-python3 -I tools/perfbench/race.py --no-run --native --c --python --runs "$runs" --timeout 900 \
+python3 -I tools/perfbench/race.py --no-run --native --c --python --runs "$runs" --timeout 900 --calibrate 0.3 \
     --json "$tmp/small.json" --programs $small >/dev/null
 # shellcheck disable=SC2086
 python3 -I tools/perfbench/race.py --no-run --native --c --runs "$runs" --timeout 900 \
