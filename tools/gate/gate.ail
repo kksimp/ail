@@ -2709,11 +2709,27 @@ fn Gate.agent_tools(mut self, tmp str)
     sh_run("mkdir -p {base}/cert")
     fs.write_text("{base}/cert/main.ail", "fn main()\n    print(1)\n") else return
     sh_run("cd {base}/cert && git init -q && git add -A && git -c user.name=g -c user.email=g@g commit -qm seed")
-    tool("task start for finish", "{base}/cert", ["task", "start", "main.ail", "print", "two"], 0, ["task open"])
+    tool(
+        "task start for finish",
+        "{base}/cert",
+        ["task", "start", "main.ail", "print", "two"],
+        0,
+        ["task open"],
+    )
     fs.write_text("{base}/cert/main.ail", "fn main()\n    print(2)\n") else return
     tool("task verify for finish", "{base}/cert", ["task", "verify"], 0, ["green"])
-    tool("task finish certificate", "{base}/cert", ["task", "finish", "--json"], 0, ["\"certificate\":\".ail/cert.json\""])
-    want("task finish writes the certificate", slurp("{base}/cert/.ail/cert.json"), ["\"cert\"", "main.ail"])
+    tool(
+        "task finish certificate",
+        "{base}/cert",
+        ["task", "finish", "--json"],
+        0,
+        ["\"certificate\":\".ail/cert.json\""],
+    )
+    want(
+        "task finish writes the certificate",
+        slurp("{base}/cert/.ail/cert.json"),
+        ["\"cert\"", "main.ail"],
+    )
     if fs.exists("{base}/cert/.ail-task")
         red("task finish", "the task is still open")
     # api.ctx.1-7 (ADR 1020)
@@ -3145,7 +3161,10 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     # mcp.tools.3: the whole `tools/list` answer stays under 1,500 tokens (about 4 bytes each).
     if listed.out.len() > 6000
-        red("mcp tools/list size", "{listed.out.len()} bytes; mcp.tools.3 allows about 1,500 tokens")
+        red(
+            "mcp tools/list size",
+            "{listed.out.len()} bytes; mcp.tools.3 allows about 1,500 tokens",
+        )
     m1 := mcp_session("{base}/mcp", [
         mcp_call(2, "ail_context", "'program':'prog.ail','symbol':'pay','budget':400"),
         mcp_call(3, "ail_context", "'program':'prog.ail','symbol':'pay','json':true"),
@@ -3198,7 +3217,11 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(5, "ail_find", "'words':'read text file'"),
         mcp_call(6, "ail_find", "'sig':'(str) bytes'"),
         mcp_call(7, "ail_find", "'words':''"),
-        mcp_call(8, "ail_try", "'program':'prog.ail','sets':['rename show shown','rename nosuch other']"),
+        mcp_call(
+            8,
+            "ail_try",
+            "'program':'prog.ail','sets':['rename show shown','rename nosuch other']",
+        ),
         mcp_call(9, "ail_prove", "'program':'prove.ail'"),
         mcp_call(10, "ail_infer", "'program':'prog.ail','function':'pay'"),
         mcp_call(11, "ail_merge_check", "'base':'prog.ail','ours':'ours.ail','theirs':'theirs.ail'"),
@@ -3283,7 +3306,13 @@ fn Gate.agent_tools(mut self, tmp str)
     want("new . kit", slurp("{base}/here/AGENTS.md"), ["ail card", "ail task finish"])
     fs.write_text("{base}/here/AGENTS.md", "mine\n") else return
     fs.remove("{base}/here/.mcp.json") else return
-    tool("new . keeps AGENTS.md", "{base}/here", ["new", "."], 0, ["left alone", "ail task start", "wrote .mcp.json"])
+    tool(
+        "new . keeps AGENTS.md",
+        "{base}/here",
+        ["new", "."],
+        0,
+        ["left alone", "ail task start", "wrote .mcp.json"],
+    )
     if slurp("{base}/here/AGENTS.md") != "mine\n"
         red("new .", "changed an existing AGENTS.md")
     tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])

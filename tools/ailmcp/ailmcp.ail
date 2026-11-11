@@ -148,12 +148,7 @@ fn tools() List[Tool]
             props: [],
             needs: [],
         ),
-        Tool(
-            name: "task_abort",
-            about: "Close the task unfinished.",
-            props: [],
-            needs: [],
-        ),
+        Tool(name: "task_abort", about: "Close the task unfinished.", props: [], needs: []),
     ]
 
 fn member(key str, value Json) JsonMember
@@ -187,10 +182,10 @@ fn prop_type(tool str, p str) str
 ## One property's schema; `sets` is a list of patch sets (ail_try), a string each.
 fn prop_schema(tool str, p str) Json
     if p == "sets"
-        return obj([
-            member("type", Json.Str("array")),
-            member("items", obj([member("type", Json.Str("string"))])),
-        ])
+        return obj([member("type", Json.Str("array")), member("items", obj([member(
+            "type",
+            Json.Str("string"),
+        )]))])
     obj([member("type", Json.Str(prop_type(tool, p)))])
 
 fn tool_json(t Tool) Json
@@ -239,8 +234,21 @@ fn command(name str, a Json) Cmd
             if (a.str(n) else "") == ""
                 return Cmd(argv: [], why: "{name} needs `{n}`", stdin: "")
         bad := dashed(a, [
-            "program", "symbol", "rule", "range", "path", "module", "form", "topic", "words", "sig",
-            "function", "base", "ours", "theirs", "cert",
+            "program",
+            "symbol",
+            "rule",
+            "range",
+            "path",
+            "module",
+            "form",
+            "topic",
+            "words",
+            "sig",
+            "function",
+            "base",
+            "ours",
+            "theirs",
+            "cert",
         ])
         if bad != ""
             return Cmd(
@@ -362,7 +370,11 @@ fn command(name str, a Json) Cmd
                     if one.trim() != ""
                         items.push(Json.Str(one))
                 if items.is_empty()
-                    return Cmd(argv: [], why: "ail_try needs `sets`: a list of patch sets", stdin: "")
+                    return Cmd(
+                        argv: [],
+                        why: "ail_try needs `sets`: a list of patch sets",
+                        stdin: "",
+                    )
                 out = ["try", program, "--sets-json"]
                 stdin = Json.Arr(items).to_text()
             "ail_prove" => out = ["prove", program]
