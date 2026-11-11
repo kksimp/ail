@@ -229,36 +229,6 @@ fn main() !
     print(log.find(b"ERROR"))                 # pages in what the search touches
 ```
 
-**std.fs.35** — `temp_dir() str` returns the directory for temporary files: the
-value of `TMPDIR` when it is set and not empty, else `TEMP` when it is set and
-not empty, else `/tmp`. It does not check that the directory exists and never
-fails. *(ADR 1059)*
-
-**std.fs.37** — `make_temp_dir(prefix str) str ! IoError` creates a new empty
-directory in `temp_dir()` and returns its path. Its name is `prefix` followed by
-12 random lowercase hexadecimal digits. The directory is created exclusively:
-a name already taken is never reused, and the call tries new digits until one is
-free, so two callers never share a directory. Only the owner can read it where
-the system has modes (`0700`). It fails as `make_dir` does when `temp_dir()`
-can't be written (kind `permission`, `not_found`, ...), with the path it tried.
-The caller removes the directory: there is no call that removes a tree, as
-`remove` (std.fs.6) removes an empty directory only. *(ADR 1059)*
-
-```ail norun rules=std.fs.35,std.fs.37
-use std.fs
-
-fn main() !
-    dir := fs.make_temp_dir("ail-spec-")?
-    other := fs.make_temp_dir("ail-spec-")?
-    print(dir != other)                       # true: never shared
-    print(dir.starts_with(fs.temp_dir()))     # true
-    fs.write_text("{dir}/a.txt", "x")?
-    print(fs.list_dir(dir)?)                  # [a.txt]
-    fs.remove("{dir}/a.txt")?
-    fs.remove(dir)?
-    fs.remove(other)?
-```
-
 ```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26,std.fs.27
 use std.fs
 
@@ -1353,7 +1323,7 @@ fn main()
     print(r.status)
 ```
 
-**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux, a `kqueue` set on macOS and a completion port on Windows (built, and switched on with the first seed whose PE writer maps `ntdll.dll`; until then Windows takes the `poll` loop below), so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. If the system gives no set, the server falls back to a `poll` loop over its connections. The native runtime only. *(ADR 1009)*
+**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux, a `kqueue` set on macOS and a completion port on Windows, so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. If the system gives no set, the server falls back to a `poll` loop over its connections. The native runtime only. *(ADR 1009)*
 
 ```ail norun rules=std.net.32
 use std.net
