@@ -167,7 +167,11 @@ fn rk_blocker(f Func, defs List[Def], lp LoopInfo, a Inst) RkBlocker
             rk_fix: "",
         )
     if s.rk_kind == "call"
-        return RkBlocker(rk_site: a.site, rk_what: "`{shown}`: the index is a call's result", rk_fix: "")
+        return RkBlocker(
+            rk_site: a.site,
+            rk_what: "`{shown}`: the index is a call's result",
+            rk_fix: "",
+        )
     if s.rk_kind == "sum"
         return RkBlocker(
             rk_site: a.site,
@@ -206,7 +210,7 @@ fn rk_accesses(f Func, lp LoopInfo) int
 ## in it (or of any function, when the loop has none of its own).
 fn rk_place(f Func, lp LoopInfo, sites List[Site], fname str) RkPlace?
     mut own := RkPlace(rk_file: 0, rk_line: 0)
-    mut any := RkPlace(rk_file: 0, rk_line: 0)
+    mut first := RkPlace(rk_file: 0, rk_line: 0)
     for b in lp.blocks
         for i in f.blocks[b].insts
             if i.site < 0
@@ -216,12 +220,12 @@ fn rk_place(f Func, lp LoopInfo, sites List[Site], fname str) RkPlace?
                 continue
             if s.func == fname and (own.rk_line == 0 or s.line < own.rk_line)
                 own = RkPlace(rk_file: s.file, rk_line: s.line)
-            if any.rk_line == 0 or s.line < any.rk_line
-                any = RkPlace(rk_file: s.file, rk_line: s.line)
+            if first.rk_line == 0 or s.line < first.rk_line
+                first = RkPlace(rk_file: s.file, rk_line: s.line)
     if own.rk_line > 0
         return own
-    if any.rk_line > 0
-        return any
+    if first.rk_line > 0
+        return first
     none
 
 fn rk_depth(loops List[LoopInfo], lp LoopInfo) int
@@ -232,8 +236,8 @@ fn rk_depth(loops List[LoopInfo], lp LoopInfo) int
     n
 
 fn rk_line_of(files List[str], p RkPlace, kind str, text str) str
-    path := if p.rk_file >= 0 and p.rk_file < files.len() then files[p.rk_file] else "?"
-    "perf\t{path}\t{p.rk_line}\t{kind}\t{text}"
+    src := if p.rk_file >= 0 and p.rk_file < files.len() then files[p.rk_file] else "?"
+    "perf\t{src}\t{p.rk_line}\t{kind}\t{text}"
 
 ## The runtime vector kernels a function calls, by name.
 fn rk_kernels(f Func) List[str]
@@ -289,7 +293,8 @@ pub fn rk_explain(
     swapped := xf.blocks.len() != orig.blocks.len() and kernels.is_empty()
     func_at := RkPlace(rk_file: 0, rk_line: 0)
     if kernels.len() > 0
-        out.push(rk_line_of(files, func_at, "func", "vector kernels: {kernels.join(", ")} (native.vec.1, native.vec.2); loops that were rewritten run in them"))
+        msg := "vector kernels: {kernels.join(", ")} (native.vec.1, native.vec.2); loops that were rewritten run in them"
+        out.push(rk_line_of(files, func_at, "func", msg))
     loops := find_loops(xf)
     for lp in loops
         place := rk_place(xf, lp, sites, fname) else continue
@@ -306,29 +311,35 @@ pub fn rk_explain(
         if rk_accesses(xf, lp) == 0 and inner
             out.push(rk_line_of(files, place, "bce", "none to remove: the loop has no list access"))
         elif found >= 0 and notes[found].rk_fast
-            out.push(rk_line_of(files, place, "bce", "removed behind one guard; when the guard fails the checked loop runs and traps at the same access (native.bce.1)"))
+            msg := "removed behind one guard; when the guard fails the checked loop runs and traps at the same access (native.bce.1)"
+            out.push(rk_line_of(files, place, "bce", msg))
         elif found >= 0 and not notes[found].rk_counted
             out.push(rk_line_of(files, place, "bce", "stay: {notes[found].rk_why}"))
         elif found >= 0
-            out.push(rk_line_of(files, place, "bce", "stay: no list access in this loop was proven in range"))
+            msg := "stay: no list access in this loop was proven in range"
+            out.push(rk_line_of(files, place, "bce", msg))
             for bl in notes[found].rk_blockers
                 at := sites[bl.rk_site]
                 out.push(rk_line_of(files, place, "bce", "line {at.line}: {bl.rk_what}"))
                 if bl.rk_fix != ""
                     out.push(rk_line_of(files, place, "fix", "line {at.line}: {bl.rk_fix}"))
         elif not inner
-            out.push(rk_line_of(files, place, "bce", "outer loop: checks are removed in the innermost loops (native.bce.1)"))
+            msg := "outer loop: checks are removed in the innermost loops (native.bce.1)"
+            out.push(rk_line_of(files, place, "bce", msg))
         else
-            out.push(rk_line_of(files, place, "bce", "not analysed (AIL_OPT_OFF names bce, or this loop is a copy the optimizer made)"))
+            msg := "not analysed (AIL_OPT_OFF names bce, or this loop is a copy the optimizer made)"
+            out.push(rk_line_of(files, place, "bce", msg))
         # List headers (native.bce.11): hoist.ail skips loops over MAX_BLOCKS.
         if rk_accesses(xf, lp) > 0 and lp.blocks.len() > MAX_BLOCKS and not opt_off("hoist")
             out.push(rk_line_of(files, place, "hoist", rk_headers_reloaded(lp.blocks.len())))
         # Vector kernels (native.vec.1-2).
         if inner and kernels.is_empty()
             if swapped
-                out.push(rk_line_of(files, place, "vec", "scalar: the loop nest was reordered (native.bce.13) but no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops"))
+                msg := "scalar: the loop nest was reordered (native.bce.13) but no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops"
+                out.push(rk_line_of(files, place, "vec", msg))
             else
-                out.push(rk_line_of(files, place, "vec", "scalar: no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops (native.vec.1, native.vec.2)"))
+                msg := "scalar: no kernel matched; kernels exist for `y[i] += a * x[i]` and escape-time loops (native.vec.1, native.vec.2)"
+                out.push(rk_line_of(files, place, "vec", msg))
         # Calls left in the loop (ADR 0391).
         mut named := List[str]()
         for b in lp.blocks
@@ -338,5 +349,6 @@ pub fn rk_explain(
         if inner and named.is_empty()
             out.push(rk_line_of(files, place, "inline", "no calls left in the loop"))
         for callee in named
-            out.push(rk_line_of(files, place, "inline", "`{callee}` is called, not inlined: {rk_inline_why(funcs, fname, callee)} (ADR 0391)"))
+            msg := "`{callee}` is called, not inlined: {rk_inline_why(funcs, fname, callee)} (ADR 0391)"
+            out.push(rk_line_of(files, place, "inline", msg))
     out

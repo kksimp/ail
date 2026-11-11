@@ -216,7 +216,8 @@ struct PerfLine
 ## where one exists, a fix. The `ail` launcher sets `AIL_PERF_EXPLAIN=FN` and checks FILE
 ## first; the exit status is 0, or 2 for a bad call or a function that isn't there.
 fn perf_command(rest List[str]) int
-    if rest.len() != 3 or rest[0] != "--explain" or rest[1].starts_with("-") or rest[2].starts_with("-")
+    bad := rest.len() != 3 or rest[0] != "--explain"
+    if bad or rest[1].starts_with("-") or rest[2].starts_with("-")
         io.eprint(PERF_USAGE)
         return 2
     fname := rest[1]
@@ -249,7 +250,8 @@ fn perf_command(rest List[str]) int
         if cut.len() == 5 and cut[0] == "perf"
             at := cut[2].to_int() else 0
             found.push(PerfLine(path: cut[1], line: at, kind: cut[3], text: cut[4]))
-    rows := [r for r in check.parallel_rows(loaded.program) if r.func == "fn:{fname}" or r.func == "method:{fname}"]
+    all_rows := check.parallel_rows(loaded.program)
+    rows := [r for r in all_rows if r.func == "fn:{fname}" or r.func == "method:{fname}"]
     print("perf {fname} ({file})")
     for l in found
         if l.kind == "func"
