@@ -40,6 +40,7 @@ fn main()
     dump(b"\x1b[<64;1;1M\x1b[<65;1;1M\x1b[<35;1;1M")
     dump(b"\x1b[24;80R")
     dump(b"a\x1b[")
+    print(term.is_tty())
     mut t := term.open(false) else err
         print(err.why.starts_with("std.term."))
         return

@@ -108,9 +108,6 @@ fn chr(n int) str
     c := char.from_code(n) else return ""
     "{c}"
 
-fn mk_key(k str, c bool, a bool, s bool) Event
-    Key(k, ctrl: c, alt: a, shift: s)
-
 ## Control, Alt and Shift from the modifier parameter `m` of a sequence
 ## (1 plus: Shift 1, Alt 2, Ctrl 4).
 fn mods(m int)(bool, bool, bool)
