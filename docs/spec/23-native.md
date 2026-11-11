@@ -515,6 +515,26 @@ fn main()
     print(match_len([1, 2, 3, 1, 2, 3, 9], 3, 0, 7))
 ```
 
+**native.bce.15** — A list made empty and pushed to a known number of times,
+either all in the block that makes it or all in one counted loop with constant
+bounds that leaves only from its header (each push in a block every pass goes
+through), has that length once the pushes are done, if every other use of it
+is `xs[i]`, `xs[i] = v` or `xs.len()` after them. `xs.len()` is then that
+constant, and an access outside a counted loop may compare its index to the
+constant instead of loading the length. Any other use (a call, a store, a
+return, a later push) rules the list out. A trap names the same site, index
+and length. *(ADR 1057)*
+
+```ail rules=native.bce.15
+fn main()
+    mut st := [0 for _ in 0..8]
+    mut sp := 0
+    while sp < 5
+        st[sp] = sp * 2
+        sp += 1
+    print(st[4] + st.len())
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
