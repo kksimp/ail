@@ -38,11 +38,11 @@ snap 6 0
 std 374 1
 task 16 0
 test 35 0
-tool 14 0
+tool 16 0
 trace 22 0
 trait 45 4
 try 10 0
 type 123 10
 unsafe 21 0
 verify 9 0
-all 1386 54
+all 1388 54

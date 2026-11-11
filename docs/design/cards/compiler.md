@@ -2,7 +2,7 @@
 entry: main in main.ail
 tests: 12 (`ail test` lists them)
 
-## (root) (62 items)
+## (root) (67 items)
 
 ## a64 (81 items)
 
@@ -40,7 +40,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (117 items)
 
-## mir (619 items)
+## mir (650 items)
 
 ## obj (66 items)
 
