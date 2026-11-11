@@ -538,3 +538,18 @@ approved syntax (ADR 0879 item 1).
 - **b.** Add `io.read_exact(n int) bytes?` (none at end of input). Pro: exact, also serves binary protocols and agents' own stdio servers. Con: one runtime primitive on three targets.
 
 Recommendation: **b** when the std lane next touches `std.io`; `ail lsp` then drops the carry.
+
+## OQ-142 — ADR 0076's order after the 2026-11-11 goals (ADR 1065)
+
+ADR 1065 accepts more tokens when they buy speed or a better AI-first feature. ADR 0076 still
+puts token usage first among the criteria for delegated decisions.
+
+- **A. Keep the order.** Tokens still break ties. Pro: stable and measurable. Con: it can work
+  against the new goal on a close call.
+- **B. Put AI understanding first, tokens second.** Pro: matches ADR 1065. Con: AI understanding
+  is harder to measure than tokens.
+- **C. Put speed (runtime) first.** Pro: the C-parity target is the most concrete. Con: it ranks
+  speed above clarity for agents.
+
+**Recommendation:** B. Measurements still back every syntax choice (ADR 0029).
+**Decision needed from:** the designer.

@@ -425,5 +425,5 @@ fn affected_command(args List[str], std str) int
                 for t in result.tests
                     print(t)
             code = 0
-    _ := proc.run("rm", ["-rf", got.1]) else return code
+    remove_scrap(got.1)
     code

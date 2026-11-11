@@ -170,6 +170,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
 | **Packed list** | The storage of a `List[int]`, `List[float]` or `List[bool]` in the interpreter: one machine word (one byte for `bool`) per element instead of a 32-byte `Value`. Invisible to programs; any other list is boxed ([ADR 0760](decisions/0760-packed-list-storage.md)). |
 | **Page model** | Garlic's agent-facing view of a page: each perceivable element's role, accessible name and the cells it was drawn in, as `--json` (api 1). See garlic-browser.md in that repository. |
+| **Parity probe** | `tools/gate/parity.ail`, the gate's `parity` suite: one line per feature (`FEATURE works`, `missing` or `differs`), found by trying it. The lines must be the same on macOS, Linux and Windows but for those in `tests/parity/expected-differences.txt` ([ADR 0925](decisions/0925-windows-release-gate.md)). |
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
 | **`par for` comprehension** | `[f(x) par for x in xs]`: a list whose elements are computed on the thread pool, in order, with the sequential result (`conc.par.12`, ADR 0302). |
 | **Peephole** | A small rewrite of adjacent machine or bytecode instructions into a cheaper form ([ADR 0623](decisions/0623-branch-and-codegen-peepholes.md)). |
@@ -189,6 +190,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
 | **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
 | **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |
+| **Tool method** | A method marked `@tool` that a running app offers an attached agent as a typed action: listed by `tools`, run by `call` (behind `--attach-input`) or through `ail attach mcp` (ADR 0986). |
 | **Tuple** | An anonymous value of two or more elements with their own types, written `(1, "a")` and typed `(int, str)`; elements are `t.0`, `t.1`, ... (`type.tuple.1-9`, ADRs 0791-0795). |
 | **Typed fast path** | A bytecode instruction specialised to the operand types the compiler knows, which skips the checks the general path makes ([ADR 0618](decisions/0618-bytecode-typed-fast-paths.md)). |
 | **Replay** | Running a program again with the same inputs and thread schedule so a failure reproduces exactly. Property tests print the seed that replays a failing case (ADR 0199); random schedule testing reproduces from its seed on every target (ADR 0322). |

@@ -72,7 +72,7 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 
 **Consequences.**
 - Counted trials of `ail-tools` need E1 and E2 to have landed to be the final arm; until then the stand-in `AGENTS.md` and the existing MCP tools are what is measured, and the trial is labelled by commit.
-- The `ail-core` arm of slice E6 is one more entry in `ARMS` and an `arms/` directory.
+- The `ail-core` arm of slice E6 is one more entry in `ARMS` and an `arms/` directory. It landed as `ail-core-card` (2026-11-11, ADR 1046 amendment): the `ail-tools` kit, but `DOCS/` holds only the core card, and everything else is `ail card TOPIC` and `ail ask std`. `ail-tools` and `ail-core-card` both carry the joined-up kit text of ADR 1046; the paid E13 run must use it.
 - The replay sessions are single flows: they measure the tools' tokens and calls, not whether a model would choose the flow.
 - Old `metrics.json` files lack the new fields; `report` shows `-` for them.
 

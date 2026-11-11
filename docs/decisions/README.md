@@ -711,7 +711,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
 | [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Accepted (built by [1020](1020-ail-context.md)) | 2026-10-24 |
-| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Deferred past 0.1.0 | 2026-10-24 |
+| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` (first slice built by [0986](0986-app-tools-and-attach-mcp.md)) | Accepted (first slice built by [0986](0986-app-tools-and-attach-mcp.md))  | 2026-10-24 |
 | [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Accepted | 2026-10-24 |
 | [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Accepted (built by [1024](1024-ail-review.md)) | 2026-10-24 |
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Accepted (built by [1023](1023-ail-infer-contracts.md)) | 2026-10-24 |
@@ -747,7 +747,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0921](0921-replay-probes.md) | Probes: `--at FILE:LINE --show a,b` prints chosen values each time a line runs | Accepted | 2026-10-26 |
 | [0923](0923-struct-scalar-replacement.md) | Native: scalar replacement of struct objects that stay in one function, and inlining of constructors *(delegated)* | Accepted | 2026-10-26 |
 | [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
-| [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
+| [0925](0925-windows-release-gate.md) | Windows: the full gate green before each release | Accepted | 2026-10-27 |
 | [0926](0926-c-header-import-subset.md) | `use c "header.h"`: a subset C header reader that writes `pub extern c fn` declarations *(delegated)* | Accepted | 2026-10-28 |
 | [0927](0927-fs-scan.md) | `fs.scan`: one bulk walk with allocated size, inode and kind *(delegated)* | Accepted | 2026-11-04 |
 | [0928](0928-fs-volume.md) | `fs.volume`: total and free bytes of a volume *(delegated)* | Accepted | 2026-11-04 |
@@ -796,12 +796,14 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
 | [0985](0985-gfx-gamepad-input.md) | `std.gfx` gamepad input: `Input.pads`, the `pad` event, GameController on the Mac *(delegated)* | Accepted | 2026-11-08 |
+| [0986](0986-app-tools-and-attach-mcp.md) | `@tool` methods: typed actions a running app offers agents (`tools`, `call` behind `--attach-input`), and `ail attach mcp` *(delegated)* | Accepted | 2026-11-08 |
 | [0987](0987-auto-parallel-inner-loops.md) | Native: a proven loop inside a loop run in order may go to the pool (amends 0911) *(delegated)* | Accepted | 2026-11-08 |
 | [0984](0984-std-app-font-op.md) | `std.app` `Font`: web fonts in the display list, kept by the host under an id | Accepted | 2026-11-08 |
 | [0988](0988-std-media-webm.md) | `std.media.webm`: WebM and Matroska demuxing in AIL, fed in pieces for Media Source Extensions *(delegated)* | Accepted | 2026-11-08 |
 | [0989](0989-std-video-vp9.md) | `std.video.vp9`: a VP9 profile 0 decoder in AIL, I420 frames and RGBA *(delegated)* | Accepted | 2026-11-08 |
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
+| [0993](0993-audio-streaming-output.md) | std.audio.device: streaming output with a played-frames clock, amends ADR 0949 *(delegated)* | Accepted | 2026-11-08 |
 | [0994](0994-overflow-facts-in-multi-exit-loops.md) | Native: drop overflow checks that bounds and index uses rule out, in loops that leave in more than one place *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
 | [1007](1007-std-io-write-bytes.md) | `io.write_bytes`: raw bytes to standard output *(delegated)* | Accepted | 2026-11-09 |
@@ -835,4 +837,8 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1054](1054-ail-edit-refactors.md) | `ail edit` refactors: `change_sig`, `extract` and `move` *(delegated)* | Accepted | 2026-11-10 |
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
+| [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
 | [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |
+| [1057](1057-ail-help.md) | `ail help`, `--help` and a real no-argument usage; JSON for agents *(delegated)* | Accepted | 2026-11-11 |
+| [1058](1058-ail-on-path-and-doctor.md) | `ail` works from PATH through symlinks; `ail doctor` and `ail doctor --path` *(delegated)* | Accepted | 2026-11-11 |
+| [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |

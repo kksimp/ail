@@ -258,6 +258,7 @@ enum Hover {
 enum Edge {
     static var wanted = false
     static var applied = false
+    static var retrying = false
     static var lastEvent: NSEvent?
     /// Our window, once edge mode is on.
     static var own: NSWindow?
@@ -265,7 +266,9 @@ enum Edge {
     /// The window controls' room in points: their right edge plus a gap, and the title bar's height.
     static func insets(_ w: NSWindow?) -> [String: Any] {
         var f = screen()
-        guard applied, let w = w else { f["inset_left"] = 0; f["inset_top"] = 0; return f }
+        // Our own window when there is one: a canvas is sized before it joins a window,
+        // and one from the closed SwiftUI window has none, so `w` alone can miss it.
+        guard applied, let w = own ?? w else { f["inset_left"] = 0; f["inset_top"] = 0; return f }
         let right = w.standardWindowButton(.zoomButton)?.frame.maxX ?? 70
         let top = w.frame.height - w.contentLayoutRect.height
         f["inset_left"] = right + 8
@@ -290,7 +293,18 @@ enum Edge {
     /// window closes. Every canvas then reports its size again so the app learns the insets.
     static func apply(_ model: Model) {
         guard wanted, !applied else { return }
-        guard let old = window(nil) else { return }
+        guard let old = window(nil) else {
+            // The first view can arrive before any window exists: try again shortly,
+            // or the app would wait for its next view to get its insets.
+            if !retrying {
+                retrying = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    retrying = false
+                    apply(model)
+                }
+            }
+            return
+        }
         applied = true
         let win = NSWindow(contentRect: old.frame,
                            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -307,6 +321,9 @@ enum Edge {
         win.backgroundColor = .windowBackgroundColor
         let hosting = NSHostingView(rootView: Root(model: model))
         hosting.autoresizingMask = [.width, .height]
+        // The tree fills the whole window, title bar included, whenever SwiftUI lays it out:
+        // with the safe area left on, a layout before the window showed stopped a title bar short.
+        if #available(macOS 13.3, *) { hosting.safeAreaRegions = [] }
         win.contentView = hosting
         win.setFrame(old.frame, display: false)
         own = win
@@ -314,7 +331,12 @@ enum Edge {
         old.orderOut(nil)
         old.close()
         FileHandle.standardError.write("AIL App Host: edge mode on (std.app.25)\n".data(using: .utf8)!)
+        // The new window's canvases are built over the next turns: report once now and
+        // once when they are in place, so the app always learns the insets.
         DispatchQueue.main.async {
+            for v in CanvasView.registry.values { v.reportSize() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             for v in CanvasView.registry.values { v.reportSize() }
         }
     }

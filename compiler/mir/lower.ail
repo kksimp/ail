@@ -546,13 +546,14 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         )
         return
     for a in f.attrs
-        # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5).
+        # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5); `@tool` only feeds the attach derive (attach.tool.1).
         if a.name != "inline"
             and a.name != "pure"
             and a.name != "allow"
             and a.name != "deprecated"
             and a.name != "test"
             and a.name != "export c"
+            and a.name != "tool"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params

@@ -13,3 +13,4 @@ trap_deep
 trap_snapshot
 tool_explain_chapters
 tool_explain_rules
+attach_tool_bad

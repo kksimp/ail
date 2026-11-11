@@ -13,6 +13,34 @@
 ## `ail edit` (infer.out.3), which checks the result.
 
 ## The compiler to drive: `$AIL`, else `./ail`.
+## The name every scratch directory of this program starts with (ADR 1059); `remove_scrap` removes no other tree.
+SCRAP_PREFIX := "ail-infer-"
+
+## `rm -f`: a failure is ignored.
+fn rm_file(target str)
+    fs.remove(target) else return
+
+## Remove the scratch directory `root` and everything in it, which `fs.make_temp_dir` made (ADR 1059). It refuses
+## any other name, and a symbolic link to a directory is removed as a link (`fs.walk` lists it as a file).
+fn remove_scrap(root str)
+    if not path.base(root).starts_with(SCRAP_PREFIX)
+        return
+    files := fs.walk(root) else return
+    mut links := Set[str]()
+    for f in files
+        links.add(f)
+    scrap_tree(root, links)
+
+fn scrap_tree(dir str, files Set[str])
+    names := fs.list_dir(dir) else return
+    for name in names
+        p := path.join(dir, name)
+        if files.contains(p)
+            rm_file(p)
+            continue
+        scrap_tree(p, files)
+    rm_file(dir)
+
 fn ail_path() str
     env.get("AIL") else "./ail"
 
@@ -61,12 +89,6 @@ struct Cand
     col int
     other int
     op str
-
-## Removes the scratch files and directory; a file that is already gone is not an error.
-fn clean_up(scratch str, rows_path str, copy str)
-    for p in [rows_path, copy, scratch]
-        if fs.exists(p)
-            fs.remove(p) else continue
 
 fn indent(l str) int
     l.len() - l.trim_start().len()
@@ -446,12 +468,8 @@ fn run(args List[str]) int
     cols := columns(sig)
     has_result_param := [p.name for p in sig.params if p.name == "result"].len() > 0
     # infer.cand.1: the copy, and the scratch file the rows go to.
-    # A scratch directory every host can write (Git's `mktemp` names a `/tmp` Windows cannot open).
-    raw := (env.get("TMPDIR") else (env.get("TEMP") else "/tmp")).replace("\\", "/")
-    base := if raw.len() > 1 and raw.ends_with("/") then raw.slice(0, raw.len() - 1) else raw
-    scratch := "{base}/ail-infer-{time.now_ms()}"
-    fs.make_dir(scratch) else err
-        return die("can't make {scratch}: {err.kind}")
+    scratch := fs.make_temp_dir(SCRAP_PREFIX) else err
+        return die("can't make a temporary directory: {err}")
     rows_path := "{scratch}/rows.txt"
     dir := path.dir(file)
     copy := if dir.is_empty() then ".ail-infer-{path.stem(file)}.ail" else "{dir}/.ail-infer-{path.stem(file)}.ail"
@@ -472,10 +490,12 @@ fn run(args List[str]) int
     if not cases.is_empty()
         test_args.extend(["--cases", cases])
     ran := proc.run(ail_path(), test_args) else err
-        clean_up(scratch, rows_path, copy)
+        remove_scrap(scratch)
+        rm_file(copy)
         return die("can't run the tests: {err}")
     seen := fs.read_text(rows_path) else ""
-    clean_up(scratch, rows_path, copy)
+    remove_scrap(scratch)
+    rm_file(copy)
     # infer.cand.1: each row is one call; a row with the wrong number of cells is not read.
     mut data := List[List[int]]()
     for _ in 0..cols.len()

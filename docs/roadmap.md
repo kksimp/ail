@@ -10,14 +10,14 @@
 | Stage | Goal | Exit criteria (proposed) | State |
 |---|---|---|---|
 | 1 | Language specification and design | All 28 design topics have accepted ADRs. The spec chapters are drafted. The token benchmark corpus (layers 1–2) exists and is used for syntax decisions. | **Core done** (2026-10-04, ADR 0086). Remaining topics continue alongside Stage 2. |
-| 2 | **Entry criteria ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)):** concurrency model, modules and packages core, strings/collections/loops/literals, entry point and printing, and the unsafe/FFI core model are decided. **First milestone:** `./ail run examples/hello.ail` on macOS. Then: lexer, parser, AST, type checker, **first semantic API** (bootstrap in Rust: [ADR 0023](decisions/0023-rust-bootstrap.md); API: [ADR 0024](decisions/0024-semantic-api-from-stage-2.md)) | All spec examples parse and type-check. Diagnostics are structured. Conformance harness running. Semantic API v1 published. | **In progress** (started 2026-10-04). Milestone 1 (Hello World) done: Linux x86-64 and macOS ARM64 pass. Milestone 2 (gradebook: structs, enums, methods, `match`, loops, lists, `mut`, interpolation) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 3 (command parser: error types, `?`, `else`, optionals, variants with data, `for mut`) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). If-binding conditions (ADR 0125) done and verified on both (2026-10-05). Milestone 4 (traits and generics, ADRs 0126–0129) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 5 (three 500–800 line programs: interpreter, JSON tool, spreadsheet; ADRs 0130–0140) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 6 (Python parity: implicit `self`, positional constructor arguments, empty literals typed by use; ADRs 0141–0143) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). **Milestone 7 (AI-first buildout, 2026-10-20) done on Linux; macOS verification pending:** the semantic API (`ail api`, `explain`, `fix`, `effects`, schema v1, typed holes), effects and capabilities, standard modules (`fs`, `env`, `io`, `proc`, `time`, `random`, `json`, `ui`), user modules and packages, `ail test` with property and doc tests, `ail fmt`, contracts, tasks and channels, the spec conformance harness, an editor written in AIL, and (rounds 4–9) ownership (`unique`, `move`, `ref`, `defer`), `par for` and a thread pool, derive generators and compile-time reflection, `std.tensor`, tracing and coverage, and a ten-program agent corpus under Python in tokens. See [status.md](status.md). |
-| 3 | Interpreter: the **semantic reference implementation** and differential-testing oracle ([ADR 0018](decisions/0018-optimizing-backend-from-start.md)); the front end ported to AIL (`compiler/`, run by the bootstrap and differentially tested against it) | Semantics validated by running the conformance suite. The AIL lexer, parser and checker agree with the Rust ones on the whole corpus. | **Started 2026-10-20** (designer's decision). Done: the syntax tree (ADR 0376), lexer and parser in AIL (ADRs 0371–0375; byte-identical to `ail api --ast` on all repo files); the checker's declaration passes (ADR 0377). In progress: the rest of the checker (its gate is ADR 0380; ADRs 0378 and 0379 were reserved and never written); a bytecode tier in the bootstrap (ADR 0359, slices 1–2 merged). |
-| 4 | **Optimising native backend, written in AIL** ([ADR 0022](decisions/0022-staged-self-hosting.md)), run on the interpreter until it compiles itself; then the front end is ported to AIL. Built on AIL's own toolchain ([ADR 0010](decisions/0010-no-llvm-backend.md): no LLVM; [ADR 0017](decisions/0017-no-c-emission.md): no C; [ADR 0018](decisions/0018-optimizing-backend-from-start.md): optimising from the start; [ADR 0015](decisions/0015-always-whole-program-incremental.md)/[0016](decisions/0016-optimized-and-observable-debugging.md): single-mode WPO with full observability) | All 5 Tier 1 targets produce working binaries with AIL's own encoder and linker. Differential tests match the interpreter. Every host can build for every target ([ADR 0031](decisions/0031-hosts-and-cross-compilation.md)). The drag-race harness runs, and first results against clang and gcc are published ([ADR 0030](decisions/0030-performance-benchmarks.md)). | Not started |
-| 5 | Custom runtime and GC | Runtime and GC pass stress tests on all targets, gated on ARM64 for weak-memory correctness. | Not started |
-| 6 | Optimizer maturation | Closes the gap to (then beats) clang/gcc -O2/-O3 on the benchmark suite, using thresholds the designer sets. | Not started |
+| 2 | **Entry criteria ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)):** concurrency model, modules and packages core, strings/collections/loops/literals, entry point and printing, and the unsafe/FFI core model are decided. **First milestone:** `./ail run examples/hello.ail` on macOS. Then: lexer, parser, AST, type checker, **first semantic API** (bootstrap in Rust: [ADR 0023](decisions/0023-rust-bootstrap.md); API: [ADR 0024](decisions/0024-semantic-api-from-stage-2.md)) | All spec examples parse and type-check. Diagnostics are structured. Conformance harness running. Semantic API v1 published. | **Done for v0.1.0.** `./ail run examples/hello.ail` runs on macOS ARM64, Linux x86-64 and Windows x86-64; the compiler, checker and tools are written in AIL and `ail` builds itself from a published seed ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md)). The semantic API v1, structured diagnostics and the conformance harness ship. The historical milestone log is in [status.md](status.md). |
+| 3 | Interpreter: the **semantic reference implementation** and differential-testing oracle ([ADR 0018](decisions/0018-optimizing-backend-from-start.md)); the front end ported to AIL (`compiler/`, run by the bootstrap and differentially tested against it) | Semantics validated by running the conformance suite. The AIL lexer, parser and checker agree with the Rust ones on the whole corpus. | **Superseded.** The interpreter and the Rust bootstrap are deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the front end in AIL (lexer, parser, checker in `compiler/`) is the only one. |
+| 4 | **Optimising native backend, written in AIL** ([ADR 0022](decisions/0022-staged-self-hosting.md)), run on the interpreter until it compiles itself; then the front end is ported to AIL. Built on AIL's own toolchain ([ADR 0010](decisions/0010-no-llvm-backend.md): no LLVM; [ADR 0017](decisions/0017-no-c-emission.md): no C; [ADR 0018](decisions/0018-optimizing-backend-from-start.md): optimising from the start; [ADR 0015](decisions/0015-always-whole-program-incremental.md)/[0016](decisions/0016-optimized-and-observable-debugging.md): single-mode WPO with full observability) | All 5 Tier 1 targets produce working binaries with AIL's own encoder and linker. Differential tests match the interpreter. Every host can build for every target ([ADR 0031](decisions/0031-hosts-and-cross-compilation.md)). The drag-race harness runs, and first results against clang and gcc are published ([ADR 0030](decisions/0030-performance-benchmarks.md)). | **Done for v0.1.0.** The native backend, encoders and linkers for macOS ARM64, Linux x86-64 and Windows x86-64 are written in AIL, with no LLVM and no C. Linux ARM64 is checked under emulation only; Windows ARM64 is untested. The drag race is in [benchmarks.md](benchmarks.md). |
+| 5 | Custom runtime and GC | Runtime and GC pass stress tests on all targets, gated on ARM64 for weak-memory correctness. | **Done for v0.1.0.** The native runtime and a stop-the-world mark-sweep collector ship (ADRs 0562–0564); stress tests run in the gate. |
+| 6 | Optimizer maturation | Closes the gap to (then beats) clang/gcc -O2/-O3 on the benchmark suite, using thresholds the designer sets. | **Ongoing.** An optimizing backend ships (CSE, inlining, bounds-check elimination, vectorisation, auto-parallel loops). Speed work continues; see [benchmarks.md](benchmarks.md) for the numbers. |
 | 7 | *(merged into Stage 4 by ADR 0018)* | — | — |
-| 8 | Complete the AI semantic interface (started in Stage 2) | All brief §12 queries are answerable. | Not started |
-| 9 | Advanced optimisation, profiling, debugging, cross-platform tooling | Profile-guided optimisation, debugger, and profilers on all targets. | Not started |
+| 8 | Complete the AI semantic interface (started in Stage 2) | All brief §12 queries are answerable. | **Done for v0.1.0.** `ail api`, `ask`, `context`, `explain`, `fix`, `review`, `try`, `task` and the MCP server answer the queries of the founding brief ([status.md](status.md)). |
+| 9 | Advanced optimisation, profiling, debugging, cross-platform tooling | Profile-guided optimisation, debugger, and profilers on all targets. | **Partly done.** Profiling (`ail perf`, tracing, coverage), time-travel record and replay, and live attach ship. Debug info (DWARF and PDB, ADR 0021) and profile-guided optimisation are planned for 0.2. |
 
 ## Proposed refinements (history: decided long ago)
 
@@ -116,19 +116,13 @@ std API still needs its own ADR first.
 4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
    ([ADR 0878](decisions/0878-screen-model-for-std-app.md)), Garlic first, then every
    GUI program; `@observe` and live attach ([ADR 0879](decisions/0879-observe-and-live-attach.md)).
-5. **Garlic interface** (kksimp/garlic window and chrome): closing tabs, and
-   a redesign that looks as polished as Chrome or Firefox but has its own look.
-6. **Garlic agent features** (kksimp/garlic page model and agent server):
-   the agent server and attach channel; watches and scheduled actions; trust
-   rules; grounding; forms as schema; extraction; quiet pages; waiting; intent
-   maps; page memory; opt-in action replay; form diff before submit; site
-   memory. Parity fixes for real sites are interleaved.
-7. **Packages and networking** (`std/net`, packages): done (hardware
+5. **App-side work** (Garlic window, chrome and agent features; ail-edit; the other apps): tracked in each app's own repository and project since 2026-11-11, not in this roadmap. Language and std gaps they find are filed here.
+6. **Packages and networking** (`std/net`, packages): done (hardware
    AES-GCM, proxy support, git dependencies and `ail.lock` in the native
    loader).
-8. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
+7. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
    and Metal, then NPUs; weaker atomic orderings (OQ-097).
-9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
+8. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
    [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
    model, pure-call CSE and hoisting, merging only where it is faster.
    Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
@@ -136,22 +130,20 @@ std API still needs its own ADR first.
    optimizer benchmark against C using contracts, `ail test --mutate` and
    `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
    (SIMD, multi-core and tensor speed; ADR 0899).
-10. **Last:** the Rust-free rebuild of ail-edit compared with
-   editor-baseline.md (in kksimp/ail-edit, `docs/`); a drag race of Garlic
-   against Chrome and Firefox on a fixed set of real sites (page load, first
-   paint, scrolling, memory and tokens per agent task); then the Python
-   on-ramp (OQ-119).
+9. **Last:** the Python on-ramp (OQ-119). The Rust-free rebuild of ail-edit and the drag race of Garlic against Chrome and Firefox moved to those apps' projects.
 
-## Toward 0.2 (2026-11-09)
+## Toward 0.2 (2026-11-10)
 
 v0.1.0 is the first public tag: the compiler builds itself from a published seed, runs on macOS ARM64, Linux x86-64 and Windows x86-64, and carries a launch set of docs. `main` is frozen for it ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)): after the release candidate only docs change, and everything else targets 0.2.
 
 Planned for 0.2 (none of it is a promise; status.md says what exists):
 
-- Gate the ungated tools (`ail context`, `ail infer`, probes, `ail lsp` rename and code actions, `ail test --fuzz` and `--mutate`) and add a Linux ARM64 and a Windows ARM64 machine to the gate.
-- The open feature pull requests: const generics (ADR 0954), generators (ADR 0965), `@tool` functions (ADR 0892), `ail merge`, `ail review`, `perf --explain`, variadic C and `export c`, epoll and signals, TLS server (needs constant-time signing first).
-- Speed: the optimizer leftovers and the SIMD slices.
-- Apps in their own repositories: Garlic (cross-platform look, video, canvas), Clove, ail-edit, Garlic Press.
+- **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, generators (ADR 0965), variadic C and `export c` (#1117), `@tool` functions (#1098).
+- **Toolchain:** debug info (`ail build -g`, DWARF and PDB, ADR 0021); one native launcher, so routing leaves `ail` and `ail.ps1` and the scripts only fetch the seed and build; a prebuilt `ail` per release.
+- **Gate:** a gate suite for `ail merge`, and a Linux ARM64 and a Windows ARM64 machine in the gate.
+- **Hardware:** GPU compute (#1104), Linux ARM64 on hardware, Windows ARM64, a TLS server (needs constant-time signing first, ADR 0959).
+- **Agents:** agent-specific kits (`ail new --agent NAME`), once the measured agent runs show whether agents skip the check loop.
+- **Apps** are in their own repositories and projects, not planned here: Garlic, Garlic Press, ail-edit, Clove, Husk, Gridrun and ail-kernel. What they need from the language and std (video, canvas, a window path) is planned here.
 
 ## Documentation roadmap
 
