@@ -30,14 +30,13 @@ fn run() bool ! device.DeviceError
     rising := b.played > a.played and a.played > 0
     if b.played > sent
         sane = false
-    device.stream_pause(mut c)?
-    p1 := device.stream_status(mut c)?
+    p1 := device.stream_pause(mut c)?
     time.sleep_ms(200)
     p2 := device.stream_status(mut c)?
     held := p1.played == p2.played
-    device.stream_resume(mut c)?
+    r := device.stream_resume(mut c)?
     f := device.stream_flush(mut c)?
-    zeroed := f.played == 0 and f.buffered == 0
+    zeroed := f.played == 0 and f.buffered == 0 and r.played >= p2.played
     device.stream_close(mut c)?
     device.close(move c)
     sane and rising and held and zeroed

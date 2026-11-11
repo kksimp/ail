@@ -59,8 +59,8 @@ which may differ from those asked for; `resample` and `to_mono` adapt it.
 channels)` opens one continuous output on the host; `stream_write(mut d, clip)`
 queues a chunk (the clip must have the stream's rate and channels; about 20 ms
 is a good size) and returns at once with a `StreamStatus`; `stream_status`,
-`stream_pause`, `stream_resume`, `stream_flush` and `stream_close` do what they
-say. `StreamStatus` has `played`, the frames the device has finished, and
+`stream_pause`, `stream_resume` and `stream_flush` do what they say and return
+the `StreamStatus` too; `stream_close` returns nothing. `StreamStatus` has `played`, the frames the device has finished, and
 `buffered`, the frames queued and not yet played: `played` is the clock to
 time video frames to, accurate to one chunk. `stream_flush` drops the queue and
 zeroes both counts, for a seek. `stream_write` does not wait for playback and
@@ -167,7 +167,8 @@ fn main() !
         st := device.stream_write(mut d, chunk)?
         if st.buffered > 800
             print("{st.played} frames played, {st.buffered} queued")
-    device.stream_flush(mut d)?
+    after := device.stream_flush(mut d)?
+    print("{after.played} played after the flush")
     device.stream_close(mut d)?
     device.close(move d)
 ```

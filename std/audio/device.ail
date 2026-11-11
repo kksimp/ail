@@ -139,16 +139,16 @@ pub fn stream_write(mut c proc.Child, clip audio.Clip) StreamStatus ! DeviceErro
 pub fn stream_status(mut c proc.Child) StreamStatus ! DeviceError
     ask(mut c, "clock")?
 
-## Pauses playback; queued audio is kept (std.audio.12).
-pub fn stream_pause(mut c proc.Child) ! DeviceError
+## Pauses playback; queued audio is kept. Returns the status (std.audio.12).
+pub fn stream_pause(mut c proc.Child) StreamStatus ! DeviceError
     ask(mut c, "pause")?
 
-## Resumes playback (std.audio.12).
-pub fn stream_resume(mut c proc.Child) ! DeviceError
+## Resumes playback and returns the status (std.audio.12).
+pub fn stream_resume(mut c proc.Child) StreamStatus ! DeviceError
     ask(mut c, "resume")?
 
-## Drops the queued audio and sets the clock to zero, for a seek (std.audio.12).
-pub fn stream_flush(mut c proc.Child) ! DeviceError
+## Drops the queued audio and sets the clock to zero, for a seek; returns the status, both counts 0 (std.audio.12).
+pub fn stream_flush(mut c proc.Child) StreamStatus ! DeviceError
     ask(mut c, "flush")?
 
 ## Ends the stream (std.audio.12).
