@@ -509,6 +509,20 @@ fn rec_fs_make_dir(path str, at str)
     fs_make_dir(path, at)
     rec_w_unit("fs.make_dir", 1)
 
+fn rec_fs_temp_dir() str
+    if rec_mode() == 2
+        return rec_r_str("fs.temp_dir", "")
+    r := fs_temp_dir()
+    rec_w_str("fs.temp_dir", r, 0)
+    r
+
+fn rec_fs_make_temp_dir(prefix str, at str) str
+    if rec_mode() == 2
+        return rec_r_str("fs.make_temp_dir", at)
+    r := fs_make_temp_dir(prefix, at)
+    rec_w_str("fs.make_temp_dir", r, 1)
+    r
+
 fn rec_fs_rename(from str, to str, at str)
     if rec_mode() == 2
         rec_r_unit("fs.rename", at)

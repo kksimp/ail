@@ -1073,17 +1073,21 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     ]
     hash.sha256(parts.join("\n"))
 
-## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
-## without it, as on Windows, the cache just grows).
+## Keep the newest `CACHE_KEEP` executables of `dir` (newest by modification time; ADR 1059 replaced `ls -t`).
 fn cache_trim(dir str)
-    listed := proc.run("ls", ["-t", dir]) else return
-    mut n := 0
-    for name in listed.out.lines()
+    names := fs.list_dir(dir) else return
+    # "AGE NAME" lines, where AGE counts down from 10^14 so that byte order is newest first.
+    mut keyed := List[str]()
+    for name in names
         if name.len() != 64
             continue
+        meta := fs.metadata(path.join(dir, name)) else continue
+        keyed.push("{100000000000000 - meta.modified_ms} {name}")
+    mut n := 0
+    for line in keyed.sorted()
         n += 1
         if n > CACHE_KEEP
-            fs.remove(path.join(dir, name)) else continue
+            fs.remove(path.join(dir, line.slice(line.len() - 64, line.len()))) else continue
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str

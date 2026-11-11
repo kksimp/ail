@@ -350,9 +350,8 @@ fn finish(json bool) !int
         io.eprint("error: {got.out}")
         return 2
     sum := summary_json(scope_lines())
-    gone := proc.run("rm", ["-f", STATE]) else return 2
-    if gone.status != 0
-        return 2
+    if fs.exists(STATE)
+        fs.remove(STATE) else return 2
     answer(
         json,
         [
@@ -369,9 +368,8 @@ fn finish(json bool) !int
 
 fn abort() int
     t := load_task() else return no_task()
-    gone := proc.run("rm", ["-f", STATE]) else return 2
-    if gone.status != 0
-        return 2
+    if fs.exists(STATE)
+        fs.remove(STATE) else return 2
     print("task aborted: {t.goal}")
     0
 

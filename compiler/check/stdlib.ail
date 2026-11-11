@@ -40,6 +40,8 @@ STD_FUNCTIONS := [
         "volume",
         "read_range",
         "trash",
+        "temp_dir",
+        "make_temp_dir",
         "write_bytes",
         "write_text",
     ],
@@ -242,6 +244,10 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.trash"
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.temp_dir"
+        return StdSig(params: [], ret: text)
+    if key == "fs.make_temp_dir"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
     if key == "fs.scan"
         return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
     if key == "fs.scan_count"

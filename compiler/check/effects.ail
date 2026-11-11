@@ -46,6 +46,8 @@ STD_EFFECTS := [
             "volume",
             "read_range",
             "trash",
+            "temp_dir",
+            "make_temp_dir",
             "scan",
             "scan_count",
             "map",

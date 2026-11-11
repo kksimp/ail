@@ -9,6 +9,41 @@
 ## `ail test FILE --affected` for the tests. The exit status is 0 when the program
 ## checks and no affected test fails that did not already fail at REV, 1 when not, and 2 for a usage error.
 
+## The name every scratch directory of this program starts with (ADR 1059); `remove_scrap` removes no other tree.
+SCRAP_PREFIX := "ail-verify-"
+
+## The `tar` to unpack with: on Windows its own `tar.exe`, since Git's GNU tar reads `C:/x` as a host name.
+fn tar_path() str
+    if (env.get("OS") else "") != "Windows_NT"
+        return "tar"
+    own := "{(env.get("SystemRoot") else "C:/Windows").replace("\\", "/")}/System32/tar.exe"
+    if fs.exists(own) then own else "tar"
+
+## `rm -f`: a failure is ignored.
+fn rm_file(target str)
+    fs.remove(target) else return
+
+## Remove the scratch directory `root` and everything in it, which `fs.make_temp_dir` made (ADR 1059). It refuses
+## any other name, and a symbolic link to a directory is removed as a link (`fs.walk` lists it as a file).
+fn remove_scrap(root str)
+    if not path.base(root).starts_with(SCRAP_PREFIX)
+        return
+    files := fs.walk(root) else return
+    mut links := Set[str]()
+    for f in files
+        links.add(f)
+    scrap_tree(root, links)
+
+fn scrap_tree(dir str, files Set[str])
+    names := fs.list_dir(dir) else return
+    for name in names
+        p := path.join(dir, name)
+        if files.contains(p)
+            rm_file(p)
+            continue
+        scrap_tree(p, files)
+    rm_file(dir)
+
 ## The compiler to drive: `$AIL`, else `./ail`.
 fn ail_path() str
     env.get("AIL") else "./ail"
@@ -44,11 +79,20 @@ fn failing_at(file str, rev str) List[str]
     if file.starts_with("/")
         return []
     mut names := List[str]()
-    made := proc.run("mktemp", ["-d"]) else return names
-    tmp := made.out.trim()
-    pre := proc.run("git", ["rev-parse", "--show-prefix"]) else return names
-    unpacked := proc.run("sh", ["-c", "git archive '{rev}' | tar -x -C '{tmp}'"]) else return names
-    if unpacked.status == 0
+    tmp := fs.make_temp_dir(SCRAP_PREFIX) else return names
+    pre := proc.run("git", ["rev-parse", "--show-prefix"]) else
+        remove_scrap(tmp)
+        return names
+    # `git archive` to a tar file, then `tar` reads it: no shell pipe (ADR 1059).
+    tar := "{tmp}/.rev.tar"
+    cut := proc.run("git", ["archive", "--format=tar", "-o", tar, rev]) else
+        remove_scrap(tmp)
+        return names
+    unpacked := proc.run(tar_path(), ["-x", "-f", tar, "-C", tmp]) else
+        remove_scrap(tmp)
+        return names
+    rm_file(tar)
+    if cut.status == 0 and unpacked.status == 0
         old := proc.run(ail_path(), [
             "test",
             "{tmp}/{pre.out.trim()}{file}",
@@ -57,7 +101,7 @@ fn failing_at(file str, rev str) List[str]
         for t in parse_json_lines(old.out)
             if t.text("status", "") == "fail"
                 names.push(t.text("test", ""))
-    _ := proc.run("rm", ["-rf", tmp]) else return names
+    remove_scrap(tmp)
     names
 
 ## The paths changed since `rev` (tracked changes and new files) with the git hash of each (verify.cert.1).

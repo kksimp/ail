@@ -13,6 +13,34 @@
 ## `ail edit` (infer.out.3), which checks the result.
 
 ## The compiler to drive: `$AIL`, else `./ail`.
+## The name every scratch directory of this program starts with (ADR 1059); `remove_scrap` removes no other tree.
+SCRAP_PREFIX := "ail-infer-"
+
+## `rm -f`: a failure is ignored.
+fn rm_file(target str)
+    fs.remove(target) else return
+
+## Remove the scratch directory `root` and everything in it, which `fs.make_temp_dir` made (ADR 1059). It refuses
+## any other name, and a symbolic link to a directory is removed as a link (`fs.walk` lists it as a file).
+fn remove_scrap(root str)
+    if not path.base(root).starts_with(SCRAP_PREFIX)
+        return
+    files := fs.walk(root) else return
+    mut links := Set[str]()
+    for f in files
+        links.add(f)
+    scrap_tree(root, links)
+
+fn scrap_tree(dir str, files Set[str])
+    names := fs.list_dir(dir) else return
+    for name in names
+        p := path.join(dir, name)
+        if files.contains(p)
+            rm_file(p)
+            continue
+        scrap_tree(p, files)
+    rm_file(dir)
+
 fn ail_path() str
     env.get("AIL") else "./ail"
 
@@ -440,9 +468,8 @@ fn run(args List[str]) int
     cols := columns(sig)
     has_result_param := [p.name for p in sig.params if p.name == "result"].len() > 0
     # infer.cand.1: the copy, and the scratch file the rows go to.
-    made := proc.run("mktemp", ["-d"]) else err
-        return die("can't run mktemp: {err}")
-    scratch := made.out.trim()
+    scratch := fs.make_temp_dir(SCRAP_PREFIX) else err
+        return die("can't make a temporary directory: {err}")
     rows_path := "{scratch}/rows.txt"
     dir := path.dir(file)
     copy := if dir.is_empty() then ".ail-infer-{path.stem(file)}.ail" else "{dir}/.ail-infer-{path.stem(file)}.ail"
@@ -463,10 +490,12 @@ fn run(args List[str]) int
     if not cases.is_empty()
         test_args.extend(["--cases", cases])
     ran := proc.run(ail_path(), test_args) else err
-        gone1 := proc.run("rm", ["-rf", scratch, copy]) else return 2
+        remove_scrap(scratch)
+        rm_file(copy)
         return die("can't run the tests: {err}")
     seen := fs.read_text(rows_path) else ""
-    gone2 := proc.run("rm", ["-rf", scratch, copy]) else return 2
+    remove_scrap(scratch)
+    rm_file(copy)
     # infer.cand.1: each row is one call; a row with the wrong number of cells is not read.
     mut data := List[List[int]]()
     for _ in 0..cols.len()
