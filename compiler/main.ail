@@ -725,7 +725,7 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
     for s in srcs
         have.add(s.path)
     mut out := List[mir.Source]()
-    for e in derive.expand([s.module for s in srcs], [s.prog for s in srcs])
+    for e in derive.expand([s.module for s in srcs], documented(srcs))
         if have.contains("gen:impl:{e.label}")
             continue
         if e.problem != ""

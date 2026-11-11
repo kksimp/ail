@@ -2096,7 +2096,7 @@ fn Gate.net(mut self)
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
         red("attach none", "exit {nobody.status}\n{nobody.err}")
     bad := sh_run("TMPDIR={ad} ./ail attach set x=1")
-    if bad.status != 2 or not bad.err.contains("the queries are observe, screen and heap")
+    if bad.status != 2 or not bad.err.contains("the queries are observe, screen, heap and tools")
         red("attach unknown query", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {ad}")
     # std.net.5, std.net.13: https and a raw TLS Conn against `openssl s_server`.
@@ -3157,6 +3157,30 @@ fn Gate.agent_tools(mut self, tmp str)
         "'range':'HEAD..HEAD','path':'examples/hello.ail'",
     )])
     want("mcp review", m3.out, ["\"isError\":false"])
+    # attach.tool.3-5 (ADR 0986): `ail attach mcp` lists an app's `@tool` next to the fixed tools, and a call
+    # reaches the app as a `call` request with the tool's name and arguments.
+    td := "{base}/attach_mcp"
+    sh_run("rm -rf {td}; mkdir -p {td}")
+    tport := net_port(3)
+    fs.write_text(
+        "{td}/reply.json",
+        jm("~'v':1,'tools':[~'name':'add','doc':'Adds n.','params':[~'name':'n','type':'int'^],'result':'int'^]^"),
+    ) else return
+    fs.write_text(
+        "{td}/ail-attach-{tport}.json",
+        "\{\"addr\":\"127.0.0.1:{tport}\",\"token\":\"tok\"}",
+    ) else return
+    tpid := net_start("python3 -I tools/gate/attach_server.py {tport} {td}/req.txt {td}/reply.json", tport)
+    tl := sh_run("cd {repo_root()} && printf '%s\\n' '{jreq(1, "tools/list", "~^")}' '{mcp_call(2, "add", "'n':2")}' | TMPDIR={td} ./ail attach mcp")
+    net_stop(tpid)
+    want("attach mcp tools/list", tl.out, ["app_observe", "app_input", "\"name\":\"add\"", "\"integer\""])
+    want("attach mcp call", reply_of(tl.out, 2), ["\"isError\":false"])
+    want("attach mcp call request", slurp("{td}/req.txt"), [
+        "\"q\":\"call\"",
+        "\"name\":\"add\"",
+        "\"token\":\"tok\"",
+        "\"n\":2",
+    ])
     # mcp.warm.1-4 (E14): a repeated read-only call comes from the memo, a changed file is
     # checked again, and `AIL_MCP_COLD` goes through the launcher.
     fs.write_text("{base}/mcp/warm.ail", ctx) else return

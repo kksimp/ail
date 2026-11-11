@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-24
 - **Decided by:** AI (delegated, ADR 0076; amends [ADR 0879](0879-observe-and-live-attach.md) and changes none of its points: read-only, local only with a 0600 token file, on in `ail run`, opt-in `--attach` for `ail build`, zero cost when off)
-- **Amended by:** [ADR 0979](0979-gfx-windows-publish-attach.md) (the shim also covers `std.gfx` windows)
+- **Amended by:** [ADR 0979](0979-gfx-windows-publish-attach.md) (the shim also covers `std.gfx` windows), [ADR 0986](0986-app-tools-and-attach-mcp.md) (`tools` and `call` queries for `@tool` methods)
 - **Topic:** 20 — AI semantic API; std.app
 - **Spec rules:** `attach.observe.1-4` and `attach.wire.1-6` (named below; they enter the spec with the code that cites them)
 

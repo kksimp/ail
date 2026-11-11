@@ -1,0 +1,8 @@
+struct Shop
+    n int
+
+@tool fn Shop.add_all(mut self, xs List[int])
+    n += xs.len()
+
+fn main()
+    print(Shop(n: 0).n)
