@@ -42,6 +42,13 @@ STD_FUNCTIONS := [
         "trash",
         "temp_dir",
         "make_temp_dir",
+        "mode",
+        "set_mode",
+        "set_modified",
+        "read_link",
+        "symlink",
+        "truncate",
+        "write_at",
         "write_bytes",
         "write_text",
     ],
@@ -248,6 +255,16 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "fs.make_temp_dir"
         return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+    if key == "fs.mode"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Int))
+    if key == "fs.set_mode" or key == "fs.set_modified" or key == "fs.truncate"
+        return StdSig(params: [text, Ty.Int], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.write_at"
+        return StdSig(params: [text, Ty.Int, Ty.Bytes], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.read_link"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+    if key == "fs.symlink"
+        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.scan"
         return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
     if key == "fs.scan_count"

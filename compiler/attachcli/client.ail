@@ -12,13 +12,16 @@ struct Running
     port int
     token str
 
+## Where programs publish their discovery files, as `std.attach.serve.token_path` has it: `TMPDIR`,
+## else `TEMP` (Windows), else `/tmp` (attach.cli.1, ADR 1045).
 fn tmp_dir() str
-    env.get("TMPDIR") else "/tmp"
+    env.get("TMPDIR") else (env.get("TEMP") else "/tmp")
 
 ## The programs whose discovery files (`attach.wire.1`) are in the temp directory, by port.
 fn running() List[Running]
     mut out := List[Running]()
-    dir := tmp_dir().strip_suffix("/") else tmp_dir()
+    raw := tmp_dir()
+    dir := raw.strip_suffix("/") else (raw.strip_suffix("\\") else raw)
     names := fs.list_dir(dir) else return out
     for n in names.sorted()
         if not (n.starts_with("ail-attach-") and n.ends_with(".json"))

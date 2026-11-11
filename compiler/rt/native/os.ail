@@ -1449,11 +1449,9 @@ fn fs_read_range(path str, off int, len int, at str) str
 ## right after it, so the data starts where `str + 16` points. The collector
 ## ignores it (the address is outside its heap) and the mapping lives to the
 ## end of the process. The block is 16384 bytes (a macOS page; a multiple of
-## the 4096-byte Linux page). An empty file, and Windows (no fixed-address
-## mapping), give an ordinary `bytes` copy.
+## the 4096-byte Linux page). An empty file gives an ordinary `bytes` copy.
+## Windows maps a view the same way (`fs_map_win`).
 fn fs_map(path str, at str) str
-    if target() == 3
-        return fs_read_bytes(path, at)
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -1482,6 +1480,13 @@ fn fs_map(path str, at str) str
     if size <= 0
         os_close(fd)
         return fs_read_bytes(path, at)
+    if target() == 3
+        wv := fs_map_win(fd, size)
+        os_close(fd)
+        if wv == 0
+            return fs_read_bytes(path, at)
+        os_succeed()
+        return str_at(wv)
     head := 16384
     span := (size + 16383) / 16384 * 16384
     base := sys_mmap(head + span)
@@ -1504,6 +1509,45 @@ fn fs_map(path str, at str) str
     store64(s + 8, size)
     os_succeed()
     str_at(s)
+
+## `fs.map` on Windows (ADR 1016, amended 2026-11-10): a read-only view of
+## the `size` bytes of the open file `fd`, as the address of a string object,
+## or 0 when the system gave no view (the caller copies the file instead).
+## Views start on a 65536-byte boundary, so the head block is that long.
+## Windows has no `MAP_FIXED` over reserved memory: the block is reserved to
+## find a free range, released, and the view (`MapViewOfFileEx`) and the head
+## (`VirtualAlloc`) are placed in it. Another thread may take the range in
+## between, so the placing is tried up to eight times.
+fn fs_map_win(fd int, size int) int
+    # PAGE_READONLY, the whole file.
+    hm := import_call("CreateFileMappingW", win_h(fd), 0, 2, 0, 0, 0)
+    if hm == 0
+        return 0
+    head := 65536
+    span := (size + 65535) / 65536 * 65536
+    mut s := 0
+    mut tries := 0
+    while s == 0 and tries < 8
+        tries += 1
+        # MEM_RESERVE, PAGE_NOACCESS; then MEM_RELEASE.
+        base := import_call("VirtualAlloc", 0, head + span, 8192, 1)
+        if base == 0
+            break
+        import_call("VirtualFree", base, 0, 32768, 0)
+        # FILE_MAP_READ, from offset 0, to the end of the file.
+        v := import_call("MapViewOfFileEx", hm, 4, 0, 0, 0, base + head)
+        if v == 0
+            continue
+        # MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE.
+        if import_call("VirtualAlloc", base, head, 12288, 4) == 0
+            import_call("UnmapViewOfFile", v, 0, 0, 0)
+            continue
+        s = base + head - 16
+        store64(s, size)
+        store64(s + 8, size)
+    # The view keeps the file open; the mapping handle is not needed again.
+    import_call("CloseHandle", hm, 0, 0, 0)
+    s
 
 ## The decimal digits of `n` (not negative), added to the string builder.
 fn os_sb_dec(n int, width int)

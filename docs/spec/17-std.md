@@ -216,9 +216,10 @@ than memory can be searched or indexed. The view reads exactly like
 end of the process; the collector never scans or frees it. A file changed by
 another process while mapped may show the change, and one truncated while
 mapped may stop the program on access (like C `mmap`), so map files that
-other programs are not writing. An empty file gives an empty `bytes`. Where
-the platform cannot map (Windows for now), the result is an ordinary copy
-with the same contents. *(ADR 1016)*
+other programs are not writing. On Windows the system refuses to truncate or
+delete a file while it is mapped. An empty file gives an empty `bytes`. If the
+system refuses the mapping, the result is an ordinary copy with the same
+contents. *(ADR 1016)*
 
 ```ail norun rules=std.fs.36
 use std.fs
@@ -272,6 +273,53 @@ fn main() !
     print("{total} of {v.total} bytes, {v.free} free, {s.skipped.len()} skipped, {seen.bytes} seen")
     head := fs.read_range("a.bin", 0, 4096)?
     fs.trash("old.bin")?
+```
+
+**std.fs.28** — `mode(path str) int ! IoError` returns the permission bits of
+the file (0 to 4095, the low twelve bits of `st_mode`), links followed. On
+Windows a read-only file is 292 (`0o444`) and any other file 438 (`0o666`).
+*(ADR 0977)*
+
+**std.fs.29** — `set_mode(path str, mode int) ! IoError` sets the permission
+bits; a `mode` outside 0 to 4095 traps. On Windows only the owner's write bit
+(128) acts: without it the file becomes read-only, with it that attribute is
+cleared. *(ADR 0977)*
+
+**std.fs.30** — `set_modified(path str, ms int) ! IoError` sets the
+modification time to `ms` milliseconds since 1970-01-01T00:00:00Z, so that
+`metadata(path).modified_ms` reads it back; the access time is unchanged.
+*(ADR 0977)*
+
+**std.fs.31** — `read_link(path str) str ! IoError` returns the text a symbolic
+link holds, as it was written and not resolved. A path that is not a link
+fails with kind `other`. On Windows the text has `\` where `/` was written.
+*(ADR 0977)*
+
+**std.fs.32** — `symlink(target str, path str) ! IoError` makes a symbolic link
+at `path` holding `target` as written; `path` existing fails with kind
+`exists`. On Windows it needs the privilege or developer mode and otherwise
+fails with kind `permission`. *(ADR 0977)*
+
+**std.fs.33** — `truncate(path str, len int) ! IoError` makes the file end at
+byte `len`: bytes past it are dropped and a shorter file grows with zero
+bytes. A negative `len` traps. *(ADR 0977)*
+
+**std.fs.34** — `write_at(path str, offset int, data bytes) ! IoError` writes
+`data` over the bytes of the file from `offset`, making the file when it is
+missing and growing it with zero bytes when it is shorter than `offset`; the
+rest of the file is unchanged. A negative `offset` traps. *(ADR 0977)*
+
+```ail norun rules=std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33,std.fs.34
+use std.fs
+
+fn main() !
+    m := fs.mode("tool.sh")?
+    fs.set_mode("tool.sh", m.bit_or(73))?
+    fs.set_modified("tool.sh", 1700000000000)?
+    fs.symlink("tool.sh", "run")?
+    print(fs.read_link("run")?)
+    fs.truncate("archive.bin", 1048576)?
+    fs.write_at("out.bin", 4096, b"tail")?
 ```
 
 ```ail rules=std.fs.20
@@ -1305,7 +1353,7 @@ fn main()
     print(r.status)
 ```
 
-**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux and a `kqueue` set on macOS, so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. On Windows the server keeps its `poll` loop (IOCP is a later slice). The native runtime only. *(ADR 1009)*
+**std.net.32** — Readiness sets: the server waits for its listener and its parked keep-alive connections (`std.net.22`) in an `epoll` set on Linux, a `kqueue` set on macOS and a completion port on Windows (built, and switched on with the first seed whose PE writer maps `ntdll.dll`; until then Windows takes the `poll` loop below), so the cost of a wait does not grow with the number of idle connections. Nothing a program can observe changes: the same requests get the same answers in any order, a quiet connection holds up no other, and the deadlines of `std.net.10` and `std.net.22` still apply. A wait on a single connection (a client call, `read`) stays `poll`. If the system gives no set, the server falls back to a `poll` loop over its connections. The native runtime only. *(ADR 1009)*
 
 ```ail norun rules=std.net.32
 use std.net
