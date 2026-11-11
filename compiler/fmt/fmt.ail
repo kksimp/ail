@@ -606,6 +606,9 @@ fn spaced(before FTok?, a FTok, b FTok) bool
     if a.kind == SYM
         and (a.text == "(" or a.text == "[" or a.text == "\{" or a.text == "." or a.text == "@")
         return false
+    # `, ...` ends an `extern c fn` parameter list (ffi.var.1): keep the space.
+    if a.sym(",") and b.sym("..")
+        return true
     if a.sym("..") or a.sym("..=") or b.sym("..") or b.sym("..=")
         return false
     # `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.
@@ -991,3 +994,7 @@ fn elements(toks List[FTok], open int, close int) List[Span]
     if start < close
         out.push(Span(from: start, to: close))
     out
+
+@test fn keeps_the_space_before_a_variadic_dots()
+    src := "extern c fn sprintf(buf *u8, fmt *u8, ...) i32\n"
+    assert_eq(format(src).text, src)

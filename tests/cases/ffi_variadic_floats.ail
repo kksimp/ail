@@ -1,0 +1,20 @@
+# ffi.var.2/4: eight variadic floats (the System V `al` count, Win64 mirroring,
+# and the Apple arm64 stack slots), then a call with no variadic arguments.
+use std.mem
+
+extern c fn sprintf(buf *u8, fmt *u8, ...) i32
+
+fn main()
+    unsafe
+        buf := mem.alloc(128, 0.to_u8())
+        fmt := mem.cstr("%.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f")
+        n := sprintf(buf, fmt, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+        print(n)
+        print(mem.from_cstr(buf))
+        plain := mem.cstr("plain")
+        m := sprintf(buf, plain)
+        print(m)
+        print(mem.from_cstr(buf))
+        mem.free(plain)
+        mem.free(fmt)
+        mem.free(buf)

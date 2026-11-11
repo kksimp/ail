@@ -800,8 +800,15 @@ fn prototype(decl List[str], aliases Map[str, str], windows bool) CFn?
     mut params := List[str]()
     mut ints := 0
     mut floats := 0
+    mut variadic := false
     if not (inner.is_empty() or (inner.len() == 1 and inner[0] == "void"))
         for part in split_params(inner)
+            if part.len() == 3 and part[0] == "." and part[1] == "." and part[2] == "."
+                # `...` ends the list after a named parameter (ffi.var.1, ADR 1031).
+                if params.is_empty()
+                    return none
+                variadic = true
+                break
             if part.contains(".")
                 return none
             t := param_type(part, aliases, windows) else return none
@@ -813,6 +820,8 @@ fn prototype(decl List[str], aliases Map[str, str], windows bool) CFn?
     if ints > 6 or floats > 8
         return none
     tail := if ret.text == "" then "" else " {ret.text}"
+    if variadic
+        params.push("...")
     CFn(name: name, line: "pub extern c fn {name}({params.join(", ")}){tail}")
 
 ## Record `typedef T name;` when `T` is a type the FFI carries.
@@ -1021,9 +1030,15 @@ pub fn module_for(header str, dir str) str?
     assert(out.contains("pub extern c fn free(a0 *u8)\n"))
 
 @test fn skips_what_the_ffi_cannot_carry()
-    src := "int printf(const char *fmt, ...);\nstruct P \{ int x; };\nstruct P make(void);\nint (*get(void))(int);\nlong double f(void);\nint ok(void);\n"
+    src := "int f(...);\nstruct P \{ int x; };\nstruct P make(void);\nint (*get(void))(int);\nlong double f(void);\nint ok(void);\n"
     out := module_text(src, false)
     assert_eq(out, "pub extern c fn ok() i32\n")
+
+@test fn keeps_variadic_prototypes()
+    src := "int printf(const char *fmt, ...);\nint snprintf(char *b, size_t n, const char *f, ...);\n"
+    out := module_text(src, false)
+    assert(out.contains("pub extern c fn printf(a0 *u8, ...) i32\n"))
+    assert(out.contains("pub extern c fn snprintf(a0 *u8, a1 u64, a2 *u8, ...) i32\n"))
 
 @test fn looks_through_guards_and_attributes()
     src := "#ifndef H\n#define H\n#ifdef __cplusplus\nextern \"C\" \{\n#endif\n/* a comment */\nextern int atoi (const char *__nptr) __attribute__ ((__nothrow__)) __wur;\n// done\n#ifdef __cplusplus\n}\n#endif\nunsigned long strtoul(const char *s, char **end, int base);\n#endif\n"
