@@ -1,0 +1,309 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## File attributes for archivers and build tools (std.fs.28 to std.fs.34, ADR
+## 0977): permission bits, the modification time, symbolic links and
+## truncation. Each call is one system call per platform; the Windows arm goes
+## through kernel32 (`import_call`), where making a symbolic link needs a
+## privilege or developer mode.
+
+## Error kind and `at` from a negative result `r`.
+fn fsattr_fail(path str, r int, at str)
+    os_fail_errno(r)
+    os_error(path, os_kind(), at)
+
+## `fs.mode(path)` (std.fs.28): the permission bits (0 to 4095) of the file,
+## links followed. On Windows a read-only file is 292 (0o444), any other 438.
+fn fs_mode(path str, at str) int
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return 0
+    if target() == 3
+        w := os_scratch(OS_WIN_A)
+        if not win_wide(w, WIN_PATH_UNITS, p)
+            fsattr_fail(path, -36, at)
+            return 0
+        a := win_attrs(w)
+        if a < 0
+            fsattr_fail(path, win_err(), at)
+            return 0
+        os_succeed()
+        return if a.bit_and(1) != 0 then 292 else 438
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        fsattr_fail(path, fd, at)
+        return 0
+    m := os_fd_mode(fd)
+    os_close(fd)
+    os_succeed()
+    m
+
+## `fs.set_mode(path, mode)` (std.fs.29): `chmod`. Windows keeps one bit: a
+## mode without owner write (128) sets the read-only attribute, with it clears it.
+fn fs_set_mode(path str, mode int, at str)
+    if mode < 0 or mode > 4095
+        flush()
+        out_str("trap[std.fs.29]: a mode is 0 to 4095\n")
+        flush_to(2)
+        sys_exit(1)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    if target() == 3
+        w := os_scratch(OS_WIN_A)
+        if not win_wide(w, WIN_PATH_UNITS, p)
+            fsattr_fail(path, -36, at)
+            return
+        a := win_attrs(w)
+        if a < 0
+            fsattr_fail(path, win_err(), at)
+            return
+        na := if mode.bit_and(128) != 0 then a.bit_and(4294967294) else a.bit_or(1)
+        if na != a and import_call("SetFileAttributesW", w, na, 0, 0) == 0
+            fsattr_fail(path, win_err(), at)
+            return
+        os_succeed()
+        return
+    mut r := 0
+    if target() == 2
+        r = syscall(15, p, mode, 0, 0, 0, 0)
+    else
+        r = syscall(os_pick(268, 53, 0), -100, p, mode, 0, 0, 0)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()
+
+## `fs.set_modified(path, ms)` (std.fs.30): the modification time, in
+## milliseconds since 1970 as `metadata` reports it; the access time stays.
+## Linux `utimensat` with `UTIME_OMIT` for the access time; macOS `utimes`
+## takes both, so the access time is read back from `fstat` first; Windows
+## `SetFileTime` with only the write time.
+fn fs_set_modified(path str, ms int, at str)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    if target() == 3
+        w := os_scratch(OS_WIN_A)
+        if not win_wide(w, WIN_PATH_UNITS, p)
+            fsattr_fail(path, -36, at)
+            return
+        # Write access, share all, open existing, FILE_FLAG_BACKUP_SEMANTICS.
+        h := import_call("CreateFileW", w, 256, 7, 0, 3, 33554432, 0)
+        if h == -1
+            fsattr_fail(path, win_err(), at)
+            return
+        t := win_tmp()
+        store64(t, ms * 10000 + 116444736000000000)
+        ok := import_call("SetFileTime", h, 0, 0, t)
+        import_call("CloseHandle", h, 0, 0, 0)
+        if ok == 0
+            fsattr_fail(path, win_err(), at)
+            return
+        os_succeed()
+        return
+    buf := os_scratch(OS_TMP)
+    secs := if ms >= 0 then ms / 1000 else (ms - 999) / 1000
+    frac := ms - secs * 1000
+    mut r := 0
+    if target() == 2
+        fd := os_open(p, 0, 0)
+        if fd < 0
+            fsattr_fail(path, fd, at)
+            return
+        st := os_scratch(OS_TMP + 256)
+        r = os_fstat(fd, st)
+        os_close(fd)
+        if r < 0
+            fsattr_fail(path, r, at)
+            return
+        # timeval[2]: access from the stat (seconds at 24, nanoseconds at 32), then the new time.
+        store64(buf, load64(st + 24))
+        store64(buf + 8, load64(st + 32) / 1000)
+        store64(buf + 16, secs)
+        store64(buf + 24, frac * 1000)
+        r = syscall(138, p, buf, 0, 0, 0, 0)
+    else
+        # timespec[2]: tv_nsec UTIME_OMIT (1073741822) leaves the access time.
+        store64(buf, 0)
+        store64(buf + 8, 1073741822)
+        store64(buf + 16, secs)
+        store64(buf + 24, frac * 1000000)
+        r = syscall(os_pick(280, 88, 0), -100, p, buf, 0, 0, 0)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()
+
+## Windows `read_link`: the print name of the symbolic link at the
+## NUL-terminated UTF-8 `path`, as UTF-8 at `dst`; its length, or `-errno`
+## (-22 for a path that is not a symbolic link). The link is opened as
+## itself (`FILE_FLAG_OPEN_REPARSE_POINT`) and asked for its reparse data
+## (`FSCTL_GET_REPARSE_POINT`): the tag at 0, then for a symbolic link the
+## substitute name's offset and length at 8 and 10, the print name's at 12
+## and 14, and the names from 20, in UTF-16 with lengths in bytes.
+fn fsattr_win_link(path int, dst int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    # No access rights, share all, OPEN_EXISTING, open the link itself.
+    h := import_call("CreateFileW", w, 0, 7, 0, 3, 35651584, 0)
+    if h == -1
+        return win_err_at(w)
+    rb := alloc_z(16400, KIND_BYTES, 1)
+    t := win_tmp()
+    store64(t, 0)
+    ok := import_call("DeviceIoControl", h, 589992, 0, 0, rb, 16384, t, 0)
+    import_call("CloseHandle", h, 0, 0, 0)
+    # Not a reparse point (error 4390), or one that is not a symbolic link.
+    if ok.bit_and(4294967295) == 0 or win_u32(rb) != 2684354572
+        return -22
+    mut off := load8(rb + 12) + 256 * load8(rb + 13)
+    mut len := load8(rb + 14) + 256 * load8(rb + 15)
+    if len == 0
+        # No print name: the substitute name, without its `\??\` prefix.
+        off = load8(rb + 8) + 256 * load8(rb + 9)
+        len = load8(rb + 10) + 256 * load8(rb + 11)
+        if len >= 8 and load8(rb + 20 + off) == 92 and load8(rb + 22 + off) == 63
+            off += 8
+            len -= 8
+    if len / 2 > WIN_PATH_UNITS or 20 + off + len > 16384
+        return -36
+    name := os_scratch(OS_WIN_B)
+    copy_bytes(name, rb + 20 + off, len)
+    win_put16(name, len / 2, 0)
+    win_narrow(name, dst)
+
+## `fs.read_link(path)` (std.fs.31): the target a symbolic link holds, as it
+## was written. A path that is not a link fails with kind `other` (EINVAL).
+fn fs_read_link(path str, at str) str
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return ""
+    buf := os_scratch(OS_PATH_B)
+    mut r := 0
+    if target() == 3
+        r = fsattr_win_link(p, buf)
+    elif target() == 2
+        r = syscall(58, p, buf, OS_PATH_MAX, 0, 0, 0)
+    else
+        r = syscall(os_pick(267, 78, 0), -100, p, buf, OS_PATH_MAX, 0, 0)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return ""
+    chars := os_utf8_chars(buf, r)
+    if chars < 0
+        os_fail_kind(K_INVALID_UTF8)
+        os_error(path, K_INVALID_UTF8, at)
+        return ""
+    s := str_new(r, chars)
+    copy_bytes(s + 16, buf, r)
+    os_succeed()
+    str_at(s)
+
+## `fs.symlink(target, path)` (std.fs.32): a symbolic link at `path` holding
+## `target` as written (not resolved). On Windows `CreateSymbolicLinkW` with
+## the unprivileged flag; without developer mode it fails with `permission`.
+fn fs_symlink(to str, path str, at str)
+    t := os_cstr(OS_PATH_B, to)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0 or t == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    if target() == 3
+        w := os_scratch(OS_WIN_A)
+        v := os_scratch(OS_WIN_B)
+        if not win_wide(w, WIN_PATH_UNITS, p) or not win_wide(v, WIN_PATH_UNITS, t)
+            fsattr_fail(path, -36, at)
+            return
+        # 2: SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE; 1 added when the target is a directory.
+        ta := win_attrs(v)
+        flags := if ta >= 0 and ta.bit_and(16) != 0 then 3 else 2
+        if import_call("CreateSymbolicLinkW", w, v, flags, 0) == 0
+            fsattr_fail(path, win_err(), at)
+            return
+        os_succeed()
+        return
+    mut r := 0
+    if target() == 2
+        r = syscall(57, t, p, 0, 0, 0, 0)
+    else
+        r = syscall(os_pick(266, 36, 0), t, -100, p, 0, 0, 0)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()
+
+## `fs.write_at(path, off, data)` (std.fs.34): `data` over the bytes from
+## `off`; a file shorter than `off` grows with zero bytes first. The file is
+## opened for writing without truncation (and made when missing).
+fn fs_write_at(path str, off int, data str, at str)
+    if off < 0
+        flush()
+        out_str("trap[std.fs.34]: negative offset\n")
+        flush_to(2)
+        sys_exit(1)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    # O_WRONLY | O_CREAT (Linux bits; win_open and the macOS arm take them too).
+    fd := os_open(p, if target() == 2 then 513 else 65, 438)
+    if fd < 0
+        fsattr_fail(path, fd, at)
+        return
+    q := str_addr(data)
+    mut r := os_lseek(fd, off, 0)
+    if r >= 0
+        r = os_write_all(fd, q + 16, load64(q))
+    os_close(fd)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()
+
+## `fs.truncate(path, len)` (std.fs.33): the file ends at byte `len`; a file
+## shorter than `len` grows with zero bytes. `ftruncate` on an open descriptor
+## (ARM64 Linux has no `truncate` call); Windows `SetFilePointerEx` then
+## `SetEndOfFile`.
+fn fs_truncate(path str, len int, at str)
+    if len < 0
+        flush()
+        out_str("trap[std.fs.33]: negative length\n")
+        flush_to(2)
+        sys_exit(1)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    # Open for writing without truncating or creating: flags 1 (O_WRONLY).
+    fd := os_open(p, 1, 0)
+    if fd < 0
+        fsattr_fail(path, fd, at)
+        return
+    mut r := 0
+    if target() == 3
+        h := win_h(fd)
+        t := win_tmp()
+        if import_call("SetFilePointerEx", h, len, t, 0) == 0
+            r = win_err()
+        elif import_call("SetEndOfFile", h, 0, 0, 0) == 0
+            r = win_err()
+    else
+        r = syscall(os_pick(77, 46, 201), fd, len, 0, 0, 0, 0)
+    os_close(fd)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()

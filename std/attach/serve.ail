@@ -1,4 +1,4 @@
-## std.attach.serve (spec attach.wire.1, attach.wire.3, attach.wire.6, ADR 0884):
+## std.attach.serve (spec attach.wire.1, attach.wire.3, attach.wire.6, attach.wire.7; ADR 0884, ADR 1045):
 ## the listener that carries the attach protocol for a `std.app` program.
 ## One thread listens on 127.0.0.1 and hands each request line to the app
 ## through its inbox; the app answers between events, so program state is never
@@ -19,9 +19,11 @@ use std.screen.view
 pub struct Hub
     pub lock Mutex[int]
     pub replies Channel[str]
+    ## True once the window has closed: the listener stops at its next connection (attach.wire.7).
+    pub stop Mutex[bool]
 
 pub fn Hub.new() Hub
-    Hub(lock: Mutex(0), replies: Channel[str](1))
+    Hub(lock: Mutex(0), replies: Channel[str](1), stop: Mutex(false))
 
 ## A token an agent must present: 24 bytes from the system's random source,
 ## else from the generator (attach.wire.2).
@@ -128,10 +130,15 @@ impl app.App for Watched[T app.App + attach.Observe]
 
 ## Reads request lines from each connection until it closes and answers each
 ## through the app (attach.wire.3). One connection at a time; a silent client
-## is dropped after 5 seconds.
+## is dropped after 5 seconds. It ends, closing `l`, at the first connection
+## after `hub.stop` is set (attach.wire.7).
 fn listen_loop(l net.Listener, inbox app.Inbox, hub Hub)
     while true
         c := l.accept() else break
+        if hub.stop.get()
+            c.close()
+            l.close()
+            break
         c.set_timeout(5000)
         while true
             got := c.read_line() else break
@@ -144,50 +151,115 @@ fn listen_loop(l net.Listener, inbox app.Inbox, hub Hub)
                 inbox.post(app.external("attach", line))
                 reply = hub.replies.recv() else ""
             c.write("{reply}\n") else break
+            if hub.stop.get()
+                break
         c.close()
 
-## Where the address and token are published: `$TMPDIR/ail-attach-PORT.json`,
-## mode 0600 (attach.wire.1).
+## Where the address and token are published: `ail-attach-PORT.json` in
+## `TMPDIR`, else in `TEMP` (Windows: the temporary folder inside the user's
+## profile), else in `/tmp` (attach.wire.1, ADR 1045).
 pub fn token_path(port str) str
     dir := env.get("TMPDIR") else (env.get("TEMP") else "/tmp")
     "{dir}/ail-attach-{port}.json"
 
-## Runs `a` in its window as `app.run` does, with the attach listener on
-## 127.0.0.1 (a free port); its address and token go to `token_path`, which is
-## removed when the window closes (attach.wire.1).
-pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
+## A listener on 127.0.0.1 whose address and token are published (attach.wire.1).
+pub struct Served
+    pub l net.Listener
+    pub addr str
+    pub token str
+    pub path str
+
+## Listens on 127.0.0.1 (a free port) and publishes the address and a new
+## token in `token_path` (attach.wire.1). The kind is `listen` when no socket
+## could be had and `attach` when the file could not be written.
+pub fn open() Served ! app.AppError
     l := net.listen("127.0.0.1:0") else err
-        # Without a listener (a Windows program has no native sockets yet) the window still runs, just not drivable.
-        io.eprint("attach: can't listen ({err}); running the window without the attach server")
-        app.run(mut a)?
-        return
+        return app.AppError(kind: "listen", message: "can't listen ({err})")
     addr := l.addr()
     port := addr.split(":").last() else addr
     path := token_path(port)
     token := make_token()
     # Create the file empty, restrict it, then put the token in it.
     fs.write_text(path, "") else err
+        l.close()
         return app.AppError(kind: "attach", message: "can't write {path}: {err}")
-    # The owner-only mode is a Unix one; a Windows file is the user's by its folder.
+    # The owner-only mode is a Unix one; on Windows the file is the user's by its folder (ADR 1045).
     if (env.get("OS") else "") != "Windows_NT"
         chmod := proc.run("chmod", ["600", path], none, none) else err
+            l.close()
             return app.AppError(kind: "attach", message: "can't restrict {path}: {err}")
     fs.write_text(path, "\{\"addr\":\"{addr}\",\"token\":\"{token}\"}\n") else err
+        l.close()
         return app.AppError(kind: "attach", message: "can't write {path}: {err}")
+    Served(l: l, addr: addr, token: token, path: path)
+
+## The window of `w` until it closes: the failure of `app.run_with`, if any.
+fn shown[T app.App + attach.Observe](
+    mut w Watched[T],
+    cmd str,
+    args List[str],
+    inbox app.Inbox,
+) app.AppError?
+    app.run_with(mut w, cmd, args, inbox) else err
+        return err
+    none
+
+## Connects to the listener so that its `accept` returns; false when it can't.
+fn wake(addr str) bool
+    port := (addr.split(":").last() else "").to_int() else return false
+    c := net.connect("127.0.0.1", port) else err
+        return false
+    c.close()
+    true
+
+## Runs `a` in the window of the host program `cmd` (as `app.run_with`) and
+## answers the attach requests that reach `s`; `input` says whether `input`
+## requests are applied (attach.input.1). When the window closes, or can't
+## open, the listener stops and the discovery file is removed (attach.wire.7).
+pub fn run_on[T app.App + attach.Observe](
+    s Served,
+    mut a T,
+    cmd str,
+    args List[str],
+    input bool,
+) ! app.AppError
     hub := Hub.new()
     inbox := app.new_inbox()
     g := TaskGroup()
-    g.add(spawn listen_loop(l, inbox, hub))
+    g.add(spawn listen_loop(s.l, inbox, hub))
     mut w := Watched(
         inner: a,
-        token: token,
+        token: s.token,
         tr: attach.Tracker.new(),
         hub: hub,
         w: 800.0,
         h: 600.0,
-        input: (env.get("AIL_ATTACH_INPUT") else "") == "1",
+        input: input,
     )
-    app.run_with(mut w, app.host_path()?, [], inbox)?
+    failed := shown(mut w, cmd, args, inbox)
     a = w.inner
-    l.close()
-    fs.remove(path) else return
+    # attach.wire.7: a request the window never answered gets an empty line, and a
+    # connection ends the listener's `accept`, which closing its socket from here
+    # does not do on every system.
+    hub.stop.set(true)
+    hub.replies.close()
+    if not wake(s.addr)
+        s.l.close()
+    if e := failed
+        fs.remove(s.path) else return e
+        return e
+    fs.remove(s.path) else return
+
+## Runs `a` in its window as `app.run` does, with the attach listener on
+## 127.0.0.1 (a free port); its address and token go to `token_path`, which is
+## removed when the window closes (attach.wire.1, attach.wire.7).
+pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
+    host := app.host_path()?
+    s := open() else err
+        if err.kind != "listen"
+            return err
+        # Without a listener the window still runs, just not drivable.
+        io.eprint("attach: {err.message}; running the window without the attach server (attach.wire.1)")
+        app.run(mut a)?
+        return
+    run_on(s, mut a, host, [], (env.get("AIL_ATTACH_INPUT") else "") == "1")?
