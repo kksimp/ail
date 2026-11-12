@@ -1,0 +1,20 @@
+# native.task.2: a thread asleep in `time.sleep_ms` is parked for the
+# collector. The task allocates past the collection trigger while the main
+# task sleeps; its collections must not wait for the sleep to end.
+use std.time
+
+fn churn() int
+    t0 := time.now_ms()
+    mut total := 0
+    for i in 0..1500000
+        s := "block {i} of garbage for the collector to take away again"
+        total += s.len()
+    if total == 0
+        return -1
+    time.now_ms() - t0
+
+fn main() !
+    t := spawn churn()
+    time.sleep_ms(4000)
+    ms := t.wait()?
+    print("collected while the main task slept: {ms >= 0 and ms < 2500}")
