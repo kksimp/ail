@@ -1,0 +1,20 @@
+# The ninth push to a list of eight traps at the same line, with the same
+# index and length, as it does without the constant length (native.bce.15,
+# type.coll.4).
+fn stack_sum(n int) int
+    mut st := [0 for _ in 0..8]
+    mut sp := 0
+    mut k := 0
+    while k < n
+        st[sp] = k * 2
+        sp += 1
+        k += 1
+    mut t := 0
+    while sp > 0
+        sp -= 1
+        t += st[sp]
+    t
+
+fn main()
+    print(stack_sum(5))
+    print(stack_sum(9))

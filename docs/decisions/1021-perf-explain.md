@@ -42,9 +42,8 @@ remark names a cause one of its optimizer slices removes:
 - **Cause classes are named once** in `remarks.ail` (`RK_*` constants and
   `rk_*` wording functions). A slice that removes a cause (multi-exit
   versioning, wide inlining) rewords or deletes it in one place.
-- **List headers.** A loop over hoist.ail's `MAX_BLOCKS` keeps reloading list
-  lengths and data pointers (native.bce.11); the remark is read from the same
-  constant, so it changes when the limit does.
+- **List headers.** Removed 2026-11-12 with hoist.ail's `MAX_BLOCKS`
+  ([ADR 1061](1061-known-list-lengths.md)): no loop is skipped by size now.
 - Overflow-check and reload remarks wait for the passes that would decide them.
 
 ## Not in this slice
