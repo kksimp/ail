@@ -1,7 +1,8 @@
 ## Local rewrites on simplified MIR (ADR 0391): constant folding of
 ## operations on constants that can't trap, checks that a constant operand
-## or a dominating comparison rules out (expr.arith.4), and `x % 2^k == 0`
-## as a bit test. Each rewrite keeps the value's id, so uses need no
+## or a dominating comparison rules out (expr.arith.4), checks and
+## comparisons that function-wide value ranges decide (vrange.ail, ADR 1063),
+## and `x % 2^k == 0` as a bit test. Each rewrite keeps the value's id, so uses need no
 ## renaming; `simplify` then drops what died.
 
 MAX := 9223372036854775807
@@ -29,15 +30,17 @@ pub fn fold_in(mut g Func)
             for extra in fd.rewrite(i, mut g.vals, mut g.names)
                 out.push(extra)
         g.blocks[b].insts = out
-    drop_bounded(mut g, fd)
-    cse(mut g)
+    # Nothing below adds or removes a block, so one dominator tree serves all.
+    dom := dominators(g)
+    drop_bounded(mut g, fd, dom)
+    apply_ranges(mut g, dom)
+    cse(mut g, dom)
 
 ## Common subexpressions (ADR 0391): an instruction that computes what one
 ## in a dominating block already did reuses that value. Checked arithmetic
 ## counts too: had the first one trapped, the second wouldn't run.
-fn cse(mut g Func)
+fn cse(mut g Func, dom List[List[bool]])
     n := g.blocks.len()
-    dom := dominators(g)
     mut seen := Map[str, List[int]]()
     mut repl := [v for v in 0..g.vals.len()]
     mut where := [-1 for _ in 0..g.vals.len()]
@@ -130,7 +133,7 @@ struct Bound
 
 ## `i + 1` where a dominating `i < n` held can't overflow, since `n` is at
 ## most the largest `int`; `i - 1` where `i > n` held likewise.
-fn drop_bounded(mut g Func, fd Folder)
+fn drop_bounded(mut g Func, fd Folder, dom List[List[bool]])
     n := g.blocks.len()
     mut preds := [0 for _ in 0..n]
     for blk in g.blocks
@@ -164,7 +167,6 @@ fn drop_bounded(mut g Func, fd Folder)
                 facts.push(Bound(block: to, v: hi, up: false))
     if facts.len() == 0
         return
-    dom := dominators(g)
     for b in 0..n
         for k in 0..g.blocks[b].insts.len()
             i := g.blocks[b].insts[k]
