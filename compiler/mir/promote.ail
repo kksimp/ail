@@ -1,4 +1,4 @@
-## Element promotion (native.promote.1): a counted innermost loop that stores to elements
+## Element promotion (native.promote.1, ADR 1079): a counted innermost loop that stores to elements
 ## `base[x + k]` whose base and index don't change in the loop keeps those elements in registers
 ## instead. Before the loop each is loaded once, the loop's loads and stores of it become the value
 ## it last stored, and on the loop's exit the values are stored back. N-body's

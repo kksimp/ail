@@ -572,7 +572,7 @@ element the loop reads or assigns must be `xs[j * c + k']` for the loop's
 counter `j`, which starts at `x0 + d` and steps by 1, where `x = x0 * c` and
 `c * d > k - k'`, so it is never one of them. A loop that runs no iteration
 reads and writes none of them. `AIL_OPT_OFF=promote` turns it off.
-*(ADR PENDING)*
+*(ADR 1079)*
 
 ```ail rules=native.promote.1
 fn kick(mut s List[float], n int)
