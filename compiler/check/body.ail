@@ -110,6 +110,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_caps())
     c.diags.extend(c.check_denied())
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))

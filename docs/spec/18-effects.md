@@ -117,6 +117,55 @@ allow-list for the program. A `package` line without `caps` sets no limit.
 ```ail pkg=caps_denied tool=check,DIR status=2 expect=eff.cap.5 rules=eff.cap.5
 ```
 
+**eff.cap.6** — `@caps(LIST)` on a function limits it to the listed
+capabilities, and so everything it calls: the function MUST NOT have, by the
+inferred effects of `eff.infer.*`, a capability outside `LIST`. `@caps(none)`
+allows none. Only capabilities count; `io`, `fail`, `mutates`, `unsafe` and
+`spawn` are not limited (`@pure` limits those). The diagnostic is at the
+attribute and names, for each capability outside the list, the shortest chain
+of calls that adds it, such as `report -> save -> fs.write_text`. A caller of
+the function sees its inferred set as before. *(ADR 1089)*
+
+```ail error=eff.cap.6 rules=eff.cap.6
+use std.fs
+
+fn save(path str, text str)
+    fs.write_text(path, text)
+
+@caps(none) fn render(path str) str
+    save(path, "x")               # error: `render` is limited to no capability
+    "done"
+
+fn main()
+    print(render("out.txt"))
+```
+
+**eff.cap.7** — `LIST` is `none`, or a comma-separated list of the names
+`--deny` takes (`eff.cap.2`) without `none`. Any other entry, an empty list,
+or `none` with other names is a compile-time error at the attribute.
+*(ADR 1089)*
+
+```ail error=eff.cap.7 rules=eff.cap.7
+@caps(io) fn show(x int)
+    print(x)
+
+fn main()
+    show(1)
+```
+
+```ail rules=eff.cap.6
+use std.fs
+
+@caps(fs) fn save(path str, text str)
+    fs.write_text(path, text)
+
+@caps(none) fn double(x int) int
+    x * 2
+
+fn main()
+    save("out.txt", "{double(21)}")
+```
+
 ## Deterministic execution
 
 **eff.det.1** — A program whose `main` reaches none of the capabilities
