@@ -50,8 +50,16 @@ functions are skipped. There is no `List.filled` in std; a comprehension
 - Tests: `tests/native/run/constlen.ail`, `constlen_refused.ail` (a later push
   keeps the checks) and `trap_constlen.ail` (the trap names the same site,
   index and length).
-- Amendment slot: the second half of F4 (dropping `MAX_BLOCKS` in hoist.ail)
-  is recorded here as a dated amendment.
+- Amendment (2026-11-12): `MAX_BLOCKS` (12) in hoist.ail is dropped. It kept
+  header hoisting out of dispatch loops because the two registers held per list
+  spilled on x86-64 (vm +1.4% to +3.0%). With F3's RDX and R11 allocatable
+  (ADR 1049) and lists of known length needing one register (the element
+  pointer; the check is against an immediate), a loop may now hold up to
+  `MAX_REGS` (6) registers of hoisted headers, busiest lists first, at most
+  `MAX_LISTS` (4) lists; a list that does not fit stays as it was. vm's `st`
+  (one register), `code` and `vars` (two each) fit exactly. The cap was a
+  register-pressure guess; the vm timing in the F4 job report decides whether
+  `MAX_REGS` stays at 6.
 
 ## Rejected alternatives
 
