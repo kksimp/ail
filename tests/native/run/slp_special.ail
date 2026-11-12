@@ -1,0 +1,31 @@
+# Special lanes through two-lane arithmetic (native.vec.3): NaN, infinities, -0.0 and
+# denormals must give the scalar results in each lane. `1.0 / x` shows the sign of a zero.
+fn step(mut s List[float], k int, a float, b float)
+    x := s[k] * a
+    y := s[k + 1] * a
+    s[k] = x + b
+    s[k + 1] = y + b
+
+fn main()
+    tiny := 2.2250738585072014e-308 / 1024.0
+    pinf := 1.0 / 0.0
+    qnan := 0.0 / 0.0
+    mut s := [qnan, 1.0, -0.0, 0.0, pinf, -pinf, tiny, -tiny, 1.0e308, -1.0e308]
+    for k in [0, 2, 4, 6, 8]
+        step(mut s, k, 1.0, 0.0)
+    print(s)
+    print(1.0 / s[2])
+    print(1.0 / s[3])
+    for k in [0, 2, 4, 6, 8]
+        step(mut s, k, -1.0, -0.0)
+    print(s)
+    print(1.0 / s[2])
+    print(1.0 / s[3])
+    for k in [0, 2, 4, 6, 8]
+        step(mut s, k, 10.0, 0.0)
+    print(s)
+    for k in [0, 2, 4, 6, 8]
+        step(mut s, k, 0.0, 0.0)
+    print(s)
+    print(1.0 / s[2])
+    print(1.0 / s[5])

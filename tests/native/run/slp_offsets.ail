@@ -1,0 +1,17 @@
+# Pairs at odd, large and negative-free offsets up to 40 elements (native.vec.3).
+fn mix(mut s List[float], b int, m float)
+    s[b + 1] = s[b + 21] * m + s[b + 1]
+    s[b + 2] = s[b + 22] * m + s[b + 2]
+    s[b + 39] = s[b + 7] - s[b + 15] * m
+    s[b + 40] = s[b + 8] - s[b + 16] * m
+    s[b + 13] = s[b + 13] / (s[b + 31] + 1.0)
+    s[b + 14] = s[b + 14] / (s[b + 32] + 1.0)
+
+fn main()
+    mut s := [i.to_float() * 0.5 - 7.0 for i in 0..90]
+    for b in [0, 1, 7, 33, 49]
+        mix(mut s, b, 1.25)
+    print(s)
+    mut t := [1.0 / (i.to_float() + 1.0) for i in 0..41]
+    mix(mut t, 0, -3.0)
+    print(t)
