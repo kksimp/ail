@@ -246,6 +246,9 @@ fn public_api(path str, std str) List[Decl] ! DiffError
 fn sh_quote(s str) str
     "'{s.replace("'", "'\\''")}'"
 
+## The name every scratch directory and file of this module starts with (ADR 1059); `remove_scrap` removes nothing else.
+SCRAP_PREFIX := "ail-rev-"
+
 ## `path` as git has it at `rev`, copied under a new temporary directory
 ## (diff.out.5); the copy's path and the directory to remove.
 fn at_revision(rev str, from_path str)(str, str) ! DiffError
@@ -253,17 +256,11 @@ fn at_revision(rev str, from_path str)(str, str) ! DiffError
     parts := from_path.split("/")
     dir := if is_dir then from_path else if parts.len() > 1 then parts[..parts.len() - 1].join("/") else "."
     windows := (env.get("OS") else "") == "Windows_NT"
-    mut tmp := ""
-    if windows
-        # Git's `mktemp` names `/c/Users/..`, which neither git nor this program can open: make the directory here.
-        base := (env.get("TMPDIR") else (env.get("TEMP") else "C:/Windows/Temp")).replace("\\", "/")
-        tmp = "{base}/ail-rev-{time.now_ms()}"
-        fs.make_dir(tmp) else err
-            return DiffError(message: "can't create a temporary directory: {err}")
-    else
-        made := proc.run("mktemp", ["-d"]) else err
-            return DiffError(message: "can't create a temporary directory: {err}")
-        tmp = made.out.trim()
+    # No `mktemp` (ADR 1059): a new directory in the system's temporary one, named by the clock and by chance.
+    base := (env.get("TMPDIR") else (env.get("TEMP") else "/tmp")).replace("\\", "/")
+    tmp := "{base}/{SCRAP_PREFIX}{time.now_ms()}-{random.int(0, 999999999)}"
+    fs.make_dir(tmp) else err
+        return DiffError(message: "can't create a temporary directory: {err}")
     tar := "{tmp}.tar"
     args := ["-C", dir, "archive", "--format=tar", "-o", tar, rev, "."]
     cut := proc.run("git", args) else err
@@ -351,6 +348,30 @@ pub fn diff_command(args List[str], std str) int
     print(result.0.strip_suffix("\n") else result.0)
     if result.1 == 0 then 0 else 1
 
-fn remove_scrap(dir str)
-    if dir != ""
-        _ := proc.run("rm", ["-rf", dir]) else return
+fn remove_scrap(target str)
+    if target.is_empty() or not path.base(target).starts_with(SCRAP_PREFIX)
+        return
+    meta := fs.metadata(target) else return
+    if not meta.is_dir
+        rm_file(target)
+        return
+    files := fs.walk(target) else return
+    mut links := Set[str]()
+    for f in files
+        links.add(f)
+    scrap_tree(target, links)
+
+## What `fs.walk` lists is a file or a link, never a directory: so a symbolic link to a directory is removed as a link and its target stays (ADR 1059).
+fn scrap_tree(dir str, files Set[str])
+    names := fs.list_dir(dir) else return
+    for name in names
+        p := path.join(dir, name)
+        if files.contains(p)
+            rm_file(p)
+            continue
+        scrap_tree(p, files)
+    rm_file(dir)
+
+## `rm -f`: a failure is ignored.
+fn rm_file(target str)
+    fs.remove(target) else return

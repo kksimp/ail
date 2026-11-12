@@ -1,8 +1,9 @@
 # AIL Language Specification
 
-> **Status:** early draft. Only the chapters marked *Drafted* below contain
-> normative rules. Everything else is waiting on design decisions
-> (see [status.md](../status.md)).
+> **Status:** drafted for v0.1.0. Every chapter below holds normative rules
+> with IDs, and the conformance harness checks its examples; *skeleton* means
+> only a start. Open design questions are in [open-questions.md](../open-questions.md)
+> and what is built is in [status.md](../status.md).
 
 ## Conventions
 
@@ -85,7 +86,7 @@ aren't run.
 | 03 | [Grammar](03-grammar.md) | `gram` | Drafted (partial) |
 | 04 | [Types](04-types.md) | `type` | Drafted (partial) |
 | 05 | [Expressions and statements](05-expressions.md) | `expr` | Drafted (partial) |
-| 06 | Memory model and allocation | `mem` | Not started |
+| 06 | [Memory model and allocation](06-memory.md) | `mem` | Drafted (partial) |
 | 07 | [Ownership and value semantics](07-ownership.md) | `own` | Drafted (partial) |
 | 08 | [Errors](08-errors.md) | `err` | Drafted (partial) |
 | 09 | [Generics](09-generics.md) | `gen` | Drafted (partial) |
@@ -94,15 +95,15 @@ aren't run.
 | 12 | [Modules and programs](12-modules.md) | `mod` | Drafted (partial) |
 | 13 | [Unsafe](13-unsafe.md) | `unsafe` | Drafted (partial) |
 | 14 | [FFI and C interoperability](14-ffi.md) | `ffi` | Drafted (partial) |
+| 15 | [Compile-time execution and metaprogramming](15-compile-time.md) | `ct` | Drafted (partial) |
+| 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
+| 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | 18 | [Effects and capabilities](18-effects.md) | `eff` | Drafted (partial) |
 | 19 | [Testing](19-testing.md) | `test` | Drafted (partial) |
 | 20 | [Contracts](20-contracts.md) | `contract` | Drafted (partial) |
-| 15 | [Compile-time execution and metaprogramming](15-compile-time.md) | `ct` | Drafted (partial) |
-| 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
 | 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace`, `probe` | Drafted (partial) |
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink` | Drafted (partial) |
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
-| 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
@@ -113,6 +114,8 @@ aren't run.
 | std | [Standard library: WebM demuxing](std-webm.md) | `std` | Drafted |
 | std | [Standard library: Opus decoding](std-opus.md) | `std` | Drafted |
 | std | [Standard library: VP9 decoding](std-vp9.md) | `std` | Drafted |
+| std | [Standard library: `std.audio` sound](std-audio.md) | `std` | Drafted |
+| std | [Standard library: terminal control](std-term.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

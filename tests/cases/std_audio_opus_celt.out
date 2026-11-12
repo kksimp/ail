@@ -1,4 +1,5 @@
 tone_stereo_64k: 7680 samples, 0 of 145 off by more than 1
 tone_stereo_10ms: 5760 samples, 0 of 109 off by more than 1
 clicks_mono_64k: 3840 samples, 0 of 73 off by more than 1
-opus: SILK and hybrid frames are not decoded yet
+960
+opus: a crossing between CELT and SILK without a redundant frame

@@ -26,15 +26,16 @@ and tooling all treat AI as a first-class user.
 ## Core goals
 
 1. **Performance:** native code, low runtime overhead, aggressive optimisation,
-   and performance comparable to optimised C where the workload allows.
+   and speed equal to optimised C as the target (ADR 1065).
    Measured, never just claimed.
 2. **Memory:** safe by default, with first-class GC inside a hybrid model:
    stack allocation, escape analysis, arenas, a GC heap, pinning, and
    unsafe manual allocation. The compiler picks the cheapest safe strategy.
-3. **AI-first:** maximum semantic density per token while staying readable and
-   unambiguous.
-4. **Token efficiency:** an explicit, benchmarked objective, never pursued
-   through cryptic syntax.
+3. **AI-first:** features for AI agents better than any other language's,
+   while staying readable and unambiguous ([ADR 1065](decisions/1065-goals-c-parity-ai-first.md)).
+4. **Token efficiency:** measured, never pursued through cryptic syntax. Using
+   more tokens than other languages is acceptable when it buys speed or a
+   better AI-first feature (ADR 1065).
 5. **Human readability:** pleasant, reviewable, and canonically formatted.
 6. **Strong static types:** inference, generics, traits, Option/Result.
 7. **Explicit, concise errors:** value-based errors with `?`-style propagation.

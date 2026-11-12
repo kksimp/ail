@@ -5,10 +5,22 @@
 use ast
 
 ## The fields of struct `name` marked `@observe`, in order; the variant names
-## of every enum without payloads, by enum name.
+## of every enum without payloads, by enum name; its `@tool` methods (attach.tool.1).
 pub struct ObserveFacts
     pub fields List[str]
     pub enums Map[str, List[str]]
+    pub tools List[ToolFact]
+
+## A `@tool` method (attach.tool.1): its name, doc, parameters and result.
+pub struct ToolFact
+    pub name str
+    pub doc str
+    pub params List[str]
+    pub types List[str]
+    ## The success type as written, "" for none.
+    pub ret str
+    ## Whether the method can fail (`!`).
+    pub fallible bool
 
 pub fn observe_facts(progs List[ast.Program], name str) ObserveFacts
     mut fields := List[str]()
@@ -28,7 +40,33 @@ pub fn observe_facts(progs List[ast.Program], name str) ObserveFacts
             if plain
                 key := e.name.split(".").last() else e.name
                 enums[key] = [v.name for v in e.variants]
-    ObserveFacts(fields: fields, enums: enums)
+    mut tools := List[ToolFact]()
+    for p in progs
+        for f in p.fns
+            o := f.owner else continue
+            if o.name.split(".").last() != name or [
+                a
+                for a in f.attrs if a.name == "tool"
+            ].len() == 0
+                continue
+            mut ret := ""
+            mut fallible := false
+            if r := f.ret
+                match r.shape
+                    Fallible(ok, _) =>
+                        fallible = true
+                        if t := ok
+                            ret = show_type(t)
+                    _ => ret = show_type(r)
+            tools.push(ToolFact(
+                name: f.name,
+                doc: (f.doc else "").trim(),
+                params: [x.name for x in f.params],
+                types: [show_type(x.ty) for x in f.params],
+                ret: ret,
+                fallible: fallible,
+            ))
+    ObserveFacts(fields: fields, enums: enums, tools: tools)
 
 ## Statements that set `var` (already declared `mut var := ""`) to the JSON
 ## text of `expr`, a value of type `ty`; `n` numbers the temporaries.
@@ -82,4 +120,73 @@ pub fn derive_observe(t TypeInfo, facts ObserveFacts) str ! DeriveError
         out.push("    out.push(attach.observed(\"{f.name}\", \"{f.type_text}\", {v}))")
         k += 1
     out.push("    out")
+    if facts.tools.len() > 0
+        out.extend(tool_lines(facts)?)
     "{out.join("\n")}\n"
+
+## `tools` and `call` for the `@tool` methods (attach.tool.3-4): `call` decodes
+## each argument by its type, runs the method and gives its result as JSON text.
+fn tool_lines(facts ObserveFacts) List[str] ! DeriveError
+    mut out := ["", "fn tools(self) List[attach.Tool]", "    ["]
+    for t in facts.tools
+        names := "[{[quote(n) for n in t.params].join(", ")}]"
+        types := "[{[quote(n) for n in t.types].join(", ")}]"
+        out.push("        attach.tool({quote(t.name)}, {quote(t.doc)}, {names}, {types}, {quote(t.ret)}),")
+    out.push("    ]")
+    out.extend(["", "fn call(mut self, ail_tool str, ail_args Json) str"])
+    mut j := 0
+    for tf in facts.tools
+        # Each tool's locals get their own names: a name can't be declared twice in a function.
+        out.push("    if ail_tool == {quote(tf.name)}")
+        mut call_args := List[str]()
+        r := "r{j}"
+        rv := "rv{j}"
+        for k in 0..tf.params.len()
+            a := "a{j}_{k}"
+            out.extend(arg_lines(tf.name, tf.params[k], tf.types[k], a, facts)?)
+            call_args.push(a)
+        invoke := "self.{tf.name}({call_args.join(", ")})"
+        if tf.ret == ""
+            if tf.fallible
+                out.push("        {invoke} else err")
+                out.push("            return attach.call_failed(\"\{err}\")")
+            else
+                out.push("        {invoke}")
+            out.push("        return attach.called(\"null\")")
+        else
+            if tf.fallible
+                out.push("        {r} := {invoke} else err")
+                out.push("            return attach.call_failed(\"\{err}\")")
+            else
+                out.push("        {r} := {invoke}")
+            out.push("        mut {rv} := \"\"")
+            out.extend(value_lines(tf.ret, r, rv, facts, 100 * (j + 1), "        ")?)
+            out.push("        return attach.called({rv})")
+        j += 1
+    out.push("    attach.no_tool(ail_tool)")
+    out
+
+## Statements that set `var` to argument `param` of tool `tool`, a `ty`, or
+## return the `bad_arg` reply (attach.tool.4).
+fn arg_lines(tool str, param str, ty str, var str, facts ObserveFacts) List[str] ! DeriveError
+    bad := "return attach.bad_arg({quote(tool)}, {quote(param)}, {quote(ty)})"
+    if ty == "int" or ty == "float" or ty == "bool" or ty == "str"
+        return ["        {var} := attach.arg_{ty}(ail_args, {quote(param)}) else {bad}"]
+    if names := facts.enums.get(ty)
+        if names.len() == 0
+            return DeriveError("a `@tool` parameter can't be the enum `{ty}`, which has no variants")
+        s := "{var}s"
+        mut out := [
+            "        {s} := attach.arg_str(ail_args, {quote(param)}) else {bad}",
+            "        mut {var} := {ty}.{names[0]}",
+        ]
+        mut first := true
+        for v in names
+            kw := if first then "if" else "elif"
+            out.push("        {kw} {s} == {quote(v)}")
+            out.push("            {var} = {ty}.{v}")
+            first = false
+        out.push("        else")
+        out.push("            {bad}")
+        return out
+    DeriveError("a `@tool` parameter can't be a `{ty}`: use int, float, bool, str or an enum without payloads (attach.tool.2)")

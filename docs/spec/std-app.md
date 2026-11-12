@@ -105,8 +105,7 @@ before a `close`). *(ADR 0838)*
 the environment variable `AIL_APP_HOST`, else `AIL_ROOT/tools/app-host/
 macos/build/AIL App Host.app/Contents/MacOS/AILAppHost`, `AIL_ROOT/tools/app-host/linux/build/ail-app-host`, or `AIL_ROOT/tools/app-host/windows/build/AILAppHost.exe` when that exists,
 where the `ail` command sets `AIL_ROOT` to its own directory. The host is started with
-`proc.start` (`std.proc.4`), which native builds don't compile yet, so a
-program that uses `run` runs on the interpreter. *(ADR 0838)*
+`proc.start` (`std.proc.4`). *(ADR 0838)*
 
 **std.app.11** — `script(mut a T, events List[Event]) List[str]`
 passes each event to `update` in order, with no host, and returns

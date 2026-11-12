@@ -2,15 +2,20 @@
 
 > **Non-normative.** One page for people and AI agents writing AIL. The
 > [spec](spec/) is authoritative. Items marked **(not yet)** are specified but
-> not supported by the bootstrap interpreter.
+> not built in the native compiler yet.
 
 ## Running programs
 
 ```sh
+./ail help [CMD] [--json]            # every command, or one command's usage and rule (also `ail --help`, `ail CMD --help`)
+./ail doctor [--json] [--path]      # check the toolchain; --path prints the profile line that puts `ail` on PATH
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
 ./ail check [--json] [--budget N [--from K]] FILE|DIR
 ./ail build FILE.ail [-o OUT]       # native executable
-./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass
+./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --fuzz NAME, --mutate, --contracts
+./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
+./ail pkg [COMMAND]                 # a program's packages: fetch, lock, list
+./ail header FILE.ail [-o OUT.h]    # a C header of the exports
 ./ail effects [--json] FILE.ail
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
@@ -25,11 +30,12 @@
 ./ail verify --diff --attest C.json FILE   # change certificate; `ail verify --check C.json` re-runs it, exit 1 on a difference
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail try FILE --set A.edit --set B.edit   # check and test patch sets on scratch copies, one verdict line each; --apply writes one clean set
-./ail mcp                       # the compiler's tools as an MCP stdio server (16 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, task_*)
+./ail mcp                       # the compiler's tools as an MCP stdio server (23 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, card, find, try, prove, infer, merge_check, verify_check, task_*)
 ./ail new [--no-agent] NAME     # a package with a first program, AGENTS.md and .mcp.json (the agent kit)
 ./ail lsp                       # a language server on stdio for any editor (diagnostics, hover, definition, references, symbols, completion, rename, quick fixes)
 ./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)
 ./ail leak FILE                  # run with the leak report: growth by kind and the roots that hold it (san.leak.1-2); AIL_LEAK works on any native exe
+./ail perf --explain FN FILE      # per loop of FN: bounds checks removed or why not (with a fix), list headers, vector kernel, parallel verdict, calls left (tool.perf.1-2)
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; `ail check --fix FILE` fixes, then checks, in one call
 ./ail diff OLD NEW                  # what changed by meaning
 ./ail edit FILE.ail [--test] < EDITS    # also change_sig, extract, move (edit.op.8-10)
@@ -662,7 +668,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
 | `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
 | `std.crypto` | `ct_eq(a, b) bool` (constant time; use it, never `==`, for MACs and tags), `random_bytes(n) bytes` (system generator, effect `random`), `hkdf_sha256(ikm, salt, info, len) bytes`, `pbkdf2_sha256(password, salt, iterations, len) bytes` (all `bytes`) |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob` and `scan_count` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `temp_dir() str` (`TMPDIR`, else `TEMP`, else `/tmp`), `make_temp_dir(prefix) str` (a new empty directory there, owner only; you remove it), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob`, `scan_count` and `temp_dir` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `write_bytes(b)` (raw bytes to stdout), `eprint(value)`, `exit(code)` |
@@ -671,6 +677,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
 | `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
 | `std.toml` | `use std.toml`; `parse(text) Json ! toml.TomlError { why, line }`; tables are `Obj`, arrays `Arr`, numbers `Num`, dates `Str` (read with `get`, `str`, `num`) |
+| `std.term` | `use std.term`; `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
 | `std.bigint` | `use std.bigint`; `from_int(n)`, `parse(text) BigInt ! bigint.BigIntError { why }`, `factorial(n)`; methods `add sub mul divmod pow cmp negate abs to_text as_int is_zero is_negative` (no operators) |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; the same as methods: `re.is_match(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |

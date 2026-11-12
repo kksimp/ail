@@ -60,6 +60,12 @@ pub fn opt_off(name str) bool
     off.split(",").contains(name)
 
 pub fn bce(f Func, reserve0 bool, grow_only bool) Func
+    mut sink := List[RkNote]()
+    bce_noting(f, reserve0, grow_only, false, mut sink)
+
+## `bce`, and when `want` is set (`ail perf --explain`, ADR 1021) a note per
+## innermost loop of what the pass decided and why.
+pub fn bce_noting(f Func, reserve0 bool, grow_only bool, want bool, mut notes List[RkNote]) Func
     if opt_off("bce")
         return f
     reserve := reserve0 and not opt_off("reserve")
@@ -79,10 +85,44 @@ pub fn bce(f Func, reserve0 bool, grow_only bool) Func
             if done.contains(lp.header) or not is_innermost(loops, lp)
                 continue
             done.add(lp.header)
-            c := counted_multi(g, defs, lp) else continue
-            if lp.exits != 1 and opt_off("mexit")
+            c := counted_multi(g, defs, lp) else
+                if want
+                    notes.push(RkNote(
+                        rk_key: rk_key(g, lp),
+                        rk_counted: false,
+                        rk_fast: false,
+                        rk_why: rk_uncounted(lp),
+                        rk_blockers: [],
+                    ))
                 continue
-            r := version(g, defs, lp, c, loops, reserve and grow_only, floors) else continue
+            if lp.exits != 1 and opt_off("mexit")
+                if want
+                    notes.push(RkNote(
+                        rk_key: rk_key(g, lp),
+                        rk_counted: false,
+                        rk_fast: false,
+                        rk_why: rk_uncounted(lp),
+                        rk_blockers: [],
+                    ))
+                continue
+            r := version(g, defs, lp, c, loops, reserve and grow_only, floors) else
+                if want
+                    notes.push(RkNote(
+                        rk_key: rk_key(g, lp),
+                        rk_counted: true,
+                        rk_fast: false,
+                        rk_why: "",
+                        rk_blockers: rk_blockers(g, defs, lp),
+                    ))
+                continue
+            if want
+                notes.push(RkNote(
+                    rk_key: rk_key(g, lp),
+                    rk_counted: true,
+                    rk_fast: true,
+                    rk_why: "",
+                    rk_blockers: [],
+                ))
             g = r.f
             floors = r.floors
             done.add(r.header)

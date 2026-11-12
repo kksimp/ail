@@ -24,6 +24,37 @@
 ## Rewriting follows native.test.2.
 
 ## The compiler to drive: `$AIL`, else `./ail`.
+fn windows() bool
+    (env.get("OS") else "") == "Windows_NT"
+
+## The name every scratch directory of this program starts with (ADR 1059); `remove_scrap` removes no other tree.
+SCRAP_PREFIX := ".ail-test-"
+
+## `rm -f`: a failure is ignored.
+fn rm_file(target str)
+    fs.remove(target) else return
+
+## Remove the scratch directory `root` and everything in it, which this program made with `SCRAP_PREFIX` (ADR 1059).
+## It refuses any other name, and a symbolic link to a directory is removed as a link (`fs.walk` lists it as a file).
+fn remove_scrap(root str)
+    if not path.base(root).starts_with(SCRAP_PREFIX)
+        return
+    files := fs.walk(root) else return
+    mut links := Set[str]()
+    for f in files
+        links.add(f)
+    scrap_tree(root, links)
+
+fn scrap_tree(dir str, files Set[str])
+    names := fs.list_dir(dir) else return
+    for name in names
+        p := path.join(dir, name)
+        if files.contains(p)
+            rm_file(p)
+            continue
+        scrap_tree(p, files)
+    rm_file(dir)
+
 fn ail_path() str
     env.get("AIL") else "./ail"
 
@@ -1642,6 +1673,12 @@ fn started(exe str, arg str, envs List[str]) !proc.Output
     mut argv := envs
     argv.push(exe)
     argv.push(arg)
+    if windows()
+        # Windows has no `env` program (ADR 1059): the command interpreter sets the variables for this one process.
+        mut line := ""
+        for e in envs
+            line = "{line}set {e}&& "
+        return proc.run("cmd", ["/d", "/c", "{line}{exe} {arg}"], none, RUN_LIMIT_MS)?
     proc.run("env", argv, none, RUN_LIMIT_MS)?
 
 ## ---- Record and replay of tests (replay.rec.1, replay.run.1, replay.nat.1) ----
@@ -1772,7 +1809,7 @@ fn write_bundles(dir str, file str, text str, vs List[Verdict], head str, rec_ou
         if v.status != "fail"
             continue
         if n == 0
-            _ := proc.run("mkdir", ["-p", dir])? "creating {dir}"
+            fs.make_dir(dir)? "creating {dir}"
         calls := secs.get(v.name) else ""
         header := "\{\"ail_bundle\":1,\"test\":{json_str(v.name)},\"program\":{json_str(file)},\"program_hash\":{text_hash(text)},\"compiler\":{json_str(ver)},\"message\":{json_str(v.message)},\"cases\":{v.cases},\"property_seed\":{unsigned_text(v.seed)},\"input\":{json_str(v.input)},\"schedule\":{json_str(sched)}}"
         at := "{dir}/{bundle_file_name(v.name)}.json"
@@ -1833,18 +1870,27 @@ fn native_cli() str
 ## Builds the native CLI when it is missing or older than the compiler's sources.
 fn ensure_native_cli() bool
     cli := native_cli()
-    stale := proc.run("sh", [
-        "-c",
-        "[ ! -x '{cli}' ] || [ -n \"$(find compiler std -name '*.ail' -newer '{cli}' 2>/dev/null | head -n 1)\" ]",
-    ]) else return false
-    if stale.status != 0
+    if not native_cli_stale(cli)
         return true
-    _ := proc.run("mkdir", ["-p", path.dir(cli)]) else return false
+    fs.make_dir(path.dir(cli)) else return false
     b := proc.run(ail_path(), ["build", "compiler/main.ail", "-o", "{cli}.new"]) else return false
     if b.status != 0
         return false
-    m := proc.run("mv", ["{cli}.new", cli]) else return false
-    m.status == 0
+    fs.rename("{cli}.new", cli) else return false
+    true
+
+## Whether `cli` is missing or older than a `.ail` file under `compiler` or `std` (no `sh` or `find`, ADR 1059).
+fn native_cli_stale(cli str) bool
+    built := fs.metadata(cli) else return true
+    for root in ["compiler", "std"]
+        files := fs.walk(root) else continue
+        for f in files
+            if not f.ends_with(".ail")
+                continue
+            m := fs.metadata(f) else continue
+            if m.modified_ms > built.modified_ms
+                return true
+    false
 
 fn doc_augment(file str) Augmented
     none_found := Augmented(lines: [], names: {}, where: {}, fences: {}, origin: [], note: "")
@@ -2728,7 +2774,7 @@ fn run_mutants(
                 print("\{\"mutant\":true,\"file\":{json_str(file)},\"line\":{m.at_line},\"fn\":{json_str(m.owner)},\"mutation\":{json_str(m.shown)},\"status\":\"survived\"}")
             else
                 print("survived {file}:{m.at_line}: {m.shown} (in {m.owner})")
-    _ := proc.run("rm", ["-f", copy]) else return 2
+    rm_file(copy)
     invalid := chosen.len() - killed - survived
     if json
         print("\{\"mutate\":true,\"mutants\":{chosen.len()},\"killed\":{killed},\"survived\":{survived},\"invalid\":{invalid}}")
@@ -3151,16 +3197,10 @@ fn main() !
     if not mf.tests.is_empty()
         # The directory is copied so the modules' tests can be made `pub` without touching the tree.
         # Beside the directory, so its package's relative `dep ... path ../x` lines still find their modules.
-        made := proc.run("mktemp", [
-            "-d",
-            "{if dir.is_empty() then "." else dir}/../.ail-test-XXXXXX",
-        ])? "running mktemp"
-        scratch = made.out.trim()
-        _ := proc.run("cp", [
-            "-R",
-            "{if dir.is_empty() then "." else dir}/.",
-            scratch,
-        ])? "copying {dir}"
+        pkg_dir := if dir.is_empty() then "." else dir
+        scratch = "{pkg_dir}/../{SCRAP_PREFIX}{time.now_ms()}-{random.int(0, 999999999)}"
+        fs.make_dir(scratch)? "creating {scratch}"
+        fs.copy(pkg_dir, scratch)? "copying {dir}"
     plain_copy := if dir.is_empty() then copy_name else "{dir}/{copy_name}"
     copy := if scratch.is_empty() then plain_copy else "{scratch}/{copy_name}"
     exe := "{copy}.bin"
@@ -3269,7 +3309,7 @@ fn main() !
             blocked = if outside.is_empty() then why_text else outside
             break
     if not coverage.is_empty()
-        _ := proc.run("rm", ["-f", "{exe}.hits"]) else io.exit(2)
+        rm_file("{exe}.hits")
     mut traces := Map[str, List[str]]()
     for i in 0..found.tests.len()
         t := found.tests[i]
@@ -3506,16 +3546,8 @@ fn main() !
             code,
         )?
     if scratch.is_empty()
-        _ := proc.run("rm", [
-            "-f",
-            copy,
-            exe,
-            "{exe}.sites",
-            "{exe}.hits",
-            "{exe}.fuzz",
-            "{exe}.trace",
-            "{exe}.rec",
-        ]) else io.exit(exit_code)
+        for f in [copy, exe, "{exe}.sites", "{exe}.hits", "{exe}.fuzz", "{exe}.trace", "{exe}.rec"]
+            rm_file(f)
     else
-        _ := proc.run("rm", ["-rf", scratch]) else io.exit(exit_code)
+        remove_scrap(scratch)
     io.exit(exit_code)

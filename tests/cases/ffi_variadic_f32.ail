@@ -1,0 +1,9 @@
+# ffi.var.3: an `f32` variadic argument is refused (C passes it as a double).
+use std.mem
+
+extern c fn sprintf(buf *u8, fmt *u8, ...) i32
+
+fn main()
+    unsafe
+        buf := mem.alloc(8, 0.to_u8())
+        sprintf(buf, buf, 1.5.to_f32())

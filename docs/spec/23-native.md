@@ -268,6 +268,8 @@ with problems is never stored. `--no-cache` or `AIL_NO_CACHE` reads and
 writes nothing. The cache is in `$AIL_CACHE_DIR`, else
 `$XDG_CACHE_HOME/ail/build`, else `%LOCALAPPDATA%\ail\build` or `~/.cache/ail/build`, and keeps the 64 most
 recently used entries. A cached and an uncached build are the same bytes.
+`ail` processes that build the same program at once each build into a file
+of their own; the first to store the entry wins and the others use it.
 *(ADR 0655)*
 
 ```text
