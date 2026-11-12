@@ -1530,6 +1530,40 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         return none
     if tag == "kw" and text == "while"
         bump()
+        if n := ident()
+            if n == "let" and tag_at(1) == "id" and sym_at(2) == "="
+                # `while let x = e`: the Rust habit (expr.loop.8).
+                eq := tokens[i + 2].pos
+                error_fix(
+                    "expr.loop.8",
+                    here(),
+                    "AIL has no `while let`; write `while name := e`",
+                    "`while name := e` loops while `e` has a value, binding `name` each time",
+                    "write `while name := e`",
+                    [fix.delete(here(), tokens[i + 1].pos), fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")],
+                )
+                return none
+            if sym_at(1) == ":="
+                # `while name := e` (expr.loop.8): `while true` whose body starts
+                # with `name := e else break`.
+                bind_pos := bump().pos
+                i += 1
+                value := range()?
+                body := block("the `while` condition", "expr.loop.8")?
+                mut stmts := [ast.Stmt.Let(
+                    name: n,
+                    pos: bind_pos,
+                    mutable: false,
+                    value: value,
+                    otherwise: ast.Else.Leave(ast.Stmt.Break(pos)),
+                )]
+                for st in body
+                    stmts.push(st)
+                return ast.Stmt.While(
+                    cond: ast.Expr.Bool(value: true, pos: pos),
+                    body: stmts,
+                    pos: pos,
+                )
         cond := range()?
         body := block("the `while` condition", "expr.loop.1")?
         return ast.Stmt.While(cond: cond, body: body, pos: pos)

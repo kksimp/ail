@@ -187,6 +187,17 @@ statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
 to that loop. AIL has no `loop` keyword: the help for it says `while true`.
 *(ADR 0139)*
 
+**expr.loop.8** — `while name := e` runs its block while `e`, of type `T?` or
+`T ! E`, has a value. Each iteration evaluates `e` first. When `e` is present
+or succeeded, `name` is bound to its value, immutably and only within that
+iteration's block, and the block runs. Otherwise the loop ends, and an error
+value is dropped. `break` and `continue` apply to this loop; `continue` evaluates
+`e` again. It is `while true` whose block starts with `name := e else break`
+(`err.else.6`), so `name` follows `expr.bind.4` and a `while` of this form
+that has a value is never a diverging statement (`expr.loop.7`). There is no
+`else err` part and no `elif`. The Rust spelling `while let x = e` is a
+compile-time error whose fix writes `while x := e`. *(ADR 0125)*
+
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
 
@@ -776,6 +787,21 @@ fn main()
     print(n)                  # 3
     for s in {"a", "b"}
         print(s)              # a b: insertion order
+```
+
+```ail rules=expr.loop.8
+fn main()
+    mut stack := [1, 2, 3]
+    while top := stack.pop()
+        print(top)            # 3 2 1
+    print(stack.len())        # 0
+```
+
+```ail error=expr.loop.8
+fn main()
+    mut stack := [1, 2]
+    while let top = stack.pop()   # error: write `while top := stack.pop()`
+        print(top)
 ```
 
 ```ail error=type.map.5

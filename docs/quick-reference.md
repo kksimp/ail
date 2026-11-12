@@ -344,6 +344,8 @@ pad := 2 + (if n < 0 then 1 else 0)  # a one-line `if` as an operand: in parenth
 
 while n > 0
     n -= 1
+while top := xs.pop()      # loops while the T? or T ! E has a value, binding it
+    print(top)
 
 for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x == 0

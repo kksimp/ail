@@ -309,6 +309,8 @@ sign := if n < 0 then "-" else "+"   # the one-line form
 
 while n > 0
     n -= 1
+while top := xs.pop()      # loops while the T? or T ! E has a value, binding it
+    print(top)
 
 for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x == 0
