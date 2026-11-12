@@ -180,7 +180,7 @@ struct Lower
     else_targets List[int]
     ## Instrumentation sites, when asked for (lower_instr.ail).
     instr Instr
-    ## The generator being lowered (lower_gen.ail).
+    ## The generator being lowered (lower_gen.ail, ADR 1073, expr.yield.1).
     gens GenLower
     ## Function literals (type.fn.4, lower_fnlit.ail).
     fl FnLitState
