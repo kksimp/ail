@@ -1638,7 +1638,7 @@ fn Checker.check_field_defaults(mut self, struct_index int)
                 "type.struct.8",
                 expr_pos(bad),
                 "`{st.fields[k].name}`'s default isn't a plain constant",
-                "write literals, `none`, `[]`, `{}`, or lists, sets, maps and tuples of them; a default has no names or calls, so build anything else where you write the literal",
+                "write literals, `none`, `[]`, `\{}`, or lists, sets, maps and tuples of them; a default has no names or calls, so build anything else where you write the literal",
             )
             continue
         want := field_types[struct_index][k]
