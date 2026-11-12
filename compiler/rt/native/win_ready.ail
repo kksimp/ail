@@ -62,6 +62,13 @@ fn wrdy_alloc(n int) int
 fn wrdy_free(p int)
     import_call("HeapFree", import_call("GetProcessHeap", 0, 0, 0, 0), 0, p, 0)
 
+## Diagnostic (`$AIL_RDY_TRACE` set): one line per submit and per completion on standard error.
+fn wrdy_dbg(msg str)
+    if os_env_get("AIL_RDY_TRACE") == ""
+        return
+    line := "rdy {win_tick()} {msg}\n"
+    win_write(2, str_addr(line) + 16, load64(str_addr(line)))
+
 ## A new set: its address, or a negative `errno`.
 fn wrdy_new() int
     wnet_init()
@@ -145,6 +152,7 @@ fn wrdy_submit(set int, e int) int
         32,
     )
     c := st.bit_and(4294967295)
+    wrdy_dbg("submit tag {load64(e + WE_TAG)} fd {load64(e + WE_FD)} keep {load64(e + WE_KEEP)} status {c}")
     # Done already or pending: either way the answer comes through the port.
     if c != 0 and c != 259
         return -9
@@ -239,6 +247,7 @@ fn wrdy_take(set int, out int, ms int) int
         status := load64(e).bit_and(4294967295)
         found := win_u32(e + WE_EVENTS)
         keep := load64(e + WE_KEEP) != 0
+        wrdy_dbg("done tag {load64(e + WE_TAG)} fd {load64(e + WE_FD)} keep {load64(e + WE_KEEP)} status {status} found {found}")
         # A request that failed or was cancelled, and a socket closed here,
         # report nothing and are not asked again.
         gone := closed or status != 0 or found.bit_and(WR_LOCAL_CLOSE) != 0
