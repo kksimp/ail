@@ -603,8 +603,8 @@ it is never copied (`own.uniq.1`). *(ADR 1073)*
 taking its sequence over and reading only as far as its result is read:
 `Seq.of(xs)` (the elements of a list), `s.map(f)`, `s.filter(keep)`,
 `s.take_while(keep)`, `s.take(n)`, `s.skip(n)`, `s.enumerate()` (pairs
-`(i, x)` from 0), `s.zip(other)` (pairs, until either ends) and
-`s.chain(other)`. Reading to the end: `s.collect()` (a `List[T]`) and
+`(i, x)` from 0), `s.zip(move other)` (pairs, until either ends) and
+`s.chain(move other)`. Reading to the end: `s.collect()` (a `List[T]`) and
 `s.count()`. *(ADR 1073)*
 
 **expr.yield.1** — A function whose body contains a `yield` statement is a

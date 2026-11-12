@@ -991,14 +991,11 @@ fn Seq.take(move self, n int) Seq[T]
 
 ## The elements after the first `n` (expr.iter.3).
 fn Seq.skip(move self, n int) Seq[T]
-    mut s := self
     mut k := 0
-    while k < n
-        if s.next() == none
-            return
+    for x in self
+        if k >= n
+            yield x
         k += 1
-    for x in s
-        yield x
 
 ## Each element with its index from 0, as `(i, x)` (expr.iter.3).
 fn Seq.enumerate(move self) Seq[(int, T)]
