@@ -553,3 +553,25 @@ puts token usage first among the criteria for delegated decisions.
 
 **Recommendation:** B. Measurements still back every syntax choice (ADR 0029).
 **Decision needed from:** the designer.
+
+## OQ-143 — Input hashes for the explain golden (tools/golden/golden.py)
+
+Every `explain` row's input hash covers all of `docs/spec/*.md` and `compiler/explain/*`.
+So any spec edit makes every row stale. Stale rows are skipped unless `--strict` is set, so
+from 2026-11-10 to 2026-11-12 the explain golden checked nothing: the refreeze at batch 4
+added 60 rules and changed 439 outputs. Until this is settled, each batch's fix-forward
+refreezes it.
+
+- **A. Hash per rule.** A rule's row hashes its own spec paragraph, its example blocks and
+  `compiler/explain/*`. The bare list hashes the rule IDs. Pro: rows stay checked through
+  unrelated edits. Con: a rule's output can depend on its neighbours (related rules,
+  chapter headers), so the hash has to follow what `explain` actually reads.
+- **B. Hash per chapter.** Pro: simple, and stale rows stay local to a chapter. Con: an edit
+  still turns a whole chapter stale.
+- **C. Run `check --strict` in the gate and refreeze in every batch.** Pro: no code change.
+  Con: a refreeze blesses whatever the binary prints, so a real regression can slip through.
+
+**Recommendation:** A, starting with B if A's dependencies are unclear. Neither option is
+needed before v0.1.0, because the per-batch refreeze plus a `golden.py compare` against
+main covers the gap.
+**Decision needed from:** AI (delegated, ADR 0076).
