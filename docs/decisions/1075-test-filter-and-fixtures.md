@@ -24,7 +24,7 @@ building. `--filter` with `--update` or `--mutate` is refused, since both need t
 - `@test @needs("tmp") fn t(tmp T)`: each fixture is named by an attribute and received by a parameter of the same
   name and type. Other parameters stay generated inputs.
 - Each run makes the fixtures in `@needs` order and tears them down in reverse order, after pass, fail, trap or
-  error. A failed setup fails the test as `setup of fixture F: ...` at the position inside the fixture.
+  error. A failed setup fails the test with the fixture's error at its position, and the line `context: setup of fixture F` under it.
 
 The runner emits a wrapper `ail_fx_NAME` per test that sets up each fixture, `defer`s its teardown right after, and
 calls the test. It reuses `defer`, so teardown order and trap behaviour are the language's own.

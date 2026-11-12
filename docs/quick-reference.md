@@ -711,7 +711,7 @@ smallest input. Parameters: `int`, `float`, `bool`, `char`, `str`, `List`, `Map`
 any text; repeat `--filter` for several); `--list` prints the names without running.
 
 A **fixture** is shared setup made fresh for each run of a test: `@fixture fn tmp() T`
-(or `!T` if setup can fail; a failure fails the test as `setup of fixture tmp: ...`).
+(or `!T` if setup can fail; a failure fails the test, with `context: setup of fixture tmp` shown).
 `@fixture("drop")` names a teardown `fn drop(v T)` that always runs, in reverse
 order, after pass, fail or trap. A test takes it with `@test @needs("tmp")` and a
 parameter `tmp T`: `@test @needs("a") @needs("b") fn t(a A, b B, n int)`

@@ -204,8 +204,9 @@ that is not a `@test` are compile-time errors. *(ADR 1075)*
 **test.fixture.4** — Each run of a test makes its fixtures anew, in the order of the `@needs` attributes (a
 property test makes them for each generated input), and tears them down in reverse order when the run
 ends, whether it passed, failed, trapped or returned an error. A fixture whose setup fails ends
-the test as `FAIL NAME: error: setup of fixture F: MESSAGE at LINE:COL`, with the position where the
-fixture first returned the error; the test body does not run and the fixtures made before it are torn
+the test as `FAIL NAME: error: MESSAGE at LINE:COL`, at the position where the fixture first
+returned the error, with the line `! context: setup of fixture F` under it; the test body does not run
+and the fixtures made before it are torn
 down. A fixture and its teardown must be in the same file as the test. *(ADR 1075)*
 
 ```ail tool=test,FILE expect=passed rules=test.fixture.1,test.fixture.2,test.fixture.3,test.fixture.4
