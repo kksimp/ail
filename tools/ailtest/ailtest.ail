@@ -3352,7 +3352,10 @@ fn main() !
         mut keep := List[TestFn]()
         for t in found.tests
             listed_of += 1
-            if name_matches(if doc_names.contains(t.name) then doc_names[t.name] else t.name, filters)
+            if name_matches(
+                if doc_names.contains(t.name) then doc_names[t.name] else t.name,
+                filters,
+            )
                 keep.push(t)
             else
                 found.left_out.push(Span(first: t.first, last: t.last))
@@ -3391,7 +3394,10 @@ fn main() !
             else
                 mfilt.add(mi)
         mf.skipped = [k for k in mf.skipped if name_matches(k.name, filters)]
-        if selected_of == 0 and found.skipped.is_empty() and mf.skipped.is_empty() and skipped_contracts.is_empty()
+        if selected_of == 0
+            and found.skipped.is_empty()
+            and mf.skipped.is_empty()
+            and skipped_contracts.is_empty()
             io.eprint("error[test.filter.1]: no test of {file} matches {filters.join(", ")} ({listed_of} tests; `ail test --list FILE` shows their names)")
             io.exit(2)
         io.eprint("filter: {selected_of} of {listed_of} tests")
