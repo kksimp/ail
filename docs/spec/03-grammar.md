@@ -77,8 +77,9 @@ fn add(a i32, b i32) i32
     a + b
 ```
 
-> **Note:** parameter grouping (`a, b i32`), function types, multiple return
-> values, and named arguments are not yet decided.
+> **Note:** there is no parameter grouping (`a, b i32`): every parameter
+> names its type. Function types are `fn(A) R` (`type.fn.1`), several results
+> are a tuple (`type.tuple.1`), and arguments may be named (`expr.call.3`).
 
 ## Lists of items
 

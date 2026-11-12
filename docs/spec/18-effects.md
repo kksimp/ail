@@ -11,8 +11,6 @@ Chapter key: `eff`
 
 **eff.infer.1** — Every function has an *effect set*: the effects `io`,
 `fail`, `mutates`, `unsafe`, `hw` and `spawn`, and the *capabilities* `fs`, `env`,
-`proc`, `clock`, `random`, `net`, `net.serve` and `ui`. The set is inferred; it is never written in
-`fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
 `proc`, `clock`, `random`, `net`, `net.serve`, `ui` and `app`. The set is inferred; it is never written in
 source. *(ADR 0163)*
 
@@ -33,9 +31,7 @@ computed at compile time and may call only compile-time-safe code
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`,
 `net.*` gives `net` and `io` (`std.net.1`), and `net.serve` and `net.listen` also give `net.serve` (`std.net.14`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
-of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `std.hw` and volatile pointer methods give `hw` (`unsafe.hw.5`); `spawn` gives
-`spawn`. *(ADR 0163, ADR 0283)*
-of `ui.Window` give `ui` and `io` (`std.ui.9`), `app.run_host` (and so `app.run`) gives `app` (`std.app.12`); an `unsafe` block gives `unsafe`; `spawn` gives
+of `ui.Window` give `ui` and `io` (`std.ui.9`), `app.run_host` (and so `app.run`) gives `app` (`std.app.12`); an `unsafe` block gives `unsafe`; `std.hw` and volatile pointer methods give `hw` (`unsafe.hw.5`); `spawn` gives
 `spawn`. *(ADR 0163, ADR 0283, ADR 0838)*
 
 **eff.infer.5** — A call whose target is known from the types (a free

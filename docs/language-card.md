@@ -350,6 +350,11 @@ calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible o
 
 ```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
+m := """
+    line one
+      indented
+    """                     # multi-line: "line one\n  indented"; the common indent is removed, the closing line adds no newline
+r := r"C:\dir\{x}"          # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 ```
