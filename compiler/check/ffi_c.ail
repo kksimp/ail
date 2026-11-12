@@ -113,7 +113,7 @@ fn Checker.check_c_call(
 ## its type). Reports an error otherwise.
 fn Checker.cb_name(mut self, e ast.Expr, rule str)
     p := expr_pos(e)
-    if np := name_pos(e)
+    if np := ffi_name_pos(e)
         if fn_values.contains(pos_key(np))
             return
     err_help(
@@ -148,7 +148,7 @@ fn Checker.mem_c_fn(mut self, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
         )
     u8p
 
-@allow("expr.match.3") fn name_pos(e ast.Expr) ast.Pos?
+@allow("expr.match.3") fn ffi_name_pos(e ast.Expr) ast.Pos?
     match e
         Name(_, p) => p
         _ => none
