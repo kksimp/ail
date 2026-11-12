@@ -608,6 +608,44 @@ fn iv_of(f Func, defs List[Def], loops List[LoopInfo], v int, depth int) Iv
         return no_iv()
     no_iv()
 
+## `iv_of` as seen from block `at`: the counter `p` of a counted loop is below its bound in
+## every block of the loop but the header, which alone leaves it (native.bce.10).
+fn iv_from(f Func, defs List[Def], loops List[LoopInfo], v int, at int, depth int) Iv
+    if depth > 6
+        return no_iv()
+    if defs[v].at >= 0
+        i := inst_of(f, defs, v) else return no_iv()
+        if i.op == "const"
+            return iv_of(f, defs, loops, v, depth)
+        if i.op != "add" and i.op != "sub" and i.op != "mul"
+            return no_iv()
+        a := iv_from(f, defs, loops, i.arg(0), defs[v].block, depth + 1)
+        b := iv_from(f, defs, loops, i.arg(1), defs[v].block, depth + 1)
+        if not a.ok or not b.ok
+            return no_iv()
+        if i.op == "add"
+            return iv_clamp(a.lo + b.lo, a.hi + b.hi)
+        if i.op == "sub"
+            return iv_clamp(a.lo - b.hi, a.hi - b.lo)
+        ps := [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi]
+        mut lo := ps[0]
+        mut hi := ps[0]
+        for x in ps
+            if x < lo
+                lo = x
+            if x > hi
+                hi = x
+        return iv_clamp(lo, hi)
+    r := iv_of(f, defs, loops, v, depth)
+    if not r.ok or at < 0
+        return r
+    for lp in loops
+        if lp.header == defs[v].block and lp.member[at] and at != lp.header and lp.exits == 1
+            # Only the header leaves, so the loop's other blocks run with `p < hi`.
+            if r.hi > r.lo
+                return Iv(ok: true, lo: r.lo, hi: r.hi - 1)
+    r
+
 fn iv_clamp(lo int, hi int) Iv
     Iv(ok: lo > 0 - IV_BIG and hi < IV_BIG, lo: lo, hi: hi)
 
@@ -934,6 +972,19 @@ fn version(
                 needs.push(Need(kind: "off", x: x, arg: off, off: 0))
                 relax.add("{b}:{k}")
                 relax.add("{defs[idx].block}:{defs[idx].at}")
+    # `xs[y]` and `xs[y + k]` with `y` fixed here but bounded by the counted loops around
+    # it: one test of the highest index per list, with the arithmetic bounds'
+    # (native.bce.10).
+    mut kept := List[Need]()
+    for nd in needs
+        if (nd.kind == "inv" or nd.kind == "invoff") and not hidx.contains(nd.arg)
+            r := iv_from(f, defs, loops, nd.arg, defs[nd.arg].block, 0)
+            if r.ok and r.lo >= 0 and r.hi + nd.off <= MAX_REACH
+                if not reach.contains(nd.x) or reach[nd.x] < r.hi + nd.off
+                    reach[nd.x] = r.hi + nd.off
+                continue
+        kept.push(nd)
+    needs = kept
     for x in reach.keys()
         needs.push(Need(kind: "const", x: x, arg: reach[x], off: 0))
     # Worth the guard on the operands: two checks, or one in a loop that is
