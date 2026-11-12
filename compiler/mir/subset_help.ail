@@ -1,91 +1,34 @@
 ## The `help:` line for a `native.subset.1` problem (ADR 0722). The problem's
 ## message is written by `lower.ail` and its siblings; this file only reads it,
-## so the messages can change without touching the lowering. `owner` names the queued PR when the night-run
-## merge order has one; `ail run` runs everything the backend refuses.
+## so the messages can change without touching the lowering. Native is the only
+## backend (ADR 0904), so a refused construct has no other route: the help says
+## how to write it with what is built.
 
 ## The help text for a message (native.subset.1 names the construct and the position; this line
-## says what to do). Every help tells the reader that `ail run` still runs the program: an entry
-## that doesn't say so gets the suffix, and a message with no entry gets the generic line. An
-## internal error has no help.
+## says what to do). A message with no entry gets the generic line. An internal error has no help.
 pub fn subset_help(message str) str
     if message.starts_with("internal error")
         return ""
     h := entry_help(message)
     if h == ""
-        return "`ail run` runs this program"
-    if h.contains("`ail run`")
-        return h
-    return "{h}; or `ail run`"
+        return "rewrite it with plain functions, structs, enums, lists, maps and loops; the other errors name what else is missing"
+    h
 
 ## The help text for a message, or "" when no entry matches. The first match
 ## wins, so the more specific forms come first.
 fn entry_help(message str) str
-    if message.contains("calling `TaskGroup`")
-        or message.contains("Channel[")
-        or message.contains("calling `Mutex`")
-        or message.contains("`spawn`")
-        return "tasks and channels aren't native yet (owner: #194); `ail run` runs them"
     if message.contains("comprehension whose type isn't known")
-        return "a set or map comprehension is native with `int`, `bool`, `char` or `str` keys and an element type the loop finds; otherwise build it with a loop"
-    if message.contains("maps") or message.contains("Map[") or message.contains("a map of")
-        return "maps are native with `int`, `bool`, `char` or `str` keys (ADR 0568); `get` and `remove` need `else`; other keys, or `ail run`"
-    if message.contains("sets") or message.contains("Set[")
-        return "sets are native over `int`, `bool`, `char` and `str` (ADR 0568); other element types, or `ail run`"
-    if message.contains("`==` on `str`") or message.contains("`!=` on `str`")
-        return "string equality isn't native yet (owner: #184); compare the parts you need, or use `ail run`"
-    if message.contains(".lines()")
-        or message.contains("`.split()`")
-        or message.contains("`.to_float()` on `str`")
-        or message.contains("`.to_int()` on `str`")
-        return "string methods beyond `chars` and `join` aren't native yet (owner: #184); `ail run` runs them"
-    if message.contains("string interpolation outside `print`")
-        return "interpolation is native only inside `print`; print the parts, or build the text with `xs.join(\", \")`"
-    if message.contains("`?` on a") or message.contains("`?` with a context message")
-        return "error values (`T ! E`) and `?` aren't native yet; return an optional `T?` or use `ail run`"
-    if message.contains(".from_json")
-        or message.contains("parse_json")
-        or message.contains("`Json`")
-        or message.contains("on a `Json`")
-        return "JSON isn't native yet; `ail run` runs it"
-    if message.contains("`bytes` literals") or message.contains("`env.find`")
-        return "this isn't native yet (bytes and some std functions); `ail run` runs it"
-    if message.contains("`char` patterns")
-        return "`char` matches aren't native yet; compare with `==` in an `if`, or use `ail run`"
-    if message.contains("error struct") or message.contains("error enum")
-        return "error types aren't native yet; `ail run` runs them"
-    if message.contains("attribute `@test`")
-        return "tests aren't part of a native build; run them with `ail test` or `ail test --native`"
-    if message.contains("methods of traits and `impl` blocks") or message.starts_with("trait `")
-        return "traits and `impl` blocks aren't native yet (owner: #222); call the concrete functions instead"
-    if message.contains("contracts aren't in the native subset yet")
-        return "contracts aren't native yet; `ail run` checks them"
-    if message.contains("`unsafe` blocks")
-        return "unsafe blocks aren't native yet; `ail run` runs them"
+        or message.contains("a comprehension whose element type isn't known")
+        return "give the list its type with `List[T]()` and `push` in a loop"
+    if message.contains("maps") or message.contains("Map[") or message.contains("a map of") or message.contains("a key of type")
+        return "maps are native with `int`, `bool`, `char` or `str` keys (ADR 0568); `get` and `remove` need `else`; other keys aren't built"
     if message.contains("this `else` must leave")
         return "write `else return`, `else break`, `else continue`, or a fallback value"
     if message.contains("`for mut`")
         return "loop by index instead: `for i in 0..xs.len()` and `xs[i] = ...`"
-    if message.contains("a comprehension whose element type isn't known")
-        return "give the list its type with `List[T]()` and `push` in a loop"
-    if message.contains(" on `?`")
-        or message.contains("indexing a `?`")
-        or message.contains("a `for` over a `?`")
-        or message.contains("`.items` on `?`")
-        or (message.contains("assigning `.") and message.contains("on `?`"))
-        return "check the optional first with `if x := ...`; its fields, indexes and loops aren't native yet"
-    if message.contains("`path` isn't in the native subset yet")
-        or message.contains("isn't in the native subset yet (only locals, parameters and constants)")
-        return "a module-level value that isn't a constant can't be read natively; pass it as a parameter"
-    if message.contains("its result type isn't in the native subset yet")
-        return "native results are int, float, bool, str, structs and enums, optionals and lists of those, or nothing"
-    if message.contains("its type isn't in the native subset yet")
-        return "native parameters and fields are int, float, bool, str, structs and enums, optionals and lists of those"
     if message.contains("printing a `")
         return "print the fields you need, for example `print(v.x)`"
-    if message.contains("methods of `") and message.contains("aren't in the native subset yet")
-        return "this method uses a construct outside the native subset; the other errors on it say which"
-    if message.contains("generic functions")
-        or message.contains("generic struct")
-        or message.contains("generic enum")
-        return "generics aren't native yet (owner: #219); write one function per type"
-    return ""
+    if message.contains("`path` isn't in the native subset yet")
+        or message.contains("isn't in the native subset yet (only locals, parameters and constants)")
+        return "a module-level value that isn't a constant can't be read here; pass it as a parameter"
+    ""
