@@ -161,8 +161,17 @@ struct Fetched
 fn failed(msg str, help str) Fetched
     Fetched(commit: "", dir: "", msg: msg, help)
 
+## How long one `git` call may take on Windows, where `GIT_TERMINAL_PROMPT=0` can't be set: 10 minutes.
+GIT_WINDOWS_MS := 600000
+
+## The name every temporary directory of a fetch starts with (ADR 1059); `remove_scrap` removes nothing else.
+SCRAP_PREFIX := ".fetch-"
+
 fn run_git(args List[str]) proc.Output ! proc.ProcError
     # Never wait on a password prompt.
+    # Windows has no `env` program (ADR 1059): git runs directly there, and a credential prompt is cut off by the timeout.
+    if (env.get("OS") else "") == "Windows_NT"
+        return proc.run("git", args, none, GIT_WINDOWS_MS)?
     mut all := ["GIT_TERMINAL_PROMPT=0", "git"]
     all.extend(args)
     proc.run("env", all)?
@@ -185,11 +194,10 @@ fn fetch(name str, source Source, locked str?, offline bool) Fetched
             "can't create the cache `{deps}` for dependency `{name}`: {err}",
             "set `AIL_HOME` to a writable directory",
         )
-    tmp := path.join(deps, ".fetch-{name}-{time.now_ms()}")
+    tmp := path.join(deps, "{SCRAP_PREFIX}{name}-{time.now_ms()}")
     result := clone(name, source, locked, tmp, deps)
     if fs.exists(tmp)
-        _ := proc.run("rm", ["-rf", tmp]) else _e1
-            return result
+        remove_scrap(tmp, tmp)
     result
 
 fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
@@ -244,7 +252,8 @@ fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
             "can't check out commit `{commit}` of dependency `{name}`",
             "try again; the cache may be out of space",
         )
-    _ := proc.run("rm", ["-rf", path.join(tmp, ".git")]) else _e2
+    remove_scrap(path.join(tmp, ".git"), tmp)
+    if fs.exists(path.join(tmp, ".git"))
         return failed("can't clear the repository data of `{name}`", "try again")
     dir := path.join(deps, "{name}-{commit}")
     # Another process may have fetched it meanwhile; its tree is the same.
@@ -255,6 +264,40 @@ fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
                 "set `AIL_HOME` to a writable directory",
             )
         # Read-only files, writable directories, so the cache can be cleared (mod.pkg.7).
-        _f := proc.run("find", [dir, "-type", "f", "-exec", "chmod", "a-w", "\{}", "+"]) else _e3
-            return Fetched(commit: commit, dir: dir, msg: "", "")
+        # `a-w` on every file (std.fs.28-29); Windows keeps them writable, so the cache can be cleared there.
+        if (env.get("OS") else "") != "Windows_NT"
+            files := fs.walk(dir) else return Fetched(commit: commit, dir: dir, msg: "", "")
+            for f in files
+                m := fs.mode(f) else continue
+                fs.set_mode(f, m.bit_and(4095 - 146)) else continue
     Fetched(commit: commit, dir: dir, msg: "", "")
+
+## Remove `target`, a file or a tree inside the scratch directory `root` that this program made (ADR 1059): it
+## refuses when `root` isn't named `SCRAP_PREFIX...` or `target` isn't `root` or below it, and a symbolic link
+## to a directory is removed as a link, its target untouched.
+fn remove_scrap(target str, root str)
+    if not path.base(root).starts_with(SCRAP_PREFIX) or not target.starts_with(root)
+        return
+    meta := fs.metadata(target) else return
+    if not meta.is_dir
+        rm_file(target)
+        return
+    files := fs.walk(target) else return
+    mut links := Set[str]()
+    for f in files
+        links.add(f)
+    scrap_tree(target, links)
+
+fn scrap_tree(dir str, files Set[str])
+    names := fs.list_dir(dir) else return
+    for name in names
+        p := path.join(dir, name)
+        if files.contains(p)
+            rm_file(p)
+            continue
+        scrap_tree(p, files)
+    rm_file(dir)
+
+## `rm -f`: a failure is ignored.
+fn rm_file(target str)
+    fs.remove(target) else return

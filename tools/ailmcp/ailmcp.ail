@@ -18,100 +18,137 @@ fn tools() List[Tool]
     [
         Tool(
             name: "ail_check",
-            about: "Check a program; the diagnostics are the answer (exit 0 means clean). With `fix` set to `true` the compiler's safe fixes are applied first and one line names them (`fixed 3: expr.not.1`).",
+            about: "Check a program; `fix` applies safe fixes first.",
             props: ["program", "fix"],
             needs: ["program"],
         ),
         Tool(
             name: "ail_test",
-            about: "Run a program's tests, writing a reproducible bundle per failure; with `since` only those a change since that git revision can reach; with `bundle` (a path from an earlier failure) rerun exactly that failure.",
+            about: "Run tests; `since` limits to affected, `bundle` reruns a failure.",
             props: ["program", "since", "bundle"],
             needs: [],
         ),
         Tool(
             name: "ail_verify",
-            about: "What a change since a git revision (default HEAD) proved, what tests exercised and what nothing looked at (ail verify --diff, as JSON).",
+            about: "What a change since a revision proved and left untested.",
             props: ["program", "rev"],
             needs: ["program"],
         ),
         Tool(
             name: "ail_ask",
-            about: "Ask the checker's graph a plain-words question: who writes field F, what calls f, which effects reach f.",
+            about: "Ask who writes a field or calls a function, not grep.",
             props: ["program", "question"],
             needs: ["program", "question"],
         ),
         Tool(
             name: "ail_impact",
-            about: "What a change since a git revision (default HEAD) touches: changed, affected, tests, effects, as JSON.",
+            about: "What a change since a revision touches.",
             props: ["program", "rev"],
             needs: ["program"],
         ),
         Tool(
             name: "ail_context",
-            about: "The smallest bundle of a program an edit to one function needs (signature, body, effects, callees, callers, types, tests, rules), cut to `budget` tokens (default 2000). One call replaces the file reads before an edit.",
+            about: "One function with callees, callers, types, tests, before editing.",
             props: ["program", "symbol", "budget", "json"],
             needs: ["program", "symbol"],
         ),
         Tool(
             name: "ail_edit",
-            about: "Apply structured edits to a file or package and check the result. `edits` is a JSON list of edit objects or the compact hunk form (edit.in.1, edit.in.3). With `test` also runs the tests; with `impact` adds what the edit touches; with `dry_run` writes nothing and returns a diff. Edits apply all or none.",
+            about: "Apply edits (JSON or hunks) all or none, then check; `test`, `dry_run`.",
             props: ["program", "edits", "test", "impact", "dry_run", "budget"],
             needs: ["program", "edits"],
         ),
         Tool(
             name: "ail_fix",
-            about: "Apply every machine fix the checker offers, to a fixed point; with `dry_run` print the diff and write nothing.",
+            about: "Apply the checker's machine fixes; `dry_run` shows a diff.",
             props: ["program", "dry_run", "budget"],
             needs: ["program"],
         ),
         Tool(
             name: "ail_explain",
-            about: "The text of one spec rule and its example (`rule`, e.g. expr.match.2); without `rule` the list of every rule.",
+            about: "Spec rule text and fix by ID from a diagnostic.",
             props: ["rule", "budget", "json"],
             needs: [],
         ),
         Tool(
             name: "ail_api",
-            about: "The program's public API. `form` is card (default), index (one line per module), outline, symbols, text or pretty; `module` limits a card to one module; `budget` trims a card to that many tokens.",
+            about: "A program's public API instead of reading files.",
             props: ["program", "form", "module", "budget", "json"],
             needs: ["program"],
         ),
         Tool(
             name: "ail_review",
-            about: "A change summarised by meaning: effects, API, contracts, performance and untested code between two git revisions (`range` is BASE..HEAD), cut to `budget` tokens (default 500).",
+            about: "A change between two revisions by meaning.",
             props: ["range", "path", "budget", "json"],
             needs: ["range"],
         ),
         Tool(
+            name: "ail_card",
+            about: "The core language card, or one `topic` of the full card.",
+            props: ["topic"],
+            needs: [],
+        ),
+        Tool(
+            name: "ail_find",
+            about: "Find a std function by `words` or `sig` before writing one.",
+            props: ["words", "sig"],
+            needs: [],
+        ),
+        Tool(
+            name: "ail_try",
+            about: "Check and test each patch set in `sets` on a copy, one verdict each.",
+            props: ["program", "sets"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_prove",
+            about: "Which `requires` and `ensures` the prover discharges.",
+            props: ["program"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_infer",
+            about: "Propose contracts for a function from its tests; writes nothing.",
+            props: ["program", "function"],
+            needs: ["program", "function"],
+        ),
+        Tool(
+            name: "ail_merge_check",
+            about: "New errors a merge adds: `base`, `ours`, `theirs` files, or revisions.",
+            props: ["base", "ours", "theirs", "path"],
+            needs: ["ours", "theirs"],
+        ),
+        Tool(
+            name: "ail_verify_check",
+            about: "Re-run a change certificate (`cert`) and say if it holds.",
+            props: ["cert"],
+            needs: ["cert"],
+        ),
+        Tool(
             name: "task_start",
-            about: "Open the task: record the goal and the base revision (ADR 0917).",
+            about: "Open a task: goal and base revision.",
             props: ["program", "goal", "rev"],
             needs: ["program", "goal"],
         ),
         Tool(
             name: "task_status",
-            about: "The open task's impact since its base and whether it was verified.",
+            about: "Open task's impact and verified state.",
             props: [],
             needs: [],
         ),
         Tool(
             name: "task_verify",
-            about: "Check, then run the affected tests; record green or red. With `fix` set to `true` the check applies the compiler's safe fixes first.",
+            about: "Check and test the task; `fix` applies safe fixes.",
             props: ["fix"],
             needs: [],
         ),
         Tool(
             name: "task_finish",
-            about: "Close the task; refused unless the last verify was green.",
+            about: "Close a verified task and write its certificate.",
             props: [],
             needs: [],
         ),
-        Tool(
-            name: "task_abort",
-            about: "Close the task without finishing it.",
-            props: [],
-            needs: [],
-        ),
+        Tool(name: "task_abort", about: "Close the task unfinished.", props: [], needs: []),
     ]
 
 fn member(key str, value Json) JsonMember
@@ -142,16 +179,21 @@ fn prop_type(tool str, p str) str
             return "boolean"
     "string"
 
+## One property's schema; `sets` is a list of patch sets (ail_try), a string each.
+fn prop_schema(tool str, p str) Json
+    if p == "sets"
+        return obj([member("type", Json.Str("array")), member("items", obj([member(
+            "type",
+            Json.Str("string"),
+        )]))])
+    obj([member("type", Json.Str(prop_type(tool, p)))])
+
 fn tool_json(t Tool) Json
-    props := obj([
-        member(p, obj([member("type", Json.Str(prop_type(t.name, p)))]))
-        for p in t.props
-    ])
-    schema := obj([
-        member("type", Json.Str("object")),
-        member("properties", props),
-        member("required", strs(t.needs)),
-    ])
+    props := obj([member(p, prop_schema(t.name, p)) for p in t.props])
+    mut parts := [member("type", Json.Str("object")), member("properties", props)]
+    if not t.needs.is_empty()
+        parts.push(member("required", strs(t.needs)))
+    schema := obj(parts)
     obj([
         member("name", Json.Str(t.name)),
         member("description", Json.Str(t.about)),
@@ -191,7 +233,23 @@ fn command(name str, a Json) Cmd
         for n in t.needs
             if (a.str(n) else "") == ""
                 return Cmd(argv: [], why: "{name} needs `{n}`", stdin: "")
-        bad := dashed(a, ["program", "symbol", "rule", "range", "path", "module", "form"])
+        bad := dashed(a, [
+            "program",
+            "symbol",
+            "rule",
+            "range",
+            "path",
+            "module",
+            "form",
+            "topic",
+            "words",
+            "sig",
+            "function",
+            "base",
+            "ours",
+            "theirs",
+            "cert",
+        ])
         if bad != ""
             return Cmd(
                 argv: [],
@@ -287,6 +345,50 @@ fn command(name str, a Json) Cmd
                 out.extend(budget_args(a))
                 if on(a, "json")
                     out.push("--json")
+            "ail_card" =>
+                out = ["card"]
+                if a.text("topic", "") != ""
+                    out.push(a.text("topic", ""))
+            "ail_find" =>
+                words := a.text("words", "")
+                sig := a.text("sig", "")
+                if words == "" and sig == ""
+                    return Cmd(argv: [], why: "ail_find needs `words` or `sig`", stdin: "")
+                out = ["ask", "std"]
+                if sig != ""
+                    out.extend(["--sig", sig])
+                else
+                    out.extend(words.split(" "))
+            "ail_try" =>
+                # try.in.2: the patch sets travel as one JSON array on standard input; `--apply` is never passed.
+                sets := a.get("sets") else Json.Null
+                mut items := List[Json]()
+                if listed := sets.as_arr()
+                    items = listed
+                else
+                    one := sets.as_str() else ""
+                    if one.trim() != ""
+                        items.push(Json.Str(one))
+                if items.is_empty()
+                    return Cmd(
+                        argv: [],
+                        why: "ail_try needs `sets`: a list of patch sets",
+                        stdin: "",
+                    )
+                out = ["try", program, "--sets-json"]
+                stdin = Json.Arr(items).to_text()
+            "ail_prove" => out = ["prove", program]
+            "ail_infer" => out = ["infer", "--contracts", a.text("function", ""), program]
+            "ail_merge_check" =>
+                out = ["merge", "--check"]
+                base := a.text("base", "")
+                if base != ""
+                    out.extend([base, a.text("ours", ""), a.text("theirs", "")])
+                else
+                    out.extend([a.text("ours", ""), a.text("theirs", "")])
+                    if a.text("path", "") != ""
+                        out.push(a.text("path", ""))
+            "ail_verify_check" => out = ["verify", "--check", a.text("cert", "")]
             "task_start" =>
                 out = ["task", "start", program, a.text("goal", ""), "--json"]
                 if rev != ""
@@ -345,6 +447,7 @@ fn structured_of(cmd Cmd, out str) Json?
 fn pure(name str, a Json) bool
     match name
         "ail_check" | "ail_ask" | "ail_context" | "ail_api" | "ail_explain" => true
+        "ail_card" | "ail_find" | "ail_prove" => true
         "ail_fix" => on(a, "dry_run")
         _ => false
 

@@ -146,6 +146,8 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         mut binds := List[Bind]()
         if has_targs
             binds = explicit_args(n, s.generics[s.owner..s.owner + s.declared], targs, npos)
+        if has_attr(prog.fns[i], "variadic c")
+            return check_variadic(n, s, args, npos, expect)
         return check_call(n, s, binds, args, none, npos, expect)
     if v := bare_variant(n, npos, expect)
         return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
@@ -455,6 +457,66 @@ fn Checker.check_call(
                     hint,
                 )
     subst(sig.ret, binds)
+
+## ffi.var.2-3: a call of a variadic `extern c fn`. The named parameters are
+## checked as in any call; every further argument keeps its own type, which
+## must have a C layout, and `f32` is refused because C promotes it to `double`.
+fn Checker.check_variadic(mut self, n str, s Sig, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
+    want := s.params.len()
+    if args.len() < want
+        args_only(args)
+        err_help(
+            "ffi.var.2",
+            at,
+            "`{n}` takes at least {count(want, "argument")}, but {was_were(args.len())} given",
+            "pass the named arguments first, then the variadic ones",
+        )
+        return s.ret
+    fixed := [args[k] for k in 0..want]
+    t := check_call(n, s, [], fixed, none, at, expect)
+    mut ints := 0
+    mut floats := 0
+    for p in s.params
+        if p.ty == Ty.Float or p.ty == Ty.Num("f32")
+            floats += 1
+        else
+            ints += 1
+    for k in want..args.len()
+        a := args[k]
+        if a.label != none or a.mutable
+            err_help(
+                "ffi.var.2",
+                expr_pos(a.value),
+                "a variadic argument is passed by value, with no name and no `mut`",
+                "write the plain value",
+            )
+        vt := expr(a.value, none, true)
+        if vt == Ty.Float
+            floats += 1
+        else
+            ints += 1
+        if vt == Ty.Num("f32")
+            err_help(
+                "ffi.var.3",
+                expr_pos(a.value),
+                "C passes a variadic `float` argument as a `double`, so an `f32` can't be one",
+                "convert it to a `float` first",
+            )
+        elif not c_layout(vt) and vt != Ty.Unknown
+            err_help(
+                "ffi.var.3",
+                expr_pos(a.value),
+                "{show(vt)} has no C layout, so it can't be a variadic argument",
+                "pass `int`, `float`, `bool`, a sized number or a raw pointer `*T`; make a `str` into a C string with `mem.cstr`",
+            )
+    if ints > 6 or floats > 8
+        err_help(
+            "ffi.var.2",
+            at,
+            "this call to `{n}` passes {ints} integer-like and {floats} float arguments; a C call takes at most 6 and 8",
+            "split the call, or pass the values through a buffer",
+        )
+    t
 
 ## The parameter that argument `i` fills: its place when none are named,
 ## else the named parameter, or the next one for a positional argument.

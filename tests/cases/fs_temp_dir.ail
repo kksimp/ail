@@ -1,0 +1,18 @@
+## std.fs.35 and std.fs.37: temp_dir, make_temp_dir.
+fn main() !
+    base := fs.temp_dir()
+    print(base.is_empty())
+    a := fs.make_temp_dir("ail-tmpcase-")?
+    b := fs.make_temp_dir("ail-tmpcase-")?
+    print(a != b)
+    print(a.starts_with(base))
+    print(path.base(a).starts_with("ail-tmpcase-"))
+    print(path.base(a).len() == "ail-tmpcase-".len() + 12)
+    print(fs.exists(a) and fs.metadata(a)?.is_dir)
+    print(fs.list_dir(a)?.len())
+    fs.write_text("{a}/f.txt", "hi")?
+    print(fs.read_text("{a}/f.txt")?)
+    fs.remove("{a}/f.txt")?
+    fs.remove(a)?
+    fs.remove(b)?
+    print(fs.exists(a))

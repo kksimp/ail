@@ -11,6 +11,8 @@
 ## Rules: native.bce.1-3 (the removed checks and the unobservable capacity),
 ## native.bce.7-9 (computed starts and steps, and index arithmetic bounded by a
 ## constant; ADR 0622). native.bce.5-6 are cited where they are tested below.
+## native.bce.16: loops that also leave from blocks other than the header,
+## and `xs[a + i]` with `a` fixed (`AIL_OPT_OFF=mexit` keeps the first out).
 ##
 ## What may change a list's length or elements inside the loop is a call
 ## that gets the list (or one that holds it: a list of lists), a `push`, and
@@ -21,7 +23,8 @@
 struct Need
     ## `index` (the access is `xs[i]`), `off` (`xs[i + arg]`), `inv`
     ## (`xs[arg]`, a value that doesn't change), `invoff` (`xs[arg + off]`
-    ## for such a value) or `const` (`xs[arg]`).
+    ## for such a value), `ivoff` (`xs[arg + i]`, or `xs[arg + j]` for the
+    ## falling `j` of a two-pointer loop when `off` is 1) or `const` (`xs[arg]`).
     kind str
     x int
     arg int
@@ -50,13 +53,19 @@ MAX_PER := 8
 ## to this value.
 MAX_REACH := 16777216
 
-## `AIL_OPT_OFF=bce,reserve,keep,inline,fill,fold,forward,pure,memo,reuse,unroll,datarange` (comma list) turns the named
+## `AIL_OPT_OFF=bce,mexit,reserve,keep,inline,fill,fold,forward,pure,memo,reuse,unroll,datarange` (comma list) turns the named
 ## optimizations off in the compiler's output, to bisect a miscompile.
 pub fn opt_off(name str) bool
     off := env.get("AIL_OPT_OFF") else ""
     off.split(",").contains(name)
 
 pub fn bce(f Func, reserve0 bool, grow_only bool) Func
+    mut sink := List[RkNote]()
+    bce_noting(f, reserve0, grow_only, false, mut sink)
+
+## `bce`, and when `want` is set (`ail perf --explain`, ADR 1021) a note per
+## innermost loop of what the pass decided and why.
+pub fn bce_noting(f Func, reserve0 bool, grow_only bool, want bool, mut notes List[RkNote]) Func
     if opt_off("bce")
         return f
     reserve := reserve0 and not opt_off("reserve")
@@ -76,8 +85,44 @@ pub fn bce(f Func, reserve0 bool, grow_only bool) Func
             if done.contains(lp.header) or not is_innermost(loops, lp)
                 continue
             done.add(lp.header)
-            c := counted(g, defs, lp) else continue
-            r := version(g, defs, lp, c, loops, reserve and grow_only, floors) else continue
+            c := counted_multi(g, defs, lp) else
+                if want
+                    notes.push(RkNote(
+                        rk_key: rk_key(g, lp),
+                        rk_counted: false,
+                        rk_fast: false,
+                        rk_why: rk_uncounted(lp),
+                        rk_blockers: [],
+                    ))
+                continue
+            if lp.exits != 1 and opt_off("mexit")
+                if want
+                    notes.push(RkNote(
+                        rk_key: rk_key(g, lp),
+                        rk_counted: false,
+                        rk_fast: false,
+                        rk_why: rk_uncounted(lp),
+                        rk_blockers: [],
+                    ))
+                continue
+            r := version(g, defs, lp, c, loops, reserve and grow_only, floors) else
+                if want
+                    notes.push(RkNote(
+                        rk_key: rk_key(g, lp),
+                        rk_counted: true,
+                        rk_fast: false,
+                        rk_why: "",
+                        rk_blockers: rk_blockers(g, defs, lp),
+                    ))
+                continue
+            if want
+                notes.push(RkNote(
+                    rk_key: rk_key(g, lp),
+                    rk_counted: true,
+                    rk_fast: true,
+                    rk_why: "",
+                    rk_blockers: [],
+                ))
             g = r.f
             floors = r.floors
             done.add(r.header)
@@ -492,6 +537,16 @@ fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
             l := len_of(x)
             non_negative(idx)
             check(emit("lt", [idx, emit("sub", [l, konst(nd.off)], Ty.Int)], Ty.Bool))
+        "ivoff" =>
+            # `0 <= a` and `hi <= len - a - off`: `len - a` can't wrap with
+            # both at least 0, and `a + i < len` then holds for every `i` below
+            # `hi` (native.bce.16).
+            l := len_of(x)
+            non_negative(idx)
+            mut room := emit("sub", [l, idx], Ty.Int)
+            if nd.off > 0
+                room = emit("sub", [room, konst(nd.off)], Ty.Int)
+            check(emit("le", [hi, room], Ty.Bool))
         _ => in_bounds(x, idx, none)
 
 ## A value's range from the loops around it, when the loops are counted from
@@ -774,6 +829,8 @@ fn version(
     mut fx := [false for _ in 0..nv]
     for v in 0..nv
         fx[v] = defs[v].block >= 0 and fixed(defs, inl, hidx, v)
+    for a in room_only(f, defs, lp, c, lt, hidx)
+        fx[a] = false
     elems := data_lists(f, defs, loops, lp)
     pr := prove(f, defs, lp, c, rpo(f), fx, elems)
     # The highest index that the loop's arithmetic bounds, per list.
@@ -833,6 +890,29 @@ fn version(
                             relax.add("{b}:{k}")
                             relax.add("{defs[idx].block}:{defs[idx].at}")
                             continue
+            # `xs[a + i]` with `a` fixed in the loop and `i` the counter (or
+            # the falling `j` of a two-pointer loop): the guard tests `0 <= a`
+            # and `hi <= len - a` once, and `a + i` can't overflow either
+            # (native.bce.16).
+            if ad := inst_of(f, defs, idx)
+                if ad.op == "add" and inl[defs[idx].block]
+                    mut fixed_side := -1
+                    mut moving := -1
+                    for s in 0..2
+                        o := ad.arg(s)
+                        if fixed_side < 0 and fixed(defs, inl, hidx, o) and cst(f, defs, o) == none
+                            fixed_side = o
+                            moving = ad.arg(1 - s)
+                    if fixed_side >= 0 and (moving == c.p or (c.q >= 0 and moving == c.q))
+                        needs.push(Need(
+                            kind: "ivoff",
+                            x: x,
+                            arg: fixed_side,
+                            off: if moving == c.p then 0 else 1,
+                        ))
+                        relax.add("{b}:{k}")
+                        relax.add("{defs[idx].block}:{defs[idx].at}")
+                        continue
             if lw := pr.lows.get(idx)
                 hg := pr.highs[idx]
                 if lw >= 0 and hg <= MAX_REACH and inl[defs[idx].block]
@@ -855,40 +935,58 @@ fn version(
     # Worth the guard on the operands: two checks, or one in a loop that is
     # versioned anyway.
     versioned := needs.len() > 0 or hoists.len() > 0 or roomy.len() > 0
-    use_ranges := pr.sites.len() >= 2 or (pr.sites.len() == 1 and versioned) or reach.len() > 0
+    # Sites the needs above already make safe don't need the operand tests.
+    mut more_sites := 0
+    for key in pr.sites
+        if not relax.contains(key)
+            more_sites += 1
+    use_ranges := more_sites >= 2 or (more_sites == 1 and versioned) or reach.len() > 0
     if use_ranges
         for key in pr.sites
             relax.add(key)
     if not versioned and not use_ranges
         return none
-    # Everything defined in the loop and used after it is defined in the
-    # header (the loop has one exit, from the header), and gets a parameter
-    # on the exit block.
-    ex := c.exit
-    mut entering := 0
-    for blk in f.blocks
-        for t in blk.term.targets
-            if t == ex
-                entering += 1
-    if entering != 1
-        return none
-    mut live := List[int]()
+    # The blocks the loop leaves to (`outs`): only the loop enters each, so
+    # each dominates every use after the loop that it leads to, and a value
+    # the loop defines dominates it. Each value that such a use reads gets a
+    # parameter there, which both copies pass (native.bce.16).
+    mut outs := List[int]()
+    for b in lp.blocks
+        for t in f.blocks[b].term.targets
+            if not inl[t] and not outs.contains(t)
+                outs.push(t)
     for b in 0..n
         if inl[b]
             continue
+        for t in f.blocks[b].term.targets
+            if outs.contains(t)
+                return none
+    doms := dominators(f)
+    # Per block after the loop, the index in `outs` of the block that
+    # dominates it, else -1.
+    mut out_of := [-1 for _ in 0..n]
+    for b in 0..n
+        if inl[b]
+            continue
+        for j in 0..outs.len()
+            if out_of[b] < 0 and doms[b][outs[j]]
+                out_of[b] = j
+    mut live := [List[int]() for _ in outs]
+    for b in 0..n
+        if inl[b]
+            continue
+        mut used := List[int]()
         for i in f.blocks[b].insts
-            for u in i.operands()
-                if inl[defs[u].block]
-                    if defs[u].block != lp.header
-                        return none
-                    if not live.contains(u)
-                        live.push(u)
-        for u in f.blocks[b].term.uses()
-            if inl[defs[u].block]
-                if defs[u].block != lp.header
-                    return none
-                if not live.contains(u)
-                    live.push(u)
+            used.extend(i.operands())
+        used.extend(f.blocks[b].term.uses())
+        for u in used
+            if not inl[defs[u].block]
+                continue
+            j := out_of[b]
+            if j < 0
+                return none
+            if not live[j].contains(u)
+                live[j].push(u)
     pre_args := f.blocks[lp.pre].term.args[0]
     mut gd := Guard(
         f: f,
@@ -996,10 +1094,53 @@ fn version(
             gd.check(gd.emit("ge", [ix, gd.zero], Ty.Bool))
             gd.check(gd.emit("lt", [ix, m], Ty.Bool))
             continue
+        if nd.kind == "ivoff"
+            if kb := cst(f, defs, c.bound)
+                if kb > 0 - IV_BIG and kb < IV_BIG
+                    # One test for `xs[a + i]` under a constant bound: `a | (len
+                    # - hi - off - a)` is not negative exactly when both halves
+                    # hold, and the sum can't wrap once `a >= 0`. It runs before
+                    # the outermost loop that keeps `a` and `len` (native.bce.16).
+                    mut o := -1
+                    if not hidx.contains(nd.arg) and not hidx.contains(nd.x)
+                        o = room_loop(f, defs, loops, lp, nd.x, nd.arg)
+                    mut m := -1
+                    if o >= 0
+                        pre := loops[o].pre
+                        fkey := "room|{nd.x}|{nd.arg}|{kb + nd.off}|{pre}"
+                        if kn := floors.get(fkey)
+                            m = kn
+                        else
+                            lv := gd.value(Ty.Int)
+                            kv := gd.value(Ty.Int)
+                            mut ki := inst(kv, "const", [])
+                            ki.imm = kb + nd.off
+                            s1 := gd.value(Ty.Int)
+                            s2 := gd.value(Ty.Int)
+                            m = gd.value(Ty.Int)
+                            for one in [
+                                inst(lv, "len", [nd.x]),
+                                ki,
+                                inst(s1, "sub", [lv, kv]),
+                                inst(s2, "sub", [s1, nd.arg]),
+                                inst(m, "bor", [nd.arg, s2]),
+                            ]
+                                floor_pre.push(pre)
+                                floor_call.push(one)
+                            floors[fkey] = m
+                    else
+                        ix := fresh_of(hoists, hidx, nd.arg)
+                        l := gd.len_of(fresh_of(hoists, hidx, nd.x))
+                        s1 := gd.emit("sub", [l, gd.konst(kb + nd.off)], Ty.Int)
+                        m = gd.emit("bor", [ix, gd.emit("sub", [s1, ix], Ty.Int)], Ty.Int)
+                    if gd.zero < 0
+                        gd.zero = gd.konst(0)
+                    gd.check(gd.emit("ge", [m, gd.zero], Ty.Bool))
+                    continue
         mut hi_is_len := false
         if d := hd
             hi_is_len = d.op == "len" and d.arg(0) == nd.x
-        idx := if nd.kind == "inv" or nd.kind == "invoff" then fresh_of(
+        idx := if nd.kind == "inv" or nd.kind == "invoff" or nd.kind == "ivoff" then fresh_of(
             hoists,
             hidx,
             nd.arg,
@@ -1052,21 +1193,29 @@ fn version(
     mut blocks := f.blocks
     for k in 0..floor_pre.len()
         blocks[floor_pre[k]].insts.push(floor_call[k])
-    # The exit block takes the values that are live after the loop.
-    mut qmap := Map[int, int]()
-    mut extra_orig := List[int]()
-    mut extra_copy := List[int]()
-    for u in live
-        vals.push(vals[u])
-        names.push(names[u])
-        q := vals.len() - 1
-        qmap[u] = q
-        blocks[ex].params.push(q)
-        extra_orig.push(u)
-        extra_copy.push(vm[u])
+    # Each block the loop leaves to takes the values that are live after it.
+    mut qmaps := List[Map[int, int]]()
+    mut extra_orig := Map[int, List[int]]()
+    mut extra_copy := Map[int, List[int]]()
+    for j in 0..outs.len()
+        mut qm := Map[int, int]()
+        mut eo := List[int]()
+        mut ec := List[int]()
+        for u in live[j]
+            vals.push(vals[u])
+            names.push(names[u])
+            q := vals.len() - 1
+            qm[u] = q
+            blocks[outs[j]].params.push(q)
+            eo.push(u)
+            ec.push(vm[u])
+        qmaps.push(qm)
+        extra_orig[outs[j]] = eo
+        extra_copy[outs[j]] = ec
     for b in 0..n
         if inl[b]
             continue
+        qmap := if out_of[b] >= 0 then qmaps[out_of[b]] else Map[int, int]()
         for k in 0..blocks[b].insts.len()
             blocks[b].insts[k] = blocks[b].insts[k].with_args([
                 renamed(qmap, a)
@@ -1077,7 +1226,11 @@ fn version(
         t.value = renamed(qmap, t.value)
         t.args = [[renamed(qmap, a) for a in edge] for edge in t.args]
         blocks[b].term = t
-    blocks[lp.header].term.args[c.exit_edge].extend(extra_orig)
+    for b in lp.blocks
+        for e in 0..blocks[b].term.targets.len()
+            dest := blocks[b].term.targets[e]
+            if not inl[dest]
+                blocks[b].term.args[e].extend(extra_orig[dest])
     blocks[lp.pre].term = jump_to(n, [])
     for b in gd.blocks
         blocks.push(b)
@@ -1112,8 +1265,9 @@ fn version(
         nt.value = if t.value >= 0 then vm[t.value] else -1
         nt.targets = [if inl[x] then cb[x] else x for x in t.targets]
         nt.args = [[vm[a] for a in edge] for edge in t.args]
-        if b == lp.header
-            nt.args[c.exit_edge].extend(extra_copy)
+        for e in 0..t.targets.len()
+            if not inl[t.targets[e]]
+                nt.args[e].extend(extra_copy[t.targets[e]])
         blocks.push(Block(params: [vm[p] for p in blk.params], insts: insts, term: nt))
     Versioned(
         f: Func(
@@ -1127,6 +1281,89 @@ fn version(
         header: cb[lp.header],
         floors: floors,
     )
+
+## The outermost loop around `lp` that `x` and `a` are defined before and in
+## which no call, `push` or row `set` can change `x`'s length, else -1: the
+## guard's test of `xs[a + i]` can run once, before that loop (native.bce.16).
+fn room_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, x int, a int) int
+    mut best := -1
+    for k in 0..loops.len()
+        o := loops[k]
+        if o.header == lp.header or not o.member[lp.header] or o.pre < 0
+            continue
+        if (defs[x].block >= 0 and o.member[defs[x].block])
+            or (defs[a].block >= 0 and o.member[defs[a].block])
+            continue
+        mut marks := [false for _ in 0..f.vals.len()]
+        for blk in o.blocks
+            for i in f.blocks[blk].insts
+                if i.op == "call" or i.op == "prim"
+                    for v in i.operands()
+                        if is_list(f.vals[v])
+                            taint(f, defs, v, mut marks)
+                elif i.op == "set" and holds_lists(f.vals[i.arg(0)])
+                    taint(f, defs, i.arg(0), mut marks)
+        if not clean(f, defs, x, marks)
+            continue
+        if best < 0 or o.member[loops[best].header]
+            best = k
+    best
+
+## The fixed `a`s that the loop `lp` uses only in sums `a + i` (`i` the
+## counter, or the falling `j` of a two-pointer loop) that index a fixed list
+## the loop doesn't resize: the guard's test of each such index (native.bce.16)
+## makes the sums safe, so `a` needs no range test of its own.
+fn room_only(
+    f Func,
+    defs List[Def],
+    lp LoopInfo,
+    c Counted,
+    lt List[bool],
+    hidx Map[int, int],
+) List[int]
+    inl := lp.member
+    # Sums that index such a list, and every use of each fixed operand.
+    mut sums := Set[int]()
+    for b in lp.blocks
+        if b == lp.header
+            continue
+        for i in f.blocks[b].insts
+            if (i.op != "get" and i.op != "set") or i.site < 0 or hidx.contains(i.dst)
+                continue
+            x := i.arg(0)
+            if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
+                continue
+            ad := inst_of(f, defs, i.arg(1)) else continue
+            if ad.op == "add" and inl[defs[i.arg(1)].block]
+                sums.add(i.arg(1))
+    mut good := Set[int]()
+    mut bad := Set[int]()
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            for u in i.operands()
+                if not room_candidate(f, defs, inl, hidx, u)
+                    continue
+                mut ok := false
+                if sums.contains(i.dst) and i.arg(0) != i.arg(1)
+                    other := if i.arg(0) == u then i.arg(1) else i.arg(0)
+                    ok = other == c.p or (c.q >= 0 and other == c.q)
+                if ok
+                    good.add(u)
+                else
+                    bad.add(u)
+        for u in f.blocks[b].term.uses()
+            if room_candidate(f, defs, inl, hidx, u)
+                bad.add(u)
+    mut out := List[int]()
+    for u in good
+        if not bad.contains(u)
+            out.push(u)
+    out
+
+fn room_candidate(f Func, defs List[Def], inl List[bool], hidx Map[int, int], u int) bool
+    if u < 0 or defs[u].block < 0
+        return false
+    not inl[defs[u].block] and not hidx.contains(u) and cst(f, defs, u) == none
 
 ## Whether `v` has the same value on every iteration.
 fn fixed(defs List[Def], inl List[bool], hidx Map[int, int], v int) bool

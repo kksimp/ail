@@ -1,8 +1,8 @@
-# 0925. Windows: a Unix-shaped gate, and native, examples and run green before each release
+# 0925. Windows: the full gate green before each release
 
 - **Status:** Accepted (amends [ADR 0842](0842-mac-first-gate.md); refines [ADR 0004](0004-macos-arm64-only.md) for Windows testing)
-- **Date:** 2026-10-27
-- **Decided by:** Designer (2026-10-27, "2B")
+- **Date:** 2026-10-27, amended 2026-11-11
+- **Decided by:** Designer (2026-10-27, "2B"; amended by the designer's parity rule of 2026-11-10)
 - **Topic:** 24 — Cross-platform ABI strategy
 - **Spec rules:** none
 
@@ -29,25 +29,45 @@ not product bugs. The rest were real Windows faults, now mostly fixed.
 
 ## Decision
 
-The gate harness stays Unix-shaped: `tools/gate/mac-gate.sh` on the Mac gates
-every change, and Linux runs on ail-linux. Before every release (a published
-seed or a tagged version), the `native`, `examples` and `run` suites must pass
-on Windows (ail-win), built with that tree's own stage-2 compiler.
+As first decided (2026-10-27, option B): the harness stays Unix-shaped, the Mac
+gate gates every change, and the `native`, `examples` and `run` suites must pass
+on ail-win before a release.
+
+**Amendment (2026-11-11).** The designer ruled on 2026-11-10 that Windows, Linux
+and macOS must be at feature parity and that the Windows gate must be green for
+a release. So, before every release (a published seed or a tagged version):
+
+- `tools\gate\win-gate.ps1` must end `GATE GREEN` on ail-win, on a fresh LF
+  clone, built with that tree's own stage-2 compiler. It runs the suites of
+  `tools/gate/suites.txt`, the one list `tools/gate/mac-gate.sh` also runs on
+  the Mac and on Linux.
+- `tools\self-host\run.ps1` must reach the fixed point there (stage 2 builds
+  stage 3, the same bytes).
+- The `parity` suite (`tools/gate/parity.ail`) prints one line per feature; the
+  lines must be the same on the three hosts but for those listed in
+  `tests/parity/expected-differences.txt`, which holds only what the operating
+  system itself decides and what waits for the next seed.
+
+The harness still runs through Git for Windows' `sh` and `perl`; it was fixed
+where it failed rather than ported (option A's cost did not have to be paid in
+full). The Mac gate still gates every change; Windows runs per change stay a
+subset.
 
 ## Rationale
 
-It meets ADR 0004 where users meet Windows, the compiler and the programs it
-builds, while keeping test plumbing in one shape.
+It meets ADR 0004 where users meet Windows, and since the amendment one suite
+list means a feature cannot be tested on two hosts and forgotten on the third.
 
 ## Consequences
 
-- A release is blocked while any of the three suites is RED on ail-win.
-- Harness-only failures on Windows (shell, `./ail`, path handling) are not
-  release blockers and are fixed only when cheap.
-- Windows runs per change stay optional; lanes touching Windows runtime arms
-  still run them.
+- A release is blocked while any suite is RED on ail-win, harness failures
+  included: they are fixed, not waived.
+- A new suite goes into `tools/gate/suites.txt` and so runs on the three hosts.
+- A feature one host cannot have is a line in
+  `tests/parity/expected-differences.txt` with its reason, and nothing else is.
 
 ## Rejected alternatives
 
-- Port the harness (option A): cost in code no user runs.
+- Port the harness to PowerShell (option A): cost in code no user runs; the amendment runs the Unix-shaped harness on Windows instead.
 - Best-effort only (option C): leaves the first-class target untested.
+- Three suites only on Windows (the first form of this ADR): Windows-only faults in the other suites reached release candidates, and the designer's parity rule replaced it.

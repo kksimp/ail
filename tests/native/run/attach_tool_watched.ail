@@ -1,0 +1,48 @@
+use std.app
+use std.attach
+use std.attach.serve as aserve
+use std.screen
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.label("{n}")
+
+## Adds `k` to the count.
+@tool fn Shop.bump(mut self, k int) int
+    n += k
+    n
+
+impl attach.Observe for Shop
+
+fn ask(mut w aserve.Watched[Shop], line str) str
+    w.update(app.external("attach", line))
+    w.hub.replies.recv() else ""
+
+fn main()
+    tok := "t0k"
+    mut w := aserve.Watched(inner: Shop(n: 0), token: tok, tr: attach.Tracker.new(), hub: aserve.Hub.new(), w: 300.0, h: 200.0, input: false)
+    # attach.tool.3: `tools` reads, so it needs only the token.
+    listed := ask(mut w, "\{\"q\":\"tools\",\"token\":\"t0k\"}")
+    assert_eq(listed, "\{\"v\":1,\"tools\":[\{\"name\":\"bump\",\"doc\":\"Adds `k` to the count.\",\"params\":[\{\"name\":\"k\",\"type\":\"int\"}],\"result\":\"int\"}]}")
+    assert(ask(mut w, "\{\"q\":\"tools\",\"token\":\"no\"}").contains("wrong token"))
+    # attach.tool.4: off without --attach-input; on, the method runs between events.
+    call := "\{\"q\":\"call\",\"token\":\"t0k\",\"name\":\"bump\",\"args\":\{\"k\":5}}"
+    assert(ask(mut w, call).contains("--attach-input"))
+    assert_eq(w.inner.n, 0)
+    w.input = true
+    assert_eq(ask(mut w, call), "\{\"v\":1,\"result\":5}")
+    assert_eq(w.inner.n, 5)
+    assert(ask(mut w, "\{\"q\":\"call\",\"token\":\"t0k\"}").contains("needs `name`"))
+    assert(ask(mut w, "\{\"q\":\"call\",\"token\":\"no\",\"name\":\"bump\"}").contains("wrong token"))
+    assert(ask(mut w, "\{\"q\":\"call\",\"token\":\"t0k\",\"name\":\"zap\"}").contains("no tool"))
+    assert_eq(w.inner.n, 5)
+    # Without a Watched, `answer` refuses `call` and lists no tools.
+    s := screen.Screen(w: 1.0, h: 1.0, items: [])
+    assert(attach.answer(call, tok, attach.Tracker.new(), s, "").contains("call is off"))
+    print("ok")

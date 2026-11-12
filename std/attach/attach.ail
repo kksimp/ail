@@ -1,6 +1,6 @@
 ## std.attach (spec attach.wire.2, attach.wire.3, attach.wire.4, attach.wire.5; ADR 0884): the protocol a running
 ## program speaks to an attached agent, as pure functions. One JSON object per
-## line in, one per line out. Every query reads, except `input`, which acts only when the program was started with `--attach-input` (attach.input.1).
+## line in, one per line out. Every query reads, except `input` and `call`, which act only when the program was started with `--attach-input` (attach.input.1, attach.tool.4).
 ## The listener, the token file and the app wrapper are separate (ADR 0884).
 
 use std.screen
@@ -106,9 +106,11 @@ pub fn answer(line str, token str, tr Tracker, sc screen.Screen, heap str) str
         if heap == ""
             return failure("no heap summary is available")
         return "\{\"v\":1,\"heap\":{text(heap)}}"
-    if q == "input"
-        return failure("input is off; start the program with `ail run --attach-input` (attach.input.1)")
-    failure("unknown query {text(q)}; the queries are observe, screen and heap, and all of them only read")
+    if q == "input" or q == "call"
+        return failure("{q} is off; start the program with `ail run --attach-input` (attach.input.1, attach.tool.4)")
+    if q == "tools"
+        return tools_reply([])
+    failure("unknown query {text(q)}; the queries are observe, screen, heap and tools, and all of them only read; input and call act, with --attach-input")
 
 ## The event kinds an `input` request may send: what a person does at the window (attach.input.3).
 INPUT_KINDS := ["press", "edit", "submit", "toggle", "click", "scroll", "key"]
@@ -142,9 +144,105 @@ pub fn input_unknown(id str) str
 pub fn input_applied(kind str) str
     "\{\"v\":1,\"applied\":{text(kind)}}"
 
-## A type that can report its observed values (attach.observe.4). The compiler
-## writes the `impl` for a type with `@observe` fields when attach is on; a
-## type with none can take the default, which reports nothing.
+## An action a program offers an attached agent: a `@tool` method (attach.tool.1-3).
+## `params` and `types` are its parameters' names and types; `result` is the
+## result's type, "" for none.
+pub struct Tool
+    pub name str
+    pub doc str
+    pub params List[str]
+    pub types List[str]
+    pub result str
+
+pub fn tool(name str, doc str, params List[str], types List[str], result str) Tool
+    Tool(name: name, doc: doc, params: params, types: types, result: result)
+
+## The `tools` reply (attach.tool.3): each action with its doc, parameters and result type.
+pub fn tools_reply(ts List[Tool]) str
+    mut parts := List[str]()
+    for t in ts
+        mut ps := List[str]()
+        for k in 0..t.params.len()
+            ps.push("\{\"name\":{text(t.params[k])},\"type\":{text(t.types[k])}}")
+        parts.push("\{\"name\":{text(t.name)},\"doc\":{text(t.doc)},\"params\":[{ps.join(",")}],\"result\":{text(t.result)}}")
+    "\{\"v\":1,\"tools\":[{parts.join(",")}]}"
+
+## The query `q` of request line `line`; "" when it is not JSON or has none.
+pub fn query(line str) str
+    req := parse_json(line) else return ""
+    req.str("q") else ""
+
+## Why `line`, a `call` request, is refused, as a reply line; "" when it may be run (attach.tool.4).
+## `on` is whether the program was started with `--attach-input`.
+pub fn call_refusal(line str, token str, on bool) str
+    req := parse_json(line) else err
+        return failure("not JSON: {err.message}")
+    if not authorized(req, token)
+        return failure("missing or wrong token")
+    if not on
+        return failure("call is off; start the program with `ail run --attach-input` (attach.tool.4)")
+    if (req.str("name") else "") == ""
+        return failure("`call` needs `name`, a tool that `tools` lists (attach.tool.4)")
+    ""
+
+## The reply to a call that ran; `value` is the result as JSON text (attach.tool.4).
+pub fn called(value str) str
+    "\{\"v\":1,\"result\":{value}}"
+
+## The reply to a call whose method failed: the error as text (attach.tool.4).
+pub fn call_failed(why str) str
+    failure(why)
+
+## The reply when `name` is not a tool of the program (attach.tool.4).
+pub fn no_tool(name str) str
+    failure("no tool `{name}`; `tools` lists them (attach.tool.4)")
+
+## The reply when argument `param` of tool `name` is missing or not a `ty` (attach.tool.4).
+pub fn bad_arg(name str, param str, ty str) str
+    failure("tool `{name}` needs `{param}` as {ty} (attach.tool.4)")
+
+## Argument `k` of a call as a string (attach.tool.4).
+pub fn arg_str(args Json, k str) str?
+    args.str(k)
+
+## Argument `k` as an int: a JSON number or a string of digits, so a shell client's text works (attach.tool.4).
+pub fn arg_int(args Json, k str) int?
+    if args.num(k) != none
+        return args.int(k)
+    (args.str(k) else return none).to_int()
+
+## Argument `k` as a float: a JSON number or a numeric string (attach.tool.4).
+pub fn arg_float(args Json, k str) float?
+    if n := args.num(k)
+        return n
+    (args.str(k) else return none).to_float()
+
+## Argument `k` as a bool: `true`/`false`, as JSON or as text (attach.tool.4).
+pub fn arg_bool(args Json, k str) bool?
+    if b := args.bool(k)
+        return b
+    s := args.str(k) else return none
+    if s == "true"
+        return true
+    if s == "false"
+        return false
+    none
+
+## A type that can report its observed values (attach.observe.4) and offer its
+## `@tool` methods as actions (attach.tool.2). The compiler writes the `impl`
+## for a type with `@observe` fields or `@tool` methods when attach is on; a
+## type with none can take the defaults, which report nothing and offer nothing.
 pub trait Observe
     fn observed(self) List[Observed]
         []
+
+    ## The actions an agent may call (attach.tool.3).
+    fn tools(self) List[Tool]
+        []
+
+    ## Runs action `ail_tool` with arguments `ail_args` (a JSON object) and gives the reply line (attach.tool.4).
+    ## A default is lowered in the impl's file, so it names only prelude items; the parameters'
+    ## names are ones no app's field is likely to have.
+    fn call(mut self, ail_tool str, ail_args Json) str
+        why := Json.Str("no tool `{ail_tool}`; `tools` lists them (attach.tool.4)").to_text()
+        "\{\"v\":1,\"error\":{why}}"

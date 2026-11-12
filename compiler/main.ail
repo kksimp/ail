@@ -33,7 +33,9 @@ use doc
 use edit
 use fix
 use fmt
+use help
 use derive
+use doctor
 use explain
 use load
 use mir
@@ -47,6 +49,21 @@ use x64
 fn main() !
     args := env.args()
     # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
+    # tool.help.1-3: `help`, `--help`, `-h` and no command at all are the command list; `CMD --help` is `help CMD`.
+    if args.len() == 0
+        io.exit(help.command([]))
+    if args[0] == "help" or args[0] == "--help" or args[0] == "-h"
+        io.exit(help.command(args[1..]))
+    if args.len() >= 2 and (args[1] == "--help" or args[1] == "-h") and not args[0].starts_with("-")
+        io.exit(help.command([args[0]]))
+    # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
+    if args[0] == "doctor"
+        io.exit(doctor.command(
+            args[1..],
+            env.get("AIL_ROOT") else path.dir(compiler_dir()),
+            cache_dir(),
+            host_target(),
+        ))
     if args.len() == 1 and args[0] == "new"
         io.exit(scaffold.command([]))
     if args.len() == 1 and args[0] == "card"
@@ -103,6 +120,8 @@ fn main() !
                 print(aug.origin)
         "explain" =>
             io.exit(explain.command(args[1..]))
+        "perf" =>
+            io.exit(perf_command(args[1..]))
         "new" =>
             io.exit(scaffold.command(args[1..]))
         "tokens" =>
@@ -198,6 +217,93 @@ fn main() !
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
+
+PERF_USAGE := "usage: ail perf --explain FN FILE"
+
+## One remark line of `ail perf --explain`, as the lowering leaves it in `Module.notes`.
+struct PerfLine
+    path str
+    line int
+    kind str
+    text str
+
+## `ail perf --explain FN FILE` (tool.perf.1-2, ADR 1021): for each loop of `FN`, whether
+## its bounds checks were removed, whether it runs in a vector kernel, whether the checker
+## finds its iterations independent, and which calls stay in it, each with the rule and,
+## where one exists, a fix. The `ail` launcher sets `AIL_PERF_EXPLAIN=FN` and checks FILE
+## first; the exit status is 0, or 2 for a bad call or a function that isn't there.
+fn perf_command(rest List[str]) int
+    bad := rest.len() != 3 or rest[0] != "--explain"
+    if bad or rest[1].starts_with("-") or rest[2].starts_with("-")
+        io.eprint(PERF_USAGE)
+        return 2
+    fname := rest[1]
+    file := rest[2]
+    if (env.get("AIL_PERF_EXPLAIN") else "") != fname
+        io.eprint("error[tool.perf.1]: start it as `ail perf --explain FN FILE`")
+        return 2
+    dir := compiler_dir()
+    std := path.join(path.dir(dir), "std")
+    rt := runtime_with(path.join(dir, "rt/native"), file, "0", "0") else err
+        io.eprint("error[native.build.3]: can't read the runtime: {err}")
+        return 2
+    m := lower_file(file, rt, std) else err
+        io.eprint("error[native.build.3]: {err}")
+        return 1
+    loaded := load.load(file, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut names := List[str]()
+    for f in m.funcs
+        if not f.name.starts_with("rt.") and mir.rk_matches(f.name, fname)
+            names.push(f.name)
+    if names.is_empty()
+        known := [f.name for f in m.funcs if not f.name.starts_with("rt.")]
+        io.eprint("error[tool.perf.1]: no function `{fname}` in {file}; functions: {known.sorted().join(", ")}")
+        return 2
+    mut found := List[PerfLine]()
+    for note in m.notes
+        cut := note.split("\t")
+        if cut.len() == 5 and cut[0] == "perf"
+            at := cut[2].to_int() else 0
+            found.push(PerfLine(path: cut[1], line: at, kind: cut[3], text: cut[4]))
+    all_rows := check.parallel_rows(loaded.program)
+    rows := [r for r in all_rows if r.func == "fn:{fname}" or r.func == "method:{fname}"]
+    print("perf {fname} ({file})")
+    for l in found
+        if l.kind == "func"
+            print("  {l.text}")
+    starts := [l for l in found if l.kind == "loop"].sorted(by: |l| l.line)
+    if starts.is_empty()
+        print("  no loops")
+        return 0
+    for s in starts
+        print("{s.path}:{s.line} loop ({s.text})")
+        for l in found
+            if l.path == s.path and l.line == s.line and l.kind == "bce"
+                print("  bounds checks: {l.text}")
+            elif l.path == s.path and l.line == s.line and l.kind == "fix"
+                print("    fix: {l.text}")
+            elif l.path == s.path and l.line == s.line and l.kind == "hoist"
+                print("  list headers: {l.text}")
+        for l in found
+            if l.path == s.path and l.line == s.line and l.kind == "vec"
+                print("  vectorised: {l.text}")
+        for r in rows
+            if r.pos.line == s.line
+                print("  parallel: {perf_par(r)}")
+        for l in found
+            if l.path == s.path and l.line == s.line and l.kind == "inline"
+                print("  calls: {l.text}")
+    0
+
+## The words for one loop's verdict from the checker (conc.par.6).
+fn perf_par(r check.ParRow) str
+    if r.verdict == "sequential"
+        return "no, {r.reason} ({r.rule})"
+    if r.is_par
+        return "yes, written `par for` ({r.rule})"
+    "yes, the iterations are independent; the loop goes to the pool when it is big enough ({r.rule}, conc.par.8)"
 
 BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos|x86_64-windows|aarch64-windows (experimental, unverified)] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
@@ -306,15 +412,27 @@ fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool
         return
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
-    tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb, attach)
-    fs.rename(tmp, exe) else err
-        io.eprint("error[native.build.5]: can't store {exe}")
-        io.exit(2)
+    cache_store(file, exe, target, ms, mb, attach)
     cache_trim(dir)
     if not cached_copy(exe, out, target)
         io.eprint("error[native.build.5]: can't write {out}")
         io.exit(2)
+
+## Build `file` into the cache entry `exe`. The build goes to a temporary
+## name only this process uses, then is renamed into place, so `ail`
+## processes building the same program at once never share a file; when the
+## rename fails because another one stored the entry first, that entry is
+## the same build (the key names its inputs) and is used (native.build.5).
+fn cache_store(file str, exe str, target str, ms str, mb str, attach bool)
+    tag := crypto.random_bytes(8).hex()
+    tmp := "{exe}.{time.now_ms()}-{tag}.tmp"
+    compile_fresh(file, tmp, target, ms, mb, attach)
+    fs.rename(tmp, exe) else err
+        if not fs.exists(exe)
+            io.eprint("error[native.build.5]: can't store {exe}")
+            io.exit(2)
+        fs.remove(tmp) else e2
+            return
 
 ## Copy the cached executable `exe` to `out`; false when there is none
 ## (native.build.5).
@@ -322,7 +440,7 @@ fn cached_copy(exe str, out str, target str) bool
     data := fs.read_bytes(exe) else return false
     fs.write_bytes(out, data) else return false
     if not target.ends_with("windows")
-        _ := proc.run("chmod", ["755", out]) else return false
+        fs.set_mode(out, 493) else return false
     true
 
 ## `compile_to` without the cache.
@@ -356,7 +474,7 @@ fn finish_build(m mir.Module, file str, out str, target str)
         io.exit(2)
         return
     if not target.ends_with("windows")
-        _ := proc.run("chmod", ["755", out]) else err
+        fs.set_mode(out, 493) else err
             io.eprint("error[native.build.3]: can't make {out} executable: {err}")
             io.exit(2)
 
@@ -638,9 +756,9 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
             if p.rule == "native.subset.1"
-                help := mir.subset_help(p.message)
-                if help != ""
-                    io.eprint("help: {help}")
+                hint := mir.subset_help(p.message)
+                if hint != ""
+                    io.eprint("help: {hint}")
         io.exit(1)
         return mir.Module(
             path: path,
@@ -653,7 +771,9 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             notes: [],
         )
     for note in m.notes
-        io.eprint(note)
+        # `ail perf --explain` reads its own lines (tool.perf.1).
+        if not note.starts_with("perf\t")
+            io.eprint(note)
     m
 
 ## Source bytes past which the loop proof is skipped (ADR 0911).
@@ -725,7 +845,7 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
     for s in srcs
         have.add(s.path)
     mut out := List[mir.Source]()
-    for e in derive.expand([s.module for s in srcs], [s.prog for s in srcs])
+    for e in derive.expand([s.module for s in srcs], documented(srcs))
         if have.contains("gen:impl:{e.label}")
             continue
         if e.problem != ""
@@ -823,7 +943,7 @@ fn run_generators(
         io.exit(2)
         return []
     if ext.is_empty()
-        _ := proc.run("chmod", ["755", file]) else err
+        fs.set_mode(file, 493) else err
             io.eprint("error[native.build.3]: can't run the generators: {err}")
             io.exit(2)
             return []
@@ -1073,17 +1193,21 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     ]
     hash.sha256(parts.join("\n"))
 
-## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
-## without it, as on Windows, the cache just grows).
+## Keep the newest `CACHE_KEEP` executables of `dir` (newest by modification time; ADR 1059 replaced `ls -t`).
 fn cache_trim(dir str)
-    listed := proc.run("ls", ["-t", dir]) else return
-    mut n := 0
-    for name in listed.out.lines()
+    names := fs.list_dir(dir) else return
+    # "AGE NAME" lines, where AGE counts down from 10^14 so that byte order is newest first.
+    mut keyed := List[str]()
+    for name in names
         if name.len() != 64
             continue
+        meta := fs.metadata(path.join(dir, name)) else continue
+        keyed.push("{100000000000000 - meta.modified_ms} {name}")
+    mut n := 0
+    for line in keyed.sorted()
         n += 1
         if n > CACHE_KEEP
-            fs.remove(path.join(dir, name)) else continue
+            fs.remove(path.join(dir, line.slice(line.len() - 64, line.len()))) else continue
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
@@ -1098,11 +1222,7 @@ fn cli_prepare_with(file str, ms str, mb str, attach bool) str
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
-    tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb, attach)
-    fs.rename(tmp, exe) else err
-        io.eprint("error[native.build.5]: can't store {exe}")
-        io.exit(2)
+    cache_store(file, exe, target, ms, mb, attach)
     cache_trim(dir)
     exe
 

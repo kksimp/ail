@@ -9,13 +9,15 @@ GFX := "ail_gfx"
 ## calls and an `impl attach.Observe` for each `impl gfx.Game for T` (attach.run.4,
 ## ADR 0979).
 ##
-## `text` with `app.run(` calls made `std.attach.serve.run(` calls and an
+## `text` with `app.run(` and `app.run_with(` calls made `std.attach.serve.run(`
+## and `std.attach.serve.run_with(` calls, and an
 ## `impl attach.Observe` added for each non-generic `impl app.App for T`, so
 ## the observed fields and the screen answer queries (attach.run.1). The two
 ## imports go on lines of their own at the top. A program that doesn't run an
 ## app comes back unchanged.
 pub fn shim(text str) str
-    apps := text.contains("app.run(") and text.contains("use std.app")
+    calls := text.contains("app.run(") or text.contains("app.run_with(")
+    apps := calls and text.contains("use std.app")
     # A game run with `host.run(` (attach.run.4).
     games := text.contains("host.run(") and text.contains("use std.gfx.host\n")
     if not (apps or games) or has_clash(text)
@@ -44,13 +46,14 @@ pub fn shim(text str) str
         out.push("impl attach.Observe for {o}")
     "{out.join("\n")}\n"
 
-## A line with its `app.run(` calls retargeted; comments stay as they are.
+## A line with its `app.run(` and `app.run_with(` calls retargeted; comments stay as they are.
 fn retarget(line str, apps bool, games bool) str
     if line.trim().starts_with("#")
         return line
     mut out := line
     if apps
         out = out.replace("app.run(", "{SERVE}.run(")
+        out = out.replace("app.run_with(", "{SERVE}.run_with(")
     if games
         out = out.replace("host.run(", "{GFX}.run(")
     out

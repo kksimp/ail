@@ -238,7 +238,7 @@ pub fn RangeDecoder.decode(mut self, ft int) int
 pub fn RangeDecoder.decode_bin(mut self, bits int) int
     self.ext = self.rng.shr(bits)
     s := self.val / self.ext
-    ft := lsh(1, bits)
+    ft := op_lsh(1, bits)
     ft - (s + 1).min(ft)
 
 ## Consumes the symbol with cumulative range `fl..fh` out of `ft` (§4.1.2).
@@ -303,7 +303,7 @@ pub fn RangeDecoder.bits(mut self, n int) int
         while self.window_bits <= 24
             self.window = self.window.bit_or(self.next_back().shl(self.window_bits))
             self.window_bits += SYM
-    v := self.window.bit_and(lsh(1, n) - 1)
+    v := self.window.bit_and(op_lsh(1, n) - 1)
     self.window = self.window.shr(n)
     self.window_bits -= n
     self.total += n
@@ -330,7 +330,7 @@ pub fn RangeDecoder.tell_frac(self) int
 pub fn RangeDecoder.size(self) int
     data.len()
 
-fn lsh(v int, n int) int
+fn op_lsh(v int, n int) int
     v.shl(n)
 
 ## CELT (RFC 6716 §4.3)
@@ -1850,7 +1850,7 @@ fn laplace(mut d RangeDecoder, fs0 int, decay int) int
 ## The CELT state kept from frame to frame (std.opus.4): band energies of
 ## this and the two previous frames, the overlap and post-filter history
 ## of each channel, the de-emphasis memory and the noise seed.
-pub struct CeltState
+struct CeltState
     channels int
     energy List[float]
     prev1 List[float]
@@ -1873,7 +1873,7 @@ fn zeros(n int) List[float]
 HIST := 2048
 
 ## A CELT decoder for `channels` channels (std.opus.4).
-pub fn celt_state(channels int) CeltState
+fn celt_state(channels int) CeltState
     CeltState(
         channels: channels,
         energy: [0.0 for _ in 0..2 * NB_BANDS],
@@ -2066,7 +2066,7 @@ fn allocate(
     for j in start..end
         nt := band_width(j)
         thresh[j] = c.shl(BITRES).max((3 * nt).shl(lm).shl(BITRES).shr(4))
-        trim_off[j] = asr(c * nt * (trim - 5 - lm) * (end - j - 1) * lsh(1, lm + BITRES), 6)
+        trim_off[j] = asr(c * nt * (trim - 5 - lm) * (end - j - 1) * op_lsh(1, lm + BITRES), 6)
         if nt.shl(lm) == 1
             trim_off[j] -= c.shl(BITRES)
     mut lo := 1
@@ -2359,7 +2359,7 @@ fn pvq_unquant(
     for i in 0..blocks
         for j in 0..n0
             if y[i * n0 + j] != 0
-                cm = cm.bit_or(lsh(1, i))
+                cm = cm.bit_or(op_lsh(1, i))
     (x, cm)
 
 fn renormalise(x List[float], gain float) List[float]
@@ -2491,11 +2491,11 @@ fn decode_theta(
     if itheta == 0
         s.imid = 32767
         s.delta = -16384
-        s.fill = s.fill.bit_and(lsh(1, blocks) - 1)
+        s.fill = s.fill.bit_and(op_lsh(1, blocks) - 1)
     elif itheta == 16384
         s.iside = 32767
         s.delta = 16384
-        s.fill = s.fill.bit_and((lsh(1, blocks) - 1).shl(blocks))
+        s.fill = s.fill.bit_and((op_lsh(1, blocks) - 1).shl(blocks))
     else
         s.imid = bitexact_cos(itheta)
         s.iside = bitexact_cos(16384 - itheta)
@@ -2544,9 +2544,9 @@ fn band_n1(mut d RangeDecoder, mut ctx BandCtx, count int) List[float]
     mut out := List[float]()
     for _ in 0..count
         mut sign := 0
-        if ctx.remaining >= lsh(1, BITRES)
+        if ctx.remaining >= op_lsh(1, BITRES)
             sign = d.bits(1)
-            ctx.remaining -= lsh(1, BITRES)
+            ctx.remaining -= op_lsh(1, BITRES)
         out.push(if sign == 1 then -1.0 else 1.0)
     out
 
@@ -2633,7 +2633,7 @@ fn partition(
         ctx.remaining -= curr
     if q != 0
         return pvq_unquant(mut d, n, get_pulses(q), ctx.spread, blocks, gain)
-    mask := lsh(1, blocks) - 1
+    mask := op_lsh(1, blocks) - 1
     fill = fill.bit_and(mask)
     if fill == 0
         return ([0.0 for _ in 0..n], 0)
@@ -2676,7 +2676,7 @@ fn band_mono(
     mut fill := fill0
     for k in 0..recombine
         if not lowband.is_empty()
-            lowband = haar(lowband, n.shr(k), lsh(1, k))
+            lowband = haar(lowband, n.shr(k), op_lsh(1, k))
         fill = BIT_INTERLEAVE[fill.bit_and(0xF)].bit_or(BIT_INTERLEAVE[fill.shr(4)].shl(2))
     blocks = blocks.shr(recombine)
     n_b = n_b.shl(recombine)
@@ -2712,13 +2712,13 @@ fn band_mono(
         x = haar(x, n_b, blocks)
     for k2 in 0..recombine
         cm = BIT_DEINTERLEAVE[cm]
-        x = haar(x, n.shr(k2), lsh(1, k2))
+        x = haar(x, n.shr(k2), op_lsh(1, k2))
     blocks = blocks.shl(recombine)
     mut out := List[float]()
     if want_out
         root := n.to_float().sqrt()
         out = [root * v for v in x]
-    (x, cm.bit_and(lsh(1, blocks) - 1), out)
+    (x, cm.bit_and(op_lsh(1, blocks) - 1), out)
 
 ## A stereo band: mid and side split by an angle, then merged back to left
 ## and right (RFC 6716 §4.3.4.4).
@@ -2746,7 +2746,7 @@ fn band_stereo(
     mut cm := 0
     mut out := List[float]()
     if n == 2
-        sbits := if s.itheta != 0 and s.itheta != 16384 then lsh(1, BITRES) else 0
+        sbits := if s.itheta != 0 and s.itheta != 16384 then op_lsh(1, BITRES) else 0
         mbits := b - sbits
         swap := s.itheta > 8192
         ctx.remaining -= s.qalloc + sbits
@@ -2856,7 +2856,7 @@ fn all_bands(
     balance0 int,
     al Allocation,
 )(List[List[float]], List[int])
-    m := lsh(1, lm)
+    m := op_lsh(1, lm)
     blocks := if short_blocks then m else 1
     norm_offset := m * EBANDS[start]
     span := m * EBANDS[NB_BANDS - 1] - norm_offset
@@ -2899,7 +2899,7 @@ fn all_bands(
                     norm[ch][n1 + j] = norm[ch][2 * n1 - n2 + j]
         ctx.tf_change = tf_res[i]
         mut effective := -1
-        mut x_cm := lsh(1, blocks) - 1
+        mut x_cm := op_lsh(1, blocks) - 1
         mut y_cm := x_cm
         if lowband_offset != 0 and (spread != 3 or blocks > 1 or tf_res[i] < 0)
             effective = (m * EBANDS[lowband_offset] - norm_offset - n).max(0)
@@ -2970,7 +2970,7 @@ fn fine_energy(mut d RangeDecoder, mut st CeltState, start int, end int, fine Li
         if fine[i] > 0
             for ch in 0..c
                 q := d.bits(fine[i])
-                step := lsh(1, 14 - fine[i]).to_float() / 16384.0
+                step := op_lsh(1, 14 - fine[i]).to_float() / 16384.0
                 st.energy[ch * NB_BANDS + i] += (q.to_float() + 0.5) * step - 0.5
 
 ## The leftover bits refine the energies once more, by priority (§4.3.2.2).
@@ -2989,7 +2989,7 @@ fn finalise_energy(
             if bits_left >= c and al.fine[i] < 8 and al.priority[i] == p
                 for ch in 0..c
                     q := d.bits(1)
-                    half := lsh(1, 13 - al.fine[i]).to_float() / 16384.0
+                    half := op_lsh(1, 13 - al.fine[i]).to_float() / 16384.0
                     st.energy[ch * NB_BANDS + i] += (q.to_float() - 0.5) * half
                     bits_left -= 1
 
@@ -3025,8 +3025,8 @@ fn anti_collapse(
             r = r.min(thresh) * sqrt_1
             base := EBANDS[i].shl(lm)
             mut refill := false
-            for k in 0..lsh(1, lm)
-                if masks[ch * NB_BANDS + i].bit_and(lsh(1, k)) == 0
+            for k in 0..op_lsh(1, lm)
+                if masks[ch * NB_BANDS + i].bit_and(op_lsh(1, k)) == 0
                     for j in 0..n0
                         seed = lcg(seed)
                         xs[ch][base + j.shl(lm) + k] = if seed.bit_and(0x8000)
@@ -3248,14 +3248,20 @@ fn end_band(bandwidth int) int
         return 19
     21
 
-## One CELT frame of `c` coded channels and 120 << lm samples (std.opus.5):
-## the samples of each channel at the int16 scale.
-fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[float]]
-    start := 0
-    m := lsh(1, lm)
+## One CELT frame of `c` coded channels and 120 << lm samples from band
+## `start` (std.opus.5), read from `d` to the end of its data: the samples of
+## each channel at the int16 scale.
+fn celt_frame(
+    mut st CeltState,
+    mut d RangeDecoder,
+    c int,
+    lm int,
+    start int,
+    end int,
+) List[List[float]]
+    m := op_lsh(1, lm)
     n := 120 * m
-    mut d := decoder(frame)
-    total := frame.len() * 8
+    total := d.data.len() * 8
     if c == 1
         for i in 0..NB_BANDS
             st.energy[i] = st.energy[i].max(st.energy[NB_BANDS + i])
@@ -3274,7 +3280,7 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
     if start == 0 and tell + 16 <= total
         if d.bit_logp(1)
             octave := d.uint(6)
-            pf_pitch = lsh(16, octave) + d.bits(4 + octave) - 1
+            pf_pitch = op_lsh(16, octave) + d.bits(4 + octave) - 1
             qg := d.bits(3)
             if d.tell() + 2 <= total
                 pf_tap = d.icdf(TAPSET_ICDF, 2)
@@ -3296,7 +3302,7 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
     if d.tell_frac() + 48 <= da.1
         trim = d.icdf(TRIM_ICDF, 7)
     mut bits := total.shl(BITRES) - d.tell_frac() - 1
-    rsv := if transient and lm >= 2 and bits >= (lm + 2).shl(BITRES) then lsh(1, BITRES) else 0
+    rsv := if transient and lm >= 2 and bits >= (lm + 2).shl(BITRES) then op_lsh(1, BITRES) else 0
     bits -= rsv
     al := allocate(mut d, start, end, da.0, caps, trim, bits, lm, c)
     fine_energy(mut d, mut st, start, end, al.fine, c)
@@ -3396,37 +3402,1418 @@ fn celt_frame(mut st CeltState, frame bytes, c int, lm int, end int) List[List[f
         pcm.push(y)
     pcm
 
+## SILK (RFC 6716 §4.2), in the fixed point of libopus's decoder so the
+## output is bit-exact: 32-bit products wrap and shifts floor as in C.
+
+## A table from hex digits: `size` bytes a value, big-endian.
+fn unhex(text str, size int, signed bool) List[int]
+    raw := bytes.from_hex(text) else b""
+    mut out := List[int]()
+    mut i := 0
+    while i < raw.len()
+        mut v := 0
+        for j in 0..size
+            v = v.shl(8) + raw[i + j].to_int()
+        if signed and v >= op_lsh(1, 8 * size - 1)
+            v -= op_lsh(1, 8 * size)
+        out.push(v)
+        i += size
+    out
+
+## SILK tables from libopus 1.5.2 (silk/tables_*.c, resampler_rom.c,
+## table_LSF_cos.c; BSD-3-Clause, see NOTICE), as hex: two digits a value
+## for 8-bit tables, four for 16-bit ones. Two-dimensional tables are flat.
+TYPE_VAD_ICDF := unhex("e89e0a00", 1, false)
+TYPE_NO_VAD_ICDF := unhex("e600", 1, false)
+
+DELTA_GAIN_ICDF := unhex(
+    "faf5eacb47322a2623211f1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
+    1,
+    false,
+)
+
+GAIN_ICDF := unhex("e0702c0f03020100feedc08446170400fffce29b3d0b0200", 1, false)
+UNIFORM3 := unhex("ab5500", 1, false)
+UNIFORM4 := unhex("c0804000", 1, false)
+UNIFORM5 := unhex("cd9a663300", 1, false)
+UNIFORM6 := unhex("d5ab80552b00", 1, false)
+UNIFORM8 := unhex("e0c0a08060402000", 1, false)
+NLSF_EXT_ICDF := unhex("64281007030100", 1, false)
+NLSF_INTERP_ICDF := unhex("f3ddc0b500", 1, false)
+PITCH_DELTA_ICDF := unhex("d2d0cecbc7c1b7a88e684a34251b140e0a06040200", 1, false)
+
+PITCH_LAG_ICDF := unhex(
+    "fdfaf4e9d4b69683786e6255483c31282019130f0d0b09080706050403020100",
+    1,
+    false,
+)
+
+CONTOUR_ICDF := unhex(
+    "dfc9b7a7988a7c6f62584f463e38322c27231f1b181512100e0c0a08060403020100",
+    1,
+    false,
+)
+
+CONTOUR_NB_ICDF := unhex("bcb09b8a7761432b1a0a00", 1, false)
+CONTOUR_10_ICDF := unhex("a577503d2f231b140e090400", 1, false)
+CONTOUR_10_NB_ICDF := unhex("713f00", 1, false)
+LTP_PER_ICDF := unhex("b36300", 1, false)
+LTP_GAIN_ICDF_0 := unhex("47382b1e150c0600", 1, false)
+LTP_GAIN_ICDF_1 := unhex("c7a5907c6d6054473d332a20170f0800", 1, false)
+
+LTP_GAIN_ICDF_2 := unhex(
+    "f1e1d3c7bbafa4998e847b7269605850484039322c26211d1814100c09050200",
+    1,
+    false,
+)
+
+LTP_VQ_0 := unhex(
+    "040618070500000200000c1c290dfcf70f2a190e01fe3e29f7f62541fc03fa044207f8100e26fd21",
+    1,
+    true,
+)
+
+LTP_VQ_1 := unhex(
+    "0d1627170cff24401bfaf90a372b11010108010106f54a35f7f4374cf408fd035d1bfc1a273b03f802004d0b09f8162cfa0728091a0309f91465f90403f82a1a00f121440217fe372efe0f03ff151029",
+    1,
+    true,
+)
+
+LTP_VQ_2 := unhex(
+    "fa1b3d2705f52a580401fe3c4106fcfffb493801f7135e1df7000c63060408ed662ef303020d030209eb5448eef52e68ea081226301700f04653eb0b05f57516f8fa1775f40303f85f1c04f60f4d3cf1ff047c02fc03265418e7020d2a0d1f15fc382effff234ff313f94158f7f214045131e314004b03ef05f72c5cf801fd16451ffa5f29f405274310fc0100fa7837dcf32c7a04e851050b03070200090a58",
+    1,
+    true,
+)
+
+LTP_SCALE_ICDF := unhex("804000", 1, false)
+LTP_SCALES_Q14 := unhex("3ccd30002000", 2, true)
+RATE_LEVELS_ICDF := unhex("f1beb284574a290e00dfc19d8c6a39271200", 1, false)
+
+PULSES_PER_BLOCK_ICDF := unhex(
+    "7d331a120f0c0b0a09080706050403020100c6692d160f0c0b0a09080706050403020100d5a274533b2b2018120f0c09070605030200efbb743b1c100b0a09080706050403020100fae5bc8756331e130d0a0806050403020100f9ebd5b99c80675342352a211a15110d0a00fef9ebcea4764d2e1b100a07050403020100fffdf9efdcbf9c77553925170f0a06040200fffdfbf6eddfcbb3987c624b37281d150f00fffefdf7dca26a432a1c120c090604030200",
+    1,
+    false,
+)
+
+SHELL_TABLE_0 := unhex(
+    "8000d62a00eb801500f4b8480b00f8d6802a0700f8e1aa50190500fbecc67e36120300faeed39f52230f0500fae7cba8805835190600fceed8b9946c4728120400fdf3e1c7a6805a391f0d0300fef6e9d4b7936d492c170a0200fffaf0dfc6a6805a3a2110060100fffbf4e7d2b5926e4b2e190c050100fffdf8eeddc4a4805c3c231208030100fffdf9f2e5d0b4926e4c301b0e07030100",
+    1,
+    false,
+)
+
+SHELL_TABLE_1 := unhex(
+    "8100cf3200ec811400f5b9480a00f9d5812a0600fae2a9571b0400fbe9c2823e140400faeccfa0632f110300fff0d9b68351290b0100fffee9c99f6b3d14020100fff9e9ceaa80563217070100fffaeed9ba946c462712060100fffcf3e2c8a6805a381e0d040100fffcf5e7d1b4926e4c2f190b040100fffdf8eddbc2a3805d3e251308030100fffefaf1e2cdb1916f4f331e0f06020100",
+    1,
+    false,
+)
+
+SHELL_TABLE_2 := unhex(
+    "8100cb3600ea811700f5b8490a00fad781290500fce8ad56180300fdf0c881380f0200fdf4d9a45e260a0100fdf5e2bd84471b070100fdf6e7cb9f693817060100fff8ebd5b385552f13050100fffef3ddc29f7546250c020100fffef8ead0ab8055301608020100fffefaf0dcbd956b43241006020100fffefbf3e3c9a6805a371d0d05020100fffefcf6ead5b7936d492b160a04020100",
+    1,
+    false,
+)
+
+SHELL_TABLE_3 := unhex(
+    "8200c83a00e7821a00f4b84c0c00f9d6822b0600fce8ad57180300fdf1cb83380e0200fef6dda75e23080100fef9e8c1824117050100fffbefd3a2632d0f040100fffbf3dfba834a210b030100fffcf5e6ca9e69391808020100fffdf7ebd6b384542c1307020100fffefaf0dfc49f7045240f06020100fffefdf5e7d1b0885d371b0b03020100fffefdfcefddc29e754c2a120403020100",
+    1,
+    false,
+)
+
+SHELL_OFFSETS := unhex("00000205090e141b232c36414d5a687787", 1, false)
+LSB_ICDF := unhex("7800", 1, false)
+
+SIGN_ICDF := unhex(
+    "fe31434d525d63c60b12181f242dff2e424e575e68d00e15202a3342ff5e686d707376f8354550585f66",
+    1,
+    false,
+)
+
+LAGS_STAGE2 := unhex(
+    "0002ffffff0000010100010001000000000001000000000001000000010000000000ff02010001010000ffff",
+    1,
+    true,
+)
+
+LAGS_STAGE2_10 := unhex("000100000001", 1, true)
+
+LAGS_STAGE3 := unhex(
+    "000001ff0001ff00ff01fe02fefe02fd0203fdfc03fc0404fb05fafb06f9060508f700000100000000000000ff01000001ff0001ffff01ff0201ff02fefe02fe020203fd0001000000000000010001000001ff0100000201ff02ffff02ff0202ff03fefefe0300010000010001ff02ff02ff0203fe03fefe0404fd05fdfc06fc0605fb08fafbf909",
+    1,
+    true,
+)
+
+LAGS_STAGE3_10 := unhex("000001ff01ff02fe02fe03fd00010001ff02ff02fe03fe03", 1, true)
+STEREO_JOINT_ICDF := unhex("f9f7f6f5f4ead2cac9c8c5ae523b3837362e160c0b0a090700", 1, false)
+
+STEREO_QUANT_Q13 := unhex(
+    "ca5cd8bedfb6e29ae69cec78f47afccc03340b86138819641d66204a274235a4",
+    2,
+    true,
+)
+
+MID_ONLY_ICDF := unhex("4000", 1, false)
+LBRR_FLAGS_2_ICDF := unhex("cb9600", 1, false)
+LBRR_FLAGS_3_ICDF := unhex("d7c3a67d6e5200", 1, false)
+
+FRAC_FIR_12 := unhex(
+    "00bdfda8026977670075ff61fbd27408003400ddf6a86e74fffc0211f2ea66e5ffd002f6f08c5da5ffb00389ef755306ff9d03ccef824766ff9503c7f08b3b27ff990380f2612eaeffa50305f4cf225effb90263f7a11698ffd201a9faa10bb4",
+    2,
+    true,
+)
+
+LSF_COS_Q12 := unhex(
+    "20001ffe1ff61fea1fd81fc21fa81f881f621f3a1f0a1ed81ea01e621e221ddc1d901d421cee1c961c3a1bd81b721b0a1a9c1a2a19b4193a18bc183c17b6172e16a01610157e14e8144e13b01310126e11c8111e10740fc60f160e640dae0cf80c400b840ac80a0a094a088a07c60702063e057804b203ea0322025a019200ca0000ff36fe6efda6fcdefc16fb4efa88f9c2f8fef83af776f6b6f5f6f538f47cf3c0f308f252f19cf0eaf03aef8ceee2ee38ed92ecf0ec50ebb2eb18ea82e9f0e960e8d2e84ae7c4e744e6c6e64ce5d6e564e4f6e48ee428e3c6e36ae312e2bee270e224e1dee19ee160e128e0f6e0c6e09ee078e058e03ee028e016e00ae002e000",
+    2,
+    true,
+)
+
+NB_CB1_Q8 := unhex(
+    "0c233c536c849db4cee40f20374d657d97afc9e1132a42597289a2b8d1e60c193248617893acc8df1a2c455a72879fb4cde10d1635506a829cb4cde40f192c405a738ea8c4de13183e52647891a8bed6161f324f677897aacbe3151d2d416a7c96abc4e01e314b61798ea5bad1e5131934465d748fa6c0db1a223e4b617691a7c2d9192138465b718fa5c4df15223348617591abc4de141d32435a7590a8c5dd161f30425f7592a8c4de1821334d74869eb4c8e0151c46576a7c95aac2d91a213540537598adcce11b22415f6c819baed2e1141a486371839ab0c8db222b3d4e5d729bb1cde5171d36617c8aa3b3d1e51e26385976819eb2c8e7151d313f556f8ea3c1de1b304d67859eb3c4d7e81d2f4a637c97b0c6dced212a3d4c5d799baecfe11d355770889aaabcd0e3181e34548396a6bacbe52530405468769cb1c9e6",
+    1,
+    false,
+)
+
+NB_CB1_WGHT_Q9 := unhex(
+    "0b51090a090a090a08ef08ef090a08fc091708ef0b480a14095a093f090a08e208e208e208e2089209b709240924090a090a090a09240924093f09320c900ace09240924090a08e208ad089f08d50892099c09aa093f095a095a095a095a093f0967090a0d970bf0084f089f08e208e208e208ef090a08d50cd20c450a14095a08c708ad089f08920892084210000f0508ad0a3c0a3c0967090a095a093f081a0c6a0cac093f08ad09f909820924090a087708ad0d0a0da00aa6089208d5099c0932093f089f0835093209740917093f095a097409740974099c093f0ec30e2d098209df093f08e208e208fc089f08000cb60c990a990b1e098f091708fc08fc08e2084f0cbf0ce40ac10af6098f08d508d508c7084f08350b390ba50a49093f09670932089208c708c708420c990c7d0a490a1408e2088508c708ad08ad085d0c6a0cee0ab4096708e208e208e208ef089208420c450cc8099c080d08ef09c4093f09b7098208850db30cd2090a0a8c0a5709aa093f095a0924084f0d5f0dcf0bde0bf008fc079e08ad08e208e208e20d4c0d2608270a7f0b390932097408e209aa09ec0eb00da0079e0a640b5109df095a093f099c08d50bd40cc80ab40b480ab4086a084f08ef08ba08c70e6f0e4907e907b10a640a8c0a1409c40917093f0c870d550932081a0b480b48092409b708c708770d0a0d260b1e0adc0917086a08e208ef0842080d091708fc088508770885093f0a490a8c0a8c09f90967098208ad08d508ad08ad092409740a2f0a8c0bde0cac0af60b4809aa081a08fc090a0932094c08ad086a084f08ef09c40ae90ae90a3c0a14093f0e5c0e8108ba072e08850ac10aa60a7109d1089f0ae90c580aa609f90b1e09d10885095a08ad0885",
+    2,
+    true,
+)
+
+NB_CB1_ICDF := unhex(
+    "d4b294816c6055524f4d3d3b39383331302d2a29282624221f1e150c0a030100fff5f4ece9e1d9cbbeb0afa195887d72665b51473c342b231c1413120c0b0500",
+    1,
+    false,
+)
+
+NB_PRED_Q8 := unhex("b38a8c9497959997a37443523b5c4864595c", 1, false)
+
+NB_CB2_SELECT := unhex(
+    "10000000006342242422242222222253452434227466464444b0664444224155445424748d988baa84bbb8d88984f9a8b98b6866644444b2dab9b9aaf4d8bbbbaaf4bbbbdb8a679bb8b98974b79b988884d9b8b8aaa4d9ab9b8bf4a9b8b9aaa4d8dfda8ad68fbcdaa8f48d889baaa88adcdb8ba4dbcad889a8baf6b98b74b9dbb98a64648664662244446444a8cbdddaa8a79a886846a4f6ab898b899bdadb8b",
+    1,
+    false,
+)
+
+NB_CB2_ICDF := unhex(
+    "fffefdee0e03020100fffefcda2303020100fffefad03b04020100fffef6c2470a020100fffcecb75208020100fffcebb45a11020100fff8e0ab611e040100fffeecad5f25070100",
+    1,
+    false,
+)
+
+NB_DELTA_MIN_Q15 := unhex("00fa00030006000300030003000400030003000301cd", 2, true)
+
+WB_CB1_Q8 := unhex(
+    "07172636455564748393a2b2c1d0dfef0d192937455362707f8e9dabbbcbdcec0f1522333d4e5c6a7e8898a7b9cde1f00a1524323f4f5f6e7e8d9dadbdcddded111425333b4e596b7b8696a4b8cde0f00a0f203343516070818e9eadbdccdcec08152533414f62717e8a9ba8b3c0d1da0c0f22373f4e576c768394a7b9cbdbec10132024384f5b6c76889aabbaccdced0b1c2b3a4a5969788796a5b4c4d3e2f10610212e3c4b5c6b7b899ca9b9c7d6e10b131e2c394a5969798798a9bacadaea0c131d2e39475864788494a5b6c7d8e91117232e384d5c6a7b8698a7b9ccdeed0e112d353f4b596b738497abbcceddf009101d283847586777899aabbdcddeed10132430394c5769768496a7b9cadaec0c111d3647515e687e8895a4b6c9dded0f1c2f3e4f6173818e9ba8b4c2d0dfee080e1e2d3e4e5e6f7f8f9fafc0cfdfef111e313e4f5c6b778491a0aebeccdceb0e13242d3d4c5b6c798a9aacbdcddeee0c121f2d3c4c5b6b7b8a9aabbbccddec0d111f2b35465367728395a7b9cbdced1116232a3a4e5d6e7d8b9baabccee0f0080f2232435363738392a2b2c1d1e0ef0d10294249565f6f808996a3b7cee1f1111925343f4b5c66778490a0afbfd4e7131f31415364758593a1aebbc8d5e3f2121f34445867757e8a95a3b1c0cfdfef101d2f3d4c5a6a778593a1b0c1d1e0f00f1523323d4956616e77818dafc6daed",
+    1,
+    false,
+)
+
+WB_CB1_WGHT_Q9 := unhex(
+    "0e490b6d0b6d0b6d0b6d0b6d0b6d0b6d0b6d0b6d0b6d0b6d0b930b930b6d0b1e0c900c0d0b9c0bf00bf00bc20bc20bc20b930b930bc20b9c0b480b1e0b1e0aa60f500fae0ba50c870c870b760bf00b1e0c320cac0b6d0b1e0a3c09f90adc0b6d0dbc0c7d0bc20c1f0bcb0b480b6d0b6d0b6d0b6d0b480b480b480b480b480ac113be13be0b760df50d390bf00c0d0ae90c580c580b9c0b1e09d109ec0ac10b48114c10350a8c0ac10b9c0bc20b6d0b1e0ba50bcb0b6d0b6d0b6d0b6d0b480aa60e240bcb0b9c0bf00bf00b390af60bf00c900be70ba50cdb0cdb0ba50cee0baf146b139609ec0d0a0dc60d390c7d0c160d300ba50a8c0a570a7f0ae90b1e0a7113d914361207114c099c0b510be70c870c610a7f0ab40b480b1e0ae90b1e0a8c0c320b480b930b6d0b6d0b6d0b6d0b930b930b930b930b6d0b6d0b930b930b93106a0c870ba50c1f0bc20b480b480b6d0b9c0b390b640bcb0b9c0bc20c7d0b390eb00eb00cac0c1f0ba50b480b6d0b480b9c0b760ae90ae90b1e0b480b480a640f0e0fae0c870c320cac0b760be70b930b930c0d0b1e0ae90ae90ae90ae90a140f050ff00d1d0dbc0c160ab40bc20b760c320c0d0b1e0b1e0a570a570b1e0af6141b131e0c990f050d710c610b510d550d7b0a8c0a140a710ab40b1e0af60ac1100d0ecd0cdb0c580b6d0b480b480b6d0ae90ab40ae90ab40ae90b1e0b480af613d913be0be70dd90cac0bf00c0d0b800c1f0b510ab40ab40ab40b1e0ae90a3c10d510d50b2c09df0c870d300d300c030c030d300bf00b1e0a570a140aa60ac10bf00b640af60b480ab40a7f0b510c1f0c4e0c4e0c900c610bf00bc20b930b1e11170f2a0b6d0b480b1e0b480b1e0b1e0b480b480b480b1e0b480b6d0b480b1e0ba50b640b640ba50ba50bf00c320c900c4e0bf00bc20b9c0b9c0b9c0b6d0ab4108510350cee0d130b6d0b930b480ba50ba50b1e0ae90ab40b1e0b1e0b1e0ae90ff00fae0c1f0bc20b6d0b6d0b6d0b480b6d0b6d0b1e0b1e0b1e0ae90b480adc120711df0c610d710c870ba50b510bde0c320ab40a7f0a7f0a7f0ab40ae90a8c103510ad0ecd0e490aa60adc0b480b480bc20b9c0b6d0b1e0a7f0a7f0ae90b4810770de20ac10b1e0b1e0b480b480b480b6d0b6d0b480b6d0b6d0b6d0b930b481436133908d50d680ecd0d970d130b1e0cee0d970c4e0b51099c09b70ac10b6d0d7b0e650c320c7d0d1d0be70c870c870ba50c900c0d0b6d0b6d0a7f09ec09820ba50bc20ae90ae90ab40ae90b1e0b9c0bf00c1f0c4e0c4e0c4e0c1f0bc20bc20b800b390a7f0aa60adc0bc20d680dd90d1d0cac0bf00bc20b930b6d0b480b1e0bcb0b800b510bc20bc20b9c0bcb0c1f0bf00bf00bc20b480b1e0b6d0b6d0b480f500f7f0bc20c7d0d1d0c900cdb0cdb0d970e780d710aa60885099c0a140a2f",
+    2,
+    true,
+)
+
+WB_CB1_ICDF := unhex(
+    "e1ccc9b8b7af9e9a99877773716e6d63625f4f443432302d2b201f1b120a0300fffbebe6d4c9c4b6a7a6a3978a7c6e685a4e4c4645392d2218150b0605040300",
+    1,
+    false,
+)
+
+WB_PRED_Q8 := unhex("af94a0b0b2adaea4b1aec4b6c6c0b6443e423c4875555a7688978ea08e9b", 1, false)
+
+WB_CB2_SELECT := unhex(
+    "00000000000000016466664444242260a46b9eb9b4b98b664042242222000120d08b8dbf98b99b6860ab68a6666666840100000000101000506d4e6bb98b6765d0d48d8bad997b672400000000000001300000000000002044877b7777674562446778767666476286889db8b6998b86d0a8f84bbd8f796b2031222222001102d2eb8b7bb9896986628768b664b7ab86644644464242228340a666442402010086a6664422224284d4f69e8b6b6b576664db7d7a8976678472878969ab6a3222a4d68d8fb9977967c022000000000001d06d4abb86f99f89666e9a7657657765000200242442442360a4666424000221a78aae6664540202646b787724c51800",
+    1,
+    false,
+)
+
+WB_CB2_ICDF := unhex(
+    "fffefdf40c03020100fffefce02603020100fffefbd13904020100fffef4c34504020100fffbe8b85407020100fffef0ba560e020100fffeefb25b1e050100fff8e3b16413020100",
+    1,
+    false,
+)
+
+WB_DELTA_MIN_Q15 := unhex(
+    "0064000300280003000300030005000e000e000a000b00030008000900070003015b",
+    2,
+    true,
+)
+
+## `x` wrapped to a signed 32-bit value.
+fn w32(x int) int
+    v := x.bit_and(0xFFFFFFFF)
+    if v >= 0x80000000
+        return v - 0x100000000
+    v
+
+## `x` wrapped to a signed 16-bit value.
+fn w16(x int) int
+    v := x.bit_and(0xFFFF)
+    if v >= 0x8000
+        return v - 0x10000
+    v
+
+fn sat16(x int) int
+    x.max(-32768).min(32767)
+
+fn smulwb(a int, b int) int
+    w32((a * w16(b)).shr(16))
+
+fn smlawb(a int, b int, c int) int
+    w32(a + (b * w16(c)).shr(16))
+
+fn smulww(a int, b int) int
+    w32((a * b).shr(16))
+
+fn smlaww(a int, b int, c int) int
+    w32(a + (b * c).shr(16))
+
+fn smulbb(a int, b int) int
+    w16(a) * w16(b)
+
+fn smmul(a int, b int) int
+    w32((a * b).shr(32))
+
+## `a` shifted right by `s` with rounding (silk_RSHIFT_ROUND).
+fn rround(a int, s int) int
+    if s == 1
+        return a.shr(1) + a.bit_and(1)
+    (a.shr(s - 1) + 1).shr(1)
+
+## `a` kept between two limits given in either order (silk_LIMIT).
+fn limit(a int, l1 int, l2 int) int
+    if l1 > l2
+        return a.min(l1).max(l2)
+    a.min(l2).max(l1)
+
+fn lshift_sat32(a int, s int) int
+    w32(limit(a, (-2147483648).shr(s), 2147483647.shr(s)).shl(s))
+
+fn sat32(x int) int
+    x.max(-2147483648).min(2147483647)
+
+## Leading zero bits of a 32-bit value.
+fn clz32(x int) int
+    if x == 0
+        return 32
+    32 - ilog(x.bit_and(0xFFFFFFFF))
+
+## 1/b in Q`qres` (silk_INVERSE32_varQ).
+fn inverse32_varq(b32 int, qres int) int
+    hd := clz32(b32.abs()) - 1
+    nrm := w32(b32.shl(hd))
+    inv := 536870911 / nrm.shr(16)
+    result := w32(inv.shl(16))
+    err := w32(((1).shl(29) - smulwb(nrm, inv)).shl(3))
+    r := smlaww(result, err, inv)
+    ls := 61 - hd - qres
+    if ls <= 0
+        return lshift_sat32(r, 0 - ls)
+    if ls < 32
+        return r.shr(ls)
+    0
+
+## a/b in Q`qres` (silk_DIV32_varQ).
+fn div32_varq(a32 int, b32 int, qres int) int
+    ah := clz32(a32.abs()) - 1
+    an := w32(a32.shl(ah))
+    bh := clz32(b32.abs()) - 1
+    bn := w32(b32.shl(bh))
+    inv := 536870911 / bn.shr(16)
+    result := smulwb(an, inv)
+    rest := w32(an - w32(smmul(bn, result).shl(3)))
+    r := smlawb(result, rest, inv)
+    ls := 29 + ah - bh - qres
+    if ls < 0
+        return lshift_sat32(r, 0 - ls)
+    if ls < 32
+        return r.shr(ls)
+    0
+
+## 2^(x/128) (silk_log2lin).
+fn log2lin(x int) int
+    if x < 0
+        return 0
+    if x >= 3967
+        return 2147483647
+    out := op_lsh(1, x.shr(7))
+    f := x.bit_and(0x7F)
+    if x < 2048
+        return out + (out * smlawb(f, smulbb(f, 128 - f), -174)).shr(7)
+    out + out.shr(7) * smlawb(f, smulbb(f, 128 - f), -174)
+
+## As `icdf` with a table that starts at `table[at]` (8-bit entries).
+fn RangeDecoder.icdf_at(mut self, table List[int], at int) int
+    r := self.rng.shr(8)
+    mut s := self.rng
+    mut t := s
+    mut k := -1
+    while true
+        k += 1
+        t = s
+        s = r * table[at + k]
+        if self.val >= s
+            break
+    self.val -= s
+    self.rng = t - s
+    self.normalize()
+    k
+
+## Drops the last `n` bytes of the frame: the Opus layer's redundant CELT
+## frame sits there (RFC 6716 §4.5.1).
+fn RangeDecoder.shorten(mut self, n int)
+    self.data = self.data[0..self.data.len() - n]
+
+## Line spectral frequencies (RFC 6716 §4.2.7.5)
+
+## A codebook of normalised LSFs: narrow/medium band (order 10) or wide
+## band (order 16).
+struct NlsfBook
+    order int
+    step int
+    cb1 List[int]
+    wght List[int]
+    cb1_icdf List[int]
+    pred List[int]
+    sel List[int]
+    ec_icdf List[int]
+    dmin List[int]
+
+NB_BOOK := NlsfBook(
+    order: 10,
+    step: 11796,
+    cb1: NB_CB1_Q8,
+    wght: NB_CB1_WGHT_Q9,
+    cb1_icdf: NB_CB1_ICDF,
+    pred: NB_PRED_Q8,
+    sel: NB_CB2_SELECT,
+    ec_icdf: NB_CB2_ICDF,
+    dmin: NB_DELTA_MIN_Q15,
+)
+
+WB_BOOK := NlsfBook(
+    order: 16,
+    step: 9830,
+    cb1: WB_CB1_Q8,
+    wght: WB_CB1_WGHT_Q9,
+    cb1_icdf: WB_CB1_ICDF,
+    pred: WB_PRED_Q8,
+    sel: WB_CB2_SELECT,
+    ec_icdf: WB_CB2_ICDF,
+    dmin: WB_DELTA_MIN_Q15,
+)
+
+## The entropy table offsets and predictor weights of first-stage vector `i0`.
+fn nlsf_unpack(cb NlsfBook, i0 int)(List[int], List[int])
+    mut ec_ix := [0 for _ in 0..cb.order]
+    mut pred := [0 for _ in 0..cb.order]
+    mut i := 0
+    while i < cb.order
+        e := cb.sel[i0 * cb.order / 2 + i / 2]
+        ec_ix[i] = e.shr(1).bit_and(7) * 9
+        pred[i] = cb.pred[i + e.bit_and(1) * (cb.order - 1)]
+        ec_ix[i + 1] = e.shr(5).bit_and(7) * 9
+        pred[i + 1] = cb.pred[i + e.shr(4).bit_and(1) * (cb.order - 1) + 1]
+        i += 2
+    (ec_ix, pred)
+
+fn nlsf_stabilize(mut x List[int], dmin List[int], l int)
+    for _ in 0..20
+        mut md := x[0] - dmin[0]
+        mut at := 0
+        for i in 1..l
+            gap := x[i] - (x[i - 1] + dmin[i])
+            if gap < md
+                md = gap
+                at = i
+        top := 32768 - (x[l - 1] + dmin[l])
+        if top < md
+            md = top
+            at = l
+        if md >= 0
+            return
+        if at == 0
+            x[0] = dmin[0]
+        elif at == l
+            x[l - 1] = 32768 - dmin[l]
+        else
+            mut lo := dmin[at].shr(1)
+            for k in 0..at
+                lo += dmin[k]
+            mut hi := 32768 - dmin[at].shr(1)
+            for k2 in at + 1..l + 1
+                hi -= dmin[k2]
+            c := limit(rround(x[at - 1] + x[at], 1), lo, hi)
+            x[at - 1] = c - dmin[at].shr(1)
+            x[at] = x[at - 1] + dmin[at]
+    x.sort()
+    x[0] = x[0].max(dmin[0])
+    for i2 in 1..l
+        x[i2] = x[i2].max(sat16(x[i2 - 1] + dmin[i2]))
+    x[l - 1] = x[l - 1].min(32768 - dmin[l])
+    mut j := l - 2
+    while j >= 0
+        x[j] = x[j].min(x[j + 1] - dmin[j + 1])
+        j -= 1
+
+## The LSFs in Q15 from the codebook indices (RFC 6716 §4.2.7.5.3-5).
+fn nlsf_decode(cb NlsfBook, idx List[int]) List[int]
+    up := nlsf_unpack(cb, idx[0])
+    pred := up.1
+    mut res := [0 for _ in 0..cb.order]
+    mut prev := 0
+    mut i := cb.order - 1
+    while i >= 0
+        p := smulbb(prev, pred[i]).shr(8)
+        mut q := idx[1 + i].shl(10)
+        if q > 0
+            q -= 102
+        elif q < 0
+            q += 102
+        prev = smlawb(p, q, cb.step)
+        res[i] = prev
+        i -= 1
+    mut nlsf := List[int]()
+    for k in 0..cb.order
+        v := res[k].shl(14) / cb.wght[idx[0] * cb.order + k] + cb.cb1[idx[0] * cb.order + k].shl(7)
+        nlsf.push(limit(v, 0, 32767))
+    nlsf_stabilize(mut nlsf, cb.dmin, cb.order)
+    nlsf
+
+## One of the two polynomials of the LSF to LPC conversion.
+fn find_poly(c List[int], off int, dd int) List[int]
+    mut out := [0 for _ in 0..dd + 1]
+    out[0] = 65536
+    out[1] = 0 - c[off]
+    for k in 1..dd
+        f := c[off + 2 * k]
+        out[k + 1] = w32(out[k - 1].shl(1) - rround(f * out[k], 16))
+        mut n := k
+        while n > 1
+            out[n] = w32(out[n] + out[n - 2] - rround(f * out[n - 1], 16))
+            n -= 1
+        out[1] -= f
+    out
+
+fn bwexpander_32(mut a List[int], d int, chirp0 int)
+    mut chirp := chirp0
+    cm1 := chirp0 - 65536
+    for i in 0..d - 1
+        a[i] = smulww(chirp, a[i])
+        chirp += rround(chirp * cm1, 16)
+    a[d - 1] = smulww(chirp, a[d - 1])
+
+## Fits Q`qin` coefficients into 16 bits at Q`qout` (silk_LPC_fit).
+fn lpc_fit(mut a List[int], qout int, qin int, d int) List[int]
+    mut fitted := false
+    for _ in 0..10
+        mut maxabs := 0
+        mut at := 0
+        for k in 0..d
+            if a[k].abs() > maxabs
+                maxabs = a[k].abs()
+                at = k
+        maxabs = rround(maxabs, qin - qout)
+        if maxabs > 32767
+            maxabs = maxabs.min(163838)
+            chirp := 65470 - (maxabs - 32767).shl(14) / (maxabs * (at + 1)).shr(2)
+            bwexpander_32(mut a, d, chirp)
+        else
+            fitted = true
+            break
+    mut out := List[int]()
+    for k2 in 0..d
+        if fitted
+            out.push(w16(rround(a[k2], qin - qout)))
+        else
+            v := sat16(rround(a[k2], qin - qout))
+            out.push(v)
+            a[k2] = v.shl(qin - qout)
+    out
+
+## The inverse prediction gain in Q30, or 0 when the filter is unstable
+## (silk_LPC_inverse_pred_gain).
+fn inv_pred_gain(a_q12 List[int], order int) int
+    mut dc := 0
+    for v in a_q12
+        dc += v
+    if dc >= 4096
+        return 0
+    mut a := [v.shl(12) for v in a_q12]
+    lim := 16773022
+    min_inv := 107374
+    mut inv := op_lsh(1, 30)
+    mut k := order - 1
+    while k > 0
+        if a[k] > lim or a[k] < 0 - lim
+            return 0
+        rc := w32(0 - a[k].shl(7))
+        m1 := op_lsh(1, 30) - smmul(rc, rc)
+        inv = w32(smmul(inv, m1).shl(2))
+        if inv < min_inv
+            return 0
+        m2q := 32 - clz32(m1.abs())
+        m2 := inverse32_varq(m1, m2q + 30)
+        for n in 0..(k + 1).shr(1)
+            t1 := a[n]
+            t2 := a[k - n - 1]
+            v1 := rround(sat32(t1 - w32(rround(t2 * rc, 31))) * m2, m2q)
+            if v1 > 2147483647 or v1 < -2147483648
+                return 0
+            a[n] = v1
+            v2 := rround(sat32(t2 - w32(rround(t1 * rc, 31))) * m2, m2q)
+            if v2 > 2147483647 or v2 < -2147483648
+                return 0
+            a[k - n - 1] = v2
+        k -= 1
+    if a[0] > lim or a[0] < 0 - lim
+        return 0
+    rc0 := w32(0 - a[0].shl(7))
+    m10 := op_lsh(1, 30) - smmul(rc0, rc0)
+    inv = w32(smmul(inv, m10).shl(2))
+    if inv < min_inv
+        return 0
+    inv
+
+ORDER16 := [0, 15, 8, 7, 4, 11, 12, 3, 2, 13, 10, 5, 6, 9, 14, 1]
+ORDER10 := [0, 9, 6, 3, 4, 5, 8, 1, 2, 7]
+
+## LPC coefficients in Q12 from LSFs in Q15, made stable (silk_NLSF2A).
+fn nlsf2a(nlsf List[int], d int) List[int]
+    mut c := [0 for _ in 0..d]
+    for k in 0..d
+        fi := nlsf[k].shr(8)
+        ff := nlsf[k] - fi.shl(8)
+        cv := LSF_COS_Q12[fi]
+        delta := LSF_COS_Q12[fi + 1] - cv
+        o := if d == 16 then ORDER16[k] else ORDER10[k]
+        c[o] = rround(cv.shl(8) + delta * ff, 4)
+    dd := d.shr(1)
+    p := find_poly(c, 0, dd)
+    q := find_poly(c, 1, dd)
+    mut a32 := [0 for _ in 0..d]
+    for k2 in 0..dd
+        pt := p[k2 + 1] + p[k2]
+        qt := q[k2 + 1] - q[k2]
+        a32[k2] = 0 - qt - pt
+        a32[d - k2 - 1] = qt - pt
+    mut a := lpc_fit(mut a32, 12, 17, d)
+    mut i := 0
+    while inv_pred_gain(a, d) == 0 and i < 16
+        bwexpander_32(mut a32, d, 65536 - op_lsh(2, i))
+        a = [w16(rround(v, 5)) for v in a32]
+        i += 1
+    a
+
+fn izeros(n int) List[int]
+    [0 for _ in 0..n]
+
+## The decoder state of one SILK channel (silk_decoder_state).
+struct SilkChan
+    khz int
+    frame_length int
+    nb_subfr int
+    subfr_length int
+    ltp_mem int
+    order int
+    book NlsfBook
+    contour List[int]
+    lag_low List[int]
+    prev_gain int
+    first bool
+    out List[int]
+    slpc List[int]
+    lag_prev int
+    last_gain int
+    prev_type int
+    prev_nlsf List[int]
+    ec_prev_type int
+    ec_prev_lag int
+    rs Resampler
+
+fn silk_chan() SilkChan
+    SilkChan(
+        khz: 0,
+        frame_length: 0,
+        nb_subfr: 0,
+        subfr_length: 0,
+        ltp_mem: 0,
+        order: 10,
+        book: NB_BOOK,
+        contour: CONTOUR_ICDF,
+        lag_low: UNIFORM8,
+        prev_gain: 65536,
+        first: true,
+        out: izeros(320),
+        slpc: izeros(16),
+        lag_prev: 100,
+        last_gain: 10,
+        prev_type: 0,
+        prev_nlsf: izeros(16),
+        ec_prev_type: 0,
+        ec_prev_lag: 0,
+        rs: resampler(16),
+    )
+
+## Clears what a channel predicts from (silk_decoder_set_fs on a rate change,
+## or the side channel restarting after mid-only frames).
+fn chan_reset(mut ch SilkChan)
+    ch.first = true
+    ch.lag_prev = 100
+    ch.last_gain = 10
+    ch.prev_type = 0
+    ch.out = izeros(ch.ltp_mem)
+    ch.slpc = izeros(16)
+
+## Sets the internal rate and the subframes of a frame (silk_decoder_set_fs).
+fn set_fs(mut ch SilkChan, khz int, subfr int)
+    ch.nb_subfr = subfr
+    ch.subfr_length = 5 * khz
+    fl := subfr * ch.subfr_length
+    changed := ch.khz != khz
+    if changed
+        ch.rs = resampler(khz)
+    if changed or fl != ch.frame_length
+        if khz == 8
+            ch.contour = if subfr == 4 then CONTOUR_NB_ICDF else CONTOUR_10_NB_ICDF
+        else
+            ch.contour = if subfr == 4 then CONTOUR_ICDF else CONTOUR_10_ICDF
+        if changed
+            ch.ltp_mem = 20 * khz
+            ch.order = if khz < 16 then 10 else 16
+            ch.book = if khz < 16 then NB_BOOK else WB_BOOK
+            low := match khz
+                16 => UNIFORM8
+                12 => UNIFORM6
+                _ => UNIFORM4
+            ch.lag_low = low
+            chan_reset(mut ch)
+        ch.khz = khz
+        ch.frame_length = fl
+
+## How a frame leans on the one before (RFC 6716 §4.2.7.4).
+INDEP := 0
+INDEP_NO_LTP := 1
+COND := 2
+
+## The side information of a frame (silk_decode_indices).
+struct Indices
+    sig int
+    qoff int
+    gains List[int]
+    nlsf List[int]
+    interp int
+    lag int
+    contour int
+    per int
+    ltp List[int]
+    ltp_scale int
+    seed int
+
+fn decode_indices(mut ch SilkChan, mut d RangeDecoder, vad bool, cond int) Indices
+    ix := if vad then d.icdf(TYPE_VAD_ICDF, 8) + 2 else d.icdf(TYPE_NO_VAD_ICDF, 8)
+    sig := ix.shr(1)
+    mut gains := List[int]()
+    if cond == COND
+        gains.push(d.icdf(DELTA_GAIN_ICDF, 8))
+    else
+        g := d.icdf_at(GAIN_ICDF, sig * 8).shl(3)
+        gains.push(g + d.icdf(UNIFORM8, 8))
+    for _ in 1..ch.nb_subfr
+        gains.push(d.icdf(DELTA_GAIN_ICDF, 8))
+    cb := ch.book
+    mut nl := [d.icdf_at(cb.cb1_icdf, sig.shr(1) * 32)]
+    up := nlsf_unpack(cb, nl[0])
+    ec_ix := up.0
+    for i in 0..cb.order
+        mut v := d.icdf_at(cb.ec_icdf, ec_ix[i])
+        if v == 0
+            v -= d.icdf(NLSF_EXT_ICDF, 8)
+        elif v == 8
+            v += d.icdf(NLSF_EXT_ICDF, 8)
+        nl.push(v - 4)
+    interp := if ch.nb_subfr == 4 then d.icdf(NLSF_INTERP_ICDF, 8) else 4
+    mut lag := 0
+    mut contour_ix := 0
+    mut per := 0
+    mut ltp := List[int]()
+    mut scale := 0
+    if sig == 2
+        mut absolute := true
+        if cond == COND and ch.ec_prev_type == 2
+            dl := d.icdf(PITCH_DELTA_ICDF, 8)
+            if dl > 0
+                lag = ch.ec_prev_lag + dl - 9
+                absolute = false
+        if absolute
+            lag = d.icdf(PITCH_LAG_ICDF, 8) * ch.khz.shr(1)
+            lag += d.icdf(ch.lag_low, 8)
+        ch.ec_prev_lag = lag
+        contour_ix = d.icdf(ch.contour, 8)
+        per = d.icdf(LTP_PER_ICDF, 8)
+        gt := match per
+            0 => LTP_GAIN_ICDF_0
+            1 => LTP_GAIN_ICDF_1
+            _ => LTP_GAIN_ICDF_2
+        for _ in 0..ch.nb_subfr
+            ltp.push(d.icdf(gt, 8))
+        if cond == INDEP
+            scale = d.icdf(LTP_SCALE_ICDF, 8)
+    ch.ec_prev_type = sig
+    seed := d.icdf(UNIFORM4, 8)
+    Indices(
+        sig: sig,
+        qoff: ix.bit_and(1),
+        gains: gains,
+        nlsf: nl,
+        interp: interp,
+        lag: lag,
+        contour: contour_ix,
+        per: per,
+        ltp: ltp,
+        ltp_scale: scale,
+        seed: seed,
+    )
+
+## The pulses of a node with `n` leaves at `out[at..]`, split depth first
+## (the shell coder, RFC 6716 §4.2.7.8.2).
+fn shell_tree(mut d RangeDecoder, mut out List[int], at int, n int, p int)
+    if n == 1
+        out[at] = p
+        return
+    table := match n
+        16 => SHELL_TABLE_3
+        8 => SHELL_TABLE_2
+        4 => SHELL_TABLE_1
+        _ => SHELL_TABLE_0
+    mut left := 0
+    if p > 0
+        left = d.icdf_at(table, SHELL_OFFSETS[p])
+    half := n / 2
+    shell_tree(mut d, mut out, at, half, left)
+    shell_tree(mut d, mut out, at + half, half, p - left)
+
+## The excitation pulses of a frame of `fl` samples (RFC 6716 §4.2.7.8).
+fn silk_pulses(mut d RangeDecoder, sig int, qoff int, fl int) List[int]
+    rate := d.icdf_at(RATE_LEVELS_ICDF, sig.shr(1) * 9)
+    mut blocks := fl.shr(4)
+    if blocks * 16 < fl
+        blocks += 1
+    mut sums := List[int]()
+    mut shifts := List[int]()
+    for _ in 0..blocks
+        mut n := 0
+        mut v := d.icdf_at(PULSES_PER_BLOCK_ICDF, rate * 18)
+        while v == 17
+            n += 1
+            v = d.icdf_at(PULSES_PER_BLOCK_ICDF, 9 * 18 + (if n == 10 then 1 else 0))
+        sums.push(v)
+        shifts.push(n)
+    mut pulses := izeros(blocks * 16)
+    for i in 0..blocks
+        if sums[i] > 0
+            shell_tree(mut d, mut pulses, i * 16, 16, sums[i])
+    for i2 in 0..blocks
+        if shifts[i2] > 0
+            for k in 0..16
+                mut q := pulses[i2 * 16 + k]
+                for _ in 0..shifts[i2]
+                    q = q.shl(1) + d.icdf(LSB_ICDF, 8)
+                pulses[i2 * 16 + k] = q
+            sums[i2] = sums[i2].bit_or(shifts[i2].shl(5))
+    base := 7 * (qoff + sig.shl(1))
+    for i3 in 0..(fl + 8).shr(4)
+        p := sums[i3]
+        if p > 0
+            tab := [SIGN_ICDF[base + p.bit_and(0x1F).min(6)], 0]
+            for j in 0..16
+                if pulses[i3 * 16 + j] > 0
+                    pulses[i3 * 16 + j] = pulses[i3 * 16 + j] * (d.icdf(tab, 8).shl(1) - 1)
+    pulses
+
+## The subframe gains in Q16 (silk_gains_dequant).
+fn gains_dequant(mut ch SilkChan, ind List[int], cond bool) List[int]
+    mut out := List[int]()
+    for k in 0..ch.nb_subfr
+        if k == 0 and not cond
+            ch.last_gain = ind[k].max(ch.last_gain - 16)
+        else
+            step := ind[k] - 4
+            th := 8 + ch.last_gain
+            if step > th
+                ch.last_gain += step.shl(1) - th
+            else
+                ch.last_gain += step
+        ch.last_gain = limit(ch.last_gain, 0, 63)
+        out.push(log2lin((smulwb(1907825, ch.last_gain) + 2090).min(3967)))
+    out
+
+## The filters of a frame (silk_decoder_control).
+struct Ctrl
+    gains List[int]
+    a0 List[int]
+    a1 List[int]
+    pitch List[int]
+    b List[int]
+    ltp_scale int
+
+fn decode_parameters(mut ch SilkChan, mut ind Indices, cond int) Ctrl
+    gains := gains_dequant(mut ch, ind.gains, cond == COND)
+    nlsf := nlsf_decode(ch.book, ind.nlsf)
+    a1 := nlsf2a(nlsf, ch.order)
+    if ch.first
+        ind.interp = 4
+    mut a0 := a1
+    if ind.interp < 4
+        old := ch.prev_nlsf
+        n0 := [old[i] + (ind.interp * (nlsf[i] - old[i])).shr(2) for i in 0..ch.order]
+        a0 = nlsf2a(n0, ch.order)
+    ch.prev_nlsf = nlsf
+    mut pitch := izeros(ch.nb_subfr)
+    mut b := izeros(5 * ch.nb_subfr)
+    mut scale := 0
+    if ind.sig == 2
+        mut lags := LAGS_STAGE3
+        mut stride := 34
+        if ch.khz == 8
+            lags = if ch.nb_subfr == 4 then LAGS_STAGE2 else LAGS_STAGE2_10
+            stride = if ch.nb_subfr == 4 then 11 else 3
+        elif ch.nb_subfr == 2
+            lags = LAGS_STAGE3_10
+            stride = 12
+        lo := 2 * ch.khz
+        hi := 18 * ch.khz
+        for k in 0..ch.nb_subfr
+            pitch[k] = limit(lo + ind.lag + lags[k * stride + ind.contour], lo, hi)
+        vq := match ind.per
+            0 => LTP_VQ_0
+            1 => LTP_VQ_1
+            _ => LTP_VQ_2
+        for k2 in 0..ch.nb_subfr
+            for i2 in 0..5
+                b[k2 * 5 + i2] = vq[ind.ltp[k2] * 5 + i2].shl(7)
+        scale = LTP_SCALES_Q14[ind.ltp_scale]
+    Ctrl(gains: gains, a0: a0, a1: a1, pitch: pitch, b: b, ltp_scale: scale)
+
+## The LPC residual of `inp[at..at + n]` (silk_LPC_analysis_filter).
+fn lpc_analysis(inp List[int], at int, coef List[int], n int, order int) List[int]
+    mut out := izeros(n)
+    for ix in order..n
+        mut acc := 0
+        for j in 0..order
+            acc = w32(acc + smulbb(inp[at + ix - 1 - j], coef[j]))
+        acc = w32(inp[at + ix].shl(12) - acc)
+        out[ix] = sat16(rround(acc, 12))
+    out
+
+OFFSETS_Q10 := [100, 240, 32, 100]
+
+## Excitation through the long- and short-term predictors (silk_decode_core).
+fn decode_core(mut ch SilkChan, ind Indices, ctrl Ctrl, pulses List[int]) List[int]
+    fl := ch.frame_length
+    sl := ch.subfr_length
+    mem := ch.ltp_mem
+    offset := OFFSETS_Q10[ind.sig.shr(1) * 2 + ind.qoff]
+    interp_flag := ind.interp < 4
+    mut seed := ind.seed
+    mut exc := izeros(fl)
+    for i in 0..fl
+        seed = w32(907633515 + seed * 196314165)
+        mut e := pulses[i].shl(14)
+        if e > 0
+            e -= 1280
+        elif e < 0
+            e += 1280
+        e += offset.shl(4)
+        if seed < 0
+            e = 0 - e
+        exc[i] = e
+        seed = w32(seed + pulses[i])
+    mut slpc := ch.slpc
+    for _ in 0..sl
+        slpc.push(0)
+    mut sltp := izeros(mem)
+    mut sltp_q15 := izeros(mem + fl)
+    mut xq := izeros(fl)
+    mut buf_idx := mem
+    mut lag := 0
+    for k in 0..ch.nb_subfr
+        coef := if k < 2 then ctrl.a0 else ctrl.a1
+        g := ctrl.gains[k]
+        gain_q10 := g.shr(6)
+        mut inv_gain := inverse32_varq(g, 47)
+        mut adj := 65536
+        if g != ch.prev_gain
+            adj = div32_varq(ch.prev_gain, g, 16)
+            for i2 in 0..16
+                slpc[i2] = smulww(adj, slpc[i2])
+        ch.prev_gain = g
+        if ind.sig == 2
+            lag = ctrl.pitch[k]
+            if k == 0 or (k == 2 and interp_flag)
+                first := mem - lag - ch.order - 2
+                mut ob := ch.out
+                if k == 2
+                    for i3 in 0..2 * sl
+                        ob.push(xq[i3])
+                res_ltp := lpc_analysis(ob, first + k * sl, coef, mem - first, ch.order)
+                for i4 in 0..mem - first
+                    sltp[first + i4] = res_ltp[i4]
+                if k == 0
+                    inv_gain = w32(smulwb(inv_gain, ctrl.ltp_scale).shl(2))
+                for i5 in 0..lag + 2
+                    sltp_q15[buf_idx - i5 - 1] = smulwb(inv_gain, sltp[mem - i5 - 1])
+            elif adj != 65536
+                for i6 in 0..lag + 2
+                    sltp_q15[buf_idx - i6 - 1] = smulww(adj, sltp_q15[buf_idx - i6 - 1])
+        mut res := izeros(sl)
+        if ind.sig == 2
+            mut p := buf_idx - lag + 2
+            for i7 in 0..sl
+                mut acc := 2
+                for j in 0..5
+                    acc = smlawb(acc, sltp_q15[p - j], ctrl.b[k * 5 + j])
+                p += 1
+                res[i7] = w32(exc[k * sl + i7] + acc.shl(1))
+                sltp_q15[buf_idx] = w32(res[i7].shl(1))
+                buf_idx += 1
+        else
+            for j8 in 0..sl
+                res[j8] = exc[k * sl + j8]
+        for i9 in 0..sl
+            mut acc2 := ch.order.shr(1)
+            for j2 in 0..ch.order
+                acc2 = smlawb(acc2, slpc[16 + i9 - 1 - j2], coef[j2])
+            slpc[16 + i9] = sat32(res[i9] + lshift_sat32(acc2, 4))
+            xq[k * sl + i9] = sat16(rround(smulww(slpc[16 + i9], gain_q10), 8))
+        for i10 in 0..16
+            slpc[i10] = slpc[sl + i10]
+    ch.slpc = slpc[0..16]
+    xq
+
+## One SILK frame of one channel at the internal rate (silk_decode_frame).
+fn silk_frame(mut ch SilkChan, mut d RangeDecoder, vad bool, cond int) List[int]
+    mut ind := decode_indices(mut ch, mut d, vad, cond)
+    pulses := silk_pulses(mut d, ind.sig, ind.qoff, ch.frame_length)
+    ctrl := decode_parameters(mut ch, mut ind, cond)
+    xq := decode_core(mut ch, ind, ctrl, pulses)
+    mem := ch.ltp_mem
+    fl := ch.frame_length
+    mut kept := List[int]()
+    if mem > fl
+        for i in fl..mem
+            kept.push(ch.out[i])
+        for v in xq
+            kept.push(v)
+    else
+        for i2 in fl - mem..fl
+            kept.push(xq[i2])
+    ch.out = kept
+    ch.prev_type = ind.sig
+    ch.first = false
+    ch.lag_prev = ctrl.pitch[ch.nb_subfr - 1]
+    xq
+
+## The resampler to 48 kHz (silk_resampler_private_IIR_FIR): 2x up by an
+## all-pass pair, then a 12-phase FIR.
+struct Resampler
+    fin int
+    delay int
+    iir List[int]
+    fir List[int]
+    dbuf List[int]
+    batch int
+    inv int
+
+fn resampler(khz int) Resampler
+    mut inv := (khz * 1000).shl(15) / 48000 * 4
+    while smulww(inv, 48000) < (khz * 1000).shl(1)
+        inv += 1
+    delay := match khz
+        8 => 0
+        12 => 4
+        _ => 7
+    Resampler(
+        fin: khz,
+        delay: delay,
+        iir: izeros(6),
+        fir: izeros(8),
+        dbuf: izeros(khz),
+        batch: khz * 10,
+        inv: inv,
+    )
+
+fn allpass(mut s List[int], i int, x int, c int, third bool) int
+    y := x - s[i]
+    k := if third then smlawb(y, y, c) else smulwb(y, c)
+    o := s[i] + k
+    s[i] = x + k
+    o
+
+fn up2(mut r Resampler, x List[int]) List[int]
+    mut s := r.iir
+    mut out := List[int]()
+    for v in x
+        in32 := v.shl(10)
+        a1 := allpass(mut s, 0, in32, 1746, false)
+        a2 := allpass(mut s, 1, a1, 14986, false)
+        a3 := allpass(mut s, 2, a2, -26453, true)
+        out.push(sat16(rround(a3, 10)))
+        b1 := allpass(mut s, 3, in32, 6854, false)
+        b2 := allpass(mut s, 4, b1, 25769, false)
+        b3 := allpass(mut s, 5, b2, -9994, true)
+        out.push(sat16(rround(b3, 10)))
+    r.iir = s
+    out
+
+fn iir_fir(mut r Resampler, x List[int]) List[int]
+    mut out := List[int]()
+    mut pos := 0
+    while true
+        n := (x.len() - pos).min(r.batch)
+        mut buf := r.fir
+        for v in up2(mut r, x[pos..pos + n])
+            buf.push(v)
+        top := n.shl(17)
+        mut idx := 0
+        while idx < top
+            ti := smulwb(idx.bit_and(0xFFFF), 12)
+            b := idx.shr(16)
+            f := ti * 4
+            g := (11 - ti) * 4
+            mut acc := buf[b] * FRAC_FIR_12[f] + buf[b + 1] * FRAC_FIR_12[f + 1]
+            acc += buf[b + 2] * FRAC_FIR_12[f + 2] + buf[b + 3] * FRAC_FIR_12[f + 3]
+            acc += buf[b + 4] * FRAC_FIR_12[g + 3] + buf[b + 5] * FRAC_FIR_12[g + 2]
+            acc += buf[b + 6] * FRAC_FIR_12[g + 1] + buf[b + 7] * FRAC_FIR_12[g]
+            out.push(sat16(rround(acc, 15)))
+            idx += r.inv
+        pos += n
+        r.fir = buf[n.shl(1)..n.shl(1) + 8]
+        if pos >= x.len()
+            break
+    out
+
+## A frame at the internal rate to 48 kHz, after the decoder's delay.
+fn op_resample(mut r Resampler, x List[int]) List[int]
+    ns := r.fin - r.delay
+    for i in 0..ns
+        r.dbuf[r.delay + i] = x[i]
+    head := r.dbuf
+    mut out := iir_fir(mut r, head)
+    for v in iir_fir(mut r, x[ns..x.len() - r.delay])
+        out.push(v)
+    for i2 in 0..r.delay
+        r.dbuf[i2] = x[x.len() - r.delay + i2]
+    out
+
+## Every SILK channel of a stream with the stereo state between them.
+struct SilkState
+    api int
+    internal int
+    mid SilkChan
+    side SilkChan
+    pred_prev List[int]
+    smid List[int]
+    sside List[int]
+    prev_mid_only bool
+
+fn silk_state(api int) SilkState
+    SilkState(
+        api: api,
+        internal: 0,
+        mid: silk_chan(),
+        side: silk_chan(),
+        pred_prev: [0, 0],
+        smid: [0, 0],
+        sside: [0, 0],
+        prev_mid_only: false,
+    )
+
+## The mid-side prediction weights in Q13 (silk_stereo_decode_pred).
+fn stereo_pred(mut d RangeDecoder) List[int]
+    n := d.icdf(STEREO_JOINT_ICDF, 8)
+    mut ix := [0, 0, n / 5, 0, 0, n - 5 * (n / 5)]
+    for k in 0..2
+        ix[k * 3] = d.icdf(UNIFORM3, 8)
+        ix[k * 3 + 1] = d.icdf(UNIFORM5, 8)
+    mut pred := [0, 0]
+    for k2 in 0..2
+        q := ix[k2 * 3] + 3 * ix[k2 * 3 + 2]
+        lo := STEREO_QUANT_Q13[q]
+        step := smulwb(STEREO_QUANT_Q13[q + 1] - lo, 6554)
+        pred[k2] = lo + smulbb(step, 2 * ix[k2 * 3 + 1] + 1)
+    pred[0] -= pred[1]
+    pred
+
+## Mid and side to left and right (silk_stereo_MS_to_LR). `x1` and `x2`
+## hold two samples of history and then the frame.
+fn ms_to_lr(mut st SilkState, mut x1 List[int], mut x2 List[int], pred List[int], khz int, fl int)
+    x1[0] = st.smid[0]
+    x1[1] = st.smid[1]
+    x2[0] = st.sside[0]
+    x2[1] = st.sside[1]
+    st.smid = [x1[fl], x1[fl + 1]]
+    st.sside = [x2[fl], x2[fl + 1]]
+    mut p0 := st.pred_prev[0]
+    mut p1 := st.pred_prev[1]
+    denom := 65536 / (8 * khz)
+    d0 := rround(smulbb(pred[0] - st.pred_prev[0], denom), 16)
+    d1 := rround(smulbb(pred[1] - st.pred_prev[1], denom), 16)
+    for n in 0..fl
+        if n < 8 * khz
+            p0 += d0
+            p1 += d1
+        else
+            p0 = pred[0]
+            p1 = pred[1]
+        mut s := (x1[n] + x1[n + 2] + x1[n + 1].shl(1)).shl(9)
+        s = smlawb(x2[n + 1].shl(8), s, p0)
+        s = smlawb(s, x1[n + 1].shl(11), p1)
+        x2[n + 1] = sat16(rround(s, 8))
+    st.pred_prev = pred
+    for n2 in 0..fl
+        a := x1[n2 + 1]
+        b := x2[n2 + 1]
+        x1[n2 + 1] = sat16(a + b)
+        x2[n2 + 1] = sat16(a - b)
+
+## Skips one channel's low-bitrate redundancy frame (RFC 6716 §4.2.7):
+## decoding its indices still moves the channel's pitch-lag context.
+fn skip_lbrr(mut ch SilkChan, mut d RangeDecoder, cond int)
+    ind := decode_indices(mut ch, mut d, true, cond)
+    silk_pulses(mut d, ind.sig, ind.qoff, ch.frame_length)
+
+## The SILK frames of one Opus frame of `ms` milliseconds at `khz` kHz with
+## `internal` coded channels: 48 kHz samples per API channel (silk_Decode).
+fn silk_decode(mut st SilkState, mut d RangeDecoder, internal int, khz int, ms int) List[List[int]]
+    if internal > st.internal and st.internal != 0
+        st.side = silk_chan()
+    nfr := if ms <= 20 then 1 else ms / 20
+    subfr := if ms == 10 then 2 else 4
+    set_fs(mut st.mid, khz, subfr)
+    if internal == 2
+        set_fs(mut st.side, khz, subfr)
+    if st.api == 2 and internal == 2 and st.internal == 1
+        st.pred_prev = [0, 0]
+        st.sside = [0, 0]
+        st.side.rs = st.mid.rs
+    st.internal = internal
+    mut vad := izeros(6)
+    mut lflags := izeros(6)
+    mut lbrr := [false, false]
+    for n in 0..internal
+        for i in 0..nfr
+            vad[n * 3 + i] = if d.bit_logp(1) then 1 else 0
+        lbrr[n] = d.bit_logp(1)
+    for n2 in 0..internal
+        if lbrr[n2]
+            if nfr == 1
+                lflags[n2 * 3] = 1
+            else
+                tab := if nfr == 2 then LBRR_FLAGS_2_ICDF else LBRR_FLAGS_3_ICDF
+                sym := d.icdf(tab, 8) + 1
+                for i2 in 0..nfr
+                    lflags[n2 * 3 + i2] = sym.shr(i2).bit_and(1)
+    for i3 in 0..nfr
+        for n3 in 0..internal
+            if lflags[n3 * 3 + i3] == 1
+                if internal == 2 and n3 == 0
+                    stereo_pred(mut d)
+                    if lflags[3 + i3] == 0
+                        d.icdf(MID_ONLY_ICDF, 8)
+                cond := if i3 > 0 and lflags[n3 * 3 + i3 - 1] == 1 then COND else INDEP
+                if n3 == 0
+                    skip_lbrr(mut st.mid, mut d, cond)
+                else
+                    skip_lbrr(mut st.side, mut d, cond)
+    mut left := List[int]()
+    mut right := List[int]()
+    for i4 in 0..nfr
+        mut mid_only := false
+        mut pred := [0, 0]
+        if internal == 2
+            pred = stereo_pred(mut d)
+            if vad[3 + i4] == 0
+                mid_only = d.icdf(MID_ONLY_ICDF, 8) == 1
+        if internal == 2 and not mid_only and st.prev_mid_only
+            chan_reset(mut st.side)
+        fl := st.mid.frame_length
+        cond1 := if i4 == 0 then INDEP else COND
+        mut b0 := [0, 0]
+        for v in silk_frame(mut st.mid, mut d, vad[i4] == 1, cond1)
+            b0.push(v)
+        mut b1 := [0, 0]
+        if internal == 2
+            if mid_only
+                for _ in 0..fl
+                    b1.push(0)
+            else
+                mut cond2 := COND
+                if i4 <= 1
+                    cond2 = INDEP
+                elif st.prev_mid_only
+                    cond2 = INDEP_NO_LTP
+                for v2 in silk_frame(mut st.side, mut d, vad[3 + i4] == 1, cond2)
+                    b1.push(v2)
+        if st.api == 2 and internal == 2
+            ms_to_lr(mut st, mut b0, mut b1, pred, khz, fl)
+        else
+            b0[0] = st.smid[0]
+            b0[1] = st.smid[1]
+            st.smid = [b0[fl], b0[fl + 1]]
+        for v3 in op_resample(mut st.mid.rs, b0[1..fl + 1])
+            left.push(v3)
+        if st.api == 2 and internal == 2
+            for v4 in op_resample(mut st.side.rs, b1[1..fl + 1])
+                right.push(v4)
+        st.prev_mid_only = mid_only
+    if st.api == 1
+        return [left]
+    if internal == 1
+        return [left, left]
+    [left, right]
+
+## The Opus layer (RFC 6716 §4.5)
+
+## An Opus decoder for `channels` output channels (std.opus.5): the CELT and
+## SILK states and what the last frame was, for the crossinges between modes.
+pub struct Stream
+    channels int
+    celt CeltState
+    silk SilkState
+    prev_mode int
+    prev_redundancy bool
+
+## A decoder for one stream (std.opus.5), giving 1 or 2 channels.
+pub fn stream(channels int) Stream
+    requires channels == 1 or channels == 2
+    Stream(
+        channels: channels,
+        celt: celt_state(channels),
+        silk: silk_state(channels),
+        prev_mode: 0,
+        prev_redundancy: false,
+    )
+
+## Modes as the crossinges compare them; 0 is "no frame yet".
+SILK_ONLY := 1
+HYBRID := 2
+CELT_ONLY := 3
+
+## A CELT frame for the stream's output channels: a mono frame feeds both
+## channels, a stereo frame is averaged for one.
+fn celt_out(mut st Stream, mut d RangeDecoder, c int, lm int, start int, end int) List[List[float]]
+    pcm := celt_frame(mut st.celt, mut d, c, lm, start, end)
+    if st.channels == c
+        return pcm
+    if st.channels == 2
+        return [pcm[0], pcm[0]]
+    [[0.5 * (pcm[0][i] + pcm[1][i]) for i in 0..pcm[0].len()]]
+
+## One frame of `f` samples at 48 kHz in `mode` (RFC 6716 §4.5, libopus
+## opus_decode_frame): the SILK layer, the CELT layer from band 17 in a
+## hybrid frame, and the 5 ms redundant CELT frame that smooths a crossing.
+fn opus_frame(mut st Stream, data bytes, mode int, pk Packet, c int) List[List[float]] ! OpusError
+    f := pk.samples
+    was := st.prev_mode
+    from_silk := mode == CELT_ONLY and was != CELT_ONLY and not st.prev_redundancy
+    crossing := was != 0 and (from_silk or (mode != CELT_ONLY and was == CELT_ONLY))
+    mut d := decoder(data)
+    mut ln := data.len()
+    mut silk_pcm := List[List[int]]()
+    if mode != CELT_ONLY
+        if was == CELT_ONLY
+            st.silk = silk_state(st.channels)
+        khz := if mode == SILK_ONLY then [8, 12, 16][pk.config / 4] else 16
+        silk_pcm = silk_decode(mut st.silk, mut d, c, khz, (f / 48).max(10))
+    mut redundancy := false
+    mut celt_to_silk := false
+    mut red := 0
+    extra := if mode == HYBRID then 20 else 0
+    if mode != CELT_ONLY and d.tell() + 17 + extra <= 8 * ln
+        redundancy = if mode == HYBRID then d.bit_logp(12) else true
+        if redundancy
+            celt_to_silk = d.bit_logp(1)
+            red = if mode == HYBRID then d.uint(256) + 2 else ln - (d.tell() + 7).shr(3)
+            ln -= red
+            if ln * 8 < d.tell()
+                return OpusError(why: "a redundant frame longer than its packet")
+            d.shorten(red)
+    if crossing and not redundancy
+        return OpusError(why: "a crossing between CELT and SILK without a redundant frame")
+    end := end_band(pk.bandwidth)
+    mut red_audio := List[List[float]]()
+    if redundancy and celt_to_silk
+        mut rd := decoder(data[ln..ln + red])
+        red_audio = celt_out(mut st, mut rd, c, 1, 0, end)
+    mut pcm := List[List[float]]()
+    if mode != SILK_ONLY
+        if mode != was and was != 0 and not st.prev_redundancy
+            st.celt = celt_state(st.channels)
+        lm := match f
+            120 => 0
+            240 => 1
+            480 => 2
+            _ => 3
+        start := if mode == HYBRID then 17 else 0
+        pcm = celt_out(mut st, mut d, c, lm, start, end)
+    else
+        for _ in 0..st.channels
+            pcm.push(zeros(f))
+        if was == HYBRID and not (redundancy and celt_to_silk and st.prev_redundancy)
+            mut sd := decoder(b"\xff\xff")
+            quiet := celt_out(mut st, mut sd, c, 0, 0, end)
+            for ch in 0..st.channels
+                mut row := pcm[ch]
+                for i in 0..120
+                    row[i] += quiet[ch][i]
+                pcm[ch] = row
+    if mode != CELT_ONLY
+        for ch2 in 0..st.channels
+            mut row2 := pcm[ch2]
+            for i2 in 0..f
+                row2[i2] += silk_pcm[ch2][i2].to_float()
+            pcm[ch2] = row2
+    if redundancy and not celt_to_silk
+        st.celt = celt_state(st.channels)
+        mut rd2 := decoder(data[ln..ln + red])
+        tail := celt_out(mut st, mut rd2, c, 1, 0, end)
+        for ch3 in 0..st.channels
+            mut row3 := pcm[ch3]
+            for i3 in 0..120
+                w := WINDOW[i3] * WINDOW[i3]
+                at := f - 120 + i3
+                row3[at] = w * tail[ch3][120 + i3] + (1.0 - w) * row3[at]
+            pcm[ch3] = row3
+    if redundancy and celt_to_silk and (was != SILK_ONLY or st.prev_redundancy)
+        for ch4 in 0..st.channels
+            mut row4 := pcm[ch4]
+            for i4 in 0..120
+                row4[i4] = red_audio[ch4][i4]
+                w2 := WINDOW[i4] * WINDOW[i4]
+                row4[120 + i4] = w2 * row4[120 + i4] + (1.0 - w2) * red_audio[ch4][120 + i4]
+            pcm[ch4] = row4
+    st.prev_mode = mode
+    st.prev_redundancy = redundancy and not celt_to_silk
+    pcm
+
 ## Decodes one Opus packet with `st` (std.opus.5): interleaved samples at
-## 48 kHz in -1..1, `st.channels` per frame. A mono stream feeds both
-## channels of a stereo state; a stereo stream is averaged for a mono one.
-## SILK and hybrid packets fail for now.
-pub fn decode(mut st CeltState, b bytes) audio.Clip ! OpusError
+## 48 kHz in -1..1, `st.channels` per frame. CELT, SILK and hybrid frames
+## all decode; a crossing between CELT and SILK fails unless the encoder sent
+## the redundant frame that bridges it.
+pub fn decode(mut st Stream, b bytes) audio.Clip ! OpusError
     pk := parse_packet(b) else e
         return e
-    celt := match pk.mode
-        Celt => true
-        Silk => false
-        Hybrid => false
-    if not celt
-        return OpusError(why: "SILK and hybrid frames are not decoded yet")
-    lm := match pk.samples
-        120 => 0
-        240 => 1
-        480 => 2
-        _ => 3
+    mode := match pk.mode
+        Silk => SILK_ONLY
+        Hybrid => HYBRID
+        Celt => CELT_ONLY
     c := if pk.stereo then 2 else 1
-    out_c := st.channels
     mut samples := List[float]()
     for frame in pk.frames
-        pcm := celt_frame(mut st, frame, c, lm, end_band(pk.bandwidth))
+        pcm := opus_frame(mut st, frame, mode, pk, c) else e2
+            return e2
         for i in 0..pk.samples
-            if out_c == c
-                for ch in 0..c
-                    samples.push(pcm[ch][i] / 32768.0)
-            elif out_c == 2
-                v := pcm[0][i] / 32768.0
-                samples.push(v)
-                samples.push(v)
-            else
-                samples.push(0.5 * (pcm[0][i] + pcm[1][i]) / 32768.0)
-    audio.Clip(rate: 48000, channels: out_c, samples: samples)
+            for ch in 0..st.channels
+                samples.push(pcm[ch][i] / 32768.0)
+    audio.Clip(rate: 48000, channels: st.channels, samples: samples)

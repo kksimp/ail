@@ -55,9 +55,26 @@ and a message naming this rule; it never crashes.
 from the default input. The clip has the rate and channels the device gave,
 which may differ from those asked for; `resample` and `to_mono` adapt it.
 
-**Planned (no rule ID yet):** a PipeWire host; streaming output
-(`open_output` with `write`) with a ring buffer in the host and under 20 ms
-latency; mixing several plays in a task off the audio thread.
+**std.audio.12** — Streaming output, for video and games. `stream_open(mut d, rate,
+channels)` opens one continuous output on the host; `stream_write(mut d, clip)`
+queues a chunk (the clip must have the stream's rate and channels; about 20 ms
+is a good size) and returns at once with a `StreamStatus`; `stream_status`,
+`stream_pause`, `stream_resume` and `stream_flush` do what they say and return
+the `StreamStatus` too; `stream_close` returns nothing. `StreamStatus` has `played`, the frames the device has finished, and
+`buffered`, the frames queued and not yet played: `played` is the clock to
+time video frames to, accurate to one chunk. `stream_flush` drops the queue and
+zeroes both counts, for a seek. `stream_write` does not wait for playback and
+the host's queue has no limit, so the caller applies back-pressure: write while
+`buffered` is under about 200 ms of frames and sleep otherwise. The host protocol adds `open_stream RATE CH`,
+`write BASE64`, `clock`, `pause`, `resume`, `flush` and `close_stream`, each
+answered by `played N buffered M` (`ok` for open and close). All three hosts
+(macOS, Linux, Windows) implement it. A host started with `--null` (or with
+`AIL_AUDIO_NULL=1`) streams to a silent device whose clock runs in real time
+and stops while paused; `open_null()` starts it that way, so a test or a
+machine with no sound card can still stream. *(ADR 0993)*
+
+**Planned (no rule ID yet):** a PipeWire host; mixing several
+plays in a task off the audio thread.
 
 ## Rejected alternatives
 
@@ -136,6 +153,35 @@ fn main() !
         print("error: {err}")
         return
     print(audio.frames(c))
+```
+
+```ail norun rules=std.audio.12
+use std.audio
+use std.audio.device
+
+fn main() !
+    mut d := device.open()?
+    device.stream_open(mut d, 8000, 1)?
+    chunk := audio.tone(440.0, 20, 8000, 0.3)
+    for _ in 0..25
+        st := device.stream_write(mut d, chunk)?
+        if st.buffered > 800
+            print("{st.played} frames played, {st.buffered} queued")
+    after := device.stream_flush(mut d)?
+    print("{after.played} played after the flush")
+    device.stream_close(mut d)?
+    device.close(move d)
+```
+
+```ail rules=std.audio.12
+use std.audio
+use std.audio.device
+
+fn main() !
+    c := device.open_at("/nonexistent/ail-audio-host") else err
+        print("no audio device: {err.kind}")
+        return
+    device.close(move c)
 ```
 
 ## Open for Fable
