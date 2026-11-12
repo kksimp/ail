@@ -459,10 +459,6 @@ pub fn Asm.vins_hi(mut self, d int, n int)
 pub fn Asm.vlane_hi(mut self, d int, n int)
     word(1578632192 + n * 32 + d)
 
-## `mov vd.16b, vn.16b`.
-pub fn Asm.vmov(mut self, d int, n int)
-    word(rrr(1319115776, d, n, n))
-
 ## `faddp dd, vn.2d`: lane 0 + lane 1.
 pub fn Asm.vfaddp_d(mut self, d int, n int)
     word(2121324544 + n * 32 + d)

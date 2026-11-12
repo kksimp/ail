@@ -270,7 +270,10 @@ fn slp_push(mut s SlpState, kind str, a int, b int, x int, at int) int
 
 ## Whether `a` is lane 0 and `b` lane 1 of one pack.
 fn slp_lanes(s SlpState, a int, b int) bool
-    s.lane_pack[a] >= 0 and s.lane_pack[a] == s.lane_pack[b] and s.lane_no[a] == 0 and s.lane_no[b] == 1
+    s.lane_pack[a] >= 0
+        and s.lane_pack[a] == s.lane_pack[b]
+        and s.lane_no[a] == 0
+        and s.lane_no[b] == 1
 
 ## Forget the packs made since there were `mark` of them.
 fn slp_undo(mut s SlpState, mark int)
