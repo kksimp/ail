@@ -58,10 +58,7 @@ pub fn inline_module(mut out Module)
         else
             shaped := known_lists(mark_nonneg(interchange(vec_loops(f))))
             f = forwarded(hoist_headers(fill_loops(
-                kept_lengths(
-                    iv_sums(bce(shaped, reserve, grow_only)),
-                    reserve and grow_only,
-                ),
+                kept_lengths(iv_sums(bce(shaped, reserve, grow_only)), reserve and grow_only),
                 fills and not opt_off("fill"),
             )))
             if not opt_off("fold")
