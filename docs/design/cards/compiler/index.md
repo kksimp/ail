@@ -2,11 +2,11 @@
 (root)  67 items
 a64  81 items
 api  284 items
-ast  142 items
+ast  152 items
 attachcli  23 items
 budget  28 items
 cheader  55 items
-check  442 items
+check  449 items
 codegen  56 items
 derive  43 items
 doc  18 items
@@ -15,10 +15,10 @@ edit  97 items
 explain  37 items
 fix  54 items
 fixrun  17 items
-fmt  64 items
+fmt  63 items
 help  10 items
 load  117 items
-mir  673 items
+mir  688 items
 obj  66 items
 pkg  49 items
 scaffold  6 items
