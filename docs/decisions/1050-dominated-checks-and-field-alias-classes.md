@@ -99,8 +99,23 @@ Option A buys the measured cases at the least risk before RC4.
   list header out of a loop that stores no slot at that offset and makes no
   call; struct-of-lists code (Clove's context mixing) still pays the first
   load of each iteration.
-- Measurements (perfbench, x86-64 and arm64): see the PR; recorded here when
-  it lands.
+- Measured on main cf7170a1 vs this change, perfbench interleaved best of 11,
+  after/before wall time (2026-11-12). No program is slower beyond noise; the
+  gains are where a field store sat between two reads of a list:
+
+  | program | x86-64 (ail-linux) | arm64 (Mac) |
+  |---|---|---|
+  | lzr | 0.983 | 0.997 |
+  | regex_scan | 0.988 | 0.999 |
+  | matmul1400 | 0.957 | 0.993 |
+  | raytrace | 0.997 | 0.983 |
+  | sieve | 0.986 | 1.000 |
+  | others (10) | 0.991 to 1.007 | 0.973 to 1.020 |
+
+  The compiler's own executable is 0.8% smaller on x86-64 and 0.9% on arm64;
+  its build time is unchanged (33.93 to 34.07 s, 15.34 to 15.27 s). With the
+  pass on, lzr runs 0.36% fewer instructions than with every new part off
+  (`fwdjoin,fwdslot,fwdcheck`), which is the forwarding of ADR 0816 alone.
 
 ## Rejected alternatives
 
