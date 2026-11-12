@@ -347,9 +347,9 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List
         Variant(_, _, names, _) =>
             given := names else []
             [Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown) for nm in given]
-        Nested(_, _, fields, _) =>
+        Nested(_, _, nfields, _) =>
             mut out := List[Binding]()
-            for q in fields
+            for q in nfields
                 out.extend(tuple_pattern_names(q))
             out
         _ => []

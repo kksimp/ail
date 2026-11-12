@@ -525,9 +525,9 @@ fn pattern_names(p ast.Pattern) List[str]
             for q in ps
                 out.extend(pattern_names(q))
             out
-        Nested(_, _, fields, _) =>
+        Nested(_, _, nfields, _) =>
             mut out := List[str]()
-            for q in fields
+            for q in nfields
                 out.extend(pattern_names(q))
             out
         Wildcard | Literal | Alt | Range => []

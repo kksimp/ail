@@ -411,8 +411,8 @@ fn Mover.pattern(mut self, p ast.Pattern)
             for a in elems
                 pattern(a)
         BindName(n, _) => declare(n)
-        Nested(_, _, fields, _) =>
-            for a in fields
+        Nested(_, _, nfields, _) =>
+            for a in nfields
                 pattern(a)
         Wildcard => return
         Literal => return
