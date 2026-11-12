@@ -462,7 +462,8 @@ fn main()
 allowed only as the one argument of a list's `sorted`, `sort`, `min` and
 `max`, and of a set's `sorted`; anywhere else, and a `by:` argument without
 `|x|`, is a compile-time error. A key function isn't a value: it can't be
-bound, returned, stored or passed to a user function. *(ADR 0250)*
+bound, returned, stored or passed to a user function. Without `by:`, `|x| e`
+is a function literal, a value (`type.fn.4`). *(ADR 0250, ADR 1067)*
 
 **expr.key.2** — `x` is a new immutable binding of the element type
 (`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in

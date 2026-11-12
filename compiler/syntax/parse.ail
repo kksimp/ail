@@ -1735,7 +1735,47 @@ fn Parser.expression_plain(mut self) ast.Expr?
         return match_expr()
     if at_sym("|") or at_sym("||")
         return closure()
+    if lambda_colon() > 0
+        return python_lambda()
     range()
+
+## Python's `lambda x, y: e` ahead: the offset of its `:`, else 0.
+fn Parser.lambda_colon(self) int
+    if tag_at(0) != "id" or tok_text(peek()) != "lambda"
+        return 0
+    mut k := 1
+    while tag_at(k) == "id"
+        k += 1
+        if sym_at(k) != ","
+            break
+        k += 1
+    if sym_at(k) == ":" then k else 0
+
+## `lambda x: e` (gram.foreign.1, ADR 1067): reported with the AIL form
+## `|x| e`, with a fix, and parsed as that function literal.
+fn Parser.python_lambda(mut self) ast.Expr?
+    pos := here()
+    colon := i + lambda_colon()
+    mut params := List[ast.ClosureParam]()
+    mut names := List[str]()
+    i += 1
+    while i < colon
+        if tag_at(0) == "id"
+            params.push(ast.ClosureParam(name: tok_text(peek()), pos: here(), ty: absent[ast.TypeRef]()))
+            names.push(tok_text(peek()))
+        i += 1
+    i += 1
+    head := "|{names.join(", ")}|"
+    error_text(
+        "gram.foreign.1",
+        pos,
+        "AIL has no `lambda`; a function literal is written `{head} ...`",
+        "the parameters go between bars and the body follows on the same line, `|x| x + 1`",
+        "write `{head}`",
+    )
+    attach("write `{head}`", [fix.span(pos, tok_end(colon) else here(), head)])
+    body := expression()?
+    ast.Expr.Closure(params: params, body: body, pos: pos)
 
 ## `|a, b| e`, `|x int| e` or `|| e`: a function literal whose body is one
 ## expression, running to the end of the expression (type.fn.4, ADR 1067).

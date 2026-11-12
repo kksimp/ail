@@ -50,6 +50,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Child** | A process started with `proc.start`: a unique value with a process id and three `Channel[str]` streams (`stdin`, `out`, `err`); `proc.wait(move c)` or `proc.kill(move c)` ends it (ADRs 0424–0428). |
 | **Chunked transfer** | The HTTP framing that sends a body in sized chunks when its length is not known up front; `std.net` uses it for request bodies ([ADR 0637](decisions/0637-http-persistent-connections-and-timeouts.md)). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
+| **Closure object** | The collected object a native function value points to: the code address, then a function literal's copied locals (`native.fnval.1`, [ADR 1067](decisions/1067-closures.md)). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
 | **Compile-time-safe** | A function whose effect set has none of `io`, `unsafe`, `spawn` or a capability, so constants and derive generators may call it; the same functions `@pure` accepts (`ct.const.2`, ADR 0225). |
@@ -105,7 +106,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Foreign syntax** | A construct from Python, Rust, Go or TypeScript that AIL doesn't have (`&&`, `def`, `try`, `x++`, `len(xs)`). Reported once with the AIL spelling (`gram.foreign.1`, ADR 0262). |
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
-| **Function value** | A declared function used as a value, of type `fn(A, B) R`, that can be stored, passed and called; no closures (`type.fn.1-3`, ADRs 0455, 0456). |
+| **Function literal** | An anonymous function value written `\|x\| e`: one expression whose parameter types come from context or are written; it copies the locals it names when made (`type.fn.4`-`5`, [ADR 1067](decisions/1067-closures.md)). Also called a closure or lambda. |
+| **Function value** | A declared function or a function literal used as a value, of type `fn(A, B) R` (or `fn(A) R ! E`), that can be stored, passed and called (`type.fn.1-8`, ADRs 0455, 0456, 1067). |
 | **Fused instruction** | A bytecode instruction that does several steps of a loop body at once, cutting dispatch cost ([ADR 0619](decisions/0619-bytecode-calls-loops-and-fusion.md)). |
 | **Coverage-guided fuzzing** | `ail test --fuzz NAME`: a property test run on mutated inputs, keeping those that reach a new statement, with an optional corpus directory ([ADR 1015](decisions/1015-user-fuzzing.md)). |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |

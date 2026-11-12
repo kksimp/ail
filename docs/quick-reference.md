@@ -600,7 +600,25 @@ Your functions' arguments can be named (`show(tag, scale: 3, n: 4)`): positional
 first, then named in any order. Built-ins take no names.
 
 A declared function is a value of type `fn(A, B) R` (`f := double`, `f(21)`).
-Not generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+Not generic functions, methods, or ones with `mut` parameters.
+
+A function literal `|a, b| e` is a value too (`|| e` takes nothing). The body
+is one expression on the same line. Parameter types come from the expected
+`fn(...)` type, or are written: `|x int| x * 2`. It copies the locals its body
+names when it is made, and can't change them; to share state, capture a `ref`.
+`fn(A) R ! E` is a function that can fail; `?` in a literal leaves the literal.
+
+```ail
+fn adder(n int) fn(int) int
+    |x| x + n                         # copies n
+
+fn main()
+    xs := [3, 8, 5, 12]
+    lo := 4
+    print(xs.filter(|x| x > lo))      # [8, 5, 12]
+    print(xs.map(adder(1)))           # [4, 9, 6, 13]
+    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by
+```
 
 ## Shared cells, resources and `move`
 

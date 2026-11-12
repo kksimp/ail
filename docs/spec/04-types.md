@@ -404,18 +404,18 @@ or text form. *(ADR 0455)*
 
 **type.fn.2** — The name of a declared function, used where a value is
 expected and not called, is a function value of its type: `f := double`. The
-function MUST be a top-level function that is not generic, not a test, has no
-`mut` or `move` parameter, and does not fail (`T ! E`); anything else is an
-error. A local of the same name hides the function. Naming a function as a
-value counts as calling it for effect inference (`eff.infer.3`, `eff.pure.1`).
-*(ADR 0455)*
+function MUST be a top-level function that is not generic, not a test, and has
+no `mut` or `move` parameter; anything else is an error. A function that fails
+is a value of a failing function type (`type.fn.6`). A local of the same name
+hides the function. Naming a function as a value counts as calling it for
+effect inference (`eff.infer.3`, `eff.pure.1`). *(ADR 0455, ADR 1067)*
 
 **type.fn.3** — A value of function type is called like a function:
 `f(x)`, or `(s.run)(x)` for a field and `pick(name)(x)` for a result. The
 arguments are passed by position, `mut` is not allowed, and each must fit the
 parameter type (`expr.call.1`, `expr.call.2`). Calling a function value adds no
-effect of its own. There are no anonymous functions and no captured variables.
-*(ADR 0456)*
+effect of its own. A function literal (`type.fn.4`) makes a function value
+without declaring a function. *(ADR 0456, ADR 1067)*
 
 ```ail rules=type.fn.1,type.fn.2,type.fn.3
 fn double(n int) int
@@ -426,6 +426,118 @@ fn apply(f fn(int) int, x int) int
 
 fn main()
     print("{apply(double, 4)}")
+```
+
+**type.fn.4** — A function literal `|a, b| e` is a function value whose
+parameters are `a` and `b` and whose result is the value of the expression
+`e`; `|| e` takes no parameters. The body is one expression and MUST start on
+the line of the parameters. Each parameter's type is the matching parameter
+type of the function type the context expects (an annotation, a parameter, a
+field, a result); where none is expected it MUST be written after the name,
+`|x int| x + 1`, and a written type MUST equal an expected one. The number of
+parameters MUST equal the expected type's. The result type is the expected
+one, or else the body's. `return`, `break` and `continue` can't leave a
+literal. A `|` where an operand is expected opens a literal: when no parameter
+name or `|` follows it, the error names both readings (a literal, or bit-or
+`a | b`, which goes between operands, ADR 1070). *(ADR 1067)*
+
+```ail rules=type.fn.4
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn main()
+    print("{apply(|x| x * 3, 4)}")        # 12
+    sq := |n int| n * n
+    print("{sq(5)}")                      # 25
+    hello := || "hi"
+    print(hello())                        # hi
+```
+
+**type.fn.5** — A function literal copies each local of the enclosing
+function that its body names, when the literal is evaluated: later changes to
+the local don't reach the copy. Inside the body the copies are read-only:
+assigning one, calling a `mut` method on it, passing it `mut` or moving it is
+an error. A value of a `unique` type can't be copied in (`own.uniq.1`). To
+share state the literal can change, capture a `ref` cell (`own.ref.1`): the
+copy is the same cell. *(ADR 1067)*
+
+```ail rules=type.fn.5
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    n += 1
+
+fn adder(n int) fn(int) int
+    |x| x + n                             # copies `n`
+
+fn main()
+    mut base := 10
+    add := |x int| x + base
+    base = 100
+    print("{add(1)} {adder(2)(3)}")       # 11 5
+    c := ref Counter(n: 0)
+    tick := || c.bump()                   # the copy is the same cell
+    tick()
+    print("{c.n}")                        # 1
+```
+
+**type.fn.6** — `fn(A) R ! E` is the type of a function value that can fail
+with the errors `E` (`err.type.1`); the `!` after the result belongs to the
+function type. A call of such a value can fail and must be handled like any
+failing call (`err.use.1`). `?` in a literal's body leaves the literal, not
+the enclosing function: the literal then fails with the errors `?` passes on,
+as do the errors of a failing body. A function value fits a function type with
+the same parameter types when its result fits that type's result: one that
+can't fail, or fails with fewer errors, fits where a failing one is expected.
+*(ADR 1067)*
+
+```ail rules=type.fn.6
+error struct BadPort
+    text str
+
+fn port(text str) int ! BadPort
+    n := text.to_int() else return BadPort(text: text)
+    n
+
+fn sum(texts List[str], parse fn(str) int ! BadPort) int ! BadPort
+    mut total := 0
+    for t in texts
+        total += parse(t)?
+    total
+
+fn main()
+    print("{sum(["1", "2"], port) else -1}")          # 3
+    print("{sum(["ab"], |t| t.len()) else -1}")       # 2
+    next := |t str| port(t)? + 1
+    print("{next("x") else -1}")                      # -1
+```
+
+**type.fn.7** — A function literal's body is checked for effects as part of
+the function that contains the literal (`eff.infer.3`): writing a literal that
+prints makes the enclosing function do output, whether or not the literal is
+called. *(ADR 1067)*
+
+```ail rules=type.fn.7
+fn main()
+    say := |s str| print(s)
+    say("hi")                             # hi
+```
+
+**type.fn.8** — A generic function can take function values: in
+`fn map_all[T, U](xs List[T], f fn(T) U) List[U]` the arguments are checked in
+order, so a literal's parameter types come from the type arguments the
+arguments before it settle, and its result settles the rest. *(ADR 1067)*
+
+```ail rules=type.fn.8
+fn map_all[T, U](xs List[T], f fn(T) U) List[U]
+    mut out := List[U]()
+    for x in xs
+        out.push(f(x))
+    out
+
+fn main()
+    print(map_all([1, 2], |x| "n{x}"))    # ["n1", "n2"]
 ```
 
 ## Tuples
@@ -694,6 +806,47 @@ fn main()
     print("".is_empty())                    # true
     print([1].is_empty())                   # false
     print({"a": 1}.is_empty())              # false
+```
+
+**type.coll.21** — A list has methods that take a function of its element
+(`type.fn.1`), a function literal (`type.fn.4`) or any other function value:
+`any`, `all`, `find`, `filter`, `map` and `group_by` (`type.coll.22`-`26`).
+Each takes exactly one, which MUST take one parameter of the element type and
+MUST NOT fail (`type.fn.6`): to handle errors per element, use a `for` loop.
+The function is called on the elements in order, at most once each.
+*(ADR 1067)*
+
+**type.coll.22** — `xs.any(f)` is `true` when `f` returns `true` for some
+element, and `xs.all(f)` when it does for every element (`true` for an empty
+list). Both stop at the first element that settles the answer. `f` returns
+`bool`. *(ADR 1067)*
+
+**type.coll.23** — `xs.find(f)` returns the first element for which `f`
+returns `true`, or `none` (`T?`). *(ADR 1067)*
+
+**type.coll.24** — `xs.filter(f)` returns a new list of the elements for
+which `f` returns `true`, in order. *(ADR 1067)*
+
+**type.coll.25** — `xs.map(f)` returns a new list of `f`'s results, one per
+element, in order: a `List[U]` for `f` of type `fn(T) U`. `f` MUST return a
+value. *(ADR 1067)*
+
+**type.coll.26** — `xs.group_by(f)` returns a `Map[K, List[T]]` from each
+key `f` returns to the elements that gave it, keys in order of first
+appearance and elements in order. `K` MUST be hashable (`gen.bound.3`).
+*(ADR 1067)*
+
+```ail rules=type.coll.21,type.coll.22,type.coll.23,type.coll.24,type.coll.25,type.coll.26
+fn is_even(n int) bool
+    n % 2 == 0
+
+fn main()
+    xs := [3, 8, 5, 12]
+    print("{xs.any(|x| x > 10)} {xs.all(is_even)}")   # true false
+    print(xs.find(|x| x > 4) else 0)                  # 8
+    print(xs.filter(is_even))                         # [8, 12]
+    print(xs.map(|x| x * 2))                          # [6, 16, 10, 24]
+    print(xs.group_by(|x| x % 2))                     # {1: [3, 5], 0: [8, 12]}
 ```
 
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index

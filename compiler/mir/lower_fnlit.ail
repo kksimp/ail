@@ -271,7 +271,8 @@ fn Lower.lower_closure_lit(
     for k in 0..params.len()
         p := params[k]
         if written := p.ty
-            ptys.push(type_of(written) else return unsupported(written.pos, "this parameter type"))
+            wt := type_of(written) else return unsupported(written.pos, "this parameter type")
+            ptys.push(wt)
         elif s := shape
             if s.params[k].is_unknown()
                 return unsupported(p.pos, "a function literal whose parameter types aren't known here")
@@ -289,7 +290,7 @@ fn Lower.lower_closure_lit(
     mut caps := List[Cap]()
     mut words := List[Val]()
     for n in used.sorted()
-        if [p for p in params if p.name == n].len() > 0
+        if [q for q in params if q.name == n].len() > 0
             continue
         key := lookup(n) else continue
         t := var_ty[key]

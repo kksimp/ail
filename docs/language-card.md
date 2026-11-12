@@ -331,7 +331,11 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 `if` and `match` work as statements or values; a function can end with either.
 
 A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
-calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible ones; no lambdas.
+calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A literal
+`|x| x + n` is one too: one expression on its line, types from context or written
+(`|x int| ...`). It copies the locals it names when made; they are read-only inside
+(share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
+Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x| x > lo)`.
 
 ## Operators and strings
 
