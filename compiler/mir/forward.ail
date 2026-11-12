@@ -208,10 +208,7 @@ fn fw_check(i Inst, key str, mut seen Map[str, int], drop int) int
 
 ## A call that makes no list shorter, so passed checks stay true.
 fn fw_grows(name str) bool
-    is_push_name(name)
-        or name == "rt.list_new"
-        or name == "rt.list_reserve"
-        or name == "rt.obj_new"
+    is_push_name(name) or name == "rt.list_new" or name == "rt.list_reserve" or name == "rt.obj_new"
 
 ## A value that points at the start of an object with one slot per field: no
 ## list header and no list's elements.
