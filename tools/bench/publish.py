@@ -126,7 +126,7 @@ def latency_table(lats):
                     " | ".join("%.0f" % m["repeat"] if m and m.get("ok") and m.get("repeat") is not None else "-" for m in rep)))
     if any("fresh_clone" in l for l in lats):
         rows.append("| first `./ail run examples/hello.ail` in a fresh clone | hello (2) | %s |" % " | ".join(
-            "%.1f s" % (l["fresh_clone"]["ms"] / 1000.0) if l.get("fresh_clone", {}).get("ok") else "-" for l in lats))
+            ("%.1f s" % (l["fresh_clone"]["ms"] / 1000.0) if l["fresh_clone"].get("ok") else "-") if "fresh_clone" in l else "n/a" for l in lats))
     return "\n".join(rows)
 
 
