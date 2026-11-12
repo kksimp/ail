@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked for the nbody gap to be closed in 0.1.0
 - **Topic:** 25 — Optimization strategy
 - **Spec rules:** [native.vec.3](../spec/23-native.md)
-- **Extends:** [ADR 0246](0246-simd-vectorisation.md), [ADR 0845](0845-vectorization-order.md)
+- **Extends:** [ADR 0246](0246-simd-vectorisation.md), [ADR 0845](0845-vectorization-order-and-idioms.md)
 
 ## Context
 
