@@ -228,7 +228,9 @@ fn stand_in(sig Sig, pub_fn bool, out_path str) List[str]
         out.push("    infer_note(\"{cells.join(" ")}\")")
     out.push("")
     out.push("fn infer_note(infer_row str)")
-    out.push("    fs.append_text(\"{out_path}\", \"{LB}infer_row{RB}\\n\") else return")
+    # The path goes into an AIL string: `/` keeps a Windows temp path's `\\` from reading as escapes (lex.str.2).
+    fwd := out_path.replace("\\", "/")
+    out.push("    fs.append_text(\"{fwd}\", \"{LB}infer_row{RB}\\n\") else return")
     out
 
 ## Statistics of one column: smallest, largest, how many different values.
