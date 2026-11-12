@@ -8,7 +8,7 @@
 - **Topic:** Errors; standard library
 - **Spec rules:** std.err.1, std.net.4, std.compress.2, std.ui.1, std.ui.7,
   std.ui.10, std.app.5, std.app.8, std.app.9, std.audio.9, std.regex.11-23,
-  std.term.2-3, type.enum.7
+  std.term.2-3, std.gfx.2, std.gfx.3, std.gfx.11, std.args.2, type.enum.7
 - **Amends:** [ADR 0158](0158-standard-io-errors.md) (kind as a string)
 
 ## Context
@@ -87,9 +87,9 @@ for every enum and names the variant to write.
   `name()`, `text()` and `key_code(name)`); mouse events carry `MouseButton`
   and `MouseKind`. `app.AppKind` gains `Listen` and `Attach` for
   `std.attach`. The host protocol keeps its snake-case names.
-- Still strings: `std.gfx` key and gamepad button names (`gfx.down(i,
-  "left")`, `pad_down(i, 0, "a")`) and `args.Spec.kind`; they are the next
-  candidates.
+- `std.gfx` keys are `ui.KeyCode` too (`gfx.down(i, Right)`), gamepad
+  buttons are `gfx.PadButton` (`pad_down(i, 0, A)`), and `args.Spec.kind` is
+  `args.SpecKind`.
 - `DeviceError`'s display text is its `message` (it was `kind: message`).
 
 ## Rejected alternatives

@@ -2054,7 +2054,9 @@ takes a value. `short` is one letter or `""`. *(ADR 0627)*
 **std.args.2** — `pos(name, help)` is a required positional word; the
 positionals are taken in the order the specs list them. `rest(name, help)`
 allows any number of further positionals, which `Args.rest` returns. Without a
-`rest` spec, an extra word is an error. *(ADR 0627)*
+`rest` spec, an extra word is an error. A `Spec`'s `kind` is the `SpecKind`
+of the maker that made it: `Flag`, `Opt`, `Pos` or `Rest`. *(ADR 0627,
+ADR 1068)*
 
 **std.args.3** — `parse(name str, about str, specs List[Spec], words
 List[str]) Args ! ArgsError` reads `words` (usually `env.args()`). `--NAME` and
