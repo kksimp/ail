@@ -733,9 +733,10 @@ fn main()
 
 **native.inline.1** — A call may be replaced by a copy of the callee's body
 when the callee is not on a cycle of the call graph, is not `main` or part of
-the runtime, has no loop, and makes no indirect call: the one call of a
-function called from one place, up to 200 instructions, and any other call
-up to 12, with each caller grown by at most 200 instructions this way;
+the runtime, has no loop, and makes no indirect call, and the call is inside
+a loop of the caller: the one call of a function called from one place, up
+to 200 instructions, and any other call up to 12, with each caller grown by
+at most 200 instructions this way;
 besides the leaf functions of ADR 0391. A function that nothing calls or
 names after this is left out of the executable. A trap in, or below, a copied
 body reports the callee's frame and every frame it was copied into
@@ -747,7 +748,8 @@ fn area(w int, h int) int
     w * h
 
 fn main()
-    print(area(3, 4))
+    for k in 1..3
+        print(area(k, 4))
 ```
 
 **native.reuse.1** — A list made empty inside a loop may be one object that

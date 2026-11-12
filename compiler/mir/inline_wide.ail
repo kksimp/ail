@@ -3,11 +3,11 @@
 ## call graph, within a size budget. A function with one call in the whole
 ## program goes inline there up to `SINGLE_LIMIT` instructions: the copy
 ## replaces the only use, and the function is dropped. Any other goes up to
-## `WIDE_LIMIT` at any call, and those copies may grow a caller by at most
-## `CALLER_GROWTH`. Copying only at calls inside loops kept a smaller
-## compiler but lost the speed (lzr -2.6% against -8.3%, wordfreq 0 against
-## -17% on ail-linux), so any call goes. A
-## function on a cycle of the call graph never goes (its body could copy
+## `WIDE_LIMIT`, and those copies may grow a caller by at most
+## `CALLER_GROWTH`. Only calls inside a loop of the caller are copied: on
+## main of 2026-11-12 that kept all of the speed (lzr -2.4% on ail-linux)
+## at a third of the growth of copying at every call (compiler +10% against
+## +30%). A function on a cycle of the call graph never goes (its body could copy
 ## itself without end), nor one with a loop (measured slower copied). The
 ## calls a copy brings with it keep the frames they stand for (trace.frame.2).
 ## `AIL_OPT_OFF=wide` turns it off.
@@ -87,8 +87,9 @@ fn frame_prim(name str) bool
         _ => false
 
 ## Inline the calls of `f` that name a function in `leaves`, or in `wide`
-## under the cost model: the one call of a single-call function, written in
-## `f` itself, or any other call while `f` may still grow. At most `INLINE_BUDGET` calls; returns the call budget
+## under the cost model inside a loop of `f`: the one call of a single-call
+## function, written in `f` itself, or any other call while `f` may still
+## grow. At most `INLINE_BUDGET` calls; returns the call budget
 ## left.
 fn expand_wide(
     mut f Func,
@@ -106,15 +107,15 @@ fn expand_wide(
     mut take := wide
     if f.name.starts_with("rt.")
         take = Wide(sizes: Map[str, int](), single: Set[str]())
-    # `main` runs once: only its loops gain from a copy. Copies at the calls
-    # it makes once (`size()` reading the arguments) went with slower
-    # wordfreq, sieve and collatz on ail-linux (ADR 0940).
-    mut warm := [f.name != "main" for _ in 0..f.blocks.len()]
-    if f.name == "main"
-        for lp in find_loops(f)
-            for b in 0..f.blocks.len()
-                if lp.member[b]
-                    warm[b] = true
+    # Only calls inside a loop gain from a copy. Copies at calls made once
+    # (`size()` reading the arguments in `main`) went with slower wordfreq,
+    # sieve and collatz on ail-linux, and copies at every call cost the
+    # compiler 30% in size for no more speed (ADR 0940).
+    mut warm := [false for _ in 0..f.blocks.len()]
+    for lp in find_loops(f)
+        for b in 0..f.blocks.len()
+            if lp.member[b]
+                warm[b] = true
     mut changed := true
     while changed and budget > 0
         changed = false

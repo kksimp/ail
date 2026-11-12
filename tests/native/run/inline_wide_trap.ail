@@ -1,16 +1,18 @@
-# A function called from one place goes inline although it calls another
+# A function that calls another goes inline at a call inside a loop
 # (native.inline.1); a trap below the copy still lists every frame
-# (trace.frame.2): pick, then total, then main.
+# (trace.frame.2): pick, then twice, then main.
 fn pick(xs List[int], i int) int
     xs[i]
 
-fn total(xs List[int], n int) int
-    mut s := 0
-    for i in 0..n
-        s += pick(xs, i)
-    s
+fn twice(xs List[int], i int) int
+    pick(xs, i) * 2
 
 fn main()
     xs := [1, 2, 3]
-    print(total(xs, 3))
-    print(total(xs, 5))
+    mut s := 0
+    for i in 0..3
+        s += twice(xs, i)
+    print(s)
+    for i in 0..5
+        s += twice(xs, i)
+    print(s)
