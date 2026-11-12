@@ -9,7 +9,7 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail test FILE.ail          # run the `@test` functions
+./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail api --text FILE.ail    # declarations and `##` docs without bodies
 ./ail explain RULE           # a rule's text, its ADRs and an example
@@ -517,6 +517,18 @@ fn double(x int) int
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
+```
+
+```ail fragment
+@fixture("drop")                    # made per test run, `drop` always runs after it
+fn tmp() str !                      # `T` or `T !`; `!` setup failure fails the test
+    "x"
+
+fn drop(v str)                      # takes the value, returns nothing
+
+@test @with("tmp")
+fn uses(tmp str)                    # parameter named like the fixture
+    assert(tmp == "x")
 ```
 
 A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.

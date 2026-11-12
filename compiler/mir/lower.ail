@@ -554,6 +554,8 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             and a.name != "test"
             and a.name != "export c"
             and a.name != "tool"
+            and a.name != "fixture"
+            and a.name != "with"
             and a.name != "variadic c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0

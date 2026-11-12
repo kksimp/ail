@@ -73,7 +73,23 @@ struct TestFn
     first int
     last int
     header int
+    ## The header line from `fn` on, without the attributes in front of it.
+    head str
+    ## The generated parameters only; a fixture's parameter is not one (test.fixture.3).
     params List[Param]
+    ## The fixtures the test lists with `@with`, in order.
+    fx List[str]
+    ## The arguments of the call, in parameter order: `ail_fN` for a fixture, `ail_aN` for a generated input.
+    call List[str]
+
+## A `@fixture` function (test.fixture.1-2): `end` is its teardown function, empty if none.
+struct Fixture
+    name str
+    end str
+    first int
+    header int
+    head str
+    can_fail bool
 
 struct Span
     first int
@@ -87,6 +103,7 @@ struct Found
     tests List[TestFn]
     skipped List[Skipped]
     left_out List[Span]
+    fixtures List[Fixture]
 
 struct Verdict
     name str
@@ -382,57 +399,141 @@ fn contract_tests(lines List[str], effects str) Synth
         out.lines.push("    {call}")
     out
 
-## Every plain `@test fn NAME()` and the property tests.
+## `text` without the leading attribute `@NAME` (and its `("ARG")`, returned in `arg`), if it starts with it.
+struct Attr
+    rest str
+    arg str
+
+fn lead_attr(text str, name str) Attr?
+    t := text.trim_start()
+    key := "@{name}"
+    if not t.starts_with(key)
+        return none
+    mut rest := t.slice(key.len(), t.len())
+    mut arg := ""
+    if rest.starts_with("(\"")
+        close := rest.find("\")") else return none
+        arg = rest.slice(2, close)
+        rest = rest.slice(close + 2, rest.len())
+    elif not rest.is_empty() and not rest.starts_with(" ")
+        return none
+    Attr(rest: rest.trim_start(), arg: arg)
+
+## `text` with its leading `@NAME` attribute taken off (`@fixture`, `@with("x")`); unchanged otherwise.
+fn strip_attr(text str, name str) str
+    a := lead_attr(text, name) else return text
+    a.rest
+
+## Every plain `@test fn NAME()`, the property tests, and the `@fixture` functions.
 fn find_tests(lines List[str]) Found
-    mut found := Found(tests: [], skipped: [], left_out: [])
+    mut found := Found(tests: [], skipped: [], left_out: [], fixtures: [])
     decls := parse_decls(lines)
     mut i := 0
     while i < lines.len()
         l := lines[i]
-        if l.starts_with("@test")
-            rest := l.slice(5, l.len())
-            if rest.is_empty() or rest.starts_with(" ")
-                mut header := i
-                mut text := rest.trim_start()
-                if rest.trim().is_empty()
-                    header = i
-                    text = ""
-                    for j in i + 1..lines.len()
+        if lead_attr(l, "fixture") != none
+            mut cur := i
+            mut text := l
+            mut end := ""
+            for _ in 0..16
+                if a := lead_attr(text, "fixture")
+                    end = a.arg
+                    text = a.rest
+                elif text.trim().is_empty()
+                    mut nxt := -1
+                    for j in cur + 1..lines.len()
                         if not lines[j].trim().is_empty()
-                            header = j
-                            text = lines[j]
+                            nxt = j
                             break
-                if text.starts_with("fn ")
-                    sig := text.slice(3, text.len())
-                    if open := sig.find("(")
-                        name := sig.slice(0, open).trim()
-                        last := block_end(lines, header)
-                        # A bare `!` is a test that may fail with `?` (test.attr.4).
-                        trimmed := sig.trim_end()
-                        core := if trimmed.ends_with(" !") then trimmed.slice(
-                            0,
-                            trimmed.len() - 2,
-                        ).trim_end() else trimmed
-                        close := core.len() - 1
-                        why := bad_params(sig.slice(open + 1, close), decls)
-                        if not core.ends_with(")")
-                            found.skipped.push(Skipped(
-                                name: name,
-                                why: "a signature with a return type",
-                            ))
-                            found.left_out.push(Span(first: i, last: last))
-                        elif not why.is_empty()
-                            found.skipped.push(Skipped(name: name, why: why))
-                            found.left_out.push(Span(first: i, last: last))
+                    if nxt < 0
+                        break
+                    cur = nxt
+                    text = lines[nxt]
+                else
+                    break
+            if text.starts_with("fn ")
+                sig := text.slice(3, text.len())
+                if open := sig.find("(")
+                    close := sig.find(")") else open
+                    found.fixtures.push(Fixture(
+                        name: sig.slice(0, open).trim(),
+                        end: end,
+                        first: i,
+                        header: cur,
+                        head: text,
+                        can_fail: sig.slice(close, sig.len()).contains("!"),
+                    ))
+        if lead_attr(l, "test") != none or lead_attr(l, "with") != none
+            mut cur := i
+            mut text := l
+            mut names := List[str]()
+            mut saw := false
+            for _ in 0..16
+                if a := lead_attr(text, "test")
+                    saw = true
+                    text = a.rest
+                elif a := lead_attr(text, "with")
+                    names.push(a.arg)
+                    text = a.rest
+                elif text.trim().is_empty()
+                    mut nxt := -1
+                    for j in cur + 1..lines.len()
+                        if not lines[j].trim().is_empty()
+                            nxt = j
+                            break
+                    if nxt < 0
+                        break
+                    cur = nxt
+                    text = lines[nxt]
+                else
+                    break
+            if saw and text.starts_with("fn ")
+                header := cur
+                sig := text.slice(3, text.len())
+                if open := sig.find("(")
+                    name := sig.slice(0, open).trim()
+                    last := block_end(lines, header)
+                    # A bare `!` is a test that may fail with `?` (test.attr.4).
+                    trimmed := sig.trim_end()
+                    core := if trimmed.ends_with(" !") then trimmed.slice(
+                        0,
+                        trimmed.len() - 2,
+                    ).trim_end() else trimmed
+                    close := core.len() - 1
+                    all := parse_params(sig.slice(open + 1, close))
+                    mut gen := List[Param]()
+                    mut gen_text := List[str]()
+                    mut call := List[str]()
+                    for p in all
+                        fxi := names.index_of(p.name) else -1
+                        if fxi >= 0
+                            call.push("ail_f{fxi}")
                         else
-                            found.tests.push(TestFn(
-                                name: name,
-                                first: i,
-                                last: last,
-                                header: header,
-                                params: parse_params(sig.slice(open + 1, close)),
-                            ))
-                            i = last
+                            call.push("ail_a{gen.len()}")
+                            gen.push(p)
+                            gen_text.push("{p.name} {p.ty}")
+                    why := bad_params(gen_text.join(", "), decls)
+                    if not core.ends_with(")")
+                        found.skipped.push(Skipped(
+                            name: name,
+                            why: "a signature with a return type",
+                        ))
+                        found.left_out.push(Span(first: i, last: last))
+                    elif not why.is_empty()
+                        found.skipped.push(Skipped(name: name, why: why))
+                        found.left_out.push(Span(first: i, last: last))
+                    else
+                        found.tests.push(TestFn(
+                            name: name,
+                            first: i,
+                            last: last,
+                            header: header,
+                            head: text,
+                            params: gen,
+                            fx: names,
+                            call: call,
+                        ))
+                    i = last
         i += 1
     found
 
@@ -458,6 +559,7 @@ struct ModTest
     t TestFn
 
 struct ModFiles
+    fixtures Map[str, List[Fixture]]
     tests List[ModTest]
     skipped List[Skipped]
     lines Map[str, List[str]]
@@ -476,7 +578,12 @@ fn use_names(lines List[str]) List[str]
 
 ## The tests of the modules `lines` imports from directories under `dir`.
 fn module_tests(lines List[str], dir str) ModFiles
-    mut out := ModFiles(tests: [], skipped: [], lines: Map[str, List[str]]())
+    mut out := ModFiles(
+        fixtures: Map[str, List[Fixture]](),
+        tests: [],
+        skipped: [],
+        lines: Map[str, List[str]](),
+    )
     base := if dir.is_empty() then "." else dir
     for m in use_names(lines)
         for f in (fs.list_dir("{base}/{m}") else []).sorted()
@@ -488,6 +595,7 @@ fn module_tests(lines List[str], dir str) ModFiles
                 continue
             key := "{m}/{f}"
             out.lines[key] = src
+            out.fixtures[key] = found.fixtures
             for t in found.tests
                 if t.params.is_empty()
                     out.tests.push(ModTest(module: m, file: key, t: t))
@@ -500,10 +608,35 @@ fn module_tests(lines List[str], dir str) ModFiles
                 out.skipped.push(Skipped(name: "{m}.{s.name}", why: s.why))
     out
 
+## The function that runs test `t` with its fixtures (test.fixture.4): each is set up in the order
+## listed, a setup that fails ends the test as `setup of fixture NAME: ...` with the ones already
+## set up torn down, and each teardown is deferred right after its setup so it always runs.
+fn fx_wrapper(t TestFn, fixtures List[Fixture]) List[str]
+    mut gen := List[str]()
+    for g in 0..t.params.len()
+        gen.push("ail_a{g} {t.params[g].ty}")
+    mut out := ["", "fn ail_fx_{t.name}({gen.join(", ")}) !"]
+    for k in 0..t.fx.len()
+        for fx in fixtures
+            if fx.name != t.fx[k]
+                continue
+            if fx.can_fail
+                out.push("    ail_f{k} := {fx.name}()? \"setup of fixture {fx.name}\"")
+            else
+                out.push("    ail_f{k} := {fx.name}()")
+            if not fx.end.is_empty()
+                out.push("    defer {fx.end}(ail_f{k})")
+    out.push("    {t.name}({t.call.join(", ")})?")
+    out
+
 ## The module files of `scratch` with their kept tests made `pub fn NAME() !`; left-out ones are blank.
 fn write_modules(scratch str, mf ModFiles, dropped Set[int]) !
     for key in mf.lines.keys()
         mut keep := mf.lines[key]
+        for fx in mf.fixtures.get(key) else []
+            for j in fx.first..fx.header
+                keep[j] = ""
+            keep[fx.header] = fx.head
         for i in 0..mf.tests.len()
             if mf.tests[i].file != key
                 continue
@@ -512,15 +645,17 @@ fn write_modules(scratch str, mf ModFiles, dropped Set[int]) !
                 for j in t.first..t.last + 1
                     keep[j] = ""
             else
-                h := keep[t.header].trim_start()
-                sig := if t.header == t.first then h.slice(5, h.len()).trim_start() else h
-                keep[t.first] = ""
-                keep[t.header] = fallible(sig)
+                for j in t.first..t.header
+                    keep[j] = ""
+                keep[t.header] = fallible(t.head)
                 # `pub` can't carry a bare `!`, so a wrapper reports the failure as an assertion.
                 keep.push("")
                 keep.push("pub fn ail_run_{t.name}()")
-                keep.push("    {t.name}() else err")
+                callee := if t.fx.is_empty() then t.name else "ail_fx_{t.name}"
+                keep.push("    {callee}() else err")
                 keep.push("        assert_eq(\"\{err}\", \"\")")
+                if not t.fx.is_empty()
+                    keep.extend(fx_wrapper(t, mf.fixtures.get(key) else []))
         fs.write_text("{scratch}/{key}", keep.join("\n"))? "writing {key}"
 
 ## `sig` as a signature that can fail.
@@ -546,10 +681,13 @@ fn rewrite(
             for j in t.first..t.last + 1
                 keep[j] = ""
         else
-            h := lines[t.header].trim_start()
-            sig := if t.header == t.first then h.slice(5, h.len()).trim_start() else h
-            keep[t.first] = ""
-            keep[t.header] = fallible(sig)
+            for j in t.first..t.header
+                keep[j] = ""
+            keep[t.header] = fallible(t.head)
+    for fx in f.fixtures
+        for j in fx.first..fx.header
+            keep[j] = ""
+        keep[fx.header] = fx.head
     for r in f.left_out
         for j in r.first..r.last + 1
             keep[j] = ""
@@ -581,6 +719,7 @@ fn rewrite(
     mut slot := 1
     mut done := Set[str]()
     mut decs := ""
+    mut wrap := ""
     for i in 0..f.tests.len()
         if dropped.contains(i)
             continue
@@ -592,7 +731,10 @@ fn rewrite(
             decs = "{decs}{decoders(w, ty, mut done)}"
             tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
             call.push("ail_p{pi}")
-        tail = "{tail}        {t.name}({call.join(", ")})?\n        io.exit(0)\n"
+        callee := if t.fx.is_empty() then t.name else "ail_fx_{t.name}"
+        tail = "{tail}        {callee}({call.join(", ")})?\n        io.exit(0)\n"
+        if not t.fx.is_empty()
+            wrap = "{wrap}{fx_wrapper(t, f.fixtures).join("\n")}\n"
         slot += 1
     for i in 0..mf.tests.len()
         if mdropped.contains(i)
@@ -603,6 +745,7 @@ fn rewrite(
     tail = "{tail}    io.exit(4)\n"
     if snap_lines > 0
         tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
+    tail = "{tail}{wrap}"
     if not decs.is_empty()
         tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
     for l in tail.split("\n")
@@ -2927,11 +3070,33 @@ fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
     a
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] [--filter PATTERN]... [--list] FILE")
     io.exit(2)
     2
 
+## Whether `pat` matches `name` (test.filter.1): the pattern is a substring of the name, and `*` in it stands for any run of characters.
+fn glob_has(name str, pat str) bool
+    mut at := 0
+    for part in pat.split("*")
+        if part.is_empty()
+            continue
+        rest := name.slice(at, name.len())
+        k := rest.find(part) else return false
+        at += k + part.len()
+    true
+
+## Whether `name` matches any of `pats`; no patterns match every name.
+fn name_matches(name str, pats List[str]) bool
+    if pats.is_empty()
+        return true
+    for p in pats
+        if glob_has(name, p)
+            return true
+    false
+
 fn main() !
+    mut filters := List[str]()
+    mut list_only := false
     mut json := false
     mut update := false
     mut dry := false
@@ -2975,6 +3140,13 @@ fn main() !
             want = ""
         elif a == "--mutate"
             mutating = true
+        elif want == "--filter"
+            filters.push(a)
+            want = ""
+        elif a == "--filter"
+            want = a
+        elif a == "--list"
+            list_only = true
         elif want == "--max"
             mutate_max = a.to_int() else usage()
             want = ""
@@ -3062,6 +3234,9 @@ fn main() !
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
+    if not filters.is_empty() and (update or mutating)
+        io.eprint("error[test.filter.3]: `--filter` can't be combined with `--update` or `--mutate`, which need every test")
+        io.exit(2)
     if mutating and coverage.is_empty()
         # test.mutate.1: the build counts the statements run, to leave out code no test reaches.
         coverage = "lines"
@@ -3170,6 +3345,21 @@ fn main() !
                 found.left_out.push(Span(first: t.first, last: t.last))
         io.eprint("affected: {keep.len()} of {found.tests.len()} tests")
         found.tests = keep
+    mut listed_of := 0
+    mut selected_of := 0
+    if not filters.is_empty()
+        # test.filter.1: only the tests whose name matches; the rest are left out of the build.
+        mut keep := List[TestFn]()
+        for t in found.tests
+            listed_of += 1
+            if name_matches(if doc_names.contains(t.name) then doc_names[t.name] else t.name, filters)
+                keep.push(t)
+            else
+                found.left_out.push(Span(first: t.first, last: t.last))
+        selected_of = keep.len()
+        found.tests = keep
+        found.skipped = [k for k in found.skipped if name_matches(k.name, filters)]
+        skipped_contracts = [k for k in skipped_contracts if name_matches(k.name, filters)]
     w := World(decls: parse_decls(lines))
     for t in found.tests
         if t.header < lines.len()
@@ -3185,10 +3375,56 @@ fn main() !
     dir := path.dir(file)
     mut mf := module_tests(lines, dir)
     if contracts or not fuzz.is_empty()
-        mf = ModFiles(tests: [], skipped: [], lines: Map[str, List[str]]())
+        mf = ModFiles(
+            fixtures: Map[str, List[Fixture]](),
+            tests: [],
+            skipped: [],
+            lines: Map[str, List[str]](),
+        )
+    mut mfilt := Set[int]()
+    mut mwhy := Map[int, str]()
+    if not filters.is_empty()
+        for mi in 0..mf.tests.len()
+            listed_of += 1
+            if name_matches("{mf.tests[mi].module}.{mf.tests[mi].t.name}", filters)
+                selected_of += 1
+            else
+                mfilt.add(mi)
+        mf.skipped = [k for k in mf.skipped if name_matches(k.name, filters)]
+        if selected_of == 0 and found.skipped.is_empty() and mf.skipped.is_empty() and skipped_contracts.is_empty()
+            io.eprint("error[test.filter.1]: no test of {file} matches {filters.join(", ")} ({listed_of} tests; `ail test --list FILE` shows their names)")
+            io.exit(2)
+        io.eprint("filter: {selected_of} of {listed_of} tests")
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
-    if found.tests.len() == 0 and mf.tests.is_empty()
+    if list_only
+        mut names := List[str]()
+        mut lns := List[int]()
+        for t in found.tests
+            names.push(if doc_names.contains(t.name) then doc_names[t.name] else t.name)
+            lns.push(if at_pos.contains(t.name) then at_pos[t.name].0 else 0)
+        for k in found.skipped
+            names.push(k.name)
+            lns.push(0)
+        for mi in 0..mf.tests.len()
+            if not mfilt.contains(mi)
+                names.push("{mf.tests[mi].module}.{mf.tests[mi].t.name}")
+                lns.push(0)
+        for k in mf.skipped
+            names.push(k.name)
+            lns.push(0)
+        for k in skipped_contracts
+            names.push(k.name)
+            lns.push(0)
+        for q in 0..names.len()
+            if json
+                print("\{\"test\":{json_str(names[q])},\"line\":{lns[q]}}")
+            else
+                print(names[q])
+        if json
+            print("\{\"summary\":true,\"listed\":{names.len()}}")
+        io.exit(0)
+    if found.tests.len() == 0 and mf.tests.len() == mfilt.len()
         # snap.update.5: a program with no tests still has its `.out` to update.
         if update
             snap_update(file, text, [], dry, json)?
@@ -3206,8 +3442,7 @@ fn main() !
     plain_copy := if dir.is_empty() then copy_name else "{dir}/{copy_name}"
     copy := if scratch.is_empty() then plain_copy else "{scratch}/{copy_name}"
     exe := "{copy}.bin"
-    mut mdropped := Set[int]()
-    mut mwhy := Map[int, str]()
+    mut mdropped := mfilt
     mut with_main := not coverage.is_empty()
     mut dropped := Set[int]()
     mut why := Map[int, str]()
@@ -3442,7 +3677,9 @@ fn main() !
     for mi in 0..mf.tests.len()
         mt := mf.tests[mi]
         name := "{mt.module}.{mt.t.name}"
-        if mdropped.contains(mi)
+        if mfilt.contains(mi)
+            continue
+        elif mdropped.contains(mi)
             verdicts.push(plain(name, "skip", "not in the native subset yet: {mwhy[mi]}"))
         elif not blocked.is_empty()
             verdicts.push(plain(name, "skip", "outside the tests: {blocked}"))
