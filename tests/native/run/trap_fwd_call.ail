@@ -1,0 +1,14 @@
+# A call between two accesses may shorten the list, so the second keeps its
+# check and traps (native.fwd.1, type.coll.4).
+fn shorten(mut xs List[int])
+    xs.pop()
+
+fn around(mut xs List[int], i int) int
+    a := xs[i]
+    shorten(mut xs)
+    a + xs[i]
+
+fn main()
+    mut xs := [1, 2, 3, 4]
+    print(around(mut xs, 1))
+    print(around(mut xs, 2))

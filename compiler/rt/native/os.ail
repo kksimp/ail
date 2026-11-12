@@ -666,7 +666,10 @@ fn env_cwd() str
 fn time_now_ms() int
     if target() == 3
         return win_now_ms()
-    ts := os_scratch(OS_TMP)
+    # The thread's own two words: the scratch area is shared by every
+    # thread, and a deadline clock that read another thread's wall-clock
+    # answer there saw every parked connection as expired.
+    ts := alloc_raw(16, KIND_BYTES)
     if target() == 2
         # `gettimeofday`: seconds, then microseconds in 32 bits.
         syscall(116, ts, 0, 0, 0, 0, 0)
@@ -684,7 +687,8 @@ fn time_now_ms() int
 fn time_mono_ns() int
     if target() == 3
         return win_mono_ns()
-    ts := os_scratch(OS_TMP)
+    # Not the shared scratch area (see `time_now_ms`).
+    ts := alloc_raw(16, KIND_BYTES)
     if target() == 2
         syscall(116, ts, 0, 0, 0, 0, 0)
         return load64(ts) * 1000000000 + load64(ts + 8).bit_and(4294967295) * 1000
@@ -702,10 +706,25 @@ fn time_sleep_ms(ms int)
         os_usage_trap("std.time.2", "a negative sleep")
     if ms == 0 or task_cancelled()
         return
+    # Parked for the collector (native-abi.md §10), as in a network wait
+    # (native.task.2): a collection another thread asks for must not wait
+    # for the sleep to end.
+    multi := load64(global(MULTI)) != 0
+    # The thread's own timespec, allocated before parking.
+    ts := if target() == 3 then 0 else alloc_raw(16, KIND_BYTES)
+    mut parked := 0
+    if multi
+        parked = blocked_enter()
+    time_sleep_raw(ms, ts)
+    if multi
+        blocked_leave(parked)
+
+## Sleep `ms` milliseconds (positive) with the two words at `ts` as the
+## timeout's room. Nothing here allocates: the caller may be parked.
+fn time_sleep_raw(ms int, ts int)
     if target() == 3
         win_sleep_ms(ms)
         return
-    ts := os_scratch(OS_TMP)
     if target() == 2
         # `select` with no descriptors and a timeout: seconds, microseconds.
         store64(ts, ms / 1000)

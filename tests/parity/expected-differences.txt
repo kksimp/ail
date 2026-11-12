@@ -3,4 +3,3 @@
 # decides belongs here, and what waits for the next seed. The gate's `parity` suite is red for any other line that
 # is not `works`, and for a line here that has started to work: delete it then.
 windows std.os.signals.delivery differs   INT and TERM come from the console only (std.os.4, ADR 1011)
-windows std.net.ready.set missing         the completion port is off until the next seed (ADR 1009 amendment)

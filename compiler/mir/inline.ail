@@ -63,9 +63,10 @@ pub fn inline_module(mut out Module)
             vf := vec_loops(f)
             xf := interchange(vf)
             mut loop_notes := List[RkNote]()
+            sized := known_lists(mark_nonneg(xf))
             f = forwarded(hoist_headers(fill_loops(
                 kept_lengths(
-                    iv_sums(bce_noting(mark_nonneg(xf), reserve, grow_only, want, mut loop_notes)),
+                    iv_sums(bce_noting(sized, reserve, grow_only, want, mut loop_notes)),
                     reserve and grow_only,
                 ),
                 fills and not opt_off("fill"),
