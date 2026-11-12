@@ -1,0 +1,215 @@
+## Lists whose length is a constant (native.bce.15). A list made empty and
+## then pushed to a known number of times (`[x for _ in 0..64]`, or a literal
+## `[a, b, c]`) has that length from the moment the pushes are done, as long
+## as nothing else can change it: every use of the list is a push, a `get`, a
+## `set` or a `len`. A `len` of such a list is the constant, and a `get` or
+## `set` that is outside a counted loop (which bce.ail guards as a whole) checks
+## its index against the constant, as an immediate, and reads or writes the
+## element through the list's data pointer. A trap reports the same line, index
+## and length as before.
+##
+## The pushes are either all in the block that makes the list (a literal), or
+## all in one counted loop that runs a constant number of times and leaves only
+## from its header, each in a block every pass of the loop goes through; every
+## other use must come after the loop (where its one exit leads, and nothing
+## else does).
+
+## The longest list tracked: the length is an immediate in the check.
+MAX_KNOWN := 1073741824
+
+## The pass on one function.
+pub fn known_lists(f Func) Func
+    if opt_off("constlen") or f.name.starts_with("rt.")
+        return f
+    lens := built_lengths(f)
+    if lens.len() == 0
+        return f
+    defs := defs_of(f)
+    # A counted loop is left to bce.ail, whose guard tests the length once.
+    mut busy := [false for _ in 0..f.blocks.len()]
+    for lp in find_loops(f)
+        if counted(f, defs, lp) != none
+            for b in lp.blocks
+                busy[b] = true
+    mut g := f
+    for b in 0..f.blocks.len()
+        mut out := List[Inst]()
+        mut changed := false
+        for i in f.blocks[b].insts
+            if i.op == "len" or i.op == "get" or i.op == "set"
+                if n := lens.get(i.arg(0))
+                    if rewrite_access(mut g, f, defs, i, n, busy[b], mut out)
+                        changed = true
+                        continue
+            out.push(i)
+        if changed
+            g.blocks[b].insts = out
+    g
+
+## `i`, a `len`, `get` or `set` of a list of `n` elements, as what replaces it
+## in `out`; false if it stays as it is.
+fn rewrite_access(
+    mut g Func,
+    f Func,
+    defs List[Def],
+    i Inst,
+    n int,
+    busy bool,
+    mut out List[Inst],
+) bool
+    if i.op == "len"
+        mut c := inst(i.dst, "const", [])
+        c.imm = n
+        out.push(c)
+        return true
+    if busy or i.site < 0
+        return false
+    idx := i.arg(1)
+    mut check := true
+    if k := const_of(f, defs, idx)
+        if k < 0 or k >= n
+            return false
+        check = false
+    if check
+        kv := new_val(mut g, Ty.Int)
+        mut kc := inst(kv, "const", [])
+        kc.imm = n
+        out.push(kc)
+        mut chk := inst(-1, "bounds", [idx, kv])
+        chk.site = i.site
+        out.push(chk)
+    dv := new_val(mut g, Ty.Int)
+    out.push(inst(dv, "data", [i.arg(0)]))
+    if i.op == "get"
+        mut ld := inst(i.dst, "ldx", [dv, idx])
+        ld.imm = g.vals[i.dst].elem_bytes()
+        out.push(ld)
+    else
+        mut st := inst(-1, "stx", [dv, idx, i.arg(2)])
+        st.imm = g.vals[i.arg(2)].elem_bytes()
+        out.push(st)
+    true
+
+## The length of each list made by `rt.list_new` that is built to a known
+## length and then only read and written.
+fn built_lengths(f Func) Map[int, int]
+    mut out := Map[int, int]()
+    nv := f.vals.len()
+    mut cand := [false for _ in 0..nv]
+    mut found := false
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == "rt.list_new" and i.dst >= 0 and is_list(f.vals[i.dst])
+                cand[i.dst] = true
+                found = true
+    if not found
+        return out
+    mut pushes := Map[int, List[At]]()
+    mut reads := Map[int, List[At]]()
+    mut bad := Set[int]()
+    for b in 0..f.blocks.len()
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            for a in 0..i.argc()
+                x := i.arg(a)
+                if x < 0 or x >= nv or not cand[x]
+                    continue
+                if a == 0 and is_push(i)
+                    add_at(mut pushes, x, At(b: b, k: k))
+                elif a == 0 and (i.op == "get" or i.op == "len" or i.op == "set")
+                    add_at(mut reads, x, At(b: b, k: k))
+                else
+                    bad.add(x)
+        for x in f.blocks[b].term.uses()
+            if x >= 0 and x < nv and cand[x]
+                bad.add(x)
+    defs := defs_of(f)
+    dom := dominators(f)
+    loops := find_loops(f)
+    mut preds := [0 for _ in 0..f.blocks.len()]
+    for blk in f.blocks
+        for t in blk.term.targets
+            preds[t] += 1
+    for x in 0..nv
+        if not cand[x] or bad.contains(x)
+            continue
+        ps := pushes.get(x) else List[At]()
+        rs := reads.get(x) else List[At]()
+        if rs.len() == 0
+            continue
+        if n := length_of(f, defs, dom, loops, preds, x, ps, rs)
+            out[x] = n
+    out
+
+fn add_at(mut m Map[int, List[At]], x int, at At)
+    if not m.contains(x)
+        m[x] = []
+    m[x].push(at)
+
+## How many elements list `x` has once its pushes `ps` are done, when every
+## use in `rs` comes after them; else none.
+fn length_of(
+    f Func,
+    defs List[Def],
+    dom List[List[bool]],
+    loops List[LoopInfo],
+    preds List[int],
+    x int,
+    ps List[At],
+    rs List[At],
+) int?
+    made := defs[x]
+    mut all_here := true
+    mut last := -1
+    for p in ps
+        if p.b != made.block
+            all_here = false
+        if p.k > last
+            last = p.k
+    if all_here
+        for r in rs
+            if r.b == made.block and r.k < last
+                return none
+        return ps.len()
+    # All the pushes in one counted loop that makes the whole list.
+    mut lp := LoopInfo(
+        header: -1,
+        member: List[bool](),
+        blocks: List[int](),
+        pre: -1,
+        latches: List[int](),
+        exits: 0,
+    )
+    for o in loops
+        if o.member[ps[0].b] and (lp.header < 0 or o.blocks.len() < lp.blocks.len())
+            lp = o
+    if lp.header < 0 or lp.member[made.block]
+        return none
+    c := counted(f, defs, lp)?
+    if c.step >= 0 or c.q >= 0
+        return none
+    for p in ps
+        if not lp.member[p.b] or p.b == lp.header
+            return none
+        for l in lp.latches
+            if not dom[l][p.b]
+                return none
+        for o in loops
+            if o.header != lp.header and lp.member[o.header] and o.member[p.b]
+                return none
+    lo := const_of(f, defs, c.lo)?
+    hi := const_of(f, defs, c.hi)?
+    if preds[c.exit] != 1
+        return none
+    for r in rs
+        if lp.member[r.b] or not dom[r.b][c.exit]
+            return none
+    if hi <= lo
+        return 0
+    trips := hi - lo
+    if trips > MAX_KNOWN
+        return none
+    total := trips * ps.len()
+    if total > MAX_KNOWN
+        return none
+    total

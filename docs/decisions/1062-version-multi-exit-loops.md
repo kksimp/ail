@@ -36,7 +36,12 @@ per loop entry can cost what it saves when most entries run one or two passes.
   in lzr the `i` half runs once per `find` and each match entry tests only `cand`.
 - An `a` used only in such sums is not given a range test of its own, and range
   tests are skipped when every proven site is already covered by a need.
-- `AIL_OPT_OFF=mexit` turns multi-exit versioning off.
+- `while l < 66` lowers the constant into the loop's header, where `counted`
+  took it for a value the loop changes; the bound is copied into the
+  preheader first (`bound_out`). Constants are rematerialised at each use, so
+  the copy costs no register. Found on ail-linux 2026-11-12: without it lzr's
+  match loop was not versioned at all.
+- `AIL_OPT_OFF=mexit` turns multi-exit versioning and the bound copy off.
 - **Pros:** small, in the two files that own the logic; covers break, return
   and `and` chains, and two-pointer scans with an early return.
 - **Cons:** the guard tests the whole range the bound allows, so a loop that

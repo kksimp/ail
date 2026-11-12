@@ -52,11 +52,6 @@ fn rk_too_big(n int) str
 fn rk_budget_spent() str
     "the caller's inline budget ({INLINE_BUDGET} calls) was spent"
 
-## The loop is over hoist.ail's `MAX_BLOCKS`, so list headers are not kept in
-## registers (native.bce.11).
-fn rk_headers_reloaded(n int) str
-    "reloaded at every access: the loop has {n} blocks, over the {MAX_BLOCKS} for which list lengths and data pointers are kept in registers (native.bce.11)"
-
 ## The function asked about, from `AIL_PERF_EXPLAIN`; empty in every other build.
 pub fn rk_target() str
     env.get("AIL_PERF_EXPLAIN") else ""
@@ -329,9 +324,6 @@ pub fn rk_explain(
         else
             msg := "not analysed (AIL_OPT_OFF names bce, or this loop is a copy the optimizer made)"
             out.push(rk_line_of(files, place, "bce", msg))
-        # List headers (native.bce.11): hoist.ail skips loops over MAX_BLOCKS.
-        if rk_accesses(xf, lp) > 0 and lp.blocks.len() > MAX_BLOCKS and not opt_off("hoist")
-            out.push(rk_line_of(files, place, "hoist", rk_headers_reloaded(lp.blocks.len())))
         # Vector kernels (native.vec.1-2).
         if inner and kernels.is_empty()
             if reordered
