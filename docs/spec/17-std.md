@@ -3159,3 +3159,60 @@ fn main()
     data := io.read_bytes()                 # reads the rest of standard input, undecoded
     print(data.len())
 ```
+
+## Tool servers: `std.mcp`
+
+**std.mcp.1** — `use std.mcp` provides `connect(cmd str, args List[str]) Client !
+McpError`. It starts the program as `proc.start` does (`std.proc.4`) and speaks
+MCP (the Model Context Protocol) to it as JSON-RPC 2.0 over its standard input
+and output, one JSON message per line. A `Client` is a unique value
+(`own.uniq.1`) that owns the server process; the program is killed when the
+client is released (`std.proc.7`). Tests need no network: the server is any
+program that speaks the protocol. *(ADR 1091)*
+
+**std.mcp.2** — `connect` sends `initialize` with protocol revision
+`2025-03-26`, waits for the reply, then sends the `notifications/initialized`
+notification. A server that can't start fails with kind `start`. *(ADR 1091)*
+
+**std.mcp.3** — `c.tools() List[Tool] ! McpError` is the server's `tools/list`,
+following `nextCursor` until there is none. `struct Tool { name str,
+description str, schema Json }`; `description` is `""` and `schema` is `Null`
+when the server gives none. *(ADR 1091)*
+
+**std.mcp.4** — `c.call(name str, args Json) Json ! McpError` is `tools/call`
+with `args` (a `Json` object) as the arguments. It returns the reply's
+`structuredContent` when it has one, and otherwise the whole `result` object.
+*(ADR 1091)*
+
+**std.mcp.5** — `mcp.text(result Json) str` joins the `text` blocks of a result's
+`content` with newlines. A result whose `isError` is true fails `call` with kind
+`tool` and that text as the message. *(ADR 1091)*
+
+**std.mcp.6** — A line from the server that is not JSON, has no `id` or has an
+`id` other than the pending request's is skipped, so notifications and log
+lines don't disturb a call. A reply with an `error` member fails with kind
+`rpc`; the message is the server's text and `(code N)`. *(ADR 1091)*
+
+**std.mcp.7** — `McpError` is an error with `kind str` and `message str`. The
+kinds are `start`, `closed`, `protocol`, `rpc`, `tool` and `timeout`. A request
+waits at most 30 seconds for its reply (`c.set_timeout(ms int)` changes it);
+when the time runs out or the server has exited it fails with kind `timeout`.
+*(ADR 1091)*
+
+**std.mcp.8** — `c.close()` takes the client with `move` and closes the server's
+standard input; the server is then killed as in `std.mcp.1`. *(ADR 1091)*
+
+```ail norun rules=std.mcp.1,std.mcp.2,std.mcp.3,std.mcp.4,std.mcp.5,std.mcp.6,std.mcp.7,std.mcp.8
+use std.mcp
+
+fn main() !
+    mut c := mcp.connect("my-mcp-server", ["--stdio"])?
+    for t in c.tools()?
+        print("{t.name}: {t.description}")
+    args := Json.Obj([JsonMember(key: "text", value: Json.Str("hi"))])
+    r := c.call("echo", args) else err
+        print("{err.kind}: {err.message}")
+        return
+    print(mcp.text(r))
+    c.close()
+```

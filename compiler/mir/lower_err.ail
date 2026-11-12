@@ -929,6 +929,7 @@ SHOWN_STD_AIL := [
     "std.csv.",
     "std.gfx.",
     "std.log.",
+    "std.mcp.",
     "std.media.webm.",
     "std.net.http.",
     "std.screen.",
