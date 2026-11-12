@@ -850,3 +850,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
 | [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |
+| [1080](1080-one-guard-per-list-for-bounded-indexes.md) | Native: one guard test per list for indexes bounded by the counted loops around *(delegated)* | Accepted | 2026-11-12 |

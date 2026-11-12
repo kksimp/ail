@@ -417,7 +417,7 @@ when they do not hold. When the counted loops around the loop keep `y` within
 `lo..=hi` with `lo >= 0` (their counters run between constants, and a counter
 is below its bound everywhere in its loop but the header), the test may
 instead be `hi + k < len`, one test per list with the largest such index.
-*(ADR 0816, ADR PENDING)*
+*(ADR 0816, ADR 1080)*
 
 ```ail rules=native.bce.10
 fn main()
