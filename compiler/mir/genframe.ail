@@ -89,16 +89,19 @@ fn gen_shift(t Term, d int) Term
     r.targets = [x + d for x in t.targets]
     r
 
+fn gen_map(m Map[int, int], v int) int
+    m.get(v) else v
+
 fn gen_remap(i Inst, m Map[int, int]) Inst
-    i.with_args([m.get(a) else a for a in i.operands()])
+    i.with_args([gen_map(m, a) for a in i.operands()])
 
 fn gen_remap_term(t Term, m Map[int, int]) Term
     mut r := t
     if t.cond >= 0
-        r.cond = m.get(t.cond) else t.cond
-    r.args = [[m.get(a) else a for a in xs] for xs in t.args]
+        r.cond = gen_map(m, t.cond)
+    r.args = [[gen_map(m, a) for a in xs] for xs in t.args]
     if t.value >= 0
-        r.value = m.get(t.value) else t.value
+        r.value = gen_map(m, t.value)
     r
 
 ## The values a block reads, its terminator's included.

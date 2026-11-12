@@ -391,6 +391,12 @@ don't clamp and negative indexes are errors. Order by a key (stable):
 Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
 `{k: v for ...}`. Pairs: `for i, x in xs.enumerate()`, `for a, b in zip(xs, ys)`.
 
+Generators: a function returning `Seq[T]` with `yield x` in its body
+(`fn count(n int) Seq[int]`) runs lazily, up to each `yield`, per `next()`
+(`T?`). `for` takes any type with `fn next(mut self) T?`, `Seq` included; a
+`Seq` is unique, read once: `count(9).filter(|x| x > 2).map(f).take(3).collect()`,
+also `Seq.of(xs)`, `take_while`, `skip`, `enumerate`, `zip`, `chain`, `count`.
+
 `for x in xs` gives a copy of each element. To change the elements
 themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1`.
 
