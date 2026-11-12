@@ -46,6 +46,19 @@ hand-written kernels.
 6. **Both ISAs in one change** (ADR 0008): NEON `.2d` forms on ARM64 and VEX
    `xmm` forms on x86-64. `AIL_OPT_OFF=slp` turns the pass off.
 
+## Result
+
+nbody, 20M steps, before → after, against the C twin (`cc -O2 -ffp-contract=off`), output identical:
+
+| Host | Before | After | C | After / C |
+|---|---|---|---|---|
+| Mac (ARM64) | 926.5 ms | 782.7 ms | 758.9 ms | 1.03 |
+| ail-linux (x86-64) | 2068.0 ms | 1738.3 ms | 1630.3 ms | 1.07 |
+
+No other perfbench program changed beyond noise. The compiler grew 1.1%
+(10,698,897 → 10,815,857 bytes on the Mac) and builds itself in 0.11 s
+against 0.10 s.
+
 ## Rationale
 
 Criterion 4 (speed) at no cost to tokens, understanding or readability: the
