@@ -1,3 +1,4 @@
+# slp-expect: pairs
 # The nbody shape the pairing pass (native.vec.3) takes: x and y of a body as one
 # two-lane vector, z alone. Every printed number must match `AIL_OPT_OFF=slp`.
 fn advance(mut s List[float], n int, dt float)
