@@ -760,6 +760,41 @@ fn main()
     print(line)
 ```
 
+**native.vec.3** — Inside one basic block, the stores of two `float`s to
+elements `k` and `k + 1` of the same list at the same index value may become
+one two-lane vector store, and the values stored one two-lane computation,
+when both are the same operation (`+`, `-`, `*`, `/`) on operands that pair
+the same way, down to loads of two adjacent elements; a value both lanes use
+is copied into both, and `x * x + y * y` over the two lanes of a pair may be
+one vector multiply and one addition of the lanes. Each lane performs its
+scalar operation with the operands in the written order (no fused
+multiply-add, no reassociation), so every result has the bits of the scalar
+code. A paired load is done at the earlier of its two loads and a paired
+store at the later of its two stores, only when every two accesses that may
+touch the same element, one of them a store, keep their order, and no access
+moves across an operation that can trap or call. Checked accesses (`get`,
+`set` with a bounds check) are never paired. `AIL_OPT_OFF=slp` turns the
+pairing off. *(ADR 1066)*
+
+```ail rules=native.vec.3
+fn main()
+    mut s := [0.0 for _ in 0..12]
+    for k in 0..12
+        s[k] = k.to_float() * 0.5
+    for i in 0..3
+        b := i * 4
+        for j in i + 1..3
+            c := j * 4
+            dx := s[b] - s[c]
+            dy := s[b + 1] - s[c + 1]
+            w := 1.0 / (dx * dx + dy * dy)
+            s[b + 2] -= dx * w
+            s[b + 3] -= dy * w
+            s[c + 2] += dx * w
+            s[c + 3] += dy * w
+    print(s)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the

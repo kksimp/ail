@@ -86,6 +86,8 @@ pub fn inline_module(mut out Module)
             if not opt_off("fold")
                 fold_addresses(mut f)
             promote_elements(mut f)
+            if not opt_off("slp")
+                slp_pairs(mut f)
         if not opt_off("fold")
             fold_prim_addresses(mut f)
         out.funcs[k] = f
