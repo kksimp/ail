@@ -1250,7 +1250,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         if self.win or not codegen.linux_import(sym)
             a.ud2()
             return
-    if i.site >= 0
+    if i.site >= 0 and sites.list[i.site].kind != "frame"
         # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
         a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
         a.jcc(CC_B, stub(11, -1, -1, i.site, sites.list[i.site].op))
@@ -1324,7 +1324,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.call_sym(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
-        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
+        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: call_func(i)))
         # A call copied in by inlining (trace.frame.2) also stands for the
         # frames it was inlined into: a row for each, innermost first.
         if i.site >= 0
@@ -1347,6 +1347,13 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_xmm(i.dst, 0)
         else
             put_gpr(i.dst, RAX)
+
+## The function a call is written in, for its row of a trap's stack: a call
+## copied in by inlining another function (trace.frame.2) names that function.
+fn Gen.call_func(self, i mir.Inst) str
+    if i.site >= 0 and sites.list[i.site].from >= 0
+        return sites.list[i.site].func
+    f.name
 
 ## The memory a load or store prim addresses.
 fn Gen.address(mut self, i mir.Inst) Mem

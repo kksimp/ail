@@ -1,13 +1,5 @@
 # MIR (unstable) of tests/native/subset.ail
 
-fn label(v0:p Point) str
-  b0(v0:p Point):
-    v1 int = load v0:p +0
-    call rt.sb_begin()
-    call rt.put_int(v1)
-    v2 str = call rt.sb_str()
-    return v2
-
 fn main() unit
   b0:
     v0 str = str #0

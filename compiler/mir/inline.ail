@@ -2,6 +2,8 @@
 ## replaced by a copy of its blocks, so arithmetic helpers such as
 ## `eval_a(i, j)` cost no call, and folding then sees through them. The
 ## callee's trap sites are kept, so a trap still names the callee's line.
+## Functions that call others go inline by a cost model (inline_wide.ail,
+## ADR 0940).
 
 ## Functions with at most this many instructions are inlined.
 INLINE_LIMIT := 40
@@ -21,6 +23,10 @@ pub fn inline_module(mut out Module)
         if inlinable(f) and not opt_off("inline")
             leaves.add(f.name)
             bodies[f.name] = f
+    wide := wide_candidates(out, leaves)
+    for f in out.funcs
+        if wide.sizes.contains(f.name)
+            bodies[f.name] = f
     reserve := by_name.contains("rt.list_reserve")
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
@@ -32,7 +38,7 @@ pub fn inline_module(mut out Module)
             expand_allocating(mut out)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
-        budget := expand_calls(mut f, leaves, bodies, mut out.sites)
+        budget := expand_wide(mut f, leaves, wide, bodies, mut out.sites)
         unrolled := unroll_self(mut f, mut out.sites)
         mut scalar := false
         if not f.name.starts_with("rt.") and not opt_off("sroa")
@@ -96,6 +102,7 @@ pub fn inline_module(mut out Module)
         memoize(mut out)
     if not opt_off("reuse")
         reuse_lists(mut out)
+    drop_unused(mut out, wide.sizes)
 
 fn forwarded(f Func) Func
     if opt_off("forward") then f else forward_loads(f)
@@ -288,6 +295,13 @@ pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     call := g.blocks[b].insts[at]
     mut frame := -1
     if call.imm != 0
+        # A call that was itself copied in from an inlined function is written
+        # in that function, and stands for the frames it was inlined into.
+        mut in_func := g.name
+        mut outer := -1
+        if call.site >= 0 and sites[call.site].from >= 0
+            in_func = sites[call.site].func
+            outer = sites[call.site].from
         frame = sites.len()
         sites.push(Site(
             rule: "",
@@ -295,9 +309,9 @@ pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
             op: "",
             line: call_line(call.imm),
             col: call_col(call.imm),
-            func: g.name,
+            func: in_func,
             file: call_file(call.imm),
-            from: -1,
+            from: outer,
         ))
     mut cloned := Map[int, int]()
     mut tail := List[Inst]()
