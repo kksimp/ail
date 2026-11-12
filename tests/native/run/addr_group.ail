@@ -1,0 +1,37 @@
+# Several accesses at `b + k` in one block share one address on ARM64: reads,
+# writes, ints and floats must still touch the same elements, in order.
+fn pack(mut xs List[int])
+    for i in 0..8
+        b := i * 5
+        xs[b] = i
+        xs[b + 1] = i * 2
+        xs[b + 2] = i * 3
+        xs[b + 3] = xs[b + 1] + xs[b + 2]
+        xs[b + 4] = xs[b + 3] - xs[b]
+
+fn packf(mut s List[float])
+    for i in 0..8
+        b := i * 5
+        s[b] = 1.5
+        s[b + 1] = 2.5
+        s[b + 2] = s[b] + s[b + 1]
+        s[b + 3] = s[b + 2] * 2.0
+        s[b + 4] = s[b + 3] - s[b]
+
+fn main()
+    mut xs := [0 for _ in 0..40]
+    pack(mut xs)
+    mut n := 0
+    for x in xs
+        n += x
+    print(n)
+    print(xs[38])
+    print(xs[39])
+    mut s := [0.0 for _ in 0..40]
+    packf(mut s)
+    mut t := 0.0
+    for x in s
+        t += x
+    print(t)
+    print(s[37])
+    print(s[39])

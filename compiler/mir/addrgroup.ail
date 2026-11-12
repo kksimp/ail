@@ -1,0 +1,98 @@
+## Shared element addresses on ARM64 (amends ADR 0625): ARM64 has no base + index +
+## offset addressing, so each unchecked `ldx`/`stx` at `base[y + k]` (k > 0)
+## costs an `add` of its own before the access. Where a straight run of a
+## block (no call between) reaches the same `base[y + ..]` at least `MIN_OFFSET`
+## times with a nonzero offset, the run computes `p = base + 8 * y` once and
+## each access becomes a `load`/`store` at `p` with the immediate `8 * k`.
+## The accesses stay in their order and on the same addresses, so no trap or
+## value changes. Only 8-byte elements and floats, offsets 0
+## to 4095. x86-64 has the addressing mode, so only a64/gen.ail calls this.
+
+## Accesses with an offset that make a group pay for its `shl` and `add`.
+MIN_OFFSET := 4
+
+## The element offset of a candidate `ldx`/`stx` (>= 0), else -1.
+fn group_off(g Func, consts List[bool], i Inst) int
+    if i.op != "ldx" and i.op != "stx"
+        return -1
+    if consts[i.arg(1)]
+        return -1
+    mut float := false
+    if i.op == "ldx"
+        float = g.vals[i.dst].is_float()
+    else
+        float = g.vals[i.arg(2)].is_float()
+    if not float and i.imm != 8
+        return -1
+    k := i.elem_off()
+    if k < 0 or k > 4095
+        return -1
+    k
+
+pub fn group_addresses(f Func) Func
+    mut g := f
+    defs := defs_of(g)
+    consts := [const_of(g, defs, v) != none for v in 0..g.vals.len()]
+    for b in 0..g.blocks.len()
+        insts := g.blocks[b].insts
+        # Per run between calls and per `base|y`: the accesses with an offset.
+        mut seg := 0
+        mut count := Map[str, int]()
+        mut segs := List[int]()
+        for i in insts
+            if i.op == "call" or i.op == "icall"
+                seg += 1
+            segs.push(seg)
+            k := group_off(g, consts, i)
+            if k > 0
+                key := "{seg}|{i.arg(0)}|{i.arg(1)}"
+                if count.contains(key)
+                    count[key] += 1
+                else
+                    count[key] = 1
+        mut any := false
+        for key in count.keys()
+            if count[key] >= MIN_OFFSET
+                any = true
+        if not any
+            continue
+        mut out := List[Inst]()
+        mut made := Map[str, int]()
+        for n in 0..insts.len()
+            i := insts[n]
+            k := group_off(g, consts, i)
+            if k < 0
+                out.push(i)
+                continue
+            key := "{segs[n]}|{i.arg(0)}|{i.arg(1)}"
+            if not count.contains(key) or count[key] < MIN_OFFSET
+                out.push(i)
+                continue
+            mut p := -1
+            if made.contains(key)
+                p = made[key]
+            else
+                three := new_addr_val(mut g, Ty.Int)
+                sh := new_addr_val(mut g, Ty.Int)
+                p = new_addr_val(mut g, Ty.Int)
+                mut c := inst(three, "const", [])
+                c.imm = 3
+                out.push(c)
+                out.push(inst(sh, "shl", [i.arg(1), three]))
+                out.push(inst(p, "add", [i.arg(0), sh]))
+                made[key] = p
+            if i.op == "ldx"
+                mut r := inst(i.dst, "load", [p])
+                r.imm = 8 * k
+                out.push(r)
+            else
+                mut r := inst(-1, "store", [p, i.arg(2)])
+                r.imm = 8 * k
+                out.push(r)
+        g.blocks[b].insts = out
+    g
+
+fn new_addr_val(mut g Func, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
