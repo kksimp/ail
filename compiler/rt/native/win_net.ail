@@ -177,7 +177,13 @@ fn wnet_poll(pf int, n int, ms int) int
             w += 16
         store8(a + 8, w % 256)
         store8(a + 9, w / 256)
+    park := net_park_wait(ms)
+    mut ps := 0
+    if park
+        ps = blocked_enter()
     r := wnet_i32(import_call("WSAPoll", arr, n, ms, 0))
+    if park
+        blocked_leave(ps)
     if r < 0
         return wnet_err()
     for i in 0..n
