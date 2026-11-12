@@ -68,6 +68,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
 - Native string-keyed map key cache (ADR 0936): the entry of a key object is found without hashing it again, and an insert reuses the hash of the probe that missed; wordfreq 10M 0.27 s → 0.22 s, 1.649G → 1.452G instructions on ail-linux; Mac 0.097 s → 0.062 s (C 0.150 s).
 - `Grid[T]` (ADR 0937, type.grid.1-6): a flat 2-D list in the prelude with `g[i, j]`; 6-17% fewer tokens than nested lists on 2-D code, 2x slower than them until bounds checks on `g[i, j]` are versioned out (P2).
+- `Heap[T]` and `Deque[T]` (ADR 1086, type.heap.1-5, type.deque.1-5): prelude priority queue and double-ended queue; `d[i]` and `for x in d` on a deque are not yet built (`d.at(i)`, `d.to_list()`).
 - Const generics (ADR 0954, `gen.const.1-3`): `const N int` parameters on structs and functions, `N` as an int value, by monomorphisation (native only); no const expressions, arrays or SIMD types yet.
 - Custom hashing (ADR 0955, `trait.hash.1-2`): `impl Hash` with a `uses` field list for a non-generic struct with a hand-written `eq`; the map table hashes and compares those fields (native only).
 - Generators (ADR 0965, proposed, spec rules planned): `yield` in a function returning `Seq[T]`, state-machine lowering, no colour; spec and design only.

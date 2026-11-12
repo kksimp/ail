@@ -1224,6 +1224,91 @@ fn main()
     print(m[1, 2])          # x: the same as m[(1, 2)]
 ```
 
+**type.heap.1** — `Heap[T]` is a priority queue of elements of an `Ord` type
+`T`. `Heap[int]()` is empty and gives the smallest element first;
+`Heap[int](max_first: true)` gives the largest first. The type is the
+prelude's, read when a program names `Heap` and doesn't declare it. *(ADR 1086)*
+
+**type.heap.2** — `Heap.from(xs)` is the min-first heap of the list `xs`, and
+`Heap.from_max(xs)` the max-first one, built in linear time. *(ADR 1086)*
+
+**type.heap.3** — `h.push(x)` adds `x`. `h.pop()` removes and returns the
+element that comes first, and `h.peek()` returns it without removing; both
+are `T?` and `none` when the heap is empty. Both ends of an unordered pair of
+equal elements may come out in either order. *(ADR 1086)*
+
+**type.heap.4** — `h.len()` and `h.is_empty()` count the elements.
+`h.to_sorted()` is the list of all elements in the order `pop` returns them,
+and leaves `h` unchanged. *(ADR 1086)*
+
+**type.heap.5** — A heap is a value (own.val.1): `g := h` copies it. Its
+`items` field holds the elements in heap order, which is no particular
+order; use `to_sorted()` to read them in order. *(ADR 1086)*
+
+```ail rules=type.heap.1,type.heap.2,type.heap.3,type.heap.4,type.heap.5
+fn main()
+    mut h := Heap[int]()
+    h.push(5)
+    h.push(1)
+    h.push(3)
+    print(h.peek())              # 1
+    print(h.pop())               # 1
+    print(h.to_sorted())         # [3, 5]
+    mut m := Heap[int](max_first: true)
+    m.push(2)
+    m.push(9)
+    print(m.pop())               # 9
+    print(Heap.from([4, 2, 8]).to_sorted())      # [2, 4, 8]
+    print(Heap.from_max([4, 2, 8]).to_sorted())  # [8, 4, 2]
+    g := h
+    h.push(0)
+    print(g.len())               # 2: `g := h` copied the heap
+```
+
+**type.deque.1** — `Deque[T]` is a double-ended queue. `Deque[int]()` is
+empty and `Deque.from(xs)` holds the elements of `xs` in order. The type is
+the prelude's, read when a program names `Deque` and doesn't declare it.
+*(ADR 1086)*
+
+**type.deque.2** — `d.push_back(x)` and `d.push_front(x)` add an element at
+an end. `d.pop_back()` and `d.pop_front()` remove and return the element at
+that end as a `T?`, `none` when empty. Each is O(1) amortised. *(ADR 1086)*
+
+**type.deque.3** — `d.first()` and `d.last()` return the end elements as a
+`T?` without removing them. `d.len()` and `d.is_empty()` count the elements.
+*(ADR 1086)*
+
+**type.deque.4** — `d.at(i)` is the element at position `i` counted from the
+front, in O(1); a position outside `0..d.len()` traps. `d.to_list()` is the
+elements, first to last, as a list. *(ADR 1086)*
+
+**type.deque.5** — A deque is a value (own.val.1): `e := d` copies it. Its
+`front` and `back` fields are the representation and aren't read. *(ADR 1086)*
+
+```ail rules=type.deque.1,type.deque.2,type.deque.3,type.deque.4,type.deque.5
+fn main()
+    mut d := Deque[int]()
+    d.push_back(2)
+    d.push_back(3)
+    d.push_front(1)
+    print(d.to_list())           # [1, 2, 3]
+    print(d.first())             # 1
+    print(d.last())              # 3
+    print(d.at(1))               # 2
+    print(d.pop_front())         # 1
+    print(d.pop_back())          # 3
+    e := d
+    d.push_back(9)
+    print(e.len())               # 1: `e := d` copied the deque
+    print(Deque.from([7, 8]).len())  # 2
+```
+
+```ail norun rules=type.deque.4
+fn main()
+    d := Deque.from([1])
+    print(d.at(5))               # traps: position 5 is outside 0..1
+```
+
 ## Examples
 
 Each block below is a conformance example (ADR 0002). Its `rules=` list names

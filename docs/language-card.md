@@ -397,6 +397,12 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
 `Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
 
+Priority queue: `h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
+for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
+`h.is_empty()`, `Heap.from(xs)`. Double-ended queue: `d := Deque[int]()`,
+`push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
+`d.at(i)`, `d.to_list()`.
+
 ## Maps and sets
 
 ```ail skip=context
