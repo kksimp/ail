@@ -240,7 +240,7 @@ fn unreachable_rule(e ast.Expr) str
                 match parts[0]
                     Lit(t) => lead = t
                     Hole | Fmt => lead = ""
-        Bytes | Int | Float | Char | Bool | NoneLit | Hole | Name | TypeArgs | Unary | If | Match | MapLit | SetLit | TupleLit | NewRef | Comp | Range | ListLit | Call | Method | Member | Index | Binary | Try | OrElse => lead = ""
+        Bytes | Int | Float | Char | Bool | NoneLit | Hole | Name | TypeArgs | Unary | If | Match | MapLit | SetLit | TupleLit | NewRef | Comp | Range | ListLit | Call | Method | Member | Index | Binary | Try | OrElse | Closure => lead = ""
     r := message_rule(lead)
     if r.is_empty() then "err.model.2" else r
 

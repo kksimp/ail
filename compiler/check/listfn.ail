@@ -22,7 +22,7 @@ fn list_fn_builtin(e Ty, n str) Builtin?
     if n == "map"
         return read([Ty.FnTy([e], Ty.Unknown)], Ty.ListOf(Ty.Unknown))
     if n == "group_by"
-        return read([Ty.FnTy([e], Ty.Unknown)], Ty.MapOf(Ty.Unknown, Ty.ListOf(e)))
+        return read([Ty.FnTy([e], Ty.Unknown)], Ty.MapOf(key: Ty.Unknown, value: Ty.ListOf(e)))
     none
 
 ## `xs.any(f)` and the others (type.coll.21-26).
@@ -91,4 +91,4 @@ fn Checker.list_fn_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) 
         if h := how_to_implement(r, std_hash)
             d = d.with_help(h)
         diags.push(d)
-    Ty.MapOf(r, Ty.ListOf(e))
+    Ty.MapOf(key: r, value: Ty.ListOf(e))
