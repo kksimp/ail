@@ -1,0 +1,19 @@
+# slp-expect: pairs
+# Pairs at odd and large offsets up to 40 elements in a loop bce versions (native.vec.3).
+fn mix(mut s List[float], n int, m float)
+    for i in 0..n
+        b := i * 41
+        s[b + 1] = s[b + 21] * m + s[b + 1]
+        s[b + 2] = s[b + 22] * m + s[b + 2]
+        s[b + 39] = s[b + 7] - s[b + 15] * m
+        s[b + 40] = s[b + 8] - s[b + 16] * m
+        s[b + 13] = s[b + 13] / (s[b + 31] + 1.0)
+        s[b + 14] = s[b + 14] / (s[b + 32] + 1.0)
+
+fn main()
+    mut s := [i.to_float() * 0.5 - 7.0 for i in 0..123]
+    mix(mut s, 3, 1.25)
+    print(s)
+    mut t := [1.0 / (i.to_float() + 1.0) for i in 0..82]
+    mix(mut t, 2, -3.0)
+    print(t)

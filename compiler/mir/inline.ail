@@ -85,6 +85,7 @@ pub fn inline_module(mut out Module)
                 out.notes.extend(lines)
             if not opt_off("fold")
                 fold_addresses(mut f)
+            promote_elements(mut f)
         if not opt_off("fold")
             fold_prim_addresses(mut f)
         out.funcs[k] = f
