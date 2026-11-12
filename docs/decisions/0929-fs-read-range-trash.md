@@ -32,7 +32,10 @@ Recoverable by default is the safe behaviour for any app that removes user data,
 
 - Husk's only delete path is `fs.trash`.
 - Native only (ADR 0865); the macOS arm first.
+- Windows arm (2026-11-05): `SHFileOperationW` with `FO_DELETE` and `FOF_ALLOWUNDO`, from `SHELL32.dll`, which joins the import table only for programs that call `fs.trash`. The path is made full with `GetFullPathNameW` first, because the call deletes outright what is not a full path. `FOF_NOCONFIRMATION` is left off so an item too large for the bin is refused and never destroyed; `FOF_SILENT`, `FOF_NOERRORUI` and `FOF_WANTNUKEWARNINGS` keep the call quiet.
 
 ## Rejected alternatives
 
 Option B is wrong on other volumes and loses put-back.
+
+For the Windows arm: writing `$Recycle.Bin` entries (`$I` and `$R` files under the user's SID) by hand relies on an undocumented format that Explorer's Restore reads; `IFileOperation` is the newer API but needs COM initialised on the thread, which the runtime does not do.

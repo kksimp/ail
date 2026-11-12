@@ -30,6 +30,7 @@ pub fn mir.find_loops(mir.Func) List[mir.LoopInfo]
 pub fn mir.is_innermost(List[mir.LoopInfo], mir.LoopInfo) bool
 pub struct mir.Counted
 pub fn mir.counted(mir.Func, List[mir.Def], mir.LoopInfo) mir.Counted?
+pub fn mir.counted_multi(mir.Func, List[mir.Def], mir.LoopInfo) mir.Counted?
 pub struct mir.Sig
 pub struct mir.Problem
 pub error struct mir.Problems
@@ -115,4 +116,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1854); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1884); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
