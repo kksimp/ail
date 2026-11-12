@@ -132,6 +132,7 @@ fn proc_fail(cmd str, kind str, at str) int
     store64(e, str_addr(cmd))
     store64(e + 8, kind_word(proc_kinds(), kind))
     err_value(e)
+    err_tag(err_tag_of("proc.ProcError"))
     0
 
 fn proc_pipe(at int) int

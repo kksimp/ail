@@ -936,6 +936,7 @@ fn cz_error_text(k str, msg str, at str)
     store64(e, kind_word(compress_kinds(), k))
     store64(e + 8, str_addr(msg))
     err_value(e)
+    err_tag(err_tag_of("compress.CompressError"))
 
 ## Fail with `kind` and `msg` and return the empty bytes object.
 fn cz_raise(st int, kind int, msg str, at str) str

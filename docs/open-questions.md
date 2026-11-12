@@ -110,18 +110,14 @@ context ([ADR 0050](decisions/0050-error-return-traces.md)), `?` on optionals
 ([ADR 0051](decisions/0051-no-implicit-optional-to-error.md)), and handling
 success *or* failure as a statement ([ADR 0125](decisions/0125-if-binding.md):
 `if x := e` … `else err`).
-**Still open:** safe member access (`a?.b`), and matching on specific errors,
-including on a set of error types (`IoError | ParseError`). Options for the
-latter:
-- qualified variant patterns from every member type (`ParseError.Empty =>`),
-  plus a pattern for a whole error type;
-- `match` with success and error arms.
+Matching on a set of error types is resolved by
+[ADR 1078](decisions/1078-error-union-member-matching.md) (`match err` with
+member types and their variants).
+**Still open:** safe member access (`a?.b`).
 **Measured 2026-10-24** (the corpus, `examples/`, `tools/` and `compiler/`, about
-148,000 lines): no `match` on a specific error variant follows an `else err`
-(errors are tested by field, e.g. `err.kind == "timed_out"`, an enum since
-[ADR 1068](decisions/1068-std-error-kinds-are-enums.md)), and about eight
-places reach a field through an optional that `a?.b` would shorten. Both stay
-open until a program needs them; the ADR 0029 measurement is then rerun.
+148,000 lines): about eight places reach a field through an optional that
+`a?.b` would shorten. It stays open until a program needs it; the ADR 0029
+measurement is then rerun.
 
 ## OQ-030 — What is an error type?
 **Partly resolved:** error types are declared with `error`
@@ -406,7 +402,7 @@ Lane 238 implemented the rules of the lane 223 and lane 225 lists that a checker
 | Rule | What's missing | Options | Recommendation |
 |---|---|---|---|
 | `gen.anon.2`, `type.enum.4` | They define a *canonical form* that rewrites tokens (`fn f[T Shape](s T)` to `fn f(s Shape)`, `Shape.Circle(r)` to `Circle(r)`). `ail fmt` only changes whitespace and refuses output whose tokens differ (fmt.safe, ADR 0169); `type.enum.4` also needs expected types. | (a) an `ail fix` rewrite with a lint-style diagnostic (new rule IDs); (b) let `ail fmt` rewrite tokens; (c) reword the rules as advice | (a): `ail fix` already rewrites tokens from checker information, and fmt.safe stays true. |
-| `err.type.4` | Matching on an inferred error set (OQ-029, "not designed yet"). | Decide OQ-029 first. | Wait for OQ-029. |
+| `err.type.4` | Resolved by [ADR 1078](decisions/1078-error-union-member-matching.md) (err.match.1-3). | | |
 | `ct.eval.4` | A MAY rule (reuse of compile-time results); nothing observable to test. | (a) implement with the build cache (lane 200); (b) keep it untested | (a) once `ail build` has its cache; no work before. |
 | `own.copy.1` | The "performance report" (ADR 0026) doesn't exist in any tool, so there is nothing to list copy sites in. | (a) a new `ail effects --copies FILE` listing each site where a list, map, set or struct is copied by assignment, argument or return; (b) wait for the report | (a), as the first line of the report: it follows the existing `--parallel` listing. |
 | `plat.isa.3` | A native start-up check of the CPU level needs the code generator's entry sequence (`compiler/mir/lower.ail`, the merge queue's critical path) or a start-up stub in the object writers. | (a) a stub in `compiler/obj/` that runs `cpuid` before `main`, x86-64 only (ARM64's baseline is checked by the OS); (b) wait for the queue to empty | (a) after the queue empties, so it lands without conflicts. |

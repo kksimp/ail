@@ -10,6 +10,8 @@
 use ast
 
 fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.Pos, want Ty?) Val?
+    if n := union_scrutinee(scrutinee)
+        return lower_union_match(n, arms, pos, want)
     s := lower_value(scrutinee, none)?
     mut en := ""
     match s.ty

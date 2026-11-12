@@ -231,6 +231,9 @@ fn main() !                                 # main can fail; the error is report
 - Inferred-error functions and tests: `?` on `none` fails with the prelude error
   `Absent`, with context: `text.to_int()? "port {text}"`. `T ! E` needs `else`.
 - `error struct NotFound "nothing at {path}"` gives a struct a message.
+- Several error types (`! IoError | ParseError`): `match err` takes member types
+  and their variants, and covers every member (err.match.1-3): `IoError =>`
+  (`err` is an `IoError` there), `ParseError.Empty =>`, `_ =>`.
 - `print` of a `T?` shows the value or `none`; `return i` needs no wrapping.
 - `mut best := none` gets its type at the first assignment (`best = 3`);
   `x := if c then 4 else none` is an `int?`.

@@ -1075,10 +1075,7 @@ fn Checker.match_expr(
         Unknown => literal = false
         Res => reject_unhandled(st, expr_pos(scrutinee))
         Tuple => literal = false
-        Union => unsupported(
-            expr_pos(scrutinee),
-            "matching on a set of error types is not designed yet (OQ-029); match on one error type",
-        )
+        Union(members) => return union_match(scrutinee, members, arms, at, expect, need)
         _ =>
             err_help(
                 "expr.match.4",

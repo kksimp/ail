@@ -1016,6 +1016,7 @@ fn os_error(path str, kind int, at str)
     store64(e, str_addr(path))
     store64(e + 8, kind_word(io_kinds(), kind_name(kind)))
     err_value(e)
+    err_tag(err_tag_of("fs.IoError"))
 
 fn fs_read_text(path str, at str) str
     s := os_fs_read_text(path)

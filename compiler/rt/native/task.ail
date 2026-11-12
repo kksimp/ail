@@ -411,6 +411,7 @@ fn trapped_error(rec int, at str)
     store64(v, str_addr(rule))
     store64(v + 8, str_addr(msg))
     err_value(v)
+    err_tag(err_tag_of("Trapped"))
 
 ## Sleep until the task has ended, trapped or not.
 fn wait_done(rec int)
