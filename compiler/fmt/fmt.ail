@@ -626,6 +626,11 @@ fn spaced(before FTok?, a FTok, b FTok) bool
         return false
     if b.tuple_ty
         return true
+    # `xs.any(f)` (type.coll.22): a keyword after `.` names a method.
+    if b.sym("(") and a.kind == KW
+        if bt := before
+            if bt.sym(".")
+                return false
     if b.sym("(") or b.sym("[")
         return not a.ends_operand()
     true
