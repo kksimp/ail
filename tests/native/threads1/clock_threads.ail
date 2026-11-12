@@ -1,0 +1,45 @@
+# The wall clock and the server's deadline clock are read on two threads at
+# once (std.time.1, std.net.10): the server must not take the wall clock's
+# answer for its own and drop its parked connections as expired.
+use std.net
+use std.time
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            return
+        ex.respond(net.Response(status: 200, headers: {}, body: "ok\n"))?
+
+fn line_of(c net.Conn) str
+    l := c.read_line() else err
+        return "error"
+    l else "(closed)"
+
+fn ask(c net.Conn) str
+    c.write("GET / HTTP/1.1\r\nHost: x\r\n\r\n") else err
+        return err.kind
+    mut l := line_of(c)
+    while l != "" and l != "error" and l != "(closed)"
+        l = line_of(c)
+    line_of(c)
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn worker(srv)
+    port := srv.addr().split(":")[1].to_int() else 0
+    mut cs := []
+    for i in 0..8
+        cs.push(net.connect("127.0.0.1", port)?)
+    mut right := 0
+    mut spins := 0
+    for k in 0..20000
+        if ask(cs[k % 8]) == "ok"
+            right += 1
+        # The server parks the connection and sweeps while this thread reads the wall clock.
+        for j in 0..50
+            if time.now_ms() > 0
+                spins += 1
+    print("answered: {right} of 20000")
+    srv.close()
+    w.wait()?
+    print("done")
