@@ -835,6 +835,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1047](1047-ail-check-fix.md) | `ail check --fix`: repair, then check, in one command *(delegated)* | Accepted | 2026-11-10 |
 | [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
 | [1049](1049-x86-64-allocates-rdx-and-r11.md) | x86-64 allocates rdx and r11; divisions keep other values out of rdx; amends ADR 0385 *(delegated)* | Accepted | 2026-11-10 |
+| [1050](1050-dominated-checks-and-field-alias-classes.md) | Drop checks a dominating check already passed; field stores forget one offset *(delegated)* | Accepted | 2026-11-10 |
 | [1051](1051-core-card-and-std-lookup.md) | Core card, `ail card` and `ail ask std` *(delegated)* | Accepted | 2026-11-10 |
 | [1052](1052-change-certificate.md) | Change certificate: `ail verify --diff --attest` and `--check` *(delegated)* | Accepted | 2026-11-10 |
 | [1054](1054-ail-edit-refactors.md) | `ail edit` refactors: `change_sig`, `extract` and `move` *(delegated)* | Accepted | 2026-11-10 |

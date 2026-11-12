@@ -1,62 +1,99 @@
-## Load forwarding (ADR 0816): a load of memory that an earlier load or store
-## in the same straight-line run of blocks already produced reuses that
-## value. The run is a block and the chain of blocks below it that each have
-## only the one predecessor; every other block starts with nothing known.
+## Load forwarding (ADR 0816) and dominated checks (ADR 1050, native.fwd.1-3).
+##
+## A load of memory that an earlier load or store already produced, on every
+## path to it, reuses that value; a bounds check that an earlier check of the
+## same list and index already passed, on every path, is dropped. Blocks are
+## visited in reverse postorder. A block starts with what all its
+## predecessors agree on, provided each was visited first; a loop header (a
+## predecessor not yet visited: the back edge) and the entry start with
+## nothing known. A fact a block starts with was true at the end of every
+## predecessor, and its values were defined in a block that dominates them
+## all, so they dominate the block too.
 ##
 ## Four kinds of memory are tracked apart: list headers (`len`, `cap`,
 ## `data`), list elements (`get`, `ldx`), struct slots (`load`) and raw
 ## memory (`prim load64`, `load8`, `loadf`). A write forgets what it can
-## reach: an element store the elements and raw memory, a slot store the
-## slots, raw memory and headers, a raw store everything, and a call (or changed
-## primitive with effects) everything. A store also remembers its value for
-## the load that reads it back. Nothing is carried over a loop's back edge,
-## since the header has two predecessors.
+## reach: an element store the elements and raw memory; a store to a slot of a
+## struct, tuple or enum object that slot offset in every object, and
+## raw memory (objects never overlap, so another offset is another word, and a
+## list header is its own object: native.fwd.2); any other store, a raw store,
+## a call (or changed primitive with effects) everything. A store also
+## remembers its value for the load that reads it back.
+##
+## A passed check (`get` or `set` at a site, as list and index; `bounds` as
+## index and length) stays true until a list could get shorter: a call other
+## than a push, `rt.list_new`, `rt.list_reserve` or `rt.obj_new`, a store to a
+## list, a raw store or a primitive with effects. Element and slot stores
+## change no length (native.fwd.1, native.fwd.3).
 
 struct Known
     header Map[str, int]
     elem Map[str, int]
+    ## Keyed `OFFSET#object`, so a store forgets one offset.
     slot Map[str, int]
     raw Map[str, int]
+    ## Checks that passed: `list|index` for `get`/`set`, `index|len` for
+    ## `bounds` (each value 1).
+    passed Map[str, int]
+    bounded Map[str, int]
 
-struct Visit
-    block int
-    known Known
+## Parts that `AIL_OPT_OFF` can turn off one by one, to measure or bisect
+## them: `fwdjoin` (start every join with nothing known), `fwdjoinmem` (a
+## join keeps the passed checks but no loaded values), `fwdslot` (a slot
+## store forgets every slot and header, as before ADR 1050) and `fwdcheck`
+## (keep every check).
+struct FwOpts
+    join bool
+    joinmem bool
+    slot bool
+    check bool
+
+## What `remember` asks of the instruction, besides a value to reuse.
+FW_NONE := -1
+FW_UNCHECK := -2
+FW_DROP := -3
 
 pub fn forward_loads(f Func) Func
     n := f.blocks.len()
-    mut preds := [0 for _ in 0..n]
-    for blk in f.blocks
-        for t in blk.term.targets
-            preds[t] += 1
+    order := rpo(f)
+    mut pos := [-1 for _ in 0..n]
+    for k in 0..order.len()
+        pos[order[k]] = k
+    mut preds := [List[int]() for _ in 0..n]
+    for b in order
+        for t in f.blocks[b].term.targets
+            preds[t].push(b)
+    mut outs := [empty_known() for _ in 0..n]
     mut repl := [v for v in 0..f.vals.len()]
     mut gone := [[false for _ in blk.insts] for blk in f.blocks]
+    mut unchecked := [[false for _ in blk.insts] for blk in f.blocks]
     mut changed := false
-    mut done := [false for _ in 0..n]
-    mut roots := rpo(f)
-    mut r := roots.len() - 1
-    mut stack := List[Visit]()
-    while r >= 0
-        b := roots[r]
-        r -= 1
-        if preds[b] == 1 and b != 0
-            continue
-        stack.push(Visit(block: b, known: empty_known()))
-        while stack.len() > 0
-            v := stack.pop() else break
-            if done[v.block]
-                continue
-            done[v.block] = true
-            mut k := v.known
-            for at in 0..f.blocks[v.block].insts.len()
-                i := f.blocks[v.block].insts[at]
-                found := remember(f, i, mut k, mut repl)
-                if found >= 0
-                    repl[i.dst] = found
-                    gone[v.block][at] = true
-                    changed = true
-            for t in f.blocks[v.block].term.targets
-                if preds[t] == 1 and t != v.block
-                    stack.push(Visit(block: t, known: k))
+    o := FwOpts(
+        join: not opt_off("fwdjoin"),
+        joinmem: not opt_off("fwdjoinmem"),
+        slot: not opt_off("fwdslot"),
+        check: not opt_off("fwdcheck"),
+    )
+    for b in order
+        mut k := empty_known()
+        if o.join or preds[b].len() < 2
+            k = fw_entry(b, preds[b], pos, outs)
+            if not o.joinmem and preds[b].len() > 1
+                clear(mut k, true)
+        for at in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[at]
+            found := remember(f, i, o, mut k, mut repl)
+            if found >= 0
+                repl[i.dst] = found
+                gone[b][at] = true
+                changed = true
+            elif found == FW_UNCHECK
+                unchecked[b][at] = true
+                changed = true
+            elif found == FW_DROP
+                gone[b][at] = true
+                changed = true
+        outs[b] = k
     if not changed
         return f
     mut g := f
@@ -66,6 +103,8 @@ pub fn forward_loads(f Func) Func
                 resolve_val(repl, a)
                 for a in g.blocks[b].insts[at].operands()
             ])
+            if unchecked[b][at]
+                g.blocks[b].insts[at].site = -1
         g.blocks[b].insts = [
             g.blocks[b].insts[at]
             for at in 0..g.blocks[b].insts.len() if not gone[b][at]
@@ -79,12 +118,46 @@ pub fn forward_loads(f Func) Func
         g.blocks[b].term = t
     g
 
+## What block `b` starts with: what every predecessor ended with, when each
+## was visited before `b`; else nothing.
+fn fw_entry(b int, ps List[int], pos List[int], outs List[Known]) Known
+    if b == 0 or ps.len() == 0
+        return empty_known()
+    for p in ps
+        if pos[p] >= pos[b]
+            return empty_known()
+    mut k := outs[ps[0]]
+    for j in 1..ps.len()
+        k = fw_meet(k, outs[ps[j]])
+    k
+
+fn fw_meet(a Known, b Known) Known
+    Known(
+        header: fw_meet_map(a.header, b.header),
+        elem: fw_meet_map(a.elem, b.elem),
+        slot: fw_meet_map(a.slot, b.slot),
+        raw: fw_meet_map(a.raw, b.raw),
+        passed: fw_meet_map(a.passed, b.passed),
+        bounded: fw_meet_map(a.bounded, b.bounded),
+    )
+
+## The entries `a` and `b` both have, with the same value.
+fn fw_meet_map(a Map[str, int], b Map[str, int]) Map[str, int]
+    mut out := Map[str, int]()
+    for key in a.keys()
+        if v := b.get(key)
+            if v == a[key]
+                out[key] = v
+    out
+
 fn empty_known() Known
     Known(
         header: Map[str, int](),
         elem: Map[str, int](),
         slot: Map[str, int](),
         raw: Map[str, int](),
+        passed: Map[str, int](),
+        bounded: Map[str, int](),
     )
 
 fn resolve_val(repl List[int], v int) int
@@ -94,39 +167,91 @@ fn resolve_val(repl List[int], v int) int
     x
 
 ## What one instruction does to `k`: the value an earlier instruction
-## already produced for it (else -1), after recording what it reads and
-## forgetting what it writes.
-fn remember(f Func, i Inst, mut k Known, mut repl List[int]) int
+## already produced for it (else `FW_NONE`, `FW_UNCHECK` for a check that
+## already passed, `FW_DROP` for a `bounds` that did), after recording what it
+## reads and forgetting what it writes.
+fn remember(f Func, i Inst, o FwOpts, mut k Known, mut repl List[int]) int
     args := [resolve_val(repl, a) for a in i.operands()]
     if i.op == "len" or i.op == "cap" or i.op == "data"
-        return look(f, i, args, mut k.header)
+        return look(f, i, key_of(i.op, args, i), mut k.header)
     if i.op == "get" or i.op == "ldx"
-        return look(f, i, args, mut k.elem)
+        found := look(f, i, key_of(i.op, args, i), mut k.elem)
+        if found >= 0 or i.op == "ldx"
+            return found
+        return fw_check(o, i, "{args[0]}|{args[1]}", mut k.passed, FW_UNCHECK)
     if i.op == "load"
-        return look(f, i, args, mut k.slot)
+        if fw_object(f.vals[args[0]])
+            return look(f, i, fw_slot(i.imm, args[0]), mut k.slot)
+        # Through an address or a list: as raw memory, which every store forgets.
+        return look(f, i, key_of(i.op, args, i), mut k.raw)
     if i.op == "prim" and (i.name == "load64" or i.name == "load8" or i.name == "loadf")
-        return look(f, i, args, mut k.raw)
+        return look(f, i, key_of(i.op, args, i), mut k.raw)
+    if i.op == "bounds"
+        return fw_check(o, i, "{args[0]}|{args[1]}", mut k.bounded, FW_DROP)
     if i.op == "set" or i.op == "stx"
         k.elem = Map[str, int]()
         k.raw = Map[str, int]()
         op := if i.op == "set" then "get" else "ldx"
         k.elem[key_of(op, [args[0], args[1]], i)] = args[2]
+        if i.op == "set"
+            return fw_check(o, i, "{args[0]}|{args[1]}", mut k.passed, FW_UNCHECK)
     elif i.op == "store"
-        # A list's own length can change under a store.
-        if f.vals[args[0]].elem() != none
-            clear(mut k)
-        else
-            k.slot = Map[str, int]()
+        if fw_object(f.vals[args[0]])
+            # Only this offset, in whatever object `args[0]` is
+            # (native.fwd.2); no list header or element is in an object.
+            k.slot = if o.slot then fw_forget_offset(k.slot, i.imm) else Map[str, int]()
             k.raw = Map[str, int]()
-            k.header = Map[str, int]()
-            k.slot[key_of("load", [args[0]], i)] = args[1]
+            if not o.slot
+                k.header = Map[str, int]()
+            k.slot[fw_slot(i.imm, args[0])] = args[1]
+        else
+            # A list's own length can change under a store; anything else
+            # isn't known.
+            clear(mut k, false)
     elif i.op == "prim" and (i.name == "store64" or i.name == "store8" or i.name == "storef")
-        clear(mut k)
+        clear(mut k, false)
     elif i.op == "prim" and not pure_prim(i.name)
-        clear(mut k)
-    elif i.op == "call" or i.op == "icall" or i.op == "utrap" or i.op == "trap"
-        clear(mut k)
-    -1
+        clear(mut k, false)
+    elif i.op == "call"
+        clear(mut k, fw_grows(i.name))
+    elif i.op == "icall" or i.op == "utrap" or i.op == "trap"
+        clear(mut k, false)
+    FW_NONE
+
+## A check at `key`: `drop` when one already passed (native.fwd.1), else
+## `FW_NONE` after remembering it. An unchecked access (site -1) is in bounds
+## all the same, so it vouches for later ones too.
+fn fw_check(o FwOpts, i Inst, key str, mut seen Map[str, int], drop int) int
+    if not o.check
+        return FW_NONE
+    if seen.contains(key)
+        if i.site >= 0
+            return drop
+        return FW_NONE
+    seen[key] = 1
+    FW_NONE
+
+## A call that makes no list shorter, so passed checks stay true.
+fn fw_grows(name str) bool
+    is_push_name(name) or name == "rt.list_new" or name == "rt.list_reserve" or name == "rt.obj_new"
+
+## A value that points at the start of an object with one slot per field: no
+## list header and no list's elements.
+fn fw_object(t Ty) bool
+    match t
+        Struct(_) | Tuple(_) | Enum(_) => true
+        _ => false
+
+fn fw_slot(off int, obj int) str
+    "{off}#{obj}"
+
+fn fw_forget_offset(m Map[str, int], off int) Map[str, int]
+    at := "{off}#"
+    mut out := Map[str, int]()
+    for key in m.keys()
+        if not key.starts_with(at)
+            out[key] = m[key]
+    out
 
 fn pure_prim(name str) bool
     name == "list_addr"
@@ -139,19 +264,23 @@ fn pure_prim(name str) bool
         or name == "global"
         or name == "globals_end"
 
-fn clear(mut k Known)
+## Forget all memory; keep the passed `get`/`set` checks when `keep_checks`
+## (nothing got shorter). `bounds` checks name values only, so they stay.
+fn clear(mut k Known, keep_checks bool)
     k.header = Map[str, int]()
     k.elem = Map[str, int]()
     k.slot = Map[str, int]()
     k.raw = Map[str, int]()
+    if not keep_checks
+        k.passed = Map[str, int]()
 
 fn key_of(op str, args List[int], i Inst) str
     "{op}|{args}|{i.imm}|{i.fimm}|{i.name}"
 
-## The earlier value for a load, else -1 after remembering this one. A value
-## of another type (a stored `int` read as a `float`) isn't reused.
-fn look(f Func, i Inst, args List[int], mut seen Map[str, int]) int
-    key := key_of(i.op, args, i)
+## The earlier value for a load at `key`, else -1 after remembering this
+## one. A value of another type (a stored `int` read as a `float`) isn't
+## reused.
+fn look(f Func, i Inst, key str, mut seen Map[str, int]) int
     if prior := seen.get(key)
         if f.vals[prior].name() == f.vals[i.dst].name()
             return prior

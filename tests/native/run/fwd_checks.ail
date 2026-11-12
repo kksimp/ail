@@ -1,0 +1,81 @@
+# Checks a dominating check already passed, and loads a field store can't
+# reach (native.fwd.1-3, ADR 1050): each result is the one the checks and
+# loads would give, including where two names reach one object.
+struct Pt
+    x int
+    y int
+
+struct Bag
+    items List[int]
+    n int
+
+struct Coder
+    rng int
+    probs List[int]
+
+fn Coder.bit(mut self, idx int) int
+    p := self.probs[idx]
+    self.rng = self.rng / 2 + p
+    self.probs[idx] = p + 1
+    self.rng % 2
+
+fn same_slot(mut ps List[Pt], j int) int
+    a := ps[0].x
+    ps[j].x = a + 10
+    b := ps[0].x
+    ps[j].y = 7
+    c := ps[0].x
+    a * 10000 + b * 100 + c
+
+fn bag(mut b Bag) int
+    a := b.items.len()
+    b.n = a
+    b.items.push(9)
+    c := b.items.len()
+    b.items = [1]
+    d := b.items.len()
+    a * 100 + c * 10 + d
+
+fn after_grow(mut xs List[int], i int) int
+    a := xs[i]
+    xs.push(a)
+    a + xs[i] + xs.len()
+
+fn join(xs List[int], i int, up bool) int
+    mut t := 0
+    if up
+        t = xs[i] + 1
+    else
+        t = xs[i] - 1
+    t + xs[i]
+
+fn join_set(mut xs List[int], i int, up bool) int
+    if up
+        xs[i] = 1
+    else
+        xs[i] = 2
+    xs[i] * 10 + xs.len()
+
+fn main()
+    mut c := Coder(rng: 100, probs: [5, 6, 7])
+    print(c.bit(1) + c.bit(1))
+    print(c.rng)
+    print(c.probs)
+    mut ps := [Pt(x: 1, y: 2), Pt(x: 3, y: 4)]
+    print(same_slot(mut ps, 0))
+    print(same_slot(mut ps, 1))
+    print(ps[0].x)
+    print(ps[0].y)
+    print(ps[1].x)
+    mut b := Bag(items: [1, 2], n: 0)
+    print(bag(mut b))
+    print(b.n)
+    print(b.items)
+    mut xs := [4, 5, 6]
+    print(after_grow(mut xs, 2))
+    print(xs)
+    print(join(xs, 2, true))
+    print(join(xs, 0, false))
+    print(join_set(mut xs, 1, true))
+    print(join_set(mut xs, 1, false))
+    print(xs)
