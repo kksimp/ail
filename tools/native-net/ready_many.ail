@@ -45,6 +45,9 @@ fn main() !
     for i in 0..n
         if ask(cs[i], i) == "ok /r{i}"
             right += 1
+        if (i + 1) % 100 == 0
+            # Diagnostic: where the per-request cost jumps.
+            print("  asked {i + 1}, {right} right, {time.now_ms() - t0} ms")
     print("first round: {right} of {n}")
     print("first round ms: {time.now_ms() - t0}")
     mut back := 0
