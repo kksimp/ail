@@ -11,7 +11,8 @@ pub fn api.public_decls(prog ast.Program, facts api.Facts, whole bool) List[api.
 pub fn api.render_diff(old str, new str, a List[api.Decl], b List[api.Decl], json bool, budget int) (str, int)  ## The report of `a` (OLD) against `b` (NEW), and how many declarations
 pub fn api.diff_command(args List[str], std str) int [clock env fs io proc random]  ## `ail api --diff ...` with its arguments after `--diff`; the exit status:
 pub fn api.errors_command(rest List[str], std str) int [clock env fs io proc]
-pub fn api.find_command(args List[str]) int [env fs io]  ## `ail ask std ...` (api.find.1-4).
+pub fn api.find_command(args List[str]) int [env fs io]  ## `ail ask std ...` (api.find.1-5).
+pub fn api.how_command(args List[str]) int [env fs io]  ## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
 pub struct api.Impact  ## What an edit touches.
     pub changed List[str]  ## Declarations whose text changed, or that are new.
     pub affected List[str]  ## Functions that are, or reach, a changed declaration.

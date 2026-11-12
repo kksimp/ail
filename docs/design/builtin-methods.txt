@@ -1,0 +1,172 @@
+# The built-in methods `ail ask std WORDS` indexes next to the std functions (api.find.5).
+# One method per line: SIGNATURE ; RULE ; WORDS the method answers to.
+# The signature is `Type.name(params) Result`, with `[mut self]` after a method that changes its receiver.
+# tools/check-method-table.py keeps this file in step with docs/spec/04-types.md and compiler/check/builtins.ail.
+str.split(sep) List[str] ; type.str.4 ; split cut divide text on separator delimiter tokens pieces
+str.split(sep, limit) List[str] ; type.str.4 ; split at most limit pieces
+str.to_int() int? ; type.str.5 ; parse string to integer int number convert decimal
+str.to_float() float? ; type.num.8 ; parse string to float decimal number convert
+str.chars() List[char] ; type.str.7 ; characters letters iterate each char list of chars
+str.lines() List[str] ; type.str.7 ; split lines newline rows text
+str.trim() str ; type.str.7 ; strip whitespace spaces both ends
+str.trim_start() str ; type.str.17 ; strip whitespace leading left spaces
+str.trim_end() str ; type.str.17 ; strip whitespace trailing right spaces
+str.contains(sub) bool ; type.str.7 ; substring contains includes has text
+str.starts_with(p) bool ; type.str.7 ; prefix begins starts text
+str.ends_with(p) bool ; type.str.7 ; suffix ends text
+str.strip_prefix(p) str? ; type.str.7 ; remove prefix drop leading text
+str.strip_suffix(p) str? ; type.str.7 ; remove suffix drop trailing text
+str.find(sub) int? ; type.str.14 ; index position search substring locate first occurrence
+str.rfind(sub) int? ; type.str.18 ; index position search substring locate last occurrence
+str.replace(from, to) str ; type.str.14 ; replace substitute substring text all occurrences
+str.to_lower() str ; type.str.14 ; lowercase lower case convert text
+str.to_upper() str ; type.str.14 ; uppercase upper case convert text
+str.slice(a, b) str ; type.str.13 ; substring slice part range characters from to
+str.char_at(i) char? ; type.str.13 ; character at index nth letter position
+str.repeat(n) str ; type.str.10 ; repeat copies times multiply text
+str.pad_left(width, fill) str ; type.str.9 ; pad left align right zero pad width fill
+str.pad_right(width, fill) str ; type.str.9 ; pad right align left width fill
+str.center(width, fill) str ; type.str.16 ; pad center centre width fill
+str.words() List[str] ; type.str.17 ; split words whitespace tokens
+str.count(sub) int ; type.str.18 ; count occurrences substring how many
+str.len() int ; type.str.12 ; length size characters count
+str.byte_len() int ; type.str.12 ; length size utf-8 bytes count
+str.is_empty() bool ; type.str.19 ; empty blank length zero
+str.to_bytes() bytes ; type.bytes.10 ; bytes utf-8 encode convert
+char.is_digit() bool ; type.char.2 ; digit numeric ascii 0-9 test
+char.is_alpha() bool ; type.char.2 ; letter alphabetic test
+char.is_alnum() bool ; type.char.2 ; letter digit alphanumeric test
+char.is_space() bool ; type.char.2 ; whitespace space blank test
+char.is_upper() bool ; type.char.2 ; uppercase capital test
+char.is_lower() bool ; type.char.2 ; lowercase test
+char.to_upper() char ; type.char.2 ; uppercase convert capital
+char.to_lower() char ; type.char.2 ; lowercase convert
+char.to_digit(radix) int? ; type.char.3 ; digit value parse number radix base
+char.code() int ; type.char.4 ; code point unicode scalar ascii number ord
+int.abs() int ; type.num.12 ; absolute value magnitude
+int.min(b) int ; type.num.12 ; smaller least minimum of two
+int.max(b) int ; type.num.12 ; larger greatest maximum of two
+int.to_float() float ; type.num.12 ; convert float real number
+int.to_hex() str ; type.str.8 ; hexadecimal hex digits string convert format
+int.checked_add(b) int? ; type.num.12 ; overflow safe add plus none
+int.checked_sub(b) int? ; type.num.12 ; overflow safe subtract minus none
+int.checked_mul(b) int? ; type.num.12 ; overflow safe multiply times none
+int.checked_div(b) int? ; type.num.12 ; divide zero safe none
+int.checked_rem(b) int? ; type.num.12 ; remainder modulo zero safe none
+int.checked_neg() int? ; type.num.12 ; negate overflow safe none
+int.wrapping_add(b) int ; type.num.12 ; overflow wrap around add plus
+int.wrapping_sub(b) int ; type.num.12 ; overflow wrap around subtract minus
+int.wrapping_mul(b) int ; type.num.12 ; overflow wrap around multiply times hash
+int.wrapping_neg() int ; type.num.12 ; overflow wrap around negate
+int.saturating_add(b) int ; type.num.12 ; overflow clamp saturate add plus
+int.saturating_sub(b) int ; type.num.12 ; overflow clamp saturate subtract minus
+int.saturating_mul(b) int ; type.num.12 ; overflow clamp saturate multiply times
+int.bit_and(b) int ; expr.bit.1 ; bitwise and mask bits
+int.bit_or(b) int ; expr.bit.1 ; bitwise or set bits
+int.bit_xor(b) int ; expr.bit.1 ; bitwise xor exclusive or bits
+int.bit_not() int ; expr.bit.1 ; bitwise not complement invert bits
+int.shl(n) int ; expr.bit.1 ; shift left bits
+int.shr(n) int ; expr.bit.1 ; shift right bits
+int.to_u8() u8 ; type.num.15 ; convert narrow sized byte integer
+int.to_u16() u16 ; type.num.15 ; convert narrow sized integer
+int.to_u32() u32 ; type.num.15 ; convert narrow sized integer
+int.to_u64() u64 ; type.num.15 ; convert unsigned sized integer
+int.to_i8() i8 ; type.num.15 ; convert narrow sized integer
+int.to_i16() i16 ; type.num.15 ; convert narrow sized integer
+int.to_i32() i32 ; type.num.15 ; convert narrow sized integer
+int.to_f32() f32 ; type.num.15 ; convert single precision float
+float.abs() float ; type.num.9 ; absolute value magnitude
+float.floor() float ; type.num.9 ; round down integer part
+float.ceil() float ; type.num.9 ; round up ceiling integer part
+float.round() float ; type.num.9 ; round nearest integer
+float.sqrt() float ; type.num.9 ; square root
+float.cbrt() float ; type.num.16 ; cube root
+float.pow(y) float ; type.num.16 ; power exponent raise
+float.hypot(y) float ; type.num.16 ; hypotenuse distance length
+float.exp() float ; type.num.16 ; exponential e
+float.ln() float ; type.num.16 ; natural logarithm log
+float.log10() float ; type.num.16 ; logarithm base ten log
+float.sin() float ; type.num.16 ; sine trigonometry angle
+float.cos() float ; type.num.16 ; cosine trigonometry angle
+float.tan() float ; type.num.16 ; tangent trigonometry angle
+float.atan() float ; type.num.16 ; arctangent trigonometry angle
+float.atan2(x) float ; type.num.16 ; arctangent angle quadrant
+float.to_int() int ; type.num.9 ; convert truncate integer
+float.min(b) float ; type.num.12 ; smaller least minimum of two
+float.max(b) float ; type.num.12 ; larger greatest maximum of two
+bytes.len() int ; type.bytes.7 ; length size count
+bytes.to_str() str? ; type.bytes.8 ; decode utf-8 text string convert
+bytes.text() str ; type.bytes.8 ; decode lossy text string convert
+bytes.to_list() List[u8] ; type.bytes.7 ; list of bytes convert
+bytes.concat(b) bytes ; type.bytes.6 ; join append concatenate
+bytes.find(sub) int? ; type.bytes.9 ; index search locate subsequence
+bytes.contains(sub) bool ; type.bytes.9 ; contains includes subsequence
+bytes.starts_with(p) bool ; type.bytes.9 ; prefix begins
+bytes.ends_with(p) bool ; type.bytes.9 ; suffix ends
+bytes.hex() str ; type.bytes.11 ; hexadecimal hex digits encode string
+bytes.hex(sep) str ; type.bytes.14 ; hexadecimal hex digits encode string separator
+bytes.base64() str ; type.bytes.12 ; base64 encode string
+List.len() int ; type.coll.5 ; length size count number of elements
+List.is_empty() bool ; type.coll.20 ; empty length zero
+List.push(x) [mut self] ; type.coll.6 ; append add element end
+List.pop() T? [mut self] ; type.coll.9 ; remove last element stack
+List.first() T? ; type.coll.14 ; first element head
+List.last() T? ; type.coll.9 ; last element tail
+List.insert(i, x) [mut self] ; type.coll.14 ; insert element at index
+List.remove_at(i) T [mut self] ; type.coll.14 ; remove delete element at index
+List.extend(ys) [mut self] ; type.coll.14 ; append all concatenate add many lists
+List.clear() [mut self] ; type.coll.14 ; remove all empty
+List.reverse() [mut self] ; type.coll.14 ; reverse in place flip order
+List.swap(i, j) [mut self] ; type.coll.7 ; swap exchange two elements
+List.contains(x) bool ; type.coll.9 ; contains includes has member
+List.index_of(x) int? ; type.coll.9 ; index position search find element
+List.join(sep) str ; type.coll.9 ; join concatenate string separator build text
+List.sorted() List[T] ; type.coll.11 ; sort ascending order new list
+List.sorted(by: |x| key) List[T] ; type.coll.11 ; sort by key order custom comparator new list
+List.sort() [mut self] ; type.coll.11 ; sort in place ascending order
+List.sort(by: |x| key) [mut self] ; type.coll.11 ; sort in place by key order
+List.min() T? ; type.coll.11 ; smallest least minimum
+List.min(by: |x| key) T? ; type.coll.11 ; smallest least minimum by key
+List.max() T? ; type.coll.11 ; largest greatest maximum
+List.max(by: |x| key) T? ; type.coll.11 ; largest greatest maximum by key
+List.sum() T ; type.coll.12 ; total add up numbers
+List.take(n) List[T] ; type.coll.15 ; first n elements head limit
+List.chunks(n) List[List[T]] ; type.coll.17 ; split groups batches of n
+List.windows(n) List[List[T]] ; type.coll.17 ; sliding window neighbours runs of n
+List.counts() Map[T, int] ; type.coll.18 ; count frequency occurrences histogram tally
+List.flatten() List[T] ; type.coll.19 ; flatten nested lists join one list
+List.enumerate() List[(int, T)] ; type.tuple.9 ; index loop with index pairs position
+List.union(ys) Set[T] ; type.coll.16 ; union combine unique sets
+List.intersect(ys) Set[T] ; type.coll.16 ; intersection common both sets
+List.difference(ys) Set[T] ; type.coll.16 ; difference except minus sets
+Map.len() int ; type.map.6 ; length size count entries
+Map.is_empty() bool ; type.coll.20 ; empty length zero
+Map.get(k) V? ; type.map.6 ; lookup read value for key optional default else
+Map.contains(k) bool ; type.map.6 ; has key contains member
+Map.remove(k) V? [mut self] ; type.map.6 ; delete remove entry key
+Map.keys() List[K] ; type.map.6 ; keys list iterate
+Map.values() List[V] ; type.map.6 ; values list iterate
+Map.push(k, x) [mut self] ; type.map.8 ; append to list at key group multimap
+Map.top(n) List[K] ; std.count.2 ; most common highest values top n counts
+Set.len() int ; type.map.6 ; length size count
+Set.is_empty() bool ; type.coll.20 ; empty length zero
+Set.add(x) bool [mut self] ; type.map.6 ; insert add element new
+Set.remove(x) bool [mut self] ; type.map.6 ; delete remove element
+Set.contains(x) bool ; type.map.6 ; has contains member
+Set.sorted() List[T] ; type.map.6 ; sort ascending order list
+Set.sorted(by: |x| key) List[T] ; type.coll.11 ; sort by key order list
+Set.is_subset(t) bool ; type.map.6 ; subset contained within
+Set.union(t) Set[T] ; type.coll.16 ; union combine
+Set.intersect(t) Set[T] ; type.coll.16 ; intersection common both
+Set.difference(t) Set[T] ; type.coll.16 ; difference except minus
+Grid.fill(rows, cols, v) Grid[T] ; type.grid.1 ; create matrix table two dimensional filled
+Grid.from(xs) Grid[T] ; type.grid.1 ; create matrix table from lists rows
+Grid.row(i) List[T] ; type.grid.4 ; row of matrix table
+Grid.to_list() List[List[T]] ; type.grid.4 ; rows lists convert matrix
+Grid.cells List[T] ; type.grid.2 ; every element row by row flat
+Option.else: e else d T ; type.opt.7 ; default value when none absent unwrap fallback
+Option.?: e? T? ; type.opt.7 ; propagate none early return absent
+Option.if: if v := e ; type.opt.7 ; bind present value when some none check unwrap
+Tuple.0: t.0 ; type.tuple.3 ; element field of tuple pair first second
+Tuple.destructure: a, b := t ; type.tuple.4 ; unpack tuple pair names multiple return values
+zip(a, b) List[(A, B)] ; type.tuple.9 ; pair lists together combine two lists
