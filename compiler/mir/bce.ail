@@ -1396,7 +1396,10 @@ fn bound_out(f Func, defs List[Def], lp LoopInfo) Func?
         ki.imm = k
         g.blocks[lp.pre].insts.push(ki)
         d := defs[t.cond]
-        g.blocks[d.block].insts[d.at] = cmp.with_args([if a == v then nv else a for a in cmp.operands()])
+        g.blocks[d.block].insts[d.at] = cmp.with_args([
+            if a == v then nv else a
+            for a in cmp.operands()
+        ])
         return g
     none
 
