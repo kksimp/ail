@@ -211,7 +211,7 @@ fn main()
 
 ```ail error=gram.foreign.1 rules=gram.rec.1
 fn main()
-    print(1 & 2 ^ 3)    # two foreign operators on one line: one diagnostic, for the first
+    print(&1, &2)       # two foreign operators on one line: one diagnostic, for the first
 ```
 
 ```ail error=expr.name.1 rules=gram.rec.2
@@ -227,12 +227,14 @@ fn main()
 
 ```ail error=gram.foreign.1 rules=gram.help.1
 fn main()
-    print(1 & 2)        # the help says what to write: `a.bit_and(b)`
+    x := 1
+    print(&x)           # the help says there are no references
 ```
 
 ```ail error=gram.foreign.1 rules=gram.help.2
 fn main()
-    print(~a)           # `ail fix` resolves this, and the result checks clean
+    n := 1
+    n++                 # `ail fix` resolves this, and the result checks clean
 ```
 
 ```ail error=gram.fn.2 rules=gram.fn.2

@@ -639,6 +639,9 @@ fn prefix(before FTok?, a FTok) bool
         if bt := before
             return not bt.ends_operand()
         return true
+    # `~x`, bitwise not (expr.bit.3).
+    if a.text == "~"
+        return true
     # `!T` and `T ! E` differ only by position in a type; the source's spacing says which.
     if a.text == "!"
         if a.space_after

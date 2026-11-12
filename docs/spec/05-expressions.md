@@ -247,11 +247,14 @@ the same type. *(ADR 0117)*
 ## Operators
 
 **expr.prec.1** — Operators bind, from tightest to loosest: postfix (call,
-field, method, index, `?`); unary `-`; `* / %`; `+ -`; comparisons
+field, method, index, `?`); unary `-` and `~`; `* / %`; `+ -`; comparisons
 `== != < <= > >=`; `not`; `and`; `or`; ranges `.. ..=`; `else`
 (`err.else.6`). Binary operators at the same level associate to the left,
 except comparisons, ranges, and `else`, which associates to the right.
 *(ADR 0112, ADR 0144)*
+
+A bit operator (`expr.bit.3`) has no place in this order: it never mixes
+with another operator without parentheses (`expr.bit.4`).
 
 **expr.prec.2** — Two comparison operators in sequence without parentheses
 (e.g. `a < b < c`) are a compile-time error. *(ADR 0112)*
@@ -522,6 +525,51 @@ MUST trap. *(ADR 0465)*
 flags := 5.bit_or(8)        # 13
 low := flags.bit_and(4)     # 4
 hi := (-8).shr(1)           # -4
+```
+
+**expr.bit.3** — The operators `&`, `|`, `^`, `<<` and `>>` and the prefix
+`~` on `int` are the methods `bit_and`, `bit_or`, `bit_xor`, `shl`, `shr` and
+`bit_not`: `a & b` is `a.bit_and(b)`, `~a` is `a.bit_not()`, and so on, with
+the same results and the same trap (`expr.bit.2`). The operands of a bit
+operator are unary expressions: a name, a literal, a call, `-x`, `~x` or a
+parenthesised expression. A `|` where an operand is expected opens a key
+function (`expr.key.1`); after an operand it is bit-or; a function body runs to
+the end of the expression, so `|x| x | m` is `|x| (x | m)`. *(ADR 1070)*
+
+**expr.bit.4** — A bit operator never meets another operator without
+parentheses. A chain repeats one of `&`, `|`, `^` (`a & b & c`); `a | b & c`,
+`a << 1 << 2`, `a & b == c`, `a + b & c` and `a & b + c` are compile-time
+errors whose help names the parenthesised spelling. No precedence is defined
+between bit operators and the others, because the C ranking is a trap and the
+ranking of other languages differs. *(ADR 1070)*
+
+**expr.bit.5** — `x op= e` for `op` in `& | ^ << >>` means `x = x op e`, for a
+plain name `x`. A place with an index or a field is written out in full. A
+trailing `|` does not continue the line (`lex.stmt.2`), since `|` also closes
+a key function's parameter. *(ADR 1070)*
+
+```ail rules=expr.bit.3,expr.bit.4,expr.bit.5
+fn main()
+    flags := 5 | 8              # 13
+    low := flags & 4            # 4
+    hi := -8 >> 1               # -4
+    mask := ~0 & 255            # 255
+    is_odd := (flags & 1) == 1  # parentheses are required here
+    mut h := 1
+    h ^= h << 3
+    h <<= 1
+    print("{flags} {low} {hi} {mask} {is_odd} {h}")
+```
+
+```ail error=expr.bit.4
+fn main()
+    flags := 5
+    print(flags & 1 == 1)       # error: `&` and `==` need parentheses
+```
+
+```ail error=expr.bit.4
+fn main()
+    print(1 | 2 & 3)            # error: `|` and `&` need parentheses
 ```
 
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap

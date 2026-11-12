@@ -106,6 +106,16 @@ fn assign_op(s str) ast.BinOp?
         "%=" => ast.BinOp.Rem
         _ => none
 
+## The bit operator of `&= |= ^= <<= >>=` (expr.bit.5), or "".
+fn bit_assign(s str) str
+    match s
+        "&=" => "&"
+        "|=" => "|"
+        "^=" => "^"
+        "<<=" => "<<"
+        ">>=" => ">>"
+        _ => ""
+
 fn comparison(s str) ast.BinOp?
     match s
         "==" => ast.BinOp.Eq
@@ -1585,6 +1595,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             return ast.Stmt.Handle(value: target, otherwise: part)
         return none
     s := sym_at(0)
+    if bit_assign(s) != ""
+        return bit_assignment(target, s)
     if s == "=" or assign_op(s) != none
         apos := bump().pos
         value := expression()?
@@ -1593,6 +1605,25 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         error_text("expr.bind.1", here(), "only a plain name can be declared with `:=`", "", "")
         return none
     ast.Stmt.Eval(target)
+
+## `x &= e` and the other four bit forms (expr.bit.5): `x = x & e` for a plain
+## name `x`. A place with an index or a field is written out in full.
+fn Parser.bit_assignment(mut self, target ast.Expr, s str) ast.Stmt?
+    apos := bump().pos
+    op := bit_assign(s)
+    if name_of(target) != none
+        value := expression()?
+        arg := ast.Arg(label: none, mutable: false, moved: false, value: value, param: none)
+        call := ast.Expr.Method(recv: target, name: bit_method(op), name_pos: apos, args: [arg])
+        return ast.Stmt.Assign(target: target, op: none, value: call, pos: apos)
+    error_text(
+        "expr.bit.5",
+        apos,
+        "`{s}` works on a plain name",
+        "write the place twice: `a[i] = a[i] {op} e` (expr.bit.5)",
+        "",
+    )
+    none
 
 ## `for x in e` or `for mut x in e` (expr.loop.1, expr.loop.6), at `for`.
 fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
@@ -1950,7 +1981,7 @@ fn Parser.additive(mut self) ast.Expr?
     lhs
 
 fn Parser.multiplicative(mut self) ast.Expr?
-    mut lhs := unary()?
+    mut lhs := bit_operand()?
     while at_sym("*") or at_sym("/") or at_sym("%")
         mut op := ast.BinOp.Rem
         if at_sym("*")
@@ -1958,9 +1989,68 @@ fn Parser.multiplicative(mut self) ast.Expr?
         elif at_sym("/")
             op = ast.BinOp.Div
         pos := bump().pos
-        rhs := unary()?
+        rhs := bit_operand()?
         lhs = ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
     lhs
+
+## The method a bit operator stands for (expr.bit.3), or "".
+fn bit_method(s str) str
+    match s
+        "&" => "bit_and"
+        "|" => "bit_or"
+        "^" => "bit_xor"
+        "<<" => "shl"
+        ">>" => "shr"
+        _ => ""
+
+## The operators a bit operator may not touch without parentheses (expr.bit.4).
+fn arith_or_cmp(s str) bool
+    ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="].contains(s)
+
+## `a & b`, `a | b`, `a ^ b`, `a << k`, `a >> k` (expr.bit.3): the same call as
+## the method form, `a.bit_and(b)`. A bit operator takes tight operands and never
+## mixes with another operator without parentheses (expr.bit.4): the chain is one
+## operator repeated (`a & b & c`, never `a | b & c`, `a << 1 << 2`), and nothing
+## arithmetic or comparing touches it on either side.
+fn Parser.bit_operand(mut self) ast.Expr?
+    first := i
+    mut lhs := unary()?
+    sym := sym_at(0)
+    if bit_method(sym) == ""
+        return lhs
+    if first > 0 and arith_or_cmp(sym_at(first - 1 - i))
+        return bit_mix(sym_at(first - 1 - i), sym)
+    mut count := 0
+    while bit_method(sym_at(0)) != ""
+        op := sym_at(0)
+        if op != sym
+            return bit_mix(sym, op)
+        if (op == "<<" or op == ">>") and count > 0
+            return bit_mix(op, op)
+        pos := bump().pos
+        rhs := unary()?
+        arg := ast.Arg(label: none, mutable: false, moved: false, value: rhs, param: none)
+        lhs = ast.Expr.Method(recv: lhs, name: bit_method(op), name_pos: pos, args: [arg])
+        count += 1
+    after := sym_at(0)
+    if arith_or_cmp(after)
+        return bit_mix(sym, after)
+    lhs
+
+## Report two operators that meet without parentheses and give up on the expression.
+fn Parser.bit_mix(mut self, a str, b str) ast.Expr?
+    msg := if a == b
+        "`{a}` can't repeat without parentheses"
+    else
+        "`{a}` and `{b}` can't meet without parentheses"
+    error_text(
+        "expr.bit.4",
+        here(),
+        msg,
+        "put parentheses around one side: `(x {a} y) {b} z` or `x {a} (y {b} z)`",
+        "add parentheses",
+    )
+    none
 
 fn Parser.unary(mut self) ast.Expr?
     # lex.num.3: `-9223372036854775808` is the minimum `int`, unless a
@@ -1975,6 +2065,20 @@ fn Parser.unary(mut self) ast.Expr?
         pos := bump().pos
         inner := unary()?
         return ast.Expr.Unary(op: ast.UnOp.Neg, operand: inner, pos: pos)
+    # expr.bit.3: `~a` is `a.bit_not()`.
+    if at_sym("~")
+        pos := bump().pos
+        inner := unary()?
+        return ast.Expr.Method(recv: inner, name: "bit_not", name_pos: pos, args: List[ast.Arg]())
+    if at_sym("&")
+        error_text(
+            "gram.foreign.1",
+            here(),
+            "AIL has no `&x` reference",
+            "values are passed by value and `mut` marks changes at the call; `a & b` is the bitwise and of two values (expr.bit.3)",
+            "",
+        )
+        return none
     # `ref e` (own.ref.1, ADR 0067).
     if at_kw("ref")
         pos := bump().pos
@@ -2118,17 +2222,6 @@ fn Parser.call_args(mut self) List[ast.Arg]?
             param = take_name("a parameter name after `|`", "expr.key.1")?
             expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
         value := expression()?
-        # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
-        if at_sym("|")
-            error_text(
-                "gram.foreign.1",
-                here(),
-                "AIL has no `|`",
-                "bit operations are methods: `a.bit_or(b)` (expr.bit.1)",
-                "write `.bit_or`",
-            )
-            attach("write `.bit_or`", [fix.operands(here(), "|", "$l.bit_or($r)")])
-            return none
         # `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
         if at_sym("@")
             error_text(
