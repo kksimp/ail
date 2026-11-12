@@ -101,6 +101,8 @@ def main():
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     os.chdir(root)
     ail = shlex.split(a.ail, posix=(os.name != "nt"))  # a command, e.g. "powershell -NoProfile -File ail.ps1" on Windows
+    if os.sep in ail[0] or "/" in ail[0]:
+        ail[0] = os.path.abspath(ail[0])  # the mcp session runs in the program's directory: a relative path would not resolve there
     subprocess.run(ail + ["run", "examples/hello.ail"], stdout=subprocess.DEVNULL, check=True)  # builds the native CLI
     out = {"host": a.label or "%s %s" % (platform.system(), platform.machine()), "runs": a.runs,
            "commit": subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
