@@ -778,6 +778,7 @@ fn Checker.fields_literal(
     missing := [
         fields[k].name
         for k in 0..fields.len() if not given[k]
+            and fields[k].default == none
             and not (label == "net.Response" and fields[k].name == "all_headers")
     ]
     if missing.len() > 0 and not lost
@@ -786,12 +787,20 @@ fn Checker.fields_literal(
             "type.struct.4",
             at,
             "`{label}(...)` is missing {word} {list_names(missing)}",
-        ).with_help("every field must be given; there are no defaults yet; `todo` stands in for a value you haven't written")
+        ).with_help(missing_help(fields))
         holes := ["{m}: todo" for m in missing].join(", ")
         template := if args.len() == 0 then "{label}({holes})" else "{label}($a, {holes})"
         if [a for a in args if a.mutable].len() == 0
             d = d.with_fix("give the missing fields a `todo` each", [fix.call(at, label, template)])
         diags.push(d)
+
+## The help of a missing field (type.struct.4): which fields may be left out
+## (type.struct.8), and that these may not.
+fn missing_help(fields List[ast.Field]) str
+    left := [f.name for f in fields if f.default != none]
+    if left.len() == 0
+        return "every field must be given (they have no defaults); `todo` stands in for a value you haven't written"
+    "the fields without a default must be given; only {list_names(left)} may be left out; `todo` stands in for a value you haven't written"
 
 ## type.struct.7: positional arguments may only fill fields whose types all
 ## differ, so that swapping two of them is a type error.

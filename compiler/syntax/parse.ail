@@ -1310,7 +1310,20 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
         )
         i += 1
     ty := type_ref("the field's type (written `name Type`)", rule)?
-    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty, observe: observe)
+    mut default := absent[ast.Expr]()
+    if at_sym("=")
+        if rule != "type.struct.2"
+            error_text(
+                "type.struct.8",
+                here(),
+                "a variant's field has no default",
+                "only a struct field may declare one, as `name Type = value`; give the variant's fields when you construct it",
+                "",
+            )
+            return none
+        bump()
+        default = expression()?
+    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty, observe: observe, default: default)
 
 ## `struct Name` and one `name Type` field per line (type.struct.1-2).
 fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?

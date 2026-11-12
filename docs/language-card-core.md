@@ -91,6 +91,7 @@ A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plai
 5. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
 6. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
 7. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
+   A field may default (`retries int = 3`, type.struct.8): a literal may leave it out; the default is a plain constant.
 8. `=` on a name that is undeclared or immutable (expr.bind.3): declare with `:=`, or `mut`.
 9. A failure left unhandled (err.use.1): `?`, `else`, or return it.
 10. A parameter written `name: Type` or an arrow (gram.fn.2): `fn f(name Type) Ret`.

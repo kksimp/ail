@@ -60,6 +60,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
         c.check_invariants(i)
         if c.gap_now
             c.gapped_structs.add(i)
+        c.check_field_defaults(i)
     # err.type.6: inferred error sets are the least fixed point, found by
     # re-checking the functions silently until nothing changes.
     inferring := [i for i in 0..p.fns.len() if is_inferred(c.sigs[i].ret)]
@@ -1620,6 +1621,72 @@ fn Checker.check_invariants(mut self, struct_index int)
         if not accepts(Ty.Bool, got)
             mismatch("contract.decl.2", expr_pos(c.cond), Ty.Bool, got)
     locals = []
+
+## type.struct.8: a field's default is a plain constant of the field's type:
+## literals, `none`, `[]`, `{}`, `List[T]()`, `Map[K, V]()`, `Set[T]()` and
+## lists, sets, maps and tuples of them. It has no names, so a literal in any
+## module reads the same value, and it has no effects.
+fn Checker.check_field_defaults(mut self, struct_index int)
+    st := prog.structs[struct_index]
+    declared := struct_params[struct_index]
+    locals = []
+    scope = scope_of(declared)
+    for k in 0..st.fields.len()
+        d := st.fields[k].default else continue
+        if bad := plain_default(d)
+            err_help(
+                "type.struct.8",
+                expr_pos(bad),
+                "`{st.fields[k].name}`'s default isn't a plain constant",
+                "write literals, `none`, `[]`, `{}`, or lists, sets, maps and tuples of them; a default has no names or calls, so build anything else where you write the literal",
+            )
+            continue
+        want := field_types[struct_index][k]
+        got := expr(d, want, true)
+        if not accepts(want, got)
+            mismatch("type.struct.5", expr_pos(d), want, got)
+    locals = []
+
+## The first part of a field default that isn't a plain constant (type.struct.8).
+@allow("expr.match.3") fn plain_default(e ast.Expr) ast.Expr?
+    match e
+        Str | Bytes | Int | Float | Char | Bool | NoneLit => none
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    _ => return e
+            none
+        ListLit(items, _) => first_not_plain(items)
+        SetLit(items, _) => first_not_plain(items)
+        TupleLit(items, _) => first_not_plain(items)
+        MapLit(entries, _) =>
+            for m in entries
+                if b := plain_default(m.key)
+                    return b
+                if b := plain_default(m.value)
+                    return b
+            none
+        Unary(_, x, _) => plain_default(x)
+        Call(callee, args, _) => empty_collection(callee, args, e)
+        _ => e
+
+fn first_not_plain(items List[ast.Expr]) ast.Expr?
+    for x in items
+        if b := plain_default(x)
+            return b
+    none
+
+## `List[T]()`, `Map[K, V]()` and `Set[T]()`.
+@allow("expr.match.3") fn empty_collection(callee ast.Expr, args List[ast.Arg], e ast.Expr) ast.Expr?
+    if args.len() > 0
+        return e
+    match callee
+        TypeArgs(n, _, _) =>
+            if n == "List" or n == "Map" or n == "Set"
+                return none
+            e
+        _ => e
 
 ## Check `f`'s contracts with its parameters in scope; `ensures` also sees
 ## `result`, the success value (contract.ens.1).

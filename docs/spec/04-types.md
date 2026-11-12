@@ -223,7 +223,7 @@ u := User(id: 7, name: "Ada", email: none)
 ```
 
 **type.struct.4** — A struct literal MUST set every field of the struct
-exactly once. Named and shorthand arguments may come in any order. Missing,
+that has no default (`type.struct.8`) exactly once, and no field twice. Named and shorthand arguments may come in any order. Missing,
 unknown and repeated fields are compile-time errors. *(ADR 0113, ADR 0142)*
 
 **type.struct.5** — A struct's field names MUST be distinct. Each value in a
@@ -249,7 +249,33 @@ Pos(row: r, col: c)    # named
 Pos(r, c)              # error: row and col are both int
 ```
 
-> **Note:** field defaults are not yet decided.
+**type.struct.8** — A struct field may declare a default, written
+`name Type = value`. A struct literal that leaves the field out gets that
+value; naming the field sets it as usual. The value MUST be a plain constant
+of the field's type: literals, `none`, `[]`, `{}`, `List[T]()`, `Map[K, V]()`,
+`Set[T]()`, and lists, sets, maps, tuples and a leading `-` of them. It names
+no constant, function or type, so it reads the same wherever the literal is
+written and has no effect; anything else is a compile-time error. Each
+literal gets its own fresh value. A generic struct's default is typed with
+its type parameters, so `items List[T] = []` is fine and `x T = 0` is not. A
+variant's field has no default. A missing field's error says which fields
+may be left out. `impl Default` derivation (`trait.assoc.1`) does not read
+field defaults: it uses each field type's default. *(ADR 1076)*
+
+```ail skip=context
+struct Config
+    name str
+    retries int = 3
+    tags List[str] = []
+
+c := Config(name: "a")          # retries 3, no tags
+d := Config(name: "b", retries: 9)
+```
+
+```ail error=type.struct.8
+struct Bad
+    a int = len("abc")          # error: a default has no calls or names
+```
 
 ## Enums
 

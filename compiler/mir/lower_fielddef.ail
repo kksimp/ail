@@ -1,0 +1,36 @@
+## Struct field defaults in the native subset (type.struct.8, ADR 1076): a
+## literal that leaves a field out gets the field's default, a plain constant
+## the checker has typed, lowered afresh at each literal.
+
+use ast
+
+## Record the defaults of `s`, in field order, when it has any.
+fn Lower.note_field_defaults(mut self, s ast.StructDecl)
+    ds := [f.default for f in s.fields]
+    if ds.len() > 0 and [d for d in ds if d != none].len() > 0
+        field_defaults["{prefix}{s.name}"] = ds
+
+## The default of field `k` of struct `n` (an instance of a generic struct
+## has its generic's), if it has one.
+fn Lower.default_of(self, n str, k int) ast.Expr?
+    key := gen.bases.get(n) else n
+    ds := field_defaults.get(key) else return none
+    if k < ds.len()
+        return ds[k]
+    none
+
+fn Lower.has_defaults(self, n str) bool
+    key := gen.bases.get(n) else n
+    field_defaults.contains(key)
+
+## Give each field no argument set its default.
+fn Lower.fill_defaults(mut self, n str, slots List[Slot], mut vs List[int]) bool
+    if not has_defaults(n)
+        return true
+    for k in 0..vs.len()
+        if vs[k] >= 0
+            continue
+        d := default_of(n, k) else continue
+        v := lower_value(d, slots[k].ty) else return false
+        vs[k] = convert(v, slots[k].ty, expr_pos(d))
+    true

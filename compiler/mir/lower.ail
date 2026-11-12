@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## Each struct's field defaults, in field order (type.struct.8, lower_fielddef.ail).
+    field_defaults Map[str, List[ast.Expr?]]
     ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
     hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
@@ -293,6 +295,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        field_defaults: {},
         hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),

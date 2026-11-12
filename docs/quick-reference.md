@@ -131,7 +131,7 @@ fn squares(n int) List[int]
 ```ail
 struct Point
     x int
-    y int
+    y int = 0                     # a default: Point(x: 1) is Point(x: 1, y: 0)
 
 enum Color
     Red
