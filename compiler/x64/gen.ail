@@ -184,13 +184,27 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     g.prologue(al.slots)
     # The entry block's parameters arrive in the argument registers.
     g.entry_moves()
+    # Measuring knobs (F7 diagnosis): `AIL_ALIGN_LOOP=N` starts each loop
+    # header, and `AIL_ALIGN_FN=N` each function, at a multiple of N bytes.
+    loop_align := align_knob("AIL_ALIGN_LOOP")
+    mut heads := [false for _ in 0..f.blocks.len()]
+    if loop_align > 1
+        for lp in mir.find_loops(f)
+            heads[lp.header] = true
     for k in 0..al.order.len()
         b := al.order[k]
         g.next_block = if k + 1 < al.order.len() then al.order[k + 1] else -1
+        if heads[b]
+            while g.a.code.len() % loop_align != 0
+                g.a.byte(144)
         g.a.bind(g.blabels[b])
         g.gen_block(b)
     g.gen_stubs()
     g.a.resolve_labels()
+    fn_align := align_knob("AIL_ALIGN_FN")
+    int3 := 204
+    while fn_align > 1 and img.code.len() % fn_align != 0
+        img.code.push(int3.to_u8())
     for sym in g.imports
         codegen.import_slot(mut img, sym)
     for x in g.f64s
@@ -204,6 +218,12 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     img.code.extend(g.a.code)
     for fx in g.a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: "rel32", sym: fx.sym, tail: fx.tail))
+
+## A measuring knob's alignment from the environment, else 1.
+fn align_knob(name str) int
+    s := env.get(name) else return 1
+    n := s.to_int() else return 1
+    n
 
 # ---- frame ----
 

@@ -55,11 +55,30 @@ pub fn wide_candidates(m Module, leaves Set[str]) Wide
         # A function with a loop stays a call: the call costs little beside the
         # loop, and copied into a caller the loop measured slower (matmul 2x,
         # spectralnorm 1.7x on ail-linux), so only straight-line code goes.
-        if (n <= WIDE_LIMIT or single and n <= SINGLE_LIMIT) and find_loops(f).len() == 0
+        if not knob_takes(f.name)
+            continue
+        if (n <= knob_int("AIL_WIDE_LIMIT", WIDE_LIMIT) or single and n <= knob_int("AIL_SINGLE_LIMIT", SINGLE_LIMIT))
+            and find_loops(f).len() == 0
             out.sizes[f.name] = n
             if single
                 out.single.add(f.name)
     out
+
+## Measuring knobs (F7 diagnosis; not part of the language): a limit read
+## from the environment, else `default`.
+fn knob_int(name str, default int) int
+    s := env.get(name) else return default
+    n := s.to_int() else return default
+    n
+
+## `AIL_WIDE_ONLY=a,b` copies only those functions, `AIL_WIDE_SKIP=a,b` never
+## those.
+fn knob_takes(name str) bool
+    only := env.get("AIL_WIDE_ONLY") else ""
+    if only != "" and not only.split(",").contains(name)
+        return false
+    skip := env.get("AIL_WIDE_SKIP") else ""
+    not skip.split(",").contains(name)
 
 ## A function's instruction count, or -1 when it may not be copied: the
 ## runtime's own functions and `main`, an indirect call, a primitive that
@@ -111,7 +130,9 @@ fn expand_wide(
     # (`size()` reading the arguments in `main`) went with slower wordfreq,
     # sieve and collatz on ail-linux, and copies at every call cost the
     # compiler 30% in size for no more speed (ADR 0940).
-    mut warm := [false for _ in 0..f.blocks.len()]
+    every := (env.get("AIL_WIDE_ALL") else "") != ""
+    log := (env.get("AIL_WIDE_LOG") else "") != ""
+    mut warm := [every for _ in 0..f.blocks.len()]
     for lp in find_loops(f)
         for b in 0..f.blocks.len()
             if lp.member[b]
@@ -129,6 +150,8 @@ fn expand_wide(
                 for _ in before..f.blocks.len()
                     warm.push(warm[b])
                 if n := take.sizes.get(name)
+                    if log
+                        io.eprint("wide {f.name} <- {name} n={n} single={take.single.contains(name)}")
                     if not take.single.contains(name)
                         room -= n
                 budget -= 1
@@ -158,7 +181,7 @@ fn first_wide_call(
                 written := i.site < 0 or sites[i.site].from < 0
                 if wide.single.contains(i.name) and written
                     return k
-                if n <= WIDE_LIMIT and n <= room
+                if n <= knob_int("AIL_WIDE_LIMIT", WIDE_LIMIT) and n <= room
                     return k
     -1
 
