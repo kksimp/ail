@@ -1,6 +1,7 @@
 ## `ail doctor [--json] [--path]` (spec tool.doctor.1-2, tool.path.1, ADR 1058): one line per check, `ok` or what to
 ## run, and the one line that puts `ail` on the shell's PATH. It reads and reports; the only thing it writes is a
 ## probe file in the build cache directory, removed at once.
+use pkg
 
 ## One check: its name, `ok`, `warn` or `fail`, what was found, the fix to run (empty when ok), and whether a
 ## failure is fatal (exit status 1).
@@ -86,6 +87,12 @@ fn check_version(root str) Check
             false,
         )
     good("version", "{version}, seed {if seed == "" then "unknown" else seed}")
+
+## The language version of the project in the current directory (mod.pkg.10).
+fn check_language() Check
+    version := pkg.tree_version(".")
+    from := if fs.exists("ail.pkg") then "ail.pkg" else "no ail.pkg, so this compiler's own"
+    good("language", "{version} ({from}), this compiler implements {pkg.lang_version()}")
 
 fn check_path(root str) Check
     found := proc.which("ail") else ""
@@ -233,6 +240,7 @@ fn checks(root str, cache str, target str) List[Check]
     [
         check_root(root),
         check_version(root),
+        check_language(),
         check_path(root),
         check_git(),
         check_curl(),

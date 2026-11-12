@@ -1300,7 +1300,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`package NAME`, [mod.pkg.1](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.1` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,
@@ -1399,7 +1399,7 @@ fn main()
 
 **tool.doctor.1** — `ail doctor [--json]` prints one line per check: `ok NAME: DETAIL`, or
 `warn`/`fail NAME: DETAIL; fix: WHAT TO RUN`. The checks are the toolchain root, the version and seed
-tag, the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
+tag, the language version of the project in the current directory ([mod.pkg.10](12-modules.md)), the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
 std.app and std.audio hosts. The exit status is 1 when a required check (root, git, cache) fails.
 With `--json` it is one array of objects with `name`, `status`, `detail`, `fix` and `required`.
 *(ADR 1058)*

@@ -75,7 +75,7 @@ fn commands() List[Cmd]
             "fix",
             "Check and fix",
             "apply the fixes that diagnostics carry",
-            "ail fix [--dry-run] FILE",
+            "ail fix [--dry-run] FILE | ail fix --migrate [DIR]",
             "fix.check.1",
         ),
         c(

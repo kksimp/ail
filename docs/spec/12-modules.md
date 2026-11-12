@@ -186,7 +186,7 @@ dependencies and no capability limit. *(ADR 0230)*
 ```
 
 **mod.pkg.2** — A manifest is lines of words separated by spaces; `#` starts
-a comment and `"..."` quotes a word. Its first line is `package NAME`,
+a comment and `"..."` quotes a word. Its first line is `package NAME` (or the `ail` line of `mod.pkg.10`),
 optionally followed by `caps LIST` (`eff.cap.5`) and `unsafe allow` or
 `unsafe driver` (`unsafe.block.3`, `unsafe.hw.1`), and appears once. Every other line is `dep NAME` followed
 by key-value pairs: `path`, `git`, `rev`, `tag`, `caps` (`eff.cap.4`) and
@@ -272,6 +272,39 @@ manifest lines again, ignoring the lock, fetches them, rewrites `ail.lock`
 and prints `locked NAME COMMIT` for each git dependency. Naming a dependency
 that no manifest of the program declares with `git` is an error.
 *(ADR 0357)*
+
+**mod.pkg.10** — A manifest may hold one line `ail MAJOR.MINOR` (`ail 0.1`),
+before or after `package`, naming the language version its sources are
+written for. `ail new` writes it. Without the line, and for a single file with
+no manifest, the version is the compiler's own, so only the line makes a tree
+declare one. Anything but two numbers separated by `.`, a missing version and
+a second `ail` line are compile-time errors at the line. A tree whose version
+is lower than the compiler's is accepted and prints nothing in 0.1. *(ADR 1084)*
+
+```ail pkg=version_ok tool=run,DIR expect=ok rules=mod.pkg.10
+```
+
+```ail pkg=version_errors tool=check,DIR status=2 expect=mod.pkg.10 rules=mod.pkg.10
+```
+
+**mod.pkg.11** — A package whose `ail` line names a version higher than the
+compiler's (compared as MAJOR, then MINOR) is a compile-time error at the
+version, whichever manifest of the program holds it, naming both versions and
+saying to update the toolchain. *(ADR 1084)*
+
+```ail pkg=version_newer tool=check,DIR status=2 expect=mod.pkg.11 rules=mod.pkg.11
+```
+
+**mod.pkg.12** — `ail fix --migrate [DIR]` reads the language version of the
+tree at `DIR` (the current directory by default, as `mod.pkg.10`) and brings it
+up to the compiler's version, one release step at a time. In 0.1 no release
+has changed the language, so it prints `nothing to migrate from VERSION` and
+exits 0; a version newer than the compiler's is `mod.pkg.11` with exit
+status 2. `ail doctor` shows the version of the project in the current
+directory. *(ADR 1084)*
+
+```ail pkg=version_ok tool=fix,--migrate,DIR expect=0.1 rules=mod.pkg.12
+```
 
 ## Program entry point
 

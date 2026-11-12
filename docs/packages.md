@@ -204,3 +204,10 @@ dep json git https://github.com/example/ail-json tag v1.4
 
 See [design/packages.md](design/packages.md) for the reasons and the open
 items.
+
+## Language version
+
+`ail 0.1` in `ail.pkg` names the language version a tree is written for (`mod.pkg.10`); `ail new`
+writes it. A tree that needs a newer language than the compiler is an error (`mod.pkg.11`).
+`ail fix --migrate [DIR]` migrates an older tree; in 0.1 it prints `nothing to migrate from 0.1`
+(`mod.pkg.12`).
