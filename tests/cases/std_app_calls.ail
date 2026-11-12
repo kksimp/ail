@@ -28,5 +28,8 @@ fn main()
         return
     ev := app.event_from_json(j)
     print("{ev.kind} {ev.id}")
+    up := app.kind_of("keyup")
+    other := app.kind_of("zzz")
+    print("{up} {other} {app.kind_name(up)}")
     found := app.host_path() else ""
     print(found.len() >= 0)

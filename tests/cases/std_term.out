@@ -39,5 +39,6 @@ scroll -3
 scroll 3
 resize 80x24
 key a ctrl=false alt=false shift=false
+pageup f5 q
 false
 true

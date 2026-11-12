@@ -2297,15 +2297,15 @@ fn Gate.net(mut self)
         by_ip := "https://127.0.0.1:{tport}/"
         a := sh_run("SSL_CERT_FILE={data}/root.pem {root}/ail run tests/net/https.ail {ok} {by_ip}")
         if a.status != 0
-            or a.out != "200 <HTML><BODY BGCOLOR=\"#ffffff\">\ntls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
+            or a.out != "200 <HTML><BODY BGCOLOR=\"#ffffff\">\nnet.NetKind.Tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
             red("net https", "exit {a.status}\n{a.out}{a.err}")
         b := sh_run("SSL_CERT_FILE={data}/rsa_leaf.pem {root}/ail run tests/net/https.ail {ok}")
         if b.out
-            != "tls: the certificate for `localhost` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store\n"
+            != "net.NetKind.Tls: the certificate for `localhost` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store\n"
             red("net https untrusted root", "{b.out}{b.err}")
         t := sh_run("SSL_CERT_FILE={data}/root.pem {root}/ail run tests/net/tls_conn.ail {tport}")
         if t.status != 0
-            or t.out != "HTTP/1.0 200 ok\ntls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
+            or t.out != "HTTP/1.0 200 ok\nnet.NetKind.Tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
             red("net tls conn", "exit {t.status}\n{t.out}{t.err}")
         net_stop(spid)
         sh_run("pkill -f 'openssl s_server.*{tport}' 2>/dev/null")
