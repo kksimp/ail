@@ -32,7 +32,7 @@ fn main() unit
     branch v5, b2(), b3()
   b2:
     v7 int = const 2
-    v8 int = mul v4:i, v7 !s0
+    v8 int = mul v4:i, v7
     call rt.list_push(v1:xs, v8)
     v9 int = const 1
     v10 int = add v4:i, v9
@@ -91,12 +91,8 @@ fn main() unit
     v52 int = const -7
     jump b11(v52)
   b13(v55 int):
-    v56 int = neg v55 !s6
-    v58 int = div v56, v43
-    v59 int = const 3
-    v60 bool = eq v58, v59
     v62 bool = const 1
-    branch v60, b15(v62), b16()
+    branch v50, b15(v62), b16()
   b14:
     jump b13(v43)
   b15(v61 bool):
