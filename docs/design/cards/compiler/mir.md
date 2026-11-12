@@ -9,11 +9,12 @@ pub fn mir.opt_off(str) bool [env]
 pub fn mir.bce(mir.Func, bool, bool) mir.Func [env]
 pub fn mir.bce_noting(mir.Func, bool, bool, bool, mut List[mir.RkNote]) mir.Func [env mutates]
 pub fn mir.lists_only_grow(mir.Module) bool
+pub fn mir.known_lists(mir.Func) mir.Func [env]
 pub fn mir.fill_loops(mir.Func, bool) mir.Func
 pub fn mir.fold(mir.Func) mir.Func
 pub fn mir.fold_in(mut mir.Func) [mutates]
 pub fn mir.rpo(mir.Func) List[int]
-pub fn mir.forward_loads(mir.Func) mir.Func
+pub fn mir.forward_loads(mir.Func) mir.Func [env]
 pub fn mir.hoist_headers(mir.Func) mir.Func [env]
 pub fn mir.inline_module(mut mir.Module) [env mutates]
 pub fn mir.inline_call(mut mir.Func, int, int, mir.Func, mut List[mir.Site]) [mutates]
@@ -96,7 +97,7 @@ pub fn mir.rk_matches(str, str) bool
 pub fn mir.rk_key(mir.Func, mir.LoopInfo) int
 pub fn mir.rk_uncounted(mir.LoopInfo) str
 pub fn mir.rk_blockers(mir.Func, List[mir.Def], mir.LoopInfo) List[mir.RkBlocker]
-pub fn mir.rk_explain(str, mir.Func, mir.Func, mir.Func, List[mir.RkNote], List[mir.Site], List[str], List[mir.Func]) List[str] [env]
+pub fn mir.rk_explain(str, mir.Func, mir.Func, mir.Func, List[mir.RkNote], List[mir.Site], List[str], List[mir.Func]) List[str]
 pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.simplify_in(mut mir.Func) [mutates]
@@ -116,4 +117,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1884); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1903); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
