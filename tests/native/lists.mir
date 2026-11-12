@@ -69,7 +69,7 @@ fn main() unit
     call rt.list_pushf(v46, v44)
     call rt.list_pushf(v46, v45)
     v65:s float = fconst 0.0
-    v67 int = len v46
+    v67 int = const 2
     v94 int = data v46
     jump b17(v0, v65:s)
   b7:
