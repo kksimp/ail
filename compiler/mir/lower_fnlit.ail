@@ -1,0 +1,595 @@
+## Function literals and function values (type.fn.1-8, ADR 1067).
+##
+## In user code a function value is a pointer to a closure object (heap kind
+## 13, scanned word by word): word 0 is the code address of a function that
+## takes the object first, then the value's arguments; words 1.. hold the
+## values the literal copied when it was made (type.fn.5). A call loads word 0
+## and calls it indirectly with the object (`call_value`). A literal's body is
+## lowered when it is met, into its own function `fnlit#N`: the enclosing
+## function's state is put aside meanwhile (`FnFrame`), so the body sees the
+## same module, file and type parameters. A declared function used as a value
+## gets a one-word object and a thunk `fnv#NAME` that drops the object.
+## Runtime code keeps plain code addresses (`is_rt`).
+use ast
+
+## Lowering's state for function literals.
+struct FnLitState
+    ## Literals made so far: the next one's number.
+    n int
+    ## The functions whose thunk is made.
+    thunks Set[str]
+
+fn new_fn_lit_state() FnLitState
+    FnLitState(n: 0, thunks: Set[str]())
+
+## The state of the function being lowered, put aside while a literal's body
+## is lowered into a function of its own.
+struct FnFrame
+    fname str
+    ret Ty
+    fails bool
+    tail_want Ty?
+    tail_pos ast.Pos
+    facts Facts
+    blocks List[Block]
+    vals List[Ty]
+    names List[str]
+    sealed List[bool]
+    closed List[bool]
+    preds List[List[int]]
+    defs List[Map[str, int]]
+    incomplete List[Map[str, int]]
+    cur int
+    scopes List[Map[str, str]]
+    var_ty Map[str, Ty]
+    var_vals Map[str, List[int]]
+    nvars int
+    loops List[Loop]
+    borrowed Set[str]
+    fn_problems int
+    fn_failed bool
+    inv_key str
+    ens List[ast.Contract]
+    ens_label str
+    ens_vars List[NameKey]
+    ens_nargs int
+    else_targets List[int]
+    exits List[ExitAct]
+    uniq_depths List[int]
+    uniq_pending List[str]
+    unw_counts List[int]
+
+fn Lower.frame_save(self) FnFrame
+    FnFrame(
+        fname: fname,
+        ret: ret,
+        fails: fails,
+        tail_want: tail_want,
+        tail_pos: tail_pos,
+        facts: facts,
+        blocks: blocks,
+        vals: vals,
+        names: names,
+        sealed: sealed,
+        closed: closed,
+        preds: preds,
+        defs: defs,
+        incomplete: incomplete,
+        cur: cur,
+        scopes: scopes,
+        var_ty: var_ty,
+        var_vals: var_vals,
+        nvars: nvars,
+        loops: loops,
+        borrowed: borrowed,
+        fn_problems: fn_problems,
+        fn_failed: fn_failed,
+        inv_key: inv_key,
+        ens: ens,
+        ens_label: ens_label,
+        ens_vars: ens_vars,
+        ens_nargs: ens_nargs,
+        else_targets: else_targets,
+        exits: tk.exits,
+        uniq_depths: uniq.depths,
+        uniq_pending: uniq.pending,
+        unw_counts: unw.counts,
+    )
+
+fn Lower.frame_restore(mut self, f FnFrame)
+    fname = f.fname
+    ret = f.ret
+    fails = f.fails
+    tail_want = f.tail_want
+    tail_pos = f.tail_pos
+    facts = f.facts
+    blocks = f.blocks
+    vals = f.vals
+    names = f.names
+    sealed = f.sealed
+    closed = f.closed
+    preds = f.preds
+    defs = f.defs
+    incomplete = f.incomplete
+    cur = f.cur
+    scopes = f.scopes
+    var_ty = f.var_ty
+    var_vals = f.var_vals
+    nvars = f.nvars
+    loops = f.loops
+    borrowed = f.borrowed
+    fn_problems = f.fn_problems
+    fn_failed = f.fn_failed
+    inv_key = f.inv_key
+    ens = f.ens
+    ens_label = f.ens_label
+    ens_vars = f.ens_vars
+    ens_nargs = f.ens_nargs
+    else_targets = f.else_targets
+    tk.exits = f.exits
+    uniq.depths = f.uniq_depths
+    uniq.pending = f.uniq_pending
+    unw.counts = f.unw_counts
+
+## Start a function of its own while another is put aside.
+fn Lower.frame_begin(mut self, name str, rty Ty, ptys List[Ty], can_fail bool) List[int]
+    ps := begin_fn(name, rty, ptys)
+    fails = can_fail
+    tail_want = none
+    facts = new_facts()
+    else_targets = []
+    tk.exits = []
+    uniq.depths = []
+    uniq.pending = []
+    unw.counts = []
+    ens_label = ""
+    ens_vars = []
+    ens_nargs = 0
+    ps
+
+# ---- function types ----
+
+fn Ty.is_fn_value(self) bool
+    match self
+        Fn(_, _, _) => true
+        _ => false
+
+## The parts of a function type.
+struct FnShape
+    params List[Ty]
+    ret Ty
+    err Ty
+
+fn fn_shape(t Ty) FnShape?
+    match t
+        Fn(ps, r, e) => FnShape(params: ps, ret: r, err: e)
+        _ => none
+
+## The result type written after `fn(...)` in a function type (type.fn.6):
+## the success part of `R ! E`.
+fn Lower.fn_ret_type(mut self, t ast.TypeRef) Ty?
+    match t.shape
+        Fallible(ok, _) =>
+            o := ok else return Ty.Unit
+            type_of(o)
+        _ => type_of(t)
+
+## The error type of a function type: `Unit` when it can't fail, the one
+## error struct it names, else `Unknown`.
+fn Lower.fn_err_type(mut self, t ast.TypeRef?) Ty
+    r := t else return Ty.Unit
+    match r.shape
+        Fallible(_, errors) =>
+            es := errors else return Ty.Unknown
+            if es.len() != 1
+                return Ty.Unknown
+            type_of(es[0]) else Ty.Unknown
+        _ => Ty.Unit
+
+## A value of type `got` fits where `want` is expected: the same parameters
+## and result, and failing only if `want` can (type.fn.6).
+fn fn_fits(got Ty, want Ty) bool
+    g := fn_shape(got) else return false
+    w := fn_shape(want) else return false
+    if g.params.len() != w.params.len()
+        return false
+    for k in 0..g.params.len()
+        if g.params[k].name() != w.params[k].name()
+            return false
+    if g.ret.name() != w.ret.name()
+        return false
+    g.err.is_unit() or g.err.is_unknown() or w.err.is_unknown() or g.err.name() == w.err.name()
+
+## The expected type of a function literal given for parameter type `pt` of
+## a generic function before all its type parameters are bound (type.fn.8):
+## the parameter types, and the result when it is known.
+fn Lower.partial_fn_want(mut self, pt ast.TypeRef, binds Map[str, Ty], params List[str], k int) Ty?
+    match pt.shape
+        FnType(ps, r) =>
+            mut tys := List[Ty]()
+            for p in ps
+                tys.push(decl_type(p, binds, params, k)?)
+            mut rt := Ty.Unit
+            mut et := Ty.Unit
+            if x := r
+                saved := enter_decl(k, binds)
+                rt = fn_ret_type(x) else Ty.Unknown
+                et = fn_err_type(x)
+                leave_decl(saved)
+            Ty.Fn(params: tys, ret: rt, err: et)
+        _ => none
+
+# ---- making function values ----
+
+## The address of function `name` as a value of type `t`.
+fn Lower.code_addr(mut self, name str) int
+    mut i := inst(-1, "fnaddr", [])
+    i.name = name
+    emit(i, Ty.Int)
+
+## A closure object for code `name` holding `words` (each with its type).
+fn Lower.closure_object(mut self, name str, words List[Val], t Ty) Val
+    obj := call("rt.fnlit_new", [konst(1 + words.len(), Ty.Int)], Ty.Int)
+    prim_op("store64", [obj, code_addr(name)], Ty.Unit)
+    for i in 0..words.len()
+        w := words[i]
+        at := op("add", [obj, konst(8 * (i + 1), Ty.Int)], Ty.Int)
+        prim_op(if w.ty.is_float() then "storef" else "store64", [at, w.id], Ty.Unit)
+    Val(id: op("copy", [obj], t), ty: t)
+
+## The declared function `key` as a value of type `t` (type.fn.2): a
+## one-word object whose code is the thunk `fnv#key`.
+fn Lower.named_fn_value(mut self, key str, sig Sig, t Ty) Val
+    thunk := "fnv#{key}"
+    if not fl.thunks.contains(key)
+        fl.thunks.add(key)
+        frame := frame_save()
+        mut ptys := [Ty.Int]
+        ptys.extend(sig.params)
+        ps := frame_begin(thunk, sig.ret, ptys, sig.fails)
+        r := call(key, ps[1..], sig.ret)
+        finish(return_of(r))
+        end_fn(thunk, ast.Pos(line: 1, col: 1))
+        frame_restore(frame)
+    closure_object(thunk, [], t)
+
+## `|a, b| e` (type.fn.4-6): lower the body into a function of its own and
+## make the closure object with the values the body copies.
+fn Lower.lower_closure_lit(
+    mut self,
+    params List[ast.ClosureParam],
+    body ast.Expr,
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    mut shape := absent_shape()
+    if w := want
+        if s := fn_shape(w)
+            if s.params.len() == params.len()
+                shape = s
+    mut ptys := List[Ty]()
+    for k in 0..params.len()
+        p := params[k]
+        if written := p.ty
+            ptys.push(type_of(written) else return unsupported(written.pos, "this parameter type"))
+        elif s := shape
+            if s.params[k].is_unknown()
+                return unsupported(p.pos, "a function literal whose parameter types aren't known here")
+            ptys.push(s.params[k])
+        else
+            return unsupported(p.pos, "a function literal whose parameter types aren't known here")
+    mut want_ret := Ty.Unknown
+    mut err := Ty.Unit
+    if s := shape
+        want_ret = s.ret
+        err = s.err
+    # The values the body copies: the outer locals it names (type.fn.5).
+    mut used := Set[str]()
+    ast.expr_names(body, mut used)
+    mut caps := List[Cap]()
+    mut words := List[Val]()
+    for n in used.sorted()
+        if [p for p in params if p.name == n].len() > 0
+            continue
+        key := lookup(n) else continue
+        t := var_ty[key]
+        if t.is_unknown()
+            fn_failed = true
+            return none
+        v := Val(id: read_var(key, cur), ty: t)
+        words.push(Val(id: copy_if_place(ast.Expr.Name(n, pos), v), ty: t))
+        caps.push(Cap(name: n, ty: t))
+    name := "fnlit#{fl.n}"
+    fl.n += 1
+    frame := frame_save()
+    mut all := [Ty.Int]
+    all.extend(ptys)
+    inferring := want_ret.is_unknown()
+    ps := frame_begin(name, want_ret, all, inferring or not err.is_unit())
+    env := ps[0]
+    for i in 0..caps.len()
+        c := caps[i]
+        at := op("add", [env, konst(8 * (i + 1), Ty.Int)], Ty.Int)
+        declare(c.name, c.ty, prim_op(if c.ty.is_float() then "loadf" else "load64", [at], c.ty))
+        borrowed.add(lookup(c.name) else "")
+    for k in 0..params.len()
+        declare(params[k].name, ptys[k], ps[k + 1])
+        borrowed.add(lookup(params[k].name) else "")
+    mut body_want := absent_ty()
+    if not inferring and not want_ret.is_unit()
+        body_want = want_ret
+    v := lower_expr(body, body_want)
+    mut rt := want_ret
+    if inferring
+        rt = Ty.Unit
+        if x := v
+            if x.id >= 0
+                rt = x.ty
+        ret = rt
+        if fallible_call(body) or raises(blocks)
+            err = Ty.Unknown
+        settle_zeros(rt)
+    if not done()
+        if x := v
+            if rt.is_unit() or x.id < 0
+                finish(return_of(-1))
+            else
+                finish(return_of(convert(Val(id: copy_if_borrowed(body, x), ty: x.ty), rt, pos)))
+        else
+            fn_failed = true
+    end_fn(name, pos)
+    frame_restore(frame)
+    t := Ty.Fn(params: ptys, ret: rt, err: err)
+    closure_object(name, words, t)
+
+fn absent_shape() FnShape?
+    none
+
+fn absent_ty() Ty?
+    none
+
+## Whether the function being built leaves with an error: `?` set the
+## runtime's error slot on some path (lower_err.ail).
+fn raises(bs List[Block]) bool
+    for b in bs
+        for i in b.insts
+            if i.op == "call" and (i.name == "rt.err_trace" or i.name == "rt.err_set")
+                return true
+    false
+
+## A literal whose result type came from its body: the zeros its `?` paths
+## return were made before that type was known; give them the type.
+fn Lower.settle_zeros(mut self, t Ty)
+    mut zeros := Set[int]()
+    for b in 0..blocks.len()
+        for k in 0..blocks[b].insts.len()
+            i := blocks[b].insts[k]
+            if i.op == "const" and i.dst >= 0 and vals[i.dst].is_unknown()
+                if t.is_float()
+                    mut f := inst(i.dst, "fconst", [])
+                    f.fimm = 0.0
+                    blocks[b].insts[k] = f
+                    vals[i.dst] = Ty.Float
+                else
+                    vals[i.dst] = if t.is_unit() then Ty.Int else t
+                zeros.add(i.dst)
+    # A literal without a result returns nothing on those paths too.
+    if t.is_unit()
+        for b in 0..blocks.len()
+            if blocks[b].term.kind == "return" and zeros.contains(blocks[b].term.value)
+                blocks[b].term.value = -1
+
+# ---- calling function values ----
+
+## The function a value of a `fn` type calls: its code, and the arguments
+## that come first (the closure object), as `icall` takes them (type.fn.3).
+fn Lower.fn_value_head(mut self, f int) List[int]
+    if is_rt
+        return [f]
+    [prim_op("load64", [f], Ty.Int), f]
+
+## Whether calling `callee` (a function value) can fail (type.fn.6).
+fn Lower.fn_value_fails(self, callee ast.Expr) bool
+    t := match callee
+        Name(n, _) =>
+            key := lookup(n) else return false
+            var_ty[key]
+        _ => recv_ty(callee) else return false
+    s := fn_shape(t) else return false
+    not s.err.is_unit()
+
+## The error type a call of the function value `callee` names, else `Unknown`.
+fn Lower.fn_value_err(self, callee ast.Expr) Ty
+    t := match callee
+        Name(n, _) =>
+            key := lookup(n) else return Ty.Unknown
+            var_ty[key]
+        _ => recv_ty(callee) else return Ty.Unknown
+    s := fn_shape(t) else return Ty.Unknown
+    if s.err.is_unit() then Ty.Unknown else s.err
+
+# ---- list methods that take a function (type.coll.21-26) ----
+
+LIST_FNS := ["any", "all", "find", "filter", "map", "group_by"]
+
+fn is_list_fn_call(name str, args List[ast.Arg]) bool
+    LIST_FNS.contains(name) and args.len() == 1
+
+## The function a list method applies to each element: a literal `|x| e`,
+## whose body is lowered inline in the loop (no object, no indirect call), or
+## a function value, called through.
+struct ElemFn
+    ## The literal's parameter, "" for a value.
+    param str
+    pty Ty
+    body ast.Expr
+    f Val
+
+## The parameter and body of a one-parameter literal.
+struct LitParts
+    name str
+    ty ast.TypeRef?
+    body ast.Expr
+
+fn lit_parts(e ast.Expr) LitParts?
+    match e
+        Closure(ps, body, _) =>
+            if ps.len() != 1
+                return none
+            LitParts(name: ps[0].name, ty: ps[0].ty, body: body)
+        _ => none
+
+fn Lower.elem_fn(mut self, a ast.Arg, e Ty, ret Ty) ElemFn?
+    if lp := lit_parts(a.value)
+        mut pt := e
+        if t := lp.ty
+            pt = type_of(t) else
+                problem(t.pos, "not in the native subset yet: this parameter type")
+                return none
+        return ElemFn(param: lp.name, pty: pt, body: lp.body, f: Val(id: -1, ty: Ty.Unit))
+    f := lower_value(a.value, Ty.Fn(params: [e], ret: ret, err: Ty.Unit))?
+    if fn_shape(f.ty) == none
+        problem(expr_pos(a.value), "not in the native subset yet: this function argument")
+        return none
+    ElemFn(param: "", pty: e, body: a.value, f: f)
+
+## The function applied to element `x`; a literal's body sees `x` as its parameter.
+fn Lower.apply_elem(mut self, fe ElemFn, x int, want Ty?) Val?
+    if fe.param != ""
+        scopes.push(Map[str, str]())
+        declare(fe.param, fe.pty, x)
+        borrowed.add(lookup(fe.param) else "")
+        v := lower_value(fe.body, want)
+        mut out := absent_val()
+        if r := v
+            out = Val(id: copy_if_borrowed(fe.body, r), ty: r.ty)
+        scopes.pop()
+        return out
+    s := fn_shape(fe.f.ty)?
+    mut vs := fn_value_head(fe.f.id)
+    vs.push(x)
+    i := inst(-1, "icall", vs)
+    if s.ret.is_unit()
+        emit_void(i)
+        return Val(id: -1, ty: Ty.Unit)
+    Val(id: emit(i, s.ret), ty: s.ret)
+
+fn absent_val() Val?
+    none
+
+## A fresh `bool`, `int` or other variable for a loop's result.
+fn Lower.loop_var(mut self, t Ty, v int) str
+    nvars += 1
+    key := "#lf{nvars}"
+    var_ty[key] = t
+    write_var(key, cur, v)
+    key
+
+## `xs.any(f)`, `xs.all(f)`, `xs.find(f)`, `xs.filter(f)`, `xs.map(f)` and
+## `xs.group_by(f)` (type.coll.21-26).
+fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
+    e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    if e.is_unknown()
+        return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    tests := name != "map" and name != "group_by"
+    fe := elem_fn(args[0], e, if tests then Ty.Bool else Ty.Unknown)?
+    if name == "group_by"
+        return lower_group_by(r, e, fe, npos)
+    n := op("len", [r.id], Ty.Int)
+    # The result: a flag, an index, or a list made before the loop.
+    mut acc := ""
+    mut out := -1
+    if name == "any" or name == "all"
+        acc = loop_var(Ty.Bool, konst(if name == "all" then 1 else 0, Ty.Bool))
+    elif name == "find"
+        acc = loop_var(Ty.Int, konst(-1, Ty.Int))
+    elif name == "filter"
+        out = call("rt.list_new", [konst(0, Ty.Int)], r.ty)
+    else
+        out = call("rt.list_new", [n], Ty.List(Ty.Unknown))
+    c := count_open(n)
+    x := op("get", [r.id, c.i], e)
+    mut vw := absent_ty()
+    if tests
+        vw = Ty.Bool
+    v := apply_elem(fe, x, vw)
+    mut mapped := Ty.Unknown
+    if fv := v
+        if tests
+            cond := if name == "all" then op("not", [fv.id], Ty.Bool) else fv.id
+            hit := new_block()
+            go := new_block()
+            branch(cond, hit, [], go, [])
+            seal(hit)
+            cur = hit
+            if name == "filter"
+                item := if needs_copy(e) then copy_value(Val(id: x, ty: e)) else x
+                call(push_fn(e), [out, item], Ty.Unit)
+                jump(go, [])
+            else
+                if name == "find"
+                    write_var(acc, cur, c.i)
+                else
+                    write_var(acc, cur, konst(if name == "any" then 1 else 0, Ty.Bool))
+                jump(c.exit, [])
+            seal(go)
+            cur = go
+        elif fv.id >= 0
+            mapped = fv.ty
+            call(push_fn(mapped), [out, fv.id], Ty.Unit)
+    # A problem still closes the loop, so the half-built function stays well formed.
+    count_close(c)
+    if name == "any" or name == "all"
+        return Val(id: read_var(acc, cur), ty: Ty.Bool)
+    if name == "find"
+        idx := read_var(acc, cur)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        return opt_at(r, found, idx, e, false, npos)
+    if name == "filter"
+        return Val(id: out, ty: r.ty)
+    if mapped.is_unknown()
+        fn_failed = true
+        return none
+    t := Ty.List(mapped)
+    vals[out] = t
+    Val(id: out, ty: t)
+
+## `xs.group_by(f)` (type.coll.26): a map from each key to the elements
+## with it, in list order. The key type is known once the first key is
+## lowered, so the map is made at the first element (or at the end, empty).
+fn Lower.lower_group_by(mut self, r Val, e Ty, fe ElemFn, npos ast.Pos) Val?
+    n := op("len", [r.id], Ty.Int)
+    acc := loop_var(Ty.Int, konst(0, Ty.Int))
+    c := count_open(n)
+    x := op("get", [r.id, c.i], e)
+    k := apply_elem(fe, x, none)
+    mut mt := Ty.Unknown
+    if kv := k
+        if kv.id >= 0
+            if not is_key_ty(kv.ty) and not needs_copy(kv.ty)
+                problem(npos, "not in the native subset yet: `group_by` with a key of `{kv.ty.name()}`")
+            else
+                mt = Ty.Map(key: kv.ty, val: Ty.List(e))
+                m := made_table(acc, mt)
+                kid := stored_key(ast.Expr.Int("0", npos), kv, kv.ty, npos)
+                item := if needs_copy(e) then copy_value(Val(id: x, ty: e)) else x
+                map_push_vals(Val(id: m, ty: mt), Ty.List(e), kid, Val(id: item, ty: e), ast.Expr.Int("0", npos), npos)
+    count_close(c)
+    if mt.is_unknown()
+        fn_failed = true
+        return none
+    Val(id: made_table(acc, mt), ty: mt)
+
+## The table the variable `acc` holds, made now if it is still 0.
+fn Lower.made_table(mut self, acc str, mt Ty) int
+    m0 := read_var(acc, cur)
+    make := new_block()
+    join := new_block()
+    branch(op("eq", [m0, konst(0, Ty.Int)], Ty.Bool), make, [], join, [])
+    seal(make)
+    cur = make
+    write_var(acc, cur, op("copy", [new_table(mt)], Ty.Int))
+    jump(join, [])
+    seal(join)
+    cur = join
+    op("copy", [read_var(acc, cur)], mt)

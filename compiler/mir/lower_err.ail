@@ -313,10 +313,13 @@ fn Lower.fallible_call(self, e ast.Expr) bool
         Call(callee, _, _) =>
             match callee
                 Name(n, _) =>
+                    # A local holding a function value that can fail (type.fn.6) hides a function.
+                    if lookup(n) != none
+                        return fn_value_fails(callee)
                     s := callee_sig(n) else return generic_fails(callee_key(n))
                     s.fails
                 TypeArgs(n, _, _) => generic_fails(callee_key(n))
-                _ => false
+                _ => fn_value_fails(callee)
         Method(recv, name, _, _) => os_fails(recv, name)
             or method_fails(recv, name)
             or net_fails(recv, name)
@@ -860,9 +863,12 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
     match e
         Call(callee, _, _) =>
             match callee
-                Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
+                Name(n, _) =>
+                    if lookup(n) != none
+                        return fn_value_err(callee)
+                    fn_errs.get(callee_key(n)) else Ty.Unknown
                 TypeArgs(n, _, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
-                _ => Ty.Unknown
+                _ => fn_value_err(callee)
         Method(recv, name, _, _) =>
             match recv
                 TypeArgs(n, _, _) =>

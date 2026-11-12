@@ -135,7 +135,7 @@ fn Lower.seq_step(self, t Ty) Ty?
 
 fn step_elem(step Ty) Ty?
     match step
-        Fn(_, r) => r.opt_inner()
+        Fn(_, r, _) => r.opt_inner()
         _ => none
 
 ## `yield e` (expr.yield.2): the element, as a copy that the generator can't

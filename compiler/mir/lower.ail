@@ -182,6 +182,8 @@ struct Lower
     instr Instr
     ## The generator being lowered (lower_gen.ail).
     gens GenLower
+    ## Function literals (type.fn.4, lower_fnlit.ail).
+    fl FnLitState
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -340,6 +342,7 @@ pub fn lower_package_par(
         else_targets: [],
         instr: new_instr(),
         gens: new_gen_lower(),
+        fl: new_fn_lit_state(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
@@ -682,8 +685,8 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 ps.push(type_of(p)?)
             mut r := Ty.Unit
             if rt := fret
-                r = type_of(rt)?
-            Ty.Fn(params: ps, ret: r)
+                r = fn_ret_type(rt)?
+            Ty.Fn(params: ps, ret: r, err: fn_err_type(fret))
         _ => none
 
 fn is_literal(e ast.Expr) bool
@@ -1044,7 +1047,7 @@ fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
-    elif not same_ty(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
+    elif not same_ty(v.ty, want) and not fn_fits(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
         # The runtime calls a function address it kept as an `int` (unwind.ail).
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
@@ -1646,6 +1649,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         OrElse(x, other, pos) => lower_or_else(x, other, pos)
         NewRef(x, pos) => lower_new_ref(x, pos, want)
         TupleLit(items, pos) => lower_tuple_lit(items, pos, want)
+        Closure(ps, body, pos) => lower_closure_lit(ps, body, pos, want)
 
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
 fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
@@ -2211,3 +2215,4 @@ pub fn expr_pos(e ast.Expr) ast.Pos
         OrElse(_, _, p) => p
         NewRef(_, p) => p
         TupleLit(_, p) => p
+        Closure(_, _, p) => p

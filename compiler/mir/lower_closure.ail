@@ -40,12 +40,15 @@ fn Lower.count_close(mut self, c KeyLoop)
 ## Whether `name` with these arguments is `sorted` or `sort` with a key
 ## function; the plain forms are in lower_list.ail.
 fn is_sorting(name str, args List[ast.Arg]) bool
-    ((name == "sorted" or name == "sort") and args.len() > 0) or is_extreme_by(name, args)
+    ((name == "sorted" or name == "sort") and args.len() > 0) or is_extreme_by(name, args) or is_list_fn_call(name, args)
 
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
     if is_extreme_by(name, args)
         return lower_extreme_by(r, name, args, npos)
+    # type.coll.21-26: `any`, `all`, `find`, `filter`, `map`, `group_by` (lower_fnlit.ail).
+    if is_list_fn_call(name, args)
+        return lower_list_fn(r, name, args, npos)
     e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or structural(e))
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -67,7 +70,7 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         c := count_open(n)
         scopes.push(Map[str, str]())
         declare(x.name, e, op("get", [r.id, c.i], e))
-        k := lower_value(a.value, Ty.Int)
+        k := lower_value(ast.key_body(a), Ty.Int)
         scopes.pop()
         # A problem still closes the loop, so the half-built function stays well formed.
         if kv := k
@@ -127,7 +130,7 @@ fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos as
     c := count_open(n)
     scopes.push(Map[str, str]())
     declare(x.name, e, op("get", [r.id, c.i], e))
-    k := lower_value(a.value, Ty.Int)
+    k := lower_value(ast.key_body(a), Ty.Int)
     scopes.pop()
     if kv := k
         if kv.ty == Ty.Int or kv.ty == Ty.Float or kv.ty == Ty.Str or orderable_record(kv.ty)
@@ -164,27 +167,33 @@ fn Lower.fn_value(mut self, name str, pos ast.Pos) Val?
             "`{name}` has contracts: a function value of it isn't in the native subset yet",
         )
         return Val(id: konst(0, Ty.Int), ty: Ty.Int)
-    mut i := inst(-1, "fnaddr", [])
-    i.name = key
-    t := Ty.Fn(params: sig.params, ret: sig.ret)
-    Val(id: emit(i, t), ty: t)
+    mut err := Ty.Unit
+    if sig.fails
+        err = fn_errs.get(key) else Ty.Unknown
+    t := Ty.Fn(params: sig.params, ret: sig.ret, err: err)
+    if is_rt
+        mut i := inst(-1, "fnaddr", [])
+        i.name = key
+        return Val(id: emit(i, t), ty: t)
+    # In user code a function value is a closure object (ADR 1067, lower_fnlit.ail).
+    named_fn_value(key, sig, t)
 
 fn Ty.is_fn(self) bool
     match self
-        Fn(_, _) => true
+        Fn(_, _, _) => true
         _ => false
 
 ## `f(args)` where `f` is a function value (type.fn.3): an indirect call.
 fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
     sig := match f.ty
-        Fn(ps, r) => Sig(params: ps, ret: r, fails: false)
+        Fn(ps, r, e) => Sig(params: ps, ret: r, fails: not e.is_unit())
         _ => return unsupported(pos, "calling a `{f.ty.name()}`")
     if args.len() != sig.params.len()
         return unsupported(
             pos,
             "calling a `fn` value with {args.len()} arguments instead of {sig.params.len()}",
         )
-    mut vs := [f.id]
+    mut vs := fn_value_head(f.id)
     for k in 0..args.len()
         a := args[k]
         if a.label != none

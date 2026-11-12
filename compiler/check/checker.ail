@@ -125,6 +125,8 @@ pub struct Checker
     pub fail_paths List[FailPath]
     pub pending List[Pending]
     pub fn_ret Ty
+    ## The function literal being checked (type.fn.4-5, closure.ail).
+    pub lit LitState
     pub loop_depth int
     pub catching int
     pub caught int
@@ -255,6 +257,7 @@ pub fn new_checker(p ast.Program) Checker
         fail_paths: [],
         pending: [],
         fn_ret: Ty.Unit,
+        lit: new_lit_state(),
         loop_depth: 0,
         catching: 0,
         caught: 0,
@@ -866,6 +869,13 @@ fn Checker.collect_consts(mut self)
                 constant_expr(m.key)
                 constant_expr(m.value)
         Unary(_, operand, _) => constant_expr(operand)
+        Closure(_, _, at) =>
+            err_help(
+                "mod.const.2",
+                at,
+                "a constant's value can't be a function literal",
+                "declare a function and name it where the value is needed",
+            )
         NewRef(_, at) =>
             err_help(
                 "mod.const.2",

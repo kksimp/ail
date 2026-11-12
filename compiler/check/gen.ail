@@ -103,6 +103,9 @@ fn Checker.gen_start(mut self, f ast.FnDecl, ret Ty) Ty?
 
 ## `yield e` (expr.yield.2): `e` is the generator's next element.
 fn Checker.yield_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    if leaves_literal("yield", at)
+        args_only(args)
+        return Ty.Unit
     elem := gen.elem else
         args_only(args)
         err_help(

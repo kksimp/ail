@@ -383,9 +383,6 @@ fn Checker.check_call(
     expect Ty?,
 ) Ty
     mut binds := given
-    for a in args
-        if p := a.param
-            key_misplaced(p.pos)
     vars := sig.generics
     order := arg_slots(what, sig, args, at) else
         args_only(args)
@@ -399,6 +396,8 @@ fn Checker.check_call(
         mut want_hint := none
         if hint != Ty.Unknown
             want_hint = hint
+        # A `|x| e` argument is a function literal (type.fn.4); its parameter types come
+        # from the arguments before it (type.fn.8).
         t := expr(a.value, want_hint, true)
         move_arg(a, k < sig.moves.len() and sig.moves[k])
         bind(p.ty, t, vars, mut binds)

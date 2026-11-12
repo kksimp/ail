@@ -154,7 +154,7 @@ fn Checker.tensor_from_fn(mut self, args List[ast.Arg], at ast.Pos) Ty
             how: LocalKind.LoopVar,
             decl: none,
         ))
-    out := expr(f.value, none, true)
+    out := expr(ast.key_body(f), none, true)
     end_scope(mark)
     if is_elem(out)
         return tensor_ty(out)
@@ -339,7 +339,7 @@ fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) 
             how: LocalKind.LoopVar,
             decl: none,
         ))
-    out := expr(a.value, elem, true)
+    out := expr(ast.key_body(a), elem, true)
     end_scope(mark)
     if is_elem(out)
         return tensor_ty(out)

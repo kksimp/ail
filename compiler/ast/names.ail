@@ -1,0 +1,121 @@
+## The names an expression reads (type.fn.5, ADR 1067): every `Name` in it,
+## nested blocks included. A function literal copies the outer locals among
+## them when it is made; names cannot be shadowed (expr.bind.4), so a name
+## that is an outer local where the literal is written is that local.
+
+## Add each name `e` reads to `out`.
+pub fn expr_names(e Expr, mut out Set[str])
+    match e
+        Name(n, _) => out.add(n)
+        Str | Bytes | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => expr_names(x, mut out)
+                    Fmt(x, _) => expr_names(x, mut out)
+        ListLit(items, _) => exprs_names(items, mut out)
+        SetLit(items, _) => exprs_names(items, mut out)
+        TupleLit(items, _) => exprs_names(items, mut out)
+        MapLit(entries, _) =>
+            for en in entries
+                expr_names(en.key, mut out)
+                expr_names(en.value, mut out)
+        Call(callee, args, _) =>
+            expr_names(callee, mut out)
+            args_names(args, mut out)
+        Method(recv, _, _, args) =>
+            expr_names(recv, mut out)
+            args_names(args, mut out)
+        Member(recv, _, _) => expr_names(recv, mut out)
+        Index(recv, index, _) =>
+            expr_names(recv, mut out)
+            expr_names(index, mut out)
+        Unary(_, x, _) => expr_names(x, mut out)
+        Binary(_, a, b, _) =>
+            expr_names(a, mut out)
+            expr_names(b, mut out)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                expr_names(x, mut out)
+            if y := hi
+                expr_names(y, mut out)
+        If(branches, els, _, _) =>
+            for b in branches
+                match b.cond
+                    Test(x) => expr_names(x, mut out)
+                    Bind(_, _, x) => expr_names(x, mut out)
+                block_names(b.body, mut out)
+            if body := els
+                block_names(body, mut out)
+        Match(scrutinee, arms, _) =>
+            expr_names(scrutinee, mut out)
+            for a in arms
+                if g := a.guard
+                    expr_names(g, mut out)
+                block_names(a.body, mut out)
+        Try(x, context, _) =>
+            expr_names(x, mut out)
+            if c := context
+                expr_names(c, mut out)
+        Comp(_, elem, value, clauses, _) =>
+            for c in clauses
+                expr_names(c.iter, mut out)
+                if x := c.cond
+                    expr_names(x, mut out)
+            expr_names(elem, mut out)
+            if v := value
+                expr_names(v, mut out)
+        OrElse(value, otherwise, _) =>
+            expr_names(value, mut out)
+            else_names(otherwise, mut out)
+        NewRef(x, _) => expr_names(x, mut out)
+        Closure(_, body, _) => expr_names(body, mut out)
+
+fn exprs_names(xs List[Expr], mut out Set[str])
+    for x in xs
+        expr_names(x, mut out)
+
+fn args_names(args List[Arg], mut out Set[str])
+    for a in args
+        expr_names(a.value, mut out)
+
+fn else_names(o Else, mut out Set[str])
+    match o
+        Fallback(x) => expr_names(x, mut out)
+        Leave(s) => stmt_names(s, mut out)
+        Handler(_, body, _) => block_names(body, mut out)
+
+fn block_names(body List[Stmt], mut out Set[str])
+    for s in body
+        stmt_names(s, mut out)
+
+fn stmt_names(s Stmt, mut out Set[str])
+    match s
+        Let(_, _, _, value, otherwise) =>
+            expr_names(value, mut out)
+            if o := otherwise
+                else_names(o, mut out)
+        Assign(target, _, value, _) =>
+            expr_names(target, mut out)
+            expr_names(value, mut out)
+        While(cond, body, _) =>
+            expr_names(cond, mut out)
+            block_names(body, mut out)
+        For(_, _, _, _, iter, body, _) =>
+            expr_names(iter, mut out)
+            block_names(body, mut out)
+        Break | Continue => return
+        Return(value, _) =>
+            if v := value
+                expr_names(v, mut out)
+        Eval(value) => expr_names(value, mut out)
+        Handle(value, otherwise) =>
+            expr_names(value, mut out)
+            else_names(otherwise, mut out)
+        Defer(inner, _) => stmt_names(inner, mut out)
+        With(m, _, _, body, _) =>
+            expr_names(m, mut out)
+            block_names(body, mut out)
+        Unsafe(body, _) => block_names(body, mut out)
+        LetTuple(_, value, _) => expr_names(value, mut out)
