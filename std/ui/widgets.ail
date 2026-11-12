@@ -111,8 +111,8 @@ pub fn fuzzy(item str, filter str) bool
 fn clicked(ev ui.Event, r Rect) Rect?
     match ev
         Mouse(c, row, button, kind) =>
-            if button == ui.MouseButton.Left
-                and kind == ui.MouseKind.Down
+            if button == Left
+                and kind == Down
                 and c >= r.col
                 and c < r.col + r.cols
                 and row >= r.row
@@ -144,26 +144,26 @@ pub fn TextField.new(label str, text str) TextField
 pub fn TextField.on_event(mut self, ev ui.Event) Action
     k := plain_key(ev) else return Ignored
     cs := text.chars()
-    if k == ui.KeyCode.Enter
+    if k == Enter
         return Submit
-    if k == ui.KeyCode.Escape
+    if k == Escape
         return Cancel
-    if k == ui.KeyCode.Backspace
+    if k == Backspace
         if cursor == 0
             return Ignored
         text = "{cs[..cursor - 1].join("")}{cs[cursor..].join("")}"
         cursor -= 1
-    elif k == ui.KeyCode.Delete
+    elif k == Delete
         if cursor >= cs.len()
             return Ignored
         text = "{cs[..cursor].join("")}{cs[cursor + 1..].join("")}"
-    elif k == ui.KeyCode.Left
+    elif k == Left
         cursor = (cursor - 1).max(0)
-    elif k == ui.KeyCode.Right
+    elif k == Right
         cursor = (cursor + 1).min(cs.len())
-    elif k == ui.KeyCode.Home
+    elif k == Home
         cursor = 0
-    elif k == ui.KeyCode.End
+    elif k == End
         cursor = cs.len()
     elif t := k.text()
         text = "{cs[..cursor].join("")}{t}{cs[cursor..].join("")}"
@@ -228,19 +228,19 @@ pub fn ListView.on_event(mut self, ev ui.Event, r Rect) Action
             return Submit
         return Ignored
     k := plain_key(ev) else return Ignored
-    if k == ui.KeyCode.Enter
+    if k == Enter
         return Submit
-    if k == ui.KeyCode.Escape
+    if k == Escape
         return Cancel
-    if k == ui.KeyCode.Up
+    if k == Up
         selected = (selected - 1).max(0)
-    elif k == ui.KeyCode.Down
+    elif k == Down
         selected = (selected + 1).min((n - 1).max(0))
-    elif k == ui.KeyCode.PageUp
+    elif k == PageUp
         selected = (selected - r.rows).max(0)
-    elif k == ui.KeyCode.PageDown
+    elif k == PageDown
         selected = (selected + r.rows).min((n - 1).max(0))
-    elif k == ui.KeyCode.Backspace
+    elif k == Backspace
         cs := filter.chars()
         if cs.len() == 0
             return Ignored
@@ -305,7 +305,7 @@ pub fn Button.on_event(mut self, ev ui.Event, r Rect) Action
     if _ := clicked(ev, r)
         return Submit
     k := plain_key(ev) else return Ignored
-    if focused and (k == ui.KeyCode.Enter or k == ui.KeyCode.Text(" "))
+    if focused and (k == Enter or k == Text(" "))
         return Submit
     Ignored
 
@@ -354,13 +354,13 @@ pub fn Dialog.on_event(mut self, ev ui.Event, r Rect) Action
         return Ignored
     k := plain_key(ev) else return Ignored
     n := choices.len()
-    if k == ui.KeyCode.Enter
+    if k == Enter
         return Submit
-    if k == ui.KeyCode.Escape
+    if k == Escape
         return Cancel
-    if k == ui.KeyCode.Left
+    if k == Left
         selected = (selected + n - 1) % n
-    elif k == ui.KeyCode.Right or k == ui.KeyCode.Tab
+    elif k == Right or k == Tab
         selected = (selected + 1) % n
     else
         return Ignored
@@ -435,21 +435,21 @@ pub fn Pane.on_event(mut self, ev ui.Event, r Rect) Action
             return Submit
         return Ignored
     k := plain_key(ev) else return Ignored
-    if k == ui.KeyCode.Enter
+    if k == Enter
         return Submit
-    if k == ui.KeyCode.Escape
+    if k == Escape
         return Cancel
-    if k == ui.KeyCode.Up
+    if k == Up
         cursor = (cursor - 1).max(0)
-    elif k == ui.KeyCode.Down
+    elif k == Down
         cursor = (cursor + 1).min(last)
-    elif k == ui.KeyCode.PageUp
+    elif k == PageUp
         cursor = (cursor - r.rows).max(0)
-    elif k == ui.KeyCode.PageDown
+    elif k == PageDown
         cursor = (cursor + r.rows).min(last)
-    elif k == ui.KeyCode.Home
+    elif k == Home
         cursor = 0
-    elif k == ui.KeyCode.End
+    elif k == End
         cursor = last
     else
         return Ignored
@@ -528,17 +528,17 @@ pub fn Tree.on_event(mut self, ev ui.Event, r Rect) Action
             return Submit
         return Ignored
     k := plain_key(ev) else return Ignored
-    if k == ui.KeyCode.Escape
+    if k == Escape
         return Cancel
-    if k == ui.KeyCode.Up
+    if k == Up
         selected = vis[(at - 1).max(0)]
-    elif k == ui.KeyCode.Down
+    elif k == Down
         selected = vis[(at + 1).min(vis.len() - 1)]
-    elif k == ui.KeyCode.Right and has_children(selected)
+    elif k == Right and has_children(selected)
         nodes[selected].open = true
-    elif k == ui.KeyCode.Left and has_children(selected) and nodes[selected].open
+    elif k == Left and has_children(selected) and nodes[selected].open
         nodes[selected].open = false
-    elif k == ui.KeyCode.Enter
+    elif k == Enter
         if not has_children(selected)
             return Submit
         nodes[selected].open = not nodes[selected].open
@@ -669,7 +669,7 @@ pub fn Checkbox.on_event(mut self, ev ui.Event, r Rect) Action
         checked = not checked
         return Changed
     k := plain_key(ev) else return Ignored
-    if focused and (k == ui.KeyCode.Text(" ") or k == ui.KeyCode.Enter)
+    if focused and (k == Text(" ") or k == Enter)
         checked = not checked
         return Changed
     Ignored
@@ -716,12 +716,12 @@ pub fn RadioGroup.on_event(mut self, ev ui.Event, r Rect) Action
             return Changed
         return Ignored
     k := plain_key(ev) else return Ignored
-    if k == ui.KeyCode.Enter
+    if k == Enter
         return Submit
-    if k == ui.KeyCode.Up and selected > 0
+    if k == Up and selected > 0
         selected -= 1
         return Changed
-    if k == ui.KeyCode.Down and selected < choices.len() - 1
+    if k == Down and selected < choices.len() - 1
         selected += 1
         return Changed
     Ignored
@@ -813,12 +813,12 @@ pub fn Tabs.on_event(mut self, ev ui.Event, r Rect) Action
                 return Changed
         return Ignored
     k := plain_key(ev) else return Ignored
-    if k == ui.KeyCode.Right or k == ui.KeyCode.Tab
+    if k == Right or k == Tab
         if selected < titles.len() - 1
             selected += 1
             return Changed
         return Ignored
-    if k == ui.KeyCode.Left and selected > 0
+    if k == Left and selected > 0
         selected -= 1
         return Changed
     Ignored

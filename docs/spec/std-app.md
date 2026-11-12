@@ -468,16 +468,15 @@ struct Select
     held bool
 
 impl app.App for Select
-    @allow("expr.match.3") fn update(mut self, ev app.Event)
-        match ev.kind
-            Down =>
-                from = ev.x
-                to = ev.x
-                held = true
-            Move => if held
-                to = ev.x
-            Up => held = false
-            _ => held = held
+    fn update(mut self, ev app.Event)
+        if ev.kind == Down
+            from = ev.x
+            to = ev.x
+            held = true
+        elif ev.kind == Move and held
+            to = ev.x
+        elif ev.kind == Up
+            held = false
 
     fn view(self) app.Node
         app.canvas("s", 0.0, 0.0, [app.draw_rect(from.min(to), 0.0, (to - from).abs(), 20.0, 0x8ab4f8)])
