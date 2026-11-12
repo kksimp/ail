@@ -155,8 +155,7 @@ fn Checker.nest_missing(mut self, t Ty, st NestRows, arms List[ast.Arm], at ast.
 
 ## Check pattern `p` on a value of type `t` (expr.match.4-8, expr.match.12-13,
 ## type.tuple.6); the names it binds go to `names`. Its shape for coverage.
-@allow("expr.match.3")
-fn Checker.npat(mut self, t Ty, p ast.Pattern, mut names List[Binding]) NCov
+@allow("expr.match.3") fn Checker.npat(mut self, t Ty, p ast.Pattern, mut names List[Binding]) NCov
     match p
         Wildcard => return NCov.Any
         BindName(n, at) =>
@@ -223,24 +222,30 @@ fn lit_key(lit ast.Literal) str
 
 ## Bind `n` to a field or element of type `t` (expr.match.13): a bare name
 ## that is a variant of `t`'s enum is an error, since it would bind, not match.
-@allow("expr.match.3")
-fn Checker.nbind(mut self, t Ty, n str, at ast.Pos, mut names List[Binding])
+@allow("expr.match.3") fn Checker.nbind(mut self, t Ty, n str, at ast.Pos, mut names List[Binding])
     names.push(Binding(name: n, pos: at, ty: t))
     match t
         Enum(e, _) =>
             if variant_index(e, n) != none
                 en := prog.enums[e].name
-                diags.push(new_diag(
-                    "expr.match.13",
-                    at,
-                    "`{n}` here binds a new name; it doesn't match the variant",
-                ).with_help(
-                    "write `{en}.{n}` to match the variant, or another name to bind the field",
-                ).with_fix("match the variant `{en}.{n}`", [fix.replace(at, n, "{en}.{n}")]))
+                diags.push(
+                    new_diag(
+                        "expr.match.13",
+                        at,
+                        "`{n}` here binds a new name; it doesn't match the variant",
+                    )
+                        .with_help("write `{en}.{n}` to match the variant, or another name to bind the field")
+                        .with_fix("match the variant `{en}.{n}`", [fix.replace(at, n, "{en}.{n}")]),
+                )
         _ => return
 
 ## The names of a pattern that was reported, typed unknown.
-fn Checker.nquiet(mut self, given List[ast.Ident]?, subs List[ast.Pattern]?, mut names List[Binding])
+fn Checker.nquiet(
+    mut self,
+    given List[ast.Ident]?,
+    subs List[ast.Pattern]?,
+    mut names List[Binding],
+)
     for g in given else []
         if g.name != "_"
             names.push(Binding(name: g.name, pos: g.pos, ty: Ty.Unknown))
@@ -493,7 +498,10 @@ fn Checker.np_missing(self, rows List[List[NCov]], ts List[Ty], max int) List[Li
     mut firsts := ["_"]
     if hs.len() > 0
         if cs := ctors(t)
-            firsts = [ctor_text(t, k, ["_" for _ in ctor_types(t, k)]) for k in cs if not hs.contains(k)]
+            firsts = [
+                ctor_text(t, k, ["_" for _ in ctor_types(t, k)])
+                for k in cs if not hs.contains(k)
+            ]
     for f in firsts
         for w in ws
             mut row := [f]

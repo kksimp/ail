@@ -1328,7 +1328,12 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Range | TuplePat | BindName | Nested => pattern(e, args, a, mut cov)
+                    Literal | Alt | Range | TuplePat | BindName | Nested => pattern(
+                        e,
+                        args,
+                        a,
+                        mut cov,
+                    )
             []
         TuplePat(_, at) =>
             err(
