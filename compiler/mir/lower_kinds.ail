@@ -1,0 +1,54 @@
+## The kinds of the runtime's error structs as enums (std.err.1, std.net.4,
+## std.compress.2, ADR 1068). `fs.IoError.kind` is `fs.IoKind`, and so on:
+## fieldless enums, so a kind is an `int`, the variant's index. The runtime
+## builds these errors (os.ail, proc.ail, net.ail, compress.ail); it stores the
+## index when `rt.kinds_as_enums` says so, which is true only in a runtime
+## lowered here. A compiler lowered by an older seed keeps the kind as text in
+## the same slot, so the seed-built CLI still reads it.
+
+use ast
+
+IO_KIND := "fs.IoKind"
+PROC_KIND := "proc.ProcKind"
+NET_KIND := "net.NetKind"
+COMPRESS_KIND := "compress.CompressKind"
+STD_KINDS := [IO_KIND, PROC_KIND, NET_KIND, COMPRESS_KIND]
+
+## The variants of kind enum `key`, in the order of `std/types.ail`.
+fn kind_names(key str) List[str]
+    mut out := List[str]()
+    if key == NET_KIND
+        return ["BadUrl", "BadRequest", "Tls", "NotFound", "Refused", "TimedOut", "Closed", "Bind", "Protocol", "Other"]
+    if key == COMPRESS_KIND
+        out = ["Corrupt", "Checksum", "TooBig", "UnsafePath", "Unsupported"]
+    out.extend(["NotFound", "Permission", "Exists", "IsDir", "NotDir", "NotEmpty", "InvalidUtf8"])
+    out.push("Other")
+    # `proc.ProcKind` starts as `fs.IoKind` does, so one index means one kind in both.
+    if key == PROC_KIND
+        out.extend(["TimedOut", "Cancelled"])
+    out
+
+## Register the kind enums, which no source the lowering reads declares.
+fn Lower.declare_std_kinds(mut self)
+    for key in STD_KINDS
+        if not enums.contains(key)
+            enums[key] = [Case(name: n, fields: []) for n in kind_names(key)]
+
+## The key of a kind enum written `fs.IoKind` (or through `use std.fs as f`),
+## else `none`.
+fn Lower.std_kind_key(self, parts List[str]) str?
+    if parts.len() != 2
+        return none
+    m := std_alias(parts[0]) else parts[0]
+    key := "{m}.{parts[1]}"
+    if STD_KINDS.contains(key) and aliases.get(m) == none
+        return key
+    none
+
+## The body of the runtime's `kinds_as_enums`: true in a runtime lowered here.
+fn Lower.lower_rt_flag(mut self, key str, name str, pos ast.Pos) bool
+    if key != "rt.kinds_as_enums"
+        return false
+    finish(return_of(konst(1, Ty.Bool)))
+    end_fn(name, pos)
+    true

@@ -1,4 +1,4 @@
-# `compress.gunzip` fails with: compress.CompressError(kind: "corrupt", message: "reserved gzip flags set")
+# `compress.gunzip` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "reserved gzip flags set")
 use std.compress
 
 fn main() !

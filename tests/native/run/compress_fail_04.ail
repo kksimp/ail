@@ -1,4 +1,4 @@
-# `compress.inflate` fails with: compress.CompressError(kind: "corrupt", message: "distance reaches before the start of the output")
+# `compress.inflate` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "distance reaches before the start of the output")
 use std.compress
 
 fn main() !

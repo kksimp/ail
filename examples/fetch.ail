@@ -16,5 +16,5 @@ fn main() !
 fn fetch(url str) str ! net.NetError
     r := net.get(url)?
     if r.status != 200
-        return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
+        return net.NetError(url: url, kind: Other, message: "HTTP {r.status}")
     r.body

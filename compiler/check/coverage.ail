@@ -179,6 +179,7 @@ pub COVERED_RULES := [
     "type.enum.3",
     "type.enum.5",
     "type.enum.6",
+    "type.enum.7",
     "type.fn.2",
     "type.map.1",
     "type.map.2",

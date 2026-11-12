@@ -181,6 +181,8 @@ fn main() !                                 # main can fail; the error is report
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
+- Standard errors carry a `kind` enum: `if err.kind == NotFound` or
+  `match err.kind` (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`); never a string.
 
 ## Traits and generics
 

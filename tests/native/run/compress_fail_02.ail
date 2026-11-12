@@ -1,4 +1,4 @@
-# `compress.gunzip` fails with: compress.CompressError(kind: "checksum", message: "gzip size mismatch")
+# `compress.gunzip` fails with: compress.CompressError(kind: compress.CompressKind.Checksum, message: "gzip size mismatch")
 use std.compress
 
 fn main() !

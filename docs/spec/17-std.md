@@ -42,14 +42,17 @@ fn main()
 ## Errors
 
 **std.err.1** — A failure of `std.fs` is the error struct `fs.IoError`, with
-fields `path str` (the path the function was given) and `kind str`. A
-failure to start a process is the error struct `proc.ProcError`, with
-fields `cmd str` and `kind str`. `kind` is one of `not_found`,
-`permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`,
-`timed_out` (a process killed at its time limit, `std.proc.2`),
-`cancelled` (`proc.run` in a cancelled task, `conc.cancel.2`) and `other`,
-and is the same for the same failure on every platform. `std.net` fails
-with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282, ADR 0321)*
+fields `path str` (the path the function was given) and `kind fs.IoKind`,
+the enum `NotFound`, `Permission`, `Exists`, `IsDir`, `NotDir`, `NotEmpty`,
+`InvalidUtf8`, `Other`. A failure to start a process is the error struct
+`proc.ProcError`, with fields `cmd str` and `kind proc.ProcKind`: the
+variants of `fs.IoKind` in the same order, then `TimedOut` (a process killed
+at its time limit, `std.proc.2`) and `Cancelled` (`proc.run` in a cancelled
+task, `conc.cancel.2`). A kind is the same for the same failure on every
+platform, and is told apart with `==` or an exhaustive `match`
+(`expr.match.2`). Every kind of the standard library is an enum
+(`type.enum.7`). `std.net` fails with `net.NetError` (`std.net.4`).
+*(ADR 0158, ADR 0282, ADR 0321, ADR 1068)*
 
 ```ail rules=std.err.1
 use std.fs
@@ -59,8 +62,12 @@ fn load(path str) str ! fs.IoError
 
 fn main()
     text := fs.read_text("notes.txt") else err
-        print("{err.kind}: {err.path}")
+        match err.kind
+            NotFound => print("no {err.path} yet")
+            Permission => print("{err.path} is locked")
+            Exists | IsDir | NotDir | NotEmpty | InvalidUtf8 | Other => print("{err.kind}")
         ""
+    print(text)
 ```
 
 ## Files: `std.fs`
@@ -571,10 +578,12 @@ They have no effects.
 **std.compress.2** — `inflate(data bytes) bytes ! compress.CompressError`
 and `gunzip(data bytes) bytes ! compress.CompressError` reverse them; use
 `.to_str()` (`type.bytes.8`) when the result is text.
-`CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
-data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
-CRC-32 or size mismatch), `too_big` (std.compress.4), `unsafe_path`, `unsupported`, or an I/O kind of
-`std.err.1` for file functions. *(ADR 0443)*
+`CompressError { kind compress.CompressKind, message str }`; the kind is
+`Corrupt` (malformed data, including trailing bytes after a DEFLATE stream),
+`Checksum` (gzip CRC-32 or size mismatch), `TooBig` (std.compress.4),
+`UnsafePath`, `Unsupported`, or, for file functions, an I/O kind of
+`std.err.1` (`NotFound` to `InvalidUtf8`, and `Other`). *(ADR 0443,
+ADR 1068)*
 
 **std.compress.3** — `gunzip` accepts the optional header fields of
 RFC 1952 and several members in a row, and checks every member's CRC-32 and
@@ -1029,16 +1038,17 @@ Connecting, and each read and write, time out after 30 seconds.
 sends `body` as an HTTP/1.1 `POST` with that `Content-Type`, and returns
 the response as `get` does, without following redirects. *(ADR 0283)*
 
-**std.net.4** — A failure is `error struct NetError { url str, kind str,
-message str }`: the URL given, a short kind, and a sentence for people.
-`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`, or not
-an address `HOST:PORT`), `bad_request` (a method, header name or header value
-the request or response may not carry, `std.net.6`), `tls` (the TLS handshake
-or connection failed, `std.net.5`), `not_found` (the host has no address),
-`refused`, `timed_out`, `closed` (the connection or server was closed, or the
-waiting task was cancelled, `std.net.9`), `bind` (the address is in use or
-not permitted, `std.net.9`), `protocol` (a malformed response, or too many
-redirects) or `other`. *(ADR 0283, ADR 0369, ADR 0418, ADR 0419)*
+**std.net.4** — A failure is `error struct NetError { url str,
+kind net.NetKind, message str }`: the URL given, a kind, and a sentence for
+people. `net.NetKind` is `BadUrl` (not `http://` or
+`https://HOST[:PORT][/PATH]`, or not an address `HOST:PORT`), `BadRequest`
+(a method, header name or header value the request or response may not
+carry, `std.net.6`), `Tls` (the TLS handshake or connection failed,
+`std.net.5`), `NotFound` (the host has no address), `Refused`, `TimedOut`,
+`Closed` (the connection or server was closed, or the waiting task was
+cancelled, `std.net.9`), `Bind` (the address is in use or not permitted,
+`std.net.9`), `Protocol` (a malformed response, or too many redirects) or
+`Other`. *(ADR 0283, ADR 0369, ADR 0418, ADR 0419, ADR 1068)*
 
 **std.net.5** — An `https` URL (default port 443) is fetched over TLS 1.3.
 The server's certificate chain **MUST** lead to a trusted root, be within
@@ -2185,18 +2195,22 @@ enum Event
     Mouse(col int, row int, button str, kind str)
     Scroll(lines int)
 error struct UiError
-    kind str               # "no_display", "closed" or "other"
+    kind UiKind
     message str
+enum UiKind
+    NoDisplay
+    Closed
+    Other
 ```
 
 **std.ui.1** — `open(title str, cols int, rows int) Window ! UiError` opens
 a window `cols` by `rows` cells in size, with every cell blank (a space,
-light grey on black). It fails with `kind` `no_display` when no window can
-be shown (no display, or a run without a window host), and `other` when
+light grey on black). It fails with `kind` `NoDisplay` when no window can
+be shown (no display, or a run without a window host), and `Other` when
 `cols` or `rows` is outside 1 to 1000 or a window is already open. In a native build the window is drawn by the
-`std.app` host (`std.app.10`) as one canvas of the cell grid: `no_display` when
+`std.app` host (`std.app.10`) as one canvas of the cell grid: `NoDisplay` when
 the host can't start, `click` is a `down` mouse event (no `up` or `drag` yet),
-and the clipboard is the program's own. *(ADR 0177, ADR 0863)*
+and the clipboard is the program's own. *(ADR 0177, ADR 0863, ADR 1068)*
 
 **std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
 `present`, `next_event`, `poll_event`, `modifiers`, `set_title` and `close`; naming another is a

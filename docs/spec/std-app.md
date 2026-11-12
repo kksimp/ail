@@ -96,10 +96,10 @@ event goes to `a.update`, and the view is sent again when its line differs
 from the last one sent. A `close` event is passed to `update`, then the
 program closes the host's input, copies the host's standard error to its
 own, waits for the host, and returns. The program's own standard output is
-free for `print`. `AppError` is `error struct AppError { kind str, message
-str }` with the kinds `no_host` (no host program), `start` (it couldn't
-start), `version` (its first line lacks `"v":1`) and `host_exited` (it ended
-before a `close`). *(ADR 0838)*
+free for `print`. `AppError` is `error struct AppError { kind AppKind,
+message str }`, where `enum AppKind` is `NoHost` (no host program), `Start`
+(it couldn't start), `Version` (its first line lacks `"v":1`) and
+`HostExited` (it ended before a `close`). *(ADR 0838, ADR 1068)*
 
 **std.app.10** — `run` finds the host with `host_path() str ! AppError`:
 the environment variable `AIL_APP_HOST`, else `AIL_ROOT/tools/app-host/
@@ -139,7 +139,7 @@ the program starts the tasks that post (a server loop, a timer) before the
 run and stops them after, in its own block, where their handles live.
 `trait App` has `attach(mut self, inbox Inbox)` (default: nothing), called
 once before the first `update`. `exited` (the host's pipe closed) fails `run`
-with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
+with `HostExited`. Headless `script` has no inbox. *(ADR 0861)*
 
 **std.app.15** — `struct Progress` has `done int`, `total int` (`0` when unknown) and `note str`. `progress(source, p) Event` makes an `external` event (`std.app.14`) whose `text` is `progress|done|total|note`; `progress_of(ev) Progress?` reads it back and gives `none` for any other event. *(ADR 0930)*
 

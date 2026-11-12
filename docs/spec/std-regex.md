@@ -137,7 +137,7 @@ fn main()
     print(m.named.len())                          # 0
 ```
 
-**std.regex.11** — `kind` is `unclosed_group` when a `(` has no `)`; `at` is
+**std.regex.11** — `kind` is `UnclosedGroup` when a `(` has no `)`; `at` is
 the `(`. Add the `)`, or write `\(` for a literal. *(ADR 0439)*
 
 ```ail rules=std.regex.11
@@ -149,7 +149,7 @@ fn main()
         return
 ```
 
-**std.regex.12** — `kind` is `unopened_group` when a `)` has no `(`; `at` is
+**std.regex.12** — `kind` is `UnopenedGroup` when a `)` has no `(`; `at` is
 the `)`. Remove it, or write `\)`. *(ADR 0439)*
 
 ```ail rules=std.regex.12
@@ -161,7 +161,7 @@ fn main()
         return
 ```
 
-**std.regex.13** — `kind` is `unclosed_class` when a `[` has no `]`; `at` is the
+**std.regex.13** — `kind` is `UnclosedClass` when a `[` has no `]`; `at` is the
 `[`. Add the `]`, or write `\[`. *(ADR 0439)*
 
 ```ail rules=std.regex.13
@@ -173,7 +173,7 @@ fn main()
         return
 ```
 
-**std.regex.14** — `kind` is `bad_escape` for a `\` that does not start an
+**std.regex.14** — `kind` is `BadEscape` for a `\` that does not start an
 escape of `std.regex.3`: a trailing `\`, `\q` and other letters, `\x` without
 hex digits, or a code that is not a character. Write `\\` for a backslash.
 *(ADR 0439)*
@@ -187,7 +187,7 @@ fn main()
         return
 ```
 
-**std.regex.15** — `kind` is `bad_repeat` for a count above 1000, a count
+**std.regex.15** — `kind` is `BadRepeat` for a count above 1000, a count
 whose lower bound is above its upper, or a repetition that follows another
 (`a**`, `a{2}{3}`). Group the first with `(?:...)`. *(ADR 0439)*
 
@@ -200,7 +200,7 @@ fn main()
         return
 ```
 
-**std.regex.16** — `kind` is `nothing_to_repeat` for a `*`, `+` or `?` with no
+**std.regex.16** — `kind` is `NothingToRepeat` for a `*`, `+` or `?` with no
 expression before it, such as at the start of the pattern or after `|` or
 `(`. *(ADR 0439)*
 
@@ -213,7 +213,7 @@ fn main()
         return
 ```
 
-**std.regex.17** — `kind` is `bad_range` for a class range that runs backwards
+**std.regex.17** — `kind` is `BadRange` for a class range that runs backwards
 (`[z-a]`) or ends in a set (`[a-\d]`). *(ADR 0439)*
 
 ```ail rules=std.regex.17
@@ -225,7 +225,7 @@ fn main()
         return
 ```
 
-**std.regex.18** — `kind` is `bad_class` for a `[[:name:]]` or `\p{Name}` that
+**std.regex.18** — `kind` is `BadClass` for a `[[:name:]]` or `\p{Name}` that
 is not in the list of `std.regex.10`. The message lists the supported names.
 *(ADR 0439)*
 
@@ -238,7 +238,7 @@ fn main()
         return
 ```
 
-**std.regex.19** — `kind` is `bad_group_name` for a group name that is empty,
+**std.regex.19** — `kind` is `BadGroupName` for a group name that is empty,
 starts with a digit, has a character other than letters, digits and `_`, is
 not closed by `>`, or is used by two groups. *(ADR 0439)*
 
@@ -251,7 +251,7 @@ fn main()
         return
 ```
 
-**std.regex.20** — `kind` is `bad_flag` for a flag other than `i`, `s` and
+**std.regex.20** — `kind` is `BadFlag` for a flag other than `i`, `s` and
 `m`. *(ADR 0439)*
 
 ```ail rules=std.regex.20
@@ -263,7 +263,7 @@ fn main()
         return
 ```
 
-**std.regex.21** — `kind` is `unsupported` for backreferences (`\1`,
+**std.regex.21** — `kind` is `Unsupported` for backreferences (`\1`,
 `(?P=name)`) and lookaround (`(?=`, `(?!`, `(?<=`, `(?<!`). They cannot be
 matched in time proportional to the text, which is `std.regex.4`'s promise.
 Match the shape with groups and test the result in AIL instead. *(ADR 0438)*
@@ -277,7 +277,7 @@ fn main()
         return
 ```
 
-**std.regex.22** — `kind` is `too_large` for a pattern over the limits of
+**std.regex.22** — `kind` is `TooLarge` for a pattern over the limits of
 `std.regex.3`. Use smaller counts or fewer nested counted groups. *(ADR 0439)*
 
 ```ail rules=std.regex.22
@@ -290,8 +290,11 @@ fn main()
 ```
 
 **std.regex.23** — A `RegexError` has `pattern`, `at` (the 0-based character
-offset in the pattern), `kind` (the short names of `std.regex.11`–`22`),
-`rule` (the rule that explains the kind) and `message`. *(ADR 0440)*
+offset in the pattern), `kind` (`enum RegexKind`, one variant per rule of
+`std.regex.11`–`22`: `UnclosedGroup`, `UnopenedGroup`, `UnclosedClass`,
+`BadEscape`, `BadRepeat`, `NothingToRepeat`, `BadRange`, `BadClass`,
+`BadGroupName`, `BadFlag`, `Unsupported`, `TooLarge`), `rule` (the rule that
+explains the kind) and `message`. *(ADR 0440, ADR 1068)*
 
 ```ail rules=std.regex.23
 use std.regex

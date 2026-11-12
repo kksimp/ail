@@ -1703,7 +1703,7 @@ fn Gate.replay(mut self, tmp str)
     fs.write_text("{d}/input.txt", "a\nb\nc\n") else return
     first := rpl(d, "hello\n", ["run", "--record", "r.json", "prog.ail"])
     if first.status != 1
-        or not first.out.contains(" first hello 3 not_found")
+        or not first.out.contains(" first hello 3 fs.IoKind.NotFound")
         or not first.err.contains("prog.ail:11:13: trap[type.coll.4]")
         red("replay record", "exit {first.status}\n{first.out}{first.err}")
     rec := slurp("{d}/r.json")

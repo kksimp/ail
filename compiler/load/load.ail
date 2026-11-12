@@ -65,7 +65,9 @@ STD_MODULES := [
 ## Each type of a standard module, declared in `std/types.ail`, and its module.
 STD_TYPES := {
     "CompressError": "compress",
+    "CompressKind": "compress",
     "IoError": "fs",
+    "IoKind": "fs",
     "Metadata": "fs",
     "Volume": "fs",
     "Entry": "fs",
@@ -75,6 +77,7 @@ STD_TYPES := {
     "RawResponse": "net",
     "RawOutput": "proc",
     "NetError": "net",
+    "NetKind": "net",
     "Options": "net",
     "Request": "net",
     "Server": "net",
@@ -85,6 +88,7 @@ STD_TYPES := {
     "Output": "proc",
     "Child": "proc",
     "ProcError": "proc",
+    "ProcKind": "proc",
     "Window": "ui",
     "Size": "ui",
     "Modifiers": "ui",
@@ -92,9 +96,11 @@ STD_TYPES := {
     "Style": "ui",
     "Cursor": "ui",
     "UiError": "ui",
+    "UiKind": "ui",
     "Tensor": "tensor",
     "Regex": "regex",
     "RegexError": "regex",
+    "RegexKind": "regex",
     "Match": "regex",
     "Captures": "regex",
 }

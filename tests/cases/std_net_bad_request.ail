@@ -24,7 +24,7 @@ fn worker(srv net.Server) !
 
 fn kind_of(method str, url str, o net.Options) str
     r := net.request(method, url, o) else err
-        return err.kind
+        return "{err.kind}"
     "{r.status}"
 
 fn main() !

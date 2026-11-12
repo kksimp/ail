@@ -58,10 +58,15 @@ pub enum Cursor
     Block
     Underline
 
-## Why a window couldn't open: `no_display`, `closed` or `other`.
+## Why a window couldn't open (std.ui.1, ADR 1068).
 pub error struct UiError
-    pub kind str
+    pub kind UiKind
     pub message str
+
+pub enum UiKind
+    NoDisplay
+    Closed
+    Other
 
 ## std.ui.17
 pub BLACK := 0x000000
@@ -100,11 +105,11 @@ fn chan_ready(ch Channel[str]) bool
 ## std.ui.1: a window needs a host, and this run may have none.
 pub fn open(title str, cols int, rows int) Window ! UiError
     if cols < 1 or cols > 1000 or rows < 1 or rows > 1000
-        return UiError(kind: "other", message: "a window is 1 to 1000 cells each way")
+        return UiError(kind: Other, message: "a window is 1 to 1000 cells each way")
     host := app.host_path() else err
-        return UiError(kind: "no_display", message: "no window host in this run")
+        return UiError(kind: NoDisplay, message: "no window host in this run")
     c := proc.start(host, []) else err
-        return UiError(kind: "no_display", message: "the window host did not start")
+        return UiError(kind: NoDisplay, message: "the window host did not start")
     n := cols * rows
     mut w := Window(
         handle: 1,
@@ -137,7 +142,7 @@ pub fn open(title str, cols int, rows int) Window ! UiError
             w.cell_w = ev.cell_w
             seen = true
     if not seen
-        return UiError(kind: "no_display", message: "the window host exited")
+        return UiError(kind: NoDisplay, message: "the window host exited")
     w.send_view(false)
     w
 

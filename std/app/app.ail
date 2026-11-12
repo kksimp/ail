@@ -301,11 +301,16 @@ pub fn progress_of(ev Event) Progress?
     total := parts[2].to_int()?
     Progress(done: done, total: total, note: parts[3])
 
-## Why an app couldn't run (std.app.9): `no_host`, `start`, `version` or
-## `host_exited`.
+## Why an app couldn't run (std.app.9, ADR 1068).
 pub error struct AppError
-    pub kind str
+    pub kind AppKind
     pub message str
+
+pub enum AppKind
+    NoHost
+    Start
+    Version
+    HostExited
 
 ## Builders. A variant with two fields of one type can't be built by
 ## position (type.struct.7); these can.
@@ -624,7 +629,7 @@ pub fn host_path() str ! AppError
     if p := env.get("AIL_APP_HOST")
         return p
     root := env.get("AIL_ROOT") else return AppError(
-        kind: "no_host",
+        kind: NoHost,
         message: "set AIL_APP_HOST to the app host program",
     )
     p := "{root}/tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost"
@@ -636,7 +641,7 @@ pub fn host_path() str ! AppError
     q := "{root}/tools/app-host/linux/build/ail-app-host"
     if not fs.exists(q)
         return AppError(
-            kind: "no_host",
+            kind: NoHost,
             message: "no host is built; run tools/app-host/macos/run.sh (macOS), tools/app-host/linux/run.sh (Linux) or tools/app-host/windows/run.ps1 (Windows)",
         )
     q
@@ -662,7 +667,7 @@ pub fn new_inbox() Inbox
 ## made with `inbox()` and gave to its own tasks.
 pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
     mut c := proc.start(cmd, args) else err
-        return AppError(kind: "start", message: "{err}")
+        return AppError(kind: Start, message: "{err}")
     mut sent := frame(a)
     mut shown := a.popup()
     mut chosen := a.pick()
@@ -788,8 +793,8 @@ fn popup_line(p Popup) str
 
 fn gone(move c proc.Child) ! AppError
     status := proc.kill(move c)
-    AppError(kind: "host_exited", message: "the app host exited with status {status}")
+    AppError(kind: HostExited, message: "the app host exited with status {status}")
 
 fn mismatch(move c proc.Child, line str) ! AppError
     proc.kill(move c)
-    AppError(kind: "version", message: "the app host spoke another protocol: {line}")
+    AppError(kind: Version, message: "the app host spoke another protocol: {line}")

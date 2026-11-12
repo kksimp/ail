@@ -1,4 +1,4 @@
-# `compress.gunzip` fails with: compress.CompressError(kind: "corrupt", message: "unexpected end of compressed data")
+# `compress.gunzip` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "unexpected end of compressed data")
 use std.compress
 
 fn main() !

@@ -106,15 +106,18 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
                 inv_file["{prefix}{s.name}"] = file
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
-    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Enum(IO_KIND))]
     structs[TRAPPED] = [Slot(name: "rule", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
-    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Enum(PROC_KIND))]
     structs[NET_ERROR] = [
         Slot(name: "url", ty: Ty.Str),
-        Slot(name: "kind", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Enum(NET_KIND)),
         Slot(name: "message", ty: Ty.Str),
     ]
-    structs[COMPRESS_ERROR] = [Slot(name: "kind", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
+    structs[COMPRESS_ERROR] = [
+        Slot(name: "kind", ty: Ty.Enum(COMPRESS_KIND)),
+        Slot(name: "message", ty: Ty.Str),
+    ]
     structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_SERVER] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_REQUEST] = [

@@ -16,7 +16,7 @@ fn line_of(c net.Conn) str
 
 fn ask(c net.Conn, i int) str
     c.write("GET /r{i} HTTP/1.1\r\nHost: x\r\n\r\n") else err
-        return err.kind
+        return "{err.kind}"
     mut l := line_of(c)
     while l != "" and l != "error" and l != "(closed)"
         l = line_of(c)

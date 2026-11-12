@@ -51,7 +51,7 @@ fn client(addr str, token str, out Channel[str])
 
 fn connect_kind(port int) str
     c := net.connect("127.0.0.1", port) else err
-        return err.kind
+        return "{err.kind}"
     c.close()
     "ok"
 

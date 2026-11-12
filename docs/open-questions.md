@@ -118,7 +118,8 @@ latter:
 - `match` with success and error arms.
 **Measured 2026-10-24** (the corpus, `examples/`, `tools/` and `compiler/`, about
 148,000 lines): no `match` on a specific error variant follows an `else err`
-(errors are tested by field, e.g. `err.kind == "timed_out"`), and about eight
+(errors are tested by field, e.g. `err.kind == "timed_out"`, an enum since
+[ADR 1068](decisions/1068-std-error-kinds-are-enums.md)), and about eight
 places reach a field through an optional that `a?.b` would shorten. Both stay
 open until a program needs them; the ADR 0029 measurement is then rerun.
 

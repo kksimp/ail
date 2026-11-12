@@ -1,4 +1,4 @@
-# `compress.gunzip` fails with: compress.CompressError(kind: "checksum", message: "gzip CRC-32 mismatch")
+# `compress.gunzip` fails with: compress.CompressError(kind: compress.CompressKind.Checksum, message: "gzip CRC-32 mismatch")
 use std.compress
 
 fn main() !

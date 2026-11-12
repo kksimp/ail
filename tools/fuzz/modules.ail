@@ -644,7 +644,7 @@ fn fill(body str, t1 str, t2 str, n int) str
 ## Run `cmd`; a time-out is status 124, a start failure 127.
 fn run(cmd str, args List[str], ms int) proc.Output
     r := proc.run(cmd, args, none, ms) else err
-        return proc.Output(status: if err.kind == "timed_out" then 124 else 127, out: "", err: "")
+        return proc.Output(status: if err.kind == TimedOut then 124 else 127, out: "", err: "")
     r
 
 fn header(body str, key str) str

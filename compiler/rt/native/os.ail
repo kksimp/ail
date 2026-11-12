@@ -1008,13 +1008,13 @@ fn os_error(path str, kind int, at str)
     sb_text("fs.IoError(path: ")
     os_put_quoted(path)
     sb_text(", kind: ")
-    os_put_quoted(kind_name(kind))
+    kind_put("fs.IoKind", kind_name(kind))
     sb_byte(41)
     err_set(sb_str(), at)
-    # The value, an `fs.IoError(path, kind)` struct (ADR 0804).
+    # The value, an `fs.IoError(path, kind)` struct (ADR 0804, ADR 1068).
     e := obj_new(16, 4)
     store64(e, str_addr(path))
-    store64(e + 8, str_addr(kind_name(kind)))
+    store64(e + 8, kind_word(io_kinds(), kind_name(kind)))
     err_value(e)
 
 fn fs_read_text(path str, at str) str

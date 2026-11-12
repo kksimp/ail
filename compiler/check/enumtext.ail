@@ -1,0 +1,80 @@
+## A string where an enum is expected (type.enum.7, ADR 1068): kinds that were
+## strings, such as `err.kind == "not_found"`, are enums now. When the string
+## is a variant's name in snake case, the diagnostic carries a fix that writes
+## the variant (`NotFound`).
+use ast
+use fix
+
+## The enum index of `t`, or -1.
+@allow("expr.match.3") fn enum_of(t Ty) int
+    match t
+        Enum(e, _) => e
+        _ => -1
+
+## `not_found` as `NotFound`; `none` unless `text` is snake case (lower-case
+## letters, digits and single underscores).
+fn snake_to_variant(text str) str?
+    if text == "" or text.starts_with("_") or text.ends_with("_") or text.contains("__")
+        return none
+    mut out := ""
+    mut up := true
+    for c in text.chars()
+        if c == '_'
+            up = true
+        elif (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9')
+            out = "{out}{if up then "{c}".to_upper() else "{c}"}"
+            up = false
+        else
+            return none
+    out
+
+## The variant of enum `e` that `text` names in snake case.
+fn Checker.variant_for_text(self, e int, text str) str?
+    v := snake_to_variant(text)?
+    for x in prog.enums[e].variants
+        if x.name == v
+            return v
+    none
+
+## Report string `text`, written at `at`, where a value of enum `e` is
+## expected; `what` says where. With a fix when it names a variant.
+fn Checker.enum_text_diag(mut self, e int, text str, at ast.Pos, what str)
+    name := prog.enums[e].name
+    msg := "{what} is a string, but `{name}` is an enum (type.enum.7)"
+    if v := variant_for_text(e, text)
+        diags.push(
+            new_diag("type.enum.7", at, msg)
+                .with_help("write the variant: `{v}`")
+                .with_fix("write `{v}`", [fix.replace(at, "\"{text}\"", v)]),
+        )
+    else
+        vs := [x.name for x in prog.enums[e].variants]
+        err_help("type.enum.7", at, msg, "write one of its variants: {list_names(vs)}")
+
+## `x == "text"` or `x != "text"` with an enum `x` (expr.cmp.1): reported
+## here, with the fix; true when it was.
+@allow("expr.match.3") fn Checker.enum_text_compare(mut self, op ast.BinOp, lt Ty, rhs ast.Expr) bool
+    if op != ast.BinOp.Eq and op != ast.BinOp.Ne
+        return false
+    e := enum_of(lt)
+    if e < 0
+        return false
+    match rhs
+        Str(text, at) =>
+            enum_text_diag(e, text, at, "this operand")
+            true
+        _ => false
+
+## A string pattern in a `match` on enum `e`: reported, and the variant it
+## names counts as covered, so the missing-arm error doesn't repeat it.
+@allow("expr.match.3") fn Checker.enum_text_pattern(mut self, e int, lit ast.Literal, at ast.Pos, mut cov Coverage) bool
+    match lit
+        StrLit(text) =>
+            enum_text_diag(e, text, at, "this pattern")
+            if v := variant_for_text(e, text)
+                vs := prog.enums[e].variants
+                for k in 0..vs.len()
+                    if vs[k].name == v
+                        cov.variants[k] = true
+            true
+        _ => false
