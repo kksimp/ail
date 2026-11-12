@@ -1,0 +1,78 @@
+## Two-lane float vectors on x86-64 (native.vec.3, ADR 1066): the `Vec2` operations of
+## the pairing pass (`slp.ail`) in VEX xmm forms. A `Vec2` lives in an xmm register,
+## lane 0 in the low half, or in the two stack slots the allocator gave it. Slots count
+## downwards from `rbp`, so the 16 bytes start at the second slot: its lane 0 is the
+## lower word. Only this file reads or writes those slots. xmm14 and xmm15 are scratch.
+
+## `v` in an xmm register: its own, or `scratch` loaded from its slots.
+fn Gen.vreg(mut self, v int, scratch int) int
+    l := loc[v]
+    if is_reg(l)
+        return l - codegen.FLOAT_BASE
+    if not is_slot(l)
+        unreachable("vector v{v} has no location")
+    a.vmovupd_rm128(scratch, vslot(l))
+    scratch
+
+## The 16 bytes of a `Vec2` spilled at slot `l` (and `l + 1`).
+fn Gen.vslot(self, l int) Mem
+    slot(l + 1)
+
+## Store a computed `Vec2` from `x` into its location.
+fn Gen.put_vec(mut self, v int, x int)
+    l := loc[v]
+    if is_slot(l)
+        a.vmovupd_mr128(vslot(l), x)
+    elif is_reg(l)
+        a.vmov_rr(l - codegen.FLOAT_BASE, x)
+
+## `base[index + fimm]` and the element after it, 8 bytes each.
+fn Gen.vec_mem(mut self, i mir.Inst) Mem
+    b := gpr(i.arg(0), S0)
+    if k := imm32(i.arg(1))
+        return at(b, 8 * (k + i.elem_off()))
+    at_index(b, gpr(i.arg(1), S1), 8, 8 * i.elem_off())
+
+fn Gen.vec_inst(mut self, i mir.Inst)
+    match i.op
+        "vldx" =>
+            mem := vec_mem(i)
+            d := out_xmm(i.dst, X0)
+            a.vmovupd_rm128(d, mem)
+            put_vec(i.dst, d)
+        "vstx" =>
+            x := vreg(i.arg(2), X0)
+            a.vmovupd_mr128(vec_mem(i), x)
+        "vfadd" | "vfsub" | "vfmul" | "vfdiv" =>
+            xa := vreg(i.arg(0), X0)
+            xb := vreg(i.arg(1), X1)
+            d := out_xmm(i.dst, X0)
+            a.vpd_op(i.op.slice(1, i.op.len()), d, xa, xb)
+            put_vec(i.dst, d)
+        "vsplat" =>
+            xa := xmm(i.arg(0), X0)
+            d := out_xmm(i.dst, X0)
+            a.vunpcklpd(d, xa, xa)
+            put_vec(i.dst, d)
+        "vpack" =>
+            xa := xmm(i.arg(0), X0)
+            xb := xmm(i.arg(1), X1)
+            d := out_xmm(i.dst, X0)
+            a.vunpcklpd(d, xa, xb)
+            put_vec(i.dst, d)
+        "vlane" =>
+            xa := vreg(i.arg(0), X0)
+            d := out_xmm(i.dst, X0)
+            if i.imm == 0
+                a.vmov_rr(d, xa)
+            else
+                a.vunpckhpd(d, xa, xa)
+            put_xmm(i.dst, d)
+        "vhadd" =>
+            # lane 0 + lane 1, in that order (one rounding, as the scalar `add`).
+            xa := vreg(i.arg(0), X0)
+            a.vunpckhpd(X1, xa, xa)
+            d := out_xmm(i.dst, X0)
+            a.vsd_rrr("fadd", d, xa, X1)
+            put_xmm(i.dst, d)
+        _ => unreachable("not a vector operation: {i.op}")
