@@ -1,0 +1,65 @@
+# Loops that leave in more than one place run a copy without bounds checks
+# when a guard before the loop says every access is in bounds
+# (native.bce.16). The results must not change, whichever copy runs.
+
+## Three exits, and a list read at `b + l` and `a + l`.
+fn match_len(data List[int], a int, b int, n int) int
+    mut l := 0
+    while l < 66 and a + l < n and data[b + l] == data[a + l]
+        l += 1
+    l
+
+## A `break`, and values used after the loop.
+fn count_after(xs List[int], k int) int
+    mut total := 0
+    mut l := 0
+    while l < 10
+        if k + l >= xs.len()
+            break
+        total += xs[k + l]
+        l += 1
+    total * 100 + l
+
+## A `return` in a `for`: a second block the loop leaves to.
+fn index_from(xs List[int], from int, want int) int
+    for i in 0..8
+        if xs[from + i] == want
+            return i
+    -1
+
+## Two pointers, each read at `lo +` it, and an early `return`.
+fn palindrome(xs List[int], lo int, n int) bool
+    mut i := 0
+    mut j := n - 1
+    while i < j
+        if xs[lo + i] != xs[lo + j]
+            return false
+        i += 1
+        j -= 1
+    true
+
+## A scan that ends at the list's own length.
+fn skip_to(s List[int], start int, c int) int
+    mut j := start
+    while j < s.len() and s[j] != c
+        j += 1
+    j
+
+fn main()
+    data := [1, 2, 3, 1, 2, 3, 1, 2, 4, 5]
+    print(match_len(data, 3, 0, data.len()))
+    print(match_len(data, 6, 0, data.len()))
+    print(match_len(data, 9, 9, data.len()))
+    print(count_after(data, 5))
+    print(count_after(data, 0))
+    print(count_after(data, 20))
+    print(index_from(data, 1, 4))
+    print(index_from(data, 2, 9))
+    print(index_from(data, 0, 3))
+    w := [5, 1, 2, 1, 5, 7]
+    print(palindrome(w, 0, 5))
+    print(palindrome(w, 1, 5))
+    print(palindrome(w, 2, 3))
+    print(palindrome(w, 1, 0))
+    print(skip_to(data, 0, 4))
+    print(skip_to(data, 2, 9))

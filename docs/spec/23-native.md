@@ -517,6 +517,32 @@ fn main()
     print(match_len([1, 2, 3, 1, 2, 3, 9], 3, 0, 7))
 ```
 
+**native.bce.16** — A counted loop (native.bce.1) that also leaves from blocks
+other than its header (a failing `and` term, `break`, `return`) may be
+versioned as one that leaves only from its header, where every block it leaves
+to is entered only from the loop. The check on `xs[a + i]`, with `a` fixed in
+the loop and `i` its counter, and the overflow check of `a + i`, may be removed
+where the guard tests `0 <= a` and that the loop's bound is at most
+`xs.len() - a` (one less for the falling `j` of a two-pointer loop). The guard
+covers every pass the bound allows, so a loop that would leave early runs with
+its checks when the list is shorter than that, and traps where it did.
+*(ADR 1062)*
+
+```ail rules=native.bce.16
+fn count_after(xs List[int], k int) int
+    mut total := 0
+    mut l := 0
+    while l < 4
+        if k + l >= xs.len()
+            break
+        total += xs[k + l]
+        l += 1
+    total
+
+fn main()
+    print(count_after([1, 2, 3, 4, 5], 1))
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
