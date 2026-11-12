@@ -318,11 +318,13 @@ fn Run.executables(mut self, target str, runner str)
         cases = live
     # A dynamic ELF (dlopen/dlsym of an `extern c fn` outside the libc subset, ADR 0870) under qemu-user needs the
     # target's own dynamic loader; without it qemu exits 255 with nothing printed. The host runs these cases.
+    # attach_tool_game imports std.gfx.host, whose `extern c "kernel32"` functions make it a dynamic ELF too.
     if target.contains("aarch64-linux")
         and not fs.exists("/usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1")
         mut static_only := List[str]()
         for c in cases
             if not [
+                "attach_tool_game",
                 "ffi_dynamic",
                 "ffi_f32",
                 "ffi_missing_library",
