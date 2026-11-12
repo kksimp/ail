@@ -60,7 +60,7 @@ fn pc_facts_of(f Func) PcFacts
                 fa.reads = true
                 if i.site >= 0
                     fa.traps = true
-            elif i.op == "len" or i.op == "cap" or i.op == "data" or i.op == "load"
+            elif i.op == "len" or i.op == "cap" or i.op == "data" or i.op == "load" or i.op == "vldx"
                 fa.reads = true
             elif i.op == "prim"
                 if not pure_prim(i.name)
@@ -157,7 +157,7 @@ fn pc_may_write(i Inst, fx Map[str, PcFx]) bool
         return not e.readonly
     if pc_arith_op(i.op) or i.op == "get" or i.op == "ldx" or i.op == "len" or i.op == "cap"
         return false
-    if i.op == "bounds"
+    if i.op == "bounds" or i.op == "vldx"
         return false
     if i.op == "data" or i.op == "load" or i.op == "ftoi"
         return false
