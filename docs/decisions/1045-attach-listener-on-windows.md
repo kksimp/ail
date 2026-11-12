@@ -29,7 +29,7 @@ socket was not the gap: `net.listen` and `accept` already reach Winsock. Three t
    port once. The listener sees the flag at that connection, closes its socket and ends. If the
    connection can't be made, the socket is closed from outside as before.
 3. **Two halves.** `serve.open()` gives the listener and its file, `serve.run_on(s, mut app, cmd,
-   args, input)` runs the window with a given host program. `run` is the two with the built host.
+   args, inbox, input)` runs the window with a given host program. `run` is the two with the built host.
    A case (`tests/cases/std_attach_listen`) uses them with a host written in AIL, so the listener
    is tested headless on the three hosts.
 

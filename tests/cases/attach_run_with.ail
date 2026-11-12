@@ -1,0 +1,65 @@
+## attach.run.1 (ADR 0884): `ail run` serves the attach socket of a program that calls
+## `app.run_with(` too. The program is its own client: a task finds the discovery file that
+## answers `observe` with this program's `@observe` field, and posts the reply to the app, whose
+## changed view makes the host (written in AIL) close the window.
+use std.app
+use std.fs
+use std.net
+use std.time
+
+struct Counter
+    @observe run_with_probe int
+    seen str
+
+impl app.App for Counter
+    fn update(mut self, ev app.Event)
+        if ev.kind == "external" and ev.id == "probe"
+            seen = ev.text
+
+    fn view(self) app.Node
+        app.label(seen)
+
+## The reply of the program that published `path` to an `observe` request, or "".
+fn asked(path str) str
+    text := fs.read_text(path) else return ""
+    j := parse_json(text) else return ""
+    addr := j.str("addr") else return ""
+    token := j.str("token") else return ""
+    port := (addr.split(":").last() else "").to_int() else return ""
+    c := net.connect("127.0.0.1", port) else err
+        return ""
+    c.set_timeout(20000)
+    c.write("\{\"v\":1,\"q\":\"observe\",\"token\":\"{token}\"}\n") else return ""
+    got := c.read_line() else return ""
+    c.close()
+    got else ""
+
+## This program's own reply, from whichever discovery file gives it, or "".
+fn own_reply(dir str) str
+    names := fs.list_dir(dir) else return ""
+    for n in names.sorted()
+        if not (n.starts_with("ail-attach-") and n.ends_with(".json"))
+            continue
+        reply := asked("{dir}/{n}")
+        if reply.contains("\"run_with_probe\"")
+            return reply
+    ""
+
+fn probe(inbox app.Inbox)
+    dir := env.get("TMPDIR") else (env.get("TEMP") else "/tmp")
+    for attempt in 0..100
+        reply := own_reply(dir)
+        if reply != ""
+            inbox.post(app.external("probe", reply))
+            return
+        time.sleep_ms(50)
+    inbox.post(app.external("probe", "no attach socket answered"))
+
+fn main() !
+    mut c := Counter(run_with_probe: 7, seen: "")
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
+    inbox := app.new_inbox()
+    g := TaskGroup()
+    g.add(spawn probe(inbox))
+    app.run_with(mut c, ail, ["run", "tests/app/inbox_host.ail"], inbox)?
+    print(c.seen)

@@ -67,7 +67,7 @@ fn main() !
     g := TaskGroup()
     g.add(spawn client(s.addr, s.token, out))
     mut shop := Shop(n: 0)
-    serve.run_on(s, mut shop, ail, ["run", "tests/app/inbox_host.ail"], true)?
+    serve.run_on(s, mut shop, ail, ["run", "tests/app/inbox_host.ail"], app.new_inbox(), true)?
     for line in out
         print(line)
     print(shop.n)

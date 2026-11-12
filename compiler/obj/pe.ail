@@ -263,6 +263,8 @@ fn pe_dll_of(name str) str
         return "crypt32.dll"
     if name == "GetNetworkParams" or name == "GetAdaptersAddresses"
         return "iphlpapi.dll"
+    if name == "SHFileOperationW"
+        return "SHELL32.dll"
     if name == "ProcessPrng"
         return "bcryptprimitives.dll"
     # The readiness set's socket-driver calls (ADR 1009, win_ready.ail).
@@ -278,6 +280,7 @@ PE_DLLS := [
     "crypt32.dll",
     "iphlpapi.dll",
     "ntdll.dll",
+    "SHELL32.dll",
 ]
 
 ## The code with its relocations resolved, for `.text` at RVA `code_rva`,

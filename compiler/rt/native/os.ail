@@ -1647,14 +1647,19 @@ fn os_trash_name(dir str, info str, name str) str
 ## `fs.trash(path)` (std.fs.26): move `path` into the user's trash, never
 ## copying. macOS: `~/.Trash`. Linux: `$XDG_DATA_HOME/Trash` (default
 ## `~/.local/share/Trash`) with a `.trashinfo`. A trash on another volume
-## makes the rename fail with kind `other`. Windows has no arm yet.
+## makes the rename fail with kind `other`. Windows: the Recycle Bin, through
+## `SHFileOperationW` (`win_trash`).
 fn os_fs_trash(path str)
     p := os_cstr(OS_PATH_A, path)
     if p == 0 or os_access(p) < 0
         os_fail_kind(K_NOT_FOUND)
         return
     if target() == 3
-        os_fail_kind(K_OTHER)
+        r := win_trash(p)
+        if r < 0
+            os_fail_errno(r)
+        else
+            os_succeed()
         return
     home := os_env_home()
     if not os_ok()
