@@ -225,37 +225,48 @@ fn net_wait(fd int, events int, ms int) int
 ## for would otherwise wait for it until the timeout). A zero wait
 ## returns at once and needs neither.
 fn net_poll_blocked(fd int, events int, ms int) int
-    if ms == 0 or load64(global(MULTI)) == 0
+    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
         return net_poll(fd, events, ms)
-    # The main thread parks too (no `wait_enter`: it is no worker): else a
-    # collection another thread asks for waits on it for the whole timeout.
-    k := worker_index()
-    if k >= 0
-        wait_enter()
-    s := blocked_enter()
+    wait_enter()
     r := net_poll(fd, events, ms)
-    blocked_leave(s)
-    if k >= 0
-        wait_leave()
+    wait_leave()
     r
+
+## Whether a wait of `ms` is parked for the collector (see `blocked_enter`): on
+## every thread, the main one too, else a collection that another task asks for
+## waits on it until the timeout. Only the system call itself is parked (nothing
+## allocates between `blocked_enter` and `blocked_leave`), and not on a
+## deterministic schedule, where the task holds the turn.
+fn net_park_wait(ms int) bool
+    ms != 0 and load64(global(MULTI)) != 0 and not det_on()
 
 fn net_poll(fd int, events int, ms int) int
     if target() == 3
         return wnet_poll1(fd, events, ms)
     pf := alloc_raw(16, KIND_BYTES)
     ts := alloc_raw(16, KIND_BYTES)
+    park := net_park_wait(ms)
     while true
         store64(pf, fd.bit_and(4294967295).bit_or(events.shl(32)))
         mut r := 0
+        mut ps := 0
         if target() == 1
             if ms < 0
+                if park
+                    ps = blocked_enter()
                 r = syscall(73, pf, 1, 0, 0, 0, 0)
             else
                 store64(ts, ms / 1000)
                 store64(ts + 8, ms % 1000 * 1000000)
+                if park
+                    ps = blocked_enter()
                 r = syscall(73, pf, 1, ts, 0, 0, 0)
         else
+            if park
+                ps = blocked_enter()
             r = syscall(if target() == 2 then 230 else 7, pf, 1, ms, 0, 0, 0)
+        if park
+            blocked_leave(ps)
         if r == -4
             continue
         if r <= 0

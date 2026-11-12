@@ -100,16 +100,11 @@ fn rdy_wait(ep int, out int, ms int) int
 
 ## `rdy_wait_raw` on a pool worker, counted as blocked (see `net_poll_blocked`).
 fn rdy_wait_blocked(ep int, out int, ms int) int
-    if ms == 0 or load64(global(MULTI)) == 0
+    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
         return rdy_wait_raw(ep, out, ms)
-    k := worker_index()
-    if k >= 0
-        wait_enter()
-    s := blocked_enter()
+    wait_enter()
     r := rdy_wait_raw(ep, out, ms)
-    blocked_leave(s)
-    if k >= 0
-        wait_leave()
+    wait_leave()
     r
 
 fn rdy_wait_raw(ep int, out int, ms int) int
@@ -119,15 +114,23 @@ fn rdy_wait_raw(ep int, out int, ms int) int
     stride := if t == 0 then 12 else 16
     buf := alloc_raw(RDY_MAX * 32, KIND_BYTES)
     ts := alloc_raw(16, KIND_BYTES)
+    park := net_park_wait(ms)
     while true
         mut r := 0
+        mut ps := 0
         if t == 2
             store64(ts, if ms < 0 then 0 else ms / 1000)
             store64(ts + 8, if ms < 0 then 0 else ms % 1000 * 1000000)
+            if park
+                ps = blocked_enter()
             r = syscall(363, ep, 0, 0, buf, RDY_MAX, if ms < 0 then 0 else ts)
         else
+            if park
+                ps = blocked_enter()
             # epoll_pwait(ep, events, max, ms, no sigmask, 8)
             r = syscall(os_pick(281, 22, 0), ep, buf, RDY_MAX, ms, 0, 8)
+        if park
+            blocked_leave(ps)
         if r == -4
             continue
         if r <= 0
