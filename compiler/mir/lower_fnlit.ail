@@ -444,9 +444,10 @@ fn Lower.elem_fn(mut self, a ast.Arg, e Ty, ret Ty) ElemFn?
     if lp := lit_parts(a.value)
         mut pt := e
         if t := lp.ty
-            pt = type_of(t) else
+            written := type_of(t) else
                 problem(t.pos, "not in the native subset yet: this parameter type")
                 return none
+            pt = written
         return ElemFn(param: lp.name, pty: pt, body: lp.body, f: Val(id: -1, ty: Ty.Unit))
     f := lower_value(a.value, Ty.Fn(params: [e], ret: ret, err: Ty.Unit))?
     if fn_shape(f.ty) == none
