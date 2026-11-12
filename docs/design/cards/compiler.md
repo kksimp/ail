@@ -48,7 +48,7 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (6 items)
 
-## syntax (111 items)
+## syntax (114 items)
 
 ## watch (5 items)
 

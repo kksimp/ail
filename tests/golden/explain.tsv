@@ -490,6 +490,12 @@ explain expr.bit.1	a465a25618c13c82	0	0d574b751ff7644c
 explain expr.bit.1 --json	a465a25618c13c82	0	275a5cbad3c1d33f
 explain expr.bit.2	a465a25618c13c82	0	b156d56b83ffae43
 explain expr.bit.2 --json	a465a25618c13c82	0	05a41e88c43b79dc
+explain expr.bit.3	0c22af17f6b9a072	0	c337cf63f3e7c999
+explain expr.bit.3 --json	0c22af17f6b9a072	0	22bd5234a71959e3
+explain expr.bit.4	0c22af17f6b9a072	0	fc76d5c5b1d7b9e3
+explain expr.bit.4 --json	0c22af17f6b9a072	0	78ad4ee2da49e32b
+explain expr.bit.5	0c22af17f6b9a072	0	61cb5a2427c72a26
+explain expr.bit.5 --json	0c22af17f6b9a072	0	5f262aaa30a95a96
 explain expr.hole.1	a465a25618c13c82	0	5901ccfcd0cc315d
 explain expr.hole.1 --json	a465a25618c13c82	0	d07d75bd8d60ee88
 explain expr.hole.2	a465a25618c13c82	0	85108fffe65e7c3d

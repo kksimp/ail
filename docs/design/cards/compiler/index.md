@@ -22,6 +22,6 @@ mir  688 items
 obj  66 items
 pkg  49 items
 scaffold  6 items
-syntax  111 items
+syntax  114 items
 watch  5 items
 x64  115 items

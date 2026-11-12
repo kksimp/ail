@@ -35,7 +35,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Axis reduction** | `t.sum(axis)`, `t.max(axis)`, `t.mean(axis)`: a tensor reduced along one axis, whose shape drops that axis (`std.tensor.11`, ADR 0345). |
 | **Bare variant pattern** | A variant with data written without parentheses in a pattern, `Rect =>`: it matches any fields and binds none (ADR 0183). |
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
-| **Bit operation** | An `int` method that works on the 64-bit two's complement bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-2, ADR 0465). |
+| **Bit operation** | An `int` operation on the 64-bit two's complement bits: `&`, `|`, `^`, `~`, `<<`, `>>` or the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-5, ADR 1070, ADR 0465). |
 | **Block parameter** | A MIR value defined on entry to a block; each edge into the block passes one argument per parameter, in place of phi nodes (ADR 0222, ADR 0384). |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. Never used (ADR 0010). |
 | **Bytecode tier** | (Removed with the Rust bootstrap, ADR 0904.) The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |

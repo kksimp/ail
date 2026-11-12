@@ -399,8 +399,11 @@ no `break` can end a function too.
   annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
-- Bits on `int` (64-bit two's complement): `a.bit_and(b)`, `bit_or`, `bit_xor`,
-  `n.bit_not()`, `n.shl(k)`, `n.shr(k)` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`).
+- Bits on `int` (64-bit two's complement): `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`,
+  `a >> k` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`); the methods `bit_and`,
+  `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` mean the same. `x &= e` (also `|= ^= <<= >>=`)
+  works on a plain name. A bit operator never mixes with another operator without
+  parentheses (`expr.bit.4`): write `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 

@@ -10,7 +10,7 @@ edit 21 0
 eff 15 0
 err 40 5
 explain 6 0
-expr 65 18
+expr 68 18
 ffi 21 0
 fix 11 0
 gen 17 0
@@ -45,4 +45,4 @@ try 10 0
 type 134 10
 unsafe 21 0
 verify 9 0
-all 1405 54
+all 1408 54

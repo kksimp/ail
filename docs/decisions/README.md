@@ -461,7 +461,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
-| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
+| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Superseded by [1070](1070-bit-operators.md) | 2026-10-20 |
 | [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
 | [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
 | [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
@@ -853,4 +853,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
 | [1063](1063-function-wide-value-ranges.md) | Native: function-wide value ranges drop checks and fold comparisons they decide *(delegated)* | Accepted | 2026-11-12 |
+| [1070](1070-bit-operators.md) | Bit operators `& \| ^ ~ << >>` as sugar for the `int` methods; mixing needs parentheses; supersedes ADR 0465 *(delegated)* | Accepted | 2026-11-12 |
 | [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |

@@ -348,7 +348,7 @@ Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x
   `x.to_int()`. An int literal works where a float is expected.
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(n)`, `shr(n)` (count 0-63).
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 

@@ -1,6 +1,0 @@
-fn main()
-    a := 6
-    b := 3
-    print(a.bit_and(b))
-    c := a.bit_xor(b)
-    print(c)
