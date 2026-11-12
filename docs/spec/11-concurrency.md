@@ -570,6 +570,9 @@ function counts as that heavy, so it goes to the pool from two iterations. The r
 the sequential ones either way. Such a loop may sit inside a loop that runs in order
 (a `for` the compiler didn't choose, or a `while`): each run of the outer body tests the
 inner loop's work again, and a loop inside a loop on the pool runs in order in its chunk.
+A loop that builds a list by `push` and whose work is only a called function's loop or
+recursion, inside such a loop, needs at least 16384 iterations: each run of the outer body
+pays a dispatch and a gather, so the estimate of 4096 for a callee's loop is not trusted there.
 *(ADR 0911, ADR 0987)*
 
 ```ail rules=conc.par.14
