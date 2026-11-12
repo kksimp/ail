@@ -176,7 +176,7 @@ fn Checker.captures_ok(mut self, params List[ast.ClosureParam], body ast.Expr)
     mut names := Set[str]()
     ast.expr_names(body, mut names)
     for n in names.sorted()
-        if [p for p in params if p.name == n].len() > 0
+        if [q for q in params if q.name == n].len() > 0
             continue
         l := local(n) else continue
         if is_unique(l.ty)

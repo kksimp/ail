@@ -793,15 +793,19 @@ fn Parser.stray_after_statement(mut self, start int) bool
         if edits := ternary_edits(start, k0 - 1)
             attach("write it as `if c then a else b`", edits)
         return true
-    # `(x) => x + 1`
+    # `(x) => x + 1` (ADR 1067: AIL writes `|x| x + 1`)
     if cur == "=>"
         error_text(
             "gram.foreign.1",
             pos,
-            "AIL has no anonymous functions yet",
-            "declare a named `fn` and pass its name",
+            "AIL writes a function literal `|x| x + 1`, not `=>`",
+            "put the parameters between bars and the body after them, on the same line",
             "",
         )
+        if from := arrow_params(k0)
+            names := [tok_text(tokens[k].tok) for k in from..k0 if tok_tag(tokens[k].tok) == "id"]
+            head := "|{names.join(", ")}|"
+            attach("write `{head}`", [fix.span(tokens[from].pos, tok_end(k0) else pos, head)])
         return true
     # `Point{x: 1}`
     if cur == "\{" and k0 >= 1 and upper_ident(tokens[k0 - 1].tok)
@@ -820,6 +824,23 @@ fn Parser.stray_after_statement(mut self, start int) bool
             ])
         return true
     false
+
+## The first token of the parameters before the `=>` at `k0`: the `(` of
+## `(a, b) =>` or the name of `x =>`; `none` otherwise.
+fn Parser.arrow_params(self, k0 int) int?
+    if k0 >= 1 and tok_tag(tokens[k0 - 1].tok) == "id"
+        return k0 - 1
+    if k0 < 2 or tokens[k0 - 1].tok != Tok.Sym(")")
+        return none
+    mut k := k0 - 2
+    while k >= 0
+        t := tokens[k].tok
+        if t == Tok.Sym("(")
+            return k
+        if tok_tag(t) != "id" and t != Tok.Sym(",")
+            return none
+        k -= 1
+    none
 
 fn upper_ident(t Tok) bool
     match t
