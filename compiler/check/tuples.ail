@@ -250,7 +250,7 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
                     )
                 cov.wildcard = true
             names
-        Literal | Variant | Range | BindName =>
+        Literal | Variant | Range | BindName | Nested =>
             err_help(
                 "type.tuple.6",
                 pattern_pos(pat),
@@ -347,4 +347,9 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List
         Variant(_, _, names, _) =>
             given := names else []
             [Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown) for nm in given]
+        Nested(_, _, fields, _) =>
+            mut out := List[Binding]()
+            for q in fields
+                out.extend(tuple_pattern_names(q))
+            out
         _ => []

@@ -1046,6 +1046,7 @@ fn pattern_pos(p ast.Pattern) ast.Pos
         Range(_, _, _, at) => at
         TuplePat(_, at) => at
         BindName(_, at) => at
+        Nested(_, _, _, at) => at
 
 @allow("expr.match.3")
 fn Checker.match_expr(
@@ -1093,6 +1094,9 @@ fn Checker.match_expr(
         )
     nvariants := if enum_index >= 0 then prog.enums[enum_index].variants.len() else 0
     mut cov := Coverage(variants: [false for _ in 0..nvariants], literals: [], wildcard: false)
+    # expr.match.13: an enum `match` whose arms nest is checked as a matrix.
+    nested := enum_index >= 0 and [a for a in arms if nests(a.pat)].len() > 0
+    mut nrows := NestRows(rows: [], named: [false for _ in 0..nvariants], broken: false)
     mut agree := new_agree(expect, need, "arm", "`match`")
     for arm in arms
         # expr.match.11: a guarded arm covers nothing, so what the pattern
@@ -1100,7 +1104,9 @@ fn Checker.match_expr(
         kept := cov
         first_diag := diags.len()
         mut bindings := List[Binding]()
-        if enum_index >= 0
+        if nested
+            bindings = nest_arm(st, arm, mut nrows)
+        elif enum_index >= 0
             bindings = pattern(enum_index, enum_args, arm.pat, mut cov)
         elif xs := tuple_elems(st)
             bindings = tuple_arm(xs, arm.pat, mut cov)
@@ -1108,7 +1114,7 @@ fn Checker.match_expr(
             literal_pattern(st, arm.pat, mut cov)
             # type.tuple.6: a misplaced tuple pattern still binds its names.
             match arm.pat
-                TuplePat => bindings = tuple_pattern_names(arm.pat)
+                TuplePat | Nested => bindings = tuple_pattern_names(arm.pat)
                 Wildcard | Literal | Alt | Variant | Range | BindName => bindings = []
         else
             # The scrutinee was already reported: bind names quietly.
@@ -1116,7 +1122,7 @@ fn Checker.match_expr(
                 Variant(_, _, names, _) =>
                     for nm in names else []
                         bindings.push(Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown))
-                TuplePat => bindings = tuple_pattern_names(arm.pat)
+                TuplePat | Nested => bindings = tuple_pattern_names(arm.pat)
                 Wildcard | Literal | Alt | Range | BindName => bindings = []
         if arm.guard != none
             cov = kept
@@ -1138,7 +1144,9 @@ fn Checker.match_expr(
             condition(g)
         agree_block(mut agree, arm.body, at)
         end_scope(mark)
-    if enum_index >= 0 and not cov.wildcard
+    if nested
+        nest_missing(st, nrows, arms, at)
+    if enum_index >= 0 and not nested and not cov.wildcard
         vs := prog.enums[enum_index].variants
         missing := [vs[k].name for k in 0..vs.len() if not cov.variants[k]]
         if missing.len() > 0
@@ -1225,7 +1233,7 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Variant | Range | TuplePat | BindName => literal_pattern(
+                    Literal | Alt | Variant | Range | TuplePat | BindName | Nested => literal_pattern(
                         t,
                         a,
                         mut cov,
@@ -1270,6 +1278,12 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
                 "`{n}` is a variant pattern, but the value matched is {show(t)}",
                 "a name in a pattern is a variant, not a variable: test the matched value with a guard, e.g. `_ if n > 0 =>`",
             )
+        Nested(_, n, _, at) => err_help(
+            "expr.match.4",
+            at,
+            "`{n}` is a variant pattern, but the value matched is {show(t)}",
+            "match it with a pattern of its type, or `_`",
+        )
         # expr.match.12: a range covers some values, never all, so it marks
         # nothing as seen.
         Range(lo, hi, inclusive, at) => range_pattern(t, lo, hi, inclusive, at, cov.wildcard)
@@ -1314,7 +1328,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Range | TuplePat | BindName => pattern(e, args, a, mut cov)
+                    Literal | Alt | Range | TuplePat | BindName | Nested => pattern(e, args, a, mut cov)
             []
         TuplePat(_, at) =>
             err(
@@ -1333,6 +1347,11 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
         Literal(_, at) =>
             err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
             []
+        # expr.match.13: inside a tuple element; it covers no whole variant.
+        Nested =>
+            mut names := List[Binding]()
+            npat(Ty.Enum(e, args), pat, mut names)
+            names
         Range(_, _, _, at) =>
             err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
             []
@@ -1366,10 +1385,12 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                 diags.push(d)
                 return []
             symbols[pos_key(at)] = "variant:{decl.name}.{n}"
+            mut newly := false
             if cov.wildcard or cov.variants[v]
                 err("expr.match.5", at, "this arm can never match; `{n}` is already covered")
             else
                 cov.variants[v] = true
+                newly = true
             # expr.match.6: one binding (or `_`) per field, in order;
             # expr.match.10: a bare name matches any fields and binds none.
             fields := decl.variants[v].fields
@@ -1387,10 +1408,17 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                 return []
             binds := binds_of(enum_params[e], args)
             ts := variant_types[e][v]
-            [
-                Binding(name: given[k].name, pos: given[k].pos, ty: subst(ts[k], binds))
-                for k in 0..given.len()
-            ]
+            mut out := List[Binding]()
+            before := nest_errors()
+            for k in 0..given.len()
+                if given[k].name == "_"
+                    out.push(Binding(name: "_", pos: given[k].pos, ty: subst(ts[k], binds)))
+                else
+                    nbind(subst(ts[k], binds), given[k].name, given[k].pos, mut out)
+            # expr.match.13: a bare variant name meant to match covers nothing.
+            if newly and nest_errors() > before
+                cov.variants[v] = false
+            out
 
 ## An unknown name; `nargs` is the argument count when it was called.
 fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)

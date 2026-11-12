@@ -1,0 +1,12 @@
+enum Items
+    Cons(head int, tail Items)
+    Nil
+
+fn count(xs Items) int
+    match xs
+        Cons(_, Items.Nil) => 1
+        Cons(_, rest) => 1 + count(rest)
+        Nil => 0
+
+fn main()
+    print(count(Items.Cons(head: 1, tail: Items.Nil)))

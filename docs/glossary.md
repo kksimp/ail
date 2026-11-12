@@ -163,6 +163,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
 | **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
 | **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
+| **Nested pattern** | A pattern inside a variant pattern's field, `Add(Num(a), Num(b))`; a `match` that nests names each missing case (ADR 1069). |
 | **Or-pattern** | `p1 | p2` in a `match` arm: matches when any alternative does; binds no names (ADR 0138). |
 | **Outline** | A program's declarations with signatures, doc comments, positions and ids but no bodies, printed by `ail api` (ADR 0150). |
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |

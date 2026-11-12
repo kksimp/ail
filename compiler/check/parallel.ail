@@ -525,6 +525,11 @@ fn pattern_names(p ast.Pattern) List[str]
             for q in ps
                 out.extend(pattern_names(q))
             out
+        Nested(_, _, fields, _) =>
+            mut out := List[str]()
+            for q in fields
+                out.extend(pattern_names(q))
+            out
         Wildcard | Literal | Alt | Range => []
 
 ## Whether `n`, declared in `f`, holds an `int` (1), a float (0), or

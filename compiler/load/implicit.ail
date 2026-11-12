@@ -224,6 +224,9 @@ fn SelfCx.pattern(mut self, p ast.Pattern)
             for a in elems
                 self.pattern(a)
         BindName(name, pos) => self.declare(name, pos)
+        Nested(_, _, fields, _) =>
+            for a in fields
+                self.pattern(a)
         Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => 0
 
 fn SelfCx.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]

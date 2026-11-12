@@ -2558,7 +2558,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) =>
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) =>
             range_start_error(pos)
             return none
     i += 1
@@ -2591,7 +2591,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) => i += 0
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) => i += 0
     error_text(
         "expr.match.12",
         hpos,
@@ -2617,15 +2617,36 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
             mut qualifier := none
             if path.len() > 1
                 qualifier = path[0..path.len() - 1].join(".")
-            # `Variant(a, _)`: one binding per field (expr.match.6).
+            # `Variant(a, _)`: one binding per field (expr.match.6), or a
+            # pattern of its own in a field (expr.match.13).
             mut bindings := none
             if eat_sym("(")
                 mut names := List[ast.Ident]()
+                mut subs := List[ast.Pattern]()
+                mut nested := false
                 while not at_sym(")")
-                    names.push(take_name("a name or `_` for the field", "expr.match.6")?)
+                    s := sym_at(1)
+                    f := ident() else ""
+                    if f != "" and (s == "," or s == ")")
+                        nm := take_name("a name or `_` for the field", "expr.match.6")?
+                        names.push(nm)
+                        if nm.name == "_"
+                            subs.push(ast.Pattern.Wildcard(nm.pos))
+                        else
+                            subs.push(ast.Pattern.BindName(name: nm.name, pos: nm.pos))
+                    else
+                        subs.push(pattern()?)
+                        nested = true
                     if not eat_sym(",")
                         break
                 expect_sym(")", "`)` or `,` in the pattern", "expr.match.6")?
+                if nested
+                    return ast.Pattern.Nested(
+                        qualifier: qualifier,
+                        name: name,
+                        fields: subs,
+                        pos: pos,
+                    )
                 bindings = names
             return ast.Pattern.Variant(
                 qualifier: qualifier,
