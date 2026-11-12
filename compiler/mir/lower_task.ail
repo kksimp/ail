@@ -621,7 +621,12 @@ fn Lower.lower_par_for(
     # 4096 is `PAR_HEAVY` in rt/native/task.ail.
     weight := konst(if not auto and plan.calls then 4096 else plan.work, Ty.Int)
     if auto and loops.len() > 0
-        nested_par_test(lo, hi, plan.work, seq)
+        nested_par_test(
+            lo,
+            hi,
+            if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work),
+            seq,
+        )
     chosen := konst(if auto then 1 else 0, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
@@ -679,13 +684,22 @@ fn Lower.lower_par_for(
 ## run costs one compare and no call on each run of the outer body. The numbers
 ## are `PAR_MIN_WORK` and `PAR_HEAVY` of rt/native/task.ail; `rt.par_worth`
 ## still decides past this test.
-fn Lower.nested_par_test(mut self, lo int, hi int, work int, seq int)
-    need := par_need(work)
+fn Lower.nested_par_test(mut self, lo int, hi int, need int, seq int)
     test := new_block()
     n := op("sub", [hi, lo], Ty.Int)
     branch(op("ge", [n, konst(need, Ty.Int)], Ty.Bool), test, [], seq, [])
     seal(test)
     cur = test
+
+## Iterations a builder loop of unknown work needs to go to the pool from inside
+## a loop run in order (conc.par.14): each run of the outer body pays a dispatch
+## and a gather, so a callee's loop is counted as 64 operations, not 4096, and
+## 1048576 operations must be in sight. mandelbrot's 6800-pixel rows stay in order.
+NESTED_BUILD_NEED := 16384
+
+## A builder loop whose work is a callee's loop or recursion, not counted ops.
+fn build_open(p ParSite) bool
+    p.builds.len() > 0 and p.open and p.work >= 4096
 
 ## The iterations a loop the compiler chose needs before it goes to the pool.
 fn par_need(work int) int
