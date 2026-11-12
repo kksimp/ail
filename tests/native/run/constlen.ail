@@ -1,0 +1,55 @@
+# A list built to a known length checks its index against that length as a
+# constant, and `len` is the constant (native.bce.15); the answers are those
+# of any list.
+fn flags_left() int
+    mut flags := [true for _ in 0..16]
+    mut i := 2
+    while i < 16
+        flags[i] = false
+        i += 3
+    mut c := 0
+    mut j := 0
+    while j < flags.len()
+        if flags[j]
+            c += 1
+        j += 1
+    c
+
+fn stack_sum(n int) int
+    mut st := [0 for _ in 0..8]
+    mut sp := 0
+    mut k := 0
+    while k < n
+        st[sp] = k * 2
+        sp += 1
+        k += 1
+    mut t := 0
+    while sp > 0
+        sp -= 1
+        t += st[sp]
+    t
+
+fn literal() int
+    xs := [10, 20, 30]
+    mut s := 0
+    mut i := 0
+    while i < xs.len()
+        s += xs[i]
+        i += 1
+    s + xs.len()
+
+fn floats() int
+    fs := [1.5 for _ in 0..4]
+    mut t := 0.0
+    mut i := 0
+    while i < fs.len()
+        t += fs[i]
+        i += 1
+    (t * 10.0).to_int()
+
+fn main()
+    print(flags_left())
+    print(stack_sum(5))
+    print(literal())
+    print(floats())
+    print(stack_sum(8))

@@ -123,7 +123,16 @@ pub struct Counted
     pub step int
 
 pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
-    if lp.pre < 0 or lp.exits != 1
+    if lp.exits != 1
+        return none
+    counted_multi(f, defs, lp)
+
+## `counted` for a loop that may also leave from blocks other than its
+## header (`break`, `return`, a failing `and` term): `p < hi` still holds in
+## every block of the body, since each pass enters it from the header's true
+## edge (native.bce.16).
+pub fn counted_multi(f Func, defs List[Def], lp LoopInfo) Counted?
+    if lp.pre < 0
         return none
     h := f.blocks[lp.header]
     t := h.term

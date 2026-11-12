@@ -1,0 +1,5 @@
+# Lines of tools/gate/parity.ail that are not `FEATURE works` on one host, and why that is right there (ADR 0925).
+# HOST FEATURE STATE, then the reason. HOST is macos, linux or windows. Only what the operating system itself
+# decides belongs here, and what waits for the next seed. The gate's `parity` suite is red for any other line that
+# is not `works`, and for a line here that has started to work: delete it then.
+windows std.os.signals.delivery differs   INT and TERM come from the console only (std.os.4, ADR 1011)

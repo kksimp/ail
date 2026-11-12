@@ -48,6 +48,7 @@ pub fn registers() codegen.Target
         float_callee: [FB + 8, FB + 9, FB + 10, FB + 11, FB + 12, FB + 13, FB + 14, FB + 15],
         int_args: [0, 1, 2, 3, 4, 5, 6, 7],
         float_args: [FB, FB + 1, FB + 2, FB + 3, FB + 4, FB + 5, FB + 6, FB + 7],
+        div_regs: [],
     )
 
 ## Operating systems: the `target()` primitive's values (native-abi.md §4).
@@ -1054,10 +1055,16 @@ fn Gen.call_out(mut self, i mir.Inst)
     # that moves don't use (a float constant goes through `S0`).
     indirect := i.op == "icall"
     mut extra := List[int]()
+    # Apple arm64 passes every variadic argument of a `cv<N>` call on the stack,
+    # in 8-byte slots, after the `N` named ones (ffi.var.4, ADR 1031).
+    named := (i.name.replace("cv", "").to_int() else 0)
+    stack_va := os == MACOS and i.name.starts_with("cv")
     for k in 0..i.argc()
         v := i.arg(k)
         if indirect and k == 0
             moves.push(move_of(S2, v))
+        elif stack_va and k > named
+            extra.push(v)
         elif f.vals[v].is_float()
             moves.push(move_of(FB + nf, v))
             nf += 1
@@ -1073,7 +1080,10 @@ fn Gen.call_out(mut self, i mir.Inst)
         adjust_sp("sub", room)
         sp_shift = room
         for k in 0..extra.len()
-            a.str(gpr(extra[k], S0), SP, 8 * k)
+            if f.vals[extra[k]].is_float()
+                a.str_d(fpr(extra[k], X0), SP, 8 * k)
+            else
+                a.str(gpr(extra[k], S0), SP, 8 * k)
     parallel(moves)
     if indirect
         a.blr(S2)
@@ -1385,6 +1395,14 @@ fn Gen.list_index(mut self, i mir.Inst) List[int]
 ## hoisted out of a loop (ADR 0890): trap at `site` unless `0 <= idx < len`.
 ## The stub gets the length itself, not the list.
 fn Gen.bounds(mut self, i mir.Inst)
+    # A length that is a constant (a list built with a known count,
+    # native.bce.15) is compared as an immediate.
+    if n := imm(i.arg(1))
+        if n >= 0 and n < 4095 and imm(i.arg(0)) == none
+            a.cmp_ri(gpr(i.arg(0), S1), n)
+            a.b_cond(HS, stub(3, i.arg(0), i.arg(1), i.site, ""))
+            stubs[stubs.len() - 1].undo = 4
+            return
     l := gpr(i.arg(1), S0)
     if k := imm(i.arg(0))
         if k >= 0 and k < 4095

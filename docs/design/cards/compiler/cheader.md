@@ -1,5 +1,5 @@
 # compiler: cheader
-tests: cheader.cheader.defines_become_constants, cheader.cheader.enums_become_constants, cheader.cheader.follows_the_headers_own_typedefs, cheader.cheader.function_pointers_are_opaque_pointers, cheader.cheader.long_follows_the_target, cheader.cheader.looks_through_guards_and_attributes, cheader.cheader.module_names_round_trip, cheader.cheader.reads_scalars_and_pointers, cheader.cheader.skips_what_the_ffi_cannot_carry, cheader.cheader.unions_stay_behind_pointers
+tests: cheader.cheader.defines_become_constants, cheader.cheader.enums_become_constants, cheader.cheader.follows_the_headers_own_typedefs, cheader.cheader.function_pointers_are_opaque_pointers, cheader.cheader.keeps_variadic_prototypes, cheader.cheader.long_follows_the_target, cheader.cheader.looks_through_guards_and_attributes, cheader.cheader.module_names_round_trip, cheader.cheader.reads_scalars_and_pointers, cheader.cheader.skips_what_the_ffi_cannot_carry, cheader.cheader.unions_stay_behind_pointers
 
 ## cheader
 ```
@@ -13,4 +13,4 @@ pub fn cheader.find(header str, dir str) str? [fs io]  ## The file of `header`: 
 pub fn cheader.module_for(header str, dir str) str? [env fs io]  ## The module text for `header`, or none when no file of that name is found.
 ```
 
-trimmed to fit 2000 tokens (~481); dropped: private items
+trimmed to fit 2000 tokens (~493); dropped: private items

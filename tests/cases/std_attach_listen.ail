@@ -1,0 +1,76 @@
+## attach.wire.1, attach.wire.3, attach.wire.7 (ADR 1045): the attach listener over a real loopback
+## socket, with a host written in AIL: a client finds the address and token, asks, is refused with
+## a wrong token, and presses a button; the host then closes the window, which stops the listener
+## and removes the discovery file.
+use std.app
+use std.attach
+use std.attach.serve
+use std.fs
+use std.net
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        if ev.kind == "press"
+            n += 1
+
+    fn view(self) app.Node
+        app.column([app.label("paid {n}"), app.button("pay", "Pay")])
+
+impl attach.Observe for Shop
+    fn observed(self) List[attach.Observed]
+        [attach.observed("n", "int", "{n}")]
+
+fn port_of(addr str) int
+    (addr.split(":").last() else "").to_int() else 0
+
+## The reply line to `line`.
+fn ask(c net.Conn, line str) str
+    c.write("{line}\n") else return "write failed"
+    got := c.read_line() else return "read failed"
+    got else "closed"
+
+fn client(addr str, token str, out Channel[str])
+    c := net.connect("127.0.0.1", port_of(addr)) else err
+        out.send("connect: {err.kind}")
+        out.close()
+        return
+    c.set_timeout(5000)
+    out.send(ask(c, "\{\"v\":1,\"q\":\"observe\",\"token\":\"{token}\"}"))
+    refused := ask(c, "\{\"v\":1,\"q\":\"observe\",\"token\":\"wrong\"}")
+    out.send("{refused.contains("wrong token")}")
+    # The press changes the view, on which the host closes the window.
+    out.send(ask(
+        c,
+        "\{\"v\":1,\"q\":\"input\",\"token\":\"{token}\",\"kind\":\"press\",\"id\":\"pay\"}",
+    ))
+    c.close()
+    out.close()
+
+fn connect_kind(port int) str
+    c := net.connect("127.0.0.1", port) else err
+        return err.kind
+    c.close()
+    "ok"
+
+fn main() !
+    s := serve.open()?
+    path := s.path
+    port := port_of(s.addr)
+    print(s.addr.starts_with("127.0.0.1:"))
+    print(path.ends_with("ail-attach-{port}.json"))
+    print((fs.read_text(path) else "").contains(s.token))
+    out := Channel[str](8)
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
+    g := TaskGroup()
+    g.add(spawn client(s.addr, s.token, out))
+    mut shop := Shop(n: 0)
+    serve.run_on(s, mut shop, ail, ["run", "tests/app/inbox_host.ail"], app.new_inbox(), true)?
+    for line in out
+        print(line)
+    print(shop.n)
+    # attach.wire.7: the window has closed, so nothing listens and the file is gone.
+    print(fs.exists(path))
+    print(connect_kind(port) != "ok")

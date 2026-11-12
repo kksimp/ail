@@ -318,11 +318,13 @@ fn Run.executables(mut self, target str, runner str)
         cases = live
     # A dynamic ELF (dlopen/dlsym of an `extern c fn` outside the libc subset, ADR 0870) under qemu-user needs the
     # target's own dynamic loader; without it qemu exits 255 with nothing printed. The host runs these cases.
+    # attach_tool_game imports std.gfx.host, whose `extern c "kernel32"` functions make it a dynamic ELF too.
     if target.contains("aarch64-linux")
         and not fs.exists("/usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1")
         mut static_only := List[str]()
         for c in cases
             if not [
+                "attach_tool_game",
                 "ffi_dynamic",
                 "ffi_f32",
                 "ffi_missing_library",
@@ -587,6 +589,30 @@ fn Run.threads_one(mut self, runner str)
     if got.status != 0 or got.out != slurp("tests/native/threads1/server_wait.out")
         red("AIL_THREADS=1 server task", "exit {got.status}, output differs or hung")
 
+## native.task.2: a thread asleep in `time.sleep_ms` is parked, so a collection another task asks for does not wait for it.
+fn Run.sleep_gc(mut self, runner str)
+    checks += 1
+    exe := "{tmp}/sleep_gc"
+    b := ail("", "build tests/native/threads1/sleep_gc.ail -o {exe}")
+    if b.status != 0
+        red("tests/native/threads1/sleep_gc.ail", "`ail build` failed:\n{b.err}")
+        return
+    got := sh("perl -e 'alarm 30; exec @ARGV' {runner} {exe}")
+    if got.status != 0 or got.out != slurp("tests/native/threads1/sleep_gc.out")
+        red("collection during a sleep", "exit {got.status}, output differs or hung:\n{got.out}")
+
+## std.time.1: the clocks are read on two threads at once; the server keeps its parked connections.
+fn Run.clock_threads(mut self, runner str)
+    checks += 1
+    exe := "{tmp}/clock_threads"
+    b := ail("", "build tests/native/threads1/clock_threads.ail -o {exe}")
+    if b.status != 0
+        red("tests/native/threads1/clock_threads.ail", "`ail build` failed:\n{b.err}")
+        return
+    got := sh("perl -e 'alarm 60; exec @ARGV' {runner} {exe}")
+    if got.status != 0 or got.out != slurp("tests/native/threads1/clock_threads.out")
+        red("clocks read on two threads", "exit {got.status}, output differs or hung:\n{got.out}")
+
 fn Run.sources(mut self)
     # Every runtime source parses as AIL: `ail fmt --check FILE` reports syntax errors (fmt.safe).
     for f in list_ext("compiler/rt/native", ".ail")
@@ -732,6 +758,8 @@ fn main() !
                 if native
                     r.limits("", "")
                     r.threads_one("")
+                    r.sleep_gc("")
+                    r.clock_threads("")
                 if q != "" and sh("uname -sm").out.trim() == "Linux x86_64"
                     r.limits("aarch64-linux", q)
             "sources" => r.sources()

@@ -304,7 +304,13 @@ fn win_unlink(path int, dir bool) int
     if a >= 0 and a.bit_and(16) != 0
         return -21
     if import_call("DeleteFileW", w, 0, 0, 0) == 0
-        return win_err_at(w)
+        e := win_err_at(w)
+        # A read-only file (git's objects are): clear the attribute, as `rm -f` does, and try once more (ADR 1059).
+        if a >= 0 and a.bit_and(1) != 0
+            if import_call("SetFileAttributesW", w, a.bit_and(-2), 0, 0) != 0
+                if import_call("DeleteFileW", w, 0, 0, 0) != 0
+                    return 0
+        return e
     0
 
 ## Replaces an existing `to`, as `rename` does.
@@ -409,6 +415,40 @@ fn win_scan_stat(path int, out int) int
     store64(out + 32, win_u32(t + 28))
     store64(out + 40, win_u32(t + 40))
     store64(out + 48, kind)
+    0
+
+## `fs.trash` (std.fs.26): the file or directory at the NUL-terminated UTF-8
+## `path` to the Recycle Bin. 0, or `-errno`. `SHFileOperationW` deletes
+## outright what is not a full path, so the path is made full first
+## (`GetFullPathNameW`). The flags are FOF_SILENT, FOF_NOERRORUI, FOF_ALLOWUNDO
+## and FOF_WANTNUKEWARNINGS: no FOF_NOCONFIRMATION, so an item the bin cannot
+## hold is refused and never destroyed. `pFrom` ends with two NULs.
+fn win_trash(path int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    if win_attrs(w) < 0
+        return win_err()
+    full := os_scratch(OS_WIN_B)
+    n := import_call("GetFullPathNameW", w, 1000, full, 0)
+    if n <= 0 or n >= 1000
+        return -36
+    win_put16(full, n + 1, 0)
+    op := win_tmp()
+    for i in 0..7
+        store64(op + 8 * i, 0)
+    store64(op + 8, 3)
+    store64(op + 16, full)
+    store64(op + 32, 17476)
+    r := import_call("SHFileOperationW", op, 0, 0, 0)
+    if r != 0
+        if r == 2 or r == 3 or r == 124
+            return -2
+        if r == 5 or r == 120
+            return -13
+        return -5
+    if win_u32(op + 36) != 0
+        return -5
     0
 
 ## `getcwd` into `buf`: the length with the NUL, or a negative result.

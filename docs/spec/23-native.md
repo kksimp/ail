@@ -268,6 +268,8 @@ with problems is never stored. `--no-cache` or `AIL_NO_CACHE` reads and
 writes nothing. The cache is in `$AIL_CACHE_DIR`, else
 `$XDG_CACHE_HOME/ail/build`, else `%LOCALAPPDATA%\ail\build` or `~/.cache/ail/build`, and keeps the 64 most
 recently used entries. A cached and an uncached build are the same bytes.
+`ail` processes that build the same program at once each build into a file
+of their own; the first to store the entry wins and the others use it.
 *(ADR 0655)*
 
 ```text
@@ -311,11 +313,11 @@ fn main()
 ```
 
 **native.bce.3** — A list's capacity is not observable: a native executable
-may allocate room for a list ahead of the pushes that fill it, at most 8 MiB
-of elements (2^20 elements of 8 bytes, 2^23 bytes in all for a narrower list) per list. A
+may allocate room for a list ahead of the pushes that fill it, at most 256 MiB
+of elements (2^25 elements of 8 bytes, 2^28 bytes in all for a narrower list) per list. A
 list is allocated with room for exactly the elements asked for (at least 1);
 one that fills its first block grows to 4 elements, then to 16, before it
-doubles. *(ADR 0579, ADR 0816, ADR 0562, ADR 0907, ADR 0912)*
+doubles. *(ADR 0579, ADR 0816, ADR 0562, ADR 0907, ADR 0912, ADR 1064)*
 
 ```ail rules=native.bce.3
 fn main()
@@ -513,6 +515,118 @@ fn match_len(data List[int], a int, b int, n int) int
 
 fn main()
     print(match_len([1, 2, 3, 1, 2, 3, 9], 3, 0, 7))
+```
+
+**native.bce.15** — A list made empty and pushed to a known number of times,
+either all in the block that makes it or all in one counted loop with constant
+bounds that leaves only from its header (each push in a block every pass goes
+through), has that length once the pushes are done, if every other use of it
+is `xs[i]`, `xs[i] = v` or `xs.len()` after them. `xs.len()` is then that
+constant, and an access outside a counted loop may compare its index to the
+constant instead of loading the length. Any other use (a call, a store, a
+return, a later push) rules the list out. A trap names the same site, index
+and length. *(ADR 1061)*
+
+```ail rules=native.bce.15
+fn main()
+    mut st := [0 for _ in 0..8]
+    mut sp := 0
+    while sp < 5
+        st[sp] = sp * 2
+        sp += 1
+    print(st[4] + st.len())
+```
+
+**native.bce.16** — A counted loop (native.bce.1) that also leaves from blocks
+other than its header (a failing `and` term, `break`, `return`) may be
+versioned as one that leaves only from its header, where every block it leaves
+to is entered only from the loop. The check on `xs[a + i]`, with `a` fixed in
+the loop and `i` its counter, and the overflow check of `a + i`, may be removed
+where the guard tests `0 <= a` and that the loop's bound is at most
+`xs.len() - a` (one less for the falling `j` of a two-pointer loop). The guard
+covers every pass the bound allows, so a loop that would leave early runs with
+its checks when the list is shorter than that, and traps where it did.
+*(ADR 1062)*
+
+```ail rules=native.bce.16
+fn count_after(xs List[int], k int) int
+    mut total := 0
+    mut l := 0
+    while l < 4
+        if k + l >= xs.len()
+            break
+        total += xs[k + l]
+        l += 1
+    total
+
+fn main()
+    print(count_after([1, 2, 3, 4, 5], 1))
+```
+
+**native.fwd.1** — An access `xs[i]` or `xs[i] = v` may run without its bounds
+check when an access to the same list with the same index value is on every
+path to it, and nothing on those paths can shorten a list: only element
+writes, field writes, arithmetic, reads, `push` and allocation come between.
+A call, a write to the list itself or a raw store ends this. Where an access
+is not covered so, its check stays, and traps with the same message
+(native.build.1). Unlike native.bce.2, this holds in a program that shortens
+lists. *(ADR 1050)*
+
+```ail rules=native.fwd.1
+struct Coder
+    rng int
+    probs List[int]
+
+fn Coder.bit(mut self, idx int) int
+    p := self.probs[idx]
+    self.rng = self.rng / 2 + p
+    self.probs[idx] = p + 1
+    self.rng % 2
+
+fn main()
+    mut c := Coder(rng: 100, probs: [5, 6, 7])
+    print(c.bit(1) + c.bit(1))
+    print(c.probs)
+```
+
+**native.fwd.2** — A write to a field of a struct, tuple or enum value
+changes only that field's word, in whichever value it reaches: another field,
+a list's length or elements, read before it, may be reused after it. A write
+through anything else, and any call, may change any memory. *(ADR 1050)*
+
+```ail rules=native.fwd.2
+struct Bag
+    items List[int]
+    n int
+
+fn fill(mut b Bag) int
+    a := b.items.len()
+    b.n = a
+    a + b.items.len()
+
+fn main()
+    mut b := Bag(items: [1, 2], n: 0)
+    print(fill(mut b))
+    print(b.n)
+```
+
+**native.fwd.3** — A value read from memory, or a check passed, on every
+path into a block whose paths join (after an `if`) counts as read or passed
+in the block when all paths agree on it (native.fwd.1-2). Nothing read inside
+a loop counts on its next iteration. *(ADR 1050)*
+
+```ail rules=native.fwd.3
+fn pick(xs List[int], i int, up bool) int
+    mut t := 0
+    if up
+        t = xs[i] + 1
+    else
+        t = xs[i] - 1
+    t + xs[i]
+
+fn main()
+    print(pick([4, 5, 6], 2, true))
+    print(pick([4, 5, 6], 0, false))
 ```
 
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is

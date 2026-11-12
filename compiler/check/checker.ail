@@ -945,7 +945,7 @@ fn Checker.check_main(mut self)
         for a in f.attrs
             if a.name == "test"
                 is_test = true
-            if a.name != "export c" and not KNOWN_ATTRS.contains(a.name)
+            if a.name != "export c" and a.name != "variadic c" and not KNOWN_ATTRS.contains(a.name)
                 known := ["`@{k}`" for k in KNOWN_ATTRS].join(", ")
                 err_help(
                     "test.attr.1",

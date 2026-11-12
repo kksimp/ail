@@ -711,7 +711,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
 | [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Accepted (built by [1020](1020-ail-context.md)) | 2026-10-24 |
-| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Deferred past 0.1.0 | 2026-10-24 |
+| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` (first slice built by [0986](0986-app-tools-and-attach-mcp.md)) | Accepted (first slice built by [0986](0986-app-tools-and-attach-mcp.md))  | 2026-10-24 |
 | [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Accepted | 2026-10-24 |
 | [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Accepted (built by [1024](1024-ail-review.md)) | 2026-10-24 |
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Accepted (built by [1023](1023-ail-infer-contracts.md)) | 2026-10-24 |
@@ -747,7 +747,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0921](0921-replay-probes.md) | Probes: `--at FILE:LINE --show a,b` prints chosen values each time a line runs | Accepted | 2026-10-26 |
 | [0923](0923-struct-scalar-replacement.md) | Native: scalar replacement of struct objects that stay in one function, and inlining of constructors *(delegated)* | Accepted | 2026-10-26 |
 | [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
-| [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
+| [0925](0925-windows-release-gate.md) | Windows: the full gate green before each release | Accepted | 2026-10-27 |
 | [0926](0926-c-header-import-subset.md) | `use c "header.h"`: a subset C header reader that writes `pub extern c fn` declarations *(delegated)* | Accepted | 2026-10-28 |
 | [0927](0927-fs-scan.md) | `fs.scan`: one bulk walk with allocated size, inode and kind *(delegated)* | Accepted | 2026-11-04 |
 | [0928](0928-fs-volume.md) | `fs.volume`: total and free bytes of a volume *(delegated)* | Accepted | 2026-11-04 |
@@ -789,19 +789,23 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0974](0974-flac-decoding.md) | std.audio: decode FLAC in AIL, amends ADR 0949 *(delegated)* | Accepted | 2026-11-07 |
 | [0975](0975-library-entry-rule.md) | Library entry: lazy runtime init, caller stack as GC root, serialised first slice *(delegated)* | Accepted | 2026-11-07 |
 | [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
+| [0977](0977-fs-attributes.md) | `std.fs` gets `mode`, `set_mode`, `set_modified`, `read_link`, `symlink`, `truncate` and `write_at`, for archivers *(delegated)* | Accepted | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
 | [0979](0979-gfx-windows-publish-attach.md) | `std.gfx` windows publish the attach socket (`gfx.watch.run`, `App.shown`) *(delegated)* | Accepted | 2026-11-07 |
 | [0980](0980-windows-c-calls.md) | Native C calls on Windows: `LoadLibraryA`, `GetProcAddress` and the Win64 convention *(delegated)* | Accepted | 2026-11-07 |
 | [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
+| [1031](1031-variadic-c-calls.md) | Variadic C calls: `extern c fn f(a, ...)` with the platform's convention *(delegated)* | Accepted | 2026-11-09 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
 | [0985](0985-gfx-gamepad-input.md) | `std.gfx` gamepad input: `Input.pads`, the `pad` event, GameController on the Mac *(delegated)* | Accepted | 2026-11-08 |
+| [0986](0986-app-tools-and-attach-mcp.md) | `@tool` methods: typed actions a running app offers agents (`tools`, `call` behind `--attach-input`), and `ail attach mcp` *(delegated)* | Accepted | 2026-11-08 |
 | [0987](0987-auto-parallel-inner-loops.md) | Native: a proven loop inside a loop run in order may go to the pool (amends 0911) *(delegated)* | Accepted | 2026-11-08 |
 | [0984](0984-std-app-font-op.md) | `std.app` `Font`: web fonts in the display list, kept by the host under an id | Accepted | 2026-11-08 |
 | [0988](0988-std-media-webm.md) | `std.media.webm`: WebM and Matroska demuxing in AIL, fed in pieces for Media Source Extensions *(delegated)* | Accepted | 2026-11-08 |
 | [0989](0989-std-video-vp9.md) | `std.video.vp9`: a VP9 profile 0 decoder in AIL, I420 frames and RGBA *(delegated)* | Accepted | 2026-11-08 |
 | [0990](0990-std-audio-opus.md) | `std.audio.opus`: an Opus decoder in AIL, CELT first, then SILK and hybrid *(delegated)* | Accepted | 2026-11-08 |
 | [0992](0992-fs-scan-count.md) | `fs.scan_count`: entries and bytes every scan has listed so far, for a live progress bar *(delegated)* | Accepted | 2026-11-08 |
+| [0993](0993-audio-streaming-output.md) | std.audio.device: streaming output with a played-frames clock, amends ADR 0949 *(delegated)* | Accepted | 2026-11-08 |
 | [0994](0994-overflow-facts-in-multi-exit-loops.md) | Native: drop overflow checks that bounds and index uses rule out, in loops that leave in more than one place *(delegated)* | Accepted | 2026-11-08 |
 | [0996](0996-try-recv-and-group-fields.md) | `try_recv`, `recv_for`, and a `TaskGroup` field of a `unique` struct *(delegated)* | Accepted | 2026-11-08 |
 | [1007](1007-std-io-write-bytes.md) | `io.write_bytes`: raw bytes to standard output *(delegated)* | Accepted | 2026-11-09 |
@@ -810,12 +814,14 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1010](1010-c-header-constants-enums-fnptr.md) | C header import breadth: `#define` constants, enums and function-pointer types *(delegated)* | Accepted | 2026-11-09 |
 | [1011](1011-os-signals.md) | `os.signals`: SIGINT, SIGTERM, SIGHUP, SIGQUIT and SIGWINCH as a `Channel[str]`; the Windows console Ctrl-C handler *(delegated)* | Accepted | 2026-11-09 |
 | [1005](1005-std-app-font-family-list.md) | `std.app` font-family lists: the host measures and draws in the first installed family and says which *(delegated)* | Accepted | 2026-11-08 |
+| [1012](1012-std-term.md) | `std.term`: raw mode, key, mouse and resize events, the alternate screen and colours, in AIL over libc *(delegated)* | Accepted | 2026-11-09 |
 | [1015](1015-user-fuzzing.md) | Coverage-guided fuzzing of user code: `ail test --fuzz NAME` with a corpus directory *(delegated)* | Accepted | 2026-11-09 |
 | [1016](1016-fs-map.md) | `fs.map`: a read-only memory-mapped `bytes` view of a file *(delegated)* | Accepted | 2026-11-09 |
 | [1017](1017-std-app-screen-size-and-scale.md) | `std.app` reports the display's size and scale on `start` and `resize` *(delegated)* | Accepted | 2026-11-09 |
 | [1018](1018-task-set-threads.md) | `task.threads()` and `task.set_threads(n)`: the pool's cap at run time *(delegated)* | Accepted | 2026-11-09 |
 | [1019](1019-ail-merge-driver.md) | `ail merge`: a git merge driver that merges `.ail` files by declaration; `--check` reports semantic conflicts *(delegated)* | Accepted | 2026-11-09 |
 | [1020](1020-ail-context.md) | `ail context`: a token-budgeted bundle for an edit; amends ADR 0891 *(delegated)* | Accepted | 2026-11-09 |
+| [1021](1021-perf-explain.md) | `ail perf --explain FN FILE`: per-loop optimisation remarks (bounds checks, vector kernels, parallel verdict, calls left) with rule and fix *(delegated)* | Accepted | 2026-11-09 |
 | [1022](1022-mutation-testing.md) | Mutation testing: `ail test --mutate [--max N]` reports the changes no test notices *(delegated)* | Accepted | 2026-11-09 |
 | [1023](1023-ail-infer-contracts.md) | `ail infer --contracts`: proposed `requires` and `ensures` from test calls; amends ADR 0895 *(delegated)* | Accepted | 2026-11-09 |
 | [1024](1024-ail-review.md) | `ail review BASE..HEAD`: a semantic summary of a change in one budgeted report; amends ADR 0894 *(delegated)* | Accepted | 2026-11-09 |
@@ -825,11 +831,22 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1035](1035-v0-1-0-freeze-and-release-candidate.md) | v0.1.0: freeze after the lanes in flight, one release candidate gated on three hosts | Accepted | 2026-11-09 |
 | [1037](1037-no-downcast-of-any-trait.md) | No downcasting of `any Trait` | Accepted | 2026-10-24 |
 | [1043](1043-versions-tags-changelog.md) | Pre-1.0 versions, release tags and the changelog *(delegated)* | Accepted | 2026-11-09 |
+| [1045](1045-attach-listener-on-windows.md) | The attach listener on Windows: `%TEMP%` discovery directory, and the listener stops when the window closes *(delegated)* | Accepted | 2026-11-10 |
 | [1046](1046-agent-kit-in-ail-new.md) | `ail new` writes an agent kit: `AGENTS.md` and `.mcp.json`, `--no-agent` to skip *(delegated)* | Accepted | 2026-11-10 |
 | [1047](1047-ail-check-fix.md) | `ail check --fix`: repair, then check, in one command *(delegated)* | Accepted | 2026-11-10 |
 | [1048](1048-task-ledger.md) | The task ledger: `ail task` measures itself *(delegated)* | Accepted | 2026-11-10 |
+| [1049](1049-x86-64-allocates-rdx-and-r11.md) | x86-64 allocates rdx and r11; divisions keep other values out of rdx; amends ADR 0385 *(delegated)* | Accepted | 2026-11-10 |
+| [1050](1050-dominated-checks-and-field-alias-classes.md) | Drop checks a dominating check already passed; field stores forget one offset *(delegated)* | Accepted | 2026-11-10 |
 | [1051](1051-core-card-and-std-lookup.md) | Core card, `ail card` and `ail ask std` *(delegated)* | Accepted | 2026-11-10 |
 | [1052](1052-change-certificate.md) | Change certificate: `ail verify --diff --attest` and `--check` *(delegated)* | Accepted | 2026-11-10 |
 | [1054](1054-ail-edit-refactors.md) | `ail edit` refactors: `change_sig`, `extract` and `move` *(delegated)* | Accepted | 2026-11-10 |
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
+| [1064](1064-reserve-256-mib-ahead-of-push-loops.md) | Native: reserve up to 256 MiB of list elements ahead of a push loop *(delegated)* | Accepted | 2026-11-11 |
+| [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
+| [1061](1061-known-list-lengths.md) | Native: lists built to a known count check against that count *(delegated)* | Accepted | 2026-11-11 |
+| [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |
+| [1057](1057-ail-help.md) | `ail help`, `--help` and a real no-argument usage; JSON for agents *(delegated)* | Accepted | 2026-11-11 |
+| [1058](1058-ail-on-path-and-doctor.md) | `ail` works from PATH through symlinks; `ail doctor` and `ail doctor --path` *(delegated)* | Accepted | 2026-11-11 |
+| [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
+| [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |

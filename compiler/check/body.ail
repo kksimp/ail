@@ -114,6 +114,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
     c.diags.extend(check_observe(p))
+    c.diags.extend(check_tools(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
     c.diags.extend(c.check_par())

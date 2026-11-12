@@ -83,7 +83,7 @@ pub fn direct(argv List[str]) List[str]?
         if argv.contains("--budget") or argv.contains("--from") or argv.contains("--diff")
             return none
         return argv
-    if ["ask", "context", "explain", "edit", "fix", "review"].contains(c)
+    if ["ask", "card", "context", "explain", "edit", "fix", "prove", "review"].contains(c)
         return argv
     none
 
@@ -104,6 +104,12 @@ fn newest(patterns List[str]) int
 pub fn fingerprint(program str, argv List[str]) str
     if argv.len() > 0 and argv[0] == "explain"
         return "spec {newest([path.join(env.get("AIL_ROOT") else ".", "docs/spec/*.md")])}"
+    # `ail card` reads the cards and `ail ask std` the spec (mcp.warm.2).
+    docs := env.get("AIL_ROOT") else "."
+    if argv.len() > 0 and argv[0] == "card"
+        return "cards {newest([path.join(docs, "docs/language-card*.md"), path.join(docs, "docs/spec/*.md")])}"
+    if argv.len() > 1 and argv[0] == "ask" and argv[1] == "std"
+        return "spec {newest([path.join(docs, "docs/spec/*.md")])}"
     if program == ""
         return ""
     root := root_of(program)

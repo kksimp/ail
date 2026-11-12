@@ -198,7 +198,8 @@ fn classify(line str) str
         and (line.starts_with("+") or line.starts_with("-") or line.starts_with("~"))
         return "breaking"
     # `PATH:LINE:COL: SEVERITY[RULE]: message`
-    parts := splitn(line, ":", 4)
+    path_rest := if has_drive(line) then line.slice(2, line.chars().len()) else line
+    parts := splitn(path_rest, ":", 4)
     if parts.len() == 4 and num(parts[1]) and num(parts[2])
         rest := parts[3].trim_start()
         if rest.starts_with("error[") or rest.starts_with("trap[")
@@ -206,6 +207,13 @@ fn classify(line str) str
         if rest.starts_with("warning[")
             return "warning"
     "line"
+
+## A Windows path starts with a drive (`C:/dir/f.ail:2:5: ...`), whose colon is not a field separator.
+fn has_drive(line str) bool
+    c0 := line.char_at(0) else ' '
+    c1 := line.char_at(1) else ' '
+    c2 := line.char_at(2) else ' '
+    c0.is_alpha() and c1 == ':' and (c2 == '/' or c2 == '\\')
 
 ## At most `n` pieces; the last holds the rest.
 fn splitn(s str, sep str, n int) List[str]

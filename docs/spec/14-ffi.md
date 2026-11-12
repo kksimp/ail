@@ -3,11 +3,9 @@
 Chapter key: `ffi`
 
 > **Status:** Drafted (partial). Specified and implemented: `extern c fn`
-> declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926), the
-> type mapping, loading, and calls on Linux, macOS and Windows. Exports are specified (`ffi.export.1-3`); the library output is not built yet. Not yet specified: callbacks,
 > declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926; constants, enums and function-pointer types `ffi.decl.4-5`, ADR 1010), the
-> type mapping, loading, and calls on Linux, macOS and Windows. Not yet specified: callbacks, exporting AIL functions to C,
-> structs by value, variadic functions, and header search configuration.
+> type mapping, loading, and calls on Linux, macOS and Windows. Exports are specified (`ffi.export.1-3`); the library output is not built yet. Variadic `extern c fn` calls are specified (`ffi.var.1-4`). Not yet specified: callbacks,
+> structs by value, and header search configuration.
 
 ## Declarations
 
@@ -23,7 +21,7 @@ becomes `extern c fn name(...)` under `name`, with `char` as `u8` behind a
 pointer and `i8` otherwise, `int` as `i32`, `long` as `i64` (`i32` on
 Windows), `double` as `float`, `float` as `f32`, `size_t` as `u64`, and any
 pointer to a type that is not a scalar as `*u8`. A prototype the FFI cannot
-carry (variadic, a struct by value, a function-pointer parameter, too many
+carry (a variadic one with no named parameter, a struct by value, a function-pointer parameter, too many
 register arguments) is left out, and using its name is the ordinary
 `mod.use.2` error. Calling a declaration is unsafe (`ffi.call.1`).
 
@@ -134,6 +132,50 @@ fn main()
         print(abs(-7))
 ```
 
+## Variadic functions
+
+**ffi.var.1** — `...` ends the parameter list of an `extern c fn` and follows
+at least one named parameter: `extern c fn snprintf(buf *u8, size u64, fmt *u8, ...) i32`.
+It is an error anywhere else. Only a call by the declared name takes the variadic
+path for now; a header-imported variadic called as `lib.f(...)` is not yet
+verified. *(ADR 1031)*
+
+**ffi.var.2** — A call passes the named arguments as in any call and then any
+number of further arguments, by value, with no label and no `mut`. The whole
+call has at most six integer-like and eight float arguments (`ffi.decl.3`).
+Calling is unsafe (`ffi.call.1`). *(ADR 1031)*
+
+**ffi.var.3** — A further argument keeps its own type, which MUST have a C
+layout (`ffi.decl.3`): `int` and the sized integers and `bool` are passed as C
+`int` or `long long` would be (narrower than 64 bits is extended by its
+signedness, `ffi.map.1`), `float` as `double`, a raw pointer as a pointer. An
+`f32` is refused, since C passes it as a `double`: convert it first. A `str` is
+refused; make a C string with `mem.cstr`. *(ADR 1031)*
+
+**ffi.var.4** — The call follows the platform's variadic convention. System V
+x86-64 sets `al` to an upper bound of the vector registers used. Win64 also
+puts each of the first four float arguments in the integer register of its
+position. Linux arm64 uses the plain AAPCS64 registers. Apple arm64 passes
+every variadic argument on the stack, one 8-byte slot each. *(ADR 1031)*
+
+```ail error=ffi.var.3
+use std.mem
+
+extern c fn snprintf(buf *u8, size u64, fmt *u8, ...) i32
+
+fn main()
+    unsafe
+        buf := mem.alloc(8, 0.to_u8())
+        snprintf(buf, 8, buf, "text")
+```
+
+```ail error=ffi.var.1
+extern c fn bad(...) i32
+
+fn main()
+    print(1)
+```
+
 ## Type mapping
 
 **ffi.map.1** — `int` is C `int64_t`; `float` is `double`; `f32` is `float`;
@@ -220,9 +262,12 @@ fn main()
 
 **ffi.load.3** — On Windows the library is opened with `LoadLibraryA` and the
 symbol found with `GetProcAddress`, and the call uses the Win64 convention.
-`c`, `libc`, `m`, `libm` and `msvcrt` name the Universal CRT (`ucrtbase.dll`);
-any other name is tried as `NAME.dll`, then `libNAME.dll`. A library or symbol
-that can't be found traps with `ffi.load.1` or `ffi.load.2`. *(ADR 0431, ADR 0004, ADR 0980)*
+`c`, `libc`, `m`, `libm` and `msvcrt` name the Universal CRT (`ucrtbase.dll`),
+as does a function with no library. For those, a symbol the Universal CRT
+lacks (the `printf` family, which it keeps as header inlines) is looked up
+next in `msvcrt.dll`. Any other name is tried as `NAME.dll`, then
+`libNAME.dll`. A library or symbol that can't be found traps with `ffi.load.1`
+or `ffi.load.2`. *(ADR 0431, ADR 0004, ADR 0980, ADR 1031)*
 
 ## Linking (Linux)
 
@@ -311,7 +356,7 @@ fn main()
 int abs(int x);
 int toupper(int c);
 double hypot(double a, double b);
-int printf(const char *format, ...);   /* left out: variadic */
+int printf(const char *format, ...);   /* kept: variadic (ffi.var.1) */
 ```
 
 ```ail tool=run,DIR pkg=ffi_header expect=5.0 rules=ffi.decl.1

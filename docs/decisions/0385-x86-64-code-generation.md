@@ -1,6 +1,6 @@
 # 0385. x86-64 code generation: the C convention, scratch registers, checks that branch to trap stubs
 
-- **Status:** Accepted
+- **Status:** Accepted; the scratch registers amended by [ADR 1049](1049-x86-64-allocates-rdx-and-r11.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture

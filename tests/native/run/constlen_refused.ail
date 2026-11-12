@@ -1,0 +1,19 @@
+# A list that is pushed to after it is read has no constant length
+# (native.bce.15): the answers follow the real length.
+fn grow() int
+    mut xs := [1, 2, 3]
+    a := xs[2]
+    xs.push(4)
+    b := xs[3]
+    a + b + xs.len()
+
+fn grow_loop() int
+    mut xs := [0 for _ in 0..4]
+    n := xs.len()
+    for i in 0..3
+        xs.push(i)
+    n + xs.len() + xs[6]
+
+fn main()
+    print(grow())
+    print(grow_loop())

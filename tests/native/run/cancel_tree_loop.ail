@@ -1,0 +1,25 @@
+# conc.cancel.1, conc.cancel.3, conc.task.7: a group cancelled while its task
+# is starting a child. Either the cancel's walk finds the child or the child
+# starts cancelled, so its `recv` always returns `none` and `wait_all` never
+# reports a deadlock. Many rounds, to give the race room.
+fn inner(ch Channel[int], out Channel[int])
+    v := ch.recv() else 0
+    out.send(if task.cancelled() then 1 else 0)
+
+fn outer(ch Channel[int], out Channel[int])
+    t := spawn inner(ch, out)
+    t.wait() else return
+
+fn main() !
+    out := Channel[int](400)
+    for i in 0..300
+        ch := Channel[int](1)
+        g := TaskGroup()
+        g.add(spawn outer(ch, out))
+        g.cancel()
+        g.wait_all()?
+    mut n := 0
+    for i in 0..300
+        x := out.recv() else 0
+        n += x
+    print("cancelled {n} of 300")

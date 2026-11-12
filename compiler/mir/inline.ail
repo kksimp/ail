@@ -31,6 +31,7 @@ pub fn inline_module(mut out Module)
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(out)
+    perf := rk_target()
     fills := by_name.contains("rt.fill")
     if not opt_off("sroa")
         for _ in 0..2
@@ -62,13 +63,32 @@ pub fn inline_module(mut out Module)
         if f.name.starts_with("rt.")
             f = forwarded(f)
         else
+            # `ail perf --explain FN` keeps what the passes decided for FN's loops (ADR 1021).
+            want := perf != "" and rk_matches(f.name, perf)
+            orig := f
+            vf := vec_loops(f)
+            xf := interchange(vf)
+            mut loop_notes := List[RkNote]()
+            sized := known_lists(mark_nonneg(xf))
             f = forwarded(hoist_headers(fill_loops(
                 kept_lengths(
-                    iv_sums(bce(mark_nonneg(interchange(vec_loops(f))), reserve, grow_only)),
+                    iv_sums(bce_noting(sized, reserve, grow_only, want, mut loop_notes)),
                     reserve and grow_only,
                 ),
                 fills and not opt_off("fill"),
             )))
+            if want
+                lines := rk_explain(
+                    orig.name,
+                    orig,
+                    xf,
+                    f,
+                    loop_notes,
+                    out.sites,
+                    out.files,
+                    out.funcs,
+                )
+                out.notes.extend(lines)
             if not opt_off("fold")
                 fold_addresses(mut f)
         if not opt_off("fold")

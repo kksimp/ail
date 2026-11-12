@@ -1,0 +1,28 @@
+## std.fs.26: trash moves a file out of its directory and never destroys it.
+## A refusal across volumes (kind `other`, Linux and macOS) leaves the file, which the case removes.
+## Only Windows must succeed; elsewhere a trash on another volume is refused.
+fn refused(kind str)
+    if (env.get("OS") else "") == "Windows_NT"
+        print("windows trash failed: {kind}")
+
+fn main() !
+    base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-fs-trash-case"
+    fs.make_dir(base)?
+    f := "{base}/t.txt"
+    fs.write_text(f, "bye")?
+    print(fs.exists(f))
+    fs.trash(f) else err
+        refused(err.kind)
+        fs.remove(f)?
+    print(fs.exists(f))
+    d := "{base}/sub"
+    fs.make_dir(d)?
+    fs.write_text("{d}/a.txt", "x")?
+    fs.trash(d) else err
+        refused(err.kind)
+        fs.remove("{d}/a.txt")?
+        fs.remove(d)?
+    print(fs.exists(d))
+    fs.trash("{base}/missing") else err
+        print(err.kind)
+    fs.remove(base)?

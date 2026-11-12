@@ -71,7 +71,7 @@ fn clicks_mono_64k() (int, List[str], List[int])
 
 fn check(name str, clip (int, List[str], List[int]))
     channels, packets, expected := clip
-    mut st := opus.celt_state(channels)
+    mut st := opus.stream(channels)
     mut got := List[float]()
     for h in packets
         data := bytes.from_hex(h) else b""
@@ -90,8 +90,12 @@ fn main()
     check("tone_stereo_64k", tone_stereo_64k())
     check("tone_stereo_10ms", tone_stereo_10ms())
     check("clicks_mono_64k", clicks_mono_64k())
-    mut st := opus.celt_state(1)
-    silk := opus.decode(mut st, bytes.from_hex("0800") else b"") else err
+    mut st := opus.stream(1)
+    quiet := opus.decode(mut st, b"\xf8\xff\xff") else err
         print(err)
+        return
+    print(quiet.samples.len())
+    silk := opus.decode(mut st, b"\x08\x00") else err2
+        print(err2)
         return
     print(silk.samples.len())
