@@ -20,7 +20,7 @@ AIL (AI-First Language, "ale") is a native, garbage-collected, memory-safe syste
 
 **Standard library by area.**
 - Text and data: strings, `bytes`, `std.json`, `std.regex` (linear time), `std.path`, `std.time`.
-- Files, processes and OS: `std.fs`, `std.env`, `std.io`, `std.proc`, `std.term` (raw input, cursor and colour for text interfaces).
+- Files, processes and OS: `std.fs`, `std.env`, `std.io`, `std.proc`, `std.term` (raw input, cursor and colour for text interfaces); `fs.trash` moves a file or directory to the user's trash (the Recycle Bin on Windows) instead of deleting it.
 - Network: `std.net` HTTP/1.1 client, HTTPS over in-house TLS 1.3, an HTTP server.
 - Crypto and compression: `std.hash`, `std.compress` (DEFLATE, gzip, zip), in-house crypto.
 - Media: `std.audio` (FLAC, Opus CELT, SILK and hybrid, streaming playback on macOS, Linux and Windows), `std.video.vp9`, `std.media.webm`.
