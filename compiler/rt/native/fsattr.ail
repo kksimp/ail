@@ -15,6 +15,7 @@ fn fsattr_fail(path str, r int, at str)
 ## `fs.mode(path)` (std.fs.28): the permission bits (0 to 4095) of the file,
 ## links followed. On Windows a read-only file is 292 (0o444), any other 438.
 fn fs_mode(path str, at str) int
+    pol_fs(path, false, "fs.mode")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -43,6 +44,7 @@ fn fs_mode(path str, at str) int
 ## `fs.set_mode(path, mode)` (std.fs.29): `chmod`. Windows keeps one bit: a
 ## mode without owner write (128) sets the read-only attribute, with it clears it.
 fn fs_set_mode(path str, mode int, at str)
+    pol_fs(path, true, "fs.set_mode")
     if mode < 0 or mode > 4095
         flush()
         out_str("trap[std.fs.29]: a mode is 0 to 4095\n")
@@ -84,6 +86,7 @@ fn fs_set_mode(path str, mode int, at str)
 ## takes both, so the access time is read back from `fstat` first; Windows
 ## `SetFileTime` with only the write time.
 fn fs_set_modified(path str, ms int, at str)
+    pol_fs(path, true, "fs.set_modified")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -183,6 +186,7 @@ fn fsattr_win_link(path int, dst int) int
 ## `fs.read_link(path)` (std.fs.31): the target a symbolic link holds, as it
 ## was written. A path that is not a link fails with kind `other` (EINVAL).
 fn fs_read_link(path str, at str) str
+    pol_fs(path, false, "fs.read_link")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -213,6 +217,7 @@ fn fs_read_link(path str, at str) str
 ## `target` as written (not resolved). On Windows `CreateSymbolicLinkW` with
 ## the unprivileged flag; without developer mode it fails with `permission`.
 fn fs_symlink(to str, path str, at str)
+    pol_fs(path, true, "fs.symlink")
     t := os_cstr(OS_PATH_B, to)
     p := os_cstr(OS_PATH_A, path)
     if p == 0 or t == 0
@@ -247,6 +252,7 @@ fn fs_symlink(to str, path str, at str)
 ## `off`; a file shorter than `off` grows with zero bytes first. The file is
 ## opened for writing without truncation (and made when missing).
 fn fs_write_at(path str, off int, data str, at str)
+    pol_fs(path, true, "fs.write_at")
     if off < 0
         flush()
         out_str("trap[std.fs.34]: negative offset\n")
@@ -277,6 +283,7 @@ fn fs_write_at(path str, off int, data str, at str)
 ## (ARM64 Linux has no `truncate` call); Windows `SetFilePointerEx` then
 ## `SetEndOfFile`.
 fn fs_truncate(path str, len int, at str)
+    pol_fs(path, true, "fs.truncate")
     if len < 0
         flush()
         out_str("trap[std.fs.33]: negative length\n")

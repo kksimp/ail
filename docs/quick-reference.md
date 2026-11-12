@@ -763,7 +763,7 @@ If every task is blocked, the program traps (deadlock).
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), `spawn`, and the capabilities
 `fs`, `env`, `proc`, `clock`, `random`, `net`, `net.serve` (`net.serve`, `net.listen`), `ui`. A call through `any Trait` counts every
-implementation.
+implementation. `ail run --allow LIST FILE` runs with only the listed capabilities: `fs.read=PATH`, `fs.write=PATH`, `net=HOST[:PORT]`, `net.serve=PORT`, `proc=NAME`, `env=NAME`, or a bare name for no limit (`none` allows nothing). A use outside a scope ends the program with `trap[eff.allow.N]` naming the entry to add (`eff.allow.1-9`).
 
 ```ail
 @pure fn area(w int, h int) int   # error if it reaches print or a capability

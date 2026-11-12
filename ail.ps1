@@ -119,7 +119,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 
 # `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
-$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null; $probeAt = $null; $probeShow = $null; $budgetOpts = @()
+$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null; $probeAt = $null; $probeShow = $null; $budgetOpts = @(); $allowList = ''
 if ($cmd -eq 'run') {
     $k = 0
     :scan while ($k -lt $rest.Count) {
@@ -177,6 +177,11 @@ if ($cmd -eq 'run') {
             '^--deny$' {
                 if (-not $v) { Fail '`--deny` needs a list of capabilities, e.g. `--deny fs,proc`' }
                 $checkOpts += @('--deny', $v); $k += 2; continue
+            }
+            '^--allow$' {
+                if (-not $v) { Fail 'error[eff.allow.2]: `--allow` needs a list, e.g. `--allow fs.read=./data,net=api.example.com:443` or `--allow none` (eff.allow.2)' }
+                if ($v -match '\s') { Fail 'error[eff.allow.2]: `--allow` entries can''t hold spaces (eff.allow.2)' }
+                $checkOpts += @('--allow', $v); $allowList = $(if ($allowList) { "$allowList,$v" } else { $v }); $k += 2; continue
             }
             '^--parallel$' { $env:AIL_PARALLEL = '1'; $k++; continue }
             '^--unsafe$' {
@@ -236,7 +241,7 @@ $native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'perf', 'ed
 $route = (
     $helpRoute -or $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
-        ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
+        ($rest[0] -in '--deny', '--allow', '--deterministic', '--unsafe', '--budget', '--from') -or
         ($rest -contains '--fix') -or
         (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
     ($cmd -eq 'test' -and $rest.Count -gt 0) -or
@@ -411,6 +416,8 @@ if ($route) {
                 Remove-Item -Force $errFile
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile
+                # eff.allow.1: the scoped capabilities reach the program only, not the compiler that ran before it.
+                if ($allowList) { $env:AIL_ALLOW = $allowList }
                 $progExe = [string]($prep | Select-Object -Last 1)
                 $progArgsRaw = @(if ($null -ne $replayArgs) { $replayArgs } else { $rawRest | Select-Object -Skip $runSkip })
                 $progArgs = @(Esc-Native $progArgsRaw)

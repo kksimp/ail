@@ -117,6 +117,168 @@ allow-list for the program. A `package` line without `caps` sets no limit.
 ```ail pkg=caps_denied tool=check,DIR status=2 expect=eff.cap.5 rules=eff.cap.5
 ```
 
+## Scoped allow-lists
+
+`--deny` (`eff.cap.1`) is all or nothing for a capability. `--allow` is its
+complement for running code you did not write: it names what the program may
+reach, and how far. *(ADR 1072)*
+
+**eff.allow.1** — `ail run --allow LIST FILE` and `ail check --allow LIST FILE`
+treat `LIST` as an allow-list. At compile time every capability the list does
+not name is denied as by `--deny` (`eff.cap.1`), and so is unsafe code, which
+no scope can contain (`eff.allow.9`), unless the list has `unsafe`. At run time
+every standard-library call that reaches the file system, the network, a
+program or an environment variable is checked against the scopes
+(`eff.allow.3-6`). `--allow` may be repeated, and combines with `--deny`.
+`--allow none` allows nothing: the program may print and compute. Printing and
+standard input and output are never restricted. Nothing changes for a
+program run without `--allow`.
+
+```ail flags=--allow,none rules=eff.allow.1
+fn main()
+    print("computing is always allowed")
+```
+
+```ail error=eff.cap.1 flags=--allow,fs.read=./data rules=eff.allow.1
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)       # error: `clock` is not in the allow-list
+```
+
+**eff.allow.2** — An entry is `NAME` (the capability with no limit) or
+`NAME=SCOPE`. The names are `fs`, `fs.read`, `fs.write`, `net`, `net.serve`,
+`proc`, `env`, `clock`, `random`, `ui`, `app` and `unsafe`; only the first
+seven take a scope, which is the text after the first `=` and holds no comma
+or space. An unknown name, a scope on a name that takes none, or an empty
+scope is a usage error (exit status 2) that lists the names. `fs.read` and
+`fs.write` allow `fs` at compile time, and `net.serve` allows `net`; `fs`
+alone allows both reading and writing anywhere. Repeating a name adds scopes.
+
+```ail error=eff.cap.1 flags=--allow,fs rules=eff.allow.2
+use std.net
+
+fn main() !
+    print(net.get("http://example.com")?.status)   # error: `net` is not in the allow-list
+```
+
+**eff.allow.3** — `fs`, `fs.read` and `fs.write` scopes are path prefixes. A
+call that reads (`read_text`, `read_bytes`, `read_range`, `map`, `exists`,
+`list_dir`, `walk`, `scan`, `glob`, `metadata`, `mode`, `read_link`, `volume`,
+the source of `copy`, and `compress.gzip_file`, `gunzip_file`, `zip_dir`
+and `unzip` for their input) needs `fs` or `fs.read` to cover the path. A
+call that writes, removes or changes (`write_*`, `append_*`, `remove`,
+`make_dir`, `make_temp_dir`, both ends of `rename`, the target of `copy`,
+`trash`, `set_mode`, `set_modified`, `symlink`, `truncate`, `write_at` and the
+outputs of the compress functions) needs `fs` or `fs.write`. A path is
+covered when, after the program's path and the scope are both made absolute
+(a relative one against the working directory), have every symbolic link
+resolved and `.` and `..` applied as the operating system applies them, the
+path equals the scope or lies below it. So `data/../secret` and a link inside
+`data` that points outside are refused. On Windows the system names the path
+(links, junctions and short names resolved) and a UNC or device path, an
+alternate stream (`name:stream`), a reserved device name and a drive-relative
+path (`C:name`) are refused. On macOS and Windows the comparison ignores
+case, as the default volumes do. A glob is read from its first component with
+a wildcard, and a `..` after a wildcard is refused.
+
+```ail flags=--allow,fs.read=./data rules=eff.allow.3
+use std.fs
+
+fn main() !
+    print(fs.read_text("data/a.txt")?.len())   # allowed at run time: under ./data
+```
+
+**eff.allow.4** — A `net` scope is `HOST`, `HOST:PORT`, `*.DOMAIN` or `HOST:*`
+(a bracketed `[::1]` for IPv6; a port is `*` or a number, and absent means any).
+A request or `connect` to `host:port` needs a scope that covers it, matching
+the host as the program wrote it, without regard to case or a trailing dot. A
+name is never matched against the address it resolves to, and an address
+written as a number is never matched against a name: to reach `93.184.216.34`
+the scope must say so. Each redirect is a new request and is checked again.
+`net.serve` takes `PORT` or `HOST:PORT` and covers `net.listen` and `net.serve`
+on that address.
+
+```ail flags=--allow,net=api.example.com:443 rules=eff.allow.4
+use std.net
+
+fn main() !
+    print(net.get("https://api.example.com/v1/items")?.status)
+```
+
+**eff.allow.5** — A `proc` scope is a program name exactly as the program
+gives it to `proc.run`, `run_bytes`, `start` or `which`: `git` allows `git`
+and not `/usr/bin/git` or `./git`. On Windows case and a trailing `.exe` are
+ignored. A program the policy allows runs with that program's own power, not
+the policy's (`eff.allow.9`).
+
+```ail flags=--allow,proc=git rules=eff.allow.5
+use std.proc
+
+fn main() !
+    print(proc.run("git", ["--version"])?.out)
+```
+
+**eff.allow.6** — An `env` scope is a variable name, or a prefix when it ends
+in `*` (`env=AIL_*`). `env.get(name)` and `env.home()` (which reads `HOME`, and
+`USERPROFILE` on Windows) need a scope that covers the variable; `env.vars()`
+returns only the variables a scope covers. Windows ignores case. `env.args`,
+`env.cwd` and `env.program` are gated at compile time only.
+
+```ail flags=--allow,env=HOME rules=eff.allow.6
+use std.env
+
+fn main()
+    print(env.get("HOME") else "")
+```
+
+**eff.allow.7** — A call the policy does not allow fails closed: the program
+ends at once, after flushing its output, with exit status 1 and one line on
+standard error, `trap[eff.allow.N]: CAPABILITY of ARGUMENT by FUNCTION is not
+allowed; allow it with --allow ENTRY (this run allows: LIST)`, where `N` is the
+rule of the capability, `ARGUMENT` is the canonical path or the host and port,
+and `ENTRY` is the one entry that would allow exactly that use. It is not an
+error value the program can catch or ignore. An entry the run-time reader does
+not understand allows nothing.
+
+```ail flags=--allow,fs.write=./out rules=eff.allow.7
+use std.fs
+
+fn main() !
+    fs.write_text("out/log.txt", "ok")?   # a write outside ./out would end with trap[eff.allow.3]
+```
+
+**eff.allow.8** — The run-time half reads the environment variable
+`AIL_ALLOW`, which holds the same list. `ail run --allow` sets it for the
+program only, after the program is built and checked, so the compiler is not
+restricted; an executable started by hand with `AIL_ALLOW` set obeys it the
+same way. A program started with no `AIL_ALLOW`, or an empty one, is not
+checked. A child process that a program starts inherits the variable, which
+restricts a child that is itself an AIL program.
+
+```ail flags=--allow,fs.read=.,--deny,net rules=eff.allow.8
+use std.fs
+
+fn main()
+    print(fs.exists("main.ail"))
+```
+
+**eff.allow.9** — `--allow` is a check on the standard library's calls, not a
+sandbox. It does not protect against: unsafe code, C calls and `std.mem` or
+`std.hw` access (refused at compile time unless `unsafe` is listed, and
+unrestricted when it is); a program that `proc` allows, which runs with its own
+authority (`git -c`, an interpreter, a shell); a race on the file system
+between the check and the use, by another process or task that can change a
+link; hard links, bind mounts and other names for the same file that the
+operating system makes; a case-sensitive volume on macOS or Windows, where
+names that differ only in case are one scope; the name a host resolves to
+(DNS rebinding) and a proxy named by `HTTP_PROXY`, which is connected to in
+place of the host; names that glob lists through a link inside a scope; the
+working directory and program path, which `env` shows; resource use (time,
+memory, disk and network volume; see `--timeout` and `--max-memory`); and the
+capabilities `ui`, `app`, `clock` and `random`, which are allowed or denied but
+not scoped. For untrusted code add an operating-system sandbox as well.
+
 ## Deterministic execution
 
 **eff.det.1** — A program whose `main` reaches none of the capabilities

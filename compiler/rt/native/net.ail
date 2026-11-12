@@ -559,6 +559,7 @@ fn net_split(addr str, out int) int
 ## `net.listen(addr)` (std.net.12): the handle of a `Listener`, or 0 after a
 ## failure.
 fn net_listen(addr str, at str) int
+    pol_serve(addr)
     out := alloc_raw(8, KIND_BYTES)
     port := net_split(addr, out)
     if port < 0
@@ -623,6 +624,7 @@ fn net_dial_ms(host str, port int, url str, ms int, at str) int
 
 ## `net.connect(host, port)` (std.net.12): the `Conn`, or 0.
 fn net_connect(host str, port int, at str) int
+    pol_net(host, port, "net.connect")
     h := net_dial(host, port, "{host}:{port}", at)
     if h == 0
         return 0
@@ -631,6 +633,7 @@ fn net_connect(host str, port int, at str) int
 ## `net.connect_tls(host, port)` (std.net.12): the `Conn` of a TLS session
 ## (the client of `tls_client.ail`), or 0.
 fn net_connect_tls(host str, port int, at str) int
+    pol_net(host, port, "net.connect_tls")
     h := net_dial(host, port, "{host}:{port}", at)
     if h == 0
         return 0

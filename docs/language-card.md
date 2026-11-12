@@ -527,7 +527,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
-one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
+one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`. `ail run --allow fs.read=./data,net=host:443` allows only what it names, and a use outside the scope ends with `trap[eff.allow.N]`.
 
 `unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`.
 

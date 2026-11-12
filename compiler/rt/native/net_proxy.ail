@@ -10,10 +10,10 @@
 
 ## The first non-empty variable of `a` and `b`.
 fn proxy_env(a str, b str) str
-    v := env_get(a)
+    v := env_raw(a)
     if str_addr(v) != 0 and load64(str_addr(v)) > 0
         return v
-    w := env_get(b)
+    w := env_raw(b)
     if str_addr(w) != 0 and load64(str_addr(w)) > 0
         return w
     ""

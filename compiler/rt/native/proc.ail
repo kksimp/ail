@@ -111,6 +111,7 @@ fn os_has_nul(s str) bool
 
 ## `which(name)` (std.proc.3): the path as a string, or 0 for `none`.
 fn proc_which(name str) int
+    pol_proc(name, "proc.which")
     c := proc_find(name)
     if c <= 0
         return 0
@@ -311,6 +312,7 @@ fn proc_run_bytes(cmd str, args List[int], input int, timeout int, at str) int
     proc_run_with(cmd, args, input, timeout, at, true)
 
 fn proc_run_with(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+    pol_proc(cmd, "proc.run")
     if target() == 3
         return win_proc_run(cmd, args, input, timeout, at, raw)
     mut limit := -1
@@ -726,6 +728,7 @@ fn chan_source_close(ch int)
 ## the channels `stdin`, `out` and `err`), or 0 with the error slot set.
 ## `timeout` is a boxed integer or 0.
 fn proc_start(cmd str, args List[int], timeout int, at str) int
+    pol_proc(cmd, "proc.start")
     mut limit := -1
     if timeout != 0
         limit = unbox(timeout)
