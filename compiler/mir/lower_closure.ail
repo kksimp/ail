@@ -40,7 +40,8 @@ fn Lower.count_close(mut self, c KeyLoop)
 ## Whether `name` with these arguments is `sorted` or `sort` with a key
 ## function; the plain forms are in lower_list.ail.
 fn is_sorting(name str, args List[ast.Arg]) bool
-    ((name == "sorted" or name == "sort") and args.len() > 0) or is_extreme_by(name, args) or is_list_fn_call(name, args)
+    sorts := (name == "sorted" or name == "sort") and args.len() > 0
+    sorts or is_extreme_by(name, args) or is_list_fn_call(name, args)
 
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?

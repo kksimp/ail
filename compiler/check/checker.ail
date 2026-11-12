@@ -126,7 +126,7 @@ pub struct Checker
     pub pending List[Pending]
     pub fn_ret Ty
     ## The function literal being checked (type.fn.4-5, closure.ail).
-    pub lit LitState
+    pub fn_lits LitState
     pub loop_depth int
     pub catching int
     pub caught int
@@ -255,7 +255,7 @@ pub fn new_checker(p ast.Program) Checker
         fail_paths: [],
         pending: [],
         fn_ret: Ty.Unit,
-        lit: new_lit_state(),
+        fn_lits: new_lit_state(),
         loop_depth: 0,
         catching: 0,
         caught: 0,
