@@ -9,7 +9,7 @@ Chapter key: `test`
 
 ## Attributes
 
-**test.attr.1** — The attributes are `@test`, `@fixture`, `@with`, `@pure`, `@inline`, `@deprecated`, `@allow` and `@tool` (`attach.tool.1`). Any other
+**test.attr.1** — The attributes are `@test`, `@fixture`, `@needs`, `@pure`, `@inline`, `@deprecated`, `@allow` and `@tool` (`attach.tool.1`). Any other
 attribute name is a compile-time error that lists the known attributes. The
 attribute syntax itself is `gram.attr.1–2`; an attribute on a line of its own
 is `gram.attr.2`. *(ADR 0083, ADR 0167)*
@@ -188,20 +188,20 @@ fn fails()
 ## Fixtures
 
 **test.fixture.1** — `@fixture` marks a top-level function with no parameters and no type parameters
-that makes a value for tests: its return type is the value's type `T`, or `T !` when setup can fail.
+that makes a value for tests: its return type is the value's type `T`, or `!T` when setup can fail.
 `@fixture("END")` also names the teardown function `END` (`test.fixture.2`). A fixture is an ordinary
 function in every other way and is not a test. *(ADR 1075)*
 
 **test.fixture.2** — A teardown is a top-level function `fn END(value T)` that takes the fixture's value
 and returns nothing, so it can't fail. *(ADR 1075)*
 
-**test.fixture.3** — A `@test` function lists the fixtures it uses with `@with("NAME")` after `@test`, one
+**test.fixture.3** — A `@test` function lists the fixtures it uses with `@needs("NAME")` after `@test`, one
 attribute per fixture, and declares a parameter `NAME` of the fixture's type for each. These parameters
 get the fixtures' values and are not generated, so a property test can take both. A fixture named
-twice, a name that is not a `@fixture`, a missing or differently typed parameter, and `@with` on a function
+twice, a name that is not a `@fixture`, a missing or differently typed parameter, and `@needs` on a function
 that is not a `@test` are compile-time errors. *(ADR 1075)*
 
-**test.fixture.4** — Each run of a test makes its fixtures anew, in the order of the `@with` attributes (a
+**test.fixture.4** — Each run of a test makes its fixtures anew, in the order of the `@needs` attributes (a
 property test makes them for each generated input), and tears them down in reverse order when the run
 ends, whether it passed, failed, trapped or returned an error. A fixture whose setup fails ends
 the test as `FAIL NAME: error: setup of fixture F: MESSAGE at LINE:COL`, with the position where the
@@ -210,14 +210,14 @@ down. A fixture and its teardown must be in the same file as the test. *(ADR 107
 
 ```ail tool=test,FILE expect=passed rules=test.fixture.1,test.fixture.2,test.fixture.3,test.fixture.4
 @fixture("drop_file")
-fn scratch_file() str !
+fn scratch_file() !str
     fs.write_text(".ail-fixture-demo.txt", "hi")?
     ".ail-fixture-demo.txt"
 
 fn drop_file(name str)
     fs.remove(name) else return
 
-@test @with("scratch_file")
+@test @needs("scratch_file")
 fn reads_the_file(scratch_file str)
     assert_eq(fs.read_text(scratch_file)?, "hi")
 ```
@@ -227,10 +227,10 @@ error struct NoDatabase
     why str
 
 @fixture
-fn broken() int ! NoDatabase
+fn broken() !int
     return NoDatabase(why: "not running")
 
-@test @with("broken")
+@test @needs("broken")
 fn uses_it(broken int)
     assert_eq(broken, 1)
 ```
@@ -261,7 +261,7 @@ fn main()
 fn make() int
     1
 
-@test @with("make")
+@test @needs("make")
 fn uses(x int)
     assert_eq(x, 1)
 

@@ -521,12 +521,12 @@ fn double(x int) int
 
 ```ail fragment
 @fixture("drop")                    # made per test run, `drop` always runs after it
-fn tmp() str !                      # `T` or `T !`; `!` setup failure fails the test
+fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
     "x"
 
 fn drop(v str)                      # takes the value, returns nothing
 
-@test @with("tmp")
+@test @needs("tmp")
 fn uses(tmp str)                    # parameter named like the fixture
     assert(tmp == "x")
 ```

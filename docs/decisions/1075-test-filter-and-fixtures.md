@@ -20,10 +20,10 @@ mistyped filter that passes silently would hide every test. `--list` prints name
 building. `--filter` with `--update` or `--mutate` is refused, since both need the whole run.
 
 **Fixtures.** Three explicit parts, all checked by `ail check`:
-- `@fixture fn tmp() T` or `T !`, optionally `@fixture("drop")` naming `fn drop(v T)`.
-- `@test @with("tmp") fn t(tmp T)`: each fixture is named by an attribute and received by a parameter of the same
+- `@fixture fn tmp() T` or `!T`, optionally `@fixture("drop")` naming `fn drop(v T)`.
+- `@test @needs("tmp") fn t(tmp T)`: each fixture is named by an attribute and received by a parameter of the same
   name and type. Other parameters stay generated inputs.
-- Each run makes the fixtures in `@with` order and tears them down in reverse order, after pass, fail, trap or
+- Each run makes the fixtures in `@needs` order and tears them down in reverse order, after pass, fail, trap or
   error. A failed setup fails the test as `setup of fixture F: ...` at the position inside the fixture.
 
 The runner emits a wrapper `ail_fx_NAME` per test that sets up each fixture, `defer`s its teardown right after, and
@@ -32,7 +32,7 @@ calls the test. It reuses `defer`, so teardown order and trap behaviour are the 
 ## Rejected alternatives
 
 - **Match fixtures to parameters by name alone.** A mistyped parameter would silently become a randomly generated
-  property input. The `@with` attribute makes the intent explicit and checkable.
+  property input. The `@needs` attribute makes the intent explicit and checkable.
 - **A fixture that yields (setup, yield, teardown in one function).** AIL has no generators or closures to build it
   on, and it makes the teardown's place in a trap unclear.
 - **Teardown that can fail.** A failing `defer` has no defined result; an infallible teardown keeps the report to one

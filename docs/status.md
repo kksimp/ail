@@ -240,7 +240,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Token measurement tool (`tools/tokbench/`) | D, implemented | [0070](decisions/0070-token-bench-tool.md) |
 | Delegated decisions by priority order | D | [0076](decisions/0076-delegated-decisions.md) |
 | Goals: speed equal to C, AI-first features ahead of the market, more tokens acceptable | D (order of ADR 0076 open, OQ-142) | [1065](decisions/1065-goals-c-parity-ai-first.md) |
-| Test filter, test listing and fixtures (`--filter`, `--list`, `@fixture`, `@with`) | D, implemented, awaiting gate | [1075](decisions/1075-test-filter-and-fixtures.md) |
+| Test filter, test listing and fixtures (`--filter`, `--list`, `@fixture`, `@needs`) | D, implemented, awaiting gate | [1075](decisions/1075-test-filter-and-fixtures.md) |
 | Digest of the night's delegated decisions, ADRs 0618–0743, for the designer | D | [digest](design/decisions-digest-2026-10-21.md) |
 | One-command scripts for everything people run | D, implemented for tokbench | [0071](decisions/0071-one-command-scripts.md) |
 | Interim testing gate: local Linux and macOS, no hosted CI | D (interim) | [0085](decisions/0085-interim-local-testing-gate.md) |

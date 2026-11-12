@@ -971,8 +971,8 @@ fn Checker.check_main(mut self)
             err_help(
                 "test.fixture.3",
                 f.pos,
-                "`@with` applies to a `@test` function",
-                "remove `@with`, or make the function a `@test`",
+                "`@needs` applies to a `@test` function",
+                "remove `@needs`, or make the function a `@test`",
             )
         if fx := attr_named(f, "fixture")
             check_fixture(f, fx)
@@ -1018,9 +1018,9 @@ fn attr_named(f ast.FnDecl, name str) ast.Attr?
             return a
     none
 
-## The fixtures a test lists with `@with("NAME")` (test.fixture.3).
+## The fixtures a test lists with `@needs("NAME")` (test.fixture.3).
 fn with_names(f ast.FnDecl) List[str]
-    [a.arg else "" for a in f.attrs if a.name == "with"]
+    [a.arg else "" for a in f.attrs if a.name == "needs"]
 
 ## What a fixture's setup gives the test: its return type, or the value of a fallible one.
 @allow("expr.match.3") fn fixture_value(f ast.FnDecl) ast.TypeRef?
@@ -1074,7 +1074,7 @@ fn Checker.check_fixture(mut self, f ast.FnDecl, a ast.Attr)
             "test.fixture.1",
             f.pos,
             bad,
-            "write `@fixture fn name() Type`, or `@fixture fn name() Type !` if setup can fail",
+            "write `@fixture fn name() Type`, or `@fixture fn name() !Type` if setup can fail",
         )
         return
     end := a.arg else return
@@ -1102,11 +1102,11 @@ fn Checker.check_fixture(mut self, f ast.FnDecl, a ast.Attr)
             "write `fn {end}(value {written_type(v)})`",
         )
 
-## test.fixture.3: each `@with("NAME")` names a fixture and a parameter of the test with its type.
+## test.fixture.3: each `@needs("NAME")` names a fixture and a parameter of the test with its type.
 fn Checker.check_with(mut self, f ast.FnDecl)
     mut seen := List[str]()
     for a in f.attrs
-        if a.name != "with"
+        if a.name != "needs"
             continue
         name := a.arg else ""
         if seen.contains(name)
