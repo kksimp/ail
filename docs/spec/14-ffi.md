@@ -262,9 +262,12 @@ fn main()
 
 **ffi.load.3** — On Windows the library is opened with `LoadLibraryA` and the
 symbol found with `GetProcAddress`, and the call uses the Win64 convention.
-`c`, `libc`, `m`, `libm` and `msvcrt` name the Universal CRT (`ucrtbase.dll`);
-any other name is tried as `NAME.dll`, then `libNAME.dll`. A library or symbol
-that can't be found traps with `ffi.load.1` or `ffi.load.2`. *(ADR 0431, ADR 0004, ADR 0980)*
+`c`, `libc`, `m`, `libm` and `msvcrt` name the Universal CRT (`ucrtbase.dll`),
+as does a function with no library. For those, a symbol the Universal CRT
+lacks (the `printf` family, which it keeps as header inlines) is looked up
+next in `msvcrt.dll`. Any other name is tried as `NAME.dll`, then
+`libNAME.dll`. A library or symbol that can't be found traps with `ffi.load.1`
+or `ffi.load.2`. *(ADR 0431, ADR 0004, ADR 0980, ADR 1031)*
 
 ## Linking (Linux)
 
