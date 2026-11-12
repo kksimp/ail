@@ -65,10 +65,10 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 ./native_fib                          # same output as ./ail run
 ```
 
-- A native build covers free functions over numbers, strings, bools and lists
-  of them: loops, calls, `print`, `join`, `chars`, `env.args()` (native.subset.1).
-  Structs, enums, methods, traits, maps and generics are not built yet, and
-  `ail build` names the first one it meets (`error[native.subset.1]`).
+- Native is the only backend: `ail run` builds the program natively and runs it, so
+  both commands accept the same language (structs, enums, methods, traits, maps,
+  generics, errors, tasks). A rare construct the lowering cannot build yet is reported
+  as `error[native.subset.1]` with its position and a `help:` line (native.subset.1).
 - A trap prints the same first line as `ail run` and exits 1.
 - Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
 - An unchanged program rebuilds from `~/.cache/ail/build`; `--no-cache` skips it (native.build.5).
@@ -419,7 +419,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - Format specs: `[[fill]align][width][.decimals][x]` only; `.N` needs a float, `x` an int.
 - `"a,b".split(",")` gives `["a", "b"]`, `"k=v=w".split("=", 2)` gives `["k", "v=w"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
-- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
+- `s.chars()` (a `List[char]`; strings have no indexing or `for`), `s.len()` (characters; `s.byte_len()` is UTF-8 bytes),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.center(width, ' ')`, `s.words()` (split on whitespace), `s.trim_start()`, `s.trim_end()`, `s.count(sub)`, `s.rfind(sub)`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
@@ -568,7 +568,7 @@ Your functions' arguments can be named (`show(tag, scale: 3, n: 4)`): positional
 first, then named in any order. Built-ins take no names.
 
 A declared function is a value of type `fn(A, B) R` (`f := double`, `f(21)`).
-Not generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+Not generic functions, methods, or ones with `mut` parameters or errors. There are no general lambdas: `|x| e` is only the `by:` key of `sorted`, `sort`, `min`, `max` and the argument of `tensor.map`.
 
 ## Shared cells, resources and `move`
 

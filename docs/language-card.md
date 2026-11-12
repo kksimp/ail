@@ -81,9 +81,8 @@ Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
-Regex (RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `is_match(re, s)`, `find(re, s)` (`Match?`), `find_all`, `group_all(re, s, n)`, `captures(re, s)`, `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`.
-
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
+
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `t.matmul(u)`, `t + u`, `t * 2.0`, `t.dot(u)`, `t.sum(axis?)`, `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`.
@@ -331,7 +330,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 `if` and `match` work as statements or values; a function can end with either.
 
 A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
-calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible ones; no lambdas.
+calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible ones. There are no general lambdas: `|x| e` is only the `by:` key of `sorted`, `sort`, `min`, `max` and the argument of `tensor.map`; elsewhere use a comprehension or a loop.
 
 ## Operators and strings
 
@@ -351,6 +350,11 @@ calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible o
 
 ```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
+m := """
+    line one
+      indented
+    """                     # multi-line: "line one\n  indented"; the common indent is removed, the closing line adds no newline
+r := r"C:\dir\{x}"          # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 ```

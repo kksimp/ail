@@ -746,8 +746,7 @@ print("{n:.2}")      # compile-time error: write {n.to_float():.2}
 ```
 
 > **Note:** joining is `xs.join(sep)` on any list (`type.coll.9`). There is
-> no `str.from_chars`. `s.len()` is absent until bytes versus characters is
-> decided (open questions).
+> no `str.from_chars`. `s.len()` counts characters (`type.str.12`).
 
 ## Bytes
 
