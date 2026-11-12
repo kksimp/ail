@@ -9,14 +9,14 @@ struct Todo
 impl app.App for Todo
     fn update(mut self, ev app.Event)
         log.push(ev.kind)
-        if ev.kind == "edit"
+        if ev.kind == Edit
             draft = ev.text
-        if (ev.kind == "press" and ev.id == "add") or ev.kind == "submit"
+        if (ev.kind == Press and ev.id == "add") or ev.kind == Submit
             items.push(draft)
             draft = ""
-        if ev.kind == "resize"
+        if ev.kind == Resize
             log.push("{ev.dx}x{ev.dy} cell {ev.cell_w}x{ev.cell_h}")
-        if ev.kind == "click"
+        if ev.kind == Click
             log.push("{ev.text} {ev.x},{ev.y} on {ev.id}")
 
     fn view(self) app.Node

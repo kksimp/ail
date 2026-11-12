@@ -13,7 +13,7 @@ struct Shop
 
 impl app.App for Shop
     fn update(mut self, ev app.Event)
-        if ev.kind == "press"
+        if ev.kind == Press
             n += 1
 
     fn view(self) app.Node

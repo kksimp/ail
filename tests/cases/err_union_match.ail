@@ -16,7 +16,7 @@ fn load(text str) int ! Missing | Parse
     if text == "?"
         return Missing(path: "conf.txt")
     if text.len() > 4
-        return Parse.TooLong(text.len(), 4)
+        return Parse.TooLong(len: text.len(), max: 4)
     for c in text.chars()
         if c < '0' or c > '9'
             return Parse.BadDigit(c)

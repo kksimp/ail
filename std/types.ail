@@ -196,11 +196,40 @@ struct Modifiers
     shift bool
 
 enum Event
-    Key(key str, ctrl bool, alt bool, shift bool)
+    Key(key ui.KeyCode, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
-    Mouse(col int, row int, button str, kind str)
+    Mouse(col int, row int, button ui.MouseButton, kind ui.MouseKind)
     Scroll(lines int)
+
+## std.ui.7 (ADR 1068): a key, as typed text or a named key.
+enum KeyCode
+    Text(text str)
+    Enter
+    Tab
+    Backspace
+    Delete
+    Insert
+    Escape
+    Up
+    Down
+    Left
+    Right
+    Home
+    End
+    PageUp
+    PageDown
+    F(n int)
+
+enum MouseButton
+    Left
+    Middle
+    Right
+
+enum MouseKind
+    Down
+    Up
+    Drag
 
 ## std.ui.16: how `put_styled` draws text.
 struct Style

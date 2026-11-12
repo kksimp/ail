@@ -6,8 +6,9 @@
   language review goes into 0.1.0, breaking changes accepted; "never
   compromise on AI understanding"). Details: AI (delegated, ADR 0076).
 - **Topic:** Errors; standard library
-- **Spec rules:** std.err.1, std.net.4, std.compress.2, std.ui.1, std.app.9,
-  std.audio.9, std.regex.11-23, type.enum.7
+- **Spec rules:** std.err.1, std.net.4, std.compress.2, std.ui.1, std.ui.7,
+  std.ui.10, std.app.5, std.app.8, std.app.9, std.audio.9, std.regex.11-23,
+  std.term.2-3, type.enum.7
 - **Amends:** [ADR 0158](0158-standard-io-errors.md) (kind as a string)
 
 ## Context
@@ -78,8 +79,17 @@ for every enum and names the variant to write.
   after it beyond the flag.
 - `ProcKind` shares `IoKind`'s indices so one record format (`ail run
   --record`) serves both.
-- `app.Event.kind` and the `ui` keys and mouse buttons are still strings;
-  they follow in a separate change.
+- The same rule covers the other closed sets of names in `std`:
+  `app.Event.kind` is `app.EventKind` (one variant per wire name, `Other` for
+  a name the program doesn't know, which `run` skips; `kind_of` and
+  `kind_name` convert); `ui` and `term` keys are `KeyCode` (`Text(text)` for
+  typed text, `Enter`, `PageUp`, `F(n)` and the other named keys, with
+  `name()`, `text()` and `key_code(name)`); mouse events carry `MouseButton`
+  and `MouseKind`. `app.AppKind` gains `Listen` and `Attach` for
+  `std.attach`. The host protocol keeps its snake-case names.
+- Still strings: `std.gfx` key and gamepad button names (`gfx.down(i,
+  "left")`, `pad_down(i, 0, "a")`) and `args.Spec.kind`; they are the next
+  candidates.
 - `DeviceError`'s display text is its `message` (it was `kind: message`).
 
 ## Rejected alternatives

@@ -81,7 +81,7 @@ impl app.App for Watched[T app.App + attach.Observe]
         inner.attach(inbox)
 
     fn update(mut self, ev app.Event)
-        if ev.kind == "external" and ev.id == "attach" and attach.is_input(ev.text)
+        if ev.kind == app.EventKind.External and ev.id == "attach" and attach.is_input(ev.text)
             why := attach.input_refusal(ev.text, token, input)
             if why != ""
                 hub.replies.send(why)
@@ -98,9 +98,9 @@ impl app.App for Watched[T app.App + attach.Observe]
                     return
                 sent.id = found
             inner.update(sent)
-            hub.replies.send(attach.input_applied(sent.kind))
+            hub.replies.send(attach.input_applied(app.kind_name(sent.kind)))
             return
-        if ev.kind == "external" and ev.id == "attach" and attach.query(ev.text) == "call"
+        if ev.kind == app.EventKind.External and ev.id == "attach" and attach.query(ev.text) == "call"
             # A `call` runs a `@tool` method between events, like a person's input (attach.tool.4).
             cwhy := attach.call_refusal(ev.text, token, input)
             if cwhy != ""
@@ -114,7 +114,7 @@ impl app.App for Watched[T app.App + attach.Observe]
                 creq.get("args") else Json.Obj([]),
             ))
             return
-        if ev.kind == "external" and ev.id == "attach" and attach.query(ev.text) == "tools"
+        if ev.kind == app.EventKind.External and ev.id == "attach" and attach.query(ev.text) == "tools"
             treq := parse_json(ev.text) else
                 hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return
@@ -123,12 +123,12 @@ impl app.App for Watched[T app.App + attach.Observe]
                 return
             hub.replies.send(attach.tools_reply(inner.tools()))
             return
-        if ev.kind == "external" and ev.id == "attach"
+        if ev.kind == app.EventKind.External and ev.id == "attach"
             tr.update(inner.observed())
             sc := view.of_node(inner.shown(), w, h, inner.focus())
             hub.replies.send(attach.answer(ev.text, token, tr, sc, ""))
             return
-        if ev.kind == "resize"
+        if ev.kind == app.EventKind.Resize
             w = ev.dx
             h = ev.dy
         inner.update(ev)
@@ -197,7 +197,7 @@ pub struct Served
 ## could be had and `attach` when the file could not be written.
 pub fn open() Served ! app.AppError
     l := net.listen("127.0.0.1:0") else err
-        return app.AppError(kind: "listen", message: "can't listen ({err})")
+        return app.AppError(kind: app.AppKind.Listen, message: "can't listen ({err})")
     addr := l.addr()
     port := addr.split(":").last() else addr
     path := token_path(port)
@@ -205,15 +205,15 @@ pub fn open() Served ! app.AppError
     # Create the file empty, restrict it, then put the token in it.
     fs.write_text(path, "") else err
         l.close()
-        return app.AppError(kind: "attach", message: "can't write {path}: {err}")
+        return app.AppError(kind: app.AppKind.Attach, message: "can't write {path}: {err}")
     # The owner-only mode is a Unix one; on Windows the file is the user's by its folder (ADR 1045).
     if (env.get("OS") else "") != "Windows_NT"
         chmod := proc.run("chmod", ["600", path], none, none) else err
             l.close()
-            return app.AppError(kind: "attach", message: "can't restrict {path}: {err}")
+            return app.AppError(kind: app.AppKind.Attach, message: "can't restrict {path}: {err}")
     fs.write_text(path, "\{\"addr\":\"{addr}\",\"token\":\"{token}\"}\n") else err
         l.close()
-        return app.AppError(kind: "attach", message: "can't write {path}: {err}")
+        return app.AppError(kind: app.AppKind.Attach, message: "can't write {path}: {err}")
     Served(l: l, addr: addr, token: token, path: path)
 
 ## The window of `w` until it closes: the failure of `app.run_with`, if any.
@@ -290,7 +290,7 @@ pub fn run_with[T app.App + attach.Observe](
     inbox app.Inbox,
 ) ! app.AppError
     s := open() else err
-        if err.kind != "listen"
+        if err.kind != app.AppKind.Listen
             return err
         # Without a listener the window still runs, just not drivable.
         io.eprint("attach: {err.message}; running the window without the attach server (attach.wire.1)")

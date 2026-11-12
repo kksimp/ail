@@ -91,7 +91,7 @@ fn Dashboard.render(self, theme Map[str, int]) List[widgets.Run]
 fn Dashboard.on_event(mut self, ev ui.Event) bool
     k := match ev
         Close => "escape"
-        Key(k, _, _, _) => k
+        Key(k, _, _, _) => k.name()
         Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => ""
     if k == "escape"
         return true
@@ -122,7 +122,7 @@ fn main()
     if env.args().contains("--window")
         window(mut d) else err
             print("no window ({err.kind}); printing the screen instead")
-    d.list.on_event(Key(key: "down", ctrl: false, alt: false, shift: false), LIST)
+    d.list.on_event(Key(key: Down, ctrl: false, alt: false, shift: false), LIST)
     d.show_preview()
     for row in widgets.text_rows(d.render(Map[str, int]()), COLS, ROWS)
         print(row)

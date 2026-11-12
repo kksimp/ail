@@ -3,5 +3,5 @@ canvas #c 40.0x20.0 ops=2
   str 1.0,2.0 "n=1" mono 13.0 0
 1
 {"v":1,"t":"view","title":"Counter","focus":"","tree":{"kind":"Canvas","id":"c","w":40,"h":20,"ops":[{"kind":"Fill","x":0,"y":0,"w":10,"h":5,"color":255},{"kind":"Str","x":1,"y":2,"text":"n=1","font":"mono","size":13,"fg":0,"bold":false,"italic":false,"underline":false}]}}
-press go
+app.EventKind.Press go
 true

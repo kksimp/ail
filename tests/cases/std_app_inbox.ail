@@ -13,7 +13,7 @@ impl app.App for Watcher
         got.push("attached")
 
     fn update(mut self, ev app.Event)
-        if ev.kind == "external"
+        if ev.kind == External
             got.push("{ev.id}:{ev.text}")
 
     fn view(self) app.Node

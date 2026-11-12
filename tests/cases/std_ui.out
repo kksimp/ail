@@ -10,3 +10,8 @@ false false false
 close
 close
 ui.UiError(kind: "no_display", message: "none")
+f5
+true
+x
+none
+true

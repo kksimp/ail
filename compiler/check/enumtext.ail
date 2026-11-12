@@ -28,12 +28,14 @@ fn snake_to_variant(text str) str?
             return none
     out
 
-## The variant of enum `e` that `text` names in snake case.
+## The variant of enum `e` that `text` names in snake case: `not_found` is
+## `NotFound`, and `keyup` is `KeyUp` too.
 fn Checker.variant_for_text(self, e int, text str) str?
     v := snake_to_variant(text)?
+    flat := v.to_lower()
     for x in prog.enums[e].variants
-        if x.name == v
-            return v
+        if x.name == v or x.name.to_lower() == flat
+            return x.name
     none
 
 ## Report string `text`, written at `at`, where a value of enum `e` is

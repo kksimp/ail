@@ -7,7 +7,7 @@ struct Counter
 
 impl app.App for Counter
     fn update(mut self, ev app.Event)
-        if ev.kind == "key"
+        if ev.kind == Key
             n += 1
 
     fn view(self) app.Node

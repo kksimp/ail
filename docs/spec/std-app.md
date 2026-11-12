@@ -55,10 +55,14 @@ cannot read it, draws in `sans`; the op draws nothing itself, ADR 0984), `Clip(x
 control that should have the keyboard focus; the host moves the focus when
 the value changes. *(ADR 0838)*
 
-**std.app.5** — `struct Event` has the fields `kind`, `id`, `text` (all
-`str`), `x`, `y`, `dx`, `dy`, `cell_w`, `cell_h` (all `float`) and `ctrl`,
-`alt`, `shift`, `meta` (all `bool`). Fields that don't apply to a kind are
-zero or empty. The kinds are: `start` (the host is ready); `press` (a
+**std.app.5** — `struct Event` has the fields `kind` (an `EventKind`), `id`,
+`text` (both `str`), `x`, `y`, `dx`, `dy`, `cell_w`, `cell_h` (all `float`)
+and `ctrl`, `alt`, `shift`, `meta` (all `bool`). Fields that don't apply to a
+kind are zero or empty. `enum EventKind` has one variant per kind, named for
+its wire name in snake case (`press` is `Press`, `keyup` is `KeyUp`,
+`pick_error` is `PickError`), and `Other` for a name the program doesn't
+know; `kind_of(name str) EventKind` and `kind_name(kind EventKind) str`
+convert (ADR 1068). The kinds are: `start` (the host is ready); `press` (a
 button, `id`); `edit` (a field changed: `id`, `text`); `submit` (Return in a
 field, `id`); `toggle` (`id`, `text` is `on` or `off`); `click` (in a canvas:
 `id`, `x`, `y`, `text` is `left`, `right` or `other`); `scroll` (`id`, `dx`,
@@ -66,9 +70,9 @@ field, `id`); `toggle` (`id`, `text` is `on` or `off`); `click` (in a canvas:
 canvas: `id`, `text` is a name or character as in `std.ui.7`, with `meta`
 for Command); `resize` (a canvas's size: `id`, `dx` wide, `dy` high, and
 `cell_w`, `cell_h`, the size of one character of `mono` at 13 points); and
-`close` (the window closed). `event(kind)` makes an event with every other
-field empty; `press(id)`, `edit(id, value)` and `key(name)` fill in one.
-*(ADR 0838)*
+`close` (the window closed). `event(kind EventKind)` makes an event with
+every other field empty; `press(id)`, `edit(id, value)` and `key(name)` fill in one.
+*(ADR 0838, ADR 1068)*
 
 **std.app.6** — `outline(n Node) str` is the tree as indented text, one
 node per line: `"text"` for a label, `[caption] #id` for a button,
@@ -86,7 +90,8 @@ line for app `a`. Every line the program sends carries `"v":1`. *(ADR 0838)*
 **std.app.8** — The host sends events as `{"kind":K, ...}` with the fields
 of `Event` (std.app.5) that apply; missing members are zero or empty
 (`event_from_json(j)`). Its first line also carries `"v":1`. A line that
-isn't a JSON object, or has no `kind`, is skipped. *(ADR 0838)*
+isn't a JSON object, or whose `kind` is missing or not a kind `EventKind`
+names (so `Other`), is skipped. *(ADR 0838, ADR 1068)*
 
 **std.app.9** — `run(mut a T) ! AppError` and
 `run_host(mut a T, cmd str, args List[str]) ! AppError`, for any `T` that
@@ -98,8 +103,10 @@ program closes the host's input, copies the host's standard error to its
 own, waits for the host, and returns. The program's own standard output is
 free for `print`. `AppError` is `error struct AppError { kind AppKind,
 message str }`, where `enum AppKind` is `NoHost` (no host program), `Start`
-(it couldn't start), `Version` (its first line lacks `"v":1`) and
-`HostExited` (it ended before a `close`). *(ADR 0838, ADR 1068)*
+(it couldn't start), `Version` (its first line lacks `"v":1`),
+`HostExited` (it ended before a `close`), and, from `std.attach`, `Listen`
+(the attach server couldn't listen) and `Attach` (it couldn't write its
+file). *(ADR 0838, ADR 1068)*
 
 **std.app.10** — `run` finds the host with `host_path() str ! AppError`:
 the environment variable `AIL_APP_HOST`, else `AIL_ROOT/tools/app-host/
@@ -272,7 +279,7 @@ struct Counter
 
 impl app.App for Counter
     fn update(mut self, ev app.Event)
-        if ev.kind == "press" and ev.id == "up"
+        if ev.kind == Press and ev.id == "up"
             n += 1
 
     fn view(self) app.Node
@@ -292,7 +299,7 @@ struct Pad
 
 impl app.App for Pad
     fn update(mut self, ev app.Event)
-        if ev.kind == "click"
+        if ev.kind == Click
             clicks += 1
 
     fn view(self) app.Node
@@ -330,7 +337,7 @@ impl app.App for Sender
 
 fn main()
     mut s := Sender(queue: [])
-    s.update(app.event("start"))
+    s.update(app.event(Start))
     print(s.lines().len())
     print(s.lines().len())
 ```
@@ -345,9 +352,9 @@ struct Strip
 
 impl app.App for Strip
     fn update(mut self, ev app.Event)
-        if ev.kind == "start" or ev.kind == "resize"
+        if ev.kind == Start or ev.kind == Resize
             left = ev.inset_left
-        elif ev.kind == "click" and ev.x >= left
+        elif ev.kind == Click and ev.x >= left
             queue.push(if ev.clicks == 2 then "\{\"v\":1,\"t\":\"zoom\"}" else "\{\"v\":1,\"t\":\"drag\"}")
 
     fn view(self) app.Node
@@ -363,12 +370,12 @@ impl app.App for Strip
 
 fn main()
     mut s := Strip(left: 0.0, queue: [])
-    mut start := app.event("start")
+    mut start := app.event(Start)
     start.inset_left = 78.0
     start.inset_top = 28.0
     s.update(start)
     print(app.frame(s).contains("\"edge\":true"))
-    mut c := app.event("click")
+    mut c := app.event(Click)
     c.x = 100.0
     c.clicks = 1
     s.update(c)
@@ -387,7 +394,7 @@ struct Page
 
 impl app.App for Page
     fn update(mut self, ev app.Event)
-        if ev.kind == "start" or ev.kind == "resize"
+        if ev.kind == Start or ev.kind == Resize
             w = ev.screen_w
             h = ev.screen_h
             ratio = if ev.scale == 0.0 then 1.0 else ev.scale
@@ -397,7 +404,7 @@ impl app.App for Page
 
 fn main()
     mut p := Page(w: 0.0, h: 0.0, ratio: 1.0)
-    mut start := app.event("start")
+    mut start := app.event(Start)
     start.screen_w = 1512.0
     start.screen_h = 982.0
     start.scale = 2.0
@@ -407,12 +414,12 @@ fn main()
 struct Themed
     dark bool
 impl app.App for Themed
-        if ev.kind == "appearance"
+        if ev.kind == Appearance
             dark = ev.text == "dark"
         bg := if dark then 0x1f1f1f else 0xffffff
         app.canvas("c", 0.0, 0.0, [app.draw_rect(0.0, 0.0, 10.0, 10.0, bg)])
     mut t := Themed(dark: false)
-    mut ev := app.event("appearance")
+    mut ev := app.event(Appearance)
     ev.text = "dark"
     print(app.step(mut t, ev))
     ev.text = "light"
@@ -428,7 +435,7 @@ struct Tabs
 
 impl app.App for Tabs
     fn update(mut self, ev app.Event)
-        if ev.kind == "start" or ev.kind == "resize"
+        if ev.kind == Start or ev.kind == Resize
             room = ev.dx - ev.inset_right
 
     fn view(self) app.Node
@@ -439,7 +446,7 @@ impl app.App for Tabs
 
 fn main()
     mut t := Tabs(room: 0.0)
-    mut r := app.event("resize")
+    mut r := app.event(Resize)
     r.dx = 1000.0
     r.inset_right = 138.0
     r.inset_top = 32.0
@@ -447,7 +454,7 @@ fn main()
     print(app.outline(t.view()))
     j := parse_json("\{\"kind\":\"resize\",\"dx\":900,\"inset_right\":138}") else Json.Null
     print(app.event_from_json(j).inset_right)
-    print(app.event("start").inset_right)
+    print(app.event(Start).inset_right)
 ```
 
 ```ail rules=std.app.27
@@ -461,15 +468,15 @@ struct Select
     held bool
 
 impl app.App for Select
-    fn update(mut self, ev app.Event)
+    @allow("expr.match.3") fn update(mut self, ev app.Event)
         match ev.kind
-            "down" =>
+            Down =>
                 from = ev.x
                 to = ev.x
                 held = true
-            "move" => if held
+            Move => if held
                 to = ev.x
-            "up" => held = false
+            Up => held = false
             _ => held = held
 
     fn view(self) app.Node
@@ -477,16 +484,16 @@ impl app.App for Select
 
 fn main()
     mut s := Select(from: 0.0, to: 0.0, held: false)
-    mut d := app.event("down")
+    mut d := app.event(Down)
     d.id = "s"
     d.x = 10.0
     d.text = "left"
     s.update(d)
-    mut m := app.event("move")
+    mut m := app.event(Move)
     m.id = "s"
     m.x = 50.0
     s.update(m)
-    mut u := app.event("up")
+    mut u := app.event(Up)
     u.id = "s"
     u.x = 50.0
     s.update(u)
@@ -515,7 +522,7 @@ struct Row
 
 impl app.App for Row
     fn update(mut self, ev app.Event)
-        if ev.kind == "start" or ev.kind == "resize"
+        if ev.kind == Start or ev.kind == Resize
             line = ev.sans_line
             top = (32.0 - (if line > 0.0 then line else 16.0)) / 2.0
 
@@ -524,7 +531,7 @@ impl app.App for Row
 
 fn main()
     mut r := Row(line: 0.0, top: 0.0)
-    r.update(app.event("start"))
+    r.update(app.event(Start))
     print(r.top)
     j := parse_json("\{\"kind\":\"resize\",\"sans_line\":18}") else Json.Null
     r.update(app.event_from_json(j))
@@ -541,7 +548,7 @@ struct Field
 
 impl app.App for Field
     fn update(mut self, ev app.Event)
-        if ev.kind == "key" and ev.meta and ev.text == "c"
+        if ev.kind == Key and ev.meta and ev.text == "c"
             out.push(app.clipboard(text))
 
     fn view(self) app.Node
@@ -570,9 +577,9 @@ struct Omnibox
 
 impl app.App for Omnibox
     fn update(mut self, ev app.Event)
-        if ev.kind == "paste"
+        if ev.kind == Paste
             text = "{text}{ev.text}"
-        elif ev.kind == "key" and ev.text.chars().len() == 1
+        elif ev.kind == Key and ev.text.chars().len() == 1
             text = "{text}{ev.text}"
 
     fn view(self) app.Node
@@ -581,7 +588,7 @@ impl app.App for Omnibox
 fn main()
     mut f := Omnibox(text: "")
     f.update(app.key("a"))
-    mut p := app.event("paste")
+    mut p := app.event(Paste)
     p.id = "f"
     p.text = "il.dev"
     f.update(p)
@@ -596,9 +603,9 @@ struct Held
 
 impl app.App for Held
     fn update(mut self, ev app.Event)
-        if ev.kind == "key"
+        if ev.kind == Key
             keys += 1
-        elif ev.kind == "keyup"
+        elif ev.kind == KeyUp
             keys -= 1
 
     fn view(self) app.Node
@@ -606,7 +613,7 @@ impl app.App for Held
 
 fn main()
     mut h := Held(keys: 0)
-    mut up := app.event("keyup")
+    mut up := app.event(KeyUp)
     up.text = "a"
     screens := app.script(mut h, [app.key("a"), up])
     print(screens[0])
@@ -646,7 +653,7 @@ struct Hello
 
 impl app.App for Hello
     fn update(mut self, ev app.Event)
-        if ev.kind == "edit"
+        if ev.kind == Edit
             name = ev.text
 
     fn view(self) app.Node
@@ -693,12 +700,12 @@ struct Where
 
 impl app.App for Where
     fn update(mut self, ev app.Event)
-        if ev.kind == "press" and ev.id == "choose"
+        if ev.kind == Press and ev.id == "choose"
             asking = true
-        if ev.kind == "picked"
+        if ev.kind == Picked
             path = ev.text
             asking = false
-        if ev.kind == "pick_error"
+        if ev.kind == PickError
             asking = false
 
     fn view(self) app.Node
@@ -713,7 +720,7 @@ fn main()
     mut w := Where(path: "", asking: false)
     app.script(mut w, [app.press("choose")])
     print(w.pick() != none)
-    mut done := app.event("picked")
+    mut done := app.event(Picked)
     done.id = "folder"
     done.text = "/tmp"
     app.script(mut w, [done])
@@ -728,9 +735,9 @@ struct Pad
 
 impl app.App for Pad
     fn update(mut self, ev app.Event)
-        if ev.kind == "click" and ev.text == "right"
+        if ev.kind == Click and ev.text == "right"
             menu = app.Popup(id: "pad", x: ev.x, y: ev.y, items: ["Reveal", "Trash"])
-        if ev.kind == "popup"
+        if ev.kind == Popup
             menu = none
 
     fn view(self) app.Node

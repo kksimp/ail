@@ -86,7 +86,7 @@ pub fn text(mut f Frame, x float, y float, s str, size float, color int)
 
 ## The host event for releasing `key` (std.gfx.3).
 pub fn key_up(key str) app.Event
-    mut e := app.event("keyup")
+    mut e := app.event(app.EventKind.KeyUp)
     e.text = key
     e
 
@@ -140,7 +140,7 @@ pub fn pad_released(i Input, n int, button str) bool
 ## The `pad` host event for gamepad `n` with state `buttons,lx,ly,rx,ry,lt,rt`;
 ## an empty `state` says it was disconnected (std.gfx.11).
 pub fn pad_event(n int, state str) app.Event
-    mut e := app.event("pad")
+    mut e := app.event(app.EventKind.Pad)
     e.id = "{n}"
     e.text = state
     e
@@ -210,24 +210,24 @@ pub fn next_input(prev Input, events List[app.Event]) Input
             rt: old.rt,
         ))
     for ev in events
-        if ev.kind == "key"
+        if ev.kind == app.EventKind.Key
             if not held.contains(ev.text)
                 held.push(ev.text)
                 went_down.push(ev.text)
             if ev.text.chars().len() == 1 and not ev.ctrl and not ev.meta
                 typed = "{typed}{ev.text}"
-        elif ev.kind == "keyup"
+        elif ev.kind == app.EventKind.KeyUp
             if held.contains(ev.text)
                 held = without(held, ev.text)
                 went_up.push(ev.text)
-        elif ev.kind == "click" or ev.kind == "move"
+        elif ev.kind == app.EventKind.Click or ev.kind == app.EventKind.Move
             x = ev.x
             y = ev.y
-            if ev.kind == "click"
+            if ev.kind == app.EventKind.Click
                 buttons = 1
-        elif ev.kind == "scroll"
+        elif ev.kind == app.EventKind.Scroll
             wheel = wheel + ev.dy
-        elif ev.kind == "pad"
+        elif ev.kind == app.EventKind.Pad
             n := ev.id.to_int() else -1
             if n >= 0 and n < 8
                 while pads.len() <= n

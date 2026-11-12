@@ -2189,11 +2189,36 @@ struct Modifiers
     alt bool
     shift bool
 enum Event
-    Key(key str, ctrl bool, alt bool, shift bool)
+    Key(key KeyCode, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
-    Mouse(col int, row int, button str, kind str)
+    Mouse(col int, row int, button MouseButton, kind MouseKind)
     Scroll(lines int)
+enum KeyCode
+    Text(text str)
+    Enter
+    Tab
+    Backspace
+    Delete
+    Insert
+    Escape
+    Up
+    Down
+    Left
+    Right
+    Home
+    End
+    PageUp
+    PageDown
+    F(n int)
+enum MouseButton
+    Left
+    Middle
+    Right
+enum MouseKind
+    Down
+    Up
+    Drag
 error struct UiError
     kind UiKind
     message str
@@ -2241,14 +2266,18 @@ such as (-1, -1), hides it. *(ADR 0177)*
 event is returned: cells that still fit are kept, new cells are blank.
 `Close` means the window was closed (std.ui.8). *(ADR 0177)*
 
-**std.ui.7** — In `Key(key, ctrl, alt, shift)`, `key` is either the typed
-character (`"a"`, `"A"`, `" "`, `"é"`, following the keyboard layout and
-Shift) or one of the names `enter`, `tab`, `backspace`, `delete`, `escape`,
-`up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown` and `f1`
-to `f12`. While Ctrl is held, a text key gives its unshifted character
-(Ctrl-S is `Key("s", true, false, false)`, Ctrl-Shift-S has `shift` true),
-and no typed character is reported. On macOS, Command reports as `ctrl`.
-Modifier keys alone give no event. *(ADR 0177)*
+**std.ui.7** — In `Key(key, ctrl, alt, shift)`, `key` is a `KeyCode`:
+either `Text(text)`, the typed character (`"a"`, `"A"`, `" "`, `"é"`,
+following the keyboard layout and Shift), or a named key `Enter`, `Tab`,
+`Backspace`, `Delete`, `Insert`, `Escape`, `Up`, `Down`, `Left`, `Right`,
+`Home`, `End`, `PageUp`, `PageDown` or `F(n)` for `n` from 1 to 12. While
+Ctrl is held, a text key gives its unshifted character (Ctrl-S is
+`Key(Text("s"), true, false, false)`, Ctrl-Shift-S has `shift` true), and no
+typed character is reported. On macOS, Command reports as `ctrl`. Modifier
+keys alone give no event. `key.name()` is the key's text or its name in lower
+case (`enter`, `pageup`, `f5`); `key.text()` is the text, or `none` for a
+named key; `key_code(name)` is the inverse of `name()`. *(ADR 0177,
+ADR 1068)*
 
 **std.ui.8** — When the user closes the window, the next event is `Close`.
 After that, and after `close(mut self)`, the window is closed: `next_event`
@@ -2273,7 +2302,7 @@ fn main()
         w.present()
         match w.next_event()
             Key(key, _, _, _) =>
-                if key == "escape"
+                if key == Escape
                     break
             Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => continue
             Close => break
@@ -2281,10 +2310,10 @@ fn main()
 ```
 
 **std.ui.10** — `Mouse(col, row, button, kind)` reports a mouse button over
-cell (`col`, `row`): `button` is `left`, `right` or `middle`, and `kind` is
-`down` when it is pressed, `up` when it is released, and `drag` when the
-mouse moves to another cell while it is held. Movement with no button held
-gives no event. *(ADR 0240)*
+cell (`col`, `row`): `button` is a `MouseButton` (`Left`, `Right` or
+`Middle`), and `kind` is a `MouseKind`: `Down` when it is pressed, `Up` when
+it is released, and `Drag` when the mouse moves to another cell while it is
+held. Movement with no button held gives no event. *(ADR 0240, ADR 1068)*
 
 **std.ui.11** — `Scroll(lines)` reports the wheel or a trackpad: `lines` is
 the number of text lines to scroll, positive towards the end of a document.
@@ -2932,7 +2961,7 @@ use std.ui
 use std.ui.widgets
 
 fn press(k str) ui.Event
-    Key(key: k, ctrl: false, alt: false, shift: false)
+    Key(key: ui.key_code(k), ctrl: false, alt: false, shift: false)
 
 fn main()
     theme := Map[str, int]()

@@ -4,10 +4,10 @@ use std.ui
 use std.ui.widgets
 
 fn key(k str) ui.Event
-    Key(key: k, ctrl: false, alt: false, shift: false)
+    Key(key: ui.key_code(k), ctrl: false, alt: false, shift: false)
 
 fn click(c int, r int) ui.Event
-    Mouse(col: c, row: r, button: "left", kind: "down")
+    Mouse(col: c, row: r, button: Left, kind: Down)
 
 fn show(runs List[widgets.Run])
     for r in runs
