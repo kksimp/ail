@@ -216,8 +216,8 @@ pub fn Writer.seek(mut self, to int) ! fs.IoError
     flush()?
     pos = to
 
-## Flushes and ends the writer, reporting a failure (std.file.9).
-pub fn Writer.close(move self) ! fs.IoError
+## Flushes the writer, reporting a failure (std.file.9); a second call does nothing.
+pub fn Writer.close(mut self) ! fs.IoError
     flush()?
 
 impl Drop for Writer
