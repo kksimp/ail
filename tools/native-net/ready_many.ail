@@ -45,23 +45,12 @@ fn main() !
     for i in 0..n
         if ask(cs[i], i) == "ok /r{i}"
             right += 1
-        if (i + 1) % 100 == 0
-            # Diagnostic: where the per-request cost jumps.
-            print("  asked {i + 1}, {right} right, {time.now_ms() - t0} ms")
     print("first round: {right} of {n}")
-    print("first round ms: {time.now_ms() - t0}")
     mut back := 0
-    mut shown := 0
     for k in 0..n
         i := n - 1 - k
-        t1 := time.now_ms()
-        got := ask(cs[i], i + n)
-        if got == "ok /r{i + n}"
+        if ask(cs[i], i + n) == "ok /r{i + n}"
             back += 1
-        elif shown < 5
-            # Diagnostic: the first failures, with how long each took and how far into the run.
-            shown += 1
-            print("fail: conn {i} (k={k}) got {got} after {time.now_ms() - t1} ms, {time.now_ms() - t0} ms into the run")
     print("second round, reversed: {back} of {n}")
     ms := time.now_ms() - t0
     print("the quiet one: {ask(quiet, 7)}")
