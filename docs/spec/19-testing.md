@@ -121,7 +121,7 @@ contains it; a `*` in the pattern stands for any run of characters. The name is 
 `test.run.1-4`. A pattern that matches no test is an error (exit 2) that says how many tests the file has.
 ([ADR 1075](../decisions/1075-test-filter-and-fixtures.md))
 
-```ail tool=test,--filter,add,FILE expect="1 passed" rules=test.filter.1
+```ail tool=test,--filter,add,FILE expect=passed rules=test.filter.1
 @test
 fn adds()
     assert_eq(1 + 1, 2)
@@ -223,7 +223,7 @@ fn reads_the_file(scratch_file str)
     assert_eq(fs.read_text(scratch_file)?, "hi")
 ```
 
-```ail tool=test,FILE status=1 expect="setup of fixture" rules=test.fixture.4
+```ail tool=test,FILE status=1 expect=context rules=test.fixture.4
 error struct NoDatabase
     why str
 
