@@ -32,6 +32,7 @@ A small, exact, capability-light call.
 
 - Purgeable-space accounting is a possible later field.
 - Native only (ADR 0865).
+- Windows (2026-11-05): `GetDiskFreeSpaceExW` on the path, `total` from the caller's quota total and `free` from the bytes free to the caller. A file path (`ERROR_DIRECTORY`) is asked again by its volume root from `GetVolumePathNameW`.
 
 ## Rejected alternatives
 

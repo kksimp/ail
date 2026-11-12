@@ -1678,7 +1678,9 @@ fn started(exe str, arg str, envs List[str]) !proc.Output
         mut line := ""
         for e in envs
             line = "{line}set {e}&& "
-        return proc.run("cmd", ["/d", "/c", "{line}{exe} {arg}"], none, RUN_LIMIT_MS)?
+        # cmd.exe reads `/` in the command word as a switch (`tests/x.exe` runs `tests`): use backslashes.
+        win_exe := exe.replace("/", "\\")
+        return proc.run("cmd", ["/d", "/c", "{line}{win_exe} {arg}"], none, RUN_LIMIT_MS)?
     proc.run("env", argv, none, RUN_LIMIT_MS)?
 
 ## ---- Record and replay of tests (replay.rec.1, replay.run.1, replay.nat.1) ----

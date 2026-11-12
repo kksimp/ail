@@ -862,20 +862,21 @@ fn list_alloc(cap int, size int) List[int]
 fn list_new(cap int) List[int]
     list_alloc(cap, 8)
 
-## The most elements `list_new_for` and `list_reserve` make room for: 8 MiB worth
-## of them, whatever their size.
+## The most elements `list_new_for` and `list_reserve` make room for: 256 MiB
+## worth of them, whatever their size (ADR 1064; it was 8 MiB, so a 150 M
+## `List[bool]` filled by pushes regrew five times, copying 248 MB).
 fn list_most(size int) int
     if size == 8
-        return 1048576
+        return 33554432
     if size == 1
-        return 8388608
+        return 268435456
     if size == 2
-        return 4194304
-    2097152
+        return 134217728
+    67108864
 
 ## A list made with room for a loop's pushes (`list_reserve` would regrow
-## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
-## iterations' worth (2^20 words, 2^23 bytes).
+## it): `(hi - lo) * per` elements of `size` bytes, at most 256 MiB of
+## iterations' worth (2^25 words, 2^28 bytes).
 ## `n` elements from `p` set to `v` (its low byte when `size` is 1): what the
 ## compiler turns a loop that stores one unchanging value into (ADR 0816).
 ## x86-64 assembles this as `rep stos` (x64/kernels.ail); this body is the
@@ -925,7 +926,7 @@ fn list_grow(p int, size int)
     store64(p + 16, data)
 
 ## Room for `(hi - lo) * per` more elements of `size` bytes, at most
-## 8 MiB worth of them, called before a loop that pushes that many (ADR 0578).
+## 256 MiB worth of them, called before a loop that pushes that many (ADR 0578).
 ## Only the capacity changes. A list that is full grows to at least twice its
 ## capacity, so a reserve called once per iteration of an outer loop copies
 ## the list O(log n) times, not once per iteration (ADR 0890).

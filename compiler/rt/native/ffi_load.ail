@@ -119,10 +119,11 @@ fn ffi_addr(k int, lib str, has_lib bool, name str) int
         # The running program's own symbols, libc included.
         handle = ffi_dlopen(0)
     c := mem_cstr(name)
-    p := ffi_dlsym(handle, c)
-    if p == 0 and not has_lib and target() == 3
-        # An older C runtime, then the executable's own imports' DLL.
-        p = ffi_dlsym(ffi_open_lib("msvcrt"), c)
+    mut p := ffi_dlsym(handle, c)
+    if p == 0 and target() == 3 and (not has_lib or ffi_is_crt(lib))
+        # The Universal CRT keeps the `printf` family (`sprintf`, ...) as header
+        # inlines, not exports: the legacy `msvcrt.dll` has them (ffi.load.3).
+        p = ffi_dlsym(ffi_try("", false, "msvcrt", ".dll"), c)
     mem_free(c)
     if p == 0
         store64(global(FFI_ST), 2)
