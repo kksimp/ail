@@ -142,6 +142,13 @@ fn commands() List[Cmd]
             "api.rev.1",
         ),
         c(
+            "perf",
+            "Ask the compiler",
+            "why each loop of a function is fast or slow, with fixes",
+            "ail perf --explain FN FILE",
+            "tool.perf.1",
+        ),
+        c(
             "diff",
             "Ask the compiler",
             "what changed between two programs, by meaning",

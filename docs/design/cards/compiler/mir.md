@@ -7,6 +7,7 @@ pub fn mir.fold_prim_addresses(mut mir.Func) [mutates]
 pub struct mir.Versioned
 pub fn mir.opt_off(str) bool [env]
 pub fn mir.bce(mir.Func, bool, bool) mir.Func [env]
+pub fn mir.bce_noting(mir.Func, bool, bool, bool, mut List[mir.RkNote]) mir.Func [env mutates]
 pub fn mir.lists_only_grow(mir.Module) bool
 pub fn mir.fill_loops(mir.Func, bool) mir.Func
 pub fn mir.fold(mir.Func) mir.Func
@@ -29,6 +30,7 @@ pub fn mir.find_loops(mir.Func) List[mir.LoopInfo]
 pub fn mir.is_innermost(List[mir.LoopInfo], mir.LoopInfo) bool
 pub struct mir.Counted
 pub fn mir.counted(mir.Func, List[mir.Def], mir.LoopInfo) mir.Counted?
+pub fn mir.counted_multi(mir.Func, List[mir.Def], mir.LoopInfo) mir.Counted?
 pub struct mir.Sig
 pub struct mir.Problem
 pub error struct mir.Problems
@@ -87,6 +89,14 @@ pub mir.DATA := 1048576
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool], Map[int, int]) mir.Proven [env]
 pub fn mir.mark_recursion(mut mir.Module) [mutates]
+pub struct mir.RkBlocker
+pub struct mir.RkNote
+pub fn mir.rk_target() str [env]
+pub fn mir.rk_matches(str, str) bool
+pub fn mir.rk_key(mir.Func, mir.LoopInfo) int
+pub fn mir.rk_uncounted(mir.LoopInfo) str
+pub fn mir.rk_blockers(mir.Func, List[mir.Def], mir.LoopInfo) List[mir.RkBlocker]
+pub fn mir.rk_explain(str, mir.Func, mir.Func, mir.Func, List[mir.RkNote], List[mir.Site], List[str], List[mir.Func]) List[str] [env]
 pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.simplify_in(mut mir.Func) [mutates]
@@ -106,4 +116,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1656); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1884); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

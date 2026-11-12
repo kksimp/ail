@@ -38,11 +38,13 @@ struct Known
     bounded Map[str, int]
 
 ## Parts that `AIL_OPT_OFF` can turn off one by one, to measure or bisect
-## them: `fwdjoin` (start every join with nothing known), `fwdslot` (a slot
+## them: `fwdjoin` (start every join with nothing known), `fwdjoinmem` (a
+## join keeps the passed checks but no loaded values), `fwdslot` (a slot
 ## store forgets every slot and header, as before ADR 1050) and `fwdcheck`
 ## (keep every check).
 struct FwOpts
     join bool
+    joinmem bool
     slot bool
     check bool
 
@@ -68,6 +70,7 @@ pub fn forward_loads(f Func) Func
     mut changed := false
     o := FwOpts(
         join: not opt_off("fwdjoin"),
+        joinmem: not opt_off("fwdjoinmem"),
         slot: not opt_off("fwdslot"),
         check: not opt_off("fwdcheck"),
     )
@@ -75,6 +78,8 @@ pub fn forward_loads(f Func) Func
         mut k := empty_known()
         if o.join or preds[b].len() < 2
             k = fw_entry(b, preds[b], pos, outs)
+            if not o.joinmem and preds[b].len() > 1
+                clear(mut k, true)
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
             found := remember(f, i, o, mut k, mut repl)
