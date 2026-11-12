@@ -86,8 +86,8 @@ pub fn bce_noting(f Func, reserve0 bool, grow_only bool, want bool, mut notes Li
                 continue
             done.add(lp.header)
             if not opt_off("mexit")
-                if moved := bound_out(g, defs, lp)
-                    g = moved
+                if lifted := bound_out(g, defs, lp)
+                    g = lifted
                     defs = defs_of(g)
             c := counted_multi(g, defs, lp) else
                 if want
