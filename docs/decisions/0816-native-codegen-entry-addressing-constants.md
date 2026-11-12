@@ -290,3 +290,7 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     `+ - *` of such ranges and counted loops (step 1, `p < hi`) whose bounds
     have ranges, and the guard leaves out the tests the range answers.
     nbody 38.0M to 35.5M instructions (-6.6%, on top of item 13).
+
+## Amendment (2026-11-11)
+
+The 8 MiB limit in item 3 is now 256 MiB of elements ([ADR 1064](1064-reserve-256-mib-ahead-of-push-loops.md)).
