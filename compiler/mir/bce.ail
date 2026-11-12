@@ -80,11 +80,15 @@ pub fn bce_noting(f Func, reserve0 bool, grow_only bool, want bool, mut notes Li
     while again
         again = false
         loops := find_loops(g)
-        defs := defs_of(g)
+        mut defs := defs_of(g)
         for lp in loops
             if done.contains(lp.header) or not is_innermost(loops, lp)
                 continue
             done.add(lp.header)
+            if not opt_off("mexit")
+                if lifted := bound_out(g, defs, lp)
+                    g = lifted
+                    defs = defs_of(g)
             c := counted_multi(g, defs, lp) else
                 if want
                     notes.push(RkNote(
@@ -1364,6 +1368,40 @@ fn room_candidate(f Func, defs List[Def], inl List[bool], hidx Map[int, int], u 
     if u < 0 or defs[u].block < 0
         return false
     not inl[defs[u].block] and not hidx.contains(u) and cst(f, defs, u) == none
+
+## `while l < 66` lowers the constant 66 into the loop's header, where
+## `counted` takes it for a value the loop changes. A copy of it made in the
+## preheader, which the header's test then reads, is the same value defined
+## outside the loop; constants are rematerialised at each use, so it costs no
+## register (native.bce.16).
+fn bound_out(f Func, defs List[Def], lp LoopInfo) Func?
+    if lp.pre < 0
+        return none
+    t := f.blocks[lp.header].term
+    if t.kind != "branch" or t.cond < 0 or defs[t.cond].block != lp.header
+        return none
+    cmp := inst_of(f, defs, t.cond)?
+    if cmp.op != "lt" and cmp.op != "gt"
+        return none
+    for s in 0..2
+        v := cmp.arg(s)
+        k := const_of(f, defs, v) else continue
+        if not lp.member[defs[v].block]
+            continue
+        mut g := f
+        g.vals.push(f.vals[v])
+        g.names.push("")
+        nv := g.vals.len() - 1
+        mut ki := inst(nv, "const", [])
+        ki.imm = k
+        g.blocks[lp.pre].insts.push(ki)
+        d := defs[t.cond]
+        g.blocks[d.block].insts[d.at] = cmp.with_args([
+            if a == v then nv else a
+            for a in cmp.operands()
+        ])
+        return g
+    none
 
 ## Whether `v` has the same value on every iteration.
 fn fixed(defs List[Def], inl List[bool], hidx Map[int, int], v int) bool
