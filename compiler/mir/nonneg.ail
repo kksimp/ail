@@ -5,8 +5,9 @@
 ##
 ## `mark_nonneg` runs before the bounds-check pass, while checked arithmetic
 ## still carries its trap site: a checked `add` or `mul` of two values that
-## are not negative is not negative, or it traps. An unchecked one in the
-## runtime wraps, so it proves nothing. `rewrite_nonneg` runs last and turns
+## are not negative is not negative, or it traps; so is one whose check
+## native.range.1 dropped (named `nw`). An unchecked one in the runtime
+## wraps, so it proves nothing. `rewrite_nonneg` runs last and turns
 ## each marked instruction into `shr` or `band`, which both back ends already
 ## have.
 
@@ -75,7 +76,8 @@ fn holds(i Inst, nn List[bool]) bool
         "const" => i.imm >= 0
         "len" | "cap" => true
         "copy" => nn[i.arg(0)]
-        "add" | "mul" => i.site >= 0 and nn[i.arg(0)] and nn[i.arg(1)]
+        # `nw`: native.range.1 proved it can't overflow (ADR 1063).
+        "add" | "mul" => (i.site >= 0 or i.name == "nw") and nn[i.arg(0)] and nn[i.arg(1)]
         "div" | "rem" => nn[i.arg(0)] and nn[i.arg(1)]
         "shr" => nn[i.arg(0)]
         "band" => nn[i.arg(0)] or nn[i.arg(1)]

@@ -850,3 +850,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1058](1058-ail-on-path-and-doctor.md) | `ail` works from PATH through symlinks; `ail doctor` and `ail doctor --path` *(delegated)* | Accepted | 2026-11-11 |
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
+| [1063](1063-function-wide-value-ranges.md) | Native: function-wide value ranges drop checks and fold comparisons they decide *(delegated)* | Accepted | 2026-11-12 |

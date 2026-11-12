@@ -1,0 +1,11 @@
+# The loop's test bounds `i` from below only, so `i * 2` keeps its check and
+# traps once `i` reaches 2^62 (native.range.1, expr.arith.1).
+fn main()
+    mut i := 1
+    mut n := 0
+    while i > 0
+        if n == 62
+            print(i)
+        i = i * 2
+        n += 1
+    print(n)

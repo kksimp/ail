@@ -629,6 +629,55 @@ fn main()
     print(pick([4, 5, 6], 0, false))
 ```
 
+**native.range.1** — An overflow, division or shift check may be omitted
+where intervals of its operands, computed over the whole function, rule the
+trap out. An interval comes from constants, `len()` (below 2^48), masks
+(`bit_and` with a value never negative), shifts, `%`, bytes, and the
+comparisons of the branches that lead to the operation; a loop's value joins
+what every path brings into the loop. A checked operation that can overflow
+keeps its check, and its result counts as within `int` after it. Where the
+intervals don't rule the trap out, the check stays and traps with the same
+message (native.build.1). *(ADR 1063)*
+
+```ail rules=native.range.1
+fn hash3(a int, b int, c int) int
+    x := a.bit_and(255)
+    y := b.bit_and(255)
+    z := c.bit_and(255)
+    (x * 65536 + y * 256 + z) * 2654435761
+
+fn main()
+    print(hash3(300, 255, 511))
+```
+
+**native.range.2** — A comparison of two `int`s whose intervals
+(native.range.1) give one answer may be replaced by that answer, and the
+branch it decides by a jump. *(ADR 1063)*
+
+```ail rules=native.range.2
+fn low(n int) int
+    m := n.bit_and(15)
+    if m < 16
+        return m
+    -1
+
+fn main()
+    print(low(47))
+```
+
+**native.range.3** — `x / 2^k` and `x % 2^k` (k >= 1) of an `x` whose
+interval (native.range.1) has no negative value may compile as a shift and a
+mask, as for a loop counter. *(ADR 1063)*
+
+```ail rules=native.range.3
+fn split(n int) int
+    m := n.bit_and(1023)
+    m / 4 + m % 8
+
+fn main()
+    print(split(1037))
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
