@@ -45,9 +45,9 @@ fn Lower.lower_gen_fn(mut self, f ast.FnDecl, name str, key str, owner str) bool
     params := begin_fn(resume, Ty.Unit, sig.params)
     fails = false
     gen_params(f, sig, params, owner)
-    gens.elem = elem
+    gen_lower.elem = elem
     lower_block(body, false)
-    gens.elem = none
+    gen_lower.elem = none
     if not done()
         finish(return_of(-1))
     end_fn(resume, f.pos)
@@ -77,8 +77,8 @@ fn Lower.lower_gen_fn(mut self, f ast.FnDecl, name str, key str, owner str) bool
     store(frame, 0, code)
     store(frame, 1, konst(0, Ty.Int))
     for j in 0..ps.len()
-        moved := gen_param_moved(f, j)
-        store(frame, GEN_SLOT0 + j, gen_own(Val(id: ps[j], ty: sig.params[j]), moved))
+        taken := gen_param_moved(f, j)
+        store(frame, GEN_SLOT0 + j, gen_own(Val(id: ps[j], ty: sig.params[j]), taken))
     seq := call("rt.obj_new", [konst(8, Ty.Int), konst(OBJ_STRUCT, Ty.Int)], sig.ret)
     store(seq, 0, frame)
     finish(return_of(seq))
@@ -114,8 +114,8 @@ fn gen_param_moved(f ast.FnDecl, j int) bool
 
 ## The generator's own copy of an argument, which the caller may change
 ## later (own.val.1, expr.yield.4); a moved or unique value is taken over.
-fn Lower.gen_own(mut self, v Val, moved bool) int
-    if moved or is_uniq(v.ty)
+fn Lower.gen_own(mut self, v Val, taken bool) int
+    if taken or is_uniq(v.ty)
         return v.id
     if v.ty.is_coll()
         return copy_coll(v)
@@ -141,7 +141,7 @@ fn step_elem(step Ty) Ty?
 ## `yield e` (expr.yield.2): the element, as a copy that the generator can't
 ## change any more, wrapped in its optional.
 fn Lower.lower_yield(mut self, args List[ast.Arg], pos ast.Pos) Val?
-    elem := gens.elem else return unsupported(pos, "`yield` outside a generator")
+    elem := gen_lower.elem else return unsupported(pos, "`yield` outside a generator")
     if args.len() != 1
         return unsupported(pos, "this `yield`")
     e := args[0].value

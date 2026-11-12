@@ -181,7 +181,7 @@ struct Lower
     ## Instrumentation sites, when asked for (lower_instr.ail).
     instr Instr
     ## The generator being lowered (lower_gen.ail, ADR 1073, expr.yield.1).
-    gens GenLower
+    gen_lower GenLower
     ## Function literals (type.fn.4, lower_fnlit.ail).
     fl FnLitState
 
@@ -341,7 +341,7 @@ pub fn lower_package_par(
         ffi_k: 0,
         else_targets: [],
         instr: new_instr(),
-        gens: new_gen_lower(),
+        gen_lower: new_gen_lower(),
         fl: new_fn_lit_state(),
     )
     l.note_lazy_names(srcs)
