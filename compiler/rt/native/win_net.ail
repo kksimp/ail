@@ -217,7 +217,21 @@ fn wnet_connect_wait(s int, ms int) int
         for k in 0..4
             store8(tv + k, sec.shr(8 * k).bit_and(255))
             store8(tv + 4 + k, usec.shr(8 * k).bit_and(255))
+    # Asleep in `select` the thread is parked for the collector, and a pool
+    # worker stops counting as running (native.task.2), as `net_poll_blocked`
+    # does for the other waits. The sets were allocated above, before parking.
+    multi := load64(global(MULTI)) != 0
+    k := worker_index()
+    mut parked := 0
+    if multi
+        if k >= 0
+            wait_enter()
+        parked = blocked_enter()
     r := wnet_i32(import_call("select", 0, 0, wset, eset, tv))
+    if multi
+        blocked_leave(parked)
+        if k >= 0
+            wait_leave()
     if r < 0
         return wnet_err()
     if r == 0

@@ -587,6 +587,18 @@ fn Run.threads_one(mut self, runner str)
     if got.status != 0 or got.out != slurp("tests/native/threads1/server_wait.out")
         red("AIL_THREADS=1 server task", "exit {got.status}, output differs or hung")
 
+## native.task.2: a thread asleep in `time.sleep_ms` is parked, so a collection another task asks for does not wait for it.
+fn Run.sleep_gc(mut self, runner str)
+    checks += 1
+    exe := "{tmp}/sleep_gc"
+    b := ail("", "build tests/native/threads1/sleep_gc.ail -o {exe}")
+    if b.status != 0
+        red("tests/native/threads1/sleep_gc.ail", "`ail build` failed:\n{b.err}")
+        return
+    got := sh("perl -e 'alarm 30; exec @ARGV' {runner} {exe}")
+    if got.status != 0 or got.out != slurp("tests/native/threads1/sleep_gc.out")
+        red("collection during a sleep", "exit {got.status}, output differs or hung:\n{got.out}")
+
 fn Run.sources(mut self)
     # Every runtime source parses as AIL: `ail fmt --check FILE` reports syntax errors (fmt.safe).
     for f in list_ext("compiler/rt/native", ".ail")
@@ -732,6 +744,7 @@ fn main() !
                 if native
                     r.limits("", "")
                     r.threads_one("")
+                    r.sleep_gc("")
                 if q != "" and sh("uname -sm").out.trim() == "Linux x86_64"
                     r.limits("aarch64-linux", q)
             "sources" => r.sources()
