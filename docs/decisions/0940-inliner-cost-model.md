@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-04
-- **Decided by:** AI (delegated, ADR 0076)
+- **Decided by:** AI (delegated, ADR 0076); 2026-11-12 round by the designer ("ship F7, the compiler gaining size or building a little bit slower isnt an issue to me")
 - **Topic:** 23 — Compiler architecture
 - **Spec rules:** [native.inline.1](../spec/23-native.md), [trace.frame.2](../spec/21-trace.md)
 - **Builds on:** [ADR 0391](0391-native-backend-optimisations.md) (leaf inlining), [ADR 0890](0890-optimizer-roadmap-to-match-c.md) (optimizer roadmap), [ADR 0923](0923-struct-scalar-replacement.md) (late inlining)
@@ -24,9 +24,9 @@ never reach the callee's bounds checks.
    place (and whose address is not taken) qualifies up to `SINGLE_LIMIT` 200
    instructions; any other up to `WIDE_LIMIT` 12.
 2. **Budget.** Copies of non-single candidates may grow one caller by at
-   most `CALLER_GROWTH` 200 instructions, at any call. The single call of a
-   single-call function goes inline wherever it is written (the function is
-   then dropped, so it costs no size); a copy of that call brought in by
+   most `CALLER_GROWTH` 200 instructions. Only a call inside a loop of the
+   caller is copied (fifth round). The single call of a single-call function
+   goes inline there (the function is then dropped, so it costs no size); a copy of that call brought in by
    another copy counts as any other call. Leaves are not counted. There is no
    program-wide cap: by the designer's rule (2026-11-05), size is not traded
    for speed, and every tighter budget measured lost the gain (below).
@@ -93,6 +93,31 @@ hot-only single-call copies (p8d) did not remove it, so it comes from small
 copies at cold calls. It is reported for review and left to the next
 inliner change to chase.
 
+Fifth round (2026-11-12; F7 of `lanes/slow-spots-2026-11-10.md`, rebuilt on
+main 3896938b; ail-linux, interleaved, best of 11). Variants: **p8e** (a wide
+copy at every call; in `main` only inside its loops), **p8l** (a wide copy only
+at a call inside a loop of its caller), **p8s** (single-call copies as p8e,
+small copies as p8l), **p8t** (p8e with `WIDE_LIMIT` 8, `CALLER_GROWTH` 60).
+
+| ail-linux (x86-64) | main | p8e | p8l | p8s | p8t |
+|---|---|---|---|---|---|
+| stage-3 compiler | 9.80 MB | +30% | +10% | +10% | +8% |
+| self-build | 31.8 s | 41.2 s | 35.8 s | 37.3 s | 37.6 s |
+| lzr | 3804 ms | 3715 | 3713 | 3716 | 3810 |
+
+vm, regex_scan, wordfreq (at 10 M), nbody, fannkuch, binarytrees, sieve and
+collatz are flat in every variant. The full table is in PR #1210.
+
+**Decision of this round (decided by: designer, 2026-11-12):** wide inlining
+ships in 0.1.0 as **p8l**. The designer ruled that the compiler growing or
+building somewhat slower is not a concern, so the size cost no longer weighs
+against the pass. p8l is chosen over p8e on the measurements alone: it has
+all of p8e's lzr gain at a third of the size and build-time cost. This
+replaces the fourth round's "full is kept"; with the earlier wordfreq gain no
+longer measurable at a 10 M size, copies at calls outside loops buy nothing.
+The fourth round's rejection of "hot sites only" is withdrawn for that reason.
+`AIL_OPT_OFF=wide` still turns the pass off.
+
 ## Deferred
 
 Cloning a function for a constant argument (`tree(base, 6, v)`) is left for a
@@ -106,8 +131,13 @@ cap that this change does not.
 - **Inlining everything below a size, recursion included**: unbounded copies
   of a cycle, and the stage-2 compile-time cost that killed ADR 0890 pass 1a.
 - **Callees with loops** (the first run): slower where measured, see above.
-- **Hot sites only, or a program-wide cap** (p8c, the 9.8 MB target of
-  review): lost the lzr and wordfreq gains, see the fourth round.
+- **A program-wide cap** (p8c, the 9.8 MB target of review): lost the lzr
+  and wordfreq gains, see the fourth round. (Copying only at calls inside
+  loops, rejected with it then, was taken in the fifth round.)
+- **A wide copy at every call** (p8e, the fourth round's choice): the same
+  lzr time as p8l at three times the size and build-time cost (fifth round).
+- **Smaller limits** (p8t, `WIDE_LIMIT` 8, `CALLER_GROWTH` 60): lost the lzr
+  gain (fifth round).
 - **Single-call functions only at hot sites** (p8d): no gain over full, and
   wordfreq 23 against 20 ms.
 - **Dropping the inlined call's frames**: a trap would name the wrong
