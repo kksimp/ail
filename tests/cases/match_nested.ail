@@ -13,6 +13,17 @@ enum Token
     Word(text str, at (int, int))
     Mark(c char)
 
+enum Cell
+    Op(c char)
+    Flag(on bool)
+
+fn cell(c Cell) str
+    match c
+        Op('-') => "minus"
+        Op(_) => "op"
+        Flag(true) => "on"
+        Flag(false) => "off"
+
 fn show(e Expr) str
     match e
         Num(n) => "{n}"
@@ -86,3 +97,7 @@ fn main()
     print(pair((Expr.Neg(e: Expr.Num(n: 1)), 3)))
     print(pair((Expr.Neg(e: Expr.Nil), 3)))
     print(pair((Expr.Num(n: 7), 1)))
+    print(cell(Cell.Op(c: '-')))
+    print(cell(Cell.Op(c: '+')))
+    print(cell(Cell.Flag(on: true)))
+    print(cell(Cell.Flag(on: false)))
