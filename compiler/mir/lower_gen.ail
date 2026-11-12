@@ -46,7 +46,12 @@ fn Lower.lower_gen_fn(mut self, f ast.FnDecl, name str, key str, owner str) bool
     fails = false
     gen_params(f, sig, params, owner)
     gen_lower.elem = elem
+    # Nothing in a generator goes to the pool: each `next()` runs one step
+    # on the caller's thread (expr.yield.4).
+    pooled := auto_par
+    auto_par = Set[str]()
     lower_block(body, false)
+    auto_par = pooled
     gen_lower.elem = none
     if not done()
         finish(return_of(-1))
