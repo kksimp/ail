@@ -17,12 +17,12 @@ fn group_off(g Func, consts List[bool], i Inst) int
         return -1
     if consts[i.arg(1)]
         return -1
-    mut float := false
+    mut isf := false
     if i.op == "ldx"
-        float = g.vals[i.dst].is_float()
+        isf = g.vals[i.dst].is_float()
     else
-        float = g.vals[i.arg(2)].is_float()
-    if not float and i.imm != 8
+        isf = g.vals[i.arg(2)].is_float()
+    if not isf and i.imm != 8
         return -1
     k := i.elem_off()
     if k < 0 or k > 4095
@@ -50,11 +50,11 @@ pub fn group_addresses(f Func) Func
                     count[key] += 1
                 else
                     count[key] = 1
-        mut any := false
+        mut pays := false
         for key in count.keys()
             if count[key] >= MIN_OFFSET
-                any = true
-        if not any
+                pays = true
+        if not pays
             continue
         mut out := List[Inst]()
         mut made := Map[str, int]()
