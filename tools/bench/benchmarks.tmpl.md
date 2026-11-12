@@ -14,7 +14,7 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   have no Python twin). A column whose output differs from the reference is reported as `DIFF` and left out.
 - AIL is `ail build FILE -o EXE` (native code, run directly). C is `gcc -O2` and `clang -O2`
   with `-ffp-contract=off`, so floats match. Python is CPython 3 (`python3 -I`), no numpy.
-- Wall time of the whole process, best of the runs shown, on a machine with nothing else running.
+- Wall time of the whole process, best of the runs shown, on a machine with nothing else running (one host: the one in the environment block).
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
   fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
@@ -41,6 +41,20 @@ source file in each language.
 
 {{TOKENS}}
 
+## Edit loop: the wait on each agent round
+
+Wall milliseconds, best of the runs shown, from the repository root of the release commit
+(`tools/bench/latency.py`, `tools/bench/publish.sh`). `ail check`, `ail context FILE main` and `ail test` are
+cold processes each time. `ail build --cold` starts with an empty build cache (`AIL_CACHE_DIR` set to a new directory); `ail build` and
+`ail run` (cached) are repeats after the build cache holds the program. The `ail mcp` rows are `ail_check`
+calls in one running server: the first call, then the best of the repeats of the same call (mcp.warm.1-4).
+`-` means the command did not exit 0 on that host. The programs are `examples/hello.ail`,
+`examples/json.ail` and `tools/ailtest/ailtest.ail`; the line count is in brackets.
+
+{{LATENCY}}
+
 ## What the numbers say
 
-(Filled in from the first published run.)
+Generated from the tables above; nothing on this page is written by hand after the run.
+
+{{SUMMARY}}
