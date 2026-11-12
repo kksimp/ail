@@ -1405,7 +1405,7 @@ With `--json` it is one array of objects with `name`, `status`, `detail`, `fix` 
 *(ADR 1058)*
 
 **tool.doctor.2** — `ail doctor --path` prints one line to add to the shell profile that puts the
-toolchain's directory on PATH (`export PATH="DIR:$PATH"`, or `$env:Path = "DIR;" + $env:Path` on
+toolchain's directory on PATH (`export PATH="DIR:$PATH"`, or `$env:PATH = "DIR;" + $env:PATH` on
 Windows) and changes nothing. `ail new` prints a hint on standard error when `ail` is not on PATH.
 *(ADR 1058)*
 
