@@ -3,6 +3,8 @@
 ## lane 0 in the low half, or in the two stack slots the allocator gave it. Slots count
 ## downwards from `rbp`, so the 16 bytes start at the second slot: its lane 0 is the
 ## lower word. Only this file reads or writes those slots. xmm14 and xmm15 are scratch.
+use mir
+use codegen
 
 ## `v` in an xmm register: its own, or `scratch` loaded from its slots.
 fn Gen.vreg(mut self, v int, scratch int) int
