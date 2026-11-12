@@ -12,13 +12,19 @@ pub fn yield_stmt(value Expr, pos Pos) Stmt
     Stmt.Eval(value: Expr.Call(callee: Expr.Name(name: YIELD, pos: pos), args: [arg], pos: pos))
 
 ## Whether `callee` is the reserved name of a `yield`.
-@allow("expr.match.3") pub fn is_yield_callee(callee Expr) bool
+pub fn is_yield_callee(callee Expr) bool
+    names_yield(callee)
+
+@allow("expr.match.3") fn names_yield(callee Expr) bool
     match callee
         Name(n, _) => n == YIELD
         _ => false
 
 ## The operand of `s` when it is `yield e`.
-@allow("expr.match.3") pub fn yield_value(s Stmt) Expr?
+pub fn yield_value(s Stmt) Expr?
+    stmt_yield(s)
+
+@allow("expr.match.3") fn stmt_yield(s Stmt) Expr?
     match s
         Eval(e) => yield_operand(e)
         _ => none

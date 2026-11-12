@@ -154,7 +154,14 @@ fn Lower.lower_yield(mut self, args List[ast.Arg], pos ast.Pos) Val?
 ## `for x in e` where `e`'s type has `next(mut self) T?` (expr.iter.1-2):
 ## false for any other `e`. The loop's own copy of `e` (or `e` itself, when
 ## it is unique) is a hidden variable.
-fn Lower.lower_iter_for(mut self, var str, iter ast.Expr, l Val, body List[ast.Stmt], pos ast.Pos) bool
+fn Lower.lower_iter_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    l Val,
+    body List[ast.Stmt],
+    pos ast.Pos,
+) bool
     n := match l.ty
         Struct(x) => x
         Enum(x) => x
