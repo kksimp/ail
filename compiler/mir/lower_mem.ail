@@ -43,6 +43,9 @@ fn ffi_known(f ast.FnDecl) bool
 
 ## The body of a known `extern c fn`: a call of its runtime function.
 fn Lower.lower_extern(mut self, f ast.FnDecl, name str, params List[int])
+    if is_cb_decl(f)
+        lower_cb_body(f, name, params)
+        return
     if f.ext == none
         return
     if ffi_known(f)
@@ -57,6 +60,10 @@ fn Lower.lower_mem_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Va
     u8 := Ty.Sized("u8")
     if name == "null" and args.len() == 0
         return Val(id: konst(0, Ty.Ptr(u8)), ty: Ty.Ptr(u8))
+    # ffi.cb.3: the C entry of a declared function, as a pointer.
+    if name == "c_fn" and args.len() == 1
+        a := cb_arg(args[0].value)?
+        return Val(id: op("copy", [a.id], Ty.Ptr(u8)), ty: Ty.Ptr(u8))
     if args.len() == 0
         return unsupported(npos, "`mem.{name}`")
     a := lower_value(args[0].value, if name == "alloc" then Ty.Int else none)?

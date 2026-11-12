@@ -1,0 +1,457 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## C calls that pass or return structs by value (ffi.struct.1-3, ADR 1074), and
+## the entry check of a C callback (ffi.cb.4). The compiler describes the call
+## in a descriptor string and hands over the arguments as 8-byte words (a
+## struct as its AIL object); `ffi_cs` lays each struct out as C does, places
+## every argument where the platform's convention says (System V x86-64,
+## AAPCS64 on Linux and Apple, Win64), and calls through the frame kernel
+## `ffi_ccall` (`ffi_ccall_win` on Windows), which the code generators
+## assemble (compiler/x64/kernels.ail, compiler/a64/kernels.ail).
+##
+## Descriptor: one code per scalar, `{...}` around a struct's fields, the
+## parameters, then `:` and the result (nothing for none). `q` int, `Q` u64,
+## `p` a pointer, `d` float, `f` f32, `i`/`I` i32/u32, `h`/`H` i16/u16,
+## `c`/`C` i8/u8, `b` bool.
+##
+## Frame (8-byte words): 0 the function, 1-8 the integer argument registers,
+## 9-16 the float argument registers (raw bits; a single in the low half),
+## 17 `x8` (AAPCS64 indirect result), 18 the stack words, 19-20 the integer
+## result registers, 21-24 the float result registers, 25 the float registers
+## used (System V `al`), 26 on the stack words.
+
+FW_INT := 1
+FW_FLT := 9
+FW_X8 := 17
+FW_NST := 18
+FW_RI := 19
+FW_RF := 21
+FW_AL := 25
+FW_STK := 26
+
+## Call state words: integer registers used, float registers used, stack
+## bytes used, Win64 argument position, the next by-reference copy.
+CS_NGR := 0
+CS_NFR := 8
+CS_SB := 16
+CS_POS := 24
+CS_REF := 32
+
+## Calls the C function in `frame[0]` with the registers and stack words of
+## the frame, and stores the result registers back (System V, AAPCS64). The
+## code generators replace this body with the kernel.
+fn ffi_ccall(frame int)
+    store64(frame + 8 * FW_RI, 0)
+
+## The same call with the Win64 convention.
+fn ffi_ccall_win(frame int)
+    store64(frame + 8 * FW_RI, 0)
+
+## The byte `i` of a descriptor at address `d`.
+fn ffi_cs_at(d int, i int) int
+    load8(d + i)
+
+## The size of the scalar code `c` in bytes, which is also its alignment.
+fn ffi_cs_leaf(c int) int
+    if c == 113 or c == 81 or c == 112 or c == 100
+        return 8
+    if c == 105 or c == 73 or c == 102
+        return 4
+    if c == 104 or c == 72
+        return 2
+    1
+
+fn ffi_cs_up(n int, a int) int
+    (n + a - 1) / a * a
+
+## The C size and alignment of the type at `i` into `st` (two words), and the
+## index after it.
+fn ffi_cs_measure(d int, i int, st int) int
+    c := ffi_cs_at(d, i)
+    if c != 123
+        n := ffi_cs_leaf(c)
+        store64(st, n)
+        store64(st + 8, n)
+        return i + 1
+    mut j := i + 1
+    mut off := 0
+    mut al := 1
+    while ffi_cs_at(d, j) != 125
+        j = ffi_cs_measure(d, j, st)
+        fa := load64(st + 8)
+        off = ffi_cs_up(off, fa) + load64(st)
+        if fa > al
+            al = fa
+    store64(st, ffi_cs_up(off, al))
+    store64(st + 8, al)
+    j + 1
+
+## The scalar leaves of the type at `i` placed at `base`: their offsets and
+## codes, in order. The index after the type.
+fn ffi_cs_leaves(d int, i int, base int, mut offs List[int], mut codes List[int], st int) int
+    c := ffi_cs_at(d, i)
+    if c != 123
+        offs.push(base)
+        codes.push(c)
+        return i + 1
+    mut j := i + 1
+    mut off := 0
+    while ffi_cs_at(d, j) != 125
+        ffi_cs_measure(d, j, st)
+        fs := load64(st)
+        off = ffi_cs_up(off, load64(st + 8))
+        j = ffi_cs_leaves(d, j, base + off, mut offs, mut codes, st)
+        off += fs
+    j + 1
+
+## Write the scalar `w` (an AIL value of code `c`) at `p` in C's layout.
+fn ffi_cs_put_leaf(c int, w int, p int)
+    if c == 102
+        storef32(p, bits_float(w))
+        return
+    n := ffi_cs_leaf(c)
+    for b in 0..n
+        store8(p + b, w.shr(8 * b).bit_and(255))
+
+## The scalar of code `c` at `p` as an AIL value.
+fn ffi_cs_get_leaf(c int, p int) int
+    if c == 102
+        return float_bits(loadf32(p))
+    n := ffi_cs_leaf(c)
+    mut w := 0
+    for b in 0..n
+        w = w.bit_or(load8(p + b).shl(8 * b))
+    if c == 98
+        return if w != 0 then 1 else 0
+    if n < 8 and (c == 105 or c == 104 or c == 99)
+        k := 64 - 8 * n
+        return w.shl(k).shr(k)
+    w
+
+## Write the value `w` of the type at `i` at `p` (a struct is its object, each
+## field one word); the index after the type.
+fn ffi_cs_put(d int, i int, w int, p int, st int) int
+    c := ffi_cs_at(d, i)
+    if c != 123
+        ffi_cs_put_leaf(c, w, p)
+        return i + 1
+    mut j := i + 1
+    mut off := 0
+    mut k := 0
+    while ffi_cs_at(d, j) != 125
+        ffi_cs_measure(d, j, st)
+        fs := load64(st)
+        off = ffi_cs_up(off, load64(st + 8))
+        j = ffi_cs_put(d, j, load64(w + 8 * k), p + off, st)
+        off += fs
+        k += 1
+    j + 1
+
+## The AIL value of the type at `load64(cur)` read from `p`; moves the cursor.
+fn ffi_cs_get(d int, cur int, p int, st int) int
+    i := load64(cur)
+    c := ffi_cs_at(d, i)
+    if c != 123
+        store64(cur, i + 1)
+        return ffi_cs_get_leaf(c, p)
+    store64(cur, i + 1)
+    mut ws := List[int]()
+    mut off := 0
+    while ffi_cs_at(d, load64(cur)) != 125
+        ffi_cs_measure(d, load64(cur), st)
+        fs := load64(st)
+        off = ffi_cs_up(off, load64(st + 8))
+        ws.push(ffi_cs_get(d, cur, p + off, st))
+        off += fs
+    store64(cur, load64(cur) + 1)
+    obj := obj_new(8 * ws.len(), 4)
+    for k in 0..ws.len()
+        store64(obj + 8 * k, ws[k])
+    obj
+
+fn ffi_cs_zero(p int, n int)
+    for k in 0..(n + 7) / 8
+        store64(p + 8 * k, 0)
+
+fn ffi_cs_copy(dst int, src int, n int)
+    for k in 0..(n + 7) / 8
+        store64(dst + 8 * k, load64(src + 8 * k))
+
+## `n` bytes at `src` onto the stack area, aligned to `al`.
+fn ffi_cs_stack(f int, cs int, src int, n int, al int)
+    sb := ffi_cs_up(load64(cs + CS_SB), al)
+    for b in 0..n
+        store8(f + 8 * FW_STK + sb + b, load8(src + b))
+    store64(cs + CS_SB, sb + n)
+
+## Whether the target passes small stack arguments packed (Apple arm64).
+fn ffi_cs_packed() bool
+    target() == 2
+
+## An integer-class word: the next integer register, else the stack (Win64:
+## the register of the argument's position).
+fn ffi_cs_int(f int, cs int, w int, tmp int, n int)
+    t := target()
+    if t == 3
+        pos := load64(cs + CS_POS)
+        store64(cs + CS_POS, pos + 1)
+        if pos < 4
+            store64(f + 8 * (FW_INT + pos), w)
+            return
+        store64(tmp, w)
+        ffi_cs_stack(f, cs, tmp, 8, 8)
+        return
+    g := load64(cs + CS_NGR)
+    if g < (if t == 0 then 6 else 8)
+        store64(f + 8 * (FW_INT + g), w)
+        store64(cs + CS_NGR, g + 1)
+        return
+    store64(tmp, w)
+    if ffi_cs_packed()
+        ffi_cs_stack(f, cs, tmp, n, n)
+    else
+        ffi_cs_stack(f, cs, tmp, 8, 8)
+
+## A float-class word (raw bits; a single in the low half).
+fn ffi_cs_flt(f int, cs int, w int, tmp int, n int)
+    t := target()
+    if t == 3
+        pos := load64(cs + CS_POS)
+        store64(cs + CS_POS, pos + 1)
+        if pos < 4
+            store64(f + 8 * (FW_FLT + pos), w)
+            return
+        store64(tmp, w)
+        ffi_cs_stack(f, cs, tmp, 8, 8)
+        return
+    r := load64(cs + CS_NFR)
+    if r < 8
+        store64(f + 8 * (FW_FLT + r), w)
+        store64(cs + CS_NFR, r + 1)
+        return
+    store64(tmp, w)
+    if ffi_cs_packed()
+        ffi_cs_stack(f, cs, tmp, n, n)
+    else
+        ffi_cs_stack(f, cs, tmp, 8, 8)
+
+## Whether every leaf is the same float code and there are one to four: an
+## AAPCS64 homogeneous floating-point aggregate.
+fn ffi_cs_hfa(codes List[int]) bool
+    if codes.len() == 0 or codes.len() > 4
+        return false
+    c := codes[0]
+    if c != 100 and c != 102
+        return false
+    for x in codes
+        if x != c
+            return false
+    true
+
+## Whether the eightbyte `e` of a System V aggregate is SSE: every leaf in it is a float.
+fn ffi_cs_sse(offs List[int], codes List[int], e int) bool
+    mut any := false
+    for k in 0..offs.len()
+        if offs[k] / 8 == e
+            any = true
+            if codes[k] != 100 and codes[k] != 102
+                return false
+    any
+
+## Whether a struct of `size` bytes comes back through a hidden pointer.
+fn ffi_cs_indirect(size int, codes List[int]) bool
+    t := target()
+    if t == 3
+        return not (size == 1 or size == 2 or size == 4 or size == 8)
+    if t == 0
+        return size > 16
+    size > 16 and not ffi_cs_hfa(codes)
+
+## Place the struct image at `img` (`size` bytes, zero after) as an argument.
+fn ffi_cs_struct_arg(f int, cs int, img int, size int, offs List[int], codes List[int], tmp int)
+    t := target()
+    up := ffi_cs_up(size, 8)
+    if t == 3
+        if size == 1 or size == 2 or size == 4 or size == 8
+            ffi_cs_int(f, cs, load64(img), tmp, 8)
+            return
+        r := load64(cs + CS_REF)
+        ffi_cs_copy(r, img, size)
+        store64(cs + CS_REF, r + up)
+        ffi_cs_int(f, cs, r, tmp, 8)
+        return
+    if t == 0
+        if size > 16
+            ffi_cs_stack(f, cs, img, up, 8)
+            return
+        nw := up / 8
+        mut ni := 0
+        mut nf := 0
+        for e in 0..nw
+            if ffi_cs_sse(offs, codes, e)
+                nf += 1
+            else
+                ni += 1
+        if load64(cs + CS_NGR) + ni > 6 or load64(cs + CS_NFR) + nf > 8
+            ffi_cs_stack(f, cs, img, up, 8)
+            return
+        for e in 0..nw
+            if ffi_cs_sse(offs, codes, e)
+                ffi_cs_flt(f, cs, load64(img + 8 * e), tmp, 8)
+            else
+                ffi_cs_int(f, cs, load64(img + 8 * e), tmp, 8)
+        return
+    # AAPCS64 (Linux and Apple).
+    if ffi_cs_hfa(codes)
+        if load64(cs + CS_NFR) + codes.len() > 8
+            store64(cs + CS_NFR, 8)
+            ffi_cs_stack(f, cs, img, up, 8)
+            return
+        for k in 0..codes.len()
+            mut w := load64(img + offs[k])
+            if codes[k] == 102
+                w = w.bit_and(4294967295)
+            ffi_cs_flt(f, cs, w, tmp, 8)
+        return
+    if size > 16
+        r := load64(cs + CS_REF)
+        ffi_cs_copy(r, img, size)
+        store64(cs + CS_REF, r + up)
+        ffi_cs_int(f, cs, r, tmp, 8)
+        return
+    nw := up / 8
+    if load64(cs + CS_NGR) + nw > 8
+        store64(cs + CS_NGR, 8)
+        ffi_cs_stack(f, cs, img, up, 8)
+        return
+    for e in 0..nw
+        ffi_cs_int(f, cs, load64(img + 8 * e), tmp, 8)
+
+## Call the C function at `addr` as the descriptor `desc` says, with the
+## argument words at `args`; the result as a word (a struct: a new object;
+## a float: its bits; an f32: the bits of the widened `float`).
+fn ffi_cs(addr int, desc str, args int) int
+    d := str_addr(desc) + 16
+    n := load64(str_addr(desc))
+    st := alloc(16, KIND_ATOMIC)
+    # The parameters' starts, the result's, and room for every copy.
+    mut starts := List[int]()
+    mut i := 0
+    mut room := 64
+    while i < n and ffi_cs_at(d, i) != 58
+        starts.push(i)
+        i = ffi_cs_measure(d, i, st)
+        room += 2 * ffi_cs_up(load64(st), 8) + 16
+    r0 := i + 1
+    has_res := r0 < n
+    mut rsize := 0
+    if has_res
+        ffi_cs_measure(d, r0, st)
+        rsize = load64(st)
+        room += ffi_cs_up(rsize, 8) + 16
+    f := alloc(8 * FW_STK + 2 * room, KIND_ATOMIC)
+    cs := alloc(48, KIND_ATOMIC)
+    tmp := alloc(16, KIND_ATOMIC)
+    store64(cs + CS_REF, f + 8 * FW_STK + room)
+    store64(f, addr)
+    t := target()
+    # A struct result that comes back in memory: the buffer's address goes
+    # first (System V `rdi`, Win64 `rcx`) or in `x8` (AAPCS64).
+    mut roffs := List[int]()
+    mut rcodes := List[int]()
+    res_struct := has_res and ffi_cs_at(d, r0) == 123
+    mut rbuf := 0
+    mut indirect := false
+    if res_struct
+        ffi_cs_leaves(d, r0, 0, mut roffs, mut rcodes, st)
+        rbuf = load64(cs + CS_REF)
+        store64(cs + CS_REF, rbuf + ffi_cs_up(rsize, 8) + 8)
+        ffi_cs_zero(rbuf, rsize + 8)
+        indirect = ffi_cs_indirect(rsize, rcodes)
+        if indirect
+            if t == 1 or t == 2
+                store64(f + 8 * FW_X8, rbuf)
+            else
+                ffi_cs_int(f, cs, rbuf, tmp, 8)
+    img := alloc(room, KIND_ATOMIC)
+    for k in 0..starts.len()
+        s := starts[k]
+        w := load64(args + 8 * k)
+        c := ffi_cs_at(d, s)
+        if c != 123
+            store64(tmp, 0)
+            ffi_cs_put_leaf(c, w, tmp)
+            size := ffi_cs_leaf(c)
+            if c == 100 or c == 102
+                ffi_cs_flt(f, cs, load64(tmp), tmp + 8, size)
+            else
+                # Narrow integers travel extended (ffi.map.1).
+                ffi_cs_int(f, cs, if size < 8 then w else load64(tmp), tmp + 8, size)
+            continue
+        ffi_cs_measure(d, s, st)
+        size := load64(st)
+        ffi_cs_zero(img, size + 8)
+        ffi_cs_put(d, s, w, img, st)
+        mut offs := List[int]()
+        mut codes := List[int]()
+        ffi_cs_leaves(d, s, 0, mut offs, mut codes, st)
+        ffi_cs_struct_arg(f, cs, img, size, offs, codes, tmp)
+    store64(f + 8 * FW_NST, (load64(cs + CS_SB) + 7) / 8)
+    store64(f + 8 * FW_AL, load64(cs + CS_NFR))
+    if t == 3
+        ffi_ccall_win(f)
+    else
+        ffi_ccall(f)
+    if not has_res
+        return 0
+    c := ffi_cs_at(d, r0)
+    if c == 100
+        return load64(f + 8 * FW_RF)
+    if c == 102
+        store64(tmp, load64(f + 8 * FW_RF))
+        return float_bits(loadf32(tmp))
+    if c != 123
+        return load64(f + 8 * FW_RI)
+    if not indirect
+        if t == 3
+            store64(rbuf, load64(f + 8 * FW_RI))
+        elif t == 0
+            mut ki := 0
+            mut kf := 0
+            for e in 0..ffi_cs_up(rsize, 8) / 8
+                if ffi_cs_sse(roffs, rcodes, e)
+                    store64(rbuf + 8 * e, load64(f + 8 * (FW_RF + kf)))
+                    kf += 1
+                else
+                    store64(rbuf + 8 * e, load64(f + 8 * (FW_RI + ki)))
+                    ki += 1
+        elif ffi_cs_hfa(rcodes)
+            for k in 0..rcodes.len()
+                w := load64(f + 8 * (FW_RF + k))
+                if rcodes[k] == 100
+                    store64(rbuf + roffs[k], w)
+                else
+                    store64(tmp, w)
+                    for b in 0..4
+                        store8(rbuf + roffs[k] + b, load8(tmp + b))
+        else
+            store64(rbuf, load64(f + 8 * FW_RI))
+            store64(rbuf + 8, load64(f + 8 * (FW_RI + 1)))
+    cur := alloc(8, KIND_ATOMIC)
+    store64(cur, r0)
+    ffi_cs_get(d, cur, rbuf, st)
+
+## Whether a C callback runs on a thread AIL started (ffi.cb.4): the main
+## thread, whose stack lies between the limit and the top, or a worker.
+fn ffi_cb_ok() bool
+    if worker_index() >= 0
+        return true
+    s := sp()
+    top := load64(global(STACK_TOP))
+    lim := load64(global(STACK_LIMIT))
+    s <= top and s >= lim - STACK_RESERVE
+
+## The message of ffi.cb.4.
+fn ffi_cb_msg() int
+    str_addr("a C callback was called on a thread AIL did not start, where the collector cannot find its values")
