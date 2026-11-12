@@ -2,7 +2,33 @@
 
 fn same(v0:a Bag, v1:b Bag) bool
   b0(v0:a Bag, v1:b Bag):
-    v3 bool = call eq.Bag(v0:a, v1:b)
+    v6 bool = eq v0:a, v1:b
+    branch v6, b1(), b3()
+  b1:
+    v15 bool = const 1
+    jump b8(v15)
+  b2:
+    v16 bool = const 0
+    jump b8(v16)
+  b3:
+    v7 int = load v0:a +0
+    v8 int = load v1:b +0
+    v9 bool = eq v7, v8
+    branch v9, b4(), b2()
+  b4:
+    v10 int = const 0
+    v11 bool = eq v7, v10
+    branch v11, b5(), b6()
+  b5:
+    v12 List[Pt] = load v0:a +8
+    v13 List[Pt] = load v1:b +8
+    v14 bool = call eq.List[Pt](v12, v13)
+    branch v14, b7(), b2()
+  b6:
+    jump b1()
+  b7:
+    jump b1()
+  b8(v3 bool):
     return v3
 
 fn main() unit
@@ -76,9 +102,16 @@ fn text.Bag(v0 Bag) str
   b5:
     v15 str = call rt.text_sep(v10)
     v16 Pt = get v8, v10
-    v17 str = call text.Pt(v16)
+    v29 str = str #6
+    v30 str = str #7
+    v31 str = call rt.str_cat(v29, v30)
+    v32 int = load v16 +0
+    v33 str = call rt.fmt_int(v32)
+    v34 str = call rt.str_cat(v31, v33)
+    v35 str = str #4
+    v36 str = call rt.str_cat(v34, v35)
     v18 str = call rt.str_cat(v11, v15)
-    v19 str = call rt.str_cat(v18, v17)
+    v19 str = call rt.str_cat(v18, v36)
     v20 int = const 1
     v21 int = add v10, v20
     jump b4(v21, v19)
@@ -89,67 +122,6 @@ fn text.Bag(v0 Bag) str
     v25 str = str #4
     v26 str = call rt.str_cat(v24, v25)
     jump b1(v26)
-
-fn text.Pt(v0 Pt) str
-  b0(v0 Pt):
-    v1 str = str #6
-    v2 str = str #7
-    v3 str = call rt.str_cat(v1, v2)
-    v4 int = load v0 +0
-    v5 str = call rt.fmt_int(v4)
-    v6 str = call rt.str_cat(v3, v5)
-    v7 str = str #4
-    v8 str = call rt.str_cat(v6, v7)
-    return v8
-
-fn eq.Bag(v0 Bag, v1 Bag) bool
-  b0(v0 Bag, v1 Bag):
-    v2 bool = eq v0, v1
-    branch v2, b1(), b3()
-  b1:
-    v11 bool = const 1
-    return v11
-  b2:
-    v12 bool = const 0
-    return v12
-  b3:
-    v3 int = load v0 +0
-    v4 int = load v1 +0
-    v5 bool = eq v3, v4
-    branch v5, b4(), b2()
-  b4:
-    v6 int = const 0
-    v7 bool = eq v3, v6
-    branch v7, b5(), b6()
-  b5:
-    v8 List[Pt] = load v0 +8
-    v9 List[Pt] = load v1 +8
-    v15 int = len v8
-    v17 int = len v9
-    v18 bool = eq v15, v17
-    branch v18, b9(v6), b8()
-  b6:
-    jump b1()
-  b7:
-    jump b1()
-  b8:
-    jump b2()
-  b9(v16 int):
-    v20 bool = lt v16, v15
-    branch v20, b10(), b7()
-  b10:
-    v21 Pt = get v8, v16
-    v22 Pt = get v9, v16
-    v30 int = load v21 +0
-    v31 int = load v22 +0
-    v32 bool = eq v30, v31
-    branch v32, b12(), b11()
-  b11:
-    jump b8()
-  b12:
-    v24 int = const 1
-    v25 int = add v16, v24
-    jump b9(v25)
 
 fn eq.List[Pt](v0 List[Pt], v1 List[Pt]) bool
   b0(v0 List[Pt], v1 List[Pt]):
@@ -193,15 +165,3 @@ fn eq.Pt(v0 Pt, v1 Pt) bool
   b2:
     v5 bool = const 1
     return v5
-
-fn init.enums() unit
-  b0:
-    v0 int = const 8
-    v1 int = const 5
-    v2 Bag = call rt.obj_new(v0, v1)
-    v3 int = const 1
-    store v2, v3 +0
-    v4 int = const 72
-    v5 int = prim global(v4)
-    store v5, v2 +0
-    return

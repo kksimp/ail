@@ -1,44 +1,33 @@
 # MIR (unstable) of tests/native/opt_unsupported.ail
 
-fn first(v0:xs List[int]) int
-  b0(v0:xs List[int]):
-    v1 int = len v0:xs
-    v2 int = const 0
-    v3 bool = eq v1, v2
-    branch v3, b1(), b2()
-  b1:
-    v5 int = const 4
-    v6 Empty = call rt.obj_new(v2, v5)
-    v13 str = str #4
-    v8 str = str #0
-    call rt.err_set(v13, v8)
-    call rt.err_value(v6)
-    return v2
-  b2:
-    v11 int = get v0:xs, v2 !s0
-    return v11
-
 fn labelled(v0:xs List[int]) int
   b0(v0:xs List[int]):
-    v1 int = call first(v0:xs)
-    v2 bool = call rt.failed()
-    branch v2, b1(), b2()
+    v7 int = len v0:xs
+    v8 int = const 0
+    v9 bool = eq v7, v8
+    branch v9, b3(), b4()
   b1:
     v3 str = str #1
     call rt.err_context(v3)
     v4 str = str #2
     call rt.err_trace(v4)
-    v5 int = const 0
-    return v5
+    return v8
   b2:
     return v1
-
-fn nested(v0:n int) Map[List[int], int]
-  b0(v0:n int):
-    v1 str = str #3
-    v2 int = const 0
-    v4 Map[List[int], int] = call rt.map_new(v1, v2, v2)
-    return v4
+  b3:
+    v11 int = const 4
+    v12 Empty = call rt.obj_new(v8, v11)
+    v19 str = str #4
+    v14 str = str #0
+    call rt.err_set(v19, v14)
+    call rt.err_value(v12)
+    jump b5(v8)
+  b4:
+    v17 int = get v0:xs, v8 !s4
+    jump b5(v17)
+  b5(v1 int):
+    v2 bool = call rt.failed()
+    branch v2, b1(), b2()
 
 fn main() unit
   b0:
@@ -63,10 +52,3 @@ fn Empty.to_str(v0:self Empty) str
   b0(v0:self Empty):
     v1 str = str #4
     return v1
-
-fn Missing.to_str(v0:self Missing) str
-  b0(v0:self Missing):
-    v1 str = str #5
-    v2 str = load v0:self +0
-    v3 str = call rt.str_cat(v1, v2)
-    return v3
