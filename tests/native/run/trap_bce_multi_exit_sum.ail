@@ -1,0 +1,19 @@
+# `a + l` overflows on the second pass, before any index is out of range: the
+# guard fails and the loop traps at the sum (expr.arith.1), as it would with
+# no guard (native.bce.16).
+fn tail_sum(xs List[int], a int) int
+    mut total := 0
+    mut l := 0
+    while l < 6
+        if l >= 1
+            if xs[a + l] < 0
+                break
+            total += xs[a + l]
+        print(l)
+        l += 1
+    total
+
+fn main()
+    xs := [1, 2, 3, 4, 5, 6, 7, 8]
+    print(tail_sum(xs, 1))
+    print(tail_sum(xs, 9223372036854775807))

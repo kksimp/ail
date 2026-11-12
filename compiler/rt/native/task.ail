@@ -74,7 +74,11 @@ T_KIDS := 216
 T_SIB := 224
 # The race detector's id for the task (race.ail); 0 when it is off.
 T_RACE := 232
-T_SIZE := 240
+# While the task sleeps in `prog_wait`: the word it sleeps on (0 when it
+# isn't) and the value it sleeps while the word holds (conc.task.7).
+T_WADDR := 240
+T_WVAL := 248
+T_SIZE := 256
 
 ## The cores this process may run on, 1 to `MAXW` (`sched_getaffinity`).
 fn cores() int
@@ -170,9 +174,16 @@ fn task_new(id int) int
     if parent != 0
         store64(rec + T_PAR, parent)
         store64(rec + T_SIB, load64(parent + T_KIDS))
-        store64(parent + T_KIDS, rec)
-        # A task started by a cancelled task starts cancelled.
-        store64(rec + T_CANC, atomic_load(parent + T_CANC))
+        # Publish the child, then look at the parent's cancel; `task_cancel`
+        # sets the cancel, then walks the children. Both sides are
+        # sequentially consistent, so either the walk finds the child or the
+        # child sees the cancel (conc.cancel.1, conc.cancel.3). A plain store
+        # here could pass the load (x86-64 store buffer, ARM64 `str`/`ldar`).
+        atomic_store(parent + T_KIDS, rec)
+        # A task started by a cancelled task starts cancelled. Only ever set:
+        # a walk that already found the child may have cancelled it.
+        if atomic_load(parent + T_CANC) != 0
+            atomic_store(rec + T_CANC, 1)
     rec
 
 ## Queue the task and make sure a worker will take it: wake an idle one, or
@@ -1147,10 +1158,37 @@ fn task_cancel(rec int)
     b := atomic_load(rec + T_BLK)
     if b != 0
         chan_wake(b)
-    mut kid := load64(rec + T_KIDS)
+    mut kid := atomic_load(rec + T_KIDS)
     while kid != 0
         task_cancel(kid)
         kid = load64(kid + T_SIB)
+
+## The running task is about to sleep in `prog_wait` while the word at `a`
+## holds `v` (`a` 0: it has woken), so the deadlock check can tell a task the
+## wake already reached from one still blocked.
+fn task_wait_mark(a int, v int)
+    rec := cur_task()
+    if rec != 0
+        atomic_store(rec + T_WVAL, v)
+        atomic_store(rec + T_WADDR, a)
+
+## Whether some task counted as blocked was already woken: the word it sleeps
+## on changed, but its thread hasn't run since (a busy machine can hold it
+## off the CPU for longer than the deadlock check waits). Such a task isn't
+## blocked (conc.task.7). Called by the main task, which isn't parked, so no
+## collection runs while it reads the records.
+fn woken_waiters() bool
+    p := load64(global(TASKS))
+    if p == 0
+        return false
+    n := atomic_load(p + P_LIVE)
+    for k in 0..n
+        rec := atomic_load(p + P_CUR + 8 * k)
+        if rec != 0
+            a := atomic_load(rec + T_WADDR)
+            if a != 0 and atomic_load(a).bit_and(4294967295) != atomic_load(rec + T_WVAL)
+                return true
+    false
 
 ## `g.cancel()`: every task of the group, and those added later.
 fn group_cancel(g int)

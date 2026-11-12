@@ -1,0 +1,16 @@
+# The start is past the end: the guard fails and the loop with its checks
+# traps at `xs[k + l]` (type.coll.4) on its first pass (native.bce.16).
+fn sum_from(xs List[int], k int, stop int) int
+    mut total := 0
+    mut l := 0
+    while l < 6
+        if xs[k + l] == stop
+            break
+        total += xs[k + l]
+        l += 1
+    total
+
+fn main()
+    xs := [1, 2, 3, 4, 5, 6, 7, 8]
+    print(sum_from(xs, 2, 9))
+    print(sum_from(xs, 8, 9))

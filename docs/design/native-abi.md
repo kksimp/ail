@@ -30,9 +30,9 @@ the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
 an `extern` call treats them as clobbered). No variadics. Structs are passed
 by pointer.
 
-On x86-64 the code generator keeps rax, rdx, r10, r11, xmm14 and xmm15 as
-scratch; the allocator (ADR 0386) uses rsi, rdi, r8, r9, rcx, rbx, r12–r15,
-xmm0–xmm13. On ARM64 (ADR 0388) the scratch registers are x16, x17, x8, d30
+On x86-64 the code generator keeps rax, r10, xmm14 and xmm15 as scratch; the
+allocator (ADR 0386) uses rsi, rdi, r8, r9, rcx, rdx, r11, rbx, r12–r15 and
+xmm0–xmm13, and keeps values live across a division out of rdx (ADR 1049). On ARM64 (ADR 0388) the scratch registers are x16, x17, x8, d30
 and d31 (x0 between calls); x18 is never used; the allocator uses x1–x7,
 x9–x15, x19–x28 and d0–d29. Mach-O executables are loaded by dyld, name
 libSystem but import nothing, and are signed ad hoc by the backend

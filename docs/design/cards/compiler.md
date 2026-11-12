@@ -1,8 +1,8 @@
 # compiler
 entry: main in main.ail
-tests: 10 (`ail test` lists them)
+tests: 12 (`ail test` lists them)
 
-## (root) (62 items)
+## (root) (67 items)
 
 ## a64 (81 items)
 
@@ -18,7 +18,7 @@ tests: 10 (`ail test` lists them)
 
 ## check (442 items)
 
-## codegen (55 items)
+## codegen (56 items)
 
 ## derive (43 items)
 
@@ -40,7 +40,7 @@ tests: 10 (`ail test` lists them)
 
 ## load (117 items)
 
-## mir (619 items)
+## mir (654 items)
 
 ## obj (66 items)
 

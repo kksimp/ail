@@ -2436,8 +2436,14 @@ fn Gate.native_misc(mut self)
 ## (file, function, why no case calls it); an entry that is now called fails
 ## too, so the list only shrinks.
 STD_UNTESTABLE := [
+    ["term/term.ail", "poll", "it waits on a terminal's keyboard; the gate has no terminal"],
     ["time/date.ail", "now_local", "its value is the clock in the machine's zone"],
     ["attach/serve.ail", "run", "it serves until its window closes; attach_watched covers the wire"],
+    [
+        "attach/serve.ail",
+        "run_with",
+        "only the `ail run` shim calls it by name (attach.run.1); attach_run_with runs it through the shim",
+    ],
     [
         "gfx/watch.ail",
         "run",

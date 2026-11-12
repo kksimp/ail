@@ -31,6 +31,9 @@ pub struct Target
     ## The registers the first integer and float arguments arrive in.
     pub int_args List[int]
     pub float_args List[int]
+    ## The registers a `div` or `rem` overwrites (x86-64 `idiv` and `mul`
+    ## write rdx): no value lives in one across a division (ADR 1049).
+    pub div_regs List[int]
 
 pub struct Alloc
     ## The location of each value.
@@ -145,6 +148,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
     # value may use its register.
     mut ranges := [List[int]() for _ in 0..n]
     mut calls := List[int]()
+    mut divs := List[int]()
     mut first := [-1 for _ in 0..n]
     mut last := [-1 for _ in 0..n]
     for b in order
@@ -169,6 +173,8 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
                 touched.push(i.dst)
             if is_call(i)
                 calls.push(k)
+            if i.op == "div" or i.op == "rem"
+                divs.push(k)
             k += 2
         for a in blk.term.uses()
             last[a] = bend[b]
@@ -269,6 +275,8 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
         end: end,
         ranges: ranges,
         calls: calls,
+        divs: divs,
+        div_regs: t.div_regs,
         hints: hints,
         apart: apart,
         arrive: arrive,
@@ -595,6 +603,9 @@ struct Scan
     end List[int]
     ranges List[List[int]]
     calls List[int]
+    ## The positions of the divisions, and the registers they overwrite.
+    divs List[int]
+    div_regs List[int]
     hints List[List[int]]
     ## The operands of the checked `mul` that defines a value. Its overflow
     ## stub reports both, so the product wants a register of its own.
@@ -611,14 +622,23 @@ struct Scan
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
 fn Scan.crosses(self, v int) bool
-    r := ranges[v]
-    for c in calls
+    live_across(ranges[v], calls)
+
+## Whether ranges `r` are live across any of the positions `at`: defined
+## before one and used after it.
+fn live_across(r List[int], at List[int]) bool
+    for c in at
         mut k := 0
         while k < r.len()
             if r[k] < c and r[k + 1] > c
                 return true
             k += 2
     false
+
+## Whether `v` may hold register `r` at all: not one a division it lives
+## across overwrites. A division's operands and result may (ADR 1049).
+fn Scan.allowed(self, r int, v int) bool
+    not div_regs.contains(r) or not live_across(ranges[v], divs)
 
 ## Whether a hinted value that starts after `v` and is not placed yet lives
 ## across a call.
@@ -637,6 +657,8 @@ fn Scan.shares(self, r int, vs List[int]) bool
 
 ## Whether register `r` is free for all of `v`'s ranges.
 fn Scan.free(self, r int, v int) bool
+    if not allowed(r, v)
+        return false
     for a in active
         if loc[a] == r and overlaps(ranges[a], ranges[v])
             return false
@@ -691,6 +713,7 @@ fn Scan.assign(mut self, v int, float bool, t Target)
         mut victim := -1
         for a in active
             if pool.contains(loc[a])
+                and allowed(loc[a], v)
                 and overlaps(ranges[a], ranges[v])
                 and sole(a, v)
                 and (victim < 0 or weight[a] < weight[victim] or (weight[a] == weight[victim] and end[a] > end[victim]))

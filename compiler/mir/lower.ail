@@ -554,6 +554,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             and a.name != "test"
             and a.name != "export c"
             and a.name != "tool"
+            and a.name != "variadic c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
@@ -1877,6 +1878,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if name == "zip" and not sigs.contains(key)
                 return lower_zip(args, pos)
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
+            if variadic_decl(key)
+                return lower_variadic(key, sig, args, pos, npos)
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")
             mut vs := List[int]()

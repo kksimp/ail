@@ -232,7 +232,7 @@ $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--bud
 # tool.help.1-3, tool.doctor.1: `help`, `--help`, `-h`, no arguments, `CMD --help` and `doctor` are native, as in ./ail.
 $helpRoute = ($cmd -eq '') -or ($cmd -in 'help', '--help', '-h', 'doctor') -or ((-not "$cmd".StartsWith('-')) -and $args.Count -eq 2 -and ("$($args[1])" -in '--help', '-h'))
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'perf', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
 $route = (
     $helpRoute -or $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -310,6 +310,16 @@ if ($route) {
             & $native api @rest; exit $LASTEXITCODE
         }
         { $_ -in 'pkg', 'fmt', 'fix', 'effects', 'header', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'new', 'prove', 'context', 'review' } { & $native $cmd @rest; exit $LASTEXITCODE }
+        'perf' {
+            # `ail perf --explain FN FILE` (tool.perf.1): the launcher names FN for the compiler.
+            if ($rest.Count -ge 3 -and (Test-Path -LiteralPath $rest[2] -PathType Leaf)) {
+                & $native check-program $rest[2]
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+            if ($rest.Count -ge 2) { $env:AIL_PERF_EXPLAIN = $rest[1] }
+            & $native perf @rest
+            exit $LASTEXITCODE
+        }
         'check' {
             if ($checkErrors) { & $native check-errors @rest; exit $LASTEXITCODE }
             if ($checkBudget) {

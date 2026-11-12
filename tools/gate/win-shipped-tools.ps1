@@ -6,8 +6,12 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ail = Join-Path $root 'ail.ps1'
 $gitCmd = Get-Command git.exe -ErrorAction SilentlyContinue
 if (-not $gitCmd) { 'RED shipped tools: git.exe is not on PATH'; exit 1 }
+# Git for Windows' bin directory also holds sh.exe and bash.exe: take git.exe from its cmd directory when there is one.
+$gitDir = Split-Path $gitCmd.Source
+$gitCmdDir = Join-Path (Split-Path $gitDir) 'cmd'
+if (Test-Path (Join-Path $gitCmdDir 'git.exe')) { $gitDir = $gitCmdDir }
 $sys = Join-Path $env:SystemRoot 'System32'
-$onlyGit = "$(Split-Path $gitCmd.Source);$sys;$sys\WindowsPowerShell\v1.0"
+$onlyGit = "$gitDir;$sys;$sys\WindowsPowerShell\v1.0"
 $work = Join-Path $env:TEMP "ail-shipped-$PID"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $src = "fn pay(n int) int`n    n + 1`n@test fn pays()`n    for i in 1..30`n        assert_eq(pay(i), i + 1)`nfn main()`n    print(pay(1))`n"
@@ -20,7 +24,8 @@ try {
     & git add prog.ail ; & git commit -q -m base
     $env:PATH = $onlyGit
     foreach ($tool in 'sh', 'mktemp', 'rm', 'cp', 'env') {
-        if (Get-Command $tool -ErrorAction SilentlyContinue) { "RED shipped tools: $tool is on PATH, so this run proves nothing"; $fails++ }
+        # Programs only: PowerShell's own aliases `rm`, `cp` and friends are not on PATH.
+        if (Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue) { "RED shipped tools: $tool is on PATH, so this run proves nothing"; $fails++ }
     }
     $cases = @(
         @{ name = 'test'; args = @('test', 'prog.ail') },
