@@ -60,7 +60,9 @@ fn pc_facts_of(f Func) PcFacts
                 fa.reads = true
                 if i.site >= 0
                     fa.traps = true
-            elif i.op == "len" or i.op == "cap" or i.op == "data" or i.op == "load" or i.op == "vldx"
+            elif i.op == "len" or i.op == "cap" or i.op == "data" or i.op == "load"
+                fa.reads = true
+            elif i.op == "vldx"
                 fa.reads = true
             elif i.op == "prim"
                 if not pure_prim(i.name)
