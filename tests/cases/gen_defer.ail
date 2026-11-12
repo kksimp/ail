@@ -1,0 +1,8 @@
+# expr.yield.4: a `Seq` dropped before its end would never run a `defer`.
+fn f() Seq[int]
+    defer print("done")
+    yield 1
+
+fn main()
+    for x in f()
+        print(x)

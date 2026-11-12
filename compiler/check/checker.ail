@@ -175,6 +175,8 @@ pub struct Checker
     pub atomic_calls Set[int]
     pub std_any Set[int]
     pub float_literals Set[int]
+    ## The generator being checked and the loops over a `next` method (gen.ail).
+    pub gen GenCheck
 
 ## How a local was declared.
 pub enum LocalKind
@@ -281,6 +283,7 @@ pub fn new_checker(p ast.Program) Checker
         atomic_calls: Set[int](),
         std_any: Set[int](),
         float_literals: Set[int](),
+        gen: new_gen_check(),
     )
 
 fn Checker.err(mut self, rule str, at ast.Pos, text str)

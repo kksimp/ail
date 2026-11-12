@@ -1562,6 +1562,11 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             return ast.Stmt.Return(value: none, pos: pos)
         value := expression()?
         return ast.Stmt.Return(value: value, pos: pos)
+    if tag == "kw" and text == "yield"
+        # expr.yield.2: `yield e` gives a generator's next element.
+        bump()
+        value := expression()?
+        return ast.yield_stmt(value, pos)
     if tag == "kw" and (text == "elif" or text == "else")
         error_text(
             "expr.if.1",

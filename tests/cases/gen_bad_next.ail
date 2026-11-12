@@ -1,0 +1,10 @@
+# expr.iter.1: `for` calls `next(mut self) T?`; a `next` without `mut self` can't advance.
+struct S
+    n int
+
+fn S.next(self) int?
+    none
+
+fn main()
+    for x in S(n: 1)
+        print(x)

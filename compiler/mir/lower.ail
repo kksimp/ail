@@ -180,6 +180,8 @@ struct Lower
     else_targets List[int]
     ## Instrumentation sites, when asked for (lower_instr.ail).
     instr Instr
+    ## The generator being lowered (lower_gen.ail).
+    gens GenLower
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -337,6 +339,7 @@ pub fn lower_package_par(
         ffi_k: 0,
         else_targets: [],
         instr: new_instr(),
+        gens: new_gen_lower(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
@@ -915,6 +918,8 @@ fn Lower.fn_owner(self, f ast.FnDecl) str
 ## method has its own key and owner).
 fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     sig := sigs.get(key) else return
+    if lower_gen_fn(f, name, key, owner)
+        return
     params := begin_fn(name, sig.ret, sig.params)
     fails = sig.fails
     self_ty = ""
@@ -1436,6 +1441,8 @@ fn Lower.lower_for(
             if chan_elem(l0.ty) != none
                 lower_chan_for(var, l0, body, expr_pos(iter))
                 return
+            if lower_iter_for(var, iter, l0, body, fpos)
+                return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
                 for_pairs(var, iter, l0, body)
@@ -1835,6 +1842,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
+            if name == ast.YIELD and not is_rt
+                return lower_yield(args, pos)
             if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
                 return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt

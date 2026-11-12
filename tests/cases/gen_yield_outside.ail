@@ -1,0 +1,6 @@
+# expr.yield.1: `yield` belongs to a generator, a function whose result is `Seq[T]`.
+fn f()
+    yield 1
+
+fn main()
+    f()

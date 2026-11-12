@@ -1,0 +1,217 @@
+## The state machine of a generator (expr.yield.1, ADR 1073). The body is
+## lowered as an ordinary function whose `yield v` statements are `yield`
+## instructions; `gen_frame` turns it into the resume function
+## `gen.NAME(frame) T?`, which runs from where the last call stopped to the
+## next `yield` and returns its element, or `none` once the body has ended.
+##
+## The frame is the `Seq`'s closure object (kind 13): word 0 the resume
+## function, word 1 the state (0 not started, k after the k-th `yield`,
+## -1 ended), then one slot per value the code after a `yield` reads: the
+## generator's arguments first (the constructor stores them), then every value
+## whose definition no longer dominates a use once the resume points are
+## entered from the dispatch. Such a value is stored to its slot where it is
+## defined and loaded at the start of each block that uses it without that
+## domination; the domination of the body before the cut guarantees that the
+## slot holds the latest value on every path. There is no stack per
+## generator, no task and no channel (ADR 0095 is unchanged).
+
+## The first slot's word: word 0 is the resume function, word 1 the state.
+GEN_SLOT0 := 2
+GEN_STATE_OFF := 8
+GEN_ENDED := -1
+
+## The resume function and how many slots its frame needs.
+pub struct GenFrame
+    pub func Func
+    pub slots int
+
+## A `yield`: the block it ends, the element it returns, and the block that
+## resumes after it.
+struct GenYield
+    block int
+    value int
+    resume int
+
+struct GenSplit
+    blocks List[Block]
+    yields List[GenYield]
+
+## The values of the function being built.
+struct GenVals
+    vals List[Ty]
+    names List[str]
+
+fn GenVals.add(mut self, t Ty, name str) int
+    vals.push(t)
+    names.push(name)
+    vals.len() - 1
+
+## `body`'s blocks, each cut after its `yield`s: the block ends at the
+## `yield`, and what follows goes to a new block, the resume point.
+fn gen_split(body List[Block]) GenSplit
+    mut blocks := body
+    mut yields := List[GenYield]()
+    mut b := 0
+    while b < blocks.len()
+        blk := blocks[b]
+        mut k := -1
+        for j in 0..blk.insts.len()
+            if blk.insts[j].op == "yield"
+                k = j
+                break
+        if k >= 0
+            blocks.push(Block(params: [], insts: blk.insts[k + 1..], term: blk.term))
+            yields.push(GenYield(block: b, value: blk.insts[k].arg(0), resume: blocks.len() - 1))
+            blocks[b] = Block(params: blk.params, insts: blk.insts[..k], term: unreachable_term())
+        b += 1
+    GenSplit(blocks: blocks, yields: yields)
+
+fn gen_const(dst int, n int) Inst
+    mut i := inst(dst, "const", [])
+    i.imm = n
+    i
+
+fn gen_load(dst int, fp int, off int) Inst
+    mut i := inst(dst, "load", [fp])
+    i.imm = off
+    i
+
+fn gen_store(fp int, v int, off int) Inst
+    mut i := inst(-1, "store", [fp, v])
+    i.imm = off
+    i
+
+fn gen_slot_off(slot int) int
+    8 * (GEN_SLOT0 + slot)
+
+fn gen_shift(t Term, d int) Term
+    mut r := t
+    r.targets = [x + d for x in t.targets]
+    r
+
+fn gen_remap(i Inst, m Map[int, int]) Inst
+    i.with_args([m.get(a) else a for a in i.operands()])
+
+fn gen_remap_term(t Term, m Map[int, int]) Term
+    mut r := t
+    if t.cond >= 0
+        r.cond = m.get(t.cond) else t.cond
+    r.args = [[m.get(a) else a for a in xs] for xs in t.args]
+    if t.value >= 0
+        r.value = m.get(t.value) else t.value
+    r
+
+## The values a block reads, its terminator's included.
+fn gen_uses(b Block) List[int]
+    mut out := List[int]()
+    for i in b.insts
+        out.extend(i.operands())
+    out.extend(b.term.uses())
+    out
+
+## The resume function of the generator body `body` (a function returning
+## nothing, with `yield` instructions), returning `ret` (`T?`).
+pub fn gen_frame(body Func, ret Ty) GenFrame
+    sp := gen_split(body.blocks)
+    n0 := sp.blocks.len()
+    mut gv := GenVals(vals: body.vals, names: body.names)
+    fp := gv.add(Ty.Int, "frame")
+    # Block 0 is the dispatch, block 1 + b the body's block b, then the end.
+    ended := n0 + 1
+    mut blocks := [Block(params: [fp], insts: [], term: unreachable_term())]
+    for blk in sp.blocks
+        mut nb := blk
+        nb.term = gen_shift(blk.term, 1)
+        blocks.push(nb)
+    blocks.push(Block(params: [], insts: [], term: unreachable_term()))
+    # The body's parameters are the arguments the constructor stored.
+    params := blocks[1].params
+    blocks[1].params = []
+    # The body's end: the state becomes "ended" and the element `none`.
+    for b in 1..ended
+        t := blocks[b].term
+        if t.kind == "return"
+            s := gv.add(Ty.Int, "")
+            z := gv.add(ret, "")
+            blocks[b].insts.push(gen_const(s, GEN_ENDED))
+            blocks[b].insts.push(gen_store(fp, s, GEN_STATE_OFF))
+            blocks[b].insts.push(gen_const(z, 0))
+            blocks[b].term = return_of(z)
+    zend := gv.add(ret, "")
+    blocks[ended].insts.push(gen_const(zend, 0))
+    blocks[ended].term = return_of(zend)
+    # A `yield`: the state becomes its number, and it returns the element.
+    mut cases := [1]
+    for k in 0..sp.yields.len()
+        y := sp.yields[k]
+        b := 1 + y.block
+        s := gv.add(Ty.Int, "")
+        blocks[b].insts.push(gen_const(s, k + 1))
+        blocks[b].insts.push(gen_store(fp, s, GEN_STATE_OFF))
+        blocks[b].term = return_of(y.value)
+        cases.push(1 + y.resume)
+    # The dispatch: the state picks the block to run; any other, "ended".
+    st := gv.add(Ty.Int, "state")
+    blocks[0].insts.push(gen_load(st, fp, GEN_STATE_OFF))
+    blocks[0].term = switch_on(st, cases, ended)
+    shaped := Func(
+        name: body.name,
+        params: [fp],
+        ret: ret,
+        blocks: blocks,
+        vals: gv.vals,
+        names: gv.names,
+    )
+    dom := dominators(shaped)
+    mut def_block := [-1 for _ in gv.vals]
+    for b in 0..blocks.len()
+        for p in blocks[b].params
+            def_block[p] = b
+        for i in blocks[b].insts
+            if i.dst >= 0
+                def_block[i.dst] = b
+    # The slots: the arguments, then each value read where its definition
+    # doesn't dominate.
+    mut slot := [-1 for _ in gv.vals]
+    for j in 0..params.len()
+        slot[params[j]] = j
+    mut nslots := params.len()
+    mut need := [List[int]() for _ in blocks]
+    for b in 0..blocks.len()
+        for u in gen_uses(blocks[b])
+            d := def_block[u]
+            if d == b or (d >= 0 and dom[b][d])
+                continue
+            if not need[b].contains(u)
+                need[b].push(u)
+            if slot[u] < 0
+                slot[u] = nslots
+                nslots += 1
+    # Store each such value where it is defined; load it where it is read.
+    for b in 0..blocks.len()
+        blk := blocks[b]
+        mut out := List[Inst]()
+        mut m := Map[int, int]()
+        for p in blk.params
+            if slot[p] >= 0
+                out.push(gen_store(fp, p, gen_slot_off(slot[p])))
+        for u in need[b]
+            w := gv.add(gv.vals[u], gv.names[u])
+            out.push(gen_load(w, fp, gen_slot_off(slot[u])))
+            m[u] = w
+        for i in blk.insts
+            out.push(gen_remap(i, m))
+            if i.dst >= 0 and i.dst < slot.len() and slot[i.dst] >= 0
+                out.push(gen_store(fp, i.dst, gen_slot_off(slot[i.dst])))
+        blocks[b] = Block(params: blk.params, insts: out, term: gen_remap_term(blk.term, m))
+    GenFrame(
+        func: Func(
+            name: body.name,
+            params: [fp],
+            ret: ret,
+            blocks: blocks,
+            vals: gv.vals,
+            names: gv.names,
+        ),
+        slots: nslots,
+    )

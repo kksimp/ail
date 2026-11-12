@@ -555,7 +555,7 @@ fn stmt_foreign(w str) bool
     match w
         "try" | "catch" | "except" | "finally" | "throw" | "raise" | "switch" | "case" | "default" => true
         "pass" | "await" | "loop" | "elseif" | "elsif" | "else_if" => true
-        "unless" | "until" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => true
+        "unless" | "until" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => true
         _ => false
 
 ## A top-level word from another language's declarations (`def`, `class`,

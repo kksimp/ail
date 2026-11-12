@@ -287,9 +287,13 @@ fn Checker.check_fn(mut self, idx int)
         unsafe_opt_in(f.pos)
     catching = 0
     fn_ret = sig.ret
+    # expr.yield.1: a generator's body gives elements, not a result.
+    gen.elem = gen_start(f, sig.ret)
+    if gen.elem != none
+        fn_ret = Ty.Unit
     push_params(f, sig)
     check_contracts(f, sig.ret)
-    need := not returns_nothing(sig.ret)
+    need := not returns_nothing(sig.ret) and gen.elem == none
     mut want := none
     if need
         want = sig.ret
@@ -320,6 +324,7 @@ fn Checker.check_fn(mut self, idx int)
 
 fn Checker.end_fn(mut self, idx int)
     record_locals(0)
+    gen.elem = none
     scope = []
     self_ty = none
     if gap_now
@@ -557,6 +562,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         _ => ""
 
 fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
+    if gen_return(value, at)
+        return
     want := fn_ret
     v := value else
         if not returns_nothing(want)
@@ -1005,6 +1012,8 @@ fn Checker.condition(mut self, cond ast.Expr)
         Str =>
             err_help("expr.loop.4", at, "`for` can't iterate over a `str`", "iterate `s.chars()`")
             Ty.Unknown
+        # expr.iter.1: a type with `fn next(mut self) T?`, a `Seq[T]` among them.
+        Struct | Enum => iter_next(t, at, iter)
         _ => iterate_error(t, at, iter)
 
 @allow("expr.match.3") fn Checker.range_loop(mut self, iter ast.Expr) Ty

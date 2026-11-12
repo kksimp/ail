@@ -136,6 +136,7 @@ pub fn prelude_text(text str) str
                 "derive",
                 "argsderive",
                 "grid",
+                "seq",
             ].contains(m.trim())
         out.push(if keep then line else "")
     "{out.join("\n")}\n"

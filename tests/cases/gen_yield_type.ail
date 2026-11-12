@@ -1,0 +1,7 @@
+# expr.yield.2: each element has the generator's element type.
+fn f() Seq[int]
+    yield "one"
+
+fn main()
+    for x in f()
+        print(x)

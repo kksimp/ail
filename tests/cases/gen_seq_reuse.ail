@@ -1,0 +1,11 @@
+# expr.iter.1, own.uniq.2: `for` takes a `Seq` over, so it can't be read again.
+fn count(n int) Seq[int]
+    for i in 0..n
+        yield i
+
+fn main()
+    s := count(2)
+    for x in s
+        print(x)
+    for y in s
+        print(y)

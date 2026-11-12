@@ -1,0 +1,9 @@
+# expr.yield.4: a generator runs after the call returns, so it can't take a `mut` parameter.
+fn f(mut xs List[int]) Seq[int]
+    for x in xs
+        yield x
+
+fn main()
+    mut a := [1]
+    for x in f(mut a)
+        print(x)

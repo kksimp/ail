@@ -53,6 +53,7 @@ KEYWORDS := {
     "use",
     "while",
     "with",
+    "yield",
 }
 
 ## The reserved words, sorted: what `ail help --keywords` prints for editors (tool.help.3).

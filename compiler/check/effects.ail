@@ -166,6 +166,8 @@ struct Facts
     free Map[str, int]
     ## The implementations of the standard traits (eff.infer.5).
     std_impls List[int]
+    ## `for` loops over a `next` method, by the iterable (expr.iter.1).
+    iter_nexts Map[int, int]
 
 ## The inferred effects of a whole program.
 struct Effects
@@ -208,6 +210,7 @@ fn Checker.facts(self) Facts
         float_literals: float_literals,
         free: free,
         std_impls: impls.sorted(),
+        iter_nexts: gen.nexts,
     )
 
 struct TraitMethod
@@ -570,6 +573,9 @@ fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
             block(prog, fx, body)
         For(_, _, _, _, iter, body, _) =>
             expr(prog, fx, iter)
+            # expr.iter.1: the loop calls the iterable's `next`.
+            if i := fx.iter_nexts.get(pos_key(expr_pos(iter)))
+                call(i)
             block(prog, fx, body)
         With(mutex, _, _, body, _) =>
             expr(prog, fx, mutex)
@@ -628,6 +634,8 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
         Comp(_, elem, value, clauses, _) =>
             for c in clauses
                 expr(prog, fx, c.iter)
+                if i := fx.iter_nexts.get(pos_key(expr_pos(c.iter)))
+                    call(i)
                 if x := c.cond
                     expr(prog, fx, x)
             expr(prog, fx, elem)
