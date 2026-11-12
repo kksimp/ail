@@ -100,13 +100,16 @@ fn rdy_wait(ep int, out int, ms int) int
 
 ## `rdy_wait_raw` on a pool worker, counted as blocked (see `net_poll_blocked`).
 fn rdy_wait_blocked(ep int, out int, ms int) int
-    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
+    if ms == 0 or load64(global(MULTI)) == 0
         return rdy_wait_raw(ep, out, ms)
-    wait_enter()
+    k := worker_index()
+    if k >= 0
+        wait_enter()
     s := blocked_enter()
     r := rdy_wait_raw(ep, out, ms)
     blocked_leave(s)
-    wait_leave()
+    if k >= 0
+        wait_leave()
     r
 
 fn rdy_wait_raw(ep int, out int, ms int) int

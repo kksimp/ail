@@ -220,16 +220,23 @@ fn net_wait(fd int, events int, ms int) int
 
 ## `net_poll` on a pool worker (native.task.2): a worker asleep in `poll` stops
 ## counting as running, so a task queued meanwhile gets a thread even when
-## `AIL_THREADS` is 1, and the collector may scan the sleeper. A zero wait
+## `AIL_THREADS` is 1. Any thread asleep in it is parked, so the collector may
+## scan the sleeper (the main thread too: a collection that another task asks
+## for would otherwise wait for it until the timeout). A zero wait
 ## returns at once and needs neither.
 fn net_poll_blocked(fd int, events int, ms int) int
-    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
+    if ms == 0 or load64(global(MULTI)) == 0
         return net_poll(fd, events, ms)
-    wait_enter()
+    # The main thread parks too (no `wait_enter`: it is no worker): else a
+    # collection another thread asks for waits on it for the whole timeout.
+    k := worker_index()
+    if k >= 0
+        wait_enter()
     s := blocked_enter()
     r := net_poll(fd, events, ms)
     blocked_leave(s)
-    wait_leave()
+    if k >= 0
+        wait_leave()
     r
 
 fn net_poll(fd int, events int, ms int) int

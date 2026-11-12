@@ -551,13 +551,16 @@ fn serve_poll(pf int, n int, ms int) int
 ## `net_poll_blocked`): `accept` polls in slices, so a task queued while the
 ## worker is between slices gets its thread at the next one.
 fn serve_poll_blocked(pf int, n int, ms int) int
-    if ms == 0 or load64(global(MULTI)) == 0 or worker_index() < 0
+    if ms == 0 or load64(global(MULTI)) == 0
         return serve_poll_raw(pf, n, ms)
-    wait_enter()
+    k := worker_index()
+    if k >= 0
+        wait_enter()
     s := blocked_enter()
     r := serve_poll_raw(pf, n, ms)
     blocked_leave(s)
-    wait_leave()
+    if k >= 0
+        wait_leave()
     r
 
 fn serve_poll_raw(pf int, n int, ms int) int
