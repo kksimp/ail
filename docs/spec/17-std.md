@@ -1388,7 +1388,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1400,7 +1400,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1412,7 +1412,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1424,7 +1424,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1436,7 +1436,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1448,7 +1448,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()

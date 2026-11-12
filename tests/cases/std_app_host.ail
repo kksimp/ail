@@ -8,7 +8,7 @@ struct Todo
 
 impl app.App for Todo
     fn update(mut self, ev app.Event)
-        log.push(ev.kind)
+        log.push(app.kind_name(ev.kind))
         if ev.kind == Edit
             draft = ev.text
         if (ev.kind == Press and ev.id == "add") or ev.kind == Submit
