@@ -362,15 +362,9 @@ Recommendation: **a.** The model stays affine, not linear, which is simpler
 for agents; the exit-time kill is the `Drop` of the child and needs no new
 rule. Reopen only if stray handles cause real bugs.
 ## OQ-121 — Closures as `std.net.http` handlers
-`std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
-because AIL has no anonymous functions or captured variables (`type.fn.3`,
-ADR 0456). A handler that needs state (a counter, a store) has to reach it
-through a `ref` global or a struct method. The question is whether function
-values should grow captures. Options: keep the rule (handlers are named
-functions plus explicit state) or add closures as a later language feature
-with their own ADR. Recommendation: keep the rule until a program shows the
-need; the AI-first measurement (ADR 0076) is tokens per handler, and the
-named form costs few.
+**Resolved** by [ADR 1067](decisions/1067-closures.md): function literals copy
+the locals they name (`type.fn.4`-`5`), so a handler is `|req| reply(req, store)`
+with shared state in a captured `ref`.
 
 ## OQ-122 — What `t[i][j]` on a one-dimensional tensor means
 

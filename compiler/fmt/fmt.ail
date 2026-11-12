@@ -611,11 +611,14 @@ fn spaced(before FTok?, a FTok, b FTok) bool
         return true
     if a.sym("..") or a.sym("..=") or b.sym("..") or b.sym("..=")
         return false
-    # `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.
+    # `|x| e` (type.fn.4, expr.key.1): a `|` where an operand is expected opens a
+    # function literal's parameters; bit-or `a | b` follows an operand.
     if a.sym("|")
         if bt := before
-            if opens_key(bt)
+            if not bt.ends_operand()
                 return false
+        else
+            return false
     if prefix(before, a)
         return false
     # `fn(int) int`, a function type (type.fn.1).
@@ -623,13 +626,14 @@ fn spaced(before FTok?, a FTok, b FTok) bool
         return false
     if b.tuple_ty
         return true
+    # `xs.any(f)` (type.coll.22): a keyword after `.` names a method.
+    if b.sym("(") and a.kind == KW
+        if bt := before
+            if bt.sym(".")
+                return false
     if b.sym("(") or b.sym("[")
         return not a.ends_operand()
     true
-
-## A `|` after this token opens a key function's parameter (expr.key.1).
-fn opens_key(t FTok) bool
-    t.sym("(") or t.sym(",") or t.sym(":")
 
 ## `a` is a prefix operator: `-x`, `!T`.
 fn prefix(before FTok?, a FTok) bool
@@ -661,19 +665,29 @@ fn flat(toks List[FTok]) str
     mut out := List[str]()
     mut prev := -1
     mut before := -1
-    # The opening `|` of a key function `|x|` (expr.key.1), whose closing `|` is unspaced.
-    mut open_bar := -1
+    # Inside a function literal's `|a, b|` (type.fn.4, expr.key.1), at bracket
+    # depth `bar_level`: its closing `|` is unspaced.
+    mut in_bars := false
+    mut bar_level := 0
+    mut level := 0
     for i in 0..toks.len()
         t := toks[i]
         if t.sym(",") and i + 1 < toks.len() and toks[i + 1].closes()
             continue
-        closing_bar := t.sym("|") and i >= 2 and open_bar == i - 2
+        closing_bar := in_bars and t.sym("|") and level == bar_level
         if prev >= 0 and not closing_bar
             b := if before >= 0 then toks[before] else none
             if spaced(b, toks[prev], t)
                 out.push(" ")
-        if t.sym("|") and prev >= 0 and opens_key(toks[prev])
-            open_bar = i
+        if closing_bar
+            in_bars = false
+        elif t.sym("|") and not in_bars and (prev < 0 or not toks[prev].ends_operand())
+            in_bars = true
+            bar_level = level
+        if t.opens()
+            level += 1
+        elif t.closes()
+            level -= 1
         out.push(t.text)
         before = prev
         prev = i

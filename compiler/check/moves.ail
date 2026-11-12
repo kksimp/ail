@@ -297,6 +297,8 @@ fn Mover.expr(mut self, e ast.Expr)
         Member(recv, _, _) => expr(recv)
         Unary(_, operand, _) => expr(operand)
         NewRef(value, _) => expr(value)
+        # type.fn.5: a function literal copies what it names when it is made.
+        Closure(_, body, _) => expr(body)
         Index(recv, index, _) =>
             expr(recv)
             expr(index)

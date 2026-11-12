@@ -231,6 +231,8 @@ fn scan_expr(mut sc ParScan, e Expr)
         Try | OrElse => refuse(mut sc, "`?` or `else` on an expression")
         Comp => refuse(mut sc, "a comprehension")
         MapLit | SetLit | TupleLit => refuse(mut sc, "a map, set or tuple literal")
+        # A key function `by: |x| e` is lowered inline; another function literal is a value.
+        Closure(_, body, _) => scan_expr(mut sc, body)
         _ => refuse(
             mut sc,
             "an expression the native parallel loop doesn't take yet (lambda, `none`, char or bytes literal)",

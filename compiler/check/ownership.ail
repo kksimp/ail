@@ -51,6 +51,9 @@ fn Checker.consume(mut self, e ast.Expr, t Ty)
     match e
         Name(n, at) =>
             l := local(n) else return
+            if is_capture(n)
+                capture_written(n, at, "moved")
+                return
             match l.how
                 Binding => moved.push(Moved(pos: at, rule: rule))
                 MoveParam => moved.push(Moved(pos: at, rule: rule))

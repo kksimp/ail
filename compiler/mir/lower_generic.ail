@@ -222,6 +222,17 @@ fn names_unbound(t ast.TypeRef, binds Map[str, Ty], params List[str]) bool
                     return true
             false
         Optional(inner) => names_unbound(inner, binds, params)
+        FnType(ps, r) =>
+            for p in ps
+                if names_unbound(p, binds, params)
+                    return true
+            if x := r
+                return names_unbound(x, binds, params)
+            false
+        Fallible(ok, _) =>
+            if o := ok
+                return names_unbound(o, binds, params)
+            false
         _ => false
 
 ## Bind the type parameters `t` names from the type `ty` of a value given
@@ -264,13 +275,17 @@ fn Lower.unify(self, t ast.TypeRef, ty Ty, params List[str], mut binds Map[str, 
             unify(inner, i, params, mut binds)
         FnType(ps, r) =>
             match ty
-                Fn(tps, tr) =>
+                Fn(tps, tr, _) =>
                     if tps.len() != ps.len()
                         return
                     for k in 0..ps.len()
                         unify(ps[k], tps[k], params, mut binds)
                     if rt := r
-                        unify(rt, tr, params, mut binds)
+                        match rt.shape
+                            Fallible(ok, _) =>
+                                if o := ok
+                                    unify(o, tr, params, mut binds)
+                            _ => unify(rt, tr, params, mut binds)
                 _ => return
         TupleType(elems) =>
             xs := tuple_elems(ty) else return
@@ -388,7 +403,11 @@ fn Lower.generic_call(
         if a.label != none
             return unsupported(pos, "labelled arguments")
         pt := f.params[k].ty
-        v := lower_value(a.value, decl_type(pt, binds, params, gf.file))?
+        mut aw := decl_type(pt, binds, params, gf.file)
+        if aw == none
+            # A function literal before its result type parameter is bound (type.fn.8).
+            aw = partial_fn_want(pt, binds, params, gf.file)
+        v := lower_value(a.value, aw)?
         unify(pt, v.ty, params, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     check_mut_overlap(args, pos)
@@ -543,7 +562,10 @@ fn Lower.generic_method_call(mut self, key str, recv Val, args List[ast.Arg], po
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         pt := f.params[k].ty
-        v := lower_value(a.value, decl_type(pt, binds, mnames, gf.file))?
+        mut aw := decl_type(pt, binds, mnames, gf.file)
+        if aw == none
+            aw = partial_fn_want(pt, binds, mnames, gf.file)
+        v := lower_value(a.value, aw)?
         unify(pt, v.ty, mnames, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     check_mut_overlap(args, pos)
@@ -579,7 +601,10 @@ fn Lower.owner_method_call(mut self, key str, recv Val, args List[ast.Arg], pos 
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         pt := f.params[k].ty
-        v := lower_value(a.value, decl_type(pt, binds, mnames, gf.file))?
+        mut aw := decl_type(pt, binds, mnames, gf.file)
+        if aw == none
+            aw = partial_fn_want(pt, binds, mnames, gf.file)
+        v := lower_value(a.value, aw)?
         unify(pt, v.ty, mnames, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     check_mut_overlap(args, pos)

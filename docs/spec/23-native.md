@@ -102,6 +102,17 @@ has changed for 100 ms, it traps with the interpreter's message. A
 deadlock the main task is not part of, or one reached through `t.wait()`,
 hangs as before. *(ADR 0599, ADR 0186)*
 
+**native.fnval.1** — A function value is a pointer to a heap object the
+collector scans word by word: word 0 is the address of the code, and the
+words after it are the literal's copied locals (type.fn.5), in the order the
+compiler gives them. A call through the value loads word 0 and calls it with
+the object as a hidden first argument, then the arguments. A declared
+function named as a value is a one-word object whose code is a small thunk
+that drops the hidden argument; a literal is a function of its own that reads
+its copies from the object. A failing function value sets the error slot as a
+failing call does. The runtime's own code keeps plain code addresses.
+*(ADR 1067)*
+
 **native.task.1** — Native code runs tasks and `par for` iterations in
 parallel on a pool of threads, at most 64 and no more than the cores the
 process may use, each region using only the workers its work repays
@@ -926,6 +937,21 @@ Each block runs `ail test` or `ail build` with the options on its fence. The rul
     assert(s.len() == 5)
     assert("{3:>4}" == "   3")
     assert("ab" < "b")
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,FILE expect=ok rules=native.fnval.1
+fn adder(n int) fn(int) int
+    |x| x + n
+
+fn double(n int) int
+    n * 2
+
+@test fn values()
+    fs := [adder(3), double, |x int| x - 1]
+    assert(fs.map(|f| f(10)) == [13, 20, 9])
 
 fn main()
     print("ok")
