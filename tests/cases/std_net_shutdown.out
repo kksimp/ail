@@ -1,3 +1,3 @@
 hi /one
 HTTP/1.1 200 OK
-new connections: refused
+new connections: net.NetKind.Refused

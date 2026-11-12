@@ -1,7 +1,7 @@
 30000 5 0 0
-bad_request
-bad_request
-bad_request
-bad_url
-refused
-refused
+net.NetKind.BadRequest
+net.NetKind.BadRequest
+net.NetKind.BadRequest
+net.NetKind.BadUrl
+net.NetKind.Refused
+net.NetKind.Refused

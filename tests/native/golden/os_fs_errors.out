@@ -1,14 +1,14 @@
 read bytes: true
-failed: fs.IoError(path: "docs/no-such-file.md", kind: "not_found")
-failed: fs.IoError(path: "docs", kind: "is_dir")
-failed: fs.IoError(path: "tests/native/run/os_bad_utf8.bin", kind: "invalid_utf8")
-failed: fs.IoError(path: "docs/spec/17-std.md/x", kind: "not_dir")
-failed: fs.IoError(path: "a \"quoted\" path", kind: "not_found")
-make_dir: fs.IoError(path: "docs/spec/23-native.md", kind: "exists")
-remove: fs.IoError(path: "docs/decisions", kind: "not_empty")
-rename: fs.IoError(path: "docs/no-such-file.md", kind: "not_found")
-list_dir: fs.IoError(path: "docs/no-such-dir", kind: "not_found")
-list_dir: fs.IoError(path: "docs/decisions/README.md", kind: "not_dir")
+failed: fs.IoError(path: "docs/no-such-file.md", kind: fs.IoKind.NotFound)
+failed: fs.IoError(path: "docs", kind: fs.IoKind.IsDir)
+failed: fs.IoError(path: "tests/native/run/os_bad_utf8.bin", kind: fs.IoKind.InvalidUtf8)
+failed: fs.IoError(path: "docs/spec/17-std.md/x", kind: fs.IoKind.NotDir)
+failed: fs.IoError(path: "a \"quoted\" path", kind: fs.IoKind.NotFound)
+make_dir: fs.IoError(path: "docs/spec/23-native.md", kind: fs.IoKind.Exists)
+remove: fs.IoError(path: "docs/decisions", kind: fs.IoKind.NotEmpty)
+rename: fs.IoError(path: "docs/no-such-file.md", kind: fs.IoKind.NotFound)
+list_dir: fs.IoError(path: "docs/no-such-dir", kind: fs.IoKind.NotFound)
+list_dir: fs.IoError(path: "docs/decisions/README.md", kind: fs.IoKind.NotDir)
 true
 unset
 true

@@ -1,20 +1,20 @@
 len 200 len
 len 3 30313233343536373839
 len after end 0
-len closed closed
+len closed net.NetKind.Closed
 chunk 200 chunk
 chunk 4 68656c6c6f20776f726c64
 chunk after end 0
-chunk closed closed
+chunk closed net.NetKind.Closed
 eof 200 eof
 eof 4 756e74696c2074686520656e64
 eof after end 0
-eof closed closed
+eof closed net.NetKind.Closed
 none 204 none
 none 0 
 none after end 0
-none closed closed
+none closed net.NetKind.Closed
 cut 200 cut
-cut read closed
+cut read net.NetKind.Closed
 6162
-refused refused
+refused net.NetKind.Refused

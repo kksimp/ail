@@ -5,12 +5,12 @@ rest
 hé
 llo 
 wörld
-read: timed_out
+read: net.NetKind.TimedOut
 0
 end
-write: closed
-connect: refused
-listen: bind
-listen: bad_url
-connect: not_found
-connect: refused
+write: net.NetKind.Closed
+connect: net.NetKind.Refused
+listen: net.NetKind.Bind
+listen: net.NetKind.BadUrl
+connect: net.NetKind.NotFound
+connect: net.NetKind.Refused

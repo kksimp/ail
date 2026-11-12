@@ -8,7 +8,7 @@ ct 18 0
 diff 9 0
 edit 21 0
 eff 15 0
-err 40 5
+err 43 6
 explain 6 0
 expr 65 18
 ffi 21 0
@@ -42,7 +42,7 @@ tool 16 0
 trace 22 0
 trait 45 4
 try 10 0
-type 123 10
+type 124 11
 unsafe 21 0
 verify 9 0
-all 1393 54
+all 1397 56

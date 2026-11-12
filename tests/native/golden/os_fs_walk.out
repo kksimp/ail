@@ -6,5 +6,5 @@
 /walk/a: 2
 /walk/a/b/c.txt
 /walk/a/z
-failed: not_dir /walk/a.txt
-failed: not_found /walk/nope
+failed: fs.IoKind.NotDir /walk/a.txt
+failed: fs.IoKind.NotFound /walk/nope

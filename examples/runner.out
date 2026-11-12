@@ -1,6 +1,6 @@
 echo: build ok
 false: exit 1
-sleep: timed_out
-no-such-tool: not_found
+sleep: proc.ProcKind.TimedOut
+no-such-tool: proc.ProcKind.NotFound
 echo: tests ok
 3 steps failed

@@ -4,4 +4,4 @@ POST /b {} none [payload]
 201 got /b
 HEAD /c {} none []
 201 []
-after close closed
+after close net.NetKind.Closed
