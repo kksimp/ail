@@ -1867,6 +1867,9 @@ struct Augmented
 
 fn native_cli() str
     root := env.get("AIL_ROOT") else "."
+    # Windows: the file is `ail.exe`, and `fs.metadata` does not add the suffix as a shell does.
+    if windows()
+        return "{root}/.native/ail.exe"
     "{root}/.native/ail"
 
 ## Builds the native CLI when it is missing or older than the compiler's sources.
@@ -1875,16 +1878,20 @@ fn ensure_native_cli() bool
     if not native_cli_stale(cli)
         return true
     fs.make_dir(path.dir(cli)) else return false
-    b := proc.run(ail_path(), ["build", "compiler/main.ail", "-o", "{cli}.new"]) else return false
+    fresh := if windows() then "{cli}.new.exe" else "{cli}.new"
+    top := env.get("AIL_ROOT") else "."
+    b := proc.run(ail_path(), ["build", "{top}/compiler/main.ail", "-o", fresh]) else return false
     if b.status != 0
         return false
-    fs.rename("{cli}.new", cli) else return false
+    fs.rename(fresh, cli) else return false
     true
 
 ## Whether `cli` is missing or older than a `.ail` file under `compiler` or `std` (no `sh` or `find`, ADR 1059).
+## The trees are the toolchain's (`AIL_ROOT`), whatever directory `ail test` runs in.
 fn native_cli_stale(cli str) bool
     built := fs.metadata(cli) else return true
-    for root in ["compiler", "std"]
+    top := env.get("AIL_ROOT") else "."
+    for root in ["{top}/compiler", "{top}/std"]
         files := fs.walk(root) else continue
         for f in files
             if not f.ends_with(".ail")
