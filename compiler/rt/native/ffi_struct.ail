@@ -251,13 +251,13 @@ fn ffi_cs_hfa(codes List[int]) bool
 
 ## Whether the eightbyte `e` of a System V aggregate is SSE: every leaf in it is a float.
 fn ffi_cs_sse(offs List[int], codes List[int], e int) bool
-    mut any := false
+    mut found := false
     for k in 0..offs.len()
         if offs[k] / 8 == e
-            any = true
+            found = true
             if codes[k] != 100 and codes[k] != 102
                 return false
-    any
+    found
 
 ## Whether a struct of `size` bytes comes back through a hidden pointer.
 fn ffi_cs_indirect(size int, codes List[int]) bool
@@ -329,9 +329,9 @@ fn ffi_cs_struct_arg(f int, cs int, img int, size int, offs List[int], codes Lis
         ffi_cs_int(f, cs, load64(img + 8 * e), tmp, 8)
 
 ## Call the C function at `addr` as the descriptor `desc` says, with the
-## argument words at `args`; the result as a word (a struct: a new object;
+## argument words at `argw`; the result as a word (a struct: a new object;
 ## a float: its bits; an f32: the bits of the widened `float`).
-fn ffi_cs(addr int, desc str, args int) int
+fn ffi_cs(addr int, desc str, argw int) int
     d := str_addr(desc) + 16
     n := load64(str_addr(desc))
     st := alloc(16, KIND_ATOMIC)
@@ -377,7 +377,7 @@ fn ffi_cs(addr int, desc str, args int) int
     img := alloc(room, KIND_ATOMIC)
     for k in 0..starts.len()
         s := starts[k]
-        w := load64(args + 8 * k)
+        w := load64(argw + 8 * k)
         c := ffi_cs_at(d, s)
         if c != 123
             store64(tmp, 0)

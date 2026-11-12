@@ -84,7 +84,7 @@ fn churn(i int) int
     s := "{i}-{i * 2}-{[i, i + 1, i + 2]}"
     s.len() % 7
 
-fn f(x float) f32
+fn s32(x float) f32
     x.to_f32()
 
 fn main()
@@ -95,11 +95,11 @@ fn main()
         print("i3 {q.a} {q.b} {q.c} {i3_sum(q)}")
         d := d2_add(D2(x: 1.5, y: 2.25), D2(x: 0.5, y: 0.75))
         print("d2 {d.x} {d.y}")
-        v := f3_scale(F3(x: f(1.0), y: f(2.0), z: f(3.5)), f(2.0))
+        v := f3_scale(F3(x: s32(1.0), y: s32(2.0), z: s32(3.5)), s32(2.0))
         print("f3 {v.x.to_float()} {v.y.to_float()} {v.z.to_float()}")
         w := d4_make(1.5)
         print("d4 {w.a} {w.b} {w.c} {w.d} {d4_sum(w)}")
-        m := mix_swap(Mix(i: 7, f: f(-3.0)))
+        m := mix_swap(Mix(i: 7, f: s32(-3.0)))
         print("mix {m.i} {m.f.to_float()}")
         dn := dn_make(0.25, -9)
         print("dn {dn.d} {dn.n}")
@@ -109,8 +109,8 @@ fn main()
         print("nest {n.inner.a} {n.inner.b} {n.w} {nest_sum(n)}")
         b := bv_flip(BV(ok: false, v: 12))
         print("bv {b.ok} {b.v}")
-        print("many {many(1, D2(x: 2.0, y: 3.0), I3(a: 4, b: 5, c: 6), 7, D2(x: 8.0, y: 9.0), 10, 11, F3(x: f(12.0), y: f(13.0), z: f(14.0)), 15, 16, 17.0)}")
-        print("spill {hfa_spill(d4_make(1.0), d4_make(0.5), f(0.5), 3, D2(x: 0.75, y: 0.25))}")
+        print("many {many(1, D2(x: 2.0, y: 3.0), I3(a: 4, b: 5, c: 6), 7, D2(x: 8.0, y: 9.0), 10, 11, F3(x: s32(12.0), y: s32(13.0), z: s32(14.0)), 15, 16, 17.0)}")
+        print("spill {hfa_spill(d4_make(1.0), d4_make(0.5), s32(0.5), 3, D2(x: 0.75, y: 0.25))}")
         print("cb {apply_cb(mul_add, 4, 0.5)}")
         print("narrow {call_narrow(narrow)}")
         print("six {call6(six)}")
