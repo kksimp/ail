@@ -389,23 +389,24 @@ fn Lower.fn_value_head(mut self, f int) List[int]
         return [f]
     [prim_op("load64", [f], Ty.Int), f]
 
+## The type of the function value `callee`, if known.
+fn Lower.fn_value_ty(self, callee ast.Expr) Ty?
+    match callee
+        Name(n, _) =>
+            key := lookup(n) else return none
+            return var_ty[key]
+        _ => return recv_ty(callee)
+    none
+
 ## Whether calling `callee` (a function value) can fail (type.fn.6).
 fn Lower.fn_value_fails(self, callee ast.Expr) bool
-    t := match callee
-        Name(n, _) =>
-            key := lookup(n) else return false
-            var_ty[key]
-        _ => recv_ty(callee) else return false
+    t := fn_value_ty(callee) else return false
     s := fn_shape(t) else return false
     not s.err.is_unit()
 
 ## The error type a call of the function value `callee` names, else `Unknown`.
 fn Lower.fn_value_err(self, callee ast.Expr) Ty
-    t := match callee
-        Name(n, _) =>
-            key := lookup(n) else return Ty.Unknown
-            var_ty[key]
-        _ => recv_ty(callee) else return Ty.Unknown
+    t := fn_value_ty(callee) else return Ty.Unknown
     s := fn_shape(t) else return Ty.Unknown
     if s.err.is_unit() then Ty.Unknown else s.err
 
