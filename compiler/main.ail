@@ -1175,6 +1175,13 @@ fn exe_ext(target str) str
         return ".exe"
     ""
 
+## The measuring knobs (F7 diagnosis) that change the executable's bytes.
+fn knob_key() str
+    mut out := ""
+    for k in ["AIL_WIDE_ONLY", "AIL_WIDE_SKIP", "AIL_WIDE_ALL", "AIL_WIDE_LIMIT", "AIL_SINGLE_LIMIT", "AIL_WIDE_LOOPS", "AIL_WIDE_GROWTH", "AIL_WIDE_LOG", "AIL_ALIGN_FN", "AIL_ALIGN_LOOP", "AIL_JCC", "AIL_SHIFT"]
+        out = "{out} {env.get(k) else ""}"
+    out
+
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
 fn cache_key(file str, target str, ms str, mb str, attach bool) str
@@ -1185,7 +1192,7 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     lock := "{fs.read_text(path.join(root, "ail.lock")) else ""}{fs.read_text(path.join(file, "ail.lock")) else ""}"
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_SANITIZE") else ""} {env.get("AIL_OPT_OFF") else ""}",
+        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_SANITIZE") else ""} {env.get("AIL_OPT_OFF") else ""}{knob_key()}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         "lock {hash.sha256(lock)}",

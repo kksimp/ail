@@ -58,7 +58,7 @@ pub fn wide_candidates(m Module, leaves Set[str]) Wide
         if not knob_takes(f.name)
             continue
         if (n <= knob_int("AIL_WIDE_LIMIT", WIDE_LIMIT) or single and n <= knob_int("AIL_SINGLE_LIMIT", SINGLE_LIMIT))
-            and find_loops(f).len() == 0
+            and (find_loops(f).len() == 0 or knob_int("AIL_WIDE_LOOPS", 0) != 0)
             out.sizes[f.name] = n
             if single
                 out.single.add(f.name)
@@ -118,7 +118,7 @@ fn expand_wide(
     mut sites List[Site],
 ) int
     mut budget := INLINE_BUDGET
-    mut room := CALLER_GROWTH
+    mut room := knob_int("AIL_WIDE_GROWTH", CALLER_GROWTH)
     # A runtime function (`rt.dispatch`, which calls each `spawn` site's
     # `task.K`) takes leaves only: later passes leave runtime functions as
     # they are, so a copied call there would miss the result object
