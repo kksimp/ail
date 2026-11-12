@@ -1244,6 +1244,13 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         mut ret := absent[ast.TypeRef]()
         if tag_at(0) == "id" or at_sym("(") or at_kw("any") or at_kw("ref")
             ret = optional_type("the result type", "type.fn.1")?
+        # `fn(A) R ! E` and `fn(A) ! E`: a function value that can fail (type.fn.6, ADR 1067).
+        if at_sym("!")
+            bang := bump().pos
+            mut errors := [named_type("an error type after `!`", "type.fn.6")?]
+            while eat_sym("|")
+                errors.push(named_type("an error type after `|`", "err.type.5")?)
+            ret = ast.TypeRef(shape: ast.TypeShape.Fallible(ok: ret, errors: errors), pos: bang)
         return ast.TypeRef(shape: ast.TypeShape.FnType(params: params, ret: ret), pos: pos)
     n := dotted_name(expected, rule)?
     mut args := List[ast.TypeRef]()
@@ -1721,7 +1728,47 @@ fn Parser.expression_plain(mut self) ast.Expr?
         return if_expr()
     if at_kw("match")
         return match_expr()
+    if at_sym("|") or at_sym("||")
+        return closure()
     range()
+
+## `|a, b| e`, `|x int| e` or `|| e`: a function literal whose body is one
+## expression, running to the end of the expression (type.fn.4, ADR 1067).
+fn Parser.closure(mut self) ast.Expr?
+    pos := here()
+    mut params := List[ast.ClosureParam]()
+    if not eat_sym("||")
+        i += 1
+        while not at_sym("|")
+            if tag_at(0) != "id"
+                # A `|` where an operand is expected and no parameter follows (ADR 1067).
+                error_text(
+                    "type.fn.4",
+                    here(),
+                    "expected a parameter name or `|` in a function literal, found {describe(peek())}",
+                    "a `|` before an operand opens a function literal `|x| x + 1`; bit-or goes between two operands, `a | b`",
+                    "",
+                )
+                return none
+            p := take_name("a parameter name", "type.fn.4")?
+            mut ty := absent[ast.TypeRef]()
+            if not at_sym(",") and not at_sym("|")
+                ty = type_ref("the parameter's type", "type.fn.4")?
+            params.push(ast.ClosureParam(name: p.name, pos: p.pos, ty: ty))
+            if not eat_sym(",")
+                break
+        expect_sym("|", "`|` after the function literal's parameters", "type.fn.4")?
+    if at_newline() or peek() == Tok.Eof
+        error_text(
+            "type.fn.4",
+            here(),
+            "a function literal's body is one expression on the same line",
+            "write `|x| x + 1`; for a longer body, declare a function and call it from the literal",
+            "",
+        )
+        return none
+    body := expression()?
+    ast.Expr.Closure(params: params, body: body, pos: pos)
 
 ## The `for x in xs [if c]` clauses of a comprehension (expr.comp.2).
 fn Parser.comp_clauses(mut self) List[ast.CompFor]?
@@ -1922,7 +1969,7 @@ fn upper_name(e ast.Expr) bool
             _,
             _,
             _,
-        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => false
+        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) | Closure(_, _, _) => false
 
 fn Parser.additive(mut self) ast.Expr?
     mut lhs := multiplicative()?
@@ -1997,12 +2044,12 @@ fn name_of(e ast.Expr) str?
             _,
             _,
             _,
-        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => none
+        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) | Closure(_, _, _) => none
 
 fn name_pos(e ast.Expr) ast.Pos
     match e
         Name(_, p) => p
-        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => ast.Pos(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) | Closure(_, _, _) => ast.Pos(
             line: 0,
             col: 0,
         )
@@ -2114,9 +2161,11 @@ fn Parser.call_args(mut self) List[ast.Arg]?
         moved := not mutable and eat_kw("move")
         # expr.key.1: `by: |x| e`, a key function.
         mut param := none
-        if eat_sym("|")
-            param = take_name("a parameter name after `|`", "expr.key.1")?
-            expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
+        # `|x| e` with one untyped parameter is a function literal that also names its
+        # parameter in `Arg.param`, the key-function form (expr.key.1, type.fn.4, ADR 1067):
+        # `ast.key_body` reads `e` back.
+        if at_sym("|") and tag_at(1) == "id" and sym_at(2) == "|"
+            param = ast.Ident(name: tok_text(peek_at(1)), pos: tok_pos(i + 1))
         value := expression()?
         # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
         if at_sym("|")

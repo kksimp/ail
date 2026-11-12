@@ -24,6 +24,7 @@ pub fn expr_pos(e ast.Expr) ast.Pos
         SetLit(_, p) => p
         TupleLit(_, p) => p
         NewRef(_, p) => p
+        Closure(_, _, p) => p
         Comp(_, _, _, _, p) => p
         Range(lo, _, _, p) =>
             if l := lo

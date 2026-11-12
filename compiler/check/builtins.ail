@@ -193,6 +193,12 @@ pub LIST_METHODS := [
     "flatten",
     "is_empty",
     "enumerate",
+    "any",
+    "all",
+    "find",
+    "filter",
+    "map",
+    "group_by",
 ]
 
 pub MAP_METHODS := ["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"]
@@ -398,6 +404,9 @@ fn read(params List[Ty], result Ty) Builtin?
                 return none
             read([], Ty.Num(c))
         ListOf(e) =>
+            # type.coll.21-26: the methods that take a function (listfn.ail).
+            if LIST_FN_METHODS.contains(n)
+                return list_fn_builtin(e, n)
             if n == "is_empty"
                 return read([], Ty.Bool)
             if n == "len"
@@ -514,6 +523,8 @@ fn read(params List[Ty], result Ty) Builtin?
 
 ## `x.name(args)` for a built-in method of `x`'s type.
 fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
+    if is_list_fn(rt, n)
+        return list_fn_call(rt, n, at, args)
     if keyed(args)
         return keyed_call(recv, rt, n, at, args)
     b := builtin(rt, n) else return Ty.Unknown
@@ -672,7 +683,7 @@ fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args Li
     mark := locals.len()
     if declare(p.name, p.pos)
         locals.push(Local(name: p.name, ty: e, mutable: false, how: LocalKind.LoopVar, decl: none))
-    kt := expr(a.value, none, true)
+    kt := expr(ast.key_body(a), none, true)
     end_scope(mark)
     if kt != Ty.Unknown and not implements(kt, std_ord)
         err_help(
