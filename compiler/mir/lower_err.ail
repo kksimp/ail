@@ -927,6 +927,7 @@ SHOWN_STD_AIL := [
     "std.audio.",
     "std.bigint.",
     "std.csv.",
+    "std.file.",
     "std.gfx.",
     "std.log.",
     "std.media.webm.",

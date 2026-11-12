@@ -26,6 +26,7 @@ CASES := [
     ["std.tz", "std_tz"],
     ["std.json", "json_roundtrip"],
     ["std.csv", "std_csv"],
+    ["std.file", "std_file"],
     ["std.toml", "std_toml"],
     ["std.regex", "std_regex"],
     ["std.bigint", "std_bigint"],

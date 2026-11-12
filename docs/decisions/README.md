@@ -842,6 +842,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
 | [1064](1064-reserve-256-mib-ahead-of-push-loops.md) | Native: reserve up to 256 MiB of list elements ahead of a push loop *(delegated)* | Accepted | 2026-11-11 |
+| [1071](1071-streaming-file-handles.md) | `std.file` Reader and Writer (unique, flush on drop) over `std.fs`; `io.read_exact`; resolves OQ-141 *(delegated)* | Accepted | 2026-11-12 |
 | [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
 | [1061](1061-known-list-lengths.md) | Native: lists built to a known count check against that count *(delegated)* | Accepted | 2026-11-11 |
 | [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |

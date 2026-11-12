@@ -81,6 +81,7 @@ pub AIL_STD_MODULES := [
     "std.attach",
     "std.attach.serve",
     "std.csv",
+    "std.file",
     "std.gfx",
     "std.gfx.host",
     "std.gfx.watch",

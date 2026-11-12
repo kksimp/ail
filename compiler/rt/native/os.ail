@@ -960,6 +960,31 @@ fn io_read_bytes() str
     os_succeed()
     str_at(s)
 
+## `io.read_exact(n)` (std.io.7): exactly `n` bytes of standard input, undecoded,
+## or `none` (zero) when the input ends first; what was read is consumed. A
+## negative `n`, or one above 1 GiB, traps. It reads through the same buffer as
+## `io.read_line` and `io.read_bytes`, so the calls mix in order.
+fn io_read_exact(n int) str
+    if n < 0 or n > 1073741824
+        flush()
+        out_str("trap[std.io.7]: byte count out of range\n")
+        flush_to(2)
+        sys_exit(1)
+    r := bytes_new(n)
+    mut got := 0
+    while got < n
+        if load64(global(IN_POS)) >= load64(global(IN_LEN))
+            if not os_in_fill("std.io.7")
+                return str_at(0)
+        b := load64(global(IN_BUF))
+        pos := load64(global(IN_POS))
+        left := load64(global(IN_LEN)) - pos
+        take := if left < n - got then left else n - got
+        copy_bytes(r + 16 + got, b + pos, take)
+        got += take
+        store64(global(IN_POS), pos + take)
+    str_at(r)
+
 # ---- the lowering's entry points (lower_os.ail) ----
 
 ## `s` as the interpreter quotes it inside a value: `"`, `\`, `\n`, `\t`,

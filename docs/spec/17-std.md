@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.compress`, `std.fs`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
+> and `std.compress`, `std.fs`, `std.file`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -795,6 +795,21 @@ fn main()
     io.write_bytes(b"he")
     io.write_bytes(b"llo\n")
     print("mid")
+```
+
+**std.io.7** — `read_exact(n int) bytes?` reads exactly `n` bytes of standard
+input, undecoded, through the buffer `read_line`, `read_all` and `read_bytes`
+share, so the calls mix in order. It returns `none` when the input ends before
+`n` bytes; the bytes read are consumed. `n` of `0` returns empty bytes. A
+negative `n`, or one above 1073741824, traps. A protocol that frames messages
+by length (`Content-Length: N`) reads each body with it. *(ADR 1071)*
+
+```ail rules=std.io.7
+use std.io
+
+fn main()
+    body := io.read_exact(4) else b""
+    print(body.len())
 ```
 
 ## Processes: `std.proc`
@@ -1824,6 +1839,100 @@ fn main()
     random.shuffle(mut deck)
     print(deck.len())
     print(random.int(1, 6) <= 6)
+```
+
+## Streaming files: `std.file`
+
+`use std.file` opens a file as a handle read or written a piece at a time;
+`std.fs` reads and writes whole files. The handles are written over
+`std.fs` (`read_range`, `write_at`, `append_bytes`), so they hold no operating-system
+resource and act the same on macOS, Linux and Windows. Both are `unique`
+(`own.uniq.1`). A failure is the `fs.IoError` of `std.fs` (`std.err.1`);
+misuse by the program (a negative offset or count, `seek` on an appending
+writer) traps. *(ADR 1071)*
+
+**std.file.1** — `open(path str) Reader ! fs.IoError` opens `path` for reading
+at byte 0 and fails as `fs.read_range` does (`not_found`, `permission`,
+`is_dir`). `r.close()` ends the reader; a reader that goes out of scope ends
+too. No file is held open, so the file may be renamed or removed meanwhile.
+*(ADR 1071)*
+
+**std.file.2** — `r.read(n int) bytes ! fs.IoError` returns up to `n` bytes
+from the position and moves it past them. It returns fewer than `n` only when
+the file ends, and empty bytes at the end. A negative `n` traps. *(ADR 1071)*
+
+**std.file.3** — `r.read_exact(n int) bytes? ! fs.IoError` returns exactly `n`
+bytes, or `none` when fewer remain; then the position is unchanged, so a
+reader following a growing file may try again. (`io.read_exact`,
+`std.io.7`, cannot do that: standard input has no position to restore.)
+*(ADR 1071)*
+
+**std.file.4** — `r.read_line() str? ! fs.IoError` returns the next line without
+its `\n` or `\r\n` (invalid UTF-8 becomes U+FFFD), or `none` at the end of
+the file; a last line with no ending is returned. `r.read_complete_line()`
+returns a line only when its `\n` is already in the file and otherwise returns
+`none` and leaves the position, so a program following a log that is being
+written never sees half a line. A reader at the end of the file sees what is
+added later on its next read. *(ADR 1071)*
+
+**std.file.5** — `r.tell() int` is the offset of the next byte; `r.seek(pos
+int)` moves it (a negative `pos` traps; a position past the end reads nothing
+until the file grows); `r.size() int ! fs.IoError` is the file's size now.
+*(ADR 1071)*
+
+```ail norun rules=std.file.1,std.file.2,std.file.3,std.file.4,std.file.5
+use std.file
+
+fn main() !
+    mut r := file.open("app.log")?
+    r.seek(r.size()?)
+    while true
+        line := r.read_complete_line()? else break
+        print(line)
+    head := r.read_exact(16)? else b""
+    print(head.len())
+    r.close()
+```
+
+**std.file.6** — `create(path str)`, `append(path str)` and `update(path str)`
+each give `Writer ! fs.IoError`. `create` makes the file or empties it and
+writes from byte 0; `append` makes it when missing and adds at the end, each
+flush being one append, so several writers may add to one file; `update`
+makes it when missing, empties nothing and writes from byte 0 so that `seek`
+can patch it. They fail as `fs.write_bytes` does. *(ADR 1071)*
+
+**std.file.7** — `w.write(text str)`, `w.write_line(text str)` (adds `\n`) and
+`w.write_bytes(data bytes)`, each `! fs.IoError`, add to a buffer. At 65536
+bytes held the buffer is written, and `w.flush() ! fs.IoError` writes it at
+once; after a failed flush the bytes stay buffered. A reader of the file sees
+only what has been flushed. *(ADR 1071)*
+
+**std.file.8** — `w.tell() int` is the offset the next byte will have,
+counting what is buffered; `w.seek(pos int) ! fs.IoError` flushes and moves the
+write position (bytes between the old end and a position past it are zero). A
+negative `pos`, or `seek` on a writer made by `append`, traps. *(ADR 1071)*
+
+**std.file.9** — `w.close() ! fs.IoError` flushes and ends the writer, and is
+the way to see a failure. A writer that goes out of scope is flushed by its
+`drop` (`own.uniq.3`) on every path, a trap included, but a `drop` cannot
+report a failure, so write `w.close()?` where the data matters. *(ADR 1071)*
+
+```ail norun rules=std.file.6,std.file.7,std.file.8,std.file.9
+use std.file
+
+fn main() !
+    mut w := file.create("report.csv")?
+    w.write_line("id,name")?
+    for i in 0..100000
+        w.write_line("{i},row {i}")?
+    w.flush()?
+    print(w.tell())
+    w.close()?
+    mut log := file.append("report.log")?
+    log.write("done\n")?
+    mut patch := file.update("report.csv")?
+    patch.seek(3)?
+    patch.write("ID")?
 ```
 
 ## Tables of text: `std.csv`

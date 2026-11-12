@@ -410,6 +410,7 @@ fn Parser.pub_marker(mut self)
         or k == "struct"
         or k == "enum"
         or k == "error"
+        or k == "unique"
         or k == "trait"
         or tag_at(0) == "id" and sym_at(1) == ":="
         public.add(pos.line)
