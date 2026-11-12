@@ -310,6 +310,10 @@ fn Lower.lower_closure_lit(
     all.extend(ptys)
     inferring := want_ret.is_unknown()
     ps := frame_begin(name, want_ret, all, inferring or not err.is_unit())
+    # With no expected result, the errors the body's `?` passes on are inferred
+    # like a `!T` function's (note_inferred_err, keyed by the literal's name).
+    if inferring
+        infer_errs[name] = Ty.Unknown
     env := ps[0]
     for i in 0..caps.len()
         c := caps[i]
@@ -332,6 +336,13 @@ fn Lower.lower_closure_lit(
         ret = rt
         if fallible_call(body) or raises(blocks)
             err = Ty.Unknown
+            if fallible_call(body)
+                note_inferred_err(error_type_of_call(body))
+            found := infer_errs[name]
+            if not found.is_unknown() and not found.is_unit()
+                err = found
+        infer_errs.remove(name)
+        fn_errs.remove(name)
         settle_zeros(rt)
     if not done()
         if x := v

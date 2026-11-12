@@ -62,7 +62,11 @@ fn Checker.closure_expr(
     expect Ty?,
 ) Ty
     mut want := absent_parts()
+    # Where the context wants a value that isn't a function, the context
+    # reports the mismatch once; the parameters' types are left unknown.
+    mut not_fn := false
     if t := expect
+        not_fn = t != Ty.Unknown and fn_parts(t) == none
         if fp := fn_parts(t)
             if fp.params.len() == params.len()
                 want = fp
@@ -83,6 +87,8 @@ fn Checker.closure_expr(
             if not has_unknown(given) and not same(given, pt)
                 mismatch("type.fn.4", written.pos, given, pt)
             ptys.push(pt)
+        elif has_unknown(given) and not_fn
+            ptys.push(Ty.Unknown)
         elif has_unknown(given)
             err_help(
                 "type.fn.4",
