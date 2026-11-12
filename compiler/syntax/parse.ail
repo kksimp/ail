@@ -2151,7 +2151,12 @@ fn Parser.postfix(mut self) ast.Expr?
                 kpos := bump().pos
                 e = ast.Expr.Member(recv: e, name: k, name_pos: kpos)
                 continue
-            m := take_name("a field or method name after `.`", "gram.syntax.1")?
+            # `xs.any(f)` (type.coll.22): the keyword `any` names the list method after `.`.
+            mut m := ast.Ident(name: "any", pos: here())
+            if kw_at(0) == "any" and sym_at(1) == "("
+                i += 1
+            else
+                m = take_name("a field or method name after `.`", "gram.syntax.1")?
             recv_name := name_of(e) else ""
             # `m.Stack[int]` after an import `m` (gen.infer.2, mod.use.2).
             if recv_name != ""

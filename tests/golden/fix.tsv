@@ -354,14 +354,10 @@ fix  tests/mistakes/fn_value_generic.ail	538005c53faeef9d	1	cf44482b880a8650
 fix --dry-run tests/mistakes/fn_value_generic.ail	538005c53faeef9d	1	41168f9f32eef743
 fix --dry-run --json tests/mistakes/fn_value_generic.ail	538005c53faeef9d	1	bff2dbf0c9fe7589
 fix --json tests/mistakes/fn_value_generic.ail	538005c53faeef9d	1	860fe113fc6ebd86
-fix  tests/mistakes/fn_value_pipe_lambda.ail	d3ec6c0bc2e35714	1	d45dd54cda89f12c
-fix --dry-run tests/mistakes/fn_value_pipe_lambda.ail	d3ec6c0bc2e35714	1	9e86cc669c5ddf62
-fix --dry-run --json tests/mistakes/fn_value_pipe_lambda.ail	d3ec6c0bc2e35714	1	40bb472444daba13
-fix --json tests/mistakes/fn_value_pipe_lambda.ail	d3ec6c0bc2e35714	1	2f15a8711413c1e0
-fix  tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	37a3683671cbe155
-fix --dry-run tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	871aa1bf495bcc9e
-fix --dry-run --json tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	fe2795130b34933b
-fix --json tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	6df449915e7e39b1
+fix  tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	f1080fbfc6beadcd
+fix --dry-run tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	7ffa6db265be23ce
+fix --dry-run --json tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	ebf0fa9114769be6
+fix --json tests/mistakes/fn_value_python_lambda.ail	1ce3cef9e4e36642	1	c5da4a928c78918a
 fix  tests/mistakes/fn_value_wrong_arity.ail	51523fc982e3fe78	1	c1169167c1441b13
 fix --dry-run tests/mistakes/fn_value_wrong_arity.ail	51523fc982e3fe78	1	a7da5cd0cfe412f2
 fix --dry-run --json tests/mistakes/fn_value_wrong_arity.ail	51523fc982e3fe78	1	25cc1795c6080741
@@ -406,10 +402,10 @@ fix  tests/mistakes/hash_crc_plus_text.ail	8120b56f6c7bf745	0	499d47eb0f3bb129
 fix --dry-run tests/mistakes/hash_crc_plus_text.ail	8120b56f6c7bf745	0	9beade7436ba4c3d
 fix --dry-run --json tests/mistakes/hash_crc_plus_text.ail	8120b56f6c7bf745	0	e8bba47d73406b58
 fix --json tests/mistakes/hash_crc_plus_text.ail	8120b56f6c7bf745	0	6cb44f5d94c45218
-fix  tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	9467c9ec5988d22c
-fix --dry-run tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	07e3ba0a62905e92
-fix --dry-run --json tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	0972de666aa446fd
-fix --json tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	7b50930396ea1333
+fix  tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	f814c17b62ca8967
+fix --dry-run tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	0ed0012badfb4bec
+fix --dry-run --json tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	3cdc343f97cffd5f
+fix --json tests/mistakes/hash_md5_missing.ail	e7f77b5e9d41105f	1	02a35bc2c31e191f
 fix  tests/mistakes/if_int.ail	92eeabc84729ae7a	0	3b8ec8f198e99187
 fix --dry-run tests/mistakes/if_int.ail	92eeabc84729ae7a	0	b495b623bf8be60e
 fix --dry-run --json tests/mistakes/if_int.ail	92eeabc84729ae7a	0	6b204c0c15ce3c97
@@ -458,10 +454,14 @@ fix  tests/mistakes/json_from_generic.ail	b797aeb9ef8b5c4b	1	f63703d1407e6ef4
 fix --dry-run tests/mistakes/json_from_generic.ail	b797aeb9ef8b5c4b	1	ba5d3f026141e584
 fix --dry-run --json tests/mistakes/json_from_generic.ail	b797aeb9ef8b5c4b	1	cd4a7ab16890a762
 fix --json tests/mistakes/json_from_generic.ail	b797aeb9ef8b5c4b	1	aec35e00f6a54b5e
-fix  tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	fb0b75f11099407b
-fix --dry-run tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	901d630e939cc954
-fix --dry-run --json tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	9e78d23e26bd1d1e
-fix --json tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	efd8a7ac44704f66
+fix  tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	da0b9ec0343fdadf
+fix --dry-run tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	637e49cac40dcb72
+fix --dry-run --json tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	b9cac098682550d6
+fix --json tests/mistakes/lambda_arrow.ail	8923f9262f3e62ef	1	94691016efd1943d
+fix  tests/mistakes/lambda_python_arg.ail	86bcf64d7d125065	0	7b7eefa24063d3af
+fix --dry-run tests/mistakes/lambda_python_arg.ail	86bcf64d7d125065	0	4cc06f6b6fac2c4c
+fix --dry-run --json tests/mistakes/lambda_python_arg.ail	86bcf64d7d125065	0	78ebb131607d899f
+fix --json tests/mistakes/lambda_python_arg.ail	86bcf64d7d125065	0	04ad7102dcccacb7
 fix  tests/mistakes/len_function.ail	539015e99c579f6b	0	8e9c60d0bc2bec4f
 fix --dry-run tests/mistakes/len_function.ail	539015e99c579f6b	0	fa8902a096d13537
 fix --dry-run --json tests/mistakes/len_function.ail	539015e99c579f6b	0	794b0f1ee058a782
