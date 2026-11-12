@@ -61,7 +61,27 @@ pub fn keywords() List[str]
 
 ## Symbols of two characters, and of one. `..=` is checked first, then `..`,
 ## then these, so the longest spelling wins (`..=` over `..` over `.`).
-TWO_SYMBOLS := {"->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||", "<<", ">>", "&=", "|=", "^="}
+TWO_SYMBOLS := {
+    "->",
+    "=>",
+    ":=",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&&",
+    "||",
+    "<<",
+    ">>",
+    "&=",
+    "|=",
+    "^=",
+}
 
 ONE_SYMBOLS := {
     ".",
@@ -93,7 +113,25 @@ ONE_SYMBOLS := {
 ## A line ending in one of these continues on the next line (lex.stmt.2).
 ## `|` is left out: it also closes a key function's `|x|` (expr.key.1), and a trailing
 ## `a |` does not continue (expr.bit.3).
-BINARY_SYMBOLS := {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..=", "&", "^", "<<", ">>"}
+BINARY_SYMBOLS := {
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "..",
+    "..=",
+    "&",
+    "^",
+    "<<",
+    ">>",
+}
 
 ## The indentation unit is exactly four spaces (lex.block.2, ADR 0040).
 UNIT := 4
