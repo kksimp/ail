@@ -563,6 +563,33 @@ fn main()
     print(count_after([1, 2, 3, 4, 5], 1))
 ```
 
+**native.promote.1** — In a counted loop (native.bce.1) that has no loop inside
+it, whose every operation is unchecked (no trap can happen in it) and calls
+nothing, the elements `xs[x + k]` it assigns, with `xs` and `x` unchanged by
+the loop, may be held in registers: read once before the loop and written
+once when it ends, with each element's last assigned value. Every other
+element the loop reads or assigns must be `xs[j * c + k']` for the loop's
+counter `j`, which starts at `x0 + d` and steps by 1, where `x = x0 * c` and
+`c * d > k - k'`, so it is never one of them. A loop that runs no iteration
+reads and writes none of them. `AIL_OPT_OFF=promote` turns it off.
+*(ADR PENDING)*
+
+```ail rules=native.promote.1
+fn kick(mut s List[float], n int)
+    for i in 0..n
+        bi := i * 3
+        for j in i + 1..n
+            bj := j * 3
+            d := s[bi] - s[bj]
+            s[bi + 1] -= d * 0.5
+            s[bj + 1] += d * 0.5
+
+fn main()
+    mut s := [1.0, 0.0, 0.0, 4.0, 0.0, 0.0, 9.0, 0.0, 0.0]
+    kick(mut s, 3)
+    print(s)
+```
+
 **native.fwd.1** — An access `xs[i]` or `xs[i] = v` may run without its bounds
 check when an access to the same list with the same index value is on every
 path to it, and nothing on those paths can shorten a list: only element
