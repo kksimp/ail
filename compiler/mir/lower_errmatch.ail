@@ -17,7 +17,7 @@ fn err_tag_hash(key str) int
     if h == 0 then 1 else h
 
 ## Record the type of the error just raised (after `rt.err_value`).
-fn Lower.tag_error(mut self, t Ty)
+@allow("expr.match.3") fn Lower.tag_error(mut self, t Ty)
     key := match t
         Struct(k) => k
         Enum(k) => k
@@ -74,10 +74,13 @@ struct MemberPat
 @allow("expr.match.3") fn Lower.member_pat(mut self, p ast.Pattern) MemberPat?
     match p
         Variant(q, name, bindings, vpos) =>
-            full := if qq := q then "{qq}.{name}" else name
+            full := if qual := q then "{qual}.{name}" else name
             if k := error_key(full)
                 if bindings != none
-                    problem(vpos, "the member pattern `{full}` takes no fields; in its arm the value is a `{full}` (err.match.2)")
+                    problem(
+                        vpos,
+                        "the member pattern `{full}` takes no fields; in its arm the value is a `{full}` (err.match.2)",
+                    )
                     return none
                 return MemberPat(key: k, variant: "")
             qq := q else
@@ -87,11 +90,17 @@ struct MemberPat
                 problem(vpos, "`{qq}` is not an error type of this union (err.match.1)")
                 return none
             if not enums.contains(ek)
-                problem(vpos, "`{qq}` is not an error enum, so it has no variant `{name}` (err.match.1)")
+                problem(
+                    vpos,
+                    "`{qq}` is not an error enum, so it has no variant `{name}` (err.match.1)",
+                )
                 return none
             MemberPat(key: ek, variant: name)
         _ =>
-            problem(pattern_pos_of(p), "a `match` on an error union takes its member types and their variants (err.match.1)")
+            problem(
+                pattern_pos_of(p),
+                "a `match` on an error union takes its member types and their variants (err.match.1)",
+            )
             none
 
 @allow("expr.match.3") fn pattern_pos_of(p ast.Pattern) ast.Pos

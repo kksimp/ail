@@ -78,10 +78,7 @@ pub fn open_null() proc.Child ! DeviceError
     c
 
 fn answer(mut c proc.Child) str ! DeviceError
-    line := c.out.recv() else return DeviceError(
-        kind: HostExited,
-        message: "the audio host closed",
-    )
+    line := c.out.recv() else return DeviceError(kind: HostExited, message: "the audio host closed")
     if line.starts_with("error ")
         return DeviceError(kind: Device, message: line.slice(6, line.len()))
     line

@@ -33,7 +33,8 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
 
 ## Check one arm's pattern; the member type it narrows the name to, and the
 ## names a `T.Variant(...)` binds.
-@allow("expr.match.3") fn Checker.member_arm(
+@allow("expr.match.3")
+fn Checker.member_arm(
     mut self,
     members List[Ty],
     pat ast.Pattern,
@@ -89,9 +90,9 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
                     )
             none
         Variant(q, n, bindings, at) =>
-            full := if qq := q then "{qq}.{n}" else n
-            k := member_named(members, full)
-            if k >= 0
+            full := if qual := q then "{qual}.{n}" else n
+            hit := member_named(members, full)
+            if hit >= 0
                 if bindings != none
                     err_help(
                         "err.match.2",
@@ -99,10 +100,10 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
                         "the member pattern `{full}` takes no fields",
                         "write `{full} =>`; in the arm, the matched name is a `{full}`",
                     )
-                if member_covered(whole, parts, wildcard, k)
+                if member_covered(whole, parts, wildcard, hit)
                     err("expr.match.5", at, "this arm can never match; `{full}` is already covered")
-                whole[k] = true
-                return members[k]
+                whole[hit] = true
+                return members[hit]
             # `T.Variant(...)`: one variant of member error enum `T`.
             if qq := q
                 e := member_named(members, qq)
@@ -110,10 +111,19 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
                     match members[e]
                         Enum(index, args) =>
                             if member_covered(whole, parts, wildcard, e)
-                                err("expr.match.5", at, "this arm can never match; `{qq}` is already covered")
+                                err(
+                                    "expr.match.5",
+                                    at,
+                                    "this arm can never match; `{qq}` is already covered",
+                                )
                                 return members[e]
                             mut cov := parts[e]
-                            binds = pattern(index, args, ast.Pattern.Variant(none, n, bindings, at), mut cov)
+                            binds = pattern(
+                                index,
+                                args,
+                                ast.Pattern.Variant(none, n, bindings, at),
+                                mut cov,
+                            )
                             parts[e] = cov
                             return members[e]
                         _ =>
@@ -136,7 +146,8 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
             none
 
 ## `match name` where `name` holds one of `members` (err.match.1-3).
-@allow("expr.match.3") fn Checker.union_match(
+@allow("expr.match.3")
+fn Checker.union_match(
     mut self,
     scrutinee ast.Expr,
     members List[Ty],
@@ -183,10 +194,22 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
         mark := locals.len()
         if t := narrowed
             if name != ""
-                locals.push(Local(name: name, ty: t, mutable: false, how: LocalKind.Binding, decl: none))
+                locals.push(Local(
+                    name: name,
+                    ty: t,
+                    mutable: false,
+                    how: LocalKind.Binding,
+                    decl: none,
+                ))
         for b in binds
             if b.name != "_" and declare(b.name, b.pos)
-                locals.push(Local(name: b.name, ty: b.ty, mutable: false, how: LocalKind.Binding, decl: none))
+                locals.push(Local(
+                    name: b.name,
+                    ty: b.ty,
+                    mutable: false,
+                    how: LocalKind.Binding,
+                    decl: none,
+                ))
         if g := arm.guard
             condition(g)
         agree_block(mut agree, arm.body, at)
@@ -203,7 +226,10 @@ fn Checker.not_member(mut self, members List[Ty], full str, at ast.Pos)
         if arms.len() > 0
             last := arms[arms.len() - 1].pat
             indent := " ".repeat(pattern_pos(last).col - 1)
-            text := ["{indent}{n} => todo\n" for n in names].join("")
-            d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), text)])
+            text := ["{indent}{nm} => todo\n" for nm in names].join("")
+            d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(
+                pattern_pos(last),
+                text,
+            )])
         diags.push(d)
     agree_result(agree)

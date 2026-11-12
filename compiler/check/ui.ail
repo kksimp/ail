@@ -101,7 +101,12 @@ fn Checker.ui_color(mut self, head str, n str, at ast.Pos) Ty
 fn Checker.key_method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     if n != "name" and n != "text"
         args_only(args)
-        err_help("std.ui.7", at, "`ui.KeyCode` has no method `{n}`", "a key's methods are `name` and `text`")
+        err_help(
+            "std.ui.7",
+            at,
+            "`ui.KeyCode` has no method `{n}`",
+            "a key's methods are `name` and `text`",
+        )
         return Ty.Unknown
     std_methods.add(pos_key(at))
     std_any.add(pos_key(at))

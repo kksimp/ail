@@ -108,7 +108,10 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
     structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Enum(IO_KIND))]
     structs[TRAPPED] = [Slot(name: "rule", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
-    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Enum(PROC_KIND))]
+    structs[PROC_ERROR] = [
+        Slot(name: "cmd", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Enum(PROC_KIND)),
+    ]
     structs[NET_ERROR] = [
         Slot(name: "url", ty: Ty.Str),
         Slot(name: "kind", ty: Ty.Enum(NET_KIND)),

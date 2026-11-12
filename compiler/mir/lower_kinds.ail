@@ -18,7 +18,18 @@ STD_KINDS := [IO_KIND, PROC_KIND, NET_KIND, COMPRESS_KIND]
 fn kind_names(key str) List[str]
     mut out := List[str]()
     if key == NET_KIND
-        return ["BadUrl", "BadRequest", "Tls", "NotFound", "Refused", "TimedOut", "Closed", "Bind", "Protocol", "Other"]
+        return [
+            "BadUrl",
+            "BadRequest",
+            "Tls",
+            "NotFound",
+            "Refused",
+            "TimedOut",
+            "Closed",
+            "Bind",
+            "Protocol",
+            "Other",
+        ]
     if key == COMPRESS_KIND
         out = ["Corrupt", "Checksum", "TooBig", "UnsafePath", "Unsupported"]
     out.extend(["NotFound", "Permission", "Exists", "IsDir", "NotDir", "NotEmpty", "InvalidUtf8"])

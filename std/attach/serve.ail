@@ -100,7 +100,9 @@ impl app.App for Watched[T app.App + attach.Observe]
             inner.update(sent)
             hub.replies.send(attach.input_applied(app.kind_name(sent.kind)))
             return
-        if ev.kind == app.EventKind.External and ev.id == "attach" and attach.query(ev.text) == "call"
+        if ev.kind == app.EventKind.External
+            and ev.id == "attach"
+            and attach.query(ev.text) == "call"
             # A `call` runs a `@tool` method between events, like a person's input (attach.tool.4).
             cwhy := attach.call_refusal(ev.text, token, input)
             if cwhy != ""
@@ -114,7 +116,9 @@ impl app.App for Watched[T app.App + attach.Observe]
                 creq.get("args") else Json.Obj([]),
             ))
             return
-        if ev.kind == app.EventKind.External and ev.id == "attach" and attach.query(ev.text) == "tools"
+        if ev.kind == app.EventKind.External
+            and ev.id == "attach"
+            and attach.query(ev.text) == "tools"
             treq := parse_json(ev.text) else
                 hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return

@@ -55,7 +55,8 @@ fn Checker.enum_text_diag(mut self, e int, text str, at ast.Pos, what str)
 
 ## `x == "text"` or `x != "text"` with an enum `x` (expr.cmp.1): reported
 ## here, with the fix; true when it was.
-@allow("expr.match.3") fn Checker.enum_text_compare(mut self, op ast.BinOp, lt Ty, rhs ast.Expr) bool
+@allow("expr.match.3")
+fn Checker.enum_text_compare(mut self, op ast.BinOp, lt Ty, rhs ast.Expr) bool
     if op != ast.BinOp.Eq and op != ast.BinOp.Ne
         return false
     e := enum_of(lt)
@@ -69,7 +70,8 @@ fn Checker.enum_text_diag(mut self, e int, text str, at ast.Pos, what str)
 
 ## A string pattern in a `match` on enum `e`: reported, and the variant it
 ## names counts as covered, so the missing-arm error doesn't repeat it.
-@allow("expr.match.3") fn Checker.enum_text_pattern(mut self, e int, lit ast.Literal, at ast.Pos, mut cov Coverage) bool
+@allow("expr.match.3")
+fn Checker.enum_text_pattern(mut self, e int, lit ast.Literal, at ast.Pos, mut cov Coverage) bool
     match lit
         StrLit(text) =>
             enum_text_diag(e, text, at, "this pattern")
