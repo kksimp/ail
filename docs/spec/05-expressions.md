@@ -196,7 +196,7 @@ value is dropped. `break` and `continue` apply to this loop; `continue` evaluate
 (`err.else.6`), so `name` follows `expr.bind.4` and a `while` of this form
 that has a value is never a diverging statement (`expr.loop.7`). There is no
 `else err` part and no `elif`. The Rust spelling `while let x = e` is a
-compile-time error whose fix writes `while x := e`. *(ADR 0125)*
+compile-time error whose fix writes `while x := e`. *(ADR 1088)*
 
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
