@@ -30,7 +30,7 @@ fn Checker.local_index(self, n str) int
 ## Whether `n` is a copy the literal being checked made of an outer local.
 fn Checker.is_capture(self, n str) bool
     i := local_index(n)
-    i >= 0 and i < lit.floor
+    i >= 0 and i < fn_lits.floor
 
 ## type.fn.5: a literal's copy can't be changed or moved.
 fn Checker.capture_written(mut self, n str, at ast.Pos, action str)
@@ -43,7 +43,7 @@ fn Checker.capture_written(mut self, n str, at ast.Pos, action str)
 
 ## type.fn.4: `return`, `break` and `continue` can't leave a function literal.
 fn Checker.leaves_literal(mut self, what str, at ast.Pos) bool
-    if lit.floor < 0
+    if fn_lits.floor < 0
         return false
     err_help(
         "type.fn.4",
@@ -99,19 +99,19 @@ fn Checker.closure_expr(
     # The body's `?` leaves the literal: it has its own result type for `?`.
     mut slot := -1
     saved_ret := fn_ret
-    saved_floor := lit.floor
+    saved_floor := fn_lits.floor
     saved_loops := loop_depth
     saved_catching := catching
     if has_unknown(ret_want)
         key := pos_key(at)
-        slot = lit.slots.get(key) else inferred.len()
+        slot = fn_lits.slots.get(key) else inferred.len()
         if slot == inferred.len()
             inferred.push([])
-            lit.slots[key] = slot
+            fn_lits.slots[key] = slot
         fn_ret = Ty.Res(Ty.Unknown, Errs.Inferred(slot))
     else
         fn_ret = ret_want
-    lit.floor = locals.len()
+    fn_lits.floor = locals.len()
     loop_depth = 0
     catching = 0
     mark := locals.len()
@@ -131,7 +131,7 @@ fn Checker.closure_expr(
     got := expr(body, hint, true)
     end_scope(mark)
     fn_ret = saved_ret
-    lit.floor = saved_floor
+    fn_lits.floor = saved_floor
     loop_depth = saved_loops
     catching = saved_catching
     captures_ok(params, body)

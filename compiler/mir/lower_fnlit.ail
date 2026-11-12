@@ -275,7 +275,10 @@ fn Lower.lower_closure_lit(
             ptys.push(wt)
         elif s := shape
             if s.params[k].is_unknown()
-                return unsupported(p.pos, "a function literal whose parameter types aren't known here")
+                return unsupported(
+                    p.pos,
+                    "a function literal whose parameter types aren't known here",
+                )
             ptys.push(s.params[k])
         else
             return unsupported(p.pos, "a function literal whose parameter types aren't known here")
@@ -441,7 +444,7 @@ fn lit_parts(e ast.Expr) LitParts?
             LitParts(name: ps[0].name, ty: ps[0].ty, body: body)
         _ => none
 
-fn Lower.elem_fn(mut self, a ast.Arg, e Ty, ret Ty) ElemFn?
+fn Lower.elem_fn(mut self, a ast.Arg, e Ty, rty Ty) ElemFn?
     if lp := lit_parts(a.value)
         mut pt := e
         if t := lp.ty
@@ -450,7 +453,7 @@ fn Lower.elem_fn(mut self, a ast.Arg, e Ty, ret Ty) ElemFn?
                 return none
             pt = written
         return ElemFn(param: lp.name, pty: pt, body: lp.body, f: Val(id: -1, ty: Ty.Unit))
-    f := lower_value(a.value, Ty.Fn(params: [e], ret: ret, err: Ty.Unit))?
+    f := lower_value(a.value, Ty.Fn(params: [e], ret: rty, err: Ty.Unit))?
     if fn_shape(f.ty) == none
         problem(expr_pos(a.value), "not in the native subset yet: this function argument")
         return none
@@ -516,7 +519,7 @@ fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.P
     if tests
         vw = Ty.Bool
     v := apply_elem(fe, x, vw)
-    mut mapped := Ty.Unknown
+    mut out_ty := Ty.Unknown
     if fv := v
         if tests
             cond := if name == "all" then op("not", [fv.id], Ty.Bool) else fv.id
@@ -538,8 +541,8 @@ fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.P
             seal(go)
             cur = go
         elif fv.id >= 0
-            mapped = fv.ty
-            call(push_fn(mapped), [out, fv.id], Ty.Unit)
+            out_ty = fv.ty
+            call(push_fn(out_ty), [out, fv.id], Ty.Unit)
     # A problem still closes the loop, so the half-built function stays well formed.
     count_close(c)
     if name == "any" or name == "all"
@@ -550,10 +553,10 @@ fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.P
         return opt_at(r, found, idx, e, false, npos)
     if name == "filter"
         return Val(id: out, ty: r.ty)
-    if mapped.is_unknown()
+    if out_ty.is_unknown()
         fn_failed = true
         return none
-    t := Ty.List(mapped)
+    t := Ty.List(out_ty)
     vals[out] = t
     Val(id: out, ty: t)
 
@@ -570,13 +573,23 @@ fn Lower.lower_group_by(mut self, r Val, e Ty, fe ElemFn, npos ast.Pos) Val?
     if kv := k
         if kv.id >= 0
             if not is_key_ty(kv.ty) and not needs_copy(kv.ty)
-                problem(npos, "not in the native subset yet: `group_by` with a key of `{kv.ty.name()}`")
+                problem(
+                    npos,
+                    "not in the native subset yet: `group_by` with a key of `{kv.ty.name()}`",
+                )
             else
                 mt = Ty.Map(key: kv.ty, val: Ty.List(e))
                 m := made_table(acc, mt)
                 kid := stored_key(ast.Expr.Int("0", npos), kv, kv.ty, npos)
                 item := if needs_copy(e) then copy_value(Val(id: x, ty: e)) else x
-                map_push_vals(Val(id: m, ty: mt), Ty.List(e), kid, Val(id: item, ty: e), ast.Expr.Int("0", npos), npos)
+                map_push_vals(
+                    Val(id: m, ty: mt),
+                    Ty.List(e),
+                    kid,
+                    Val(id: item, ty: e),
+                    ast.Expr.Int("0", npos),
+                    npos,
+                )
     count_close(c)
     if mt.is_unknown()
         fn_failed = true

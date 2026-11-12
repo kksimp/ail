@@ -1047,10 +1047,15 @@ fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
-    elif not same_ty(v.ty, want) and not fn_fits(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
+    elif not fits_want(v.ty, want)
         # The runtime calls a function address it kept as an `int` (unwind.ail).
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
+
+## Whether a value of type `got` fits `want`: the same type, a function value
+## that fits (type.fn.6), or a function address the runtime keeps as an `int`.
+fn Lower.fits_want(self, got Ty, want Ty) bool
+    same_ty(got, want) or fn_fits(got, want) or (is_rt and want.is_fn() and got == Ty.Int)
 
 fn same_ty(a Ty, b Ty) bool
     if p := a.opt_inner()

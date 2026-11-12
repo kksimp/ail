@@ -83,7 +83,11 @@ fn Checker.list_fn_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) 
     if n == "map"
         return Ty.ListOf(r)
     if r != Ty.Unknown and not implements(r, std_hash)
-        mut d := new_diag("gen.bound.3", expr_pos(a.value), "`group_by` needs a key that can be hashed (`Hash`), and this is {show(r)}")
+        mut d := new_diag(
+            "gen.bound.3",
+            expr_pos(a.value),
+            "`group_by` needs a key that can be hashed (`Hash`), and this is {show(r)}",
+        )
         if h := how_to_implement(r, std_hash)
             d = d.with_help(h)
         diags.push(d)
