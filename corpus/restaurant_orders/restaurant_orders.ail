@@ -1,0 +1,135 @@
+## Restaurant order processing. Order lines ("table dish qty") are checked
+## against a menu with limited stock; unknown dishes, bad quantities and sold
+## out dishes fail with a typed error. Each dish is cooked at a station (a
+## trait) with its own prep time. Prints a bill per table with 8% tax in cents.
+
+error enum OrderError
+    BadLine(text str) "cannot read '{text}'"
+    UnknownDish(name str) "no dish named {name}"
+    BadQty(name str, qty int) "bad quantity {qty} for {name}"
+    SoldOut(name str, left int) "{name} sold out ({left} left)"
+
+enum Kind
+    Hot
+    Cold
+    Drink
+
+struct Dish
+    name str
+    cents int
+    kind Kind
+    stock int
+
+trait Station
+    fn label(self) str
+    fn minutes(self, qty int) int
+
+struct Grill
+    base int
+
+struct Garde
+    base int
+
+struct Bar
+    base int
+
+impl Station for Grill
+    fn label(self) str
+        "grill"
+    fn minutes(self, qty int) int
+        self.base + 3 * qty
+
+impl Station for Garde
+    fn label(self) str
+        "garde"
+    fn minutes(self, qty int) int
+        self.base + qty
+
+impl Station for Bar
+    fn label(self) str
+        "bar"
+    fn minutes(self, qty int) int
+        self.base
+
+fn prep(kind Kind, qty int) str
+    match kind
+        Hot =>
+            g := Grill(base: 8)
+            "{g.label()} {g.minutes(qty)}m"
+        Cold =>
+            c := Garde(base: 2)
+            "{c.label()} {c.minutes(qty)}m"
+        Drink =>
+            b := Bar(base: 1)
+            "{b.label()} {b.minutes(qty)}m"
+
+struct Kitchen
+    menu List[Dish]
+    totals Map[str, int]
+
+fn Kitchen.order(mut self, line str) int ! OrderError
+    parts := line.split(" ")
+    if parts.len() != 3
+        return BadLine(text: line)
+    qty := parts[2].to_int() else return BadLine(text: line)
+    mut at := -1
+    for i in 0..self.menu.len()
+        if self.menu[i].name == parts[1]
+            at = i
+    if at < 0
+        return UnknownDish(name: parts[1])
+    if qty < 1
+        return BadQty(name: parts[1], qty: qty)
+    if self.menu[at].stock < qty
+        return SoldOut(name: parts[1], left: self.menu[at].stock)
+    self.menu[at].stock -= qty
+    cost := self.menu[at].cents * qty
+    self.totals[parts[0]] += cost
+    cost
+
+fn money(cents int) str
+    "{cents / 100}.{cents % 100:0>2}"
+
+fn main()
+    menu := [
+        Dish(name: "steak", cents: 2450, kind: Kind.Hot, stock: 3),
+        Dish(name: "salad", cents: 850, kind: Kind.Cold, stock: 10),
+        Dish(name: "cola", cents: 300, kind: Kind.Drink, stock: 4),
+    ]
+    lines := [
+        "t1 steak 2", "t2 salad 1", "t1 cola 2", "t3 pizza 1", "t2 steak 2",
+        "t3 cola 0", "t3 cola 2", "t2 cola 3", "oops", "t1 salad x",
+    ]
+    mut k := Kitchen(menu: menu, totals: {})
+    for line in lines
+        cost := k.order(line) else err
+            print("rejected '{line}': {err}")
+            continue
+        print("ok {line} = {money(cost)}")
+    for d in k.menu
+        print("{d.name}: {d.stock} left, {prep(d.kind, 2)}")
+    mut tables := []
+    for t in k.totals.keys()
+        tables.push(t)
+    tables.sort()
+    for t in tables
+        sub := k.totals[t]
+        tax := sub * 8 / 100
+        print("{t}: {money(sub)} + tax {money(tax)} = {money(sub + tax)}")
+
+@test fn orders_reduce_stock()
+    mut k := Kitchen(menu: [Dish(name: "tea", cents: 200, kind: Kind.Drink, stock: 2)], totals: {})
+    assert_eq(k.order("a tea 2")?, 400)
+    assert_eq(k.menu[0].stock, 0)
+    assert_err(k.order("a tea 1"))
+
+@test fn bad_lines_fail()
+    mut k := Kitchen(menu: [], totals: {})
+    assert_err(k.order("nonsense"))
+    assert_err(k.order("a b c"))
+    assert_err(k.order("a b 1"))
+
+@test fn stations_scale_with_quantity()
+    assert_eq(prep(Kind.Hot, 2), "grill 14m")
+    assert_eq(prep(Kind.Cold, 5), "garde 7m")
+    assert_eq(money(5), "0.05")

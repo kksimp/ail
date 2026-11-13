@@ -1417,7 +1417,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                     "expr.match.3",
                     at,
                     "`_` covers {list_names(uncovered)}, so a variant added later won't be flagged here",
-                    "list the variants instead of `_`, or mark the function `@allow(\"expr.match.3\")`",
+                    "write `{uncovered.join(" | ")} =>` instead of `_`, or mark the function `@allow(\"expr.match.3\")` to keep the catch-all",
                 )
             cov.wildcard = true
             []

@@ -1,0 +1,93 @@
+## Sharded counters: worker tasks count tokens from a generated stream. Instead
+## of one global lock, the counts live in several shards, each behind its own
+## mutex, and a token goes to the shard picked by a simple hash of its text.
+## Workers on different shards never wait for each other. The merged result is
+## checked against a single-threaded count.
+
+fn tokens() List[str]
+    ["red", "green", "blue", "cyan", "pink", "gold", "teal", "navy", "plum"]
+
+fn token_at(i int) str
+    ts := tokens()
+    ts[(i * 7 + i / 3) % ts.len()]
+
+fn shard_of(word str, shards int) int
+    mut h := 0
+    for c in word.chars()
+        h = (h * 31 + c.code()) % 1000003
+    h % shards
+
+fn worker(lo int, hi int, shards List[Mutex[Map[str, int]]])
+    for i in lo..hi
+        w := token_at(i)
+        s := shards[shard_of(w, shards.len())]
+        with s as mut m
+            m[w] += 1
+
+fn count_sharded(total int, workers int, nshards int) !List[Map[str, int]]
+    mut shards := List[Mutex[Map[str, int]]]()
+    for _ in 0..nshards
+        shards.push(Mutex(Map[str, int]()))
+    g := TaskGroup()
+    size := (total + workers - 1) / workers
+    for k in 0..workers
+        lo := k * size
+        hi := (lo + size).min(total)
+        if lo < hi
+            g.add(spawn worker(lo, hi, shards))
+    g.wait_all()?
+    [s.get() for s in shards]
+
+fn count_plain(total int) Map[str, int]
+    mut m := Map[str, int]()
+    for i in 0..total
+        m[token_at(i)] += 1
+    m
+
+fn merge(parts List[Map[str, int]]) Map[str, int]
+    mut out := Map[str, int]()
+    for p in parts
+        for k in p.keys()
+            out[k] += p[k]
+    out
+
+fn same_counts(a Map[str, int], b Map[str, int]) bool
+    if a.len() != b.len()
+        return false
+    for k in a.keys()
+        if (b.get(k) else -1) != a[k]
+            return false
+    true
+
+fn main() !
+    parts := count_sharded(3000, 5, 3)?
+    for i in 0..parts.len()
+        words := parts[i].keys().sorted()
+        total := parts[i].values().sum()
+        print("shard {i}: {words.join(",")} ({total} tokens)")
+    merged := merge(parts)
+    plain := count_plain(3000)
+    for w in merged.keys().sorted()
+        print("{w:<6}{merged[w]:>5}")
+    print("distinct {merged.len()}, total {merged.values().sum()}")
+    print("matches single-threaded count: {same_counts(merged, plain)}")
+
+@test fn shard_choice_is_stable_and_in_range()
+    for w in tokens()
+        s := shard_of(w, 4)
+        assert(s >= 0 and s < 4, "in range")
+        assert_eq(s, shard_of(w, 4))
+    assert_eq(shard_of("red", 1), 0)
+
+@test fn sharded_matches_plain()
+    got := merge(count_sharded(400, 3, 4)?)
+    assert(same_counts(got, count_plain(400)), "same counts")
+
+@test fn each_word_lives_in_one_shard()
+    parts := count_sharded(300, 4, 3)?
+    for w in tokens()
+        mut homes := 0
+        for p in parts
+            if p.contains(w)
+                homes += 1
+        assert(homes <= 1, "one home per word")

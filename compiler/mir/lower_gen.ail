@@ -185,10 +185,10 @@ fn Lower.lower_iter_for(
         pos: pos,
         mutable: false,
         value: ast.Expr.Method(recv: recv, name: "next", name_pos: pos, args: []),
-        otherwise: ast.Else.Leave(ast.Stmt.Break(pos)),
+        otherwise: ast.Else.Leave(ast.Stmt.Break(pos, none)),
     )
     mut inner := [step]
     inner.extend(body)
-    lower_while(ast.Expr.Bool(value: true, pos: pos), inner)
+    lower_while(ast.Expr.Bool(value: true, pos: pos), inner, pos)
     scopes.pop()
     true

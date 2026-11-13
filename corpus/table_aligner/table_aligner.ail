@@ -1,0 +1,107 @@
+## Table aligner: reformats ragged pipe-separated rows into an aligned
+## Markdown table. Columns whose body cells are all integers are right
+## aligned, the rest left aligned, short rows are padded with empty cells and
+## the separator row is sized to the widest cell.
+
+fn parse_rows(lines List[str]) List[List[str]]
+    mut rows := List[List[str]]()
+    for raw in lines
+        t := raw.trim()
+        if t == ""
+            continue
+        mut cells := List[str]()
+        for part in t.split("|")
+            cells.push(part.trim())
+        if cells[0] == "" and cells.len() > 1
+            cells = cells[1..]
+        if cells[cells.len() - 1] == "" and cells.len() > 1
+            cells = cells[..cells.len() - 1]
+        rows.push(cells)
+    rows
+
+fn is_int(s str) bool
+    cs := s.chars()
+    if cs.is_empty()
+        return false
+    mut start := 0
+    if cs[0] == '-'
+        start = 1
+    if start >= cs.len()
+        return false
+    for i in start..cs.len()
+        if not cs[i].is_digit()
+            return false
+    true
+
+fn cell(row List[str], col int) str
+    if col < row.len()
+        return row[col]
+    ""
+
+fn align(lines List[str]) List[str]
+    rows := parse_rows(lines)
+    if rows.is_empty()
+        return []
+    mut ncols := 0
+    for r in rows
+        ncols = ncols.max(r.len())
+    mut widths := List[int]()
+    mut numeric := List[bool]()
+    for col in 0..ncols
+        mut w := 3
+        mut all_int := rows.len() > 1
+        for ri in 0..rows.len()
+            text := cell(rows[ri], col)
+            w = w.max(text.len())
+            if ri > 0 and text != "" and not is_int(text)
+                all_int = false
+        widths.push(w)
+        numeric.push(all_int)
+    mut out := List[str]()
+    for i in 0..rows.len()
+        mut parts := List[str]()
+        for c in 0..ncols
+            cv := cell(rows[i], c)
+            if numeric[c] and i > 0
+                parts.push(cv.pad_left(widths[c], ' '))
+            else
+                parts.push(cv.pad_right(widths[c], ' '))
+        out.push("| {parts.join(" | ")} |")
+        if i == 0
+            mut seps := List[str]()
+            for d in 0..ncols
+                dashes := "".pad_left(widths[d] - 1, '-')
+                seps.push(if numeric[d] then "{dashes}:" else ":{dashes}")
+            out.push("| {seps.join(" | ")} |")
+    out
+
+fn main()
+    raw := [
+        "item | qty | price | note",
+        "| apple | 3 | 120 | fresh |",
+        "banana | 12 | 45",
+        "",
+        "dragon fruit | 1 | -7 | imported, rare |",
+        "kiwi | 30 | 8 | ",
+    ]
+    for line in align(raw)
+        print(line)
+    print("")
+    for line in align(["name | role", "ann | lead", "bo | dev"])
+        print(line)
+
+@test fn detects_integers()
+    assert(is_int("42"))
+    assert(is_int("-7"))
+    assert(not is_int("4x"))
+    assert(not is_int("-"))
+    assert(not is_int(""))
+
+@test fn pads_ragged_rows()
+    out := align(["a | b", "x"])
+    assert_eq(out[2], "| x   |     |")
+
+@test fn numbers_align_right()
+    out := align(["n", "5", "123"])
+    assert_eq(out[1], "| --: |")
+    assert_eq(out[2], "|   5 |")

@@ -614,7 +614,7 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
             if body := d.body
                 nd.body = self.block(body)
             ast.Stmt.LocalFn(nd)
-        Break(_) | Continue(_) => s
+        Break(_, _) | Continue(_, _) => s
         Select(arms, pos) => ast.Stmt.Select(self.select_arms(arms), pos)
 
 ## A `select`'s arms (conc.select.2): the heads, the name a receive arm

@@ -1,0 +1,78 @@
+## Wrap and indent: word-wraps a paragraph to a width with a lead prefix on
+## the first line and a hanging prefix on the others (bullets, quotes), and
+## re-indents a block after removing the indentation its lines share.
+
+fn wrap_indent(text str, width int, lead str, hang str) List[str]
+    mut lines := List[str]()
+    mut cur := lead
+    mut fresh := true
+    for w in text.words()
+        if fresh
+            cur = "{cur}{w}"
+            fresh = false
+        elif cur.len() + 1 + w.len() <= width
+            cur = "{cur} {w}"
+        else
+            lines.push(cur)
+            cur = "{hang}{w}"
+    if not fresh
+        lines.push(cur)
+    lines
+
+fn indent_of(line str) int
+    line.len() - line.trim_start().len()
+
+fn dedent(lines List[str]) List[str]
+    mut least := -1
+    for l in lines
+        if l.trim() == ""
+            continue
+        n := indent_of(l)
+        if least < 0 or n < least
+            least = n
+    mut out := List[str]()
+    for m in lines
+        if m.trim() == ""
+            out.push("")
+        else
+            out.push(m.slice(least, m.len()))
+    out
+
+fn indent_block(lines List[str], prefix str) List[str]
+    mut out := List[str]()
+    for l in lines
+        if l == ""
+            out.push("")
+        else
+            out.push("{prefix}{l}")
+    out
+
+fn show(title str, lines List[str])
+    print("{title}:")
+    for l in lines
+        print("[{l}]")
+
+fn main()
+    text := "Wrapping text is mostly bookkeeping: count the characters on the line, break before a word that does not fit, and carry the hanging indent onto every continuation line."
+    show("plain 30", wrap_indent(text, 30, "", ""))
+    show("bullet 36", wrap_indent(text, 36, "- ", "  "))
+    show("quote 28", wrap_indent("short words only here and a verylongunbreakableword too", 28, "> ", "> "))
+    code := [
+        "        if ready:",
+        "            go()",
+        "",
+        "        stop()",
+    ]
+    show("dedent", dedent(code))
+    show("reindent", indent_block(dedent(code), "    "))
+
+@test fn wraps_within_width()
+    for l in wrap_indent("aa bb cc dd ee ff", 8, "", "")
+        assert(l.len() <= 8)
+    assert_eq(wrap_indent("aa bb cc", 5, "", ""), ["aa bb", "cc"])
+
+@test fn hanging_indent()
+    assert_eq(wrap_indent("aa bb cc", 6, "* ", "  "), ["* aa", "  bb", "  cc"])
+
+@test fn dedent_keeps_relative_indent()
+    assert_eq(dedent(["  a", "    b", "", "  c"]), ["a", "  b", "", "c"])

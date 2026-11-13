@@ -1,0 +1,18 @@
+ann leads vase at 100
+rejected 'bid vase bob 110': vase: need at least 125, got 110
+bob leads vase at 125
+rejected 'bid vase bob 200': bob already leads
+ann leads vase at 200
+rejected 'bid vase ann 350': ann already leads
+cy leads clock at 50
+rejected 'bid clock dee 54': clock: need at least 55, got 54
+dee leads clock at 55
+rejected 'bid rug ann 10': no lot rug
+rejected 'bid vase ann': cannot read 'bid vase ann'
+vase passed
+rejected 'bid vase eve 999': lot vase is closed
+clock passed
+rejected 'close rug': no lot rug
+rejected 'sell vase': cannot read 'sell vase'
+vase: 3 bids, high 200 by ann, premium 20
+clock: 2 bids, high 55 by dee, premium 5

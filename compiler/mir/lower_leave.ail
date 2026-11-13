@@ -1,0 +1,22 @@
+## `break outer` and `continue outer`: leave or continue the labeled loop that
+## `target` names (expr.loop.10, ADR 1107). With no target they leave the
+## innermost loop (expr.loop.2). The labels were resolved by the parser, so a
+## target is always one of the enclosing loops.
+use ast
+
+fn Lower.lower_leave(mut self, pos ast.Pos, target ast.Pos?, is_break bool)
+    word := if is_break then "break" else "continue"
+    if loops.len() == 0
+        problem(pos, "`{word}` outside a loop")
+        return
+    mut k := loops.len() - 1
+    if t := target
+        while k >= 0 and not (loops[k].at.line == t.line and loops[k].at.col == t.col)
+            k -= 1
+        if k < 0
+            problem(pos, "`{word}` names a loop this lowering can't find")
+            return
+    defer_loop_exit_to(k + 1)
+    unwind_loop_to(k + 1)
+    dest := if is_break then loops[k].exit else loops[k].cont
+    jump(dest, [])

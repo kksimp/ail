@@ -1,0 +1,6 @@
+struct Seq
+    id int
+
+fn main()
+    t := Seq(id: 1)
+    print(t.id)

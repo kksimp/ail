@@ -1,0 +1,86 @@
+## Work-stealing scheduler simulation on a tick clock. Each worker owns a queue
+## of job durations and runs them front to back. A worker that runs dry steals
+## the newest job from the back of the longest other queue (lowest index wins
+## ties). The same workload is run with and without stealing to compare the
+## makespan, and the steals and per-worker busy time are reported.
+
+struct Result
+    makespan int
+    steals int
+    done List[int]
+    busy List[int]
+
+fn simulate(start List[List[int]], steal bool) Result
+    n := start.len()
+    mut queues := start
+    mut left := [0 for _ in 0..n]
+    mut done := [0 for _ in 0..n]
+    mut busy := [0 for _ in 0..n]
+    mut remaining := 0
+    for q in start
+        remaining += q.len()
+    mut steals := 0
+    mut tick := 0
+    while remaining > 0 or (left.max() else 0) > 0
+        for i in 0..n
+            if left[i] > 0
+                continue
+            if queues[i].len() > 0
+                mut own := queues[i]
+                left[i] = own[0]
+                own.remove_at(0)
+                queues[i] = own
+                remaining -= 1
+            elif steal
+                mut victim := -1
+                for v in 0..n
+                    if v != i and queues[v].len() > 0
+                        if victim < 0 or queues[v].len() > queues[victim].len()
+                            victim = v
+                if victim >= 0
+                    mut vq := queues[victim]
+                    left[i] = vq[vq.len() - 1]
+                    vq.remove_at(vq.len() - 1)
+                    queues[victim] = vq
+                    remaining -= 1
+                    steals += 1
+        for i in 0..n
+            if left[i] > 0
+                left[i] -= 1
+                busy[i] += 1
+                if left[i] == 0
+                    done[i] += 1
+        tick += 1
+    Result(makespan: tick, steals: steals, done: done, busy: busy)
+
+fn show(label str, r Result)
+    print("{label}: makespan {r.makespan}, steals {r.steals}")
+    print("  jobs done {r.done}")
+    print("  busy ticks {r.busy}")
+
+fn main()
+    work := [[9, 8, 7, 6, 5, 4], [2, 1], [3]]
+    total := [q.sum() for q in work].sum()
+    print("total work {total} ticks over {work.len()} workers")
+    fixed := simulate(work, false)
+    stolen := simulate(work, true)
+    show("no stealing", fixed)
+    show("stealing", stolen)
+    print("lower bound {(total + work.len() - 1) / work.len()}")
+    print("speedup in ticks: {fixed.makespan - stolen.makespan}")
+
+@test fn no_jobs_finish_instantly()
+    r := simulate([List[int](), List[int]()], true)
+    assert_eq(r.makespan, 0)
+    assert_eq(r.steals, 0)
+
+@test fn stealing_balances_the_load()
+    r := simulate([[5, 5, 5, 5], List[int]()], true)
+    assert_eq(r.makespan, 10)
+    assert(r.steals >= 1, "the idle worker steals")
+    assert_eq(r.done.sum(), 4)
+
+@test fn without_stealing_the_busy_worker_sets_the_pace()
+    r := simulate([[5, 5, 5, 5], List[int]()], false)
+    assert_eq(r.makespan, 20)
+    assert_eq(r.busy, [20, 0])

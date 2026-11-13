@@ -49,7 +49,7 @@ fn tok(t Tok) str
         Num => "num"
         Word(at: Point(x: 1), text) => "{text} at column 1"
         Word(text: "fn") => "keyword"
-        Word(text) => text
+        Word(text, _) => text
 
 fn pair(p (Point, bool)) str
     match p

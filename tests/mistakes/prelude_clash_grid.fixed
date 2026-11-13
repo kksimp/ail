@@ -1,0 +1,6 @@
+struct Board
+    id int
+
+fn main()
+    t := Board(id: 1)
+    print(t.id)

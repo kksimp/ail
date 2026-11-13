@@ -292,6 +292,57 @@ fn main()
 ```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
 ```
 
+## Check output
+
+**check.out.1** — `ail check FILE|DIR` that finds no error prints one line on
+standard output, `ok PATH: N functions, M warnings` (N counts the program's own
+functions, M its warnings), so a clean run is told from one that did not run.
+The warnings themselves are on standard error. The checks `ail run`, `ail build`
+and `ail test` make first print no such line
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=warnings rules=check.out.1
+fn main()
+    print("hi")
+```
+
+**check.out.2** — Every error ends with a `next:` line, or in `--json` a `next`
+member: `ail fix FILE` when the diagnostic offers a fix, else
+`ail explain RULE`. A warning has none
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=next: status=2 rules=check.out.2
+fn main()
+    prnt("hi")
+```
+
+**check.out.3** — With `--json` every diagnostic is one object per line on
+standard error, as [check-json.schema.json](../design/check-json.schema.json)
+describes (`api`, `severity`, `rule`, `file`, `line`, `col`, `end_line`,
+`end_col`, `message`, and when there are any `help`, `notes`, `fixes`, `next`),
+and one summary object `{"api":1,"summary":true,"errors":N,"warnings":M,"fixable":K}`
+is printed last on standard output. `fixable` counts diagnostics with a fix. The
+gate checks every record of the mistakes corpus against the schema
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,--json,FILE expect="summary":true,"errors":1 status=2 rules=check.out.3
+fn main()
+    prnt("hi")
+```
+
+**check.exit.1** — `ail check` exits 0 when the program has no error (warnings
+allowed) and 2 when it has one or the command line is wrong. `ail run` of a
+program that does not compile prints the diagnostics and exits 1 without
+running it; a trap exits 1; otherwise `ail run` exits with the program's status.
+`ail test` of a program that does not compile exits non-zero, and 1 when a test
+fails. The gate checks these on macOS, Linux and Windows
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=error status=2 rules=check.exit.1
+fn main()
+    prnt("hi")
+```
+
 ## Explain
 
 **explain.show.1** — `ail explain RULE` prints the rule's text from
@@ -711,7 +762,7 @@ for `api.find.6`).
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
-rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
 same.
 
 **tool.card.2** — `ail card TOPIC` prints the section of the full card

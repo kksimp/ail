@@ -1,0 +1,7 @@
+src/main.ail: 2 hunks
+README.md: 1 hunk
+lib/util.ail: 1 hunk
+ src/main.ail |   5 ++-
+ README.md    |   2 +-
+ lib/util.ail |  30 ++++++++++++++++++++
+ 3 files changed, 34 insertions(+), 3 deletions(-)

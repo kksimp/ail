@@ -158,6 +158,13 @@ struct Placed
 ## Report `diags` for the program `files` (sources `texts`, one per file):
 ## text lines like `ail check`, or one JSON object per line.
 pub fn report(files List[ast.SourceFile], texts List[str], diags List[Shown], json bool) str
+    report_in(files, texts, diags, json, false)
+
+## `report` for `ail check` (check.out.2): each error also says what to run next.
+pub fn report_next(files List[ast.SourceFile], texts List[str], diags List[Shown], json bool) str
+    report_in(files, texts, diags, json, true)
+
+fn report_in(files List[ast.SourceFile], texts List[str], diags List[Shown], json bool, follow bool) str
     mut groups := [List[Shown]() for _ in files]
     mut nodes := List[Shown]()
     for d in diags
@@ -196,15 +203,24 @@ pub fn report(files List[ast.SourceFile], texts List[str], diags List[Shown], js
                 shown.edits = fix.settle_fixes(local, fix.split_lines(text))
                 shown.fixes = [f.title for f in shown.edits]
             if json
-                out.push(to_json(shown, end, files[fi].path))
+                out.push(to_json(shown, end, files[fi].path, follow))
             else
-                out.push(to_text(shown, files[fi].path, text))
+                out.push(to_text(shown, files[fi].path, text, follow))
     out.join("\n")
 
 fn severity(d Shown) str
     if d.warning then "warning" else "error"
 
-fn to_text(d Shown, path str, text str) str
+## What an agent runs after an error (check.out.2): `ail fix FILE` when a fix
+## settled, else `ail explain RULE`. Warnings have none.
+fn next_step(d Shown, path str) str?
+    if d.warning
+        return none
+    if d.fixes.len() > 0
+        return "ail fix {path}"
+    "ail explain {d.rule}"
+
+fn to_text(d Shown, path str, text str, follow bool) str
     mut lines := ["{path}:{d.pos.line}:{d.pos.col}: {severity(d)}[{d.rule}]: {d.message}"]
     src := text.lines()
     if d.pos.line >= 1 and d.pos.line <= src.len()
@@ -218,10 +234,13 @@ fn to_text(d Shown, path str, text str) str
     for f in d.fixes
         if d.help != f
             lines.push("fix: {f}")
+    if follow
+        if n := next_step(d, path)
+            lines.push("next: {n}")
     lines.join("\n")
 
 ## One diagnostic as a schema v1 JSON object (ADR 0145), with fixes.
-fn to_json(d Shown, end ast.Pos, path str) str
+fn to_json(d Shown, end ast.Pos, path str, follow bool) str
     mut s := "\{\"api\":1,\"severity\":{quote(severity(d))},\"rule\":{quote(d.rule)},\"file\":{quote(path)},\"line\":{d.pos.line},\"col\":{d.pos.col},\"message\":{quote(d.message)}"
     if h := d.help
         s = "{s},\"help\":{quote(h)}"
@@ -234,6 +253,9 @@ fn to_json(d Shown, end ast.Pos, path str) str
         s = "{s},\"notes\":[{ns.join(",")}]"
     if d.edits.len() > 0
         s = "{s},\"fixes\":[{[check.fix_json(f) for f in d.edits].join(",")}]"
+    if follow
+        if n := next_step(d, path)
+            s = "{s},\"next\":{quote(n)}"
     "{s}}"
 
 fn chop_cr(l str) str

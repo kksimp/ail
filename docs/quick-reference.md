@@ -10,7 +10,7 @@
 ./ail help [CMD] [--json]            # every command, or one command's usage and rule (also `ail --help`, `ail CMD --help`)
 ./ail doctor [--json] [--path]      # check the toolchain; --path prints the profile line that puts `ail` on PATH
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
-./ail check [--json] [--budget N [--from K]] FILE|DIR
+./ail check [--json] [--budget N [--from K]] FILE|DIR   # clean: one `ok FILE: N functions, M warnings` line, exit 0; errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`; --json adds a summary record
 ./ail build FILE.ail [-o OUT]       # native executable
 ./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
 ./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
@@ -380,6 +380,11 @@ for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
         continue
     if x > 9
         break
+
+outer: for r in rows       # a label: `break outer` / `continue outer` from a nested loop
+    for c in r
+        if c == 0
+            continue outer
 
 label := match c     # must cover every variant; `_` covers the rest
     Red => "red"
