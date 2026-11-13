@@ -94,7 +94,10 @@ fn site_prefix(text List[char], at int, structs List[ast.StructDecl]) str?
     mut a := e
     while a < text.len() and (text[a] == ' ' or text[a] == '\n')
         a += 1
-    if b < 0 or a >= text.len() or not (text[b] == '(' or text[b] == ',') or not (text[a] == ')' or text[a] == ',')
+    if b < 0
+        or a >= text.len()
+        or not (text[b] == '(' or text[b] == ',')
+        or not (text[a] == ')' or text[a] == ',')
         return "self."
     # The `(` of the call the argument is in.
     mut paren := b
