@@ -43,7 +43,7 @@ fn ffi_try(pre str, lib_prefix bool, name str, suf str) int
     sb_text(suf)
     c := mem_cstr(sb_str())
     h := ffi_dlopen(c)
-    ffi_free_name(c)
+    mem_free(c)
     h
 
 ## Whether `name` is used as written: it has a `/` or a `.` (ffi.load.1).
@@ -124,7 +124,7 @@ fn ffi_addr(k int, lib str, has_lib bool, name str) int
         # The Universal CRT keeps the `printf` family (`sprintf`, ...) as header
         # inlines, not exports: the legacy `msvcrt.dll` has them (ffi.load.3).
         p = ffi_dlsym(ffi_try("", false, "msvcrt", ".dll"), c)
-    ffi_free_name(c)
+    mem_free(c)
     if p == 0
         store64(global(FFI_ST), 2)
         return 0
@@ -165,11 +165,3 @@ fn ffi_load_msg(st int, lib str, has_lib bool, name str) int
         sb_text(name)
         sb_text("`")
     str_addr(sb_str())
-
-## Free a name made by `mem_cstr` for a lookup, and mark its block freed in
-## the table of `std.mem` blocks: the memory can come back from the system
-## for the program's own `mem.alloc`, and a stale live entry would wrongly
-## trap an access to it (unsafe.ptr.5).
-fn ffi_free_name(c int)
-    memtab_free(c)
-    mem_free(c)
