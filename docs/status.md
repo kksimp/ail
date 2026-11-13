@@ -250,6 +250,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Delegated-decision order: AI understanding, human readability, speed, tokens | D | [1077](decisions/1077-decision-order-ai-understanding-first.md) |
 | The kinds of standard errors are enums (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`, ...), as are `app.EventKind`, `ui`/`term` `KeyCode`, `MouseButton` and `MouseKind`; a string compared with an enum is type.enum.7, with a fix | D+I | [1068](decisions/1068-std-error-kinds-are-enums.md) |
 | `match err` on an error union: member types and their variants, the name narrowed in the arm, every member covered (err.match.1-3); failures record their type | D+I | [1078](decisions/1078-error-union-member-matching.md) |
+| Test filter, test listing and fixtures (`--filter`, `--list`, `@fixture`, `@needs`) | D, implemented, awaiting gate | [1075](decisions/1075-test-filter-and-fixtures.md) |
 | Digest of the night's delegated decisions, ADRs 0618–0743, for the designer | D | [digest](design/decisions-digest-2026-10-21.md) |
 | One-command scripts for everything people run | D, implemented for tokbench | [0071](decisions/0071-one-command-scripts.md) |
 | Interim testing gate: local Linux and macOS, no hosted CI | D (interim) | [0085](decisions/0085-interim-local-testing-gate.md) |

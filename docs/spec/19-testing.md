@@ -3,13 +3,13 @@
 Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
-> functions, the `ail test` runner and its result format, `assert`,
-> `assert_eq`, `assert_err` and `assert_near`, property tests, fuzzing, mutation testing, and doc examples as tests. Not yet designed:
-> fixtures, test filtering, parallel runs, and expected-failure tests.
+> functions, the `ail test` runner and its result format, test filtering and listing, fixtures,
+> `assert`, `assert_eq`, `assert_err` and `assert_near`, property tests, fuzzing, mutation testing,
+> and doc examples as tests. Not yet designed: parallel runs and expected-failure tests.
 
 ## Attributes
 
-**test.attr.1** — The attributes are `@test`, `@pure`, `@inline`, `@deprecated`, `@allow`, `@tool` (`attach.tool.1`) and `@caps` (`eff.cap.6`). Any other
+**test.attr.1** — The attributes are `@test`, `@fixture`, `@needs`, `@pure`, `@inline`, `@deprecated`, `@allow`, `@tool` (`attach.tool.1`) and `@caps` (`eff.cap.6`). Any other
 attribute name is a compile-time error that lists the known attributes. The
 attribute syntax itself is `gram.attr.1–2`; an attribute on a line of its own
 is `gram.attr.2`. *(ADR 0083, ADR 0167)*
@@ -109,6 +109,165 @@ runs. Everything else is as `test.run.1-4`.
 @test
 fn adds()
     assert_eq(1 + 1, 2)
+```
+
+## Filtering and listing
+
+**test.filter.1** — `ail test --filter PATTERN FILE` runs only the tests whose name matches
+`PATTERN` and says `filter: N of M tests` on standard error. A pattern matches a name that
+contains it; a `*` in the pattern stands for any run of characters. The name is the function's name,
+`MODULE.NAME` for a test of an imported module, and `doc:NAME` for a doc example (`test.doc.3`).
+`--filter` can be given several times, and a test that matches any pattern runs. Everything else is as
+`test.run.1-4`. A pattern that matches no test is an error (exit 2) that says how many tests the file has.
+([ADR 1075](../decisions/1075-test-filter-and-fixtures.md))
+
+```ail tool=test,--filter,add,FILE expect=passed rules=test.filter.1
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+
+@test
+fn fails()
+    assert(false)
+```
+
+```ail tool=test,--filter,nosuch,FILE status=2 expect=test.filter.1 rules=test.filter.1
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+```
+
+**test.filter.2** — With `--filter`, only the matching tests are built and run, and the rest are not
+reported. A property test is matched by name like any other (`test.prop.1`). `--cases`, `--seed`,
+`--json`, `--coverage` and `--trace` work as without it.
+
+```ail tool=test,--filter,a*s,--json,FILE expect="test":"adds" rules=test.filter.2
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+
+@test
+fn zero()
+    assert(false)
+```
+
+**test.filter.3** — `--filter` can't be combined with `--update` or `--mutate`, which need every test: it
+is an error (exit 2) naming `test.filter.3`.
+
+```ail tool=test,--filter,a,--mutate,FILE status=2 expect=test.filter.3 rules=test.filter.3
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+```
+
+**test.list.1** — `ail test --list [--filter PATTERN] FILE` checks the program and prints the name of each
+test in source order, one per line, without building or running anything (exit 0). With `--json`, each
+test is `{"test":NAME,"line":N}` (`line` is 0 for a test that can't be built) followed by
+`{"summary":true,"listed":N}`. ([ADR 1075](../decisions/1075-test-filter-and-fixtures.md))
+
+```ail tool=test,--list,FILE expect=adds rules=test.list.1
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+
+@test
+fn fails()
+    assert(false)
+```
+
+```ail tool=test,--list,--json,--filter,fail,FILE expect="listed":1 rules=test.list.1
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+
+@test
+fn fails()
+    assert(false)
+```
+
+## Fixtures
+
+**test.fixture.1** — `@fixture` marks a top-level function with no parameters and no type parameters
+that makes a value for tests: its return type is the value's type `T`, or `!T` when setup can fail.
+`@fixture("END")` also names the teardown function `END` (`test.fixture.2`). A fixture is an ordinary
+function in every other way and is not a test. *(ADR 1075)*
+
+**test.fixture.2** — A teardown is a top-level function `fn END(value T)` that takes the fixture's value
+and returns nothing, so it can't fail. *(ADR 1075)*
+
+**test.fixture.3** — A `@test` function lists the fixtures it uses with `@needs("NAME")` after `@test`, one
+attribute per fixture, and declares a parameter `NAME` of the fixture's type for each. These parameters
+get the fixtures' values and are not generated, so a property test can take both. A fixture named
+twice, a name that is not a `@fixture`, a missing or differently typed parameter, and `@needs` on a function
+that is not a `@test` are compile-time errors. *(ADR 1075)*
+
+**test.fixture.4** — Each run of a test makes its fixtures anew, in the order of the `@needs` attributes (a
+property test makes them for each generated input), and tears them down in reverse order when the run
+ends, whether it passed, failed, trapped or returned an error. A fixture whose setup fails ends
+the test as `FAIL NAME: error: MESSAGE at LINE:COL`, at the position where the fixture first
+returned the error, with the line `! context: setup of fixture F` under it; the test body does not run
+and the fixtures made before it are torn
+down. A fixture and its teardown must be in the same file as the test. *(ADR 1075)*
+
+```ail tool=test,FILE expect=passed rules=test.fixture.1,test.fixture.2,test.fixture.3,test.fixture.4
+@fixture("drop_file")
+fn scratch_file() !str
+    fs.write_text(".ail-fixture-demo.txt", "hi")?
+    ".ail-fixture-demo.txt"
+
+fn drop_file(name str)
+    fs.remove(name) else return
+
+@test @needs("scratch_file")
+fn reads_the_file(scratch_file str)
+    assert_eq(fs.read_text(scratch_file)?, "hi")
+```
+
+```ail tool=test,FILE status=1 expect=context rules=test.fixture.4
+error struct NoDatabase
+    why str
+
+@fixture
+fn broken() !int
+    return NoDatabase(why: "not running")
+
+@test @needs("broken")
+fn uses_it(broken int)
+    assert_eq(broken, 1)
+```
+
+```ail error=test.fixture.1 rules=test.fixture.1
+@fixture
+fn needs(x int) int
+    x
+
+fn main()
+    print("x")
+```
+
+```ail error=test.fixture.2 rules=test.fixture.2
+@fixture("drop")
+fn make() int
+    1
+
+fn drop(value str)
+    print(value)
+
+fn main()
+    print("x")
+```
+
+```ail error=test.fixture.3 rules=test.fixture.3
+@fixture
+fn make() int
+    1
+
+@test @needs("make")
+fn uses(x int)
+    assert_eq(x, 1)
+
+fn main()
+    print("x")
 ```
 
 ## Assertions

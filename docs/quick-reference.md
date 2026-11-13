@@ -12,7 +12,7 @@
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
 ./ail check [--json] [--budget N [--from K]] FILE|DIR
 ./ail build FILE.ail [-o OUT]       # native executable
-./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --fuzz NAME, --mutate, --contracts
+./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
 ./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
 ./ail pkg [COMMAND]                 # a program's packages: fetch, lock, list
 ./ail header FILE.ail [-o OUT.h]    # a C header of the exports
@@ -743,6 +743,16 @@ A test with parameters is a **property**: `ail test` runs generated inputs
 (`--cases N`, default 100; `--seed S` replays) and shrinks a failure to the
 smallest input. Parameters: `int`, `float`, `bool`, `char`, `str`, `List`, `Map`,
 `Set`, optionals, and structs and enums of those.
+
+`ail test --filter PATTERN FILE` runs the tests whose name contains PATTERN (`*` is
+any text; repeat `--filter` for several); `--list` prints the names without running.
+
+A **fixture** is shared setup made fresh for each run of a test: `@fixture fn tmp() T`
+(or `!T` if setup can fail; a failure fails the test, with `context: setup of fixture tmp` shown).
+`@fixture("drop")` names a teardown `fn drop(v T)` that always runs, in reverse
+order, after pass, fail or trap. A test takes it with `@test @needs("tmp")` and a
+parameter `tmp T`: `@test @needs("a") @needs("b") fn t(a A, b B, n int)`
+(`n` is still a generated input).
 
 A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
 `# => text` after a `print` asserts its output:
