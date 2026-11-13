@@ -1,5 +1,6 @@
 fn main()
     assert(true, 5)
     assert_err(1 + 1)
-    assert_near(1, 2.0, 0.1)
+    n := 1
+    assert_near(n, 2.0, 0.1)
     assert_near(1.0, 2.0)
