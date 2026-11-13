@@ -115,6 +115,7 @@ fn os_lookup(mod str, name str) OsFn?
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_bytes" => os_fn("rt.io_read_bytes", [], Ty.Bytes, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
+        "io.read_exact" => os_fn("rt.io_read_exact", [Ty.Int], Ty.Opt(Ty.Bytes), false)
         "io.write_bytes" => os_fn("rt.io_write_bytes", [Ty.Bytes], Ty.Unit, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
         "os.signals" => os_fn("rt.os_signals", [Ty.List(s)], Ty.Chan(s), false)

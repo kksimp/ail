@@ -1,0 +1,6 @@
+## std.io.7: a negative byte count traps.
+use std.io
+
+fn main()
+    print("start")
+    _ := io.read_exact(-1)

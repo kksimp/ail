@@ -843,6 +843,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
 | [1064](1064-reserve-256-mib-ahead-of-push-loops.md) | Native: reserve up to 256 MiB of list elements ahead of a push loop *(delegated)* | Accepted | 2026-11-11 |
 | [1066](1066-pair-adjacent-float-operations.md) | Native: pair adjacent float element operations into two-lane vector operations (`Vec2`, native.vec.3) *(delegated)* | Accepted | 2026-11-12 |
+| [1071](1071-streaming-file-handles.md) | `std.file` Reader and Writer (unique, flush on drop) over `std.fs`; `io.read_exact`; resolves OQ-141 *(delegated)* | Accepted | 2026-11-12 |
 | [1077](1077-decision-order-ai-understanding-first.md) | Delegated decisions: AI understanding first, human readability second, then speed, then tokens *(designer)* | Accepted | 2026-11-12 |
 | [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
 | [1067](1067-closures.md) | Function literals that copy their locals, failing function values, and `any`/`all`/`find`/`filter`/`map`/`group_by` *(delegated)* | Accepted | 2026-11-12 |

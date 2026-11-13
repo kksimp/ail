@@ -98,7 +98,7 @@ STD_EFFECTS := [
         names: ["run", "run_bytes", "which", "start", "wait", "kill"],
         effects: ["proc", "io"],
     ),
-    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "write_bytes", "eprint", "exit"], effects: ["io"]),
+    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "read_exact", "write_bytes", "eprint", "exit"], effects: ["io"]),
     # std.net.14: a server needs the narrower capability as well.
     StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
     # std.net.1: every request reaches the network.
