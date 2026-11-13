@@ -2,14 +2,14 @@
 use std.fs
 use std.env
 
-fn save(path str, text str)
-    fs.write_text(path, text)
+fn save(path str, text str) ! fs.IoError
+    fs.write_text(path, text)?
 
 fn home() str
     env.get("HOME") else ""
 
-@caps(none) fn direct(path str) str
-    save(path, "x")
+@caps(none) fn direct(path str) str ! fs.IoError
+    save(path, "x")?
     "done"
 
 @caps(fs) fn chained() str
@@ -21,9 +21,11 @@ fn home() str
 @caps(none, fs) fn mixed(x int) int
     x
 
-@caps(fs, env) fn fine(path str) str
-    save(path, "x")
+@caps(fs, env) fn fine(path str) str ! fs.IoError
+    save(path, "x")?
     home()
 
-fn main()
-    print(direct("a") + chained() + fine("b"))
+fn main() !
+    a := direct("a")?
+    b := fine("b")?
+    print("{a} {chained()} {b}")

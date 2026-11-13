@@ -3270,8 +3270,8 @@ fn Gate.agent_tools(mut self, tmp str)
     fs.write_text("{base}/allow/writer.ail", src_of([
         "use std.fs",
         "",
-        "fn main()",
-        "    fs.write_text(\"data/b.txt\", \"beta\") else print(\"failed\")",
+        "fn main() !",
+        "    fs.write_text(\"data/b.txt\", \"beta\")?",
         "    print(\"done\")",
     ])) else return
     tool(

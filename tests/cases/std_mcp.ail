@@ -15,11 +15,20 @@ fn main() !
         JsonMember(key: "b", value: Json.Num(3.5)),
     ]))?
     print(s.to_text())
-    _ := c.call("boom", Json.Obj([])) else err
+    failed := c.call("boom", Json.Obj([])) else err
         print("{err.kind}: {err.message}")
-    _ := c.call("nope", Json.Obj([])) else err
+        Json.Null
+    print(failed.kind())
+    missing := c.call("nope", Json.Obj([])) else err
         print("{err.kind}: {err.message}")
+        Json.Null
+    print(missing.kind())
     c.set_timeout(5000)
     c.close()
-    _ := mcp.connect("/nonexistent/mcp-server", []) else err
-        print(err.kind)
+    print(start_kind())
+
+fn start_kind() str
+    c := mcp.connect("/nonexistent/mcp-server", []) else err
+        return err.kind
+    c.close()
+    "started"

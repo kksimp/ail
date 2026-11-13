@@ -48,6 +48,8 @@ fn Checker.consume(mut self, e ast.Expr, t Ty)
 
 ## Move the value of `e` out of its binding.
 @allow("expr.match.3") fn Checker.take(mut self, e ast.Expr, rule str)
+    # eff.use.1: giving a value away does something.
+    effect_marks += 1
     match e
         Name(n, at) =>
             l := local(n) else return

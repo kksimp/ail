@@ -413,7 +413,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         if (not last or not need) and is_stmt_eval(s) and reject_unhandled(ty, stmt_pos(s))
             ty = Ty.Unknown
         elif not last or not need
-            note_discard(s, ty, marks)
+            note_discard(s, ty, marks, last)
     end_scope(mark)
     if leaves then Ty.Never else ty
 
@@ -515,7 +515,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     # so is a `mut` local that starts as `none`.
     opt := mutable and is_none_literal(value)
     if (is_empty_literal(value) or opt) and otherwise == none
-        if declare(n, at)
+        # eff.use.1: `_ := e` throws the value away; `_` is never a binding.
+        if n != "_" and declare(n, at)
             index := locals.len()
             locals.push(Local(
                 name: n,
@@ -554,6 +555,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
             )
         else
             err("expr.bind.1", expr_pos(value), text)
+    if n == "_"
+        return
     if declare(n, at)
         locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0

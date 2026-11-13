@@ -80,11 +80,14 @@ fn main()
 expression statement that is not its block's value) MUST do something
 else: a call whose value is neither unit, `Never` nor `T ! E` (`err.use.1`)
 is an error when its effects (`eff.infer.1–5`) include none of `io`,
-`unsafe`, `hw`, `spawn`, `mutates` or a capability and it changes no place
-passed `mut` or used as a `mut` receiver. A call through a function value,
+`unsafe`, `hw`, `spawn`, `mutates` or a capability, it changes no place
+passed `mut` or used as a `mut` receiver, and it moves no value (a `move`
+argument or a `move self` receiver). A call through a function value,
 a method of a channel, task, mutex or atomic, a function without a body,
-and a call inside an `unsafe` block are never reported. `_ := expr` throws a
-value away on purpose. The fix offers the in-place twin of a copying
+a call inside an `unsafe` block, and the last statement of a block in a
+function that can fail (its error value, `err.ret.*`) are never reported. `_ := expr` (also with
+`else` or `?`) throws a value away on purpose; `_` binds nothing, so it may be
+written any number of times in a function. The fix offers the in-place twin of a copying
 built-in (`xs.sorted()` → `xs.sort()`) when there is one, and `_ := ` always.
 *(ADR 1082)*
 
@@ -138,15 +141,15 @@ the function sees its inferred set as before. *(ADR 1089)*
 ```ail error=eff.cap.6 rules=eff.cap.6
 use std.fs
 
-fn save(path str, text str)
-    fs.write_text(path, text)
+fn save(path str, text str) ! fs.IoError
+    fs.write_text(path, text)?
 
-@caps(none) fn render(path str) str
-    save(path, "x")               # error: `render` is limited to no capability
+@caps(none) fn render(path str) str ! fs.IoError
+    save(path, "x")?              # error: `render` is limited to no capability
     "done"
 
-fn main()
-    print(render("out.txt"))
+fn main() !
+    print(render("out.txt")?)
 ```
 
 **eff.cap.7** — `LIST` is `none`, or a comma-separated list of the names
@@ -165,14 +168,14 @@ fn main()
 ```ail rules=eff.cap.6
 use std.fs
 
-@caps(fs) fn save(path str, text str)
-    fs.write_text(path, text)
+@caps(fs) fn save(path str, text str) ! fs.IoError
+    fs.write_text(path, text)?
 
 @caps(none) fn double(x int) int
     x * 2
 
-fn main()
-    save("out.txt", "{double(21)}")
+fn main() !
+    save("out.txt", "{double(21)}")?
 ```
 
 ## Scoped allow-lists

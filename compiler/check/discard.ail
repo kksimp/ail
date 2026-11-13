@@ -21,9 +21,13 @@ fn twin_of(n str) str?
 
 ## Called by `block` after typing a statement whose value isn't the block's.
 ## `marks` is `effect_marks` before the statement: if typing it mutated a
-## place or called a function value, it does something and stays legal.
-fn Checker.note_discard(mut self, s ast.Stmt, ty Ty, marks int)
+## place, moved a value or called a function value, it does something and
+## stays legal. The last statement of a function that can fail may be its
+## error value (`err.ret.*`), so it isn't noted.
+fn Checker.note_discard(mut self, s ast.Stmt, ty Ty, marks int, last bool)
     if marks != effect_marks or unsafe_depth > 0 or not is_value_ty(ty)
+        return
+    if last and is_res(fn_ret)
         return
     e := eval_of(s) else return
     if not is_call(e) or is_prelude_line(stmt_pos(s).line)
