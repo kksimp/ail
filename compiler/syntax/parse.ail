@@ -1748,7 +1748,11 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             ) else fix.delete(pos, tokens[i + 1].pos)
             attach(title, [first, fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")])
         return none
-    if tag == "id" and text == "let" and kw_at(1) == "mut" and tag_at(2) == "id" and sym_at(3) == "="
+    if tag == "id"
+        and text == "let"
+        and kw_at(1) == "mut"
+        and tag_at(2) == "id"
+        and sym_at(3) == "="
         error_text(
             "expr.bind.1",
             pos,
@@ -2764,7 +2768,10 @@ fn Parser.primary(mut self) ast.Expr?
                     "",
                 )
                 return none
-            if s == "=" and i > 0 and (tokens[i - 1].tok == Tok.Sym("==") or tokens[i - 1].tok == Tok.Sym("!=")) and touches(i)
+            if s == "="
+                and i > 0
+                and (tokens[i - 1].tok == Tok.Sym("==") or tokens[i - 1].tok == Tok.Sym("!="))
+                and touches(i)
                 eqs := if tokens[i - 1].tok == Tok.Sym("==") then "===" else "!=="
                 error_fix(
                     "gram.foreign.1",

@@ -32,7 +32,10 @@ fn Checker.enum_static(mut self, e int, n str, at ast.Pos, args List[ast.Arg]) T
         return Ty.ListOf(t)
     a := args[0]
     st := expr(a.value, Ty.Str, true)
-    if st != Ty.Str and st != Ty.Unknown and st != Ty.Never and not reject_unhandled(st, expr_pos(a.value))
+    if st != Ty.Str and st != Ty.Unknown and st != Ty.Never and not reject_unhandled(
+        st,
+        expr_pos(a.value),
+    )
         err_help(
             "type.enum.20",
             expr_pos(a.value),
@@ -42,7 +45,8 @@ fn Checker.enum_static(mut self, e int, n str, at ast.Pos, args List[ast.Arg]) T
     Ty.Opt(t)
 
 ## `c.name()` on a value of a field-less enum: the variant's name.
-@allow("expr.match.3") fn Checker.enum_name_method(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty?
+@allow("expr.match.3")
+fn Checker.enum_name_method(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty?
     if n != "name"
         return none
     match rt
@@ -51,11 +55,6 @@ fn Checker.enum_static(mut self, e int, n str, at ast.Pos, args List[ast.Arg]) T
                 return none
             args_only(args)
             if args.len() > 0
-                err_help(
-                    "type.enum.20",
-                    at,
-                    "`name` takes no arguments",
-                    "write `c.name()`",
-                )
+                err_help("type.enum.20", at, "`name` takes no arguments", "write `c.name()`")
             Ty.Str
         _ => none

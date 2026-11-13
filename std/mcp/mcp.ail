@@ -71,7 +71,10 @@ fn Client.request(mut self, method str, params Json) Json ! McpError
     while true
         line := child.out.recv_for(wait_ms) else
             note := self.stderr_note()
-            return fail("timeout", "no reply to {method} within {wait_ms} ms, or the server closed{note}")
+            return fail(
+                "timeout",
+                "no reply to {method} within {wait_ms} ms, or the server closed{note}",
+            )
         reply := parse_json(line) else continue
         rid := reply.int("id") else
             continue

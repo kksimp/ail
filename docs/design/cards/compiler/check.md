@@ -122,6 +122,7 @@ pub enum check.Def
 pub struct check.Bind
 pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
+pub struct check.BindDecl
 ```
 
-trimmed to fit 2000 tokens (~1595); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1603); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

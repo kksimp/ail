@@ -660,8 +660,14 @@ fn Parser.header_tail(mut self, after str) Header
     cond := after.contains("condition")
     s := sym_at(0)
     # `if let Some(x) = e` (Rust)
-    if cond and k0 >= 1 and tokens[k0 - 1].tok == Tok.Ident("let") and tag_at(0) == "id" and sym_at(1) == "("
-        and tag_at(2) == "id" and sym_at(3) == ")" and sym_at(4) == "="
+    if cond
+        and k0 >= 1
+        and tokens[k0 - 1].tok == Tok.Ident("let")
+        and tag_at(0) == "id"
+        and sym_at(1) == "("
+        and tag_at(2) == "id"
+        and sym_at(3) == ")"
+        and sym_at(4) == "="
         wrapper := tok_text(peek())
         is_while := after.contains("`while`")
         if is_while
@@ -776,7 +782,10 @@ fn Parser.stray_after_statement(mut self, start int) bool
         )
         return true
     # `println!(..)`, `vec![..]`, `format!(..)`
-    if cur == "!" and k0 >= 1 and tok_tag(tokens[k0 - 1].tok) == "id" and touches(k0)
+    if cur == "!"
+        and k0 >= 1
+        and tok_tag(tokens[k0 - 1].tok) == "id"
+        and touches(k0)
         and (sym_at(1) == "(" or sym_at(1) == "[")
         return macro_call(k0)
     # `go work(1)`
@@ -974,7 +983,8 @@ fn Parser.macro_call(mut self, k0 int) bool
             "write the list literal",
             [fix.delete(npos, bend)],
         )
-    elif paren and (name == "println" or name == "print" or name == "eprintln" or name == "eprint" or name == "dbg")
+    elif paren
+        and (name == "println" or name == "print" or name == "eprintln" or name == "eprint" or name == "dbg")
         error_fix(
             "gram.foreign.1",
             npos,
@@ -983,7 +993,8 @@ fn Parser.macro_call(mut self, k0 int) bool
             "write `print`",
             [fix.span(npos, bend, "print")],
         )
-    elif paren and (name == "assert" or name == "assert_eq" or name == "assert_ne" or name == "debug_assert")
+    elif paren
+        and (name == "assert" or name == "assert_eq" or name == "assert_ne" or name == "debug_assert")
         error_fix(
             "gram.foreign.1",
             npos,
@@ -1030,7 +1041,9 @@ fn Parser.macro_call(mut self, k0 int) bool
 ## `for (const x of xs)`: the edits that write `for x in xs`, at `(`.
 fn Parser.js_for_edits(self) List[fix.Edit]?
     mut k := i + 1
-    if tokens[k].tok == Tok.Ident("const") or tokens[k].tok == Tok.Ident("let") or tokens[k].tok == Tok.Ident("var")
+    if tokens[k].tok == Tok.Ident("const")
+        or tokens[k].tok == Tok.Ident("let")
+        or tokens[k].tok == Tok.Ident("var")
         k += 1
     if tok_tag(tokens[k].tok) != "id"
         return none
@@ -1093,7 +1106,9 @@ fn Parser.go_receiver(mut self) bool
     mut t := i + 2
     if tokens[t].tok == Tok.Sym("*")
         t += 1
-    if tok_tag(tokens[t].tok) != "id" or tokens[t + 1].tok != Tok.Sym(")") or tok_tag(tokens[t + 2].tok) != "id"
+    if tok_tag(tokens[t].tok) != "id"
+        or tokens[t + 1].tok != Tok.Sym(")")
+        or tok_tag(tokens[t + 2].tok) != "id"
         return false
     tname := tok_text(tokens[t].tok)
     mname := tok_text(tokens[t + 2].tok)
