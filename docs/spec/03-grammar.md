@@ -88,8 +88,10 @@ ones; a suggestion is at most one edit away up to 4 characters and two from 5.
 declarations. After one, `ail check` still reports the checker's errors from
 every declaration (the text from one column-1 line to the next) that has no
 syntax error, so five mistakes in five functions are five diagnostics in one run.
-It drops warnings, and any error that mentions a name a broken declaration
-declares. The test is `tests/cases/onepass_five.ail`. *(ADR 1112)*
+It drops warnings, `mod.main.1`, and any error that mentions a name a broken
+declaration declares. An error in an import (`use`, or a foreign `import`) is
+not a broken declaration: after one, no checker error is added. The test is
+`tests/cases/onepass_five.ail`. *(ADR 1112)*
 
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*

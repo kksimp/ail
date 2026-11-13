@@ -48,3 +48,9 @@ trap, exit 0, 1 or 2 with an error behind 2, all five reported and none in `main
 The fast form is the gate suite `checkfuzz`; every failure it finds becomes a
 file in `tests/cases/`. The mutation harness for diagnostic quality is
 `tools/checkbench` (package S27), a separate tool.
+
+Amended 2026-11-13 by the integrator (delegated, ADR 0076), from the batch 12
+gate: one mistake must stay one diagnostic. The extra checker pass adds nothing
+after an import error (`use`, a foreign `import`), drops `mod.main.1` like a
+warning, and counts short declared names (`fn f`, `const N`) too; without that,
+`fn f() int !` added "unknown name `f`" at every call.
