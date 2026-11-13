@@ -40,7 +40,7 @@ fn sh(script str) proc.Output
     r
 
 fn Run.red(mut self, name str, why str)
-    fails += 1
+    self.fails += 1
     print("RED {name}")
     mut n := 0
     for l in why.lines()
@@ -113,27 +113,27 @@ fn interp_line(l str) str?
 
 fn Run.mir(mut self)
     for case in list_ext("tests/native", ".ail")
-        checks += 1
+        self.checks += 1
         r := comp("mir {case}")
         stem := case.slice(0, case.len() - 4)
         if fs.exists("{stem}.mir")
             if r.status != 0
-                red(case, "failed:\n{r.err}")
+                self.red(case, "failed:\n{r.err}")
             elif r.out != slurp("{stem}.mir")
-                red(case, "differs from the expected output; got:\n{r.out}")
+                self.red(case, "differs from the expected output; got:\n{r.out}")
         else
             mut problems := List[str]()
             for l in r.err.lines()
                 if l.contains(": error[native.")
                     problems.push(l)
             if r.status == 0
-                red(case, "expected problems, but it lowered")
+                self.red(case, "expected problems, but it lowered")
             elif "{problems.join("\n")}\n" != slurp("{stem}.err")
-                red(case, "differs from the expected output; got:\n{problems.join("\n")}")
+                self.red(case, "differs from the expected output; got:\n{problems.join("\n")}")
     # ADR 0722: each `native.subset.1` problem is followed by its `help:` line. Every help
     # form of subset_help.ail is native now (its .mir golden), so this uses a refused program
     # (a function with more than 8 float parameters, still outside the subset; ADR 1109).
-    checks += 1
+    self.checks += 1
     case := "tests/native/subset_ext.ail"
     r := comp("mir {case}")
     mut lines := List[str]()
@@ -148,11 +148,11 @@ fn Run.mir(mut self)
         else
             prev = false
     if "{lines.join("\n")}\n" != slurp("tests/native/subset_ext.help")
-        red("subset help lines", lines.join("\n"))
+        self.red("subset help lines", lines.join("\n"))
 
 ## ADR 0814: a batch build gives the same bytes as one `ail build` per program.
 fn Run.batch(mut self)
-    checks += 1
+    self.checks += 1
     mut all := List[str]()
     for f in list_ext("tests/native/run", ".ail")
         if not slurp(f).contains("derive")
@@ -165,17 +165,17 @@ fn Run.batch(mut self)
         i += step
     r := comp("build-many compiler/rt/native {host_target()} 0 0 {self.root}/std {sample.join(" ")}")
     if r.status != 0
-        red("batch build", r.err)
+        self.red("batch build", r.err)
         return
     parts := r.out.split("== ")
     for k in 0..sample.len()
         sect := parts[k + 1]
         nl := sect.find("\n") else 0
         hex := squeeze(sect.slice(nl + 1, sect.len()))
-        exe := "{tmp}/batch{k}"
+        exe := "{self.tmp}/batch{k}"
         b := ail("", "build {sample[k]} -o {exe}")
         if b.status != 0 or hex_of_file(exe) != hex
-            red("batch build", "{sample[k]}: the batch build differs from `ail build`")
+            self.red("batch build", "{sample[k]}: the batch build differs from `ail build`")
 
 ## The first line where `want` and `got` differ, so a gate log that shows only the head of a failure still names it.
 fn first_diff(want str, got str, want_status int, got_status int) str
@@ -356,21 +356,21 @@ fn Run.executables(mut self, target str, runner str)
             sampled.push(cases[n])
             n += stride
         cases = sampled
-    if shard_n > 1
+    if self.shard_n > 1
         mut mine := List[str]()
         for i in 0..cases.len()
-            if i % shard_n == shard_k
+            if i % self.shard_n == self.shard_k
                 mine.push(cases[i])
-        total += cases.len()
-        ran += mine.len()
+        self.total += cases.len()
+        self.ran += mine.len()
         cases = mine
     else
-        total += cases.len()
-        ran += cases.len()
-    checks += cases.len()
+        self.total += cases.len()
+        self.ran += cases.len()
+    self.checks += cases.len()
     # One process per core (a shard: one), each with every n-th program so the chunks cost about the same.
     n := (env.get("NX_JOBS") else "0").to_int() else 0
-    jobs := if n > 0 then n else (if shard_n > 1 then 1 else cores())
+    jobs := if n > 0 then n else (if self.shard_n > 1 then 1 else cores())
     mut chunks := List[List[str]]()
     for _ in 0..jobs
         chunks.push(List[str]())
@@ -388,13 +388,13 @@ fn Run.executables(mut self, target str, runner str)
                     if target.is_empty() then "-" else target,
                     if runner.is_empty() then "-" else runner,
                     "{k}",
-                    tmp,
-                    root,
+                    self.tmp,
+                    self.root,
                 ],
                 chunk,
             )
             c := proc.start(BIN, argv) else err
-                red("native executables", "can't start a chunk: {err}")
+                self.red("native executables", "can't start a chunk: {err}")
                 continue
             kids.push(move c)
         k += 1
@@ -404,72 +404,72 @@ fn Run.executables(mut self, target str, runner str)
         for line in kid.out
             if line == "@@FAIL"
                 if why.len() > 0
-                    red("native executables", why.join("\n"))
+                    self.red("native executables", why.join("\n"))
                 why = List[str]()
             else
                 why.push(line)
         if why.len() > 0
-            red("native executables", why.join("\n"))
+            self.red("native executables", why.join("\n"))
         proc.wait(move kid) else 0
 
 ## Each tests/native/stack/NAME.ail against NAME.out and the first line of NAME.err (err.trap.1, ADR 0535).
 fn Run.stack(mut self, target str, runner str)
     for case in list_ext("tests/native/stack", ".ail")
-        checks += 1
+        self.checks += 1
         stem := case.slice(0, case.len() - 4)
-        exe := "{tmp}/stack-{stem_of(case)}"
+        exe := "{self.tmp}/stack-{stem_of(case)}"
         b := ail(
             "",
             "build {case} -o {exe}{if target.is_empty() then "" else " --target {target}"}",
         )
         if b.status != 0
-            red(case, "`ail build` failed:\n{b.err}")
+            self.red(case, "`ail build` failed:\n{b.err}")
             continue
         got := sh("{runner} {exe}")
         want_err := slurp("{stem}.err").lines().first() else ""
         got_err := got.err.lines().first() else ""
         if got.out != slurp("{stem}.out") or got.status != 1 or got_err != want_err
-            red(case, "(exit {got.status})\n{got.out}{got.err}")
+            self.red(case, "(exit {got.status})\n{got.out}{got.err}")
 
 fn Run.misc_builds(mut self)
     # native.subset.1: a program outside the native subset builds nothing.
-    checks += 1
-    out := "{tmp}/refused"
+    self.checks += 1
+    out := "{self.tmp}/refused"
     sh("rm -f {out}")
     # subset_ext.ail stays outside the subset on purpose (ADR 1109): other `.err`
     # programs may be refused by the checker before lowering.
     src := "tests/native/subset_ext.ail"
     r := ail("", "build {src} -o {out}")
     if r.status == 0 or fs.exists(out) or not r.err.contains("error[native.subset.1]")
-        red("build refuses programs outside the subset", r.err)
+        self.red("build refuses programs outside the subset", r.err)
     # native.task.1, ADR 0599: a task program builds for macOS with a bind table naming pthread_create.
-    checks += 1
-    mac := "{tmp}/mac-task"
+    self.checks += 1
+    mac := "{self.tmp}/mac-task"
     t := ail("", "build tests/native/run/task_basic.ail --target aarch64-macos -o {mac}")
     if t.status != 0 or sh("grep -aq '_pthread_create' {mac}").status != 0
-        red("tasks build for macOS", t.err)
-    mac2 := "{tmp}/mac-arith"
+        self.red("tasks build for macOS", t.err)
+    mac2 := "{self.tmp}/mac-arith"
     a := ail("", "build tests/native/run/arith.ail --target aarch64-macos -o {mac2}")
     if a.status != 0
         or sh("grep -aq '_pthread_create' {mac2}").status == 0
         or sh("grep -aq 'GetStdHandle' {mac2}").status == 0
         or sh("grep -aq 'ExitProcess' {mac2}").status == 0
-        red("macOS imports", a.err)
+        self.red("macOS imports", a.err)
     # The generated files are current.
     for g in [
         ["tools/native/gen_unicode.ail", "compiler/rt/native/unicode.ail"],
         ["tools/native/gen_prelude.ail", "compiler/mir/prelude_embed.ail"],
     ]
-        checks += 1
+        self.checks += 1
         gen := ail("", "run {g[0]}")
         if gen.status != 0 or gen.out != slurp(g[1])
-            red("{g[1]} is stale", "run `./ail run {g[0]} > {g[1]}`\n{gen.err}")
-    checks += 1
+            self.red("{g[1]} is stale", "run `./ail run {g[0]} > {g[1]}`\n{gen.err}")
+    self.checks += 1
     gd := ail("", "run tools/native/gen_derive.ail")
-    fs.write_text("{tmp}/gens.ail", gd.out) else return
-    ail("", "fmt {tmp}/gens.ail")
-    if gd.status != 0 or slurp("{tmp}/gens.ail") != slurp("compiler/derive/gens.ail")
-        red(
+    fs.write_text("{self.tmp}/gens.ail", gd.out) else return
+    ail("", "fmt {self.tmp}/gens.ail")
+    if gd.status != 0 or slurp("{self.tmp}/gens.ail") != slurp("compiler/derive/gens.ail")
+        self.red(
             "compiler/derive/gens.ail is stale",
             "run `./ail run tools/native/gen_derive.ail > compiler/derive/gens.ail && ./ail fmt compiler/derive`",
         )
@@ -477,86 +477,86 @@ fn Run.misc_builds(mut self)
 ## The native compiler run without `ail build`'s AIL_DERIVED file builds the same bytes `ail build` does.
 fn Run.without_derived(mut self)
     for name in ["json_modules"]
-        checks += 1
+        self.checks += 1
         rel := "tests/native/run/{name}.ail"
         c := ail(
             "env -u AIL_DERIVED",
-            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/std",
+            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {self.root}/std",
         )
-        built := "{tmp}/via-build-{name}"
+        built := "{self.tmp}/via-build-{name}"
         b := ail("", "build {rel} -o {built}")
         if c.status != 0 or b.status != 0 or squeeze(c.out) != hex_of_file(built)
-            red(
+            self.red(
                 "{name} without the derived file",
                 "{c.err}{b.err}\nthe embedded prelude builds different bytes than `ail build`",
             )
     for name in ["json_prelude", "json_native", "derive_default", "derive_json_args", "derive_user"]
-        checks += 1
+        self.checks += 1
         rel := "tests/native/run/{name}.ail"
         c := ail(
             "env -u AIL_DERIVED",
-            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/std",
+            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {self.root}/std",
         )
-        built := "{tmp}/via-build-{name}"
+        built := "{self.tmp}/via-build-{name}"
         b := ail("", "build {rel} -o {built}")
         if c.status != 0 or b.status != 0 or squeeze(c.out) != hex_of_file(built)
-            red(
+            self.red(
                 "{name} without the derived file",
                 "{c.err}{b.err}\nthe built-in generators differ from `ail build`'s",
             )
-    checks += 1
+    self.checks += 1
     rel := "tests/cases/derive_generator_fails.ail"
     g := ail(
         "env -u AIL_DERIVED",
-        "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/std",
+        "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {self.root}/std",
     )
     if g.status != 1
         or not g.err.contains("error[ct.derive.4]: `Size` can't be derived for `Light`: `Size` needs a struct; `Light` is an enum")
-        red("user generator refusal", g.err)
+        self.red("user generator refusal", g.err)
 
 fn Run.compiler_cli(mut self)
     # native.build.3: the native compiler's own command line is `ail build`'s.
-    checks += 1
-    a := "{tmp}/cli-a"
-    b := "{tmp}/cli-b"
-    c := ail("AIL_ROOT={root}", "run compiler build examples/hello.ail -o {a}")
+    self.checks += 1
+    a := "{self.tmp}/cli-a"
+    b := "{self.tmp}/cli-b"
+    c := ail("AIL_ROOT={self.root}", "run compiler build examples/hello.ail -o {a}")
     d := ail("", "build examples/hello.ail -o {b}")
     if c.status != 0 or d.status != 0 or hex_of_file(a) != hex_of_file(b)
-        red(
+        self.red(
             "compiler command line",
             "{c.err}{d.err}\nthe compiler's own `build` writes different bytes than `ail build`",
         )
     if not sh(a).out.contains("Hello")
-        red("compiler command line", "the executable doesn't run")
-    bad := ail("AIL_ROOT={root}", "run compiler build examples/hello.ail --bogus")
+        self.red("compiler command line", "the executable doesn't run")
+    bad := ail("AIL_ROOT={self.root}", "run compiler build examples/hello.ail --bogus")
     if bad.status != 2
-        red("compiler command line --bogus", "exit {bad.status}, want 2")
+        self.red("compiler command line --bogus", "exit {bad.status}, want 2")
     # `AIL_NATIVE_COMPILER=PATH ail build ARGS` checks the program, then runs PATH with the same arguments.
-    checks += 1
-    stub := "{tmp}/stub"
-    log := "{tmp}/stublog"
+    self.checks += 1
+    stub := "{self.tmp}/stub"
+    log := "{self.tmp}/stublog"
     sh("printf '#!/bin/sh\\necho \"$@\" > {log}\\n' > {stub}; chmod +x {stub}; rm -f {log}")
     g1 := sh("AIL_NATIVE_COMPILER={stub} ./ail build -o x --target x86_64-linux examples/hello.ail")
     if g1.status != 0 or slurp(log).trim() != "build -o x --target x86_64-linux examples/hello.ail"
-        red("ail script routes build", "{g1.err}{slurp(log)}")
+        self.red("ail script routes build", "{g1.err}{slurp(log)}")
     sh("rm -f {log}")
     g2 := sh("AIL_NATIVE_COMPILER={stub} ./ail build --unsafe driver -o x tests/native/unsafe/hw_volatile.ail")
     if g2.status != 0
         or slurp(log).trim() != "build --unsafe driver -o x tests/native/unsafe/hw_volatile.ail"
-        red("ail script routes --unsafe driver", "{g2.err}{slurp(log)}")
+        self.red("ail script routes --unsafe driver", "{g2.err}{slurp(log)}")
     sh("rm -f {log}")
     g3 := sh("AIL_NATIVE_COMPILER={stub} ./ail build -o x --target x86_64-linux tests/native/run/no_such_file.ail")
     if g3.status == 0 or fs.exists(log)
-        red("ail script on a bad program", "reached the native compiler")
+        self.red("ail script on a bad program", "reached the native compiler")
     # unsafe.hw.1-4, ADR 0820: `build FILE --unsafe driver` on the native compiler's command line.
-    checks += 1
-    exe := "{tmp}/hw"
+    self.checks += 1
+    exe := "{self.tmp}/hw"
     u := ail(
-        "AIL_ROOT={root}",
+        "AIL_ROOT={self.root}",
         "run compiler build tests/native/unsafe/hw_volatile.ail --unsafe driver -o {exe}",
     )
     if u.status != 0 or sh(exe).out.trim() != "7"
-        red("native build takes --unsafe driver", u.err)
+        self.red("native build takes --unsafe driver", u.err)
 
 ## run.limit.5, run.limit.6: a native program stops at AIL_TIMEOUT_MS, AIL_MAX_MEMORY_MB and the baked defaults.
 fn trap_message(stderr str) str
@@ -579,75 +579,81 @@ fn Run.limits(mut self, target str, runner str)
         for baked in [false, true]
             if name == "loop" and not baked
                 continue
-            checks += 1
-            exe := "{tmp}/limit-{name}-{baked}"
+            self.checks += 1
+            exe := "{self.tmp}/limit-{name}-{baked}"
             bflag := if baked then " {spec[1]} {spec[2]}" else ""
             b := ail("", "build {src} -o {exe}{tflag}{bflag}")
             if b.status != 0
-                red(src, "`ail build` failed:\n{b.err}")
+                self.red(src, "`ail build` failed:\n{b.err}")
                 continue
             envp := if baked then "" else "{spec[3]}={spec[2]}"
             got := sh("{envp} {runner} {exe}")
             label := "{src} ({spec[3]}{if baked then ", baked" else ""})"
             if got.status != 1
-                red(label, "exit status {got.status}")
+                self.red(label, "exit status {got.status}")
             elif got.out != want_out
-                red(label, "stdout differs")
+                self.red(label, "stdout differs")
             elif trap_message(got.err) != slurp("tests/native/limits/{name}.trap").trim()
-                red(
+                self.red(
                     label,
                     "trap line differs:\n{trap_message(got.err)}\n{slurp("tests/native/limits/{name}.trap").trim()}",
                 )
-    checks += 1
-    bad := sh("AIL_TIMEOUT_MS=soon {runner} {tmp}/limit-spin-false")
+    self.checks += 1
+    bad := sh("AIL_TIMEOUT_MS=soon {runner} {self.tmp}/limit-spin-false")
     if bad.status != 2
-        red("a bad AIL_TIMEOUT_MS", "exit {bad.status}, want 2")
+        self.red("a bad AIL_TIMEOUT_MS", "exit {bad.status}, want 2")
 
 ## native.task.2: with `AIL_THREADS=1` a task asleep in `accept` must not hold the only worker.
 fn Run.threads_one(mut self, runner str)
-    checks += 1
-    exe := "{tmp}/threads1"
+    self.checks += 1
+    exe := "{self.tmp}/threads1"
     b := ail("", "build tests/native/threads1/server_wait.ail -o {exe}")
     if b.status != 0
-        red("tests/native/threads1/server_wait.ail", "`ail build` failed:\n{b.err}")
+        self.red("tests/native/threads1/server_wait.ail", "`ail build` failed:\n{b.err}")
         return
     got := sh("AIL_THREADS=1 perl -e 'alarm 30; exec @ARGV' {runner} {exe}")
     if got.status != 0 or got.out != slurp("tests/native/threads1/server_wait.out")
-        red("AIL_THREADS=1 server task", "exit {got.status}, output differs or hung")
+        self.red("AIL_THREADS=1 server task", "exit {got.status}, output differs or hung")
 
 ## native.task.2: a thread asleep in `time.sleep_ms` is parked, so a collection another task asks for does not wait for it.
 fn Run.sleep_gc(mut self, runner str)
-    checks += 1
-    exe := "{tmp}/sleep_gc"
+    self.checks += 1
+    exe := "{self.tmp}/sleep_gc"
     b := ail("", "build tests/native/threads1/sleep_gc.ail -o {exe}")
     if b.status != 0
-        red("tests/native/threads1/sleep_gc.ail", "`ail build` failed:\n{b.err}")
+        self.red("tests/native/threads1/sleep_gc.ail", "`ail build` failed:\n{b.err}")
         return
     got := sh("perl -e 'alarm 30; exec @ARGV' {runner} {exe}")
     if got.status != 0 or got.out != slurp("tests/native/threads1/sleep_gc.out")
-        red("collection during a sleep", "exit {got.status}, output differs or hung:\n{got.out}")
+        self.red(
+            "collection during a sleep",
+            "exit {got.status}, output differs or hung:\n{got.out}",
+        )
 
 ## std.time.1: the clocks are read on two threads at once; the server keeps its parked connections.
 fn Run.clock_threads(mut self, runner str)
-    checks += 1
-    exe := "{tmp}/clock_threads"
+    self.checks += 1
+    exe := "{self.tmp}/clock_threads"
     b := ail("", "build tests/native/threads1/clock_threads.ail -o {exe}")
     if b.status != 0
-        red("tests/native/threads1/clock_threads.ail", "`ail build` failed:\n{b.err}")
+        self.red("tests/native/threads1/clock_threads.ail", "`ail build` failed:\n{b.err}")
         return
     got := sh("perl -e 'alarm 60; exec @ARGV' {runner} {exe}")
     if got.status != 0 or got.out != slurp("tests/native/threads1/clock_threads.out")
-        red("clocks read on two threads", "exit {got.status}, output differs or hung:\n{got.out}")
+        self.red(
+            "clocks read on two threads",
+            "exit {got.status}, output differs or hung:\n{got.out}",
+        )
 
 fn Run.sources(mut self)
     # Every runtime source parses as AIL: `ail fmt --check FILE` reports syntax errors (fmt.safe).
     for f in list_ext("compiler/rt/native", ".ail")
-        checks += 1
+        self.checks += 1
         r := ail("", "fmt --check {f}")
         if r.status == 2
-            red("runtime source {f}", r.err)
+            self.red("runtime source {f}", r.err)
     # The native runtime is one namespace: every top-level name must be unique (notask.ail stands in for task.ail).
-    checks += 1
+    self.checks += 1
     mut seen := Map[str, str]()
     for f in list_ext("compiler/rt/native", ".ail")
         if f.ends_with("notask.ail")
@@ -667,7 +673,7 @@ fn Run.sources(mut self)
                     break
                 name = "{name}{c}"
             if first := seen.get(name)
-                red("runtime functions defined twice", "{name}: {first} and {file}")
+                self.red("runtime functions defined twice", "{name}: {first} and {file}")
             else
                 seen[name] = file
 
@@ -679,16 +685,16 @@ fn Run.drivers(mut self)
         mem_only := stem.starts_with("mem_")
         if mem_only and not linux_x64
             continue
-        checks += 1
-        exe := "{tmp}/driver-{stem}"
+        self.checks += 1
+        exe := "{self.tmp}/driver-{stem}"
         b := ail("", "build --unsafe driver {case} -o {exe}")
         if b.status != 0
-            red(case, "`ail build` failed:\n{b.err}")
+            self.red(case, "`ail build` failed:\n{b.err}")
             continue
         got := sh(exe)
         if mem_only
             if got.out != slurp("tests/native/driver/{stem}.out") or got.status != 0
-                red(
+                self.red(
                     case,
                     "expected\n{slurp("tests/native/driver/{stem}.out")}got (exit {got.status})\n{got.out}",
                 )
@@ -702,7 +708,7 @@ fn Run.drivers(mut self)
             if not (l.starts_with("  at ") or l.starts_with("note:") or l.starts_with("help:"))
                 got_err.push(l)
         if slurp("{base}.out") != got.out or want_status != got.status or want_err != got_err
-            red(
+            self.red(
                 case,
                 "differs from its frozen output\n--- frozen (exit {want_status}):\n{slurp("{base}.out")}{want_err.join("\n")}\n--- native (exit {got.status}):\n{got.out}{got_err.join("\n")}",
             )

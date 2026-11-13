@@ -193,7 +193,12 @@ fn Chk.mutants(mut self, files List[str], count int, seed int)
         fs.write_text(target, mutate(lines, kind)) else continue
         why := verdict(check_run(target, false))
         if why != ""
-            self.red("fuzz.chk.1", "{k}", target, "{why} (from {file}, mutation {kind}, seed {seed + k})")
+            self.red(
+                "fuzz.chk.1",
+                "{k}",
+                target,
+                "{why} (from {file}, mutation {kind}, seed {seed + k})",
+            )
         sh("rm -f \"$1\"", [target])
 
 ## fuzz.chk.2: the extremes, made by awk so the program holds no huge string.
@@ -224,21 +229,49 @@ struct Piece
 
 fn piece(kind int, k int) Piece
     if kind == 0
-        return Piece(src: "fn unknown_{k}()\n    missing_helper_{k}(1)\n", rule: "expr.name.1", syntax: false)
+        return Piece(
+            src: "fn unknown_{k}()\n    missing_helper_{k}(1)\n",
+            rule: "expr.name.1",
+            syntax: false,
+        )
     if kind == 1
-        return Piece(src: "fn immutable_{k}()\n    n := 1\n    n = 2\n    print(n)\n", rule: "expr.bind.3", syntax: false)
+        return Piece(
+            src: "fn immutable_{k}()\n    n := 1\n    n = 2\n    print(n)\n",
+            rule: "expr.bind.3",
+            syntax: false,
+        )
     if kind == 2
-        return Piece(src: "fn pattern_{k}(n int)\n    match n\n        \"a\" => print(1)\n        _ => print(0)\n", rule: "expr.match.7", syntax: false)
+        return Piece(
+            src: "fn pattern_{k}(n int)\n    match n\n        \"a\" => print(1)\n        _ => print(0)\n",
+            rule: "expr.match.7",
+            syntax: false,
+        )
     if kind == 3
-        return Piece(src: "fn param_{k}(p P)\n    p.x = 1\n    print(p.x)\n", rule: "own.param.1", syntax: false)
+        return Piece(
+            src: "fn param_{k}(p P)\n    p.x = 1\n    print(p.x)\n",
+            rule: "own.param.1",
+            syntax: false,
+        )
     if kind == 4
         return Piece(src: "fn broken_{k}()\n    x := 1 +\n    print(x)\n", rule: "", syntax: true)
     if kind == 5
-        return Piece(src: "fn broken_{k}()\n    y := (1 + 2\n    print(y)\n", rule: "", syntax: true)
+        return Piece(
+            src: "fn broken_{k}()\n    y := (1 + 2\n    print(y)\n",
+            rule: "",
+            syntax: true,
+        )
     Piece(src: "fn broken_{k}()\n    print(1\n    print(2)\n", rule: "", syntax: true)
 
 fn call_of(kind int, k int) str
-    names := ["unknown_{k}()", "immutable_{k}()", "pattern_{k}(1)", "param_{k}(P(x: 1))", "broken_{k}()", "broken_{k}()", "broken_{k}()"]
+    names := [
+        "unknown_{k}()",
+        "immutable_{k}()",
+        "pattern_{k}(1)",
+        "param_{k}(P(x: 1))",
+        "broken_{k}()",
+        "broken_{k}()",
+        "broken_{k}()",
+    ]
     "    {names[kind]}\n"
 
 ## The first line number in `json` output with an error, and the rules and lines of every error.

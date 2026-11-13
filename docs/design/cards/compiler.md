@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (518 items)
+## check (520 items)
 
 ## codegen (56 items)
 
@@ -34,11 +34,11 @@ tests: 12 (`ail test` lists them)
 
 ## fixrun (17 items)
 
-## fmt (69 items)
+## fmt (67 items)
 
 ## help (10 items)
 
-## load (113 items)
+## load (123 items)
 
 ## mir (842 items)
 
@@ -48,7 +48,7 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (6 items)
 
-## syntax (134 items)
+## syntax (140 items)
 
 ## watch (5 items)
 

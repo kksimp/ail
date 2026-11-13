@@ -44,23 +44,23 @@ struct FTok
     tuple_ty bool
 
 fn FTok.sym(self, s str) bool
-    kind == SYM and text == s
+    self.kind == SYM and self.text == s
 
 fn FTok.opens(self) bool
-    kind == SYM and (text == "(" or text == "[" or text == "\{")
+    self.kind == SYM and (self.text == "(" or self.text == "[" or self.text == "\{")
 
 fn FTok.closes(self) bool
-    kind == SYM and (text == ")" or text == "]" or text == "}")
+    self.kind == SYM and (self.text == ")" or self.text == "]" or self.text == "}")
 
 ## Ends an operand, so a following `(` or `[` is a call or an index. `then` is a
 ## contextual keyword lexed as a word (expr.if.*): `then (a + b)` stays spaced.
 fn FTok.ends_operand(self) bool
-    if kind == WORD and text == "then"
+    if self.kind == WORD and self.text == "then"
         return false
-    kind == WORD
-        or kind == LIT
-        or (kind == KW and text == "self")
-        or (kind == SYM and (text == ")" or text == "]" or text == "}" or text == "?"))
+    self.kind == WORD
+        or self.kind == LIT
+        or (self.kind == KW and self.text == "self")
+        or (self.kind == SYM and (self.text == ")" or self.text == "]" or self.text == "}" or self.text == "?"))
 
 fn comma_tok() FTok
     FTok(text: ",", kind: SYM, line: 0, end_line: 0, space_after: true, tuple_ty: false)

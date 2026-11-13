@@ -17,7 +17,7 @@ pub enum McpKind
     Timeout
 
 ## Why a request failed (std.mcp.7).
-pub error struct McpError "{kind}: {message}"
+pub error struct McpError "{self.kind}: {self.message}"
     pub kind McpKind
     pub message str
 
@@ -61,26 +61,26 @@ fn notification(method str) Json
 
 ## Sets the time `request` waits for one reply, in milliseconds (std.mcp.7).
 pub fn Client.set_timeout(mut self, ms int)
-    wait_ms = ms
+    self.wait_ms = ms
 
 ## Sends one request and returns the `result` of its reply (std.mcp.6). Lines
 ## that are not the reply (notifications, server logs) are skipped.
 fn Client.request(mut self, method str, params Json) Json ! McpError
-    id := seq
-    seq += 1
+    id := self.seq
+    self.seq += 1
     msg := Json.Obj([
         jm("jsonrpc", Json.Str("2.0")),
         jm("id", Json.Num(id.to_float())),
         jm("method", Json.Str(method)),
         jm("params", params),
     ])
-    child.stdin.send("{msg.to_text()}\n")
+    self.child.stdin.send("{msg.to_text()}\n")
     while true
-        line := child.out.recv_for(wait_ms) else
+        line := self.child.out.recv_for(self.wait_ms) else
             note := self.stderr_note()
             return fail(
                 McpKind.Timeout,
-                "no reply to {method} within {wait_ms} ms, or the server closed{note}",
+                "no reply to {method} within {self.wait_ms} ms, or the server closed{note}",
             )
         reply := parse_json(line) else continue
         rid := reply.int("id") else
@@ -100,7 +100,7 @@ fn Client.request(mut self, method str, params Json) Json ! McpError
 fn Client.stderr_note(mut self) str
     mut lines := List[str]()
     while lines.len() < 10
-        line := child.err.recv_for(200) else break
+        line := self.child.err.recv_for(200) else break
         lines.push(line)
     if lines.len() == 0
         return ""
@@ -150,4 +150,4 @@ pub fn text(result Json) str
 
 ## Ends the server (std.mcp.8).
 pub fn Client.close(move self)
-    child.stdin.close()
+    self.child.stdin.close()

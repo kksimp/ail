@@ -63,7 +63,7 @@ fn Lower.own_groups(mut self, slots List[Slot], vs List[int])
 ## `Mutex(v)`, `Mutex[T](v)` and `TaskGroup()`.
 fn Lower.lower_sync_new(mut self, name str, args List[ast.Arg], pos ast.Pos) Val?
     if name == "Mutex"
-        return lower_mutex_new(none, args, pos)
+        return self.lower_mutex_new(none, args, pos)
     if args.len() != 0
         return unsupported(pos, "this `TaskGroup`")
     g := call("rt.group_new", [], Ty.Group)
@@ -127,27 +127,27 @@ fn Lower.lower_sync_method(mut self, r Val, name str, npos ast.Pos, args List[as
             call("rt.group_cancel", [r.id], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
         if name == "add" and args.len() == 1
-            rec := group_member(args[0].value)?
+            rec := self.group_member(args[0].value)?
             call("rt.group_add", [r.id, rec], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
         return unsupported(npos, "`.{name}()` on `TaskGroup`")
     elem := mutex_elem(r.ty) else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "get" and args.len() == 0
-        return fresh_unwrap(call("rt.mutex_get", [r.id], Ty.Opt(elem)), elem)
+        return self.fresh_unwrap(call("rt.mutex_get", [r.id], Ty.Opt(elem)), elem)
     if name == "lock" and args.len() == 0
         w := call("rt.mutex_lock", [r.id], Ty.Opt(elem))
-        mutex_lock_check(w, npos)
-        return fresh_unwrap(w, elem)
+        self.mutex_lock_check(w, npos)
+        return self.fresh_unwrap(w, elem)
     if args.len() == 1 and (name == "set" or name == "swap" or name == "unlock")
         v := lower_value(args[0].value, elem)?
         if not same_ty(v.ty, elem)
             return unsupported(npos, "`.{name}()` of `{v.ty.name()}` on `{r.ty.name()}`")
-        w := stored(args[0].value, v)
+        w := self.stored(args[0].value, v)
         if name == "set"
             call("rt.mutex_set", [r.id, w.id], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
         if name == "swap"
-            return fresh_unwrap(call("rt.mutex_swap", [r.id, w.id], Ty.Opt(elem)), elem)
+            return self.fresh_unwrap(call("rt.mutex_swap", [r.id, w.id], Ty.Opt(elem)), elem)
         tensor_trap_if(call("rt.mutex_unlock", [r.id, w.id], Ty.Int), "conc.share.5", npos)
         return Val(id: -1, ty: Ty.Unit)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -202,8 +202,8 @@ fn Lower.lower_with(mut self, mex ast.Expr, var str, body List[ast.Stmt], pos as
         problem(pos, "`with` of a `{m.ty.name()}`")
         return
     w := call("rt.mutex_lock", [m.id], Ty.Opt(elem))
-    mutex_lock_check(w, pos)
-    x := fresh_unwrap(w, elem)
+    self.mutex_lock_check(w, pos)
+    x := self.fresh_unwrap(w, elem)
     scopes.push(Map[str, str]())
     declare(var, elem, x.id)
     key := lookup(var) else
@@ -221,7 +221,7 @@ fn Lower.lower_with(mut self, mex ast.Expr, var str, body List[ast.Stmt], pos as
     tk.exits.push(act)
     lower_block(body, false)
     if not done()
-        run_exit(act)
+        self.run_exit(act)
     tk.exits.pop()
     scopes.pop()
 
@@ -238,18 +238,18 @@ fn Lower.run_exit(mut self, a ExitAct)
 fn Lower.unwind_exits(mut self)
     mut i := tk.exits.len() - 1
     while i >= 0
-        run_exit(tk.exits[i])
+        self.run_exit(tk.exits[i])
         i -= 1
 
 ## `break` and `continue` leave the scopes opened inside the innermost loop.
 fn Lower.unwind_loop(mut self)
-    unwind_loop_to(loops.len())
+    self.unwind_loop_to(loops.len())
 
 ## The same for a `break outer` that leaves the loops from the `depth`-th inward.
 fn Lower.unwind_loop_to(mut self, depth int)
     mut i := tk.exits.len() - 1
     while i >= 0 and tk.exits[i].loopn >= depth
-        run_exit(tk.exits[i])
+        self.run_exit(tk.exits[i])
         i -= 1
 
 ## Where an expression starts: its leftmost operand.
@@ -289,7 +289,7 @@ fn Lower.end_scope_exits(mut self, last ast.Pos?)
             if at := last
                 act.pos = at
         if not done()
-            run_exit(act)
+            self.run_exit(act)
 
 ## `t.cancel()` on a task handle variable.
 fn Lower.is_task_cancel(self, recv ast.Expr, name str) bool

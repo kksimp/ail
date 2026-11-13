@@ -41,7 +41,7 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
                     Bool =>
                         piece = v.id
                         kind = 3
-                    _ => piece = text_of(v, expr_pos(x))?
+                    _ => piece = self.text_of(v, expr_pos(x))?
             Fmt(x, spec) =>
                 v := lower_value(x, none)?
                 f := fmt_text(v, spec, expr_pos(x))?
@@ -179,7 +179,7 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                 n0 := call("rt.str_byte_len", [r.id], Ty.Int)
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             "to_str" => return r
-            "to_int" => return str_to_int_opt(r)
+            "to_int" => return self.str_to_int_opt(r)
             "to_bytes" => return Val(id: call("rt.str_to_bytes", [r.id], Ty.Bytes), ty: Ty.Bytes)
             "chars" =>
                 t := Ty.List(Ty.Char)
@@ -194,43 +194,43 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                 return Val(id: call("rt.str_words", [r.id], t), ty: t)
             "to_upper" => return Val(id: call("rt.str_to_upper", [r.id], Ty.Str), ty: Ty.Str)
             "to_lower" => return Val(id: call("rt.str_to_lower", [r.id], Ty.Str), ty: Ty.Str)
-            _ => return str_unsupported(name, npos)
+            _ => return self.str_unsupported(name, npos)
     if n == 1
         match name
             "contains" | "starts_with" | "ends_with" =>
-                a := text_arg(vs[0], name, npos)?
+                a := self.text_arg(vs[0], name, npos)?
                 return Val(id: call("rt.str_{name}", [r.id, a], Ty.Bool), ty: Ty.Bool)
             "split" =>
-                a := text_arg(vs[0], name, npos)?
-                h := trap_head("type.str.4", npos)
+                a := self.text_arg(vs[0], name, npos)?
+                h := self.trap_head("type.str.4", npos)
                 t := Ty.List(Ty.Str)
-                return Val(id: call("rt.str_split", [r.id, a, h, trap_tail(npos)], t), ty: t)
+                return Val(id: call("rt.str_split", [r.id, a, h, self.trap_tail(npos)], t), ty: t)
             "repeat" =>
-                k := int_arg(vs[0], name, npos)?
-                h3 := trap_head("type.str.10", npos)
-                h4 := trap_head("type.str.15", npos)
+                k := self.int_arg(vs[0], name, npos)?
+                h3 := self.trap_head("type.str.10", npos)
+                h4 := self.trap_head("type.str.15", npos)
                 return Val(
-                    id: call("rt.str_repeat", [r.id, k, h3, h4, trap_tail(npos)], Ty.Str),
+                    id: call("rt.str_repeat", [r.id, k, h3, h4, self.trap_tail(npos)], Ty.Str),
                     ty: Ty.Str,
                 )
             "find" =>
-                a := text_arg(vs[0], name, npos)?
+                a := self.text_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Int)
                 return Val(id: call("rt.str_find_opt", [r.id, a], t), ty: t)
             "rfind" =>
-                a := text_arg(vs[0], name, npos)?
+                a := self.text_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Int)
                 return Val(id: call("rt.str_rfind_opt", [r.id, a], t), ty: t)
             "count" =>
-                a := text_arg(vs[0], name, npos)?
-                h := trap_head("type.str.18", npos)
+                a := self.text_arg(vs[0], name, npos)?
+                h := self.trap_head("type.str.18", npos)
                 return Val(
-                    id: call("rt.str_count", [r.id, a, h, trap_tail(npos)], Ty.Int),
+                    id: call("rt.str_count", [r.id, a, h, self.trap_tail(npos)], Ty.Int),
                     ty: Ty.Int,
                 )
-            "to_int" => return str_to_int_radix(r, vs[0], npos)
+            "to_int" => return self.str_to_int_radix(r, vs[0], npos)
             "char_at" =>
-                i := int_arg(vs[0], name, npos)?
+                i := self.int_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Char)
                 return Val(id: call("rt.str_char_at", [r.id, i], t), ty: t)
             "strip_prefix" | "strip_suffix" =>
@@ -239,61 +239,61 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     return none
                 t := Ty.Opt(Ty.Str)
                 return Val(id: call("rt.str_{name}", [r.id, vs[0].id], t), ty: t)
-            _ => return str_unsupported(name, npos)
+            _ => return self.str_unsupported(name, npos)
     if n == 2
         match name
             "split" =>
-                a := text_arg(vs[0], name, npos)?
-                limit := int_arg(vs[1], name, npos)?
-                h := trap_head("type.str.4", npos)
+                a := self.text_arg(vs[0], name, npos)?
+                limit := self.int_arg(vs[1], name, npos)?
+                h := self.trap_head("type.str.4", npos)
                 t := Ty.List(Ty.Str)
                 return Val(
-                    id: call("rt.str_split_n", [r.id, a, limit, h, trap_tail(npos)], t),
+                    id: call("rt.str_split_n", [r.id, a, limit, h, self.trap_tail(npos)], t),
                     ty: t,
                 )
             "slice" =>
-                a := int_arg(vs[0], name, npos)?
-                b := int_arg(vs[1], name, npos)?
-                h := trap_head("type.str.13", npos)
+                a := self.int_arg(vs[0], name, npos)?
+                b := self.int_arg(vs[1], name, npos)?
+                h := self.trap_head("type.str.13", npos)
                 return Val(
-                    id: call("rt.str_slice", [r.id, a, b, h, trap_tail(npos)], Ty.Str),
+                    id: call("rt.str_slice", [r.id, a, b, h, self.trap_tail(npos)], Ty.Str),
                     ty: Ty.Str,
                 )
             "replace" =>
-                a := text_arg(vs[0], name, npos)?
-                b := text_arg(vs[1], name, npos)?
-                h := trap_head("type.str.14", npos)
+                a := self.text_arg(vs[0], name, npos)?
+                b := self.text_arg(vs[1], name, npos)?
+                h := self.trap_head("type.str.14", npos)
                 return Val(
-                    id: call("rt.str_replace", [r.id, a, b, h, trap_tail(npos)], Ty.Str),
+                    id: call("rt.str_replace", [r.id, a, b, h, self.trap_tail(npos)], Ty.Str),
                     ty: Ty.Str,
                 )
             "pad_left" | "pad_right" | "center" =>
-                w := int_arg(vs[0], name, npos)?
+                w := self.int_arg(vs[0], name, npos)?
                 if not (vs[1].ty == Ty.Char)
                     problem(npos, "`.{name}()` needs a `char` fill, found `{vs[1].ty.name()}`")
                     return none
                 align := if name == "pad_left" then 1 else if name == "center" then 2 else 0
-                h := trap_head("type.str.15", npos)
+                h := self.trap_head("type.str.15", npos)
                 return Val(
                     id: call(
                         "rt.str_pad_checked",
-                        [r.id, w, vs[1].id, konst(align, Ty.Int), h, trap_tail(npos)],
+                        [r.id, w, vs[1].id, konst(align, Ty.Int), h, self.trap_tail(npos)],
                         Ty.Str,
                     ),
                     ty: Ty.Str,
                 )
-            _ => return str_unsupported(name, npos)
-    str_unsupported(name, npos)
+            _ => return self.str_unsupported(name, npos)
+    self.str_unsupported(name, npos)
 
 ## `c.NAME(...)` on a `char` (type.char.2-4).
 fn Lower.lower_char_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if name == "cmp" and vs.len() == 1
         return lower_cmp(r, vs[0], npos)
     if vs.len() == 1 and name == "to_digit"
-        radix := int_arg(vs[0], name, npos)?
-        h := trap_head("type.char.3", npos)
+        radix := self.int_arg(vs[0], name, npos)?
+        h := self.trap_head("type.char.3", npos)
         t := Ty.Opt(Ty.Int)
-        return Val(id: call("rt.char_to_digit", [r.id, radix, h, trap_tail(npos)], t), ty: t)
+        return Val(id: call("rt.char_to_digit", [r.id, radix, h, self.trap_tail(npos)], t), ty: t)
     if vs.len() != 0
         return unsupported(npos, "`.{name}()` on `char`")
     match name
@@ -329,7 +329,7 @@ fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
     if args.len() != 1
         return unsupported(npos, "`char.from_code` with {args.len()} arguments instead of 1")
     n := lower_value(args[0].value, Ty.Int)?
-    k := int_arg(n, "from_code", npos)?
+    k := self.int_arg(n, "from_code", npos)?
     t := Ty.Opt(Ty.Char)
     Val(id: call("rt.char_from_code", [k], t), ty: t)
 
@@ -347,12 +347,12 @@ fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         return lower_cmp(r, vs[0], npos)
     if name == "to_float" and vs.len() == 0
         return lower_to_float(r)
-    return lower_str_method(r, name, npos, vs)
+    return self.lower_str_method(r, name, npos, vs)
 
 ## `s.to_int(radix)` (type.str.20): an `int?` in `radix`, which traps outside 2 to 36.
 fn Lower.str_to_int_radix(mut self, r Val, radix Val, pos ast.Pos) Val?
-    k := int_arg(radix, "to_int", pos)?
-    check_radix(k, pos)
+    k := self.int_arg(radix, "to_int", pos)?
+    self.check_radix(k, pos)
     t := Ty.Opt(Ty.Int)
     n := call("rt.str_to_int_radix", [r.id, k], Ty.Int)
     ok := call("rt.parse_ok", [], Ty.Bool)
@@ -387,10 +387,10 @@ fn Lower.check_radix(mut self, radix int, pos ast.Pos)
         pos,
     )
     ok1 := check_branch(lo.id)
-    radix_trap(radix, pos)
+    self.radix_trap(radix, pos)
     cur = ok1
     ok2 := check_branch(hi.id)
-    radix_trap(radix, pos)
+    self.radix_trap(radix, pos)
     cur = ok2
 
 fn Lower.radix_trap(mut self, radix int, pos ast.Pos)
