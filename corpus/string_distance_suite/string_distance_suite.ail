@@ -1,0 +1,109 @@
+## String distance suite: Levenshtein, optimal-string-alignment (adjacent
+## swaps count once), Hamming, longest common subsequence, longest common
+## substring and common-prefix length, compared over a table of word pairs.
+
+fn levenshtein(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    mut g := Grid.fill(xs.len() + 1, ys.len() + 1, 0)
+    for i in 0..=xs.len()
+        g[i, 0] = i
+    for j in 0..=ys.len()
+        g[0, j] = j
+    for i in 1..=xs.len()
+        for j in 1..=ys.len()
+            cost := if xs[i - 1] == ys[j - 1] then 0 else 1
+            g[i, j] = (g[i - 1, j] + 1).min(g[i, j - 1] + 1).min(g[i - 1, j - 1] + cost)
+    g[xs.len(), ys.len()]
+
+fn osa(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    mut g := Grid.fill(xs.len() + 1, ys.len() + 1, 0)
+    for i in 0..=xs.len()
+        g[i, 0] = i
+    for j in 0..=ys.len()
+        g[0, j] = j
+    for i in 1..=xs.len()
+        for j in 1..=ys.len()
+            cost := if xs[i - 1] == ys[j - 1] then 0 else 1
+            mut best := (g[i - 1, j] + 1).min(g[i, j - 1] + 1).min(g[i - 1, j - 1] + cost)
+            if i > 1 and j > 1 and xs[i - 1] == ys[j - 2] and xs[i - 2] == ys[j - 1]
+                best = best.min(g[i - 2, j - 2] + 1)
+            g[i, j] = best
+    g[xs.len(), ys.len()]
+
+fn hamming(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    if xs.len() != ys.len()
+        return -1
+    mut n := 0
+    for i in 0..xs.len()
+        if xs[i] != ys[i]
+            n += 1
+    n
+
+fn lcs_len(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    mut g := Grid.fill(xs.len() + 1, ys.len() + 1, 0)
+    for i in 1..=xs.len()
+        for j in 1..=ys.len()
+            if xs[i - 1] == ys[j - 1]
+                g[i, j] = g[i - 1, j - 1] + 1
+            else
+                g[i, j] = g[i - 1, j].max(g[i, j - 1])
+    g[xs.len(), ys.len()]
+
+fn common_substring(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    mut g := Grid.fill(xs.len() + 1, ys.len() + 1, 0)
+    mut best := 0
+    for i in 1..=xs.len()
+        for j in 1..=ys.len()
+            if xs[i - 1] == ys[j - 1]
+                g[i, j] = g[i - 1, j - 1] + 1
+                best = best.max(g[i, j])
+    best
+
+fn common_prefix(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    mut n := 0
+    while n < xs.len() and n < ys.len() and xs[n] == ys[n]
+        n += 1
+    n
+
+fn main()
+    pairs := [
+        ["kitten", "sitting"],
+        ["ab", "ba"],
+        ["abcdef", "abdcef"],
+        ["karolin", "kathrin"],
+        ["flaw", "lawn"],
+        ["interview", "internet"],
+        ["", "abc"],
+        ["same", "same"],
+    ]
+    print("a          b          lev osa ham lcs sub pre")
+    for p in pairs
+        a := p[0]
+        b := p[1]
+        print("{a:<10} {b:<10} {levenshtein(a, b):>3} {osa(a, b):>3} {hamming(a, b):>3} {lcs_len(a, b):>3} {common_substring(a, b):>3} {common_prefix(a, b):>3}")
+
+@test fn classic_distances()
+    assert_eq(levenshtein("kitten", "sitting"), 3)
+    assert_eq(levenshtein("", "abc"), 3)
+    assert_eq(levenshtein("same", "same"), 0)
+
+@test fn swaps_count_once_in_osa()
+    assert_eq(levenshtein("ab", "ba"), 2)
+    assert_eq(osa("ab", "ba"), 1)
+
+@test fn subsequence_and_substring()
+    assert_eq(lcs_len("AGGTAB", "GXTXAYB"), 4)
+    assert_eq(common_substring("xabcy", "zabcw"), 3)
+    assert_eq(hamming("abc", "ab"), -1)
+    assert_eq(common_prefix("inter", "internet"), 5)

@@ -1,0 +1,9 @@
+a          b          lev osa ham lcs sub pre
+kitten     sitting      3   3  -1   4   3   0
+ab         ba           2   1   2   1   1   0
+abcdef     abdcef       2   1   2   5   2   2
+karolin    kathrin      3   3   3   5   2   2
+flaw       lawn         2   2   4   3   3   0
+interview  internet     3   3  -1   6   5   5
+           abc          3   3  -1   0   0   0
+same       same         0   0   0   4   4   4

@@ -1,0 +1,16 @@
+Ann: 1A for 175
+Bob: 1A already taken by Ann
+Cy: 2D for 175
+Dee: 7B is not in this cabin
+Eve: bad seat code 3E
+Fay: bad seat code x
+Gus: 4B for 80
+Hal: 6C for 80
+Ivy: 6D for 90
+ 1 A . | . .
+ 2 . . | . C
+ 3 . . | . .
+ 4 . G | . .
+ 5 . . | . .
+ 6 . . | H I
+booked 5, revenue 600

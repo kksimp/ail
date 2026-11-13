@@ -1,0 +1,81 @@
+## License header check: audits source files for the two-line header
+## `<c> SPDX-License-Identifier: Apache-2.0` / `<c> Copyright (c) 2026 Acme`,
+## where `<c>` is the comment marker for the file extension. A leading
+## shebang line is skipped. Prints one verdict per file and a summary.
+
+WANT_YEAR := 2026
+
+struct SrcFile
+    name str
+    text str
+
+struct Verdict
+    kind str
+    detail str
+
+fn comment_marker(name str) str
+    if name.ends_with(".py") or name.ends_with(".sh")
+        return "#"
+    if name.ends_with(".sql")
+        return "--"
+    "//"
+
+fn check(f SrcFile) Verdict
+    mut lines := f.text.lines()
+    if not lines.is_empty() and lines[0].starts_with("#!")
+        lines = lines[1..]
+    mark := comment_marker(f.name)
+    spdx := "{mark} SPDX-License-Identifier:"
+    if lines.len() < 2 or not lines[0].starts_with(spdx)
+        return Verdict(kind: "missing", detail: "no SPDX line")
+    lic := lines[0].slice(spdx.len(), lines[0].len()).trim()
+    if lic != "Apache-2.0"
+        return Verdict(kind: "license", detail: lic)
+    words := lines[1].words()
+    if words.len() < 5 or words[0] != mark or words[1] != "Copyright" or words[2] != "(c)"
+        return Verdict(kind: "copyright", detail: "malformed line 2")
+    year := words[3].to_int() else return Verdict(kind: "copyright", detail: "bad year {words[3]}")
+    if year != WANT_YEAR
+        return Verdict(kind: "year", detail: "{year}")
+    Verdict(kind: "ok", detail: "")
+
+fn sample() List[SrcFile]
+    [
+        SrcFile(name: "src/a.go", text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) 2026 Acme\npackage a"),
+        SrcFile(name: "tools/run.sh", text: "#!/bin/sh\n# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2026 Acme\necho hi"),
+        SrcFile(name: "tools/old.py", text: "# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2024 Acme\nx = 1"),
+        SrcFile(name: "src/b.c", text: "int main(void) { return 0; }"),
+        SrcFile(name: "db/init.sql", text: "-- SPDX-License-Identifier: GPL-3.0-only\n-- Copyright (c) 2026 Acme\nselect 1;"),
+        SrcFile(name: "src/c.c", text: "// SPDX-License-Identifier: Apache-2.0\n// copyright 2026 Acme\nint x;"),
+        SrcFile(name: "src/d.c", text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) twenty Acme"),
+        SrcFile(name: "empty.py", text: ""),
+    ]
+
+fn main()
+    files := sample()
+    for f in files
+        v := check(f)
+        extra := if v.detail == "" then "" else " ({v.detail})"
+        print("{f.name:<14} {v.kind}{extra}")
+    print("summary:")
+    for kind in ["ok", "missing", "license", "copyright", "year"]
+        mut n := 0
+        for g in files
+            if check(g).kind == kind
+                n += 1
+        print("  {kind:<10} {n}")
+
+@test fn accepts_good_header()
+    f := SrcFile(name: "a.py", text: "#!/usr/bin/python\n# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2026 Acme\n")
+    assert_eq(check(f).kind, "ok")
+
+@test fn flags_wrong_license_and_year()
+    a := SrcFile(name: "a.c", text: "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Acme")
+    b := SrcFile(name: "b.c", text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) 2019 Acme")
+    assert_eq(check(a).detail, "MIT")
+    assert_eq(check(b).kind, "year")
+
+@test fn markers_follow_extension()
+    assert_eq(comment_marker("x.sql"), "--")
+    assert_eq(comment_marker("x.sh"), "#")
+    assert_eq(comment_marker("x.rs"), "//")

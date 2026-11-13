@@ -1,0 +1,7 @@
+slice 0 [    2,  1820):  280 primes, sum    233019
+slice 1 [ 1820,  5456):  441 primes, sum   1587231
+slice 2 [ 5456, 10910):  606 primes, sum   4940622
+slice 3 [10910, 20000):  935 primes, sum  14410319
+gathered: 2262 primes, sum 21171191, largest 19997
+sequential: 2262 primes, sum 21171191, largest 19997
+agree: true

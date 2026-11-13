@@ -1,0 +1,14 @@
+shard 0: red (334 tokens)
+shard 1: blue,cyan (666 tokens)
+shard 2: gold,green,navy,pink,plum,teal (2000 tokens)
+blue    333
+cyan    333
+gold    334
+green   333
+navy    334
+pink    333
+plum    333
+red     334
+teal    333
+distinct 9, total 3000
+matches single-threaded count: true

@@ -1,0 +1,6 @@
+random (n=24): lomuto=93 three-way=74 agree=yes
+ascending (n=24): lomuto=276 three-way=123 agree=yes
+descending (n=24): lomuto=276 three-way=276 agree=yes
+all equal (n=16): lomuto=120 three-way=15 agree=yes
+three values (n=24): lomuto=131 three-way=42 agree=yes
+first set sorted: 0 2 4 6 8 10 13 13 13 14 15 17 18 22 24 24 29 30 31 34 35 35 40 49

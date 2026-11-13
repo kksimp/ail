@@ -1,0 +1,11 @@
+| item         | qty | price | note           |
+| :----------- | --: | ----: | :------------- |
+| apple        |   3 |   120 | fresh          |
+| banana       |  12 |    45 |                |
+| dragon fruit |   1 |    -7 | imported, rare |
+| kiwi         |  30 |     8 |                |
+
+| name | role |
+| :--- | :--- |
+| ann  | lead |
+| bo   | dev  |

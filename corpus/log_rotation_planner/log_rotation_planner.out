@@ -1,0 +1,17 @@
+keep     app.log         0d   40
+keep     app.log.1       1d   55
+keep     app.log.3       3d   60
+keep     app.log.6       6d   65
+keep     app.log.2.gz    9d   20
+compress app.log.4      12d   70
+delete   app.log.7      20d   90
+delete   app.log.5.gz   31d   18
+frees 108 bytes
+  app.log         40
+  app.log.1       55
+  app.log.2.gz    20
+  app.log.3       60
+  app.log.4.gz    70
+  app.log.6       65
+6 files, 310 bytes left
+cleaned up: true

@@ -1,0 +1,117 @@
+## Wildcard expander: shell-style brace expansion (`{a,b}`, nested braces,
+## numeric ranges `{1..3}` with zero padding) followed by `*` and `?` matching
+## of every expanded pattern against a file list. Braces that hold no choice
+## stay literal.
+
+fn matching(cs List[char], open_at int) int
+    mut depth := 0
+    mut i := open_at
+    while i < cs.len()
+        if cs[i] == '{'
+            depth += 1
+        elif cs[i] == '}'
+            depth -= 1
+            if depth == 0
+                return i
+        i += 1
+    -1
+
+fn split_top(body str) List[str]
+    mut parts := List[str]()
+    mut cur := ""
+    mut depth := 0
+    for c in body.chars()
+        if c == ',' and depth == 0
+            parts.push(cur)
+            cur = ""
+            continue
+        if c == '{'
+            depth += 1
+        elif c == '}'
+            depth -= 1
+        cur = "{cur}{c}"
+    parts.push(cur)
+    parts
+
+fn range_items(body str) List[str]
+    parts := body.split("..")
+    if parts.len() != 2
+        return []
+    lo := parts[0].to_int() else return []
+    hi := parts[1].to_int() else return []
+    padded := (parts[0].len() > 1 and parts[0].starts_with("0")) or (parts[1].len() > 1 and parts[1].starts_with("0"))
+    width := if padded then parts[0].len().max(parts[1].len()) else 0
+    mut out := List[str]()
+    mut n := lo
+    while (lo <= hi and n <= hi) or (lo > hi and n >= hi)
+        out.push("{n}".pad_left(width, '0'))
+        n = if lo <= hi then n + 1 else n - 1
+    out
+
+fn expand(s str) List[str]
+    cs := s.chars()
+    mut i := 0
+    while i < cs.len()
+        if cs[i] == '{'
+            shut := matching(cs, i)
+            if shut > 0
+                lo := i + 1
+                body := cs[lo..shut].join("")
+                mut alts := split_top(body)
+                if alts.len() < 2
+                    alts = range_items(body)
+                if alts.len() > 0
+                    pre := cs[..i].join("")
+                    after := shut + 1
+                    post := cs[after..].join("")
+                    mut out := List[str]()
+                    for a in alts
+                        out.extend(expand("{pre}{a}{post}"))
+                    return out
+        i += 1
+    [s]
+
+fn wild(p List[char], pi int, t List[char], ti int) bool
+    if pi == p.len()
+        return ti == t.len()
+    if p[pi] == '*'
+        mut k := ti
+        while k <= t.len()
+            if wild(p, pi + 1, t, k)
+                return true
+            k += 1
+        return false
+    if ti >= t.len()
+        return false
+    (p[pi] == '?' or p[pi] == t[ti]) and wild(p, pi + 1, t, ti + 1)
+
+fn pick_files(pattern str, files List[str]) List[str]
+    mut hits := List[str]()
+    for pat in expand(pattern)
+        for f in files
+            if wild(pat.chars(), 0, f.chars(), 0) and not hits.contains(f)
+                hits.push(f)
+    hits
+
+fn main()
+    for p in [r"file{1,2,3}.txt", r"{a,b}{x,y}", r"img{08..11}.png", r"n{3..1}", r"src/{lib,bin/{cli,srv}}.ail", r"{solo}", r"a{b,c", r"pre{,s}"]
+        print("{p} => {expand(p).join(" ")}")
+    files := ["main.c", "main.h", "util.c", "util.h", "util.o", "README.md", "a1.txt", "a2.txt", "a10.txt"]
+    for q in [r"*.{c,h}", "a?.txt", r"{util,main}.*", r"*.{py,rs}"]
+        print("{q}: {pick_files(q, files).join(" ")}")
+
+@test fn expands_choices()
+    assert_eq(expand(r"a{b,c}d"), ["abd", "acd"])
+    assert_eq(expand(r"{1,2}{x,y}"), ["1x", "1y", "2x", "2y"])
+    assert_eq(expand(r"x{a,b{c,d}}"), ["xa", "xbc", "xbd"])
+
+@test fn expands_ranges()
+    assert_eq(expand(r"v{1..3}"), ["v1", "v2", "v3"])
+    assert_eq(expand(r"v{3..1}"), ["v3", "v2", "v1"])
+    assert_eq(expand(r"{08..10}"), ["08", "09", "10"])
+
+@test fn literal_braces_stay()
+    assert_eq(expand(r"{x}"), [r"{x}"])
+    assert_eq(expand(r"a{b"), [r"a{b"])
+    assert(wild("a*c".chars(), 0, "abbc".chars(), 0))
+    assert(not wild("a?c".chars(), 0, "ac".chars(), 0))
