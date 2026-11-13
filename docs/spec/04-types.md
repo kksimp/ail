@@ -259,8 +259,8 @@ written and has no effect; anything else is a compile-time error. Each
 literal gets its own fresh value. A generic struct's default is typed with
 its type parameters, so `items List[T] = []` is fine and `x T = 0` is not. A
 variant's field has no default. A missing field's error says which fields
-may be left out. `impl Default` derivation (`trait.assoc.1`) does not read
-field defaults: it uses each field type's default. *(ADR 1076)*
+may be left out. An empty `impl Default` (`trait.assoc.1`) keeps a field's declared
+default and uses the field type's default for the others. *(ADR 1076)*
 
 ```ail skip=context
 struct Config

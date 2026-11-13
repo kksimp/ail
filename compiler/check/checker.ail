@@ -38,6 +38,8 @@ pub struct Sig
     ## The parameters' names, for named arguments (expr.call.3); empty for a
     ## built-in whose parameters have no names.
     pub names List[str]
+    ## How many leading parameters have no default (expr.call.4); the rest may be left out.
+    pub required int
     pub moves List[bool]
     pub ret Ty
     pub generics List[int]
@@ -740,6 +742,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             receiver: receiver_of(f),
             params: params,
             names: [p.name for p in f.params],
+            required: [p for p in f.params if p.default == none].len(),
             moves: if param_moves.contains(true) then param_moves else [],
             ret: ret,
             generics: generics,

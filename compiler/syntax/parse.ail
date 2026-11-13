@@ -1062,7 +1062,45 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                 )
                 i += 1
             ty := type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?
-            params.push(ast.Param(name: p.name, pos: p.pos, mutable: mutable, moved: moved, ty: ty))
+            mut default := absent[ast.Expr]()
+            if at_sym("=")
+                if within != ast.Within.TopLevel
+                    error_text(
+                        "expr.call.4",
+                        here(),
+                        "a method of a trait or of an `impl Trait` block has no parameter defaults",
+                        "give the default to the function that calls it, or declare the method as `fn Type.name(...)`",
+                        "",
+                    )
+                    return none
+                if mutable or moved
+                    error_text(
+                        "expr.call.4",
+                        here(),
+                        "a `mut` or `move` parameter has no default",
+                        "remove the `= value`, or the `mut`/`move`",
+                        "",
+                    )
+                    return none
+                bump()
+                default = expression()?
+            elif params.len() > 0 and params[params.len() - 1].default != none
+                error_text(
+                    "expr.call.4",
+                    here(),
+                    "a parameter without a default can't follow one with a default",
+                    "put the parameters with defaults last",
+                    "",
+                )
+                return none
+            params.push(ast.Param(
+                name: p.name,
+                pos: p.pos,
+                mutable: mutable,
+                moved: moved,
+                ty: ty,
+                default: default,
+            ))
         if not eat_sym(",")
             break
     expect_sym(")", "`)` or `,` in the parameter list", "gram.fn.2")?

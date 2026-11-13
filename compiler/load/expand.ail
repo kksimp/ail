@@ -21,6 +21,8 @@ struct Job
     type_name str
     info derive.TypeInfo
     trait_name str
+    ## The struct's fields that declare a default (type.struct.8).
+    defaulted List[str]
 
 ## The generators of the prelude, which this compiler contains.
 BUILTIN_GENERATORS := ["derive_to_json", "derive_from_json", "derive_default", "derive_from_args"]
@@ -190,8 +192,15 @@ fn err_at(imp ast.ImplDecl, job Job, message str) syntax.Diag
     match job.generator
         "derive_to_json" => derive.derive_to_json(job.info)
         "derive_from_json" => derive.derive_from_json(job.info)
-        "derive_default" => derive.derive_default(job.info)
+        "derive_default" => derive.derive_default_skipping(job.info, job.defaulted)
         _ => derive.derive_from_args(job.info)
+
+## The fields of struct `name` in `prog` that declare a default (type.struct.8).
+fn defaulted_of(prog ast.Program, name str) List[str]
+    for s in prog.structs
+        if last(s.name) == name
+            return [f.name for f in s.fields if f.default != none]
+    []
 
 ## The deriving `impl`s: no methods, and a trait with a generator (ct.derive.2).
 ## A problem with one is an error in `errors`.
@@ -261,6 +270,7 @@ fn find_jobs(prog ast.Program, mut errors List[syntax.Diag]) List[Job]
             type_name: type_name,
             info: info,
             trait_name: tr.name,
+            defaulted: defaulted_of(prog, type_name),
         ))
     jobs
 

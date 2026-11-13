@@ -291,6 +291,7 @@ fn Checker.check_fn(mut self, idx int)
     pending = []
     loop_depth = 0
     unsafe_depth = 0
+    check_param_defaults(f, sig)
     if f.unsafe_fn
         unsafe_opt_in(f.pos)
     catching = 0
@@ -1712,6 +1713,24 @@ fn Checker.check_field_defaults(mut self, struct_index int)
         if not accepts(want, got)
             mismatch("type.struct.5", expr_pos(d), want, got)
     locals = []
+
+## expr.call.4: a parameter's default is a plain constant of the parameter's
+## type, under the same rule as a struct field's (type.struct.8).
+fn Checker.check_param_defaults(mut self, f ast.FnDecl, sig Sig)
+    for k in 0..f.params.len()
+        d := f.params[k].default else continue
+        if bad := plain_default(d)
+            err_help(
+                "expr.call.4",
+                expr_pos(bad),
+                "`{f.params[k].name}`'s default isn't a plain constant",
+                "write literals, `none`, `[]`, `\{}`, or lists, sets, maps and tuples of them; a default has no names or calls, so build anything else where you call",
+            )
+            continue
+        want := sig.params[k].ty
+        got := expr(d, want, true)
+        if not accepts(want, got)
+            mismatch("expr.call.2", expr_pos(d), want, got)
 
 ## The first part of a field default that isn't a plain constant (type.struct.8).
 @allow("expr.match.3") fn plain_default(e ast.Expr) ast.Expr?

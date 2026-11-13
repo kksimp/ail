@@ -59,7 +59,7 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
                 problem: "",
             )
             facts := observe_facts(progs, type_name)
-            text := run(gen, info, facts) else err
+            text := run(gen, info, facts, defaulted_fields(progs, type_name)) else err
                 e.problem = err.message
                 out.push(e)
                 continue
@@ -67,13 +67,33 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
             out.push(e)
     out
 
-fn run(gen str, info TypeInfo, facts ObserveFacts) str ! DeriveError
+fn run(gen str, info TypeInfo, facts ObserveFacts, defaulted List[str]) str ! DeriveError
     match gen
         "derive_observe" => derive_observe(info, facts)
         "derive_to_json" => derive_to_json(info)
         "derive_from_json" => derive_from_json(info)
-        "derive_default" => derive_default(info)
+        "derive_default" => derive_default_skipping(info, defaulted)
         _ => derive_from_args(info)
+
+## The names of the fields of struct `name` that declare a default (type.struct.8).
+fn defaulted_fields(progs List[ast.Program], name str) List[str]
+    for p in progs
+        for s in p.structs
+            if last(s.name) == name
+                return [f.name for f in s.fields if f.default != none]
+    []
+
+## `derive_default` for a struct whose fields may declare defaults
+## (type.struct.8, trait.assoc.1): the derived `default()` leaves those out of
+## the literal, so each gets its declared default, not its type's.
+pub fn derive_default_skipping(t TypeInfo, defaulted List[str]) str ! DeriveError
+    if defaulted.len() == 0
+        return derive_default(t)
+    args := [
+        "{f.name}: {default_of(f.type_text)}"
+        for f in t.fields if not defaulted.contains(f.name)
+    ]
+    "fn default() Self\n    {t.name}({args.join(", ")})\n"
 
 ## `text` with the module's own prefix `a.b.` removed from its names: the
 ## generated code is read inside that module (mod.unit.2).

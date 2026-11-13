@@ -883,3 +883,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1095](1095-else-leave-as-block-tail.md) | `e else return ...`, `else break` or `else continue` as a block's last statement gives `e`'s value (`err.else.7`) *(delegated)* | Accepted | 2026-11-13 |
 | [1096](1096-x64-jumps-inside-32-byte-lines.md) | Native x86-64: keep jumps inside 32-byte lines *(delegated)* | Accepted | 2026-11-13 |
 | [1097](1097-faster-gates.md) | Faster gates: `NAME@K/N` shards, one process per runnable spec fence, stage 1 in the pool, `--failed` rerun, fast `run` on Windows *(delegated)* | Accepted | 2026-11-13 |
+| [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |

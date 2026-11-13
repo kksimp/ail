@@ -60,6 +60,7 @@ pub COVERED_RULES := [
     "expr.call.1",
     "expr.call.2",
     "expr.call.3",
+    "expr.call.4",
     "expr.cmp.1",
     "expr.cmp.3",
     "expr.comp.3",
