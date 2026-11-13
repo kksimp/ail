@@ -5,8 +5,8 @@ Chapter key: `conc`
 > **Status:** Drafted (partial). Specified: memory-model foundations, the task
 > model, scope-bound tasks, communication through `Channel[T]` and
 > `Mutex[T]`, `Atomic[int]` and `Atomic[bool]`, cancellation, random-schedule
-> testing, and parallel loops. Not yet designed: weaker atomic orderings,
-> `select`, and the formal model.
+> testing, parallel loops and `select`. Not yet designed: weaker atomic
+> orderings and the formal model.
 
 ## Memory model
 
@@ -473,6 +473,134 @@ fn main() !
         else
             print("err {c.err.recv()}")
     proc.wait(move c)?
+```
+
+**conc.select.2** — A `select` statement waits on several channel operations
+and runs the block of the one that happens. It is `select` and an indented
+block of arms. An arm is a head, `=>`, and an indented block or one statement
+on the same line (as a `match` arm, `expr.match.9`). The heads are:
+`v := ch.recv()` (a receive arm), `ch.send(x)` (a send arm), `after ms` and
+`closed`. A `select` has at least one receive or send arm. `select` is
+reserved (`lex.kw.1`); `after` and `closed` are words only at the start of an
+arm. *(ADR 1102)*
+
+**conc.select.3** — A `select` first evaluates, once and in source order,
+every arm's channel, each send arm's value and the `after` time. Then it waits
+until an arm can go ahead and runs the first arm in source order that can: a
+receive arm when its channel has a value waiting, which it takes (the oldest)
+and binds to the arm's name for the arm's block, as a `T`, not a `T?`; a send
+arm when its channel has room, which queues its value. Exactly one arm's
+operation happens; the values of the other send arms are dropped. The
+channels may have different element types. The name of a receive arm can't
+be reassigned and exists only in its block; `_ := ch.recv()` drops the value.
+A send arm on a closed channel traps as `send` does (`conc.share.4`). Other
+tasks run while it waits. *(ADR 1102)*
+
+```ail rules=conc.select.2,conc.select.3,conc.select.5
+fn numbers(out Channel[int])
+    for i in 1..=3
+        out.send(i)
+    out.close()
+
+fn words(out Channel[str])
+    out.send("done")
+    out.close()
+
+fn main() !
+    nums := Channel[int](4)
+    msgs := Channel[str](4)
+    a := spawn numbers(nums)
+    b := spawn words(msgs)
+    mut total := 0
+    mut last := ""
+    while true
+        select
+            n := nums.recv() =>
+                total += n
+            m := msgs.recv() =>
+                last = m
+            closed => break
+    a.wait()?
+    b.wait()?
+    print("{total} {last}")
+```
+
+```ail rules=conc.select.3,conc.select.4
+fn main()
+    small := Channel[int](1)
+    big := Channel[int](4)
+    for i in 1..=3
+        select
+            small.send(i) => print("small {i}")
+            big.send(i) => print("big {i}")
+    select
+        small.send(4) => print("sent")
+        after 0 => print("small is full")
+```
+
+```ail error=conc.select.2
+fn main()
+    ch := Channel[int](1)
+    select
+        ch.recv() => print("a value")
+        closed => print("closed")
+```
+
+**conc.select.4** — An `after ms =>` arm runs when `ms` milliseconds (an
+`int`; below 0 counts as 0) pass with no other arm ready; `after 0` runs at
+once when no other arm is ready. A `select` has at most one. A `select` with
+an `after` arm is never a deadlock (`conc.task.7`). Under `--deterministic` no
+time passes: `after 0` is as above, and a longer `after` runs once every other
+task is blocked, as `recv_for` does (`conc.share.8`). *(ADR 1102)*
+
+```ail rules=conc.select.4
+fn main()
+    ch := Channel[int](1)
+    select
+        v := ch.recv() =>
+            print("got {v}")
+        after 10 =>
+            print("nothing yet")
+        closed =>
+            print("closed")
+```
+
+**conc.select.5** — A `closed =>` arm runs when every channel of the
+`select`'s receive arms is closed and empty, so a loop around a `select` can
+end. Until then a closed, empty channel's arm never runs and the other arms
+go on. A `select` with a receive arm MUST have exactly one `closed` arm, and
+one without a receive arm MUST NOT have one. *(ADR 1102)*
+
+```ail error=conc.select.5
+fn main()
+    ch := Channel[int](1)
+    select
+        v := ch.recv() => print(v)
+        after 0 => print("none yet")
+```
+
+**conc.select.6** — Without an `after` arm, a `select` that waits when no other
+task can run is a deadlock (`conc.task.7`). In a cancelled task a `select`
+never waits (`conc.cancel.2`): when no arm can go ahead it runs its `closed`
+arm, else its `after` arm, else no arm. A `select` with a `closed` or an
+`after` arm always runs an arm, so it leaves its block when every arm does
+(`expr.block.3`). `task.select` (`conc.select.1`) stays for a list of
+channels of one type. *(ADR 1102)*
+
+```ail rules=conc.select.6
+fn worker(jobs Channel[int])
+    while true
+        select
+            j := jobs.recv() => print("job {j}")
+            closed => break
+    print("stopped: {task.cancelled()}")
+
+fn main() !
+    jobs := Channel[int](4)
+    g := TaskGroup()
+    g.add(spawn worker(jobs))
+    g.cancel()
+    g.wait_all()?
 ```
 
 ## Parallel execution

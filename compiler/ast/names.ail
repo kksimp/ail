@@ -119,3 +119,8 @@ fn stmt_names(s Stmt, mut out Set[str])
             block_names(body, mut out)
         Unsafe(body, _) => block_names(body, mut out)
         LetTuple(_, value, _) => expr_names(value, mut out)
+        Select(arms, _) =>
+            for h in select_heads(arms)
+                expr_names(h, mut out)
+            for body in select_bodies(arms)
+                block_names(body, mut out)

@@ -1,0 +1,16 @@
+# conc.select.6: a cancelled task's `select` doesn't wait; with nothing ready it
+# runs its `closed` arm.
+
+fn worker(jobs Channel[int])
+    while true
+        select
+            j := jobs.recv() => print("job {j}")
+            closed => break
+    print("stopped: {task.cancelled()}")
+
+fn main() !
+    jobs := Channel[int](4)
+    g := TaskGroup()
+    g.add(spawn worker(jobs))
+    g.cancel()
+    g.wait_all()?

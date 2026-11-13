@@ -3,7 +3,7 @@ that lines wrap: `lengthen.py IN OUT`. Used by parity.sh; the output isn't a
 meaningful program, only a formatter input."""
 import re, sys
 
-KW = set("and any as break continue defer elif else ensures enum error extern false fn for if impl in invariant match move mut none not or par pub ref requires return self spawn struct todo trait true unique unsafe use while with then int str bool float char".split())
+KW = set("and any as break continue defer elif else ensures enum error extern false fn for if impl in invariant match move mut none not or par pub ref requires return select self spawn struct todo trait true unique unsafe use while with then int str bool float char".split())
 out, in_multiline = [], False
 for line in open(sys.argv[1]).read().split("\n"):
     if '"""' in line:

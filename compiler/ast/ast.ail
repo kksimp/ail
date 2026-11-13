@@ -247,6 +247,25 @@ pub enum Stmt
     ## `a, mut b := t`, one name per element (type.tuple.4); `for a, b in xs`
     ## starts its body with one, over the hidden variable `(a, b)`.
     LetTuple(names List[Binder], value Expr, pos Pos)
+    ## `select` and its arms in source order (conc.select.2, ADR 1102).
+    Select(arms List[SelectArm], pos Pos)
+
+## One arm of a `select` (conc.select.2): what it waits for and its block.
+pub struct SelectArm
+    pub op SelectOp
+    pub body List[Stmt]
+    pub pos Pos
+
+## What a `select` arm waits for (conc.select.2).
+pub enum SelectOp
+    ## `v := ch.recv() =>`: a value from `ch`, bound to `v` in the arm.
+    Recv(var str, var_pos Pos, chan Expr)
+    ## `ch.send(x) =>`: room in `ch` for `x`.
+    Send(chan Expr, value Expr)
+    ## `after ms =>`: `ms` milliseconds with no other arm ready.
+    After(ms Expr)
+    ## `closed =>`: every channel of a receive arm is closed and empty.
+    Closed
 
 ## One name of a destructuring binding (type.tuple.4).
 pub struct Binder
@@ -454,6 +473,10 @@ impl ToJson for Stmt
 impl FromJson for Stmt
 impl ToJson for Binder
 impl FromJson for Binder
+impl ToJson for SelectArm
+impl FromJson for SelectArm
+impl ToJson for SelectOp
+impl FromJson for SelectOp
 impl ToJson for Else
 impl FromJson for Else
 impl ToJson for BinOp

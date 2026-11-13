@@ -263,6 +263,7 @@ fn Lower.unwind_loop(mut self)
         For(_, _, _, _, _, _, p) => p
         With(_, _, _, _, p) => p
         Unsafe(_, p) => p
+        Select(_, p) => p
         Return(_, p) => p
         _ => none
 

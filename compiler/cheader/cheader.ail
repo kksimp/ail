@@ -71,6 +71,7 @@ RESERVED := {
     "ref",
     "requires",
     "return",
+    "select",
     "self",
     "spawn",
     "struct",
