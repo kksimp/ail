@@ -741,7 +741,7 @@ fn rewrite(
         for pi in 0..t.params.len()
             ty := parse_ty(t.params[pi].ty, w.decls) else continue
             decs = "{decs}{decoders(w, ty, mut done)}"
-            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
+            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_arg(ail_args[{pi + 1}], ail_args[0].starts_with(\"y\")).split(\"\\u\{1f}\"), mut ail_c{pi})\n"
             call.push("ail_p{pi}")
         callee := if t.fx.is_empty() then t.name else "ail_fx_{t.name}"
         tail = "{tail}        {callee}({call.join(", ")})?\n        ail_io.exit(0)\n"
@@ -759,7 +759,7 @@ fn rewrite(
         tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
     tail = "{tail}{wrap}"
     if not decs.is_empty()
-        tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
+        tail = "{tail}\nstruct AilCur\n    i int\n\nfn ail_arg(a str, hexed bool) str\n    if not hexed\n        return a\n    b := bytes.from_hex(a) else return a\n    b.text()\n{decs}"
     for l in tail.split("\n")
         out.push(l)
         origin.push(-1)
@@ -1418,9 +1418,14 @@ fn try_case_in(
     args List[Node],
     envs List[str],
 ) str?
-    mut all := [["x" for _ in 0..slot].join("")]
+    # On Windows `env` is Git's MSYS program, which re-reads its command line by shell rules: a `'` in a generated
+    # string joined two arguments, and `*` or `?` would be globbed. There each input goes as hex, and the slot
+    # word is `y`s so the test binary knows to decode it (test.prop.3).
+    hexed := windows()
+    mut all := [[if hexed then "y" else "x" for _ in 0..slot].join("")]
     for i in 0..args.len()
-        all.push(tokens(w, tys[i], args[i]).join("\u{1f}"))
+        joined := tokens(w, tys[i], args[i]).join("\u{1f}")
+        all.push(if hexed then joined.to_bytes().hex() else joined)
     mut prog := exe
     mut argv := all
     if not envs.is_empty()
