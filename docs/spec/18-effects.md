@@ -85,8 +85,9 @@ passed `mut` or used as a `mut` receiver, and it moves no value (a `move`
 argument or a `move self` receiver). A call through a function value,
 a method of a channel, task, mutex or atomic, a function without a body,
 a call inside an `unsafe` block, and the last statement of a block in a
-function that can fail (its error value, `err.ret.*`) are never reported. `_ := expr` throws a
-value away on purpose. The fix offers the in-place twin of a copying
+function that can fail (its error value, `err.ret.*`) are never reported. `_ := expr` (also with
+`else` or `?`) throws a value away on purpose; `_` binds nothing, so it may be
+written any number of times in a function. The fix offers the in-place twin of a copying
 built-in (`xs.sorted()` → `xs.sort()`) when there is one, and `_ := ` always.
 *(ADR 1082)*
 
