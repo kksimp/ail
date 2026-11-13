@@ -32,6 +32,17 @@ struct Gate
     fails int
     built int
     unbuilt List[str]
+    # `NAME@K/N` runs shard K (from 0) of N of a suite that has shards (`cases`): item i belongs to shard i % N.
+    # Every item is counted in `seq` whichever shard runs it, so the shards cover the suite exactly once.
+    part int
+    parts int
+    seq int
+
+## True when this run's shard owns the next item of a sharded suite (always, for an unsharded run).
+fn Gate.mine(mut self) bool
+    i := seq
+    seq += 1
+    parts <= 1 or i % parts == part
 
 fn temp_dir() str
     # A Windows TMPDIR has backslashes, which `sh -c` scripts would eat: use `/`, which Windows takes too.
@@ -309,7 +320,10 @@ fn Gate.case_dir(mut self, dir str)
         # golden/pending.txt names features the native CLI lacks for now
         # (`ail test --coverage`, `--update`): named here, not checked.
         if pending_cases.contains(name.replace(".ail", ""))
-            print("PENDING {at}")
+            if mine()
+                print("PENDING {at}")
+            continue
+        if not mine()
             continue
         if why := run_case(at, "{dir}/{name.replace(".ail", "")}.")
             red(at, why)
@@ -326,6 +340,8 @@ fn Gate.packages(mut self)
             and not fs.exists("{at}/expected.rules")
             and not fs.exists("{at}/expected.trap")
             and not fs.exists("{at}/expected.err")
+            continue
+        if not mine()
             continue
         if why := run_case(at, "{at}/expected.")
             red(at, why)
@@ -472,8 +488,10 @@ fn Gate.cases(mut self)
     case_dir("examples")
     case_dir("tests/cases")
     packages()
-    cli_checks()
-    api_outlines()
+    # The two small groups have no items of their own to split: shard 0 runs them.
+    if part == 0
+        cli_checks()
+        api_outlines()
 
 ## `ail explain` and `ail fix` coverage: every rule a diagnostic can carry has a spec entry, the spec cites
 ## only rules that exist, compiler/explain/fixable.txt matches the fixes the corpora
@@ -2329,7 +2347,9 @@ fn Gate.net(mut self)
 
 ## The spec conformance harness (spec.rs, ported to tools/gate/spec.ail; ADR 0002).
 fn Gate.spec(mut self)
-    r := proc.run("./ail", ["run", "tools/gate/spec.ail"], "", 3600000) else
+    # A shard (`spec@K/N`) goes on to spec.ail, which checks the fences i % N == K.
+    shard := if parts > 1 then ["{part}/{parts}"] else []
+    r := proc.run("./ail", cat(["run", "tools/gate/spec.ail"], shard), "", 3600000) else
         red("spec", "could not start tools/gate/spec.ail")
         return
     if r.status != 0
@@ -3582,8 +3602,24 @@ fn main() !
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
     fs.make_dir(tmp)? "creating {tmp}"
-    mut g := Gate(fails: 0, built: 0, unbuilt: [])
-    for s in suites
+    mut g := Gate(fails: 0, built: 0, unbuilt: [], part: 0, parts: 1, seq: 0)
+    for asked in suites
+        # `NAME@K/N`: shard K of N of suite NAME (see Gate.mine; `spec` takes it too).
+        mut s := asked
+        g.part = 0
+        g.parts = 1
+        g.seq = 0
+        if asked.contains("@")
+            halves := asked.split("@")
+            s = halves[0]
+            kn := halves[1].split("/")
+            n := if kn.len() == 2 then kn[1].to_int() else 0
+            k := kn[0].to_int() else -1
+            if n < 1 or k < 0 or k >= n
+                io.eprint("bad shard `{asked}`: write NAME@K/N with 0 <= K < N")
+                io.exit(2)
+            g.part = k
+            g.parts = n
         match s
             "examples" => g.examples(tmp)
             "cases" => g.cases()

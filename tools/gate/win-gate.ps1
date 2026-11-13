@@ -67,15 +67,22 @@ $tmpBase = $env:TMPDIR.TrimEnd('/')
 $times = @()
 
 function Start-Suite([string]$name) {
-    $tmp = "$tmpBase/gate-$name"
+    # `cases@1/4` is shard 1 of 4 of a suite (tools\gate\suites.txt): its files are named cases_1_4.
+    $tag = $name -replace '[@/]', '_'
+    $tmp = "$tmpBase/gate-$tag"
     if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-    $log = Join-Path $out "gate_$name.log"
+    $log = Join-Path $out "gate_$tag.log"
     # The child takes the environment as it is now: its own TMPDIR, then ours back.
     $env:TMPDIR = $tmp
+    # AIL_FAST_RUN=1 (`./ail`, under Git's sh): a plain `ail run FILE` skips the PowerShell start (about a second each, and the
+    # cases and spec suites make thousands). `examples`, `cli`, `build_cache` and `docs` keep the full ail.ps1 path, so it
+    # stays gated here; GATE_FAST_RUN=0 turns the fast path off for every suite.
+    if ($env:GATE_FAST_RUN -ne '0' -and $name -notin 'examples', 'cli', 'build_cache', 'docs') { $env:AIL_FAST_RUN = '1' } else { Remove-Item Env:AIL_FAST_RUN -ErrorAction SilentlyContinue }
     $p = Start-Process -FilePath powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$ail`" run tools/gate/gate.ail $name" -WorkingDirectory $root -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
     $null = $p.Handle   # without this, ExitCode can read empty after the process ends
     $env:TMPDIR = $tmpBase
+    Remove-Item Env:AIL_FAST_RUN -ErrorAction SilentlyContinue
     @{ Name = $name; Proc = $p; Log = $log; Tmp = $tmp; Start = Get-Date }
 }
 
@@ -93,7 +100,9 @@ function Finish-Suite($r) {
     if ($rc -eq 0 -and $redLines.Count -eq 0) { return }
     $script:fails++
     "RED $($r.Name)"
-    Select-String -Path $r.Log -Pattern $pattern | Select-Object -First 8 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
+    # Every failing case of the suite in one pass (GATE_SHOW lines, default 60), so one round fixes them all.
+    $show = if ("$env:GATE_SHOW" -match '^[1-9]\d*$') { [int]$env:GATE_SHOW } else { 60 }
+    Select-String -Path $r.Log -Pattern $pattern | Select-Object -First $show | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
 }
 
 function Run-Pool([string[]]$names, [int]$width) {
