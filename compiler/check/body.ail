@@ -413,7 +413,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         if (not last or not need) and is_stmt_eval(s) and reject_unhandled(ty, stmt_pos(s))
             ty = Ty.Unknown
         elif not last or not need
-            note_discard(s, ty, marks)
+            note_discard(s, ty, marks, last)
     end_scope(mark)
     if leaves then Ty.Never else ty
 

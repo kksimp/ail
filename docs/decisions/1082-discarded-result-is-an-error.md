@@ -45,7 +45,9 @@ value was silent. The checker already infers every function's effects
 that is a call or method call, whose type is not unit, `Never` or `T ! E`,
 is an error when its inferred effects have none of `io`, `unsafe`, `hw`,
 `spawn`, `mutates` or a capability and typing it changed no place (a `mut`
-argument or receiver). Never reported: calls through a function value,
+argument or receiver) and moved no value (a `move` argument or `move self`
+receiver, which may release a resource). Never reported: the last statement
+of a block in a function that can fail (it may be the error value), calls through a function value,
 methods of channels, tasks, mutexes and atomics, functions without a body,
 standard functions outside the effects table, `task.*`, and calls inside an
 `unsafe` block. The fixes are the in-place twin of a copying built-in
