@@ -1,0 +1,2 @@
+# The scope widened and a host added (eff.allow.11).
+package app caps fs.read=.,net=api.example.com

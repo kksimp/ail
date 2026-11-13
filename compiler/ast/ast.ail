@@ -50,6 +50,8 @@ pub struct SourceFile
 pub struct Grant
     pub package str
     pub caps List[str]
+    ## The entries as written, sorted, scopes included (`fs.read=./data`, `net`); `ail run` and `ail review` read them (eff.allow.10-11).
+    pub entries List[str]
     pub pos Pos
     pub own bool
 

@@ -57,3 +57,22 @@ fn Checker.check_grants(self) List[Diag]
                     .with_help(help),
             )
     out
+
+## eff.allow.10: the policy a run gets from the manifests. When the root package has a `caps` line and any
+## entry anywhere carries a scope, it is every entry of every grant, sorted without repeats, as `--allow`
+## takes it; otherwise "" (no run-time limit beyond the compile-time check).
+pub fn grants_policy(prog ast.Program) str
+    mut root := false
+    mut scoped := false
+    mut all := List[str]()
+    for g in prog.grants
+        if g.own
+            root = true
+        for e in g.entries
+            if e.contains("=")
+                scoped = true
+            if not all.contains(e)
+                all.push(e)
+    if not root or not scoped
+        return ""
+    all.sorted().join(",")
