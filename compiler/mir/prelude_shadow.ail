@@ -1,0 +1,93 @@
+## Which of the prelude's modules a program gets in native code when its
+## root module declares a struct or enum a module declares too (a program's
+## own `Heap`): the program's type wins and only that module is left out,
+## with the modules that use its types, as the checker leaves out a module
+## whose type the program declares (json.prelude.1). The other modules stay,
+## so `Grid` still builds beside a program's own `Heap`.
+
+## `prelude_text(text)` for the program `srcs`, with the modules above left
+## out: their lines blank, so each kept line keeps its number (ADR 0808).
+pub fn prelude_text_for(text str, srcs List[Source]) str
+    mut user := Set[str]()
+    for s in srcs
+        if s.module == ""
+            for d in s.prog.structs
+                user.add(d.name)
+            for d in s.prog.enums
+                user.add(d.name)
+    kept := prelude_text(text)
+    if user.len() == 0
+        return kept
+    # Each module runs from its `## @module` line to the next one.
+    mut sections := List[List[str]]()
+    mut cur := List[str]()
+    for line in kept.lines()
+        if line.starts_with("## @module ")
+            sections.push(cur)
+            cur = []
+        cur.push(line)
+    sections.push(cur)
+    mut dropped := List[bool]()
+    mut gone := Set[str]()
+    for sec in sections
+        mut clash := false
+        for n in declared_types(sec)
+            if user.contains(n)
+                clash = true
+        dropped.push(clash)
+        if clash
+            for n in declared_types(sec)
+                gone.add(n)
+    # A module that names a type of a module left out goes too (`jsonderive`
+    # without `json`).
+    mut changed := gone.len() > 0
+    while changed
+        changed = false
+        for k in 0..sections.len()
+            if dropped[k]
+                continue
+            words := section_words(sections[k])
+            mut uses_gone := false
+            for n in gone
+                if words.contains(n)
+                    uses_gone = true
+            if uses_gone
+                dropped[k] = true
+                changed = true
+                for n in declared_types(sections[k])
+                    gone.add(n)
+    mut out := List[str]()
+    for k in 0..sections.len()
+        for line in sections[k]
+            out.push(if dropped[k] then "" else line)
+    "{out.join("\n")}\n"
+
+## The structs and enums a module's lines declare at the top level.
+fn declared_types(lines List[str]) List[str]
+    mut out := List[str]()
+    for line in lines
+        decl := line.strip_prefix("pub ") else line
+        mut rest := decl.strip_prefix("struct ") else ""
+        if rest == ""
+            rest = decl.strip_prefix("enum ") else continue
+        mut name := ""
+        for c in rest.chars()
+            if c != '_' and not c.is_alnum()
+                break
+            name = "{name}{c}"
+        if name != ""
+            out.push(name)
+    out
+
+## The identifiers that appear in a module's lines.
+fn section_words(lines List[str]) Set[str]
+    mut out := Set[str]()
+    for line in lines
+        mut w := ""
+        for c in "{line} ".chars()
+            if c == '_' or c.is_alnum()
+                w = "{w}{c}"
+            elif w != ""
+                out.add(w)
+                w = ""
+    out

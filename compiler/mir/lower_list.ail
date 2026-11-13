@@ -101,7 +101,7 @@ fn Lower.lower_list_edit(
     unit := Val(id: -1, ty: Ty.Unit)
     if is_list_build(name)
         return lower_list_build(r, e, name, npos, vs)
-    if (structural(e) or e == Ty.Bytes) and tuple_list_method(name)
+    if (structural(e) or e == Ty.Bytes or deep_list_order(e, name)) and tuple_list_method(name)
         return tuple_list_edit(r, e, name, npos, vs)
     if name == "extend" and vs.len() == 1
         if not same_ty(vs[0].ty, r.ty)

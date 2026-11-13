@@ -1,0 +1,96 @@
+## A program that declares its own `Heap` still gets the prelude's `Grid`:
+## only the prelude module whose type the program declares is left out
+## (json.prelude.1). Shortest path on a weighted grid, with a module
+## constant beside `Grid.fill` (type.grid.1).
+struct Heap[T Ord]
+    items List[T]
+
+fn Heap[T].new() Heap[T]
+    Heap[T](items: [])
+
+fn Heap[T].push(mut self, x T)
+    items.push(x)
+    mut i := items.len() - 1
+    while i > 0
+        parent := (i - 1) / 2
+        if items[i] < items[parent]
+            items.swap(i, parent)
+            i = parent
+        else
+            break
+
+fn Heap[T].pop(mut self) T?
+    ensures old(items.len()) == 0 or items.len() == old(items.len()) - 1
+    if items.is_empty()
+        return none
+    last := items.len() - 1
+    items.swap(0, last)
+    top := items.pop()
+    mut i := 0
+    while true
+        l := 2 * i + 1
+        r := l + 1
+        mut m := i
+        if l < items.len() and items[l] < items[m]
+            m = l
+        if r < items.len() and items[r] < items[m]
+            m = r
+        if m == i
+            break
+        items.swap(i, m)
+        i = m
+    top
+
+MAP := [
+    "S.#.....",
+    ".9#.###.",
+    ".1..#...",
+    ".1###.#.",
+    ".1111.#E",
+]
+
+fn cost(c char) int?
+    match c
+        '#' => none
+        '.' | 'S' | 'E' => 1
+        '0'..='9' => c.to_digit(10)
+        _ => none
+
+fn find(rows List[str], want char) (int, int)?
+    for r, row in rows.enumerate()
+        if c := row.find(want)
+            return (r, c)
+    none
+
+fn shortest(rows List[str]) int?
+    start := find(rows, 'S')?
+    goal := find(rows, 'E')?
+    h := rows.len()
+    w := rows[0].len()
+    cells := [row.chars() for row in rows]
+    mut dist := Grid.fill(h, w, -1)
+    mut heap := Heap[(int, int, int)].new()
+    heap.push((0, start.0, start.1))
+    while true
+        d, r, c := heap.pop() else break
+        if dist[r, c] != -1
+            continue
+        dist[r, c] = d
+        if (r, c) == goal
+            return d
+        for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]
+            nr := r + dr
+            nc := c + dc
+            if nr < 0 or nr >= h or nc < 0 or nc >= w
+                continue
+            step := cost(cells[nr][nc]) else continue
+            if dist[nr, nc] == -1
+                heap.push((d + step, nr, nc))
+fn main()
+    d := shortest(MAP) else -1
+    print("shortest: {d}")
+    mut hp := Heap[int].new()
+    for x in [5, 1, 4]
+        hp.push(x)
+    first := hp.pop() else -1
+    print("first: {first}")
