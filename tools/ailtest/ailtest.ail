@@ -77,8 +77,10 @@ struct TestFn
     head str
     ## The generated parameters only; a fixture's parameter is not one (test.fixture.3).
     params List[Param]
-    ## The fixtures the test lists with `@needs`, in order.
+    ## The fixtures the test lists with `@needs("NAME")`, in order.
     fx List[str]
+    ## The capabilities it lists with `@needs(net, proc)`, comma-joined (test.sandbox.1); `all` under `--allow all`.
+    caps str
     ## The arguments of the call, in parameter order: `ail_fN` for a fixture, `ail_aN` for a generated input.
     call List[str]
 
@@ -415,6 +417,11 @@ fn lead_attr(text str, name str) Attr?
         close := rest.find("\")") else return none
         arg = rest.slice(2, close)
         rest = rest.slice(close + 2, rest.len())
+    elif name == "needs" and rest.starts_with("(")
+        # `@needs(net, proc)`: bare words name capabilities (test.sandbox.1).
+        close := rest.find(")") else return none
+        arg = "cap:{rest.slice(1, close).replace(" ", "")}"
+        rest = rest.slice(close + 1, rest.len())
     elif not rest.is_empty() and not rest.starts_with(" ")
         return none
     Attr(rest: rest.trim_start(), arg: arg)
@@ -467,13 +474,17 @@ fn find_tests(lines List[str]) Found
             mut cur := i
             mut text := l
             mut names := List[str]()
+            mut caps := ""
             mut saw := false
             for _ in 0..16
                 if a := lead_attr(text, "test")
                     saw = true
                     text = a.rest
                 elif a := lead_attr(text, "needs")
-                    names.push(a.arg)
+                    if a.arg.starts_with("cap:")
+                        caps = "{caps},{a.arg.slice(4, a.arg.len())}"
+                    else
+                        names.push(a.arg)
                     text = a.rest
                 elif text.trim().is_empty()
                     mut nxt := -1
@@ -531,6 +542,7 @@ fn find_tests(lines List[str]) Found
                             head: text,
                             params: gen,
                             fx: names,
+                            caps: caps,
                             call: call,
                         ))
                     i = last
@@ -778,6 +790,19 @@ fn describe(err str, lead int) str
                     return "{first} at {ln - lead}:{parts[parts.len() - 1]}"
     first
 
+## test.sandbox.3: a sandbox denial (`trap[eff.allow.N]`) names the `@needs` that lifts it in place of the `--allow` advice.
+fn sandbox_hint(msg str) str
+    if not msg.starts_with("trap[eff.allow.")
+        return msg
+    cut := msg.find("; allow it with") else return msg
+    mut need := "fs"
+    if msg.starts_with("trap[eff.allow.4]")
+        need = if msg.contains("net.serve") then "net.serve" else "net"
+    elif msg.starts_with("trap[eff.allow.5]")
+        need = "proc"
+    at := msg.rfind(" at ") else msg.len()
+    "{msg.slice(0, cut)}; tests run in a sandbox: add `@needs({need})` to the test, or run `ail test --allow all` (test.sandbox.3){msg.slice(at, msg.len())}"
+
 ## `msg` with its ` at L:C` mapped from the augmented source back to FILE's lines.
 fn remap_at(msg str, origin List[int]) str
     w := where_at(msg) else return msg
@@ -900,6 +925,8 @@ fn kid_node(kids List[Node]) Node
 ## What generation and shrinking need to know about the file's types.
 struct World
     decls Map[str, Decl]
+    ## The directories a sandboxed test may read: the package root, the test file's directory and `.` (test.sandbox.1).
+    roots List[str]
 
 ODD := ['\n', '\t', 'é', 'λ', '日', '"', '\\']
 
@@ -1376,7 +1403,10 @@ struct Prop
 
 ## Runs the binary on one input: none when it passes, else the failure line.
 fn try_case(w World, lead int, exe str, slot int, t TestFn, tys List[Ty], args List[Node]) str?
-    try_case_in(w, lead, exe, slot, tys, args, List[str]())
+    box := box_open(w, exe, t.caps)
+    r := try_case_in(w, lead, exe, slot, tys, args, box.envs)
+    box_close(box)
+    r
 
 ## `try_case` with the environment variables `envs` set for the run (`NAME=VALUE` each).
 fn try_case_in(
@@ -1404,7 +1434,7 @@ fn try_case_in(
         return none
     if r.status == 4
         return "error: no such test"
-    describe(r.err, lead)
+    sandbox_hint(describe(r.err, lead))
 
 ## The parsed parameter types of `t`, or none when one is not generatable.
 fn param_tys(w World, t TestFn) List[Ty]?
@@ -1720,9 +1750,11 @@ struct FuzzRun
     ids Set[int]
 
 ## One run of the instrumented binary: the failure line, if any, and the ids of the statements it ran.
-fn fuzz_case(w World, lead int, exe str, slot int, tys List[Ty], args List[Node], hits str) !FuzzRun
+fn fuzz_case(w World, lead int, exe str, slot int, caps str, tys List[Ty], args List[Node], hits str) !FuzzRun
     fs.write_text(hits, "")?
-    fail := try_case_in(w, lead, exe, slot, tys, args, ["AIL_INSTRUMENT_OUT={hits}"])
+    box := box_open(w, exe, caps)
+    fail := try_case_in(w, lead, exe, slot, tys, args, with_envs(["AIL_INSTRUMENT_OUT={hits}"], box.envs))
+    box_close(box)
     FuzzRun(fail: fail, ids: hit_ids(hits))
 
 ## Fuzzes the property test `t` (test.fuzz.1-5): inputs that reach a statement no earlier input did
@@ -1783,7 +1815,7 @@ fn run_fuzz(
                 moved := mutate(w, tys[j], args[j], mut rng, 0)
                 args[j] = moved
         runs += 1
-        res := fuzz_case(w, lead, exe, slot, tys, args, hits)?
+        res := fuzz_case(w, lead, exe, slot, t.caps, tys, args, hits)?
         if fail := res.fail
             small := shrink_input(w, lead, exe, slot, t, tys, args, fail)
             body := corpus_text(w, tys, small.0)
@@ -1842,6 +1874,70 @@ fn test_env(lim str, rec str, rep str, seed int, steps str) List[str]
         envs.push("AIL_REPLAY={rep}")
         envs.push("AIL_SEED={seed}")
     envs
+
+## ---- Sandboxed tests (test.sandbox.1-4, ADR 1100) ----
+
+## The directories whose files a sandboxed test may read: the current directory, the directory of `file`,
+## and the nearest directory above it with an `ail.pkg` (the package root).
+fn read_roots(file str) List[str]
+    mut roots := ["."]
+    here := path.dir(file)
+    if not here.is_empty() and not roots.contains(here)
+        roots.push(here)
+    mut d := if here.is_empty() then "." else here
+    for _ in 0..12
+        if fs.exists("{d}/ail.pkg")
+            if not roots.contains(d)
+                roots.push(d)
+            break
+        d = "{d}/.."
+    roots
+
+## A test's sandbox: its own temporary directory, and the environment that confines the test to it.
+struct Box
+    dir str
+    envs List[str]
+
+## test.sandbox.1: the environment for one run of a test that lists the capabilities `caps`
+## (comma-joined; `all` for `--allow all`, which sandboxes nothing). The run may write only in a
+## fresh directory (which is also its `TMPDIR`), read the package, and use `env`; `net`, `net.serve`
+## and `proc` are denied unless `caps` has them, and `fs` lifts the file limit. A directory that can't
+## be made leaves the run with no file access outside the package (it fails closed).
+fn box_open(w World, exe str, caps str) Box
+    if caps.split(",").contains("all")
+        return Box(dir: "", envs: [])
+    dir := fs.make_temp_dir(SCRAP_PREFIX) else ""
+    mut entries := ["env"]
+    if caps.split(",").contains("fs")
+        entries.push("fs")
+    else
+        for r in w.roots
+            entries.push("fs.read={r}")
+        if not dir.is_empty()
+            entries.push("fs={dir}")
+        # What the runner's own flags make a test binary write beside itself.
+        for ext in [".hits", ".fuzz", ".rec"]
+            entries.push("fs.write={exe}{ext}")
+    for c in ["net", "net.serve", "proc"]
+        if caps.split(",").contains(c)
+            entries.push(c)
+    mut envs := ["AIL_ALLOW={entries.join(",")}"]
+    if not dir.is_empty()
+        envs.push("TMPDIR={dir}")
+        envs.push("TEMP={dir}")
+        envs.push("TMP={dir}")
+    Box(dir: dir, envs: envs)
+
+## Removes the directory of `box` and what the test left in it.
+fn box_close(box Box)
+    if not box.dir.is_empty()
+        remove_scrap(box.dir)
+
+## `base` followed by `extra`.
+fn with_envs(base List[str], extra List[str]) List[str]
+    mut out := base
+    out.extend(extra)
+    out
 
 fn rec_header(file str, seed int) str
     "\{\"ail_record\":1,\"program\":{json_str(file)},\"args\":[],\"seed\":{seed},\"limit\":67108864}"
@@ -1987,7 +2083,7 @@ fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
     Verdict(
         name: "",
         status: "fail",
-        message: describe(r.err, lead),
+        message: sandbox_hint(describe(r.err, lead)),
         cases: 0,
         seed: 0,
         input: "",
@@ -2133,7 +2229,7 @@ fn run_doc(
     r := started(exe, arg, envs) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status != 0
-        return plain("", "fail", describe(r.err, lead))
+        return plain("", "fail", sandbox_hint(describe(r.err, lead)))
     if expected.is_empty()
         return plain("", "pass", "")
     got := r.out.lines()
@@ -3077,7 +3173,7 @@ fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
     a
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] [--filter PATTERN]... [--list] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] [--filter PATTERN]... [--list] [--allow all] FILE")
     io.exit(2)
     2
 
@@ -3131,8 +3227,17 @@ fn main() !
     mut cases_given := false
     mut mutating := false
     mut mutate_max := 50
+    mut allow_all := false
     for a in env.args()
-        if want == "--since"
+        if want == "--allow"
+            if a != "all"
+                io.eprint("error[test.sandbox.4]: `ail test --allow` takes `all`, which lifts the sandbox of every test; to let one test use a capability write `@needs(net)`, `@needs(proc)` or `@needs(fs)` on it")
+                io.exit(2)
+            allow_all = true
+            want = ""
+        elif a == "--allow"
+            want = a
+        elif want == "--since"
             since = a
             want = ""
         elif a == "--affected"
@@ -3314,6 +3419,9 @@ fn main() !
         lines.extend(made.lines)
         synth = made.names
     mut found := find_tests(lines)
+    if allow_all
+        for ai in 0..found.tests.len()
+            found.tests[ai].caps = "all"
     if not fuzz.is_empty()
         # test.fuzz.1: only the named property test is built and run.
         mut only := List[TestFn]()
@@ -3370,7 +3478,7 @@ fn main() !
         found.tests = keep
         found.skipped = [k for k in found.skipped if name_matches(k.name, filters)]
         skipped_contracts = [k for k in skipped_contracts if name_matches(k.name, filters)]
-    w := World(decls: parse_decls(lines))
+    w := World(decls: parse_decls(lines), roots: read_roots(file))
     for t in found.tests
         if t.header < lines.len()
             col := (lines[t.header].find(t.name) else 0) + 1
@@ -3588,6 +3696,7 @@ fn main() !
                     trace_limit,
                     max_steps,
                 )?
+                box := box_open(w, exe, t.caps)
                 v := run_doc(
                     exe,
                     slot,
@@ -3595,8 +3704,9 @@ fn main() !
                     doc_expected(lines, t),
                     update,
                     doc_where.get(t.name) else [],
-                    envs,
+                    with_envs(envs, box.envs),
                 )
+                box_close(box)
                 rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
                 verdicts.push(Verdict(
                     name: doc_names[t.name],
@@ -3624,7 +3734,9 @@ fn main() !
                     trace_limit,
                     max_steps,
                 )?
-                v := run_one(exe, slot, last_lead, envs)
+                box := box_open(w, exe, t.caps)
+                v := run_one(exe, slot, last_lead, with_envs(envs, box.envs))
+                box_close(box)
                 rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
                 if trace and v.status == "fail"
                     traces[t.name] = take_trace(exe)
@@ -3715,7 +3827,9 @@ fn main() !
                 trace_limit,
                 max_steps,
             )?
-            v := run_one(exe, slot, 0, envs)
+            box := box_open(w, exe, if allow_all then "all" else mt.t.caps)
+            v := run_one(exe, slot, 0, with_envs(envs, box.envs))
+            box_close(box)
             rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v, 0)}"
             verdicts.push(plain(name, v.status, v.message))
     if rec_mode == "record" and not own_rec

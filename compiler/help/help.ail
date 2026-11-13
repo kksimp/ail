@@ -46,8 +46,8 @@ fn commands() List[Cmd]
             "test",
             "Build and run",
             "run the @test functions",
-            "ail test [--json] [--filter PATTERN] [--list] [--fuzz NAME | --mutate | --contracts] [--budget [N]] FILE|DIR",
-            "test.run.1,test.filter.1,test.list.1,test.fixture.4,test.fuzz.1,test.mutate.1",
+            "ail test [--json] [--filter PATTERN] [--list] [--fuzz NAME | --mutate | --contracts] [--budget [N]] [--allow all] FILE|DIR",
+            "test.run.1,test.filter.1,test.list.1,test.fixture.4,test.sandbox.1,test.fuzz.1,test.mutate.1",
         ),
         c(
             "leak",

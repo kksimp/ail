@@ -3,7 +3,7 @@
 Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
-> functions, the `ail test` runner and its result format, test filtering and listing, fixtures,
+> functions, the `ail test` runner and its result format, test filtering and listing, fixtures, the test sandbox,
 > `assert`, `assert_eq`, `assert_err` and `assert_near`, property tests, fuzzing, mutation testing,
 > and doc examples as tests. Not yet designed: parallel runs and expected-failure tests.
 
@@ -195,7 +195,7 @@ function in every other way and is not a test. *(ADR 1075)*
 **test.fixture.2** — A teardown is a top-level function `fn END(value T)` that takes the fixture's value
 and returns nothing, so it can't fail. *(ADR 1075)*
 
-**test.fixture.3** — A `@test` function lists the fixtures it uses with `@needs("NAME")` after `@test`, one
+**test.fixture.3** — A `@test` function lists the fixtures it uses with `@needs("NAME")` (the name in quotes) after `@test`, one
 attribute per fixture, and declares a parameter `NAME` of the fixture's type for each. These parameters
 get the fixtures' values and are not generated, so a property test can take both. A fixture named
 twice, a name that is not a `@fixture`, a missing or differently typed parameter, and `@needs` on a function
@@ -212,8 +212,9 @@ down. A fixture and its teardown must be in the same file as the test. *(ADR 107
 ```ail tool=test,FILE expect=passed rules=test.fixture.1,test.fixture.2,test.fixture.3,test.fixture.4
 @fixture("drop_file")
 fn scratch_file() !str
-    fs.write_text(".ail-fixture-demo.txt", "hi")?
-    ".ail-fixture-demo.txt"
+    name := "{fs.temp_dir()}/fixture-demo.txt"
+    fs.write_text(name, "hi")?
+    name
 
 fn drop_file(name str)
     fs.remove(name) else return
@@ -268,6 +269,63 @@ fn uses(x int)
 
 fn main()
     print("x")
+```
+
+## Sandbox
+
+**test.sandbox.1** — `ail test` runs each test in a sandbox, a use of `eff.allow.1-9` that needs no flag. The
+test may not use `net`, `net.serve` or `proc`. It may read files under the current directory, the directory
+of the test file and the package root (the nearest directory above the test file with an `ail.pkg`). It may
+write only in its own temporary directory, which is also where it may read what it wrote. That directory is
+new for each run, is the test's `fs.temp_dir()` (the runner sets `TMPDIR` and `TEMP`), and is removed when the
+run ends. `env`, `clock` and `random` are not limited. A property test gets a new directory for each generated
+input. *(ADR 1100)*
+
+```ail tool=test,FILE expect=passed rules=test.sandbox.1
+@test fn writes_in_its_own_directory() !
+    name := "{fs.temp_dir()}/note.txt"
+    fs.write_text(name, "kept for this test only")?
+    assert_eq(fs.read_text(name)?, "kept for this test only")
+```
+
+**test.sandbox.2** — `@needs(CAP)` after `@test` lifts the limit for one test: `@needs(fs)` allows every file
+(read and write), `@needs(net)` the network, `@needs(net.serve)` listening, and `@needs(proc)` running programs.
+Several are written `@needs(net, proc)`. A capability name in bare words is a capability; a name in quotes is a
+fixture (`test.fixture.3`) and can sit beside it. A word that is not one of the four, a capability listed twice,
+and a quoted capability name that is not a fixture are compile-time errors. *(ADR 1100)*
+
+```ail tool=test,FILE expect=passed rules=test.sandbox.2
+@test @needs(fs)
+fn may_write_beside_the_program() !
+    fs.write_text(".ail-sandbox-demo.txt", "x")?
+    fs.remove(".ail-sandbox-demo.txt")?
+```
+
+```ail error=test.sandbox.2 rules=test.sandbox.2
+@test @needs(gpu)
+fn t()
+    assert(true)
+
+fn main()
+    print("x")
+```
+
+**test.sandbox.3** — A call the sandbox refuses fails that test only, with `trap[eff.allow.N]`, the call chain,
+and the line to write: `add @needs(CAP) to the test, or run ail test --allow all`. Other tests are not
+affected. *(ADR 1100)*
+
+```ail tool=test,FILE status=1 expect=test.sandbox.3 rules=test.sandbox.3
+@test fn writes_beside_the_program() !
+    fs.write_text(".ail-sandbox-denied.txt", "x")?
+```
+
+**test.sandbox.4** — `ail test --allow all` runs every test with no sandbox, as before `test.sandbox.1`. It takes
+no other list (`@needs` is the way to widen one test), and `ail task verify` runs without it. *(ADR 1100)*
+
+```ail tool=test,--allow,all,FILE expect=passed rules=test.sandbox.4
+@test fn writes_beside_the_program() !
+    fs.write_text(".ail-sandbox-all.txt", "x")?
+    fs.remove(".ail-sandbox-all.txt")?
 ```
 
 ## Assertions
