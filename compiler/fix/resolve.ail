@@ -107,7 +107,7 @@ pub fn settle_fixes(fixes List[Fix], lines List[List[char]]) List[Fix]
         mut ok := true
         for e in f.edits
             if e.anchor == "rename_all"
-                renamed := rename_all(e, lines)
+                renamed := whole_word_renames(e, lines)
                 if renamed.len() == 0
                     ok = false
                 edits.extend(renamed)
@@ -120,7 +120,7 @@ pub fn settle_fixes(fixes List[Fix], lines List[List[char]]) List[Fix]
     out
 
 ## Every whole-word `e.old` outside strings and comments, as edits that write `e.text`.
-fn rename_all(e Edit, lines List[List[char]]) List[Edit]
+fn whole_word_renames(e Edit, lines List[List[char]]) List[Edit]
     mut out := List[Edit]()
     word := e.old else return out
     pat := word.chars()
