@@ -3427,7 +3427,9 @@ lines don't disturb a call. A reply with an `error` member fails with kind
 **std.mcp.7** — `McpError` is an error with `kind str` and `message str`. The
 kinds are `start`, `closed`, `protocol`, `rpc`, `tool` and `timeout`. A request
 waits at most 30 seconds for its reply (`c.set_timeout(ms int)` changes it);
-when the time runs out or the server has exited it fails with kind `timeout`.
+when the time runs out or the server has exited it fails with kind `timeout`,
+and the message ends with ` (server stderr: ...)`, the first ten lines the
+server wrote to its standard error joined with ` | `, when there are any.
 *(ADR 1091)*
 
 **std.mcp.8** — `c.close()` takes the client with `move` and closes the server's
