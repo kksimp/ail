@@ -850,6 +850,10 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
         # `@caps(fs, net.serve)` (eff.cap.6): the list is kept as `fs,net.serve`.
         if a.name == "caps" and listed != ""
             arg = listed
+        # `@needs(net, proc)` (test.sandbox.1): bare words name capabilities, kept as `cap:net,proc`;
+        # `@needs("NAME")` with a string names a fixture (test.fixture.3).
+        if a.name == "needs" and arg == none and listed != ""
+            arg = "cap:{listed}"
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
         while at_newline()

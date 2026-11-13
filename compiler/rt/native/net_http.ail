@@ -1035,6 +1035,10 @@ fn http_decode(r int, url str, spec int, at str) int
 ## connect timeout, and whether to drop `Authorization` and `Cookie`; for
 ## `net.open` two more: streaming, and whether redirects are followed.
 fn http_request(method str, url str, body str, ctype str, spec int, redirects int, at str) int
+    if spec == 0 or load64(spec + 32) == 0
+        stubbed := stub_http(method, url)
+        if stubbed != 0
+            return stubbed
     follows := method == "GET" or method == "HEAD"
     next := alloc_raw(8, KIND_BYTES)
     mut cur := url

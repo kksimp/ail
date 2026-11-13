@@ -885,6 +885,8 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1097](1097-faster-gates.md) | Faster gates: `NAME@K/N` shards, one process per runnable spec fence, stage 1 in the pool, `--failed` rerun, fast `run` on Windows *(delegated)* | Accepted | 2026-11-13 |
 | [1098](1098-std-kv.md) | `std.kv`: a key-value store in one file with a crash-safe log; `fs.sync` *(delegated)* | Accepted | 2026-11-13 |
 | [1099](1099-collection-vocabulary.md) | One collection vocabulary: `fold`, `count(f)`, `flat_map` and the rest on every collection *(delegated)* | Accepted | 2026-11-13 |
+| [1100](1100-sandboxed-tests.md) | `ail test` sandboxes each test; `@needs(net)`, `@needs(proc)`, `@needs(fs)` lift it; `--allow all` *(delegated)* | Accepted | 2026-11-13 |
+| [1101](1101-test-stubs.md) | `std.test` stubs for files, variables, the clock and HTTP in tests *(delegated)* | Accepted | 2026-11-13 |
 | [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |
 | [1105](1105-scoped-caps-in-manifests-and-review.md) | Scoped capabilities in `ail.pkg` (`caps fs.read=./data`) give a run its policy; `ail review` reports widened scopes *(delegated)* | Accepted | 2026-11-13 |
 | [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |

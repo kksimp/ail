@@ -1,0 +1,70 @@
+## std.test (spec test.stub.1-6, ADR 1101): stubs for the file system, the clock, the
+## network and the environment of ONE test run by `ail test`. A call is active until the test
+## ends, and the next test starts with none. The runner gives each test a table file
+## (`fs.temp_dir()` + `/.ail-stubs`); each function appends a line to it, and the runtime's
+## `fs.read_text`, `fs.read_bytes`, `fs.exists`, `env.get`, `time.now_ms`, `time.sleep_ms` and
+## `net.get`/`net.request` answer from it (compiler/rt/native/stub.ail). Outside `ail test`
+## there is no table, and every function here fails with a message that says so.
+
+## A field of a table line: `%` is `%25`, a newline `%0A` and a tab `%09`.
+fn esc(s str) str
+    s.replace("%", "%25").replace("\n", "%0A").replace("\t", "%09")
+
+fn table() str
+    "{fs.temp_dir()}/.ail-stubs"
+
+fn write_line(p str, line str) bool
+    fs.append_text(p, line) else return false
+    true
+
+fn put(kind str, a str, b str, c str)
+    p := table()
+    assert(fs.exists(p), "test.stub.1: stubs work only in a test run by `ail test`")
+    ok := write_line(p, "{kind}\t{esc(a)}\t{esc(b)}\t{esc(c)}\n")
+    assert(ok, "test.stub.1: can't write the stub table {p}")
+
+## Whether `test.clock` has been called in this test.
+fn clock_set() bool
+    t := fs.read_text(table()) else ""
+    "\n{t}".contains("\nC\t")
+
+## Each file of `content` (path to text) reads as that text for `fs.read_text`, `fs.read_bytes`
+## and `fs.exists` until the test ends; the path is compared as `eff.allow.3` compares paths, so
+## `a.txt` and `./a.txt` are one file. Nothing is written to disk. A later call for the same path
+## replaces the text.
+pub fn files(content Map[str, str])
+    for name in content.keys().sorted()
+        assert(name != "", "test.stub.2: a stubbed file needs a path")
+        put("F", name, content[name], "")
+
+## Each pair of `vars` (name to value) is what `env.get(name)` returns until the test ends.
+## Other variables are unchanged.
+pub fn env(vars Map[str, str])
+    for name in vars.keys().sorted()
+        assert(name != "", "test.stub.3: a stubbed variable needs a name")
+        put("E", name, vars[name], "")
+
+## From here `time.now_ms()` (and `time.now()`) return `ms`, which stands still, and
+## `time.sleep_ms(n)` returns at once and moves the clock on by `n`.
+pub fn clock(ms int)
+    assert(ms >= 0, "test.stub.4: the clock starts at 0 or later")
+    put("C", "{ms}", "", "")
+
+## Moves the stubbed clock on by `ms`. `test.clock` comes first.
+pub fn advance(ms int)
+    assert(ms >= 0, "test.stub.4: the clock only moves forward")
+    assert(clock_set(), "test.stub.4: call test.clock(ms) before test.advance")
+    put("A", "{ms}", "", "")
+
+## `net.get(url)` and the other calls of `std.net` for `METHOD URL` (for example
+## `"GET https://api.example.com/items"`, the method in capitals, the URL as the program writes
+## it) answer with `status` and `body` and no headers until the test ends, with no network and
+## without `@needs(net)`. A request that matches no stub goes on as without stubs.
+pub fn http(call str, status int, body str)
+    parts := call.split(" ")
+    assert(
+        parts.len() == 2 and parts[0] != "" and parts[0] == parts[0].to_upper() and parts[1] != "",
+        "test.stub.5: write the stub as \"METHOD URL\", for example \"GET https://example.com/x\"",
+    )
+    assert(status >= 100 and status <= 599, "test.stub.5: the status is 100 to 599")
+    put("H", call, body, "{status}")
