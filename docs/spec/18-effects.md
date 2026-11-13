@@ -340,6 +340,13 @@ memory, disk and network volume; see `--timeout` and `--max-memory`); and the
 capabilities `ui`, `app`, `clock` and `random`, which are allowed or denied but
 not scoped. For untrusted code add an operating-system sandbox as well.
 
+```ail flags=--allow,none rules=eff.allow.9
+fn main()
+    # `--allow none` limits the standard library's calls; the program
+    # still computes and prints. It is not a sandbox.
+    print("{21 * 2}")
+```
+
 ## Deterministic execution
 
 **eff.det.1** — A program whose `main` reaches none of the capabilities

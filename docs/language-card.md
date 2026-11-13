@@ -563,6 +563,7 @@ fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
     "x"
 
 fn drop(v str)                      # takes the value, returns nothing
+    print("dropped {v}")
 
 @test @needs("tmp")
 fn uses(tmp str)                    # parameter named like the fixture
