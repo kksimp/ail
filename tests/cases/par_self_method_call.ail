@@ -1,0 +1,24 @@
+## A loop in a method that calls another method of `self` bare (`cell(x, y)`) is
+## not split into parallel chunks: a chunk captures the fields it names, not
+## `self` (conc.par.8). Before the fix the build trapped in remove_trivial_params.
+
+struct Board
+    cols int
+    rows int
+
+fn Board.cell(self, x int, y int) str
+    "{x + y * cols}"
+
+fn Board.lines(self) List[str]
+    mut out := List[str]()
+    for y in 0..rows
+        mut row := List[str]()
+        for x in 0..cols
+            row.push(cell(x, y))
+        out.push(row.join(","))
+    out
+
+fn main()
+    b := Board(cols: 3, rows: 2)
+    for l in b.lines()
+        print(l)

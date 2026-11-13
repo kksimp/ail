@@ -478,6 +478,19 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     ast.scan_block(mut sc, body, 0)
     if sc.bad
         return decline("the body has {sc.why}")
+    # A bare call of a method of `self` (`glyph(x, y)` inside a method) needs `self` itself, which a
+    # chunk doesn't capture (only the fields the body names bare): left sequential.
+    # As the call's lowering does, a method of a generic `self` is instantiated first, so it is in `sigs`.
+    if self_ty != "" and sc.callees.len() >= 64
+        return decline("the body makes too many calls to check for methods of `self`")
+    if self_ty != ""
+        for c in sc.callees
+            if lookup(c) != none
+                continue
+            if not sigs.contains("{self_ty}.{c}")
+                instance_method("{self_ty}.{c}")
+            if sigs.contains("{self_ty}.{c}") or bad.contains("{self_ty}.{c}")
+                return decline("the body calls `{c}`, a method of `self`")
     mut caps := List[Cap]()
     mut accs := List[str]()
     mut atomic := false

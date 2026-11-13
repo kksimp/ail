@@ -1,6 +1,6 @@
 # AIL core card
 
-> Non-normative; budget 2,000 tokens (`tools/tokbench/run.sh docs/language-card-core.md`).
+> Non-normative; budget 3,000 tokens (ADR 1110) (`tools/tokbench/run.sh docs/language-card-core.md`).
 > The [full card](language-card.md) has the rest: `ail card TOPIC` prints one of its
 > sections (`ail card errors`), `ail ask std "read a file by lines"` finds a std function or built-in method, `ail ask how "sort descending"` a checked how-to,
 > `ail explain RULE` gives the text of any rule a diagnostic cites.
@@ -37,6 +37,7 @@ while n > 0
   (gram.foreign.1): `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
+  `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
 - Collections: `xs := [1, 2]`, `xs.push(3)`, `xs.len()`, `m := {"a": 1}`, `m["a"]`.
 
 ## Structs, enums, match
@@ -62,7 +63,7 @@ p := Point(x: 1, y: 2)           # fields by name, any order
 print(p.sum())                   # calls always have `()`
 ```
 
-Patterns nest in fields, `Add(Num(a), Num(b)) =>`; there a bare name binds, so write a fieldless variant qualified (`Expr.Nil`).
+Patterns nest in fields, `Add(Num(a), Num(b)) =>`; there a bare name binds, so write a fieldless variant qualified (`Expr.Nil`). Structs match by field name: `Point(x: 0, y) =>`.
 
 ## Absence and errors
 
@@ -92,6 +93,7 @@ A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plai
 4. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
 5. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
 6. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
+   A parameter may default (`retries int = 3`, expr.call.4): leave it out, or pass it by name only.
 7. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
    A field may default (`retries int = 3`, type.struct.8): a literal may leave it out; the default is a plain constant.
 8. `=` on a name that is undeclared or immutable (expr.bind.3): declare with `:=`, or `mut`.

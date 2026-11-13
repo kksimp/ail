@@ -1,0 +1,69 @@
+## Classifies every number up to a limit as perfect, abundant or deficient by
+## its sum of proper divisors, computed for all numbers at once with a
+## sieve-style pass. Also lists the perfect numbers and amicable pairs.
+
+fn divisor_sums(limit int) List[int]
+    mut sums := [0 for k in 0..limit + 1]
+    for d in 1..=limit / 2
+        mut m := d * 2
+        while m <= limit
+            sums[m] += d
+            m += d
+    sums
+
+fn kind(n int, sum int) str
+    if sum == n
+        return "perfect"
+    if sum > n
+        return "abundant"
+    "deficient"
+
+fn perfect_list(sums List[int]) List[int]
+    [n for n in 2..sums.len() if sums[n] == n]
+
+fn amicable_pairs(sums List[int]) List[str]
+    mut out := List[str]()
+    limit := sums.len() - 1
+    for a in 2..=limit
+        b := sums[a]
+        if b > a and b <= limit and sums[b] == a
+            out.push("{a}/{b}")
+    out
+
+fn main()
+    limit := 10000
+    sums := divisor_sums(limit)
+    mut perfect := 0
+    mut abundant := 0
+    mut deficient := 0
+    for n in 1..=limit
+        match kind(n, sums[n])
+            "perfect" => perfect += 1
+            "abundant" => abundant += 1
+            _ => deficient += 1
+    print("numbers 1..{limit}")
+    print("  perfect {perfect}, abundant {abundant}, deficient {deficient}")
+    print("perfect numbers: {perfect_list(sums).join(" ")}")
+    print("amicable pairs: {amicable_pairs(sums).join(" ")}")
+    small := [q for q in 1..=30 if kind(q, sums[q]) == "abundant"]
+    print("abundant up to 30: {small.join(" ")}")
+    odd := [r for r in 1..=1000 if r % 2 == 1 and kind(r, sums[r]) == "abundant"]
+    print("first odd abundant: {odd[0]}")
+    print("sigma(28) = {sums[28] + 28}")
+
+@test fn sums_of_small_numbers()
+    sums := divisor_sums(12)
+    assert_eq(sums[6], 6)
+    assert_eq(sums[12], 16)
+    assert_eq(sums[7], 1)
+
+@test fn first_perfect_numbers()
+    assert_eq(perfect_list(divisor_sums(500)), [6, 28, 496])
+
+@test fn classification()
+    assert_eq(kind(6, 6), "perfect")
+    assert_eq(kind(12, 16), "abundant")
+    assert_eq(kind(9, 4), "deficient")
+
+@test fn smallest_amicable_pair()
+    assert_eq(amicable_pairs(divisor_sums(300)), ["220/284"])

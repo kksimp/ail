@@ -1,0 +1,87 @@
+## Duration formatting: turns seconds into "1d 2h 3m 4s", a two-unit summary
+## and HH:MM:SS, and parses strings such as "1h30m" back into seconds.
+
+fn unit_names() List[str]
+    ["d", "h", "m", "s"]
+
+fn unit_sizes() List[int]
+    [86400, 3600, 60, 1]
+
+fn format_long(total int) str
+    if total == 0
+        return "0s"
+    names := unit_names()
+    sizes := unit_sizes()
+    mut rest := total
+    mut parts := List[str]()
+    for i in 0..names.len()
+        n := rest / sizes[i]
+        rest = rest % sizes[i]
+        if n > 0
+            parts.push("{n}{names[i]}")
+    parts.join(" ")
+
+fn format_short(total int) str
+    pieces := format_long(total).split(" ")
+    pieces.take(2).join(" ")
+
+fn format_clock(total int) str
+    h := total / 3600
+    m := (total % 3600) / 60
+    s := total % 60
+    "{h:02}:{m:02}:{s:02}"
+
+fn unit_seconds(c char) int
+    match c
+        'd' => 86400
+        'h' => 3600
+        'm' => 60
+        's' => 1
+        _ => 0
+
+fn parse_duration(text str) int?
+    mut total := 0
+    mut num := ""
+    for c in text.chars()
+        if c.is_space()
+            continue
+        if c.is_digit()
+            num = "{num}{c}"
+            continue
+        size := unit_seconds(c)
+        if size == 0 or num == ""
+            return none
+        n := num.to_int() else return none
+        total += n * size
+        num = ""
+    if num != ""
+        return none
+    total
+
+fn main()
+    for t in [0, 7, 59, 60, 61, 3599, 3600, 3661, 86399, 86400, 90061, 1000000]
+        long_text := format_long(t)
+        short_text := format_short(t)
+        clock := format_clock(t)
+        print("{t:>8}  {long_text:<14} {short_text:<7} {clock}")
+    for text in ["1h30m", "2d 4h", "90s", "1h 5", "5x", "m", "1d1h1m1s", ""]
+        v := parse_duration(text) else
+            print("{text:<10} invalid")
+            continue
+        print("{text:<10} {v}")
+
+@test fn formats()
+    assert_eq(format_long(3661), "1h 1m 1s")
+    assert_eq(format_long(0), "0s")
+    assert_eq(format_short(90061), "1d 1h")
+    assert_eq(format_clock(3661), "01:01:01")
+
+@test fn parses()
+    assert_eq(parse_duration("1h30m")?, 5400)
+    assert_eq(parse_duration("2d 4h")?, 187200)
+    assert(parse_duration("5x") == none)
+    assert(parse_duration("12") == none)
+
+@test fn round_trip()
+    for t in [1, 59, 61, 3600, 86461, 500000]
+        assert_eq(parse_duration(format_long(t))?, t)

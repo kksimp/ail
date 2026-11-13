@@ -135,16 +135,19 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
             sc.looped = true
             scan_block(mut sc, body, depth + 1)
             sc.mult = sc.mult / 16
-        Break(_) =>
-            if depth == 0
+        Break(_, target) =>
+            if depth == 0 or target != none
                 refuse(mut sc, "`break` out of the loop")
-        Continue(_) => return
+        Continue(_, target) =>
+            if target != none
+                refuse(mut sc, "`continue` of an outer loop")
         Eval(e) => scan_expr(mut sc, e)
         Return(_, _) => refuse(mut sc, "`return`")
         Handle(_, _) | Defer(_, _) | With(_, _, _, _, _) | Unsafe(_, _) => refuse(
             mut sc,
             "`handle`, `defer`, `with` or `unsafe`",
         )
+        Select(_, _) => refuse(mut sc, "`select`")
 
 ## The place an element is stored into: the indexes are read, the list is
 ## only named.

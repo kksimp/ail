@@ -1,0 +1,8 @@
+v1: 4 files, v2: 4 files
+= README
+~ main.c 78257017 -> 53775af2
++ new.txt (11 bytes)
+- old.txt
+= util.c
+3 of 5 entries differ
+cleaned up: true

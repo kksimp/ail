@@ -1,0 +1,120 @@
+## An auction house. Commands ("bid LOT WHO AMOUNT", "close LOT") run against
+## a list of lots. Each lot has its own `Increment` rule (fixed step or percent)
+## for the smallest allowed raise; low bids, bids on closed lots, self-outbids and
+## bad lines fail with a typed error. Closing sells a lot when the reserve is
+## met. Prints rejections, then results with a 10% buyer premium.
+
+error enum AuctionError
+    BadLine(text str) "cannot read '{text}'"
+    NoSuchLot(name str) "no lot {name}"
+    Closed(name str) "lot {name} is closed"
+    TooLow(name str, need int, got int) "{name}: need at least {need}, got {got}"
+    SelfOutbid(who str) "{who} already leads"
+
+trait Increment
+    fn next_min(self, high int) int
+
+struct Fixed
+    step int
+
+struct Percent
+    pct int
+
+impl Increment for Fixed
+    fn next_min(self, high int) int
+        high + self.step
+
+impl Increment for Percent
+    fn next_min(self, high int) int
+        high + (high * self.pct / 100).max(1)
+
+struct Lot
+    name str
+    start int
+    reserve int
+    high int
+    leader str
+    bids int
+    closed bool
+
+struct House
+    lots List[Lot]
+    rules List[any Increment]
+
+fn House.find(self, name str) int ! AuctionError
+    for i in 0..self.lots.len()
+        if self.lots[i].name == name
+            return i
+    return NoSuchLot(name: name)
+
+fn House.run(mut self, line str) str ! AuctionError
+    parts := line.split(" ")
+    if parts[0] == "close" and parts.len() == 2
+        at := self.find(parts[1])?
+        if self.lots[at].closed
+            return Closed(name: parts[1])
+        self.lots[at].closed = true
+        if self.lots[at].high >= self.lots[at].reserve and self.lots[at].bids > 0
+            return "{parts[1]} sold to {self.lots[at].leader}"
+        return "{parts[1]} passed"
+    if parts[0] != "bid" or parts.len() != 4
+        return BadLine(text: line)
+    amt := parts[3].to_int() else return BadLine(text: line)
+    at2 := self.find(parts[1])?
+    if self.lots[at2].closed
+        return Closed(name: parts[1])
+    if self.lots[at2].leader == parts[2]
+        return SelfOutbid(who: parts[2])
+    need := if self.lots[at2].bids == 0 then self.lots[at2].start else self.rules[at2].next_min(self.lots[at2].high)
+    if amt < need
+        return TooLow(name: parts[1], need: need, got: amt)
+    self.lots[at2].high = amt
+    self.lots[at2].leader = parts[2]
+    self.lots[at2].bids += 1
+    "{parts[2]} leads {parts[1]} at {amt}"
+
+fn House.demo() House
+    ls := [
+        Lot(name: "vase", start: 100, reserve: 300, high: 0, leader: "", bids: 0, closed: false),
+        Lot(name: "clock", start: 50, reserve: 500, high: 0, leader: "", bids: 0, closed: false),
+    ]
+    mut rs := List[any Increment]()
+    rs.push(Fixed(step: 25))
+    rs.push(Percent(pct: 10))
+    House(lots: ls, rules: rs)
+
+fn main()
+    commands := [
+        "bid vase ann 100", "bid vase bob 110", "bid vase bob 125", "bid vase bob 200",
+        "bid vase ann 200", "bid vase ann 350", "bid clock cy 50", "bid clock dee 54",
+        "bid clock dee 55", "bid rug ann 10", "bid vase ann", "close vase",
+        "bid vase eve 999", "close clock", "close rug", "sell vase",
+    ]
+    mut h := House.demo()
+    for c in commands
+        msg := h.run(c) else err
+            print("rejected '{c}': {err}")
+            continue
+        print(msg)
+    for lot in h.lots
+        premium := lot.high * 10 / 100
+        print("{lot.name}: {lot.bids} bids, high {lot.high} by {lot.leader}, premium {premium}")
+
+@test fn percent_rule_has_a_floor_of_one()
+    assert_eq(Percent(pct: 10).next_min(5), 6)
+    assert_eq(Percent(pct: 10).next_min(200), 220)
+    assert_eq(Fixed(step: 25).next_min(100), 125)
+
+@test fn bids_must_beat_the_increment()
+    mut h := House.demo()
+    assert_eq(h.run("bid vase a 100")?, "a leads vase at 100")
+    assert_err(h.run("bid vase b 120"))
+    assert_eq(h.run("bid vase b 125")?, "b leads vase at 125")
+    assert_err(h.run("bid vase b 500"))
+
+@test fn closed_and_unknown_lots_fail()
+    mut h := House.demo()
+    assert_eq(h.run("close vase")?, "vase passed")
+    assert_err(h.run("bid vase a 500"))
+    assert_err(h.run("close vase"))
+    assert_err(h.run("bid nothing a 5"))

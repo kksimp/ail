@@ -1,0 +1,97 @@
+## Sales pivot: parses embedded sales records (region, product, units, price)
+## and prints a region by product revenue table with row and column totals.
+
+struct Sale
+    region str
+    product str
+    units int
+    price int
+
+fn data() List[str]
+    [
+        "region,product,units,price",
+        "north,widget,10,25",
+        "south,gadget,4,80",
+        "north,gadget,3,80",
+        "east,widget,7,25",
+        "south,widget,12,25",
+        "west,gizmo,2,150",
+        "north,widget,5,25",
+        "broken,row",
+        "east,gizmo,1,150",
+        "south,gadget,x,80",
+        "east,gadget,6,80",
+    ]
+
+fn parse(line str) Sale?
+    cells := line.split(",")
+    if cells.len() != 4
+        return none
+    Sale(region: cells[0], product: cells[1], units: cells[2].to_int()?, price: cells[3].to_int()?)
+
+fn distinct(xs List[str]) List[str]
+    mut seen := Set[str]()
+    mut out := List[str]()
+    for x in xs
+        if seen.add(x)
+            out.push(x)
+    out.sorted()
+
+fn pivot(sales List[Sale]) Map[str, int]
+    mut cells := Map[str, int]()
+    for s in sales
+        cells["{s.region}|{s.product}"] += s.units * s.price
+    cells
+
+fn main()
+    mut sales := List[Sale]()
+    mut bad := 0
+    for line in data()[1..]
+        s := parse(line) else
+            bad += 1
+            continue
+        sales.push(s)
+    regions := distinct([s.region for s in sales])
+    products := distinct([s.product for s in sales])
+    cells := pivot(sales)
+    print("records: {sales.len()}, skipped: {bad}")
+    mut head := "region  "
+    for p in products
+        head = "{head}{p:>8}"
+    label := "total"
+    print("{head}{label:>8}")
+    mut col_totals := Map[str, int]()
+    mut grand := 0
+    for r in regions
+        mut line := "{r:<8}"
+        mut row_total := 0
+        for p in products
+            v := cells.get("{r}|{p}") else 0
+            line = "{line}{v:>8}"
+            row_total += v
+            col_totals[p] += v
+        grand += row_total
+        print("{line}{row_total:>8}")
+    mut foot := "total   "
+    for p in products
+        t := col_totals[p]
+        foot = "{foot}{t:>8}"
+    print("{foot}{grand:>8}")
+
+@test fn parses_records()
+    assert_eq(parse("a,b,2,3")?, Sale(region: "a", product: "b", units: 2, price: 3))
+    assert(parse("a,b,2") == none)
+    assert(parse("a,b,z,3") == none)
+
+@test fn pivot_sums_cells()
+    sales := [
+        Sale(region: "n", product: "w", units: 2, price: 5),
+        Sale(region: "n", product: "w", units: 1, price: 5),
+        Sale(region: "s", product: "g", units: 4, price: 2),
+    ]
+    cells := pivot(sales)
+    assert_eq(cells["n|w"], 15)
+    assert_eq(cells["s|g"], 8)
+
+@test fn distinct_sorts()
+    assert_eq(distinct(["b", "a", "b"]), ["a", "b"])

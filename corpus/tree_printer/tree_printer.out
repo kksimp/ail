@@ -1,0 +1,21 @@
+.
+|-- docs/
+|   `-- intro.md
+|-- src/
+|   |-- net/
+|   |   |-- http.ail
+|   |   `-- tls.ail
+|   |-- ui/
+|   |   `-- window.ail
+|   `-- main.ail
+|-- tests/
+|   `-- basic.ail
+`-- README
+5 directories, 7 files
+depth 1:
+  |-- docs/
+  |-- src/
+  |-- tests/
+  `-- README
+3 directories, 1 files
+cleaned up: true

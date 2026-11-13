@@ -1,0 +1,8 @@
+19 words, 28 postings
+in 3+ docs: the
+fox   a.txt:1 c.txt:1
+river b.txt:2 c.txt:1
+the   a.txt:2 b.txt:2 c.txt:3 d.txt:1
+quick a.txt:1 d.txt:2
+zebra -
+cleaned up: true

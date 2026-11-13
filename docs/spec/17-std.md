@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.compress`, `std.fs`, `std.file`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
+> and `std.compress`, `std.fs`, `std.file`, `std.kv`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -316,7 +316,15 @@ bytes. A negative `len` traps. *(ADR 0977)*
 missing and growing it with zero bytes when it is shorter than `offset`; the
 rest of the file is unchanged. A negative `offset` traps. *(ADR 0977)*
 
-```ail norun rules=std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33,std.fs.34
+**std.fs.38** — `sync(path str) ! IoError` asks the operating system to put the
+file's data on the disk, so it survives a power failure: `fsync` on Linux,
+`fcntl(F_FULLFSYNC)` on macOS (plain `fsync` there stops at the drive's cache),
+`FlushFileBuffers` on Windows. The file must exist and be writable, and is not
+changed. It does not sync the directory that holds the file, so a file made a
+moment before may still be missing after a power failure. It needs `fs` or
+`fs.write` ([18-effects](18-effects.md)). *(ADR 1098)*
+
+```ail norun rules=std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33,std.fs.34,std.fs.38
 use std.fs
 
 fn main() !
@@ -327,6 +335,7 @@ fn main() !
     print(fs.read_link("run")?)
     fs.truncate("archive.bin", 1048576)?
     fs.write_at("out.bin", 4096, b"tail")?
+    fs.sync("out.bin")?
 ```
 
 ```ail rules=std.fs.20
@@ -1927,7 +1936,12 @@ the way to see a failure. A writer that goes out of scope is flushed by its
 `drop` (`own.uniq.3`) on every path, a trap included, but a `drop` cannot
 report a failure, so write `w.close()?` where the data matters. *(ADR 1071)*
 
-```ail norun rules=std.file.6,std.file.7,std.file.8,std.file.9
+**std.file.10** — `w.sync() ! fs.IoError` flushes the writer and then asks the
+operating system to put the file on the disk (`fs.sync`, `std.fs.38`), so the
+data written so far survives a power failure. `close` and `drop` flush but do not
+sync. *(ADR 1098)*
+
+```ail norun rules=std.file.6,std.file.7,std.file.8,std.file.9,std.file.10
 use std.file
 
 fn main() !
@@ -2174,6 +2188,119 @@ fn main()
             print(err)   # duplicate key 'a' (line 2), then the anchor and tab errors
             Json.Null
         print(doc.to_text())
+```
+
+## Key-value files: `std.kv`
+
+**std.kv.1** — `use std.kv` provides `open(path str) Store ! fs.IoError | KvError`,
+which opens the store kept in the file `path` and makes it when the file is
+missing or empty. A `Store` is a `unique struct` (`own.uniq.1`): a file has one
+handle at a time. The keys are `str` and the values `bytes`; `close(move self)`
+ends the use, and dropping the store does the same, because nothing is
+buffered. *(ADR 1098)*
+
+**std.kv.2** — `get(key) bytes?`, `has(key) bool`, `keys() List[str]` and
+`len() int` read the store from memory and do no file access. `keys` lists
+each key in the order it was first set since it was last removed. Any `str`
+is a key, the empty string too; any `bytes` is a value, empty ones too.
+*(ADR 1098)*
+
+**std.kv.3** — `set(mut self, key, value bytes) ! fs.IoError | KvError` gives
+the key the value, and `remove(mut self, key) bool ! fs.IoError | KvError`
+deletes it and is true when the key had a value (nothing is written when it
+had none). The change is in the file when the call returns; when the call
+fails the store is as it was. A value of 4 GiB or more fails with `KvError`.
+*(ADR 1098)*
+
+**std.kv.4** — A change is made with an ordinary file write: it survives the
+program stopping, crashing or being killed, but is not yet on the disk, so a
+power failure may lose the last changes. `sync(self) ! fs.IoError` asks the
+operating system to put the file on the disk (`fs.sync`, `std.fs.38`); after it
+returns, every change made so far survives a power failure. Call it after the
+changes that matter, not after each one: it is slow. `compact` syncs the new log
+before it renames it into place. *(ADR 1098)*
+
+**std.kv.5** — The file is a log: a 7-byte header `AILKV1\n`, then one record
+per change (key length and value length as 4-byte little-endian integers, the
+key, the value, and the CRC-32 of those bytes; a value length of `0xFFFFFFFF`
+and no value mean removal). `open` replays the records in order and stops at
+the first record that is cut short or fails its checksum; it cuts the file back
+to the end of the last good record, so a stop in the middle of a change loses
+that change and nothing before it. *(ADR 1098)*
+
+**std.kv.6** — A non-empty file that does not start with the header, or with
+the start of it, is not a store: `open` fails with `KvError` and leaves the
+file alone. *(ADR 1098)*
+
+**std.kv.7** — `compact(mut self) ! fs.IoError | KvError` rewrites the log
+with one record per key. It writes `PATH.compact` and renames it over the
+file (`std.fs.11`), so a stop leaves the old log or the new one whole. `set` and
+`remove` compact by themselves when the log holds more than 1 MiB of replaced
+or removed records and more of them than live ones. *(ADR 1098)*
+
+**std.kv.8** — A store is held in memory: its memory is the keys and values
+together, so it suits small data. *(ADR 1098)*
+
+**std.kv.9** — `KvError` is an error with `why str`; its text is `why`.
+*(ADR 1098)*
+
+```ail rules=std.kv.1,std.kv.2,std.kv.3,std.kv.4,std.kv.8
+use std.kv
+
+fn main() !
+    dir := fs.make_temp_dir("ail-kv-doc-")?
+    path := "{dir}/settings.kv"
+    mut s := kv.open(path)?
+    s.set("name", "demo".to_bytes())?
+    s.set("blob", b"\x01\x02")?
+    s.sync()?                               # on the disk, not only in the file cache
+    print(s.len())                          # 2
+    print(s.remove("blob")?)                # true
+    s.close()
+    mut again := kv.open(path)?             # the change is still there
+    print((again.get("name") else b"").text())   # demo
+    print(again.keys().join(","))           # name
+    again.close()
+    fs.remove(path)?
+    fs.remove(dir)?
+```
+
+```ail rules=std.kv.5,std.kv.7
+use std.kv
+
+fn main() !
+    dir := fs.make_temp_dir("ail-kv-doc-")?
+    path := "{dir}/log.kv"
+    mut s := kv.open(path)?
+    s.set("k", b"1")?
+    s.set("k", b"22")?
+    s.close()
+    fs.append_bytes(path, b"\x05\x00")?     # a change cut short by a stop
+    mut again := kv.open(path)?             # the unfinished record is dropped
+    print((again.get("k") else b"").text()) # 22
+    again.compact()?
+    print(fs.metadata(path)?.size)          # 22: header and one record
+    again.close()
+    fs.remove(path)?
+    fs.remove(dir)?
+```
+
+```ail rules=std.kv.6,std.kv.9
+use std.kv
+
+fn try_open(path str)
+    s := kv.open(path) else err
+        print(err)                          # not a std.kv file (bad header)
+        return
+    print(s.len())
+
+fn main() !
+    dir := fs.make_temp_dir("ail-kv-doc-")?
+    path := "{dir}/notes.txt"
+    fs.write_text(path, "just text")?
+    try_open(path)
+    fs.remove(path)?
+    fs.remove(dir)?
 ```
 
 ## Integers of any size: `std.bigint`

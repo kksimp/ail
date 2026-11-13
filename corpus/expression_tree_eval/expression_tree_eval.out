@@ -1,0 +1,5 @@
+((3 + 4) * 2) = 14 (depth 3, folded 14)
+-(10 - (2 * 3)) = -4 (depth 4, folded -4)
+(8 / (2 + 4)) = 1 (depth 3, folded 1)
+((1 + 2) / (5 - 5)) fails: division by zero
+(9 / 3) = 3 (depth 2, folded 3)

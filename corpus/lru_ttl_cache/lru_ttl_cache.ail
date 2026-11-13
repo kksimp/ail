@@ -1,0 +1,113 @@
+## An LRU cache whose entries also expire. Time is a logical tick counter that
+## a script advances. A get refreshes recency, an expired entry is dropped on
+## access or on the next put, and a full cache evicts its least recent entry.
+## A scripted workload runs on a cache of capacity 3 and prints the stats.
+
+struct Entry
+    key int
+    val int
+    expires int
+
+struct TtlCache
+    cap int
+    now int
+    items List[Entry]
+    hits int
+    misses int
+    expired int
+    evicted int
+
+fn TtlCache.new(capacity int) TtlCache
+    TtlCache(cap: capacity, now: 0, items: [], hits: 0, misses: 0, expired: 0, evicted: 0)
+
+fn TtlCache.find(self, k int) int
+    for i in 0..self.items.len()
+        if self.items[i].key == k
+            return i
+    -1
+
+fn TtlCache.purge(mut self)
+    mut kept := List[Entry]()
+    for e in self.items
+        if e.expires > self.now
+            kept.push(e)
+        else
+            self.expired += 1
+    self.items = kept
+
+fn TtlCache.put(mut self, k int, v int, ttl int)
+    self.purge()
+    i := self.find(k)
+    if i >= 0
+        self.items.remove_at(i)
+    elif self.items.len() >= self.cap
+        self.items.remove_at(0)
+        self.evicted += 1
+    self.items.push(Entry(key: k, val: v, expires: self.now + ttl))
+
+fn TtlCache.get(mut self, k int) int?
+    i := self.find(k)
+    if i >= 0
+        e := self.items[i]
+        self.items.remove_at(i)
+        if e.expires > self.now
+            self.items.push(e)
+            self.hits += 1
+            return e.val
+        self.expired += 1
+    self.misses += 1
+    none
+
+fn TtlCache.tick(mut self, dt int)
+    self.now += dt
+
+fn run(script str) List[str]
+    mut cache := TtlCache.new(3)
+    mut lines := List[str]()
+    for cmd in script.split(";")
+        parts := cmd.split(" ")
+        op := parts[0]
+        a := if parts.len() > 1 then (parts[1].to_int() else 0) else 0
+        match op
+            "p" => cache.put(a, (parts[2].to_int() else 0), (parts[3].to_int() else 0))
+            "t" => cache.tick(a)
+            _ =>
+                if v := cache.get(a)
+                    lines.push("t={cache.now} get {a} -> {v}")
+                else
+                    lines.push("t={cache.now} get {a} -> miss")
+    keys := [e.key for e in cache.items]
+    lines.push("live keys oldest first: {keys}")
+    lines.push("hits {cache.hits}, misses {cache.misses}, expired {cache.expired}, evicted {cache.evicted}")
+    lines
+
+fn main()
+    script := "p 1 10 5;p 2 20 3;p 3 30 9;g 1;t 4;g 2;g 1;p 4 40 2;p 5 50 6;g 3;t 3;g 4;g 5;p 6 60 5;g 3"
+    for line in run(script)
+        print(line)
+
+@test fn expired_entry_is_a_miss()
+    mut c := TtlCache.new(2)
+    c.put(1, 10, 3)
+    c.tick(3)
+    assert(c.get(1) == none)
+    assert_eq(c.expired, 1)
+    assert_eq(c.misses, 1)
+
+@test fn lru_evicts_when_full()
+    mut c := TtlCache.new(2)
+    c.put(1, 1, 100)
+    c.put(2, 2, 100)
+    assert_eq(c.get(1) else -1, 1)
+    c.put(3, 3, 100)
+    assert(c.get(2) == none)
+    assert_eq(c.evicted, 1)
+
+@test fn put_replaces_and_renews()
+    mut c := TtlCache.new(2)
+    c.put(7, 1, 2)
+    c.tick(1)
+    c.put(7, 9, 5)
+    c.tick(3)
+    assert_eq(c.get(7) else -1, 9)
+    assert_eq(c.items.len(), 1)

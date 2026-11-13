@@ -1,0 +1,10 @@
+workers 4, rounds 250
+  counter 1000
+  atomic  124500
+  tally   334 hits, 666 misses
+workers 8, rounds 100
+  counter 800
+  atomic  39600
+  tally   267 hits, 533 misses
+expected hits 334 and 267
+match: true

@@ -1,0 +1,34 @@
+first run:
+dry run, 4 files:
+  move arch.jpg      -> trip_001.jpg
+  move beach.jpg     -> trip_002.jpg
+  move cafe.jpg      -> trip_003.jpg
+  move dune.jpg      -> trip_004.jpg
+renamed 4 files
+now: map.png notes.txt trip_001.jpg trip_002.jpg trip_003.jpg trip_004.jpg
+second run:
+dry run, 4 files:
+  same trip_001.jpg  -> trip_001.jpg
+  same trip_002.jpg  -> trip_002.jpg
+  same trip_003.jpg  -> trip_003.jpg
+  same trip_004.jpg  -> trip_004.jpg
+renamed 0 files
+third run with a stale temp file:
+dry run, 5 files:
+  move snap.jpg      -> trip_001.jpg
+  move trip_001.jpg  -> trip_002.jpg
+  move trip_002.jpg  -> trip_003.jpg
+  move trip_003.jpg  -> trip_004.jpg
+  move trip_004.jpg  -> trip_005.jpg
+conflict with stale files: trip_001.jpg.tmp; nothing changed
+fourth run after removing it:
+dry run, 5 files:
+  move snap.jpg      -> trip_001.jpg
+  move trip_001.jpg  -> trip_002.jpg
+  move trip_002.jpg  -> trip_003.jpg
+  move trip_003.jpg  -> trip_004.jpg
+  move trip_004.jpg  -> trip_005.jpg
+renamed 5 files
+final: map.png notes.txt trip_001.jpg trip_002.jpg trip_003.jpg trip_004.jpg trip_005.jpg
+trip_001 holds: snap
+cleaned up: true

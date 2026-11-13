@@ -1,0 +1,66 @@
+## Top N words: tokenizes an embedded passage, drops stopwords and short
+## words, and prints the N most frequent words with their share of the kept
+## words in percent (ties alphabetical), plus the longest kept word.
+
+fn passage() str
+    lines := [
+        "Data is only useful when the data is clean and the reports are clear.",
+        "A report that hides its data is a story, and a story is not a report.",
+        "Clean data, clear reports and honest tables make a useful team.",
+        "Honest reports show the data, the gaps and the doubts.",
+    ]
+    lines.join(" ")
+
+fn stopwords() Set[str]
+    {"the", "is", "and", "a", "that", "its", "are", "not", "only", "when", "show"}
+
+fn tokens(text str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in text.to_lower().chars()
+        if c.is_alpha()
+            cur = "{cur}{c}"
+        elif cur != ""
+            out.push(cur)
+            cur = ""
+    if cur != ""
+        out.push(cur)
+    out
+
+fn keep(words List[str], skip Set[str], min_len int) List[str]
+    mut out := List[str]()
+    for w in words
+        if w.len() >= min_len and not skip.contains(w)
+            out.push(w)
+    out
+
+fn top(words List[str], n int) List[str]
+    mut counts := Map[str, int]()
+    for w in words
+        counts[w] += 1
+    final := counts
+    ordered := final.keys().sorted().sorted(by: |w| -final[w])
+    ["{w} {final[w]}" for w in ordered.take(n)]
+
+fn main()
+    all_words := tokens(passage())
+    kept := keep(all_words, stopwords(), 3)
+    print("tokens: {all_words.len()}, kept: {kept.len()}")
+    for entry in top(kept, 5)
+        parts := entry.split(" ")
+        n := parts[1].to_int() else 0
+        pct := n * 100 / kept.len()
+        word := parts[0]
+        print("{word:<9}{n:>3} {pct:>3}%")
+    longest := kept.sorted().sorted(by: |w| -w.len())[0]
+    print("longest: {longest}")
+
+@test fn tokenizes_text()
+    assert_eq(tokens("It's A-OK!"), ["it", "s", "a", "ok"])
+
+@test fn keep_filters()
+    got := keep(["the", "data", "is", "big"], stopwords(), 3)
+    assert_eq(got, ["data", "big"])
+
+@test fn top_orders_by_count_then_word()
+    assert_eq(top(["b", "a", "b", "c", "a", "b"], 2), ["b 3", "a 2"])

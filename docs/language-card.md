@@ -1,14 +1,14 @@
 # AIL language card
 
 > v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
-> [quick reference](quick-reference.md) has the long form. Budget 8,000 tokens
+> [quick reference](quick-reference.md) has the long form. Budget 16,000 tokens (ADR 1110)
 > (five-tokenizer mean, `tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs
 
 ```sh
 ./ail run FILE.ail           # check, then run
-./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail check --json FILE.ail  # `ok` line when clean, else exit 2; each error cites a rule and ends `next:`
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail api --text FILE.ail    # declarations and `##` docs without bodies
@@ -79,11 +79,18 @@ update a `mut` variable in a loop, use `=`.
 Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
 `(0, s) =>`; `==`, `<` and map keys work elementwise.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
+Distinct types: `type UserId = int` (any built-in scalar base) is a new type
+that never mixes with `int` or another id type. `UserId(3)` makes one,
+`int(id)` gives the value back; same-type operators, `==`, `<`, text, map keys
+and JSON work as the base's; no fields, methods or `impl`; free at run time.
+
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sqrt()`, `floor()`, `ceil()`, `round()` (type.num.9), `x.sin()`, `cos`, `tan`, `atan`, `atan2(x)`, `exp`, `ln`, `log10`, `cbrt`, `hypot(y)`, `x.pow(y)` (type.num.16).
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `t.matmul(u)`, `t + u`, `t * 2.0`, `t.dot(u)`, `t.sum(axis?)`, `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
+
+Standard input: `line := io.read_line() else break` gives a `str?` without its line ending (`\n` or `\r\n`; so `line.len()` does not count it), `none` at the end of input (std.io.1); `io.read_all()` gives all of it.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `use std.file`; `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
@@ -121,6 +128,7 @@ fn main()
 ```
 
 `==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
+An enum with no fields has `Color.variants()` (a `List[Color]`), `Color.from_str("Red")` (a `Color?`, exact variant name) and `c.name()` (`"Red"`) (type.enum.20).
 
 A keyword may name a field, a method or a label: `error str`, `o.error`,
 `Outcome(error: "")`, `fn T.any(self)`. In a method reach such a field as
@@ -139,7 +147,7 @@ fn area(s Shape) int
         Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
 ```
 
-Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`.
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
 
 ## Absence and errors
 
@@ -331,6 +339,11 @@ for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x > 9
         break
 
+outer: for r in rows       # a label: `break outer` / `continue outer` from a nested loop
+    for c in r
+        if c == 0
+            continue outer
+
 label := match c     # must cover every variant; `_` covers the rest
     Red => "red"
     Green => "green"  # an arm can also be an indented block
@@ -350,7 +363,7 @@ calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A li
 `|x| x + n` is one too: one expression on its line, types from context or written
 (`|x int| ...`). It copies the locals it names when made; they are read-only inside
 (share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
-Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x| x > lo)`.
+Collections share one vocabulary (List, Set, Map, Deque, Seq): `map filter any all find count fold flat_map take skip take_while skip_while zip enumerate group_by`; a function takes the element, on a map `|k, v|`: `xs.filter(|x| x > lo)`, `xs.fold(0, |acc, x| acc + x)`.
 A `fn name(params) R` with a block inside a body is a local function: it copies the
 same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
@@ -366,7 +379,7 @@ same way, can call itself, `return`s from itself, and is a value (no `mut` param
   `x.to_int()`. An int literal works where a float is expected.
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 
@@ -388,13 +401,13 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
-- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
+- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.is_alnum()`, `c.is_upper()`, `c.is_lower()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` on strings and no `{{`; write `\{`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
-  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
+  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
 ## Lists
 
@@ -410,7 +423,7 @@ mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
 Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; descending is `xs.sorted().reversed()`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
-`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`. Slices
+`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`, `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
 don't clamp and negative indexes are errors. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)`, also `sort`, `min`, `max`.
 
@@ -431,9 +444,9 @@ Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
 
 Priority queue: `h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
 for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
-`h.is_empty()`, `Heap.from(xs)`. Double-ended queue: `d := Deque[int]()`,
+`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (all elements in pop order). Double-ended queue: `d := Deque[int]()`,
 `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
-`d.at(i)`, `d.to_list()`.
+`d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 ## Maps and sets
 
@@ -450,7 +463,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats.
+Also `contains`, `remove`, `len`, `sorted`, `m.map_values(|v| e)`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats.
 
 ## Values and `mut`
 
@@ -513,6 +526,11 @@ v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
 for v in ch                 # receives until closed and empty
     print(v)
+select                      # first ready arm in order; channels of any types
+    n := nums.recv() => total += n
+    out.send(job) => sent += 1
+    after 50 => print("idle")   # optional; `after 0` never waits
+    closed => break         # required with a recv arm: all recv channels closed
 m := Mutex(0)               # get, set, swap
 with m as mut x             # holds m; stores x back on any exit
     x += 1
@@ -555,7 +573,7 @@ fn double(x int) int
     assert_eq(double(4), 8)         # traps showing both values
     assert(double(1) == 2, "message")   # optional `str` message
     assert_near(0.1 + 0.2, 0.3, 0.0001) # three floats: |a - b| <= eps
-    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error
+    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error (kind alone for a variant with data; `E.V(f: x)` the payload too)
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
@@ -586,7 +604,7 @@ one; `@caps(fs)` limits a function to the listed capabilities and everything it 
 means `xs.sort()`; write `_ := f()` to drop a value on purpose (`eff.use.1`).
 `ail run --deterministic` denies `clock`, `random`, `proc` and `net`. `ail run --allow fs.read=./data,net=host:443` allows only what it names, and a use outside the scope ends with `trap[eff.allow.N]`.
 
-`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`.
+`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`. Structs of C-typed fields pass to C by value; a `fn(...)` parameter of an `extern c fn` takes a declared function's name as a callback (`mem.c_fn(f)` gives a `*u8`).
 
 A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
 

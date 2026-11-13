@@ -1,0 +1,149 @@
+## C calls with structs by value and C callbacks on x86-64 (ffi.struct.2,
+## ffi.cb.4, ADR 1074). `rt.ffi_ccall` and `rt.ffi_ccall_win` call the
+## function of a call frame that `compiler/rt/native/ffi_struct.ail` filled:
+## argument registers, stack words, and the result registers stored back. On
+## Windows a C callback's entry (`cb#f`) is an adapter that keeps the
+## registers Win64 makes the callee keep and moves the arguments from their
+## Win64 positions to the AIL order before it calls the compiled entry.
+use mir
+use codegen
+
+## The frame's words (ffi_struct.ail).
+FW_INT := 1
+FW_FLT := 9
+FW_NST := 18
+FW_RI := 19
+FW_RF := 21
+FW_AL := 25
+FW_STK := 26
+
+## Whether `name` is one of the call kernels.
+pub fn is_ffi_kernel(name str) bool
+    name == "rt.ffi_ccall" or name == "rt.ffi_ccall_win"
+
+## The call kernel: rdi = frame (the AIL convention on every x86-64 target).
+## rbx keeps the frame across the call; the stack words are copied below the
+## kernel's own frame, after Win64's 32 bytes of shadow space.
+pub fn kernel_ffi_ccall(mut a Asm, win bool)
+    a.push(RBP)
+    a.mov_rr(RBP, RSP)
+    a.push(RBX)
+    a.push(12)
+    # System V: C may clobber xmm8-xmm13, which AIL functions keep (ADR 0870).
+    if not win
+        a.alu_ri("sub", RSP, 48)
+        for k in 0..6
+            a.vmovsd_mr(at(RSP, 8 * k), 8 + k)
+    a.mov_rr(RBX, RDI)
+    a.mov_rm(RCX, at(RBX, 8 * FW_NST))
+    a.mov_rr(RAX, RCX)
+    a.shift_ri("shl", RAX, 3)
+    shadow := if win then 32 else 0
+    a.alu_ri("add", RAX, 15 + shadow)
+    a.alu_ri("and", RAX, -16)
+    a.alu_rr("sub", RSP, RAX)
+    a.mov_ri(R11, 0)
+    top := a.label()
+    done := a.label()
+    a.bind(top)
+    a.alu_rr("cmp", R11, RCX)
+    a.jcc(CC_GE, done)
+    a.mov_rm(RAX, at_index(RBX, R11, 8, 8 * FW_STK))
+    a.mov_mr(at_index(RSP, R11, 8, shadow), RAX)
+    a.alu_ri("add", R11, 1)
+    a.jmp(top)
+    a.bind(done)
+    if win
+        for k in 0..4
+            a.vmovsd_rm(k, at(RBX, 8 * (FW_FLT + k)))
+        regs := [RCX, RDX, R8, R9]
+        for k in 0..4
+            a.mov_rm(regs[k], at(RBX, 8 * (FW_INT + k)))
+    else
+        for k in 0..8
+            a.vmovsd_rm(k, at(RBX, 8 * (FW_FLT + k)))
+        regs := [RDI, RSI, RDX, RCX, R8, R9]
+        for k in 0..6
+            a.mov_rm(regs[k], at(RBX, 8 * (FW_INT + k)))
+        a.mov_rm(RAX, at(RBX, 8 * FW_AL))
+    a.mov_rm(R10, at(RBX, 0))
+    a.call_reg(R10)
+    a.mov_mr(at(RBX, 8 * FW_RI), RAX)
+    a.mov_mr(at(RBX, 8 * (FW_RI + 1)), RDX)
+    a.vmovsd_mr(at(RBX, 8 * FW_RF), 0)
+    a.vmovsd_mr(at(RBX, 8 * (FW_RF + 1)), 1)
+    if win
+        a.lea(RSP, at(RBP, -16))
+    else
+        a.lea(RSP, at(RBP, -64))
+        for k in 0..6
+            a.vmovsd_rm(8 + k, at(RSP, 8 * k))
+        a.alu_ri("add", RSP, 48)
+    a.pop(12)
+    a.pop(RBX)
+    a.pop(RBP)
+    a.ret()
+
+## Whether `f` is the compiled entry of a C callback (`cb#key`, ffi.cb.4).
+pub fn is_cb_entry(f mir.Func) bool
+    f.name.starts_with("cb#")
+
+## The Win64 adapter of the C callback `f`, under `f`'s name; `f` itself is
+## generated as `NAME.ail`. It keeps rsi, rdi and xmm6-xmm15 (Win64's, which AIL
+## functions use freely), then moves argument k from its Win64 position (rcx,
+## rdx, r8, r9 or xmm0-3, then the stack after the shadow space) to the AIL
+## order (the integers in rdi rsi rdx rcx r8 r9, the floats in xmm0-7).
+pub fn gen_cb_adapter(mut img codegen.Image, f mir.Func)
+    mut a := new_asm()
+    a.push(RSI)
+    a.push(RDI)
+    # 160 bytes for xmm6-xmm15, 32 for the four integer registers and 8 of
+    # padding: the return address, two pushes and 200 bytes keep rsp 16-byte
+    # aligned at the call.
+    room := 200
+    a.alu_ri("sub", RSP, room)
+    for k in 0..10
+        a.movdqu_mr(at(RSP, 16 * k), 6 + k)
+    win_ints := [RCX, RDX, R8, R9]
+    for k in 0..4
+        a.mov_mr(at(RSP, 160 + 8 * k), win_ints[k])
+    ail_ints := [RDI, RSI, RDX, RCX, R8, R9]
+    mut ni := 0
+    mut nf := 0
+    # Above the adapter: its frame, the two pushes, the return address, then
+    # the caller's shadow space; the fifth argument follows.
+    stack := room + 16 + 8 + 32
+    for k in 0..f.params.len()
+        is_f := f.vals[f.params[k]].is_float()
+        if is_f
+            if k < 4
+                if k != nf
+                    a.vmov_rr(nf, k)
+            else
+                a.vmovsd_rm(nf, at(RSP, stack + 8 * (k - 4)))
+            nf += 1
+        else
+            if k < 4
+                a.mov_rm(ail_ints[ni], at(RSP, 160 + 8 * k))
+            else
+                a.mov_rm(ail_ints[ni], at(RSP, stack + 8 * (k - 4)))
+            ni += 1
+    a.call_sym("{f.name}.ail")
+    for k in 0..10
+        a.movdqu_rm(6 + k, at(RSP, 16 * k))
+    a.alu_ri("add", RSP, room)
+    a.pop(RDI)
+    a.pop(RSI)
+    a.ret()
+    a.resolve_labels()
+    base := img.code.len()
+    img.funcs[f.name] = base
+    img.code.extend(a.code)
+    for fx in a.fixups
+        img.relocs.push(codegen.Reloc(at: fx.at + base, kind: "rel32", sym: fx.sym, tail: fx.tail))
+
+## `f` under the name its adapter calls.
+pub fn cb_body(f mir.Func) mir.Func
+    mut g := f
+    g.name = "{f.name}.ail"
+    g

@@ -40,8 +40,13 @@ fn main()
             if d.to_list() != model
                 bad += 1
             for i in 0..model.len()
-                if d.at(i) != model[i]
+                if d[i] != model[i] or d.at(i) != model[i]
                     bad += 1
+            mut seen := List[int]()
+            for x in d
+                seen.push(x)
+            if seen != model or d.len() != model.len()
+                bad += 1
     print("bad {bad}")
     e := Deque.from([1, 2, 3])
     print(e.to_list())
@@ -52,3 +57,10 @@ fn main()
     mut none_left := Deque[str]()
     print(none_left.pop_front())
     print(none_left.pop_back())
+    mut w := Deque.from([1, 2, 3])
+    w.set(0, 9)
+    w.push_front(0)
+    mut sum := 0
+    for x in w
+        sum += x * 10
+    print("{w[1]} {w[3]} {sum} {w.len()}")

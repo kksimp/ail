@@ -27,8 +27,9 @@ caller reserves a 16-byte-aligned area below its frame for them and frees it
 after the call, and the callee reads them above its frame record (ADR 0533).
 Float arguments beyond the eighth aren't supported yet. Callee-saved registers are
 the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
-an `extern` call treats them as clobbered). No variadics. Structs are passed
-by pointer.
+an `extern` call treats them as clobbered). Variadic C calls follow ADR 1031.
+AIL structs are passed between AIL functions by pointer; to C they pass by
+value in C's layout through the call frame of §9 (ADR 1074).
 
 On x86-64 the code generator keeps rax, r10, xmm14 and xmm15 as scratch; the
 allocator (ADR 0386) uses rsi, rdi, r8, r9, rcx, rdx, r11, rbx, r12–r15 and
@@ -465,7 +466,8 @@ arguments:
 | Result | integer register or float register; a narrow result is truncated to its declared type and extended again (`ffi.map.2`); `bool` is the low byte `!= 0` |
 | Registers | caller-saved registers are assumed clobbered across the call |
 | Stack | 16-byte aligned at the call (§1) |
-| Not supported | variadic functions, structs by value, stack arguments, callbacks (`ffi.decl.3`, ADR 0432) |
+| Structs by value | `rt.ffi_cs` (`compiler/rt/native/ffi_struct.ail`) lays each struct out as C does, classifies it for System V, AAPCS64 or Win64, fills a call frame (argument registers, stack words, `x8`) and calls through the kernel `rt.ffi_ccall` (`rt.ffi_ccall_win`), assembled in `compiler/x64/ffi_kernels.ail` and `compiler/a64/ffi_kernels.ail` (ADR 1074) |
+| Callbacks | a declared function `f` passed to C gets an entry `cb#f` (a MIR function that checks the thread, converts the arguments and calls `f`); on Windows a Win64 adapter keeps rsi, rdi and xmm6-15 and moves the arguments to the AIL order (ADR 1074) |
 
 **Resolution: static or dynamic.** A symbol the runtime provides (`rt_*`) is
 a direct call. Any other symbol is **dynamic**, from the library written in the

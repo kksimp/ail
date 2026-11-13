@@ -1,0 +1,112 @@
+## Word search puzzle: places words on a square letter grid in the first free
+## spot and direction (8 directions), fills the rest with letters from a fixed
+## linear congruential generator, prints the grid, then solves it by scanning
+## every cell and direction for each word.
+
+struct Hit
+    row int
+    col int
+    dir int
+
+fn dir_rows() List[int]
+    [0, 1, 1, 1, 0, -1, -1, -1]
+
+fn dir_cols() List[int]
+    [1, 1, 0, -1, -1, -1, 0, 1]
+
+fn dir_names() List[str]
+    ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]
+
+## True when `word` fits starting at (r, c) heading in direction d: inside the
+## grid and every cell holds the same letter (or, unless `exact`, is empty).
+fn fits(cells List[str], n int, word List[char], r int, c int, d int, exact bool) bool
+    drs := dir_rows()
+    dcs := dir_cols()
+    last_r := r + drs[d] * (word.len() - 1)
+    last_c := c + dcs[d] * (word.len() - 1)
+    if last_r < 0 or last_r >= n or last_c < 0 or last_c >= n
+        return false
+    for k in 0..word.len()
+        have := cells[(r + drs[d] * k) * n + c + dcs[d] * k]
+        letter := "{word[k]}"
+        if have != letter and (exact or have != "")
+            return false
+    true
+
+fn place(mut cells List[str], n int, text str) bool
+    word := text.chars()
+    drs := dir_rows()
+    dcs := dir_cols()
+    for r in 0..n
+        for c in 0..n
+            for d in 0..8
+                if fits(cells, n, word, r, c, d, false)
+                    for k in 0..word.len()
+                        idx := (r + drs[d] * k) * n + c + dcs[d] * k
+                        cells[idx] = "{word[k]}"
+                    return true
+    false
+
+fn fill_rest(mut cells List[str], seed int)
+    letters := "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars()
+    mut state := seed
+    for i in 0..cells.len()
+        state = (state * 1103515245 + 12345) % 2147483648
+        if cells[i] == ""
+            cells[i] = "{letters[(state / 65536) % 26]}"
+
+fn solve(cells List[str], n int, text str) Hit?
+    word := text.chars()
+    for r in 0..n
+        for c in 0..n
+            for d in 0..8
+                if fits(cells, n, word, r, c, d, true)
+                    return Hit(row: r, col: c, dir: d)
+    none
+
+fn main()
+    n := 10
+    words := ["VOLTARE", "STRING", "TRAIT", "ENUM", "CHECK", "GRID", "LIST", "ALE"]
+    mut cells := List[str]()
+    total := n * n
+    for i in 0..total
+        cells.push("")
+    mut placed := 0
+    for w in words
+        ok := place(mut cells, n, w)
+        if ok
+            placed += 1
+    fill_rest(mut cells, 2024)
+    print("placed {placed} of {words.len()} words")
+    for r in 0..n
+        row := [cells[r * n + c] for c in 0..n]
+        print(row.join(" "))
+    print("solutions:")
+    names := dir_names()
+    for w in words
+        hit := solve(cells, n, w) else
+            print("  {w:<8} not found")
+            continue
+        print("  {w:<8} row {hit.row + 1} col {hit.col + 1} {names[hit.dir]}")
+
+@test fn fits_checks_bounds_and_overlap()
+    mut cells := List[str]()
+    for i in 0..9
+        cells.push("")
+    assert(fits(cells, 3, "CAT".chars(), 0, 0, 0, false))
+    assert(not fits(cells, 3, "CAT".chars(), 0, 1, 0, false))
+    ok := place(mut cells, 3, "CAT")
+    assert(ok)
+    assert(not fits(cells, 3, "DOG".chars(), 0, 0, 0, false))
+    assert(fits(cells, 3, "CAT".chars(), 0, 0, 0, true))
+
+@test fn solve_finds_diagonal()
+    cells := ["A", "x", "y", "z", "B", "q", "w", "e", "C"]
+    hit := solve(cells, 3, "ABC")?
+    assert_eq(hit.row, 0)
+    assert_eq(hit.col, 0)
+    assert_eq(hit.dir, 1)
+
+@test fn solve_misses_absent_word()
+    cells := ["A", "B", "C", "D"]
+    assert(solve(cells, 2, "AA") == none)

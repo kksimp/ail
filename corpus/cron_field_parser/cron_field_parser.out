@@ -1,0 +1,36 @@
+*/15 9-17 * * MON-FRI
+  minute   0,15,30,45
+  hour     9,10,11,12,13,14,... (9 values)
+  day      1,2,3,4,5,6,... (31 values)
+  month    1,2,3,4,5,6,... (12 values)
+  weekday  1,2,3,4,5
+  runs per day: 36
+0 0 1,15 JAN-JUN *
+  minute   0
+  hour     0
+  day      1,15
+  month    1,2,3,4,5,6
+  weekday  0,1,2,3,4,5,6
+  runs per day: 1
+5,10-12,50/5 */6 * * 0
+  minute   5,10,11,12,50,55
+  hour     0,6,12,18
+  day      1,2,3,4,5,6,... (31 values)
+  month    1,2,3,4,5,6,... (12 values)
+  weekday  0
+  runs per day: 24
+30 2 * * 7
+  error: 7 is outside 0-6
+61 * * * *
+  error: 61 is outside 0-59
+*/0 * * * *
+  error: bad step 0
+10-5 * * * *
+  error: descending range 10-5
+x * * * *
+  error: bad value x
+* * * *
+  error: expected 5 fields, got 4
+Wed 09:30 fires: true
+Wed 09:31 fires: false
+Sun 09:30 fires: false

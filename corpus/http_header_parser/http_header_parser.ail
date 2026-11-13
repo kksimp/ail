@@ -1,0 +1,108 @@
+## HTTP header parser: reads a request line, headers (case-insensitive names,
+## folded continuation lines, repeated headers merged), the body length, the
+## Cookie pairs and the Accept list ordered by q-value.
+
+struct Pref
+    media str
+    q int
+
+fn split_once(s str, sep str)(str, str)
+    i := s.find(sep) else return (s, "")
+    (s.slice(0, i), s.slice(i + sep.len(), s.len()))
+
+fn parse_q(text str) int
+    whole, frac := split_once(text, ".")
+    w := whole.to_int() else return 1000
+    f := frac.pad_right(3, '0').slice(0, 3).to_int() else 0
+    w * 1000 + f
+
+fn parse_accept(value str) List[Pref]
+    mut prefs := List[Pref]()
+    for part in value.split(",")
+        media, params := split_once(part.trim(), ";")
+        mut q := 1000
+        for p in params.split(";")
+            k, v := split_once(p.trim(), "=")
+            if k == "q"
+                q = parse_q(v)
+        prefs.push(Pref(media: media.trim(), q: q))
+    prefs.sorted(by: |x| -x.q)
+
+fn parse_cookies(value str) Map[str, str]
+    mut jar := Map[str, str]()
+    for part in value.split(";")
+        k, v := split_once(part.trim(), "=")
+        if k != ""
+            jar[k] = v
+    jar
+
+fn main()
+    lines := [
+        "POST /submit?x=1 HTTP/1.1",
+        "Host: example.org",
+        "ACCEPT: text/html, application/json;q=0.9, */*;q=0.1, text/plain;q=0.9",
+        "X-Trace: a",
+        "x-trace: b",
+        "Cookie: sid=abc123; theme=dark; lang=en",
+        "X-Long: first part",
+        "   second part",
+        "Content-Length: 11",
+        "bad header line",
+        "",
+        "hello world",
+    ]
+    mut names := List[str]()
+    mut values := List[str]()
+    mut bad := 0
+    mut body := ""
+    mut in_body := false
+    for i in 1..lines.len()
+        line := lines[i]
+        if in_body
+            body = "{body}{line}"
+        elif line == ""
+            in_body = true
+        elif line.starts_with(" ") or line.starts_with("\t")
+            last := values.len() - 1
+            values[last] = "{values[last]} {line.trim()}"
+        else
+            name, value := split_once(line, ":")
+            if not line.contains(":")
+                bad += 1
+                continue
+            names.push(name.trim().to_lower())
+            values.push(value.trim())
+    mut merged := Map[str, str]()
+    for i in 0..names.len()
+        if merged.contains(names[i])
+            merged[names[i]] = "{merged[names[i]]}, {values[i]}"
+        else
+            merged[names[i]] = values[i]
+    method, rest := split_once(lines[0], " ")
+    target, version := split_once(rest, " ")
+    print("{method} {target} {version}")
+    for k in merged.keys().sorted()
+        print("{k}: {merged[k]}")
+    print("bad lines: {bad}")
+    print("body: {body.len()} chars, declared {merged.get("content-length") else "?"}")
+    jar := parse_cookies(merged.get("cookie") else "")
+    for k in jar.keys().sorted()
+        print("cookie {k} = {jar[k]}")
+    for p in parse_accept(merged.get("accept") else "")
+        print("accept {p.media} q={p.q}")
+
+@test fn parses_q_values()
+    assert_eq(parse_q("0.9"), 900)
+    assert_eq(parse_q("0.25"), 250)
+    assert_eq(parse_q("1"), 1000)
+
+@test fn accept_orders_by_q_then_position()
+    got := parse_accept("a/b;q=0.5, c/d, e/f;q=0.5")
+    assert_eq(got[0].media, "c/d")
+    assert_eq(got[1].media, "a/b")
+    assert_eq(got[2].media, "e/f")
+
+@test fn cookies_split_on_semicolons()
+    jar := parse_cookies("a=1; b=2=3; ;c")
+    assert_eq(jar["b"], "2=3")
+    assert_eq(jar["c"], "")

@@ -1,0 +1,81 @@
+## Rotation ciphers: ROT-N on letters, ROT5 on digits, ROT47 on printable
+## ASCII, and Atbash (alphabet mirror), with involution checks.
+
+fn rotate(c char, base int, k int) char
+    char.from_code((c.code() - base + k) % 26 + base) else c
+
+fn rot_alpha(text str, key int) str
+    k := (key % 26 + 26) % 26
+    mut out := ""
+    for c in text.chars()
+        ch := match c
+            'a'..='z' => rotate(c, 97, k)
+            'A'..='Z' => rotate(c, 65, k)
+            _ => c
+        out = "{out}{ch}"
+    out
+
+fn rot_digits(text str, key int) str
+    k := (key % 10 + 10) % 10
+    mut out := ""
+    for c in text.chars()
+        if c.is_digit()
+            ch := char.from_code((c.code() - 48 + k) % 10 + 48) else c
+            out = "{out}{ch}"
+        else
+            out = "{out}{c}"
+    out
+
+fn rot47(text str) str
+    mut out := ""
+    for c in text.chars()
+        n := c.code()
+        if n >= 33 and n <= 126
+            ch := char.from_code(33 + (n - 33 + 47) % 94) else c
+            out = "{out}{ch}"
+        else
+            out = "{out}{c}"
+    out
+
+fn mirror(c char, lo int, hi int) char
+    char.from_code(lo + hi - c.code()) else c
+
+fn atbash(text str) str
+    mut out := ""
+    for c in text.chars()
+        ch := match c
+            'a'..='z' => mirror(c, 97, 122)
+            'A'..='Z' => mirror(c, 65, 90)
+            _ => c
+        out = "{out}{ch}"
+    out
+
+fn rot13(text str) str
+    rot_digits(rot_alpha(text, 13), 5)
+
+fn main()
+    msg := "Meet at Gate 7 at 18:30, bring Zed's key!"
+    print("plain:    {msg}")
+    print("rot13+5:  {rot13(msg)}")
+    print("rot47:    {rot47(msg)}")
+    print("atbash:   {atbash(msg)}")
+    print("rot-3:    {rot_alpha(msg, -3)}")
+    print("rot13x2:  {rot13(rot13(msg))}")
+    print("rot47x2:  {rot47(rot47(msg))}")
+    print("atbash x2: {atbash(atbash(msg))}")
+    for k in [1, 5, 13, 25]
+        print("shift {k:>2}: {rot_alpha("Hello, World", k)}")
+    print(rot_digits("2026-11-13", 3))
+
+@test fn rot13_is_involution()
+    assert_eq(rot13(rot13("Hello, World 42")), "Hello, World 42")
+    assert_eq(rot_alpha("Hello", 13), "Uryyb")
+
+@test fn rot47_known()
+    assert_eq(rot47("Hello"), "w6==@")
+    assert_eq(rot47(rot47("a b~!")), "a b~!")
+
+@test fn atbash_and_digits()
+    assert_eq(atbash("abc XYZ"), "zyx CBA")
+    assert_eq(rot_digits("0129", 1), "1230")
+    assert_eq(rot_alpha("abc", -1), "zab")

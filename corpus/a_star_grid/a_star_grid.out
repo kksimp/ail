@@ -1,0 +1,19 @@
+open field:
+  length 10, 11 cells expanded
+  S*******
+  .......*
+  .......*
+  .......G
+with walls:
+  length 17, 27 cells expanded
+  S**#******
+  .#*#*####*
+  .#***#...*
+  .#####.##*
+  ......#..G
+sealed off:
+  no path (4 cells expanded)
+  S.#.
+  ..#.
+  ###.
+  ...G

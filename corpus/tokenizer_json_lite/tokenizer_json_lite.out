@@ -1,0 +1,35 @@
+{"name": "ail", "tags": ["a", "b"], "n": -12}
+  17 tokens, depth 2
+  colon     3
+  comma     3
+  lbrace    1
+  lbracket  1
+  num       1
+  rbrace    1
+  rbracket  1
+  str       6
+  words: name ail tags a b n
+[1, 2.5e3, true, false, null, {"k": []}]
+  18 tokens, depth 3
+  colon     1
+  comma     5
+  lbrace    1
+  lbracket  2
+  lit       3
+  num       2
+  rbrace    1
+  rbracket  2
+  str       1
+  words: true false null k
+["x\"y"]
+  3 tokens, depth 1
+  lbracket  1
+  rbracket  1
+  str       1
+  words: x\"y
+{"a": tru}
+  error: bad literal tru at 6
+[1, "open]
+  error: unterminated string at 4
+{"a": @}
+  error: bad character @ at 6

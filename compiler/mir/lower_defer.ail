@@ -55,7 +55,12 @@ fn Lower.defer_all(mut self)
 
 ## `break` or `continue` leaves the blocks of the innermost loop.
 fn Lower.defer_loop_exit(mut self)
+    defer_loop_exit_to(loops.len())
+
+## `break outer` or `continue outer` leaves the blocks of the loops from the
+## `depth`-th one inward (expr.loop.10).
+fn Lower.defer_loop_exit_to(mut self, depth int)
     mut first := facts.defers.len()
-    while first > 0 and facts.defer_loops[first - 1] >= loops.len()
+    while first > 0 and facts.defer_loops[first - 1] >= depth
         first -= 1
     defer_run_from(first)

@@ -1,0 +1,88 @@
+## Fibonacci three ways: memoised recursion with a Map cache, a plain loop,
+## and naive recursion (only its call count is measured). Also the Zeckendorf
+## representation of a number as a sum of non-consecutive Fibonacci numbers,
+## and the sum of the even terms below four million.
+
+fn fib(n int, mut memo Map[int, int]) int
+    if n < 2
+        return n
+    if memo.contains(n)
+        return memo[n]
+    v := fib(n - 1, mut memo) + fib(n - 2, mut memo)
+    memo[n] = v
+    v
+
+fn fib_loop(n int) int
+    mut a := 0
+    mut b := 1
+    for i in 0..n
+        t := a + b
+        a = b
+        b = t
+    a
+
+fn naive_calls(n int) int
+    if n < 2
+        return 1
+    1 + naive_calls(n - 1) + naive_calls(n - 2)
+
+fn zeckendorf(n int) List[int]
+    mut fibs := [1, 2]
+    while fibs[fibs.len() - 1] <= n
+        fibs.push(fibs[fibs.len() - 2] + fibs[fibs.len() - 1])
+    mut parts := List[int]()
+    mut left := n
+    mut k := fibs.len() - 1
+    while k >= 0
+        if fibs[k] <= left
+            parts.push(fibs[k])
+            left -= fibs[k]
+        k -= 1
+    parts
+
+fn even_sum(limit int) int
+    mut a := 1
+    mut b := 2
+    mut total := 0
+    while b < limit
+        if b % 2 == 0
+            total += b
+        t := a + b
+        a = b
+        b = t
+    total
+
+fn main()
+    mut memo := Map[int, int]()
+    mut firsts := List[int]()
+    for i in 0..15
+        firsts.push(fib(i, mut memo))
+    print("first 15: {firsts.join(" ")}")
+    f50 := fib(50, mut memo)
+    f90 := fib(90, mut memo)
+    print("fib(50) = {f50}")
+    print("fib(90) = {f90}")
+    print("cache entries: {memo.len()}")
+    agrees := fib_loop(90) == f90
+    print("loop agrees: {agrees}")
+    print("naive calls for fib(20): {naive_calls(20)}")
+    for n in [4, 100, 1000, 12345]
+        parts := zeckendorf(n)
+        print("{n} = {parts.join(" + ")}")
+    print("even terms below 4000000 sum to {even_sum(4000000)}")
+
+@test fn memo_matches_loop()
+    mut memo := Map[int, int]()
+    for n in 0..40
+        assert_eq(fib(n, mut memo), fib_loop(n))
+
+@test fn known_values()
+    mut memo := Map[int, int]()
+    assert_eq(fib(10, mut memo), 55)
+    assert_eq(fib(30, mut memo), 832040)
+    assert_eq(naive_calls(10), 177)
+
+@test fn zeckendorf_sums_back()
+    for n in [1, 2, 3, 50, 777, 10000]
+        parts := zeckendorf(n)
+        assert_eq(parts.sum(), n)

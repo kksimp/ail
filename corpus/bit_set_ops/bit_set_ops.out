@@ -1,0 +1,9 @@
+primes below 100: 25
+primes below 40: [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
+multiples of 3: 34, of 5: 20
+either: 47
+both: [0, 15, 30, 45, 60, 75, 90]
+3 but not 5: 27
+prime multiples of 3 or 5: [3, 5]
+edge bits: [0, 31, 32, 33, 63, 64, 69] in 3 words
+after removes: 6 members, words [2147483649, 2147483650, 33]

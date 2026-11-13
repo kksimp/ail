@@ -77,6 +77,11 @@ fn stmt_spawns(s ast.Stmt, mut diags List[Diag])
             else_spawns(o, mut diags)
         Defer(inner, _) => stmt_spawns(inner, mut diags)
         Unsafe(body, _) => handle_block(body, mut diags)
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                spawns(h, mut diags)
+            for body in ast.select_bodies(arms)
+                handle_block(body, mut diags)
         Break => return
         Continue => return
 
@@ -291,6 +296,13 @@ fn stmt_uses(n str, s ast.Stmt, cond bool, mut u Uses)
         Unsafe(body, _) =>
             for x in body
                 stmt_uses(n, x, cond, mut u)
+        # conc.select.3: the heads run first; at most one arm's block runs.
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                expr_uses(n, h, cond, mut u)
+            for body in ast.select_bodies(arms)
+                for x in body
+                    stmt_uses(n, x, true, mut u)
         Break => return
         Continue => return
 

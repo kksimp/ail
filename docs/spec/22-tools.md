@@ -251,7 +251,9 @@ the last arm, each `=> todo`, so each arm is a typed hole
 **fix.apply.1** — `ail fix FILE` checks the file and takes the first fix of
 every diagnostic that has one. It skips a fix whose edits touch the range of an
 earlier-chosen fix, and applies the rest from last to first
-([ADR 0203](../decisions/0203-ail-fix-command.md)).
+([ADR 0203](../decisions/0203-ail-fix-command.md)). It leaves the fix of an
+unused local (`expr.bind.14`) to the author: an unused local is often a bug
+([ADR 1087](../decisions/1087-std-papercuts.md)).
 
 **fix.apply.2** — `ail fix` checks the result again and repeats, up to 5
 rounds, until no fixable diagnostic remains ([ADR 0203](../decisions/0203-ail-fix-command.md)).
@@ -288,6 +290,57 @@ fn main()
 ```
 
 ```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
+```
+
+## Check output
+
+**check.out.1** — `ail check FILE|DIR` that finds no error prints one line on
+standard output, `ok PATH: N functions, M warnings` (N counts the program's own
+functions, M its warnings), so a clean run is told from one that did not run.
+The warnings themselves are on standard error. The checks `ail run`, `ail build`
+and `ail test` make first print no such line
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=warnings rules=check.out.1
+fn main()
+    print("hi")
+```
+
+**check.out.2** — Every error ends with a `next:` line, or in `--json` a `next`
+member: `ail fix FILE` when the diagnostic offers a fix, else
+`ail explain RULE`. A warning has none
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=next: status=2 rules=check.out.2
+fn main()
+    prnt("hi")
+```
+
+**check.out.3** — With `--json` every diagnostic is one object per line on
+standard error, as [check-json.schema.json](../design/check-json.schema.json)
+describes (`api`, `severity`, `rule`, `file`, `line`, `col`, `end_line`,
+`end_col`, `message`, and when there are any `help`, `notes`, `fixes`, `next`),
+and one summary object `{"api":1,"summary":true,"errors":N,"warnings":M,"fixable":K}`
+is printed last on standard output. `fixable` counts diagnostics with a fix. The
+gate checks every record of the mistakes corpus against the schema
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,--json,FILE expect="summary":true,"errors":1 status=2 rules=check.out.3
+fn main()
+    prnt("hi")
+```
+
+**check.exit.1** — `ail check` exits 0 when the program has no error (warnings
+allowed) and 2 when it has one or the command line is wrong. `ail run` of a
+program that does not compile prints the diagnostics and exits 1 without
+running it; a trap exits 1; otherwise `ail run` exits with the program's status.
+`ail test` of a program that does not compile exits non-zero, and 1 when a test
+fails. The gate checks these on macOS, Linux and Windows
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=error status=2 rules=check.exit.1
+fn main()
+    prnt("hi")
 ```
 
 ## Explain
@@ -693,7 +746,7 @@ those of its line. On a miss, the line after `nothing in std matches WORDS` is
 the answer of the first row of `docs/design/not-in-std.txt` (`WORDS|WORDS ->
 ANSWER`) one of whose alternatives has all its words in the query; no row, no
 second line. `tools/check-method-table.py` checks that every rule of the table
-exists and that every built-in method of the checker is in it.
+exists, that every built-in method of the checker and every `x.name(args)` a `type.*` rule names is in it, and that no row of `not-in-std.txt` names a std module or prelude type that exists.
 
 **api.find.6** — `ail ask how WORDS...` searches `docs/how-to.md`, whose `##`
 sections are one task each (`sort descending`, `read a file by lines`): a title,
@@ -709,7 +762,7 @@ for `api.find.6`).
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
-rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
 same.
 
 **tool.card.2** — `ail card TOPIC` prints the section of the full card
@@ -973,6 +1026,11 @@ is new. `(none)` stands for an absent one.
 **api.rev.10** — `perf` has a line for each loop whose `ail perf --explain` verdict
 (ADR 1021) differs between the versions. It is
 empty until that command exists.
+
+**api.rev.12** — `effects` also has a line for each package whose `caps` entries
+in `ail.pkg` changed (`eff.allow.10-11`): `NEW CAPABILITY grant PACKAGE: +ENTRY` when
+an entry was gained or a scope widened or moved, counted as a new capability,
+else `grant PACKAGE: -ENTRY`. *(ADR 1105)*
 
 **api.rev.11** — `untested` has the id of each changed or new function, other than
 `main` and `@test` functions, that no `@test` function reaches by calls or by

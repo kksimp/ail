@@ -1,0 +1,77 @@
+## Environment table: parses embedded KEY=VALUE lines (as if from a .env
+## file), expands $\{NAME} references to earlier definitions, skips comments
+## and malformed lines, and prints the final table sorted by key.
+
+fn data() List[str]
+    [
+        "# sample environment",
+        "USER=ada",
+        "HOME=/home/$\{USER}",
+        "PATH=$\{HOME}/bin:/usr/bin",
+        "EDITOR = vi",
+        "",
+        "LOG_DIR=$\{HOME}/logs",
+        "LOG_FILE=$\{LOG_DIR}/$\{APP}.log",
+        "APP=demo",
+        "BAD LINE",
+        "USER=grace",
+        "GREETING=hello $\{USER} from $\{MISSING}!",
+    ]
+
+## Replaces each $\{NAME} with its value in vars (empty when undefined).
+fn expand(s str, vars Map[str, str]) str
+    mut out := ""
+    mut rest := s
+    while true
+        i := rest.find("$\{") else break
+        tailpart := rest.slice(i + 2, rest.len())
+        j := tailpart.find("}") else break
+        name := tailpart.slice(0, j)
+        val := vars.get(name) else ""
+        out = "{out}{rest.slice(0, i)}{val}"
+        rest = tailpart.slice(j + 1, tailpart.len())
+    "{out}{rest}"
+
+struct Env
+    vars Map[str, str]
+    bad int
+
+fn load(lines List[str]) Env
+    mut vars := Map[str, str]()
+    mut bad := 0
+    for raw in lines
+        line := raw.trim()
+        if line == "" or line.starts_with("#")
+            continue
+        eq := line.find("=") else
+            bad += 1
+            continue
+        key := line.slice(0, eq).trim()
+        if key == "" or key.contains(" ")
+            bad += 1
+            continue
+        vars[key] = expand(line.slice(eq + 1, line.len()).trim(), vars)
+    Env(vars: vars, bad: bad)
+
+fn main()
+    env := load(data())
+    for k in env.vars.keys().sorted()
+        print("{k:<9}= {env.vars[k]}")
+    print("{env.vars.len()} variables, {env.bad} malformed lines")
+    refs := [v for v in env.vars.values() if v.contains("/home/ada")]
+    print("{refs.len()} values mention the home directory")
+
+@test fn expands_known_and_unknown_names()
+    vars := {"A": "1", "B": "two"}
+    assert_eq(expand("$\{A}-$\{B}-$\{C}", vars), "1-two-")
+    assert_eq(expand("no refs", vars), "no refs")
+
+@test fn later_definitions_do_not_change_earlier_ones()
+    env := load(["A=x", "B=$\{A}", "A=y", "C=$\{A}"])
+    assert_eq(env.vars["B"], "x")
+    assert_eq(env.vars["C"], "y")
+
+@test fn malformed_lines_are_counted()
+    env := load(["# c", "", "ok=1", "nokey", "=v", "two words=3"])
+    assert_eq(env.vars.len(), 1)
+    assert_eq(env.bad, 3)

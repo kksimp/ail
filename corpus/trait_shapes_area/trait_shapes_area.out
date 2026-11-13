@@ -1,0 +1,11 @@
+circle: area 48, perimeter 24
+rect: area 18, perimeter 18
+triangle 6-8-10 with area 24
+square: area 25, perimeter 20
+circle: area 3, perimeter 6
+total area: 118
+1. circle 48
+2. square 25
+3. triangle 24
+4. rect 18
+5. circle 3

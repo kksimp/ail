@@ -1,0 +1,15 @@
+scattered: 20 points, hull has 8
+  (0,0) (3,0) (10,2) (10,5) (9,7) (5,12) (2,12) (0,3)
+  doubled area 176
+square with extras: 9 points, hull has 4
+  (0,0) (4,0) (4,4) (0,4)
+  doubled area 32
+collinear: 4 points, hull has 2
+  (1,1) (5,5)
+  doubled area 0
+pair: 3 points, hull has 2
+  (1,2) (3,4)
+  doubled area 0
+ring: 8 points, hull has 6
+  (-5,0) (-3,-4) (3,-4) (5,0) (3,4) (-3,4)
+  doubled area 128

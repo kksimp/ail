@@ -1,0 +1,15 @@
+loan 1000000 cents at 600bps for 12 months: payment 860.67, interest 327.96
+  month   1: paid    860.67 interest    50.00 balance    9189.33
+  month   2: paid    860.67 interest    45.95 balance    8374.61
+  month  12: paid    860.59 interest     4.28 balance       0.00
+loan 25000000 cents at 450bps for 360 months: payment 1266.72, interest 206013.88
+  month   1: paid   1266.72 interest   937.50 balance  249670.78
+  month   2: paid   1266.72 interest   936.27 balance  249340.33
+  month 360: paid   1261.40 interest     4.71 balance       0.00
+loan 120000 cents at 0bps for 10 months: payment 120.00, interest 0.00
+  month   1: paid    120.00 interest     0.00 balance    1080.00
+  month   2: paid    120.00 interest     0.00 balance     960.00
+  month  10: paid    120.00 interest     0.00 balance       0.00
+loan -5 cents at 500bps for 12: principal must be positive, got -5
+loan 50000 cents at 100001bps for 12: rate out of range: 100001
+loan 50000 cents at 500bps for 0: term must be 1-480 months, got 0

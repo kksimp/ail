@@ -1,0 +1,102 @@
+## Query string parser: splits a raw query into decoded key/value pairs, keeps
+## repeated keys (and name[] arrays) as lists, offers typed getters and
+## re-encodes the parameters in a canonical, sorted form.
+
+fn split_once(s str, sep str)(str, str)
+    i := s.find(sep) else return (s, "")
+    (s.slice(0, i), s.slice(i + sep.len(), s.len()))
+
+fn decode(s str) str
+    cs := s.chars()
+    mut out := ""
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == '%' and i + 2 < cs.len()
+            v := "{cs[i + 1]}{cs[i + 2]}".to_int(16) else -1
+            if v >= 0
+                ch := char.from_code(v) else c
+                out = "{out}{ch}"
+                i += 3
+                continue
+        if c == '+'
+            out = "{out} "
+        else
+            out = "{out}{c}"
+        i += 1
+    out
+
+fn encode(s str) str
+    digits := "0123456789ABCDEF".chars()
+    mut out := ""
+    for c in s.chars()
+        if c.is_alpha() or c.is_digit() or "-_.~".contains(c)
+            out = "{out}{c}"
+        elif c == ' '
+            out = "{out}+"
+        else
+            n := c.code()
+            out = "{out}%{digits[n / 16]}{digits[n % 16]}"
+    out
+
+fn parse_query(raw str) Map[str, List[str]]
+    mut params := Map[str, List[str]]()
+    q := raw.strip_prefix("?") else raw
+    for pair in q.split("&")
+        if pair == ""
+            continue
+        k, v := split_once(pair, "=")
+        mut key := decode(k)
+        if key.ends_with("[]")
+            key = key.slice(0, key.len() - 2)
+        params.push(key, decode(v))
+    params
+
+fn canonical(params Map[str, List[str]]) str
+    mut parts := List[str]()
+    for k in params.keys().sorted()
+        for v in params[k]
+            parts.push("{encode(k)}={encode(v)}")
+    parts.join("&")
+
+fn first_of(params Map[str, List[str]], key str) str?
+    vals := params.get(key) else return none
+    vals.first()
+
+fn int_of(params Map[str, List[str]], key str, fallback int) int
+    v := first_of(params, key) else return fallback
+    v.to_int() else fallback
+
+fn show(raw str)
+    params := parse_query(raw)
+    print("query '{raw}'")
+    for k in params.keys().sorted()
+        print("  {k} = {params[k].join(" | ")}")
+    print("  canonical: '{canonical(params)}'")
+
+fn main()
+    show("?q=hello+world&page=3&tag=a&tag=b&tag=c")
+    show("name=Ann%20Lee&city=S%26o&flag&empty=&x[]=1&x[]=2")
+    show("a=1&&b=%zz&c=100%&d=%4")
+    show("")
+    params := parse_query("q=ail&page=3&per=many&tag=a&tag=b")
+    print("page: {int_of(params, "page", 1)}")
+    print("per: {int_of(params, "per", 20)}")
+    print("limit: {int_of(params, "limit", 50)}")
+    print("first tag: {first_of(params, "tag") else "-"}")
+    print("sort: {first_of(params, "sort") else "-"}")
+
+@test fn decodes_escapes()
+    assert_eq(decode("a%20b+c%2Fd"), "a b c/d")
+    assert_eq(decode("100%"), "100%")
+    assert_eq(decode("%zz"), "%zz")
+
+@test fn encodes_reserved_characters()
+    assert_eq(encode("a b&c=d"), "a+b%26c%3Dd")
+    assert_eq(encode("safe-_.~09"), "safe-_.~09")
+
+@test fn keeps_repeated_keys_in_order()
+    params := parse_query("t=1&t=2&u[]=x&u[]=y")
+    assert_eq(params["t"], ["1", "2"])
+    assert_eq(params["u"], ["x", "y"])
+    assert_eq(canonical(params), "t=1&t=2&u=x&u=y")

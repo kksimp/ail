@@ -1,0 +1,160 @@
+## Subscription billing for four months. Events ("month day action who ...")
+## subscribe, upgrade (prorated for the days left in a 30 day month) or cancel
+## customers; each month end invoices every active account. A `Discount` trait
+## gives percent off (none, loyalty after N months, student). Bad plans, unknown
+## customers, double subscriptions and downgrades fail with a typed error.
+
+error enum BillError
+    BadLine(text str) "cannot read '{text}'"
+    NoSuchPlan(name str) "no plan {name}"
+    NoSuchCustomer(who str) "no customer {who}"
+    AlreadyActive(who str) "{who} is already subscribed"
+    NotAnUpgrade(who str, plan str) "{plan} is not an upgrade for {who}"
+
+trait Discount
+    fn percent_off(self, months int) int
+
+struct Plain
+    tag str
+
+struct Loyalty
+    after int
+    pct int
+
+struct Student
+    pct int
+
+impl Discount for Plain
+    fn percent_off(self, months int) int
+        0
+
+impl Discount for Loyalty
+    fn percent_off(self, months int) int
+        if months >= self.after
+            self.pct
+        else
+            0
+
+impl Discount for Student
+    fn percent_off(self, months int) int
+        self.pct
+
+struct Account
+    plan str
+    months int
+    active bool
+    disc int
+
+struct Billing
+    accounts Map[str, Account]
+    discounts List[any Discount]
+
+fn price(plan str) int ! BillError
+    if plan == "basic"
+        return 900
+    if plan == "pro"
+        return 2900
+    if plan == "team"
+        return 9900
+    return NoSuchPlan(name: plan)
+
+fn Billing.run(mut self, line str) int ! BillError
+    parts := line.split(" ")
+    if parts.len() < 4
+        return BadLine(text: line)
+    day := parts[1].to_int() else return BadLine(text: line)
+    act := parts[2]
+    who := parts[3]
+    if act == "subscribe" and parts.len() == 6
+        cost := price(parts[4])?
+        cur := self.accounts.get(who) else Account(plan: "", months: 0, active: false, disc: 0)
+        if cur.active
+            return AlreadyActive(who: who)
+        kinds := ["plain", "loyal", "student"]
+        did := kinds.index_of(parts[5]) else return BadLine(text: line)
+        self.accounts[who] = Account(plan: parts[4], months: 0, active: true, disc: did)
+        return cost * (30 - day) / 30
+    acct := self.accounts.get(who) else return NoSuchCustomer(who: who)
+    if not acct.active
+        return NoSuchCustomer(who: who)
+    if act == "cancel" and parts.len() == 4
+        self.accounts[who] = Account(plan: acct.plan, months: acct.months, active: false, disc: acct.disc)
+        return 0
+    if act == "upgrade" and parts.len() == 5
+        old := price(acct.plan)?
+        fresh := price(parts[4])?
+        if fresh <= old
+            return NotAnUpgrade(who: who, plan: parts[4])
+        self.accounts[who] = Account(plan: parts[4], months: acct.months, active: true, disc: acct.disc)
+        return (fresh - old) * (30 - day) / 30
+    return BadLine(text: line)
+
+fn Billing.invoice(mut self, who str) int
+    acct := self.accounts[who]
+    base := price(acct.plan) else 0
+    off := self.discounts[acct.disc].percent_off(acct.months)
+    self.accounts[who] = Account(plan: acct.plan, months: acct.months + 1, active: true, disc: acct.disc)
+    base - base * off / 100
+
+fn new_billing() Billing
+    mut b := Billing(accounts: {}, discounts: [])
+    b.discounts.push(Plain(tag: "plain"))
+    b.discounts.push(Loyalty(after: 2, pct: 10))
+    b.discounts.push(Student(pct: 25))
+    b
+
+fn main()
+    events := [
+        "1 1 subscribe ann basic plain", "1 10 subscribe bob pro student",
+        "1 12 subscribe cy gold plain", "1 15 subscribe ann pro plain",
+        "2 3 upgrade ann pro", "2 5 upgrade bob basic", "2 9 upgrade dan team",
+        "2 20 subscribe dee team loyal", "3 7 cancel bob", "3 8 cancel bob",
+        "3 9 upgrade dee basic", "4 2 subscribe bob basic plain", "4 4 bogus",
+        "4 5 subscribe cy basic plain",
+    ]
+    mut b := new_billing()
+    mut revenue := 0
+    for month in 1..=4
+        print("month {month}")
+        for line in events
+            first := line.split(" ")[0]
+            want := "{month}"
+            if first != want
+                continue
+            extra := b.run(line) else err
+                print("  rejected '{line}': {err}")
+                continue
+            revenue += extra
+            print("  ok {line} (prorated {extra})")
+        mut names := []
+        for k in b.accounts.keys()
+            names.push(k)
+        names.sort()
+        for who in names
+            if b.accounts[who].active
+                amt := b.invoice(who)
+                revenue += amt
+                print("  invoice {who}: {amt}")
+    print("revenue {revenue}")
+
+@test fn upgrades_are_prorated()
+    mut b := new_billing()
+    assert_eq(b.run("1 1 subscribe a basic plain")?, 870)
+    assert_eq(b.run("1 16 upgrade a pro")?, 933)
+    assert_eq(b.accounts["a"].plan, "pro")
+
+@test fn bad_requests_fail()
+    mut b := new_billing()
+    assert_err(b.run("1 1 subscribe a gold plain"))
+    assert_err(b.run("1 1 upgrade ghost pro"))
+    assert_err(b.run("x"))
+    b.run("1 1 subscribe a pro plain")?
+    assert_err(b.run("1 2 subscribe a pro plain"))
+    assert_err(b.run("1 3 upgrade a basic"))
+
+@test fn loyalty_discount_applies_later()
+    mut b := new_billing()
+    b.run("1 1 subscribe a pro loyal")?
+    assert_eq(b.invoice("a"), 2900)
+    assert_eq(b.invoice("a"), 2900)
+    assert_eq(b.invoice("a"), 2610)

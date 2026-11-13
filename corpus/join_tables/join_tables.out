@@ -1,0 +1,16 @@
+inner join:
+  order 100: Ada (Paris) 250
+  order 101: Cy (Rome) 90
+  order 102: Ada (Paris) 40
+  order 104: Dee (Oslo) 15
+  order 106: Ada (Paris) 310
+customers without orders:
+  Bob (Oslo)
+  Eve (Lima)
+orphan orders:
+  order 103 refers to unknown customer 9
+  order 107 refers to unknown customer 7
+totals:
+  Ada (Paris)     600
+  Cy (Rome)        90
+  Dee (Oslo)       15

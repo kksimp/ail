@@ -54,3 +54,96 @@ fn Lower.nested_bind(mut self, p ast.Pattern, s Val)
                     ft := fields[j].ty
                     bind_elem(subs[j], Val(id: load(s.id, j + 1, ft), ty: ft))
         _ => return
+
+## The fields a pattern with field names (expr.match.14) reads from `s`:
+## their slots and types, in the pattern's order.
+struct FieldRead
+    slots List[int]
+    tys List[Ty]
+
+## The slots of `labels` in struct `s`, or in its variant `name` (after the
+## variant index, so one more); none after a problem.
+fn Lower.label_reads(mut self, s Val, name str, labels List[str], pos ast.Pos) FieldRead?
+    mut out := FieldRead(slots: [], tys: [])
+    mut fields := List[Slot]()
+    mut base := 0
+    if sn := struct_name(s.ty)
+        fields = structs.get(sn) else []
+    else
+        n := enum_name(s.ty) else
+            problem(pos, "pattern `{name}(...)` on `{s.ty.name()}`")
+            return none
+        k := case_index(n, name)
+        if k < 0
+            problem(pos, "`{n}` has no variant `{name}`")
+            return none
+        fields = enums[n][k].fields
+        base = 1
+    for lab in labels
+        mut slot := -1
+        for j in 0..fields.len()
+            if fields[j].name == lab
+                slot = j
+        if slot < 0
+            problem(pos, "`{name}` has no field `{lab}`")
+            return none
+        out.slots.push(slot + base)
+        out.tys.push(fields[slot].ty)
+    out
+
+## End the current block with a branch to `yes` when `Point(x: p, ...)` or
+## `Variant(f: p, ...)` matches `s`, else to `no` (expr.match.14): the
+## variant index first, then each named field in order.
+fn Lower.labeled_test(mut self, p ast.Pattern, s Val, tag int, yes int, no int) bool
+    match p
+        StructPat(_, name, labels, subs, ppos) =>
+            reads := label_reads(s, name, labels, ppos) else return false
+            if struct_name(s.ty) == none
+                n := enum_name(s.ty) else return false
+                mid := new_block()
+                branch(
+                    op("eq", [tag, konst(case_index(n, name), Ty.Int)], Ty.Bool),
+                    mid,
+                    [],
+                    no,
+                    [],
+                )
+                seal(mid)
+                cur = mid
+            if subs.len() == 0
+                jump(yes, [])
+                return true
+            for j in 0..subs.len()
+                ft := reads.tys[j]
+                f := Val(id: load(s.id, reads.slots[j], ft), ty: ft)
+                last := j == subs.len() - 1
+                next := if last then yes else new_block()
+                if not elem_test(subs[j], f, next, no)
+                    return false
+                if not last
+                    seal(next)
+                    cur = next
+            true
+        _ => false
+
+## Declare the names inside a pattern with field names to the fields of `s`.
+fn Lower.labeled_bind(mut self, p ast.Pattern, s Val)
+    match p
+        StructPat(_, name, labels, subs, ppos) =>
+            reads := label_reads(s, name, labels, ppos) else return
+            for j in 0..subs.len()
+                ft := reads.tys[j]
+                bind_elem(subs[j], Val(id: load(s.id, reads.slots[j], ft), ty: ft))
+        _ => return
+
+## `Point(x, y)` on a struct (expr.match.14): each name binds the field of
+## that name.
+fn Lower.record_bind(mut self, binds List[ast.Ident], s Val)
+    sn := struct_name(s.ty) else return
+    for b in binds
+        k := slot_of(sn, b.name)
+        if k < 0 or b.name == "_"
+            continue
+        ft := structs[sn][k].ty
+        declare(b.name, ft, load(s.id, k, ft))
+        borrowed.add(lookup(b.name) else "")

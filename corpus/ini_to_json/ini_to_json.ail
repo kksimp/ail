@@ -1,0 +1,134 @@
+## INI to JSON: parses an embedded INI document (comments, blank lines,
+## sections, key = value) and renders it as an indented JSON object. Keys
+## before any section become top-level members, each section becomes a nested
+## object, integers and booleans stay bare. The output is then parsed again
+## to check it is valid JSON and a few values are read back.
+
+struct Entry
+    sec str
+    name str
+    val str
+
+fn sample() str
+    lines := [
+        "; deployment settings",
+        "name = shop",
+        "debug = false",
+        "",
+        "[server]",
+        "host = example.org",
+        "port = 8080",
+        "motto = say \"hi\"",
+        "",
+        "[limits]",
+        "# per minute",
+        "requests = 600",
+        "burst=40",
+        "ignored line",
+    ]
+    lines.join("\n")
+
+fn parse(text str) List[Entry]
+    mut out := List[Entry]()
+    mut current := ""
+    for raw in text.lines()
+        line := raw.trim()
+        if line == "" or line.starts_with("#") or line.starts_with(";")
+            continue
+        if line.starts_with("[") and line.ends_with("]")
+            current = line.slice(1, line.len() - 1).trim()
+            continue
+        idx := line.find("=") else continue
+        out.push(Entry(
+            sec: current,
+            name: line.slice(0, idx).trim(),
+            val: line.slice(idx + 1, line.len()).trim(),
+        ))
+    out
+
+fn quote(s str) str
+    esc := s.replace("\\", "\\\\").replace("\"", "\\\"")
+    "\"{esc}\""
+
+fn scalar(v str) str
+    if v == "true" or v == "false"
+        return v
+    n := v.to_int() else return quote(v)
+    "{n}"
+
+fn sections(entries List[Entry]) List[str]
+    mut names := List[str]()
+    for e in entries
+        if e.sec != "" and not names.contains(e.sec)
+            names.push(e.sec)
+    names
+
+fn member_items(entries List[Entry], sec str, pad str) List[List[str]]
+    mut out := List[List[str]]()
+    for e in entries
+        if e.sec == sec
+            out.push(["{pad}{quote(e.name)}: {scalar(e.val)}"])
+    out
+
+fn comma_last(block List[str], more bool) List[str]
+    if not more
+        return block
+    mut out := block[..block.len() - 1]
+    out.push("{block[block.len() - 1]},")
+    out
+
+fn flatten(items List[List[str]]) List[str]
+    mut out := List[str]()
+    for i in 0..items.len()
+        out.extend(comma_last(items[i], i < items.len() - 1))
+    out
+
+fn render(entries List[Entry]) List[str]
+    mut top := member_items(entries, "", "  ")
+    for s in sections(entries)
+        mut inner := ["  {quote(s)}: \{"]
+        inner.extend(flatten(member_items(entries, s, "    ")))
+        inner.push("  }")
+        top.push(inner)
+    mut out := ["\{"]
+    out.extend(flatten(top))
+    out.push("}")
+    out
+
+fn main() !
+    lines := render(parse(sample()))
+    for l in lines
+        print(l)
+    doc := parse_json(lines.join("\n"))?
+    print("valid json, {lines.len()} lines")
+    print("name: {doc.str("name") else "?"}, debug: {doc.flag("debug", true)}")
+    if srv := doc.get("server")
+        print("port: {srv.int("port") else -1}")
+        print("motto: {srv.text("motto", "?")}")
+    if lim := doc.get("limits")
+        print("burst: {lim.int("burst") else -1}")
+
+@test fn scalars_are_typed()
+    assert_eq(scalar("12"), "12")
+    assert_eq(scalar("true"), "true")
+    assert_eq(scalar("x1"), "\"x1\"")
+
+@test fn quotes_are_escaped()
+    assert_eq(quote("a\"b"), "\"a\\\"b\"")
+
+@test fn parses_sections_in_order()
+    es := parse("a=1\n[s]\nb = 2\n[t]\nc=3")
+    assert_eq(es.len(), 3)
+    assert_eq(sections(es), ["s", "t"])
+
+@test fn renders_a_small_document()
+    got := render(parse("a=1\n[s]\nb=x\nc=true"))
+    assert_eq(got, [
+        "\{",
+        "  \"a\": 1,",
+        "  \"s\": \{",
+        "    \"b\": \"x\",",
+        "    \"c\": true",
+        "  }",
+        "}",
+    ])

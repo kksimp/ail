@@ -1,0 +1,15 @@
+book 101 1 4: booked #1
+book 101 4 6: booked #2
+book 101 3 5: REJECTED room 101 is held by booking 1
+book 102 2 3: booked #3
+book 102 0 3: REJECTED bad stay 0-3
+book 102 5 5: REJECTED bad stay 5-5
+book 301 1 2: REJECTED no room 301
+book 201 2 9: booked #4
+cancel 1: cancelled #1
+book 101 2 4: booked #5
+cancel 42: REJECTED no booking 42
+stay 101: REJECTED bad command 'stay 101'
+101 .####..... 4 nights
+102 .#........ 1 nights
+201 .#######.. 7 nights

@@ -1,0 +1,63 @@
+## N-gram counter: counts character n-grams and word n-grams of a text and
+## prints the most frequent ones (ties broken alphabetically).
+
+fn normalize(text str) str
+    mut out := ""
+    for c in text.to_lower().chars()
+        if c.is_alpha() or c == ' '
+            out = "{out}{c}"
+        else
+            out = "{out} "
+    out.words().join(" ")
+
+fn char_ngrams(text str, n int) Map[str, int]
+    cs := text.chars()
+    mut counts := Map[str, int]()
+    for i in 0..cs.len()
+        if i + n <= cs.len()
+            gram := cs[i..i + n].join("")
+            if not gram.contains(' ')
+                counts[gram] += 1
+    counts
+
+fn word_ngrams(text str, n int) Map[str, int]
+    ws := text.words()
+    mut counts := Map[str, int]()
+    for i in 0..ws.len()
+        if i + n <= ws.len()
+            gram := ws[i..i + n].join(" ")
+            counts[gram] += 1
+    counts
+
+fn top(counts Map[str, int], limit int) List[str]
+    keys := counts.keys().sorted()
+    ranked := keys.sorted(by: |k| -counts[k])
+    mut out := List[str]()
+    for k in ranked.take(limit)
+        out.push("{k}={counts[k]}")
+    out
+
+fn main()
+    raw := "The cat sat on the mat. The cat saw the other cat, and the other cat ran; the mat stayed."
+    text := normalize(raw)
+    print(text)
+    print("char trigrams: {top(char_ngrams(text, 3), 6).join(" ")}")
+    print("char bigrams:  {top(char_ngrams(text, 2), 6).join(" ")}")
+    print("word bigrams:  {top(word_ngrams(text, 2), 5).join(" | ")}")
+    print("word unigrams: {top(word_ngrams(text, 1), 5).join(" ")}")
+    print("distinct word trigrams: {word_ngrams(text, 3).len()}")
+
+@test fn counts_char_grams()
+    c := char_ngrams("abab", 2)
+    assert_eq(c["ab"], 2)
+    assert_eq(c["ba"], 1)
+    assert_eq(c.len(), 2)
+
+@test fn skips_grams_with_spaces()
+    assert_eq(char_ngrams("a b", 2).len(), 0)
+
+@test fn word_grams_and_normalize()
+    assert_eq(normalize("  Hi,   THERE!! "), "hi there")
+    c := word_ngrams("a b a b", 2)
+    assert_eq(c["a b"], 2)
+    assert_eq(top(c, 1), ["a b=2"])

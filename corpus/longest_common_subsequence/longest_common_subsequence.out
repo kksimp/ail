@@ -1,0 +1,7 @@
+'ABCBDAB' vs 'BDCABA': 'BCBA' length 4 similarity 61%
+'AGGTAB' vs 'GXTXAYB': 'GTAB' length 4 similarity 61%
+'kitten' vs 'sitting': 'ittn' length 4 similarity 61%
+'dynamic programming' vs 'dramatic programs': 'damic program' length 13 similarity 72%
+'same' vs 'same': 'same' length 4 similarity 100%
+'abc' vs 'xyz': '' length 0 similarity 0%
+'' vs 'abc': '' length 0 similarity 0%

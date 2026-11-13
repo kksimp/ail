@@ -1,0 +1,7 @@
+numbers 1..10000
+  perfect 4, abundant 2488, deficient 7508
+perfect numbers: 6 28 496 8128
+amicable pairs: 220/284 1184/1210 2620/2924 5020/5564 6232/6368
+abundant up to 30: 12 18 20 24 30
+first odd abundant: 945
+sigma(28) = 56

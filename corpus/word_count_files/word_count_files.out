@@ -1,0 +1,7 @@
+ lines  words  bytes file
+     3      9     40 notes.txt
+     4     13     63 poem.txt
+     0      0      0 empty.txt
+     7     22    103 total
+missing.txt: cannot read
+cleaned up: true

@@ -1,0 +1,36 @@
+width 30, left aligned:
+|AIL is a garbage collected,   |
+|memory safe systems language  |
+|designed so that humans and AI|
+|agents can both read, write   |
+|and check programs with the   |
+|same confidence.              |
+width 30, justified:
+|AIL  is  a  garbage collected,|
+|memory  safe  systems language|
+|designed so that humans and AI|
+|agents  can  both  read, write|
+|and  check  programs  with the|
+|same confidence.              |
+width 12:
+|AIL is a    |
+|garbage     |
+|collected,  |
+|memory safe |
+|systems     |
+|language    |
+|designed so |
+|that humans |
+|and AI      |
+|agents can  |
+|both read,  |
+|write and   |
+|check       |
+|programs    |
+|with the    |
+|same        |
+|confidence. |
+a long word does not break:
+|tiny                |
+|supercalifragilistic|
+|word                |

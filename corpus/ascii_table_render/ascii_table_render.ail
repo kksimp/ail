@@ -1,0 +1,102 @@
+## ASCII table renderer: a generic bordered-table printer (auto column widths,
+## per-column alignment) used to show an ASCII code chart in several bases.
+
+fn to_base(n int, base int, width int) str
+    digits := "0123456789abcdef".chars()
+    mut out := ""
+    mut v := n
+    while v > 0
+        d := digits[v % base]
+        out = "{d}{out}"
+        v = v / base
+    out.pad_left(width, '0')
+
+fn widths(headers List[str], rows List[List[str]]) List[int]
+    mut w := [h.len() for h in headers]
+    for row in rows
+        for i in 0..row.len()
+            w[i] = w[i].max(row[i].len())
+    w
+
+fn rule(w List[int]) str
+    mut out := "+"
+    for n in w
+        out = "{out}{"-".pad_right(n + 2, '-')}+"
+    out
+
+fn row_line(cells List[str], w List[int], right List[bool]) str
+    mut out := "|"
+    for i in 0..cells.len()
+        cell := if right[i] then cells[i].pad_left(w[i], ' ') else cells[i].pad_right(w[i], ' ')
+        out = "{out} {cell} |"
+    out
+
+fn render(headers List[str], rows List[List[str]], right List[bool]) List[str]
+    w := widths(headers, rows)
+    mut lines := [rule(w), row_line(headers, w, [false for h in headers]), rule(w)]
+    for row in rows
+        lines.push(row_line(row, w, right))
+    lines.push(rule(w))
+    lines
+
+fn glyph(n int, names List[str]) str
+    if n < 32
+        return names[n]
+    if n == 32
+        return "SP"
+    if n == 127
+        return "DEL"
+    ch := char.from_code(n) else '?'
+    "{ch}"
+
+fn classify(n int) str
+    if n < 32 or n == 127
+        return "control"
+    if n == 32
+        return "space"
+    if n >= 48 and n <= 57
+        return "digit"
+    if n >= 65 and n <= 90
+        return "upper"
+    if n >= 97 and n <= 122
+        return "lower"
+    "punct"
+
+fn main()
+    names := "NUL SOH STX ETX EOT ENQ ACK BEL BS HT LF VT FF CR SO SI DLE DC1 DC2 DC3 DC4 NAK SYN ETB CAN EM SUB ESC FS GS RS US".split(" ")
+    mut rows := List[List[str]]()
+    for n in [0, 7, 9, 10, 13, 27, 32, 33, 48, 57, 65, 90, 97, 122, 126, 127]
+        rows.push([
+            "{n}",
+            "0x{to_base(n, 16, 2)}",
+            to_base(n, 8, 3),
+            to_base(n, 2, 8),
+            glyph(n, names),
+            classify(n),
+        ])
+    for line in render(
+        ["Dec", "Hex", "Oct", "Bin", "Char", "Class"],
+        rows,
+        [true, true, true, true, false, false],
+    )
+        print(line)
+    print("")
+    for line in render(["Item", "Qty"], [["apple", "3"], ["watermelon", "12"]], [false, true])
+        print(line)
+
+@test fn converts_bases()
+    assert_eq(to_base(65, 16, 2), "41")
+    assert_eq(to_base(5, 2, 8), "00000101")
+    assert_eq(to_base(0, 8, 3), "000")
+
+@test fn renders_aligned()
+    lines := render(["A", "Num"], [["xy", "5"]], [false, true])
+    assert_eq(lines[0], "+----+-----+")
+    assert_eq(lines[1], "| A  | Num |")
+    assert_eq(lines[3], "| xy |   5 |")
+    assert_eq(lines.len(), 5)
+
+@test fn classifies()
+    assert_eq(classify(65), "upper")
+    assert_eq(classify(33), "punct")
+    assert_eq(classify(127), "control")

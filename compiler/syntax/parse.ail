@@ -39,6 +39,13 @@ struct FnBody
     body List[ast.Stmt]?
     contracts List[ast.Contract]
 
+## An enclosing loop: `name` is its label ("" for none), `at` the loop
+## keyword's position, `in_par` a `par for`, which `break` can't leave (conc.par.2).
+struct LoopLabel
+    name str
+    at ast.Pos
+    in_par bool
+
 struct Parser
     tokens List[Token]
     i int
@@ -66,6 +73,9 @@ struct Parser
     ## The struct whose members are being parsed ("" outside one), for the
     ## fix that moves its methods out (type.struct.2).
     member_owner str
+    ## The loops enclosing the statement being parsed in this function, outermost
+    ## first, for `break outer` (expr.loop.10).
+    loops List[LoopLabel]
     ## Keywords already reported as a binding's name: later uses read as that
     ## name, so the one `lex.kw.1` with its rename fix is the only error (ADR 1085).
     misnamed Set[str]
@@ -164,6 +174,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         uses: [],
         member_owner: "",
         misnamed: Set[str](),
+        loops: [],
     )
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
@@ -245,6 +256,10 @@ fn Parser.top_level(mut self)
                 skip_statement()
         elif tag == "kw" and text == "struct"
             if s := struct_decl(false)
+                structs.push(s)
+        elif tag == "id" and text == "type" and tag_at(1) == "id"
+            # `type Name = Base`: a distinct type (type.distinct.1, ADR 1103).
+            if s := distinct_decl()
                 structs.push(s)
         elif tag == "kw" and text == "unique"
             # `unique struct` and `unique enum` (own.uniq.1).
@@ -553,7 +568,22 @@ fn Parser.describe(self, t Tok) str
 ## Report an unexpected token, preferring "not supported yet" for spec
 ## keywords the bootstrap doesn't implement.
 fn Parser.unexpected(mut self, expected str, rule str)
+    prev_tag := if i > 0 then tok_tag(tokens[i - 1].tok) else ""
+    cast := prev_tag == "id"
+        or prev_tag == "int"
+        or prev_tag == "float"
+        or (i > 0 and (tokens[i - 1].tok == Tok.Sym(")") or tokens[i - 1].tok == Tok.Sym("]")))
+    if tag_at(0) == "kw" and not_yet(kw_at(0)) and not cast
+        error_text(
+            "bootstrap.unsupported",
+            here(),
+            "`{kw_at(0)}` is not supported by the bootstrap yet (spec ffi.decl.1)",
+            "",
+            "",
+        )
+        return
     if tag_at(0) == "kw" and not_yet(kw_at(0))
+        # `x as float` (a Rust or TypeScript cast) after a value.
         error_text(
             "gram.foreign.1",
             here(),
@@ -845,6 +875,10 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
         # `@caps(fs, net.serve)` (eff.cap.6): the list is kept as `fs,net.serve`.
         if a.name == "caps" and listed != ""
             arg = listed
+        # `@needs(net, proc)` (test.sandbox.1): bare words name capabilities, kept as `cap:net,proc`;
+        # `@needs("NAME")` with a string names a fixture (test.fixture.3).
+        if a.name == "needs" and arg == none and listed != ""
+            arg = "cap:{listed}"
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
         while at_newline()
@@ -1057,7 +1091,45 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                 )
                 i += 1
             ty := type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?
-            params.push(ast.Param(name: p.name, pos: p.pos, mutable: mutable, moved: moved, ty: ty))
+            mut default := absent[ast.Expr]()
+            if at_sym("=")
+                if within != ast.Within.TopLevel
+                    error_text(
+                        "expr.call.4",
+                        here(),
+                        "a method of a trait or of an `impl Trait` block has no parameter defaults",
+                        "give the default to the function that calls it, or declare the method as `fn Type.name(...)`",
+                        "",
+                    )
+                    return none
+                if mutable or moved
+                    error_text(
+                        "expr.call.4",
+                        here(),
+                        "a `mut` or `move` parameter has no default",
+                        "remove the `= value`, or the `mut`/`move`",
+                        "",
+                    )
+                    return none
+                bump()
+                default = expression()?
+            elif params.len() > 0 and params[params.len() - 1].default != none
+                error_text(
+                    "expr.call.4",
+                    here(),
+                    "a parameter without a default can't follow one with a default",
+                    "put the parameters with defaults last",
+                    "",
+                )
+                return none
+            params.push(ast.Param(
+                name: p.name,
+                pos: p.pos,
+                mutable: mutable,
+                moved: moved,
+                ty: ty,
+                default: default,
+            ))
         if not eat_sym(",")
             break
     expect_sym(")", "`)` or `,` in the parameter list", "gram.fn.2")?
@@ -1592,6 +1664,7 @@ fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
         doc: none,
         is_error: is_error,
         is_unique: false,
+        is_distinct: false,
         generics: generics,
         fields: fields,
         invariants: invariants,
@@ -1704,7 +1777,42 @@ fn Parser.statement(mut self) ast.Stmt?
     skip_statement()
     none
 
+## A statement. A loop is on `loops` while its header and block are parsed, so
+## `break outer` finds it (expr.loop.9-10, ADR 1107).
 fn Parser.statement_inner(mut self) ast.Stmt?
+    tag := tag_at(0)
+    text := tok_text(peek())
+    if tag == "id" and sym_at(1) == ":" and (kw_at(2) == "for" or kw_at(2) == "while")
+        return labeled_loop(text)
+    if tag == "kw" and (text == "for" or text == "while" or text == "par")
+        loops.push(LoopLabel(name: "", at: here(), in_par: text == "par"))
+        s := statement_core()
+        loops.pop()
+        return s
+    statement_core()
+
+## `outer: for ...` and `outer: while ...` (expr.loop.9): the name labels the
+## loop, so `break outer` and `continue outer` in a nested loop leave or
+## continue this one (expr.loop.10).
+fn Parser.labeled_loop(mut self, name str) ast.Stmt?
+    lpos := here()
+    for l in loops
+        if l.name == name
+            error_text(
+                "expr.loop.9",
+                lpos,
+                "the loop label `{name}` is already used by an enclosing loop",
+                "give this loop a different label, for example `{name}2`",
+                "",
+            )
+            return none
+    i += 2
+    loops.push(LoopLabel(name: name, at: here(), in_par: false))
+    s := statement_core()
+    loops.pop()
+    s
+
+fn Parser.statement_core(mut self) ast.Stmt?
     pos := here()
     tag := tag_at(0)
     text := tok_text(peek())
@@ -1809,7 +1917,7 @@ fn Parser.statement_inner(mut self) ast.Stmt?
                     pos: bind_pos,
                     mutable: false,
                     value: value,
-                    otherwise: ast.Else.Leave(ast.Stmt.Break(pos)),
+                    otherwise: ast.Else.Leave(ast.Stmt.Break(pos, none)),
                 )]
                 for st in body
                     stmts.push(st)
@@ -1825,6 +1933,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         return for_loop(false, pos)
     if tag == "kw" and text == "with"
         return with_stmt(pos)
+    if tag == "kw" and text == "select"
+        return select_stmt(pos)
     if tag == "kw" and text == "unsafe" and kw_at(1) != "fn"
         # unsafe.block.1: `unsafe` and an indented block.
         bump()
@@ -1837,12 +1947,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             unexpected("`for` after `par`", "conc.par.5")
             return none
         return for_loop(true, pos)
-    if tag == "kw" and text == "break"
-        bump()
-        return ast.Stmt.Break(pos)
-    if tag == "kw" and text == "continue"
-        bump()
-        return ast.Stmt.Continue(pos)
+    if tag == "kw" and (text == "break" or text == "continue")
+        return leave_stmt(text == "break", pos)
     if tag == "kw" and text == "return"
         bump()
         t := tag_at(0)
@@ -1907,6 +2013,85 @@ fn Parser.bit_assignment(mut self, target ast.Expr, s str) ast.Stmt?
         "",
     )
     none
+
+## `break`, `continue`, `break outer` or `continue outer` (expr.loop.2, expr.loop.10).
+## The label names an enclosing loop of this function; it can't leave a `par for`.
+fn Parser.leave_stmt(mut self, is_break bool, pos ast.Pos) ast.Stmt?
+    word := if is_break then "break" else "continue"
+    bump()
+    mut target := absent[ast.Pos]()
+    if tag_at(0) == "id"
+        n := take_name("a loop label", "expr.loop.10")?
+        mut k := loops.len() - 1
+        mut crossed := false
+        while k >= 0 and target == none
+            l := loops[k]
+            if l.name == n.name
+                target = l.at
+            elif l.in_par
+                crossed = true
+                break
+            k -= 1
+        if target == none
+            unknown_label(word, n, crossed)
+            return none
+    if is_break
+        return ast.Stmt.Break(pos, target)
+    ast.Stmt.Continue(pos, target)
+
+## `break outer` where no enclosing loop of the function is labeled `outer`
+## (expr.loop.10), or one is but a `par for` lies between (conc.par.2).
+fn Parser.unknown_label(mut self, word str, n ast.Ident, crossed bool)
+    if crossed
+        error_text(
+            "conc.par.2",
+            n.pos,
+            "`{word} {n.name}` would leave a `par for`",
+            "a later iteration must not run after an earlier one leaves; keep the loop sequential (drop `par`), or collect the results and decide after the loop",
+            "",
+        )
+        return
+    at_label := n.pos
+    at_end := ast.Pos(line: at_label.line, col: at_label.col + n.name.len())
+    mut names := List[str]()
+    mut outermost := absent[ast.Pos]()
+    for l in loops
+        if l.in_par
+            names = []
+            outermost = none
+        elif l.name != ""
+            names.push(l.name)
+        if not l.in_par and outermost == none
+            outermost = l.at
+    if names.len() == 0 and outermost == none
+        error_text(
+            "expr.loop.5",
+            at_label,
+            "`{word} {n.name}` is outside a loop",
+            "`{word}` is only allowed inside a `for` or `while` loop",
+            "",
+        )
+        return
+    if names.len() > 0
+        last := names[names.len() - 1]
+        error_text(
+            "expr.loop.10",
+            at_label,
+            "`{word} {n.name}` names no enclosing loop; the labeled loops here are {names.join(", ")}",
+            "write the label of the loop to {word}, such as `{word} {last}`",
+            "write `{word} {last}`",
+        )
+        attach("write `{word} {last}`", [fix.span(at_label, at_end, last)])
+        return
+    start := outermost else return
+    error_text(
+        "expr.loop.10",
+        at_label,
+        "`{word} {n.name}` names no enclosing loop; no loop here is labeled",
+        "label the outer loop with `{n.name}: for ...` (or `{n.name}: while ...`), then `{word} {n.name}` leaves it",
+        "label the outermost loop `{n.name}`",
+    )
+    attach("label the outermost loop `{n.name}`", [fix.span(start, start, "{n.name}: ")])
 
 ## `for x in e` or `for mut x in e` (expr.loop.1, expr.loop.6), at `for`.
 fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
@@ -2131,7 +2316,12 @@ fn Parser.closure(mut self) ast.Expr?
             "",
         )
         return none
-    body := expression()?
+    # A loop label isn't visible inside a function literal (expr.loop.10).
+    saved := loops
+    loops = []
+    parsed := expression()
+    loops = saved
+    body := parsed?
     ast.Expr.Closure(params: params, body: body, pos: pos)
 
 ## `fn name(params) R` and its block inside a function body: a named local
@@ -2241,6 +2431,16 @@ fn Parser.else_block_follows(self) bool
 ## `a..b` and `a..=b` (expr.loop.3): the loosest operators. A bound may be
 ## left out before `]`, for a slice (type.coll.10).
 fn Parser.range(mut self) ast.Expr?
+    # `...xs` (a JavaScript spread) lexes as `..` then `.`, and would read as an open range.
+    if at_sym("..") and sym_at(1) == "." and touches(i + 1)
+        error_text(
+            "gram.foreign.1",
+            here(),
+            "AIL has no spread `...`",
+            "join lists with `xs.extend(ys)` on a `mut` list, or build one with `[x for x in xs]`; copy a struct with `b := a`, then change a field",
+            "",
+        )
+        return none
     mut lo := none
     if not at_sym("..") and not at_sym("..=")
         lo = or_expr()?
@@ -2792,16 +2992,6 @@ fn Parser.primary(mut self) ast.Expr?
                     [fix.delete(pos, ast.Pos(line: pos.line, col: pos.col + 1))],
                 )
                 return none
-            # `...` lexes as `..` then `.`.
-            if s == ".." and sym_at(1) == "." and touches(i + 1)
-                error_text(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no spread `...`",
-                    "join lists with `xs.extend(ys)` on a `mut` list, or build one with `[x for x in xs]`; copy a struct with `b := a`, then change a field",
-                    "",
-                )
-                return none
         Newline | Indent | Dedent | Eof => i += 0
     unexpected("an expression", "gram.syntax.1")
     none
@@ -3123,12 +3313,13 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 StrLit(_) | BoolLit(_) =>
                     range_start_error(pos)
                     return none
-        Wildcard(_) | Alt(_, _) | Variant(
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(
             _,
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) =>
+            _,
+        ) =>
             range_start_error(pos)
             return none
     i += 1
@@ -3156,12 +3347,13 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 IntLit(_) | CharLit(_) =>
                     return ast.Pattern.Range(lo: lo_lit, hi: value, inclusive: inclusive, pos: pos)
                 StrLit(_) | BoolLit(_) => i += 0
-        Wildcard(_) | Alt(_, _) | Variant(
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(
             _,
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) => i += 0
+            _,
+        ) => i += 0
     error_text(
         "expr.match.12",
         hpos,
@@ -3194,22 +3386,53 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
                 mut names := List[ast.Ident]()
                 mut subs := List[ast.Pattern]()
                 mut nested := false
+                # expr.match.14: `name: pattern` matches a field by name.
+                mut labels := List[str]()
+                mut item_pos := List[ast.Pos]()
+                mut labeled := false
                 while not at_sym(")")
                     s := sym_at(1)
                     f := ident() else ""
-                    if f != "" and (s == "," or s == ")")
+                    lab := if f != "" then f else kw_at(0)
+                    item_pos.push(here())
+                    if lab != "" and s == ":"
+                        i += 2
+                        labels.push(lab)
+                        subs.push(pattern()?)
+                        labeled = true
+                    elif f != "" and (s == "," or s == ")")
                         nm := take_name("a name or `_` for the field", "expr.match.6")?
                         names.push(nm)
+                        labels.push(nm.name)
                         if nm.name == "_"
                             subs.push(ast.Pattern.Wildcard(nm.pos))
                         else
                             subs.push(ast.Pattern.BindName(name: nm.name, pos: nm.pos))
                     else
+                        labels.push("")
                         subs.push(pattern()?)
                         nested = true
                     if not eat_sym(",")
                         break
                 expect_sym(")", "`)` or `,` in the pattern", "expr.match.6")?
+                if labeled
+                    for k in 0..labels.len()
+                        if labels[k] == "" or labels[k] == "_"
+                            error_text(
+                                "expr.match.14",
+                                item_pos[k],
+                                "a pattern with field names gives each field as `name: pattern` or a bare field name",
+                                "write `field: pattern` here, or leave the field out to match any value",
+                                "",
+                            )
+                            return none
+                    return ast.Pattern.StructPat(
+                        qualifier: qualifier,
+                        name: name,
+                        labels: labels,
+                        fields: subs,
+                        pos: pos,
+                    )
                 if nested
                     return ast.Pattern.Nested(
                         qualifier: qualifier,

@@ -1,0 +1,94 @@
+## Exact dice probabilities with integer arithmetic only. Builds the count of
+## ways to roll each sum of n dice with s sides by dynamic programming, prints
+## the distribution of 2d6 with bars, and reports tail probabilities and the
+## expected value as reduced fractions. Also compares a plain d20 roll with
+## rolling two d20 and keeping the higher (advantage).
+
+fn gcd(a int, b int) int
+    mut x := a
+    mut y := b
+    while y != 0
+        t := x % y
+        x = y
+        y = t
+    x
+
+fn frac(num int, den int) str
+    if num == 0
+        return "0"
+    g := gcd(num, den)
+    if den / g == 1
+        return "{num / g}"
+    "{num / g}/{den / g}"
+
+fn ways(n int, sides int) List[int]
+    mut counts := [1]
+    for d in 0..n
+        mut next := List[int]()
+        for i in 0..counts.len() + sides
+            next.push(0)
+        for total in 0..counts.len()
+            for face in 1..=sides
+                next[total + face] += counts[total]
+        counts = next
+    counts
+
+fn at_least(counts List[int], target int) int
+    mut n := 0
+    for total in 0..counts.len()
+        if total >= target
+            n += counts[total]
+    n
+
+fn expected(counts List[int]) str
+    mut weighted := 0
+    for total in 0..counts.len()
+        weighted += total * counts[total]
+    frac(weighted, counts.sum())
+
+fn advantage(sides int, target int) int
+    mut n := 0
+    for a in 1..=sides
+        for b in 1..=sides
+            if a.max(b) >= target
+                n += 1
+    n
+
+fn main()
+    two := ways(2, 6)
+    outcomes := two.sum()
+    print("2d6: {outcomes} outcomes")
+    for total in 2..=12
+        mut bar := List[str]()
+        for k in 0..two[total]
+            bar.push("#")
+        print("{total:>3} {two[total]:>2}/{outcomes} {bar.join("")}")
+    print("P(sum >= 10) = {frac(at_least(two, 10), outcomes)}")
+    print("P(sum is 7) = {frac(two[7], outcomes)}")
+    print("E[2d6] = {expected(two)}")
+    three := ways(3, 6)
+    print("3d6: {three.sum()} outcomes, E = {expected(three)}")
+    print("P(3d6 >= 15) = {frac(at_least(three, 15), three.sum())}")
+    print("P(3d6 >= 11) = {frac(at_least(three, 11), three.sum())}")
+    d20 := ways(1, 20)
+    print("hit DC 15 on a d20: {frac(at_least(d20, 15), 20)}")
+    print("hit DC 15 with advantage: {frac(advantage(20, 15), 400)}")
+    four := ways(4, 6)
+    peak := four.max() else 0
+    mode := four.index_of(peak) else 0
+    print("4d6: {four.sum()} outcomes, most common sum {mode}")
+
+@test fn two_dice_counts()
+    counts := ways(2, 6)
+    assert_eq(counts[7], 6)
+    assert_eq(counts[2], 1)
+    assert_eq(counts.sum(), 36)
+
+@test fn fractions_reduce()
+    assert_eq(frac(6, 36), "1/6")
+    assert_eq(frac(36, 36), "1")
+    assert_eq(frac(0, 36), "0")
+
+@test fn advantage_beats_a_plain_roll()
+    assert_eq(advantage(20, 15), 400 - 14 * 14)
+    assert_eq(expected(ways(2, 6)), "7")

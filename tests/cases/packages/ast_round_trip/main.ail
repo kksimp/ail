@@ -45,7 +45,7 @@ fn main() !
             is_const: false,
         )],
         receiver: none,
-        params: [ast.Param(name: "x", pos: p, mutable: false, moved: false, ty: opt_ty)],
+        params: [ast.Param(name: "x", pos: p, mutable: false, moved: false, ty: opt_ty, default: none)],
         ret: int_ty,
         body: body,
         within: ast.Within.TopLevel,

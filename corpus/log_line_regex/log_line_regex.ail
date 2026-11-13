@@ -1,0 +1,89 @@
+## Log line parser with regex: captures date, time, level, component and
+## message from each line, collects key=value fields from the message, counts
+## levels and components, and totals the request latencies.
+
+struct Entry
+    date str
+    hour int
+    level str
+    comp str
+    msg str
+
+fn parse_line(line str) Entry?
+    re := regex.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2}) \[(\w+)\] ([a-z]+): (.*)$") else return none
+    c := re.captures(line) else return none
+    day := c.groups[1] else return none
+    hh := c.groups[2] else return none
+    level := c.groups[5] else return none
+    comp := c.groups[6] else return none
+    msg := c.groups[7] else return none
+    hv := hh.to_int() else 0
+    Entry(date: day, hour: hv, level: level, comp: comp, msg: msg)
+
+fn fields(msg str) Map[str, str]
+    mut out := Map[str, str]()
+    re := regex.compile(r"(\w+)=([\w.]+)") else return out
+    for m in re.find_all(msg)
+        i := m.text.find("=") else continue
+        out[m.text.slice(0, i)] = m.text.slice(i + 1, m.text.len())
+    out
+
+fn sample() List[str]
+    [
+        "2024-03-05 12:01:33 [INFO] web: GET /home status=200 took=35ms",
+        "2024-03-05 12:01:40 [WARN] auth: login failed user=bob ip=10.0.0.7",
+        "this line is garbage",
+        "2024-03-05 12:02:01 [ERROR] db: query timeout table=orders took=5000ms",
+        "2024-03-05 13:15:09 [INFO] web: POST /cart status=201 took=120ms",
+        "2024-03-05 13:15:10 [INFO] auth: login ok user=ann ip=10.0.0.9",
+        "2024-03-05 25:99 [INFO] web: truncated",
+        "2024-03-06 00:00:01 [INFO] web: GET /about status=404 took=7ms",
+    ]
+
+fn main()
+    mut levels := Map[str, int]()
+    mut comps := Map[str, int]()
+    mut hours := Map[int, int]()
+    mut total := 0
+    mut timed := 0
+    mut skipped := 0
+    for line in sample()
+        e := parse_line(line) else
+            skipped += 1
+            print("skip: {line}")
+            continue
+        levels[e.level] += 1
+        comps[e.comp] += 1
+        hours[e.hour] += 1
+        kv := fields(e.msg)
+        took := kv.get("took") else ""
+        ms := took.replace("ms", "").to_int() else -1
+        if ms >= 0
+            total += ms
+            timed += 1
+        if kv.contains("user")
+            print("{e.date} user {kv["user"]} from {kv.get("ip") else "?"}")
+    for k in levels.keys().sorted()
+        print("level {k}: {levels[k]}")
+    for k in comps.keys().sorted()
+        print("component {k}: {comps[k]}")
+    for h in hours.keys().sorted()
+        print("hour {h:02}: {hours[h]}")
+    print("skipped {skipped}, timed {timed}, total {total}ms, mean {total / timed}ms")
+
+@test fn parses_a_good_line()
+    e := parse_line("2024-01-02 03:04:05 [WARN] net: link down iface=eth0")?
+    assert_eq(e.level, "WARN")
+    assert_eq(e.hour, 3)
+    assert_eq(e.comp, "net")
+    assert_eq(e.msg, "link down iface=eth0")
+
+@test fn rejects_bad_lines()
+    assert(parse_line("nope") == none)
+    assert(parse_line("2024-01-02 03:04 [INFO] x: y") == none)
+
+@test fn extracts_fields()
+    kv := fields("a=1 b=x.y c")
+    assert_eq(kv["a"], "1")
+    assert_eq(kv["b"], "x.y")
+    assert_eq(kv.len(), 2)

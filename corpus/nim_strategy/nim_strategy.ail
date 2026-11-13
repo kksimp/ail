@@ -1,0 +1,103 @@
+## Nim with the nim-sum strategy. A move takes any number of objects from one
+## pile; whoever takes the last object wins. The optimal player makes the
+## nim-sum (xor of the piles) zero. The program plays an optimal player against
+## a naive one, and cross-checks the xor rule against a brute-force search over
+## every position of three piles of up to four objects.
+
+struct Move
+    pile int
+    take int
+
+fn nim_sum(piles List[int]) int
+    mut x := 0
+    for p in piles
+        x = x ^ p
+    x
+
+fn total(piles List[int]) int
+    piles.sum()
+
+fn optimal(piles List[int]) Move
+    x := nim_sum(piles)
+    if x != 0
+        for i in 0..piles.len()
+            if (piles[i] ^ x) < piles[i]
+                return Move(pile: i, take: piles[i] - (piles[i] ^ x))
+    for i in 0..piles.len()
+        if piles[i] > 0
+            return Move(pile: i, take: 1)
+    Move(pile: 0, take: 0)
+
+fn naive(piles List[int]) Move
+    mut best := 0
+    for i in 0..piles.len()
+        if piles[i] > piles[best]
+            best = i
+    Move(pile: best, take: 1)
+
+fn wins(a int, b int, c int, mut memo Map[str, bool]) bool
+    if a + b + c == 0
+        return false
+    key := "{a},{b},{c}"
+    if memo.contains(key)
+        return memo[key]
+    mut verdict := false
+    for t in 1..=a
+        if not wins(a - t, b, c, mut memo)
+            verdict = true
+    for t in 1..=b
+        if not wins(a, b - t, c, mut memo)
+            verdict = true
+    for t in 1..=c
+        if not wins(a, b, c - t, mut memo)
+            verdict = true
+    memo[key] = verdict
+    verdict
+
+fn game(start List[int], first_optimal bool)
+    mut piles := start
+    mut turn := 0
+    print("start {piles}, nim-sum {nim_sum(piles)}")
+    while total(piles) > 0
+        use_optimal := (turn % 2 == 0) == first_optimal
+        m := if use_optimal then optimal(piles) else naive(piles)
+        piles[m.pile] -= m.take
+        who := if use_optimal then "optimal" else "naive  "
+        print("  {who} takes {m.take} from pile {m.pile} -> {piles}")
+        turn += 1
+    winner := if (turn % 2 == 1) == first_optimal then "optimal" else "naive"
+    print("  last object taken by the {winner} player")
+
+fn main()
+    game([3, 4, 5], true)
+    game([3, 4, 5], false)
+    game([1, 2, 3], true)
+    mut memo := Map[str, bool]()
+    mut agree := 0
+    mut losing := 0
+    for a in 0..5
+        for b in 0..5
+            for c in 0..5
+                brute := wins(a, b, c, mut memo)
+                rule := nim_sum([a, b, c]) != 0
+                if brute == rule
+                    agree += 1
+                if not brute
+                    losing += 1
+    print("positions checked: 125, rule agrees on {agree}, lost for the mover: {losing}")
+
+@test fn nim_sum_of_classic_start()
+    assert_eq(nim_sum([3, 4, 5]), 2)
+    assert_eq(nim_sum([1, 2, 3]), 0)
+
+@test fn optimal_move_zeroes_the_nim_sum()
+    m := optimal([3, 4, 5])
+    mut after := [3, 4, 5]
+    after[m.pile] -= m.take
+    assert_eq(nim_sum(after), 0)
+
+@test fn brute_force_agrees_with_xor()
+    mut memo := Map[str, bool]()
+    assert(wins(1, 2, 4, mut memo))
+    assert(not wins(1, 2, 3, mut memo))
+    assert(not wins(0, 0, 0, mut memo))

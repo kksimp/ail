@@ -1,0 +1,76 @@
+## Tower of Hanoi. Solves the puzzle recursively, replays every move against
+## the rules (a disk may only land on a larger disk or an empty peg), checks
+## that the move count is 2^n - 1 and that the iterative "ruler" rule picks
+## the same disk each step. Prints the full solution for three disks.
+
+struct Move
+    disk int
+    src int
+    dst int
+
+fn hanoi(n int, src int, dst int, via int, mut moves List[Move])
+    if n == 0
+        return
+    hanoi(n - 1, src, via, dst, mut moves)
+    moves.push(Move(disk: n - 1, src: src, dst: dst))
+    hanoi(n - 1, via, dst, src, mut moves)
+
+fn legal(pos List[int], m Move) bool
+    if pos[m.disk] != m.src
+        return false
+    for j in 0..m.disk
+        if pos[j] == m.src or pos[j] == m.dst
+            return false
+    true
+
+fn replay(n int, moves List[Move]) bool
+    mut pos := List[int]()
+    for i in 0..n
+        pos.push(0)
+    for m in moves
+        if not legal(pos, m)
+            return false
+        pos[m.disk] = m.dst
+    for p in pos
+        if p != 2
+            return false
+    true
+
+fn ruler(k int) int
+    mut v := k
+    mut z := 0
+    while v % 2 == 0
+        v = v / 2
+        z += 1
+    z
+
+fn peg_name(p int) str
+    ["A", "B", "C"][p]
+
+fn main()
+    mut moves := List[Move]()
+    hanoi(3, 0, 2, 1, mut moves)
+    for i in 0..moves.len()
+        m := moves[i]
+        print("{i + 1:>2}: disk {m.disk + 1} {peg_name(m.src)} -> {peg_name(m.dst)}")
+    print("disks  moves  valid")
+    for n in 1..=10
+        mut sol := List[Move]()
+        hanoi(n, 0, 2, 1, mut sol)
+        print("{n:>5}  {sol.len():>5}  {replay(n, sol)}")
+
+@test fn move_count_is_power_of_two_minus_one()
+    for n in 0..9
+        mut sol := List[Move]()
+        hanoi(n, 0, 2, 1, mut sol)
+        assert_eq(sol.len(), (1 << n) - 1)
+
+@test fn ruler_rule_matches_recursion()
+    mut sol := List[Move]()
+    hanoi(5, 0, 2, 1, mut sol)
+    for k in 1..=sol.len()
+        assert_eq(sol[k - 1].disk, ruler(k))
+
+@test fn rejects_illegal_moves()
+    assert(not legal([0, 0], Move(disk: 1, src: 0, dst: 1)))
+    assert(not replay(2, [Move(disk: 0, src: 0, dst: 2)]))

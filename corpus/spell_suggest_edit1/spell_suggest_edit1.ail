@@ -1,0 +1,83 @@
+## Spell suggester: generates every string one edit away (delete, transpose,
+## replace, insert) and ranks the ones found in a small frequency dictionary.
+
+fn load_dict(entries List[str]) Map[str, int]
+    mut dict := Map[str, int]()
+    for e in entries
+        parts := e.split(" ")
+        n := parts[1].to_int() else 0
+        dict[parts[0]] = n
+    dict
+
+fn edits1(word str) Set[str]
+    letters := "abcdefghijklmnopqrstuvwxyz".chars()
+    n := word.len()
+    mut out := Set[str]()
+    for i in 0..=n
+        left := word.slice(0, i)
+        right := word.slice(i, n)
+        if right.len() > 0
+            out.add("{left}{right.slice(1, right.len())}")
+        if right.len() > 1
+            out.add("{left}{right.slice(1, 2)}{right.slice(0, 1)}{right.slice(2, right.len())}")
+        for c in letters
+            if right.len() > 0
+                out.add("{left}{c}{right.slice(1, right.len())}")
+            out.add("{left}{c}{right}")
+    out
+
+fn suggest(word str, dict Map[str, int]) List[str]
+    if dict.contains(word)
+        return [word]
+    mut found := List[str]()
+    for cand in edits1(word).sorted()
+        if dict.contains(cand)
+            found.push(cand)
+    found.sorted(by: |w| -dict[w])
+
+fn main()
+    dict := load_dict([
+        "the 500",
+        "tea 40",
+        "ten 35",
+        "then 90",
+        "spelling 12",
+        "spoiling 3",
+        "spewing 2",
+        "correct 60",
+        "corrects 4",
+        "collect 30",
+        "word 80",
+        "ward 20",
+        "world 70",
+        "would 85",
+        "cat 25",
+        "cart 15",
+        "act 18",
+        "hello 55",
+        "help 45",
+    ])
+    for w in ["teh", "speling", "korrect", "wrld", "wuold", "cta", "hello", "zzzz", "hel"]
+        got := suggest(w, dict)
+        if got.is_empty()
+            print("{w} -> (none)")
+        else
+            print("{w} -> {got.join(", ")}")
+    print("candidates for speling: {edits1("speling").len()}")
+
+@test fn generates_each_edit_kind()
+    c := edits1("cat")
+    assert(c.contains("at"))
+    assert(c.contains("act"))
+    assert(c.contains("cut"))
+    assert(c.contains("cart"))
+    assert(not c.contains("dog"))
+
+@test fn exact_word_wins()
+    dict := load_dict(["the 5", "then 9"])
+    assert_eq(suggest("the", dict), ["the"])
+
+@test fn ranks_by_frequency()
+    dict := load_dict(["tea 40", "ten 35", "then 90"])
+    assert_eq(suggest("teh", dict), ["tea", "ten"])
+    assert(suggest("qqq", dict).is_empty())

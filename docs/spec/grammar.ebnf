@@ -1,0 +1,234 @@
+(* AIL grammar (gram.ebnf.1). Machine-checked by tools/check-grammar.py against every .ail file
+   that compiles. Read the notation, then the rules; each rule cites the spec rule it comes from.
+
+   NOTATION
+     name = a b ;        sequence
+     a | b               choice
+     [ a ]               zero or one
+     { a }               zero or more
+     ( a )               grouping
+     'x'                 a keyword (if x is in compiler/syntax/lex.ail KEYWORDS), a name token with
+                         that spelling (a contextual word such as 'then' or 'after'), or a symbol
+     comment             text between an opening and a closing comment mark, as in this note
+
+   TOKENS (made by the lexer, spec 02-lexical.md)
+     NAME      a name that is not a keyword (lex.name.1); `_` is a NAME
+     KEYWORD   any reserved word; a keyword is a plain name where nothing else can stand (lex.kw.3)
+     INT FLOAT CHAR BYTES
+     STRING    every string form: plain, interpolated, raw and multi-line (lex.str.1-6);
+               the code inside `{...}` is an Expr, parsed on its own
+     NEWLINE   the end of a statement (lex.stmt.1); not made inside ( [ { or on a continued line (lex.stmt.2)
+     INDENT    a line indented 4 more spaces (lex.block.1-2)
+     DEDENT    one per block closed
+     EOF
+     AFTER_BLOCK  matches no token: it holds when the token before it is DEDENT. A statement or
+                  member that ends with an indented block needs no NEWLINE after it.
+     ANY       any token except NEWLINE, INDENT, DEDENT, EOF, '(' and ')'; used only for attribute arguments
+
+   Rules that the parser enforces and the grammar leaves open (the checker reports them with their
+   own rule IDs): a bit operator never touches an arithmetic or comparing operator without
+   parentheses (expr.bit.4); comparisons don't chain (expr.prec.2); only a trait's method or an
+   `extern c fn` may end without a body (trait.decl.2, ffi.decl.2); a variant's fields have no
+   default (type.struct.8); a parameter without a default doesn't follow one with a default
+   (expr.call.4). *)
+
+(* ---- Module (mod.unit.1, mod.use.1, mod.vis.1) ---- *)
+
+Module      = { NEWLINE | Item } EOF ;
+
+Item        = [ 'pub' ] Declaration ;
+
+Declaration = Use
+            | Const
+            | DistinctType
+            | StructDecl
+            | EnumDecl
+            | TraitDecl
+            | ImplDecl
+            | DeriveTrait
+            | ExportFn
+            | AttrFn
+            | FnDecl ;
+
+Use         = 'use' ( 'c' STRING 'as' NAME | Path [ 'as' NAME ] ) EndOfLine ;
+Path        = NAME { '.' NAME } ;
+EndOfLine   = NEWLINE | EOF ;
+
+Const       = NAME ':=' Expr NEWLINE ;                           (* mod.const.1 *)
+
+DistinctType = 'type' NAME '=' Type NEWLINE ;                    (* type.distinct.1 *)
+
+(* ---- Functions (gram.fn.1-2, gram.attr.1-6, gen.method.1-2, ffi.decl.2, ffi.export.1) ---- *)
+
+AttrFn      = Attribute { Attribute } FnDecl ;
+Attribute   = '@' Member [ AttrArgs ] [ NEWLINE ] ;
+AttrArgs    = '(' { ANY | AttrArgs } ')' ;
+
+DeriveTrait = '@' 'derive' '(' NAME ')' TraitDecl ;              (* ct.derive.1 *)
+
+ExportFn    = 'export' NAME [ STRING ] FnDecl ;                  (* after `pub` *)
+
+FnDecl      = [ 'unsafe' | 'extern' NAME [ STRING ] ]
+              'fn' Member [ TypeParams ] [ '.' Member [ TypeParams ] ]
+              '(' [ Param { ',' Param } [ ',' ] ] ')' [ ReturnType ]
+              NEWLINE [ INDENT { Contract } { Stmt } DEDENT ] ;
+
+Param       = [ 'mut' | 'move' ] 'self'
+            | [ 'mut' | 'move' ] NAME Type [ '=' Expr ]          (* expr.call.4 *)
+            | '..' '.' ;                                         (* ffi.var.1: `...` ends an extern c fn *)
+
+ReturnType  = Type ;
+Contract    = ( 'requires' | 'ensures' ) Expr NEWLINE ;          (* contract.decl.1 *)
+
+TypeParams  = '[' TypeParam { ',' TypeParam } [ ',' ] ']' ;      (* gen.decl.1, gen.bound.1, gen.const.1 *)
+TypeParam   = [ 'const' ] NAME [ Path { '+' Path } ] ;
+
+(* ---- Types (type.*, err.type.*, gram.generic.1) ---- *)
+
+Type        = '!' [ OptType { '|' NamedType } | 'any' Type ]
+            | 'any' Path
+            | OptType [ '!' NamedType { '|' NamedType } ] ;
+
+OptType     = NamedType { '?' } ;
+
+NamedType   = 'ref' NamedType                                    (* own.ref.1 *)
+            | '*' NamedType                                      (* unsafe.ptr.1 *)
+            | '(' Type ',' Type { ',' Type } [ ',' ] ')'         (* type.tuple.1 *)
+            | 'fn' '(' [ Type { ',' Type } [ ',' ] ] ')' [ OptType ] [ '!' NamedType { '|' NamedType } ]
+                                                                 (* type.fn.1, type.fn.6 *)
+            | Path [ '[' TypeArg { ',' TypeArg } [ ',' ] ']' ] ;
+
+TypeArg     = INT | Type ;                                       (* gen.const.1 *)
+
+(* ---- Structs, enums, traits, impls (type.struct.*, type.enum.*, trait.*, err.msg.1, own.uniq.1) ---- *)
+
+StructDecl  = [ 'unique' | 'error' ] 'struct' NAME [ TypeParams ] [ STRING ]
+              NEWLINE [ INDENT { NEWLINE | StructMember } DEDENT ] ;
+StructMember = ( 'invariant' Expr | Field [ '=' Expr ] ) NEWLINE ;   (* type.struct.8 *)
+
+Field       = [ '@' 'observe' ] [ 'pub' ] Member Type ;          (* gram.attr.6 *)
+
+EnumDecl    = [ 'unique' | 'error' ] 'enum' NAME [ TypeParams ]
+              NEWLINE INDENT { NEWLINE | Variant NEWLINE } DEDENT ;
+Variant     = NAME [ '(' Field { ',' Field } [ ',' ] ')' ] [ STRING ] ;
+
+TraitDecl   = 'trait' NAME [ Path { '+' Path } ]                 (* trait.super.1 *)
+              NEWLINE [ INDENT { NEWLINE | FnDecl } DEDENT ] ;
+
+ImplDecl    = 'impl' Path 'for' Path [ TypeParams ]
+              NEWLINE [ INDENT ( { NEWLINE | FnDecl } | HashUses ) DEDENT ] ;
+HashUses    = 'uses' Member { ',' Member } NEWLINE ;             (* trait.hash.1 *)
+
+(* ---- Statements (lex.stmt.1, expr.*, err.else.*, own.defer.1, conc.par.5, conc.select.2) ---- *)
+
+Block       = NEWLINE INDENT { Stmt } DEDENT ;
+Stmt        = NEWLINE | StmtInner End ;
+End         = NEWLINE | AFTER_BLOCK ;
+
+StmtInner   = FnDecl                                             (* type.fn.9: a named local function *)
+            | 'defer' StmtInner                                  (* own.defer.1 *)
+            | Let
+            | LetTuple
+            | While
+            | For
+            | 'par' For                                          (* conc.par.5 *)
+            | With
+            | 'unsafe' Block                                     (* unsafe.block.1 *)
+            | Select
+            | NAME ':' ( For | While )                           (* expr.loop.9: a labeled loop *)
+            | 'break' [ NAME ]                                   (* expr.loop.10: `break outer` *)
+            | 'continue' [ NAME ]
+            | 'return' [ Expr ]
+            | 'yield' Expr                                       (* expr.yield.2 *)
+            | Assign
+            | ExprPlain [ Otherwise ] ;                          (* an expression, or err.else.5 *)
+
+Let         = [ 'mut' ] NAME ':=' ExprPlain [ Otherwise ] ;      (* expr.bind.* *)
+LetTuple    = [ 'mut' ] NAME ',' [ 'mut' ] NAME { ',' [ 'mut' ] NAME } ':=' Expr ;   (* type.tuple.4 *)
+Assign      = ExprPlain AssignOp Expr ;
+AssignOp    = '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=' ;
+
+(* The `else` of a binding or statement (err.else.1-6). *)
+Otherwise   = 'else' ( Block                                     (* err.else.2 *)
+                     | NAME Block                                (* err.else.3: binds the error *)
+                     | Leave
+                     | Expr ) ;
+Leave       = 'return' [ Expr ] | 'break' [ NAME ] | 'continue' [ NAME ] ;
+
+While       = 'while' ( NAME ':=' Range | Range ) Block ;        (* expr.loop.1, expr.loop.8 *)
+For         = 'for' [ 'mut' ] NAME { ',' NAME } 'in' Range [ ElseTail ] Block ;   (* expr.loop.1, type.tuple.5 *)
+With        = 'with' Range 'as' 'mut' NAME Block ;               (* conc.share.6 *)
+
+Select      = 'select' NEWLINE INDENT { NEWLINE | SelectArm } DEDENT ;   (* conc.select.2 *)
+SelectArm   = SelectHead '=>' ( Block | StmtInner End ) ;
+SelectHead  = 'closed'                                           (* closed channel *)
+            | 'after' ExprPlain                                  (* timeout in ms *)
+            | NAME ':=' ExprPlain                                (* v := ch.recv() *)
+            | ExprPlain ;                                        (* ch.send(x) *)
+
+(* ---- Expressions, loosest first (expr.prec.1) ---- *)
+
+Expr        = ExprPlain [ ElseTail ] ;
+ElseTail    = 'else' ( Leave | Expr ) ;                          (* err.else.6 *)
+ExprPlain   = IfExpr | MatchExpr | Closure | Range ;
+
+Closure     = ( '||' | '|' [ ClosureParam { ',' ClosureParam } ] '|' ) Expr ;   (* type.fn.4 *)
+ClosureParam = NAME [ Type ] ;
+
+Range       = [ OrExpr ] ( '..' | '..=' ) [ OrExpr ] | OrExpr ;  (* expr.loop.3, type.coll.10 *)
+OrExpr      = AndExpr { 'or' AndExpr } ;
+AndExpr     = NotExpr { 'and' NotExpr } ;
+NotExpr     = 'not' NotExpr | CmpExpr ;
+CmpExpr     = AddExpr [ ( '==' | '!=' | '<' | '<=' | '>' | '>=' ) AddExpr ] ;
+AddExpr     = MulExpr { ( '+' | '-' ) MulExpr } ;
+MulExpr     = BitExpr { ( '*' | '/' | '%' ) BitExpr } ;
+BitExpr     = Unary [ '&' Unary { '&' Unary }
+                    | '|' Unary { '|' Unary }
+                    | '^' Unary { '^' Unary }
+                    | '<<' Unary
+                    | '>>' Unary ] ;                             (* expr.bit.3-4 *)
+Unary       = '-' Unary | '~' Unary | 'ref' Unary | 'spawn' Postfix | Postfix ;
+
+Postfix     = Primary { Suffix } ;
+Suffix      = '(' [ Arg { ',' Arg } [ ',' ] ] ')'
+            | '.' INT                                            (* type.tuple.3 *)
+            | '.' Member
+            | '[' Range { ',' Expr } [ ',' ] ']'                 (* an index, or `g[i, j]` (type.grid.3) *)
+            | '[' TypeArg { ',' TypeArg } [ ',' ] ']'            (* type arguments (gen.infer.2) *)
+            | '?' [ STRING ] ;                                   (* err.prop.1, err.ctx.2 *)
+
+Arg         = [ Member ':' ] [ 'mut' | 'move' ] Expr ;           (* expr.call.1-3 *)
+
+Primary     = STRING | CHAR | BYTES | INT | FLOAT
+            | NAME
+            | 'true' | 'false' | 'none' | 'todo' | 'uhwhatnow?' | 'self'
+            | '(' ( IfExpr | Range ) [ ElseTail ] { ',' Expr } [ ',' ] ')'   (* group or tuple (type.tuple.2) *)
+            | ListLit
+            | BraceLit ;
+
+ListLit     = '[' [ Expr { ',' Expr } [ ',' ] ] ']'
+            | '[' Expr Clauses ']' ;                             (* expr.comp.1 *)
+BraceLit    = '{' '}'
+            | '{' Expr ':' Expr ( Clauses | { ',' Expr ':' Expr } [ ',' ] ) '}'   (* map *)
+            | '{' Expr ( Clauses | { ',' Expr } [ ',' ] ) '}' ;                  (* set *)
+Clauses     = Clause { Clause } ;
+Clause      = [ 'par' ] 'for' NAME { ',' NAME } 'in' Range [ 'if' Expr ] ;      (* expr.comp.2, conc.par.12 *)
+
+IfExpr      = 'if' Cond ( 'then' ExprPlain 'else' ExprPlain
+                        | Block { 'elif' Cond Block } [ 'else' [ NAME ] Block ] ) ;   (* expr.if.1-8 *)
+Cond        = NAME ':=' Range | Range ;
+
+MatchExpr   = 'match' Range NEWLINE INDENT { NEWLINE | Arm } DEDENT ;       (* expr.match.1 *)
+Arm         = Pattern [ 'if' ExprPlain ] '=>' ( Block | StmtInner End ) ;   (* expr.match.9, expr.match.11 *)
+
+(* ---- Patterns (expr.match.4-14, type.tuple.6) ---- *)
+
+Pattern     = SinglePat { '|' SinglePat } ;                      (* expr.match.8 *)
+SinglePat   = PlainPat [ ( '..' | '..=' ) PlainPat ] ;           (* expr.match.12 *)
+PlainPat    = Path [ '(' [ PatItem { ',' PatItem } [ ',' ] ] ')' ]
+            | INT | '-' INT | CHAR | STRING | 'true' | 'false'
+            | '(' Pattern ',' Pattern { ',' Pattern } [ ',' ] ')' ;
+PatItem     = Member ':' Pattern                                 (* expr.match.14: by field name *)
+            | Pattern ;                                          (* expr.match.6, expr.match.13 *)
+
+Member      = NAME | KEYWORD ;

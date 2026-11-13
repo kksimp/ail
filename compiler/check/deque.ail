@@ -1,0 +1,34 @@
+## `Deque[T]` (spec 04-types, type.deque.6, ADR 1086): the prelude's
+## double-ended queue. The checker adds `d[i]`, which reads the element at
+## position `i` (as `d.at(i)`), and refuses `d[i] = v`.
+use ast
+
+## The element type of `t` when it is the prelude's `Deque[T]`.
+@allow("expr.match.3") fn Checker.deque_elem(self, t Ty) Ty?
+    match t
+        Struct(s, args) =>
+            d := prog.structs[s]
+            if d.name == "Deque" and is_prelude_line(d.pos.line)
+                if args.len() > 0
+                    return args[0]
+                return Ty.Unknown
+        _ => return none
+    none
+
+## `d[i]` (type.deque.6): one `int` position.
+fn Checker.deque_index(mut self, index ast.Expr, elem Ty) Ty
+    it := expr(index, Ty.Int, true)
+    if not accepts(Ty.Int, it)
+        err_help(
+            "type.deque.6",
+            expr_pos(index),
+            "a deque position must be `int`, found {show(it)}",
+            "write `d[i]` with an `int` position; `d.to_list()[a..b]` slices",
+        )
+    elem
+
+## `d[i] = ...` on a deque (type.deque.6).
+@allow("expr.match.3") fn Checker.deque_element_target(mut self, target ast.Expr) bool
+    match target
+        Index(recv, _, _) => deque_elem(quiet_type(recv)) != none
+        _ => false

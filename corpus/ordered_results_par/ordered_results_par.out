@@ -1,0 +1,16 @@
+     n divisors  kind
+    12        6  composite
+    97        2  prime
+   360       24  highly composite
+  1001        8  composite
+  5040       60  highly composite
+     7        2  prime
+   840       32  highly composite
+  2310       32  highly composite
+   999        8  composite
+    64        7  composite
+     1        1  composite
+tasks == comprehension: true
+tasks == par for: true
+most divisors: 5040 with 60
+total divisors: 182

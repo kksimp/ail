@@ -1,0 +1,113 @@
+## Hotel booking with conflict detection. A booking holds a room for the nights
+## [start, stop). Overlapping stays in the same room are rejected with the id of
+## the booking in the way; back-to-back stays are fine. Prints an occupancy map.
+
+error enum BookingError
+    BadCommand(text str) "bad command '{text}'"
+    BadRange(start int, stop int) "bad stay {start}-{stop}"
+    NoRoom(room str) "no room {room}"
+    Conflict(room str, other int) "room {room} is held by booking {other}"
+    Missing(id int) "no booking {id}"
+
+struct Booking
+    id int
+    room str
+    start int
+    stop int
+
+struct Hotel
+    rooms List[str]
+    bookings List[Booking]
+    next_id int
+
+fn Hotel.book(mut self, room str, start int, stop int) int ! BookingError
+    if not self.rooms.contains(room)
+        return NoRoom(room: room)
+    if start < 1 or stop <= start
+        return BadRange(start: start, stop: stop)
+    for b in self.bookings
+        if b.room == room and start < b.stop and b.start < stop
+            return Conflict(room: room, other: b.id)
+    id := self.next_id
+    self.next_id += 1
+    self.bookings.push(Booking(id: id, room: room, start: start, stop: stop))
+    id
+
+fn Hotel.cancel(mut self, id int) ! BookingError
+    kept := self.bookings.filter(|b| b.id != id)
+    if kept.len() == self.bookings.len()
+        return Missing(id: id)
+    self.bookings = kept
+
+fn Hotel.nights(self, room str) int
+    mut total := 0
+    for b in self.bookings
+        if b.room == room
+            total += b.stop - b.start
+    total
+
+fn Hotel.row(self, room str, days int) str
+    mut cells := List[str]()
+    for d in 1..=days
+        mut busy := false
+        for b in self.bookings
+            if b.room == room and b.start <= d and d < b.stop
+                busy = true
+        cells.push(if busy then "#" else ".")
+    cells.join("")
+
+fn Hotel.run(mut self, line str) str ! BookingError
+    parts := line.split(" ")
+    if parts[0] == "book" and parts.len() == 4
+        a := parts[2].to_int() else return BadCommand(text: line)
+        z := parts[3].to_int() else return BadCommand(text: line)
+        id := self.book(parts[1], a, z)?
+        return "booked #{id}"
+    if parts[0] == "cancel" and parts.len() == 2
+        n := parts[1].to_int() else return BadCommand(text: line)
+        self.cancel(n)?
+        return "cancelled #{n}"
+    return BadCommand(text: line)
+
+fn main()
+    mut hotel := Hotel(rooms: ["101", "102", "201"], bookings: [], next_id: 1)
+    script := [
+        "book 101 1 4",
+        "book 101 4 6",
+        "book 101 3 5",
+        "book 102 2 3",
+        "book 102 0 3",
+        "book 102 5 5",
+        "book 301 1 2",
+        "book 201 2 9",
+        "cancel 1",
+        "book 101 2 4",
+        "cancel 42",
+        "stay 101",
+    ]
+    for line in script
+        msg := hotel.run(line) else err
+            print("{line}: REJECTED {err}")
+            continue
+        print("{line}: {msg}")
+    for room in hotel.rooms
+        print("{room} {hotel.row(room, 10)} {hotel.nights(room)} nights")
+
+@test fn adjacent_stays_do_not_conflict()
+    mut h := Hotel(rooms: ["1"], bookings: [], next_id: 1)
+    assert_eq(h.book("1", 1, 3)?, 1)
+    assert_eq(h.book("1", 3, 5)?, 2)
+
+@test fn overlap_is_rejected()
+    mut h := Hotel(rooms: ["1", "2"], bookings: [], next_id: 1)
+    h.book("1", 2, 6)?
+    assert_err(h.book("1", 5, 8))
+    assert_err(h.book("1", 1, 3))
+    assert_eq(h.book("2", 5, 8)?, 2)
+
+@test fn cancel_frees_the_room()
+    mut h := Hotel(rooms: ["1"], bookings: [], next_id: 1)
+    id := h.book("1", 1, 4)?
+    h.cancel(id)?
+    assert_eq(h.nights("1"), 0)
+    assert_err(h.cancel(id))

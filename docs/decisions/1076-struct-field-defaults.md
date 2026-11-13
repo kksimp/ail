@@ -41,9 +41,7 @@ literal evaluates the value afresh, so no two values share a default list.
 
 ## Consequences
 
-- `impl Default` derivation still uses each field type's default, not the
-  declared field defaults (spec note in `type.struct.8`); a later change
-  must extend the reflection `FieldInfo`.
+- A derived `impl Default` leaves fields with a declared default out of the literal it writes, so it keeps them (the built-in generators only; reflection `FieldInfo` is unchanged).
 - `ail fmt` is token based and needs no change. `FromJson` still requires
   every key.
 - The compiler's own source does not use the feature in this release.

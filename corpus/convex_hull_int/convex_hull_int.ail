@@ -1,0 +1,98 @@
+## Convex hull of integer points by Andrew's monotone chain. Points are sorted,
+## duplicates dropped, then a lower and an upper chain are built, popping any
+## vertex that does not make a strict left turn. Prints the hull
+## counter-clockwise from the leftmost point, plus its doubled area.
+
+struct Pt
+    x int
+    y int
+
+fn cross(o Pt, a Pt, b Pt) int
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+
+fn unique_sorted(pts List[Pt]) List[Pt]
+    ordered := pts.sorted(by: |q| q.x * 100000 + q.y)
+    mut out := List[Pt]()
+    for p in ordered
+        if out.is_empty() or out[out.len() - 1] != p
+            out.push(p)
+    out
+
+fn chain(pts List[Pt]) List[Pt]
+    mut hull := List[Pt]()
+    for p in pts
+        while hull.len() >= 2 and cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0
+            _ := hull.pop()
+        hull.push(p)
+    hull
+
+fn convex_hull(pts List[Pt]) List[Pt]
+    sorted_pts := unique_sorted(pts)
+    if sorted_pts.len() < 3
+        return sorted_pts
+    mut lower := chain(sorted_pts)
+    mut upper := chain(sorted_pts.reversed())
+    _ := lower.pop()
+    _ := upper.pop()
+    lower.extend(upper)
+    lower
+
+fn twice_area(hull List[Pt]) int
+    mut sum := 0
+    for i in 0..hull.len()
+        a := hull[i]
+        b := hull[(i + 1) % hull.len()]
+        sum += a.x * b.y - b.x * a.y
+    sum
+
+fn label(p Pt) str
+    "({p.x},{p.y})"
+
+fn report(name str, pts List[Pt])
+    hull := convex_hull(pts)
+    print("{name}: {pts.len()} points, hull has {hull.len()}")
+    print("  {[label(p) for p in hull].join(" ")}")
+    print("  doubled area {twice_area(hull)}")
+
+fn main()
+    scattered := [Pt(x: i * 7 % 11, y: i * 5 % 13) for i in 0..20]
+    report("scattered", scattered)
+    square := [
+        Pt(x: 0, y: 0),
+        Pt(x: 4, y: 0),
+        Pt(x: 4, y: 4),
+        Pt(x: 0, y: 4),
+        Pt(x: 2, y: 2),
+        Pt(x: 2, y: 0),
+        Pt(x: 4, y: 2),
+        Pt(x: 1, y: 3),
+        Pt(x: 0, y: 0),
+    ]
+    report("square with extras", square)
+    line := [Pt(x: 3, y: 3), Pt(x: 1, y: 1), Pt(x: 2, y: 2), Pt(x: 5, y: 5)]
+    report("collinear", line)
+    report("pair", [Pt(x: 1, y: 2), Pt(x: 1, y: 2), Pt(x: 3, y: 4)])
+    ring := [
+        Pt(x: 5, y: 0),
+        Pt(x: 3, y: 4),
+        Pt(x: -3, y: 4),
+        Pt(x: -5, y: 0),
+        Pt(x: -3, y: -4),
+        Pt(x: 3, y: -4),
+        Pt(x: 0, y: 0),
+        Pt(x: 1, y: 1),
+    ]
+    report("ring", ring)
+
+@test fn triangle_with_inner_point()
+    pts := [Pt(x: 0, y: 0), Pt(x: 6, y: 0), Pt(x: 0, y: 6), Pt(x: 1, y: 1)]
+    assert_eq(convex_hull(pts).len(), 3)
+
+@test fn collinear_points_collapse_to_ends()
+    pts := [Pt(x: 0, y: 0), Pt(x: 1, y: 1), Pt(x: 2, y: 2)]
+    assert_eq(convex_hull(pts), [Pt(x: 0, y: 0), Pt(x: 2, y: 2)])
+
+@test fn cross_sign_gives_turn_direction()
+    o := Pt(x: 0, y: 0)
+    assert(cross(o, Pt(x: 1, y: 0), Pt(x: 1, y: 1)) > 0)
+    assert(cross(o, Pt(x: 1, y: 0), Pt(x: 1, y: -1)) < 0)

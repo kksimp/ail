@@ -1,0 +1,96 @@
+## grep-lite: searches the lines of a text file for a substring with the
+## usual switches: -i ignore case, -v invert the match, -n number the lines
+## and -c print only the count. The text goes through a temp file first.
+
+struct Opts
+    ignore_case bool
+    invert bool
+    numbers bool
+
+fn sample() List[str]
+    [
+        "The quick brown fox",
+        "jumps over the lazy dog.",
+        "THE END of the first act",
+        "",
+        "A dog barks; the fox runs away",
+        "Nothing to see here",
+        "the last line",
+    ]
+
+fn hit(line str, pat str, o Opts) bool
+    found := if o.ignore_case then line.to_lower().contains(pat.to_lower()) else line.contains(pat)
+    if o.invert
+        return not found
+    found
+
+fn grep(lines List[str], pat str, o Opts) List[str]
+    mut out := List[str]()
+    for i, line in lines.enumerate()
+        if hit(line, pat, o)
+            text := if o.numbers then "{i + 1}:{line}" else line
+            out.push(text)
+    out
+
+fn show(title str, lines List[str], pat str, o Opts, count_only bool)
+    found := grep(lines, pat, o)
+    print("$ {title}")
+    if count_only
+        print(found.len())
+        return
+    for l in found
+        print(l)
+    print("-- {found.len()} of {lines.len()} lines")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_grep_lite")?
+    p := path.join(dir, "story.txt")
+    fs.write_text(p, "{sample().join("\n")}\n")?
+    lines := fs.read_text(p)?.lines()
+    plain := Opts(ignore_case: false, invert: false, numbers: false)
+    show("grep the story.txt", lines, "the", plain, false)
+    show(
+        "grep -i the story.txt",
+        lines,
+        "the",
+        Opts(ignore_case: true, invert: false, numbers: false),
+        false,
+    )
+    show(
+        "grep -n fox story.txt",
+        lines,
+        "fox",
+        Opts(ignore_case: false, invert: false, numbers: true),
+        false,
+    )
+    show(
+        "grep -v -n o story.txt",
+        lines,
+        "o",
+        Opts(ignore_case: false, invert: true, numbers: true),
+        false,
+    )
+    show(
+        "grep -ic dog story.txt",
+        lines,
+        "dog",
+        Opts(ignore_case: true, invert: false, numbers: false),
+        true,
+    )
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn case_switch_changes_matches()
+    lines := sample()
+    assert_eq(grep(lines, "the", Opts(ignore_case: false, invert: false, numbers: false)).len(), 4)
+    assert_eq(grep(lines, "the", Opts(ignore_case: true, invert: false, numbers: false)).len(), 5)
+
+@test fn invert_partitions_the_lines()
+    lines := sample()
+    a := grep(lines, "fox", Opts(ignore_case: false, invert: false, numbers: false))
+    b := grep(lines, "fox", Opts(ignore_case: false, invert: true, numbers: false))
+    assert_eq(a.len() + b.len(), lines.len())
+
+@test fn numbers_are_one_based()
+    got := grep(["a", "b"], "b", Opts(ignore_case: false, invert: false, numbers: true))
+    assert_eq(got, ["2:b"])

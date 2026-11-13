@@ -1,0 +1,6 @@
+# expr.call.4: parameters with defaults come last.
+fn f(a int = 1, b int) int
+    a + b
+
+fn main()
+    print(f(b: 2))

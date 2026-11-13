@@ -1,0 +1,100 @@
+## Acronym finder: scans prose for acronyms (two or more capital letters).
+## When a word in parentheses is spelled by the initials of the words just
+## before it ("Portable Network Graphics (PNG)") the expansion is recorded.
+## Prints the defined acronyms with their expansion and use count, then the
+## undefined ones, most used first.
+
+struct Found
+    name str
+    hits int
+
+fn is_word_char(c char) bool
+    c.is_alpha() or c.is_digit()
+
+## Drops punctuation from both ends of a word.
+fn clean(word str) str
+    cs := word.chars()
+    mut lo := 0
+    mut hi := cs.len()
+    while lo < hi and not is_word_char(cs[lo])
+        lo += 1
+    while hi > lo and not is_word_char(cs[hi - 1])
+        hi -= 1
+    cs[lo..hi].join("")
+
+fn is_acronym(s str) bool
+    if s.len() < 2
+        return false
+    for c in s.chars()
+        if not (c.is_alpha() and c == c.to_upper())
+            return false
+    true
+
+fn initials(words List[str]) str
+    mut out := ""
+    for w in words
+        if w.is_empty()
+            continue
+        out = "{out}{w.slice(0, 1).to_upper()}"
+    out
+
+## Expansion defined by the "(ABC)" word at index i, or none.
+fn definition(words List[str], i int) str?
+    raw := words[i]
+    name := clean(raw)
+    if not raw.starts_with("(") or not is_acronym(name)
+        return none
+    n := name.len()
+    if i < n
+        return none
+    start := i - n
+    before := [clean(w) for w in words[start..i]]
+    if initials(before) == name
+        return before.join(" ")
+    none
+
+fn main()
+    text := [
+        "The Portable Network Graphics (PNG) format replaced GIF in many tools.",
+        "A Central Processing Unit (CPU) runs code; the CPU and the GPU share RAM.",
+        "HTTP and TLS secure the web, and Transport Layer Security (TLS) is the",
+        "successor of SSL. Sending a PNG over HTTP needs no CPU tricks. The",
+        "Domain Name System (DNS) maps names, but (OK) is not an expansion.",
+    ].join(" ")
+    words := text.words()
+    mut counts := Map[str, int]()
+    mut defined := Map[str, str]()
+    for i in 0..words.len()
+        word := clean(words[i])
+        if not is_acronym(word)
+            continue
+        counts[word] += 1
+        d := definition(words, i) else continue
+        defined[word] = d
+    print("defined:")
+    for key in defined.keys().sorted()
+        print("  {key:<5} {defined[key]} (used {counts[key]}x)")
+    mut rest := List[Found]()
+    for key2 in counts.keys().sorted()
+        if not defined.contains(key2)
+            rest.push(Found(name: key2, hits: counts[key2]))
+    print("undefined:")
+    for f in rest.sorted(by: |x| -x.hits)
+        print("  {f.name:<5} {f.hits}")
+
+@test fn cleans_punctuation()
+    assert_eq(clean("(PNG),"), "PNG")
+    assert_eq(clean("..x.."), "x")
+    assert_eq(clean("--"), "")
+
+@test fn acronym_shape()
+    assert(is_acronym("CPU"))
+    assert(not is_acronym("Cpu"))
+    assert(not is_acronym("A"))
+    assert(not is_acronym("A1"))
+
+@test fn finds_definition()
+    words := "the Domain Name System (DNS) works".words()
+    assert_eq(definition(words, 4)?, "Domain Name System")
+    assert(definition(words, 0) == none)
+    assert(definition("(OK) fine".words(), 0) == none)

@@ -1,0 +1,111 @@
+## Tic-tac-toe with a perfect negamax player. The board is nine cells
+## (0 empty, 1 X, 2 O). The program counts the game tree, lets the AI play
+## both sides of an empty board (a draw), and shows it taking a win and a block.
+
+fn lines() List[List[int]]
+    [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]
+
+fn winner(board List[int]) int
+    for line in lines()
+        a := board[line[0]]
+        if a != 0 and a == board[line[1]] and a == board[line[2]]
+            return a
+    0
+
+fn is_full(board List[int]) bool
+    for cell in board
+        if cell == 0
+            return false
+    true
+
+fn other(me int) int
+    3 - me
+
+fn negamax(board List[int], me int) int
+    w := winner(board)
+    if w != 0
+        return if w == me then 1 else -1
+    if is_full(board)
+        return 0
+    mut best := -2
+    for i in 0..9
+        if board[i] == 0
+            mut after := board
+            after[i] = me
+            v := 0 - negamax(after, other(me))
+            if v > best
+                best = v
+    best
+
+fn best_move(board List[int], me int) int
+    mut best := -2
+    mut pick := -1
+    for i in 0..9
+        if board[i] == 0
+            mut after := board
+            after[i] = me
+            v := 0 - negamax(after, other(me))
+            if v > best
+                best = v
+                pick = i
+    pick
+
+fn tree_size(board List[int], me int) int
+    if winner(board) != 0 or is_full(board)
+        return 1
+    mut total := 1
+    for i in 0..9
+        if board[i] == 0
+            mut after := board
+            after[i] = me
+            total += tree_size(after, other(me))
+    total
+
+fn render(board List[int]) List[str]
+    marks := [".", "X", "O"]
+    mut rows := List[str]()
+    for r in 0..3
+        c0 := marks[board[r * 3]]
+        c1 := marks[board[r * 3 + 1]]
+        c2 := marks[board[r * 3 + 2]]
+        rows.push("{c0}{c1}{c2}")
+    rows
+
+fn show(title str, board List[int])
+    print(title)
+    for row in render(board)
+        print("  {row}")
+
+fn main()
+    empty := [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    print("game tree nodes from the empty board: {tree_size(empty, 1)}")
+    mut board := empty
+    mut me := 1
+    mut moves := List[int]()
+    while winner(board) == 0 and not is_full(board)
+        spot := best_move(board, me)
+        board[spot] = me
+        moves.push(spot)
+        me = other(me)
+    print("self-play moves: {moves.join(" ")}")
+    show("final board, winner {winner(board)}:", board)
+    take_win := [1, 1, 0, 2, 2, 0, 0, 0, 0]
+    print("X to move with a win available: plays {best_move(take_win, 1)}")
+    must_block := [1, 1, 0, 0, 2, 0, 0, 0, 0]
+    print("O to move, X threatens 2: plays {best_move(must_block, 2)}")
+    corner_trap := [1, 0, 0, 0, 2, 0, 0, 0, 1]
+    print("O to move after X takes opposite corners: plays {best_move(corner_trap, 2)}")
+
+@test fn detects_winners()
+    assert_eq(winner([1, 1, 1, 0, 2, 2, 0, 0, 0]), 1)
+    assert_eq(winner([2, 1, 0, 2, 1, 0, 2, 0, 0]), 2)
+    assert_eq(winner([1, 2, 1, 2, 1, 2, 2, 1, 2]), 0)
+
+@test fn takes_the_win()
+    assert_eq(best_move([1, 1, 0, 2, 2, 0, 0, 0, 0], 1), 2)
+
+@test fn blocks_the_threat()
+    assert_eq(best_move([1, 1, 0, 0, 2, 0, 0, 0, 0], 2), 2)
+
+@test fn perfect_play_draws()
+    assert_eq(negamax([0, 0, 0, 0, 0, 0, 0, 0, 0], 1), 0)

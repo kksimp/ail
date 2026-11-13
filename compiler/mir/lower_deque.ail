@@ -1,0 +1,17 @@
+## `d[i]` on the prelude's `Deque[T]` (type.deque.6, ADR 1086): the call
+## `d.at(i)`, with its bounds trap (type.deque.4).
+use ast
+
+## Whether `t` is an instance of the prelude's `Deque`.
+fn Lower.is_deque_ty(self, t Ty) bool
+    match t
+        Struct(n) => (gen.bases.get(n) else "") == "Deque" and lazy.names.contains("Deque")
+        _ => false
+
+## `d.at(i)` for `d[i]` when `recv` is a deque, else `none`.
+fn Lower.deque_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
+    t := recv_ty(recv)?
+    if not is_deque_ty(t)
+        return none
+    arg := ast.Arg(label: none, mutable: false, moved: false, value: index, param: none)
+    lower_value(ast.Expr.Method(recv: recv, name: "at", name_pos: pos, args: [arg]), none)

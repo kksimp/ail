@@ -1,0 +1,79 @@
+## Number base converter. Converts non-negative integers to and from any base
+## from 2 to 16 by hand, prints a table of binary, octal and hex, 8-bit two's
+## complement for negative numbers, population count and Gray code.
+
+DIGITS := "0123456789ABCDEF"
+
+fn to_base(n int, base int) str
+    if n == 0
+        return "0"
+    symbols := DIGITS.chars()
+    mut out := List[char]()
+    mut left := n
+    while left > 0
+        out.push(symbols[left % base])
+        left = left / base
+    out.reverse()
+    out.join("")
+
+fn from_base(text str, base int) int
+    symbols := DIGITS.chars()
+    mut acc := 0
+    for ch in text.chars()
+        d := symbols.index_of(ch) else -1
+        if d < 0 or d >= base
+            return -1
+        acc = acc * base + d
+    acc
+
+fn popcount(n int) int
+    mut left := n
+    mut count := 0
+    while left > 0
+        bit := left & 1
+        count += bit
+        left = left >> 1
+    count
+
+fn gray(n int) int
+    n ^ (n >> 1)
+
+fn twos8(n int) str
+    low := n & 255
+    to_base(low, 2).pad_left(8, '0')
+
+fn main()
+    print("   n | binary           | octal | hex  | ones")
+    for n in [0, 5, 10, 255, 1000, 65535]
+        b := to_base(n, 2)
+        o := to_base(n, 8)
+        h := to_base(n, 16)
+        print("{n:>4} | {b:<16} | {o:>5} | {h:>4} | {popcount(n)}")
+    texts := ["101101", "777", "FF", "Z9", "12"]
+    bases := [2, 8, 16, 16, 2]
+    for text, base in zip(texts, bases)
+        print("{text} in base {base} = {from_base(text, base)}")
+    for v in [1, -1, -2, -128, 127, 100, -100]
+        print("{v:>4} -> {twos8(v)}")
+    mut codes := List[str]()
+    for g in 0..8
+        codes.push(to_base(gray(g), 2).pad_left(3, '0'))
+    print("gray code: {codes.join(" ")}")
+
+@test fn round_trip_in_every_base()
+    for base in 2..=16
+        for n in [0, 1, 7, 100, 4095, 123456]
+            assert_eq(from_base(to_base(n, base), base), n)
+
+@test fn known_conversions()
+    assert_eq(to_base(255, 2), "11111111")
+    assert_eq(to_base(255, 16), "FF")
+    assert_eq(from_base("1010", 2), 10)
+    assert_eq(from_base("12", 2), -1)
+
+@test fn twos_complement_and_gray()
+    assert_eq(twos8(-1), "11111111")
+    assert_eq(twos8(5), "00000101")
+    assert_eq(popcount(255), 8)
+    assert_eq(gray(3), 2)
+    assert_eq(gray(4), 6)

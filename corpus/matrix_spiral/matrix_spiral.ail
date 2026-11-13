@@ -1,0 +1,98 @@
+## Spiral matrices. Reads a row-major matrix in clockwise spiral order, fills
+## an empty matrix with 1, 2, 3 ... along a spiral, and rotates a matrix a
+## quarter turn clockwise. Matrices are flat lists with a column count.
+
+fn numbered(rows int, cols int) List[int]
+    [k + 1 for k in 0..rows * cols]
+
+fn spiral_order(data List[int], rows int, cols int) List[int]
+    mut out := List[int]()
+    mut top := 0
+    mut bottom := rows - 1
+    mut left := 0
+    mut right := cols - 1
+    while top <= bottom and left <= right
+        for c in left..=right
+            out.push(data[top * cols + c])
+        top += 1
+        if top <= bottom
+            for r in top..=bottom
+                out.push(data[r * cols + right])
+        right -= 1
+        if top <= bottom and left <= right
+            for j in 0..=right - left
+                out.push(data[bottom * cols + right - j])
+            bottom -= 1
+        if left <= right and top <= bottom
+            for k in 0..=bottom - top
+                out.push(data[(bottom - k) * cols + left])
+            left += 1
+    out
+
+fn spiral_fill(rows int, cols int) List[int]
+    mut data := List[int]()
+    for i in 0..rows * cols
+        data.push(0)
+    dxs := [1, 0, -1, 0]
+    dys := [0, 1, 0, -1]
+    mut x := 0
+    mut y := 0
+    mut d := 0
+    for n in 1..=rows * cols
+        data[y * cols + x] = n
+        nx := x + dxs[d]
+        ny := y + dys[d]
+        if nx < 0 or nx >= cols or ny < 0 or ny >= rows or data[ny * cols + nx] != 0
+            d = (d + 1) % 4
+        x += dxs[d]
+        y += dys[d]
+    data
+
+fn rotate_cw(data List[int], rows int, cols int) List[int]
+    mut out := List[int]()
+    for i in 0..cols
+        for j in 0..rows
+            out.push(data[(rows - 1 - j) * cols + i])
+    out
+
+fn show(label str, data List[int], cols int)
+    print("{label}:")
+    for r in 0..data.len() / cols
+        mut line := ""
+        for c in 0..cols
+            v := data[r * cols + c]
+            line = "{line}{v:>4}"
+        print(line)
+
+fn main()
+    grid := numbered(3, 4)
+    show("3x4 matrix", grid, 4)
+    print("spiral order: {spiral_order(grid, 3, 4).join(" ")}")
+    filled := spiral_fill(4, 5)
+    show("4x5 spiral fill", filled, 5)
+    show("rotated clockwise", rotate_cw(grid, 3, 4), 3)
+    single := numbered(4, 1)
+    print("one column: {spiral_order(single, 4, 1).join(" ")}")
+    wide := numbered(1, 5)
+    print("one row: {spiral_order(wide, 1, 5).join(" ")}")
+    big := spiral_fill(6, 6)
+    diagonal := [big[k * 6 + k] for k in 0..6]
+    print("6x6 diagonal: {diagonal.join(" ")}")
+
+@test fn spiral_order_of_square()
+    assert_eq(spiral_order(numbered(3, 3), 3, 3), [1, 2, 3, 6, 9, 8, 7, 4, 5])
+
+@test fn fill_then_read_is_the_identity()
+    for shape in [[2, 2], [3, 5], [5, 3], [4, 4], [1, 6], [6, 1]]
+        rows := shape[0]
+        cols := shape[1]
+        filled := spiral_fill(rows, cols)
+        assert_eq(spiral_order(filled, rows, cols), numbered(rows, cols))
+
+@test fn four_turns_restore_the_matrix()
+    start := numbered(2, 3)
+    once := rotate_cw(start, 2, 3)
+    twice := rotate_cw(once, 3, 2)
+    thrice := rotate_cw(twice, 2, 3)
+    assert_eq(rotate_cw(thrice, 3, 2), start)
+    assert_eq(once, [4, 1, 5, 2, 6, 3])

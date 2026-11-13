@@ -48,9 +48,10 @@ pub fn stmt_pos(s ast.Stmt) ast.Pos
         For(_, _, _, _, _, _, p) => p
         With(_, _, _, _, p) => p
         Unsafe(_, p) => p
+        Select(_, p) => p
         Assign(target, _, _, _) => expr_pos(target)
-        Break(p) => p
-        Continue(p) => p
+        Break(p, _) => p
+        Continue(p, _) => p
         Return(_, p) => p
         Defer(_, p) => p
         Eval(e) => expr_pos(e)

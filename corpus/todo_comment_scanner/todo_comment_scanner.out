@@ -1,0 +1,10 @@
+FIXME main.go:4 [-] leaks the buffer
+FIXME tool.py:5 [kim] off by one
+TODO  main.go:2 [kim] handle EOF
+TODO  tool.py:4 [-] 
+HACK  tool.py:2 [lee] sleep until the port opens
+NOTE  tool.py:3 [-] keep this in sync
+FIXME: 2
+TODO: 2
+HACK: 1
+NOTE: 1

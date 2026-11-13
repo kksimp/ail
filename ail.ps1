@@ -333,7 +333,7 @@ if ($route) {
                 $bopts = @($sp.B); $copts = @($sp.C)
                 & $native budget check @bopts -- $native check-program @copts; exit $LASTEXITCODE
             }
-            & $native check-program @rest; exit $LASTEXITCODE
+            & $native check-program --summary @rest; exit $LASTEXITCODE
         }
         'verify' { Run-Tool (Fwd (Join-Path $root 'tools\verify\verify.ail')) }
         'infer' { Run-Tool (Fwd (Join-Path $root 'tools\infer\infer.ail')) }
@@ -398,8 +398,12 @@ if ($route) {
                 $val = [Environment]::GetEnvironmentVariable($v)
                 if ($null -ne $val) { $runEnv[$v] = $val; Remove-Item "Env:$v" }
             }
+            # eff.allow.10: with no `--allow`, the scopes of the package's `caps` lines become the run's policy.
+            $policyFile = $null
+            if (-not $allowList) { $policyFile = New-TemporaryFile; $checkOpts += @('--policy-out', $policyFile.FullName) }
             & $native check-program @checkOpts $runFile
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) { if ($policyFile) { Remove-Item -Force $policyFile }; exit $LASTEXITCODE }
+            if ($policyFile) { $allowList = (Get-Content -Raw $policyFile).Trim(); Remove-Item -Force $policyFile }
             $errFile = New-TemporaryFile
             # Start-Process with file redirection: PowerShell never wraps the child's stderr in error records,
             # so nothing on it can stop the script under 'Stop' (a `2>` redirection does, even with 'Continue').

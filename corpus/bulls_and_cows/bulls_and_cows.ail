@@ -1,0 +1,70 @@
+## Bulls and cows solver. The secret is four different digits; feedback is the
+## number of bulls (right digit, right place) and cows (right digit, wrong
+## place). The solver keeps every code that is still consistent with the
+## answers so far and always guesses the smallest one.
+
+struct Feedback
+    bulls int
+    cows int
+
+fn all_codes() List[str]
+    mut out := List[str]()
+    for a in 0..10
+        for b in 0..10
+            for c in 0..10
+                for d in 0..10
+                    if a != b and a != c and a != d and b != c and b != d and c != d
+                        out.push("{a}{b}{c}{d}")
+    out
+
+fn score(secret str, guess str) Feedback
+    s := secret.chars()
+    g := guess.chars()
+    mut bulls := 0
+    mut common := 0
+    for i in 0..4
+        if s[i] == g[i]
+            bulls += 1
+        if s.contains(g[i])
+            common += 1
+    Feedback(bulls: bulls, cows: common - bulls)
+
+fn show(fb Feedback) str
+    "{fb.bulls}B {fb.cows}C"
+
+fn solve(secret str) int
+    mut cands := all_codes()
+    mut rounds := 0
+    print("secret {secret}:")
+    while rounds < 12
+        guess := cands[0]
+        fb := score(secret, guess)
+        rounds += 1
+        cands = [c for c in cands if score(c, guess) == fb]
+        print("  {rounds}. guess {guess} -> {show(fb)}, {cands.len()} left")
+        if fb.bulls == 4
+            break
+    rounds
+
+fn main()
+    print("possible codes: {all_codes().len()}")
+    mut total := 0
+    for secret in ["4271", "9035", "0123", "9876"]
+        total += solve(secret)
+    print("total guesses: {total}")
+
+@test fn counts_bulls_and_cows()
+    assert_eq(score("1234", "1234"), Feedback(bulls: 4, cows: 0))
+    assert_eq(score("1234", "4321"), Feedback(bulls: 0, cows: 4))
+    assert_eq(score("1234", "1567"), Feedback(bulls: 1, cows: 0))
+    assert_eq(score("1234", "2134"), Feedback(bulls: 2, cows: 2))
+
+@test fn code_space_has_5040_entries()
+    codes := all_codes()
+    assert_eq(codes.len(), 5040)
+    assert_eq(codes[0], "0123")
+    assert_eq(codes[5039], "9876")
+
+@test fn solver_finds_every_secret()
+    for secret in ["0123", "5678", "3092"]
+        assert(solve(secret) <= 10)

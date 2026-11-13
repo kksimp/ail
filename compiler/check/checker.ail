@@ -38,6 +38,8 @@ pub struct Sig
     ## The parameters' names, for named arguments (expr.call.3); empty for a
     ## built-in whose parameters have no names.
     pub names List[str]
+    ## How many leading parameters have no default (expr.call.4); the rest may be left out.
+    pub required int
     pub moves List[bool]
     pub ret Ty
     pub generics List[int]
@@ -143,6 +145,9 @@ pub struct Checker
     pub allow_wildcards bool
     ## How many `unsafe` blocks enclose the code being checked (unsafe.block.1).
     pub unsafe_depth int
+    ## `pos_key` of each labeled loop that a `break outer` names (expr.loop.10),
+    ## for the divergence of `outer: while true` (expr.loop.7).
+    pub label_breaks Set[int]
     ## Calls resolved to a declared function, or an associated function of a
     ## type, by `pos_key` of the name: the calls `spawn` can start (conc.task.1).
     pub declared_fns Set[int]
@@ -276,6 +281,7 @@ pub fn new_checker(p ast.Program) Checker
         gap_now: false,
         allow_wildcards: false,
         unsafe_depth: 0,
+        label_breaks: Set[int](),
         declared_fns: Set[int](),
         targets: Map[int, int](),
         symbols: Map[int, str](),
@@ -744,6 +750,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             receiver: receiver_of(f),
             params: params,
             names: [p.name for p in f.params],
+            required: [p for p in f.params if p.default == none].len(),
             moves: if param_moves.contains(true) then param_moves else [],
             ret: ret,
             generics: generics,
@@ -1012,7 +1019,7 @@ fn Checker.check_main(mut self)
                     "`@deprecated` needs a reason",
                     "write `@deprecated(\"use new_name instead\")`",
                 )
-        if not is_test and not with_names(f).is_empty()
+        if not is_test and [a for a in f.attrs if a.name == "needs"].len() > 0
             err_help(
                 "test.fixture.3",
                 f.pos,
@@ -1042,6 +1049,7 @@ fn Checker.check_main(mut self)
             bad_shape = false
         if not bad_shape
             check_with(f)
+            check_needs_caps(f)
             check_prop_params(f)
         if r := f.ret
             mut fails := false
@@ -1065,7 +1073,38 @@ fn attr_named(f ast.FnDecl, name str) ast.Attr?
 
 ## The fixtures a test lists with `@needs("NAME")` (test.fixture.3).
 fn with_names(f ast.FnDecl) List[str]
-    [a.arg else "" for a in f.attrs if a.name == "needs"]
+    [
+        a.arg else ""
+        for a in f.attrs if a.name == "needs" and not (a.arg else "").starts_with("cap:")
+    ]
+
+## The capabilities a test lists with `@needs(net, proc)` and so may use (test.sandbox.1-2).
+SANDBOX_NEEDS := ["fs", "net", "net.serve", "proc"]
+
+## test.sandbox.2: each `@needs(...)` of bare words names one of `SANDBOX_NEEDS`, once.
+fn Checker.check_needs_caps(mut self, f ast.FnDecl)
+    mut seen := List[str]()
+    for a in f.attrs
+        text := a.arg else ""
+        if a.name != "needs" or not text.starts_with("cap:")
+            continue
+        for word in text.slice(4, text.len()).split(",")
+            if not SANDBOX_NEEDS.contains(word)
+                err_help(
+                    "test.sandbox.2",
+                    a.pos,
+                    "`@needs({word})` is not a capability a test can ask for",
+                    "write `@needs(fs)`, `@needs(net)`, `@needs(net.serve)` or `@needs(proc)`; a fixture is `@needs(\"name\")` in quotes",
+                )
+            elif seen.contains(word)
+                err_help(
+                    "test.sandbox.2",
+                    a.pos,
+                    "`@needs({word})` is listed twice",
+                    "list each capability once",
+                )
+            else
+                seen.push(word)
 
 ## What a fixture's setup gives the test: its return type, or the value of a fallible one.
 @allow("expr.match.3") fn fixture_value(f ast.FnDecl) ast.TypeRef?
@@ -1154,6 +1193,8 @@ fn Checker.check_with(mut self, f ast.FnDecl)
         if a.name != "needs"
             continue
         name := a.arg else ""
+        if name.starts_with("cap:")
+            continue
         if seen.contains(name)
             err_help(
                 "test.fixture.3",
@@ -1164,6 +1205,14 @@ fn Checker.check_with(mut self, f ast.FnDecl)
             continue
         seen.push(name)
         fx := top_fn(name) else
+            if SANDBOX_NEEDS.contains(name)
+                err_help(
+                    "test.sandbox.2",
+                    a.pos,
+                    "`@needs(\"{name}\")` names a fixture, and the program has none called `{name}`",
+                    "to let the test use the capability write `@needs({name})` without quotes",
+                )
+                continue
             err_help(
                 "test.fixture.3",
                 a.pos,

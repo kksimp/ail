@@ -47,6 +47,7 @@ RECORDED := [
     "fs_symlink",
     "fs_truncate",
     "fs_write_at",
+    "fs_sync",
     "fs_scan",
     "fs_scan_count",
     "env_vars",

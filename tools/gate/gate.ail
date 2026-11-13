@@ -75,7 +75,7 @@ fn first_lines(text str, n int) str
 fn Gate.red(mut self, name str, why str)
     fails += 1
     print("RED {name}")
-    print(first_lines(why, 3))
+    print(first_lines(why, 30))
 
 fn Gate.examples(mut self, tmp str)
     for name in fs.list_dir("examples") else []
@@ -108,10 +108,22 @@ fn Gate.examples(mut self, tmp str)
 ## The public corpus (corpus/NAME/{NAME.ail, NAME.py, NAME.out}): each program builds natively, prints its `.out`, and passes
 ## its own `@test`s. The `.out` is the Python twin's output, so the twin is the oracle (tools/check-corpus-py.py checks it).
 fn Gate.corpus(mut self, tmp str)
+    # corpus/waiting.txt: `NAME reason` lines for programs that wait on a compiler fix; the gate skips them (and says so).
+    waiting := (fs.read_text("corpus/waiting.txt") else "").lines()
     for name in (fs.list_dir("corpus") else []).sorted()
         dir := "corpus/{name}"
         meta := fs.metadata(dir) else continue
         if not meta.is_dir
+            continue
+        # Sharded (`corpus@K/N`): every program is counted, only this shard's are run (see Gate.mine).
+        if not self.mine()
+            continue
+        mut held := false
+        for w in waiting
+            if w.starts_with("{name} ")
+                held = true
+        if held
+            print("corpus {name} waits on a compiler fix (corpus/waiting.txt)")
             continue
         src := "{dir}/{name}.ail"
         if not fs.exists(src)
@@ -412,7 +424,32 @@ fn Gate.cli_checks(mut self)
             ["\"edits\":[\{\"line\":5,\"col\":5,\"end_line\":5,\"end_col\":9,\"text\":\"print\"}]"],
         )
     t := ail_run(["check", path]) else return
-    want("text diagnostics fix line", t.err, ["\nfix: replace `prnt` with `print`"])
+    want("text diagnostics fix line", t.err, ["\nfix: replace `prnt` with `print`", "\nnext: ail fix {path}"])
+    # check.out.1-3, check.exit.1: the ok line, the summary record, the next line of an unfixable error, exit statuses.
+    ok := ail_run(["check", "examples/hello.ail"]) else return
+    if ok.status != 0 or not ok.out.starts_with("ok examples/hello.ail: ") or not ok.out.contains(" functions, 0 warnings")
+        red("check ok line", "exit {ok.status}\n{ok.out}{ok.err}")
+    oj := ail_run(["check", "--json", "examples/hello.ail"]) else return
+    if oj.status != 0 or oj.out.trim() != "\{\"api\":1,\"summary\":true,\"errors\":0,\"warnings\":0,\"fixable\":0}"
+        red("check --json summary", "exit {oj.status}\n{oj.out}{oj.err}")
+    sj := ail_run(["check", "--json", path]) else return
+    if sj.status != 2 or not sj.out.contains("\"summary\":true,\"errors\":2,")
+        red("check --json summary of errors", "exit {sj.status}\n{sj.out}")
+    if bad := schema_problem(sj.out.trim())
+        red("check --json summary schema", bad)
+    un := ail_run(["check", "tests/mistakes/abs_function.ail"]) else return
+    if un.status != 2 or not un.err.contains("\nnext: ail ")
+        red("check next line", "exit {un.status}\n{un.err}")
+    # check.exit.1: a program that doesn't compile stops `ail run` (1) and `ail test` (not 0) before anything runs.
+    rb := ail_run(["run", "tests/mistakes/abs_function.ail"]) else return
+    if rb.status != 1 or not rb.out.is_empty()
+        red("run of a program with errors", "exit {rb.status}\n{rb.out}{rb.err}")
+    tb := ail_run(["test", "tests/mistakes/abs_function.ail"]) else return
+    if tb.status == 0
+        red("test of a program with errors", "exit 0\n{tb.out}{tb.err}")
+    nf := ail_run(["check", "tests/cases/no_such_file.ail"]) else return
+    if nf.status != 2
+        red("check missing file exit", "exit {nf.status}, want 2")
     # `ail explain` (ADR 0146): a known rule, JSON, and an unknown rule.
     e1 := ail_run(["explain", "expr.hole.2"]) else return
     if e1.status != 0 or not e1.out.starts_with("expr.hole.2 (05-expressions.md:")
@@ -940,6 +977,30 @@ fn Gate.cli_effects(mut self, tmp str)
 fn rule_of(line str) str
     line.split("\"rule\":\"")[1].split("\"")[0]
 
+## check.out.3: a problem with one `ail check --json` record against docs/design/check-json.schema.json, or none.
+fn schema_problem(l str) str?
+    d := parse_json(l) else return "not JSON"
+    if (d.int("api") else 0) != 1
+        return "`api` is not 1"
+    if d.get("summary") != none
+        for k in ["errors", "warnings", "fixable"]
+            if d.int(k) == none
+                return "summary lacks integer `{k}`"
+        return none
+    sev := d.text("severity", "")
+    if sev != "error" and sev != "warning"
+        return "`severity` is `{sev}`"
+    for k in ["rule", "file", "message"]
+        if d.text(k, "") == ""
+            return "`{k}` is missing or empty"
+    for k in ["line", "col", "end_line", "end_col"]
+        v := d.int(k) else return "`{k}` is not an integer"
+        if v < 1
+            return "`{k}` is below 1"
+    if sev == "error" and d.text("next", "") == ""
+        return "an error has no `next`"
+    none
+
 fn Gate.mistakes(mut self, tmp str)
     dir := "tests/mistakes"
     scratch := "{tmp}/mistakes"
@@ -956,6 +1017,8 @@ fn Gate.mistakes(mut self, tmp str)
         r := ail_run(["check", "--json", path]) else continue
         mut rules := List[str]()
         for l in r.err.lines()
+            if bad := schema_problem(l)
+                red("mistakes {stem}", "record breaks check-json.schema.json: {bad}\n{l}")
             if l.contains("\"severity\":\"error\"")
                 rules.push(rule_of(l))
                 if not l.contains("\"help\":\"")
@@ -1302,9 +1365,14 @@ fn Gate.docs(mut self)
         return
     for args in [
         ["tools/check-doc-links.py"],
+        ["tools/check-grammar.py", "--self-test"],
+        ["tools/check-grammar.py"],
         ["tools/check-doc-dupes.py"],
         ["tools/check-doc-dupes.py", "--self-test"],
         ["tools/check-method-table.py"],
+        ["tools/collection-vocab-audit.py"],
+        ["tools/check-card-coverage.py"],
+        ["tools/gen-llms-full.py", "--check"],
     ]
         r := proc.run("python3", cat(["-I"], args)) else return
         if r.status != 0
@@ -2478,12 +2546,17 @@ fn owner_ok(owner str) bool
 ## failures and ends with `NATIVEX GREEN` or `NATIVEX RED`.
 ## Native-only features (ADR 0865) build here, so nativex runs on `./ail` with no AIL_BINARY.
 fn Gate.nativex(mut self)
+    # `nativex@K/N`: one shard, one process (the gate's pool supplies the parallelism); see nativex.ail.
+    shard := if shard_count > 1 then " --shard {part}/{shard_count}" else ""
     r := proc.run("sh", [
         "-c",
-        "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail",
+        "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail{shard}",
     ]) else
         red("nativex", "could not start tools/gate/nativex.ail")
         return
+    for l in r.out.lines()
+        if l.starts_with("SHARD ")
+            print(l)
     if r.status != 0 or not r.out.contains("NATIVEX GREEN")
         red("nativex", "{r.out}{r.err}")
 
@@ -2522,6 +2595,10 @@ fn Gate.native_misc(mut self)
         red("test --native refusal", "exit {n.status}\n{n.out}{n.err}")
     nt := native_run(["test", mixed]) else return
     want("test mixed", nt.out, ["adds", "fails_on_purpose", "uses_defer"])
+    # test.stub.1-6 (ADR 1101): every stub works in a test run.
+    sb := native_run(["test", "tests/native_test/stubs.ail"]) else return
+    if sb.status != 0 or not sb.out.contains(" 0 failed")
+        red("std.test stubs", "exit {sb.status}\n{sb.out}{sb.err}")
     st := native_run(["selftest", "--test", "x"]) else return
     if st.status != 2 or not st.err.contains("ADR 0900")
         red("selftest --test refusal", "exit {st.status}\n{st.out}{st.err}")

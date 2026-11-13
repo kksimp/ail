@@ -1,0 +1,15 @@
+skip: bad flight data '25xx'
+skip: bad flight data 'UA98 SFO LAX 0900'
+skip: bad flight data 'UA97 SFO LAX 0900 1000 abc'
+11 flights loaded
+SFO -> JFK: 4 itineraries
+  cheapest: UA1+UA2 cost 350 arrive 16:00 (2 legs)
+  earliest: UA1+UA2 cost 350 arrive 16:00 (2 legs)
+SEA -> MIA: 1 itineraries
+  cheapest: UA10+UA7 cost 320 arrive 16:30 (2 legs)
+  earliest: UA10+UA7 cost 320 arrive 16:30 (2 legs)
+SEA -> JFK: 2 itineraries
+  cheapest: UA10+UA7+UA8 cost 420 arrive 21:00 (3 legs)
+  earliest: UA9+UA5 cost 600 arrive 17:00 (2 legs)
+JFK -> SFO: no route JFK -> SFO
+SFO -> XXX: unknown airport XXX

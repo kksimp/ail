@@ -1,0 +1,13 @@
+batch 1
+  job 0 ok   sum:80   3240
+  job 1 ok   fact:10  3628800
+  job 2 ok   fib:30   832040
+batch 2
+  job 3 FAIL fact:25  factorial overflows at 25
+  job 4 FAIL pow:2    unknown kind 'pow'
+  job 5 FAIL sum:abc  bad argument 'abc'
+batch 3
+  job 6 ok   fib:10   55
+  job 7 FAIL sum      malformed spec
+  job 8 ok   fact:5   120
+5 ok, 4 failed

@@ -1,0 +1,17 @@
+strategy snake
+  order 1: boltx10@0.2 gearx1@1.1 lampx1@3.8 fanx2@3.0 (distance 78)
+  order 2: nutx2@0.7 beltx1@1.6 motorx1@2.3 (distance 54)
+  order 3 rejected: motor: have 1, want 2
+  order 4 rejected: unknown sku widget
+  order 5: nutx3@0.7 gearx7@1.1 lampx2@3.8 (distance 88)
+  order 6 rejected: bad pick line 'belt:x'
+  total distance 220
+strategy ascending
+  order 1: boltx10@0.2 gearx1@1.1 fanx2@3.0 lampx1@3.8 (distance 80)
+  order 2: nutx2@0.7 beltx1@1.6 motorx1@2.3 (distance 54)
+  order 3 rejected: motor: have 1, want 2
+  order 4 rejected: unknown sku widget
+  order 5: nutx3@0.7 gearx7@1.1 lampx2@3.8 (distance 88)
+  order 6 rejected: bad pick line 'belt:x'
+  total distance 222
+snake saves 2

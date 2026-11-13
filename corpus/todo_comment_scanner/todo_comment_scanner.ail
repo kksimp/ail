@@ -1,0 +1,97 @@
+## TODO comment scanner: finds FIXME, TODO, HACK and NOTE markers that start a
+## `//` or `#` comment (the same words in plain code are ignored), reads an optional
+## `(owner)` and the message, and lists them by priority, then file and line.
+
+TAGS := ["FIXME", "TODO", "HACK", "NOTE"]
+
+struct Parsed
+    tag str
+    owner str
+    msg str
+
+struct Note
+    name str
+    line int
+    tag str
+    owner str
+    msg str
+    key int
+
+fn comment_text(line str) str?
+    a := line.find("//") else -1
+    b := line.find("#") else -1
+    if a >= 0 and (b < 0 or a < b)
+        return line.slice(a + 2, line.len())
+    if b >= 0
+        return line.slice(b + 1, line.len())
+    none
+
+fn parse_note(comment str) Parsed?
+    body := comment.trim()
+    for tag in TAGS
+        rest := body.strip_prefix(tag) else continue
+        mut owner := ""
+        mut msg := rest
+        if rest.starts_with("(")
+            rp := rest.find(")") else return none
+            owner = rest.slice(1, rp)
+            msg = rest.slice(rp + 1, rest.len())
+        elif not rest.is_empty() and not rest.starts_with(":") and not rest.starts_with(" ")
+            continue
+        if msg.starts_with(":")
+            msg = msg.slice(1, msg.len())
+        return Parsed(tag: tag, owner: owner, msg: msg.trim())
+    none
+
+fn scan(name str, fileno int, text str) List[Note]
+    mut out := List[Note]()
+    mut n := 0
+    for raw in text.lines()
+        n += 1
+        c := comment_text(raw) else continue
+        found := parse_note(c) else continue
+        rank := TAGS.index_of(found.tag) else 0
+        out.push(Note(name: name, line: n, tag: found.tag, owner: found.owner, msg: found.msg, key: rank * 100000 + fileno * 1000 + n))
+    out
+
+fn main()
+    go_src := [
+        "package main",
+        "// TODO(kim): handle EOF",
+        "func f() \{",
+        "    s := \"TODO later\"   // FIXME: leaks the buffer",
+        "    // TODOS are plain words",
+        "}",
+    ]
+    py_src := [
+        "import sys",
+        "# HACK(lee): sleep until the port opens",
+        "x = 1  # NOTE keep this in sync",
+        "# TODO",
+        "# FIXME(kim) off by one",
+    ]
+    mut notes := List[Note]()
+    notes.extend(scan("main.go", 0, go_src.join("\n")))
+    notes.extend(scan("tool.py", 1, py_src.join("\n")))
+    for nt in notes.sorted(by: |q| q.key)
+        who := if nt.owner == "" then "-" else nt.owner
+        print("{nt.tag:<5} {nt.name}:{nt.line} [{who}] {nt.msg}")
+    for tag in TAGS
+        mut count := 0
+        for m in notes
+            if m.tag == tag
+                count += 1
+        print("{tag}: {count}")
+
+@test fn parses_owner_and_message()
+    got := parse_note(" TODO(kim): fix it") else Parsed(tag: "", owner: "", msg: "")
+    assert_eq(got, Parsed(tag: "TODO", owner: "kim", msg: "fix it"))
+
+@test fn ignores_longer_words()
+    assert(parse_note(" TODOS later") == none)
+    assert(parse_note(" nothing here") == none)
+
+@test fn finds_comment_start()
+    assert_eq(comment_text("x := 1 // hi") else "", " hi")
+    assert_eq(comment_text("y = 2 # ho") else "", " ho")
+    assert(comment_text("plain code") == none)

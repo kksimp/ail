@@ -48,4 +48,7 @@ is an error, `assert_err` doesn't exist (and `ail fix` offered to rename it to `
   value is a likely bug but not wrong), and `@allow` (the `_` fix is the allowance).
   A program with an error gets none of these warnings (batch 8, 2026-11-13): they buried the error under
   noise and made a first draft noisier. Rejected: warning anyway (24 error cases gained an extra line).
+  `ail fix` doesn't apply the `_` fix (fix.apply.1): after `"{n"` is escaped `n` is unused, and renaming it
+  would hide what the author meant. Rejected: applying it only in the first round (a second `ail fix` then
+  still changed the file).
 - `ToJson` on `Map` and `T?` moved to its own lane: it needs generic `impl`s for a second builtin owner.

@@ -1,0 +1,11 @@
+nodes: 21
+'car' -> car(50) care(35) card(20)
+'ca' -> car(50) cat(40) care(35)
+'do' -> dog(30) door(15) dot(10)
+'d' -> dog(30) door(15) dot(10)
+'z' -> (none)
+'' -> car(50) cat(40) care(35)
+has car: true
+has ca: false
+has dot: true
+has dots: false

@@ -265,6 +265,11 @@ fn Refs.block(mut self, b List[ast.Stmt])
             expr(value)
             else_part(otherwise)
         Defer(inner, _) => stmt(inner)
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                expr(h)
+            for body in ast.select_bodies(arms)
+                block(body)
         _ => return
 
 fn Refs.else_part(mut self, o ast.Else)
@@ -435,5 +440,13 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
                         add(pos, tid)
                 add(pos, id)
             for x in fields
+                pattern(x)
+        StructPat(qualifier, _, _, sfields, pos) =>
+            if id := symbols.get(pk(pos))
+                if q := qualifier
+                    if tid := type_id(q)
+                        add(pos, tid)
+                add(pos, id)
+            for x in sfields
                 pattern(x)
         _ => return

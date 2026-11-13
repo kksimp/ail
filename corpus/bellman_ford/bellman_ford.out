@@ -1,0 +1,10 @@
+currency-like: 11 edges, 3 rounds
+  S: 0 via S
+  A: 2 via S -> B -> C -> A
+  B: 7 via S -> B
+  C: 4 via S -> B -> C
+  D: -2 via S -> B -> C -> A -> D
+  E: unreachable
+  F: unreachable
+with a cycle: 5 edges, 6 rounds
+  negative cycle reachable from S
