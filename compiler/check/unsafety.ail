@@ -100,12 +100,18 @@ fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
                 "an `extern c fn` parameter is passed by value, not `mut`",
                 "pass a raw pointer `*T` to let C write to memory",
             )
+        # A struct by value (ffi.struct.1) is placed by the platform's rules and
+        # counts toward no limit; a callback (ffi.cb.1) is a pointer.
+        if c_extra_ok(t, p.ty.pos, false)
+            if is_fn_ty(t)
+                ints += 1
+            continue
         if not c_layout(t) and t != Ty.Unknown
             err_help(
                 "ffi.decl.3",
                 p.ty.pos,
                 "{show(t)} has no C layout, so it can't be a parameter of an `extern c fn`",
-                "use `int`, `float`, `bool`, a sized number such as `i32` or `u8`, or a raw pointer `*T`",
+                "use `int`, `float`, `bool`, a sized number such as `i32` or `u8`, a raw pointer `*T`, a struct of those, or a `fn(...)` callback",
             )
         if t == Ty.Float or t == Ty.Num("f32")
             floats += 1
@@ -118,15 +124,17 @@ fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
             "`{f.name}` takes {ints} integer-like and {floats} float arguments; a C call takes at most 6 and 8",
             "declare a smaller wrapper, or pass a pointer to a struct-like buffer",
         )
+    mut rat := f.pos
+    if r := f.ret
+        rat = r.pos
+    if c_extra_ok(sig.ret, rat, true)
+        return
     if not c_layout(sig.ret) and sig.ret != Ty.Unknown and sig.ret != Ty.Unit
-        mut at := f.pos
-        if r := f.ret
-            at = r.pos
         err_help(
             "ffi.decl.3",
-            at,
+            rat,
             "{show(sig.ret)} has no C layout, so it can't be the result of an `extern c fn`",
-            "return `int`, `float`, `bool`, a sized number or a raw pointer, or nothing",
+            "return `int`, `float`, `bool`, a sized number, a raw pointer or a struct of those, or nothing",
         )
 
 ## ffi.export.2: a `pub export c fn` has the signature of an `extern c fn`
@@ -232,6 +240,8 @@ fn Checker.ptr_method(
 ## (unsafe.mem.3). None for the other `std.mem` functions.
 @allow("expr.match.3")
 fn Checker.mem_generic(mut self, f str, args List[ast.Arg], at ast.Pos, expect Ty?) Ty?
+    if f == "c_fn"
+        return mem_c_fn(args, at, expect)
     if f != "alloc" and f != "cast" and f != "free"
         return none
     want := if f == "free" then 1 else 2
