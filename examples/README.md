@@ -40,6 +40,7 @@ with `./ail fmt`.
 | `app_todo.ail` | A to-do list in a native window (`std.app`). Needs the app host; see `app_todo.rules`. |
 | `ui_hello.ail` | A window that says hello (`std.ui`). Needs a display; see `ui_hello.rules`. |
 | `bits.ail` | Bit operations on `int`: flags, a bitset, a hash mix; `shr` keeps the sign. |
+| `keyword_names.ail` | Keywords as names: a field `error`, `o.match`, the label `in:`, a method `any`, and derived JSON (`lex.kw.3`). |
 | `calendar.ail` | Dates, times and zones (`std.time.date`, `std.tz`): leap years, ISO 8601, DST, `in_zone`. Fixed values, same output every run. |
 | `tensors.ail` | Float tensors: scalars, unary minus, division, and the activations `relu`, `sigmoid`, `tanh`. |
 | `matrix.ail` | Agent-style matrix script: integer matrix product, transpose and row sums with `std.tensor`. |

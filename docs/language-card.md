@@ -122,6 +122,10 @@ fn main()
 
 `==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
 
+A keyword may name a field, a method or a label: `error str`, `o.error`,
+`Outcome(error: "")`, `fn T.any(self)`. In a method reach such a field as
+`self.error`; anywhere else a keyword is not a name.
+
 Variants can carry fields. Build them like structs; match them by position:
 
 ```ail

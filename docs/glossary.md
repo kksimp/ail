@@ -143,7 +143,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **JSON path** | The place of a failure in a document a derived `from_json` reads, from the root: `items[2].kind`. Messages read `missing PATH` or `PATH: problem` (`json.derive.3`, ADR 0343). |
 | **JSON value (`Json`)** | The standard `enum Json` (`Null`, `Bool`, `Num`, `Str`, `Arr`, `Obj`) that `parse_json` returns and `Json.to_text` prints. Numbers are `float`; objects keep document order (`json.type.1`, ADR 0161). |
 | **Key function** | The `by: \|x\| key` argument of `sorted`, `sort`, `min` and `max`: an expression evaluated once per element to order by. It is an argument form, not a value (ADR 0250). |
-| **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. Keywords can never be used as names (`lex.kw.1`, ADR 0114). |
+| **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. A keyword is not a name (`lex.kw.1`, ADR 0114), except as a field, after `.`, as a label before `:` and as a method name (`lex.kw.3`, ADR 1085). |
 | **Lazy binary splitting** | Splitting a parallel loop's range in half only when another worker is idle, so small or nested loops cost almost nothing (ADR 0238). |
 | **Literal pattern** | A `match` pattern that is an integer, character, string or `bool` literal (ADR 0138). |
 | **Lockfile** | `ail.lock`: the exact commit of every git dependency of the program, written by `ail run`/`ail test` when stale, refreshed by `ail pkg update` (`mod.pkg.8–9`, ADRs 0233, 0356). |

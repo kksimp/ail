@@ -603,9 +603,10 @@ fn derive_to_json(t TypeInfo) str ! DeriveError
         if v.fields.len() == 0
             out.push("        {v.name} => Json.Str(\"{v.name}\")\n")
         else
-            names := [f.name for f in v.fields]
+            # `v_` keeps a keyword-named field a plain name (lex.kw.3, ADR 1085).
+            names := ["v_{f.name}" for f in v.fields]
             kind := "{"                JsonMember(\"kind\", Json.Str(\"{v.name}\")),\n"}"
-            body := "Json.Obj({json_members(v.fields, "", "            ", kind)})"
+            body := "Json.Obj({json_members(v.fields, "v_", "            ", kind)})"
             out.push("        {v.name}({names.join(", ")}) => {body}\n")
     out.join("")
 
