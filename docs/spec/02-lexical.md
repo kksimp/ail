@@ -15,8 +15,10 @@ false fn for if impl in invariant match move mut none not or par pub ref require
 return self spawn struct todo trait true uhwhatnow unique unsafe use while with`.
 `uhwhatnow?`, with no space before the `?`, is one keyword token, the hole
 that asks (`expr.hole.3`); where `uhwhatnow` alone stands as an expression,
-the error carries a fix that adds the `?`. After `.` and before `(`, `any`
-names the list method `xs.any(f)` (`type.coll.22`). *(ADR 1067, ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872)*
+the error carries a fix that adds the `?`. In the positions of `lex.kw.3` a
+keyword is a name. The error's help names a replacement; for `error`, `todo`,
+`any`, `ref`, `enum`, `struct`, `use` and `pub` its fix renames the binding and
+each later use of the word in the function. *(ADR 1085, ADR 1067, ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872)*
 
 ```ail error=lex.kw.1
 fn main()
@@ -39,12 +41,34 @@ fn main()
     print(c)
 ```
 
+**lex.kw.3** — A keyword is a plain name where nothing else can stand: as a
+field of a struct or of an enum variant (except `pub`, `fn` and `invariant`,
+which begin a member line), after `.` (`o.error`, `xs.any(f)`), as a label
+before `:` in a call or literal (`Outcome(error: "")`), as a method name
+(`fn T.any(self)`, and `fn error(self)` inside a `trait` or `impl` block), and
+after `uses` (`trait.hash.1`). Inside a method a keyword-named field is
+reached as `self.error`; the bare word is the keyword. *(ADR 1085)*
+
+```ail rules=lex.kw.3
+struct Outcome
+    job str
+    error str
+
+fn Outcome.any(self) bool
+    self.error != ""
+
+fn main()
+    o := Outcome(job: "sync", error: "disk full")
+    print("{o.job}: {o.error} {o.any()}")
+```
+
 ## Names
 
 **lex.name.1** — A name starts with a letter (the Unicode `Alphabetic`
 property) or `_`, and continues with letters, ASCII digits `0`–`9` and `_`:
 the characters for which `char.is_alpha()` and `char.is_alnum()` are true
-(`type.char.2`). A name that is a keyword is the keyword (`lex.kw.1`).
+(`type.char.2`). A name that is a keyword is the keyword (`lex.kw.1`), except
+in the positions of `lex.kw.3`.
 *(ADR 0372)*
 
 ```ail rules=lex.name.1
@@ -364,6 +388,17 @@ fn main()
 fn main()
     c := 2          # `c` is not reserved outside `extern` and `use`
     print(c)        # 2
+```
+
+```ail rules=lex.kw.3
+struct Reply
+    in str          # a keyword names a field
+    match bool
+
+fn main()
+    r := Reply(in: "ping", match: true)
+    print(r.in)     # ping
+    print(r.match)  # true
 ```
 
 ```ail rules=lex.name.1

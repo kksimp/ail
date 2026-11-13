@@ -819,8 +819,8 @@ The function is called on the elements in order, at most once each.
 **type.coll.22** — `xs.any(f)` is `true` when `f` returns `true` for some
 element, and `xs.all(f)` when it does for every element (`true` for an empty
 list). Both stop at the first element that settles the answer. `f` returns
-`bool`. `any` is a keyword (`lex.kw.1`); after `.` and before `(` it names this
-method. *(ADR 1067)*
+`bool`. `any` is a keyword (`lex.kw.1`); after `.` it names this method
+(`lex.kw.3`). *(ADR 1067, ADR 1085)*
 
 **type.coll.23** — `xs.find(f)` returns the first element for which `f`
 returns `true`, or `none` (`T?`). *(ADR 1067)*
