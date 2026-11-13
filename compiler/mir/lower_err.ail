@@ -365,6 +365,12 @@ fn Lower.method_key(self, recv ast.Expr, name str) str?
     match recv_ty(recv)?
         Struct(s) => "{s}.{name}"
         Enum(s) => "{s}.{name}"
+        # `x.m()` on an `any T` (trait.any.1): every implementation has the trait's
+        # signature, so the first one says whether the call can fail (ADR 1109).
+        Any(t) =>
+            owners := traits.impls.get(t)?
+            one := owners.first()?
+            "{one}.{name}"
         _ => none
 
 ## The type of a receiver written as a local, an element `xs[i]` of a list
