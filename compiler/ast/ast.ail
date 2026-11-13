@@ -391,6 +391,9 @@ pub enum Pattern
     ## `Variant(p, ...)` whose fields hold patterns of their own
     ## (expr.match.13): a plain name binds its field, `_` ignores it.
     Nested(qualifier str?, name str, fields List[Pattern], pos Pos)
+    ## `Point(x: 0, y)` or `Circle(r: 1..=9)`: fields matched by name, a bare
+    ## name binding the field of that name (expr.match.14).
+    StructPat(qualifier str?, name str, labels List[str], fields List[Pattern], pos Pos)
 
 pub enum Literal
     IntLit(value str)

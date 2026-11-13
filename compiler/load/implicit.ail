@@ -227,6 +227,9 @@ fn SelfCx.pattern(mut self, p ast.Pattern)
         Nested(_, _, nfields, _) =>
             for a in nfields
                 self.pattern(a)
+        StructPat(_, _, _, sfields, _) =>
+            for a in sfields
+                self.pattern(a)
         Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => 0
 
 fn SelfCx.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]

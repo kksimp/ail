@@ -32,6 +32,7 @@ NEST_MISSING_MAX := 8
 @allow("expr.match.3") fn nests(p ast.Pattern) bool
     match p
         Nested => return true
+        StructPat => return true
         Alt(alts, _) =>
             for a in alts
                 if nests(a)
@@ -123,6 +124,7 @@ fn Checker.nest_wild_warn(mut self, t Ty, st NestRows, at ast.Pos)
     match p
         Variant(_, n, _, _) => return variant_index(e, n)
         Nested(_, n, _, _) => return variant_index(e, n)
+        StructPat(_, n, _, _, _) => return variant_index(e, n)
         _ => return none
     none
 
@@ -207,8 +209,18 @@ fn Checker.nest_missing(mut self, t Ty, st NestRows, arms List[ast.Arm], at ast.
             for k in 0..ps.len()
                 out.push(npat(xs[k], ps[k], mut names))
             return NCov.Con(key: "()", args: out)
-        Variant(q, n, given, at) => return nvariant(t, q, n, at, given, none, mut names)
-        Nested(q, n, fields, at) => return nvariant(t, q, n, at, none, fields, mut names)
+        Variant(q, n, given, at) =>
+            if is_record(t)
+                return nstruct(t, n, at, none, given, none, mut names)
+            return nvariant(t, q, n, at, none, given, none, mut names)
+        Nested(q, n, fields, at) =>
+            if is_record(t)
+                return nstruct(t, n, at, none, none, fields, mut names)
+            return nvariant(t, q, n, at, none, none, fields, mut names)
+        StructPat(q, n, labels, fields, at) =>
+            if is_record(t)
+                return nstruct(t, n, at, labels, none, fields, mut names)
+            return nvariant(t, q, n, at, labels, none, fields, mut names)
     NCov.Any
 
 ## The coverage key of a literal pattern; `true` and `false` are `bool`'s
@@ -262,6 +274,7 @@ fn Checker.nvariant(
     qualifier str?,
     n str,
     at ast.Pos,
+    labels List[str]?,
     given List[ast.Ident]?,
     subs List[ast.Pattern]?,
     mut names List[Binding],
@@ -303,6 +316,8 @@ fn Checker.nvariant(
         written = g.len()
     if s := subs
         written = s.len()
+    if labels != none
+        written = -1
     if written >= 0 and written != fields.len()
         shown := [f.name for f in fields]
         hint := if fields.len()
@@ -317,7 +332,10 @@ fn Checker.nvariant(
         return NCov.Any
     ts := subst_all(variant_types[e][v], binds_of(enum_params[e], args))
     mut out := List[NCov]()
-    if g := given
+    if l := labels
+        given_subs := subs else []
+        out = by_label([f.name for f in fields], ts, l, given_subs, "`{n}`", mut names)
+    elif g := given
         for k in 0..g.len()
             if g[k].name != "_"
                 nbind(ts[k], g[k].name, g[k].pos, mut names)
@@ -329,6 +347,146 @@ fn Checker.nvariant(
         out = [NCov.Any for _ in fields]
     NCov.Con(key: "v{v}", args: out)
 
+## Whether `t` is a struct, matched by its fields (expr.match.14).
+@allow("expr.match.3") fn is_record(t Ty) bool
+    match t
+        Struct => true
+        _ => false
+
+## Whether a shape matches every value of a struct or tuple: nothing but
+## names and `_` inside.
+@allow("expr.match.3") fn irrefutable(c NCov) bool
+    match c
+        Any => return true
+        Con(k, args) =>
+            if k != "rec" and k != "()"
+                return false
+            for a in args
+                if not irrefutable(a)
+                    return false
+            return true
+        Or(alts) =>
+            for a in alts
+                if irrefutable(a)
+                    return true
+            return false
+    false
+
+## The shapes of fields matched by name (expr.match.14): `labels[k]` names
+## the field `subs[k]` matches; a field not named matches any value.
+fn Checker.by_label(
+    mut self,
+    fnames List[str],
+    ts List[Ty],
+    labels List[str],
+    subs List[ast.Pattern],
+    owner str,
+    mut names List[Binding],
+) List[NCov]
+    mut out := [NCov.Any for _ in fnames]
+    mut seen := List[str]()
+    for k in 0..labels.len()
+        lab := labels[k]
+        sub := subs[k]
+        mut idx := -1
+        for j in 0..fnames.len()
+            if fnames[j] == lab
+                idx = j
+        if idx < 0
+            mut d := new_diag("expr.match.14", pattern_pos(sub), "{owner} has no field `{lab}`")
+            if near := suggest(lab, fnames)
+                d = d.did_you_mean(lab, near)
+            else
+                d = d.with_help("its fields are {list_names(fnames)}")
+            diags.push(d)
+            names.extend(tuple_pattern_names(sub))
+            continue
+        if seen.contains(lab)
+            err_help(
+                "expr.match.14",
+                pattern_pos(sub),
+                "the field `{lab}` is matched twice",
+                "join the two patterns into one, or use `|` between them",
+            )
+            names.extend(tuple_pattern_names(sub))
+            continue
+        seen.push(lab)
+        out[idx] = npat(ts[idx], sub, mut names)
+    out
+
+## `Point`, `Point(x, y)` (`given`, each a field's name binding it) or
+## `Point(x: p, y)` (`labels`) on a struct value `t` (expr.match.14).
+@allow("expr.match.3")
+fn Checker.nstruct(
+    mut self,
+    t Ty,
+    n str,
+    at ast.Pos,
+    labels List[str]?,
+    given List[ast.Ident]?,
+    subs List[ast.Pattern]?,
+    mut names List[Binding],
+) NCov
+    mut si := -1
+    mut args := List[Ty]()
+    match t
+        Struct(i, a) =>
+            si = i
+            args = a
+        _ => si = -1
+    if si < 0
+        nquiet(given, subs, mut names)
+        return NCov.Any
+    decl := prog.structs[si]
+    if n != decl.name
+        err_help(
+            "expr.match.14",
+            at,
+            "`{n}` doesn't name the struct of this value, {show(t)}",
+            "write `{decl.name}(field: pattern, ...)`, or `_`",
+        )
+        nquiet(given, subs, mut names)
+        return NCov.Any
+    fnames := [f.name for f in decl.fields]
+    ts := subst_all(field_types[si], binds_of(struct_params[si], args))
+    if l := labels
+        given_subs := subs else []
+        return NCov.Con(key: "rec", args: by_label(fnames, ts, l, given_subs, "`{n}`", mut names))
+    if s := subs
+        first := if fnames.len() > 0 then fnames[0] else "x"
+        err_help(
+            "expr.match.14",
+            at,
+            "a struct pattern matches fields by name, not by position",
+            "write each as `field: pattern`, e.g. `{n}({first}: _)`",
+        )
+        nquiet(none, s, mut names)
+        return NCov.Any
+    mut out := [NCov.Any for _ in fnames]
+    for g in given else []
+        if g.name == "_"
+            err_help(
+                "expr.match.14",
+                g.pos,
+                "`_` names no field of `{n}`",
+                "leave the field out to match any value",
+            )
+            continue
+        mut idx := -1
+        for j in 0..fnames.len()
+            if fnames[j] == g.name
+                idx = j
+        if idx < 0
+            mut d := new_diag("expr.match.14", g.pos, "`{n}` has no field `{g.name}`")
+            if near := suggest(g.name, fnames)
+                d = d.did_you_mean(g.name, near)
+            else
+                d = d.with_help("a bare name in a struct pattern binds the field of that name; its fields are {list_names(fnames)}")
+            diags.push(d)
+            continue
+        nbind(ts[idx], g.name, g.pos, mut names)
+    NCov.Con(key: "rec", args: out)
+
 ## The constructors of `t` when it has finitely many: an enum's variants,
 ## `true` and `false`, or a tuple's one.
 @allow("expr.match.3") fn Checker.ctors(self, t Ty) List[str]?
@@ -336,6 +494,7 @@ fn Checker.nvariant(
         Enum(e, _) => return ["v{k}" for k in 0..prog.enums[e].variants.len()]
         Bool => return ["true", "false"]
         Tuple => return ["()"]
+        Struct => return ["rec"]
         _ => return none
     none
 
@@ -356,6 +515,7 @@ fn Checker.complete(self, t Ty, hs List[str]) bool
                     return subst_all(variant_types[e][v], binds_of(enum_params[e], args))
             return []
         Tuple(xs) => return xs
+        Struct(si, args) => return subst_all(field_types[si], binds_of(struct_params[si], args))
         _ => return []
     []
 
@@ -371,6 +531,13 @@ fn Checker.complete(self, t Ty, hs List[str]) bool
                         return "{prog.enums[e].name}.{vs[v].name}"
                     return "{vs[v].name}({args.join(", ")})"
         Tuple => return "({args.join(", ")})"
+        # expr.match.14: the fields that matter, by name; `_` for none.
+        Struct(si, _) =>
+            fs := prog.structs[si].fields
+            parts := ["{fs[j].name}: {args[j]}" for j in 0..args.len() if j < fs.len() and args[j] != "_"]
+            if parts.len() == 0
+                return "_"
+            return "{prog.structs[si].name}({parts.join(", ")})"
         _ => return k
     k
 
