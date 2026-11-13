@@ -15,11 +15,14 @@ function, then:
 
 Usage:
   matrix.py emit DIR                 write the group programs to DIR
-  matrix.py run AIL_BIN [--keep DIR] check, build and run every group with the
+  matrix.py run AIL_BIN [--keep DIR] [--freeze DIR]
+                                     check, build and run every group with the
                                      stage-2 binary AIL_BIN (AIL_ROOT and
-                                     AIL_COMPILER set by the caller)
-  matrix.py gate AIL_BIN DIR         the gate: build and run the committed
-                                     programs in DIR, diff against NAME.out
+                                     AIL_COMPILER set by the caller); --freeze
+                                     writes each group that built and ran as
+                                     DIR/NAME.ail and its output as NAME.out,
+                                     the gate's `native_matrix` suite
+                                     (tests/native_matrix/)
 
 Measurement only: it edits no source.
 """
@@ -167,7 +170,7 @@ MAPK = {  # Map[@T, int]: the element type as the key
     "filter": "m := {@A: 1, @B: 2}\nprint(m.filter(|k, v| v > 1).len())",
     "map": "m := {@A: 1, @B: 2}\nprint(m.map(|k, v| v).len())",
     "flat_map": "m := {@A: 1, @B: 2}\nprint(m.flat_map(|k, v| [v, v]).len())",
-    "map_values": "m := {@A: 1, @B: 2}\nprint(m.map_values(|v| v * 2).len())",
+    "map_values": "m := {@A: 1, @B: 2}\nprint(m.map_values(|k, v| v * 2).len())",
     "push": "mut m := Map[@T, List[int]]()\nm.push(@A, 1)\nm.push(@A, 2)\nprint(m[@A].len())",
     "eq": "m := {@A: 1}\nprint(m == {@A: 1})",
     "print": "m := {@A: 1}\nprint(m)",
@@ -186,7 +189,7 @@ MAPV = {  # Map[str, @T]: the element type as the value
     "values": "m := {\"a\": @A, \"b\": @B}\nprint(m.values().len())",
     "values_sorted": "m := {\"a\": @B, \"b\": @A}\nprint(m.values().sorted().len())",
     "for": "m := {\"a\": @A, \"b\": @B}\nmut n := 0\nfor k, v in m\n    n += 1\nprint(n)",
-    "map_values": "m := {\"a\": @A}\nprint(m.map_values(|v| @K2).len())",
+    "map_values": "m := {\"a\": @A}\nprint(m.map_values(|k, v| v).len())",
     "filter": "m := {\"a\": @A, \"b\": @B}\nprint(m.filter(|k, v| v == @A).len())",
     "nested_update": "mut m := Map[str, List[@T]]()\nm[\"a\"] = [@A]\nm[\"a\"].push(@B)\nprint(m[\"a\"].len())",
     "eq": "m := {\"a\": @A}\nprint(m == {\"a\": @A})",
@@ -517,8 +520,10 @@ def run(binary, cmd, path, out=None, timeout=300):
     return r.returncode, r.stdout + r.stderr
 
 
-def drive(binary, keep):
+def drive(binary, keep, freeze=None):
     work = keep or tempfile.mkdtemp()
+    if freeze:
+        os.makedirs(freeze, exist_ok=True)
     os.makedirs(work, exist_ok=True)
     holes, refused, runs, built = [], 0, [], 0
     for stem, snippets, decls in groups():
@@ -581,6 +586,11 @@ def drive(binary, keep):
             code, rout = 124, "timeout"
         with open(os.path.join(work, stem + ".run"), "w") as f:
             f.write(rout)
+        if freeze and code == 0:
+            with open(os.path.join(freeze, stem + ".ail"), "w") as f:
+                f.write(text)
+            with open(os.path.join(freeze, stem + ".out"), "w") as f:
+                f.write(rout)
         if code != 0:
             last = [l for l in rout.splitlines() if l.startswith("-- ")]
             at = last[-1][3:] if last else stem
@@ -631,8 +641,10 @@ def main():
         emit(sys.argv[2])
         return 0
     if len(sys.argv) >= 3 and sys.argv[1] == "run":
-        keep = sys.argv[4] if len(sys.argv) >= 5 and sys.argv[3] == "--keep" else None
-        return drive(sys.argv[2], keep)
+        opts = sys.argv[3:]
+        keep = opts[opts.index("--keep") + 1] if "--keep" in opts else None
+        freeze = opts[opts.index("--freeze") + 1] if "--freeze" in opts else None
+        return drive(sys.argv[2], keep, freeze)
     print(__doc__)
     return 2
 
