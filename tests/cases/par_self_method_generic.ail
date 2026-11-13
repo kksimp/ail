@@ -8,7 +8,7 @@ struct Shelf[T]
 fn Shelf.at(self, i int) T
     items[i]
 
-fn Shelf.copy(self) List[T]
+fn Shelf.all_items(self) List[T]
     mut out := List[T]()
     for i in 0..items.len()
         out.push(at(i))
@@ -16,4 +16,4 @@ fn Shelf.copy(self) List[T]
 
 fn main()
     s := Shelf(items: [10, 20, 30])
-    print(s.copy())
+    print(s.all_items())
