@@ -2,7 +2,7 @@
 ## a message by picking the shift that yields the most common English letters.
 
 fn rotate(c char, base int, k int) char
-    char.from_code((c.code() - base + k) % 26 + base)
+    char.from_code((c.code() - base + k) % 26 + base) else c
 
 fn shift(text str, key int) str
     k := (key % 26 + 26) % 26

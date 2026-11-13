@@ -62,8 +62,8 @@ fn main() !
 
 @test fn missing_field_is_rejected()
     j := parse_json("\{\"name\": \"Dee\"}")?
-    if p := Person.from_json(j)
-        assert_eq(p.name, "unreachable")
+    p := Person.from_json(j) else Person(name: "rejected", age: 0, tags: [], email: none)
+    assert_eq(p.name, "rejected")
 
 @test fn birthday_adds_a_year()
     older := birthday([Person(name: "A", age: 1, tags: [], email: none)])
