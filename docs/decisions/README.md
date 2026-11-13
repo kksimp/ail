@@ -892,3 +892,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |
 | [1105](1105-scoped-caps-in-manifests-and-review.md) | Scoped capabilities in `ail.pkg` (`caps fs.read=./data`) give a run its policy; `ail review` reports widened scopes *(delegated)* | Accepted | 2026-11-13 |
 | [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |
+| [1113](1113-check-output-for-agents.md) | `ail check` output for agents: `ok` line, `next:` on each error, JSON schema and summary record, exit statuses *(delegated)* | Accepted | 2026-11-13 |
