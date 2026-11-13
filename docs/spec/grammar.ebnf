@@ -135,8 +135,9 @@ StmtInner   = FnDecl                                             (* type.fn.9: a
             | With
             | 'unsafe' Block                                     (* unsafe.block.1 *)
             | Select
-            | 'break'
-            | 'continue'
+            | NAME ':' ( For | While )                           (* expr.loop.9: a labeled loop *)
+            | 'break' [ NAME ]                                   (* expr.loop.10: `break outer` *)
+            | 'continue' [ NAME ]
             | 'return' [ Expr ]
             | 'yield' Expr                                       (* expr.yield.2 *)
             | Assign
@@ -152,7 +153,7 @@ Otherwise   = 'else' ( Block                                     (* err.else.2 *
                      | NAME Block                                (* err.else.3: binds the error *)
                      | Leave
                      | Expr ) ;
-Leave       = 'return' [ Expr ] | 'break' | 'continue' ;
+Leave       = 'return' [ Expr ] | 'break' [ NAME ] | 'continue' [ NAME ] ;
 
 While       = 'while' ( NAME ':=' Range | Range ) Block ;        (* expr.loop.1, expr.loop.8 *)
 For         = 'for' [ 'mut' ] NAME { ',' NAME } 'in' Range [ ElseTail ] Block ;   (* expr.loop.1, type.tuple.5 *)
