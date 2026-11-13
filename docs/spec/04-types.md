@@ -130,8 +130,8 @@ imply `a == b`. *(ADR 0130)*
 
 ```ail fragment
 n := 0.0 / 0.0
-[2.0, n, 1.0].sorted()  # [1.0, 2.0, nan]
-n < 1.0                 # false: the operator is IEEE
+print([2.0, n, 1.0].sorted())  # [1.0, 2.0, nan]
+print(n < 1.0)                 # false: the operator is IEEE
 ```
 
 > **Note:** float literal patterns are an error (`expr.match.7`). The same
@@ -155,9 +155,9 @@ values are the default methods of `Ord` (ADR 0137).
 
 ```ail fragment
 x := 9223372036854775807
-x.checked_add(1)        # none
-x.wrapping_add(1)       # -9223372036854775808
-x.saturating_add(1)     # 9223372036854775807
+print(x.checked_add(1))        # none
+print(x.wrapping_add(1))       # -9223372036854775808
+print(x.saturating_add(1))     # 9223372036854775807
 ```
 
 **type.num.13** — A sized number is a value of one of the types of

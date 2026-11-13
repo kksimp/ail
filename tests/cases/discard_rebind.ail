@@ -1,0 +1,29 @@
+## eff.use.1 (ADR 1082): `_ :=` throws a value away and binds nothing, so it
+## can be written any number of times in one function: plain, with `else`,
+## and with `?`.
+error struct BadNum
+    text str
+
+fn num(text str) int ! BadNum
+    text.to_int() else return BadNum(text: text)
+
+fn twice(n int) int
+    n * 2
+
+fn run() ! BadNum
+    _ := twice(1)
+    _ := twice(2)
+    _ := num("x") else 0
+    _ := num("y") else err
+        print("bad {err.text}")
+        0
+    _ := num("3")?
+    _ := twice(3)
+    print("run done")
+
+fn main()
+    _ := twice(4)
+    _ := num("z") else -1
+    _ := twice(5)
+    run() else err
+        print("failed {err.text}")

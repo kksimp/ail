@@ -120,6 +120,9 @@ List.clear() [mut self] ; type.coll.14 ; remove all empty
 List.reverse() [mut self] ; type.coll.14 ; reverse in place flip order
 List.reversed() List[T] ; type.coll.27 ; reversed copy reverse order descending new list
 List.any(f) bool ; type.coll.22 ; any some exists predicate test true for one element
+List.all(f) bool ; type.coll.22 ; all every each predicate test true for every element
+List.find(f) T? ; type.coll.23 ; find first element matching predicate search lookup
+List.filter(f) List[T] ; type.coll.24 ; filter keep select elements matching predicate where
 List.swap(i, j) [mut self] ; type.coll.7 ; swap exchange two elements
 List.contains(x) bool ; type.coll.9 ; contains includes has member
 List.index_of(x) int? ; type.coll.9 ; index position search find element

@@ -4,7 +4,6 @@ LIMIT := 5
 struct Bad
     a int = LIMIT
     b int = "x"
-    c int = len("abc")
     d int
     e int = 1
 
