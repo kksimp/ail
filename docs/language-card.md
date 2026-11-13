@@ -569,7 +569,7 @@ Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. A call whose value is dropped and that has no effect is an error: `xs.sorted()` alone
 means `xs.sort()`; write `_ := f()` to drop a value on purpose (`eff.use.1`).
-`ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
+`ail run --deterministic` denies `clock`, `random`, `proc` and `net`. `ail run --allow fs.read=./data,net=host:443` allows only what it names, and a use outside the scope ends with `trap[eff.allow.N]`.
 
 `unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`. Structs of C-typed fields pass to C by value; a `fn(...)` parameter of an `extern c fn` takes a declared function's name as a callback (`mem.c_fn(f)` gives a `*u8`).
 

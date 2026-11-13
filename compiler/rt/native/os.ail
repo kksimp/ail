@@ -288,6 +288,7 @@ fn os_str_cmp(a int, b int) int
 
 ## `fs.exists(path)` (std.fs.4).
 fn fs_exists(path str) bool
+    pol_fs(path, false, "fs.exists")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         return false
@@ -569,6 +570,7 @@ fn os_env_get(name str) str
 ## `env.vars()` (std.env.5): the variables whose names and values are UTF-8,
 ## as a `Map[str, str]` in name order (byte order).
 fn env_vars() int
+    pol := pol_env_vars_begin()
     m := map_new(1, 0, 0)
     names := list_new(16)
     mut e := os_envp()
@@ -603,6 +605,8 @@ fn env_vars() int
         i += 1
     for k in 0..n
         name := str_at(load64(data + 8 * k))
+        if not pol_env_visible(pol, name)
+            continue
         v := os_env_get(name)
         map_set(m, str_addr(name), str_addr(v))
     os_succeed()
@@ -1044,18 +1048,21 @@ fn os_error(path str, kind int, at str)
     err_tag(err_tag_of("fs.IoError"))
 
 fn fs_read_text(path str, at str) str
+    pol_fs(path, false, "fs.read_text")
     s := os_fs_read_text(path)
     if not os_ok()
         os_error(path, os_kind(), at)
     s
 
 fn fs_read_bytes(path str, at str) str
+    pol_fs(path, false, "fs.read_bytes")
     s := os_fs_read_bytes(path)
     if not os_ok()
         os_error(path, os_kind(), at)
     s
 
 fn fs_write_text(path str, text str, at str)
+    pol_fs(path, true, "fs.write_text")
     os_fs_write_text(path, text)
     if not os_ok()
         os_error(path, os_kind(), at)
@@ -1063,21 +1070,25 @@ fn fs_write_text(path str, text str, at str)
 ## `fs.write_bytes(path, data)` (std.fs.14): a `bytes` object has a `str`'s
 ## layout, so the text writer takes it as it is.
 fn fs_write_bytes(path str, data str, at str)
+    pol_fs(path, true, "fs.write_bytes")
     os_fs_write_text(path, data)
     if not os_ok()
         os_error(path, os_kind(), at)
 
 fn fs_append_text(path str, text str, at str)
+    pol_fs(path, true, "fs.append_text")
     os_fs_append_text(path, text)
     if not os_ok()
         os_error(path, os_kind(), at)
 
 fn fs_append_bytes(path str, data str, at str)
+    pol_fs(path, true, "fs.append_bytes")
     os_fs_append_text(path, data)
     if not os_ok()
         os_error(path, os_kind(), at)
 
 fn fs_list_dir(path str, at str) List[int]
+    pol_fs(path, false, "fs.list_dir")
     xs := os_fs_list_dir(path)
     if not os_ok()
         os_error(path, os_kind(), at)
@@ -1100,6 +1111,7 @@ fn os_is_real_dir(path str) bool
 ## `fs.walk(dir)` (std.fs.8): every file below `dir`, joined with `dir` and
 ## sorted by bytes; a directory that can't be read fails with its own path.
 fn fs_walk(dir str, at str) List[int]
+    pol_fs(dir, false, "fs.walk")
     mut out := List[int]()
     mut dirs := [dir]
     mut next := 0
@@ -1127,6 +1139,7 @@ fn fs_walk(dir str, at str) List[int]
 ## `is_dir`; links are followed. The `fstat` layout of each target: size at 48
 ## (macOS 72), modification seconds at 88 (macOS 40) with nanoseconds 8 after.
 fn fs_metadata(path str, at str) int
+    pol_fs(path, false, "fs.metadata")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -1274,6 +1287,8 @@ fn os_copy_dir(from str, to str) str
 ## `fs.copy(from, to)` (std.fs.12). The path of a failure: `from` when it is
 ## missing, else `to` (or the entry that failed inside a copied tree).
 fn fs_copy(from str, to str, at str)
+    pol_fs(from, false, "fs.copy")
+    pol_fs(to, true, "fs.copy")
     p := os_cstr(OS_PATH_A, from)
     if p == 0 or os_access(p) < 0
         k := if p == 0 then -2 else os_access(p)
@@ -1297,11 +1312,13 @@ fn fs_copy(from str, to str, at str)
         os_error(to, os_kind(), at)
 
 fn fs_remove(path str, at str)
+    pol_fs(path, true, "fs.remove")
     os_fs_remove(path)
     if not os_ok()
         os_error(path, os_kind(), at)
 
 fn fs_make_dir(path str, at str)
+    pol_fs(path, true, "fs.make_dir")
     os_fs_make_dir(path)
     if not os_ok()
         os_error(path, os_kind(), at)
@@ -1332,6 +1349,7 @@ fn os_mkdir_private(path int) int
 ## two callers never share one. A name already taken is tried again with new
 ## digits. The failure's path is the directory it tried last.
 fn fs_make_temp_dir(prefix str, at str) str
+    pol_fs(fs_temp_dir(), true, "fs.make_temp_dir")
     base := fs_temp_dir()
     mut last := base
     mut tries := 0
@@ -1367,18 +1385,26 @@ fn fs_make_temp_dir(prefix str, at str) str
 
 ## A failure's path is `from` when `from` is missing, else `to` (std.fs.12).
 fn fs_rename(from str, to str, at str)
+    pol_fs(from, true, "fs.rename")
+    pol_fs(to, true, "fs.rename")
     os_fs_rename(from, to)
     if not os_ok()
         k := os_kind()
         os_error(if k == K_NOT_FOUND then from else to, k, at)
 
+## `env.get(name)`. The runtime itself reads variables through `env_raw`, which asks no policy (eff.allow.6).
 fn env_get(name str) str
+    pol_env(name)
+    env_raw(name)
+
+fn env_raw(name str) str
     s := os_env_get(name)
     if os_ok()
         return s
     str_at(0)
 
 fn env_home() str
+    pol_env_home()
     s := os_env_home()
     if os_ok()
         return s
@@ -1404,6 +1430,7 @@ fn str_float_opt(s str) int
 ## `statfs64` (syscall 345) `f_bsize` (32 bits) at 0, `f_blocks` 8, `f_bavail` 24.
 ## Windows: GetDiskFreeSpaceExW (`win_volume`).
 fn fs_volume(path str, at str) int
+    pol_fs(path, false, "fs.volume")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -1439,6 +1466,7 @@ fn fs_volume(path str, at str) int
 ## `fs.read_range(path, offset, len)` (std.fs.25): up to `len` bytes from
 ## `offset`; fewer at the end of the file, none past it.
 fn fs_read_range(path str, off int, len int, at str) str
+    pol_fs(path, false, "fs.read_range")
     if off < 0 or len < 0
         flush()
         out_str("trap[std.fs.25]: negative offset or length\n")
@@ -1497,6 +1525,7 @@ fn fs_read_range(path str, off int, len int, at str) str
 ## the 4096-byte Linux page). An empty file gives an ordinary `bytes` copy.
 ## Windows maps a view the same way (`fs_map_win`).
 fn fs_map(path str, at str) str
+    pol_fs(path, false, "fs.map")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -1745,6 +1774,7 @@ fn os_fs_trash(path str)
         os_fail_kind(k)
 
 fn fs_trash(path str, at str)
+    pol_fs(path, true, "fs.trash")
     os_fs_trash(path)
     if not os_ok()
         os_error(path, os_kind(), at)

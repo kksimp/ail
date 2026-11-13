@@ -358,7 +358,7 @@ fn tz_dir(k int) str
 ## `AIL_ROOT`; the rest are the system directories, none on Windows.
 fn tz_dir_at(k int) str
     if k == 0
-        root := env_get("AIL_ROOT")
+        root := env_raw("AIL_ROOT")
         if str_addr(root) == 0
             return ""
         return str_cat3(root, "/", "tools/tzdata/zones")
@@ -396,7 +396,7 @@ fn tz_offset(zone str, secs int) int
 ## UTF-16 string at byte 172) looked up in `tools/tzdata/windows-zones.txt`,
 ## lines `Windows ID<TAB>IANA name`. `UTC` when any step fails.
 fn tz_win_system() str
-    root := env_get("AIL_ROOT")
+    root := env_raw("AIL_ROOT")
     if str_addr(root) == 0
         return "UTC"
     info := alloc(432, KIND_ATOMIC)
@@ -446,7 +446,7 @@ fn tz_win_system() str
 ## `tz.system()` (std.tz.2): `TZ` if it names a safe zone, else the zone
 ## `/etc/localtime` links to, else `UTC`.
 fn tz_system() str
-    t := env_get("TZ")
+    t := env_raw("TZ")
     if str_addr(t) != 0
         tp := str_addr(t)
         n := load64(tp)

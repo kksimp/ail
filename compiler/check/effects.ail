@@ -433,6 +433,47 @@ pub fn parse_deny(list str)(List[str], str)
             uniq.push(c)
     (uniq, "")
 
+## The entry names `--allow` takes (eff.allow.2) and the ones that may carry a `=SCOPE`.
+ALLOW_NAMES := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env", "clock", "random", "ui", "app", "unsafe"]
+ALLOW_SCOPED := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env"]
+
+## `--allow LIST` (eff.allow.1-2): what the list leaves out, as the capabilities `--deny` takes
+## (`unsafe` and `hw` stand for unsafe code, which no scope can contain), and the usage error
+## text (empty when the list is fine). `none` allows nothing.
+pub fn parse_allow(list str)(List[str], str)
+    mut allowed := List[str]()
+    for raw in list.split(",")
+        entry := raw.trim()
+        if entry == "" or entry == "none"
+            continue
+        mut name := entry
+        mut scoped := false
+        eq := entry.find("=")
+        if eq != none
+            at := eq else 0
+            name = entry.slice(0, at)
+            scoped = true
+            if entry.slice(at + 1, entry.len()) == ""
+                return ([], "`{entry}` has no scope after `=`; write `{name}=SCOPE`, or `{name}` for no limit (eff.allow.2)")
+        if not ALLOW_NAMES.contains(name)
+            return ([], "`{name}` is not something `--allow` takes; use {ALLOW_NAMES.join(", ")} (eff.allow.2)")
+        if scoped and not ALLOW_SCOPED.contains(name)
+            return ([], "`{name}` has no scopes; write `{name}` alone (eff.allow.2)")
+        allowed.push(name)
+    mut out := List[str]()
+    for c in CAPABILITIES
+        mut keep := allowed.contains(c)
+        if c == "fs" and (allowed.contains("fs.read") or allowed.contains("fs.write"))
+            keep = true
+        if c == "net" and allowed.contains("net.serve")
+            keep = true
+        if not keep
+            out.push(c)
+    if not allowed.contains("unsafe")
+        out.push("unsafe")
+        out.push("hw")
+    (out.sorted(), "")
+
 ## eff.cap.1: `main` must not reach a denied capability. One diagnostic per
 ## capability, naming the chain of calls.
 fn Checker.check_denied(self) List[Diag]
@@ -454,7 +495,7 @@ fn Checker.check_denied(self) List[Diag]
                     "eff.cap.1",
                     prog.fns[main].pos,
                     "the program reaches the denied capability `{e}`: {fx.chain(prog, main, e)}",
-                ).with_help("remove the call, or run without denying `{e}`"),
+                ).with_help(if e == "unsafe" or e == "hw" then "unsafe code can step outside every `--allow` scope; remove it, or add `unsafe` to `--allow` to accept that" else "remove the call, or allow `{e}` (`--allow {e}`, or `{e}=SCOPE` where it takes one), or run without denying it"),
             )
     out
 

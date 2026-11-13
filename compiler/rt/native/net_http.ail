@@ -686,6 +686,7 @@ fn http_exchange_on(
     scheme := str_at(load64(u))
     host := str_at(load64(u + 8))
     port := load64(u + 16)
+    pol_net(host, port, "net.request")
     timeout := if spec == 0 then NET_DEFAULT_MS else load64(spec + 8)
     cms := if spec == 0 then 0 else load64(spec + 16)
     px := proxy_find(scheme, host, port, url, at)

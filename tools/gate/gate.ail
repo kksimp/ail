@@ -3165,6 +3165,131 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     fs.write_text("{base}/leak/small.ail", "fn main()\n    print(1)\n") else return
     tool("leak quiet", "{base}/leak", ["leak", "small.ail"], 0, ["no growth"])
+    # eff.allow.1-9 (ADR 1072): scoped capabilities. Each program runs under `ail run --allow`; a denial is one trap line.
+    sh_run("mkdir -p {base}/allow/data {base}/allow/secret")
+    fs.write_text("{base}/allow/data/a.txt", "alpha") else return
+    fs.write_text("{base}/allow/secret/s.txt", "hidden") else return
+    fs.write_text("{base}/allow/inside.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"data/a.txt\") else \"no\")",
+    ])) else return
+    tool("allow read in scope", "{base}/allow", ["run", "--allow", "fs.read=./data", "inside.ail"], 0, ["alpha"])
+    tool("allow read, bare fs", "{base}/allow", ["run", "--allow", "fs", "inside.ail"], 0, ["alpha"])
+    tool("allow read, two entries", "{base}/allow", ["run", "--allow", "fs.read=./nothing,fs.read=./data", "inside.ail"], 0, ["alpha"])
+    tool("allow read out of scope", "{base}/allow", ["run", "--allow", "fs.read=./secret", "inside.ail"], 1, ["trap[eff.allow.3]", "fs.read of", "by fs.read_text", "--allow fs.read="])
+    tool("allow nothing", "{base}/allow", ["run", "--allow", "none", "inside.ail"], 2, ["eff.cap.1", "fs"])
+    fs.write_text("{base}/allow/outside.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"secret/s.txt\") else \"no\")",
+    ])) else return
+    tool("allow read outside", "{base}/allow", ["run", "--allow", "fs.read=./data", "outside.ail"], 1, ["trap[eff.allow.3]", "secret", "--allow fs.read="])
+    fs.write_text("{base}/allow/dots.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"data/../secret/s.txt\") else \"no\")",
+    ])) else return
+    tool("allow dotdot traversal", "{base}/allow", ["run", "--allow", "fs.read=./data", "dots.ail"], 1, ["trap[eff.allow.3]", "secret"])
+    fs.write_text("{base}/allow/dots2.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"./data/../data/a.txt\") else \"no\")",
+    ])) else return
+    tool("allow dotdot inside scope", "{base}/allow", ["run", "--allow", "fs.read=./data", "dots2.ail"], 0, ["alpha"])
+    fs.write_text("{base}/allow/prefix.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.exists(\"data_extra/a.txt\"))",
+    ])) else return
+    tool("allow sibling with the same prefix", "{base}/allow", ["run", "--allow", "fs.read=./data", "prefix.ail"], 1, ["trap[eff.allow.3]", "data_extra"])
+    fs.write_text("{base}/allow/writer.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    fs.write_text(\"data/b.txt\", \"beta\") else print(\"failed\")",
+        "    print(\"done\")",
+    ])) else return
+    tool("allow write needs fs.write", "{base}/allow", ["run", "--allow", "fs.read=./data", "writer.ail"], 1, ["trap[eff.allow.3]", "fs.write of", "--allow fs.write="])
+    tool("allow write in scope", "{base}/allow", ["run", "--allow", "fs.write=./data", "writer.ail"], 0, ["done"])
+    if slurp("{base}/allow/data/b.txt") != "beta"
+        red("allow write in scope", "the file was not written")
+    # A link made inside the scope that points out of it (skipped where links can't be made, Windows without developer mode).
+    fs.write_text("{base}/allow/linker.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    fs.symlink(\"../secret\", \"data/escape\") else",
+        "        print(\"nolink\")",
+        "        return",
+        "    print(fs.read_text(\"data/escape/s.txt\") else \"no\")",
+    ])) else return
+    sh_run("rm -rf {base}/allow/data/escape")
+    link := ail_in(repo_root(), "{base}/allow", ["run", "--allow", "fs.read=./data,fs.write=./data", "linker.ail"])
+    if not link.out.contains("nolink")
+        if link.status != 1 or not link.err.contains("trap[eff.allow.3]") or not link.err.contains("secret")
+            red("allow link escape", "exit {link.status}\n{link.out}{link.err}")
+    sh_run("rm -rf {base}/allow/data/escape")
+    fs.write_text("{base}/allow/net.ail", src_of([
+        "use std.net",
+        "",
+        "fn main()",
+        "    r := net.get(\"http://127.0.0.1:1/\") else err",
+        "        print(\"not-trapped\")",
+        "        return",
+        "    print(r.status)",
+    ])) else return
+    tool("allow net host", "{base}/allow", ["run", "--allow", "net=api.example.com", "net.ail"], 1, ["trap[eff.allow.4]", "127.0.0.1:1", "--allow net=127.0.0.1:1"])
+    tool("allow net by address", "{base}/allow", ["run", "--allow", "net=127.0.0.1:1", "net.ail"], 0, ["not-trapped"])
+    tool("allow net wrong port", "{base}/allow", ["run", "--allow", "net=127.0.0.1:2", "net.ail"], 1, ["trap[eff.allow.4]"])
+    tool("allow net domain scope", "{base}/allow", ["run", "--allow", "net=*.example.com", "net.ail"], 1, ["trap[eff.allow.4]"])
+    tool("allow net is not fs", "{base}/allow", ["run", "--allow", "fs", "net.ail"], 2, ["eff.cap.1", "net"])
+    fs.write_text("{base}/allow/proc.ail", src_of([
+        "use std.proc",
+        "",
+        "fn main()",
+        "    r := proc.run(\"echo\", [\"hi\"]) else err",
+        "        print(\"not-trapped\")",
+        "        return",
+        "    print(r.status >= 0)",
+    ])) else return
+    tool("allow proc by name", "{base}/allow", ["run", "--allow", "proc=git", "proc.ail"], 1, ["trap[eff.allow.5]", "`echo`", "--allow proc=echo"])
+    fs.write_text("{base}/allow/env.ail", src_of([
+        "use std.env",
+        "",
+        "fn main()",
+        "    print(env.get(\"PATH\") else \"unset\") ",
+        "    print(env.get(\"HOME\") else \"unset\")",
+    ])) else return
+    tool("allow env by name", "{base}/allow", ["run", "--allow", "env=PATH", "env.ail"], 1, ["trap[eff.allow.6]", "`HOME`", "--allow env=HOME"])
+    fs.write_text("{base}/allow/vars.ail", src_of([
+        "use std.env",
+        "",
+        "fn main()",
+        "    vs := env.vars()",
+        "    print(vs.contains(\"PATH\") or vs.contains(\"Path\") or vs.contains(\"AIL_ALLOW\"))",
+        "    print(vs.contains(\"HOME\") or vs.contains(\"USERPROFILE\") or vs.contains(\"USER\"))",
+    ])) else return
+    tool("allow env.vars is filtered", "{base}/allow", ["run", "--allow", "env=AIL_*", "vars.ail"], 0, ["true\nfalse"])
+    fs.write_text("{base}/allow/unsafe.ail", src_of([
+        "use std.mem",
+        "",
+        "fn main()",
+        "    unsafe",
+        "        xs := mem.alloc(4, 0)",
+        "        print(\"ok\")",
+    ])) else return
+    tool("allow refuses unsafe code", "{base}/allow", ["check", "--allow", "fs", "unsafe.ail"], 2, ["eff.cap.1", "unsafe"])
+    tool("allow accepts unsafe when listed", "{base}/allow", ["check", "--allow", "fs,unsafe", "unsafe.ail"], 0, [])
+    tool("allow unknown name", "{base}/allow", ["check", "--allow", "disk", "inside.ail"], 2, ["eff.allow.2", "disk"])
+    tool("allow empty scope", "{base}/allow", ["check", "--allow", "fs=", "inside.ail"], 2, ["eff.allow.2"])
+    tool("allow scope on a name without scopes", "{base}/allow", ["check", "--allow", "clock=now", "inside.ail"], 2, ["eff.allow.2"])
+    tool("allow with deny", "{base}/allow", ["check", "--allow", "fs", "--deny", "fs", "inside.ail"], 2, ["eff.cap.1"])
     # test.fuzz.1-5 (ADR 1015)
     fs.write_text("{base}/fuzz/prog.ail", src_of([
         "@test fn small(n int)",

@@ -1081,6 +1081,8 @@ fn cz_io_fail(path str, k int, at str)
 
 ## `compress.gzip_file(src, dst)` (std.compress.5).
 fn compress_gzip_file(src str, dst str, at str)
+    pol_fs(src, false, "compress.gzip_file")
+    pol_fs(dst, true, "compress.gzip_file")
     data := os_fs_read_bytes(src)
     if not os_ok()
         cz_io_fail(src, os_kind(), at)
@@ -1091,6 +1093,8 @@ fn compress_gzip_file(src str, dst str, at str)
 
 ## `compress.gunzip_file(src, dst)` (std.compress.5).
 fn compress_gunzip_file(src str, dst str, at str)
+    pol_fs(src, false, "compress.gunzip_file")
+    pol_fs(dst, true, "compress.gunzip_file")
     data := os_fs_read_bytes(src)
     if not os_ok()
         cz_io_fail(src, os_kind(), at)
