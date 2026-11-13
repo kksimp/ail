@@ -674,6 +674,7 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
             skip_statement()
             return none
         mut arg := absent[str]()
+        mut listed := ""
         if at_sym("(")
             mut depth := 0
             while true
@@ -685,15 +686,26 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                     Str(text) =>
                         if depth == 1 and arg == none
                             arg = text
+                    Ident(word) =>
+                        if depth == 1
+                            listed = "{listed}{word}"
+                    Kw(word) =>
+                        if depth == 1
+                            listed = "{listed}{word}"
                     Sym(s) =>
                         if s == "("
                             depth += 1
                         elif s == ")"
                             depth -= 1
-                    Ident(_) | Kw(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+                        elif depth == 1 and (s == "." or s == ",")
+                            listed = "{listed}{s}"
+                    Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
                 i += 1
                 if depth == 0
                     break
+        # `@caps(fs, net.serve)` (eff.cap.6): the list is kept as `fs,net.serve`.
+        if a.name == "caps" and listed != ""
+            arg = listed
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
         while at_newline()

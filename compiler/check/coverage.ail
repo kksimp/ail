@@ -26,6 +26,8 @@ pub COVERED_RULES := [
     "ct.const.2",
     "ct.const.3",
     "ct.const.4",
+    "eff.cap.6",
+    "eff.cap.7",
     "eff.pure.1",
     "err.ctx.2",
     "err.decl.2",
