@@ -1,0 +1,85 @@
+## An LRU cache with a fixed capacity: the most recently used key sits at the
+## end of the list and the oldest is evicted first. A workload from an integer
+## LCG drives it, and the program reports hits, misses and evictions.
+
+struct LruCache
+    cap int
+    keys List[int]
+    vals List[int]
+    hits int
+    misses int
+    evictions int
+
+fn LruCache.new(capacity int) LruCache
+    LruCache(cap: capacity, keys: [], vals: [], hits: 0, misses: 0, evictions: 0)
+
+fn LruCache.get(mut self, k int) int?
+    if i := self.keys.index_of(k)
+        v := self.vals[i]
+        self.keys.remove_at(i)
+        self.vals.remove_at(i)
+        self.keys.push(k)
+        self.vals.push(v)
+        self.hits += 1
+        return v
+    self.misses += 1
+    none
+
+fn LruCache.put(mut self, k int, v int)
+    mut present := false
+    if i := self.keys.index_of(k)
+        self.keys.remove_at(i)
+        self.vals.remove_at(i)
+        present = true
+    if not present and self.keys.len() >= self.cap
+        self.keys.remove_at(0)
+        self.vals.remove_at(0)
+        self.evictions += 1
+    self.keys.push(k)
+    self.vals.push(v)
+
+fn next_rand(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn main()
+    mut cache := LruCache.new(3)
+    mut seed := 42
+    mut total := 0
+    for i in 0..40
+        seed = next_rand(seed)
+        key := seed / 65536 % 6
+        if i % 3 == 0
+            cache.put(key, i * 10)
+        else
+            if v := cache.get(key)
+                total += v
+    print("hits: {cache.hits}")
+    print("misses: {cache.misses}")
+    print("evictions: {cache.evictions}")
+    print("sum of hit values: {total}")
+    print("order oldest to newest: {cache.keys}")
+
+@test fn evicts_the_oldest()
+    mut c := LruCache.new(2)
+    c.put(1, 10)
+    c.put(2, 20)
+    c.put(3, 30)
+    assert(c.get(1) == none)
+    assert_eq(c.evictions, 1)
+    assert_eq(c.keys, [2, 3])
+
+@test fn get_refreshes_recency()
+    mut c := LruCache.new(2)
+    c.put(1, 10)
+    c.put(2, 20)
+    assert_eq(c.get(1) else -1, 10)
+    c.put(3, 30)
+    assert_eq(c.keys, [1, 3])
+    assert_eq(c.hits, 1)
+
+@test fn put_replaces_value()
+    mut c := LruCache.new(2)
+    c.put(5, 1)
+    c.put(5, 2)
+    assert_eq(c.keys.len(), 1)
+    assert_eq(c.get(5) else -1, 2)

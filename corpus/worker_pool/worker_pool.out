@@ -1,0 +1,18 @@
+    n  steps
+    1      0
+    2      1
+    3      7
+    6      8
+    7     16
+    9     19
+   11     14
+   19     20
+   27    111
+   97    118
+  171    124
+  231    127
+  313    130
+  871    178
+jobs: 14, total steps: 873
+longest: n=871 with 178 steps
+par check: true

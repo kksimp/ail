@@ -1,0 +1,8 @@
+key       value       layer
+cache_dir /var/cache  user
+host      localhost   defaults
+log       warn        override
+port      9090        override
+workers   many        override
+port=9090 workers=1 retries=3
+5 keys, 2 bad lines

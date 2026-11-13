@@ -1,0 +1,61 @@
+## A command-line front end tested without a shell: std.args parses several
+## embedded argument lists for two tools and the result of each is printed,
+## including the lists that must be rejected.
+use std.args
+
+fn convert(words List[str]) str
+    spec := [
+        args.flag("verbose", "v", "more output"),
+        args.opt("out", "o", "output file", "a.txt"),
+        args.opt("level", "l", "compression level", "5"),
+        args.pos("input", "file to read"),
+    ]
+    a := args.parse("convert", "convert a file", spec, words) else return "error"
+    level := a.get("level").to_int() else 0
+    "in={a.get("input")} out={a.get("out")} level={level} verbose={a.flag("verbose")}"
+
+fn bundle(words List[str]) str
+    spec := [
+        args.flag("dry", "n", "do not write"),
+        args.pos("name", "bundle name"),
+        args.rest("files", "files to add"),
+    ]
+    a := args.parse("bundle", "bundle files", spec, words) else return "error"
+    "name={a.get("name")} dry={a.flag("dry")} files={a.rest.len()} [{a.rest.join(",")}]"
+
+fn main()
+    print("== convert ==")
+    runs := [
+        ["in.txt"],
+        ["-v", "in.txt"],
+        ["--out", "b.bin", "in.txt"],
+        ["--out=c.bin", "--level=9", "in.txt"],
+        ["in.txt", "-l", "2", "-v"],
+        ["--", "-weird"],
+        ["--nope", "in.txt"],
+        ["in.txt", "--out"],
+        ["--verbose=yes", "in.txt"],
+        List[str](),
+        ["a.txt", "b.txt"],
+    ]
+    for i in 0..runs.len()
+        print("{i + 1}: {convert(runs[i])}")
+    print("== bundle ==")
+    bundles := [
+        ["site"],
+        ["site", "a.html", "b.css"],
+        ["-n", "site", "a.html"],
+        ["site", "--", "-x", "-y"],
+        ["--dry"],
+    ]
+    for i in 0..bundles.len()
+        print("{i + 1}: {bundle(bundles[i])}")
+
+@test fn defaults_apply()
+    assert_eq(convert(["f"]), "in=f out=a.txt level=5 verbose=false")
+
+@test fn unknown_option_is_rejected()
+    assert_eq(convert(["--bogus", "f"]), "error")
+
+@test fn rest_collects_extra_words()
+    assert_eq(bundle(["n", "x", "y"]), "name=n dry=false files=2 [x,y]")

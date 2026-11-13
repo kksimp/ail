@@ -1,0 +1,9 @@
+rejected: withdraw bob 9999 -> bob is short by 2449
+rejected: withdraw dave 5 -> no such account dave
+rejected: deposit carol abc -> cannot parse 'deposit carol abc'
+rejected: audit alice 1 -> cannot parse 'audit alice 1'
+rejected: transfer bob carol 7550 -> bob is short by 1
+alice: 24.01
+bob: 75.49
+carol: 0.01
+applied 5 of 10, moved 201.50

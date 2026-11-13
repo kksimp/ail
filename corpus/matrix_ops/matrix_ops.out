@@ -1,0 +1,16 @@
+a * b:
+  5 4 1
+  7 5 5
+  12 1 5
+transpose of a:
+  2 1 0
+  0 3 1
+  1 2 4
+trace of a: 9
+det of a: 21
+det of b: 7
+fib(1) mod 1000003 = 1
+fib(10) mod 1000003 = 55
+fib(30) mod 1000003 = 832040
+fib(90) mod 1000003 = 153535
+walks of length 6 from node 0 to node 0: 22

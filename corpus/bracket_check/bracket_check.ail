@@ -1,0 +1,52 @@
+## Bracket checker: validates (), [] and braces with a stack and reports the
+## first problem with its position: unexpected, mismatched or unclosed.
+
+fn closer_of(c char) char
+    match c
+        '(' => ')'
+        '[' => ']'
+        _ => '\u{7d}'
+
+fn check(s str) str
+    mut closers := List[char]()
+    mut opens := List[int]()
+    cs := s.chars()
+    for i, c in cs.enumerate()
+        match c
+            '(' | '[' | '\u{7b}' =>
+                closers.push(closer_of(c))
+                opens.push(i)
+            ')' | ']' | '\u{7d}' =>
+                want := closers.pop() else return "unexpected '{c}' at {i}"
+                opener := opens.pop() else return "unexpected '{c}' at {i}"
+                if c != want
+                    return "mismatch at {i}: found '{c}', expected '{want}' for opener at {opener}"
+            _ => continue
+    if closers.is_empty()
+        return "ok"
+    last := closers.len() - 1
+    "unclosed, expected '{closers[last]}' for opener at {opens[last]}"
+
+fn main()
+    inputs := [
+        "(a + b) * [c - d]",
+        "f(x[1], \{k: v})",
+        "((]",
+        "no brackets at all",
+        ")(",
+        "[(\{})",
+        "",
+    ]
+    for s in inputs
+        print("{s:<20} -> {check(s)}")
+
+@test fn accepts_balanced()
+    assert_eq(check("(\{[]})"), "ok")
+    assert_eq(check(""), "ok")
+
+@test fn finds_mismatch()
+    assert_eq(check("(]"), "mismatch at 1: found ']', expected ')' for opener at 0")
+
+@test fn finds_unclosed_and_unexpected()
+    assert_eq(check("(("), "unclosed, expected ')' for opener at 1")
+    assert_eq(check("a)"), "unexpected ')' at 1")

@@ -1,0 +1,90 @@
+## An incremental backup planner. It fingerprints a source directory,
+## compares it with the fingerprints of the last backup, prints the plan
+## (add, update, delete), applies it with real file copies and verifies that
+## the backup directory now matches the source.
+use std.hash
+
+fn snapshot(dir str) !Map[str, str]
+    mut snap := Map[str, str]()
+    for p in fs.walk(dir)?
+        snap[path.base(p)] = hash.sha256(fs.read_text(p)?).slice(0, 8)
+    snap
+
+fn make_plan(before Map[str, str], after Map[str, str]) List[str]
+    mut steps := List[str]()
+    for name in after.keys().sorted()
+        if not before.contains(name)
+            steps.push("add {name}")
+        elif before[name] != after[name]
+            steps.push("update {name}")
+    for name in before.keys().sorted()
+        if not after.contains(name)
+            steps.push("delete {name}")
+    steps
+
+fn apply_plan(steps List[str], src str, dest str) !
+    for step in steps
+        parts := step.split(" ")
+        target := path.join(dest, parts[1])
+        if parts[0] == "delete"
+            fs.remove(target)?
+        else
+            fs.copy(path.join(src, parts[1]), target)?
+
+fn write_all(dir str, names List[str], texts List[str]) !
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+
+fn clean(dir str) !
+    for p in fs.walk(dir)?
+        fs.remove(p)?
+    fs.remove(dir)?
+
+fn main() !
+    root := fs.make_temp_dir("corpus_backup_plan")?
+    src := path.join(root, "src")
+    dest := path.join(root, "dest")
+    fs.make_dir(src)?
+    fs.make_dir(dest)?
+    write_all(src, ["notes.txt", "todo.txt", "old.log", "data.csv"], ["meeting at 10\n", "buy milk\n", "boot ok\n", "a,b\n1,2\n"])?
+    for run_no in 1..=2
+        print("== backup {run_no} ==")
+        now := snapshot(src)?
+        before := snapshot(dest)?
+        plan := make_plan(before, now)
+        for step in plan
+            print("  {step}")
+        same := [n for n in now.keys() if before.get(n) == now[n]]
+        print("  {plan.len()} actions, {same.len()} unchanged")
+        apply_plan(plan, src, dest)?
+        after := snapshot(dest)?
+        print("  verified: {after == now}")
+        if run_no == 1
+            fs.write_text(path.join(src, "todo.txt"), "buy milk and eggs\n")?
+            fs.remove(path.join(src, "old.log"))?
+            fs.write_text(path.join(src, "new.md"), "# new\n")?
+    clean(src)?
+    clean(dest)?
+    fs.remove(root)?
+
+@test fn plan_lists_adds_updates_and_deletes()
+    before := {"a": "1", "b": "2", "c": "3"}
+    after := {"a": "1", "b": "9", "d": "4"}
+    assert_eq(make_plan(before, after), ["update b", "add d", "delete c"])
+
+@test fn identical_snapshots_need_no_actions()
+    m := {"a": "1"}
+    assert_eq(make_plan(m, m).len(), 0)
+
+@test fn backup_copies_files()
+    root := fs.make_temp_dir("corpus_backup_plan_t")?
+    src := path.join(root, "src")
+    dest := path.join(root, "dest")
+    fs.make_dir(src)?
+    fs.make_dir(dest)?
+    write_all(src, ["x.txt"], ["hello\n"])?
+    apply_plan(make_plan(snapshot(dest)?, snapshot(src)?), src, dest)?
+    assert_eq(snapshot(dest)?, snapshot(src)?)
+    clean(src)?
+    clean(dest)?
+    fs.remove(root)?

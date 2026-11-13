@@ -1,0 +1,9 @@
+loaded 3 people
+Ann  31 tags=admin+dev email=ann@example.com
+Bob  27 tags=- email=none
+Cy   45 tags=ops email=none
+round trip equal: true
+ages: [32, 28, 46]
+{"id":"a1","ok":true,"names":["x","y"],"gone":null}
+id=a1 ok=true missing=dflt
+rejected a person without an age

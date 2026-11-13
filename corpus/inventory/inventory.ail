@@ -1,0 +1,89 @@
+## A warehouse inventory. Stock commands (receive, ship, price) change item
+## quantities; shipping more than is on hand is refused. Prints a report sorted
+## by stock value, the items at or below their reorder level, and the total.
+
+struct Item
+    sku str
+    qty int
+    price int
+    reorder int
+
+struct Inventory
+    items List[Item]
+    refused int
+
+fn Inventory.find(self, sku str) int?
+    for i in 0..self.items.len()
+        if self.items[i].sku == sku
+            return i
+    none
+
+fn Inventory.receive(mut self, sku str, n int, unit int)
+    if i := self.find(sku)
+        self.items[i].qty += n
+    else
+        self.items.push(Item(sku: sku, qty: n, price: unit, reorder: 5))
+
+fn Inventory.ship(mut self, sku str, n int)
+    if i := self.find(sku)
+        if self.items[i].qty >= n
+            self.items[i].qty -= n
+            return
+    self.refused += 1
+    print("refused: ship {n} of {sku}")
+
+fn Inventory.total(self) int
+    mut sum := 0
+    for it in self.items
+        sum += it.qty * it.price
+    sum
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn main()
+    mut inv := Inventory(items: [], refused: 0)
+    inv.receive("bolt", 200, 15)
+    inv.receive("nut", 150, 10)
+    inv.receive("gear", 12, 1250)
+    inv.receive("belt", 8, 899)
+    inv.ship("bolt", 120)
+    inv.ship("gear", 9)
+    inv.ship("belt", 9)
+    inv.ship("cog", 1)
+    inv.receive("belt", 4, 899)
+    inv.ship("nut", 148)
+    ranked := inv.items.sorted(by: |it| -(it.qty * it.price))
+    print("sku      qty    value")
+    for r in ranked
+        sku := r.sku
+        qty := r.qty
+        value := money(r.qty * r.price)
+        print("{sku:<6} {qty:>5} {value:>8}")
+    print("reorder:")
+    for low in inv.items
+        if low.qty <= low.reorder
+            print("  {low.sku} ({low.qty} left)")
+    print("total value: {money(inv.total())}")
+    print("refused orders: {inv.refused}")
+
+@test fn receive_adds_stock()
+    mut inv := Inventory(items: [], refused: 0)
+    inv.receive("a", 5, 100)
+    inv.receive("a", 3, 100)
+    assert_eq(inv.items.len(), 1)
+    assert_eq(inv.items[0].qty, 8)
+
+@test fn oversell_is_refused()
+    mut inv := Inventory(items: [], refused: 0)
+    inv.receive("a", 2, 100)
+    inv.ship("a", 3)
+    assert_eq(inv.items[0].qty, 2)
+    assert_eq(inv.refused, 1)
+
+@test fn total_sums_values()
+    mut inv := Inventory(items: [], refused: 0)
+    inv.receive("a", 2, 100)
+    inv.receive("b", 1, 50)
+    assert_eq(inv.total(), 250)
