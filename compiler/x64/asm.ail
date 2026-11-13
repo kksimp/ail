@@ -502,9 +502,11 @@ pub fn Asm.jcc(mut self, cc int, l int)
 
 ## `jmp r`: an indirect jump (a `switch`, native.match.2).
 pub fn Asm.jmp_reg(mut self, r int)
+    start := code.len()
     rex(0, 0, 0, r, false)
     byte(255)
     byte(224 + low(r))
+    keep_in_window(start)
 
 ## `lea dst, [rip + l]`: the address of local label `l`.
 pub fn Asm.lea_label(mut self, dst int, l int)
@@ -531,14 +533,18 @@ pub fn Asm.call_sym(mut self, sym str)
     byte(232)
     fixups.push(Fixup(at: code.len(), label: -1, sym: sym, tail: 0))
     u32(0)
+    keep_in_window(code.len() - 5)
 
 pub fn Asm.call_reg(mut self, r int)
+    start := code.len()
     rex(0, 0, 0, r, false)
     byte(255)
     byte(208 + low(r))
+    keep_in_window(start)
 
 pub fn Asm.ret(mut self)
     byte(195)
+    keep_in_window(code.len() - 1)
 
 pub fn Asm.push(mut self, r int)
     rex(0, 0, 0, r, false)

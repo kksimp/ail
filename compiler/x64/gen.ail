@@ -191,9 +191,10 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     # Measuring knobs (F7 diagnosis): `AIL_ALIGN_LOOP=N` starts each loop
     # header, and `AIL_ALIGN_FN=N` each function, at a multiple of N bytes.
     # `AIL_JCC=1` keeps every jump inside a 32-byte line (asm.ail), `AIL_JCC=2`
-    # only the jumps of blocks inside a loop.
+    # only the jumps of blocks inside a loop; unset or 0 is off. Either starts
+    # the function on a 32-byte line, so that offsets in it are positions.
     loop_align := align_knob("AIL_ALIGN_LOOP")
-    jcc := align_knob("AIL_JCC")
+    jcc := knob_or("AIL_JCC", 0)
     mut heads := [false for _ in 0..f.blocks.len()]
     mut looped := [jcc == 1 for _ in 0..f.blocks.len()]
     if loop_align > 1 or jcc == 2
@@ -212,7 +213,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     g.a.window = 0
     g.gen_stubs()
     g.a.resolve_labels()
-    fn_align := align_knob("AIL_ALIGN_FN")
+    fn_align := if jcc > 0 then align_knob("AIL_ALIGN_FN").max(32) else align_knob("AIL_ALIGN_FN")
     int3 := 204
     while fn_align > 1 and img.code.len() % fn_align != 0
         img.code.push(int3.to_u8())
@@ -232,8 +233,11 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
 
 ## A measuring knob's alignment from the environment, else 1.
 fn align_knob(name str) int
-    s := env.get(name) else return 1
-    n := s.to_int() else return 1
+    knob_or(name, 1)
+
+fn knob_or(name str, default int) int
+    s := env.get(name) else return default
+    n := s.to_int() else return default
     n
 
 # ---- frame ----

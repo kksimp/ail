@@ -1178,7 +1178,21 @@ fn exe_ext(target str) str
 ## The measuring knobs (F7 diagnosis) that change the executable's bytes.
 fn knob_key() str
     mut out := ""
-    for k in ["AIL_WIDE_ONLY", "AIL_WIDE_SKIP", "AIL_WIDE_ALL", "AIL_WIDE_LIMIT", "AIL_SINGLE_LIMIT", "AIL_WIDE_LOOPS", "AIL_WIDE_GROWTH", "AIL_WIDE_LOG", "AIL_ALIGN_FN", "AIL_ALIGN_LOOP", "AIL_JCC", "AIL_SHIFT"]
+    knobs := [
+        "AIL_WIDE_ONLY",
+        "AIL_WIDE_SKIP",
+        "AIL_WIDE_ALL",
+        "AIL_WIDE_LIMIT",
+        "AIL_SINGLE_LIMIT",
+        "AIL_WIDE_LOOPS",
+        "AIL_WIDE_GROWTH",
+        "AIL_WIDE_LOG",
+        "AIL_ALIGN_FN",
+        "AIL_ALIGN_LOOP",
+        "AIL_JCC",
+        "AIL_SHIFT",
+    ]
+    for k in knobs
         out = "{out} {env.get(k) else ""}"
     out
 
