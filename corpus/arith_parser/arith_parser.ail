@@ -1,0 +1,139 @@
+## Arithmetic parser: a tokenizer plus a precedence-climbing parser for integer
+## expressions with + - * / ^ (right associative), parentheses and unary minus.
+## It evaluates while it parses and also records the reverse Polish form.
+
+error enum CalcError
+    BadChar(text str) "bad character {text}"
+    Unexpected(text str) "unexpected {text}"
+    Unbalanced "missing closing parenthesis"
+    DivZero "division by zero"
+    NegExp "negative exponent"
+
+struct Parser
+    toks List[str]
+    pos int
+    rpn List[str]
+
+fn tokenize(src str) List[str] ! CalcError
+    mut out := List[str]()
+    mut num := ""
+    for c in src.chars()
+        if c.is_digit()
+            num = "{num}{c}"
+            continue
+        if num != ""
+            out.push(num)
+            num = ""
+        if "+-*/^()".contains(c)
+            out.push("{c}")
+        elif not c.is_space()
+            return BadChar(text: "{c}")
+    if num != ""
+        out.push(num)
+    out
+
+fn prec(op str) int
+    match op
+        "+" | "-" => 1
+        "*" | "/" => 2
+        "^" => 3
+        _ => 0
+
+fn apply(op str, a int, b int) int ! CalcError
+    if op == "+"
+        return a + b
+    if op == "-"
+        return a - b
+    if op == "*"
+        return a * b
+    if op == "/"
+        if b == 0
+            return DivZero
+        return a / b
+    if b < 0
+        return NegExp
+    mut r := 1
+    mut k := 0
+    while k < b
+        r *= a
+        k += 1
+    r
+
+fn Parser.peek(self) str
+    if pos < toks.len()
+        return toks[pos]
+    "end"
+
+fn Parser.take(mut self) str
+    t := peek()
+    pos += 1
+    t
+
+fn Parser.primary(mut self) int ! CalcError
+    t := take()
+    if t == "("
+        v := expr(1)?
+        if take() != ")"
+            return Unbalanced
+        return v
+    if t == "-"
+        w := expr(3)?
+        rpn.push("neg")
+        return 0 - w
+    n := t.to_int() else return Unexpected(text: t)
+    rpn.push(t)
+    n
+
+fn Parser.expr(mut self, lowest int) int ! CalcError
+    mut lhs := primary()?
+    while prec(peek()) >= lowest and prec(peek()) > 0
+        op := take()
+        nxt := if op == "^" then prec(op) else prec(op) + 1
+        rhs := expr(nxt)?
+        rpn.push(op)
+        lhs = apply(op, lhs, rhs)?
+    lhs
+
+fn evaluate(src str) str ! CalcError
+    mut p := Parser(toks: tokenize(src)?, pos: 0, rpn: [])
+    v := p.expr(1)?
+    if p.pos != p.toks.len()
+        return Unexpected(text: p.peek())
+    "{v}   rpn: {p.rpn.join(" ")}"
+
+fn main()
+    exprs := [
+        "1 + 2 * 3",
+        "(1 + 2) * 3",
+        "2 ^ 3 ^ 2",
+        "-2 ^ 2",
+        "10 / 3 * 3",
+        "7 - 2 - 1",
+        "-(4 + 1) * 2",
+        "8 / (3 - 3)",
+        "2 ^ -1",
+        "(1 + 2",
+        "4 $ 4",
+        "3 +",
+        "1 2",
+    ]
+    for src in exprs
+        if r := evaluate(src)
+            print("{src:<14} = {r}")
+        else err
+            print("{src:<14} ! {err}")
+
+@test fn precedence_and_associativity()
+    assert(evaluate("1 + 2 * 3")?.starts_with("7 "))
+    assert(evaluate("2 ^ 3 ^ 2")?.starts_with("512 "))
+    assert(evaluate("7 - 2 - 1")?.starts_with("4 "))
+
+@test fn unary_minus_binds_below_power()
+    assert(evaluate("-2 ^ 2")?.starts_with("-4 "))
+    assert(evaluate("-(4 + 1) * 2")?.starts_with("-10 "))
+
+@test fn errors_are_typed()
+    assert_err(evaluate("1 / 0"), CalcError.DivZero)
+    assert_err(evaluate("(1"), CalcError.Unbalanced)
+    assert_err(evaluate("2 # 3"), CalcError.BadChar)
+    assert_err(evaluate("1 2"), CalcError.Unexpected)

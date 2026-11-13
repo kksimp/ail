@@ -1,0 +1,79 @@
+## Inventory reorder: reads embedded stock records (sku, on hand, daily use,
+## lead days, pack size), computes each reorder point with a two-day safety
+## stock, and plans how many whole packs to order, lowest cover first.
+
+struct Stock
+    sku str
+    on_hand int
+    daily int
+    lead int
+    pack int
+
+fn data() List[str]
+    [
+        "sku,on_hand,daily,lead,pack",
+        "bolt-m4,500,40,7,100",
+        "nut-m4,120,30,5,50",
+        "washer,900,25,10,200",
+        "cable-1m,14,3,14,10",
+        "gasket,0,2,9,6",
+        "bad,line",
+        "fuse-5a,61,6,6,25",
+    ]
+
+fn parse(line str) Stock?
+    c := line.split(",")
+    if c.len() != 5
+        return none
+    Stock(
+        sku: c[0],
+        on_hand: c[1].to_int()?,
+        daily: c[2].to_int()?,
+        lead: c[3].to_int()?,
+        pack: c[4].to_int()?,
+    )
+
+fn reorder_point(s Stock) int
+    s.daily * s.lead + s.daily * 2
+
+fn packs_needed(s Stock) int
+    gap := reorder_point(s) - s.on_hand
+    if gap <= 0
+        return 0
+    (gap + s.pack - 1) / s.pack
+
+fn cover_days(s Stock) int
+    s.on_hand / s.daily
+
+fn main()
+    mut items := List[Stock]()
+    for line in data()[1..]
+        item := parse(line) else
+            print("skipped: {line}")
+            continue
+        items.push(item)
+    ordered := items.sorted(by: |x| cover_days(x))
+    print("sku        stock cover  point order")
+    mut total_packs := 0
+    mut total_units := 0
+    for s in ordered
+        rp := reorder_point(s)
+        n := packs_needed(s)
+        cover := cover_days(s)
+        total_packs += n
+        total_units += n * s.pack
+        print("{s.sku:<10} {s.on_hand:>5} {cover:>5} {rp:>6} {n:>5}")
+    print("order {total_packs} packs ({total_units} units)")
+
+@test fn reorder_point_includes_safety()
+    s := Stock(sku: "a", on_hand: 0, daily: 10, lead: 3, pack: 1)
+    assert_eq(reorder_point(s), 50)
+
+@test fn packs_round_up()
+    s := Stock(sku: "a", on_hand: 10, daily: 10, lead: 3, pack: 25)
+    assert_eq(packs_needed(s), 2)
+
+@test fn no_order_when_stocked()
+    s := Stock(sku: "a", on_hand: 500, daily: 10, lead: 3, pack: 25)
+    assert_eq(packs_needed(s), 0)
+    assert_eq(cover_days(s), 50)

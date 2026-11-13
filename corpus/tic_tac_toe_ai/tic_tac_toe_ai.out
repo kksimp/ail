@@ -1,0 +1,9 @@
+game tree nodes from the empty board: 549946
+self-play moves: 0 4 1 2 6 3 5 7 8
+final board, winner 0:
+  XXO
+  OOX
+  XOX
+X to move with a win available: plays 2
+O to move, X threatens 2: plays 2
+O to move after X takes opposite corners: plays 1

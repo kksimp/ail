@@ -1,0 +1,19 @@
+name = demo app
+debug = true
+
+[db]
+dsn = "user=ail;pass=x"
+dir = C:\data
+
+[paths]
+root = " /srv/app "
+note = "a;b # c"
+empty =
+
+[server]
+host = localhost
+port = 8080
+motto = "say \"hi\" now"
+---
+items: 10, read back: 10
+round trip: ok

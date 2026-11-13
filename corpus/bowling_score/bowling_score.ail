@@ -1,0 +1,68 @@
+## Ten-pin bowling scorer. A game is written in the usual notation (X strike,
+## / spare, - miss, digits for pins, spaces ignored). The program turns it into
+## rolls, scores the ten frames with strike and spare bonuses, and prints the
+## running total after every frame.
+
+fn parse_rolls(game str) List[int]
+    mut rolls := List[int]()
+    for ch in game.replace(" ", "").chars()
+        if ch == 'X'
+            rolls.push(10)
+        elif ch == '/'
+            prev := rolls[rolls.len() - 1]
+            rolls.push(10 - prev)
+        elif ch == '-'
+            rolls.push(0)
+        else
+            d := ch.to_digit(10) else 0
+            rolls.push(d)
+    rolls
+
+fn running(rolls List[int]) List[int]
+    mut totals := List[int]()
+    mut total := 0
+    mut pos := 0
+    for frame in 0..10
+        if rolls[pos] == 10
+            total += 10 + rolls[pos + 1] + rolls[pos + 2]
+            pos += 1
+        elif rolls[pos] + rolls[pos + 1] == 10
+            total += 10 + rolls[pos + 2]
+            pos += 2
+        else
+            total += rolls[pos] + rolls[pos + 1]
+            pos += 2
+        totals.push(total)
+    totals
+
+fn score(game str) int
+    totals := running(parse_rolls(game))
+    totals[totals.len() - 1]
+
+fn describe(label str, game str)
+    totals := running(parse_rolls(game))
+    print("{label}: {game}")
+    print("  frames: {totals.join(" ")}")
+    print("  strikes {game.count("X")}, spares {game.count("/")}, score {totals[9]}")
+
+fn main()
+    describe("perfect game", "X X X X X X X X X X X X")
+    describe("gutter game", "-- -- -- -- -- -- -- -- -- --")
+    describe("nines", "9- 9- 9- 9- 9- 9- 9- 9- 9- 9-")
+    describe("all spares", "5/ 5/ 5/ 5/ 5/ 5/ 5/ 5/ 5/ 5/5")
+    describe("mixed game", "X 7/ 9- X -8 8/ -6 X X X81")
+    describe("open frames", "72 35 8- 44 61 17 53 90 26 81")
+
+@test fn perfect_game_is_300()
+    assert_eq(score("XXXXXXXXXXXX"), 300)
+
+@test fn spares_score_ten_plus_next_roll()
+    assert_eq(score("5/5/5/5/5/5/5/5/5/5/5"), 150)
+    assert_eq(score("9-9-9-9-9-9-9-9-9-9-"), 90)
+
+@test fn parse_converts_marks_to_pins()
+    assert_eq(parse_rolls("X 7/ 9-"), [10, 7, 3, 9, 0])
+    assert_eq(parse_rolls("-- 1/"), [0, 0, 1, 9])
+
+@test fn mixed_game()
+    assert_eq(score("X7/9-X-88/-6XXX81"), 167)

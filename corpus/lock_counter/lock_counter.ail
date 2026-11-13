@@ -1,0 +1,61 @@
+## Shared counters under contention: worker tasks bump a mutex-protected
+## counter, a mutex-protected tally struct and an atomic, then the totals are
+## checked against what a single thread would compute.
+
+struct Tally
+    hits int
+    misses int
+
+fn work(id int, rounds int, counter Mutex[int], tally Mutex[Tally], atom Atomic[int])
+    for i in 0..rounds
+        with counter as mut c
+            c += 1
+        with tally as mut t
+            if (id + i) % 3 == 0
+                t.hits += 1
+            else
+                t.misses += 1
+        atom.add(i)
+
+fn run(workers int, rounds int) !Tally
+    counter := Mutex(0)
+    tally := Mutex(Tally(hits: 0, misses: 0))
+    atom := Atomic(0)
+    g := TaskGroup()
+    for id in 0..workers
+        g.add(spawn work(id, rounds, counter, tally, atom))
+    g.wait_all()?
+    t := tally.get()
+    print("workers {workers}, rounds {rounds}")
+    print("  counter {counter.get()}")
+    print("  atomic  {atom.load()}")
+    print("  tally   {t.hits} hits, {t.misses} misses")
+    t
+
+fn expected_hits(workers int, rounds int) int
+    mut n := 0
+    for id in 0..workers
+        for i in 0..rounds
+            if (id + i) % 3 == 0
+                n += 1
+    n
+
+fn main() !
+    a := run(4, 250)?
+    b := run(8, 100)?
+    print("expected hits {expected_hits(4, 250)} and {expected_hits(8, 100)}")
+    print("match: {a.hits == expected_hits(4, 250) and b.hits == expected_hits(8, 100)}")
+
+@test fn tally_matches_sequential_count()
+    t := run(3, 40)?
+    assert_eq(t.hits, expected_hits(3, 40))
+    assert_eq(t.hits + t.misses, 120)
+
+@test fn single_worker_works()
+    t := run(1, 9)?
+    assert_eq(t.hits, 3)
+    assert_eq(t.misses, 6)
+
+@test fn no_rounds_leaves_zero()
+    t := run(4, 0)?
+    assert_eq(t.hits + t.misses, 0)

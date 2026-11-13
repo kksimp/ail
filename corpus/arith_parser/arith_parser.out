@@ -1,0 +1,13 @@
+1 + 2 * 3      = 7   rpn: 1 2 3 * +
+(1 + 2) * 3    = 9   rpn: 1 2 + 3 *
+2 ^ 3 ^ 2      = 512   rpn: 2 3 2 ^ ^
+-2 ^ 2         = -4   rpn: 2 2 ^ neg
+10 / 3 * 3     = 9   rpn: 10 3 / 3 *
+7 - 2 - 1      = 4   rpn: 7 2 - 1 -
+-(4 + 1) * 2   = -10   rpn: 4 1 + neg 2 *
+8 / (3 - 3)    ! division by zero
+2 ^ -1         ! negative exponent
+(1 + 2         ! missing closing parenthesis
+4 $ 4          ! bad character $
+3 +            ! unexpected end
+1 2            ! unexpected 2

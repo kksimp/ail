@@ -1,0 +1,17 @@
+t= 0 arrive  j1
+t= 0 acquire j1 (waited 0)
+t= 1 arrive  j2
+t= 1 arrive  j3
+t= 1 acquire j2 (waited 0)
+t= 2 arrive  j4
+t= 4 release j1 (free 1)
+t= 4 release j2 (free 2)
+t= 4 acquire j3 (waited 3)
+t= 4 acquire j4 (waited 2)
+t= 6 release j3 (free 1)
+t= 6 release j4 (free 2)
+t= 9 arrive  j5
+t= 9 acquire j5 (waited 0)
+t=10 release j5 (free 2)
+peak holders 2, total wait 5
+with 4 permits: peak 4, total wait 0

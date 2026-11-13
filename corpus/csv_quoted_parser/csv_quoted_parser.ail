@@ -1,0 +1,119 @@
+## Quoted CSV parser: a character state machine (start, unquoted, quoted, quote
+## seen) that handles commas, doubled quotes and newlines inside quoted fields.
+## Bad quotes are typed errors. The writer re-quotes fields so the output parses
+## back to the same rows.
+
+error enum CsvError
+    BadQuote(line int) "unexpected character after quote in row {line}"
+    Unterminated(line int) "unterminated quote in row {line}"
+
+enum Mode
+    Start
+    Unquoted
+    Quoted
+    QuoteSeen
+
+fn parse_csv(text str) List[List[str]] ! CsvError
+    mut rows := List[List[str]]()
+    mut row := List[str]()
+    mut field := ""
+    mut st := Mode.Start
+    for c in text.chars()
+        if st == Mode.Quoted
+            if c == '\u{22}'
+                st = Mode.QuoteSeen
+            else
+                field = "{field}{c}"
+        elif st == Mode.QuoteSeen
+            if c == '\u{22}'
+                field = "{field}{c}"
+                st = Mode.Quoted
+            elif c == ','
+                row.push(field)
+                field = ""
+                st = Mode.Start
+            elif c == '\n'
+                row.push(field)
+                rows.push(row)
+                row = List[str]()
+                field = ""
+                st = Mode.Start
+            else
+                return BadQuote(line: rows.len() + 1)
+        elif c == '\u{22}' and st == Mode.Start
+            st = Mode.Quoted
+        elif c == ','
+            row.push(field)
+            field = ""
+            st = Mode.Start
+        elif c == '\n'
+            row.push(field)
+            rows.push(row)
+            row = List[str]()
+            field = ""
+            st = Mode.Start
+        elif c != '\r'
+            field = "{field}{c}"
+            st = Mode.Unquoted
+    if st == Mode.Quoted
+        return Unterminated(line: rows.len() + 1)
+    if st != Mode.Start or not row.is_empty() or field != ""
+        row.push(field)
+        rows.push(row)
+    rows
+
+fn quote_field(f str) str
+    if f.contains(",") or f.contains("\"") or f.contains("\n")
+        esc := f.replace("\"", "\"\"")
+        return "\"{esc}\""
+    f
+
+fn write_csv(rows List[List[str]]) str
+    mut lines := List[str]()
+    for r in rows
+        lines.push([quote_field(f) for f in r].join(","))
+    lines.join("\n")
+
+fn show(f str) str
+    flat := f.replace("\n", "~")
+    "<{flat}>"
+
+fn report(label str, text str)
+    print("{label}:")
+    rows := parse_csv(text) else err
+        print("  error: {err}")
+        return
+    for i, r in rows.enumerate()
+        shown := [show(f) for f in r]
+        print("  row {i + 1} ({r.len()} fields): {shown.join(" ")}")
+    again := parse_csv(write_csv(rows)) else rows
+    print("  round trip: {again == rows}")
+
+fn main()
+    good := [
+        "name,quote,score",
+        "\"Smith, Jo\",\"said \"\"hi\"\"\",9",
+        "Lee,\"two",
+        "lines\",7",
+        ",\"\",",
+        "x,y,z",
+    ]
+    report("good", good.join("\n"))
+    report("crlf", "a,b\r\nc,d\r\n")
+    report("bad quote", "a,\"b\"c")
+    report("unterminated", "a,\"b\nc,d")
+    report("empty", "")
+
+@test fn parses_quotes_and_newlines()
+    rows := parse_csv("a,\"b,c\",\"d\"\"e\"\n\"f\ng\",h,")?
+    assert_eq(rows.len(), 2)
+    assert_eq(rows[0], ["a", "b,c", "d\"e"])
+    assert_eq(rows[1], ["f\ng", "h", ""])
+
+@test fn writer_round_trips()
+    rows := [["plain", "with,comma"], ["say \"x\"", "line\nbreak"]]
+    assert_eq(parse_csv(write_csv(rows))?, rows)
+
+@test fn errors_are_typed()
+    assert_err(parse_csv("a,\"b\"c"), CsvError.BadQuote)
+    assert_err(parse_csv("\"open"), CsvError.Unterminated)

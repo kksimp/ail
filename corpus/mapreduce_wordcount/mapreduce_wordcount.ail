@@ -1,0 +1,76 @@
+## Word count as map/reduce: each document is mapped by its own task into a
+## partial count table, the partials come back over a channel, and the reduce
+## step merges them. Words are lower-cased and split on non-letters.
+
+struct Partial
+    doc int
+    counts Map[str, int]
+
+fn clean(text str) str
+    mut out := ""
+    for ch in text.chars()
+        if ch.is_alpha()
+            out = "{out}{ch}"
+        else
+            out = "{out} "
+    out.to_lower()
+
+fn count_words(text str) Map[str, int]
+    mut counts := Map[str, int]()
+    for w in clean(text).words()
+        counts[w] += 1
+    counts
+
+fn map_doc(doc int, text str, out Channel[Partial])
+    out.send(Partial(doc: doc, counts: count_words(text)))
+
+fn reduce(parts List[Partial]) Map[str, int]
+    mut total := Map[str, int]()
+    for p in parts
+        for w, n in p.counts
+            total[w] += n
+    total
+
+fn map_reduce(docs List[str]) !Map[str, int]
+    out := Channel[Partial](docs.len() + 1)
+    g := TaskGroup()
+    for i in 0..docs.len()
+        g.add(spawn map_doc(i, docs[i], out))
+    g.wait_all()?
+    out.close()
+    parts := [p for p in out]
+    reduce(parts.sorted(by: |p| p.doc))
+
+fn main() !
+    docs := [
+        "The cat sat on the mat. The mat was warm.",
+        "A dog and a cat met; the dog barked!",
+        "Warm mats, warm cats, and a warm dog.",
+        "",
+        "On the mat: a cat, a dog, and the sun.",
+    ]
+    counts := map_reduce(docs)?
+    ranked := counts.keys().sorted().sorted(by: |w| -counts[w])
+    for w in ranked.take(6)
+        print("{w:<6}{counts[w]:>3}")
+    print("distinct: {counts.len()}, total: {counts.values().sum()}")
+    singles := [w for w in counts.keys().sorted() if counts[w] == 1]
+    print("seen once: {singles.join(" ")}")
+
+@test fn counts_ignore_case_and_punctuation()
+    c := count_words("Hi, hi! HI?")
+    assert_eq(c["hi"], 3)
+    assert_eq(c.len(), 1)
+
+@test fn reduce_adds_partials()
+    parts := [Partial(doc: 0, counts: {"a": 2}), Partial(doc: 1, counts: {"a": 1, "b": 4})]
+    t := reduce(parts)
+    assert_eq(t["a"], 3)
+    assert_eq(t["b"], 4)
+
+@test fn tasks_match_a_single_pass()
+    docs := ["x y x", "y z", "x"]
+    c := map_reduce(docs)?
+    assert_eq(c["x"], 3)
+    assert_eq(c["y"], 2)
+    assert_eq(c["z"], 1)

@@ -1,0 +1,73 @@
+## Cohort counts: from embedded "user,YYYY-MM" activity events, finds each
+## user's first active month (their cohort) and prints how many users of each
+## cohort were active 0 to 3 months later, with retention in percent.
+
+struct Event
+    user str
+    month int
+
+fn data() List[str]
+    [
+        "u1,2026-01", "u2,2026-01", "u3,2026-01", "u1,2026-02", "u2,2026-02",
+        "u4,2026-02", "u5,2026-02", "u1,2026-03", "u4,2026-03", "u6,2026-03",
+        "u3,2026-04", "u4,2026-04", "u6,2026-04", "u7,2026-04", "u1,2026-04",
+        "u5,2026-05", "u7,2026-05", "u2,2025-12", "bogus", "u9,2026-13",
+        "u1,2026-02",
+    ]
+
+fn parse(line str) Event?
+    cells := line.split(",")
+    if cells.len() != 2
+        return none
+    ym := cells[1].split("-")
+    if ym.len() != 2
+        return none
+    year := ym[0].to_int()?
+    mon := ym[1].to_int()?
+    if mon < 1 or mon > 12
+        return none
+    Event(user: cells[0], month: year * 12 + mon - 1)
+
+fn label(month int) str
+    mon := month % 12 + 1
+    "{month / 12}-{mon:0>2}"
+
+fn main()
+    mut events := List[Event]()
+    for line in data()
+        ev := parse(line) else
+            print("skipped: {line}")
+            continue
+        events.push(ev)
+    mut born := Map[str, int]()
+    mut seen := Set[str]()
+    for e in events
+        cur := born.get(e.user) else 999999
+        if e.month < cur
+            born[e.user] = e.month
+        _ := seen.add("{e.user}|{e.month}")
+    mut size := Map[int, int]()
+    mut kept := Map[str, int]()
+    for u in born.keys()
+        start := born[u]
+        size[start] += 1
+        for off in 0..4
+            if seen.contains("{u}|{start + off}")
+                kept["{start}|{off}"] += 1
+    print("cohort   users  +0   +1   +2   +3")
+    for start in size.keys().sorted()
+        mut row := "{label(start)}  {size[start]:>5}"
+        for off in 0..4
+            n := kept.get("{start}|{off}") else 0
+            pct := n * 100 / size[start]
+            row = "{row} {pct:>3}%"
+        print(row)
+
+@test fn parses_events()
+    assert_eq(parse("u1,2026-01")?, Event(user: "u1", month: 24312))
+    assert(parse("u1,2026-00") == none)
+    assert(parse("u1") == none)
+
+@test fn labels_months()
+    assert_eq(label(24312), "2026-01")
+    assert_eq(label(24323), "2026-12")

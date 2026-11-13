@@ -1,0 +1,103 @@
+## Flood fill on a small text image ('#' ink, '.' paper). Fills the outside
+## with '~' using an explicit stack, counts the enclosed paper cells, then
+## labels every ink island with a letter and reports its size.
+
+fn parse(rows List[str]) List[str]
+    mut cells := List[str]()
+    for line in rows
+        for ch in line.chars()
+            cells.push("{ch}")
+    cells
+
+fn fill(mut cells List[str], width int, height int, start int, target str, paint str) int
+    if cells[start] != target or target == paint
+        return 0
+    mut stack := [start]
+    cells[start] = paint
+    mut filled := 0
+    while cur := stack.pop()
+        filled += 1
+        x := cur % width
+        y := cur / width
+        if x > 0 and cells[cur - 1] == target
+            cells[cur - 1] = paint
+            stack.push(cur - 1)
+        if x < width - 1 and cells[cur + 1] == target
+            cells[cur + 1] = paint
+            stack.push(cur + 1)
+        if y > 0 and cells[cur - width] == target
+            cells[cur - width] = paint
+            stack.push(cur - width)
+        if y < height - 1 and cells[cur + width] == target
+            cells[cur + width] = paint
+            stack.push(cur + width)
+    filled
+
+fn count_of(cells List[str], what str) int
+    mut n := 0
+    for c in cells
+        if c == what
+            n += 1
+    n
+
+fn label_islands(mut cells List[str], width int, height int) List[int]
+    names := "ABCDEFGHIJ".chars()
+    mut sizes := List[int]()
+    for i in 0..cells.len()
+        if cells[i] == "#"
+            tag := "{names[sizes.len()]}"
+            size := fill(mut cells, width, height, i, "#", tag)
+            sizes.push(size)
+    sizes
+
+fn show(title str, cells List[str], width int)
+    print(title)
+    height := cells.len() / width
+    for r in 0..height
+        lo := r * width
+        hi := lo + width
+        line := cells[lo..hi].join("")
+        print("  {line}")
+
+fn main()
+    rows := [
+        "............",
+        ".####...##..",
+        ".#..#..####.",
+        ".####...##..",
+        "............",
+        "..#......#..",
+        "............",
+    ]
+    width := rows[0].len()
+    height := rows.len()
+    mut cells := parse(rows)
+    show("original:", cells, width)
+    outside := fill(mut cells, width, height, 0, ".", "~")
+    print("outside paper cells: {outside}")
+    print("enclosed paper cells: {count_of(cells, ".")}")
+    sizes := label_islands(mut cells, width, height)
+    show("labelled:", cells, width)
+    names := "ABCDEFGHIJ".chars()
+    for k in 0..sizes.len()
+        print("island {names[k]}: {sizes[k]} cells")
+    print("ink total: {sizes.sum()}")
+
+@test fn fills_a_connected_region()
+    mut cells := parse(["..#", "..#", "###"])
+    n := fill(mut cells, 3, 3, 0, ".", "o")
+    assert_eq(n, 4)
+    assert_eq(count_of(cells, "o"), 4)
+
+@test fn fill_stops_at_walls()
+    mut cells := parse([".#.", ".#."])
+    assert_eq(fill(mut cells, 3, 2, 0, ".", "o"), 2)
+    assert_eq(count_of(cells, "."), 2)
+
+@test fn fill_with_same_colour_is_a_no_op()
+    mut cells := parse(["##", "##"])
+    assert_eq(fill(mut cells, 2, 2, 0, "#", "#"), 0)
+
+@test fn islands_are_counted_separately()
+    mut cells := parse(["#.#", "...", "#.."])
+    assert_eq(label_islands(mut cells, 3, 3), [1, 1, 1])
