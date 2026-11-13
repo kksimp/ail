@@ -115,7 +115,7 @@ pub fn name_word(name str) NameWord?
             new: "none",
             help: "the absent value is `none`, and the type must say it can be absent: `int?`",
         )
-        "this" => NameWord(new: "self", help: "a method's receiver is `self`: `self.field`, `self.method()`"),
+        "this" => NameWord(new: "self", help: "a method's receiver is `self`: `self.field`, `self.method()`")
         "println" | "puts" | "echo" | "print_line" | "printline" | "writeln" => NameWord(
             new: "print",
             help: "`print(value)` writes a value and a newline",
