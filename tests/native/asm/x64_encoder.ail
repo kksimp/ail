@@ -300,6 +300,26 @@ fn main()
             e.vpd_rrr(k, d, 4, 5)
             pd := if k == 84 then "andpd" else "xorpd"
             emit("v{pd} xmm{d}, xmm4, xmm5", e)
+    # two-lane vectors (native.vec.3)
+    for d in [0, 8, 15]
+        for i in 0..4
+            mnem := SD_NAMES[i]
+            mut p := asm.new_asm()
+            p.vpd_op(SD_OPS[i], d, 1, 10)
+            emit("v{mnem}pd xmm{d}, xmm1, xmm10", p)
+        mut lo := asm.new_asm()
+        lo.vunpcklpd(d, 9, 2)
+        emit("vunpcklpd xmm{d}, xmm9, xmm2", lo)
+        mut hi := asm.new_asm()
+        hi.vunpckhpd(d, 3, 3)
+        emit("vunpckhpd xmm{d}, xmm3, xmm3", hi)
+        for m in [asm.at(asm.RBP, -24), asm.at_index(12, 1, 8, 40)]
+            mut ld := asm.new_asm()
+            ld.vmovupd_rm128(d, m)
+            emit("vmovupd xmm{d}, XMMWORD PTR {mem(m)}", ld)
+            mut st := asm.new_asm()
+            st.vmovupd_mr128(m, d)
+            emit("vmovupd XMMWORD PTR {mem(m)}, xmm{d}", st)
     mut rd := asm.new_asm()
     rd.vroundsd(0, 0, 1, 9)
     emit("vroundsd xmm0, xmm0, xmm1, 9", rd)

@@ -1,0 +1,27 @@
+# slp-expect: none
+# Lists the pairing pass (native.vec.3) leaves scalar, in loops bce versions: `f32`
+# elements and integers.
+fn f32s(mut s List[f32], n int, m f32)
+    for i in 0..n
+        k := i * 2
+        x := s[k] * m
+        y := s[k + 1] * m
+        s[k] = x + s[k + 2]
+        s[k + 1] = y + s[k + 3]
+
+fn ints(mut s List[int], n int, m int)
+    for i in 0..n
+        k := i * 2
+        x := s[k] * m
+        y := s[k + 1] * m
+        s[k] = x + s[k + 2]
+        s[k + 1] = y + s[k + 3]
+
+fn main()
+    mut a := [x.to_f32() for x in [1.5, 2.25, 0.1, 0.2, 7.0, 0.5, -1.0]]
+    half := 0.5
+    f32s(mut a, 2, half.to_f32())
+    print(a)
+    mut b := [3, -4, 5, 6, 7, 1, 2]
+    ints(mut b, 2, 3)
+    print(b)

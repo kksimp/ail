@@ -15,8 +15,8 @@
 use mir
 
 ## Where a value lives: a register (0-63, targets number vector registers
-## from `FLOAT_BASE`), a stack slot (`SLOT_BASE + k`), `REMAT` (rebuilt at
-## each use), or `NOWHERE` (never read).
+## from `FLOAT_BASE`), a stack slot (`SLOT_BASE + k`; a `Vec2` has that slot
+## and the next), `REMAT` (rebuilt at each use), or `NOWHERE` (never read).
 pub FLOAT_BASE := 32
 pub SLOT_BASE := 1000
 pub REMAT := -2
@@ -285,7 +285,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
         func: f,
     )
     for v in queue
-        s.assign(v, f.vals[v].is_float(), t)
+        s.assign(v, f.vals[v].in_float_reg(), t)
     mut sallocs := Map[int, int]()
     for blk in f.blocks
         for i in blk.insts
@@ -676,7 +676,11 @@ fn Scan.assign(mut self, v int, float bool, t Target)
     # register, so the partner can take the same one and no move is left.
     cross := crosses(v) or partner_crosses(v)
     mut pool := List[int]()
-    if float
+    if func.vals[v].is_vec()
+        # A `Vec2` never lives across a call (native.vec.3), and a callee-saved register keeps only its low
+        # half (AAPCS64) or is saved as one `float` (Windows x86-64).
+        pool.extend(t.float_caller)
+    elif float
         if not cross
             pool.extend(t.float_caller)
         pool.extend(t.float_callee)
@@ -721,14 +725,14 @@ fn Scan.assign(mut self, v int, float bool, t Target)
         if victim >= 0
             and (weight[victim] < weight[v] or (weight[victim] == weight[v] and end[victim] > end[v]))
             pick = loc[victim]
-            loc[victim] = new_slot()
+            loc[victim] = slot_for(victim)
             mut rest := List[int]()
             for a in active
                 if a != victim
                     rest.push(a)
             active = rest
         else
-            loc[v] = new_slot()
+            loc[v] = slot_for(v)
             return
     loc[v] = pick
     active.push(v)
@@ -741,6 +745,14 @@ fn Scan.sole(self, a int, v int) bool
         if b != a and loc[b] == loc[a] and overlaps(ranges[b], ranges[v])
             return false
     true
+
+## A stack slot for `v`. A `Vec2` takes two that follow each other (native.vec.3); the target reads its 16 bytes
+## from whichever of the two has the lower address.
+fn Scan.slot_for(mut self, v int) int
+    at := new_slot()
+    if func.vals[v].is_vec()
+        slots += 1
+    at
 
 fn Scan.new_slot(mut self) int
     slots += 1

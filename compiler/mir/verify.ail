@@ -91,6 +91,8 @@ fn check_types(f Func, i Inst, mut errs List[str])
         "fadd" | "fsub" | "fmul" | "fdiv" | "fneg" | "ftoi" | "sqrt" | "abs" | "floor" | "ceil" => "float"
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => "float"
         "not" => "bool"
+        "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vlane" | "vhadd" => "float2"
+        "vsplat" | "vpack" => "float"
         _ => ""
     if want == ""
         return

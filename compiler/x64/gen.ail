@@ -856,6 +856,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := out_xmm(i.dst, X0)
             a.vpd_rrr(if i.op == "fneg" then 87 else 84, d, xa, X1)
             put_xmm(i.dst, d)
+        "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
+        "vsplat" | "vpack" | "vlane" | "vhadd" => vec_inst(i)
         "sqrt" | "floor" | "ceil" =>
             xa := xmm(i.arg(0), X0)
             d := out_xmm(i.dst, X0)

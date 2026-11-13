@@ -23,49 +23,22 @@
   the backend). Any other name is an error (native.build.3).
 - The executables link no libc and import nothing. Each one is a single static
   file.
-- Build time is about one to two seconds per program today, because the native
-  compiler itself still runs on the interpreter. Lane 182 works on that.
+- `ail run FILE` builds the program the same way and runs it; an unchanged
+  program starts from the build cache (native.build.5).
 
-## What builds natively today
+## What builds natively
 
-A program builds when every function is a free function (no methods, generics,
-contracts or traits) over `int`, `float`, `bool`, `str`, and lists of those and
-of lists. The full list is native.subset.1 in [spec/23-native.md](../spec/23-native.md).
-In short:
-
-- locals, constants made of literals and arithmetic, `if`, `while`, `for` over
-  a range or a list, `break`, `continue`, `return`, and calls between functions;
-- `print`, and string interpolation inside `print` (`{x:.N}` for a float);
-- `xs[i]`, `xs[i] = v`, `len`, `push`, `join`, `chars`, `env.args()`, and
-  `s.to_int() else ...` as a binding's value;
-- the methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor` and
-  `ceil`, and the bit operations.
-
-Examples that build and print what `ail run` prints (checked by
-`tools/gate/goldens.ail`):
-
-| File | Shows |
-|---|---|
-| [examples/native_collatz.ail](../../examples/native_collatz.ail) | `while`, a value `if`, a loop over a range |
-| [examples/native_sieve.ail](../../examples/native_sieve.ail) | lists of bools built by `push`, indexing, assignment |
-| [examples/native_fib.ail](../../examples/native_fib.ail) | recursion and a loop, interpolated `print` |
-| [examples/native_words.ail](../../examples/native_words.ail) | `join`, `len`, `chars`, `to_int() else` |
-| [examples/native_mandel.ail](../../examples/native_mandel.ail) | float arithmetic and `{x:.4}` |
-
-The other programs in `examples/` do not build yet. Most use structs, enums,
-methods, traits, maps, closures, or `main` returning a result. `examples/hello.ail`
-is the only one that builds today. `ail build` reports the first construct of
-each kind it meets, with its position:
+Everything `ail check` accepts: structs, enums, methods, traits, generics,
+maps and sets, optionals, errors, tasks and channels, contracts and the
+standard library (native.subset.1 in [spec/23-native.md](../spec/23-native.md)).
+Native is the only backend (ADR 0904). A rare construct the lowering cannot
+build yet is reported with its position and a `help:` line, and no executable
+is written:
 
 ```text
-$ ./ail build examples/build.ail
-examples/build.ail:3:8: error[native.subset.1]: struct `Finding` isn't in the native subset yet
+error[native.subset.1]: not in the native subset yet: a `Map[str, int]` in a tuple
+help: maps are native with `int`, `bool`, `char` or `str` keys (ADR 0568); ...
 ```
-
-When there is a problem, no executable is written. Lanes 171–177 widen the
-subset (heap objects, strings, maps and sets, closures, optionals and errors, and
-the OS layer). Lane 180's coverage tracker is the list of what is in and what is
-not; update this section when it changes.
 
 ## When a program traps
 
@@ -83,20 +56,7 @@ PATH:5:17: trap[type.coll.4]: index 3 is out of bounds for a list of length 3
   5 |         print(xs[i])
 ```
 
-The interpreter adds a snapshot of the locals after that excerpt. The native
-executable does not print the snapshot, so its standard error is shorter.
-
-## Checking native output against the interpreter
-
-The interpreter is the reference (ADR 0032). To check a program by hand:
-
-```sh
-./ail build FILE.ail -o /tmp/prog && /tmp/prog > native.txt
-./ail run FILE.ail > interp.txt
-cmp native.txt interp.txt
-```
-
-For the examples, the test suite does this for every `native_*` file.
+`ail run --trace` adds a snapshot of the locals.
 
 ## Looking at the code the backend produces
 
@@ -120,10 +80,7 @@ run as part of writing this guide, so report any mismatch.
 
 ## Limits
 
-- Only the subset above. Everything else is a diagnostic, not a slow fallback.
 - Integer overflow, division by zero, bad indexes and bad shifts trap with the
   rule IDs of [spec/23-native.md](../spec/23-native.md); they do not wrap.
-- Standard output and `env.args()` are the only I/O so far: no files, no network, no processes.
 - Performance numbers change with each lane. See
-  [native-performance.md](native-performance.md) for the latest race against C
-  and Python.
+  [native-performance.md](native-performance.md) and [../benchmarks.md](../benchmarks.md).

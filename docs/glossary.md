@@ -5,6 +5,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
+| **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
 | **Task ledger** | `.ail/task-log.jsonl`: one line per `ail task verify` (stage, result, tokens printed, fixes, rules hit, wall ms); nothing leaves the machine ([ADR 1048](decisions/1048-task-ledger.md)). |
 | **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
 | **`ail merge`** | A three-way merge that cuts `.ail` files into declarations, so branches that change different declarations never conflict; it works as a git merge driver ([ADR 1019](decisions/1019-ail-merge-driver.md)). |
@@ -33,7 +35,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Axis reduction** | `t.sum(axis)`, `t.max(axis)`, `t.mean(axis)`: a tensor reduced along one axis, whose shape drops that axis (`std.tensor.11`, ADR 0345). |
 | **Bare variant pattern** | A variant with data written without parentheses in a pattern, `Rect =>`: it matches any fields and binds none (ADR 0183). |
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
-| **Bit operation** | An `int` method that works on the 64-bit two's complement bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-2, ADR 0465). |
+| **Bit operation** | An `int` operation on the 64-bit two's complement bits: `&`, `|`, `^`, `~`, `<<`, `>>` or the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-5, ADR 1070, ADR 0465). |
 | **Block parameter** | A MIR value defined on entry to a block; each edge into the block passes one argument per parameter, in place of phi nodes (ADR 0222, ADR 0384). |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. Never used (ADR 0010). |
 | **Bytecode tier** | (Removed with the Rust bootstrap, ADR 0904.) The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
@@ -50,6 +52,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Child** | A process started with `proc.start`: a unique value with a process id and three `Channel[str]` streams (`stdin`, `out`, `err`); `proc.wait(move c)` or `proc.kill(move c)` ends it (ADRs 0424–0428). |
 | **Chunked transfer** | The HTTP framing that sends a body in sized chunks when its length is not known up front; `std.net` uses it for request bodies ([ADR 0637](decisions/0637-http-persistent-connections-and-timeouts.md)). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
+| **Closure object** | The collected object a native function value points to: the code address, then a function literal's copied locals (`native.fnval.1`, [ADR 1067](decisions/1067-closures.md)). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
 | **Compile-time-safe** | A function whose effect set has none of `io`, `unsafe`, `spawn` or a capability, so constants and derive generators may call it; the same functions `@pure` accepts (`ct.const.2`, ADR 0225). |
@@ -103,7 +106,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Foreign syntax** | A construct from Python, Rust, Go or TypeScript that AIL doesn't have (`&&`, `def`, `try`, `x++`, `len(xs)`). Reported once with the AIL spelling (`gram.foreign.1`, ADR 0262). |
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
-| **Function value** | A declared function used as a value, of type `fn(A, B) R`, that can be stored, passed and called; no closures (`type.fn.1-3`, ADRs 0455, 0456). |
+| **Function literal** | An anonymous function value written `\|x\| e`: one expression whose parameter types come from context or are written; it copies the locals it names when made (`type.fn.4`-`5`, [ADR 1067](decisions/1067-closures.md)). Also called a closure or lambda. |
+| **Function value** | A declared function or a function literal used as a value, of type `fn(A, B) R` (or `fn(A) R ! E`), that can be stored, passed and called (`type.fn.1-8`, ADRs 0455, 0456, 1067). |
 | **Fused instruction** | A bytecode instruction that does several steps of a loop body at once, cutting dispatch cost ([ADR 0619](decisions/0619-bytecode-calls-loops-and-fusion.md)). |
 | **Coverage-guided fuzzing** | `ail test --fuzz NAME`: a property test run on mutated inputs, keeping those that reach a new statement, with an optional corpus directory ([ADR 1015](decisions/1015-user-fuzzing.md)). |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
@@ -121,7 +125,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Glob** | A path pattern with `*` and `?` inside a component and `**` for any number of directories; `fs.glob` returns the matching paths, sorted (`std.fs.9`, ADR 0281). |
 | **`Hash`** | The standard trait of map keys and set elements. Automatic for every type whose `==` is automatic or derived and whose parts are `Hash`; has no methods (ADR 0133). |
 | **hash64** | `hash.hash64(s)`: AIL's fast non-cryptographic 64-bit hash, stable across platforms (`std.hash.4`, ADR 0444). |
-| **HIR** | High-level IR: the resolved, typed, expanded program, named by stable ids; what `ail api` serves and the interpreter runs ([ir-architecture.md](design/ir-architecture.md), ADR 0222). |
+| **HIR** | High-level IR: the resolved, typed, expanded program, named by stable ids; what `ail api` serves ([ir-architecture.md](design/ir-architecture.md), ADR 0222). |
 | **Hand-off (bytecode tier)** | An expression or statement a compiled body leaves to the tree walker, which runs it on the same environment (ADR 0361). A method call whose receiver fails its guard is handed off with the receiver already evaluated (ADR 0363). |
 | **Hot/cold splitting** | Placing rarely used fields (or code) away from frequently used ones to improve cache use. |
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
@@ -156,7 +160,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Mutation testing** | `ail test --mutate`: changes the reached lines of a program one way at a time, runs the tests on each change and reports the changes (mutants) that no test fails on ([ADR 1022](decisions/1022-mutation-testing.md)). |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
-| **Native subset** | The constructs the native backend compiles (native.subset.1): free functions over numbers, string literals and lists of numbers; anything else is reported before code is made (ADR 0384). |
+| **Native subset** | The constructs the native backend compiles (native.subset.1): the whole language checked by `ail check`, with rare corner cases the lowering reports as native.subset.1 before any code is made (ADR 0384, ADR 0904). |
 | **Native test runner** | `ail test`: builds each `@test` function natively and runs it; the comparison with the interpreter was retired ([ADR 0679](decisions/0679-native-test-runner.md), [ADR 0900](decisions/0900-refuse-rust-only-routes.md)). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **net.serve** | The capability to listen for connections, held in addition to `net` (`std.net.14`, ADR 0422). |
@@ -168,7 +172,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
 | **Package** | The code under one package root: its root module and the modules below it, optionally described by an `ail.pkg` manifest (ADRs 0153, 0230). |
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
-| **Packed list** | The storage of a `List[int]`, `List[float]` or `List[bool]` in the interpreter: one machine word (one byte for `bool`) per element instead of a 32-byte `Value`. Invisible to programs; any other list is boxed ([ADR 0760](decisions/0760-packed-list-storage.md)). |
+| **Packed list** | The storage of a `List[int]`, `List[float]` or `List[bool]` in the retired interpreter (ADR 0904; native lists store the same way): one machine word (one byte for `bool`) per element instead of a 32-byte `Value`. Invisible to programs; any other list is boxed ([ADR 0760](decisions/0760-packed-list-storage.md)). |
 | **Page model** | Garlic's agent-facing view of a page: each perceivable element's role, accessible name and the cells it was drawn in, as `--json` (api 1). See garlic-browser.md in that repository. |
 | **Parity probe** | `tools/gate/parity.ail`, the gate's `parity` suite: one line per feature (`FEATURE works`, `missing` or `differs`), found by trying it. The lines must be the same on macOS, Linux and Windows but for those in `tests/parity/expected-differences.txt` ([ADR 0925](decisions/0925-windows-release-gate.md)). |
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
@@ -179,7 +183,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
 | **Place** | A local binding, parameter or `self`, or a field or element of a place: something that can be assigned to or passed `mut`. It is *mutable* when its root is a `mut` binding, `mut` parameter or `mut self` (`own.place.1`, ADR 0117). |
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
-| **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
+| **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the native runtime runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
 | **Push-builder loop** | A loop whose body names an outer list only in one top-level `out.push(e)`, so iteration `k` pushes element `k`; it runs on the pool with a list per chunk, joined in order (`conc.par.16`, [ADR 0938](decisions/0938-auto-parallel-push-builder-loops.md)). |
 | **Renderer** | The part of a host that turns a view tree into controls on screen; one per platform (SwiftUI on macOS), so the same AIL app runs everywhere a host exists (ADR 0838). |
@@ -231,6 +235,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0904; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
+| **SLP** | Superword-level parallelism: turning matching scalar operations of straight-line code (the `x` and `y` of a point, say) into one vector operation. AIL pairs adjacent `float` element operations two at a time (native.vec.3, [ADR 1066](decisions/1066-pair-adjacent-float-operations.md)). |
 | **Site cache** | (Removed with the Rust interpreter, ADR 0904.) A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
 | **Sized number** | One of `i8 i16 i32 u8 u16 u32 u64 f32`: the numeric types besides `int` (`i64`) and `float` (`f64`). Literals take their type from context, and nothing converts implicitly (ADRs 0194–0195). |
 | **Snapshot (expectation)** | An expected value written in a test: a literal in `assert_eq`, a doc example's `# =>` lines, or a `NAME.out` file. `ail test --update` rewrites stale ones and prints the diff (ADR 0395). |
@@ -254,7 +259,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Text cell** | One character position in a `std.ui` window, with a foreground and background color; the window is a grid of them, `cols` by `rows` (ADR 0177). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
 | **Text layer** | The text a PDF carries as glyph codes plus its fonts' maps to Unicode, read with positions and no OCR; scans have none (ADR 0520). |
-| **Thread pool** | The interpreter's `min(cores, 8)` worker threads (`AIL_THREADS=N` overrides) that run a `par for` in chunks on copied values, with the sequential result (`conc.par.8`, ADR 0272). |
+| **Thread pool** | The `min(cores, 8)` worker threads (`AIL_THREADS=N` overrides) that run a `par for` in chunks on copied values, with the sequential result (`conc.par.8`, ADR 0272). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
 | **Token listing** | The output of `ail api --tokens FILE`: one `LINE:COL KIND VALUE` line per token, then comments and diagnostics; the AIL lexer must print it byte for byte (ADR 0371, `api.tok.1–3`). |
 | **Total order (float)** | Float's `cmp`: numeric order with NaN after every number and `-0.0` equal to `0.0`, used for sorting; the operators `<` and `==` stay IEEE (ADR 0130). |
@@ -262,7 +267,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Trait** | A named set of method signatures that types implement explicitly with `impl Trait for Type` (ADR 0073). |
 | **Trap** | The response to a bug (overflow, out-of-bounds access, failed assertion). It stops the current task, runs its deferred cleanup, and is reported to the parent task. In the main task it ends the program (ADR 0035, ADR 0047). |
 | **Trap record** | A per-site constant the native compiler emits for a runtime check: file, line, column, rule ID and message, which `rt_trap` prints (ADR 0405). |
-| **Trap site** | A MIR record of one check that can trap: its rule, kind, operator and position; the code jumps to a stub that prints the interpreter's trap line (ADR 0384). |
+| **Trap site** | A MIR record of one check that can trap: its rule, kind, operator and position; the code jumps to a stub that prints the trap line (ADR 0384). |
 | **Trap snapshot** | The source line and the stack, each frame with its arguments and locals, reported with a trap that ends `ail run` (ADR 0267). |
 | **Call table** | The rows `trace.tab` holds in a native executable's code, one per user call: return address, call position and function. A trap's stack is printed by walking frame pointers and looking each return address up in it (trace.frame.1, ADR 0641). |
 | **Trap stub** | Code at the end of a native function that a failed check branches to; it calls `rt.trap` with the check's kind, operands and constant source text (ADR 0385). |

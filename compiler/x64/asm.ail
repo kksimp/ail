@@ -678,6 +678,24 @@ pub fn Asm.vsd_rrm(mut self, op str, dst int, a int, m Mem)
 pub fn Asm.vpd_rrr(mut self, op int, dst int, a int, b int)
     vex_rr(1, 1, 0, op, dst, a, b)
 
+## `vaddpd` `vsubpd` `vmulpd` `vdivpd` on xmm registers: `dst = a op b`, two doubles (native.vec.3).
+pub fn Asm.vpd_op(mut self, op str, dst int, a int, b int)
+    vex_rr(1, 1, 0, sd_opcode(op), dst, a, b)
+
+## `vunpcklpd` (dst = a[0], b[0]) and `vunpckhpd` (dst = a[1], b[1]) on xmm registers.
+pub fn Asm.vunpcklpd(mut self, dst int, a int, b int)
+    vex_rr(1, 1, 0, 20, dst, a, b)
+
+pub fn Asm.vunpckhpd(mut self, dst int, a int, b int)
+    vex_rr(1, 1, 0, 21, dst, a, b)
+
+## `vmovupd xmm, [m]` and `vmovupd [m], xmm`: two doubles, unaligned.
+pub fn Asm.vmovupd_rm128(mut self, dst int, m Mem)
+    vex_rm(1, 1, 0, 16, dst, 0, m, 0)
+
+pub fn Asm.vmovupd_mr128(mut self, m Mem, src int)
+    vex_rm(1, 1, 0, 17, src, 0, m, 0)
+
 ## `vroundsd dst, a, b, mode` (mode 9: floor, 10: ceil).
 pub fn Asm.vroundsd(mut self, dst int, a int, b int, mode int)
     vex_rr(1, 3, 0, 11, dst, a, b)

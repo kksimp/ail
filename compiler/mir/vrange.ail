@@ -1,0 +1,523 @@
+## Function-wide value ranges (ADR 1063, native.range.1-3).
+##
+## One forward analysis per function gives each value an interval `lo..=hi`
+## that holds on every run reaching its definition. Sources: constants,
+## `len` and `cap` (a list has fewer than 2^48 elements: they fit in the
+## 48-bit address space), bytes, masks, shifts, remainders and comparisons;
+## a branch on `x < y` (and the other comparisons) bounds `x` and `y` in the
+## blocks its edge dominates, and on that edge's arguments. Loop parameters
+## join what every edge brings; one that keeps growing jumps to the end of
+## `int` (widening), so the walk ends, and the branch facts in the body bound
+## it again (a counter below `n` plus a step can't overflow).
+##
+## An operation with a trap site that can't overflow, isn't checked when its
+## result could overflow, keeps its interval clipped to `int`: had it
+## overflowed, it would have trapped. An unchecked one that might wrap is
+## unknown.
+##
+## `apply_ranges` then drops each check whose operands' intervals rule its
+## trap out (native.range.1), folds each comparison they decide
+## (native.range.2), and marks `x / 2^k` and `x % 2^k` of an `x` that is never
+## negative for the shift and mask of ADR 0816 (native.range.3).
+
+VR_MAX := 9223372036854775807
+VR_MIN := -9223372036854775807 - 1
+## The most elements a list has: 2^48 - 1.
+VR_LEN := 281474976710655
+## How many times a loop parameter may grow before its growing end jumps to
+## the end of `int`.
+VR_WIDEN := 3
+## The most rounds the walk takes before it gives up on a function.
+VR_ROUNDS := 64
+
+struct VRange
+    lo int
+    hi int
+
+## `v rel w` (`lt`, `le`, `gt`, `ge` or `eq`), true in the blocks `block`
+## dominates (-1: on one edge only).
+struct VrFact
+    block int
+    v int
+    rel str
+    w int
+
+struct VrState
+    r List[VRange]
+    has List[bool]
+    dom List[List[bool]]
+    ## The facts about each value that hold in a region.
+    facts Map[int, List[VrFact]]
+    ## Per block and out edge, the facts that hold on that edge.
+    edge List[List[List[VrFact]]]
+
+fn vr_top() VRange
+    VRange(lo: VR_MIN, hi: VR_MAX)
+
+fn vr_same(a VRange, b VRange) bool
+    a.lo == b.lo and a.hi == b.hi
+
+fn vr_join(a VRange, b VRange) VRange
+    VRange(lo: a.lo.min(b.lo), hi: a.hi.max(b.hi))
+
+## `a + b`, or none when it overflows.
+fn vr_add(a int, b int) int?
+    if b >= 0 and a <= VR_MAX - b or b < 0 and a >= VR_MIN - b then a + b else none
+
+fn vr_sub(a int, b int) int?
+    if b <= 0 and a <= VR_MAX + b or b > 0 and a >= VR_MIN + b then a - b else none
+
+fn vr_mul(a int, b int) int?
+    if a == 0 or b == 0
+        return 0
+    if a == 1
+        return b
+    if b == 1
+        return a
+    if a == VR_MIN or b == VR_MIN
+        return none
+    x := if a < 0 then 0 - a else a
+    y := if b < 0 then 0 - b else b
+    if x > VR_MAX / y
+        return none
+    a * b
+
+## The least `2^k - 1` at or above `x` (`x >= 0`).
+fn vr_mask(x int) int
+    mut m := 0
+    while m < x
+        m = m * 2 + 1
+    m
+
+## What a comparison's negation is.
+fn vr_not(rel str) str
+    if rel == "lt"
+        return "ge"
+    if rel == "le"
+        return "gt"
+    if rel == "gt"
+        return "le"
+    if rel == "ge"
+        return "lt"
+    if rel == "eq"
+        return "ne"
+    if rel == "ne"
+        return "eq"
+    ""
+
+## `y rel' x` for `x rel y`.
+fn vr_flip(rel str) str
+    if rel == "lt"
+        return "gt"
+    if rel == "le"
+        return "ge"
+    if rel == "gt"
+        return "lt"
+    if rel == "ge"
+        return "le"
+    rel
+
+## `r` narrowed by the fact `v rel w`; `r` itself when that leaves nothing
+## (the region can't run, and `r` is true there all the same).
+fn vr_refine(s VrState, r VRange, f VrFact) VRange
+    w := if s.has[f.w] then s.r[f.w] else vr_top()
+    mut lo := r.lo
+    mut hi := r.hi
+    if f.rel == "lt"
+        if w.hi > VR_MIN
+            hi = hi.min(w.hi - 1)
+    elif f.rel == "le"
+        hi = hi.min(w.hi)
+    elif f.rel == "gt"
+        if w.lo < VR_MAX
+            lo = lo.max(w.lo + 1)
+    elif f.rel == "ge"
+        lo = lo.max(w.lo)
+    elif f.rel == "eq"
+        lo = lo.max(w.lo)
+        hi = hi.min(w.hi)
+    if lo > hi then r else VRange(lo: lo, hi: hi)
+
+## The interval of `v` in block `b`: its own, narrowed by each fact of a
+## branch edge that dominates `b`.
+fn vr_at(s VrState, v int, b int) VRange
+    if v < 0 or not s.has[v]
+        return vr_top()
+    mut r := s.r[v]
+    if fs := s.facts.get(v)
+        for f in fs
+            if s.dom[b][f.block]
+                r = vr_refine(s, r, f)
+    r
+
+## The interval of `v` passed on out edge `e` of block `p`.
+fn vr_on_edge(s VrState, v int, p int, e int) VRange
+    mut r := vr_at(s, v, p)
+    for f in s.edge[p][e]
+        if f.v == v
+            r = vr_refine(s, r, f)
+    r
+
+## Whether `a op b` can trap or overflow, and its interval when it doesn't.
+struct VrOut
+    safe bool
+    r VRange
+
+fn vr_arith(op str, a VRange, b VRange) VrOut
+    if op == "add" or op == "sub"
+        lo := if op == "add" then vr_add(a.lo, b.lo) else vr_sub(a.lo, b.hi)
+        hi := if op == "add" then vr_add(a.hi, b.hi) else vr_sub(a.hi, b.lo)
+        # An end that overflows: the result is within `int` only when the
+        # operation doesn't, and a checked one traps otherwise.
+        mut out := VRange(lo: VR_MIN, hi: VR_MAX)
+        mut safe := true
+        if l := lo
+            out.lo = l
+        else
+            safe = false
+        if h := hi
+            out.hi = h
+        else
+            safe = false
+        return VrOut(safe: safe, r: out)
+    if op == "mul"
+        ps := [vr_mul(a.lo, b.lo), vr_mul(a.lo, b.hi), vr_mul(a.hi, b.lo), vr_mul(a.hi, b.hi)]
+        mut lo := VR_MAX
+        mut hi := VR_MIN
+        for p in ps
+            x := p else return VrOut(safe: false, r: vr_top())
+            lo = lo.min(x)
+            hi = hi.max(x)
+        return VrOut(safe: true, r: VRange(lo: lo, hi: hi))
+    if op == "neg"
+        if a.lo == VR_MIN
+            return VrOut(safe: false, r: vr_top())
+        return VrOut(safe: true, r: VRange(lo: 0 - a.hi, hi: 0 - a.lo))
+    zero := b.lo <= 0 and b.hi >= 0
+    if op == "div"
+        minus_one := b.lo <= -1 and b.hi >= -1
+        if a.lo == VR_MIN
+            return VrOut(safe: not zero and not minus_one, r: vr_top())
+        if zero
+            m := (0 - a.lo).max(a.hi).max(0)
+            return VrOut(safe: false, r: VRange(lo: 0 - m, hi: m))
+        qs := [a.lo / b.lo, a.lo / b.hi, a.hi / b.lo, a.hi / b.hi]
+        mut lo := VR_MAX
+        mut hi := VR_MIN
+        for q in qs
+            lo = lo.min(q)
+            hi = hi.max(q)
+        return VrOut(safe: true, r: VRange(lo: lo, hi: hi))
+    if op == "rem"
+        if b.lo == 0 and b.hi == 0
+            return VrOut(safe: false, r: vr_top())
+        # |a % b| < |b|, with the sign of `a`, and |a % b| <= |a|.
+        big := if b.lo == VR_MIN then VR_MAX else (0 - b.lo).max(b.hi)
+        m := big - 1
+        lo := if a.lo >= 0 then 0 else a.lo.max(0 - m)
+        hi := if a.hi <= 0 then 0 else a.hi.min(m)
+        return VrOut(safe: not zero, r: VRange(lo: lo, hi: hi))
+    VrOut(safe: false, r: vr_top())
+
+## `x.shl(c)` or `x.shr(c)` for counts `c` within 0..=63.
+fn vr_shift(op str, a VRange, c VRange) VRange
+    if op == "shr"
+        return VRange(
+            lo: a.lo.shr(c.lo).min(a.lo.shr(c.hi)),
+            hi: a.hi.shr(c.lo).max(a.hi.shr(c.hi)),
+        )
+    if a.lo < VR_MIN.shr(c.hi) or a.hi > VR_MAX.shr(c.hi)
+        return vr_top()
+    VRange(lo: a.lo.shl(c.lo).min(a.lo.shl(c.hi)), hi: a.hi.shl(c.lo).max(a.hi.shl(c.hi)))
+
+fn vr_count_ok(c VRange) bool
+    c.lo >= 0 and c.hi <= 63
+
+## The interval of `i`'s result in block `b`.
+fn vr_eval(s VrState, g Func, i Inst, b int) VRange
+    op := i.op
+    mut r := vr_top()
+    if op == "const"
+        r = VRange(lo: i.imm, hi: i.imm)
+    elif op == "copy"
+        r = vr_at(s, i.arg(0), b)
+    elif op == "len" or op == "cap"
+        r = VRange(lo: 0, hi: VR_LEN)
+    elif vr_is_rel(op) or vr_is_frel(op) or op == "not"
+        r = VRange(lo: 0, hi: 1)
+    elif op == "prim" and i.name == "load8"
+        r = VRange(lo: 0, hi: 255)
+    elif op == "add" or op == "sub" or op == "mul" or op == "div" or op == "rem"
+        o := vr_arith(op, vr_at(s, i.arg(0), b), vr_at(s, i.arg(1), b))
+        if o.safe or i.site >= 0
+            r = o.r
+    elif op == "neg"
+        o := vr_arith(op, vr_at(s, i.arg(0), b), vr_top())
+        if o.safe or i.site >= 0
+            r = o.r
+    elif op == "shl" or op == "shr"
+        c := vr_at(s, i.arg(1), b)
+        if vr_count_ok(c)
+            r = vr_shift(op, vr_at(s, i.arg(0), b), c)
+        elif i.site >= 0 and c.hi >= 0 and c.lo <= 63
+            # Any other count traps (expr.bit.2).
+            r = vr_shift(op, vr_at(s, i.arg(0), b), VRange(lo: c.lo.max(0), hi: c.hi.min(63)))
+    elif op == "band"
+        x := vr_at(s, i.arg(0), b)
+        y := vr_at(s, i.arg(1), b)
+        if x.lo >= 0 and y.lo >= 0
+            r = VRange(lo: 0, hi: x.hi.min(y.hi))
+        elif x.lo >= 0
+            r = VRange(lo: 0, hi: x.hi)
+        elif y.lo >= 0
+            r = VRange(lo: 0, hi: y.hi)
+    elif op == "bor" or op == "bxor"
+        x := vr_at(s, i.arg(0), b)
+        y := vr_at(s, i.arg(1), b)
+        if x.lo >= 0 and y.lo >= 0
+            r = VRange(lo: 0, hi: vr_mask(x.hi.max(y.hi)))
+    elif op == "bnot"
+        x := vr_at(s, i.arg(0), b)
+        r = VRange(lo: x.hi.bit_not(), hi: x.lo.bit_not())
+    if g.vals[i.dst] == Ty.Byte
+        lo := r.lo.max(0)
+        hi := r.hi.min(255)
+        r = if lo <= hi then VRange(lo: lo, hi: hi) else VRange(lo: 0, hi: 255)
+    r
+
+## Whether `i`, which has a trap site, can't trap in block `b`.
+fn vr_safe(s VrState, i Inst, b int) bool
+    op := i.op
+    if op == "add" or op == "sub" or op == "mul" or op == "div" or op == "rem"
+        return vr_arith(op, vr_at(s, i.arg(0), b), vr_at(s, i.arg(1), b)).safe
+    if op == "neg"
+        return vr_at(s, i.arg(0), b).lo > VR_MIN
+    if op == "shl" or op == "shr"
+        return vr_count_ok(vr_at(s, i.arg(1), b))
+    false
+
+## 1 or 0 when `i`, a comparison of two `int`s, has one answer in block
+## `b`, else none.
+fn vr_decide(s VrState, g Func, i Inst, b int) int?
+    if i.argc() != 2 or g.vals[i.arg(0)] != Ty.Int or g.vals[i.arg(1)] != Ty.Int
+        return none
+    x := vr_at(s, i.arg(0), b)
+    y := vr_at(s, i.arg(1), b)
+    if x.lo == VR_MIN and x.hi == VR_MAX or y.lo == VR_MIN and y.hi == VR_MAX
+        return none
+    lt := x.hi < y.lo
+    ge := x.lo >= y.hi
+    gt := x.lo > y.hi
+    le := x.hi <= y.lo
+    one := x.lo == x.hi and y.lo == y.hi and x.lo == y.lo
+    apart := lt or gt
+    mut yes := false
+    mut no := false
+    op := i.op
+    if op == "lt"
+        yes = lt
+        no = ge
+    elif op == "ge"
+        yes = ge
+        no = lt
+    elif op == "le"
+        yes = le
+        no = gt
+    elif op == "gt"
+        yes = gt
+        no = le
+    elif op == "eq"
+        yes = one
+        no = apart
+    elif op == "ne"
+        yes = apart
+        no = one
+    if yes
+        return 1
+    if no
+        return 0
+    none
+
+fn vr_is_frel(op str) bool
+    op == "flt" or op == "fle" or op == "fgt" or op == "fge" or op == "feq" or op == "fne"
+
+## A comparison of two `int`s or `bool`s.
+fn vr_is_rel(op str) bool
+    op == "lt" or op == "le" or op == "gt" or op == "ge" or op == "eq" or op == "ne"
+
+fn vr_power(n int) bool
+    n >= 2 and n.bit_and(n - 1) == 0
+
+## Drop the checks the ranges rule out, fold the comparisons they decide,
+## and mark division by a power of two of a value never negative
+## (native.range.1-3). `AIL_OPT_OFF=vrange` turns it off; `vrcmp` keeps
+## every comparison.
+pub fn apply_ranges(mut g Func, dom List[List[bool]])
+    if opt_off("vrange")
+        return
+    n := g.blocks.len()
+    nv := g.vals.len()
+    mut work := false
+    for blk in g.blocks
+        for i in blk.insts
+            if i.site >= 0 or i.op == "div" or i.op == "rem"
+                work = true
+        if blk.term.kind == "branch"
+            work = true
+    if not work
+        return
+    mut where := [-1 for _ in 0..nv]
+    mut at := [-1 for _ in 0..nv]
+    for b in 0..n
+        for k in 0..g.blocks[b].insts.len()
+            d := g.blocks[b].insts[k].dst
+            if d >= 0
+                where[d] = b
+                at[d] = k
+    mut preds := [0 for _ in 0..n]
+    mut in_p := [List[int]() for _ in 0..n]
+    mut in_e := [List[int]() for _ in 0..n]
+    for b in 0..n
+        ts := g.blocks[b].term.targets
+        for e in 0..ts.len()
+            preds[ts[e]] += 1
+            in_p[ts[e]].push(b)
+            in_e[ts[e]].push(e)
+    mut facts := Map[int, List[VrFact]]()
+    mut edge := [[List[VrFact]() for _ in blk.term.targets] for blk in g.blocks]
+    for b in 0..n
+        t := g.blocks[b].term
+        if t.kind != "branch" or t.cond < 0 or where[t.cond] < 0 or t.targets.len() != 2
+            continue
+        c := g.blocks[where[t.cond]].insts[at[t.cond]]
+        if c.argc() != 2 or not vr_is_rel(c.op)
+            continue
+        if g.vals[c.arg(0)] != Ty.Int or g.vals[c.arg(1)] != Ty.Int
+            continue
+        for e in 0..2
+            rel := if e == 0 then c.op else vr_not(c.op)
+            if rel == "ne"
+                continue
+            to := t.targets[e]
+            region := preds[to] == 1 and to != 0
+            x := VrFact(block: to, v: c.arg(0), rel: rel, w: c.arg(1))
+            y := VrFact(block: to, v: c.arg(1), rel: vr_flip(rel), w: c.arg(0))
+            edge[b][e].push(x)
+            edge[b][e].push(y)
+            if region
+                vr_note(mut facts, x)
+                vr_note(mut facts, y)
+    mut s := VrState(
+        r: [vr_top() for _ in 0..nv],
+        has: [false for _ in 0..nv],
+        dom: dom,
+        facts: facts,
+        edge: edge,
+    )
+    order := rpo(g)
+    mut reached := [false for _ in 0..n]
+    reached[0] = true
+    for p in g.blocks[0].params
+        s.has[p] = true
+    mut grew := [0 for _ in 0..nv]
+    mut nparams := 0
+    for blk in g.blocks
+        nparams += blk.params.len()
+    # Each parameter grows at most VR_WIDEN + 2 times, and parameters grow
+    # together, so a few rounds per loop level suffice; the cap bounds the
+    # compile time of a huge function, which then gets nothing proved.
+    limit := (8 + (VR_WIDEN + 3) * nparams).min(VR_ROUNDS)
+    mut rounds := 0
+    mut changed := true
+    while changed
+        changed = false
+        rounds += 1
+        if rounds > limit
+            # Never expected: widening ends the walk sooner. Prove nothing.
+            return
+        for b in order
+            if b != 0
+                mut live := false
+                for p in in_p[b]
+                    if reached[p]
+                        live = true
+                if not live
+                    continue
+                if not reached[b]
+                    reached[b] = true
+                    changed = true
+                for j in 0..g.blocks[b].params.len()
+                    prm := g.blocks[b].params[j]
+                    mut got := false
+                    mut nr := vr_top()
+                    for x in 0..in_p[b].len()
+                        p := in_p[b][x]
+                        e := in_e[b][x]
+                        if not reached[p] or j >= g.blocks[p].term.args[e].len()
+                            continue
+                        v := g.blocks[p].term.args[e][j]
+                        if not s.has[v]
+                            continue
+                        r := vr_on_edge(s, v, p, e)
+                        nr = if got then vr_join(nr, r) else r
+                        got = true
+                    if not got
+                        continue
+                    if s.has[prm]
+                        old := s.r[prm]
+                        nr = vr_join(nr, old)
+                        if vr_same(nr, old)
+                            continue
+                        grew[prm] += 1
+                        if grew[prm] > VR_WIDEN
+                            nr = VRange(
+                                lo: if nr.lo < old.lo then VR_MIN else nr.lo,
+                                hi: if nr.hi > old.hi then VR_MAX else nr.hi,
+                            )
+                    s.r[prm] = nr
+                    s.has[prm] = true
+                    changed = true
+            for i in g.blocks[b].insts
+                if i.dst < 0
+                    continue
+                r := vr_eval(s, g, i, b)
+                if not s.has[i.dst] or not vr_same(r, s.r[i.dst])
+                    s.r[i.dst] = r
+                    s.has[i.dst] = true
+                    changed = true
+    cmp := not opt_off("vrcmp")
+    user := not g.name.starts_with("rt.")
+    for b in order
+        if not reached[b]
+            continue
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.site >= 0
+                if vr_safe(s, i, b)
+                    g.blocks[b].insts[k].site = -1
+                    # Not wrapped: native.range.1 proved it, so nonneg.ail may
+                    # still count its result as an `int` sum or product.
+                    if (i.op == "add" or i.op == "mul") and i.name == ""
+                        g.blocks[b].insts[k].name = "nw"
+            if cmp and i.dst >= 0
+                if c := vr_decide(s, g, i, b)
+                    mut kc := inst(i.dst, "const", [])
+                    kc.imm = c
+                    g.blocks[b].insts[k] = kc
+                    continue
+            if user and (i.op == "div" or i.op == "rem") and i.name == ""
+                if d := vr_const(g, where, at, i.arg(1))
+                    if vr_power(d) and vr_at(s, i.arg(0), b).lo >= 0
+                        g.blocks[b].insts[k].name = "nn"
+
+fn vr_note(mut facts Map[int, List[VrFact]], f VrFact)
+    if not facts.contains(f.v)
+        facts[f.v] = []
+    facts[f.v].push(f)
+
+## The constant `v` holds, if its definition is a `const`.
+fn vr_const(g Func, where List[int], at List[int], v int) int?
+    if where[v] < 0
+        return none
+    i := g.blocks[where[v]].insts[at[v]]
+    if i.op == "const" then i.imm else none

@@ -1,0 +1,107 @@
+## ARM64 code for the two-lane float vector operations (native.vec.3, ADR 1066): a `Vec2` is a `v` register's
+## two doubles, or two stack slots that follow each other. The scratch registers are d30 and d31, as for a `float`.
+use mir
+use codegen
+
+## A 16-byte load or store at `[n, #off]`, through x8 when no form has the offset.
+fn Gen.vec_mem(mut self, load bool, t int, n int, off int)
+    if off >= 0 and off % 16 == 0 and off < 65536
+        if load
+            a.ldr_q(t, n, off)
+        else
+            a.str_q(t, n, off)
+        return
+    if off >= -256 and off <= 255
+        if load
+            a.ldur_q(t, n, off)
+        else
+            a.stur_q(t, n, off)
+        return
+    if off > 0
+        a.alu_ri("add", S2, n, off)
+    else
+        a.alu_ri("sub", S2, n, 0 - off)
+    if load
+        a.ldr_q(t, S2, 0)
+    else
+        a.str_q(t, S2, 0)
+
+## The `Vec2` `v` in a vector register: its own, or `scratch` loaded from its two slots.
+fn Gen.vpr(mut self, v int, scratch int) int
+    l := loc[v]
+    if is_reg(l)
+        return l - FB
+    if not is_slot(l)
+        unreachable("a64: the vector v{v} has no location")
+    vec_mem(true, scratch, SP, slot(l))
+    scratch
+
+fn Gen.put_vec(mut self, v int, x int)
+    l := loc[v]
+    if is_slot(l)
+        vec_mem(false, x, SP, slot(l))
+    elif is_reg(l) and l - FB != x
+        a.vmov(l - FB, x)
+
+## `vldx`/`vstx`: the 16 bytes at element `index + fimm` of `base`, register `t`.
+fn Gen.vec_elems(mut self, load bool, t int, i mir.Inst)
+    base := gpr(i.arg(0), S0)
+    if k := imm(i.arg(1))
+        vec_mem(load, t, base, 8 * (k + i.elem_off()))
+        return
+    x := gpr(i.arg(1), S1)
+    a.add_lsl(S1, base, x, 3)
+    vec_mem(load, t, S1, 8 * i.elem_off())
+
+fn Gen.vec_inst(mut self, i mir.Inst)
+    match i.op
+        "vldx" =>
+            d := out_fpr(i.dst, X0)
+            vec_elems(true, d, i)
+            put_vec(i.dst, d)
+        "vstx" =>
+            x := vpr(i.arg(2), X0)
+            vec_elems(false, x, i)
+        "vsplat" =>
+            xa := fpr(i.arg(0), X0)
+            d := out_fpr(i.dst, X0)
+            a.vdup(d, xa)
+            put_vec(i.dst, d)
+        "vpack" =>
+            xa := fpr(i.arg(0), X0)
+            xb := fpr(i.arg(1), X1)
+            d := out_fpr(i.dst, X0)
+            if d != xb
+                if d != xa
+                    a.fop1("fmov", d, xa)
+                a.vins_hi(d, xb)
+            else
+                # The result's register holds lane 1: build the pair in d31, which no operand is in here.
+                a.fop1("fmov", X1, xa)
+                a.vins_hi(X1, xb)
+                a.vmov(d, X1)
+            put_vec(i.dst, d)
+        "vlane" =>
+            xa := vpr(i.arg(0), X0)
+            d := out_fpr(i.dst, X0)
+            if i.imm == 1
+                a.vlane_hi(d, xa)
+            elif d != xa
+                a.fop1("fmov", d, xa)
+            put_fpr(i.dst, d)
+        "vhadd" =>
+            xa := vpr(i.arg(0), X0)
+            d := out_fpr(i.dst, X0)
+            a.vfaddp_d(d, xa)
+            put_fpr(i.dst, d)
+        _ =>
+            xa := vpr(i.arg(0), X0)
+            xb := vpr(i.arg(1), X1)
+            d := out_fpr(i.dst, X0)
+            name := match i.op
+                "vfadd" => "fadd"
+                "vfsub" => "fsub"
+                "vfmul" => "fmul"
+                _ => "fdiv"
+            a.vop(name, d, xa, xb)
+            put_vec(i.dst, d)

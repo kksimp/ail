@@ -106,6 +106,16 @@ fn assign_op(s str) ast.BinOp?
         "%=" => ast.BinOp.Rem
         _ => none
 
+## The bit operator of `&= |= ^= <<= >>=` (expr.bit.5), or "".
+fn bit_assign(s str) str
+    match s
+        "&=" => "&"
+        "|=" => "|"
+        "^=" => "^"
+        "<<=" => "<<"
+        ">>=" => ">>"
+        _ => ""
+
 fn comparison(s str) ast.BinOp?
     match s
         "==" => ast.BinOp.Eq
@@ -1244,6 +1254,13 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         mut ret := absent[ast.TypeRef]()
         if tag_at(0) == "id" or at_sym("(") or at_kw("any") or at_kw("ref")
             ret = optional_type("the result type", "type.fn.1")?
+        # `fn(A) R ! E` and `fn(A) ! E`: a function value that can fail (type.fn.6, ADR 1067).
+        if at_sym("!")
+            bang := bump().pos
+            mut errors := [named_type("an error type after `!`", "type.fn.6")?]
+            while eat_sym("|")
+                errors.push(named_type("an error type after `|`", "err.type.5")?)
+            ret = ast.TypeRef(shape: ast.TypeShape.Fallible(ok: ret, errors: errors), pos: bang)
         return ast.TypeRef(shape: ast.TypeShape.FnType(params: params, ret: ret), pos: pos)
     n := dotted_name(expected, rule)?
     mut args := List[ast.TypeRef]()
@@ -1585,6 +1602,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             return ast.Stmt.Handle(value: target, otherwise: part)
         return none
     s := sym_at(0)
+    if bit_assign(s) != ""
+        return bit_assignment(target, s)
     if s == "=" or assign_op(s) != none
         apos := bump().pos
         value := expression()?
@@ -1593,6 +1612,25 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         error_text("expr.bind.1", here(), "only a plain name can be declared with `:=`", "", "")
         return none
     ast.Stmt.Eval(target)
+
+## `x &= e` and the other four bit forms (expr.bit.5): `x = x & e` for a plain
+## name `x`. A place with an index or a field is written out in full.
+fn Parser.bit_assignment(mut self, target ast.Expr, s str) ast.Stmt?
+    apos := bump().pos
+    op := bit_assign(s)
+    if name_of(target) != none
+        value := expression()?
+        arg := ast.Arg(label: none, mutable: false, moved: false, value: value, param: none)
+        call := ast.Expr.Method(recv: target, name: bit_method(op), name_pos: apos, args: [arg])
+        return ast.Stmt.Assign(target: target, op: none, value: call, pos: apos)
+    error_text(
+        "expr.bit.5",
+        apos,
+        "`{s}` works on a plain name",
+        "write the place twice: `a[i] = a[i] {op} e` (expr.bit.5)",
+        "",
+    )
+    none
 
 ## `for x in e` or `for mut x in e` (expr.loop.1, expr.loop.6), at `for`.
 fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
@@ -1721,7 +1759,91 @@ fn Parser.expression_plain(mut self) ast.Expr?
         return if_expr()
     if at_kw("match")
         return match_expr()
+    if at_sym("|") or at_sym("||")
+        return closure()
+    if lambda_colon() > 0
+        return python_lambda()
     range()
+
+## Python's `lambda x, y: e` ahead: the offset of its `:`, else 0.
+fn Parser.lambda_colon(self) int
+    if tag_at(0) != "id" or tok_text(peek()) != "lambda"
+        return 0
+    mut k := 1
+    while tag_at(k) == "id"
+        k += 1
+        if sym_at(k) != ","
+            break
+        k += 1
+    if sym_at(k) == ":" then k else 0
+
+## `lambda x: e` (gram.foreign.1, ADR 1067): reported with the AIL form
+## `|x| e`, with a fix, and parsed as that function literal.
+fn Parser.python_lambda(mut self) ast.Expr?
+    pos := here()
+    colon := i + lambda_colon()
+    mut params := List[ast.ClosureParam]()
+    mut names := List[str]()
+    i += 1
+    while i < colon
+        if tag_at(0) == "id"
+            params.push(ast.ClosureParam(
+                name: tok_text(peek()),
+                pos: here(),
+                ty: absent[ast.TypeRef](),
+            ))
+            names.push(tok_text(peek()))
+        i += 1
+    i += 1
+    head := "|{names.join(", ")}|"
+    error_text(
+        "gram.foreign.1",
+        pos,
+        "AIL has no `lambda`; a function literal is written `{head} ...`",
+        "the parameters go between bars and the body follows on the same line, `|x| x + 1`",
+        "write `{head}`",
+    )
+    attach("write `{head}`", [fix.span(pos, tok_end(colon) else here(), head)])
+    body := expression()?
+    ast.Expr.Closure(params: params, body: body, pos: pos)
+
+## `|a, b| e`, `|x int| e` or `|| e`: a function literal whose body is one
+## expression, running to the end of the expression (type.fn.4, ADR 1067).
+fn Parser.closure(mut self) ast.Expr?
+    pos := here()
+    mut params := List[ast.ClosureParam]()
+    if not eat_sym("||")
+        i += 1
+        while not at_sym("|")
+            if tag_at(0) != "id"
+                # A `|` where an operand is expected and no parameter follows (ADR 1067).
+                error_text(
+                    "type.fn.4",
+                    here(),
+                    "expected a parameter name or `|` in a function literal, found {describe(peek())}",
+                    "a `|` before an operand opens a function literal `|x| x + 1`; bit-or goes between two operands, `a | b`",
+                    "",
+                )
+                return none
+            p := take_name("a parameter name", "type.fn.4")?
+            mut ty := absent[ast.TypeRef]()
+            if not at_sym(",") and not at_sym("|")
+                ty = type_ref("the parameter's type", "type.fn.4")?
+            params.push(ast.ClosureParam(name: p.name, pos: p.pos, ty: ty))
+            if not eat_sym(",")
+                break
+        expect_sym("|", "`|` after the function literal's parameters", "type.fn.4")?
+    if at_newline() or peek() == Tok.Eof
+        error_text(
+            "type.fn.4",
+            here(),
+            "a function literal's body is one expression on the same line",
+            "write `|x| x + 1`; for a longer body, declare a function and call it from the literal",
+            "",
+        )
+        return none
+    body := expression()?
+    ast.Expr.Closure(params: params, body: body, pos: pos)
 
 ## The `for x in xs [if c]` clauses of a comprehension (expr.comp.2).
 fn Parser.comp_clauses(mut self) List[ast.CompFor]?
@@ -1922,7 +2044,7 @@ fn upper_name(e ast.Expr) bool
             _,
             _,
             _,
-        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => false
+        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) | Closure(_, _, _) => false
 
 fn Parser.additive(mut self) ast.Expr?
     mut lhs := multiplicative()?
@@ -1950,7 +2072,7 @@ fn Parser.additive(mut self) ast.Expr?
     lhs
 
 fn Parser.multiplicative(mut self) ast.Expr?
-    mut lhs := unary()?
+    mut lhs := bit_operand()?
     while at_sym("*") or at_sym("/") or at_sym("%")
         mut op := ast.BinOp.Rem
         if at_sym("*")
@@ -1958,9 +2080,68 @@ fn Parser.multiplicative(mut self) ast.Expr?
         elif at_sym("/")
             op = ast.BinOp.Div
         pos := bump().pos
-        rhs := unary()?
+        rhs := bit_operand()?
         lhs = ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
     lhs
+
+## The method a bit operator stands for (expr.bit.3), or "".
+fn bit_method(s str) str
+    match s
+        "&" => "bit_and"
+        "|" => "bit_or"
+        "^" => "bit_xor"
+        "<<" => "shl"
+        ">>" => "shr"
+        _ => ""
+
+## The operators a bit operator may not touch without parentheses (expr.bit.4).
+fn arith_or_cmp(s str) bool
+    ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="].contains(s)
+
+## `a & b`, `a | b`, `a ^ b`, `a << k`, `a >> k` (expr.bit.3): the same call as
+## the method form, `a.bit_and(b)`. A bit operator takes tight operands and never
+## mixes with another operator without parentheses (expr.bit.4): the chain is one
+## operator repeated (`a & b & c`, never `a | b & c`, `a << 1 << 2`), and nothing
+## arithmetic or comparing touches it on either side.
+fn Parser.bit_operand(mut self) ast.Expr?
+    first := i
+    mut lhs := unary()?
+    sym := sym_at(0)
+    if bit_method(sym) == ""
+        return lhs
+    if first > 0 and arith_or_cmp(sym_at(first - 1 - i))
+        return bit_mix(sym_at(first - 1 - i), sym)
+    mut count := 0
+    while bit_method(sym_at(0)) != ""
+        op := sym_at(0)
+        if op != sym
+            return bit_mix(sym, op)
+        if (op == "<<" or op == ">>") and count > 0
+            return bit_mix(op, op)
+        pos := bump().pos
+        rhs := unary()?
+        arg := ast.Arg(label: none, mutable: false, moved: false, value: rhs, param: none)
+        lhs = ast.Expr.Method(recv: lhs, name: bit_method(op), name_pos: pos, args: [arg])
+        count += 1
+    after := sym_at(0)
+    if arith_or_cmp(after)
+        return bit_mix(sym, after)
+    lhs
+
+## Report two operators that meet without parentheses and give up on the expression.
+fn Parser.bit_mix(mut self, a str, b str) ast.Expr?
+    msg := if a == b
+        "`{a}` can't repeat without parentheses"
+    else
+        "`{a}` and `{b}` can't meet without parentheses"
+    error_text(
+        "expr.bit.4",
+        here(),
+        msg,
+        "put parentheses around one side: `(x {a} y) {b} z` or `x {a} (y {b} z)`",
+        "add parentheses",
+    )
+    none
 
 fn Parser.unary(mut self) ast.Expr?
     # lex.num.3: `-9223372036854775808` is the minimum `int`, unless a
@@ -1975,6 +2156,20 @@ fn Parser.unary(mut self) ast.Expr?
         pos := bump().pos
         inner := unary()?
         return ast.Expr.Unary(op: ast.UnOp.Neg, operand: inner, pos: pos)
+    # expr.bit.3: `~a` is `a.bit_not()`.
+    if at_sym("~")
+        pos := bump().pos
+        inner := unary()?
+        return ast.Expr.Method(recv: inner, name: "bit_not", name_pos: pos, args: List[ast.Arg]())
+    if at_sym("&")
+        error_text(
+            "gram.foreign.1",
+            here(),
+            "AIL has no `&x` reference",
+            "values are passed by value and `mut` marks changes at the call; `a & b` is the bitwise and of two values (expr.bit.3)",
+            "",
+        )
+        return none
     # `ref e` (own.ref.1, ADR 0067).
     if at_kw("ref")
         pos := bump().pos
@@ -1997,12 +2192,12 @@ fn name_of(e ast.Expr) str?
             _,
             _,
             _,
-        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => none
+        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) | Closure(_, _, _) => none
 
 fn name_pos(e ast.Expr) ast.Pos
     match e
         Name(_, p) => p
-        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => ast.Pos(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) | Closure(_, _, _) => ast.Pos(
             line: 0,
             col: 0,
         )
@@ -2055,7 +2250,12 @@ fn Parser.postfix(mut self) ast.Expr?
                 kpos := bump().pos
                 e = ast.Expr.Member(recv: e, name: k, name_pos: kpos)
                 continue
-            m := take_name("a field or method name after `.`", "gram.syntax.1")?
+            # `xs.any(f)` (type.coll.22): the keyword `any` names the list method after `.`.
+            mut m := ast.Ident(name: "any", pos: here())
+            if kw_at(0) == "any" and sym_at(1) == "("
+                i += 1
+            else
+                m = take_name("a field or method name after `.`", "gram.syntax.1")?
             recv_name := name_of(e) else ""
             # `m.Stack[int]` after an import `m` (gen.infer.2, mod.use.2).
             if recv_name != ""
@@ -2114,21 +2314,12 @@ fn Parser.call_args(mut self) List[ast.Arg]?
         moved := not mutable and eat_kw("move")
         # expr.key.1: `by: |x| e`, a key function.
         mut param := none
-        if eat_sym("|")
-            param = take_name("a parameter name after `|`", "expr.key.1")?
-            expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
+        # `|x| e` with one untyped parameter is a function literal that also names its
+        # parameter in `Arg.param`, the key-function form (expr.key.1, type.fn.4, ADR 1067):
+        # `ast.key_body` reads `e` back.
+        if at_sym("|") and tag_at(1) == "id" and sym_at(2) == "|"
+            param = ast.Ident(name: tok_text(peek_at(1)), pos: tok_pos(i + 1))
         value := expression()?
-        # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
-        if at_sym("|")
-            error_text(
-                "gram.foreign.1",
-                here(),
-                "AIL has no `|`",
-                "bit operations are methods: `a.bit_or(b)` (expr.bit.1)",
-                "write `.bit_or`",
-            )
-            attach("write `.bit_or`", [fix.operands(here(), "|", "$l.bit_or($r)")])
-            return none
         # `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
         if at_sym("@")
             error_text(

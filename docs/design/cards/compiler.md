@@ -8,7 +8,7 @@ tests: 12 (`ail test` lists them)
 
 ## api (284 items)
 
-## ast (142 items)
+## ast (152 items)
 
 ## attachcli (23 items)
 
@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (442 items)
+## check (449 items)
 
 ## codegen (56 items)
 
@@ -34,13 +34,13 @@ tests: 12 (`ail test` lists them)
 
 ## fixrun (17 items)
 
-## fmt (64 items)
+## fmt (63 items)
 
 ## help (10 items)
 
 ## load (117 items)
 
-## mir (673 items)
+## mir (755 items)
 
 ## obj (66 items)
 
@@ -48,7 +48,7 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (6 items)
 
-## syntax (111 items)
+## syntax (114 items)
 
 ## watch (5 items)
 

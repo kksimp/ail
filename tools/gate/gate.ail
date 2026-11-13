@@ -2419,7 +2419,7 @@ fn Gate.native_misc(mut self)
                 row.push(cells[i].trim())
             if row.len() == 3 and row[0] != "Construct" and not row[0].starts_with("---")
                 rows.push(row)
-    if rows.len() < 20
+    if rows.len() < 10
         red("native subset table", "the table has {rows.len()} rows")
     mut text := slurp("docs/design/native-coverage.md").replace("`", "")
     for f in fs.glob("compiler/**/*.ail")

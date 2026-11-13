@@ -1,0 +1,22 @@
+error struct Bad
+    code int
+
+unique struct Handle
+    fd int
+
+fn check(n int) bool ! Bad
+    if n < 0
+        return Bad(code: n)
+    n > 0
+
+fn main()
+    mut items := List[int]()
+    add := |x int| items.push(x)
+    f := |x| x + 1
+    g := |t str| t.to_int() else return
+    xs := [1, -2, 3]
+    ok := xs.all(check)
+    h := Handle(fd: 3)
+    k := || h.fd
+    bad := |x int, y int| x
+    want_one := xs.map(bad)

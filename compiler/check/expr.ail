@@ -97,6 +97,7 @@ use fix
         If(branches, els, else_err, at) => if_expr(branches, els, else_err, at, expect, need)
         Match(scrutinee, arms, at) => match_expr(scrutinee, arms, at, expect, need)
         NewRef(value, at) => ref_expr(value, at, expect)
+        Closure(params, body, at) => closure_expr(params, body, at, expect)
 
 @allow("expr.match.3") fn is_int_literal(e ast.Expr) bool
     match e

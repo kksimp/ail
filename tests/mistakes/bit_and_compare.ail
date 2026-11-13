@@ -1,0 +1,3 @@
+fn main()
+    flags := 6
+    print(flags & 2 == 2)

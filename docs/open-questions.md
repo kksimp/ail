@@ -362,15 +362,9 @@ Recommendation: **a.** The model stays affine, not linear, which is simpler
 for agents; the exit-time kill is the `Drop` of the child and needs no new
 rule. Reopen only if stray handles cause real bugs.
 ## OQ-121 — Closures as `std.net.http` handlers
-`std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
-because AIL has no anonymous functions or captured variables (`type.fn.3`,
-ADR 0456). A handler that needs state (a counter, a store) has to reach it
-through a `ref` global or a struct method. The question is whether function
-values should grow captures. Options: keep the rule (handlers are named
-functions plus explicit state) or add closures as a later language feature
-with their own ADR. Recommendation: keep the rule until a program shows the
-need; the AI-first measurement (ADR 0076) is tokens per handler, and the
-named form costs few.
+**Resolved** by [ADR 1067](decisions/1067-closures.md): function literals copy
+the locals they name (`type.fn.4`-`5`), so a handler is `|req| reply(req, store)`
+with shared state in a captured `ref`.
 
 ## OQ-122 — What `t[i][j]` on a one-dimensional tensor means
 
@@ -541,18 +535,7 @@ Recommendation: **b** when the std lane next touches `std.io`; `ail lsp` then dr
 
 ## OQ-142 — ADR 0076's order after the 2026-11-11 goals (ADR 1065)
 
-ADR 1065 accepts more tokens when they buy speed or a better AI-first feature. ADR 0076 still
-puts token usage first among the criteria for delegated decisions.
-
-- **A. Keep the order.** Tokens still break ties. Pro: stable and measurable. Con: it can work
-  against the new goal on a close call.
-- **B. Put AI understanding first, tokens second.** Pro: matches ADR 1065. Con: AI understanding
-  is harder to measure than tokens.
-- **C. Put speed (runtime) first.** Pro: the C-parity target is the most concrete. Con: it ranks
-  speed above clarity for agents.
-
-**Recommendation:** B. Measurements still back every syntax choice (ADR 0029).
-**Decision needed from:** the designer.
+Resolved 2026-11-12 by the designer: [ADR 1077](decisions/1077-decision-order-ai-understanding-first.md).
 
 ## OQ-143 — Input hashes for the explain golden (tools/golden/golden.py)
 

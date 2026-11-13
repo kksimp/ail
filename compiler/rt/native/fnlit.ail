@@ -1,0 +1,13 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Closure objects (type.fn.5, ADR 1067): word 0 is the code address of the
+## function a call runs, words 1.. the values a function literal copied. The
+## block is kind 13 (an environment record), which the collector scans word
+## by word, so a copied pointer keeps its object alive.
+
+FNLIT_KIND := 13
+
+## A closure object of `n` words, zeroed; the caller fills them.
+fn fnlit_new(n int) int
+    alloc(8 * n, FNLIT_KIND)
