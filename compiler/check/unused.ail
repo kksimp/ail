@@ -55,3 +55,25 @@ fn quiet_unused(ds List[Diag]) List[Diag]
         if d.rule != "expr.bind.14"
             out.push(d)
     out
+
+## A declaration that clashes with a prelude type (mod.unit.1) is reported once: the errors
+## its uses would add, which name the type, are dropped.
+fn drop_clash_cascade(ds List[Diag]) List[Diag]
+    mut names := List[str]()
+    for d in ds
+        if d.rule == "mod.unit.1" and d.message.contains("is a prelude type")
+            parts := d.message.split("`")
+            if parts.len() > 1
+                names.push(parts[1])
+    if names.len() == 0
+        return ds
+    mut out := List[Diag]()
+    for d in ds
+        mut hit := false
+        if d.rule != "mod.unit.1"
+            for n in names
+                if d.message.contains(n) or (d.help != none and (d.help else "").contains(n))
+                    hit = true
+        if not hit
+            out.push(d)
+    out

@@ -718,12 +718,14 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 if at(line, end) == '?'
                     end += 1
                 elif names_something(line, end)
-                    diag_msg(
+                    diag_fix(
                         "lex.kw.1",
                         pos,
                         "`uhwhatnow` is reserved and can't be used as a name",
-                        "choose a different name",
+                        "choose a different name, such as `what_next`",
+                        "rename `uhwhatnow` to `what_next` here",
                     )
+                    attach([fix.span(pos, ast.Pos(line: line_no, col: end + 1), "what_next")])
                 else
                     diag_fix(
                         "lex.kw.1",
@@ -1208,12 +1210,13 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
         )
         attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
         return Escaped(ch: '}', next: i + 2)
-    diag_msg(
-        "lex.str.1",
-        pos,
-        "unknown escape sequence `\\{shown}`",
-        "valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\' \\\{ \\u\{hex}",
-    )
+    help := "valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\' \\\{ \\u\{hex}"
+    if i + 1 < line.len() and not line[i + 1].is_alpha() and not line[i + 1].is_digit()
+        # A punctuation character needs no escape: drop the backslash.
+        diag_fix("lex.str.1", pos, "unknown escape sequence `\\{shown}`", help, "remove the `\\`")
+        attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
+    else
+        diag_msg("lex.str.1", pos, "unknown escape sequence `\\{shown}`", help)
     Escaped(ch: none, next: (i + 2).min(line.len()))
 
 ## The character whose hexadecimal code is `line[from..to]`, if it is one.

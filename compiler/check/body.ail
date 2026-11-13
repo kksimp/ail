@@ -126,7 +126,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.diags.extend(c.check_par())
     c.diags.extend(c.check_par_comps())
     c.remap_generated()
-    c.diags = quiet_unused(c.diags)
+    c.diags = drop_clash_cascade(quiet_unused(c.diags))
     report := Report(
         diags: c.diags,
         gapped: c.gapped.sorted(),

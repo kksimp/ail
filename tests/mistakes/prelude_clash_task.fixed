@@ -1,0 +1,6 @@
+struct Job
+    id int
+
+fn main()
+    t := Job(id: 1)
+    print(t.id)
