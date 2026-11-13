@@ -407,6 +407,12 @@ PKGS = {
         "util/edit.ail": "pub fn rename_all(pos int, old str, text str) str\n    \"{pos}{old}{text}\"\n",
         "util/resolve.ail": "fn rename_all(e int, lines List[str]) int\n    e + lines.len()\n\npub fn use_it() int\n    rename_all(1, [])\n",
     },
+    # A private generic function of another module, called unqualified (trial-b10's `absent[ast.Pos]()`).
+    "private_generic_other_module": {
+        "main.ail": "use util\nuse other\n\nfn main()\n    print(other.run())\n    print(util.size())\n",
+        "util/util.ail": "fn nothing[T]() T?\n    none\n\npub fn size() int\n    x := nothing[int]() else 3\n    x\n",
+        "other/other.ail": "pub fn run() int\n    y := nothing[int]() else 4\n    y\n",
+    },
     # The same in the root module, across two files.
     "dup_fn_in_root": {
         "main.ail": "fn twice(x int) int\n    x * 2\n\nfn main()\n    print(twice(2))\n",
