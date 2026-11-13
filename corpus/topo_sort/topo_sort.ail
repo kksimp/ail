@@ -1,0 +1,94 @@
+## Orders build tasks so every task comes after its dependencies (Kahn's
+## algorithm). A line "app: lib util" says app needs lib and util. Among ready
+## tasks the alphabetically first goes next; leftovers mean a cycle.
+
+struct Graph
+    names List[str]
+    src List[int]
+    dst List[int]
+
+fn build(lines List[str]) Graph
+    mut seen := Set[str]()
+    for line in lines
+        p := line.split(":")
+        seen.add(p[0].trim())
+        for d in p[1].words()
+            seen.add(d)
+    mut names := List[str]()
+    for n in seen
+        names.push(n)
+    names.sort()
+    mut g := Graph(names: names, src: [], dst: [])
+    for text in lines
+        q := text.split(":")
+        task := names.index_of(q[0].trim()) else 0
+        for dep in q[1].words()
+            need := names.index_of(dep) else 0
+            g.src.push(need)
+            g.dst.push(task)
+    g
+
+fn order(g Graph) List[int]
+    n := g.names.len()
+    mut indeg := List[int]()
+    mut done := List[bool]()
+    for i in 0..n
+        indeg.push(0)
+        done.push(false)
+    for e in 0..g.src.len()
+        indeg[g.dst[e]] = indeg[g.dst[e]] + 1
+    mut out := List[int]()
+    while true
+        mut pick := -1
+        for j in 0..n
+            if not done[j] and indeg[j] == 0
+                pick = j
+                break
+        if pick == -1
+            break
+        done[pick] = true
+        out.push(pick)
+        for e2 in 0..g.src.len()
+            if g.src[e2] == pick
+                indeg[g.dst[e2]] = indeg[g.dst[e2]] - 1
+    out
+
+fn report(title str, lines List[str])
+    g := build(lines)
+    out := order(g)
+    names := [g.names[i] for i in out]
+    print("{title}: {names.join(" ")}")
+    if out.len() < g.names.len()
+        stuck := [g.names[k] for k in 0..g.names.len() if not out.contains(k)]
+        print("  cycle among: {stuck.join(" ")}")
+
+fn main()
+    report("build", [
+        "app: lib ui",
+        "ui: lib widgets",
+        "lib: core",
+        "widgets: core",
+        "core:",
+        "docs: app",
+    ])
+    report("cyclic", [
+        "a: b",
+        "b: c",
+        "c: a",
+        "d: a",
+        "e:",
+    ])
+
+@test fn dependencies_come_first()
+    g := build(["b: a", "c: b", "a:"])
+    names := [g.names[i] for i in order(g)]
+    assert_eq(names, ["a", "b", "c"])
+
+@test fn ties_break_alphabetically()
+    g := build(["z:", "m:", "a:"])
+    names := [g.names[i] for i in order(g)]
+    assert_eq(names, ["a", "m", "z"])
+
+@test fn cycle_leaves_tasks_out()
+    g := build(["x: y", "y: x", "w:"])
+    assert_eq(order(g).len(), 1)

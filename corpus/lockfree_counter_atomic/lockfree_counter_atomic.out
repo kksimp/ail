@@ -1,0 +1,7 @@
+4 workers x 500 rounds
+  total 99843, hits 217, best 100, claims 1
+  matches sequential run: true
+8 workers x 200 rounds
+  total 79901, hits 173, best 100, claims 1
+  matches sequential run: true
+par for square sum: 173

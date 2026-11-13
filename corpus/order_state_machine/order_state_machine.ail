@@ -1,0 +1,129 @@
+## Order lifecycle as a state machine. States: created, paid, shipped,
+## delivered, cancelled, refunded. Events are applied in order; an illegal
+## event leaves the order unchanged and reports a typed error. Each order keeps
+## the trail of states it went through.
+
+error enum OrderError
+    BadEvent(text str) "unknown event '{text}'"
+    Illegal(state str, event str) "cannot {event} an order that is {state}"
+
+enum State
+    Created
+    Paid
+    Shipped
+    Delivered
+    Cancelled
+    Refunded
+
+enum Event
+    Pay
+    Ship
+    Deliver
+    Cancel
+    Refund
+
+struct Order
+    id int
+    state State
+    trail List[str]
+
+fn State.label(self) str
+    match self
+        Created => "created"
+        Paid => "paid"
+        Shipped => "shipped"
+        Delivered => "delivered"
+        Cancelled => "cancelled"
+        Refunded => "refunded"
+
+fn Event.label(self) str
+    match self
+        Pay => "pay"
+        Ship => "ship"
+        Deliver => "deliver"
+        Cancel => "cancel"
+        Refund => "refund"
+
+fn parse_event(text str) Event ! OrderError
+    mut ev := Event.Pay
+    if text == "pay"
+        ev = Event.Pay
+    elif text == "ship"
+        ev = Event.Ship
+    elif text == "deliver"
+        ev = Event.Deliver
+    elif text == "cancel"
+        ev = Event.Cancel
+    elif text == "refund"
+        ev = Event.Refund
+    else
+        return BadEvent(text: text)
+    ev
+
+fn step(s State, ev Event) State ! OrderError
+    mut dest := s
+    mut ok := true
+    match s
+        Created =>
+            match ev
+                Pay => dest = State.Paid
+                Cancel => dest = State.Cancelled
+                _ => ok = false
+        Paid =>
+            match ev
+                Ship => dest = State.Shipped
+                Cancel => dest = State.Cancelled
+                Refund => dest = State.Refunded
+                _ => ok = false
+        Shipped =>
+            match ev
+                Deliver => dest = State.Delivered
+                _ => ok = false
+        Delivered =>
+            match ev
+                Refund => dest = State.Refunded
+                _ => ok = false
+        Cancelled | Refunded => ok = false
+    if not ok
+        return Illegal(state: s.label(), event: ev.label())
+    dest
+
+fn Order.apply(mut self, name str) ! OrderError
+    ev := parse_event(name)?
+    self.state = step(self.state, ev)?
+    self.trail.push(self.state.label())
+
+fn run_order(id int, events str)
+    mut order := Order(id: id, state: State.Created, trail: ["created"])
+    for name in events.split(",")
+        order.apply(name) else err
+            print("order {id}: {err}")
+            continue
+    print("order {id}: {order.state.label()} [{order.trail.join(">")}]")
+
+fn main()
+    run_order(1, "pay,ship,deliver")
+    run_order(2, "ship,pay,cancel,pay,refund")
+    run_order(3, "pay,ship,cancel,deliver,refund,refund")
+    run_order(4, "pay,teleport,refund")
+    run_order(5, "deliver")
+
+@test fn happy_path()
+    mut o := Order(id: 1, state: State.Created, trail: [])
+    o.apply("pay")?
+    o.apply("ship")?
+    o.apply("deliver")?
+    assert_eq(o.state, State.Delivered)
+    assert_eq(o.trail.len(), 3)
+
+@test fn illegal_events_change_nothing()
+    mut o := Order(id: 1, state: State.Created, trail: [])
+    assert_err(o.apply("ship"))
+    assert_err(o.apply("dance"))
+    assert_eq(o.state, State.Created)
+    assert_eq(o.trail.len(), 0)
+
+@test fn terminal_states_are_final()
+    assert_err(step(State.Cancelled, Event.Pay))
+    assert_err(step(State.Refunded, Event.Refund))
+    assert_eq(step(State.Delivered, Event.Refund)?, State.Refunded)

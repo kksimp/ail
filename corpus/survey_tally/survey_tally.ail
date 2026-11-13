@@ -1,0 +1,77 @@
+## Survey tally: reads embedded survey responses (id, three ratings from 1 to
+## 5, blank when skipped), ignores out-of-range answers, and prints for each
+## question the rating counts, mean in hundredths, median and percent favorable.
+
+fn data() List[str]
+    [
+        "id,service,price,quality",
+        "r1,5,3,4",
+        "r2,4,2,5",
+        "r3,5,,4",
+        "r4,3,3,3",
+        "r5,2,1,2",
+        "r6,4,4,9",
+        "r7,5,2,5",
+        "r8,,3,4",
+        "r9,4,3,4",
+        "r10,1,2,0",
+    ]
+
+fn column(lines List[str], col int) List[int]
+    mut out := List[int]()
+    for line in lines
+        cells := line.split(",")
+        v := cells[col].to_int() else continue
+        if v >= 1 and v <= 5
+            out.push(v)
+    out
+
+fn median(xs List[int]) int
+    s := xs.sorted()
+    n := s.len()
+    if n % 2 == 1
+        return s[n / 2]
+    (s[n / 2 - 1] + s[n / 2]) / 2
+
+fn hundredths(total int, n int) str
+    m := total * 100 / n
+    rest := m % 100
+    "{m / 100}.{rest:0>2}"
+
+fn favorable(xs List[int]) int
+    mut fav := 0
+    for x in xs
+        if x >= 4
+            fav += 1
+    (fav * 100 + xs.len() / 2) / xs.len()
+
+fn counts(xs List[int]) List[int]
+    mut out := [0, 0, 0, 0, 0]
+    for x in xs
+        out[x - 1] += 1
+    out
+
+fn main()
+    lines := data()[1..]
+    names := ["service", "price", "quality"]
+    print("responses: {lines.len()}")
+    for q in 0..names.len()
+        xs := column(lines, q + 1)
+        cs := counts(xs)
+        dist := cs.join(" ")
+        avg := hundredths(xs.sum(), xs.len())
+        med := median(xs)
+        fav := favorable(xs)
+        print("{names[q]:<8} n={xs.len()} counts[{dist}] mean {avg} median {med} favorable {fav}%")
+
+@test fn column_ignores_bad_answers()
+    assert_eq(column(["a,1,x", "b,,2", "c,9,5", "d,3,0"], 1), [1, 3])
+
+@test fn median_even_and_odd()
+    assert_eq(median([5, 1, 3]), 3)
+    assert_eq(median([1, 2, 3, 4]), 2)
+
+@test fn mean_and_favorable()
+    assert_eq(hundredths(10, 4), "2.50")
+    assert_eq(favorable([4, 5, 1]), 67)
+    assert_eq(counts([1, 1, 5]), [2, 0, 0, 0, 1])

@@ -1,0 +1,13 @@
+  fn main()
+      x := 1
++     z := 5
+      y := 2
+-     print(x + y)
++     print(x + y + z)
+  
+  fn helper()
+-     todo
+added 2, removed 2, kept 5
+patch reproduces new: true
+identical inputs changed: 0
+from empty: 7 lines

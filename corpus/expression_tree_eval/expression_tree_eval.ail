@@ -1,0 +1,120 @@
+## An arithmetic expression tree as a recursive enum. Trees are built from
+## postfix text with a stack, then printed, measured, constant-folded and
+## evaluated. Division by zero is an error value, not a crash.
+
+error enum EvalError
+    DivZero "division by zero"
+
+enum Expr
+    Num(n int)
+    Neg(inner Expr)
+    Add(left Expr, right Expr)
+    Sub(left Expr, right Expr)
+    Mul(left Expr, right Expr)
+    Div(left Expr, right Expr)
+
+fn from_postfix(text str) Expr
+    mut stack := List[Expr]()
+    for tok in text.split(" ")
+        match tok
+            "+" | "-" | "*" | "/" =>
+                b := stack.pop() else Expr.Num(n: 0)
+                a := stack.pop() else Expr.Num(n: 0)
+                node := match tok
+                    "+" => Expr.Add(left: a, right: b)
+                    "-" => Expr.Sub(left: a, right: b)
+                    "*" => Expr.Mul(left: a, right: b)
+                    _ => Expr.Div(left: a, right: b)
+                stack.push(node)
+            "neg" =>
+                v := stack.pop() else Expr.Num(n: 0)
+                stack.push(Expr.Neg(inner: v))
+            _ => stack.push(Expr.Num(n: tok.to_int() else 0))
+    stack.pop() else Expr.Num(n: 0)
+
+fn show(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Neg(inner) => "-{show(inner)}"
+        Add(l, r) => "({show(l)} + {show(r)})"
+        Sub(l, r) => "({show(l)} - {show(r)})"
+        Mul(l, r) => "({show(l)} * {show(r)})"
+        Div(l, r) => "({show(l)} / {show(r)})"
+
+fn depth(e Expr) int
+    match e
+        Num => 1
+        Neg(inner) => 1 + depth(inner)
+        Add(l, r) => 1 + depth(l).max(depth(r))
+        Sub(l, r) => 1 + depth(l).max(depth(r))
+        Mul(l, r) => 1 + depth(l).max(depth(r))
+        Div(l, r) => 1 + depth(l).max(depth(r))
+
+fn evaluate(e Expr) int ! EvalError
+    match e
+        Num(n) => n
+        Neg(inner) => -evaluate(inner)?
+        Add(l, r) => evaluate(l)? + evaluate(r)?
+        Sub(l, r) => evaluate(l)? - evaluate(r)?
+        Mul(l, r) => evaluate(l)? * evaluate(r)?
+        Div(l, r) =>
+            d := evaluate(r)?
+            if d == 0
+                return DivZero
+            evaluate(l)? / d
+
+fn is_num(e Expr) bool
+    match e
+        Num => true
+        _ => false
+
+fn num_value(e Expr) int
+    match e
+        Num(n) => n
+        _ => 0
+
+fn fold(e Expr) Expr
+    match e
+        Num => e
+        Neg(inner) =>
+            f := fold(inner)
+            if is_num(f)
+                Expr.Num(n: -num_value(f))
+            else
+                Expr.Neg(inner: f)
+        Add(l, r) => fold_pair(e, fold(l), fold(r))
+        Sub(l, r) => fold_pair(e, fold(l), fold(r))
+        Mul(l, r) => fold_pair(e, fold(l), fold(r))
+        Div(l, r) => fold_pair(e, fold(l), fold(r))
+
+fn fold_pair(orig Expr, a Expr, b Expr) Expr
+    rebuilt := match orig
+        Add => Expr.Add(left: a, right: b)
+        Sub => Expr.Sub(left: a, right: b)
+        Mul => Expr.Mul(left: a, right: b)
+        _ => Expr.Div(left: a, right: b)
+    if is_num(a) and is_num(b)
+        v := evaluate(rebuilt) else return rebuilt
+        return Expr.Num(n: v)
+    rebuilt
+
+fn main()
+    for src in ["3 4 + 2 *", "10 2 3 * - neg", "8 2 4 + /", "1 2 + 5 5 - /", "9 3 /"]
+        tree := from_postfix(src)
+        result := evaluate(tree) else err
+            print("{show(tree)} fails: {err}")
+            continue
+        print("{show(tree)} = {result} (depth {depth(tree)}, folded {show(fold(tree))})")
+
+@test fn postfix_builds_expected_tree()
+    assert_eq(show(from_postfix("1 2 + 3 *")), "((1 + 2) * 3)")
+
+@test fn evaluate_handles_negation_and_division()
+    assert_eq(evaluate(from_postfix("7 2 /")) else -1, 3)
+    assert_eq(evaluate(from_postfix("5 neg 2 *")) else 0, -10)
+
+@test fn division_by_zero_is_an_error()
+    assert_err(evaluate(from_postfix("1 0 /")))
+
+@test fn fold_collapses_constants()
+    assert_eq(show(fold(from_postfix("2 3 + 4 *"))), "20")

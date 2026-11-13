@@ -1,0 +1,60 @@
+## wc for several files: writes three small text files into a temp directory,
+## then reports lines, words and bytes for each and a grand total, the way
+## `wc` does. An unreadable file is reported instead of stopping the run.
+
+struct Counts
+    lines int
+    words int
+    bytes int
+
+fn count_text(text str) Counts
+    Counts(lines: text.count("\n"), words: text.words().len(), bytes: text.byte_len())
+
+fn count_file(p str) !Counts
+    count_text(fs.read_text(p)?)
+
+fn row(name str, c Counts) str
+    "{c.lines:>6}{c.words:>7}{c.bytes:>7} {name}"
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_word_count_files")?
+    names := ["notes.txt", "poem.txt", "empty.txt"]
+    texts := [
+        "buy milk\ncall the bank\nfix the sink tap\n",
+        "roses are red\n  violets are blue\nsugar is sweet\nand so are you\n",
+        "",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    print("{"lines":>6}{"words":>7}{"bytes":>7} file")
+    mut total := Counts(lines: 0, words: 0, bytes: 0)
+    for name in names
+        c := count_file(path.join(dir, name))?
+        total.lines += c.lines
+        total.words += c.words
+        total.bytes += c.bytes
+        print(row(name, c))
+    print(row("total", total))
+    if c2 := count_file(path.join(dir, "missing.txt"))
+        print("unexpected: {c2.lines}")
+    else err
+        print("missing.txt: cannot read")
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn counts_a_text()
+    c := count_text("a b\nc\n")
+    assert_eq(c.lines, 2)
+    assert_eq(c.words, 3)
+    assert_eq(c.bytes, 6)
+
+@test fn empty_text_is_all_zero()
+    assert_eq(count_text(""), Counts(lines: 0, words: 0, bytes: 0))
+
+@test fn extra_spaces_do_not_add_words()
+    assert_eq(count_text("  a   b  ").words, 2)
+
+@test fn row_is_aligned()
+    assert_eq(row("x", Counts(lines: 1, words: 2, bytes: 3)), "     1      2      3 x")

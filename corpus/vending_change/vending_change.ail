@@ -1,0 +1,81 @@
+## Vending machine change maker with a limited coin box. Unlike greedy change,
+## it searches for the fewest coins that the box can actually supply, so it can
+## pay 40 with two 20s when the 25s would strand it. Typed errors for underpaying
+## and for amounts the box cannot make.
+
+error enum ChangeError
+    Underpaid(price int, paid int) "paid {paid} for a price of {price}"
+    Short(amount int) "cannot make exact change for {amount}"
+
+struct Till
+    denoms List[int]
+    counts List[int]
+
+fn solve(denoms List[int], avail List[int], idx int, left int) List[int]?
+    if idx == denoms.len()
+        if left == 0
+            return List[int]()
+        return none
+    mut top := left / denoms[idx]
+    if avail[idx] < top
+        top = avail[idx]
+    mut found := false
+    mut best := List[int]()
+    mut best_n := 0
+    for j in 0..=top
+        k := top - j
+        rest := solve(denoms, avail, idx + 1, left - k * denoms[idx]) else continue
+        total := k + rest.sum()
+        if not found or total < best_n
+            mut cand := [k]
+            cand.extend(rest)
+            best = cand
+            best_n = total
+            found = true
+    if found
+        return best
+    none
+
+fn Till.change(mut self, price int, paid int) List[int] ! ChangeError
+    if paid < price
+        return Underpaid(price: price, paid: paid)
+    due := paid - price
+    plan := solve(self.denoms, self.counts, 0, due) else return Short(amount: due)
+    for i in 0..plan.len()
+        self.counts[i] = self.counts[i] - plan[i]
+    plan
+
+fn describe(denoms List[int], plan List[int]) str
+    mut parts := List[str]()
+    for i in 0..plan.len()
+        if plan[i] > 0
+            parts.push("{plan[i]}x{denoms[i]}")
+    if parts.is_empty()
+        return "no coins"
+    parts.join(" ")
+
+fn main()
+    mut till := Till(denoms: [100, 25, 20, 5], counts: [2, 3, 3, 8])
+    sales := [(60, 100), (75, 100), (35, 200), (100, 100), (120, 100), (45, 100), (45, 100), (10, 100), (85, 100)]
+    for sale in sales
+        plan := till.change(sale.0, sale.1) else err
+            print("sale {sale.0} paid {sale.1}: {err}")
+            continue
+        print("sale {sale.0} paid {sale.1}: {describe(till.denoms, plan)}")
+    print("box left: {till.counts.join(" ")}")
+
+@test fn prefers_fewest_coins()
+    mut t := Till(denoms: [25, 20, 5], counts: [2, 2, 5])
+    plan := t.change(60, 100)?
+    assert_eq(plan, [0, 2, 0])
+    assert_eq(t.counts, [2, 0, 5])
+
+@test fn box_is_limited()
+    mut t := Till(denoms: [25, 5], counts: [1, 1])
+    assert_err(t.change(40, 100))
+    assert_eq(t.counts, [1, 1])
+
+@test fn underpaying_fails()
+    mut t := Till(denoms: [5], counts: [9])
+    assert_err(t.change(50, 45))
+    assert_eq(t.change(45, 45)?, [0])

@@ -1,0 +1,84 @@
+## Find and replace across files: writes a few files into a temp directory,
+## reports how many matches each holds (a dry run), applies the replacement
+## to the files that match, and re-reads them to verify nothing is left.
+
+struct Change
+    name str
+    count int
+
+fn count_in_file(p str) !int
+    fs.read_text(p)?.count("colour")
+
+fn replace_in_file(p str, old str, new str) !int
+    text := fs.read_text(p)?
+    n := text.count(old)
+    if n > 0
+        fs.write_text(p, text.replace(old, new))?
+    n
+
+fn apply_all(dir str, names List[str], old str, new str) !List[Change]
+    mut out := List[Change]()
+    for name in names
+        n := replace_in_file(path.join(dir, name), old, new)?
+        out.push(Change(name: name, count: n))
+    out
+
+fn report(changes List[Change]) int
+    mut files := 0
+    mut total := 0
+    for c in changes
+        if c.count > 0
+            files += 1
+            total += c.count
+            print("  {c.name:<10}{c.count:>3} replaced")
+    print("  {files} files changed, {total} replacements")
+    total
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_find_replace_files")?
+    names := ["a.txt", "b.md", "c.cfg", "d.txt"]
+    texts := [
+        "The colour red and the colour blue.\nNo match here.\n",
+        "# colour guide\nPick a colour.\n",
+        "theme=dark\nname=plain\n",
+        "colourful colours: colour, colour, colour\n",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    print("dry run:")
+    mut before := 0
+    for name in names
+        n := count_in_file(path.join(dir, name))?
+        before += n
+        print("  {name:<10}{n:>3} matches")
+    print("apply:")
+    changes := apply_all(dir, names, "colour", "color")?
+    done := report(changes)
+    print("expected {before}, replaced {done}")
+    print("verify:")
+    mut left := 0
+    for name in names
+        left += count_in_file(path.join(dir, name))?
+    print("  matches left: {left}")
+    print("b.md now: {fs.read_text(path.join(dir, "b.md"))?.lines().join(" | ")}")
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn replaces_and_counts()
+    dir := fs.make_temp_dir("corpus_find_replace_files_t")?
+    p := path.join(dir, "x.txt")
+    fs.write_text(p, "aXbXc")?
+    assert_eq(replace_in_file(p, "X", "--")?, 2)
+    assert_eq(fs.read_text(p)?, "a--b--c")
+    assert_eq(replace_in_file(p, "X", "--")?, 0)
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn report_totals_only_changed_files()
+    total := report([Change(name: "a", count: 2), Change(name: "b", count: 0), Change(name: "c", count: 5)])
+    assert_eq(total, 7)
+
+@test fn missing_file_fails()
+    assert_err(count_in_file("/no/such/dir/file.txt"))

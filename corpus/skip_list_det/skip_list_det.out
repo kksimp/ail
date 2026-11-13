@@ -1,0 +1,11 @@
+keys: [3, 7, 11, 19, 25, 33, 42, 56, 64, 71, 88, 90]
+count 12, duplicates 2
+level 0: 12 nodes
+level 1: 5 nodes
+level 2: 3 nodes
+level 3: 3 nodes
+contains 19: true
+contains 20: false
+contains 90: true
+contains 1: false
+contains 100: false

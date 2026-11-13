@@ -1,0 +1,18 @@
+*.ail                main.ail                 yes
+*.ail                src/main.ail             no
+**/*.ail             src/lib/main.ail         yes
+**/*.ail             main.ail                 yes
+file?.txt            file7.txt                yes
+file?.txt            file10.txt               no
+[a-c]*.py            beta.py                  yes
+[!a-c]*.py           beta.py                  no
+data[0-9][0-9].csv   data42.csv               yes
+log.[!0-9]           log.x                    yes
+src/*/test_*.ail     src/std/test_fs.ail      yes
+src/*/test_*.ail     src/std/io/test_fs.ail   no
+a[bc                 a[bc                     yes
+*                    a/b                      no
+**                   a/b                      yes
+                                              yes
+src/**.ail: src/c.ail src/d/e.ail
+*.*: a.ail b.txt

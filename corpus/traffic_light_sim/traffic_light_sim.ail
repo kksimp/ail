@@ -1,0 +1,97 @@
+## A traffic light as a state machine: red, green, yellow, repeat. Each state
+## has a length in ticks. A pedestrian button pressed while the light is green
+## cuts the green phase short (two ticks remain). The program runs 45 ticks,
+## logging every change and the time spent in each state.
+
+enum Light
+    Red
+    Green
+    Yellow
+
+fn Light.label(self) str
+    match self
+        Red => "red"
+        Green => "green"
+        Yellow => "yellow"
+
+fn Light.length(self) int
+    match self
+        Red => 6
+        Green => 8
+        Yellow => 3
+
+fn Light.next(self) Light
+    match self
+        Red => Light.Green
+        Green => Light.Yellow
+        Yellow => Light.Red
+
+fn Light.slot(self) int
+    match self
+        Red => 0
+        Green => 1
+        Yellow => 2
+
+struct Signal
+    phase Light
+    remaining int
+    changes int
+    early int
+    spent List[int]
+
+fn Signal.new() Signal
+    start := Light.Red
+    Signal(phase: start, remaining: start.length(), changes: 0, early: 0, spent: [0, 0, 0])
+
+fn Signal.press(mut self)
+    if self.phase == Light.Green and self.remaining > 2
+        self.remaining = 2
+        self.early += 1
+
+fn Signal.tick(mut self, t int)
+    slot := self.phase.slot()
+    self.spent[slot] = self.spent[slot] + 1
+    self.remaining -= 1
+    if self.remaining == 0
+        self.phase = self.phase.next()
+        self.remaining = self.phase.length()
+        self.changes += 1
+        print("t={t:>2} -> {self.phase.label()}")
+
+fn main()
+    presses := [10, 30, 31]
+    mut sig := Signal.new()
+    for t in 1..=45
+        if presses.contains(t)
+            sig.press()
+            print("t={t:>2} button pressed ({sig.phase.label()}, {sig.remaining} left)")
+        sig.tick(t)
+    print("changes: {sig.changes}")
+    print("shortened greens: {sig.early}")
+    print("ticks red/green/yellow: {sig.spent}")
+    print("final: {sig.phase.label()} with {sig.remaining} left")
+
+@test fn cycle_order()
+    r := Light.Red
+    g := Light.Green
+    y := Light.Yellow
+    assert_eq(r.next(), g)
+    assert_eq(g.next(), y)
+    assert_eq(y.next(), r)
+
+@test fn red_turns_green_after_its_length()
+    mut s := Signal.new()
+    for t in 1..=6
+        s.tick(t)
+    assert_eq(s.phase, Light.Green)
+    assert_eq(s.remaining, 8)
+
+@test fn button_only_shortens_green()
+    mut s := Signal.new()
+    s.press()
+    assert_eq(s.early, 0)
+    for t in 1..=6
+        s.tick(t)
+    s.press()
+    assert_eq(s.remaining, 2)
+    assert_eq(s.early, 1)

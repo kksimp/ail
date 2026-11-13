@@ -1,0 +1,36 @@
+-- session 1
+> set name ada
+OK
+> set url http://x.org/?a=b
+OK
+> incr visits
+1
+> incr visits
+2
+> get name
+ada
+> get missing
+(nil)
+> frobnicate
+ERR unknown command
+-- file after session 1
+name=ada
+url=http://x.org/?a=b
+visits=2
+-- session 2
+> get visits
+2
+> incr visits
+3
+> del name
+1
+> del name
+0
+> set city rome
+OK
+> count
+3
+-- file after session 2
+city=rome
+url=http://x.org/?a=b
+visits=3

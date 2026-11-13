@@ -1,0 +1,36 @@
+left:
++--------------------------+
+|Plain text tools should be|
+|boring and predictable. A |
+|justified paragraph       |
+|spreads the spare space   |
+|across the gaps, and the  |
+|last line stays left      |
+|aligned.                  |
+right:
++--------------------------+
+|Plain text tools should be|
+| boring and predictable. A|
+|       justified paragraph|
+|   spreads the spare space|
+|  across the gaps, and the|
+|      last line stays left|
+|                  aligned.|
+center:
++--------------------------+
+|Plain text tools should be|
+|boring and predictable. A |
+|   justified paragraph    |
+| spreads the spare space  |
+| across the gaps, and the |
+|   last line stays left   |
+|         aligned.         |
+full:
++--------------------------+
+|Plain text tools should be|
+|boring  and predictable. A|
+|justified        paragraph|
+|spreads  the  spare  space|
+|across  the  gaps, and the|
+|last   line   stays   left|
+|aligned.                  |

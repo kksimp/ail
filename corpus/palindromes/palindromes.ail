@@ -1,0 +1,85 @@
+## Palindromes: checks phrases (ignoring case and punctuation), finds the
+## longest palindromic substring by expanding around centers, and counts them.
+
+fn normalize(text str) List[char]
+    mut out := List[char]()
+    for c in text.to_lower().chars()
+        if c.is_alpha() or c.is_digit()
+            out.push(c)
+    out
+
+fn is_palindrome(text str) bool
+    cs := normalize(text)
+    n := cs.len()
+    half := n / 2
+    for i in 0..half
+        if cs[i] != cs[n - 1 - i]
+            return false
+    true
+
+fn expand(cs List[char], lo int, hi int) int
+    mut a := lo
+    mut b := hi
+    while a >= 0 and b < cs.len() and cs[a] == cs[b]
+        a -= 1
+        b += 1
+    b - a - 1
+
+fn longest(text str) str
+    cs := text.chars()
+    mut best_start := 0
+    mut best_len := 0
+    for i in 0..cs.len()
+        odd := expand(cs, i, i)
+        even := expand(cs, i, i + 1)
+        if odd > best_len
+            best_len = odd
+            best_start = i - (odd - 1) / 2
+        if even > best_len
+            best_len = even
+            best_start = i - even / 2 + 1
+    cs[best_start..best_start + best_len].join("")
+
+fn count_all(text str) int
+    cs := text.chars()
+    mut total := 0
+    for i in 0..cs.len()
+        total += (expand(cs, i, i) + 1) / 2
+        total += expand(cs, i, i + 1) / 2
+    total
+
+fn digits_palindrome(n int) bool
+    is_palindrome("{n}")
+
+fn main()
+    phrases := [
+        "A man, a plan, a canal: Panama",
+        "Was it a car or a cat I saw?",
+        "No lemon, no melon",
+        "Hello, World",
+        "",
+    ]
+    for p in phrases
+        print("{p:<32} {is_palindrome(p)}")
+    for s in ["babad", "cbbd", "forgeeksskeegfor", "abacdfgdcaba", "x", "abcde"]
+        print("{s}: longest={longest(s)} count={count_all(s)}")
+    mut found := List[int]()
+    for n in 100..400
+        if digits_palindrome(n) and n % 11 == 0
+            found.push(n)
+    print("palindromes divisible by 11 in 100..399: {found}")
+
+@test fn phrases()
+    assert(is_palindrome("Madam, I'm Adam"))
+    assert(not is_palindrome("palindrome"))
+    assert(is_palindrome(""))
+
+@test fn finds_longest()
+    assert_eq(longest("babad"), "bab")
+    assert_eq(longest("cbbd"), "bb")
+    assert_eq(longest("forgeeksskeegfor"), "geeksskeeg")
+
+@test fn counts_substrings()
+    assert_eq(count_all("aaa"), 6)
+    assert_eq(count_all("abc"), 3)
+    assert_eq(count_all(""), 0)

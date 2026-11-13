@@ -1,0 +1,22 @@
+          0  zero
+          7  seven
+         13  thirteen
+         20  twenty
+         42  forty-two
+        100  one hundred
+        101  one hundred one
+        999  nine hundred ninety-nine
+       1000  one thousand
+       1234  one thousand two hundred thirty-four
+      20000  twenty thousand
+     100001  one hundred thousand one
+    1000000  one million
+    7654321  seven million six hundred fifty-four thousand three hundred twenty-one
+ 2000000000  two billion
+ 1234567891  one billion two hundred thirty-four million five hundred sixty-seven thousand eight hundred ninety-one
+        -45  minus forty-five
+forty-two -> 42
+one thousand two hundred thirty-four -> 1234
+minus nine -> -9
+seven bazillion -> invalid
+round trip failures in 0..4999: 0

@@ -1,0 +1,16 @@
+out ann dune 1: ann borrowed dune, due day 15
+out bob dune 2: ERROR no copies of dune left
+out ann emma 3: ann borrowed emma, due day 17
+out ann ulysses 4: ERROR ann already holds 2 books
+out bob hamlet 5: ERROR no such book hamlet
+back bob emma 10: ERROR bob does not hold emma
+back ann dune 20: ann returned dune, 5 days late, fee 1.25
+out bob dune 21: bob borrowed dune, due day 35
+back ann emma 17: ann returned emma, 0 days late, fee 0.00
+borrow cy emma 1: ERROR bad command 'borrow cy emma 1'
+out cy emma x: ERROR bad command 'out cy emma x'
+stock dune: 0
+stock emma: 2
+stock ulysses: 1
+open loans: bob/dune
+fees collected: 1.25

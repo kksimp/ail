@@ -1,0 +1,10 @@
+rotated before event 5
+rotated before event 9
+rotated before event 13
+files after 14 events:
+  app.log    24 bytes
+  app.log.1  48 bytes
+  app.log.2  48 bytes
+oldest file starts with: event 05 ok
+current file holds 2 lines, last: event 14 ok
+cleaned up: true

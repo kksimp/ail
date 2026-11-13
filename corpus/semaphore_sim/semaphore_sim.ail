@@ -1,0 +1,79 @@
+## Counting semaphore simulation on a tick clock: jobs arrive, wait in FIFO
+## order for one of a few permits, hold it for a fixed time and release it.
+## The program logs every event, then reports the peak number of holders and
+## the total time spent waiting.
+
+struct Job
+    name str
+    arrival int
+    hold int
+
+struct Report
+    log List[str]
+    peak int
+    total_wait int
+
+fn simulate(jobs List[Job], permits int) Report
+    n := jobs.len()
+    mut free := permits
+    mut waiting := List[int]()
+    mut ends := [-1 for _ in 0..n]
+    mut running := List[int]()
+    mut log := List[str]()
+    mut peak := 0
+    mut total_wait := 0
+    mut finished := 0
+    mut tick := 0
+    while finished < n
+        for i in 0..n
+            if ends[i] == tick
+                free += 1
+                finished += 1
+                running = [r for r in running if r != i]
+                log.push("t={tick:>2} release {jobs[i].name} (free {free})")
+        for i in 0..n
+            if jobs[i].arrival == tick
+                waiting.push(i)
+                log.push("t={tick:>2} arrive  {jobs[i].name}")
+        while free > 0 and not waiting.is_empty()
+            i := waiting[0]
+            waiting.remove_at(0)
+            free -= 1
+            ends[i] = tick + jobs[i].hold
+            running.push(i)
+            total_wait += tick - jobs[i].arrival
+            peak = peak.max(running.len())
+            log.push("t={tick:>2} acquire {jobs[i].name} (waited {tick - jobs[i].arrival})")
+        tick += 1
+    Report(log: log, peak: peak, total_wait: total_wait)
+
+fn main()
+    jobs := [
+        Job(name: "j1", arrival: 0, hold: 4),
+        Job(name: "j2", arrival: 1, hold: 3),
+        Job(name: "j3", arrival: 1, hold: 2),
+        Job(name: "j4", arrival: 2, hold: 2),
+        Job(name: "j5", arrival: 9, hold: 1),
+    ]
+    r := simulate(jobs, 2)
+    for line in r.log
+        print(line)
+    print("peak holders {r.peak}, total wait {r.total_wait}")
+    wide := simulate(jobs, 4)
+    print("with 4 permits: peak {wide.peak}, total wait {wide.total_wait}")
+
+@test fn permits_bound_the_holders()
+    jobs := [Job(name: "a", arrival: 0, hold: 3), Job(name: "b", arrival: 0, hold: 3), Job(name: "c", arrival: 0, hold: 3)]
+    r := simulate(jobs, 2)
+    assert_eq(r.peak, 2)
+    assert_eq(r.total_wait, 3)
+
+@test fn one_permit_serialises_jobs()
+    jobs := [Job(name: "a", arrival: 0, hold: 2), Job(name: "b", arrival: 0, hold: 2)]
+    r := simulate(jobs, 1)
+    assert_eq(r.peak, 1)
+    assert_eq(r.total_wait, 2)
+
+@test fn plenty_of_permits_means_no_waiting()
+    jobs := [Job(name: "a", arrival: 0, hold: 2), Job(name: "b", arrival: 1, hold: 2)]
+    assert_eq(simulate(jobs, 5).total_wait, 0)

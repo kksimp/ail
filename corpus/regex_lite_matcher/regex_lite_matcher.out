@@ -1,0 +1,14 @@
+abc        xxabcxx    match at 2
+^abc       xxabcxx    no match
+abc$       xxabc      match at 2
+a.c        a-c        match at 0
+ab*c       ac         match at 0
+ab*c       abbbc      match at 0
+ab+c       ac         no match
+colou?r    my color   match at 3
+^a.*z$     abc xyz    match at 0
+^a.*z$     abc xyz!   no match
+x*         aaa        match at 0
+^$                    match at 0
+a.+b       ab         no match
+9+7        id 99997   match at 3

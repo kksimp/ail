@@ -1,0 +1,80 @@
+## Grade curve: shifts every raw score so the class mean lands on 75 (capped
+## at 100), assigns letter grades before and after, and shows the quartiles
+## using nearest-rank percentiles, all in integer math.
+
+struct Pupil
+    name str
+    raw int
+
+fn roster() List[Pupil]
+    names := ["ana", "ben", "cy", "dee", "eli", "fay", "gus", "hal", "ivy", "jon"]
+    raws := [48, 62, 55, 71, 39, 66, 58, 80, 52, 60]
+    mut out := List[Pupil]()
+    for i in 0..names.len()
+        out.push(Pupil(name: names[i], raw: raws[i]))
+    out
+
+fn letter(score int) str
+    if score >= 90
+        return "A"
+    if score >= 80
+        return "B"
+    if score >= 70
+        return "C"
+    if score >= 60
+        return "D"
+    "F"
+
+fn curve_shift(scores List[int], target int) int
+    target - scores.sum() / scores.len()
+
+fn curved(score int, shift int) int
+    (score + shift).min(100).max(0)
+
+fn percentile(sorted_xs List[int], p int) int
+    n := sorted_xs.len()
+    idx := (p * n + 99) / 100 - 1
+    sorted_xs[idx.max(0)]
+
+fn tally(scores List[int]) Map[str, int]
+    mut out := Map[str, int]()
+    for s in scores
+        out[letter(s)] += 1
+    out
+
+fn main()
+    pupils := roster()
+    raws := [p.raw for p in pupils]
+    shift := curve_shift(raws, 75)
+    print("mean {raws.sum() / raws.len()}, shift {shift}")
+    ordered := raws.sorted()
+    print("quartiles {percentile(ordered, 25)} {percentile(ordered, 50)} {percentile(ordered, 75)}")
+    print("name  raw  new  grade")
+    mut bumped := List[int]()
+    for p in pupils.sorted(by: |x| -x.raw)
+        c := curved(p.raw, shift)
+        bumped.push(c)
+        print("{p.name:<5} {p.raw:>3} {c:>4}  {letter(p.raw)}->{letter(c)}")
+    before_counts := tally(raws)
+    after_counts := tally(bumped)
+    for g in ["A", "B", "C", "D", "F"]
+        b := before_counts.get(g) else 0
+        a := after_counts.get(g) else 0
+        print("{g}: {b} -> {a}")
+
+@test fn letters_at_boundaries()
+    assert_eq(letter(90), "A")
+    assert_eq(letter(89), "B")
+    assert_eq(letter(60), "D")
+    assert_eq(letter(59), "F")
+
+@test fn shift_hits_target_mean()
+    assert_eq(curve_shift([50, 60, 70], 75), 15)
+    assert_eq(curved(95, 15), 100)
+    assert_eq(curved(-5, 2), 0)
+
+@test fn percentiles_use_nearest_rank()
+    xs := [10, 20, 30, 40]
+    assert_eq(percentile(xs, 25), 10)
+    assert_eq(percentile(xs, 50), 20)
+    assert_eq(percentile(xs, 100), 40)

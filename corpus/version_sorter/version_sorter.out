@@ -1,0 +1,6 @@
+natural: app-1.2 app-1.2.9 app-1.2.10 app-1.10.2 app-2.0 app-10.0 lib-0.9 lib-0.9.1 lib-0.10 tool-v3 tool-v4 tool-v12
+plain:   app-1.10.2 app-1.2 app-1.2.10 app-1.2.9 app-10.0 app-2.0 lib-0.10 lib-0.9 lib-0.9.1 tool-v12 tool-v3 tool-v4
+newest app-: app-10.0
+newest lib-: lib-0.10
+newest tool-v: tool-v12
+1.9 vs 1.10: -1

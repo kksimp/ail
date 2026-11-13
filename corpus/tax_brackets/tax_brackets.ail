@@ -1,0 +1,92 @@
+## Progressive tax brackets. A schedule is a list of (upper limit, percent)
+## brackets in cents; each slice of income is taxed at its own rate, rounded
+## down per bracket. Reports tax, effective rate and the marginal rate for two
+## schedules, and rejects negative incomes and unordered schedules.
+
+TOP := 100000000000000
+
+error enum TaxError
+    NegativeIncome(amount int) "income cannot be negative: {amount}"
+    BadBrackets(index int) "bracket {index} does not rise above the one before"
+
+struct Bracket
+    upto int
+    pct int
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn validate(brackets List[Bracket]) ! TaxError
+    for i in 1..brackets.len()
+        if brackets[i].upto <= brackets[i - 1].upto
+            return BadBrackets(index: i)
+
+fn slices(brackets List[Bracket], income int) List[int] ! TaxError
+    validate(brackets)?
+    if income < 0
+        return NegativeIncome(amount: income)
+    mut prev := 0
+    mut out := List[int]()
+    for b in brackets
+        top := income.min(b.upto)
+        out.push(if top > prev then top - prev else 0)
+        prev = b.upto
+    out
+
+fn tax_for(brackets List[Bracket], income int) int ! TaxError
+    parts := slices(brackets, income)?
+    mut tax := 0
+    for i in 0..parts.len()
+        tax += parts[i] * brackets[i].pct / 100
+    tax
+
+fn marginal(brackets List[Bracket], income int) int
+    for b in brackets
+        if income < b.upto
+            return b.pct
+    brackets.last()?.pct else 0
+
+fn tenths(per_mille int) str
+    "{per_mille / 10}.{per_mille % 10}%"
+
+fn report(name str, brackets List[Bracket], income int)
+    tax := tax_for(brackets, income) else err
+        print("{name} {income}: {err}")
+        return
+    eff := if income > 0 then tax * 1000 / income else 0
+    print("{name} {money(income)}: tax {money(tax)}, effective {tenths(eff)}, marginal {marginal(brackets, income)}%")
+
+fn main()
+    single := [
+        Bracket(upto: 1100000, pct: 10),
+        Bracket(upto: 4472500, pct: 12),
+        Bracket(upto: 9525000, pct: 22),
+        Bracket(upto: TOP, pct: 32),
+    ]
+    flat := [Bracket(upto: 5000000, pct: 0), Bracket(upto: TOP, pct: 15)]
+    broken := [Bracket(upto: 500, pct: 5), Bracket(upto: 400, pct: 9)]
+    for income in [0, 850000, 4000000, 12000000, -100]
+        report("single", single, income)
+        report("flat", flat, income)
+    report("broken", broken, 1000)
+    parts := slices(single, 6000000) else List[int]()
+    for i in 0..parts.len()
+        print("slice {i + 1}: {money(parts[i])} at {single[i].pct}%")
+
+@test fn taxes_each_slice_at_its_rate()
+    b := [Bracket(upto: 1000, pct: 10), Bracket(upto: TOP, pct: 20)]
+    assert_eq(tax_for(b, 500)?, 50)
+    assert_eq(tax_for(b, 2000)?, 300)
+
+@test fn tax_is_monotonic()
+    b := [Bracket(upto: 1000, pct: 10), Bracket(upto: TOP, pct: 20)]
+    mut last := 0
+    for income in [0, 999, 1000, 1001, 5000, 90000]
+        t := tax_for(b, income)?
+        assert(t >= last, "tax decreased")
+        last = t
+
+@test fn rejects_bad_input()
+    assert_err(tax_for([Bracket(upto: 100, pct: 1)], -1))
+    assert_err(tax_for([Bracket(upto: 100, pct: 1), Bracket(upto: 100, pct: 2)], 5))

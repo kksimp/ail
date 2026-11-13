@@ -1,0 +1,65 @@
+## Line diff: computes a shortest edit script between two texts with the
+## longest-common-subsequence table, prints it as "+", "-" and " " lines and
+## applies it to check that the old text turns into the new one.
+
+fn diff(a List[str], b List[str]) List[str]
+    mut g := Grid.fill(a.len() + 1, b.len() + 1, 0)
+    for r in 0..a.len()
+        for c in 0..b.len()
+            if a[r] == b[c]
+                g[r + 1, c + 1] = g[r, c] + 1
+            else
+                g[r + 1, c + 1] = g[r, c + 1].max(g[r + 1, c])
+    mut rev := List[str]()
+    mut i := a.len()
+    mut j := b.len()
+    while i > 0 or j > 0
+        if i > 0 and j > 0 and a[i - 1] == b[j - 1]
+            rev.push("  {a[i - 1]}")
+            i -= 1
+            j -= 1
+        elif j > 0 and (i == 0 or g[i, j - 1] >= g[i - 1, j])
+            rev.push("+ {b[j - 1]}")
+            j -= 1
+        else
+            rev.push("- {a[i - 1]}")
+            i -= 1
+    rev.reversed()
+
+fn apply_edits(edits List[str]) List[str]
+    mut out := List[str]()
+    for e in edits
+        if not e.starts_with("- ")
+            out.push(e.slice(2, e.len()))
+    out
+
+fn count_prefix(edits List[str], prefix str) int
+    mut n := 0
+    for e in edits
+        if e.starts_with(prefix)
+            n += 1
+    n
+
+fn main()
+    before := ["fn main()", "    x := 1", "    y := 2", "    print(x + y)", "", "fn helper()", "    todo"]
+    after := ["fn main()", "    x := 1", "    z := 5", "    y := 2", "    print(x + y + z)", "", "fn helper()"]
+    edits := diff(before, after)
+    for e in edits
+        print(e)
+    print("added {count_prefix(edits, "+ ")}, removed {count_prefix(edits, "- ")}, kept {count_prefix(edits, "  ")}")
+    print("patch reproduces new: {apply_edits(edits) == after}")
+    same := diff(before, before)
+    print("identical inputs changed: {count_prefix(same, "+ ") + count_prefix(same, "- ")}")
+    print("from empty: {diff([], after).len()} lines")
+
+@test fn single_insertion()
+    assert_eq(diff(["a", "c"], ["a", "b", "c"]), ["  a", "+ b", "  c"])
+
+@test fn single_deletion()
+    assert_eq(diff(["a", "b"], ["a"]), ["  a", "- b"])
+
+@test fn patch_round_trip()
+    a := ["one", "two", "three", "four"]
+    b := ["zero", "two", "four", "five"]
+    assert_eq(apply_edits(diff(a, b)), b)
+    assert_eq(apply_edits(diff(b, a)), a)

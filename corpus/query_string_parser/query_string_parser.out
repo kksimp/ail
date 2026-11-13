@@ -1,0 +1,25 @@
+query '?q=hello+world&page=3&tag=a&tag=b&tag=c'
+  page = 3
+  q = hello world
+  tag = a | b | c
+  canonical: 'page=3&q=hello+world&tag=a&tag=b&tag=c'
+query 'name=Ann%20Lee&city=S%26o&flag&empty=&x[]=1&x[]=2'
+  city = S&o
+  empty = 
+  flag = 
+  name = Ann Lee
+  x = 1 | 2
+  canonical: 'city=S%26o&empty=&flag=&name=Ann+Lee&x=1&x=2'
+query 'a=1&&b=%zz&c=100%&d=%4'
+  a = 1
+  b = %zz
+  c = 100%
+  d = %4
+  canonical: 'a=1&b=%25zz&c=100%25&d=%254'
+query ''
+  canonical: ''
+page: 3
+per: 20
+limit: 50
+first tag: a
+sort: -

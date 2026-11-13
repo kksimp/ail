@@ -1,0 +1,92 @@
+## Connect Four referee. Finds a winning line of four on a 7 by 6 board (flat
+## list, row 0 on top), and replays column drops that alternate X and O until
+## someone wins, a column overflows or the board fills.
+
+COLS := 7
+ROWS := 6
+
+fn parse(rows List[str]) List[char]
+    mut cells := List[char]()
+    for line in rows
+        cells.extend(line.chars())
+    cells
+
+fn find_win(cells List[char]) str
+    steps := [[0, 1], [1, 0], [1, 1], [1, -1]]
+    for r in 0..ROWS
+        for c in 0..COLS
+            p := cells[r * COLS + c]
+            if p == '.'
+                continue
+            for s in steps
+                mut run := 1
+                for k in 1..4
+                    nr := r + s[0] * k
+                    nc := c + s[1] * k
+                    if nr >= 0 and nr < ROWS and nc >= 0 and nc < COLS
+                        if cells[nr * COLS + nc] == p
+                            run += 1
+                if run == 4
+                    return "{p} from row {r} col {c} step {s[0]},{s[1]}"
+    "none"
+
+fn drop(mut cells List[char], col int, piece char) int
+    mut r := ROWS - 1
+    while r >= 0
+        if cells[r * COLS + col] == '.'
+            cells[r * COLS + col] = piece
+            return r
+        r -= 1
+    -1
+
+fn show(cells List[char])
+    for r in 0..ROWS
+        line := cells[r * COLS..(r + 1) * COLS]
+        print("  {line.join("")}")
+
+fn replay(columns str)
+    mut cells := parse([".......", ".......", ".......", ".......", ".......", "......."])
+    mut turn := 0
+    for ch in columns.chars()
+        col := ch.to_digit(10) else 0
+        piece := if turn % 2 == 0 then 'X' else 'O'
+        row := drop(mut cells, col, piece)
+        if row < 0
+            print("move {turn + 1}: column {col} is full")
+            return
+        turn += 1
+        verdict := find_win(cells)
+        if verdict != "none"
+            print("move {turn}: {verdict}")
+            show(cells)
+            return
+    print("no winner after {turn} moves")
+    show(cells)
+
+fn main()
+    boards := [
+        [".......", ".......", ".......", ".......", "..O....", ".XXXX.O"],
+        [".......", ".......", "...X...", "..XO...", ".XOO...", "XOXO..."],
+        ["XOXOXOX", "XOXOXOX", "OXOXOXO", "OXOXOXO", "XOXOXOX", "XOXOXOX"],
+    ]
+    for rows in boards
+        print("board: {find_win(parse(rows))}")
+    replay("3344556")
+    replay("3232323")
+    replay("0000000")
+
+@test fn horizontal_win()
+    cells := parse([".......", ".......", ".......", ".......", ".......", "..OOOO."])
+    assert_eq(find_win(cells), "O from row 5 col 2 step 0,1")
+
+@test fn anti_diagonal_win()
+    cells := parse([".......", ".......", "...X...", "..XO...", ".XOO...", "XOXO..."])
+    assert_eq(find_win(cells), "X from row 2 col 3 step 1,-1")
+
+@test fn drops_stack_up()
+    mut cells := parse([".......", ".......", ".......", ".......", ".......", "......."])
+    assert_eq(drop(mut cells, 2, 'X'), 5)
+    assert_eq(drop(mut cells, 2, 'O'), 4)
+    for i in 0..4
+        _ := drop(mut cells, 2, 'X')
+    assert_eq(drop(mut cells, 2, 'O'), -1)

@@ -1,0 +1,94 @@
+## Tree printer: builds a small project in a temp directory and draws it like
+## the `tree` command (directories first, names sorted, `|--` and a closing
+## backtick branch), with a depth limit and file and directory totals.
+
+struct Tally
+    dirs int
+    files int
+    lines List[str]
+
+fn print_tree(dir str, prefix str, depth int, mut t Tally) !
+    mut subdirs := List[str]()
+    mut plain := List[str]()
+    for name in fs.list_dir(dir)?
+        if fs.metadata(path.join(dir, name))?.is_dir
+            subdirs.push(name)
+        else
+            plain.push(name)
+    mut entries := subdirs.sorted()
+    entries.extend(plain.sorted())
+    for i, name in entries.enumerate()
+        last := i == entries.len() - 1
+        branch := if last then "`-- " else "|-- "
+        is_dir := subdirs.contains(name)
+        label := if is_dir then "{name}/" else name
+        t.lines.push("{prefix}{branch}{label}")
+        if is_dir
+            t.dirs += 1
+            if depth > 1
+                pad := if last then "    " else "|   "
+                print_tree(path.join(dir, name), "{prefix}{pad}", depth - 1, mut t)?
+        else
+            t.files += 1
+
+fn render(root str, depth int) !Tally
+    mut t := Tally(dirs: 0, files: 0, lines: [])
+    print_tree(root, "", depth, mut t)?
+    t
+
+fn build(root str) !
+    fs.make_dir(path.join(root, "src/net"))?
+    fs.make_dir(path.join(root, "src/ui"))?
+    fs.make_dir(path.join(root, "tests"))?
+    fs.make_dir(path.join(root, "docs"))?
+    for rel in ["README", "src/main.ail", "src/net/http.ail", "src/net/tls.ail", "src/ui/window.ail", "tests/basic.ail", "docs/intro.md"]
+        fs.write_text(path.join(root, rel), "x\n")?
+
+fn remove_tree(dir str) !
+    for name in fs.list_dir(dir)?
+        child := path.join(dir, name)
+        if fs.metadata(child)?.is_dir
+            remove_tree(child)?
+        else
+            fs.remove(child)?
+    fs.remove(dir)?
+
+fn main() !
+    root := fs.make_temp_dir("corpus_tree_printer")?
+    build(root)?
+    full := render(root, 10)?
+    print(".")
+    for l in full.lines
+        print(l)
+    print("{full.dirs} directories, {full.files} files")
+    shallow := render(root, 1)?
+    print("depth 1:")
+    for l in shallow.lines
+        print("  {l}")
+    print("{shallow.dirs} directories, {shallow.files} files")
+    remove_tree(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn directories_come_first()
+    root := fs.make_temp_dir("corpus_tree_printer_t")?
+    build(root)?
+    t := render(root, 1)?
+    assert_eq(t.lines[0], "|-- docs/")
+    assert_eq(t.lines[t.lines.len() - 1], "`-- README")
+    remove_tree(root)?
+
+@test fn depth_limits_the_walk()
+    root := fs.make_temp_dir("corpus_tree_printer_d")?
+    build(root)?
+    deep := render(root, 3)?
+    flat := render(root, 1)?
+    assert_eq(deep.files, 7)
+    assert_eq(flat.files, 1)
+    assert_eq(flat.dirs, deep.dirs - 2)
+    remove_tree(root)?
+
+@test fn empty_directory_prints_nothing()
+    root := fs.make_temp_dir("corpus_tree_printer_e")?
+    t := render(root, 5)?
+    assert_eq(t.lines.len(), 0)
+    remove_tree(root)?

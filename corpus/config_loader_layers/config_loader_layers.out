@@ -1,0 +1,12 @@
+layer defaults: 4 keys
+layer user: 3 keys
+layer local: missing, skipped
+debug    = false      from defaults
+host     = localhost  from defaults
+port     = 9090       from user
+theme    = dark       from user
+workers  = 4          from user
+port + 1 = 9091
+retries = 3
+host is not a number: -1
+cleaned up: true

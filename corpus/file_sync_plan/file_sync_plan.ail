@@ -1,0 +1,101 @@
+## One-way directory sync planner: compares a source and a destination
+## directory by file contents, prints the plan (add, update, delete), applies
+## it, and plans again to show the destination now matches. Both directories
+## live in a temp directory that is removed at the end.
+
+enum Action
+    Add(name str)
+    Update(name str)
+    Delete(name str)
+
+fn Action.describe(self) str
+    match self
+        Add(n) => "add    {n}"
+        Update(n) => "update {n}"
+        Delete(n) => "delete {n}"
+
+fn load_dir(dir str) !Map[str, str]
+    mut files := Map[str, str]()
+    for name in fs.list_dir(dir)?.sorted()
+        files[name] = fs.read_text(path.join(dir, name))?
+    files
+
+## Adds and updates in name order, then deletions in name order.
+fn plan(src Map[str, str], dst Map[str, str]) List[Action]
+    mut acts := List[Action]()
+    for name in src.keys().sorted()
+        if not dst.contains(name)
+            acts.push(Action.Add(name: name))
+        elif dst[name] != src[name]
+            acts.push(Action.Update(name: name))
+    for name in dst.keys().sorted()
+        if not src.contains(name)
+            acts.push(Action.Delete(name: name))
+    acts
+
+fn apply_plan(acts List[Action], src_dir str, dst_dir str) !
+    for a in acts
+        match a
+            Add(n) =>
+                fs.write_text(path.join(dst_dir, n), fs.read_text(path.join(src_dir, n))?)?
+            Update(n) =>
+                fs.write_text(path.join(dst_dir, n), fs.read_text(path.join(src_dir, n))?)?
+            Delete(n) => fs.remove(path.join(dst_dir, n))?
+
+fn clear_dir(dir str) !
+    for name in fs.list_dir(dir)?
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+
+fn main() !
+    root := fs.make_temp_dir("corpus_file_sync_plan")?
+    src_dir := path.join(root, "src")
+    dst_dir := path.join(root, "dst")
+    fs.make_dir(src_dir)?
+    fs.make_dir(dst_dir)?
+    fs.write_text(path.join(src_dir, "a.txt"), "alpha\n")?
+    fs.write_text(path.join(src_dir, "b.txt"), "beta v2\n")?
+    fs.write_text(path.join(src_dir, "c.txt"), "gamma\n")?
+    fs.write_text(path.join(dst_dir, "b.txt"), "beta v1\n")?
+    fs.write_text(path.join(dst_dir, "c.txt"), "gamma\n")?
+    fs.write_text(path.join(dst_dir, "old.txt"), "stale\n")?
+    acts := plan(load_dir(src_dir)?, load_dir(dst_dir)?)
+    print("plan: {acts.len()} actions")
+    for a in acts
+        print("  {a.describe()}")
+    apply_plan(acts, src_dir, dst_dir)?
+    after := plan(load_dir(src_dir)?, load_dir(dst_dir)?)
+    print("after apply: {after.len()} actions")
+    final := load_dir(dst_dir)?
+    print("destination: {final.keys().sorted().join(", ")}")
+    clear_dir(src_dir)?
+    clear_dir(dst_dir)?
+    fs.remove(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn plan_covers_add_update_delete()
+    src := {"a": "1", "b": "2", "c": "3"}
+    dst := {"b": "x", "c": "3", "d": "4"}
+    acts := plan(src, dst)
+    assert_eq(acts.len(), 3)
+    assert_eq(acts[0].describe(), "add    a")
+    assert_eq(acts[1].describe(), "update b")
+    assert_eq(acts[2].describe(), "delete d")
+
+@test fn identical_trees_need_nothing()
+    same := {"x": "1"}
+    assert_eq(plan(same, same).len(), 0)
+
+@test fn apply_makes_destination_match()
+    root := fs.make_temp_dir("corpus_file_sync_plan_t")?
+    s := path.join(root, "s")
+    d := path.join(root, "d")
+    fs.make_dir(s)?
+    fs.make_dir(d)?
+    fs.write_text(path.join(s, "f"), "new")?
+    fs.write_text(path.join(d, "g"), "old")?
+    apply_plan(plan(load_dir(s)?, load_dir(d)?), s, d)?
+    assert_eq(load_dir(d)?, load_dir(s)?)
+    clear_dir(s)?
+    clear_dir(d)?
+    fs.remove(root)?

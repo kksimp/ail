@@ -1,0 +1,23 @@
+1 = 1
+  divisors 1, sigma 1, phi 1
+2 = 2
+  divisors 2, sigma 3, phi 1
+12 = 2^2 * 3
+  divisors 6, sigma 28, phi 4
+97 = 97
+  divisors 2, sigma 98, phi 96
+360 = 2^3 * 3^2 * 5
+  divisors 24, sigma 1170, phi 96
+1001 = 7 * 11 * 13
+  divisors 8, sigma 1344, phi 720
+4096 = 2^12
+  divisors 13, sigma 8191, phi 2048
+65536 = 2^16
+  divisors 17, sigma 131071, phi 32768
+999999 = 3^3 * 7 * 11 * 13 * 37
+  divisors 64, sigma 2042880, phi 466560
+600851475143 = 71 * 839 * 1471 * 6857
+  divisors 16, sigma 610544148480, phi 591194251200
+smallest prime factor, 2..30
+2:2 3:3 4:2 5:5 6:2 7:7 8:2 9:3 10:2 11:11 12:2 13:13 14:2 15:3 16:2 17:17 18:2 19:19 20:2 21:3 22:2 23:23 24:2 25:5 26:2 27:3 28:2 29:29 30:2
+primes up to 60: 2 3 5 7 11 13 17 19 23 29 31 37 41 43 47 53 59

@@ -1,0 +1,127 @@
+## Cron field parser: expands the five fields of a cron expression (minute,
+## hour, day of month, month, day of week) into sorted value lists. Supports *,
+## lists, ranges, steps (*/15, 10-30/5) and month/weekday names. A time fires
+## when all five fields contain its values.
+
+error enum CronError
+    BadValue(text str) "bad value {text}"
+    OutOfRange(val int, lo int, hi int) "{val} is outside {lo}-{hi}"
+    BadStep(text str) "bad step {text}"
+    BadRange(text str) "descending range {text}"
+    WrongFields(count int) "expected 5 fields, got {count}"
+
+struct Schedule
+    minutes List[int]
+    hours List[int]
+    days List[int]
+    months List[int]
+    weekdays List[int]
+
+fn split_once(s str, sep str)(str, str)
+    i := s.find(sep) else return (s, "")
+    (s.slice(0, i), s.slice(i + sep.len(), s.len()))
+
+fn parse_value(t str, lo int, hi int, names List[str]) int ! CronError
+    mut v := lo
+    idx := names.index_of(t.to_upper()) else -1
+    if idx >= 0
+        v = lo + idx
+    else
+        n := t.to_int() else return BadValue(text: t)
+        v = n
+    if v < lo or v > hi
+        return OutOfRange(val: v, lo: lo, hi: hi)
+    v
+
+fn parse_field(text str, lo int, hi int, names List[str]) List[int] ! CronError
+    mut seen := Set[int]()
+    for part in text.split(",")
+        base, step_text := split_once(part, "/")
+        mut step := 1
+        if step_text != ""
+            s := step_text.to_int() else return BadStep(text: step_text)
+            if s <= 0
+                return BadStep(text: step_text)
+            step = s
+        mut lowest := lo
+        mut highest := hi
+        if base != "*"
+            a, b := split_once(base, "-")
+            lowest = parse_value(a, lo, hi, names)?
+            if b == ""
+                highest = if step_text != "" then hi else lowest
+            else
+                highest = parse_value(b, lo, hi, names)?
+                if highest < lowest
+                    return BadRange(text: base)
+        mut v := lowest
+        while v <= highest
+            seen.add(v)
+            v += step
+    seen.sorted()
+
+fn parse_cron(expr str) Schedule ! CronError
+    parts := expr.words()
+    if parts.len() != 5
+        return WrongFields(count: parts.len())
+    month_names := ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+    day_names := ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+    no_names := List[str]()
+    f_min := parse_field(parts[0], 0, 59, no_names)?
+    f_hour := parse_field(parts[1], 0, 23, no_names)?
+    f_day := parse_field(parts[2], 1, 31, no_names)?
+    f_month := parse_field(parts[3], 1, 12, month_names)?
+    f_week := parse_field(parts[4], 0, 6, day_names)?
+    Schedule(minutes: f_min, hours: f_hour, days: f_day, months: f_month, weekdays: f_week)
+
+fn Schedule.fires(self, month int, dom int, dow int, hour int, minute int) bool
+    months.contains(month) and days.contains(dom) and weekdays.contains(dow) and hours.contains(hour) and minutes.contains(minute)
+
+fn brief(xs List[int]) str
+    if xs.len() <= 8
+        return xs.join(",")
+    "{xs.take(6).join(",")},... ({xs.len()} values)"
+
+fn show(expr str)
+    print(expr)
+    s := parse_cron(expr) else err
+        print("  error: {err}")
+        return
+    print("  minute   {brief(s.minutes)}")
+    print("  hour     {brief(s.hours)}")
+    print("  day      {brief(s.days)}")
+    print("  month    {brief(s.months)}")
+    print("  weekday  {brief(s.weekdays)}")
+    print("  runs per day: {s.minutes.len() * s.hours.len()}")
+
+fn main()
+    show("*/15 9-17 * * MON-FRI")
+    show("0 0 1,15 JAN-JUN *")
+    show("5,10-12,50/5 */6 * * 0")
+    show("30 2 * * 7")
+    show("61 * * * *")
+    show("*/0 * * * *")
+    show("10-5 * * * *")
+    show("x * * * *")
+    show("* * * *")
+    s := parse_cron("*/15 9-17 * * MON-FRI") else return
+    print("Wed 09:30 fires: {s.fires(6, 12, 3, 9, 30)}")
+    print("Wed 09:31 fires: {s.fires(6, 12, 3, 9, 31)}")
+    print("Sun 09:30 fires: {s.fires(6, 12, 0, 9, 30)}")
+
+@test fn expands_steps_and_ranges()
+    assert_eq(parse_field("*/15", 0, 59, List[str]())?, [0, 15, 30, 45])
+    assert_eq(parse_field("10-20/5", 0, 59, List[str]())?, [10, 15, 20])
+    assert_eq(parse_field("5,1-3,2", 0, 59, List[str]())?, [1, 2, 3, 5])
+    assert_eq(parse_field("30/15", 0, 59, List[str]())?, [30, 45])
+
+@test fn names_map_to_numbers()
+    assert_eq(parse_field("MON-WED", 0, 6, ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"])?, [1, 2, 3])
+    assert_eq(parse_field("dec", 1, 12, ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])?, [12])
+
+@test fn errors_are_typed()
+    assert_err(parse_cron("1 2 3"))
+    assert_err(parse_cron("60 * * * *"))
+    assert_err(parse_cron("*/x * * * *"))
+    assert_err(parse_cron("5-1 * * * *"))
+    assert_err(parse_cron("? * * * *"))

@@ -1,0 +1,101 @@
+## Dynamic programming on grids with moves right and down only. Part one
+## counts the routes through a map with blocked cells ('#'). Part two finds the
+## cheapest route over a grid of digit costs and rebuilds it as R/D moves.
+
+fn count_paths(rows List[str]) int
+    h := rows.len()
+    w := rows[0].len()
+    mut ways := [0 for k in 0..h * w]
+    for r in 0..h
+        cells := rows[r].chars()
+        for c in 0..w
+            if cells[c] == '#'
+                continue
+            if r == 0 and c == 0
+                ways[0] = 1
+                continue
+            mut total := 0
+            if r > 0
+                total += ways[(r - 1) * w + c]
+            if c > 0
+                total += ways[r * w + c - 1]
+            ways[r * w + c] = total
+    ways[h * w - 1]
+
+fn digit_grid(rows List[str]) List[int]
+    mut out := List[int]()
+    for line in rows
+        for ch in line.chars()
+            out.push(ch.to_digit(10) else 0)
+    out
+
+fn cheapest(rows List[str]) List[int]
+    h := rows.len()
+    w := rows[0].len()
+    cost := digit_grid(rows)
+    mut best := [0 for k in 0..h * w]
+    for r in 0..h
+        for c in 0..w
+            i := r * w + c
+            if r == 0 and c == 0
+                best[i] = cost[i]
+            elif r == 0
+                best[i] = best[i - 1] + cost[i]
+            elif c == 0
+                best[i] = best[i - w] + cost[i]
+            else
+                best[i] = best[i - 1].min(best[i - w]) + cost[i]
+    best
+
+fn moves(rows List[str], best List[int]) str
+    w := rows[0].len()
+    mut r := rows.len() - 1
+    mut c := w - 1
+    mut steps := List[str]()
+    while r > 0 or c > 0
+        if r == 0
+            steps.push("R")
+            c -= 1
+        elif c == 0
+            steps.push("D")
+            r -= 1
+        elif best[(r - 1) * w + c] <= best[r * w + c - 1]
+            steps.push("D")
+            r -= 1
+        else
+            steps.push("R")
+            c -= 1
+    steps.reverse()
+    steps.join("")
+
+fn open_row(w int) str
+    ["." for k in 0..w].join("")
+
+fn main()
+    open_map := ["....", "....", "...."]
+    print("open 3x4: {count_paths(open_map)} routes")
+    walled := ["...#.", ".#...", "...#.", "#....", "....."]
+    print("walled 5x5: {count_paths(walled)} routes")
+    sealed := ["..#", "##.", "..."]
+    print("sealed 3x3: {count_paths(sealed)} routes")
+    big := [open_row(12) for k in 0..12]
+    print("open 12x12: {count_paths(big)} routes")
+    costs := ["131", "425", "122", "913"]
+    best := cheapest(costs)
+    print("cheapest cost: {best[best.len() - 1]}")
+    print("moves: {moves(costs, best)}")
+    wide := ["19999", "11199", "99119", "99911"]
+    wb := cheapest(wide)
+    print("wide cost: {wb[wb.len() - 1]} via {moves(wide, wb)}")
+
+@test fn open_2x2_has_two_routes()
+    assert_eq(count_paths(["..", ".."]), 2)
+
+@test fn binomial_for_open_grid()
+    assert_eq(count_paths(["....", "....", "...."]), 10)
+
+@test fn blocked_start_corner_neighbour()
+    assert_eq(count_paths([".#", ".."]), 1)
+
+@test fn single_cell_costs_itself()
+    assert_eq(cheapest(["7"]), [7])

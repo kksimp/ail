@@ -1,0 +1,12 @@
+doc 1: ok
+doc 2: 4 problems
+  - name: required, non-empty text
+  - port: need an integer in 1..65535
+  - workers: need an integer in 1..64
+  - level: 'loud' is not one of debug|info|warn|error
+doc 3: 1 problems
+  - port: need an integer in 1..65535
+doc 4: 1 problems
+  - not valid json
+doc 5: ok
+2 of 5 documents valid

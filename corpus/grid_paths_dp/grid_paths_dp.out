@@ -1,0 +1,7 @@
+open 3x4: 10 routes
+walled 5x5: 11 routes
+sealed 3x3: 0 routes
+open 12x12: 705432 routes
+cheapest cost: 12
+moves: RDDDR
+wide cost: 8 via DRRDRDR

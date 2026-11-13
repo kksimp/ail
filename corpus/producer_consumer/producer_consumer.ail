@@ -1,0 +1,61 @@
+## Producer/consumer over a bounded queue: several producer tasks push work
+## items into a small channel, a pool of consumer tasks scores them, and main
+## gathers the scores. Arrival order is nondeterministic, so results are
+## sorted before they are reported.
+
+struct Item
+    producer int
+    seq int
+    value int
+
+struct Scored
+    producer int
+    seq int
+    score int
+
+fn produce(id int, n int, queue Channel[Item])
+    for s in 0..n
+        queue.send(Item(producer: id, seq: s, value: (id * 31 + s * 17) % 50))
+
+fn consume(queue Channel[Item], out Channel[Scored])
+    for it in queue
+        out.send(Scored(producer: it.producer, seq: it.seq, score: it.value * it.value + 1))
+
+fn run(producers int, per int, consumers int) !List[Scored]
+    queue := Channel[Item](4)
+    out := Channel[Scored](producers * per + 1)
+    pg := TaskGroup()
+    cg := TaskGroup()
+    for _ in 0..consumers
+        cg.add(spawn consume(queue, out))
+    for p in 0..producers
+        pg.add(spawn produce(p, per, queue))
+    pg.wait_all()?
+    queue.close()
+    cg.wait_all()?
+    out.close()
+    got := [s for s in out]
+    got.sorted(by: |s| s.producer * 1000 + s.seq)
+
+fn main() !
+    scored := run(3, 5, 2)?
+    for s in scored
+        print("p{s.producer}#{s.seq} -> {s.score}")
+    mut totals := [0, 0, 0]
+    for s in scored
+        totals[s.producer] = totals[s.producer] + s.score
+    for p in 0..3
+        print("producer {p} total {totals[p]}")
+    print("items: {scored.len()}, grand total: {totals.sum()}")
+
+@test fn every_item_is_consumed_once()
+    scored := run(2, 6, 3)?
+    assert_eq(scored.len(), 12)
+    assert_eq(scored[0].producer, 0)
+    assert_eq(scored[11].seq, 5)
+
+@test fn consumer_count_does_not_change_results()
+    assert_eq(run(3, 4, 1)?, run(3, 4, 4)?)
+
+@test fn empty_run_has_no_results()
+    assert_eq(run(2, 0, 2)?.len(), 0)

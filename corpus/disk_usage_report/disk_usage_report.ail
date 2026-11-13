@@ -1,0 +1,104 @@
+## A `du`-style report: builds a small project tree of files with known sizes
+## in a temp directory, totals the bytes of each top-level entry (directories
+## recursively) and per file extension, and draws a bar chart. The tree is
+## removed afterwards.
+
+struct Entry
+    name str
+    size int
+    is_dir bool
+
+fn make_file(dir str, rel str, size int) !
+    fs.write_text(path.join(dir, rel), "x".repeat(size))?
+
+fn build(root str) !
+    fs.make_dir(path.join(root, "src/lib"))?
+    fs.make_dir(path.join(root, "docs"))?
+    fs.make_dir(path.join(root, "assets"))?
+    make_file(root, "src/main.ail", 420)?
+    make_file(root, "src/util.ail", 180)?
+    make_file(root, "src/lib/core.ail", 950)?
+    make_file(root, "src/lib/io.ail", 300)?
+    make_file(root, "docs/guide.md", 640)?
+    make_file(root, "docs/api.md", 1210)?
+    make_file(root, "assets/logo.bin", 2048)?
+    make_file(root, "README.md", 150)?
+    make_file(root, "Makefile", 90)?
+
+fn extension(name str) str
+    parts := name.split(".")
+    if parts.len() > 1
+        return parts[parts.len() - 1]
+    "(none)"
+
+## Total size of everything under `dir`; adds each file's size to `exts`.
+fn tree_size(dir str, mut exts Map[str, int]) !int
+    mut total := 0
+    for name in fs.list_dir(dir)?.sorted()
+        child := path.join(dir, name)
+        meta := fs.metadata(child)?
+        if meta.is_dir
+            total += tree_size(child, mut exts)?
+        else
+            total += meta.size
+            exts[extension(name)] += meta.size
+    total
+
+fn remove_tree(dir str) !
+    for name in fs.list_dir(dir)?
+        child := path.join(dir, name)
+        if fs.metadata(child)?.is_dir
+            remove_tree(child)?
+        else
+            fs.remove(child)?
+    fs.remove(dir)?
+
+fn report(root str) !List[Entry]
+    mut exts := Map[str, int]()
+    mut entries := List[Entry]()
+    for name in fs.list_dir(root)?.sorted()
+        child := path.join(root, name)
+        if fs.metadata(child)?.is_dir
+            sub := tree_size(child, mut exts)?
+            entries.push(Entry(name: "{name}/", size: sub, is_dir: true))
+        else
+            size := fs.metadata(child)?.size
+            exts[extension(name)] += size
+            entries.push(Entry(name: name, size: size, is_dir: false))
+    print("by extension:")
+    for ext in exts.keys().sorted()
+        print("  {ext:<7}{exts[ext]:>6}")
+    entries.sorted(by: |e| -e.size)
+
+fn main() !
+    root := fs.make_temp_dir("corpus_disk_usage_report")?
+    build(root)?
+    entries := report(root)?
+    total := entries.map(|x| x.size).sum()
+    print("by entry:")
+    for e in entries
+        bar := "#".repeat(e.size / 200)
+        print("  {e.name:<9}{e.size:>6} {e.size * 100 / total:>3}% {bar}")
+    print("total {total} bytes")
+    remove_tree(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn extension_of_names()
+    assert_eq(extension("a.tar.gz"), "gz")
+    assert_eq(extension("Makefile"), "(none)")
+
+@test fn tree_size_adds_nested_files()
+    root := fs.make_temp_dir("corpus_disk_usage_report_t")?
+    build(root)?
+    mut exts := Map[str, int]()
+    total := tree_size(root, mut exts)?
+    assert_eq(total, 5988)
+    assert_eq(exts["ail"], 1850)
+    remove_tree(root)?
+    assert(not fs.exists(root))
+
+@test fn empty_dir_is_zero()
+    root := fs.make_temp_dir("corpus_disk_usage_report_e")?
+    mut exts := Map[str, int]()
+    assert_eq(tree_size(root, mut exts)?, 0)
+    remove_tree(root)?

@@ -1,0 +1,167 @@
+## A tiny stack machine: an assembler turns text lines (with labels) into
+## instructions, then the VM runs them with a stack, 8 memory slots and a step
+## limit. Programs: factorial, a summing loop, a countdown and four failures.
+
+error enum VmError
+    BadLine(text str) "cannot assemble '{text}'"
+    NoLabel(name str) "unknown label {name}"
+    Underflow(pc int) "stack underflow at {pc}"
+    TooLong "step limit reached"
+
+enum Op
+    Push(n int)
+    Bin(sym str)
+    Load(src_slot int)
+    Store(dst_slot int)
+    Jmp(dest int)
+    Jz(target int)
+    Print
+    Halt
+
+struct Case
+    name str
+    lines List[str]
+
+fn assemble(lines List[str]) List[Op] ! VmError
+    mut labels := Map[str, int]()
+    mut body := List[str]()
+    for raw in lines
+        line := raw.trim()
+        if line.ends_with(":")
+            labels[line.slice(0, line.len() - 1)] = body.len()
+        elif line != ""
+            body.push(line)
+    mut ops := List[Op]()
+    for text in body
+        parts := text.words()
+        name := parts[0]
+        arg := if parts.len() > 1 then parts[1] else ""
+        num := arg.to_int() else 0
+        if name == "push" or name == "load" or name == "store"
+            if parts.len() != 2 or arg.to_int() == none
+                return BadLine(text: text)
+            if name == "push"
+                ops.push(Op.Push(n: num))
+            elif name == "load"
+                ops.push(Op.Load(src_slot: num))
+            else
+                ops.push(Op.Store(dst_slot: num))
+        elif name == "jmp" or name == "jz"
+            dest := labels.get(arg) else return NoLabel(name: arg)
+            if name == "jmp"
+                ops.push(Op.Jmp(dest: dest))
+            else
+                ops.push(Op.Jz(target: dest))
+        elif name == "add"
+            ops.push(Op.Bin(sym: "+"))
+        elif name == "sub"
+            ops.push(Op.Bin(sym: "-"))
+        elif name == "mul"
+            ops.push(Op.Bin(sym: "*"))
+        elif name == "lt"
+            ops.push(Op.Bin(sym: "<"))
+        elif name == "print"
+            ops.push(Op.Print)
+        elif name == "halt"
+            ops.push(Op.Halt)
+        else
+            return BadLine(text: text)
+    ops
+
+fn pop_val(mut st List[int], pc int) int ! VmError
+    v := st.pop() else return Underflow(pc: pc)
+    v
+
+fn binop(sym str, a int, b int) int
+    if sym == "+"
+        return a + b
+    if sym == "-"
+        return a - b
+    if sym == "*"
+        return a * b
+    if a < b then 1 else 0
+
+fn run(prog List[Op]) str ! VmError
+    mut st := List[int]()
+    mut mem := List[int]()
+    for k in 0..8
+        mem.push(0)
+    mut out := List[str]()
+    mut pc := 0
+    mut steps := 0
+    while pc < prog.len()
+        steps += 1
+        if steps > 5000
+            return TooLong
+        op := prog[pc]
+        pc += 1
+        match op
+            Push(n) => st.push(n)
+            Bin(sym) =>
+                b := pop_val(mut st, pc - 1)?
+                a := pop_val(mut st, pc - 1)?
+                st.push(binop(sym, a, b))
+            Load(src_slot) => st.push(mem[src_slot])
+            Store(dst_slot) =>
+                mem[dst_slot] = pop_val(mut st, pc - 1)?
+            Jmp(dest) => pc = dest
+            Jz(target) =>
+                cond := pop_val(mut st, pc - 1)?
+                if cond == 0
+                    pc = target
+            Print =>
+                shown := pop_val(mut st, pc - 1)?
+                out.push("{shown}")
+            Halt => pc = prog.len()
+    out.join(" ")
+
+fn execute(lines List[str]) str ! VmError
+    ops := assemble(lines)?
+    run(ops)?
+
+fn main()
+    cases := [
+        Case(name: "factorial", lines: [
+            "push 6", "store 0", "push 1", "store 1",
+            "loop:", "load 0", "jz done", "load 1", "load 0", "mul", "store 1",
+            "load 0", "push 1", "sub", "store 0", "jmp loop",
+            "done:", "load 1", "print", "halt",
+        ]),
+        Case(name: "sum10", lines: [
+            "push 0", "store 0", "push 1", "store 1",
+            "top:", "load 1", "push 11", "lt", "jz end",
+            "load 0", "load 1", "add", "store 0",
+            "load 1", "push 1", "add", "store 1", "jmp top",
+            "end:", "load 0", "print",
+        ]),
+        Case(name: "countdown", lines: [
+            "push 5", "store 0",
+            "again:", "load 0", "jz fin", "load 0", "print",
+            "load 0", "push 1", "sub", "store 0", "jmp again",
+            "fin:", "halt",
+        ]),
+        Case(name: "stray_add", lines: ["push 1", "add", "print"]),
+        Case(name: "bad_label", lines: ["jmp nowhere"]),
+        Case(name: "bad_op", lines: ["push x"]),
+        Case(name: "spin", lines: ["top:", "jmp top"]),
+    ]
+    for c in cases
+        if r := execute(c.lines)
+            print("{c.name:<10} {r}")
+        else err
+            print("{c.name:<10} error: {err}")
+
+@test fn assembles_labels()
+    ops := assemble(["start:", "push 1", "jmp start"])?
+    assert_eq(ops.len(), 2)
+    assert(ops[1] == Op.Jmp(dest: 0))
+
+@test fn runs_arithmetic()
+    assert_eq(execute(["push 6", "push 7", "mul", "print"])?, "42")
+    assert_eq(execute(["push 2", "push 3", "lt", "print"])?, "1")
+
+@test fn errors_are_typed()
+    assert_err(execute(["add"]))
+    assert_err(execute(["jz x"]))
+    assert_err(execute(["fly"]))
+    assert_err(execute(["a:", "jmp a"]), VmError.TooLong)

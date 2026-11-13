@@ -1,0 +1,87 @@
+## URL router: matches request paths against route patterns with :name
+## parameters and a trailing *rest wildcard. The first route whose method and
+## pattern fit wins; a path that fits only other methods answers 405.
+
+struct Route
+    method str
+    pattern str
+    name str
+
+fn segs(path str) List[str]
+    [s for s in path.split("/") if s != ""]
+
+fn match_path(pattern str, path str) Map[str, str]?
+    ps := segs(pattern)
+    xs := segs(path)
+    mut params := Map[str, str]()
+    for i in 0..ps.len()
+        p := ps[i]
+        if p.starts_with("*")
+            params[p.slice(1, p.len())] = xs[i..].join("/")
+            return params
+        if i >= xs.len()
+            return none
+        if p.starts_with(":")
+            params[p.slice(1, p.len())] = xs[i]
+        elif p != xs[i]
+            return none
+    if xs.len() != ps.len()
+        return none
+    params
+
+fn routes() List[Route]
+    [
+        Route(method: "GET", pattern: "/", name: "home"),
+        Route(method: "GET", pattern: "/users/:id", name: "show_user"),
+        Route(method: "DELETE", pattern: "/users/:id", name: "delete_user"),
+        Route(method: "GET", pattern: "/users/:id/posts/:post", name: "show_post"),
+        Route(method: "GET", pattern: "/users/me", name: "me"),
+        Route(method: "GET", pattern: "/static/*path", name: "static_file"),
+    ]
+
+fn dispatch(table List[Route], method str, path str) str
+    mut allowed := List[str]()
+    for r in table
+        found := match_path(r.pattern, path) else continue
+        if r.method != method
+            allowed.push(r.method)
+            continue
+        mut shown := List[str]()
+        for k in found.keys().sorted()
+            shown.push("{k}={found[k]}")
+        return "{r.name} [{shown.join(", ")}]"
+    if allowed.is_empty()
+        return "404 not found"
+    "405 allowed: {allowed.join(",")}"
+
+fn main()
+    table := routes()
+    requests := [
+        ("GET", "/"),
+        ("GET", "/users/42"),
+        ("GET", "/users/me"),
+        ("DELETE", "/users/7/"),
+        ("POST", "/users/7"),
+        ("GET", "/users/7/posts/99"),
+        ("GET", "/static/css/site/main.css"),
+        ("GET", "/static"),
+        ("GET", "/users/7/posts"),
+        ("PUT", "/nothing/here"),
+    ]
+    for rq in requests
+        print("{rq.0:<6} {rq.1:<28} -> {dispatch(table, rq.0, rq.1)}")
+
+@test fn binds_params()
+    got := match_path("/a/:x/b/:y", "/a/1/b/2")?
+    assert_eq(got["x"], "1")
+    assert_eq(got["y"], "2")
+
+@test fn wildcard_takes_the_rest()
+    got := match_path("/f/*p", "/f/a/b/c")?
+    assert_eq(got["p"], "a/b/c")
+    assert(match_path("/a/:x", "/a") == none)
+    assert(match_path("/a", "/a/b") == none)
+
+@test fn first_match_wins()
+    assert_eq(dispatch(routes(), "GET", "/users/me"), "show_user [id=me]")
+    assert_eq(dispatch(routes(), "POST", "/users/1"), "405 allowed: GET,DELETE")

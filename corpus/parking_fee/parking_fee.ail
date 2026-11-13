@@ -1,0 +1,108 @@
+## Parking fee calculator. Tickets are "plate,kind,in,out" with HH:MM times.
+## The first 15 minutes are free, then each started hour is billed at the
+## vehicle's rate up to a daily cap. Bad tickets are reported with typed errors.
+
+error enum ParkError
+    BadTime(text str) "bad time '{text}'"
+    BadKind(text str) "unknown vehicle '{text}'"
+    BadTicket(text str) "malformed ticket '{text}'"
+    Backwards(plate str) "{plate} left before arriving"
+
+enum Kind
+    Car
+    Bike
+    Truck
+
+fn Kind.rate(self) int
+    match self
+        Car => 300
+        Bike => 100
+        Truck => 800
+
+fn Kind.cap(self) int
+    match self
+        Car => 2000
+        Bike => 600
+        Truck => 4500
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn parse_kind(text str) Kind ! ParkError
+    mut k := Kind.Car
+    if text == "car"
+        k = Kind.Car
+    elif text == "bike"
+        k = Kind.Bike
+    elif text == "truck"
+        k = Kind.Truck
+    else
+        return BadKind(text: text)
+    k
+
+fn parse_time(text str) int ! ParkError
+    parts := text.split(":")
+    if parts.len() != 2
+        return BadTime(text: text)
+    h := parts[0].to_int() else return BadTime(text: text)
+    m := parts[1].to_int() else return BadTime(text: text)
+    if h < 0 or h > 23 or m < 0 or m > 59
+        return BadTime(text: text)
+    h * 60 + m
+
+fn fee_for(kind Kind, minutes int) int
+    billable := if minutes > 15 then minutes - 15 else 0
+    hours := (billable + 59) / 60
+    raw := hours * kind.rate()
+    if raw > kind.cap()
+        return kind.cap()
+    raw
+
+fn charge(ticket str) int ! ParkError
+    parts := ticket.split(",")
+    if parts.len() != 4
+        return BadTicket(text: ticket)
+    kind := parse_kind(parts[1])?
+    start := parse_time(parts[2])?
+    stop := parse_time(parts[3])?
+    if stop < start
+        return Backwards(plate: parts[0])
+    fee_for(kind, stop - start)
+
+fn main()
+    tickets := [
+        "AB123,car,08:00,08:10",
+        "CD456,car,08:00,09:16",
+        "EF789,bike,10:30,13:30",
+        "GH012,truck,06:00,18:45",
+        "IJ345,car,07:00,22:59",
+        "KL678,boat,09:00,10:00",
+        "MN901,car,25:00,10:00",
+        "OP234,car,12:00,11:00",
+        "QR567,car,12:00",
+    ]
+    mut total := 0
+    mut paid := 0
+    for t in tickets
+        fee := charge(t) else err
+            print("{t}: {err}")
+            continue
+        paid += 1
+        total += fee
+        print("{t}: {money(fee)}")
+    print("{paid} tickets, takings {money(total)}")
+
+@test fn free_grace_period()
+    assert_eq(fee_for(Kind.Car, 15), 0)
+    assert_eq(fee_for(Kind.Car, 16), 300)
+
+@test fn daily_cap_applies()
+    assert_eq(fee_for(Kind.Bike, 600), 600)
+    assert_eq(fee_for(Kind.Truck, 1000), 4500)
+
+@test fn bad_tickets_fail()
+    assert_err(charge("A,car,10:00,09:00"))
+    assert_err(charge("A,van,10:00,11:00"))
+    assert_err(charge("A,car,10:61,11:00"))
+    assert_eq(charge("A,car,10:00,12:00")?, 600)

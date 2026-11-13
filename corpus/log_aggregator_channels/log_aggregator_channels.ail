@@ -1,0 +1,89 @@
+## Log aggregator: three producer tasks send raw log lines over one channel
+## while an aggregator task consumes them concurrently, counting lines by
+## level and service and collecting the ERROR messages. Arrival order varies,
+## so the report sorts everything before printing. Malformed lines are counted.
+
+struct Summary
+    levels Map[str, int]
+    services Map[str, int]
+    errors List[str]
+    malformed int
+
+fn produce(lines List[str], out Channel[str])
+    for l in lines
+        out.send(l)
+
+fn aggregate(events Channel[str]) Summary
+    mut levels := Map[str, int]()
+    mut services := Map[str, int]()
+    mut errors := List[str]()
+    mut bad := 0
+    for line in events
+        parts := line.split(" ", 4)
+        if parts.len() < 4
+            bad += 1
+            continue
+        levels[parts[1]] += 1
+        services[parts[2]] += 1
+        if parts[1] == "ERROR"
+            errors.push("{parts[2]}: {parts[3]}")
+    Summary(levels: levels, services: services, errors: errors, malformed: bad)
+
+fn collect(sources List[List[str]]) !Summary
+    events := Channel[str](4)
+    agg := spawn aggregate(events)
+    g := TaskGroup()
+    for lines in sources
+        g.add(spawn produce(lines, events))
+    g.wait_all()?
+    events.close()
+    agg.wait()?
+
+fn main() !
+    sources := [
+        [
+            "10:00:01 INFO web GET /index 200",
+            "10:00:02 INFO web GET /about 200",
+            "10:00:03 ERROR web upstream timeout",
+            "10:00:04 WARN web slow response 1200ms",
+        ],
+        [
+            "10:00:01 INFO db checkpoint done",
+            "10:00:02 ERROR db deadlock detected",
+            "10:00:05 ERROR db disk almost full",
+            "garbage",
+        ],
+        [
+            "10:00:01 DEBUG auth token refreshed",
+            "10:00:03 WARN auth 3 failed logins",
+            "10:00:06 ERROR auth locked account",
+            "10:00:07 INFO auth login ok",
+            "10:00:08 INFO",
+        ],
+    ]
+    s := collect(sources)?
+    for level in ["ERROR", "WARN", "INFO", "DEBUG"]
+        print("{level:<6}{s.levels.get(level) else 0:>3}")
+    for name in s.services.keys().sorted()
+        print("{name:<6}{s.services[name]:>3} lines")
+    print("errors:")
+    for e in s.errors.sorted()
+        print("  {e}")
+    print("malformed: {s.malformed}")
+    print("total lines: {s.levels.values().sum() + s.malformed}")
+
+@test fn counts_levels_and_services()
+    s := collect([["1 INFO a x", "2 ERROR a y z"], ["3 INFO b q"]])?
+    assert_eq(s.levels["INFO"], 2)
+    assert_eq(s.levels["ERROR"], 1)
+    assert_eq(s.services["a"], 2)
+    assert_eq(s.errors, ["a: y z"])
+
+@test fn short_lines_are_malformed()
+    s := collect([["oops", "1 INFO a"]])?
+    assert_eq(s.malformed, 2)
+    assert_eq(s.levels.len(), 0)
+
+@test fn no_sources_gives_an_empty_summary()
+    s := collect(List[List[str]]())?
+    assert_eq(s.levels.len() + s.errors.len() + s.malformed, 0)

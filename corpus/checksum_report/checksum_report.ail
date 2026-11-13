@@ -1,0 +1,76 @@
+## Checksum report: writes a few files into a temp directory, reports each
+## file's size, CRC-32 and SHA-256 prefix, builds a manifest, then edits one
+## file and verifies the manifest to find what changed.
+use std.hash
+
+struct Sum
+    size int
+    crc str
+    sha str
+
+fn digest(text str) Sum
+    crc := hash.crc32(text).to_hex().pad_left(8, '0')
+    Sum(size: text.byte_len(), crc: crc, sha: hash.sha256(text).slice(0, 12))
+
+fn manifest(dir str) !Map[str, Sum]
+    mut m := Map[str, Sum]()
+    for name in fs.list_dir(dir)?
+        m[name] = digest(fs.read_text(path.join(dir, name))?)
+    m
+
+## Names whose current digest differs from the manifest, or that are gone.
+fn verify(dir str, expected Map[str, Sum]) !List[str]
+    mut changed := List[str]()
+    for name in expected.keys().sorted()
+        p := path.join(dir, name)
+        if not fs.exists(p)
+            changed.push("{name} (missing)")
+        elif digest(fs.read_text(p)?) != expected[name]
+            changed.push(name)
+    changed
+
+fn names_text(xs List[str]) str
+    if xs.is_empty()
+        return "none"
+    xs.join(", ")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_checksum_report")?
+    names := ["notes.txt", "data.csv", "empty.txt", "config.ini"]
+    texts := ["remember the milk\n", "a,b\n1,2\n3,4\n", "", "mode=fast\nretries=3\n"]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    m := manifest(dir)?
+    print("{"file":<11}{"size":>5}  {"crc32":<9}{"sha256":<12}")
+    for name in m.keys().sorted()
+        s := m[name]
+        print("{name:<11}{s.size:>5}  {s.crc:<9}{s.sha:<12}")
+    print("verify (untouched): {names_text(verify(dir, m)?)}")
+    fs.write_text(path.join(dir, "data.csv"), "a,b\n1,2\n3,5\n")?
+    fs.remove(path.join(dir, "empty.txt"))?
+    print("verify (after edits): {names_text(verify(dir, m)?)}")
+    for name in fs.list_dir(dir)?
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn digest_is_stable_and_sensitive()
+    assert_eq(digest("abc"), digest("abc"))
+    assert(digest("abc") != digest("abd"))
+    assert_eq(digest("").size, 0)
+
+@test fn known_vectors()
+    assert_eq(digest("").crc, "00000000")
+    assert_eq(digest("abc").sha, "ba7816bf8f01")
+
+@test fn verify_finds_changes()
+    dir := fs.make_temp_dir("corpus_checksum_report_t")?
+    fs.write_text(path.join(dir, "a"), "one")?
+    fs.write_text(path.join(dir, "b"), "two")?
+    m := manifest(dir)?
+    assert_eq(verify(dir, m)?.len(), 0)
+    fs.write_text(path.join(dir, "b"), "three")?
+    assert_eq(verify(dir, m)?, ["b"])
+    fs.remove(path.join(dir, "a"))?
+    fs.remove(path.join(dir, "b"))?
+    fs.remove(dir)?

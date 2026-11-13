@@ -1,0 +1,21 @@
+  TENOFF: -4.00
+  FIVER: -5.00
+order 1: 40.00 -> 31.00
+  BIG20: -25.00
+  TENOFF: -17.50
+  FIVER: skipped, two coupons per order
+order 2: 200.00 -> 157.50
+  FIVER: FIVER has no uses left
+  NOPE: unknown coupon NOPE
+  BIG20: BIG20 needs a total of at least 10000
+order 3: 30.00 -> 30.00
+  FIVER: FIVER expired on day 10
+  BIG20: -25.00
+order 4: 150.00 -> 125.00
+  TENOFF: -0.80
+order 5: 8.00 -> 7.20
+  TENOFF: TENOFF has no uses left
+order 6: 90.00 -> 90.00
+BIG20 used 2
+FIVER used 1
+TENOFF used 3

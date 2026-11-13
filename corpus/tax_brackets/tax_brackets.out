@@ -1,0 +1,15 @@
+single 0.00: tax 0.00, effective 0.0%, marginal 10%
+flat 0.00: tax 0.00, effective 0.0%, marginal 0%
+single 8500.00: tax 850.00, effective 10.0%, marginal 10%
+flat 8500.00: tax 0.00, effective 0.0%, marginal 0%
+single 40000.00: tax 4580.00, effective 11.4%, marginal 12%
+flat 40000.00: tax 0.00, effective 0.0%, marginal 0%
+single 120000.00: tax 24182.50, effective 20.1%, marginal 32%
+flat 120000.00: tax 10500.00, effective 8.7%, marginal 15%
+single -100: income cannot be negative: -100
+flat -100: income cannot be negative: -100
+broken 1000: bracket 1 does not rise above the one before
+slice 1: 11000.00 at 10%
+slice 2: 33725.00 at 12%
+slice 3: 15275.00 at 22%
+slice 4: 0.00 at 32%

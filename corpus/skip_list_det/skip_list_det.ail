@@ -1,0 +1,116 @@
+## A deterministic skip list of ints. A key's tower height comes from the
+## trailing zero bits of a fixed integer hash, so every run builds the same
+## list. Nodes live in flat arrays: node 0 is the head, -1 means no link.
+
+LEVELS := 4
+
+struct SkipList
+    keys List[int]
+    links List[int]
+    count int
+
+fn SkipList.new() SkipList
+    mut cells := List[int]()
+    for _ in 0..LEVELS
+        cells.push(-1)
+    SkipList(keys: [-1], links: cells, count: 0)
+
+fn height(key int) int
+    mut h := (key * 2654435761) % 4294967296
+    mut lv := 1
+    while lv < LEVELS and h % 2 == 0
+        lv += 1
+        h = h / 2
+    lv
+
+fn SkipList.before(self, key int, level int, start int) int
+    mut cur := start
+    while true
+        nx := links[cur * LEVELS + level]
+        if nx == -1
+            break
+        if keys[nx] >= key
+            break
+        cur = nx
+    cur
+
+fn SkipList.insert(mut self, key int) bool
+    mut update := List[int]()
+    for _ in 0..LEVELS
+        update.push(0)
+    mut cur := 0
+    for i in 0..LEVELS
+        lv := LEVELS - 1 - i
+        cur = self.before(key, lv, cur)
+        update[lv] = cur
+    nxt := links[cur * LEVELS]
+    if nxt != -1
+        if keys[nxt] == key
+            return false
+    nid := keys.len()
+    h := height(key)
+    keys.push(key)
+    for _ in 0..LEVELS
+        links.push(-1)
+    for lv2 in 0..h
+        self.links[nid * LEVELS + lv2] = links[update[lv2] * LEVELS + lv2]
+        self.links[update[lv2] * LEVELS + lv2] = nid
+    count += 1
+    true
+
+fn SkipList.contains(self, key int) bool
+    mut cur := 0
+    for i in 0..LEVELS
+        cur = self.before(key, LEVELS - 1 - i, cur)
+    nxt := links[cur * LEVELS]
+    if nxt == -1
+        return false
+    keys[nxt] == key
+
+fn SkipList.to_list(self) List[int]
+    mut out := List[int]()
+    mut cur := links[0]
+    while cur != -1
+        out.push(keys[cur])
+        cur = links[cur * LEVELS]
+    out
+
+fn SkipList.level_size(self, level int) int
+    mut n := 0
+    mut cur := links[level]
+    while cur != -1
+        n += 1
+        cur = links[cur * LEVELS + level]
+    n
+
+fn main()
+    mut sl := SkipList.new()
+    mut dupes := 0
+    for k in [42, 7, 19, 88, 3, 56, 7, 71, 25, 64, 11, 90, 42, 33]
+        if not sl.insert(k)
+            dupes += 1
+    print("keys: {sl.to_list()}")
+    print("count {sl.count}, duplicates {dupes}")
+    for lv in 0..LEVELS
+        print("level {lv}: {sl.level_size(lv)} nodes")
+    for probe in [19, 20, 90, 1, 100]
+        print("contains {probe}: {sl.contains(probe)}")
+
+@test fn insert_keeps_order_and_rejects_duplicates()
+    mut s := SkipList.new()
+    for k in [5, 1, 9, 5, 3]
+        s.insert(k)
+    assert_eq(s.to_list(), [1, 3, 5, 9])
+    assert_eq(s.count, 4)
+
+@test fn contains_matches_membership()
+    mut s := SkipList.new()
+    for k in [10, 20, 30]
+        s.insert(k)
+    assert(s.contains(20))
+    assert(not s.contains(25))
+
+@test fn heights_stay_in_range()
+    for k in 0..50
+        assert(height(k) >= 1)
+        assert(height(k) <= LEVELS)
