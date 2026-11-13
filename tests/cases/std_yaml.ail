@@ -1,0 +1,64 @@
+## std.yaml.1-10: maps, lists, scalars, block strings, flow collections, comments, refusals and errors.
+use std.yaml
+
+fn show(src str)
+    doc := yaml.parse(src) else err
+        print("error: {err}")
+        return
+    print(doc.to_text())
+
+fn main()
+    show([
+        "name: demo",
+        "port: 8080",
+        "ratio: 0.5",
+        "debug: true",
+        "off: no",
+        "nothing: ~",
+        "empty:",
+        "version: 1.2.3",
+        "tags: [a, \"b c\", 3]",
+        "point: \{x: 1, y: 2}",
+        "list:",
+        "  - one",
+        "  - two: 2",
+        "    three: 3",
+        "  - - x",
+        "    - y",
+    ].join("\n"))
+    show([
+        "a: |",
+        "  line1",
+        "  line2",
+        "b: >-",
+        "  folded",
+        "  text",
+        "",
+        "  para",
+        "c: \"tab\\there \\x41\"",
+        "d: 'it''s # not a comment' # comment",
+        "e: http://x.y/z#frag",
+    ].join("\n"))
+    show([
+        "# leading comment",
+        "---",
+        "items: [1,",
+        "  2, 3]   # trailing",
+        "nested:",
+        "- a",
+        "- b",
+        "last: -4",
+        "...",
+    ].join("\n"))
+    show("n: [0x1F, 0o17, 1e3, -2.5, 007, .5, 12abc, yes]")
+    show("\"a b\": 1\nc: \{d: [], e: \{}}")
+    show("- 1\n- 2")
+    show("42")
+    show("")
+    show("a: &x 1")
+    show("a: 1\na: 2")
+    show("a: 1\n---\nb: 2")
+    show("a:\n\tb: 1")
+    show("a: b: c")
+    show("a: 'x")
+    show("a: [1, 2")
