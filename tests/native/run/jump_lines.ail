@@ -1,0 +1,35 @@
+# Jumps kept inside 32-byte lines (native.jump.1) change no result: loops,
+# calls, a `match` table and a trap check, each with many jumps close together.
+fn kind(x int) int
+    match x % 5
+        0 => 10
+        1 => 20
+        2 => 30
+        3 => 40
+        _ => 50
+
+fn sum_to(xs List[int], n int) int
+    mut s := 0
+    mut i := 0
+    while i < n and i < xs.len()
+        if xs[i] % 2 == 0
+            s += xs[i]
+        elif xs[i] % 3 == 0
+            s -= 1
+        else
+            s += kind(xs[i])
+        i += 1
+    s
+
+fn main()
+    xs := [k for k in 0..20]
+    print(sum_to(xs, 20))
+    print(sum_to(xs, 5))
+    mut t := 0
+    for a in 0..6
+        for b in 0..6
+            if a < b
+                t += kind(a + b)
+            elif a == b
+                t += 1
+    print(t)

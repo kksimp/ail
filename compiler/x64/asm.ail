@@ -65,12 +65,21 @@ pub struct Asm
     pub code List[u8]
     pub labels List[int]
     pub fixups List[Fixup]
-    ## Measuring knob (F7 diagnosis): when 32, no jump, and no comparison
-    ## joined to its conditional jump, crosses or ends on a 32-byte line.
+    ## When `JUMP_LINE`, no jump, call or return, and no comparison joined to
+    ## its conditional jump, crosses or ends on a line of that many bytes
+    ## (native.jump.1); 0 leaves them as they fall.
     pub window int
-    ## Where the last flag-setting instruction starts and ends.
+    ## Where the last flag-setting instruction starts and ends: a processor
+    ## runs it and a conditional jump right after it as one operation.
     pub fuse int
     pub fuse_end int
+
+## The bytes of a line of code for `Asm.window`: processors of 2015 to 2019
+## decode a jump that crosses or ends on a 32-byte line many times slower
+## (Intel's "jump conditional code" erratum; measured 9% on lzr and 20% on vm
+## on ail-linux), and where a jump falls otherwise changes with any edit
+## anywhere before it.
+pub JUMP_LINE := 32
 
 pub fn new_asm() Asm
     Asm(code: [], labels: [], fixups: [], window: 0, fuse: -1, fuse_end: -1)
@@ -125,8 +134,8 @@ fn Asm.nops(mut self, n int)
                 u32(0)
         left -= k
 
-## Move the instructions from `start` to the end past the next 32-byte line
-## when they cross one or end on one, filling with `nops`.
+## Move the instructions from `start` to the end past the next line when
+## they cross one or end on one, filling with `nops` (native.jump.1).
 fn Asm.keep_in_window(mut self, start int)
     end := code.len()
     if window == 0 or start % window == 0

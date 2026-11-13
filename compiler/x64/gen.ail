@@ -114,10 +114,6 @@ pub fn generate(m mir.Module) codegen.Image
     img.code = a.code
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
-    # Measuring knob (F7 diagnosis): `AIL_SHIFT=N` moves every function N bytes on.
-    int3 := 204
-    for _ in 1..align_knob("AIL_SHIFT")
-        img.code.push(int3.to_u8())
     for f in m.funcs
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
@@ -185,40 +181,25 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         else
             g.saved_ints.push(r)
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
+    # Jumps stay inside 32-byte lines (native.jump.1); the trap stubs, which
+    # run once, are left as they fall.
+    lined := jump_lines()
+    g.a.window = if lined then JUMP_LINE else 0
     g.prologue(al.slots)
     # The entry block's parameters arrive in the argument registers.
     g.entry_moves()
-    # Measuring knobs (F7 diagnosis): `AIL_ALIGN_LOOP=N` starts each loop
-    # header, and `AIL_ALIGN_FN=N` each function, at a multiple of N bytes.
-    # `AIL_JCC=1` keeps every jump inside a 32-byte line (asm.ail), `AIL_JCC=2`
-    # only the jumps of blocks inside a loop; unset or 0 is off. Either starts
-    # the function on a 32-byte line, so that offsets in it are positions.
-    loop_align := align_knob("AIL_ALIGN_LOOP")
-    jcc := knob_or("AIL_JCC", 0)
-    mut heads := [false for _ in 0..f.blocks.len()]
-    mut looped := [jcc == 1 for _ in 0..f.blocks.len()]
-    if loop_align > 1 or jcc == 2
-        for lp in mir.find_loops(f)
-            heads[lp.header] = loop_align > 1
-            for b in lp.blocks
-                looped[b] = true
     for k in 0..al.order.len()
         b := al.order[k]
         g.next_block = if k + 1 < al.order.len() then al.order[k + 1] else -1
-        if heads[b]
-            g.a.nops((loop_align - g.a.code.len() % loop_align) % loop_align)
-        g.a.window = if looped[b] then 32 else 0
         g.a.bind(g.blabels[b])
         g.gen_block(b)
     g.a.window = 0
     g.gen_stubs()
     g.a.resolve_labels()
-    fn_align := if jcc > 0 then align_knob("AIL_ALIGN_FN").max(32) else align_knob("AIL_ALIGN_FN")
+    # The function starts on a line, so an offset in it is a place in the
+    # line (the executable loads the code at a multiple of the line too).
     int3 := 204
-    # `AIL_PHASE=N`: the code's first byte is loaded N bytes past a multiple of 32
-    # (16 in a static Linux executable: the file's headers are 176 bytes).
-    phase := knob_or("AIL_PHASE", 0)
-    while fn_align > 1 and (img.code.len() + phase) % fn_align != 0
+    while lined and img.code.len() % JUMP_LINE != 0
         img.code.push(int3.to_u8())
     for sym in g.imports
         codegen.import_slot(mut img, sym)
@@ -234,14 +215,10 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     for fx in g.a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: "rel32", sym: fx.sym, tail: fx.tail))
 
-## A measuring knob's alignment from the environment, else 1.
-fn align_knob(name str) int
-    knob_or(name, 1)
-
-fn knob_or(name str, default int) int
-    s := env.get(name) else return default
-    n := s.to_int() else return default
-    n
+## Whether jumps are kept inside 32-byte lines (native.jump.1);
+## `AIL_OPT_OFF=jumpline` turns it off.
+fn jump_lines() bool
+    not mir.opt_off("jumpline")
 
 # ---- frame ----
 

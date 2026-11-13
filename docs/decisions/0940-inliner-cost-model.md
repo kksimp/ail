@@ -22,9 +22,9 @@ never reach the callee's bounds checks.
    runtime function, with no indirect call, no primitive that reads its frame
    or starts a thread, no jump to its entry and no loop. One called from a single
    place (and whose address is not taken) qualifies up to `SINGLE_LIMIT` 200
-   instructions; any other up to `WIDE_LIMIT` 12.
+   instructions; any other up to `WIDE_LIMIT` 48 (sixth round; 12 before).
 2. **Budget.** Copies of non-single candidates may grow one caller by at
-   most `CALLER_GROWTH` 200 instructions. Only a call inside a loop of the
+   most `CALLER_GROWTH` 400 instructions (sixth round; 200 before). Only a call inside a loop of the
    caller is copied (fifth round). The single call of a single-call function
    goes inline there (the function is then dropped, so it costs no size); a copy of that call brought in by
    another copy counts as any other call. Leaves are not counted. There is no
@@ -118,6 +118,36 @@ longer measurable at a 10 M size, copies at calls outside loops buy nothing.
 The fourth round's rejection of "hot sites only" is withdrawn for that reason.
 `AIL_OPT_OFF=wide` still turns the pass off.
 
+## Sixth round (2026-11-13, ail-linux, main 55ba9d85)
+
+On main 55ba9d85 the fifth round's p8l measured lzr 4% *slower* (3358 to
+3490 ms). The cause was not a copy: in lzr the pass copied nothing and only
+dropped the dead `insert` (decision 4), which moved `find` 635 bytes. The two
+builds ran the same 15,549,829 thousand instructions with the same branch
+misses, and the moved one took 4.4% more cycles: two compare-and-jump pairs
+of `find`'s inner loop had landed across a 32-byte line, which the test
+machine (Intel, 2017) decodes slowly. Moving the code 0 to 56 bytes by hand
+moved lzr between 3255 and 3584 ms and vm between 430 and 486 ms. Every
+earlier x86-64 table in this ADR carries that much chance.
+
+With jumps kept inside 32-byte lines (native.jump.1, its own ADR) the times
+stopped moving with placement, and the limits were measured again (best of
+5, interleaved; `off` is `AIL_OPT_OFF=wide`):
+
+| ail-linux, jumps in lines | off | 12 / 200 | 24 / 200 | 48 / 400 | 80 / 600 | 80 / 600, every call |
+|---|---|---|---|---|---|---|
+| lzr | 3071 ms | 3064 | 3076 | 3022 | 3025 | 3029 |
+| regex_scan | 1603 | 1604 | 1596 | 1585 | 1596 | 1582 |
+| vm | 344 | 344 | 345 | 346 | 345 | 348 |
+| raytrace | 1693 | 1693 | 1688 | 1692 | 1696 | 1693 |
+| matmul 1400 | 742 | 752 | 737 | 738 | 747 | 742 |
+
+**Decision of this round (AI, delegated):** `WIDE_LIMIT` 48 and
+`CALLER_GROWTH` 400. At 48 `Dec.bit` (41 instructions) goes into `Dec.tree`'s
+loop: lzr runs 2.2% fewer instructions and 1.5% less time, regex_scan 1%
+less; 80 gains nothing more, and copies at every call nothing either. The
+small programs (4 to 27 ms) are equal in every column.
+
 ## Deferred
 
 Cloning a function for a constant argument (`tree(base, 6, v)`) is left for a
@@ -130,7 +160,9 @@ cap that this change does not.
   others, so no limit reaches them.
 - **Inlining everything below a size, recursion included**: unbounded copies
   of a cycle, and the stage-2 compile-time cost that killed ADR 0890 pass 1a.
-- **Callees with loops** (the first run): slower where measured, see above.
+- **Callees with loops** (the first run): slower where measured, see above;
+  again in the sixth round (lzr 3713 ms against 3250, `find` copied into
+  `compress`).
 - **A program-wide cap** (p8c, the 9.8 MB target of review): lost the lzr
   and wordfreq gains, see the fourth round. (Copying only at calls inside
   loops, rejected with it then, was taken in the fifth round.)

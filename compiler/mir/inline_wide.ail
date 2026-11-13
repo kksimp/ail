@@ -4,10 +4,12 @@
 ## program goes inline there up to `SINGLE_LIMIT` instructions: the copy
 ## replaces the only use, and the function is dropped. Any other goes up to
 ## `WIDE_LIMIT`, and those copies may grow a caller by at most
-## `CALLER_GROWTH`. Only calls inside a loop of the caller are copied: on
-## main of 2026-11-12 that kept all of the speed (lzr -2.4% on ail-linux)
-## at a third of the growth of copying at every call (compiler +10% against
-## +30%). A function on a cycle of the call graph never goes (its body could copy
+## `CALLER_GROWTH`. Only calls inside a loop of the caller are copied:
+## copies at every call measured no faster and grew the compiler three
+## times as much. The limits are those measured on ail-linux on 2026-11-13
+## with jumps kept in lines (native.jump.1): 48 against 12 took 1.5% off lzr
+## (`Dec.bit`, 41 instructions, into `Dec.tree`'s loop) and 1% off
+## regex_scan; 80 gained no more. A function on a cycle of the call graph never goes (its body could copy
 ## itself without end), nor one with a loop (measured slower copied). The
 ## calls a copy brings with it keep the frames they stand for (trace.frame.2).
 ## `AIL_OPT_OFF=wide` turns it off.
@@ -16,10 +18,10 @@
 SINGLE_LIMIT := 200
 
 ## Any other function that calls others goes inline up to this many.
-WIDE_LIMIT := 12
+WIDE_LIMIT := 48
 
 ## How many instructions one caller may grow by through these copies.
-CALLER_GROWTH := 200
+CALLER_GROWTH := 400
 
 ## The candidates: each one's instruction count, and those called from one
 ## place (whose copy replaces the call).
@@ -55,30 +57,11 @@ pub fn wide_candidates(m Module, leaves Set[str]) Wide
         # A function with a loop stays a call: the call costs little beside the
         # loop, and copied into a caller the loop measured slower (matmul 2x,
         # spectralnorm 1.7x on ail-linux), so only straight-line code goes.
-        if not knob_takes(f.name)
-            continue
-        if (n <= knob_int("AIL_WIDE_LIMIT", WIDE_LIMIT) or single and n <= knob_int("AIL_SINGLE_LIMIT", SINGLE_LIMIT))
-            and (find_loops(f).len() == 0 or knob_int("AIL_WIDE_LOOPS", 0) != 0)
+        if (n <= WIDE_LIMIT or single and n <= SINGLE_LIMIT) and find_loops(f).len() == 0
             out.sizes[f.name] = n
             if single
                 out.single.add(f.name)
     out
-
-## Measuring knobs (F7 diagnosis; not part of the language): a limit read
-## from the environment, else `default`.
-fn knob_int(name str, default int) int
-    s := env.get(name) else return default
-    n := s.to_int() else return default
-    n
-
-## `AIL_WIDE_ONLY=a,b` copies only those functions, `AIL_WIDE_SKIP=a,b` never
-## those.
-fn knob_takes(name str) bool
-    only := env.get("AIL_WIDE_ONLY") else ""
-    if only != "" and not only.split(",").contains(name)
-        return false
-    skip := env.get("AIL_WIDE_SKIP") else ""
-    not skip.split(",").contains(name)
 
 ## A function's instruction count, or -1 when it may not be copied: the
 ## runtime's own functions and `main`, an indirect call, a primitive that
@@ -118,7 +101,7 @@ fn expand_wide(
     mut sites List[Site],
 ) int
     mut budget := INLINE_BUDGET
-    mut room := knob_int("AIL_WIDE_GROWTH", CALLER_GROWTH)
+    mut room := CALLER_GROWTH
     # A runtime function (`rt.dispatch`, which calls each `spawn` site's
     # `task.K`) takes leaves only: later passes leave runtime functions as
     # they are, so a copied call there would miss the result object
@@ -130,9 +113,7 @@ fn expand_wide(
     # (`size()` reading the arguments in `main`) went with slower wordfreq,
     # sieve and collatz on ail-linux, and copies at every call cost the
     # compiler 30% in size for no more speed (ADR 0940).
-    every := (env.get("AIL_WIDE_ALL") else "") != ""
-    log := (env.get("AIL_WIDE_LOG") else "") != ""
-    mut warm := [every for _ in 0..f.blocks.len()]
+    mut warm := [false for _ in 0..f.blocks.len()]
     for lp in find_loops(f)
         for b in 0..f.blocks.len()
             if lp.member[b]
@@ -150,8 +131,6 @@ fn expand_wide(
                 for _ in before..f.blocks.len()
                     warm.push(warm[b])
                 if n := take.sizes.get(name)
-                    if log
-                        io.eprint("wide {f.name} <- {name} n={n} single={take.single.contains(name)}")
                     if not take.single.contains(name)
                         room -= n
                 budget -= 1
@@ -181,7 +160,7 @@ fn first_wide_call(
                 written := i.site < 0 or sites[i.site].from < 0
                 if wide.single.contains(i.name) and written
                     return k
-                if n <= knob_int("AIL_WIDE_LIMIT", WIDE_LIMIT) and n <= room
+                if n <= WIDE_LIMIT and n <= room
                     return k
     -1
 
