@@ -161,7 +161,7 @@ indexing and ranges of compile-time-safe code (`ct.const.1–4`). A bare
 *(ADR 0132, amended by ADR 0225)*
 
 **mod.const.3** — Constants have no order and no side effects. They are
-computed at compile time (`ct.eval.*`); the bootstrap computes them before
+computed at compile time (`ct.eval.*`); the compiler computes them before
 `main` runs. A failure while computing one (overflow, division
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*

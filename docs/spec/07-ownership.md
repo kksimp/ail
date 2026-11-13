@@ -5,7 +5,7 @@ Chapter key: `own`
 > **Status:** Drafted (partial). Specified: the value model, parameter modes,
 > exclusivity, copy reporting, borrows, unique resource types and their
 > cleanup, `defer`, shared references, and `move` parameters, with map entries
-> as places. Not yet designed: closures, element projections, `move self`, and
+> as places. Function literals and their copies of locals are specified in chapter [04](04-types.md) (ADR 1067). Not yet designed: element projections, `move self`, and
 > unique values in collections and generic code.
 
 ## Values
@@ -424,7 +424,7 @@ print("body")
 ## Runnable examples for the rules above
 
 Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
-report the named rule; the diagnostic that the bootstrap reports is named in
+report the named rule; the diagnostic that the compiler reports is named in
 the comment where it differs from the rule ID. Runs that print show their
 output in the comments.
 

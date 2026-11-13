@@ -4,7 +4,7 @@ Chapter key: `ct`
 
 > **Status:** Drafted (partial). Specified: constants computed by calling
 > functions, the rules of compile-time evaluation, derive generators and
-> generated code. The bootstrap implements `ct.const.1–3` (with `if`,
+> generated code. The compiler implements `ct.const.1–3` (with `if`,
 > `match` and `?` in a constant left to a function, `bootstrap.unsupported`),
 > `ct.derive.1–4` and `ct.gen.1–4` (ADRs 0306–0309). `ct.eval.3`'s step limit is counted for
 > constants, in statements run (ADR 0742; natively through `.ct` copies of the
@@ -122,7 +122,7 @@ time, including overflow traps and float arithmetic. Because every target is
 64-bit and little-endian (`plat.endian.1`, `plat.ptr.*`), the value doesn't
 depend on the target. A trap while computing a constant or a derive is a
 compile-time error that names the trap's rule and the compile-time call
-stack. The bootstrap computes constants before `main` and reports such a
+stack. The compiler computes constants before `main` and reports such a
 trap at the constant before `main` starts (`mod.const.3`). *(ADR 0225,
 ADR 0226, ADR 0032)*
 
@@ -199,7 +199,7 @@ fn main()
     print(Version(major: 1, minor: 2).describe()) # Version with major, minor
 ```
 
-The bootstrap runs generators while it loads the program, before checking
+The compiler runs generators while it loads the program, before checking
 it: a generator, and what it calls, can't use what other derives generate.
 *(ADR 0306)*
 
@@ -347,7 +347,7 @@ fn main()
 **ct.gen.4** — Each generated method has the stable id it would have if
 written by hand (`api.id.*`) and an origin naming the `impl` and the
 generator. `ail api --expanded` includes generated methods, their origin,
-and their text. *(ADR 0228)* In the bootstrap, each generated function sits
+and their text. *(ADR 0228)* In the compiler, each generated function sits
 under its `impl`'s `methods` with `origin` (`kind`, `impl`, `generator`,
 `at`) and `text`; the `impl` gets `derived_by`, the generator's id, or
 `built-in` for an empty `impl` of `Eq`, `Ord` or `ToStr` (OQ-096). Without

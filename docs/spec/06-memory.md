@@ -235,7 +235,7 @@ stop a run that uses more than `MB` megabytes, with `trap[run.limit.2]`
 prints its trap as `run.limit.5` and `run.limit.6` define (chapter
 [21](21-trace.md)). The
 native check counts heap bytes in use when the heap takes a new chunk, not
-resident memory, so it fires a little later than the interpreter's. A program
+resident memory, so it fires a little later than a count of resident memory would. A program
 the system cannot give more memory to also traps `run.limit.2`, so a run that
 exhausts the heap ends with a trap and exit status 1, never silently.
 *(ADR 0288, ADR 0562, ADR 0726)*
