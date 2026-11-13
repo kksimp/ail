@@ -1,5 +1,5 @@
-accept: closed
+accept: net.NetKind.Closed
 200 late
 answered
-accept: closed
-tls: tls
+accept: net.NetKind.Closed
+tls: net.NetKind.Tls

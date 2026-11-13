@@ -1,0 +1,61 @@
+## CSV statistics: parses an embedded employee table, skips malformed rows and
+## reports min, max, mean and median salary plus a total per department.
+
+struct Row
+    name str
+    dept str
+    salary int
+
+fn data() List[str]
+    [
+        "name,dept,salary",
+        "ada,eng,120",
+        "bob,ops,80",
+        "cy,eng,100",
+        "dee,sales,70",
+        "eve,ops,90",
+        "oops,eng",
+        "fay,sales,abc",
+        "gus,eng,110",
+    ]
+
+fn parse_row(line str) Row?
+    cells := line.split(",")
+    if cells.len() != 3
+        return none
+    Row(name: cells[0], dept: cells[1], salary: cells[2].to_int()?)
+
+fn median(xs List[int]) int
+    s := xs.sorted()
+    n := s.len()
+    if n % 2 == 1
+        return s[n / 2]
+    (s[n / 2 - 1] + s[n / 2]) / 2
+
+fn main()
+    mut rows := List[Row]()
+    mut bad := 0
+    for line in data()[1..]
+        row := parse_row(line) else
+            bad += 1
+            continue
+        rows.push(row)
+    salaries := [r.salary for r in rows]
+    total := salaries.sum()
+    print("rows: {rows.len()}, skipped: {bad}")
+    print("min {salaries.min() else 0}, max {salaries.max() else 0}")
+    print("mean {total / rows.len()}, median {median(salaries)}")
+    mut by_dept := Map[str, int]()
+    for r in rows
+        by_dept[r.dept] += r.salary
+    for d in by_dept.keys().sorted()
+        print("{d:<6}{by_dept[d]:>5}")
+
+@test fn parses_good_and_bad_rows()
+    assert_eq(parse_row("a,b,5")?, Row(name: "a", dept: "b", salary: 5))
+    assert(parse_row("a,b") == none)
+    assert(parse_row("a,b,x") == none)
+
+@test fn medians()
+    assert_eq(median([5, 1, 3]), 3)
+    assert_eq(median([4, 1, 3, 2]), 2)

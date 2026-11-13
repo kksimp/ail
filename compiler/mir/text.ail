@@ -44,7 +44,7 @@ fn inst_text(f Func, i Inst) str
         "fconst" => "fconst {i.fimm}"
         "str" => "str #{i.imm}"
         "call" | "prim" | "fnaddr" => "{i.op} {i.name}({vals_text(f, i.operands())})"
-        "ldx" | "stx" =>
+        "ldx" | "stx" | "vldx" | "vstx" =>
             if i.elem_off() != 0
                 "{i.op} {vals_text(f, i.operands())} *{i.imm} +{i.elem_off()}"
             else

@@ -8,9 +8,9 @@ ct 18 0
 diff 9 0
 edit 21 0
 eff 15 0
-err 40 5
+err 43 6
 explain 6 0
-expr 65 18
+expr 68 18
 ffi 21 0
 fix 11 0
 gen 17 0
@@ -35,9 +35,9 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 374 1
+std 384 1
 task 16 0
-test 35 0
+test 43 0
 tool 16 0
 trace 22 0
 trait 45 4
@@ -45,4 +45,4 @@ try 10 0
 type 134 10
 unsafe 21 0
 verify 9 0
-all 1405 54
+all 1408 54

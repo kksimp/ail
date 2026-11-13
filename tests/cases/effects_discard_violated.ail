@@ -1,0 +1,24 @@
+# eff.use.1: calls whose value is thrown away and that do nothing else: a
+# pure function, a built-in method that returns a copy, a method of a
+# struct, a pure standard function, and a value thrown away in the middle
+# of a block as well as at the end of a function that returns nothing.
+use std.path
+
+struct Point
+    x int
+    y int
+
+fn Point.moved(self, dx int) Point
+    Point(x: x + dx, y: y)
+
+fn square(n int) int
+    n * n
+
+fn main()
+    p := Point(x: 1, y: 2)
+    square(3)
+    "text".trim()
+    p.moved(1)
+    path.base("a/b.txt")
+    print(p.x)
+    [1, 2].len()

@@ -1,0 +1,7 @@
+fn main()
+    mut todo := List[str]()
+    todo.push("write tests")
+    todo.push("ship")
+    for t in todo
+        print(t)
+    print("{todo.len()} left")

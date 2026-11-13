@@ -1,0 +1,4 @@
+fn main()
+    mut xs := [1, 2]
+    xs[0] |= 4
+    print(xs[0])

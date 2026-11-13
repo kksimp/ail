@@ -1,0 +1,72 @@
+## Builds a small project tree in a temp directory, then walks it recursively
+## and prints an indented listing (directories marked with `/`), with
+## file, directory and byte totals. The tree is removed bottom-up afterwards.
+
+struct Stats
+    files int
+    dirs int
+    bytes int
+    lines List[str]
+
+fn visit(dir str, depth int, mut st Stats) !
+    for name in fs.list_dir(dir)?
+        child := path.join(dir, name)
+        pad := "  ".repeat(depth)
+        if fs.metadata(child)?.is_dir
+            st.dirs += 1
+            st.lines.push("{pad}{name}/")
+            visit(child, depth + 1, mut st)?
+        else
+            size := fs.metadata(child)?.size
+            st.files += 1
+            st.bytes += size
+            st.lines.push("{pad}{name} ({size})")
+
+fn remove_tree(dir str) !
+    for name in fs.list_dir(dir)?
+        child := path.join(dir, name)
+        if fs.metadata(child)?.is_dir
+            remove_tree(child)?
+        else
+            fs.remove(child)?
+    fs.remove(dir)?
+
+fn build(root str) !
+    fs.make_dir(path.join(root, "src/core"))?
+    fs.make_dir(path.join(root, "docs"))?
+    fs.make_dir(path.join(root, "empty"))?
+    fs.write_text(path.join(root, "README.md"), "# demo\n")?
+    fs.write_text(path.join(root, "src/main.txt"), "entry point\n")?
+    fs.write_text(path.join(root, "src/core/engine.txt"), "engine code goes here\n")?
+    fs.write_text(path.join(root, "src/core/util.txt"), "helpers\n")?
+    fs.write_text(path.join(root, "docs/guide.txt"), "read me first\nthen this\n")?
+
+fn main() !
+    root := fs.make_temp_dir("corpus_dir_walker")?
+    build(root)?
+    mut st := Stats(files: 0, dirs: 0, bytes: 0, lines: [])
+    visit(root, 0, mut st)?
+    for line in st.lines
+        print(line)
+    print("{st.files} files, {st.dirs} dirs, {st.bytes} bytes")
+    found := fs.walk(root)?
+    print("walk finds {found.len()} files")
+    remove_tree(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn visit_counts_a_tree()
+    root := fs.make_temp_dir("corpus_dir_walker_t")?
+    build(root)?
+    mut st := Stats(files: 0, dirs: 0, bytes: 0, lines: [])
+    visit(root, 0, mut st)?
+    assert_eq(st.files, 5)
+    assert_eq(st.dirs, 4)
+    remove_tree(root)?
+    assert(not fs.exists(root))
+
+@test fn empty_dir_has_no_entries()
+    root := fs.make_temp_dir("corpus_dir_walker_e")?
+    mut st := Stats(files: 0, dirs: 0, bytes: 0, lines: [])
+    visit(root, 0, mut st)?
+    assert_eq(st.lines.len(), 0)
+    remove_tree(root)?

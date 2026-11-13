@@ -2,4 +2,4 @@ file: tool.ail
 lines: 37 (4 blank, 2 comments)
 functions: measure, base_name, main
 echo said: measured tool.ail (status 0)
-a missing file is not_found
+a missing file is fs.IoKind.NotFound

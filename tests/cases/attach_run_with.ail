@@ -13,7 +13,7 @@ struct Counter
 
 impl app.App for Counter
     fn update(mut self, ev app.Event)
-        if ev.kind == "external" and ev.id == "probe"
+        if ev.kind == External and ev.id == "probe"
             seen = ev.text
 
     fn view(self) app.Node

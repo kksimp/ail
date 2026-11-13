@@ -1,4 +1,4 @@
-# `compress.unzlib` fails with: compress.CompressError(kind: "checksum", message: "zlib Adler-32 mismatch")
+# `compress.unzlib` fails with: compress.CompressError(kind: compress.CompressKind.Checksum, message: "zlib Adler-32 mismatch")
 use std.compress
 
 fn main() !

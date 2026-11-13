@@ -1,0 +1,11 @@
+fn describe(path str) str
+    text := fs.read_text(path) else err
+        if err.kind == NotFound
+            return "missing"
+        return match err.kind
+            Permission => "locked"
+            NotFound | Exists | IsDir | NotDir | NotEmpty | InvalidUtf8 | Other => "unreadable"
+    text
+
+fn main()
+    print(describe("no-such-file.txt"))

@@ -1,0 +1,131 @@
+## std.mcp (spec std.mcp.1-8, ADR 1091): a client for MCP servers (the Model
+## Context Protocol) that speak JSON-RPC 2.0 over a child process's standard
+## input and output, one JSON message per line. `connect` starts the server and
+## does the handshake; `tools` lists what the server offers and `call` runs one
+## tool. No network is used by the client itself.
+use std.proc
+
+## The protocol revision the client asks for (std.mcp.1).
+MCP_PROTOCOL := "2025-03-26"
+
+## Why a request failed (std.mcp.7). `kind` is `start`, `rpc`,
+## `tool` or `timeout`.
+pub error struct McpError "{kind}: {message}"
+    pub kind str
+    pub message str
+
+## One tool a server offers (std.mcp.3): its name, what it says it does and
+## its JSON Schema for the arguments (`Null` when it gives none).
+pub struct Tool
+    pub name str
+    pub description str
+    pub schema Json
+
+## A connected server (std.mcp.1). Unique: it owns the server process.
+pub unique struct Client
+    child proc.Child
+    seq int
+    wait_ms int
+
+fn jm(key str, value Json) JsonMember
+    JsonMember(key: key, value: value)
+
+fn fail(kind str, message str) McpError
+    McpError(kind: kind, message: message)
+
+## The server `cmd args` started and initialised (std.mcp.1, std.mcp.2).
+pub fn connect(cmd str, args List[str]) Client ! McpError
+    mut ch := proc.start(cmd, args) else e
+        return fail("start", "{e}")
+    mut c := Client(child: move ch, seq: 1, wait_ms: 30000)
+    info := Json.Obj([jm("name", Json.Str("ail")), jm("version", Json.Str("0.1"))])
+    params := Json.Obj([
+        jm("protocolVersion", Json.Str(MCP_PROTOCOL)),
+        jm("capabilities", Json.Obj([])),
+        jm("clientInfo", info),
+    ])
+    _ := c.request("initialize", params)?
+    done := notification("notifications/initialized").to_text()
+    c.child.stdin.send("{done}\n")
+    c
+
+fn notification(method str) Json
+    Json.Obj([jm("jsonrpc", Json.Str("2.0")), jm("method", Json.Str(method))])
+
+## Sets the time `request` waits for one reply, in milliseconds (std.mcp.7).
+pub fn Client.set_timeout(mut self, ms int)
+    wait_ms = ms
+
+## Sends one request and returns the `result` of its reply (std.mcp.6). Lines
+## that are not the reply (notifications, server logs) are skipped.
+fn Client.request(mut self, method str, params Json) Json ! McpError
+    id := seq
+    seq += 1
+    msg := Json.Obj([
+        jm("jsonrpc", Json.Str("2.0")),
+        jm("id", Json.Num(id.to_float())),
+        jm("method", Json.Str(method)),
+        jm("params", params),
+    ])
+    child.stdin.send("{msg.to_text()}\n")
+    while true
+        line := child.out.recv_for(wait_ms) else return fail(
+            "timeout",
+            "no reply to {method} within {wait_ms} ms, or the server closed",
+        )
+        reply := parse_json(line) else continue
+        rid := reply.int("id") else
+            continue
+        if rid != id
+            continue
+        if er := reply.get("error")
+            code := er.int("code") else 0
+            why := er.text("message", "error")
+            return fail("rpc", "{why} (code {code})")
+        return reply.get("result") else Json.Null
+    fail("timeout", "no reply")
+
+## The tools the server offers (std.mcp.3), following `nextCursor` pages.
+pub fn Client.tools(mut self) List[Tool] ! McpError
+    mut out := List[Tool]()
+    mut cursor := ""
+    while true
+        mut params := Json.Obj([])
+        if cursor != ""
+            params.set("cursor", Json.Str(cursor))
+        r := self.request("tools/list", params)?
+        for t in r.arr("tools") else []
+            name := t.str("name") else continue
+            out.push(Tool(
+                name: name,
+                description: t.text("description", ""),
+                schema: t.get("inputSchema") else Json.Null,
+            ))
+        cursor = r.text("nextCursor", "")
+        if cursor == ""
+            break
+    out
+
+## Runs tool `name` with `args`, a JSON object (std.mcp.4, std.mcp.5). The result
+## is the reply's `structuredContent` when it has one, else the whole result.
+## A tool that reports `isError` fails with kind `tool` and its text.
+pub fn Client.call(mut self, name str, args Json) Json ! McpError
+    params := Json.Obj([jm("name", Json.Str(name)), jm("arguments", args)])
+    r := self.request("tools/call", params)?
+    if r.flag("isError", false)
+        return fail("tool", text(r))
+    if s := r.get("structuredContent")
+        return s
+    r
+
+## The text blocks of a tool result joined with newlines (std.mcp.5).
+pub fn text(result Json) str
+    mut parts := List[str]()
+    for b in result.arr("content") else []
+        if b.text("type", "") == "text"
+            parts.push(b.text("text", ""))
+    parts.join("\n")
+
+## Ends the server (std.mcp.8).
+pub fn Client.close(move self)
+    child.stdin.close()

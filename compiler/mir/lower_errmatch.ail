@@ -1,0 +1,217 @@
+## Matching on which member of an error union a failure is (err.match.1-3,
+## ADR 1078). Every failure records a type tag next to its value
+## (`rt.err_tag`, `compiler/rt/native/err.ail`): `err_tag_hash` of its type's
+## key. `else err` on a call whose error type the lowering doesn't know as one
+## type binds `err` to the display text, as before, and two hidden locals,
+## `err$v` (the value) and `err$t` (the tag). `match err` with type patterns
+## tests the tag; in an arm `T =>` the name `err` is the value as a `T`, and
+## `T.Variant(...)` tests the variant of an error enum `T` too.
+
+use ast
+
+## The tag of error type `key`; `rt.err_tag_of` computes the same number.
+fn err_tag_hash(key str) int
+    mut h := 0
+    for c in key.chars()
+        h = (h * 31 + c.code()) % 2147483647
+    if h == 0 then 1 else h
+
+## Record the type of the error just raised (after `rt.err_value`).
+@allow("expr.match.3") fn Lower.tag_error(mut self, t Ty)
+    key := match t
+        Struct(k) => k
+        Enum(k) => k
+        _ => return
+    call("rt.err_tag", [konst(err_tag_hash(key), Ty.Int)], Ty.Unit)
+
+## The `Absent` failure of `?` on an optional (err.prop.5).
+fn Lower.tag_absent(mut self)
+    call("rt.err_tag", [konst(err_tag_hash("Absent"), Ty.Int)], Ty.Unit)
+
+## Bind `name` to the text of an error of no single known type, with its
+## value and tag in the hidden locals a union `match` reads.
+fn Lower.bind_text_error(mut self, name str)
+    v := call("rt.err_peek_value", [], Ty.Int)
+    t := call("rt.err_tag_get", [], Ty.Int)
+    declare("{name}$v", Ty.Int, v)
+    declare("{name}$t", Ty.Int, t)
+    declare(name, Ty.Str, call("rt.err_take", [], Ty.Str))
+
+## The scrutinee's name when `match` is on an error bound by `else err` of
+## no single type.
+@allow("expr.match.3") fn Lower.union_scrutinee(self, e ast.Expr) str?
+    match e
+        Name(n, _) =>
+            # The innermost `n` must be the one `else err` bound with its tag.
+            mut i := scopes.len() - 1
+            while i >= 0
+                if scopes[i].contains(n)
+                    return if scopes[i].contains("{n}$t") then n else none
+                i -= 1
+            none
+        _ => none
+
+## The key of an error type written `T` or `m.T` here, else `none`.
+fn Lower.error_key(self, name str) str?
+    if k := type_key(name)
+        return if err_msgs.contains(k) then k else none
+    if k := enum_key(name)
+        return if err_msgs.contains(k) then k else none
+    if name == "Absent" or name == "Trapped"
+        return name
+    none
+
+## The type of error key `key`.
+fn Lower.error_ty(self, key str) Ty
+    if enums.contains(key) then Ty.Enum(key) else Ty.Struct(key)
+
+## What an arm's pattern names: the member type, and the variant when it is
+## `T.Variant` of an error enum `T` (`""` for the whole member).
+struct MemberPat
+    key str
+    variant str
+
+@allow("expr.match.3") fn Lower.member_pat(mut self, p ast.Pattern) MemberPat?
+    match p
+        Variant(q, name, bindings, vpos) =>
+            full := if qual := q then "{qual}.{name}" else name
+            if k := error_key(full)
+                if bindings != none
+                    problem(
+                        vpos,
+                        "the member pattern `{full}` takes no fields; in its arm the value is a `{full}` (err.match.2)",
+                    )
+                    return none
+                return MemberPat(key: k, variant: "")
+            qq := q else
+                problem(vpos, "`{name}` is not an error type of this union (err.match.1)")
+                return none
+            ek := error_key(qq) else
+                problem(vpos, "`{qq}` is not an error type of this union (err.match.1)")
+                return none
+            if not enums.contains(ek)
+                problem(
+                    vpos,
+                    "`{qq}` is not an error enum, so it has no variant `{name}` (err.match.1)",
+                )
+                return none
+            MemberPat(key: ek, variant: name)
+        _ =>
+            problem(
+                pattern_pos_of(p),
+                "a `match` on an error union takes its member types and their variants (err.match.1)",
+            )
+            none
+
+fn pattern_pos_of(p ast.Pattern) ast.Pos
+    match p
+        Wildcard(at) => at
+        Literal(_, at) => at
+        Alt(_, at) => at
+        Variant(_, _, _, at) => at
+        Range(_, _, _, at) => at
+        TuplePat(_, at) => at
+        BindName(_, at) => at
+
+## The member's value as its own type.
+fn Lower.member_value(mut self, n str, key str, pos ast.Pos) Val?
+    raw := lower_value(ast.Expr.Name("{n}$v", pos), Ty.Int)?
+    t := error_ty(key)
+    Val(id: op("copy", [raw.id], t), ty: t)
+
+## End the current block: to `yes` when pattern `p` matches the union value
+## named `n` with tag `tag`, else to `no`.
+@allow("expr.match.3") fn alts_of(p ast.Pattern) List[ast.Pattern]?
+    match p
+        Alt(alts, _) => alts
+        _ => none
+
+@allow("expr.match.3") fn is_wildcard(p ast.Pattern) bool
+    match p
+        Wildcard => true
+        _ => false
+
+fn Lower.union_test(mut self, n str, p ast.Pattern, tag int, yes int, no int, pos ast.Pos) bool
+    if is_wildcard(p)
+        jump(yes, [])
+        return true
+    if alts := alts_of(p)
+        for k in 0..alts.len()
+            if k == alts.len() - 1
+                return union_test(n, alts[k], tag, yes, no, pos)
+            other := new_block()
+            if not union_test(n, alts[k], tag, yes, other, pos)
+                return false
+            seal(other)
+            cur = other
+        return true
+    m := member_pat(p) else return false
+    c := op("eq", [tag, konst(err_tag_hash(m.key), Ty.Int)], Ty.Bool)
+    if m.variant == ""
+        branch(c, yes, [], no, [])
+        return true
+    mid := new_block()
+    branch(c, mid, [], no, [])
+    seal(mid)
+    cur = mid
+    v := member_value(n, m.key, pos) else return false
+    test_pattern(p, v, tag_of(m.key, v.id), yes, no)
+
+## In the arm of pattern `p`: `n` is the member's value, and the fields of a
+## `T.Variant(a, b)` are bound.
+@allow("expr.match.3") fn Lower.union_bind(mut self, n str, p ast.Pattern, pos ast.Pos)
+    match p
+        Variant =>
+            m := member_pat(p) else return
+            # `Absent` has no fields and no stored value: `n` stays its text.
+            if m.key == "Absent"
+                return
+            v := member_value(n, m.key, pos) else return
+            declare(n, v.ty, v.id)
+            if m.variant != ""
+                bind_fields(p, v)
+        _ => return
+
+## `match err` on an error union (err.match.1-3).
+fn Lower.lower_union_match(mut self, n str, arms List[ast.Arm], pos ast.Pos, want Ty?) Val?
+    tag := lower_value(ast.Expr.Name("{n}$t", pos), Ty.Int)?.id
+    value := want_value(want)
+    join := new_block()
+    mut result := -1
+    mut rty := Ty.Unknown
+    if value
+        result = new_value(Ty.Unknown, "")
+        blocks[join].params.push(result)
+        rty = arms_start(want, [arm.body for arm in arms], none)
+    for arm in arms
+        if done()
+            break
+        body := new_block()
+        next := new_block()
+        if not union_test(n, arm.pat, tag, body, next, pos)
+            return none
+        seal(body)
+        cur = body
+        scopes.push(Map[str, str]())
+        union_bind(n, arm.pat, pos)
+        if g := arm.guard
+            c := lower_value(g, Ty.Bool)?
+            pass := new_block()
+            branch(c.id, pass, [], next, [])
+            seal(pass)
+            cur = pass
+        before := problems.len()
+        v := lower_arm(arm.body, value, rty)
+        if value and v == none and problems.len() > before
+            finish(unreachable_term())
+        rty = arm_end(join, value, v, pos, rty)
+        scopes.pop()
+        seal(next)
+        cur = next
+    finish(unreachable_term())
+    seal(join)
+    cur = join
+    if value
+        vals[result] = rty
+        return Val(id: result, ty: rty)
+    Val(id: -1, ty: Ty.Unit)

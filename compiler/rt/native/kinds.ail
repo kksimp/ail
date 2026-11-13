@@ -1,0 +1,99 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The `kind` word of the error structs the runtime builds (std.err.1,
+## std.net.4, std.compress.2, ADR 1068). A kind is an enum (`fs.IoKind`,
+## `proc.ProcKind`, `net.NetKind`, `compress.CompressKind`): the variant's
+## index, in the order of `std/types.ail` and `compiler/mir/lower_kinds.ail`.
+## A compiler lowered by a seed from before ADR 1068 reads the word as text, so
+## `kinds_as_enums` (whose body the lowering of ADR 1068 replaces with `true`)
+## picks which to store.
+
+## The variants as the runtime names them, one space between. `proc_kinds`
+## starts with `io_kinds`, so an index names the same kind in both.
+fn io_kinds() str
+    "not_found permission exists is_dir not_dir not_empty invalid_utf8 other"
+
+fn proc_kinds() str
+    "not_found permission exists is_dir not_dir not_empty invalid_utf8 other timed_out cancelled"
+
+fn net_kinds() str
+    "bad_url bad_request tls not_found refused timed_out closed bind protocol other"
+
+fn compress_kinds() str
+    "corrupt checksum too_big unsafe_path unsupported not_found permission exists is_dir not_dir not_empty invalid_utf8 other"
+
+## Whether this runtime was lowered by a compiler that knows the kind enums.
+fn kinds_as_enums() bool
+    false
+
+## The index of the word `name` in `names`, else that of `other`.
+fn kind_index(names str, name str) int
+    p := str_addr(names) + 16
+    n := load64(str_addr(names))
+    q := str_addr(name) + 16
+    m := load64(str_addr(name))
+    mut idx := 0
+    mut start := 0
+    mut i := 0
+    while i <= n
+        if i == n or load8(p + i) == 32
+            if i - start == m
+                mut j := 0
+                while j < m and load8(p + start + j) == load8(q + j)
+                    j += 1
+                if j == m
+                    return idx
+            idx += 1
+            start = i + 1
+        i += 1
+    if str_eq(name, "other")
+        return idx - 1
+    kind_index(names, "other")
+
+## The text of kind word `w` of an error the runtime built: the variant's
+## name (`names` is `proc_kinds` for both `fs` and `proc` errors).
+fn kind_text(names str, w int) str
+    if not kinds_as_enums()
+        return str_at(w)
+    p := str_addr(names) + 16
+    n := load64(str_addr(names))
+    mut idx := 0
+    mut start := 0
+    mut i := 0
+    while i <= n
+        if i == n or load8(p + i) == 32
+            if idx == w
+                return str_sub(str_addr(names), start, i)
+            idx += 1
+            start = i + 1
+        i += 1
+    "other"
+
+## The kind word of an error struct: the enum index, or the text for an older
+## compiler.
+fn kind_word(names str, name str) int
+    if kinds_as_enums()
+        return kind_index(names, name)
+    str_addr(name)
+
+## A kind in an error's text form (err.text.1): `ty.Variant`, as the lowering
+## shows an enum, or the quoted text for an older compiler.
+fn kind_put(ty str, name str)
+    if not kinds_as_enums()
+        os_put_quoted(name)
+        return
+    sb_text(ty)
+    sb_byte(46)
+    p := str_addr(name) + 16
+    n := load64(str_addr(name))
+    mut up := true
+    mut i := 0
+    while i < n
+        c := load8(p + i)
+        if c == 95
+            up = true
+        else
+            sb_byte(if up and c >= 97 and c <= 122 then c - 32 else c)
+            up = false
+        i += 1

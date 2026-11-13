@@ -1,6 +1,6 @@
 # 0076. The AI decides routine design questions by a fixed priority order; serious ones go to the designer
 
-- **Status:** Accepted
+- **Status:** Accepted; priority order amended by [ADR 1077](1077-decision-order-ai-understanding-first.md)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** Project process

@@ -1,0 +1,19 @@
+error enum ParseError
+    Bad(text str) "bad {text}"
+
+fn parse(s str) int ! ParseError
+    n := s.to_int() else return Bad(text: s)
+    n
+
+fn main()
+    mut stack := [1, 2, 3, 4]
+    while top := stack.pop()
+        if top == 3
+            continue
+        print(top)
+    print(stack.len())
+    mut inputs := ["1", "2", "x", "4"]
+    mut i := 0
+    while n := parse(inputs[i])
+        print(n)
+        i += 1

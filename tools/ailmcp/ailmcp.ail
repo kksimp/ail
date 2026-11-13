@@ -90,8 +90,8 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "ail_find",
-            about: "Find a std function by `words` or `sig` before writing one.",
-            props: ["words", "sig"],
+            about: "Find a std function or built-in method by `words` or `sig`, or a how-to by `how` words, before writing one.",
+            props: ["words", "sig", "how"],
             needs: [],
         ),
         Tool(
@@ -244,6 +244,7 @@ fn command(name str, a Json) Cmd
             "topic",
             "words",
             "sig",
+            "how",
             "function",
             "base",
             "ours",
@@ -352,9 +353,14 @@ fn command(name str, a Json) Cmd
             "ail_find" =>
                 words := a.text("words", "")
                 sig := a.text("sig", "")
-                if words == "" and sig == ""
-                    return Cmd(argv: [], why: "ail_find needs `words` or `sig`", stdin: "")
+                how := a.text("how", "")
+                if words == "" and sig == "" and how == ""
+                    return Cmd(argv: [], why: "ail_find needs `words`, `sig` or `how`", stdin: "")
                 out = ["ask", "std"]
+                if how != "" and sig == "" and words == ""
+                    out = ["ask", "how"]
+                    out.extend(how.split(" "))
+                    return Cmd(argv: out, why: "", stdin: "")
                 if sig != ""
                     out.extend(["--sig", sig])
                 else

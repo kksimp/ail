@@ -6,6 +6,7 @@
 ## vsync and surface come later (ADR 0957).
 
 use std.app
+use std.ui
 
 ## One draw command of a `Frame`. Coordinates are pixels from the top left,
 ## colors `0xRRGGBB`.
@@ -23,11 +24,11 @@ pub struct Frame
 
 ## What the player did, as of one frame (std.gfx.2). `pressed` and `released`
 ## hold the keys that changed since the previous frame; `down` holds every key
-## held now. Keys are named as `std.ui.7` names them.
+## held now. Keys are `ui.KeyCode`s (std.ui.7, ADR 1068).
 pub struct Input
-    pub down List[str]
-    pub pressed List[str]
-    pub released List[str]
+    pub down List[ui.KeyCode]
+    pub pressed List[ui.KeyCode]
+    pub released List[ui.KeyCode]
     pub text str
     pub x float
     pub y float
@@ -85,39 +86,51 @@ pub fn text(mut f Frame, x float, y float, s str, size float, color int)
     f.cmds.push(Cmd.Text(x: x, y: y, text: s, size: size, color: color))
 
 ## The host event for releasing `key` (std.gfx.3).
-pub fn key_up(key str) app.Event
-    mut e := app.event("keyup")
-    e.text = key
+pub fn key_up(key ui.KeyCode) app.Event
+    mut e := app.event(app.EventKind.KeyUp)
+    e.text = key.name()
     e
 
 ## A gamepad with nothing held and the sticks centred.
 pub fn no_pad() Pad
     Pad(buttons: 0, pressed: 0, released: 0, lx: 0.0, ly: 0.0, rx: 0.0, ry: 0.0, lt: 0.0, rt: 0.0)
 
-## The bit of button `name` (std.gfx.11): `a` 1, `b` 2, `x` 4, `y` 8, `lb` 16,
-## `rb` 32, `back` 64, `start` 128, `l3` 256, `r3` 512, `up` 1024, `down` 2048,
-## `left` 4096, `right` 8192; 0 for any other name.
-pub fn pad_bit(name str) int
-    names := [
-        "a",
-        "b",
-        "x",
-        "y",
-        "lb",
-        "rb",
-        "back",
-        "start",
-        "l3",
-        "r3",
-        "up",
-        "down",
-        "left",
-        "right",
-    ]
-    for k in 0..names.len()
-        if names[k] == name
-            return 1.shl(k)
-    0
+## A gamepad button (std.gfx.11, ADR 1068).
+pub enum PadButton
+    A
+    B
+    X
+    Y
+    Lb
+    Rb
+    Back
+    Start
+    L3
+    R3
+    Up
+    Down
+    Left
+    Right
+
+## The bit of `button` in `Pad.buttons` (std.gfx.11): `A` 1, `B` 2, `X` 4,
+## `Y` 8, `Lb` 16, `Rb` 32, `Back` 64, `Start` 128, `L3` 256, `R3` 512, `Up`
+## 1024, `Down` 2048, `Left` 4096, `Right` 8192.
+pub fn pad_bit(button PadButton) int
+    match button
+        A => 1
+        B => 2
+        X => 4
+        Y => 8
+        Lb => 16
+        Rb => 32
+        Back => 64
+        Start => 128
+        L3 => 256
+        R3 => 512
+        Up => 1024
+        Down => 2048
+        Left => 4096
+        Right => 8192
 
 ## Gamepad `n` (from 0); one that isn't connected is `no_pad()`.
 pub fn pad(i Input, n int) Pad
@@ -126,21 +139,21 @@ pub fn pad(i Input, n int) Pad
     i.pads[n]
 
 ## Whether `button` of gamepad `n` is held.
-pub fn pad_down(i Input, n int, button str) bool
+pub fn pad_down(i Input, n int, button PadButton) bool
     pad(i, n).buttons.bit_and(pad_bit(button)) != 0
 
 ## Whether `button` of gamepad `n` went down this frame.
-pub fn pad_pressed(i Input, n int, button str) bool
+pub fn pad_pressed(i Input, n int, button PadButton) bool
     pad(i, n).pressed.bit_and(pad_bit(button)) != 0
 
 ## Whether `button` of gamepad `n` went up this frame.
-pub fn pad_released(i Input, n int, button str) bool
+pub fn pad_released(i Input, n int, button PadButton) bool
     pad(i, n).released.bit_and(pad_bit(button)) != 0
 
 ## The `pad` host event for gamepad `n` with state `buttons,lx,ly,rx,ry,lt,rt`;
 ## an empty `state` says it was disconnected (std.gfx.11).
 pub fn pad_event(n int, state str) app.Event
-    mut e := app.event("pad")
+    mut e := app.event(app.EventKind.Pad)
     e.id = "{n}"
     e.text = state
     e
@@ -165,19 +178,19 @@ fn pad_from(old Pad, state str) Pad
     )
 
 ## Whether `key` is held (std.gfx.2).
-pub fn down(i Input, key str) bool
+pub fn down(i Input, key ui.KeyCode) bool
     i.down.contains(key)
 
 ## Whether `key` went down this frame.
-pub fn pressed(i Input, key str) bool
+pub fn pressed(i Input, key ui.KeyCode) bool
     i.pressed.contains(key)
 
 ## Whether `key` went up this frame: a key-up is a fact, not an event to miss.
-pub fn released(i Input, key str) bool
+pub fn released(i Input, key ui.KeyCode) bool
     i.released.contains(key)
 
-fn without(keys List[str], key str) List[str]
-    mut out := List[str]()
+fn without(keys List[ui.KeyCode], key ui.KeyCode) List[ui.KeyCode]
+    mut out := List[ui.KeyCode]()
     for k in keys
         if k != key
             out.push(k)
@@ -188,8 +201,8 @@ fn without(keys List[str], key str) List[str]
 ## `click` and `move` set the pointer, `scroll` adds to the wheel (std.gfx.3).
 pub fn next_input(prev Input, events List[app.Event]) Input
     mut held := prev.down
-    mut went_down := List[str]()
-    mut went_up := List[str]()
+    mut went_down := List[ui.KeyCode]()
+    mut went_up := List[ui.KeyCode]()
     mut typed := ""
     mut x := prev.x
     mut y := prev.y
@@ -210,24 +223,26 @@ pub fn next_input(prev Input, events List[app.Event]) Input
             rt: old.rt,
         ))
     for ev in events
-        if ev.kind == "key"
-            if not held.contains(ev.text)
-                held.push(ev.text)
-                went_down.push(ev.text)
+        if ev.kind == app.EventKind.Key
+            k := ui.key_code(ev.text)
+            if not held.contains(k)
+                held.push(k)
+                went_down.push(k)
             if ev.text.chars().len() == 1 and not ev.ctrl and not ev.meta
                 typed = "{typed}{ev.text}"
-        elif ev.kind == "keyup"
-            if held.contains(ev.text)
-                held = without(held, ev.text)
-                went_up.push(ev.text)
-        elif ev.kind == "click" or ev.kind == "move"
+        elif ev.kind == app.EventKind.KeyUp
+            k := ui.key_code(ev.text)
+            if held.contains(k)
+                held = without(held, k)
+                went_up.push(k)
+        elif ev.kind == app.EventKind.Click or ev.kind == app.EventKind.Move
             x = ev.x
             y = ev.y
-            if ev.kind == "click"
+            if ev.kind == app.EventKind.Click
                 buttons = 1
-        elif ev.kind == "scroll"
+        elif ev.kind == app.EventKind.Scroll
             wheel = wheel + ev.dy
-        elif ev.kind == "pad"
+        elif ev.kind == app.EventKind.Pad
             n := ev.id.to_int() else -1
             if n >= 0 and n < 8
                 while pads.len() <= n

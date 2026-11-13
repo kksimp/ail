@@ -603,9 +603,10 @@ fn derive_to_json(t TypeInfo) str ! DeriveError
         if v.fields.len() == 0
             out.push("        {v.name} => Json.Str(\"{v.name}\")\n")
         else
-            names := [f.name for f in v.fields]
+            # `v_` keeps a keyword-named field a plain name (lex.kw.3, ADR 1085).
+            names := ["v_{f.name}" for f in v.fields]
             kind := "{"                JsonMember(\"kind\", Json.Str(\"{v.name}\")),\n"}"
-            body := "Json.Obj({json_members(v.fields, "", "            ", kind)})"
+            body := "Json.Obj({json_members(v.fields, "v_", "            ", kind)})"
             out.push("        {v.name}({names.join(", ")}) => {body}\n")
     out.join("")
 
@@ -937,6 +938,177 @@ fn Grid.row(self, i int) List[T]
 ## The rows as lists (type.grid.4).
 fn Grid.to_list(self) List[List[T]]
     [row(i) for i in 0..rows]
+## @module heap
+## `Heap[T]` (type.heap.1-6, ADR 1086): a priority queue, smallest first, or
+## largest first with `max_first: true`. It is read only when the program
+## names `Heap` and doesn't declare that name itself.
+
+## `Heap[int]()` is empty and min-first; `Heap[int](max_first: true)` is
+## max-first (type.heap.1). `items` is the binary heap's array, in no
+## particular order (type.heap.5).
+struct Heap[T Ord]
+    items List[T] = []
+    max_first bool = false
+
+## A min-first heap of `xs` (type.heap.2).
+fn Heap.from(xs List[T]) Self
+    mut h := Heap(items: xs, max_first: false)
+    h.heapify()
+    h
+
+## A max-first heap of `xs` (type.heap.2).
+fn Heap.from_max(xs List[T]) Self
+    mut h := Heap(items: xs, max_first: true)
+    h.heapify()
+    h
+
+## Whether `a` comes out before `b`.
+fn Heap.before(self, a T, b T) bool
+    if max_first then a > b else a < b
+
+fn Heap.heapify(mut self)
+    mut k := items.len() / 2
+    while k > 0
+        k -= 1
+        sift_down(k)
+
+fn Heap.sift_down(mut self, start int)
+    mut i := start
+    while true
+        l := 2 * i + 1
+        r := l + 1
+        mut m := i
+        if l < items.len() and before(items[l], items[m])
+            m = l
+        if r < items.len() and before(items[r], items[m])
+            m = r
+        if m == i
+            break
+        items.swap(i, m)
+        i = m
+
+## Add `x` (type.heap.3).
+fn Heap.push(mut self, x T)
+    items.push(x)
+    mut i := items.len() - 1
+    while i > 0
+        parent := (i - 1) / 2
+        if before(items[i], items[parent])
+            items.swap(i, parent)
+            i = parent
+        else
+            break
+
+## Remove and return the element that comes first, or `none` when the heap is
+## empty (type.heap.3).
+fn Heap.pop(mut self) T?
+    if items.is_empty()
+        return none
+    last := items.len() - 1
+    items.swap(0, last)
+    top := items.pop()
+    sift_down(0)
+    top
+
+## The element `pop` would return, left in place (type.heap.3).
+fn Heap.peek(self) T?
+    items.first()
+
+## The number of elements (type.heap.4).
+fn Heap.len(self) int
+    items.len()
+
+fn Heap.is_empty(self) bool
+    items.is_empty()
+
+## Every element in the order `pop` returns them, leaving the heap as it is
+## (type.heap.4).
+fn Heap.to_sorted(self) List[T]
+    mut h := Heap(items: items, max_first: max_first)
+    mut out := List[T]()
+    while x := h.pop()
+        out.push(x)
+    out
+## @module deque
+## `Deque[T]` (type.deque.1-5, ADR 1086): a double-ended queue with amortised
+## O(1) pushes and pops at both ends and O(1) access by position. It is read
+## only when the program names `Deque` and doesn't declare that name itself.
+
+## `Deque[int]()` is empty (type.deque.1). The elements, first to last, are
+## `front` reversed followed by `back` (type.deque.5).
+struct Deque[T]
+    front List[T] = []
+    back List[T] = []
+
+## A deque of the elements of `xs`, in order (type.deque.1).
+fn Deque.from(xs List[T]) Self
+    Deque(front: [], back: xs)
+
+## Add `x` as the last element (type.deque.2).
+fn Deque.push_back(mut self, x T)
+    back.push(x)
+
+## Add `x` as the first element (type.deque.2).
+fn Deque.push_front(mut self, x T)
+    front.push(x)
+
+## Remove and return the last element, or `none` when empty (type.deque.2).
+fn Deque.pop_back(mut self) T?
+    if back.is_empty()
+        n := front.len()
+        if n == 0
+            return none
+        k := (n + 1) / 2
+        back = [front[k - 1 - i] for i in 0..k]
+        front = front[k..]
+    back.pop()
+
+## Remove and return the first element, or `none` when empty (type.deque.2).
+fn Deque.pop_front(mut self) T?
+    if front.is_empty()
+        n := back.len()
+        if n == 0
+            return none
+        k := (n + 1) / 2
+        front = [back[k - 1 - i] for i in 0..k]
+        back = back[k..]
+    front.pop()
+
+## The first element, or `none` when empty (type.deque.3).
+fn Deque.first(self) T?
+    if front.is_empty()
+        return back.first()
+    front[front.len() - 1]
+
+## The last element, or `none` when empty (type.deque.3).
+fn Deque.last(self) T?
+    if back.is_empty()
+        return front.first()
+    back[back.len() - 1]
+
+## The number of elements (type.deque.3).
+fn Deque.len(self) int
+    front.len() + back.len()
+
+fn Deque.is_empty(self) bool
+    front.is_empty() and back.is_empty()
+
+## The element at position `i` from the front; an index outside `0..len()`
+## traps (type.deque.4).
+fn Deque.at(self, i int) T
+    n := front.len()
+    if i < 0 or i >= n + back.len()
+        unreachable("type.deque.4: index {i} is outside 0..{n + back.len()}")
+    if i < n then front[n - 1 - i] else back[i - n]
+
+## The elements, first to last, as a list (type.deque.4).
+fn Deque.to_list(self) List[T]
+    mut out := List[T]()
+    for i in 0..front.len()
+        out.push(front[front.len() - 1 - i])
+    out.extend(back)
+    out
+
 ## @module seq
 ## `Seq[T]` (expr.yield.1-5, expr.iter.1-3, ADR 1073): a lazy sequence, what a
 ## generator returns. It is read only when the program names `Seq` and doesn't

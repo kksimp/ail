@@ -1,0 +1,89 @@
+# err.match.1-3 (ADR 1078): `match err` on an error of two or more types.
+error struct Missing
+    path str
+
+error enum Parse
+    Empty "empty input"
+    BadDigit(c char) "bad digit {c}"
+    TooLong(len int, max int) "{len} chars, at most {max}"
+
+error struct Locked
+    owner str
+
+fn load(text str) int ! Missing | Parse
+    if text == ""
+        return Parse.Empty
+    if text == "?"
+        return Missing(path: "conf.txt")
+    if text.len() > 4
+        return Parse.TooLong(len: text.len(), max: 4)
+    for c in text.chars()
+        if c < '0' or c > '9'
+            return Parse.BadDigit(c)
+    text.to_int() else 0
+
+fn describe(text str) str
+    n := load(text) else err
+        msg := match err
+            Missing => "no file {err.path}"
+            Parse.BadDigit(c) => "bad digit '{c}'"
+            Parse.TooLong(size, max) if size > 2 * max => "far too long ({size})"
+            Parse.TooLong(size, _) => "too long ({size})"
+            Parse.Empty => "nothing to read"
+        return msg
+    "read {n}"
+
+# An inferred set of three types; a whole-member arm, an alternative and `_`.
+fn open_file(name str) !
+    if name == "locked"
+        return Locked(owner: "ann")
+    n := load(name)?
+    print("opened {n}")
+
+@allow("expr.match.3") fn try_open(name str)
+    open_file(name) else err
+        match err
+            Locked => print("locked by {err.owner}")
+            Missing | Parse.Empty => print("nothing there: {err}")
+            _ => print("other: {err}")
+
+# The value `err` still prints as its text outside a member arm.
+fn first_line(text str) str
+    n := load(text) else err
+        print("failed: {err}")
+        match err
+            Parse => print("a parse error: {err}")
+            Missing => print("missing {err.path}")
+        return ""
+    "{n}"
+
+# A standard error and a user error in one union.
+fn read_number(path str) int ! fs.IoError | Parse
+    text := fs.read_text(path)?
+    if text == ""
+        return Parse.Empty
+    text.trim().to_int() else 0
+
+fn main()
+    for t in ["42", "?", "4x", "", "123456789", "12345"]
+        print(describe(t))
+    for name in ["7", "locked", "?", "", "x"]
+        try_open(name)
+    print(first_line("x"))
+    print(first_line("?"))
+    v := read_number("/no/such/dir/number.txt") else err
+        match err
+            fs.IoError => print("io: {err.kind}")
+            Parse => print("parse: {err}")
+        -1
+    print(v)
+    # In a loop: each failure is told apart again.
+    mut counts := [0, 0]
+    for t in ["a", "?", "b", "?", "?"]
+        if n := load(t)
+            print("loaded {n}")
+        else err
+            match err
+                Missing => counts[0] += 1
+                Parse => counts[1] += 1
+    print(counts)

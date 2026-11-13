@@ -1,0 +1,218 @@
+## Element promotion (native.promote.1, ADR 1079): a counted innermost loop that stores to elements
+## `base[x + k]` whose base and index don't change in the loop keeps those elements in registers
+## instead. Before the loop each is loaded once, the loop's loads and stores of it become the value
+## it last stored, and on the loop's exit the values are stored back. N-body's
+## `s[bi + 3] -= dx * mj` across the `j` loop is the case.
+##
+## It applies only when nothing else in the loop can touch those elements or see them: the loop is a
+## header and one body block, every instruction is pure and can't trap or is an unchecked 8-byte
+## element access of the same base, and every other access of that base is at an index provably
+## past them on every iteration: `p * C + k'`, where `p` is the loop's counter, which starts at
+## `x0 + d` and steps by 1, and `x = x0 * C`, so the distance is at least `C * d`, more than any
+## `k - k'`. A loop that may not run at all doesn't load or store: a copy of the header's test
+## before the loop goes straight to the exit.
+## Each element holds its last stored value when the loop ends, as it does without the pass, and
+## nothing reads it in between.
+
+## The most elements one loop keeps.
+SR_MAX := 8
+
+## A value as `v * k` (`k` 1 when it isn't a multiplication by a constant).
+struct SrScaled
+    v int
+    k int
+
+pub fn promote_elements(mut g Func)
+    if opt_off("promote") or g.name.starts_with("rt.")
+        return
+    mut tries := 0
+    while tries < 8
+        tries += 1
+        if not sr_once(mut g)
+            return
+
+## Promote in the first loop that qualifies; whether one did.
+fn sr_once(mut g Func) bool
+    defs := defs_of(g)
+    loops := find_loops(g)
+    for lp in loops
+        if not is_innermost(loops, lp)
+            continue
+        c := counted(g, defs, lp) else continue
+        if sr_loop(mut g, defs, lp, c)
+            return true
+    false
+
+fn sr_access(i Inst) bool
+    i.op == "ldx" or i.op == "stx"
+
+fn sr_loop(mut g Func, defs List[Def], lp LoopInfo, c Counted) bool
+    h := lp.header
+    if lp.blocks.len() != 2 or lp.latches.len() != 1 or lp.pre < 0
+        return false
+    body := lp.latches[0]
+    if body == h or c.body != body or g.blocks[body].term.kind != "jump"
+        return false
+    # Every instruction pure and unable to trap, or an 8-byte element access of one base, in the
+    # body.
+    mut base := -1
+    for b in lp.blocks
+        for i in g.blocks[b].insts
+            if sr_access(i)
+                if i.imm != 8 or b == h or i.site >= 0
+                    return false
+                if base < 0
+                    base = i.arg(0)
+                elif base != i.arg(0)
+                    return false
+            elif not i.is_pure() or i.site >= 0
+                return false
+    if base < 0 or sr_inside(lp, defs, base)
+        return false
+    # The elements: the offsets stored at the first index that doesn't change in the loop.
+    insts := g.blocks[body].insts
+    mut index := -1
+    mut offs := List[int]()
+    mut tys := List[Ty]()
+    for i in insts
+        if i.op != "stx" or sr_inside(lp, defs, i.arg(1))
+            continue
+        if index < 0
+            index = i.arg(1)
+        if i.arg(1) == index and not offs.contains(i.elem_off())
+            offs.push(i.elem_off())
+            tys.push(g.vals[i.arg(2)])
+    if index < 0 or offs.len() > SR_MAX
+        return false
+    mut most_off := offs[0]
+    for o in offs
+        if o > most_off
+            most_off = o
+    for i in insts
+        if sr_access(i) and i.arg(1) != index
+            if not sr_apart(g, defs, c, index, i.arg(1), most_off - i.elem_off())
+                return false
+    sr_rewrite(mut g, lp, c, base, index, offs, tys)
+    true
+
+## Whether `v` is defined in the loop.
+fn sr_inside(lp LoopInfo, defs List[Def], v int) bool
+    d := defs[v].block
+    d >= 0 and lp.member[d]
+
+fn sr_scaled(g Func, defs List[Def], v int) SrScaled
+    if i := inst_of(g, defs, v)
+        if i.op == "mul"
+            if k := const_of(g, defs, i.arg(1))
+                return SrScaled(v: i.arg(0), k: k)
+            if k := const_of(g, defs, i.arg(0))
+                return SrScaled(v: i.arg(1), k: k)
+    SrScaled(v: v, k: 1)
+
+## Whether `y - x > gap` on every iteration: `y = p * C`, `x = x0 * C` with `C >= 1`, and `p` starts
+## at `x0 + d` (`d >= 0`) and steps by 1, so `y - x >= C * d`.
+fn sr_apart(g Func, defs List[Def], c Counted, x int, y int, gap int) bool
+    ys := sr_scaled(g, defs, y)
+    xs := sr_scaled(g, defs, x)
+    if ys.v != c.p or ys.k != xs.k or ys.k < 1
+        return false
+    if c.step >= 0
+        return false
+    mut d := -1
+    if c.lo == xs.v
+        d = 0
+    else
+        s := inst_of(g, defs, c.lo) else return false
+        if s.op == "add" and s.arg(0) == xs.v
+            d = const_of(g, defs, s.arg(1)) else -1
+        elif s.op == "add" and s.arg(1) == xs.v
+            d = const_of(g, defs, s.arg(0)) else -1
+    d >= 0 and ys.k * d > gap
+
+fn sr_val(mut g Func, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
+
+fn sr_get(rn Map[int, int], v int) int
+    rn.get(v) else v
+
+## The rewrite: `pre -> E -> P -> header`, E testing the header's condition on the entry values
+## (false: straight to the exit), P loading the elements into new header parameters, the body
+## carrying them, and X on the exit edge storing them back.
+fn sr_rewrite(mut g Func, lp LoopInfo, c Counted, base int, index int, offs List[int], tys List[Ty])
+    h := lp.header
+    body := lp.latches[0]
+    pre := lp.pre
+    t := g.blocks[h].term
+    entry := g.blocks[pre].term.args[0]
+    e_blk := g.blocks.len()
+    p_blk := e_blk + 1
+    x_blk := e_blk + 2
+    # E: the header's instructions on the entry values.
+    mut rn := Map[int, int]()
+    for k in 0..g.blocks[h].params.len()
+        rn[g.blocks[h].params[k]] = entry[k]
+    mut e_insts := List[Inst]()
+    for i in g.blocks[h].insts
+        mut ci := i.with_args([sr_get(rn, a) for a in i.operands()])
+        if i.dst >= 0
+            nd := sr_val(mut g, g.vals[i.dst])
+            rn[i.dst] = nd
+            ci.dst = nd
+        e_insts.push(ci)
+    mut e_term := branch_on(sr_get(rn, t.cond), p_blk, t.targets[1])
+    e_term.args[1] = [sr_get(rn, a) for a in t.args[1]]
+    # P: one load per element.
+    mut p_insts := List[Inst]()
+    mut p_args := entry
+    mut held := List[int]()
+    for k in 0..offs.len()
+        v := sr_val(mut g, tys[k])
+        mut ld := inst(v, "ldx", [base, index])
+        ld.imm = 8
+        ld.fimm = offs[k].to_float()
+        p_insts.push(ld)
+        p_args.push(v)
+        held.push(sr_val(mut g, tys[k]))
+    g.blocks[h].params.extend(held)
+    # The body: a load of an element is its value, a store gives it one.
+    mut cur := held
+    mut uses := Map[int, int]()
+    mut out := List[Inst]()
+    for i0 in g.blocks[body].insts
+        i := i0.with_args([sr_get(uses, a) for a in i0.operands()])
+        at := if sr_access(i) and i.arg(1) == index then sr_index_of(offs, i.elem_off()) else -1
+        if at < 0
+            out.push(i)
+        elif i.op == "ldx"
+            uses[i.dst] = cur[at]
+        else
+            cur[at] = i.arg(2)
+    g.blocks[body].insts = out
+    mut bt := g.blocks[body].term
+    bt.args[0] = [sr_get(uses, a) for a in bt.args[0]]
+    bt.args[0].extend(cur)
+    g.blocks[body].term = bt
+    # X: the elements back to memory on the way out.
+    mut x_insts := List[Inst]()
+    for k in 0..offs.len()
+        mut st := inst(-1, "stx", [base, index, held[k]])
+        st.imm = 8
+        st.fimm = offs[k].to_float()
+        x_insts.push(st)
+    x_term := jump_to(t.targets[1], t.args[1])
+    mut ht := t
+    ht.targets[1] = x_blk
+    ht.args[1] = []
+    g.blocks[h].term = ht
+    g.blocks[pre].term = jump_to(e_blk, [])
+    g.blocks.push(Block(params: [], insts: e_insts, term: e_term))
+    g.blocks.push(Block(params: [], insts: p_insts, term: jump_to(h, p_args)))
+    g.blocks.push(Block(params: [], insts: x_insts, term: x_term))
+
+fn sr_index_of(offs List[int], o int) int
+    for k in 0..offs.len()
+        if offs[k] == o
+            return k
+    -1

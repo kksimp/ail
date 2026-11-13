@@ -1,0 +1,30 @@
+# eff.use.1: thrown-away values that stay legal: a call that prints, one
+# that changes a `mut` argument or receiver (`pop`, `add`), a call through a
+# function value, `_ :=`, and a value that is the block's own.
+
+fn noisy(n int) int
+    print("noisy {n}")
+    n
+
+fn take(mut xs List[int]) int
+    xs.pop() else 0
+
+fn twice(n int) int
+    n * 2
+
+fn apply(f fn(int) int, n int)
+    f(n)
+
+fn last(n int) int
+    twice(n)
+
+fn main()
+    mut xs := [1, 2, 3]
+    mut seen := Set[int]()
+    noisy(1)
+    take(mut xs)
+    xs.pop()
+    seen.add(4)
+    apply(twice, 5)
+    _ := twice(6)
+    print("{xs} {seen} {last(7)}")

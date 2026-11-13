@@ -1,0 +1,48 @@
+# Elements held in registers across a loop (native.promote.1): the nbody shape, a
+# loop that runs no iteration, an int list, a start equal to the held index (not
+# provably apart, so left alone) and a stride too small for the offsets. Every
+# printed list must match `AIL_OPT_OFF=promote`.
+fn kick(mut s List[float], n int)
+    for i in 0..n
+        bi := i * 4
+        for j in i + 1..n
+            bj := j * 4
+            d := s[bi] - s[bj]
+            s[bi + 1] -= d * 0.5
+            s[bi + 2] += d * d
+            s[bj + 1] += d * 0.25
+            s[bj + 3] = s[bi + 1] + s[bj + 3]
+
+fn ints(mut s List[int], n int)
+    for i in 0..n
+        bi := i * 2
+        for j in i + 1..n
+            s[bi + 1] += s[j * 2] - j
+        s[bi] = s[bi + 1] % 1000
+
+fn same(mut s List[float], n int)
+    for i in 0..n
+        bi := i * 2
+        for j in i..n
+            s[bi + 1] += s[j * 2] * 0.5
+
+fn tight(mut s List[float], n int)
+    for i in 0..n
+        bi := i * 2
+        for j in i + 1..n
+            s[bi + 1] += s[j * 2 - 1] * 2.0
+
+fn main()
+    mut s := [i.to_float() * 0.5 - 3.0 for i in 0..24]
+    kick(mut s, 6)
+    print(s)
+    kick(mut s, 1)
+    print(s)
+    mut t := [i * 7 - 20 for i in 0..12]
+    ints(mut t, 6)
+    print(t)
+    mut u := [i.to_float() for i in 0..14]
+    same(mut u, 7)
+    print(u)
+    tight(mut u, 5)
+    print(u)

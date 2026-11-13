@@ -10,9 +10,10 @@ Chapter key: `native`
 > [ir-architecture.md](../design/ir-architecture.md) and
 > [native-abi.md](../design/native-abi.md).
 
-The interpreter is the reference (ADR 0032): a native executable behaves as
-`ail run` does on the same program, or the program is rejected before any
-code is produced. The backend is written in AIL under `compiler/` (ADR 0022)
+Native is the only backend (ADR 0904): `ail run` builds the program natively
+and runs it, so `ail run` and a built executable behave the same. A program
+the checker accepts compiles; a rare construct the lowering cannot build yet
+is rejected before any code is produced (native.subset.1). The backend is written in AIL under `compiler/` (ADR 0022)
 with its own encoders and object writers (ADR 0010).
 
 ## The native subset
@@ -46,105 +47,12 @@ field, a list element or an optional. A `ref` of anything but a struct, the
 text of a `ref`, and the trap of own.ref.7 are not in the subset yet.
 *(ADRs 0067, 0192)*
 
-**native.subset.1** — The native backend compiles programs whose every
-function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
-locals, constants whose values are literals, other constants and operators
-on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
-value), `while`, `for` over a range or a list, `break`, `continue`,
-`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
-field names in a method), method calls, `print` of numbers, strings and
-lists of them or an interpolation of them (with
-`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
-methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
-construct is reported at its position under this rule, all of them at once,
-`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, `unreachable(message)` (err.model.2), `requires`, `ensures`, `old(e)` and struct `invariant` lines (contract.req.1, contract.ens.1-3, contract.inv.2-3, contract.run.1-2, ADR 0612), `path.dir`, `path.base`, `path.ext` and `path.join` (std.path.2-4), `hash.crc32`, `hash.hash64`, `hash.sha256`, `hash.sha384`, `hash.sha512` and `hash.hmac_sha256` (std.hash.2-4), `random.seed`, `random.int`, `random.float` and `random.shuffle` (std.random.2-4, ADR 0614), `unsafe` blocks (unsafe.block.1) as plain blocks, functions marked `@test` (left out of the build, test.attr.2), `@deprecated` and `@inline` (gram.attr.3-4, ADR 0613), and function values (type.fn.1-8, ADR 1067): a declared function named as a value, a function literal with its copied locals, a `fn(...)` parameter, result or local, calls through one, and the list methods that take one (type.coll.21-26). Any other construct is reported at its
-position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393)*
-and the bit operations of expr.bit.1. Also: format specifications on numbers,
-`bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
-`.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
-`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.glob`, `fs.copy`,
-`fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
-`env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
-`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
-call that can fail is in the subset only as the value of `else` with a
-fallback value, a statement that leaves, or a block without a binding
-(err.else.1-2); `else err` and `?` are not yet. Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-8, ADR 1067): a declared function named as a value, a function literal with its copied locals, a `fn(...)` parameter, result or local, calls through one, and the list methods that take one (type.coll.21-26). Any other construct is
-reported at its position under this rule, all of them at once, and nothing
-is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
-function is a free function, a method of a struct or enum, or a method of
-an `impl` block (no generic methods or contracts), in
-the root module or a module it imports (mod.unit.1-5), over `int`, `float`,
-`bool`, `char`, `str`, structs and enums without invariants, generic or not,
-optionals of those and of `char`s (`T?`), and lists of those and of lists,
-with generic functions and types monomorphised (gen.decl.1-2, gen.bound.1),
-using locals, module constants
-of any expression in the subset (computed once before `main` runs),
-arithmetic, comparisons (`==` on enums, structs and lists compares their
-values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
-range or a list, `break`, `continue`, `return`, calls, list comprehensions,
-slices `xs[a..b]`, struct construction, enum variants (bare or qualified),
-fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
-`match` as a statement or a value (variant patterns and bindings, `_`, `|`,
-guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
-strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
-`len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
-`o else d` and `o?` in a function returning an optional (and a `?` chain such as `a?.b.c else d`, err.prop.4), `@allow` and `@deprecated` on functions, functions that can
-fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
-with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
-typed when the function names one error type, a failing
-`main`), the methods `abs`, `min`,
-`max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
-the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
-`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
-`Map[K, V]` and `Set[T]` over `int`, `bool`, `char` and `str` keys (`Map[K, V]()`,
-`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
-include structs and enums, and lists of maps and sets (`Map[K, V]()`,
-`Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
-`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values of
-any type in the subset, enums included (`Map[K, V]()`,
-`Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k)` (a `V?`, type.map.6) and `m.get(k) else ...`,
-`contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, `for mut x in xs` over a list of structs or of `int`, `bool`, `char`, `float` or `str` (an assignment to `x` also sets the element), a `mut` parameter of type `int`, `bool`, `char`, `float`, `str`, an enum or an optional, and an enum `mut self` (the caller passes a cell and reads it back; own.param.2), nested optionals `T??` (a cell holding the inner optional, so `some(none)` differs from `none`; ADR 0209), an empty `{}` where a `Set` is expected, printing a table; an error type with no message, whose fields may be structs (trait.auto.2); a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `m.push(k, x)`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
-that are lists of constants, `join` on lists of strings or characters, and the
-list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
-statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
-`float`, `bool` or `str` (not `by:` keys), `swap`, `take` (type.coll.15), `sum`, `min`, `max`, `first`, `last`
-and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
-sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
-whose type is expected (a function result, argument or field), in functions with at most eight
-`float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); the methods derive generators write (ct.gen.1, ADR 0807); the prelude's `Json` and `Default`, as far as the program reaches them (ADR 0808); format specifications on
-numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression), and `else` followed by a block on `s.to_int()`, `xs.pop()` and `m.get(k)` (the block leaves or ends in the replacement value, err.else.1-3) and `s.to_float()` (a `float?`, type.num.8);
-alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression), `?` on an optional inside an `else` value across operators (err.prop.4) and `s.to_float()` (a `float?`, type.num.8);
-and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
-`fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.glob`, `fs.copy`, `fs.remove`, `fs.make_dir`, `fs.rename`
-(`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`), printing a `T?` (`none` or the value),
-`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
-`path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `fs.read_bytes`, `fs.write_bytes` and `bytes.to_list()` (std.fs.1-2, type.bytes.1), `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
-(std.fs including `write_bytes`, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
-`input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
-`Output` has `status`, `out`, `err` and the methods `ok()` and `text()`; `proc.start`, `proc.wait` and `proc.kill` with a `Child`'s `pid` and `Channel[str]` streams (std.proc.4-7, ADR 0846; `run` and `start` also on macOS); `std.app` (`app.run`, `run_host`, `script`, `outline`) with generic functions that can fail, `return f()` of a failing call, and a trait's default methods for an `impl` in another file
-(std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet); `t := spawn f(args)`
-and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
-`store`, `cas` and `add` (`native.task.1`); `Channel[str]` with `send`, `recv`, `close`, `for v in ch`
-and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, `net.connect_tls` (the TLS 1.3 client, native.net.tls), and on a
-`net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_bytes`, `read_line`, `write`, `write_bytes`, `set_timeout`, `peer`,
-`close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
-per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
-uses TLS 1.3 with `TLS_CHACHA20_POLY1305_SHA256` (preferred), `TLS_AES_128_GCM_SHA256` or `TLS_AES_256_GCM_SHA384` and X25519 (std.tls.1, std.tls.3, ADR 0852: the chain checked against `SSL_CERT_FILE` or the platform bundle as in ADRs 0368-0369; no HelloRetryRequest, no resumption, no close_notify sent), and any failure is kind `tls`; an idle connection a response leaves open is kept for the next request to its origin (std.net.19); `Accept-Encoding: gzip, deflate` is sent and a `gzip`, `x-gzip` or `deflate` body is undone as in std.net.26), `std.net.jar` cookie jars (std.net.20-22), `net.get_bytes`, `net.post_bytes` and `net.request_bytes` (std.net.16), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
-other host is asked of the first three servers of `/etc/resolv.conf` over UDP on Linux (an `A` query, two tries of two seconds each, no search list, no TCP) and of `getaddrinfo` on macOS, and fails with kind `not_found` when none answers), `https` only through `net.get`, `net.post` and `net.request`, a wait does not let other tasks run, the
-message's wording may differ from the interpreter's (the `kind` is the same); and the standard
-modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log`, `std.regex` and `std.time.date`; `regex.captures` is not built yet, and `std.app`
-waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
-at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830, 0838, 0840)*
+**native.subset.1** — The native backend compiles every program `ail check`
+accepts. A construct the lowering cannot yet build (a corner of the language,
+named in the message) is reported at its position under this rule, all of
+them at once with a `help:` line saying how to write it with what is built,
+and nothing is built. The report is a gap in the compiler, not a language
+rule: the other chapters say what each construct means. *(ADRs 0384, 0904)*
 
 ```ail
 fn steps(n int) int
@@ -574,6 +482,33 @@ fn main()
     print(count_after([1, 2, 3, 4, 5], 1))
 ```
 
+**native.promote.1** — In a counted loop (native.bce.1) that has no loop inside
+it, whose every operation is unchecked (no trap can happen in it) and calls
+nothing, the elements `xs[x + k]` it assigns, with `xs` and `x` unchanged by
+the loop, may be held in registers: read once before the loop and written
+once when it ends, with each element's last assigned value. Every other
+element the loop reads or assigns must be `xs[j * c + k']` for the loop's
+counter `j`, which starts at `x0 + d` and steps by 1, where `x = x0 * c` and
+`c * d > k - k'`, so it is never one of them. A loop that runs no iteration
+reads and writes none of them. `AIL_OPT_OFF=promote` turns it off.
+*(ADR 1079)*
+
+```ail rules=native.promote.1
+fn kick(mut s List[float], n int)
+    for i in 0..n
+        bi := i * 3
+        for j in i + 1..n
+            bj := j * 3
+            d := s[bi] - s[bj]
+            s[bi + 1] -= d * 0.5
+            s[bj + 1] += d * 0.5
+
+fn main()
+    mut s := [1.0, 0.0, 0.0, 4.0, 0.0, 0.0, 9.0, 0.0, 0.0]
+    kick(mut s, 3)
+    print(s)
+```
+
 **native.fwd.1** — An access `xs[i]` or `xs[i] = v` may run without its bounds
 check when an access to the same list with the same index value is on every
 path to it, and nothing on those paths can shorten a list: only element
@@ -640,6 +575,55 @@ fn main()
     print(pick([4, 5, 6], 0, false))
 ```
 
+**native.range.1** — An overflow, division or shift check may be omitted
+where intervals of its operands, computed over the whole function, rule the
+trap out. An interval comes from constants, `len()` (below 2^48), masks
+(`bit_and` with a value never negative), shifts, `%`, bytes, and the
+comparisons of the branches that lead to the operation; a loop's value joins
+what every path brings into the loop. A checked operation that can overflow
+keeps its check, and its result counts as within `int` after it. Where the
+intervals don't rule the trap out, the check stays and traps with the same
+message (native.build.1). *(ADR 1063)*
+
+```ail rules=native.range.1
+fn hash3(a int, b int, c int) int
+    x := a.bit_and(255)
+    y := b.bit_and(255)
+    z := c.bit_and(255)
+    (x * 65536 + y * 256 + z) * 2654435761
+
+fn main()
+    print(hash3(300, 255, 511))
+```
+
+**native.range.2** — A comparison of two `int`s whose intervals
+(native.range.1) give one answer may be replaced by that answer, and the
+branch it decides by a jump. *(ADR 1063)*
+
+```ail rules=native.range.2
+fn low(n int) int
+    m := n.bit_and(15)
+    if m < 16
+        return m
+    -1
+
+fn main()
+    print(low(47))
+```
+
+**native.range.3** — `x / 2^k` and `x % 2^k` (k >= 1) of an `x` whose
+interval (native.range.1) has no negative value may compile as a shift and a
+mask, as for a loop counter. *(ADR 1063)*
+
+```ail rules=native.range.3
+fn split(n int) int
+    m := n.bit_and(1023)
+    m / 4 + m % 8
+
+fn main()
+    print(split(1037))
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
@@ -693,6 +677,41 @@ fn main()
     for x in 0..7
         line.push(escape(-2.0 + 3.0 * x.to_float() / 7.0, 0.3))
     print(line)
+```
+
+**native.vec.3** — Inside one basic block, the stores of two `float`s to
+elements `k` and `k + 1` of the same list at the same index value may become
+one two-lane vector store, and the values stored one two-lane computation,
+when both are the same operation (`+`, `-`, `*`, `/`) on operands that pair
+the same way, down to loads of two adjacent elements; a value both lanes use
+is copied into both, and `x * x + y * y` over the two lanes of a pair may be
+one vector multiply and one addition of the lanes. Each lane performs its
+scalar operation with the operands in the written order (no fused
+multiply-add, no reassociation), so every result has the bits of the scalar
+code. A paired load is done at the earlier of its two loads and a paired
+store at the later of its two stores, only when every two accesses that may
+touch the same element, one of them a store, keep their order, and no access
+moves across an operation that can trap or call. Checked accesses (`get`,
+`set` with a bounds check) are never paired. `AIL_OPT_OFF=slp` turns the
+pairing off. *(ADR 1066)*
+
+```ail rules=native.vec.3
+fn main()
+    mut s := [0.0 for _ in 0..12]
+    for k in 0..12
+        s[k] = k.to_float() * 0.5
+    for i in 0..3
+        b := i * 4
+        for j in i + 1..3
+            c := j * 4
+            dx := s[b] - s[c]
+            dy := s[b + 1] - s[c + 1]
+            w := 1.0 / (dx * dx + dy * dy)
+            s[b + 2] -= dx * w
+            s[b + 3] -= dy * w
+            s[c + 2] += dx * w
+            s[c + 3] += dy * w
+    print(s)
 ```
 
 **native.match.1** — A `match` over an `int` or an enum whose arms each test

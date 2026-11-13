@@ -1,14 +1,14 @@
-unclosed_group at 1 (std.regex.11): `(` is never closed
-unopened_group at 1 (std.regex.12): `)` has no matching `(`
-unclosed_class at 0 (std.regex.13): `[` is never closed
-bad_escape at 1 (std.regex.14): `\q` isn't an escape
-bad_repeat at 2 (std.regex.15): a repetition operator can't follow another one; group it with `(?:...)`
-nothing_to_repeat at 0 (std.regex.16): `*` has nothing before it to repeat
-bad_range at 1 (std.regex.17): the range `z-a` runs backwards
-bad_class at 0 (std.regex.18): `Nope` isn't a supported Unicode class; supported: L, Lu, Ll, N, Nd, P, S, Z, Zs, Cc, Letter, Uppercase_Letter, Lowercase_Letter, Number, Decimal_Number, Punctuation, Symbol, Separator, Alphabetic, White_Space, Any, Latin, Greek, Cyrillic, Han, Hiragana, Katakana, Hangul, Arabic, Hebrew, Thai, Devanagari
-bad_group_name at 12 (std.regex.19): two groups are named `n`
-bad_flag at 2 (std.regex.20): `z` isn't a flag; the flags are i, s and m
-unsupported at 3 (std.regex.21): backreferences aren't supported: the engine runs in linear time
-unsupported at 0 (std.regex.21): lookahead isn't supported: the engine runs in linear time
-too_large at 0 (std.regex.22): the pattern compiles to more than 50000 instructions; use smaller repetition counts
+regex.RegexKind.UnclosedGroup at 1 (std.regex.11): `(` is never closed
+regex.RegexKind.UnopenedGroup at 1 (std.regex.12): `)` has no matching `(`
+regex.RegexKind.UnclosedClass at 0 (std.regex.13): `[` is never closed
+regex.RegexKind.BadEscape at 1 (std.regex.14): `\q` isn't an escape
+regex.RegexKind.BadRepeat at 2 (std.regex.15): a repetition operator can't follow another one; group it with `(?:...)`
+regex.RegexKind.NothingToRepeat at 0 (std.regex.16): `*` has nothing before it to repeat
+regex.RegexKind.BadRange at 1 (std.regex.17): the range `z-a` runs backwards
+regex.RegexKind.BadClass at 0 (std.regex.18): `Nope` isn't a supported Unicode class; supported: L, Lu, Ll, N, Nd, P, S, Z, Zs, Cc, Letter, Uppercase_Letter, Lowercase_Letter, Number, Decimal_Number, Punctuation, Symbol, Separator, Alphabetic, White_Space, Any, Latin, Greek, Cyrillic, Han, Hiragana, Katakana, Hangul, Arabic, Hebrew, Thai, Devanagari
+regex.RegexKind.BadGroupName at 12 (std.regex.19): two groups are named `n`
+regex.RegexKind.BadFlag at 2 (std.regex.20): `z` isn't a flag; the flags are i, s and m
+regex.RegexKind.Unsupported at 3 (std.regex.21): backreferences aren't supported: the engine runs in linear time
+regex.RegexKind.Unsupported at 0 (std.regex.21): lookahead isn't supported: the engine runs in linear time
+regex.RegexKind.TooLarge at 0 (std.regex.22): the pattern compiles to more than 50000 instructions; use smaller repetition counts
 ok fine

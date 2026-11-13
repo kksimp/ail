@@ -188,6 +188,17 @@ statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
 to that loop. AIL has no `loop` keyword: the help for it says `while true`.
 *(ADR 0139)*
 
+**expr.loop.8** — `while name := e` runs its block while `e`, of type `T?` or
+`T ! E`, has a value. Each iteration evaluates `e` first. When `e` is present
+or succeeded, `name` is bound to its value, immutably and only within that
+iteration's block, and the block runs. Otherwise the loop ends, and an error
+value is dropped. `break` and `continue` apply to this loop; `continue` evaluates
+`e` again. It is `while true` whose block starts with `name := e else break`
+(`err.else.6`), so `name` follows `expr.bind.4` and a `while` of this form
+that has a value is never a diverging statement (`expr.loop.7`). There is no
+`else err` part and no `elif`. The Rust spelling `while let x = e` is a
+compile-time error whose fix writes `while x := e`. *(ADR 1088)*
+
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
 
@@ -248,11 +259,14 @@ the same type. *(ADR 0117)*
 ## Operators
 
 **expr.prec.1** — Operators bind, from tightest to loosest: postfix (call,
-field, method, index, `?`); unary `-`; `* / %`; `+ -`; comparisons
+field, method, index, `?`); unary `-` and `~`; `* / %`; `+ -`; comparisons
 `== != < <= > >=`; `not`; `and`; `or`; ranges `.. ..=`; `else`
 (`err.else.6`). Binary operators at the same level associate to the left,
 except comparisons, ranges, and `else`, which associates to the right.
 *(ADR 0112, ADR 0144)*
+
+A bit operator (`expr.bit.3`) has no place in this order: it never mixes
+with another operator without parentheses (`expr.bit.4`).
 
 **expr.prec.2** — Two comparison operators in sequence without parentheses
 (e.g. `a < b < c`) are a compile-time error. *(ADR 0112)*
@@ -312,8 +326,9 @@ and name those variants, unless the function allows it with
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`), or written bare to match any fields
-(`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183)*
+for each of its fields (`expr.match.6`, `expr.match.13`), or written bare to
+match any fields (`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183,
+ADR 1069)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -322,7 +337,8 @@ redundant), and the rule applies to each alternative of an or-pattern.
 
 **expr.match.6** — In a pattern `Variant(p1, ..., pn)`, there MUST be one
 `pi` per field, in declaration order. Each `pi` is a new immutable binding
-name or `_`, which ignores the field. *(ADR 0123)*
+name, `_`, which ignores the field, or a pattern of the field's type
+(`expr.match.13`). *(ADR 0123, ADR 1069)*
 
 **expr.match.7** — A literal pattern is an `int` literal (with an optional
 `-`), a `char` literal, a `str` literal without interpolation (a raw string is
@@ -410,8 +426,46 @@ fn main()
     print(grade(30))
 ```
 
-> **Note:** not yet designed: or-patterns that bind names, patterns nested
-> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+**expr.match.13** — A field of a variant pattern may hold a pattern of the
+field's type: a variant pattern, nested to any depth, a literal, a range, a
+tuple pattern, or an or-pattern. A plain name binds the field and `_` ignores
+it; a name that is a variant of the field's enum is an error, so a variant
+without fields is written qualified, `Expr.Nil`. A `match` on an enum whose
+arms nest is exhaustive (`expr.match.2`) only when every value is taken by an
+unguarded arm, and the diagnostic names each missing case as a pattern, such
+as `Add(Num(_), Neg(_))`. An arm, or an alternative of an or-pattern, that
+matches no value the earlier arms leave is redundant (`expr.match.5`).
+*(ADR 1069)*
+
+```ail rules=expr.match.13
+enum Expr
+    Num(n int)
+    Neg(e Expr)
+    Add(a Expr, b Expr)
+    Nil
+
+fn simplify(e Expr) Expr
+    match e
+        Add(Num(a), Num(b)) => Expr.Num(n: a + b)
+        Add(x, Expr.Nil) => x
+        Neg(Neg(x)) => x
+        Neg(Num(0)) => Expr.Num(n: 0)
+        Num | Neg | Add | Nil => e
+
+fn show(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Neg(x) => "-{show(x)}"
+        Add(a, b) => "({show(a)} + {show(b)})"
+        Nil => "nil"
+
+fn main()
+    print(show(simplify(Expr.Add(a: Expr.Num(n: 2), b: Expr.Num(n: 3)))))    # 5
+    print(show(simplify(Expr.Neg(e: Expr.Neg(e: Expr.Num(n: 7))))))         # 7
+    print(show(simplify(Expr.Add(a: Expr.Neg(e: Expr.Nil), b: Expr.Nil))))  # -nil
+```
+
+> **Note:** not yet designed: or-patterns that bind names, a binding pattern for a whole
 > scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
 > suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
 > ADR 0453)*
@@ -524,6 +578,51 @@ MUST trap. *(ADR 0465)*
 flags := 5.bit_or(8)        # 13
 low := flags.bit_and(4)     # 4
 hi := (-8).shr(1)           # -4
+```
+
+**expr.bit.3** — The operators `&`, `|`, `^`, `<<` and `>>` and the prefix
+`~` on `int` are the methods `bit_and`, `bit_or`, `bit_xor`, `shl`, `shr` and
+`bit_not`: `a & b` is `a.bit_and(b)`, `~a` is `a.bit_not()`, and so on, with
+the same results and the same trap (`expr.bit.2`). The operands of a bit
+operator are unary expressions: a name, a literal, a call, `-x`, `~x` or a
+parenthesised expression. A `|` where an operand is expected opens a key
+function (`expr.key.1`); after an operand it is bit-or; a function body runs to
+the end of the expression, so `|x| x | m` is `|x| (x | m)`. *(ADR 1070)*
+
+**expr.bit.4** — A bit operator never meets another operator without
+parentheses. A chain repeats one of `&`, `|`, `^` (`a & b & c`); `a | b & c`,
+`a << 1 << 2`, `a & b == c`, `a + b & c` and `a & b + c` are compile-time
+errors whose help names the parenthesised spelling. No precedence is defined
+between bit operators and the others, because the C ranking is a trap and the
+ranking of other languages differs. *(ADR 1070)*
+
+**expr.bit.5** — `x op= e` for `op` in `& | ^ << >>` means `x = x op e`, for a
+plain name `x`. A place with an index or a field is written out in full. A
+trailing `|` does not continue the line (`lex.stmt.2`), since `|` also closes
+a key function's parameter. *(ADR 1070)*
+
+```ail rules=expr.bit.3,expr.bit.4,expr.bit.5
+fn main()
+    flags := 5 | 8              # 13
+    low := flags & 4            # 4
+    hi := -8 >> 1               # -4
+    mask := ~0 & 255            # 255
+    is_odd := (flags & 1) == 1  # parentheses are required here
+    mut h := 1
+    h ^= h << 3
+    h <<= 1
+    print("{flags} {low} {hi} {mask} {is_odd} {h}")
+```
+
+```ail error=expr.bit.4
+fn main()
+    flags := 5
+    print(flags & 1 == 1)       # error: `&` and `==` need parentheses
+```
+
+```ail error=expr.bit.4
+fn main()
+    print(1 | 2 & 3)            # error: `|` and `&` need parentheses
 ```
 
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
@@ -885,6 +984,21 @@ fn main()
     print(n)                  # 3
     for s in {"a", "b"}
         print(s)              # a b: insertion order
+```
+
+```ail rules=expr.loop.8
+fn main()
+    mut stack := [1, 2, 3]
+    while top := stack.pop()
+        print(top)            # 3 2 1
+    print(stack.len())        # 0
+```
+
+```ail error=expr.loop.8
+fn main()
+    mut stack := [1, 2]
+    while let top = stack.pop()   # error: write `while top := stack.pop()`
+        print(top)
 ```
 
 ```ail error=type.map.5

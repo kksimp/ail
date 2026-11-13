@@ -1,0 +1,53 @@
+# Heap[T] (type.heap.1-5, ADR 1086) against a sorted list, on pseudo-random lists.
+fn lcg(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn main()
+    mut seed := 42
+    mut bad := 0
+    for r in 0..60
+        n := r % 19
+        mut xs := List[int]()
+        for _ in 0..n
+            seed = lcg(seed)
+            xs.push(seed / 65536 % 50)
+        want := xs.sorted()
+        rev := [want[n - 1 - i] for i in 0..n]
+        mut h := Heap[int]()
+        for x in xs
+            h.push(x)
+        if h.len() != n or h.is_empty() != (n == 0)
+            bad += 1
+        if h.peek() != want.first()
+            bad += 1
+        if h.to_sorted() != want
+            bad += 1
+        mut got := List[int]()
+        while x := h.pop()
+            got.push(x)
+        if got != want or not h.is_empty()
+            bad += 1
+        if Heap.from(xs).to_sorted() != want
+            bad += 1
+        mut m := Heap[int](max_first: true)
+        for x in xs
+            m.push(x)
+        if m.to_sorted() != rev
+            bad += 1
+        if Heap.from_max(xs).to_sorted() != rev
+            bad += 1
+    print("bad {bad}")
+    mut words := Heap[str]()
+    words.push("pear")
+    words.push("apple")
+    words.push("fig")
+    print(words.to_sorted())
+    mut empty := Heap[int]()
+    print(empty.pop())
+    print(empty.peek())
+    mut pairs := Heap[(int, str)]()
+    pairs.push((3, "c"))
+    pairs.push((1, "a"))
+    pairs.push((2, "b"))
+    if p := pairs.pop()
+        print("{p.0} {p.1}")

@@ -1,0 +1,4 @@
+fn main()
+    mut stack := [1, 2]
+    while top := stack.pop()
+        print(top)

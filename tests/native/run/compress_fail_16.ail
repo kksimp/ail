@@ -1,4 +1,4 @@
-# `compress.unzlib` fails with: compress.CompressError(kind: "corrupt", message: "truncated zlib trailer")
+# `compress.unzlib` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "truncated zlib trailer")
 use std.compress
 
 fn main() !

@@ -8,7 +8,7 @@ struct Themed
 
 impl app.App for Themed
     fn update(mut self, ev app.Event)
-        if ev.kind == "appearance"
+        if ev.kind == Appearance
             seen.push(ev.text)
             dark = ev.text == "dark"
 

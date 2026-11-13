@@ -821,6 +821,8 @@ fn mentions_prelude(srcs List[mir.Source]) bool
             or s.text.contains("Default")
             or s.text.contains("Grid")
             or s.text.contains("Seq")
+            or s.text.contains("Heap")
+            or s.text.contains("Deque")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
         if s.text.contains("@derive")
@@ -1302,11 +1304,13 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--fix] [--deny LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
     mut repair := false
     mut deny := List[str]()
+    mut allow_given := false
+    mut allow_text := ""
     mut paths := List[str]()
     mut i := 0
     while i < rest.len()
@@ -1321,6 +1325,10 @@ fn check_cmd(rest List[str])
             i += 1
         elif a == "--deterministic"
             deny.extend(check.deterministic_deny())
+        elif a == "--allow" and has
+            allow_given = true
+            allow_text = "{allow_text},{rest[i + 1]}"
+            i += 1
         elif a == "--deny" and has
             parsed := check.parse_deny(rest[i + 1])
             if parsed.1 != ""
@@ -1337,6 +1345,13 @@ fn check_cmd(rest List[str])
     if paths.len() != 1
         io.eprint(usage)
         io.exit(2)
+    if allow_given
+        # eff.allow.1: what the allow-list leaves out is denied, as with `--deny`.
+        allowed := check.parse_allow(allow_text)
+        if allowed.1 != ""
+            io.eprint("error: {allowed.1}")
+            io.exit(2)
+        deny.extend(allowed.0)
     std := path.join(path.dir(compiler_dir()), "std")
     if repair
         # fix.check.1: apply every safe fix to a fixed point, then check what is left.

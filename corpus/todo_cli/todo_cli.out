@@ -1,0 +1,30 @@
+> list
+nothing to do
+0 open, 0 done
+> add buy milk
+added 1: buy milk
+> add write the report
+added 2: write the report
+> add call mom
+added 3: call mom
+> list
+[ ] 1 buy milk
+[ ] 2 write the report
+[ ] 3 call mom
+3 open, 0 done
+> done 2
+completed 2
+> done 9
+no such todo: 9
+> rm 1
+removed 1
+> add water plants
+added 4: water plants
+> frobnicate now
+unknown command: frobnicate
+> list
+[x] 2 write the report
+[ ] 3 call mom
+[ ] 4 water plants
+2 open, 1 done
+file holds 3 lines

@@ -1,0 +1,12 @@
+README.md (7)
+docs/
+  guide.txt (24)
+empty/
+src/
+  core/
+    engine.txt (22)
+    util.txt (8)
+  main.txt (12)
+5 files, 4 dirs, 73 bytes
+walk finds 5 files
+cleaned up: true

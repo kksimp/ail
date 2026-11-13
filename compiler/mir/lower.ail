@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## Each struct's field defaults, in field order (type.struct.8, lower_fielddef.ail).
+    field_defaults Map[str, List[ast.Expr?]]
     ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
     hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
@@ -297,6 +299,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        field_defaults: {},
         hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),
@@ -555,11 +558,14 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5); `@tool` only feeds the attach derive (attach.tool.1).
         if a.name != "inline"
             and a.name != "pure"
+            and a.name != "caps"
             and a.name != "allow"
             and a.name != "deprecated"
             and a.name != "test"
             and a.name != "export c"
             and a.name != "tool"
+            and a.name != "fixture"
+            and a.name != "needs"
             and a.name != "variadic c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
@@ -944,7 +950,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     body := f.body else
         lower_extern(f, name, params)
         return
-    if lower_ui_intrinsic(f, key, name, params)
+    if lower_ui_intrinsic(f, key, name, params) or lower_rt_flag(key, name, f.pos)
         return
     if not unchecked
         enter_contracts(f, key)
@@ -1853,7 +1859,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_print(args, pos)
             if name == ast.YIELD and not is_rt
                 return lower_yield(args, pos)
-            if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
+            if ASSERT_FNS.contains(name) and not is_rt and lookup(name) == none
                 return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(none, args, pos)
@@ -1896,7 +1902,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if name == "zip" and not sigs.contains(key)
                 return lower_zip(args, pos)
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
-            if variadic_decl(key)
+            if c_call_site(key)
                 return lower_variadic(key, sig, args, pos, npos)
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")

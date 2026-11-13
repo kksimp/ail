@@ -1,0 +1,45 @@
+## Keywords as names (lex.kw.3, ADR 1085): a field, a name after `.`, a label
+## before `:` and a method may be any keyword. Inside a method a keyword-named
+## field is `self.error`; the bare word is still the keyword.
+
+struct Outcome
+    job str
+    error str
+    match int
+
+enum Step
+    Done(value int)
+    Failed(error str, in str)
+
+impl ToJson for Step
+impl FromJson for Step
+
+fn Outcome.any(self) bool
+    self.error != "" or self.match > 0
+
+trait Named
+    fn ref(self) str
+
+impl Named for Outcome
+    fn ref(self) str
+        "outcome {self.job}"
+
+fn describe(s Step) str
+    match s
+        Done(v) => "done {v}"
+        Failed(e, place) => "failed in {place}: {e}"
+
+fn main() !
+    a := Outcome(job: "a", error: "", match: 0)
+    b := Outcome(job: "b", error: "disk full", match: 2)
+    print("{b.error} {b.match}")
+    print("{a.any()} {b.any()}")
+    print(b.ref())
+    print(b.error.len() - 1)
+    s := Step.Failed(error: "timeout", in: "fetch")
+    print(describe(s))
+    print(describe(Step.Done(value: 3)))
+    text := s.to_json().to_text()
+    print(text)
+    back := Step.from_json(parse_json(text)?)?
+    print(describe(back))

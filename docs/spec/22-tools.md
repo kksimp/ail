@@ -654,7 +654,9 @@ what it would otherwise recall from memory
 
 **api.find.1** — `ail ask std WORDS...` prints at most ten lines, best first,
 each `MODULE.SIGNATURE   (RULE)` with the signature as the spec writes it
-(`fs.read_text(path str) str ! IoError   (std.fs.1)`). Exit status is 0 when
+(`fs.read_text(path str) str ! IoError   (std.fs.1)`). A built-in method
+(`api.find.5`) prints as `TYPE.SIGNATURE   (RULE)`
+(`List.sorted(by: |x| key) List[T]   (type.coll.11)`). Exit status is 0 when
 there are lines, 1 when there are none, 2 for an error.
 
 **api.find.2** — The words are matched against the standard library's rules in
@@ -663,7 +665,13 @@ the spec: a rule `**std.M.N**` whose text starts with a backticked signature
 for each word that is its name, 3 for each word its name contains (of three
 letters or more), 2 for each word that is its module, and 1 for each word (or
 its plural or singular) in the rule's text. Filler words (`a`, `the`, `of`,
-`to`, `by`, `in`, `from`, `and`, `std`, ...) say nothing.
+`to`, `by`, `in`, `from`, `and`, `std`, ...) say nothing. A function is
+printed only when it is answered, so one stray word no longer answers: some
+word is its name, a `_` piece of its name, or the start of one of at least four
+letters (`sort` for `sorted`), or at least two different words hit it in any
+way above, or the only word is its module. A word that names a type or a common
+noun (`list`, `map`, `str`, `key`, `file`, `text`, ...) never answers by hitting a
+name.
 
 **api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
@@ -671,9 +679,33 @@ and `! Error` is ignored. A function scores 6 when its parameter types equal
 the asked ones in order, else 1 for each asked type among its parameters, and 4
 when its result type equals the asked one.
 
-**api.find.4** — A query that matches nothing prints nothing and exits 1. No
-words, or an unknown option, is a usage error (status 2). The index is read from
-the repository's `docs/spec`, found as `ail explain` finds it.
+**api.find.4** — A query that nothing answers exits 1 and prints
+`nothing in std matches WORDS` (`api.find.5`). No words, or an unknown option,
+is a usage error (status 2). The index is read from the repository's `docs/spec`
+and `docs/design`, found as `ail explain` finds it.
+
+**api.find.5** — `ail ask std WORDS...` also searches the built-in methods of
+`str`, `char`, `int`, `float`, `bytes`, `List`, `Map`, `Set`, `Grid`, optionals
+and tuples, which `docs/design/builtin-methods.txt` lists one per line
+(`SIGNATURE ; RULE ; WORDS`, the rule being the `type.*` rule that defines it).
+A method is matched like a function, its type is its module, and its words are
+those of its line. On a miss, the line after `nothing in std matches WORDS` is
+the answer of the first row of `docs/design/not-in-std.txt` (`WORDS|WORDS ->
+ANSWER`) one of whose alternatives has all its words in the query; no row, no
+second line. `tools/check-method-table.py` checks that every rule of the table
+exists and that every built-in method of the checker is in it.
+
+**api.find.6** — `ail ask how WORDS...` searches `docs/how-to.md`, whose `##`
+sections are one task each (`sort descending`, `read a file by lines`): a title,
+a `Words:` line and a block of code the docs check keeps compiling. A section is
+answered when a word is a non-generic word of its title or two words are among
+its title and `Words:` line. The best section is printed, as its title and
+`(docs/how-to.md)`, its text and its code, then `also: TITLE; TITLE` for up to
+two more. No answer prints `no how-to matches WORDS` and the titles, status 1.
+No words lists the titles.
+
+**api.find.7** — The MCP tool `ail_find` takes `words`, `sig` or `how` (words
+for `api.find.6`).
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
@@ -703,7 +735,22 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,zzqqxx status=1 rules=api.find.4
+```ail tool=ask,std,zzqqxx status=1 expect=nothing rules=api.find.4,api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,sort,list,by,key expect=List.sorted(by: rules=api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,sqlite,database status=1 expect=nothing rules=api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,how,sort,descending expect=sorted(by: rules=api.find.6
 fn main()
     print(1)
 ```
@@ -1300,7 +1347,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`package NAME`, [mod.pkg.1](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.1` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,
@@ -1399,13 +1446,13 @@ fn main()
 
 **tool.doctor.1** — `ail doctor [--json]` prints one line per check: `ok NAME: DETAIL`, or
 `warn`/`fail NAME: DETAIL; fix: WHAT TO RUN`. The checks are the toolchain root, the version and seed
-tag, the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
+tag, the language version of the project in the current directory ([mod.pkg.10](12-modules.md)), the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
 std.app and std.audio hosts. The exit status is 1 when a required check (root, git, cache) fails.
 With `--json` it is one array of objects with `name`, `status`, `detail`, `fix` and `required`.
 *(ADR 1058)*
 
 **tool.doctor.2** — `ail doctor --path` prints one line to add to the shell profile that puts the
-toolchain's directory on PATH (`export PATH="DIR:$PATH"`, or `$env:Path = "DIR;" + $env:Path` on
+toolchain's directory on PATH (`export PATH="DIR:$PATH"`, or `$env:PATH = "DIR;" + $env:PATH` on
 Windows) and changes nothing. `ail new` prints a hint on standard error when `ail` is not on PATH.
 *(ADR 1058)*
 

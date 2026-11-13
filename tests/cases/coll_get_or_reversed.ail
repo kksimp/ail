@@ -1,0 +1,12 @@
+fn main()
+    m := {"a": 1, "b": 2}
+    print(m.get_or("a", 0))
+    print(m.get_or("z", 7))
+    names := {1: "one"}
+    print(names.get_or(2, "many"))
+    xs := [3, 1, 2]
+    ys := xs.reversed()
+    print(ys)
+    print(xs)
+    print(xs.sorted().reversed())
+    print(["a", "b"].reversed())

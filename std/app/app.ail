@@ -210,11 +210,10 @@ impl ToJson for Node
                 member("ops", Json.Arr([o.to_json() for o in ops])),
             ])
 
-## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
-## `click`, `scroll`, `key`, `keyup` (key release, std.app.20), `resize`, `close`, `external` (std.app.14), `move`, `leave` (std.app.16), `popup` (std.app.18) or `appearance` (std.app.30; `text` is `dark` or `light`); the other
-## fields are zero or empty when they don't apply.
+## What happened (std.app.5, ADR 1068): `kind` says which event it is; the
+## other fields are zero or empty when they don't apply.
 pub struct Event
-    pub kind str
+    pub kind EventKind
     ## The control's id (`press`, `edit`, `submit`, `toggle`, and the canvas
     ## for `click`, `scroll` and `key`).
     pub id str
@@ -292,7 +291,7 @@ pub fn progress(source str, p Progress) Event
 
 ## The progress an event carries, or `none` for any other event (std.app.15).
 pub fn progress_of(ev Event) Progress?
-    if ev.kind != "external" or not ev.text.starts_with("progress|")
+    if ev.kind != EventKind.External or not ev.text.starts_with("progress|")
         return none
     parts := ev.text.split("|", 4)
     if parts.len() < 4
@@ -301,11 +300,110 @@ pub fn progress_of(ev Event) Progress?
     total := parts[2].to_int()?
     Progress(done: done, total: total, note: parts[3])
 
-## Why an app couldn't run (std.app.9): `no_host`, `start`, `version` or
-## `host_exited`.
+## The kinds of `Event` (std.app.5). On the wire each is its name in snake
+## case (`KeyUp` is `keyup`, `PickError` is `pick_error`); a name the
+## program doesn't know is `Other`, which `run` skips (std.app.8).
+pub enum EventKind
+    Start
+    Press
+    Edit
+    Submit
+    Toggle
+    Click
+    Down
+    Up
+    Move
+    Leave
+    Scroll
+    Key
+    KeyUp
+    Resize
+    Close
+    External
+    Popup
+    Appearance
+    Paste
+    Picked
+    PickError
+    Pad
+    Vsync
+    Measured
+    Exited
+    Other
+
+## The kind named `name` on the wire, or `Other`.
+pub fn kind_of(name str) EventKind
+    match name
+        "start" => EventKind.Start
+        "press" => EventKind.Press
+        "edit" => EventKind.Edit
+        "submit" => EventKind.Submit
+        "toggle" => EventKind.Toggle
+        "click" => EventKind.Click
+        "down" => EventKind.Down
+        "up" => EventKind.Up
+        "move" => EventKind.Move
+        "leave" => EventKind.Leave
+        "scroll" => EventKind.Scroll
+        "key" => EventKind.Key
+        "keyup" => EventKind.KeyUp
+        "resize" => EventKind.Resize
+        "close" => EventKind.Close
+        "external" => EventKind.External
+        "popup" => EventKind.Popup
+        "appearance" => EventKind.Appearance
+        "paste" => EventKind.Paste
+        "picked" => EventKind.Picked
+        "pick_error" => EventKind.PickError
+        "pad" => EventKind.Pad
+        "vsync" => EventKind.Vsync
+        "measured" => EventKind.Measured
+        "exited" => EventKind.Exited
+        _ => EventKind.Other
+
+## The wire name of `kind` (`""` for `Other`).
+pub fn kind_name(kind EventKind) str
+    match kind
+        EventKind.Start => "start"
+        EventKind.Press => "press"
+        EventKind.Edit => "edit"
+        EventKind.Submit => "submit"
+        EventKind.Toggle => "toggle"
+        EventKind.Click => "click"
+        EventKind.Down => "down"
+        EventKind.Up => "up"
+        EventKind.Move => "move"
+        EventKind.Leave => "leave"
+        EventKind.Scroll => "scroll"
+        EventKind.Key => "key"
+        EventKind.KeyUp => "keyup"
+        EventKind.Resize => "resize"
+        EventKind.Close => "close"
+        EventKind.External => "external"
+        EventKind.Popup => "popup"
+        EventKind.Appearance => "appearance"
+        EventKind.Paste => "paste"
+        EventKind.Picked => "picked"
+        EventKind.PickError => "pick_error"
+        EventKind.Pad => "pad"
+        EventKind.Vsync => "vsync"
+        EventKind.Measured => "measured"
+        EventKind.Exited => "exited"
+        EventKind.Other => ""
+
+## Why an app couldn't run (std.app.9, ADR 1068).
 pub error struct AppError
-    pub kind str
+    pub kind AppKind
     pub message str
+
+pub enum AppKind
+    NoHost
+    Start
+    Version
+    HostExited
+    ## `std.attach`: the attach server couldn't listen, or write its file.
+    Listen
+    Attach
 
 ## Builders. A variant with two fields of one type can't be built by
 ## position (type.struct.7); these can.
@@ -361,7 +459,7 @@ pub fn bitmap_data(rgba List[int]) str
     bytes.from_list([v.to_u8() for v in rgba]).base64()
 
 ## An event of `kind` with every other field zero or empty.
-pub fn event(kind str) Event
+pub fn event(kind EventKind) Event
     Event(
         kind: kind,
         id: "",
@@ -416,20 +514,20 @@ pub fn generic_of(font str) str
 
 ## A button press, for tests.
 pub fn press(id str) Event
-    mut e := event("press")
+    mut e := event(EventKind.Press)
     e.id = id
     e
 
 ## A field edit, for tests.
 pub fn edit(id str, value str) Event
-    mut e := event("edit")
+    mut e := event(EventKind.Edit)
     e.id = id
     e.text = value
     e
 
 ## A key, for tests.
 pub fn key(name str) Event
-    mut e := event("key")
+    mut e := event(EventKind.Key)
     e.text = name
     e
 
@@ -445,7 +543,7 @@ pub fn Inbox.post(self, ev Event)
 
 ## An `external` event from `source` with `data`, for `Inbox.post`.
 pub fn external(source str, data str) Event
-    mut e := event("external")
+    mut e := event(EventKind.External)
     e.id = source
     e.text = data
     e
@@ -572,7 +670,7 @@ pub fn step[T App](mut a T, ev Event) str
 ## are zero or empty.
 pub fn event_from_json(j Json) Event
     Event(
-        kind: j.text("kind", ""),
+        kind: kind_of(j.text("kind", "")),
         id: j.text("id", ""),
         text: j.text("text", ""),
         x: j.num("x") else 0.0,
@@ -624,7 +722,7 @@ pub fn host_path() str ! AppError
     if p := env.get("AIL_APP_HOST")
         return p
     root := env.get("AIL_ROOT") else return AppError(
-        kind: "no_host",
+        kind: NoHost,
         message: "set AIL_APP_HOST to the app host program",
     )
     p := "{root}/tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost"
@@ -636,7 +734,7 @@ pub fn host_path() str ! AppError
     q := "{root}/tools/app-host/linux/build/ail-app-host"
     if not fs.exists(q)
         return AppError(
-            kind: "no_host",
+            kind: NoHost,
             message: "no host is built; run tools/app-host/macos/run.sh (macOS), tools/app-host/linux/run.sh (Linux) or tools/app-host/windows/run.ps1 (Windows)",
         )
     q
@@ -662,7 +760,7 @@ pub fn new_inbox() Inbox
 ## made with `inbox()` and gave to its own tasks.
 pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
     mut c := proc.start(cmd, args) else err
-        return AppError(kind: "start", message: "{err}")
+        return AppError(kind: Start, message: "{err}")
     mut sent := frame(a)
     mut shown := a.popup()
     mut chosen := a.pick()
@@ -678,11 +776,11 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
     mut queued := List[Event]()
     while true
         # std.app.8: a line that isn't an event is skipped.
-        if ev.kind == "exited"
+        if ev.kind == EventKind.Exited
             return gone(move c)
-        if ev.kind != ""
+        if ev.kind != EventKind.Other
             a.update(ev)
-        if ev.kind == "close"
+        if ev.kind == EventKind.Close
             break
         # std.app.13: ask the host for the widths the app wants, a few rounds
         # at most; events that arrive meanwhile are handled afterwards.
@@ -696,9 +794,9 @@ pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
             mut used := List[str]()
             while true
                 got := inbox.ch.recv() else return gone(move c)
-                if got.kind == "exited"
+                if got.kind == EventKind.Exited
                     return gone(move c)
-                if got.kind == "measured"
+                if got.kind == EventKind.Measured
                     widths = [w.to_float() else 0.0 for w in got.text.split(",")]
                     if got.fonts != ""
                         used = got.fonts.split(",")
@@ -746,7 +844,7 @@ fn pump(out Channel[str], inbox Inbox)
     while true
         line := out.recv() else break
         inbox.post(event_from_json(parse_json(line) else Json.Null))
-    inbox.post(event("exited"))
+    inbox.post(event(EventKind.Exited))
 
 ## The request for the widths of `runs` (std.app.13).
 fn measure_line(runs List[Measure]) str
@@ -788,8 +886,8 @@ fn popup_line(p Popup) str
 
 fn gone(move c proc.Child) ! AppError
     status := proc.kill(move c)
-    AppError(kind: "host_exited", message: "the app host exited with status {status}")
+    AppError(kind: HostExited, message: "the app host exited with status {status}")
 
 fn mismatch(move c proc.Child, line str) ! AppError
     proc.kill(move c)
-    AppError(kind: "version", message: "the app host spoke another protocol: {line}")
+    AppError(kind: Version, message: "the app host spoke another protocol: {line}")

@@ -211,26 +211,21 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     ty: Ty.Str,
                 )
             "find" =>
-                if not (vs[0].ty == Ty.Str)
-                    problem(npos, "`.find()` needs a `str`, found `{vs[0].ty.name()}`")
-                    return none
+                a := text_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Int)
-                return Val(id: call("rt.str_find_opt", [r.id, vs[0].id], t), ty: t)
+                return Val(id: call("rt.str_find_opt", [r.id, a], t), ty: t)
             "rfind" =>
-                if not (vs[0].ty == Ty.Str)
-                    problem(npos, "`.rfind()` needs a `str`, found `{vs[0].ty.name()}`")
-                    return none
+                a := text_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Int)
-                return Val(id: call("rt.str_rfind_opt", [r.id, vs[0].id], t), ty: t)
+                return Val(id: call("rt.str_rfind_opt", [r.id, a], t), ty: t)
             "count" =>
-                if not (vs[0].ty == Ty.Str)
-                    problem(npos, "`.count()` needs a `str`, found `{vs[0].ty.name()}`")
-                    return none
+                a := text_arg(vs[0], name, npos)?
                 h := trap_head("type.str.18", npos)
                 return Val(
-                    id: call("rt.str_count", [r.id, vs[0].id, h, trap_tail(npos)], Ty.Int),
+                    id: call("rt.str_count", [r.id, a, h, trap_tail(npos)], Ty.Int),
                     ty: Ty.Int,
                 )
+            "to_int" => return str_to_int_radix(r, vs[0], npos)
             "char_at" =>
                 i := int_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Char)
@@ -262,14 +257,13 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     ty: Ty.Str,
                 )
             "replace" =>
-                if not (vs[0].ty == Ty.Str and vs[1].ty == Ty.Str)
-                    problem(npos, "`.replace()` needs two `str`s")
-                    return none
+                a := text_arg(vs[0], name, npos)?
+                b := text_arg(vs[1], name, npos)?
                 h := trap_head("type.str.14", npos)
                 return Val(
                     id: call(
                         "rt.str_replace",
-                        [r.id, vs[0].id, vs[1].id, h, trap_tail(npos)],
+                        [r.id, a, b, h, trap_tail(npos)],
                         Ty.Str,
                     ),
                     ty: Ty.Str,
@@ -355,3 +349,43 @@ fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if name == "to_float" and vs.len() == 0
         return lower_to_float(r)
     return lower_str_method(r, name, npos, vs)
+
+## `s.to_int(radix)` (type.str.20): an `int?` in `radix`, which traps outside 2 to 36.
+fn Lower.str_to_int_radix(mut self, r Val, radix Val, pos ast.Pos) Val?
+    k := int_arg(radix, "to_int", pos)?
+    check_radix(k, pos)
+    t := Ty.Opt(Ty.Int)
+    n := call("rt.str_to_int_radix", [r.id, k], Ty.Int)
+    ok := call("rt.parse_ok", [], Ty.Bool)
+    join := new_block()
+    res := new_value(t, "")
+    blocks[join].params.push(res)
+    yes := new_block()
+    no := new_block()
+    branch(ok, yes, [], no, [])
+    seal(yes)
+    seal(no)
+    cur = yes
+    jump(join, [some(Val(id: n, ty: Ty.Int)).id])
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: res, ty: t)
+
+## Trap `type.str.20` unless `radix` is 2 to 36.
+fn Lower.check_radix(mut self, radix int, pos ast.Pos)
+    lo := binary(ast.BinOp.Ge, Val(id: radix, ty: Ty.Int), Val(id: konst(2, Ty.Int), ty: Ty.Int), pos)
+    hi := binary(ast.BinOp.Le, Val(id: radix, ty: Ty.Int), Val(id: konst(36, Ty.Int), ty: Ty.Int), pos)
+    ok1 := check_branch(lo.id)
+    radix_trap(radix, pos)
+    cur = ok1
+    ok2 := check_branch(hi.id)
+    radix_trap(radix, pos)
+    cur = ok2
+
+fn Lower.radix_trap(mut self, radix int, pos ast.Pos)
+    trap_open("type.str.20", pos)
+    say("a radix is 2 to 36, found ")
+    describe(Val(id: radix, ty: Ty.Int), pos)
+    trap_close(pos)

@@ -1,0 +1,84 @@
+## A bank ledger in cents. Text commands (deposit, withdraw, transfer) are
+## applied in order; a bad command fails with a typed error and is skipped, so
+## balances never go negative. Prints each rejection and the final balances.
+
+error enum LedgerError
+    Unknown(who str) "no such account {who}"
+    Insufficient(who str, short int) "{who} is short by {short}"
+    BadLine(text str) "cannot parse '{text}'"
+
+struct Ledger
+    balances Map[str, int]
+    applied int
+
+fn Ledger.debit(mut self, who str, amt int) ! LedgerError
+    bal := self.balances.get(who) else return Unknown(who: who)
+    if bal < amt
+        return Insufficient(who: who, short: amt - bal)
+    self.balances[who] = bal - amt
+
+fn Ledger.apply(mut self, line str) int ! LedgerError
+    parts := line.split(" ")
+    amt := parts[parts.len() - 1].to_int() else return BadLine(text: line)
+    cmd := parts[0]
+    if cmd == "deposit" and parts.len() == 3
+        self.balances[parts[1]] += amt
+    elif cmd == "withdraw" and parts.len() == 3
+        self.debit(parts[1], amt)?
+    elif cmd == "transfer" and parts.len() == 4
+        self.debit(parts[1], amt)?
+        self.balances[parts[2]] += amt
+    else
+        return BadLine(text: line)
+    self.applied += 1
+    amt
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn main()
+    lines := [
+        "deposit alice 10000",
+        "deposit bob 2550",
+        "withdraw alice 2599",
+        "transfer alice bob 5000",
+        "withdraw bob 9999",
+        "transfer bob carol 1",
+        "withdraw dave 5",
+        "deposit carol abc",
+        "audit alice 1",
+        "transfer bob carol 7550",
+    ]
+    mut ledger := Ledger(balances: {}, applied: 0)
+    mut moved := 0
+    for line in lines
+        n := ledger.apply(line) else err
+            print("rejected: {line} -> {err}")
+            continue
+        moved += n
+    mut names := []
+    for key in ledger.balances.keys()
+        names.push(key)
+    names.sort()
+    for who in names
+        print("{who}: {money(ledger.balances[who])}")
+    print("applied {ledger.applied} of {lines.len()}, moved {money(moved)}")
+
+@test fn deposit_then_withdraw()
+    mut l := Ledger(balances: {}, applied: 0)
+    l.apply("deposit a 500")?
+    l.apply("withdraw a 200")?
+    assert_eq(l.balances["a"], 300)
+    assert_eq(l.applied, 2)
+
+@test fn overdraft_is_rejected()
+    mut l := Ledger(balances: {}, applied: 0)
+    l.apply("deposit a 100")?
+    r := l.apply("withdraw a 101") else -1
+    assert_eq(r, -1)
+    assert_eq(l.balances["a"], 100)
+
+@test fn formats_money()
+    assert_eq(money(5), "0.05")
+    assert_eq(money(12345), "123.45")

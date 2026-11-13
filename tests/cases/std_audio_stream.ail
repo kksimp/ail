@@ -11,7 +11,7 @@ fn main() !
 
 fn run() bool ! device.DeviceError
     mut c := device.open_null() else err
-        if err.kind == "no_host"
+        if err.kind == NoHost
             return true
         return err
     device.stream_open(mut c, 8000, 1)?

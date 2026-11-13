@@ -60,6 +60,8 @@ fn Lower.declare_enums(mut self, prog ast.Program)
 fn Lower.enum_key(self, name str) str?
     parts := name.split(".")
     if parts.len() > 1
+        if k := std_kind_key(parts)
+            return k
         m := aliases.get(parts[0])?
         key := "{m}.{parts[1..].join(".")}"
         return if enums.contains(key) then key else none

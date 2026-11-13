@@ -1,0 +1,6 @@
+fn main()
+    text := fs.read_text("settings.txt") else err
+        if err.kind == "not_found"
+            print("no settings yet")
+        ""
+    print(text.len())

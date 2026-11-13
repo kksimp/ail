@@ -1,0 +1,15 @@
+{"name":"demo","port":8080,"ratio":0.5,"debug":true,"off":"no","nothing":null,"empty":null,"version":"1.2.3","tags":["a","b c",3],"point":{"x":1,"y":2},"list":["one",{"two":2,"three":3},["x","y"]]}
+{"a":"line1\nline2\n","b":"folded text\npara","c":"tab\there A","d":"it's # not a comment","e":"http://x.y/z#frag"}
+{"items":[1,2,3],"nested":["a","b"],"last":-4}
+[31,15,1000,-2.5,7,0.5,"12abc","yes"]
+{"a b":1,"c":{"d":[],"e":{}}}
+[1,2]
+42
+null
+error: anchors (&name) are not supported: write the value out in full (line 1)
+error: duplicate key 'a' (line 2)
+error: several documents are not supported: parse one document at a time (line 2)
+error: tabs cannot indent YAML: use spaces (line 2)
+error: a mapping cannot start on the same line as its key: put the inner map on its own indented lines or write it with braces (line 1)
+error: unterminated string (a quoted string must end on the line it starts, or use a | block) (line 1)
+error: unterminated '[' (line 1)

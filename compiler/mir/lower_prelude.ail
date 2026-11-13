@@ -136,6 +136,8 @@ pub fn prelude_text(text str) str
                 "derive",
                 "argsderive",
                 "grid",
+                "heap",
+                "deque",
                 "seq",
             ].contains(m.trim())
         out.push(if keep then line else "")

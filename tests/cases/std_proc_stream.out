@@ -6,7 +6,7 @@ out first
 err second
 events 3
 4
-sleep: timed_out
+sleep: proc.ProcKind.TimedOut
 -1
 137
-not_found
+proc.ProcKind.NotFound

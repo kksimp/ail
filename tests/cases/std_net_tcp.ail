@@ -13,7 +13,7 @@ fn echo(l net.Listener) !
 
 fn connect_kind(port int) str
     c := net.connect("127.0.0.1", port) else err
-        return err.kind
+        return "{err.kind}"
     c.close()
     "connected"
 

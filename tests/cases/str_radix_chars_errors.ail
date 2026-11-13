@@ -1,0 +1,5 @@
+fn main()
+    print("1".to_int(1))
+    print("1".to_int(2.5))
+    print(5.to_str(37))
+    print("ab".find(1))

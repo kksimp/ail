@@ -9,7 +9,7 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail test FILE.ail          # run the `@test` functions
+./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail api --text FILE.ail    # declarations and `##` docs without bodies
 ./ail explain RULE           # a rule's text, its ADRs and an example
@@ -81,12 +81,11 @@ Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
-Regex (RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `is_match(re, s)`, `find(re, s)` (`Match?`), `find_all`, `group_all(re, s, n)`, `captures(re, s)`, `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`.
-
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
+
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `t.matmul(u)`, `t + u`, `t * 2.0`, `t.dot(u)`, `t.sum(axis?)`, `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
-`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`.
+`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `use std.file`; `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?`.
 
@@ -123,6 +122,10 @@ fn main()
 
 `==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
 
+A keyword may name a field, a method or a label: `error str`, `o.error`,
+`Outcome(error: "")`, `fn T.any(self)`. In a method reach such a field as
+`self.error`; anywhere else a keyword is not a name.
+
 Variants can carry fields. Build them like structs; match them by position:
 
 ```ail
@@ -135,6 +138,8 @@ fn area(s Shape) int
         Circle(r) => 3 * r * r
         Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
 ```
+
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`.
 
 ## Absence and errors
 
@@ -181,6 +186,12 @@ fn main() !                                 # main can fail; the error is report
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
+- Which one failed: `match err` with `IoError =>` (there `err` is an
+  `IoError`) and `ParseError.Empty =>`; every member must be covered.
+- Standard errors carry a `kind` enum: `if err.kind == NotFound` or
+  `match err.kind` (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`); never a string.
+  So are `app.Event.kind` (`ev.kind == Press`) and keys (`key == Escape`,
+  `Text("q")`).
 
 ## Traits and generics
 
@@ -309,6 +320,8 @@ sign := if n < 0 then "-" else "+"   # the one-line form
 
 while n > 0
     n -= 1
+while top := xs.pop()      # loops while the T? or T ! E has a value, binding it
+    print(top)
 
 for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x == 0
@@ -349,14 +362,19 @@ Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x
   `x.to_int()`. An int literal works where a float is expected.
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(n)`, `shr(n)` (count 0-63).
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 
 ```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
+m := """
+    line one
+      indented
+    """                     # multi-line: "line one\n  indented"; the common indent is removed, the closing line adds no newline
+r := r"C:\dir\{x}"          # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
-print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
+print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad, binary, thousands, fill and align
 ```
 
 - Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
@@ -406,6 +424,12 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 
 Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
 `Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
+
+Priority queue: `h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
+for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
+`h.is_empty()`, `Heap.from(xs)`. Double-ended queue: `d := Deque[int]()`,
+`push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
+`d.at(i)`, `d.to_list()`.
 
 ## Maps and sets
 
@@ -529,6 +553,18 @@ fn double(x int) int
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
+```ail fragment
+@fixture("drop")                    # made per test run, `drop` always runs after it
+fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
+    "x"
+
+fn drop(v str)                      # takes the value, returns nothing
+
+@test @needs("tmp")
+fn uses(tmp str)                    # parameter named like the fixture
+    assert(tmp == "x")
+```
+
 A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.
 
 ## Packages, effects and the system
@@ -537,9 +573,11 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
-one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
+one. A call whose value is dropped and that has no effect is an error: `xs.sorted()` alone
+means `xs.sort()`; write `_ := f()` to drop a value on purpose (`eff.use.1`).
+`ail run --deterministic` denies `clock`, `random`, `proc` and `net`. `ail run --allow fs.read=./data,net=host:443` allows only what it names, and a use outside the scope ends with `trap[eff.allow.N]`.
 
-`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`.
+`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`. Structs of C-typed fields pass to C by value; a `fn(...)` parameter of an `extern c fn` takes a declared function's name as a callback (`mem.c_fn(f)` gives a `*u8`).
 
 A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
 
@@ -550,8 +588,8 @@ fn main()
     w.present()
     while true
         match w.next_event()
-            Key(key, _, _, _) =>                   # "a", "enter"; (key, ctrl, alt, shift)
-                if key == "escape"
+            Key(key, _, _, _) =>                   # Text("a"), Enter; (key, ctrl, alt, shift)
+                if key == Escape
                     break
             Close => break
             Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()

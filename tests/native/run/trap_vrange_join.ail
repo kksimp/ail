@@ -1,0 +1,11 @@
+# `x` is a byte on one path only, so the product keeps its check and traps
+# when the other path brings a large value (native.range.1, expr.arith.1).
+fn scale(n int, small bool) int
+    mut x := n
+    if small
+        x = n.bit_and(255)
+    x * 1000000000000
+
+fn main()
+    print(scale(9223372036854775807, true))
+    print(scale(9223372036854775807, false))

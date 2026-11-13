@@ -6,7 +6,7 @@ use ast
 use syntax
 
 ## The prelude's functions, which a bare call could also mean.
-PRELUDE_FNS := ["print", "unreachable", "assert", "assert_eq"]
+PRELUDE_FNS := ["print", "unreachable", "assert", "assert_eq", "assert_err", "assert_near"]
 
 ## The members of one type: its field names and its method names.
 struct Members
@@ -224,6 +224,9 @@ fn SelfCx.pattern(mut self, p ast.Pattern)
             for a in elems
                 self.pattern(a)
         BindName(name, pos) => self.declare(name, pos)
+        Nested(_, _, nfields, _) =>
+            for a in nfields
+                self.pattern(a)
         Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => 0
 
 fn SelfCx.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]

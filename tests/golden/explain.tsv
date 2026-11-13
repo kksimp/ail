@@ -490,6 +490,12 @@ explain expr.bit.1	a465a25618c13c82	0	0d574b751ff7644c
 explain expr.bit.1 --json	a465a25618c13c82	0	275a5cbad3c1d33f
 explain expr.bit.2	a465a25618c13c82	0	b156d56b83ffae43
 explain expr.bit.2 --json	a465a25618c13c82	0	05a41e88c43b79dc
+explain expr.bit.3	0c22af17f6b9a072	0	c337cf63f3e7c999
+explain expr.bit.3 --json	0c22af17f6b9a072	0	22bd5234a71959e3
+explain expr.bit.4	0c22af17f6b9a072	0	fc76d5c5b1d7b9e3
+explain expr.bit.4 --json	0c22af17f6b9a072	0	78ad4ee2da49e32b
+explain expr.bit.5	0c22af17f6b9a072	0	61cb5a2427c72a26
+explain expr.bit.5 --json	0c22af17f6b9a072	0	5f262aaa30a95a96
 explain expr.hole.1	a465a25618c13c82	0	5901ccfcd0cc315d
 explain expr.hole.1 --json	a465a25618c13c82	0	d07d75bd8d60ee88
 explain expr.hole.2	a465a25618c13c82	0	85108fffe65e7c3d
@@ -1654,6 +1660,22 @@ explain test.run.4	a465a25618c13c82	0	5ad190d32c7c5449
 explain test.run.4 --json	a465a25618c13c82	0	1b6c869d382161ba
 explain test.affected.1	a465a25618c13c82	0	65c1152ccd21eeeb
 explain test.affected.1 --json	a465a25618c13c82	0	936087379f428c57
+explain test.filter.1	e8c4eeabf94b6bbb	0	6fe9d7234ee0d791
+explain test.filter.1 --json	e8c4eeabf94b6bbb	0	4527176aba7dfdaf
+explain test.filter.2	e8c4eeabf94b6bbb	0	ffabdac53116ccda
+explain test.filter.2 --json	e8c4eeabf94b6bbb	0	dd0f0a3e0c78c32a
+explain test.filter.3	e8c4eeabf94b6bbb	0	bbb652f0f9e41fae
+explain test.filter.3 --json	e8c4eeabf94b6bbb	0	e74bcebec7a99be8
+explain test.list.1	e8c4eeabf94b6bbb	0	22da45baf4b0a991
+explain test.list.1 --json	e8c4eeabf94b6bbb	0	b49423f449c157e0
+explain test.fixture.1	e8c4eeabf94b6bbb	0	e50c23e5e8786ae4
+explain test.fixture.1 --json	e8c4eeabf94b6bbb	0	0cf3ef9be0fdb677
+explain test.fixture.2	e8c4eeabf94b6bbb	0	33580e1888a483ec
+explain test.fixture.2 --json	e8c4eeabf94b6bbb	0	aba70bff1b0ceaaf
+explain test.fixture.3	e8c4eeabf94b6bbb	0	f3483741615acfc9
+explain test.fixture.3 --json	e8c4eeabf94b6bbb	0	c2611518a365ff99
+explain test.fixture.4	e8c4eeabf94b6bbb	0	c9f8062d3fc748f1
+explain test.fixture.4 --json	e8c4eeabf94b6bbb	0	5e2672c090f353e2
 explain test.assert.1	a465a25618c13c82	0	6b795fd8064cac2f
 explain test.assert.1 --json	a465a25618c13c82	0	7e94a593871ed4e9
 explain test.assert.2	a465a25618c13c82	0	2e0a628a6556a427

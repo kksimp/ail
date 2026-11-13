@@ -98,7 +98,7 @@ STD_EFFECTS := [
         names: ["run", "run_bytes", "which", "start", "wait", "kill"],
         effects: ["proc", "io"],
     ),
-    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "write_bytes", "eprint", "exit"], effects: ["io"]),
+    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "read_exact", "write_bytes", "eprint", "exit"], effects: ["io"]),
     # std.net.14: a server needs the narrower capability as well.
     StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
     # std.net.1: every request reaches the network.
@@ -358,6 +358,48 @@ fn Checker.check_pure(self) List[Diag]
             break
     out
 
+## eff.cap.6-7: `@caps(LIST)` allows a function, and everything it calls, only the listed
+## capabilities (`@caps(none)`: none). One diagnostic per function, naming each chain of calls.
+fn Checker.check_caps(self) List[Diag]
+    if [f for f in prog.fns if has_attr(f, "caps")].len() == 0
+        return []
+    fx := infer_effects(prog, facts())
+    mut out := List[Diag]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        n := display_name(prog, f)
+        for a in f.attrs
+            if a.name != "caps"
+                continue
+            want := (a.arg else "").split(",")
+            mut ok := true
+            for cap in want
+                if cap == "" or (cap == "none" and want.len() > 1) or (cap != "none" and not CAPABILITIES.contains(cap))
+                    ok = false
+                    shown := if cap == "" then "an empty entry" else "`{cap}`"
+                    out.push(
+                        new_diag(
+                            "eff.cap.7",
+                            a.pos,
+                            "`@caps` on `{n}` names {shown}, which is not a capability or is mixed with `none`",
+                        ).with_help("write `@caps(none)` or `@caps(fs, net)` with names from {CAPABILITIES.join(", ")}"),
+                    )
+                    break
+            if not ok
+                break
+            bad := [e for e in fx.sets[i] if CAPABILITIES.contains(e) and not want.contains(e)]
+            if bad.len() > 0
+                allowed := if want == ["none"] then "no capability" else "only {want.join(", ")}"
+                out.push(
+                    new_diag(
+                        "eff.cap.6",
+                        a.pos,
+                        "`{n}` is `@caps` for {allowed} but {reasons(prog, fx, i, bad)}",
+                    ).with_help("add the capability to `@caps` on `{n}`, or move the effect out of `{n}` and pass its result in as an argument"),
+                )
+            break
+    out
+
 ## The capabilities `--deny` takes (eff.cap.2).
 CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
 
@@ -394,6 +436,47 @@ pub fn parse_deny(list str)(List[str], str)
             uniq.push(c)
     (uniq, "")
 
+## The entry names `--allow` takes (eff.allow.2) and the ones that may carry a `=SCOPE`.
+ALLOW_NAMES := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env", "clock", "random", "ui", "app", "unsafe"]
+ALLOW_SCOPED := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env"]
+
+## `--allow LIST` (eff.allow.1-2): what the list leaves out, as the capabilities `--deny` takes
+## (`unsafe` and `hw` stand for unsafe code, which no scope can contain), and the usage error
+## text (empty when the list is fine). `none` allows nothing.
+pub fn parse_allow(list str)(List[str], str)
+    mut allowed := List[str]()
+    for raw in list.split(",")
+        entry := raw.trim()
+        if entry == "" or entry == "none"
+            continue
+        mut name := entry
+        mut scoped := false
+        eq := entry.find("=")
+        if eq != none
+            at := eq else 0
+            name = entry.slice(0, at)
+            scoped = true
+            if entry.slice(at + 1, entry.len()) == ""
+                return ([], "`{entry}` has no scope after `=`; write `{name}=SCOPE`, or `{name}` for no limit (eff.allow.2)")
+        if not ALLOW_NAMES.contains(name)
+            return ([], "`{name}` is not something `--allow` takes; use {ALLOW_NAMES.join(", ")} (eff.allow.2)")
+        if scoped and not ALLOW_SCOPED.contains(name)
+            return ([], "`{name}` has no scopes; write `{name}` alone (eff.allow.2)")
+        allowed.push(name)
+    mut out := List[str]()
+    for c in CAPABILITIES
+        mut keep := allowed.contains(c)
+        if c == "fs" and (allowed.contains("fs.read") or allowed.contains("fs.write"))
+            keep = true
+        if c == "net" and allowed.contains("net.serve")
+            keep = true
+        if not keep
+            out.push(c)
+    if not allowed.contains("unsafe")
+        out.push("unsafe")
+        out.push("hw")
+    (out.sorted(), "")
+
 ## eff.cap.1: `main` must not reach a denied capability. One diagnostic per
 ## capability, naming the chain of calls.
 fn Checker.check_denied(self) List[Diag]
@@ -415,7 +498,7 @@ fn Checker.check_denied(self) List[Diag]
                     "eff.cap.1",
                     prog.fns[main].pos,
                     "the program reaches the denied capability `{e}`: {fx.chain(prog, main, e)}",
-                ).with_help("remove the call, or run without denying `{e}`"),
+                ).with_help(if e == "unsafe" or e == "hw" then "unsafe code can step outside every `--allow` scope; remove it, or add `unsafe` to `--allow` to accept that" else "remove the call, or allow `{e}` (`--allow {e}`, or `{e}=SCOPE` where it takes one), or run without denying it"),
             )
     out
 

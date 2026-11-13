@@ -633,6 +633,11 @@ fn pv_param(f PvFacts, p ast.Param) PvFacts
                 g3 = pv_pattern(g3, q)
             g3
         BindName(name, _) => pv_forget(f, name)
+        Nested(_, _, nfields, _) =>
+            mut g4 := f
+            for q in nfields
+                g4 = pv_pattern(g4, q)
+            g4
         _ => f
 
 ## Whether a block always leaves: it ends in `return`, `break` or `continue`, or in an

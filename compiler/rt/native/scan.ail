@@ -481,6 +481,7 @@ fn sc_merge(ws int)
 ## `fs.scan(root, same_device)` (std.fs.23): an `fs.Scan` of `entries` and
 ## `skipped`; a `root` that can't be read fails with its own path.
 fn fs_scan(root str, same_device bool, at str) int
+    pol_fs(root, false, "fs.scan")
     sc_counter()
     ws := env_new(14)
     store64(ws, alloc_raw(SC_BUF_SIZE, KIND_BYTES))

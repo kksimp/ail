@@ -1,0 +1,68 @@
+## A bigram Markov text generator with a fixed integer LCG. It learns which
+## words follow which from an embedded text, prints the most branching words,
+## and generates three short sentences, the same every run.
+
+TEXT := "the cat sat on the mat and the dog sat on the rug while the cat watched the dog and the dog watched the cat on the mat"
+
+struct Model
+    follows Map[str, List[str]]
+
+fn Model.learn(mut self, text str)
+    ws := text.words()
+    for i in 1..ws.len()
+        self.follows.push(ws[i - 1], ws[i])
+
+fn Model.branching(self, w str) int
+    opts := self.follows.get(w) else return 0
+    mut distinct := Set[str]()
+    for o in opts
+        distinct.add(o)
+    distinct.len()
+
+fn next_rand(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn generate(m Model, start str, seed int, max_words int) str
+    mut cur := start
+    mut s := seed
+    mut out := [start]
+    for i in 1..max_words
+        opts := m.follows.get(cur) else break
+        s = next_rand(s)
+        cur = opts[s / 65536 % opts.len()]
+        out.push(cur)
+    out.join(" ")
+
+fn main()
+    mut model := Model(follows: {})
+    model.learn(TEXT)
+    mut names := List[str]()
+    for key in model.follows.keys()
+        names.push(key)
+    names.sort()
+    print("{names.len()} distinct words with followers")
+    for w in names
+        n := model.branching(w)
+        if n >= 2
+            print("{w}: {n} different followers, {model.follows[w].len()} total")
+    print(generate(model, "the", 1, 8))
+    print(generate(model, "dog", 2, 8))
+    print(generate(model, "cat", 3, 8))
+
+@test fn learns_followers_in_order()
+    mut m := Model(follows: {})
+    m.learn("a b a c")
+    assert_eq(m.follows["a"], ["b", "c"])
+    assert_eq(m.follows["b"], ["a"])
+
+@test fn branching_counts_distinct()
+    mut m := Model(follows: {})
+    m.learn("a b a b a c")
+    assert_eq(m.branching("a"), 2)
+    assert_eq(m.branching("zzz"), 0)
+
+@test fn generation_is_deterministic()
+    mut m := Model(follows: {})
+    m.learn("x y x z y x")
+    assert_eq(generate(m, "x", 5, 6), generate(m, "x", 5, 6))
+    assert_eq(generate(m, "q", 5, 6), "q")

@@ -1,6 +1,6 @@
 320
 160
 true
-start
+std.audio.device.DeviceKind.Start
 true
 open checked

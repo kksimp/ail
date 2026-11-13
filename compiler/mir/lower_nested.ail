@@ -1,0 +1,56 @@
+## Nested patterns in the native subset (expr.match.13, ADR 1069):
+## `Variant(p, ...)` tests the variant index, then each field against its own
+## pattern in order; the first field that fails goes to the next arm. The
+## names inside bind the fields once the arm is taken.
+
+use ast
+
+## End the current block with a branch to `yes` when nested pattern `p`
+## matches `s` (whose variant index is `tag`), else to `no`. False after a
+## problem.
+fn Lower.nested_test(mut self, p ast.Pattern, s Val, tag int, yes int, no int) bool
+    match p
+        Nested(_, name, subs, npos) =>
+            n := enum_name(s.ty) else
+                problem(npos, "variant pattern `{name}` on `{s.ty.name()}`")
+                return false
+            k := case_index(n, name)
+            if k < 0
+                problem(npos, "`{n}` has no variant `{name}`")
+                return false
+            fields := enums[n][k].fields
+            if fields.len() != subs.len()
+                problem(npos, "`{name}` has {fields.len()} fields, not {subs.len()}")
+                return false
+            mid := new_block()
+            branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), mid, [], no, [])
+            seal(mid)
+            cur = mid
+            for j in 0..subs.len()
+                ft := fields[j].ty
+                f := Val(id: load(s.id, j + 1, ft), ty: ft)
+                last := j == subs.len() - 1
+                next := if last then yes else new_block()
+                if not elem_test(subs[j], f, next, no)
+                    return false
+                if not last
+                    seal(next)
+                    cur = next
+            true
+        _ => false
+
+## Declare the names inside nested pattern `p` to the fields of `s`
+## (expr.match.13). They belong to the enum value, as in `bind_fields`.
+fn Lower.nested_bind(mut self, p ast.Pattern, s Val)
+    match p
+        Nested(_, name, subs, _) =>
+            n := enum_name(s.ty) else return
+            k := case_index(n, name)
+            if k < 0
+                return
+            fields := enums[n][k].fields
+            for j in 0..subs.len()
+                if j < fields.len()
+                    ft := fields[j].ty
+                    bind_elem(subs[j], Val(id: load(s.id, j + 1, ft), ty: ft))
+        _ => return

@@ -10,6 +10,8 @@
 use ast
 
 fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.Pos, want Ty?) Val?
+    if n := union_scrutinee(scrutinee)
+        return lower_union_match(n, arms, pos, want)
     s := lower_value(scrutinee, none)?
     mut en := ""
     match s.ty
@@ -134,6 +136,7 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
                 return false
             branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
         TuplePat => return tuple_test(p, s, yes, no)
+        Nested => return nested_test(p, s, tag, yes, no)
         BindName(_, bpos) =>
             problem(bpos, "a name pattern outside a tuple isn't in the native subset yet")
             return false
@@ -196,4 +199,5 @@ fn Lower.bind_fields(mut self, p ast.Pattern, s Val)
                 declare(binds[j].name, ft, load(s.id, j + 1, ft))
                 borrowed.add(lookup(binds[j].name) else "")
         TuplePat => tuple_bind(p, s)
+        Nested => nested_bind(p, s)
         _ => return

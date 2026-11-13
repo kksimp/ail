@@ -1,0 +1,413 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Scoped capabilities at run time (ADR 1072, eff.allow.1-9). `ail run --allow LIST FILE`
+## sets `AIL_ALLOW=LIST` for the program (and `ail check --allow` rejects at compile
+## time what the list leaves out); this file is the run-time half: every standard-library
+## call that reaches the file system, the network, a program or an environment
+## variable asks it first. A use outside the list ends the program with
+## `trap[eff.allow.N]: ...` naming the capability and the entry that would allow it.
+##
+## `AIL_ALLOW` is a comma-separated list of entries `NAME` (the capability, no limit)
+## or `NAME=SCOPE`: `fs`, `fs.read`, `fs.write` (path prefixes), `net` (`HOST[:PORT]`,
+## `*.DOMAIN`), `net.serve` (`PORT` or `HOST:PORT`), `proc` (program names), `env`
+## (variable names, a trailing `*` makes a prefix). With no `AIL_ALLOW` (or an empty
+## one) nothing is checked and the cost of a check is one scan of the environment.
+## An entry that names nothing known matches nothing, so the program fails closed.
+## No global slots: the list is read from the environment at each check.
+
+fn pol_len(s str) int
+    load64(str_addr(s))
+
+fn pol_sub(s str, a int, b int) str
+    str_sub(str_addr(s), a, b)
+
+## The policy text, "" when there is none.
+fn pol_spec() str
+    s := os_env_get("AIL_ALLOW")
+    if os_ok()
+        return s
+    ""
+
+## `kind` given by entry `e`: "" for another capability, "u" for no limit, else "s" and the scope.
+fn pol_scope(e str, kind str) str
+    if e == kind
+        return "u"
+    pre := str_cat(kind, "=")
+    if e.starts_with(pre)
+        return str_cat("s", pol_sub(e, pol_len(pre), pol_len(e)))
+    ""
+
+## Whether the policy has any entry for `kind`.
+fn pol_has(spec str, kind str) bool
+    for raw in spec.split(",")
+        if pol_len(pol_scope(raw.trim(), kind)) > 0
+            return true
+    false
+
+## The trap that ends a program for a use the policy does not allow.
+fn pol_deny(rule str, what str, need str, spec str)
+    os_usage_trap(rule, "{what} is not allowed; allow it with --allow {need} (this run allows: {spec})")
+
+# ---- paths (eff.allow.3) ----
+
+## The target of the symbolic link at `path`, "" when it is not one (or can't be read).
+fn pol_link(path str) str
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        return ""
+    buf := os_scratch(OS_PATH_B)
+    mut r := 0
+    if target() == 2
+        r = syscall(58, p, buf, OS_PATH_MAX, 0, 0, 0)
+    else
+        r = syscall(os_pick(267, 78, 0), -100, p, buf, OS_PATH_MAX, 0, 0)
+    if r <= 0
+        return ""
+    os_str_from(buf, r)
+
+## The absolute path of `path` with every symbolic link resolved and `.` and `..` applied
+## the way the kernel applies them (a link before `..` is followed first), "" when it
+## can't be named. On macOS the case is folded, as the default volume does.
+fn pol_canon_posix(path str) str
+    if pol_len(path) == 0 or os_has_nul(path)
+        return ""
+    full := if load8(str_addr(path) + 16) == 47 then path else path_join(env_cwd(), path)
+    mut todo := full.split("/")
+    mut parts := List[str]()
+    mut hops := 0
+    mut i := 0
+    while i < todo.len()
+        c := todo[i]
+        i += 1
+        if c == "" or c == "."
+            continue
+        if c == ".."
+            if parts.len() > 0
+                parts.pop()
+            continue
+        parts.push(c)
+        link := pol_link(str_cat("/", parts.join("/")))
+        if pol_len(link) > 0
+            hops += 1
+            if hops > 40
+                return ""
+            parts.pop()
+            if load8(str_addr(link) + 16) == 47
+                parts = List[str]()
+            mut next := link.split("/")
+            mut j := i
+            while j < todo.len()
+                next.push(todo[j])
+                j += 1
+            todo = next
+            i = 0
+    out := if parts.len() == 0 then "/" else str_cat("/", parts.join("/"))
+    if target() == 2
+        return out.to_lower()
+    out
+
+## Windows: the final name of an existing file or directory (links, junctions and short
+## names resolved by the system) as `c:/dir/file` in lower case, "" when it does not exist.
+fn pol_win_final(path str) str
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        return ""
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, p)
+        return ""
+    # No access, share all, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS (a directory opens too).
+    h := import_call("CreateFileW", w, 0, 7, 0, 3, 33554432, 0)
+    if h == -1
+        return ""
+    v := os_scratch(OS_WIN_B)
+    n := import_call("GetFinalPathNameByHandleW", h, v, 1000, 0)
+    import_call("CloseHandle", h, 0, 0, 0)
+    if n <= 0 or n > 1000
+        return ""
+    dst := os_scratch(OS_TMP)
+    len := win_narrow(v, dst)
+    mut s := os_str_from(dst, len).replace("\\", "/")
+    # `//?/C:/dir`: the plain form. A network share (`//?/UNC/...`) is not a path the policy names.
+    if s.starts_with("//?/UNC/")
+        return ""
+    if s.starts_with("//?/")
+        s = pol_sub(s, 4, pol_len(s))
+    s.to_lower()
+
+## Whether Windows treats `c` (one path component) as a device or something else no scope can name.
+fn pol_win_bad(c str) bool
+    if c.contains(":") or c.contains("*") or c.contains("?") or c.contains("<")
+        return true
+    if c.contains(">") or c.contains("|") or c.contains("\"")
+        return true
+    stem := c.split(".")[0].to_upper()
+    if ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"].contains(stem)
+        return true
+    if pol_len(stem) == 4 and (stem.starts_with("COM") or stem.starts_with("LPT"))
+        return stem.ends_with("1") or stem.ends_with("2") or stem.ends_with("3") or stem.ends_with("4") or stem.ends_with("5") or stem.ends_with("6") or stem.ends_with("7") or stem.ends_with("8") or stem.ends_with("9")
+    false
+
+## Windows: `path` as an absolute `c:/dir/file` in lower case with links resolved, "" when it
+## can't be named (a UNC or device path, a stream, a reserved device name, a drive-relative path).
+fn pol_canon_win(path str) str
+    if pol_len(path) == 0 or os_has_nul(path)
+        return ""
+    s := path.replace("\\", "/")
+    if s.starts_with("//")
+        return ""
+    cwd := env_cwd().replace("\\", "/")
+    mut full := ""
+    if pol_len(s) >= 2 and load8(str_addr(s) + 17) == 58
+        if pol_len(s) < 3 or load8(str_addr(s) + 18) != 47
+            return ""
+        full = s
+    elif s.starts_with("/")
+        full = str_cat(pol_sub(cwd, 0, 2), s)
+    else
+        full = str_cat3(cwd, "/", s)
+    comps := full.split("/")
+    drive := comps[0].to_lower()
+    mut parts := List[str]()
+    mut k := 1
+    while k < comps.len()
+        mut c := comps[k]
+        k += 1
+        if c == "" or c == "."
+            continue
+        if c == ".."
+            if parts.len() > 0
+                parts.pop()
+            continue
+        # Win32 drops trailing dots and spaces from a name.
+        while c.ends_with(".") or c.ends_with(" ")
+            c = pol_sub(c, 0, pol_len(c) - 1)
+        if pol_len(c) == 0 or pol_win_bad(c)
+            return ""
+        parts.push(c.to_lower())
+    # The longest prefix that exists is named by the system; the rest is appended.
+    mut n := parts.len()
+    while n >= 0
+        pre := if n == 0 then str_cat(drive, "/") else str_cat3(drive, "/", parts[..n].join("/"))
+        fin := pol_win_final(pre)
+        if pol_len(fin) > 0
+            mut out := fin
+            if n < parts.len()
+                tail := parts[n..].join("/")
+                out = if fin.ends_with("/") then str_cat(fin, tail) else str_cat3(fin, "/", tail)
+            return out
+        n -= 1
+    ""
+
+## The canonical form of `path` for matching against a scope (`pol_canon_posix`, `pol_canon_win`).
+fn pol_canon(path str) str
+    if target() == 3
+        return pol_canon_win(path)
+    pol_canon_posix(path)
+
+## Whether canonical `canon` is the canonical form of `scope` or lies below it.
+fn pol_path_in(canon str, scope str) bool
+    sc := pol_canon(scope)
+    if pol_len(sc) == 0
+        return false
+    if canon == sc
+        return true
+    pre := if sc.ends_with("/") then sc else str_cat(sc, "/")
+    canon.starts_with(pre)
+
+# ---- names, hosts, ports ----
+
+## The index of the `:` that starts a port in `s`, else -1. An IPv6 host is written `[::1]`.
+fn pol_colon(s str) int
+    p := str_addr(s) + 16
+    mut i := pol_len(s) - 1
+    while i >= 0
+        c := load8(p + i)
+        if c == 93
+            return -1
+        if c == 58
+            return i
+        i -= 1
+    -1
+
+## A host as compared: lower case, no trailing dot, no brackets.
+fn pol_norm_host(h str) str
+    mut x := h.to_lower()
+    while x.ends_with(".")
+        x = pol_sub(x, 0, pol_len(x) - 1)
+    if x.starts_with("[") and x.ends_with("]")
+        x = pol_sub(x, 1, pol_len(x) - 1)
+    x
+
+## Whether scope `HOST[:PORT]` covers `host` and `port` (`HOST` may be `*` or `*.DOMAIN`, `PORT` `*`).
+fn pol_host_ok(scope str, host str, port int) bool
+    c := pol_colon(scope)
+    mut sh := scope
+    mut sp := -1
+    if c >= 0
+        ps := pol_sub(scope, c + 1, pol_len(scope))
+        if ps != "*"
+            sp = ps.to_int() else 99999999
+            if sp < 0 or sp > 65535
+                return false
+        sh = pol_sub(scope, 0, c)
+    if sp != -1 and sp != port
+        return false
+    hs := pol_norm_host(host)
+    sh = pol_norm_host(sh)
+    if sh == "*"
+        return true
+    if sh.starts_with("*.")
+        suf := pol_sub(sh, 1, pol_len(sh))
+        return hs.ends_with(suf) and pol_len(hs) > pol_len(suf)
+    hs == sh
+
+## Whether scope `PORT`, `HOST:PORT` or `*` covers listening on `host:port`.
+fn pol_serve_ok(scope str, host str, port int) bool
+    if scope == "*"
+        return true
+    if pol_colon(scope) < 0
+        n := scope.to_int() else 99999999
+        return n == port
+    pol_host_ok(scope, host, port)
+
+## A name as compared on this platform: Windows folds case and drops `.exe`.
+fn pol_fold_name(n str) str
+    if target() != 3
+        return n
+    x := n.to_lower()
+    if x.ends_with(".exe")
+        return pol_sub(x, 0, pol_len(x) - 4)
+    x
+
+## Whether scope `NAME` or `PREFIX*` covers the variable or program `name`.
+fn pol_name_ok(scope str, name str, prefix bool) bool
+    sc := pol_fold_name(scope)
+    nm := pol_fold_name(name)
+    if prefix and sc.ends_with("*")
+        return nm.starts_with(pol_sub(sc, 0, pol_len(sc) - 1))
+    sc == nm
+
+# ---- the check ----
+
+## Whether some entry for `kind` covers a use. `how`: 1 canonical path `a`, 2 host `a` and
+## `port`, 3 program name `a`, 4 listening on host `a` and `port`, 5 variable name `a`.
+fn pol_covered(spec str, kind str, how int, a str, port int) bool
+    for raw in spec.split(",")
+        s := pol_scope(raw.trim(), kind)
+        n := pol_len(s)
+        if n == 0
+            continue
+        if load8(str_addr(s) + 16) == 117
+            return true
+        rest := pol_sub(s, 1, n)
+        if how == 1 and pol_path_in(a, rest)
+            return true
+        if how == 2 and pol_host_ok(rest, a, port)
+            return true
+        if how == 3 and pol_name_ok(rest, a, false)
+            return true
+        if how == 4 and pol_serve_ok(rest, a, port)
+            return true
+        if how == 5 and pol_name_ok(rest, a, true)
+            return true
+    false
+
+## eff.allow.3: `path` may be read (or written, when `write`) by the call `what`.
+fn pol_fs(path str, write bool, what str)
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    canon := pol_canon(path)
+    kind := if write then "fs.write" else "fs.read"
+    if pol_len(canon) > 0
+        if pol_covered(spec, "fs", 1, canon, 0) or pol_covered(spec, kind, 1, canon, 0)
+            return
+        pol_deny("eff.allow.3", "{kind} of `{canon}` by {what}", "{kind}={canon}", spec)
+    os_usage_trap("eff.allow.3", "{kind} of `{path}` by {what} is not allowed: the path can't be resolved to one plain absolute path (a stream, device or network path, or a link loop); this run allows: {spec}")
+
+## eff.allow.3: a glob `pattern` is read from its first component with a wildcard down; a `..`
+## after a wildcard could leave the scope, so it is refused.
+fn pol_glob(pattern str)
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    mut base := List[str]()
+    mut wild := false
+    for c in pattern.split("/")
+        if c.contains("*") or c.contains("?") or c.contains("[") or c.contains("{")
+            wild = true
+        if wild and c == ".."
+            os_usage_trap("eff.allow.3", "fs.read by fs.glob of `{pattern}` is not allowed: `..` after a wildcard can leave the allowed scope; this run allows: {spec}")
+        if not wild
+            base.push(c)
+    mut root := base.join("/")
+    if pol_len(root) == 0
+        root = "."
+        if pattern.starts_with("/")
+            root = "/"
+    pol_fs(root, false, "fs.glob")
+
+## eff.allow.4: connecting to `host:port`.
+fn pol_net(host str, port int, what str)
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    if pol_covered(spec, "net", 2, host, port)
+        return
+    pol_deny("eff.allow.4", "net: {what} to `{host}:{port}`", "net={host}:{port}", spec)
+
+## eff.allow.4: listening on `addr` (`HOST:PORT`).
+fn pol_serve(addr str)
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    c := pol_colon(addr)
+    mut host := addr
+    mut port := -1
+    if c >= 0
+        port = pol_sub(addr, c + 1, pol_len(addr)).to_int() else 99999999
+        host = pol_sub(addr, 0, c)
+    if pol_covered(spec, "net.serve", 4, host, port)
+        return
+    pol_deny("eff.allow.4", "net.serve: listening on `{addr}`", "net.serve={port}", spec)
+
+## eff.allow.5: running the program `cmd`.
+fn pol_proc(cmd str, what str)
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    if pol_covered(spec, "proc", 3, cmd, 0)
+        return
+    pol_deny("eff.allow.5", "proc: {what} of `{cmd}`", "proc={cmd}", spec)
+
+## eff.allow.6: reading the environment variable `name`.
+fn pol_env(name str)
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    if pol_covered(spec, "env", 5, name, 0)
+        return
+    pol_deny("eff.allow.6", "env: reading `{name}`", "env={name}", spec)
+
+## eff.allow.6: `env.home()` reads `HOME` (`USERPROFILE` on Windows).
+fn pol_env_home()
+    spec := pol_spec()
+    if pol_len(spec) == 0
+        return
+    if pol_covered(spec, "env", 5, "HOME", 0) or pol_covered(spec, "env", 5, "USERPROFILE", 0)
+        return
+    pol_deny("eff.allow.6", "env: reading `HOME`", "env=HOME", spec)
+
+## eff.allow.6: `env.vars()` lists only the variables the policy covers; with no `env` entry at all it is refused.
+fn pol_env_vars_begin() str
+    spec := pol_spec()
+    if pol_len(spec) > 0 and not pol_has(spec, "env")
+        pol_deny("eff.allow.6", "env: listing the variables", "env", spec)
+    spec
+
+## Whether `env.vars()` shows `name` under policy `spec` (all, when there is none).
+fn pol_env_visible(spec str, name str) bool
+    if pol_len(spec) == 0
+        return true
+    pol_covered(spec, "env", 5, name, 0)

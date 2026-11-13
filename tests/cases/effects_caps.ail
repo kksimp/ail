@@ -1,0 +1,29 @@
+# eff.cap.6-7: `@caps(LIST)` limits a function to the listed capabilities.
+use std.fs
+use std.env
+
+fn save(path str, text str)
+    fs.write_text(path, text)
+
+fn home() str
+    env.get("HOME") else ""
+
+@caps(none) fn direct(path str) str
+    save(path, "x")
+    "done"
+
+@caps(fs) fn chained() str
+    home()
+
+@caps(io) fn bad_entry(x int)
+    print(x)
+
+@caps(none, fs) fn mixed(x int) int
+    x
+
+@caps(fs, env) fn fine(path str) str
+    save(path, "x")
+    home()
+
+fn main()
+    print(direct("a") + chained() + fine("b"))

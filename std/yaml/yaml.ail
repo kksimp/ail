@@ -1,0 +1,625 @@
+## std.yaml (spec std.yaml.1-10, ADR 1090): the common subset of YAML 1.2 read
+## into the `Json` value, so one set of accessors (`get`, `at`, `as_str`, ...)
+## serves every config format. Maps are `Obj` with `Str` keys, lists are `Arr`,
+## and a plain scalar is `Null`, `Bool`, `Num` or `Str` by the YAML 1.2 core
+## rules (`yes`, `no`, `on` and `off` stay strings, std.yaml.3). What is outside
+## the subset (anchors, aliases, tags, merge keys, several documents,
+## multi-line plain or quoted scalars) is refused with a message that says what
+## to write instead (std.yaml.7), never read wrongly.
+
+## Why the text is not YAML in the subset (std.yaml.10). `line` is 1-based.
+pub error struct YamlError "{why} (line {line})"
+    pub why str
+    pub line int
+
+struct YamlParser
+    lines List[str]
+    pos int
+
+## The scanner for one value written on one line (or a joined flow collection).
+struct Inline
+    chars List[char]
+    pos int
+    line int
+    depth int
+
+## The YAML document `text` as a `Json` value (std.yaml.1). An empty document
+## is `Null`.
+pub fn parse(text str) Json ! YamlError
+    mut clean := text.replace("\r\n", "\n")
+    if clean.starts_with("\u{feff}")
+        clean = clean.slice(1, clean.len())
+    mut p := YamlParser(lines: clean.split("\n"), pos: 0)
+    p.document()?
+
+fn indent_of(s str) int
+    mut n := 0
+    for c in s.chars()
+        if c == ' '
+            n += 1
+        else
+            break
+    n
+
+## `s` without its trailing comment (`#` at the start or after a blank, outside
+## quotes) and without trailing blanks.
+fn strip_comment(s str) str
+    cs := s.chars()
+    mut quote := ' '
+    mut i := 0
+    mut cut := cs.len()
+    while i < cs.len()
+        c := cs[i]
+        opens := i == 0 or " \t[\{,:".contains(cs[i - 1])
+        if quote == '"'
+            if c == '\\'
+                i += 1
+            elif c == '"'
+                quote = ' '
+        elif quote == '\''
+            if c == '\'' and i + 1 < cs.len() and cs[i + 1] == '\''
+                i += 1
+            elif c == '\''
+                quote = ' '
+        elif (c == '"' or c == '\'') and opens
+            quote = c
+        elif c == '#' and (i == 0 or cs[i - 1] == ' ' or cs[i - 1] == '\t')
+            cut = i
+            break
+        i += 1
+    cs[0..cut].join("").trim_end()
+
+## How many `[` and `{` are still open at the end of `s` (outside quotes).
+fn flow_depth(s str) int
+    cs := s.chars()
+    mut quote := ' '
+    mut depth := 0
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        opens := i == 0 or " \t[\{,:".contains(cs[i - 1])
+        if quote == '"'
+            if c == '\\'
+                i += 1
+            elif c == '"'
+                quote = ' '
+        elif quote == '\''
+            if c == '\'' and i + 1 < cs.len() and cs[i + 1] == '\''
+                i += 1
+            elif c == '\''
+                quote = ' '
+        elif (c == '"' or c == '\'') and opens
+            quote = c
+        elif c == '[' or c == '{'
+            depth += 1
+        elif c == ']' or c == '}'
+            depth -= 1
+        i += 1
+    depth
+
+## The index of the `:` that ends the key of a `key: value` line, or -1 when
+## `t` is not a mapping line. The colon must be followed by a blank or the end.
+fn key_colon(t str) int
+    cs := t.chars()
+    if cs.len() == 0 or cs[0] == '[' or cs[0] == '{'
+        return -1
+    mut i := 0
+    if cs[0] == '"' or cs[0] == '\''
+        q := cs[0]
+        i = 1
+        while i < cs.len()
+            if q == '"' and cs[i] == '\\'
+                i += 2
+                continue
+            if cs[i] == q
+                if q == '\'' and i + 1 < cs.len() and cs[i + 1] == '\''
+                    i += 2
+                    continue
+                break
+            i += 1
+        i += 1
+        while i < cs.len() and cs[i] == ' '
+            i += 1
+        if i < cs.len() and cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ')
+            return i
+        return -1
+    while i < cs.len()
+        if cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ')
+            return i
+        i += 1
+    -1
+
+fn is_seq_item(t str) bool
+    t == "-" or t.starts_with("- ")
+
+## The refusal text for a scalar that starts an anchor, alias or tag, or "".
+fn refusal(word str) str
+    if word.starts_with("&")
+        return "anchors (&name) are not supported: write the value out in full"
+    if word.starts_with("*")
+        return "aliases (*name) are not supported: write the value out in full"
+    if word.starts_with("!")
+        return "tags (!type) are not supported: the value's own form gives its type; quote text that must stay a string"
+    ""
+
+fn all_digits(s str) bool
+    if s.len() == 0
+        return false
+    for c in s.chars()
+        if not c.is_digit()
+            return false
+    true
+
+fn is_float(w str) bool
+    cs := w.chars()
+    mut i := 0
+    if i < cs.len() and (cs[i] == '-' or cs[i] == '+')
+        i += 1
+    mut digits := 0
+    while i < cs.len() and cs[i].is_digit()
+        i += 1
+        digits += 1
+    if i < cs.len() and cs[i] == '.'
+        i += 1
+        while i < cs.len() and cs[i].is_digit()
+            i += 1
+            digits += 1
+    if digits == 0
+        return false
+    if i < cs.len() and (cs[i] == 'e' or cs[i] == 'E')
+        i += 1
+        if i < cs.len() and (cs[i] == '-' or cs[i] == '+')
+            i += 1
+        mut exp := 0
+        while i < cs.len() and cs[i].is_digit()
+            i += 1
+            exp += 1
+        if exp == 0
+            return false
+    i == cs.len()
+
+## An unquoted scalar by the YAML 1.2 core schema (std.yaml.3).
+fn resolve(w str) Json
+    if w == "" or w == "~" or w == "null" or w == "Null" or w == "NULL"
+        return Json.Null
+    if w == "true" or w == "True" or w == "TRUE"
+        return Json.Bool(true)
+    if w == "false" or w == "False" or w == "FALSE"
+        return Json.Bool(false)
+    for pre in ["0x", "0o"]
+        if w.starts_with(pre) and w.len() > 2
+            base := if pre == "0x" then 16 else 8
+            mut n := 0
+            for d in w.slice(2, w.len()).chars()
+                digit := d.to_digit(base) else return Json.Str(w)
+                n = n * base + digit
+            return Json.Num(n.to_float())
+    neg := w.starts_with("-")
+    body := if neg or w.starts_with("+") then w.slice(1, w.len()) else w
+    if all_digits(body)
+        n := body.to_int() else return Json.Num((body.to_float() else 0.0) * (if neg then -1.0 else 1.0))
+        return Json.Num((if neg then -n else n).to_float())
+    if is_float(w)
+        mut fixed := body
+        if fixed.starts_with(".")
+            fixed = "0{fixed}"
+        fixed = fixed.replace(".e", ".0e").replace(".E", ".0E")
+        if fixed.ends_with(".")
+            fixed = "{fixed}0"
+        f := fixed.to_float() else return Json.Str(w)
+        return Json.Num(if neg then -f else f)
+    Json.Str(w)
+
+fn YamlParser.fail(self, why str) YamlError
+    YamlError(why: why, line: pos + 1)
+
+fn YamlParser.at_end(self) bool
+    pos >= lines.len()
+
+## The comment-free, trimmed text of line `i`.
+fn YamlParser.body(self, i int) str
+    strip_comment(lines[i]).trim()
+
+## Moves to the next line that holds content.
+fn YamlParser.skip_blank_lines(mut self) !
+    while pos < lines.len() and body(pos) == ""
+        pos += 1
+    if pos < lines.len()
+        raw := lines[pos]
+        k := indent_of(raw)
+        if raw.char_at(k) == '\t'
+            return fail("tabs cannot indent YAML: use spaces")
+
+fn YamlParser.document(mut self) !Json
+    skip_blank_lines()?
+    if at_end()
+        return Json.Null
+    first := body(pos)
+    if first.starts_with("%")
+        return fail("directives (%YAML, %TAG) are not supported")
+    if first == "---"
+        pos += 1
+        skip_blank_lines()?
+        if at_end()
+            return Json.Null
+    elif first.starts_with("--- ")
+        return fail("start the content on the line after '---'")
+    v := node(indent_of(lines[pos]))?
+    skip_blank_lines()?
+    if not at_end()
+        rest := body(pos)
+        if rest == "..."
+            pos += 1
+            skip_blank_lines()?
+            if at_end()
+                return v
+        if rest == "---" or rest == "..." or rest.starts_with("--- ")
+            return fail("several documents are not supported: parse one document at a time")
+        return fail("unexpected text at this indentation")
+    v
+
+## The block node that starts at the current line, indented by `ind`.
+fn YamlParser.node(mut self, ind int) !Json
+    t := body(pos)
+    if is_seq_item(t)
+        return seq(ind)
+    if t.starts_with("? ") or t == "?"
+        return fail("complex keys (?) are not supported: use a quoted string key")
+    if key_colon(t) >= 0
+        return map(ind)
+    start := pos + 1
+    pos += 1
+    inline_value(t, start, ind - 1, false)?
+
+fn YamlParser.seq(mut self, ind int) !Json
+    mut items := List[Json]()
+    while true
+        skip_blank_lines()?
+        if at_end()
+            break
+        k := indent_of(lines[pos])
+        if k < ind
+            break
+        if k > ind
+            return fail("unexpected indentation")
+        t := body(pos)
+        if not is_seq_item(t)
+            break
+        rest := if t == "-" then "" else t.slice(2, t.len()).trim_start()
+        start := pos + 1
+        if rest != "" and (key_colon(rest) >= 0 or is_seq_item(rest))
+            # `- key: v` and `- - x`: the item's content starts where the
+            # dash's text ends, so blank the dash and read the line as a node.
+            raw := lines[pos]
+            pad := " ".repeat(ind + 1)
+            lines[pos] = "{pad}{raw.slice(ind + 1, raw.len())}"
+            items.push(node(indent_of(lines[pos]))?)
+        else
+            pos += 1
+            items.push(inline_value(rest, start, ind, false)?)
+    Json.Arr(items)
+
+fn YamlParser.map(mut self, ind int) !Json
+    mut members := List[JsonMember]()
+    while true
+        skip_blank_lines()?
+        if at_end()
+            break
+        k := indent_of(lines[pos])
+        if k < ind
+            break
+        t := body(pos)
+        if k > ind
+            return fail("unexpected indentation (a plain value cannot continue on the next line: use | or > for a text block, or quote it)")
+        if t == "..." or t == "---"
+            break
+        if is_seq_item(t)
+            return fail("expected 'key: value' but found a list item")
+        if t.starts_with("? ") or t == "?"
+            return fail("complex keys (?) are not supported: use a quoted string key")
+        c := key_colon(t)
+        if c < 0
+            return fail("expected 'key: value' (a key ends with ':' followed by a space or the end of the line)")
+        start := pos + 1
+        key := read_key(t.slice(0, c).trim_end(), start)?
+        for m in members
+            if m.key == key
+                return fail("duplicate key '{key}'")
+        rest := t.slice(c + 1, t.len()).trim_start()
+        pos += 1
+        v := inline_value(rest, start, ind, true)?
+        members.push(JsonMember(key, v))
+    Json.Obj(members)
+
+fn YamlParser.read_key(self, s str, ln int) !str
+    if s.starts_with("\"") or s.starts_with("'")
+        mut inl := Inline(chars: s.chars(), pos: 0, line: ln, depth: 0)
+        q := inl.quoted()?
+        inl.finish()?
+        return q
+    m := refusal(s)
+    if m != ""
+        return fail(m)
+    if s == "<<"
+        return fail("merge keys (<<) are not supported: write the merged entries out in full")
+    s
+
+## The value after `key:` or `- ` (`text`, already without its comment). `pos`
+## is the line after the one holding `text`; `parent` is the indent of the
+## construct that owns the value.
+fn YamlParser.inline_value(mut self, text str, start int, parent int, in_map bool) !Json
+    if text == ""
+        skip_blank_lines()?
+        if at_end()
+            return Json.Null
+        k := indent_of(lines[pos])
+        if k > parent
+            return node(k)
+        if in_map and k == parent and is_seq_item(body(pos))
+            return seq(k)
+        return Json.Null
+    if text.starts_with("|") or text.starts_with(">")
+        return block_scalar(text, parent, start)
+    mut buf := text
+    if text.starts_with("[") or text.starts_with("\{")
+        while flow_depth(buf) > 0 and not at_end()
+            buf = "{buf} {body(pos)}"
+            pos += 1
+    mut inl := Inline(chars: buf.chars(), pos: 0, line: start, depth: 0)
+    v := inl.value()?
+    inl.finish()?
+    v
+
+## A `|` (literal) or `>` (folded) block (std.yaml.5). The lines after the
+## header that are indented deeper than `parent` are the content.
+fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
+    literal := header.starts_with("|")
+    mut chomp := ' '
+    for h in header.slice(1, header.len()).chars()
+        if h == '-' or h == '+'
+            chomp = h
+        elif h.is_digit()
+            return YamlError(why: "explicit indentation indicators are not supported: indent the block under its key", line: start)
+        else
+            return YamlError(why: "unexpected text after '{header.slice(0, 1)}'", line: start)
+    mut raw := List[str]()
+    mut blk := -1
+    while pos < lines.len()
+        l := lines[pos]
+        if l.trim() == ""
+            raw.push("")
+            pos += 1
+            continue
+        k := indent_of(l)
+        if blk < 0
+            if k <= parent
+                break
+            blk = k
+        if k < blk
+            break
+        raw.push(l.slice(blk, l.len()))
+        pos += 1
+    mut last := raw.len()
+    while last > 0 and raw[last - 1] == ""
+        last -= 1
+    trailing := raw.len() - last
+    mut out := ""
+    if literal
+        out = raw[0..last].join("\n")
+    else
+        mut parts := List[str]()
+        mut normal := false
+        mut blanks := 0
+        for i in 0..last
+            s := raw[i]
+            if s == ""
+                blanks += 1
+                continue
+            spaced := s.starts_with(" ")
+            if i == blanks
+                parts.push("\n".repeat(blanks))
+            elif normal and not spaced
+                parts.push(if blanks == 0 then " " else "\n".repeat(blanks))
+            else
+                parts.push("\n".repeat(blanks + 1))
+            parts.push(s)
+            normal = not spaced
+            blanks = 0
+        out = parts.join("")
+    if chomp == '-'
+        return Json.Str(out)
+    if chomp == '+'
+        tail := "\n".repeat(if last > 0 then trailing + 1 else trailing)
+        return Json.Str("{out}{tail}")
+    if last > 0
+        return Json.Str("{out}\n")
+    Json.Str("")
+
+fn Inline.fail(self, why str) YamlError
+    YamlError(why: why, line: line)
+
+fn Inline.at_end(self) bool
+    pos >= chars.len()
+
+fn Inline.peek(self) char?
+    if at_end()
+        return none
+    chars[pos]
+
+fn Inline.skip_blank(mut self)
+    while not at_end() and (chars[pos] == ' ' or chars[pos] == '\t')
+        pos += 1
+
+## After a value on a block line nothing else may follow.
+fn Inline.finish(mut self) !
+    skip_blank()
+    if not at_end()
+        return fail("unexpected text after the value")
+
+fn Inline.value(mut self) !Json
+    skip_blank()
+    c := peek() else return Json.Null
+    if c == '"' or c == '\''
+        return Json.Str(quoted()?)
+    if c == '['
+        return flow_seq()
+    if c == '{'
+        return flow_map()
+    word := plain_text()?
+    m := refusal(word)
+    if m != ""
+        return fail(m)
+    if depth == 0 and (word.contains(": ") or word.ends_with(":"))
+        return fail("a mapping cannot start on the same line as its key: put the inner map on its own indented lines or write it with braces")
+    resolve(word)
+
+## An unquoted scalar: to the end of the line, or in a flow collection to the
+## next `,`, bracket or `: `.
+fn Inline.plain_text(mut self) !str
+    start := pos
+    while not at_end()
+        c := chars[pos]
+        if depth > 0
+            if c == ',' or c == ']' or c == '}' or c == '[' or c == '{'
+                break
+            if c == ':' and (pos + 1 >= chars.len() or " ,]}".contains(chars[pos + 1]))
+                break
+        pos += 1
+    chars[start..pos].join("").trim()
+
+fn Inline.quoted(mut self) !str
+    c := peek() else return fail("expected a string")
+    if c == '"'
+        return double_quoted()
+    single_quoted()
+
+fn Inline.single_quoted(mut self) !str
+    pos += 1
+    mut out := List[char]()
+    while true
+        c := peek() else return fail("unterminated string (a quoted string must end on the line it starts, or use a | block)")
+        pos += 1
+        if c == '\''
+            if peek() == '\''
+                out.push('\'')
+                pos += 1
+            else
+                break
+        else
+            out.push(c)
+    out.join("")
+
+fn Inline.double_quoted(mut self) !str
+    pos += 1
+    mut out := List[char]()
+    while true
+        c := peek() else return fail("unterminated string (a quoted string must end on the line it starts, or use a | block)")
+        pos += 1
+        if c == '"'
+            break
+        if c == '\\'
+            out.push(escape()?)
+        else
+            out.push(c)
+    out.join("")
+
+## The escape after a backslash that `pos` has already passed (std.yaml.2).
+fn Inline.escape(mut self) !char
+    c := peek() else return fail("unterminated string")
+    pos += 1
+    match c
+        '0' => '\u{0}'
+        'a' => '\u{7}'
+        'b' => '\u{8}'
+        't' => '\t'
+        'n' => '\n'
+        'v' => '\u{b}'
+        'f' => '\u{c}'
+        'r' => '\r'
+        'e' => '\u{1b}'
+        ' ' => ' '
+        '"' => '"'
+        '/' => '/'
+        '\\' => '\\'
+        'x' => hex_char(2)?
+        'u' => hex_char(4)?
+        'U' => hex_char(8)?
+        _ => return fail("invalid escape '\\{c}'")
+
+fn Inline.hex_char(mut self, n int) !char
+    stop := pos + n
+    if stop > chars.len()
+        return fail("invalid unicode escape")
+    mut code := 0
+    for d in chars[pos..stop]
+        code = code * 16 + (d.to_digit(16) else return fail("invalid unicode escape"))
+    pos = stop
+    ch := char.from_code(code) else return fail("invalid unicode escape")
+    ch
+
+fn Inline.flow_seq(mut self) !Json
+    pos += 1
+    depth += 1
+    mut items := List[Json]()
+    while true
+        skip_blank()
+        c := peek() else return fail("unterminated '['")
+        if c == ']'
+            pos += 1
+            break
+        items.push(value()?)
+        skip_blank()
+        d := peek() else return fail("unterminated '['")
+        if d == ','
+            pos += 1
+        elif d == ']'
+            pos += 1
+            break
+        else
+            return fail("expected ',' or ']' in list")
+    depth -= 1
+    Json.Arr(items)
+
+fn Inline.flow_map(mut self) !Json
+    pos += 1
+    depth += 1
+    mut members := List[JsonMember]()
+    while true
+        skip_blank()
+        c := peek() else return fail("unterminated '\{'")
+        if c == '}'
+            pos += 1
+            break
+        mut key := ""
+        if c == '"' or c == '\''
+            key = quoted()?
+        else
+            key = plain_text()?
+            bad := refusal(key)
+            if bad != ""
+                return fail(bad)
+            if key == "<<"
+                return fail("merge keys (<<) are not supported: write the merged entries out in full")
+        for m in members
+            if m.key == key
+                return fail("duplicate key '{key}'")
+        skip_blank()
+        mut v := Json.Null
+        if peek() == ':'
+            pos += 1
+            skip_blank()
+            nxt := peek() else return fail("unterminated '\{'")
+            if nxt != ',' and nxt != '}'
+                v = value()?
+        members.push(JsonMember(key, v))
+        skip_blank()
+        d := peek() else return fail("unterminated '\{'")
+        if d == ','
+            pos += 1
+        elif d == '}'
+            pos += 1
+            break
+        else
+            return fail("expected ',' or '}' in map")
+    depth -= 1
+    Json.Obj(members)

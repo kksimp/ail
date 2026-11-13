@@ -115,6 +115,7 @@ fn os_lookup(mod str, name str) OsFn?
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_bytes" => os_fn("rt.io_read_bytes", [], Ty.Bytes, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
+        "io.read_exact" => os_fn("rt.io_read_exact", [Ty.Int], Ty.Opt(Ty.Bytes), false)
         "io.write_bytes" => os_fn("rt.io_write_bytes", [Ty.Bytes], Ty.Unit, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
         "os.signals" => os_fn("rt.os_signals", [Ty.List(s)], Ty.Chan(s), false)
@@ -355,17 +356,31 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
 ## alignment says so.
 fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     n := spec.precision else -1
+    fl := spec.flags
     mut text := -1
     match v.ty
         Int | Sized(_) =>
             u := if v.ty == Ty.Sized("u64") then "u" else ""
-            text = call(
-                if spec.hex then "rt.fmt_hex{if u == "" then "" else "_u"}" else "rt.fmt_{if u == "" then "int" else "u64"}",
-                [v.id],
-                Ty.Str,
-            )
+            if fl.contains("b")
+                text = call(
+                    "rt.fmt_radix{if u == "" then "" else "_u"}",
+                    [v.id, konst(2, Ty.Int)],
+                    Ty.Str,
+                )
+            else
+                text = call(
+                    if spec.hex then "rt.fmt_hex{if u == "" then "" else "_u"}" else "rt.fmt_{if u == "" then "int" else "u64"}",
+                    [v.id],
+                    Ty.Str,
+                )
         Float | F32 =>
-            if n >= 0
+            if fl.contains("e")
+                text = call(
+                    "rt.fmt_exp",
+                    [v.id, konst(n, Ty.Int), konst(if v.ty == Ty.F32 then 1 else 0, Ty.Int)],
+                    Ty.Str,
+                )
+            elif n >= 0
                 text = call("rt.fmt_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Str)
             elif v.ty == Ty.F32
                 text = call("rt.fmt_f32", [v.id], Ty.Str)
@@ -377,7 +392,14 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
         _ =>
             # A list, tuple, struct or enum is padded as its text form (lex.str.7).
             text = text_of(v, pos)?
+    # The marks of a number (lex.str.7): `,` groups, `+` signs, `0` pads after the sign.
+    if fl.contains(",")
+        text = call("rt.fmt_group", [text], Ty.Str)
+    if fl.contains("+")
+        text = call("rt.fmt_plus", [text], Ty.Str)
     w := spec.width else return Val(id: text, ty: Ty.Str)
+    if fl.contains("0")
+        text = call("rt.fmt_zero", [text, konst(w, Ty.Int)], Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_sized() or v.ty.is_float()
     mut align := if numeric then 1 else 0
     if a := spec.align
@@ -393,7 +415,7 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
 ## A `{x:spec}` piece of `print`: a float with only `.N` is written straight
 ## into the output buffer; anything else is built as a string first.
 fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
-    plain := spec.fill == none and spec.align == none and spec.width == none
+    plain := spec.fill == none and spec.align == none and spec.width == none and spec.flags == ""
     n := spec.precision else -1
     if plain and not spec.hex and n >= 0 and v.ty.is_float()
         call("rt.out_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Unit)

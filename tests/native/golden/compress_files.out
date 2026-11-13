@@ -1,5 +1,5 @@
 hello hello hello
 true
-corrupt? corrupt
-missing not_found
-corrupt not gzip data
+corrupt? compress.CompressKind.Corrupt
+missing compress.CompressKind.NotFound
+compress.CompressKind.Corrupt not gzip data

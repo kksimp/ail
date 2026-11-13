@@ -1,0 +1,9 @@
+keys in order: [0, 4, 6, 10, 13, 14, 15, 18, 22, 24, 30, 31, 34, 35, 40, 49]
+nodes: 16, duplicates skipped: 4
+height: 7
+min: 0, max: 49
+depth of 14: 0
+depth of 25: -1
+depth of 49: 6
+depth of 100: -1
+keys below 25: 10
