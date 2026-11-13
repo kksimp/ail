@@ -473,7 +473,8 @@ fn Gate.cli_checks(mut self)
     if tb.status == 0
         red("test of a program with errors", "exit 0\n{tb.out}{tb.err}")
     nt := ail_run(["test", "examples/hello.ail"]) else return
-    if nt.status != 0 or not nt.out.starts_with("no tests found in examples/hello.ail\n0 passed, 0 failed")
+    if nt.status != 0
+        or not nt.out.starts_with("no tests found in examples/hello.ail\n0 passed, 0 failed")
         red("test of a file with no tests", "exit {nt.status}\n{nt.out}{nt.err}")
     nf := ail_run(["check", "tests/cases/no_such_file.ail"]) else return
     if nf.status != 2
