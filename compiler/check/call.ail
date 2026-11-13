@@ -548,12 +548,12 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
         if args.len() == sig.required and sig.required < sig.params.len()
             return [i for i in 0..args.len()]
         if args.len() > sig.required and args.len() <= sig.params.len() and sig.required < sig.params.len()
-            skipped := sig.names[sig.required]
+            defaulted := sig.names[sig.required]
             err_help(
                 "expr.call.4",
                 expr_pos(args[sig.required].value),
-                "`{what}`'s parameter `{skipped}` has a default, so it is passed by name",
-                "write `{skipped}: value`",
+                "`{what}`'s parameter `{defaulted}` has a default, so it is passed by name",
+                "write `{defaulted}: value`",
             )
             return none
         if args.len() != sig.params.len()
@@ -599,12 +599,12 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                 ok = false
                 continue
         elif i >= sig.required and sig.required < sig.params.len()
-            skipped := sig.names[sig.required]
+            defaulted := sig.names[sig.required]
             err_help(
                 "expr.call.4",
                 expr_pos(a.value),
-                "`{what}`'s parameter `{skipped}` has a default, so it is passed by name",
-                "write `{skipped}: value`",
+                "`{what}`'s parameter `{defaulted}` has a default, so it is passed by name",
+                "write `{defaulted}: value`",
             )
             ok = false
             continue
