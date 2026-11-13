@@ -965,6 +965,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             elif n == "add" and pending[k].brace
                 t := quiet_type(args[0].value)
                 if k2 := pending_recv(recv)
+                    if t != Ty.Unknown
+                        require_key(t, expr_pos(args[0].value))
                     settle(k2, Ty.SetOf(t))
     # type.coll.13: `m.push(k, x)` makes a pending `{}` a `Map[K, List[X]]`.
     if k := pending_recv(recv)
@@ -972,6 +974,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             kt := quiet_type(args[0].value)
             vt := quiet_type(args[1].value)
             if k2 := pending_recv(recv)
+                if kt != Ty.Unknown
+                    require_key(kt, expr_pos(args[0].value))
                 settle(k2, Ty.MapOf(key: kt, value: Ty.ListOf(vt)))
     # `Type.name(...)`: an associated function or a variant; `Trait.name(x,
     # ...)`: a qualified trait method call (trait.res.1).

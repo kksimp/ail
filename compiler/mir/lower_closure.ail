@@ -76,7 +76,9 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         scopes.pop()
         # A problem still closes the loop, so the half-built function stays well formed.
         if kv := k
-            if orderable_key(kv.ty)
+            if word_key(kv.ty)
+                call(push_fn(Ty.Int), [keys, op("copy", [kv.id], Ty.Int)], Ty.Unit)
+            elif orderable_key(kv.ty)
                 kt = kv.ty
                 call(push_fn(kt), [keys, kv.id], Ty.Unit)
             else
@@ -135,7 +137,9 @@ fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos as
     k := lower_value(ast.key_body(a), Ty.Int)
     scopes.pop()
     if kv := k
-        if orderable_key(kv.ty)
+        if word_key(kv.ty)
+            call(push_fn(Ty.Int), [keys, op("copy", [kv.id], Ty.Int)], Ty.Unit)
+        elif orderable_key(kv.ty)
             kt = kv.ty
             call(push_fn(kt), [keys, kv.id], Ty.Unit)
         else

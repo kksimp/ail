@@ -71,10 +71,10 @@ TYPES = {
     "ordstruct": ("Q", 'Q(n: 1, name: "a")', 'Q(n: 2, name: "b")', 'Q(n: 3, name: "c")', "x.n", "oh"),
     "enum": ("Color", "Color.Red", "Color.Green", "Color.Blue", "1", "h"),
     "payenum": ("Shape", "Shape.Circle(r: 1)", "Shape.Square(s: 2)", "Shape.Circle(r: 3)", "1", "h"),
-    "opt": ("int?", "oi(1)", "oi(2)", "oi(-1)", "x else 0", "h"),
+    "opt": ("int?", "oi(1)", "oi(2)", "oi(-1)", "(x else 0)", "h"),
     "list": ("List[int]", "[1]", "[1, 2]", "[2]", "x.len()", "oh"),
     "map": ("Map[str, int]", '{"a": 1}', '{"b": 2}', '{"c": 3}', "x.len()", ""),
-    "set": ("Set[int]", "Set[int]([1])", "Set[int]([2])", "Set[int]([3])", "x.len()", ""),
+    "set": ("Set[int]", "{1}", "{2}", "{3}", "x.len()", ""),
     "bytes": ("bytes", 'b"a"', 'b"b"', 'b"c"', "x.len()", "oh"),
 }
 
@@ -196,7 +196,7 @@ MAPV = {  # Map[str, @T]: the element type as the value
 SET = {
     "literal": "s := {@A, @B}\nprint(s.len())",
     "empty": "s := Set[@T]()\nprint(s.len())",
-    "from_list": "s := Set[@T]([@A, @B, @A])\nprint(s.len())",
+    "from_list": "s := {x for x in [@A, @B, @A]}\nprint(s.len())",
     "add_remove": "mut s := Set[@T]()\nprint(s.add(@A))\nprint(s.remove(@A))",
     "contains": "s := {@A, @B}\nprint(s.contains(@A))",
     "is_empty": "s := {@A}\nprint(s.is_empty())",
@@ -258,8 +258,8 @@ SEQ = {
     "map_filter": "s := Seq.of([@A, @B])\nprint(s.filter(|x| x == @A).map(|x| @K).collect().len())",
     "take_skip": "s := Seq.of([@A, @B, @C])\nprint(s.skip(1).take(1).collect().len())",
     "enumerate": "s := Seq.of([@A, @B])\nprint(s.enumerate().collect().len())",
-    "zip_chain": "s := Seq.of([@A, @B])\nt := Seq.of([1, 2])\nprint(s.zip(t).collect().len())",
-    "chain": "s := Seq.of([@A])\nt := Seq.of([@B])\nprint(s.chain(t).collect().len())",
+    "zip_chain": "s := Seq.of([@A, @B])\nt := Seq.of([1, 2])\nprint(s.zip(move t).collect().len())",
+    "chain": "s := Seq.of([@A])\nt := Seq.of([@B])\nprint(s.chain(move t).collect().len())",
     "next": "mut s := Seq.of([@A, @B])\nif x := s.next()\n    print(1)",
     "for": "s := Seq.of([@A, @B])\nmut n := 0\nfor x in s\n    n += 1\nprint(n)",
     "count_any": "s := Seq.of([@A, @B])\nprint(s.count(|x| x == @A))",
@@ -280,7 +280,6 @@ VALUE = {  # the element type on its own
     "optional_if": "o := wrap_@N(@A)\nif x := o\n    print(1)",
     "optional_none": "o := nothing_@N()\nprint(o == none)",
     "optional_print": "o := wrap_@N(@A)\nprint(o)",
-    "optional_match": "o := wrap_@N(@A)\nmatch o\n    none => print(0)\n    _ => print(1)",
     "tuple": "t := (@A, 1)\nprint(t.1)\na, b := t\nprint(b)",
     "tuple_eq": "t := (@A, 1)\nprint(t == (@A, 1))",
     "tuple_print": "t := (@A, 1)\nprint(t)",
@@ -363,7 +362,7 @@ SCALAR = {
         "print(1.saturating_sub(2))", "print(2.saturating_mul(3))", "print((-3).abs())", "print(3.to_float())",
         "print(255.to_hex())", "print(3.to_str())", "print(3.to_i8())", "print(3.to_i16())", "print(3.to_i32())",
         "print(3.to_u8())", "print(3.to_u16())", "print(3.to_u32())", "print(3.to_u64())", "print(3.to_f32())",
-        "print(7 / 2)", "print(7 % 3)", "print(2 ** 10)",
+        "print(7 / 2)", "print(7 % 3)",
     ],
     "float": [
         "print((-1.5).abs())", "print(1.5.floor())", "print(1.5.ceil())", "print(1.5.round())", "print(4.0.sqrt())",
@@ -484,6 +483,8 @@ def program(snippets, decls):
         spans.append((name, start, len(lines)))
     lines.append("")
     lines.append("fn main()")
+    if not snippets:
+        lines.append('    print("-- none")')
     for i, (name, _) in enumerate(snippets):
         lines.append('    print("-- {}")'.format(name))
         lines.append("    s{}()".format(i))

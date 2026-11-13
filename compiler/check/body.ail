@@ -1283,6 +1283,9 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
             vt := quiet_type(value)
             if op == none or vt == Ty.Int or vt == Ty.Float
                 if k2 := pending_of(n)
+                    # A key typed by its first use is a key as `Map[K, V]()` names it (type.map.2, ADR 1109).
+                    if kt != Ty.Unknown
+                        require_key(kt, expr_pos(index))
                     settle(k2, Ty.MapOf(key: kt, value: vt))
         Name(n, _) =>
             if op != none
