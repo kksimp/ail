@@ -98,6 +98,7 @@ pub AIL_STD_MODULES := [
     "std.gfx",
     "std.gfx.host",
     "std.gfx.watch",
+    "std.kv",
     "std.log",
     "std.mcp",
     "std.media.webm",

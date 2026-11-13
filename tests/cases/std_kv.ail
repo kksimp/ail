@@ -1,0 +1,82 @@
+## std.kv.1-9: a file-backed store, removal, reopening, recovery after a stop, compaction and errors.
+use std.kv
+
+fn try_open(p str)
+    s := kv.open(p) else err
+        print("error: {err}")
+        return
+    print("opened {s.len()}")
+
+fn text(s kv.Store, key str) str
+    (s.get(key) else b"").text()
+
+fn main() !
+    base := fs.make_temp_dir("ail-kv-")?
+    p := "{base}/s.kv"
+    mut s := kv.open(p)?
+    print(s.len())
+    s.set("a", b"one")?
+    s.set("b", b"\x00\xff")?
+    s.set("", b"empty key")?
+    print(text(s, "a"))
+    print((s.get("b") else b"").hex())
+    print(s.has("zzz"))
+    s.set("a", b"uno")?
+    print(text(s, "a"))
+    print(s.keys().join(","))
+    print(s.remove("b")?)
+    print(s.remove("b")?)
+    s.close()
+
+    # std.kv.3, std.kv.6: a reopened store has the changes; the file is 88 bytes.
+    mut s2 := kv.open(p)?
+    print(s2.len())
+    print(s2.keys().join(","))
+    print(text(s2, "a"))
+    print(fs.metadata(p)?.size)
+    s2.close()
+
+    # std.kv.5: an unfinished record at the end is dropped and cut off the file.
+    fs.append_bytes(p, b"\x05\x00\x00")?
+    mut s3 := kv.open(p)?
+    print(s3.len())
+    print(fs.metadata(p)?.size)
+    s3.set("c", b"3")?
+    s3.close()
+    mut s4 := kv.open(p)?
+    print(s4.keys().join(","))
+    s4.close()
+
+    # std.kv.5: a log cut inside a record keeps everything before it.
+    fs.truncate(p, 80)?
+    mut s5 := kv.open(p)?
+    print(s5.len())
+    print(s5.keys().join(","))
+    print(fs.metadata(p)?.size)
+    s5.close()
+
+    # std.kv.7: compact keeps one record per key.
+    p2 := "{base}/c.kv"
+    mut c := kv.open(p2)?
+    c.set("k", b"1")?
+    c.set("k", b"22")?
+    c.set("k", b"333")?
+    print(fs.metadata(p2)?.size)
+    c.compact()?
+    print(fs.metadata(p2)?.size)
+    c.close()
+    mut c2 := kv.open(p2)?
+    print(text(c2, "k"))
+    c2.close()
+
+    # std.kv.1, std.kv.9: an empty file is a new store; another file is refused.
+    p3 := "{base}/other.kv"
+    fs.write_text(p3, "hello world")?
+    try_open(p3)
+    p4 := "{base}/empty.kv"
+    fs.write_bytes(p4, b"")?
+    try_open(p4)
+
+    for f in [p, p2, p3, p4]
+        fs.remove(f)?
+    fs.remove(base)?
