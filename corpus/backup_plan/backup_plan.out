@@ -1,0 +1,13 @@
+== backup 1 ==
+  add data.csv
+  add notes.txt
+  add old.log
+  add todo.txt
+  4 actions, 0 unchanged
+  verified: true
+== backup 2 ==
+  add new.md
+  update todo.txt
+  delete old.log
+  3 actions, 2 unchanged
+  verified: true

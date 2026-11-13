@@ -1,0 +1,70 @@
+## Log summary: parses "DATE TIME LEVEL component: message" lines, counts
+## levels and error components, and finds the busiest hour.
+
+struct Line
+    hour str
+    level str
+    comp str
+    msg str
+
+fn sample() List[str]
+    [
+        "2026-01-05 09:58:01 INFO web: started",
+        "2026-01-05 10:00:07 ERROR db: timeout after 30s",
+        "2026-01-05 10:00:09 WARN web: slow request",
+        "garbled line",
+        "2026-01-05 10:15:44 ERROR db: connection reset",
+        "2026-01-05 10:16:00 INFO cache: warmed 120 keys",
+        "2026-01-05 11:02:10 ERROR web: 500 on /checkout",
+        "2026-01-05 11:02:11 DEBUG web: ignored level",
+        "2026-01-05 11:30:00 ERROR db: deadlock detected",
+    ]
+
+fn parse_line(text str) Line?
+    parts := text.split(" ")
+    if parts.len() < 4
+        return none
+    level := parts[2]
+    if not ["INFO", "WARN", "ERROR"].contains(level)
+        return none
+    Line(
+        hour: parts[1].slice(0, 2),
+        level: level,
+        comp: parts[3].replace(":", ""),
+        msg: parts[4..].join(" "),
+    )
+
+fn main()
+    mut levels := Map[str, int]()
+    mut hours := Map[str, int]()
+    mut errors := Map[str, int]()
+    mut bad := 0
+    mut last_error := ""
+    for text in sample()
+        line := parse_line(text) else
+            bad += 1
+            continue
+        levels[line.level] += 1
+        hours[line.hour] += 1
+        if line.level == "ERROR"
+            errors[line.comp] += 1
+            last_error = line.msg
+    print("unparsed: {bad}")
+    for l in ["ERROR", "WARN", "INFO"]
+        n := levels.get(l) else 0
+        print("{l:<6}{n:>3}")
+    busiest := hours.keys().sorted().sorted(by: |h| -hours[h])[0]
+    print("busiest hour: {busiest}:00 ({hours[busiest]} lines)")
+    for c in errors.keys().sorted().sorted(by: |k| -errors[k])
+        print("errors in {c}: {errors[c]}")
+    print("last error: {last_error}")
+
+@test fn parses_a_line()
+    l := parse_line("2026-01-05 10:00:07 ERROR db: timeout after 30s")?
+    assert_eq(l.hour, "10")
+    assert_eq(l.comp, "db")
+    assert_eq(l.msg, "timeout after 30s")
+
+@test fn rejects_bad_lines()
+    assert(parse_line("nonsense") == none)
+    assert(parse_line("2026-01-05 10:00:07 TRACE db: x") == none)

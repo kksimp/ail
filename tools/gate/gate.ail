@@ -90,6 +90,36 @@ fn Gate.examples(mut self, tmp str)
                 "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
 
+## The public corpus (corpus/NAME/{NAME.ail, NAME.py, NAME.out}): each program builds natively, prints its `.out`, and passes
+## its own `@test`s. The `.out` is the Python twin's output, so the twin is the oracle (tools/check-corpus-py.py checks it).
+fn Gate.corpus(mut self, tmp str)
+    for name in (fs.list_dir("corpus") else []).sorted()
+        dir := "corpus/{name}"
+        meta := fs.metadata(dir) else continue
+        if not meta.is_dir
+            continue
+        src := "{dir}/{name}.ail"
+        if not fs.exists(src) or not fs.exists("{dir}/{name}.py") or not fs.exists("{dir}/{name}.out")
+            red(dir, "needs {name}.ail, {name}.py and {name}.out")
+            continue
+        exe := "{tmp}/co_{name}"
+        if why := build(src, exe)
+            red(src, "does not build: {why}")
+            continue
+        self.built += 1
+        got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
+            red(src, "could not run the executable")
+            continue
+        want := fs.read_text("{dir}/{name}.out") else ""
+        if got.status != 0 or lf(got.out) != lf(want)
+            red(src, "exit {got.status}; output differs from {name}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}")
+            continue
+        t := proc.run("./ail", ["test", src], none, 120000) else
+            red(src, "could not start ail test")
+            continue
+        if t.status != 0
+            red(src, "ail test failed\n{t.out}{t.err}")
+
 fn Gate.selfhost(mut self)
     # Windows has the fixed point in PowerShell (stages 1 to 3); its native test programs are nativex's.
     mut cmd := "tools/self-host/run.sh"
@@ -3582,6 +3612,7 @@ fn main() !
         "cert",
         "try",
         "parity",
+        "corpus",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3590,6 +3621,7 @@ fn main() !
     for s in suites
         match s
             "examples" => g.examples(tmp)
+            "corpus" => g.corpus(tmp)
             "cases" => g.cases()
             "explain" => g.explain_coverage()
             "fix" => g.fix(tmp)

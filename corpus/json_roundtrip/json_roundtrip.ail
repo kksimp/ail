@@ -1,0 +1,70 @@
+## JSON round trip: a people list is written to a temp file, decoded into
+## structs with a derived `FromJson`, edited, encoded back with `ToJson`,
+## reloaded and compared. A compact re-encode of a small document is shown.
+
+struct Person
+    name str
+    age int
+    tags List[str]
+    email str?
+
+impl ToJson for Person
+impl FromJson for Person
+
+PEOPLE := r"""
+[
+  {"name": "Ann", "age": 31, "tags": ["admin", "dev"], "email": "ann@example.com"},
+  {"name": "Bob", "age": 27, "tags": []},
+  {"name": "Cy", "age": 45, "tags": ["ops"], "email": null}
+]
+"""
+
+fn birthday(people List[Person]) List[Person]
+    [Person(name: p.name, age: p.age + 1, tags: p.tags, email: p.email) for p in people]
+
+fn describe(p Person) str
+    tags := if p.tags.is_empty() then "-" else p.tags.join("+")
+    email := p.email else "none"
+    "{p.name:<4}{p.age:>3} tags={tags} email={email}"
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_json_roundtrip")?
+    file := path.join(dir, "people.json")
+    fs.write_text(file, PEOPLE)?
+    people := load_json[List[Person]](file)?
+    print("loaded {people.len()} people")
+    for p in people
+        print(describe(p))
+    older := birthday(people)
+    fs.write_text(file, Json.Arr([q.to_json() for q in older]).to_text())?
+    again := load_json[List[Person]](file)?
+    print("round trip equal: {again == older}")
+    print("ages: {[q.age for q in again]}")
+    doc := parse_json("\{\"id\": \"a1\", \"ok\": true, \"names\": [\"x\", \"y\"], \"gone\": null}")?
+    print(doc.to_text())
+    print("id={doc.text("id", "?")} ok={doc.flag("ok", false)} missing={doc.text("nope", "dflt")}")
+    bad := parse_json("\{\"name\": \"Dee\", \"tags\": []}")?
+    if r := Person.from_json(bad)
+        print("unexpected: {r}")
+    else err
+        print("rejected a person without an age")
+    fs.remove(file)?
+    fs.remove(dir)?
+
+@test fn decodes_a_person()
+    j := parse_json("\{\"name\": \"Ann\", \"age\": 3, \"tags\": [\"a\"]}")?
+    p := Person.from_json(j)?
+    assert_eq(p, Person(name: "Ann", age: 3, tags: ["a"], email: none))
+
+@test fn encode_then_decode_is_identity()
+    p := Person(name: "Zed", age: 9, tags: ["x", "y"], email: "z@example.com")
+    assert_eq(Person.from_json(p.to_json())?, p)
+
+@test fn missing_field_is_rejected()
+    j := parse_json("\{\"name\": \"Dee\"}")?
+    if p := Person.from_json(j)
+        assert_eq(p.name, "unreachable")
+
+@test fn birthday_adds_a_year()
+    older := birthday([Person(name: "A", age: 1, tags: [], email: none)])
+    assert_eq(older[0].age, 2)

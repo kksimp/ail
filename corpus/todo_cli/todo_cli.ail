@@ -1,0 +1,107 @@
+## A to-do list CLI whose state lives in one text file (`id|done|text` per
+## line). Each embedded command is run against the file: add, done, remove
+## and list, so the list survives from one command to the next.
+
+struct Todo
+    id int
+    done bool
+    text str
+
+fn parse_todos(text str) List[Todo]
+    mut out := List[Todo]()
+    for line in text.lines()
+        cells := line.split("|")
+        if cells.len() != 3
+            continue
+        id := cells[0].to_int() else continue
+        out.push(Todo(id: id, done: cells[1] == "1", text: cells[2]))
+    out
+
+fn done_char(done bool) str
+    if done
+        return "1"
+    "0"
+
+fn render_todos(todos List[Todo]) str
+    lines := ["{t.id}|{done_char(t.done)}|{t.text}" for t in todos]
+    lines.join("\n")
+
+fn complete(todos List[Todo], id int) List[Todo]
+    [Todo(id: t.id, done: t.done or t.id == id, text: t.text) for t in todos]
+
+fn without(todos List[Todo], id int) List[Todo]
+    [t for t in todos if t.id != id]
+
+fn load(file str) !List[Todo]
+    if not fs.exists(file)
+        return List[Todo]()
+    parse_todos(fs.read_text(file)?)
+
+fn run(file str, line str) !
+    mut todos := load(file)?
+    parts := line.split(" ", 2)
+    verb := parts[0]
+    arg := if parts.len() > 1 then parts[1] else ""
+    ids := [t.id for t in todos]
+    if verb == "add"
+        new_id := (ids.max() else 0) + 1
+        todos.push(Todo(id: new_id, done: false, text: arg))
+        print("added {new_id}: {arg}")
+    elif verb == "done" or verb == "rm"
+        id := arg.to_int() else -1
+        if not ids.contains(id)
+            print("no such todo: {arg}")
+            return
+        if verb == "done"
+            todos = complete(todos, id)
+            print("completed {id}")
+        else
+            todos = without(todos, id)
+            print("removed {id}")
+    elif verb == "list"
+        if todos.is_empty()
+            print("nothing to do")
+        for t in todos
+            mark := if t.done then "x" else " "
+            print("[{mark}] {t.id} {t.text}")
+        pending := [t for t in todos if not t.done]
+        print("{pending.len()} open, {todos.len() - pending.len()} done")
+    else
+        print("unknown command: {verb}")
+    fs.write_text(file, render_todos(todos))?
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_todo_cli")?
+    file := path.join(dir, "todos.txt")
+    commands := [
+        "list",
+        "add buy milk",
+        "add write the report",
+        "add call mom",
+        "list",
+        "done 2",
+        "done 9",
+        "rm 1",
+        "add water plants",
+        "frobnicate now",
+        "list",
+    ]
+    for c in commands
+        print("> {c}")
+        run(file, c)?
+    print("file holds {fs.read_text(file)?.lines().len()} lines")
+    fs.remove(file)?
+    fs.remove(dir)?
+
+@test fn roundtrips_through_text()
+    todos := [Todo(id: 1, done: true, text: "a b"), Todo(id: 4, done: false, text: "c")]
+    assert_eq(parse_todos(render_todos(todos)), todos)
+
+@test fn complete_marks_only_one()
+    todos := [Todo(id: 1, done: false, text: "a"), Todo(id: 2, done: false, text: "b")]
+    assert_eq(complete(todos, 2)[1].done, true)
+    assert_eq(complete(todos, 2)[0].done, false)
+
+@test fn without_removes_by_id()
+    todos := [Todo(id: 1, done: false, text: "a"), Todo(id: 2, done: false, text: "b")]
+    assert_eq(without(todos, 1), [Todo(id: 2, done: false, text: "b")])

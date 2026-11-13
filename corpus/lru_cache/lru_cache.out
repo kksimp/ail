@@ -1,0 +1,5 @@
+hits: 10
+misses: 16
+evictions: 5
+sum of hit values: 1530
+order oldest to newest: [3, 5, 1]

@@ -1,0 +1,76 @@
+## Two channel pipelines. Numbers: a generator task feeds a filter task that
+## squares the odd values, and main sums what comes out. Text: a task splits
+## lines into words, and main counts them.
+
+fn generate(out Channel[int], n int)
+    for i in 1..=n
+        out.send(i)
+    out.close()
+
+fn square_odd(inp Channel[int], out Channel[int])
+    for v in inp
+        if v % 2 == 1
+            out.send(v * v)
+    out.close()
+
+fn sum_odd_squares(n int) !int
+    raw := Channel[int](4)
+    squares := Channel[int](4)
+    t1 := spawn generate(raw, n)
+    t2 := spawn square_odd(raw, squares)
+    mut total := 0
+    for v in squares
+        total += v
+    t1.wait()?
+    t2.wait()?
+    total
+
+fn split_words(lines Channel[str], words Channel[str])
+    for line in lines
+        for w in line.words()
+            words.send(w.to_lower())
+    words.close()
+
+fn feed(lines Channel[str], texts List[str])
+    for t in texts
+        lines.send(t)
+    lines.close()
+
+fn count_words(texts List[str]) !Map[str, int]
+    lines := Channel[str](2)
+    words := Channel[str](4)
+    t1 := spawn feed(lines, texts)
+    t2 := spawn split_words(lines, words)
+    mut counts := {}
+    for w in words
+        counts[w] += 1
+    t1.wait()?
+    t2.wait()?
+    counts
+
+fn main() !
+    small := sum_odd_squares(10)?
+    large := sum_odd_squares(100)?
+    print("odd squares up to 10: {small}")
+    print("odd squares up to 100: {large}")
+    texts := [
+        "the quick brown fox",
+        "jumps over the lazy dog",
+        "The dog barks and the fox runs",
+        "",
+        "quick quick quick",
+    ]
+    counts := count_words(texts)?
+    order := counts.keys().sorted().sorted(by: |w| -counts[w])
+    for w in order.take(5)
+        print("{w:<6}{counts[w]:>3}")
+    print("{counts.len()} distinct words, {counts.values().sum()} in total")
+
+@test fn sums_small_cases()
+    assert_eq(sum_odd_squares(5)?, 35)
+    assert_eq(sum_odd_squares(0)?, 0)
+
+@test fn counts_case_insensitively()
+    c := count_words(["A a", "b"])?
+    assert_eq(c["a"], 2)
+    assert_eq(c["b"], 1)

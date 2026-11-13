@@ -1,0 +1,81 @@
+## Layered configuration: defaults, a user file and an override layer, each
+## `key = value` text, are written to temp files, read back and merged with
+## the later layer winning. The report shows each key's value and the layer
+## it came from, plus lines that were not valid settings.
+
+struct Layer
+    name str
+    pairs Map[str, str]
+    bad int
+
+fn parse_layer(name str, text str) Layer
+    mut pairs := Map[str, str]()
+    mut bad := 0
+    for line in text.lines()
+        t := line.trim()
+        if t.is_empty() or t.starts_with("#")
+            continue
+        cells := t.split("=", 2)
+        if cells.len() != 2 or cells[0].trim().is_empty()
+            bad += 1
+            continue
+        pairs[cells[0].trim()] = cells[1].trim()
+    Layer(name: name, pairs: pairs, bad: bad)
+
+fn merge(layers List[Layer]) Layer
+    mut merged := Map[str, str]()
+    mut bad := 0
+    for layer in layers
+        bad += layer.bad
+        for k, v in layer.pairs
+            merged[k] = v
+    Layer(name: "merged", pairs: merged, bad: bad)
+
+fn setting_int(layer Layer, key str, fallback int) int
+    text := layer.pairs.get(key) else return fallback
+    text.to_int() else fallback
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_config_merge")?
+    names := ["defaults", "user", "override"]
+    texts := [
+        "# built-in defaults\nport = 8080\nhost = localhost\nworkers = 2\nlog = info\n",
+        "workers = 8\nlog=debug\n\nthis line is junk\ncache_dir = /var/cache\n",
+        "port = 9090\n= nameless\nworkers = many\nlog = warn\n",
+    ]
+    mut layers := List[Layer]()
+    for i in 0..names.len()
+        file := path.join(dir, "{names[i]}.conf")
+        fs.write_text(file, texts[i])?
+        layers.push(parse_layer(names[i], fs.read_text(file)?))
+        fs.remove(file)?
+    fs.remove(dir)?
+    mut origin := Map[str, str]()
+    for layer in layers
+        for k in layer.pairs.keys()
+            origin[k] = layer.name
+    cfg := merge(layers)
+    print("{"key":<10}{"value":<12}layer")
+    for k in cfg.pairs.keys().sorted()
+        print("{k:<10}{cfg.pairs[k]:<12}{origin[k]}")
+    port := setting_int(cfg, "port", 80)
+    workers := setting_int(cfg, "workers", 1)
+    retries := setting_int(cfg, "retries", 3)
+    print("port={port} workers={workers} retries={retries}")
+    print("{cfg.pairs.len()} keys, {cfg.bad} bad lines")
+
+@test fn later_layer_wins()
+    a := parse_layer("a", "x = 1\ny = 2\n")
+    b := parse_layer("b", "y = 3\n")
+    assert_eq(merge([a, b]).pairs, {"x": "1", "y": "3"})
+
+@test fn bad_lines_are_counted()
+    l := parse_layer("l", "ok = 1\njunk\n# c\n= v\n")
+    assert_eq(l.bad, 2)
+    assert_eq(l.pairs.len(), 1)
+
+@test fn typed_lookup_falls_back()
+    l := parse_layer("l", "n = 7\nm = x\n")
+    assert_eq(setting_int(l, "n", 0), 7)
+    assert_eq(setting_int(l, "m", 5), 5)
+    assert_eq(setting_int(l, "q", 9), 9)
