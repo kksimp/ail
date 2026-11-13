@@ -1,6 +1,6 @@
 # 0965. Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine
 
-- **Status:** Deferred past 0.1.0
+- **Status:** Superseded by [1073](1073-generators-and-user-iteration.md)
 - **Date:** 2026-11-05
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 05 — Expressions; 11 — Concurrency

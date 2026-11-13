@@ -1112,4 +1112,97 @@ fn Deque.to_list(self) List[T]
         out.push(front[front.len() - 1 - i])
     out.extend(back)
     out
+
+## @module seq
+## `Seq[T]` (expr.yield.1-5, expr.iter.1-3, ADR 1073): a lazy sequence, what a
+## generator returns. It is read only when the program names `Seq` and doesn't
+## declare that name itself.
+
+## A sequence whose elements are made as they are read: `step` gives the next
+## one, or `none` at the end. It is unique: reading it uses it up, so it is
+## never copied (own.uniq.1), and `for x in s` takes it over (expr.iter.1).
+unique struct Seq[T]
+    step fn() T?
+
+## The next element, or `none` once the sequence has ended (expr.iter.2).
+fn Seq.next(mut self) T?
+    f := step
+    f()
+
+## The elements of `xs`, in order (expr.iter.3).
+fn Seq.of(xs List[T]) Seq[T]
+    for x in xs
+        yield x
+
+## `f` of each element (expr.iter.3).
+fn Seq.map[U](move self, f fn(T) U) Seq[U]
+    for x in self
+        yield f(x)
+
+## The elements for which `keep` is true (expr.iter.3).
+fn Seq.filter(move self, keep fn(T) bool) Seq[T]
+    for x in self
+        if keep(x)
+            yield x
+
+## The elements up to the first for which `keep` is false (expr.iter.3).
+fn Seq.take_while(move self, keep fn(T) bool) Seq[T]
+    for x in self
+        if not keep(x)
+            return
+        yield x
+
+## The first `n` elements; no more are read (expr.iter.3).
+fn Seq.take(move self, n int) Seq[T]
+    mut s := self
+    mut left := n
+    while left > 0
+        x := s.next() else return
+        yield x
+        left -= 1
+
+## The elements after the first `n` (expr.iter.3).
+fn Seq.skip(move self, n int) Seq[T]
+    mut k := 0
+    for x in self
+        if k >= n
+            yield x
+        k += 1
+
+## Each element with its index from 0, as `(i, x)` (expr.iter.3).
+fn Seq.enumerate(move self) Seq[(int, T)]
+    mut i := 0
+    for x in self
+        yield (i, x)
+        i += 1
+
+## Pairs of elements of the two sequences, until either ends (expr.iter.3).
+fn Seq.zip[U](move self, move other Seq[U]) Seq[(T, U)]
+    mut a := self
+    mut b := other
+    while true
+        x := a.next() else return
+        y := b.next() else return
+        yield (x, y)
+
+## The elements of this sequence, then those of `other` (expr.iter.3).
+fn Seq.chain(move self, move other Seq[T]) Seq[T]
+    for x in self
+        yield x
+    for y in other
+        yield y
+
+## The elements in a list (expr.iter.3).
+fn Seq.collect(move self) List[T]
+    mut out := List[T]()
+    for x in self
+        out.push(x)
+    out
+
+## How many elements there are (expr.iter.3).
+fn Seq.count(move self) int
+    mut n := 0
+    for _ in self
+        n += 1
+    n
 """

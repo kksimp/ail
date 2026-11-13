@@ -317,7 +317,7 @@
         },
         {
           "name": "keyword.control.ail",
-          "match": "\\b(?:break|continue|elif|else|for|if|match|return|while|defer|spawn|par|with)\\b"
+          "match": "\\b(?:break|continue|elif|else|for|if|match|return|while|defer|spawn|par|with|yield)\\b"
         },
         {
           "name": "storage.modifier.const.ail",

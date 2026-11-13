@@ -1096,6 +1096,10 @@ fn Checker.proven_loops(self) List[ast.Pos]
         if is_prelude_line(f.pos.line)
             continue
         body := f.body else continue
+        # A generator's loops run one element per `next()`, never on the pool
+        # (expr.yield.4, ADR 1073).
+        if ast.has_yield(body)
+            continue
         for s in loops(body)
             match s
                 For(_, _, _, mutable, _, _, _) =>

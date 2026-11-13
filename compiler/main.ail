@@ -741,8 +741,8 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     srcs.extend(derive_builtin(srcs))
     srcs.extend(derive_user(srcs, rt, std))
     lazy := srcs.len()
-    # The prelude's JSON and `Default` modules come from the embedded copy,
-    # for the programs that name them (json.prelude.1, ADR 0808).
+    # The prelude's JSON, `Default` and `Seq` modules come from the embedded
+    # copy, for the programs that name them (json.prelude.1, ADR 0808, ADR 1073).
     if mentions_prelude(srcs)
         srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
     # The proof checks the whole program once more, so a program over about
@@ -820,6 +820,7 @@ fn mentions_prelude(srcs List[mir.Source]) bool
             or s.text.contains("Json")
             or s.text.contains("Default")
             or s.text.contains("Grid")
+            or s.text.contains("Seq")
             or s.text.contains("Heap")
             or s.text.contains("Deque")
             return true

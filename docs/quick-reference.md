@@ -383,6 +383,38 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 either one, and its value is the function's result. A `while true` loop with
 no `break` can end a function too.
 
+### Generators and `Seq` (expr.yield.1-4, expr.iter.1-3)
+
+```ail
+fn count(n int) Seq[int]             # `yield` in the body makes it a generator
+    for i in 0..n
+        yield i                      # the next element; a bare `return` ends it
+
+struct Countdown
+    n int
+
+fn Countdown.next(mut self) int?     # any type with this `next` works in `for`
+    if n == 0
+        return none
+    n -= 1
+    n + 1
+
+fn main()
+    for i in count(3)                # runs the body up to each `yield`
+        print(i)
+    print(count(10).filter(|x| x % 2 == 0).map(|x| x * x).take(3).collect())   # [0, 4, 16]
+    mut s := count(2)
+    print(s.next() else -1)          # 0
+    for k in Countdown(n: 2)         # 2 1; the loop reads a copy
+        print(k)
+```
+
+A `Seq[T]` is unique: `for` and the adapters take it over, so it is read once.
+Adapters (lazy): `Seq.of(xs)`, `map`, `filter`, `take_while`, `take`, `skip`,
+`enumerate`, `zip`, `chain`; `collect()` and `count()` read to the end.
+`Seq(step: f)` wraps any `fn() T?`. A generator keeps copies of its arguments,
+so it takes no `mut` parameters, `mut self`, `defer` or contracts.
+
 ## Operators and strings
 
 - `+ - * / %` on `int`. Overflow and division by zero stop the program (a

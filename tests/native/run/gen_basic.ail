@@ -1,0 +1,107 @@
+# expr.yield.1-4, expr.iter.1-3 (ADR 1073): generators, `Seq` and `for` over `next`.
+fn count(n int) Seq[int]
+    for i in 0..n
+        yield i
+
+fn evens(limit int) Seq[int]
+    mut k := 0
+    while true
+        if k > limit
+            return
+        yield k
+        k += 2
+
+fn words(text str) Seq[str]
+    for w in text.split(" ")
+        if w != ""
+            yield w
+
+fn fib() Seq[int]
+    mut a := 0
+    mut b := 1
+    while true
+        yield a
+        c := a + b
+        a = b
+        b = c
+
+fn halves(x float) Seq[float]
+    mut v := x
+    while v > 0.1
+        yield v
+        v = v / 2.0
+
+## Each yielded list is a copy: the generator goes on changing its own.
+fn grow() Seq[List[int]]
+    mut acc := List[int]()
+    for i in 0..3
+        acc.push(i)
+        yield acc
+
+fn each(xs List[int]) Seq[int]
+    for x in xs
+        yield x
+
+struct Node
+    value int
+    kids List[Node]
+
+## A recursive generator: each child's sequence is read inside this one.
+fn walk(n Node) Seq[int]
+    yield n.value
+    for k in n.kids
+        for v in walk(k)
+            yield v
+
+struct Countdown
+    n int
+
+fn Countdown.next(mut self) int?
+    if n == 0
+        return none
+    n -= 1
+    n + 1
+
+struct Shelf
+    names List[str]
+
+fn Shelf.titles(self) Seq[str]
+    for n in names
+        yield "[{n}]"
+
+fn main()
+    for i in count(3)
+        print(i)
+    print([x * x for x in count(4)])
+    print(evens(6).collect())
+    for w in words("a  b c")
+        print(w)
+    print(fib().take(10).collect())
+    for h in halves(1.0)
+        print("{h:.3}")
+    print(grow().collect())
+    mut xs := [1, 2]
+    s0 := each(xs)
+    xs.push(3)
+    print(s0.collect())
+    mut s := count(2)
+    print(s.next() else -1)
+    print(s.next() else -1)
+    print(s.next() else -1)
+    print(s.next() else -1)
+    c := Countdown(n: 3)
+    for k in c
+        print(k)
+    print(c.n)
+    leaf := Node(value: 3, kids: [])
+    tree := Node(value: 1, kids: [Node(value: 2, kids: [leaf]), Node(value: 4, kids: [])])
+    print(walk(tree).collect())
+    for i, x in Seq.of(["a", "b"]).enumerate()
+        print("{i}:{x}")
+    for a, b in count(3).zip(move Seq.of(["x", "y"]))
+        print("{a}{b}")
+    print(count(3).chain(move count(2)).collect())
+    print(count(10).skip(7).collect())
+    print(count(5).count())
+    print(Shelf(names: ["x", "y"]).titles().collect())
+    print(count(0).collect().len())

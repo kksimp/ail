@@ -1,0 +1,90 @@
+## `yield e` (expr.yield.1-2, ADR 1073). The parser holds the statement as a
+## call of the reserved name `yield` with one argument, so every pass that
+## walks calls (effects, moves, implicit `self`) sees its operand; `yield` is a
+## keyword, so no program can declare or call a function of that name.
+
+## The reserved callee of a `yield` statement.
+pub YIELD := "yield"
+
+## The statement `yield value` at `pos`.
+pub fn yield_stmt(value Expr, pos Pos) Stmt
+    arg := Arg(label: none, mutable: false, moved: false, value: value, param: none)
+    Stmt.Eval(value: Expr.Call(callee: Expr.Name(name: YIELD, pos: pos), args: [arg], pos: pos))
+
+## Whether `callee` is the reserved name of a `yield`.
+pub fn is_yield_callee(callee Expr) bool
+    names_yield(callee)
+
+@allow("expr.match.3") fn names_yield(callee Expr) bool
+    match callee
+        Name(n, _) => n == YIELD
+        _ => false
+
+## The operand of `s` when it is `yield e`.
+pub fn yield_value(s Stmt) Expr?
+    stmt_yield(s)
+
+@allow("expr.match.3") fn stmt_yield(s Stmt) Expr?
+    match s
+        Eval(e) => yield_operand(e)
+        _ => none
+
+@allow("expr.match.3") fn yield_operand(e Expr) Expr?
+    match e
+        Call(callee, args, _) =>
+            if is_yield_callee(callee) and args.len() == 1
+                return args[0].value
+            none
+        _ => none
+
+## Whether a function body contains a `yield`, at any depth of its blocks:
+## such a function is a generator (expr.yield.1).
+pub fn has_yield(body List[Stmt]) bool
+    for s in body
+        if stmt_yields(s)
+            return true
+    false
+
+@allow("expr.match.3") fn stmt_yields(s Stmt) bool
+    if yield_value(s) != none
+        return true
+    match s
+        Let(_, _, _, value, otherwise) =>
+            if expr_yields(value)
+                return true
+            if o := otherwise
+                return else_yields(o)
+            false
+        Assign(_, _, value, _) => expr_yields(value)
+        While(_, body, _) => has_yield(body)
+        For(_, _, _, _, _, body, _) => has_yield(body)
+        Eval(e) => expr_yields(e)
+        Handle(value, otherwise) => expr_yields(value) or else_yields(otherwise)
+        Defer(inner, _) => stmt_yields(inner)
+        With(_, _, _, body, _) => has_yield(body)
+        Unsafe(body, _) => has_yield(body)
+        _ => false
+
+## The statement blocks inside an expression: `if`, `match` and an `else` handler.
+@allow("expr.match.3") fn expr_yields(e Expr) bool
+    match e
+        If(branches, els, _, _) =>
+            for b in branches
+                if has_yield(b.body)
+                    return true
+            if body := els
+                return has_yield(body)
+            false
+        Match(_, arms, _) =>
+            for a in arms
+                if has_yield(a.body)
+                    return true
+            false
+        OrElse(_, otherwise, _) => else_yields(otherwise)
+        _ => false
+
+fn else_yields(o Else) bool
+    match o
+        Fallback(v) => expr_yields(v)
+        Leave(st) => stmt_yields(st)
+        Handler(_, body, _) => has_yield(body)

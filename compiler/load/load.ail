@@ -375,7 +375,7 @@ fn assemble(
 
 ## The always-read prelude, plus the optional modules the program names
 ## (json.prelude.1, ADR 0161): `json`, `jsonderive`, `default`, `argsderive`, `derive`,
-## `grid` (ADR 0937), `heap` and `deque` (ADR 1086).
+## `grid` (ADR 0937), `heap` and `deque` (ADR 1086), and `seq` (ADR 1073).
 @allow("expr.match.3") fn prelude_text(tokens List[syntax.Token]) str
     parts := split_modules(mir.PRELUDE_EMBED)
     want_json_derive := wants(tokens, JSON_DERIVE_NAMES)
@@ -410,10 +410,13 @@ fn assemble(
         text = "{text}{parts[7]}"
     if wants(tokens, ["Deque"])
         text = "{text}{parts[8]}"
+    # expr.yield.1: `Seq[T]`, what a generator returns (ADR 1073).
+    if wants(tokens, ["Seq"])
+        text = "{text}{parts[9]}"
     text
 
 ## The prelude cut at its `## @module` markers: core, json, jsonderive,
-## default, argsderive, derive, grid, heap, deque. Each part after the first starts after its marker line.
+## default, argsderive, derive, grid, heap, deque, seq. Each part after the first starts after its marker line.
 fn split_modules(text str) List[str]
     mut parts := List[str]()
     mut cur := List[str]()
