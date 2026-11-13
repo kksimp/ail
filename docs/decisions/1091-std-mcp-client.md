@@ -18,7 +18,7 @@ is MCP servers, and a program that drives one hand-writes the JSON-RPC framing.
 server over stdio with `proc.start`, does the `initialize` handshake and returns
 a unique `Client`; `tools()` lists tools (all pages); `call(name, Json)` returns
 `structuredContent` or the result; `mcp.text` reads text blocks. Failures are an
-`McpError { kind, message }` with four kinds. Messages that are not the pending
+`McpError { kind, message }` with four kinds (`mcp.McpKind`, an enum per ADR 1068). Messages that are not the pending
 reply are skipped; each reply waits 30 s by default. No runtime, lowering or
 Rust change: only the four std registration lines.
 
