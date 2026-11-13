@@ -230,7 +230,7 @@ the source of `copy`, and `compress.gzip_file`, `gunzip_file`, `zip_dir`
 and `unzip` for their input) needs `fs` or `fs.read` to cover the path. A
 call that writes, removes or changes (`write_*`, `append_*`, `remove`,
 `make_dir`, `make_temp_dir`, both ends of `rename`, the target of `copy`,
-`trash`, `set_mode`, `set_modified`, `symlink`, `truncate`, `write_at` and the
+`trash`, `set_mode`, `set_modified`, `symlink`, `truncate`, `sync`, `write_at` and the
 outputs of the compress functions) needs `fs` or `fs.write`. A path is
 covered when, after the program's path and the scope are both made absolute
 (a relative one against the working directory), have every symbolic link

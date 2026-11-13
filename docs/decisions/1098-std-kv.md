@@ -35,8 +35,11 @@ Linux and Windows.
 - **A B-tree or hash file read in place.** Needs page management and no
   in-memory copy; far more code for data sized for a config or a cache. A later
   module can add it.
-- **Calling `fsync`.** `std.fs` has no flush-to-disk call; the cost is that a
-  power failure may lose the last changes (std.kv.4), which is documented.
+- **Syncing on every `set`.** Makes each change power-safe but costs a disk
+  flush per call; an explicit `sync()` lets the program choose. Cost: a program
+  that forgets it may lose the last changes in a power failure (std.kv.4).
+- **Syncing the directory too.** Needs a directory handle on Windows and extra
+  per-OS code; a new file may be missing after a power failure until then.
 - **Text values (`Map[str, str]`).** Forces an encoding step for binary data;
   `bytes` loses nothing and `text()` / `to_bytes()` convert.
 - **Replacing a corrupt record in the middle and reading on.** Cannot tell a

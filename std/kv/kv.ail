@@ -194,8 +194,14 @@ pub fn Store.compact(mut self) ! fs.IoError | KvError
     data := join(parts)
     temp := "{path}.compact"
     fs.write_bytes(temp, data)?
+    fs.sync(temp)?
     fs.rename(temp, path)?
     size = data.len()
+
+## Asks the operating system to put the file on the disk, so every change made
+## so far survives a power failure (std.kv.4).
+pub fn Store.sync(self) ! fs.IoError
+    fs.sync(path)?
 
 ## Ends the use of the store (std.kv.1). Nothing is buffered, so nothing is lost
 ## by dropping it instead.

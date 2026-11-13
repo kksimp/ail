@@ -873,4 +873,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1089](1089-caps-attribute-on-functions.md) | `@caps(LIST)` limits a function to the listed capabilities *(delegated)* | Accepted | 2026-11-12 |
 | [1090](1090-std-yaml.md) | `std.yaml`: the common subset of YAML read into the `Json` value *(delegated)* | Accepted | 2026-11-13 |
 | [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |
-| [1098](1098-std-kv.md) | `std.kv`: a key-value store in one file with a crash-safe log *(delegated)* | Accepted | 2026-11-13 |
+| [1098](1098-std-kv.md) | `std.kv`: a key-value store in one file with a crash-safe log; `fs.sync` *(delegated)* | Accepted | 2026-11-13 |

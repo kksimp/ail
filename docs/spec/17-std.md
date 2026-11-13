@@ -316,7 +316,15 @@ bytes. A negative `len` traps. *(ADR 0977)*
 missing and growing it with zero bytes when it is shorter than `offset`; the
 rest of the file is unchanged. A negative `offset` traps. *(ADR 0977)*
 
-```ail norun rules=std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33,std.fs.34
+**std.fs.38** — `sync(path str) ! IoError` asks the operating system to put the
+file's data on the disk, so it survives a power failure: `fsync` on Linux,
+`fcntl(F_FULLFSYNC)` on macOS (plain `fsync` there stops at the drive's cache),
+`FlushFileBuffers` on Windows. The file must exist and be writable, and is not
+changed. It does not sync the directory that holds the file, so a file made a
+moment before may still be missing after a power failure. It needs `fs` or
+`fs.write` ([18-effects](18-effects.md)). *(ADR 1098)*
+
+```ail norun rules=std.fs.28,std.fs.29,std.fs.30,std.fs.31,std.fs.32,std.fs.33,std.fs.34,std.fs.38
 use std.fs
 
 fn main() !
@@ -327,6 +335,7 @@ fn main() !
     print(fs.read_link("run")?)
     fs.truncate("archive.bin", 1048576)?
     fs.write_at("out.bin", 4096, b"tail")?
+    fs.sync("out.bin")?
 ```
 
 ```ail rules=std.fs.20
@@ -1927,7 +1936,12 @@ the way to see a failure. A writer that goes out of scope is flushed by its
 `drop` (`own.uniq.3`) on every path, a trap included, but a `drop` cannot
 report a failure, so write `w.close()?` where the data matters. *(ADR 1071)*
 
-```ail norun rules=std.file.6,std.file.7,std.file.8,std.file.9
+**std.file.10** — `w.sync() ! fs.IoError` flushes the writer and then asks the
+operating system to put the file on the disk (`fs.sync`, `std.fs.38`), so the
+data written so far survives a power failure. `close` and `drop` flush but do not
+sync. *(ADR 1098)*
+
+```ail norun rules=std.file.6,std.file.7,std.file.8,std.file.9,std.file.10
 use std.file
 
 fn main() !
@@ -2198,10 +2212,13 @@ had none). The change is in the file when the call returns; when the call
 fails the store is as it was. A value of 4 GiB or more fails with `KvError`.
 *(ADR 1098)*
 
-**std.kv.4** — The change is made with an ordinary file write: it survives the
-program stopping, crashing or being killed, but `std.kv` does not ask the
-operating system to flush to the disk, so a power failure may lose the last
-changes. *(ADR 1098)*
+**std.kv.4** — A change is made with an ordinary file write: it survives the
+program stopping, crashing or being killed, but is not yet on the disk, so a
+power failure may lose the last changes. `sync(self) ! fs.IoError` asks the
+operating system to put the file on the disk (`fs.sync`, `std.fs.38`); after it
+returns, every change made so far survives a power failure. Call it after the
+changes that matter, not after each one: it is slow. `compact` syncs the new log
+before it renames it into place. *(ADR 1098)*
 
 **std.kv.5** — The file is a log: a 7-byte header `AILKV1\n`, then one record
 per change (key length and value length as 4-byte little-endian integers, the
@@ -2236,6 +2253,7 @@ fn main() !
     mut s := kv.open(path)?
     s.set("name", "demo".to_bytes())?
     s.set("blob", b"\x01\x02")?
+    s.sync()?                               # on the disk, not only in the file cache
     print(s.len())                          # 2
     print(s.remove("blob")?)                # true
     s.close()

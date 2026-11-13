@@ -1,4 +1,5 @@
-## std.kv.1-9: a file-backed store, removal, reopening, recovery after a stop, compaction and errors.
+## std.kv.1-9, std.fs.38, std.file.10: a file-backed store, removal, reopening, recovery after a stop, compaction, sync and errors.
+use std.file
 use std.kv
 
 fn try_open(p str)
@@ -26,6 +27,7 @@ fn main() !
     print(s.keys().join(","))
     print(s.remove("b")?)
     print(s.remove("b")?)
+    s.sync()?
     s.close()
 
     # std.kv.3, std.kv.6: a reopened store has the changes; the file is 88 bytes.
@@ -46,6 +48,10 @@ fn main() !
     mut s4 := kv.open(p)?
     print(s4.keys().join(","))
     s4.close()
+    fs.sync(p)?
+    mut w := file.append(p)?
+    w.sync()?
+    w.close()?
 
     # std.kv.5: a log cut inside a record keeps everything before it.
     fs.truncate(p, 80)?

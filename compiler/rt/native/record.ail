@@ -981,6 +981,13 @@ fn rec_fs_truncate(path str, len int, at str)
     fs_truncate(path, len, at)
     rec_w_unit("fs.truncate", 1)
 
+fn rec_fs_sync(path str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.sync", at)
+        return
+    fs_sync(path, at)
+    rec_w_unit("fs.sync", 1)
+
 fn rec_fs_write_at(path str, off int, data str, at str)
     if rec_mode() == 2
         rec_r_unit("fs.write_at", at)
