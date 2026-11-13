@@ -142,9 +142,11 @@ fn Lower.frame_begin(mut self, name str, rty Ty, ptys List[Ty], can_fail bool) L
     uniq.depths = []
     uniq.pending = []
     unw.counts = []
+    ens = []
     ens_label = ""
     ens_vars = []
     ens_nargs = 0
+    inv_key = ""
     ps
 
 # ---- function types ----
@@ -620,3 +622,103 @@ fn Lower.made_table(mut self, acc str, mt Ty) int
     seal(join)
     cur = join
     op("copy", [read_var(acc, cur)], mt)
+
+# ---- local functions (type.fn.9-10, ADR 1094) ----
+
+## `fn name(params) R` inside a body: lowered into a function of its own,
+## `OUTER.name`, whose closure object holds the outer locals the body names
+## (type.fn.5). In its body, `name` is the object itself, so it can recurse.
+fn Lower.lower_local_fn(mut self, d ast.FnDecl)
+    mut ptys := List[Ty]()
+    for p in d.params
+        pt := type_of(p.ty) else
+            problem(p.pos, "not in the native subset yet: this parameter type")
+            declare(d.name, Ty.Unknown, -1)
+            return
+        ptys.push(pt)
+    mut rty := Ty.Unit
+    mut err := Ty.Unit
+    mut infers := false
+    if r := d.ret
+        rt := fn_ret_type(r) else
+            problem(r.pos, "not in the native subset yet: this result type")
+            declare(d.name, Ty.Unknown, -1)
+            return
+        rty = rt
+        err = fn_err_type(r)
+        infers = errs_inferred(r)
+    body := d.body else []
+    # The values the body copies: the outer locals it names (type.fn.5).
+    mut used := Set[str]()
+    for s in body
+        ast.stmt_names(s, mut used)
+    mut caps := List[Cap]()
+    mut words := List[Val]()
+    for n in used.sorted()
+        if n == d.name or [p for p in d.params if p.name == n].len() > 0
+            continue
+        key := lookup(n) else continue
+        t := var_ty[key]
+        if t.is_unknown()
+            fn_failed = true
+            declare(d.name, Ty.Unknown, -1)
+            return
+        v := Val(id: read_var(key, cur), ty: t)
+        words.push(Val(id: copy_if_place(ast.Expr.Name(n, d.pos), v), ty: t))
+        caps.push(Cap(name: n, ty: t))
+    # Traces and trap stacks name it `outer.name`.
+    mut name := "{fname}.{d.name}"
+    if fl.thunks.contains(name)
+        name = "{name}#{fl.n}"
+        fl.n += 1
+    fl.thunks.add(name)
+    frame := frame_save()
+    mut all := [Ty.Int]
+    all.extend(ptys)
+    ps := frame_begin(name, rty, all, not err.is_unit())
+    if infers
+        infer_errs[name] = Ty.Unknown
+    env := ps[0]
+    for i in 0..caps.len()
+        c := caps[i]
+        at := op("add", [env, konst(8 * (i + 1), Ty.Int)], Ty.Int)
+        declare(c.name, c.ty, prim_op(if c.ty.is_float() then "loadf" else "load64", [at], c.ty))
+        borrowed.add(lookup(c.name) else "")
+    declare(d.name, Ty.Fn(params: ptys, ret: rty, err: err), env)
+    for k in 0..d.params.len()
+        declare(d.params[k].name, ptys[k], ps[k + 1])
+        borrowed.add(lookup(d.params[k].name) else "")
+    want := not rty.is_unit()
+    if want
+        tail_want = rty
+        if body.len() > 0
+            if e := final_expr(body[body.len() - 1])
+                tail_pos = expr_pos(e)
+    result := lower_block(body, want)
+    if not done()
+        if want
+            if r := result
+                v := Val(id: convert(r, rty, d.pos), ty: r.ty)
+                e := final_expr(body[body.len() - 1]) else ast.Expr.NoneLit(d.pos)
+                finish(return_of(copy_if_borrowed(e, v)))
+            elif not failing()
+                problem(d.pos, "`{d.name}` must end with its result")
+        else
+            finish(return_of(-1))
+    if infers
+        found := infer_errs[name]
+        if not found.is_unknown() and not found.is_unit()
+            err = found
+        infer_errs.remove(name)
+        fn_errs.remove(name)
+    end_fn(name, d.pos)
+    frame_restore(frame)
+    t := Ty.Fn(params: ptys, ret: rty, err: err)
+    obj := closure_object(name, words, t)
+    declare(d.name, t, obj.id)
+
+## Whether a written result is `!T` or `!`, its errors inferred (err.type.2).
+fn errs_inferred(t ast.TypeRef) bool
+    match t.shape
+        Fallible(_, errors) => errors == none
+        _ => false

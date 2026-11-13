@@ -15,9 +15,12 @@ pub struct LitState
     ## no expected result type, by position: the same set on every pass of the
     ## inference (err.type.6).
     pub slots Map[int, int]
+    ## Checking the body of a local function (type.fn.9), where `return`
+    ## leaves it, rather than a literal's.
+    pub in_local_fn bool
 
 pub fn new_lit_state() LitState
-    LitState(floor: -1, slots: {})
+    LitState(floor: -1, slots: {}, in_local_fn: false)
 
 ## The index of the innermost local named `n`, or -1.
 fn Checker.local_index(self, n str) int
@@ -45,6 +48,17 @@ fn Checker.capture_written(mut self, n str, at ast.Pos, action str)
 fn Checker.leaves_literal(mut self, what str, at ast.Pos) bool
     if fn_lits.floor < 0
         return false
+    # type.fn.9: `return` leaves a local function; `break` and `continue` can't.
+    if fn_lits.in_local_fn
+        if what == "return"
+            return false
+        err_help(
+            "type.fn.9",
+            at,
+            "`{what}` can't leave a local function",
+            "return a value that tells the caller to stop, and `break` there",
+        )
+        return true
     err_help(
         "type.fn.4",
         at,
@@ -117,7 +131,9 @@ fn Checker.closure_expr(
         fn_ret = Ty.Res(Ty.Unknown, Errs.Inferred(slot))
     else
         fn_ret = ret_want
+    saved_local := fn_lits.in_local_fn
     fn_lits.floor = locals.len()
+    fn_lits.in_local_fn = false
     loop_depth = 0
     catching = 0
     mark := locals.len()
@@ -138,6 +154,7 @@ fn Checker.closure_expr(
     end_scope(mark)
     fn_ret = saved_ret
     fn_lits.floor = saved_floor
+    fn_lits.in_local_fn = saved_local
     loop_depth = saved_loops
     catching = saved_catching
     captures_ok(params, body)
@@ -191,4 +208,117 @@ fn Checker.captures_ok(mut self, params List[ast.ClosureParam], body ast.Expr)
                 expr_pos(body),
                 "the function literal would copy `{n}`, of the unique type {show(l.ty)}",
                 "a unique value has one owner; pass it to the literal as an argument instead",
+            )
+
+## `fn name(params) R` and its block inside a function body (type.fn.9-10,
+## ADR 1094). The name is a local of the function's type, declared before the
+## body so the body can call it; the body is checked as a function's, with the
+## outer locals it names as read-only copies (type.fn.5). Its parameters are
+## passed by position, so they can't be `mut` or `move` (type.fn.3).
+fn Checker.local_fn(mut self, d ast.FnDecl)
+    mut ptys := List[Ty]()
+    for p in d.params
+        if p.mutable or p.moved
+            err_help(
+                "type.fn.9",
+                p.pos,
+                "a local function's parameter can't be `mut` or `move`",
+                "it is called as a function value, by position; declare the function at the top level instead",
+            )
+        ptys.push(resolve_type(p.ty))
+    mut slot := -1
+    mut ret := Ty.Unit
+    if r := d.ret
+        if errors_inferred(r)
+            key := pos_key(d.pos)
+            slot = fn_lits.slots.get(key) else inferred.len()
+            if slot == inferred.len()
+                inferred.push([])
+                fn_lits.slots[key] = slot
+        ret = resolve_ret(r, slot)
+    if declare(d.name, d.pos)
+        locals.push(Local(
+            name: d.name,
+            ty: Ty.FnTy(ptys, ret),
+            mutable: false,
+            how: LocalKind.Binding,
+            decl: d.pos,
+        ))
+    saved_ret := fn_ret
+    saved_floor := fn_lits.floor
+    saved_local := fn_lits.in_local_fn
+    saved_loops := loop_depth
+    saved_catching := catching
+    fn_ret = ret
+    fn_lits.floor = locals.len()
+    fn_lits.in_local_fn = true
+    loop_depth = 0
+    catching = 0
+    mark := locals.len()
+    for k in 0..d.params.len()
+        p := d.params[k]
+        if declare(p.name, p.pos)
+            locals.push(Local(
+                name: p.name,
+                ty: ptys[k],
+                mutable: false,
+                how: LocalKind.ParamLocal,
+                decl: p.pos,
+            ))
+    body := d.body else []
+    need := not returns_nothing(ret)
+    mut want := no_ty()
+    if need
+        want = ret
+    got := block(body, want, need)
+    if need and not accepts(ret, got)
+        mut at := d.pos
+        if e := last_value(body)
+            at = expr_pos(e)
+        mismatch("expr.block.2", at, ret, got)
+    end_scope(mark)
+    fn_ret = saved_ret
+    fn_lits.floor = saved_floor
+    fn_lits.in_local_fn = saved_local
+    loop_depth = saved_loops
+    catching = saved_catching
+    mut names := Set[str]()
+    for s in body
+        ast.stmt_names(s, mut names)
+    for p in d.params
+        names.remove(p.name)
+    names.remove(d.name)
+    unique_captures(names, d.pos)
+    # Once the body is checked, an inferred error set is the one it found.
+    if slot >= 0
+        i := local_index(d.name)
+        if i >= 0
+            locals[i].ty = Ty.FnTy(ptys, settled_ret(ret, slot))
+
+## Whether a written result is `!T` or `!`, errors inferred (err.type.2).
+@allow("expr.match.3") fn errors_inferred(t ast.TypeRef) bool
+    match t.shape
+        Fallible(_, errors) => errors == none
+        _ => false
+
+## The result `Res(ok, Inferred(slot))` with the errors found, as a set.
+@allow("expr.match.3") fn Checker.settled_ret(self, ret Ty, slot int) Ty
+    match ret
+        Res(ok, _) =>
+            found := inferred[slot]
+            if found.len() == 0
+                return ok
+            Ty.Res(ok, Errs.ErrSet(sort_errors(found)))
+        _ => ret
+
+## type.fn.5: a local function can't copy a value of a unique type.
+fn Checker.unique_captures(mut self, names Set[str], at ast.Pos)
+    for n in names.sorted()
+        l := local(n) else continue
+        if is_unique(l.ty)
+            err_help(
+                "type.fn.5",
+                at,
+                "the local function would copy `{n}`, of the unique type {show(l.ty)}",
+                "a unique value has one owner; pass it to the function as an argument instead",
             )

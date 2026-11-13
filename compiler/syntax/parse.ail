@@ -1698,6 +1698,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
     pos := here()
     tag := tag_at(0)
     text := tok_text(peek())
+    if tag == "kw" and text == "fn" and tag_at(1) == "id"
+        return local_fn()
     if tag == "kw" and text == "defer"
         # `defer S` (own.defer.1).
         bump()
@@ -2117,6 +2119,22 @@ fn Parser.closure(mut self) ast.Expr?
         return none
     body := expression()?
     ast.Expr.Closure(params: params, body: body, pos: pos)
+
+## `fn name(params) R` and its block inside a function body: a named local
+## function (type.fn.9, ADR 1094). Not generic, not a method, no contracts.
+fn Parser.local_fn(mut self) ast.Stmt?
+    f := function_inner(ast.Within.TopLevel)?
+    plain := f.generics.len() == 0 and f.owner == none and f.contracts.len() == 0
+    if not plain or f.unsafe_fn or f.body == none
+        error_text(
+            "type.fn.9",
+            f.pos,
+            "a local function is a plain `fn name(params) Result` with a body",
+            "declare a generic function, a method or one with contracts at the top level",
+            "",
+        )
+        return none
+    ast.Stmt.LocalFn(decl: f)
 
 ## The `for x in xs [if c]` clauses of a comprehension (expr.comp.2).
 fn Parser.comp_clauses(mut self) List[ast.CompFor]?

@@ -123,6 +123,21 @@ fn Mover.stmt(mut self, s ast.Stmt)
             expr(value)
             for b in names
                 declare(b.name)
+        # type.fn.9: a local function's body is a function of its own; the outer
+        # flow goes on past it unchanged.
+        LocalFn(d) =>
+            declare(d.name)
+            saved_flow := flow
+            saved_loops := loops
+            mark := names_in.len()
+            flow = fresh()
+            loops = []
+            for p in d.params
+                names_in.push(p.name)
+            block(d.body else [])
+            names_in = names_in[..mark]
+            flow = saved_flow
+            loops = saved_loops
         Assign(target, op, value, _) =>
             expr(value)
             if n := whole_name(target)

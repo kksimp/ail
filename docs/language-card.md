@@ -350,6 +350,8 @@ calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A li
 (`|x int| ...`). It copies the locals it names when made; they are read-only inside
 (share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
 Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x| x > lo)`.
+A `fn name(params) R` with a block inside a body is a local function: it copies the
+same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
 ## Operators and strings
 

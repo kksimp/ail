@@ -215,6 +215,12 @@ fn Scan.stmt(mut self, s ast.Stmt)
             expr(value)
             for b in names
                 bind(b.name)
+        # type.fn.9: a local function reads the names it copies; its parameters are its own.
+        LocalFn(d) =>
+            bind(d.name)
+            mut own := [p.name for p in d.params]
+            own.push(d.name)
+            scoped(own, d.body else [])
         Assign(target, op, value, _) =>
             write(target, op, expr_pos(target))
             expr(value)
@@ -589,7 +595,7 @@ fn each_let(b List[ast.Stmt]) List[LetOf]
     for s in b
         match s
             Let(n, _, _, value, _) => out.push(LetOf(name: n, value: value))
-            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => out = out
+            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn => out = out
         for inner in each_block(s)
             out.extend(each_let(inner))
     out
@@ -603,6 +609,7 @@ pub fn each_block(s ast.Stmt) List[List[ast.Stmt]]
             if e := o
                 out.extend(else_blocks(e))
         LetTuple(_, value, _) => out.extend(expr_blocks(value))
+        LocalFn(d) => out.push(d.body else [])
         Assign(target, _, value, _) =>
             out.extend(expr_blocks(target))
             out.extend(expr_blocks(value))
@@ -1022,7 +1029,7 @@ fn Checker.check_par(self) List[Diag]
                     For(is_par, _, _, _, _, _, _) =>
                         if is_par
                             any_par = true
-                    Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => any_par = any_par
+                    Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn => any_par = any_par
     if not any_par
         return []
     cx := par_context()
@@ -1067,7 +1074,7 @@ fn Checker.check_par(self) List[Diag]
                         )
                         d.warning = true
                         out.push(d)
-                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => continue
+                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn => continue
     out
 
 ## Why the native compiler runs a written `par for` in order, or "" when it
@@ -1105,7 +1112,7 @@ fn Checker.proven_loops(self) List[ast.Pos]
                 For(_, _, _, mutable, _, _, _) =>
                     if mutable
                         continue
-                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => continue
+                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn => continue
             if v := judge(cx, f, s)
                 if not v.sequential
                     out.push(v.pos)
@@ -1244,6 +1251,7 @@ fn par_comps_stmt(s ast.Stmt, mut out List[ParComp], fi int)
             if e := o
                 par_comps_else(e, mut out, fi)
         LetTuple(_, value, _) => par_comps_expr(value, mut out, fi)
+        LocalFn(d) => par_comps_block(d.body else [], mut out, fi)
         Assign(target, _, value, _) =>
             par_comps_expr(target, mut out, fi)
             par_comps_expr(value, mut out, fi)
@@ -1392,7 +1400,7 @@ fn has_loop(b List[ast.Stmt]) bool
     for s in b
         match s
             For | While => return true
-            Let | Assign | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => continue
+            Let | Assign | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn => continue
         for inner in each_block(s)
             if has_loop(inner)
                 return true
@@ -1472,7 +1480,7 @@ fn heavy_fn(cx ParContext, i int) bool
                         reads: sc.names.sorted(),
                     )
                 _ => return none
-        Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => return none
+        Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn => return none
 
 ## The rows of the runs in `b` and the blocks inside it.
 fn fork_block(cx ParContext, fname str, b List[ast.Stmt], mut out List[ForkRow])
