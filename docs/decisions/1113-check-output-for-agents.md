@@ -28,7 +28,10 @@ no end marker. Exit statuses were unwritten.
    stdout, so the diagnostic lines on stderr keep their count. The gate checks
    every record of the mistakes corpus against the schema's required members.
 4. Exit statuses: `check` 0 or 2; `run` of a program that doesn't compile 1,
-   as a trap; `test` non-zero. The gate tests them on all three hosts.
+   as a trap; `test` non-zero, and a file with no tests prints `no tests found in FILE`
+   (JSON `no_tests`) and exits 0: `ail task`, `try` and `edit` run `ail test`
+   on programs without tests and must not read that as a failure. The gate tests
+   them on all three hosts.
 5. `expr.match.3` stays a warning (ADR 0056, 0379). Its help now writes the
    variants to put in place of `_`. Quieting it needs the corpus rate; see
    Follow-up.
@@ -41,6 +44,7 @@ no end marker. Exit statuses were unwritten.
   output; opt-in cannot fail that way.
 - **Demote `expr.match.3` now.** Contradicts ADR 0056 and 0379 and needs the
   measured rate first.
+- **Exit non-zero on no tests.** Would turn every `ail task verify` of a test-free program red.
 - **`next:` only for fixable errors.** The unfixable ones need it most.
 
 ## Follow-up

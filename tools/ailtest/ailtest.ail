@@ -3094,6 +3094,8 @@ fn report(
     src List[str],
     traces Map[str, List[str]],
     at_pos Map[str, (int, int)],
+    no_tests bool,
+    file_name str,
 ) int
     mut passed := 0
     mut failed := 0
@@ -3163,8 +3165,12 @@ fn report(
     if json
         more := if skipped > 0 then ",\"skipped\":{skipped}" else ""
         at := if seed.is_empty() then "" else ",\"schedule_seed\":{seed}"
-        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}{at}}")
+        none_json := if no_tests then ",\"no_tests\":true" else ""
+        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}{at}{none_json}}")
     else
+        # check.exit.1: a file with no tests says so; the status stays 0, since nothing failed.
+        if no_tests
+            print("no tests found in {file_name}")
         more := if skipped > 0 then ", {skipped} skipped" else ""
         print("{passed} passed, {failed} failed{more}")
         if not seed.is_empty()
@@ -3571,7 +3577,7 @@ fn main() !
         # snap.update.5: a program with no tests still has its `.out` to update.
         if update
             snap_update(file, text, [], dry, json)?
-        io.exit(report(verdicts, json, text.lines(), {}, at_pos))
+        io.exit(report(verdicts, json, text.lines(), {}, at_pos, verdicts.len() == 0, file))
     stem := path.stem(file)
     # A name of its own per run (removed at the end), so two runs on one file at once (the gate's shards) don't
     # overwrite each other's copy and executable.
@@ -3893,7 +3899,7 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines(), traces, at_pos)
+    code := report(verdicts, json, text.lines(), traces, at_pos, false, file)
     mut reached := Set[int]()
     mut base_pass := 0
     for v in verdicts

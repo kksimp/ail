@@ -335,7 +335,9 @@ allowed) and 2 when it has one or the command line is wrong. `ail run` of a
 program that does not compile prints the diagnostics and exits 1 without
 running it; a trap exits 1; otherwise `ail run` exits with the program's status.
 `ail test` of a program that does not compile exits non-zero, and 1 when a test
-fails. The gate checks these on macOS, Linux and Windows
+fails. `ail test` of a file with no tests prints `no tests found in FILE` before
+the `0 passed, 0 failed` line (`--json`: `"no_tests":true` in the summary) and exits 0,
+since nothing failed. The gate checks these on macOS, Linux and Windows
 ([ADR 1113](../decisions/1113-check-output-for-agents.md)).
 
 ```ail tool=check,FILE expect=error status=2 rules=check.exit.1
