@@ -5,6 +5,7 @@
 str.split(sep) List[str] ; type.str.4 ; split cut divide text on separator delimiter tokens pieces
 str.split(sep, limit) List[str] ; type.str.4 ; split at most limit pieces
 str.to_int() int? ; type.str.5 ; parse string to integer int number convert decimal
+str.to_int(radix) int? ; type.str.20 ; parse string to integer in a base radix hex hexadecimal binary octal convert
 str.to_float() float? ; type.num.8 ; parse string to float decimal number convert
 str.chars() List[char] ; type.str.7 ; characters letters iterate each char list of chars
 str.lines() List[str] ; type.str.7 ; split lines newline rows text
@@ -42,12 +43,14 @@ char.is_lower() bool ; type.char.2 ; lowercase test
 char.to_upper() char ; type.char.2 ; uppercase convert capital
 char.to_lower() char ; type.char.2 ; lowercase convert
 char.to_digit(radix) int? ; type.char.3 ; digit value parse number radix base
+char.from_code(n) char? ; type.char.4 ; character from code point unicode scalar chr
 char.code() int ; type.char.4 ; code point unicode scalar ascii number ord
 int.abs() int ; type.num.12 ; absolute value magnitude
 int.min(b) int ; type.num.12 ; smaller least minimum of two
 int.max(b) int ; type.num.12 ; larger greatest maximum of two
 int.to_float() float ; type.num.12 ; convert float real number
 int.to_hex() str ; type.str.8 ; hexadecimal hex digits string convert format
+int.to_str() str ; type.str.20 ; decimal digits string text convert format
 int.to_str(radix) str ; type.str.20 ; digits in a base radix binary octal convert to string text
 int.checked_add(b) int? ; type.num.12 ; overflow safe add plus none
 int.checked_sub(b) int? ; type.num.12 ; overflow safe subtract minus none
@@ -95,6 +98,10 @@ float.atan2(x) float ; type.num.16 ; arctangent angle quadrant
 float.to_int() int ; type.num.9 ; convert truncate integer
 float.min(b) float ; type.num.12 ; smaller least minimum of two
 float.max(b) float ; type.num.12 ; larger greatest maximum of two
+bytes.from_list(xs) bytes ; type.bytes.13 ; bytes from list of u8 build
+bytes.from_hex(s) bytes? ; type.bytes.13 ; decode hexadecimal hex string to bytes
+bytes.from_base64(s) bytes? ; type.bytes.13 ; decode base64 string to bytes
+bytes.zeros(n) bytes ; type.bytes.13 ; n zero bytes buffer allocate
 bytes.len() int ; type.bytes.7 ; length size count
 bytes.to_str() str? ; type.bytes.8 ; decode utf-8 text string convert
 bytes.text() str ; type.bytes.8 ; decode lossy text string convert
@@ -179,3 +186,22 @@ Option.if: if v := e ; type.opt.7 ; bind present value when some none check unwr
 Tuple.0: t.0 ; type.tuple.3 ; element field of tuple pair first second
 Tuple.destructure: a, b := t ; type.tuple.4 ; unpack tuple pair names multiple return values
 zip(a, b) List[(A, B)] ; type.tuple.9 ; pair lists together combine two lists
+Heap.from(xs) Heap[T] ; type.heap.2 ; priority queue min first from list build heapify
+Heap.from_max(xs) Heap[T] ; type.heap.2 ; priority queue max first from list build heapify
+Heap.push(x) [mut self] ; type.heap.3 ; priority queue add insert element
+Heap.pop() T? [mut self] ; type.heap.3 ; priority queue remove smallest first element next
+Heap.peek() T? ; type.heap.3 ; priority queue smallest first element without removing top
+Heap.len() int ; type.heap.4 ; priority queue length size count
+Heap.is_empty() bool ; type.heap.4 ; priority queue empty length zero
+Heap.to_sorted() List[T] ; type.heap.4 ; priority queue all elements in order sorted list
+Deque.from(xs) Deque[T] ; type.deque.1 ; double ended queue from list build
+Deque.push_back(x) [mut self] ; type.deque.2 ; double ended queue queue enqueue add end
+Deque.push_front(x) [mut self] ; type.deque.2 ; double ended queue add front
+Deque.pop_back() T? [mut self] ; type.deque.2 ; double ended queue remove end stack
+Deque.pop_front() T? [mut self] ; type.deque.2 ; double ended queue queue dequeue remove front
+Deque.first() T? ; type.deque.3 ; double ended queue front element peek
+Deque.last() T? ; type.deque.3 ; double ended queue end element peek
+Deque.len() int ; type.deque.3 ; double ended queue length size count
+Deque.is_empty() bool ; type.deque.3 ; double ended queue empty length zero
+Deque.at(i) T ; type.deque.4 ; double ended queue element at index position
+Deque.to_list() List[T] ; type.deque.4 ; double ended queue elements list convert

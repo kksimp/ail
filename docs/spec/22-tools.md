@@ -693,7 +693,7 @@ those of its line. On a miss, the line after `nothing in std matches WORDS` is
 the answer of the first row of `docs/design/not-in-std.txt` (`WORDS|WORDS ->
 ANSWER`) one of whose alternatives has all its words in the query; no row, no
 second line. `tools/check-method-table.py` checks that every rule of the table
-exists and that every built-in method of the checker is in it.
+exists, that every built-in method of the checker and every `x.name(args)` a `type.*` rule names is in it, and that no row of `not-in-std.txt` names a std module or prelude type that exists.
 
 **api.find.6** — `ail ask how WORDS...` searches `docs/how-to.md`, whose `##`
 sections are one task each (`sort descending`, `read a file by lines`): a title,
