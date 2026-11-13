@@ -138,10 +138,10 @@ enum Color
     Green
 
 fn Point.sum(self) int            # method; `self` is read-only
-    x + y                         # fields and methods by bare name (self.x)
+    self.x + self.y               # canonical; bare `x + y` works too
 
 fn Point.shift(mut self, dx int)  # may change self
-    x += dx
+    self.x += dx
 
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
@@ -222,6 +222,7 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
+- A function may end with `s.to_int() else return BadNumber(text: s)`: as a block's last line, `else return` gives the value (`err.else.7`).
 - A failing result must be handled: `?`, `else`, or returned. `parse(s)` alone
   on a line is an error.
 - `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
@@ -623,6 +624,9 @@ is one expression on the same line. Parameter types come from the expected
 `fn(...)` type, or are written: `|x int| x * 2`. It copies the locals its body
 names when it is made, and can't change them; to share state, capture a `ref`.
 `fn(A) R ! E` is a function that can fail; `?` in a literal leaves the literal.
+A `fn` declared inside a function body is a local function: a block body that
+copies the outer locals it names, can call itself, and is a value. It isn't
+generic, and its parameters aren't `mut`.
 
 ```ail
 fn adder(n int) fn(int) int

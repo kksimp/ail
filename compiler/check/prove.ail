@@ -805,6 +805,13 @@ fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool)
             for b in names
                 g = pv_forget(g, b.name)
             g
+        # type.fn.9: the body runs later, on copies; it assumes nothing about its parameters.
+        LocalFn(d) =>
+            mut g := pv_forget(f, d.name)
+            for p in d.params
+                g = pv_forget(g, p.name)
+            walk_block(d.body else [], g, false)
+            pv_forget(f, d.name)
         _ => f
 
 ## `name := value`: an immutable `int` gets its value's facts, and those of the `ensures`

@@ -265,7 +265,7 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
                 out.fns[i].owner = no
             else
                 out.fns[i].name = qualified(r.module, f.name)
-    renamed := rewrite_self(out)
+    renamed := syntax.rewrite_self(out)
     out = renamed.program
     r.diags.extend(renamed.diags)
     # Rewrite every reference to an item to its qualified name.
@@ -598,6 +598,22 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
             v := self.expr(value)
             ast.Stmt.Handle(v, self.otherwise(otherwise))
         Defer(inner, pos) => ast.Stmt.Defer(self.stmt(inner), pos)
+        # type.fn.9: a local function's name and parameters are new locals.
+        LocalFn(d) =>
+            self.local(d.name, d.pos)
+            mut nd := d
+            mut params := List[ast.Param]()
+            for p in d.params
+                self.local(p.name, p.pos)
+                mut np := p
+                np.ty = self.type_ref(p.ty)
+                params.push(np)
+            nd.params = params
+            if ret := d.ret
+                nd.ret = self.type_ref(ret)
+            if body := d.body
+                nd.body = self.block(body)
+            ast.Stmt.LocalFn(nd)
         Break(_) | Continue(_) => s
 
 fn Resolver.otherwise(mut self, o ast.Else) ast.Else

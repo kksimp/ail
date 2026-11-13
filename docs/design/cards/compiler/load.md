@@ -11,10 +11,6 @@ pub fn load.fixed_line(rules List[str]) str  ## `fixed 3: expr.not.1, gram.fn.4 
 pub fn load.repair(path str, std str) load.Repair [clock env fs io proc]  ## Fixes `path` to a fixed point as `ail fix` does, writing it and printing nothing (fix.check.1).
 pub fn load.header_command(rest List[str], std str) int [clock env fs io proc]
 pub fn load.c_header(prog ast.Program, source str) str  ## The header text for the exported functions of `prog`, in source order.
-pub struct load.SelfDone  ## What the pass changed: the program with the rewritten functions, and its diagnostics.
-    pub program ast.Program
-    pub diags List[syntax.Diag]
-pub fn load.rewrite_self(prog ast.Program) load.SelfDone
 pub load.FILE_LINES := 1048576  ## Each file's lines are numbered from a multiple of this (modules.rs).
 pub load.PRELUDE_LINE := 1073741824  ## Lines from here on belong to the prelude and the standard types.
 pub error struct load.LoadError  ## Why a program can't be loaded: a file that can't be read, or no files.
@@ -42,4 +38,4 @@ pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## Th
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 ```
 
-trimmed to fit 2000 tokens (~1029); dropped: private items
+trimmed to fit 2000 tokens (~960); dropped: private items

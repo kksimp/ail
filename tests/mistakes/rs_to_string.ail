@@ -1,0 +1,4 @@
+fn main()
+    n := 3
+    s := n.to_string()
+    print(s)

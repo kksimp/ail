@@ -1118,6 +1118,7 @@ fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
         Eval(e) => e
+        Handle(value, other) => ast.tail_else(value, other)
         _ => none
 
 # ---- statements ----
@@ -1266,6 +1267,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
+        LocalFn(d) => lower_local_fn(d)
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
@@ -2099,6 +2101,8 @@ fn Lower.lower_method(
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
+        if is_enum_static(en, name)
+            return lower_enum_static(en, name, args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
         assoc_instance(recv, name)
@@ -2134,6 +2138,8 @@ fn Lower.lower_method(
     if s := struct_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
+    if is_enum_name(r.ty, name, args)
+        return lower_enum_name(r, npos)
     if s := enum_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)

@@ -380,6 +380,26 @@ fn main()
     print(text)
 ```
 
+**type.enum.20** — An enum whose variants have no fields, and that declares no
+function of the same name, has three functions without being written.
+`Color.variants()` returns a `List[Color]` of every variant in declaration
+order. `Color.from_str(s)` returns the `Color?` whose variant name is exactly
+`s`, and `none` for any other text. `c.name()` returns the variant's name as a
+`str`, without the enum's name (`Red`, where `print(c)` shows `Color.Red`). A call with the wrong number of arguments, or
+a `from_str` argument that isn't a `str`, is a compile-time error. *(ADR 1087)*
+
+```ail rules=type.enum.20
+enum Color
+    Red
+    Green
+
+fn main()
+    for c in Color.variants()
+        print(c.name())              # Red, then Green
+    print(Color.from_str("Green"))   # Color.Green
+    print(Color.from_str("green"))   # none
+```
+
 ```ail rules=type.enum.7
 fn main()
     text := fs.read_text("notes.txt") else err
@@ -590,6 +610,40 @@ fn map_all[T, U](xs List[T], f fn(T) U) List[U]
 
 fn main()
     print(map_all([1, 2], |x| "n{x}"))    # ["n1", "n2"]
+```
+
+**type.fn.9** — A statement `fn name(params) R` followed by a block, inside a
+function body, declares a local function: a local `name` of the function type
+`fn(A, B) R`, visible from its declaration to the end of the enclosing block,
+including inside its own body, so it can call itself. Its body is a function
+body: `return` leaves it, its result is its last expression, and `R` may fail
+(`T ! E`, `!T`). It MUST NOT be generic, a method, or have contracts, and its
+parameters MUST NOT be `mut` or `move`: it is called as a function value
+(`type.fn.3`), by position. `break` and `continue` can't leave it. The name
+follows `expr.bind.4`. *(ADR 1094)*
+
+```ail rules=type.fn.9
+fn main()
+    fn fact(n int) int
+        if n <= 1
+            return 1
+        n * fact(n - 1)
+    print("{fact(5)}")                    # 120
+    print([1, 2, 3].map(fact))            # [1, 2, 6]
+```
+
+**type.fn.10** — A local function copies each outer local its body names
+when the declaration is reached, under `type.fn.5`: the copies are read-only,
+a `unique` value can't be copied, and a captured `ref` cell is shared. Its
+body's effects count for the enclosing function (`type.fn.7`). In traces and
+trap stacks it is named `outer.name`. *(ADR 1094)*
+
+```ail rules=type.fn.10
+fn main()
+    base := 10
+    fn add(x int) int
+        x + base                          # copies `base`
+    print("{add(5)}")                     # 15
 ```
 
 ## Tuples

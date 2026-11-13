@@ -8,6 +8,11 @@ pub fn syntax.one_per_line(diags List[syntax.Diag]) List[syntax.Diag]  ## One sy
 pub fn syntax.quote(s str) str  ## A string in JSON, as the prelude's `json_quote` writes it.
 pub fn syntax.ast_text(lexed syntax.Lexed, parsed syntax.Parsed) str  ## The tree of `ail api --ast` (api.ast.1-2): the program as one line of
 pub fn syntax.report_text(path str, text str, diags List[syntax.Diag]) str  ## The syntax diagnostics of one file as `ail check` prints them (the text
+pub struct syntax.SelfDone  ## What the pass changed: the program with the rewritten functions, its
+    pub program ast.Program
+    pub diags List[syntax.Diag]
+    pub sites List[ast.Pos]
+pub fn syntax.rewrite_self(prog ast.Program) syntax.SelfDone
 pub fn syntax.keywords() List[str]  ## The reserved words, sorted: what `ail help --keywords` prints for editors (tool.help.3).
 pub enum syntax.Tok  ## A token's kind and value.
     Ident(name str)
@@ -62,4 +67,4 @@ pub fn syntax.parse(tokens List[syntax.Token]) syntax.Parsed  ## Parse a file's 
 pub fn syntax.parse_with(tokens List[syntax.Token], extra Set[str]) syntax.Parsed  ## `parse` of a file whose module's other files declare generic names too:
 ```
 
-trimmed to fit 2000 tokens (~1203); dropped: private items
+trimmed to fit 2000 tokens (~1279); dropped: private items

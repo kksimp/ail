@@ -46,8 +46,10 @@ pub struct ast.Arg  ## A call argument (own.param.2, own.move.2, type.struct.3, 
 pub struct ast.Arm
 pub enum ast.Pattern
 pub enum ast.Literal
+pub fn ast.tail_else(ast.Expr, ast.Else) ast.Expr?  ## err.else.7 (ADR 1095): `e else return ...`, `else break` or `else continue`
 pub fn ast.key_body(ast.Arg) ast.Expr  ## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
 pub fn ast.expr_names(ast.Expr, mut Set[str]) [mutates]  ## Add each name `e` reads to `out`.
+pub fn ast.stmt_names(ast.Stmt, mut Set[str]) [mutates]
 pub struct ast.ParScan  ## What a loop body does, for deciding whether its chunks can run apart.
 pub fn ast.new_scan() ast.ParScan
 pub fn ast.scan_block(mut ast.ParScan, List[ast.Stmt], int) [mutates]
@@ -58,4 +60,4 @@ pub fn ast.yield_value(ast.Stmt) ast.Expr?  ## The operand of `s` when it is `yi
 pub fn ast.has_yield(List[ast.Stmt]) bool  ## Whether a function body contains a `yield`, at any depth of its blocks:
 ```
 
-trimmed to fit 2000 tokens (~1165); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1239); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

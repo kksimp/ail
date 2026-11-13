@@ -76,9 +76,16 @@ fn text.Bag(v0 Bag) str
   b5:
     v15 str = call rt.text_sep(v10)
     v16 Pt = get v8, v10
-    v17 str = call text.Pt(v16)
+    v29 str = str #6
+    v30 str = str #7
+    v31 str = call rt.str_cat(v29, v30)
+    v32 int = load v16 +0
+    v33 str = call rt.fmt_int(v32)
+    v34 str = call rt.str_cat(v31, v33)
+    v35 str = str #4
+    v36 str = call rt.str_cat(v34, v35)
     v18 str = call rt.str_cat(v11, v15)
-    v19 str = call rt.str_cat(v18, v17)
+    v19 str = call rt.str_cat(v18, v36)
     v20 int = const 1
     v21 int = add v10, v20
     jump b4(v21, v19)
@@ -89,18 +96,6 @@ fn text.Bag(v0 Bag) str
     v25 str = str #4
     v26 str = call rt.str_cat(v24, v25)
     jump b1(v26)
-
-fn text.Pt(v0 Pt) str
-  b0(v0 Pt):
-    v1 str = str #6
-    v2 str = str #7
-    v3 str = call rt.str_cat(v1, v2)
-    v4 int = load v0 +0
-    v5 str = call rt.fmt_int(v4)
-    v6 str = call rt.str_cat(v3, v5)
-    v7 str = str #4
-    v8 str = call rt.str_cat(v6, v7)
-    return v8
 
 fn eq.Bag(v0 Bag, v1 Bag) bool
   b0(v0 Bag, v1 Bag):
@@ -193,15 +188,3 @@ fn eq.Pt(v0 Pt, v1 Pt) bool
   b2:
     v5 bool = const 1
     return v5
-
-fn init.enums() unit
-  b0:
-    v0 int = const 8
-    v1 int = const 5
-    v2 Bag = call rt.obj_new(v0, v1)
-    v3 int = const 1
-    store v2, v3 +0
-    v4 int = const 72
-    v5 int = prim global(v4)
-    store v5, v2 +0
-    return

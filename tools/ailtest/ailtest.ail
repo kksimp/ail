@@ -3556,7 +3556,9 @@ fn main() !
             snap_update(file, text, [], dry, json)?
         io.exit(report(verdicts, json, text.lines(), {}, at_pos))
     stem := path.stem(file)
-    copy_name := ".ail-test-{stem}.ail"
+    # A name of its own per run (removed at the end), so two runs on one file at once (the gate's shards) don't
+    # overwrite each other's copy and executable.
+    copy_name := ".ail-test-{stem}-{time.now_ms()}-{random.int(0, 999999999)}.ail"
     mut scratch := ""
     if not mf.tests.is_empty()
         # The directory is copied so the modules' tests can be made `pub` without touching the tree.

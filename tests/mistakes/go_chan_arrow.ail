@@ -1,0 +1,4 @@
+fn main()
+    ch := Channel[int](1)
+    x := <-ch
+    print(x)

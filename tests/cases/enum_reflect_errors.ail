@@ -1,0 +1,12 @@
+enum Color
+    Red
+
+enum Shape
+    Dot
+    Line(len int)
+
+fn main()
+    print(Color.variants(1))
+    print(Color.from_str(5))
+    print(Color.Red.name(1))
+    print(Shape.variants())

@@ -1,0 +1,66 @@
+## `Color.variants()`, `Color.from_str(s)` and `c.name()` for a field-less enum (type.enum.20,
+## ADR 1087). Such an enum's values are `int` tags in declaration order.
+use ast
+
+## Whether `E.name(...)` is a reflection function: a field-less enum with no function of that name.
+fn Lower.is_enum_static(self, en str, name str) bool
+    (name == "variants" or name == "from_str") and is_flat(en) and not sigs.contains("{en}.{name}")
+
+## Whether `r.name()` is the reflection method of a field-less enum value.
+fn Lower.is_enum_name(self, t Ty, name str, args List[ast.Arg]) bool
+    s := enum_name(t) else return false
+    name == "name" and args.len() == 0 and is_flat(s) and not sigs.contains("{s}.name")
+
+## `c.name()`: the variant's name alone (`Red`); the text form is qualified (`Color.Red`).
+fn Lower.lower_enum_name(mut self, r Val, pos ast.Pos) Val?
+    en := enum_name(r.ty) else return unsupported(pos, "`name` of this value")
+    cases := enums[en]
+    join := new_block()
+    out := new_value(Ty.Str, "")
+    blocks[join].params.push(out)
+    for k in 0..cases.len()
+        same := op("eq", [r.id, konst(k, r.ty)], Ty.Bool)
+        hit := new_block()
+        next := new_block()
+        branch(same, hit, [], next, [])
+        seal(hit)
+        seal(next)
+        cur = hit
+        jump(join, [str_value(cases[k].name)])
+        cur = next
+    jump(join, [str_value("")])
+    seal(join)
+    cur = join
+    Val(id: out, ty: Ty.Str)
+
+fn Lower.lower_enum_static(mut self, en str, name str, args List[ast.Arg], pos ast.Pos) Val?
+    t := Ty.Enum(en)
+    cases := enums[en]
+    if name == "variants"
+        if args.len() != 0
+            return unsupported(pos, "arguments to `{en}.variants`")
+        l := call("rt.list_new", [konst(cases.len(), Ty.Int)], Ty.List(t))
+        for k in 0..cases.len()
+            call(push_fn(t), [l, konst(k, t)], Ty.Unit)
+        return Val(id: l, ty: Ty.List(t))
+    if args.len() != 1
+        return unsupported(pos, "this call of `{en}.from_str`")
+    s := lower_value(args[0].value, Ty.Str)?
+    ot := Ty.Opt(t)
+    join := new_block()
+    r := new_value(ot, "")
+    blocks[join].params.push(r)
+    for k in 0..cases.len()
+        same := call("rt.str_eq", [s.id, str_value(cases[k].name)], Ty.Bool)
+        hit := new_block()
+        next := new_block()
+        branch(same, hit, [], next, [])
+        seal(hit)
+        seal(next)
+        cur = hit
+        jump(join, [some(Val(id: konst(k, t), ty: t)).id])
+        cur = next
+    jump(join, [konst(0, ot)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: ot)

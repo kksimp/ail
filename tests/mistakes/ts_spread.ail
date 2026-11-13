@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2]
+    ys := [...xs, 3]
+    print(ys)

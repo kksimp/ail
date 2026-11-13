@@ -1,7 +1,9 @@
 ## The spec conformance harness (ADR 0002) in AIL.
 ## Every fenced `ail` block of docs/spec/*.md and the other documents agents load is
 ## checked as its fence line says (docs/spec/README.md). Run from the repository root:
-##   ail run tools/gate/spec.ail
+##   ail run tools/gate/spec.ail [K/N]
+## With `K/N` it runs only the fences whose position i has i % N == K (the gate's `spec@K/N` shards: each starts a
+## process or two per fence, so the shards cut the wall time); the rule-coverage check at the end is shard 0's.
 ## Prints only failures; the last line is `SPEC GREEN (N checked, M skipped)` or
 ## `SPEC RED (N failures)`, and the exit status is 0 only for green.
 
@@ -254,6 +256,18 @@ fn main() !
             print("SPEC RED: {why}")
             io.exit(1)
     spec_ids := spec_rules()
+    mut part := 0
+    mut shards := 1
+    for a in env.args()
+        kn := a.split("/")
+        if kn.len() == 2
+            part = kn[0].to_int() else 0
+            shards = kn[1].to_int() else 1
+    if shards < 1 or part < 0 or part >= shards
+        print("SPEC RED: bad shard `{part}/{shards}`")
+        io.exit(2)
+    mut seen := 0
+    mut owned_n := 0
     mut run := 0
     mut skipped := 0
     mut fails := List[str]()
@@ -264,8 +278,16 @@ fn main() !
         while shown < fails.len()
             show_fail(fails[shown])
             shown += 1
+        seen += 1
+        if shards <= 1 or (seen - 1) % shards == part
+            owned_n += 1
         if b.kind == "skip"
             skipped += 1
+            for r in b.rules
+                covered.add(r)
+            continue
+        # Another shard's fence: counted as covering its rules (that shard reports it if it fails), and not run here.
+        if shards > 1 and (seen - 1) % shards != part
             for r in b.rules
                 covered.add(r)
             continue
@@ -310,7 +332,24 @@ fn main() !
                 and not has_main(b.code) then wrap_fragment(b.code) else b.code
             file := "{tmp}/{stem}_{b.line}.ail"
             fs.write_text(file, code)? "writing {file}"
-            r := ail_in(root, cat(["check"], cat(b.flags, ["--json", file])), "")
+            # A clean fence that runs: `ail run` checks it first and fails on any error, so when it succeeds the
+            # separate `ail check` is redundant (one process less per fence; on Windows each is a PowerShell start).
+            # When it fails, the check below reports why, as before.
+            mut quick := false
+            if b.kind == "clean"
+                and b.run
+                and b.flags.is_empty()
+                and has_main(code)
+                and not code.contains("ui.open(")
+                if why := run_both_tiers(file)
+                    _ := why
+                else
+                    quick = true
+            r := if quick then proc.Output(status: 0, out: "", err: "") else ail_in(
+                root,
+                cat(["check"], cat(b.flags, ["--json", file])),
+                "",
+            )
             mut errors := List[str]()
             for l in r.err.lines()
                 if l.contains("\"severity\":\"error\"")
@@ -323,7 +362,12 @@ fn main() !
             if b.kind == "error" and not errors.contains(b.error_rule)
                 ok = false
                 fails.push("{at}: expected error {b.error_rule}, got {errors}\n{r.err}")
-            if ok and b.run and b.flags.is_empty() and b.kind == "clean" and has_main(code)
+            if ok
+                and not quick
+                and b.run
+                and b.flags.is_empty()
+                and b.kind == "clean"
+                and has_main(code)
                 if why := run_both_tiers(file)
                     ok = false
                     fails.push("{at}: {why}")
@@ -338,12 +382,14 @@ fn main() !
                 covered.add(rule)
     # Each rule of the batch chapters needs a runnable example (ADR 0002).
     for pair in spec_ids
-        if not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
+        if part == 0 and not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
             fails.push("{pair[1]} {pair[0]}: no runnable example")
     mk4 := proc.run("rm", ["-rf", tmp]) else return
     while shown < fails.len()
         show_fail(fails[shown])
         shown += 1
+    if shards > 1
+        print("SHARD spec {part}/{shards} total {seen} ran {owned_n}")
     if fails.is_empty()
         print("SPEC GREEN ({run} checked, {skipped} skipped)")
     else

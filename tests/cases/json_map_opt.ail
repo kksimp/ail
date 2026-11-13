@@ -1,0 +1,29 @@
+## json.derive.4: `to_json` and `print_json` on maps and optionals at top
+## level, nested, and through a `ToJson` bound (ADR 1093).
+struct Stats
+    count int
+    mean float
+
+impl ToJson for Stats
+
+fn lookup(m Map[str, int], k str) int?
+    m.get(k)
+
+fn shown[T ToJson](v T) str
+    v.to_json().to_text()
+
+fn main()
+    counts := {"get": 3, "post": 1}
+    print_json(counts)
+    by_path := {"/a": Stats(count: 2, mean: 1.5)}
+    print_json(by_path)
+    print(by_path.to_json().to_text())
+    print_json({404: ["/x"], 500: List[str]()})
+    print_json({"a": {"b": 1}})
+    print_json(lookup(counts, "get"))
+    print_json(lookup(counts, "put"))
+    print(lookup(counts, "post").to_json().to_text())
+    print_json([lookup(counts, "post"), lookup(counts, "x")])
+    print_json({"hit": lookup(counts, "get"), "miss": lookup(counts, "x")})
+    print(shown(counts))
+    print(shown(lookup(counts, "x")))

@@ -125,6 +125,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.diags.extend(c.check_par())
     c.diags.extend(c.check_par_comps())
     c.remap_generated()
+    c.diags = quiet_unused(c.diags)
     report := Report(
         diags: c.diags,
         gapped: c.gapped.sorted(),
@@ -279,6 +280,8 @@ fn Checker.check_fn(mut self, idx int)
         end_fn(idx)
         return
     body := f.body else []
+    bind_decls = []
+    bind_seen = Set[int]()
     sig := sigs[idx]
     scope = fn_scopes[idx]
     self_ty = fn_self[idx]
@@ -328,6 +331,7 @@ fn Checker.check_fn(mut self, idx int)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
+    report_unused()
     record_locals(0)
     gen.elem = none
     scope = []
@@ -447,6 +451,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         LetTuple(names, value, at) =>
             let_tuple(names, value, at)
             Ty.Unit
+        LocalFn(d) =>
+            local_fn(d)
+            Ty.Unit
         Assign(target, op, value, at) =>
             assign(target, op, value, at)
             Ty.Unit
@@ -458,6 +465,10 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             # expr.loop.7: `while true` with no `break` of its own never finishes.
             if is_true(cond) and not breaks(body) then Ty.Never else Ty.Unit
         Handle(value, otherwise) =>
+            # err.else.7: a block's last `e else return ...` gives its value.
+            if need
+                if e := ast.tail_else(value, otherwise)
+                    return expr(e, expect, true)
             handle(value, otherwise)
             Ty.Unit
         For(_, var, var_pos, mutable, iter, body, _) =>
@@ -559,6 +570,7 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         return
     if declare(n, at)
         locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+        note_binding(n, at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
         diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(
@@ -705,7 +717,7 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
         "err.else.4",
         expr_pos(value),
         "this {what}, and has a value ({show(vt)}); `else` on its own handles only results with no value",
-        "bind the value: `x := ... else ...`",
+        "bind the value: `x := ... else ...`; as the last line of a block, `... else return ...` gives the value (err.else.7)",
     )
 
 ## Help for `else` on a value that is never absent (expr.name.2).
@@ -1409,6 +1421,8 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
         )
         Defer(st, _) => overlap_in_stmt(target, st)
         LetTuple(_, value, _) => overlap_in_expr(target, value)
+        # A local function's body works on copies (type.fn.5).
+        LocalFn => none
         Break => none
         Continue => none
 
@@ -1548,6 +1562,8 @@ fn stmt_breaks(s ast.Stmt) bool
         While(cond, _, _) => breaks_in_expr(cond)
         For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
         LetTuple(_, value, _) => breaks_in_expr(value)
+        # A local function's body can't leave the enclosing loop (type.fn.9).
+        LocalFn => false
         Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool

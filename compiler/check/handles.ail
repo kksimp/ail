@@ -71,6 +71,7 @@ fn stmt_spawns(s ast.Stmt, mut diags List[Diag])
                 spawns(e, mut diags)
         Eval(e) => spawns(e, mut diags)
         LetTuple(_, value, _) => spawns(value, mut diags)
+        LocalFn(d) => handle_block(d.body else [], mut diags)
         Handle(value, o) =>
             spawns(value, mut diags)
             else_spawns(o, mut diags)
@@ -281,6 +282,8 @@ fn stmt_uses(n str, s ast.Stmt, cond bool, mut u Uses)
                 expr_uses(n, e, cond, mut u)
         Eval(e) => expr_uses(n, e, cond, mut u)
         LetTuple(_, value, _) => expr_uses(n, value, cond, mut u)
+        # A handle is unique, so a local function can't copy it (type.fn.5).
+        LocalFn => return
         Handle(value, o) =>
             expr_uses(n, value, cond, mut u)
             else_uses(n, o, mut u)
