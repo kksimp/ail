@@ -1,0 +1,185 @@
+## Inlining beyond leaves (ADR 0940, rule native.inline.1): a function that
+## calls others may be copied into its callers too, by a cost model over the
+## call graph, within a size budget. A function with one call in the whole
+## program goes inline there up to `SINGLE_LIMIT` instructions: the copy
+## replaces the only use, and the function is dropped. Any other goes up to
+## `WIDE_LIMIT`, and those copies may grow a caller by at most
+## `CALLER_GROWTH`. Only calls inside a loop of the caller are copied:
+## copies at every call measured no faster and grew the compiler three
+## times as much. The limits are those measured on ail-linux on 2026-11-13
+## with jumps kept in lines (native.jump.1): 48 against 12 took 1.5% off lzr
+## (`Dec.bit`, 41 instructions, into `Dec.tree`'s loop) and 1% off
+## regex_scan; 80 gained no more. A function on a cycle of the call graph never goes (its body could copy
+## itself without end), nor one with a loop (measured slower copied). The
+## calls a copy brings with it keep the frames they stand for (trace.frame.2).
+## `AIL_OPT_OFF=wide` turns it off.
+
+## A function called from one place goes inline up to this many instructions.
+SINGLE_LIMIT := 200
+
+## Any other function that calls others goes inline up to this many.
+WIDE_LIMIT := 48
+
+## How many instructions one caller may grow by through these copies.
+CALLER_GROWTH := 400
+
+## The candidates: each one's instruction count, and those called from one
+## place (whose copy replaces the call).
+pub struct Wide
+    pub sizes Map[str, int]
+    pub single Set[str]
+
+pub fn wide_candidates(m Module, leaves Set[str]) Wide
+    mut out := Wide(sizes: Map[str, int](), single: Set[str]())
+    # `--values` and `--trace` builds keep one frame per call.
+    instr := env.get("AIL_INSTRUMENT") else ""
+    if opt_off("wide") or opt_off("inline") or instr != ""
+        return out
+    rec := recursive_names(m)
+    mut calls := Map[str, int]()
+    mut taken := Set[str]()
+    for f in m.funcs
+        for blk in f.blocks
+            for i in blk.insts
+                if i.op == "call"
+                    c := calls.get(i.name) else 0
+                    calls[i.name] = c + 1
+                elif i.op == "fnaddr"
+                    taken.add(i.name)
+    for f in m.funcs
+        if leaves.contains(f.name) or rec.contains(f.name)
+            continue
+        n := wide_size(f)
+        if n < 0
+            continue
+        c := calls.get(f.name) else 0
+        single := c == 1 and not taken.contains(f.name)
+        # A function with a loop stays a call: the call costs little beside the
+        # loop, and copied into a caller the loop measured slower (matmul 2x,
+        # spectralnorm 1.7x on ail-linux), so only straight-line code goes.
+        if (n <= WIDE_LIMIT or single and n <= SINGLE_LIMIT) and find_loops(f).len() == 0
+            out.sizes[f.name] = n
+            if single
+                out.single.add(f.name)
+    out
+
+## A function's instruction count, or -1 when it may not be copied: the
+## runtime's own functions and `main`, an indirect call, a primitive that
+## reads its own frame or makes a thread, or a jump back to its entry. Loops
+## are ruled out by `wide_candidates` (`find_loops`).
+fn wide_size(f Func) int
+    if f.name.starts_with("rt.") or f.name == "main"
+        return -1
+    mut n := 0
+    for blk in f.blocks
+        n += blk.insts.len()
+        for i in blk.insts
+            if i.op == "icall"
+                return -1
+            if i.op == "prim" and frame_prim(i.name)
+                return -1
+        for t in blk.term.targets
+            if t == 0
+                return -1
+    n
+
+fn frame_prim(name str) bool
+    match name
+        "syscall" | "clone" | "sp" | "frame_ptr" | "restart" | "gc_regs" | "code_tab" => true
+        _ => false
+
+## Inline the calls of `f` that name a function in `leaves`, or in `wide`
+## under the cost model inside a loop of `f`: the one call of a single-call
+## function, written in `f` itself, or any other call while `f` may still
+## grow. At most `INLINE_BUDGET` calls; returns the call budget
+## left.
+fn expand_wide(
+    mut f Func,
+    leaves Set[str],
+    wide Wide,
+    bodies Map[str, Func],
+    mut sites List[Site],
+) int
+    mut budget := INLINE_BUDGET
+    mut room := CALLER_GROWTH
+    # A runtime function (`rt.dispatch`, which calls each `spawn` site's
+    # `task.K`) takes leaves only: later passes leave runtime functions as
+    # they are, so a copied call there would miss the result object
+    # `sret_convert` gives its callee (native.stack.2), and crash.
+    mut take := wide
+    if f.name.starts_with("rt.")
+        take = Wide(sizes: Map[str, int](), single: Set[str]())
+    # Only calls inside a loop gain from a copy. Copies at calls made once
+    # (`size()` reading the arguments in `main`) went with slower wordfreq,
+    # sieve and collatz on ail-linux, and copies at every call cost the
+    # compiler 30% in size for no more speed (ADR 0940).
+    mut warm := [false for _ in 0..f.blocks.len()]
+    for lp in find_loops(f)
+        for b in 0..f.blocks.len()
+            if lp.member[b]
+                warm[b] = true
+    mut changed := true
+    while changed and budget > 0
+        changed = false
+        for b in 0..f.blocks.len()
+            at := first_wide_call(f.blocks[b], leaves, take, f.name, room, warm[b], sites)
+            if at >= 0
+                name := f.blocks[b].insts[at].name
+                before := f.blocks.len()
+                inline_call(mut f, b, at, bodies[name], mut sites)
+                # The copy's blocks and the rest of `b` are as warm as `b`.
+                for _ in before..f.blocks.len()
+                    warm.push(warm[b])
+                if n := take.sizes.get(name)
+                    if not take.single.contains(name)
+                        room -= n
+                budget -= 1
+                changed = true
+                break
+    budget
+
+fn first_wide_call(
+    blk Block,
+    leaves Set[str],
+    wide Wide,
+    self_name str,
+    room int,
+    warm bool,
+    sites List[Site],
+) int
+    for k in 0..blk.insts.len()
+        i := blk.insts[k]
+        if i.op == "call" and i.name != self_name
+            if leaves.contains(i.name)
+                return k
+            if not warm
+                continue
+            if n := wide.sizes.get(i.name)
+                # Copies of the one call (brought in by another copy) count as
+                # any other call, so the function still goes inline once.
+                written := i.site < 0 or sites[i.site].from < 0
+                if wide.single.contains(i.name) and written
+                    return k
+                if n <= WIDE_LIMIT and n <= room
+                    return k
+    -1
+
+## Remove the functions of `wide` that nothing calls or names any more (each
+## of their calls went inline), so a function inlined at its one call is not
+## also kept whole.
+fn drop_unused(mut m Module, wide Map[str, int])
+    if wide.len() == 0
+        return
+    mut named := Set[str]()
+    for f in m.funcs
+        for blk in f.blocks
+            for i in blk.insts
+                if i.op == "call" or i.op == "fnaddr"
+                    named.add(i.name)
+                elif i.op == "prim" and i.name.starts_with("fn_addr:")
+                    named.add(i.name.replace("fn_addr:", ""))
+    mut kept := List[Func]()
+    for f in m.funcs
+        if not wide.contains(f.name) or named.contains(f.name)
+            kept.push(f)
+    m.funcs = kept

@@ -6,20 +6,6 @@ fn lines_of(v0:s str) int
     v2 int = len v1
     return v2
 
-fn same(v0:a str, v1:b str) bool
-  b0(v0:a str, v1:b str):
-    v2 bool = call rt.str_eq(v0:a, v1:b)
-    return v2
-
-fn label(v0:n int) str
-  b0(v0:n int):
-    v1 str = str #0
-    call rt.sb_begin()
-    call rt.sb_text(v1)
-    call rt.put_int(v0:n)
-    v2 str = call rt.sb_str()
-    return v2
-
 fn loop_by_index(v0:xs List[List[int]]) int
   b0(v0:xs List[List[int]]):
     v1:total int = const 0
@@ -37,14 +23,6 @@ fn loop_by_index(v0:xs List[List[int]]) int
     jump b1(v9)
   b3:
     return v1:total
-
-fn with_map() int
-  b0:
-    v0 int = const 1
-    v1 int = const 0
-    v3:m Map[str, int] = call rt.map_new(v0, v1, v1)
-    v4 int = prim load64(v3:m)
-    return v4
 
 fn main() unit
   b0:

@@ -762,6 +762,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0937](0937-grid-flat-2d-list.md) | `Grid[T]`: a flat 2-D list in the prelude, indexed `g[i, j]` *(delegated)* | Accepted | 2026-11-04 |
 | [0938](0938-auto-parallel-push-builder-loops.md) | Run push-builder loops on the pool: one push per iteration, chunks joined in order *(delegated)* | Accepted | 2026-11-04 |
 | [0939](0939-match-jump-tables.md) | Native: `match` through a jump table, with the dispatch repeated in each arm *(delegated)* | Accepted | 2026-11-04 |
+| [0940](0940-inliner-cost-model.md) | Native: inlining functions that call others, by a call-graph cost model *(delegated)* | Accepted | 2026-11-05 |
 | [0941](0941-data-range-loop-guards.md) | Native: data-range guards for loop nests, and ikj interchange of reduction nests *(delegated)* | Accepted | 2026-11-04 |
 | [0942](0942-user-loop-vector-kernels.md) | Native: vector kernels for swapped reduction nests (ADR 0845 stage 3, first step) *(delegated)* | Accepted | 2026-11-04 |
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
@@ -879,4 +880,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1093](1093-tojson-maps-optionals.md) | `ToJson` on `Map[K, V]` and `T?` without an `impl` block *(delegated)* | Accepted | 2026-11-13 |
 | [1094](1094-local-functions.md) | Named local functions: `fn name(...)` inside a body copies the locals it names, can recurse and is a value *(delegated)* | Accepted | 2026-11-13 |
 | [1095](1095-else-leave-as-block-tail.md) | `e else return ...`, `else break` or `else continue` as a block's last statement gives `e`'s value (`err.else.7`) *(delegated)* | Accepted | 2026-11-13 |
+| [1096](1096-x64-jumps-inside-32-byte-lines.md) | Native x86-64: keep jumps inside 32-byte lines *(delegated)* | Accepted | 2026-11-13 |
 | [1097](1097-faster-gates.md) | Faster gates: `NAME@K/N` shards, one process per runnable spec fence, stage 1 in the pool, `--failed` rerun, fast `run` on Windows *(delegated)* | Accepted | 2026-11-13 |

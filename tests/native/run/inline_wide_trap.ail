@@ -1,0 +1,18 @@
+# A function that calls another goes inline at a call inside a loop
+# (native.inline.1); a trap below the copy still lists every frame
+# (trace.frame.2): pick, then twice, then main.
+fn pick(xs List[int], i int) int
+    xs[i]
+
+fn twice(xs List[int], i int) int
+    pick(xs, i) * 2
+
+fn main()
+    xs := [1, 2, 3]
+    mut s := 0
+    for i in 0..3
+        s += twice(xs, i)
+    print(s)
+    for i in 0..5
+        s += twice(xs, i)
+    print(s)
