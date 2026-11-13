@@ -94,11 +94,12 @@ fn stub_clock() int
         f := line.split("\t")
         if f.len() < 2
             continue
+        n := f[1].to_int() else 0
         if f[0] == "C"
-            base = f[1].to_int() else 0
+            base = n
             add = 0
         elif f[0] == "A" and base >= 0
-            add += f[1].to_int() else 0
+            add += n
     if base < 0
         return -1
     base + add
@@ -122,7 +123,9 @@ fn stub_http(method str, url str) int
         return 0
     f := sl.split("\t")
     body := stub_un(f[2])
-    status := if f.len() > 3 then (f[3].to_int() else 200) else 200
+    mut status := 200
+    if f.len() > 3
+        status = f[3].to_int() else 200
     n := pol_len(body)
     text := net_text(str_addr(body) + 16, n)
     raw := str_new(n, n)
