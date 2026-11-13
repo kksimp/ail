@@ -88,56 +88,56 @@ pub fn collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str])
     Found(refs: [x for x in r.found if x.pos.line < 1073741824], names: r.names)
 
 fn Refs.add(mut self, pos ast.Pos, id str)
-    found.push(Ref(id: id, pos: pos, within: cur, label: false))
+    self.found.push(Ref(id: id, pos: pos, within: self.cur, label: false))
 
 fn Refs.add_label(mut self, pos ast.Pos, id str)
-    found.push(Ref(id: id, pos: pos, within: cur, label: true))
+    self.found.push(Ref(id: id, pos: pos, within: self.cur, label: true))
 
 fn Refs.program(mut self)
-    for s in prog.structs
-        generics = [g.name for g in s.generics]
-        generic_bounds(s.generics)
+    for s in self.prog.structs
+        self.generics = [g.name for g in s.generics]
+        self.generic_bounds(s.generics)
         for f in s.fields
-            type_ref(f.ty)
+            self.type_ref(f.ty)
         for c in s.invariants
-            expr(c.cond)
-    for e in prog.enums
-        generics = [g.name for g in e.generics]
-        generic_bounds(e.generics)
+            self.expr(c.cond)
+    for e in self.prog.enums
+        self.generics = [g.name for g in e.generics]
+        self.generic_bounds(e.generics)
         for v in e.variants
             for f in v.fields
-                type_ref(f.ty)
-    generics = []
-    for im in prog.impls
-        add(im.trait_pos, "trait:{im.trait_name}")
-        owner(im.target)
-    for fi in 0..prog.fns.len()
-        f := prog.fns[fi]
-        cur = fi
-        generics = []
+                self.type_ref(f.ty)
+    self.generics = []
+    for im in self.prog.impls
+        self.add(im.trait_pos, "trait:{im.trait_name}")
+        self.owner(im.target)
+    for fi in 0..self.prog.fns.len()
+        f := self.prog.fns[fi]
+        self.cur = fi
+        self.generics = []
         if i := impl_index(f.within)
-            scope_owner(prog.impls[i].target)
+            self.scope_owner(self.prog.impls[i].target)
         if o := f.owner
             if top_level(f)
-                owner(o)
+                self.owner(o)
             else
-                scope_owner(o)
+                self.scope_owner(o)
         for g in f.generics
-            generics.push(g.name)
-        generic_bounds(f.generics)
+            self.generics.push(g.name)
+        self.generic_bounds(f.generics)
         for p in f.params
-            type_ref(p.ty)
+            self.type_ref(p.ty)
         if t := f.ret
-            type_ref(t)
+            self.type_ref(t)
         for c in f.contracts
-            expr(c.cond)
+            self.expr(c.cond)
             for o in c.olds
-                expr(o.value)
+                self.expr(o.value)
         if body := f.body
-            block(body)
-    cur = -1
-    for c in prog.consts
-        expr(c.value)
+            self.block(body)
+    self.cur = -1
+    for c in self.prog.consts
+        self.expr(c.value)
 
 @allow("expr.match.3") fn impl_index(w ast.Within) int?
     match w
@@ -157,45 +157,45 @@ fn no_str() str?
 fn Refs.scope_owner(mut self, o ast.Owner)
     mut declared := List[ast.GenericParam]()
     mut found_decl := false
-    for s in prog.structs
+    for s in self.prog.structs
         if not found_decl and s.name == o.name
             declared = s.generics
             found_decl = true
-    for e in prog.enums
+    for e in self.prog.enums
         if not found_decl and e.name == o.name
             declared = e.generics
             found_decl = true
     for g in declared
-        generics.push(g.name)
+        self.generics.push(g.name)
     if ps := o.params
         for g in ps
-            generics.push(g.name)
+            self.generics.push(g.name)
 
 ## `Type` in `fn Type.name` or `impl Trait for Type`, with its bounds.
 fn Refs.owner(mut self, o ast.Owner)
-    if id := type_id(o.name)
-        add(o.pos, id)
-    scope_owner(o)
+    if id := self.type_id(o.name)
+        self.add(o.pos, id)
+    self.scope_owner(o)
     if ps := o.params
-        generic_bounds(ps)
+        self.generic_bounds(ps)
 
 fn Refs.generic_bounds(mut self, gs List[ast.GenericParam])
     for g in gs
         for b in g.bounds
-            add(b.pos, "trait:{b.name}")
+            self.add(b.pos, "trait:{b.name}")
 
 ## The id of a declared type or trait called `name`, unless a type
 ## parameter in scope has that name.
 fn Refs.type_id(self, name str) str?
-    if generics.contains(name)
+    if self.generics.contains(name)
         return none
-    for s in prog.structs
+    for s in self.prog.structs
         if s.name == name
             return "type:{name}"
-    for e in prog.enums
+    for e in self.prog.enums
         if e.name == name
             return "type:{name}"
-    for t in prog.traits
+    for t in self.prog.traits
         if t.name == name
             return "trait:{name}"
     none
@@ -203,86 +203,86 @@ fn Refs.type_id(self, name str) str?
 fn Refs.type_ref(mut self, t ast.TypeRef)
     match t.shape
         Named(name, args) =>
-            if id := type_id(name)
-                add(t.pos, id)
+            if id := self.type_id(name)
+                self.add(t.pos, id)
             for a in args
-                type_ref(a)
-        Optional(inner) => type_ref(inner)
-        RefTo(inner) => type_ref(inner)
-        PtrTo(inner) => type_ref(inner)
+                self.type_ref(a)
+        Optional(inner) => self.type_ref(inner)
+        RefTo(inner) => self.type_ref(inner)
+        PtrTo(inner) => self.type_ref(inner)
         TupleType(elems) =>
             for e in elems
-                type_ref(e)
+                self.type_ref(e)
         FnType(params, ret) =>
             for p in params
-                type_ref(p)
+                self.type_ref(p)
             if r := ret
-                type_ref(r)
-        AnyTrait(name) => add(t.pos, "trait:{name}")
+                self.type_ref(r)
+        AnyTrait(name) => self.add(t.pos, "trait:{name}")
         Fallible(ok, errors) =>
             if o := ok
-                type_ref(o)
+                self.type_ref(o)
             if es := errors
                 for e in es
-                    type_ref(e)
+                    self.type_ref(e)
 
 fn Refs.block(mut self, b List[ast.Stmt])
     for s in b
-        stmt(s)
+        self.stmt(s)
 
 @allow("expr.match.3") fn Refs.stmt(mut self, s ast.Stmt)
     match s
         Let(_, _, _, value, otherwise) =>
-            expr(value)
+            self.expr(value)
             if o := otherwise
-                else_part(o)
-        LetTuple(_, value, _) => expr(value)
+                self.else_part(o)
+        LetTuple(_, value, _) => self.expr(value)
         LocalFn(d) =>
             for p in d.params
-                type_ref(p.ty)
+                self.type_ref(p.ty)
             if r := d.ret
-                type_ref(r)
+                self.type_ref(r)
             if body := d.body
-                block(body)
+                self.block(body)
         Assign(target, _, value, _) =>
-            expr(target)
-            expr(value)
+            self.expr(target)
+            self.expr(value)
         While(cond, body, _) =>
-            expr(cond)
-            block(body)
+            self.expr(cond)
+            self.block(body)
         For(_, _, _, _, iter, body, _) =>
-            expr(iter)
-            block(body)
+            self.expr(iter)
+            self.block(body)
         With(mutex, _, _, body, _) =>
-            expr(mutex)
-            block(body)
-        Unsafe(body, _) => block(body)
+            self.expr(mutex)
+            self.block(body)
+        Unsafe(body, _) => self.block(body)
         Return(value, _) =>
             if v := value
-                expr(v)
-        Eval(value) => expr(value)
+                self.expr(v)
+        Eval(value) => self.expr(value)
         Handle(value, otherwise) =>
-            expr(value)
-            else_part(otherwise)
-        Defer(inner, _) => stmt(inner)
+            self.expr(value)
+            self.else_part(otherwise)
+        Defer(inner, _) => self.stmt(inner)
         Select(arms, _) =>
             for h in ast.select_heads(arms)
-                expr(h)
+                self.expr(h)
             for body in ast.select_bodies(arms)
-                block(body)
+                self.block(body)
         _ => return
 
 fn Refs.else_part(mut self, o ast.Else)
     match o
-        Fallback(value) => expr(value)
-        Leave(s) => stmt(s)
-        Handler(_, body, _) => block(body)
+        Fallback(value) => self.expr(value)
+        Leave(s) => self.stmt(s)
+        Handler(_, body, _) => self.block(body)
 
 ## The id the checker recorded for the use at `pos`, if any.
 fn Refs.resolved_at(self, pos ast.Pos) str?
-    if id := symbols.get(pk(pos))
+    if id := self.symbols.get(pk(pos))
         return id
-    weak.get(pk(pos))
+    self.weak.get(pk(pos))
 
 ## `Type` or `Trait` before `.name` in `Type.f(...)`, `Enum.Variant` or
 ## `Trait.f(x)`, when `.name` resolved through it.
@@ -302,151 +302,151 @@ fn Refs.resolved_at(self, pos ast.Pos) str?
     path := if parts.len() > 1 then parts[1..].join(":") else ""
     qowner := path.split(".")[0]
     if qowner == n
-        if id := type_id(n)
-            add(p, id)
+        if id := self.type_id(n)
+            self.add(p, id)
 
 fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
     for a in args
         if l := a.label
             if owner := fields_of
-                add_label(l.pos, "field:{owner}.{l.name}")
-        expr(a.value)
+                self.add_label(l.pos, "field:{owner}.{l.name}")
+        self.expr(a.value)
 
 @allow("expr.match.3") fn Refs.expr(mut self, e ast.Expr)
     match e
         Interp(parts, _) =>
             for p in parts
                 match p
-                    Hole(v) => expr(v)
-                    Fmt(v, _) => expr(v)
+                    Hole(v) => self.expr(v)
+                    Fmt(v, _) => self.expr(v)
                     Lit(_) => continue
         Name(n, p) =>
-            if id := resolved_at(p)
-                add(p, id)
+            if id := self.resolved_at(p)
+                self.add(p, id)
             else
-                names.push((p, n))
+                self.names.push((p, n))
         TypeArgs(_, targs, p) =>
-            if id := resolved_at(p)
-                add(p, id)
+            if id := self.resolved_at(p)
+                self.add(p, id)
             for a in targs
-                type_ref(a)
+                self.type_ref(a)
         ListLit(items, _) =>
             for x in items
-                expr(x)
+                self.expr(x)
         SetLit(items, _) =>
             for x in items
-                expr(x)
+                self.expr(x)
         TupleLit(items, _) =>
             for x in items
-                expr(x)
+                self.expr(x)
         Comp(_, elem, value, clauses, _) =>
             for c in clauses
-                expr(c.iter)
+                self.expr(c.iter)
                 if cond := c.cond
-                    expr(cond)
-            expr(elem)
+                    self.expr(cond)
+            self.expr(elem)
             if v := value
-                expr(v)
+                self.expr(v)
         MapLit(entries, _) =>
             for ent in entries
-                expr(ent.key)
-                expr(ent.value)
+                self.expr(ent.key)
+                self.expr(ent.value)
         Call(callee, args, _) =>
-            expr(callee)
+            self.expr(callee)
             mut id := no_str()
             match callee
-                Name(_, p) => id = resolved_at(p)
-                TypeArgs(_, _, p) => id = resolved_at(p)
+                Name(_, p) => id = self.resolved_at(p)
+                TypeArgs(_, _, p) => id = self.resolved_at(p)
                 _ => id = none
             mut owner := no_str()
             if i := id
                 owner = fields_owner(i)
             self.args(args, owner)
         Method(recv, _, name_pos, args) =>
-            id := resolved_at(name_pos)
-            qualifier(recv, id)
-            expr(recv)
+            id := self.resolved_at(name_pos)
+            self.qualifier(recv, id)
+            self.expr(recv)
             mut owner := no_str()
             if i := id
                 owner = fields_owner(i)
-                add(name_pos, i)
+                self.add(name_pos, i)
             self.args(args, owner)
         Member(recv, _, name_pos) =>
-            id := resolved_at(name_pos)
-            qualifier(recv, id)
-            expr(recv)
+            id := self.resolved_at(name_pos)
+            self.qualifier(recv, id)
+            self.expr(recv)
             if i := id
-                add(name_pos, i)
+                self.add(name_pos, i)
         Index(recv, index, _) =>
-            expr(recv)
-            expr(index)
-        Unary(_, operand, _) => expr(operand)
-        NewRef(value, _) => expr(value)
+            self.expr(recv)
+            self.expr(index)
+        Unary(_, operand, _) => self.expr(operand)
+        NewRef(value, _) => self.expr(value)
         Closure(params, body, _) =>
             for p in params
                 if t := p.ty
-                    type_ref(t)
-            expr(body)
+                    self.type_ref(t)
+            self.expr(body)
         Binary(_, lhs, rhs, _) =>
-            expr(lhs)
-            expr(rhs)
+            self.expr(lhs)
+            self.expr(rhs)
         Range(lo, hi, _, _) =>
             if x := lo
-                expr(x)
+                self.expr(x)
             if x := hi
-                expr(x)
+                self.expr(x)
         If(branches, els, _, _) =>
             for b in branches
                 match b.cond
-                    Test(v) => expr(v)
-                    Bind(_, _, v) => expr(v)
-                block(b.body)
+                    Test(v) => self.expr(v)
+                    Bind(_, _, v) => self.expr(v)
+                self.block(b.body)
             if bs := els
-                block(bs)
+                self.block(bs)
         Match(scrutinee, arms, _) =>
-            expr(scrutinee)
+            self.expr(scrutinee)
             for arm in arms
-                pattern(arm.pat)
+                self.pattern(arm.pat)
                 if g := arm.guard
-                    expr(g)
-                block(arm.body)
+                    self.expr(g)
+                self.block(arm.body)
         Try(inner, context, _) =>
-            expr(inner)
+            self.expr(inner)
             if c := context
-                expr(c)
+                self.expr(c)
         OrElse(value, otherwise, _) =>
-            expr(value)
-            else_part(otherwise)
+            self.expr(value)
+            self.else_part(otherwise)
         _ => return
 
 @allow("expr.match.3") fn Refs.pattern(mut self, p ast.Pattern)
     match p
         Alt(alts, _) =>
             for x in alts
-                pattern(x)
+                self.pattern(x)
         TuplePat(elems, _) =>
             for x in elems
-                pattern(x)
+                self.pattern(x)
         Variant(qualifier, _, _, pos) =>
-            if id := symbols.get(pk(pos))
+            if id := self.symbols.get(pk(pos))
                 if q := qualifier
-                    if tid := type_id(q)
-                        add(pos, tid)
-                add(pos, id)
+                    if tid := self.type_id(q)
+                        self.add(pos, tid)
+                self.add(pos, id)
         Nested(qualifier, _, fields, pos) =>
-            if id := symbols.get(pk(pos))
+            if id := self.symbols.get(pk(pos))
                 if q := qualifier
-                    if tid := type_id(q)
-                        add(pos, tid)
-                add(pos, id)
+                    if tid := self.type_id(q)
+                        self.add(pos, tid)
+                self.add(pos, id)
             for x in fields
-                pattern(x)
+                self.pattern(x)
         StructPat(qualifier, _, _, sfields, pos) =>
-            if id := symbols.get(pk(pos))
+            if id := self.symbols.get(pk(pos))
                 if q := qualifier
-                    if tid := type_id(q)
-                        add(pos, tid)
-                add(pos, id)
+                    if tid := self.type_id(q)
+                        self.add(pos, tid)
+                self.add(pos, id)
             for x in sfields
-                pattern(x)
+                self.pattern(x)
         _ => return

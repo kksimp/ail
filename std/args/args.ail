@@ -6,7 +6,7 @@
 ##     a.flag("verbose"); a.get("out"); a.get("input"); a.rest
 
 ## What was wrong with the command line, with the usage text (std.args.6).
-pub error struct ArgsError "{why}\n{usage}"
+pub error struct ArgsError "{self.why}\n{self.usage}"
     pub why str
     pub usage str
 
@@ -55,50 +55,50 @@ pub fn rest(name str, help str) Spec
 ## Whether option or positional `name` was given on the command line
 ## (std.args.8).
 pub fn Args.has(self, name str) bool
-    given.contains(name)
+    self.given.contains(name)
 
 ## Option or positional `name` as a `str`, `none` when absent (std.args.8).
 pub fn Args.opt(self, name str) str?
-    if given.contains(name)
-        return values.get(name)
+    if self.given.contains(name)
+        return self.values.get(name)
     none
 
 ## `name` as an `int`; text that isn't one is an `ArgsError` (std.args.8).
 pub fn Args.int(self, name str) int ! ArgsError
-    v := values.get(name) else ""
+    v := self.values.get(name) else ""
     got := v.to_int()
     n := got else
-        return ArgsError(why: "{name} needs an integer, got `{v}`", usage: text)
+        return ArgsError(why: "{name} needs an integer, got `{v}`", usage: self.text)
     n
 
 ## `name` as a `float` (std.args.8).
 pub fn Args.float(self, name str) float ! ArgsError
-    v := values.get(name) else ""
+    v := self.values.get(name) else ""
     got := v.to_float()
     n := got else
-        return ArgsError(why: "{name} needs a number, got `{v}`", usage: text)
+        return ArgsError(why: "{name} needs a number, got `{v}`", usage: self.text)
     n
 
 ## `name` as an `int` when given and a number, else `none` (std.args.8).
 pub fn Args.opt_int(self, name str) int?
-    if given.contains(name)
-        return values.get(name)?.to_int()
+    if self.given.contains(name)
+        return self.values.get(name)?.to_int()
     none
 
 ## `name` as a `float` when given and a number, else `none` (std.args.8).
 pub fn Args.opt_float(self, name str) float?
-    if given.contains(name)
-        return values.get(name)?.to_float()
+    if self.given.contains(name)
+        return self.values.get(name)?.to_float()
     none
 
 ## Whether switch `name` was given (std.args.4).
 pub fn Args.flag(self, name str) bool
-    flags.contains(name)
+    self.flags.contains(name)
 
 ## The value of option or positional `name`; its default when absent
 ## (std.args.4).
 pub fn Args.get(self, name str) str
-    values.get(name) else ""
+    self.values.get(name) else ""
 
 ## The usage text `--help` prints (std.args.5).
 pub fn usage(name str, about str, specs List[Spec]) str

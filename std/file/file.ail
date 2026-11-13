@@ -61,10 +61,10 @@ pub fn open(path str) Reader ! fs.IoError
 
 ## Fetches the next chunk after the one held.
 fn Reader.fill(mut self) ! fs.IoError
-    next := base + buf.len()
-    buf = fs.read_range(path, next, CHUNK)?
-    base = next
-    at = 0
+    next := self.base + self.buf.len()
+    self.buf = fs.read_range(self.path, next, CHUNK)?
+    self.base = next
+    self.at = 0
 
 ## Up to `n` bytes from the position; fewer only when the file ends, and an
 ## empty `bytes` at its end (std.file.2). A negative `n` traps.
@@ -73,14 +73,14 @@ pub fn Reader.read(mut self, n int) bytes ! fs.IoError
     mut parts := List[bytes]()
     mut need := n
     while need > 0
-        if at >= buf.len()
-            fill()?
-            if buf.len() == 0
+        if self.at >= self.buf.len()
+            self.fill()?
+            if self.buf.len() == 0
                 break
-        avail := buf.len() - at
+        avail := self.buf.len() - self.at
         take := if avail < need then avail else need
-        parts.push(buf[at..at + take])
-        at += take
+        parts.push(self.buf[self.at..self.at + take])
+        self.at += take
         need -= take
     join(parts)
 
@@ -88,44 +88,44 @@ pub fn Reader.read(mut self, n int) bytes ! fs.IoError
 ## unchanged, so a reader that follows a growing file can try again (std.file.3).
 pub fn Reader.read_exact(mut self, n int) bytes? ! fs.IoError
     requires n >= 0
-    start := tell()
-    got := read(n)?
+    start := self.tell()
+    got := self.read(n)?
     if got.len() < n
-        seek(start)
+        self.seek(start)
         return none
     got
 
 ## The next line without its `\n` or `\r\n`, or `none` at the end of the file.
 ## A last line with no ending is returned too (std.file.4).
 pub fn Reader.read_line(mut self) str? ! fs.IoError
-    line(false)?
+    self.line(false)?
 
 ## As `read_line`, but only a line whose `\n` is already in the file; otherwise
 ## `none` and the position is unchanged. A program that follows a log being
 ## written uses this, so it never sees half a line (std.file.4).
 pub fn Reader.read_complete_line(mut self) str? ! fs.IoError
-    line(true)?
+    self.line(true)?
 
 fn Reader.line(mut self, complete bool) str? ! fs.IoError
-    start := tell()
+    start := self.tell()
     mut parts := List[bytes]()
     while true
-        if at >= buf.len()
-            fill()?
-            if buf.len() == 0
+        if self.at >= self.buf.len()
+            self.fill()?
+            if self.buf.len() == 0
                 break
-        size := buf.len()
-        mut i := at
-        while i < size and buf[i] != 10
+        size := self.buf.len()
+        mut i := self.at
+        while i < size and self.buf[i] != 10
             i += 1
         if i < size
-            parts.push(buf[at..i])
-            at = i + 1
+            parts.push(self.buf[self.at..i])
+            self.at = i + 1
             return line_text(join(parts))
-        parts.push(buf[at..size])
-        at = size
+        parts.push(self.buf[self.at..size])
+        self.at = size
     if complete
-        seek(start)
+        self.seek(start)
         return none
     if parts.len() == 0
         return none
@@ -133,22 +133,22 @@ fn Reader.line(mut self, complete bool) str? ! fs.IoError
 
 ## The byte offset of the next byte to read (std.file.5).
 pub fn Reader.tell(self) int
-    base + at
+    self.base + self.at
 
 ## Moves the position to byte `pos`; a position past the end reads nothing
 ## until the file grows. A negative `pos` traps (std.file.5).
 pub fn Reader.seek(mut self, pos int)
     requires pos >= 0
-    if pos >= base and pos <= base + buf.len()
-        at = pos - base
+    if pos >= self.base and pos <= self.base + self.buf.len()
+        self.at = pos - self.base
     else
-        base = pos
-        buf = b""
-        at = 0
+        self.base = pos
+        self.buf = b""
+        self.at = 0
 
 ## The file's size now, in bytes (std.file.5).
 pub fn Reader.size(self) int ! fs.IoError
-    m := fs.metadata(path)?
+    m := fs.metadata(self.path)?
     m.size
 
 ## Ends the reader (std.file.1). Dropping it does the same.
@@ -176,57 +176,57 @@ pub fn update(path str) Writer ! fs.IoError
 
 ## Adds `data` to the buffer; at 64 KiB held, the buffer is written (std.file.7).
 pub fn Writer.write_bytes(mut self, data bytes) ! fs.IoError
-    parts.push(data)
-    held += data.len()
-    if held >= CHUNK
-        flush()?
+    self.parts.push(data)
+    self.held += data.len()
+    if self.held >= CHUNK
+        self.flush()?
 
 ## `write_bytes` of the text's UTF-8 bytes (std.file.7).
 pub fn Writer.write(mut self, text str) ! fs.IoError
-    write_bytes(text.to_bytes())?
+    self.write_bytes(text.to_bytes())?
 
 ## `write` of the text and a `\n` (std.file.7).
 pub fn Writer.write_line(mut self, text str) ! fs.IoError
-    write_bytes("{text}\n".to_bytes())?
+    self.write_bytes("{text}\n".to_bytes())?
 
 ## Writes everything buffered to the file (std.file.7). On a failure the bytes
 ## stay buffered, so a later `flush` tries again.
 pub fn Writer.flush(mut self) ! fs.IoError
-    if held == 0
+    if self.held == 0
         return
-    data := join(parts)
-    if appending
-        fs.append_bytes(path, data)?
+    data := join(self.parts)
+    if self.appending
+        fs.append_bytes(self.path, data)?
     else
-        fs.write_at(path, pos, data)?
-    pos += data.len()
-    parts = List[bytes]()
-    held = 0
+        fs.write_at(self.path, self.pos, data)?
+    self.pos += data.len()
+    self.parts = List[bytes]()
+    self.held = 0
 
 ## Flushes, then asks the operating system to put the file on the disk, so the
 ## data survives a power failure (std.file.10).
 pub fn Writer.sync(mut self) ! fs.IoError
-    flush()?
-    fs.sync(path)?
+    self.flush()?
+    fs.sync(self.path)?
 
 ## The offset the next written byte will have, counting what is buffered
 ## (std.file.8).
 pub fn Writer.tell(self) int
-    pos + held
+    self.pos + self.held
 
 ## Flushes, then moves the write position to byte `pos`; a position past the
 ## end leaves zero bytes between. A negative position, or any `seek` on a writer
 ## made by `append`, traps (std.file.8).
 pub fn Writer.seek(mut self, to int) ! fs.IoError
-    requires to >= 0 and not appending
-    flush()?
-    pos = to
+    requires to >= 0 and not self.appending
+    self.flush()?
+    self.pos = to
 
 ## Flushes the writer, reporting a failure (std.file.9); a second call does nothing.
 pub fn Writer.close(mut self) ! fs.IoError
-    flush()?
+    self.flush()?
 
 impl Drop for Writer
     fn drop(mut self)
-        flush() else err
+        self.flush() else err
             return

@@ -24,7 +24,7 @@ REMOVED := 4294967295
 SLACK := 1048576
 
 ## Why a store could not be opened or changed (std.kv.9).
-pub error struct KvError "{why}"
+pub error struct KvError "{self.why}"
     pub why str
 
 ## A store open on a file (std.kv.1). `unique`: two handles on one file would
@@ -139,73 +139,73 @@ pub fn open(path str) Store ! fs.IoError | KvError
 
 ## The value of `key`, or `none` (std.kv.2).
 pub fn Store.get(self, key str) bytes?
-    items.get(key)
+    self.items.get(key)
 
 ## Whether `key` has a value (std.kv.2).
 pub fn Store.has(self, key str) bool
-    items.contains(key)
+    self.items.contains(key)
 
 ## The keys, in the order each was first set since it was last removed (std.kv.2).
 pub fn Store.keys(self) List[str]
-    items.keys()
+    self.items.keys()
 
 ## How many keys have a value (std.kv.2).
 pub fn Store.len(self) int
-    items.len()
+    self.items.len()
 
 ## Adds one record to the end of the log, at the end of the intact part, so a
 ## failed earlier write cannot leave junk in front of it.
 fn Store.append(mut self, rec bytes) ! fs.IoError
-    fs.write_at(path, size, rec)?
-    size += rec.len()
+    fs.write_at(self.path, self.size, rec)?
+    self.size += rec.len()
 
 ## Gives `key` the value `value` (std.kv.3). The change is in the file when
 ## `set` returns; on a failure the store is as it was.
 pub fn Store.set(mut self, key str, value bytes) ! fs.IoError | KvError
     if value.len() >= REMOVED
         return KvError(why: "a value must be smaller than 4 GiB")
-    append(set_record(key, value))?
-    if items.contains(key)
-        live -= record_size(key, items[key].len())
-    items[key] = value
-    live += record_size(key, value.len())
-    tidy()?
+    self.append(set_record(key, value))?
+    if self.items.contains(key)
+        self.live -= record_size(key, self.items[key].len())
+    self.items[key] = value
+    self.live += record_size(key, value.len())
+    self.tidy()?
 
 ## Removes `key`; true when it had a value, false (and nothing written) when it
 ## had none (std.kv.3).
 pub fn Store.remove(mut self, key str) bool ! fs.IoError | KvError
-    if not items.contains(key)
+    if not self.items.contains(key)
         return false
-    append(remove_record(key))?
-    live -= record_size(key, items[key].len())
-    items.remove(key)
-    tidy()?
+    self.append(remove_record(key))?
+    self.live -= record_size(key, self.items[key].len())
+    self.items.remove(key)
+    self.tidy()?
     true
 
 ## Compacts when the log holds more waste than it is worth keeping.
 fn Store.tidy(mut self) ! fs.IoError | KvError
-    waste := size - MAGIC.len() - live
-    if waste > SLACK and waste > live
-        compact()?
+    waste := self.size - MAGIC.len() - self.live
+    if waste > SLACK and waste > self.live
+        self.compact()?
 
 ## Rewrites the file with one record per key, dropping the waste of replaced
 ## and removed values (std.kv.7). The new log is written beside the file and
 ## renamed over it, so a stop leaves the old or the new log whole.
 pub fn Store.compact(mut self) ! fs.IoError | KvError
     mut parts := [MAGIC]
-    for k in items.keys()
-        parts.push(set_record(k, items[k]))
+    for k in self.items.keys()
+        parts.push(set_record(k, self.items[k]))
     data := join(parts)
-    temp := "{path}.compact"
+    temp := "{self.path}.compact"
     fs.write_bytes(temp, data)?
     fs.sync(temp)?
-    fs.rename(temp, path)?
-    size = data.len()
+    fs.rename(temp, self.path)?
+    self.size = data.len()
 
 ## Asks the operating system to put the file on the disk, so every change made
 ## so far survives a power failure (std.kv.4).
 pub fn Store.sync(self) ! fs.IoError
-    fs.sync(path)?
+    fs.sync(self.path)?
 
 ## Ends the use of the store (std.kv.1). Nothing is buffered, so nothing is lost
 ## by dropping it instead.

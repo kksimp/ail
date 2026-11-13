@@ -38,7 +38,7 @@ fn Lower.f32_round(mut self, x int) int
 ## runtime, because going through a `float` would round twice.
 fn Lower.int_to_f32(mut self, r Val) Val
     if r.ty.is_sized()
-        return Val(id: f32_round(op("itof", [r.id], Ty.Float)), ty: Ty.F32)
+        return Val(id: self.f32_round(op("itof", [r.id], Ty.Float)), ty: Ty.F32)
     Val(id: call("rt.int_to_f32", [r.id], Ty.Float), ty: Ty.F32)
 
 ## `a OP b` on two `f32`.
@@ -49,7 +49,7 @@ fn Lower.f32_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     if name == "rem"
         problem(pos, "`%` on `f32`")
         return a
-    Val(id: f32_round(op("f{name}", [a.id, b.id], Ty.Float)), ty: Ty.F32)
+    Val(id: self.f32_round(op("f{name}", [a.id, b.id], Ty.Float)), ty: Ty.F32)
 
 ## The methods of an `f32` (type.num.14-15).
 fn Lower.f32_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
@@ -65,5 +65,5 @@ fn Lower.f32_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         x := float_method(f, name, npos, vs)?
         return Val(id: x.id, ty: Ty.F32)
     if name == "sqrt"
-        return Val(id: f32_round(op("sqrt", [r.id], Ty.Float)), ty: Ty.F32)
+        return Val(id: self.f32_round(op("sqrt", [r.id], Ty.Float)), ty: Ty.F32)
     unsupported(npos, "`.{name}()` on `f32`")

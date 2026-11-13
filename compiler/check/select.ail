@@ -21,11 +21,11 @@ fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
         mut elem := Ty.Unit
         match a.op
             Recv(_, _, ch) =>
-                elem = select_channel(ch, "receive")
+                elem = self.select_channel(ch, "receive")
                 waits += 1
                 recvs += 1
             Send(ch, v) =>
-                elem = select_channel(ch, "send")
+                elem = self.select_channel(ch, "send")
                 arg := ast.Arg(label: none, mutable: false, moved: false, value: v, param: none)
                 check_call("send", plain_sig(false, [elem], Ty.Unit), [], [arg], none, a.pos, none)
                 waits += 1
@@ -34,11 +34,11 @@ fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
                 if not reject_unhandled(t, expr_pos(ms)) and not accepts(Ty.Int, t)
                     mismatch("conc.select.4", expr_pos(ms), Ty.Int, t)
                 if first := after_at
-                    select_twice("after", a.pos, first)
+                    self.select_twice("after", a.pos, first)
                 after_at = a.pos
             Closed =>
                 if first := closed_at
-                    select_twice("closed", a.pos, first)
+                    self.select_twice("closed", a.pos, first)
                 closed_at = a.pos
         elems.push(elem)
     if waits == 0

@@ -233,7 +233,7 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
         Alt(alts, _) =>
             for a in alts
                 mut covers := Covers(all: false)
-                names := elem_pattern(tuple, a, mut covers)
+                names := self.elem_pattern(tuple, a, mut covers)
                 for nm in names
                     if nm.name != "_"
                         err_help(
@@ -246,7 +246,7 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
             []
         TuplePat(_, at) =>
             mut covers := Covers(all: true)
-            names := elem_pattern(tuple, pat, mut covers)
+            names := self.elem_pattern(tuple, pat, mut covers)
             if covers.all
                 if cov.wildcard
                     err(
@@ -309,7 +309,7 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List
                     return []
                 mut names := List[Binding]()
                 for k in 0..ps.len()
-                    names.extend(elem_pattern(xs[k], ps[k], mut covers))
+                    names.extend(self.elem_pattern(xs[k], ps[k], mut covers))
                 return names
         _ => covers.all = covers.all
     # expr.match.14: a struct element is matched by its fields.

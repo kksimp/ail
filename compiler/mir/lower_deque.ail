@@ -11,7 +11,7 @@ fn Lower.is_deque_ty(self, t Ty) bool
 ## `d.at(i)` for `d[i]` when `recv` is a deque, else `none`.
 fn Lower.deque_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
     t := recv_ty(recv)?
-    if not is_deque_ty(t)
+    if not self.is_deque_ty(t)
         return none
     arg := ast.Arg(label: none, mutable: false, moved: false, value: index, param: none)
     lower_value(ast.Expr.Method(recv: recv, name: "at", name_pos: pos, args: [arg]), none)

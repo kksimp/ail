@@ -29,7 +29,7 @@ fn chan_elem(t Ty) Ty?
 fn Lower.lower_chan_new(mut self, targs List[ast.TypeRef], args List[ast.Arg], pos ast.Pos) Val?
     if targs.len() != 1 or args.len() != 1 or args[0].label != none
         return unsupported(pos, "this `Channel`")
-    t := chan_type_of(targs) else return unsupported(pos, "a `Channel` of this type")
+    t := self.chan_type_of(targs) else return unsupported(pos, "a `Channel` of this type")
     cap := lower_value(args[0].value, Ty.Int)?
     if cap.ty != Ty.Int
         return unsupported(pos, "a `Channel` capacity of `{cap.ty.name()}`")
@@ -50,7 +50,7 @@ fn Lower.chan_deadlock_check(mut self, r int, pos ast.Pos)
     branch(op("eq", [r, konst(0, Ty.Int)], Ty.Bool), found, [], cont, [])
     seal(found)
     cur = found
-    chan_deadlock_trap(pos)
+    self.chan_deadlock_trap(pos)
     jump(cont, [])
     seal(cont)
     cur = cont
@@ -72,7 +72,7 @@ fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[a
     if name == "recv" and args.len() == 0
         t := Ty.Opt(chan_elem(ch.ty) else Ty.Str)
         r := call("rt.chan_recv", [ch.id], t)
-        chan_deadlock_check(r, npos)
+        self.chan_deadlock_check(r, npos)
         return Val(id: r, ty: t)
     # conc.share.8: a receive that never waits, or waits at most `ms` milliseconds.
     if name == "try_recv" and args.len() == 0
@@ -103,7 +103,7 @@ fn Lower.lower_chan_for(mut self, var str, ch Val, body List[ast.Stmt], pos ast.
     branch(op("ne", [v, konst(0, Ty.Int)], Ty.Bool), inner, [], ended, [])
     seal(ended)
     cur = ended
-    chan_deadlock_trap(pos)
+    self.chan_deadlock_trap(pos)
     jump(exit, [])
     seal(inner)
     cur = inner
@@ -133,5 +133,5 @@ fn Lower.lower_chan_select(mut self, args List[ast.Arg], pos ast.Pos) Val?
         call("rt.chan_slot", [arr, konst(k, Ty.Int), c.id], Ty.Unit)
     t := Ty.Opt(Ty.Int)
     i := call("rt.chan_select", [arr, konst(n, Ty.Int)], t)
-    chan_deadlock_check(i, pos)
+    self.chan_deadlock_check(i, pos)
     Val(id: i, ty: t)

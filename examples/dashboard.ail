@@ -43,22 +43,25 @@ fn Dashboard.new(dir str) Dashboard
 
 ## Rescans the directory on a task and shows the result.
 fn Dashboard.rescan(mut self)
-    t := spawn scan(dir)
-    entries = t.wait() else []
-    scans += 1
+    t := spawn scan(self.dir)
+    self.entries = t.wait() else []
+    self.scans += 1
     mut rows := List[str]()
-    for e in entries
+    for e in self.entries
         rows.push("{e.name.pad_right(24, ' ')}{e.size} bytes")
-    list.items = rows
-    list.selected = list.selected.min((rows.len() - 1).max(0))
-    show_preview()
+    self.list.items = rows
+    self.list.selected = self.list.selected.min((rows.len() - 1).max(0))
+    self.show_preview()
 
 fn Dashboard.show_preview(mut self)
-    if list.selected >= entries.len()
-        preview = widgets.Pane.new([])
+    if self.list.selected >= self.entries.len()
+        self.preview = widgets.Pane.new([])
         return
-    text := fs.read_text(path.join(dir, entries[list.selected].name)) else "(unreadable)"
-    preview = widgets.Pane.new(text.split("\n").take(6))
+    text := fs.read_text(path.join(
+        self.dir,
+        self.entries[self.list.selected].name,
+    )) else "(unreadable)"
+    self.preview = widgets.Pane.new(text.split("\n").take(6))
 
 LIST := widgets.Rect(col: 0, row: 1, cols: COLS, rows: 4)
 PREVIEW := widgets.Rect(col: 0, row: 6, cols: COLS, rows: 6)
@@ -68,13 +71,16 @@ fn Dashboard.render(self, theme Map[str, int]) List[widgets.Run]
     bar := widgets.Run(
         col: 0,
         row: 0,
-        text: widgets.fit(" {path.base(dir)}: {entries.len()} files, scan {scans}", COLS),
+        text: widgets.fit(
+            " {path.base(self.dir)}: {self.entries.len()} files, scan {self.scans}",
+            COLS,
+        ),
         fg: widgets.color(theme, "status_fg"),
         bg: widgets.color(theme, "status_bg"),
         bold: true,
     )
     mut runs := [bar]
-    runs.extend(list.render(LIST, theme))
+    runs.extend(self.list.render(LIST, theme))
     runs.push(widgets.Run(
         col: 0,
         row: 5,
@@ -83,8 +89,8 @@ fn Dashboard.render(self, theme Map[str, int]) List[widgets.Run]
         bg: widgets.color(theme, "bg"),
         bold: false,
     ))
-    runs.extend(preview.render(PREVIEW, theme))
-    runs.extend(refresh.render(BUTTON, theme))
+    runs.extend(self.preview.render(PREVIEW, theme))
+    runs.extend(self.refresh.render(BUTTON, theme))
     runs
 
 ## One event: true to quit.
@@ -96,12 +102,12 @@ fn Dashboard.on_event(mut self, ev ui.Event) bool
     if k == "escape"
         return true
     if k == "r"
-        rescan()
+        self.rescan()
         return false
-    if refresh.on_event(ev, BUTTON) == widgets.Action.Submit
-        rescan()
-    elif list.on_event(ev, LIST) == widgets.Action.Changed
-        show_preview()
+    if self.refresh.on_event(ev, BUTTON) == widgets.Action.Submit
+        self.rescan()
+    elif self.list.on_event(ev, LIST) == widgets.Action.Changed
+        self.show_preview()
     false
 
 fn window(mut d Dashboard) ! ui.UiError

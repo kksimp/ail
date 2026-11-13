@@ -86,14 +86,14 @@ struct Graph
     writes Set[int]
 
 fn Graph.fn_index(self, id str) int?
-    for i in 0..fn_ids.len()
-        if fn_ids[i] == id
+    for i in 0..self.fn_ids.len()
+        if self.fn_ids[i] == id
             return i
     none
 
 fn Graph.within_id(self, r Ref) str
-    if r.within >= 0 and r.within < fn_ids.len()
-        return fn_ids[r.within]
+    if r.within >= 0 and r.within < self.fn_ids.len()
+        return self.fn_ids[r.within]
     ""
 
 ## The declared ids a name can mean, for the kinds of declaration `prefixes`
@@ -101,7 +101,7 @@ fn Graph.within_id(self, r Ref) str
 ## names itself (api.ask.1).
 fn Graph.candidates(self, name str, prefixes List[str]) List[str]
     mut out := List[str]()
-    for d in decls
+    for d in self.decls
         id := d.1
         mut kind_ok := false
         for p in prefixes
@@ -150,7 +150,7 @@ fn ref_kind(g Graph, r Ref) str
 ## The sites that use `id` in the way the question asks (api.ask.2-4).
 fn Graph.sites(self, id str, q Ask) List[Site]
     mut out := List[Site]()
-    for r in refs.sorted(by: |x| (x.pos.line, x.pos.col))
+    for r in self.refs.sorted(by: |x| (x.pos.line, x.pos.col))
         if r.id != id
             continue
         k := ref_kind(self, r)
@@ -162,7 +162,7 @@ fn Graph.sites(self, id str, q Ask) List[Site]
             Ask.Uses => keep = true
             _ => keep = false
         if keep
-            site := Site(within: within_id(r), target: id, kind: k, pos: r.pos)
+            site := Site(within: self.within_id(r), target: id, kind: k, pos: r.pos)
             if out.len() == 0 or out[out.len() - 1].pos != site.pos or out[out.len() - 1].kind != k
                 out.push(site)
     out
@@ -170,9 +170,9 @@ fn Graph.sites(self, id str, q Ask) List[Site]
 ## The functions `id` calls, each once, at its first call (api.ask.4).
 fn Graph.callees(self, id str) List[Site]
     mut out := List[Site]()
-    i := fn_index(id) else return out
+    i := self.fn_index(id) else return out
     mut seen := Set[str]()
-    for r in refs
+    for r in self.refs
         if r.within == i and (r.id.starts_with("fn:") or r.id.starts_with("method:")) and ref_kind(
             self,
             r,
@@ -186,21 +186,21 @@ fn Graph.callees(self, id str) List[Site]
 ## the function that has it of its own (api.ask.5).
 fn Graph.effect_chain(self, id str, effect str, mut seen Set[str]) List[str]
     seen.add(id)
-    for c in callees(id)
+    for c in self.callees(id)
         if seen.contains(c.target)
             continue
-        if j := fn_index(c.target)
-            if j < analysis.effects.len() and analysis.effects[j].contains(effect)
-                tail := effect_chain(c.target, effect, mut seen)
+        if j := self.fn_index(c.target)
+            if j < self.analysis.effects.len() and self.analysis.effects[j].contains(effect)
+                tail := self.effect_chain(c.target, effect, mut seen)
                 mut chain := [id]
                 chain.extend(tail)
                 return chain
     [id]
 
 fn Graph.effects_of(self, id str) List[str]
-    i := fn_index(id) else return []
-    if i < analysis.effects.len()
-        return analysis.effects[i]
+    i := self.fn_index(id) else return []
+    if i < self.analysis.effects.len()
+        return self.analysis.effects[i]
     []
 
 ## Splits the question into its verb and subject (api.ask.1).

@@ -708,8 +708,8 @@ struct PvProver
 
 fn PvProver.walk_fn(mut self, fd ast.FnDecl)
     body := fd.body else return
-    in_method = not pv_top(fd)
-    name_now = if o := fd.owner then "{o.name}.{fd.name}" else fd.name
+    self.in_method = not pv_top(fd)
+    self.name_now = if o := fd.owner then "{o.name}.{fd.name}" else fd.name
     mut f := pv_none()
     if fd.receiver != none
         f = pv_forget(f, "self")
@@ -721,22 +721,22 @@ fn PvProver.walk_fn(mut self, fd ast.FnDecl)
         for c in fd.contracts
             if not c.is_ensures
                 f = pv_assume(f, c.cond, true, pv_direct())
-    goals = [c for c in fd.contracts if c.is_ensures]
-    holds = [c.olds.len() == 0 for c in goals]
-    proving = goals.len() > 0 and pv_provable(fd)
-    params_now = fd.params
-    ret_int = pv_ret_int(fd.ret)
+    self.goals = [c for c in fd.contracts if c.is_ensures]
+    self.holds = [c.olds.len() == 0 for c in self.goals]
+    self.proving = self.goals.len() > 0 and pv_provable(fd)
+    self.params_now = fd.params
+    self.ret_int = pv_ret_int(fd.ret)
     unit := fd.ret == none
-    end := walk_block(body, f, proving and not unit)
-    if proving and unit
-        see_return(end, none)
+    end := self.walk_block(body, f, self.proving and not unit)
+    if self.proving and unit
+        self.see_return(end, none)
     if pv_top(fd)
-        for k in 0..goals.len()
-            g := goals[k]
-            ok := proving and holds[k]
+        for k in 0..self.goals.len()
+            g := self.goals[k]
+            ok := self.proving and self.holds[k]
             if ok
-                found.ens.add(ens_key(fd.name, g.pos))
-            found.rows.push(ProofRow(
+                self.found.ens.add(ens_key(fd.name, g.pos))
+            self.found.rows.push(ProofRow(
                 kind: "ensures",
                 func: fd.name,
                 cond: g.text,
@@ -745,67 +745,67 @@ fn PvProver.walk_fn(mut self, fd ast.FnDecl)
                 caller: fd.name,
                 proved: ok,
             ))
-    proving = false
+    self.proving = false
 
 fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool) PvFacts
     mut f := start
     for i in 0..stmts.len()
-        f = walk_stmt(stmts[i], f, tail and i == stmts.len() - 1)
+        f = self.walk_stmt(stmts[i], f, tail and i == stmts.len() - 1)
     f
 
 @allow("expr.match.3") fn PvProver.walk_stmt(mut self, s ast.Stmt, f PvFacts, tail bool) PvFacts
     match s
         Let(name, _, mutable, value, otherwise) =>
-            walk_expr(value, f)
+            self.walk_expr(value, f)
             if o := otherwise
-                walk_else(o, f)
+                self.walk_else(o, f)
                 return pv_forget(f, name)
-            bind_let(f, name, mutable, value)
+            self.bind_let(f, name, mutable, value)
         Assign(target, _, value, _) =>
-            walk_expr(target, f)
-            walk_expr(value, f)
+            self.walk_expr(target, f)
+            self.walk_expr(value, f)
             f
         While(cond, body, _) =>
-            walk_expr(cond, f)
-            walk_block(body, pv_assume(f, cond, true, pv_direct()), false)
+            self.walk_expr(cond, f)
+            self.walk_block(body, pv_assume(f, cond, true, pv_direct()), false)
             f
         For(_, var, _, mutable, iter, body, _) =>
-            walk_expr(iter, f)
-            walk_block(body, pv_loop(f, var, mutable, iter), false)
+            self.walk_expr(iter, f)
+            self.walk_block(body, pv_loop(f, var, mutable, iter), false)
             f
         Return(value, _) =>
             if e := value
-                walk_expr(e, f)
-            see_return(f, value)
+                self.walk_expr(e, f)
+            self.see_return(f, value)
             f
         Eval(e) =>
             if tail
-                return walk_tail(e, f)
+                return self.walk_tail(e, f)
             match e
                 If(branches, els, else_err, _) =>
-                    rest := walk_if(branches, els, else_err, f, false)
+                    rest := self.walk_if(branches, els, else_err, f, false)
                     if pv_all_leave(branches)
                         return rest
                     f
                 _ =>
-                    walk_expr(e, f)
+                    self.walk_expr(e, f)
                     f
         Handle(value, otherwise) =>
-            walk_expr(value, f)
-            walk_else(otherwise, f)
+            self.walk_expr(value, f)
+            self.walk_else(otherwise, f)
             f
         Defer(inner, _) =>
-            walk_stmt(inner, f, false)
+            self.walk_stmt(inner, f, false)
             f
         With(mutex, var, _, body, _) =>
-            walk_expr(mutex, f)
-            walk_block(body, pv_forget(f, var), false)
+            self.walk_expr(mutex, f)
+            self.walk_block(body, pv_forget(f, var), false)
             f
         Unsafe(body, _) =>
-            walk_block(body, f, tail)
+            self.walk_block(body, f, tail)
             f
         LetTuple(names, value, _) =>
-            walk_expr(value, f)
+            self.walk_expr(value, f)
             mut g := f
             for b in names
                 g = pv_forget(g, b.name)
@@ -815,16 +815,16 @@ fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool)
             mut g := pv_forget(f, d.name)
             for p in d.params
                 g = pv_forget(g, p.name)
-            walk_block(d.body else [], g, false)
+            self.walk_block(d.body else [], g, false)
             pv_forget(f, d.name)
         Select(arms, _) =>
             for h in ast.select_heads(arms)
-                walk_expr(h, f)
+                self.walk_expr(h, f)
             for a in arms
                 mut g := f
                 if b := ast.select_var(a.op)
                     g = pv_forget(f, b.name)
-                walk_block(a.body, g, false)
+                self.walk_block(a.body, g, false)
             f
         _ => f
 
@@ -839,7 +839,7 @@ fn PvProver.bind_let(mut self, f PvFacts, name str, mutable bool, value ast.Expr
     if pv_is_coll(f, value)
         g.colls.add(name)
         return g
-    called := called_fn(value, f)
+    called := self.called_fn(value, f)
     from_call := if c := called then pv_ret_int(c.ret) else false
     if not (pv_is_int(f, value, pv_direct()) or pv_lit_only(value) or from_call)
         return g
@@ -869,9 +869,9 @@ fn PvProver.bind_let(mut self, f PvFacts, name str, mutable bool, value ast.Expr
     name := match callee
         Name(n, _) => n
         _ => return none
-    if f.locals.contains(name) or (in_method and owned.contains(name))
+    if f.locals.contains(name) or (self.in_method and self.owned.contains(name))
         return none
-    cf := callees.get(name)?
+    cf := self.callees.get(name)?
     if r := cf.ret
         if pv_fallible(r)
             return none
@@ -879,18 +879,18 @@ fn PvProver.bind_let(mut self, f PvFacts, name str, mutable bool, value ast.Expr
 
 @allow("expr.match.3") fn PvProver.walk_tail(mut self, e ast.Expr, f PvFacts) PvFacts
     match e
-        If(branches, els, else_err, _) => walk_if(branches, els, else_err, f, true)
+        If(branches, els, else_err, _) => self.walk_if(branches, els, else_err, f, true)
         Match(scrutinee, arms, _) =>
-            walk_expr(scrutinee, f)
+            self.walk_expr(scrutinee, f)
             for a in arms
                 g := pv_pattern(f, a.pat)
                 if gd := a.guard
-                    walk_expr(gd, g)
-                walk_block(a.body, g, true)
+                    self.walk_expr(gd, g)
+                self.walk_block(a.body, g, true)
             f
         _ =>
-            walk_expr(e, f)
-            see_return(f, e)
+            self.walk_expr(e, f)
+            self.see_return(f, e)
             f
 
 ## Walk an `if`: each branch under its condition and the negation of those before it.
@@ -908,125 +908,125 @@ fn PvProver.walk_if(
     for b in branches
         match b.cond
             Test(c) =>
-                walk_expr(c, rest)
-                walk_block(b.body, pv_assume(rest, c, true, pv_direct()), tail)
+                self.walk_expr(c, rest)
+                self.walk_block(b.body, pv_assume(rest, c, true, pv_direct()), tail)
                 rest = pv_assume(rest, c, false, pv_direct())
             Bind(name, _, value) =>
-                walk_expr(value, rest)
-                walk_block(b.body, pv_forget(rest, name), tail)
+                self.walk_expr(value, rest)
+                self.walk_block(b.body, pv_forget(rest, name), tail)
     if es := els
         mut g := rest
         if who := else_err
             g = pv_forget(g, who.name)
-        walk_block(es, g, tail)
+        self.walk_block(es, g, tail)
     elif tail
-        see_return(rest, none)
+        self.see_return(rest, none)
     rest
 
 fn PvProver.walk_else(mut self, o ast.Else, f PvFacts)
     match o
-        Fallback(value) => walk_expr(value, f)
-        Leave(st) => walk_stmt(st, f, false)
+        Fallback(value) => self.walk_expr(value, f)
+        Leave(st) => self.walk_stmt(st, f, false)
         Handler(who, body, _) =>
             mut g := f
             if w := who
                 g = pv_forget(g, w.name)
-            walk_block(body, g, false)
+            self.walk_block(body, g, false)
     return
 
 @allow("expr.match.3") fn PvProver.walk_expr(mut self, e ast.Expr, f PvFacts)
     match e
         Call(callee, args, _) =>
-            walk_args(args, f)
+            self.walk_args(args, f)
             match callee
-                Name(name, at) => see_call(name, at, args, f)
-                _ => walk_expr(callee, f)
+                Name(name, at) => self.see_call(name, at, args, f)
+                _ => self.walk_expr(callee, f)
         Method(recv, _, _, args) =>
-            walk_expr(recv, f)
-            walk_args(args, f)
-        Member(recv, _, _) => walk_expr(recv, f)
+            self.walk_expr(recv, f)
+            self.walk_args(args, f)
+        Member(recv, _, _) => self.walk_expr(recv, f)
         Index(recv, index, _) =>
-            walk_expr(recv, f)
-            walk_expr(index, f)
-        Unary(_, x, _) => walk_expr(x, f)
+            self.walk_expr(recv, f)
+            self.walk_expr(index, f)
+        Unary(_, x, _) => self.walk_expr(x, f)
         Binary(op, l, r, _) =>
-            walk_expr(l, f)
+            self.walk_expr(l, f)
             match op
-                And => walk_expr(r, pv_assume(f, l, true, pv_direct()))
-                Or => walk_expr(r, pv_assume(f, l, false, pv_direct()))
-                _ => walk_expr(r, f)
+                And => self.walk_expr(r, pv_assume(f, l, true, pv_direct()))
+                Or => self.walk_expr(r, pv_assume(f, l, false, pv_direct()))
+                _ => self.walk_expr(r, f)
         Range(lo, hi, _, _) =>
             if x := lo
-                walk_expr(x, f)
+                self.walk_expr(x, f)
             if y := hi
-                walk_expr(y, f)
+                self.walk_expr(y, f)
         ListLit(items, _) =>
             for x in items
-                walk_expr(x, f)
+                self.walk_expr(x, f)
         SetLit(items, _) =>
             for x in items
-                walk_expr(x, f)
+                self.walk_expr(x, f)
         TupleLit(items, _) =>
             for x in items
-                walk_expr(x, f)
+                self.walk_expr(x, f)
         MapLit(entries, _) =>
             for en in entries
-                walk_expr(en.key, f)
-                walk_expr(en.value, f)
+                self.walk_expr(en.key, f)
+                self.walk_expr(en.value, f)
         Interp(parts, _) =>
             for part in parts
                 match part
-                    Hole(v) => walk_expr(v, f)
-                    Fmt(v, _) => walk_expr(v, f)
+                    Hole(v) => self.walk_expr(v, f)
+                    Fmt(v, _) => self.walk_expr(v, f)
                     Lit(_) => continue
-        If(branches, els, else_err, _) => walk_if(branches, els, else_err, f, false)
+        If(branches, els, else_err, _) => self.walk_if(branches, els, else_err, f, false)
         Match(scrutinee, arms, _) =>
-            walk_expr(scrutinee, f)
+            self.walk_expr(scrutinee, f)
             for a in arms
                 g := pv_pattern(f, a.pat)
                 if gd := a.guard
-                    walk_expr(gd, g)
-                walk_block(a.body, g, false)
+                    self.walk_expr(gd, g)
+                self.walk_block(a.body, g, false)
         Try(x, context, _) =>
-            walk_expr(x, f)
+            self.walk_expr(x, f)
             if c := context
-                walk_expr(c, f)
+                self.walk_expr(c, f)
         Comp(_, elem, value, clauses, _) =>
             mut g := f
             for cl in clauses
-                walk_expr(cl.iter, g)
+                self.walk_expr(cl.iter, g)
                 g = pv_loop(g, cl.var, false, cl.iter)
                 for b in cl.unpack
                     g = pv_forget(g, b.name)
                 if c := cl.cond
-                    walk_expr(c, g)
+                    self.walk_expr(c, g)
                     g = pv_assume(g, c, true, pv_direct())
-            walk_expr(elem, g)
+            self.walk_expr(elem, g)
             if v := value
-                walk_expr(v, g)
+                self.walk_expr(v, g)
         OrElse(value, otherwise, _) =>
-            walk_expr(value, f)
-            walk_else(otherwise, f)
-        NewRef(value, _) => walk_expr(value, f)
+            self.walk_expr(value, f)
+            self.walk_else(otherwise, f)
+        NewRef(value, _) => self.walk_expr(value, f)
         # type.fn.4: the body runs later, so it assumes nothing about its parameters.
         Closure(params, body, _) =>
             mut g := f
             for p in params
                 g = pv_forget(g, p.name)
-            walk_expr(body, g)
+            self.walk_expr(body, g)
         _ => return
     return
 
 ## The arguments of a call; a key function `|x| e` (expr.key.1) binds `x` in `e`.
 fn PvProver.walk_args(mut self, args List[ast.Arg], f PvFacts)
     for a in args
-        walk_expr(a.value, f)
+        self.walk_expr(a.value, f)
 
 ## A call `name(args)` at `at`: try each `requires` of the function it reaches.
 fn PvProver.see_call(mut self, name str, at ast.Pos, args List[ast.Arg], f PvFacts)
-    if f.locals.contains(name) or (in_method and owned.contains(name))
+    if f.locals.contains(name) or (self.in_method and self.owned.contains(name))
         return
-    callee := callees.get(name) else return
+    callee := self.callees.get(name) else return
     env := pv_call_env(f, callee, args)
     for c in callee.contracts
         if c.is_ensures
@@ -1036,24 +1036,24 @@ fn PvProver.see_call(mut self, name str, at ast.Pos, args List[ast.Arg], f PvFac
             d := pv_decide(f, c.cond, PvCtx(direct: false, env: m))
             ok = d.v == 1 and d.safe
         if ok
-            found.req.add(site_key(callee.name, at, c.pos))
-        found.rows.push(ProofRow(
+            self.found.req.add(site_key(callee.name, at, c.pos))
+        self.found.rows.push(ProofRow(
             kind: "requires",
             func: callee.name,
             cond: c.text,
             at: c.pos,
             site: at,
-            caller: name_now,
+            caller: self.name_now,
             proved: ok,
         ))
 
 ## A return of `value` (`none`: no value, or one the pass can't read) with facts `f`:
 ## each `ensures` still proved must hold for it.
 fn PvProver.see_return(mut self, f PvFacts, value ast.Expr?)
-    if not proving
+    if not self.proving
         return
     mut env := Map[str, PvBound]()
-    for p in params_now
+    for p in self.params_now
         if p.mutable or p.moved
             continue
         if pv_int_type(p.ty)
@@ -1061,13 +1061,13 @@ fn PvProver.see_return(mut self, f PvFacts, value ast.Expr?)
         elif pv_coll_type(p.ty)
             env[p.name] = PvBound.CollB(key: p.name)
     if e := value
-        if ret_int
+        if self.ret_int
             mut r := pv_value(f, e, pv_direct())
             r.safe = true
             env["result"] = PvBound.IntB(v: r)
     cx := PvCtx(direct: false, env: env)
-    for k in 0..goals.len()
-        if holds[k]
-            d := pv_decide(f, goals[k].cond, cx)
+    for k in 0..self.goals.len()
+        if self.holds[k]
+            d := pv_decide(f, self.goals[k].cond, cx)
             if d.v != 1 or not d.safe
-                holds[k] = false
+                self.holds[k] = false

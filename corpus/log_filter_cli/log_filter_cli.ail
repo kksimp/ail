@@ -43,7 +43,10 @@ fn parse_line(line str) Entry?
     Entry(stamp: parts[0], level: parts[1], msg: parts[2])
 
 fn Query.accepts(self, e Entry) bool
-    rank(e.level) >= min_rank and e.msg.contains(needle) and e.stamp >= after and e.stamp < before
+    rank(e.level) >= self.min_rank
+        and e.msg.contains(self.needle)
+        and e.stamp >= self.after
+        and e.stamp < self.before
 
 fn filter_file(p str, q Query) !List[Entry]
     mut r := file.open(p)?

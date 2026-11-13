@@ -14,13 +14,13 @@ pub struct Work
     pub std str
 
 fn Work.index(self, file str) int
-    for i in 0..paths.len()
-        if paths[i] == file
+    for i in 0..self.paths.len()
+        if self.paths[i] == file
             return i
     -1
 
 pub fn Work.module(self, file str) str
-    if package then module_of(root, file) else ""
+    if self.package then module_of(self.root, file) else ""
 
 ## One declaration found by `find`: where, and which.
 struct Hit
@@ -28,15 +28,15 @@ struct Hit
     decl Decl
 
 fn Work.fail(mut self, msg str)
-    if err == ""
-        err = msg
+    if self.err == ""
+        self.err = msg
 
 ## The file and declaration an id names (edit.id.1-2); `file` is -1 when none.
 fn Work.find(mut self, id str) Hit
     mut hits := List[Hit]()
-    for f in 0..paths.len()
-        module := self.module(paths[f])
-        for d in decls(texts[f])
+    for f in 0..self.paths.len()
+        module := self.module(self.paths[f])
+        for d in decls(self.texts[f])
             # edit.id.3: a bare name stands for `kind:name`.
             bare := not id.contains(":") and bare_name(d.id) == id
             qual := qualified(d.id, module)
@@ -46,9 +46,9 @@ fn Work.find(mut self, id str) Hit
     if hits.len() == 1
         return hits[0]
     if hits.len() == 0
-        fail("no declaration has the id `{id}` (edit.id.1)")
+        self.fail("no declaration has the id `{id}` (edit.id.1)")
     else
-        fail("`{id}` names {hits.len()} declarations; qualify it with its module, e.g. `fn:geo.origin` (edit.id.2)")
+        self.fail("`{id}` names {hits.len()} declarations; qualify it with its module, e.g. `fn:geo.origin` (edit.id.2)")
     Hit(file: -1, decl: Decl(id: "", name: "", start: 0, head: 0, sig_end: 0, end: 0))
 
 fn bare_name(id str) str
@@ -59,18 +59,18 @@ fn bare_name(id str) str
 ## The file an insert or import goes to (edit.op.3, edit.op.6); -1 on failure.
 fn Work.target(mut self, op J) int
     if f := op.str_of("file")
-        p := if package then "{root}/{f}" else f
-        i := index(p)
+        p := if self.package then "{self.root}/{f}" else f
+        i := self.index(p)
         if i < 0
-            fail("`{f}` is not a file of the program (edit.op.3)")
+            self.fail("`{f}` is not a file of the program (edit.op.3)")
         return i
-    if not package
+    if not self.package
         return 0
     # A package's root module: its first file at the top.
-    for i in 0..paths.len()
-        if parent_of(paths[i]) == root
+    for i in 0..self.paths.len()
+        if parent_of(self.paths[i]) == self.root
             return i
-    fail("say which file with \"file\" (edit.op.3)")
+    self.fail("say which file with \"file\" (edit.op.3)")
     -1
 
 fn parent_of(path str) str
@@ -478,14 +478,14 @@ fn Work.declared_at(mut self, id str) Spot
         kind := id.slice(0, c)
         rest := id.slice(c + 1, id.chars().len())
         dot := rest.rfind(".") else
-            fail("`{id}` names no member (edit.id.1)")
+            self.fail("`{id}` names no member (edit.id.1)")
             return none_spot
         owner := rest.slice(0, dot)
         member := rest.slice(dot + 1, rest.chars().len())
-        h := find("type:{owner}")
-        if err != ""
+        h := self.find("type:{owner}")
+        if self.err != ""
             return none_spot
-        lines := texts[h.file].split("\n")
+        lines := self.texts[h.file].split("\n")
         for i in h.decl.head + 1..h.decl.end
             if i >= lines.len()
                 break
@@ -498,15 +498,15 @@ fn Work.declared_at(mut self, id str) Spot
                     break
             if head_word == member and lines[i].chars().len() - t.chars().len() == 4
                 return Spot(file: h.file, line: i + 1, col: 5, name: member)
-        fail("no {kind} `{member}` in `{owner}` (edit.id.1)")
+        self.fail("no {kind} `{member}` in `{owner}` (edit.id.1)")
         return none_spot
-    h := find(id)
-    if err != ""
+    h := self.find(id)
+    if self.err != ""
         return none_spot
-    head := texts[h.file].split("\n")[h.decl.head]
+    head := self.texts[h.file].split("\n")[h.decl.head]
     col := name_column(head, h.decl)
     if col == 0
-        fail("can't find `{h.decl.name}` on its declaration line (edit.op.5)")
+        self.fail("can't find `{h.decl.name}` on its declaration line (edit.op.5)")
         return none_spot
     Spot(file: h.file, line: h.decl.head + 1, col: col, name: h.decl.name)
 

@@ -8,7 +8,7 @@
 ## to write instead (std.yaml.7), never read wrongly.
 
 ## Why the text is not YAML in the subset (std.yaml.10). `line` is 1-based.
-pub error struct YamlError "{why} (line {line})"
+pub error struct YamlError "{self.why} (line {self.line})"
     pub why str
     pub line int
 
@@ -211,123 +211,123 @@ fn resolve(w str) Json
     Json.Str(w)
 
 fn YamlParser.fail(self, why str) YamlError
-    YamlError(why: why, line: pos + 1)
+    YamlError(why: why, line: self.pos + 1)
 
 fn YamlParser.at_end(self) bool
-    pos >= lines.len()
+    self.pos >= self.lines.len()
 
 ## The comment-free, trimmed text of line `i`.
 fn YamlParser.body(self, i int) str
-    strip_comment(lines[i]).trim()
+    strip_comment(self.lines[i]).trim()
 
 ## Moves to the next line that holds content.
 fn YamlParser.skip_blank_lines(mut self) !
-    while pos < lines.len() and body(pos) == ""
-        pos += 1
-    if pos < lines.len()
-        raw := lines[pos]
+    while self.pos < self.lines.len() and self.body(self.pos) == ""
+        self.pos += 1
+    if self.pos < self.lines.len()
+        raw := self.lines[self.pos]
         k := indent_of(raw)
         if raw.char_at(k) == '\t'
-            return fail("tabs cannot indent YAML: use spaces")
+            return self.fail("tabs cannot indent YAML: use spaces")
 
 fn YamlParser.document(mut self) !Json
-    skip_blank_lines()?
-    if at_end()
+    self.skip_blank_lines()?
+    if self.at_end()
         return Json.Null
-    first := body(pos)
+    first := self.body(self.pos)
     if first.starts_with("%")
-        return fail("directives (%YAML, %TAG) are not supported")
+        return self.fail("directives (%YAML, %TAG) are not supported")
     if first == "---"
-        pos += 1
-        skip_blank_lines()?
-        if at_end()
+        self.pos += 1
+        self.skip_blank_lines()?
+        if self.at_end()
             return Json.Null
     elif first.starts_with("--- ")
-        return fail("start the content on the line after '---'")
-    v := node(indent_of(lines[pos]))?
-    skip_blank_lines()?
-    if not at_end()
-        rest := body(pos)
+        return self.fail("start the content on the line after '---'")
+    v := self.node(indent_of(self.lines[self.pos]))?
+    self.skip_blank_lines()?
+    if not self.at_end()
+        rest := self.body(self.pos)
         if rest == "..."
-            pos += 1
-            skip_blank_lines()?
-            if at_end()
+            self.pos += 1
+            self.skip_blank_lines()?
+            if self.at_end()
                 return v
         if rest == "---" or rest == "..." or rest.starts_with("--- ")
-            return fail("several documents are not supported: parse one document at a time")
-        return fail("unexpected text at this indentation")
+            return self.fail("several documents are not supported: parse one document at a time")
+        return self.fail("unexpected text at this indentation")
     v
 
 ## The block node that starts at the current line, indented by `ind`.
 fn YamlParser.node(mut self, ind int) !Json
-    t := body(pos)
+    t := self.body(self.pos)
     if is_seq_item(t)
-        return seq(ind)
+        return self.seq(ind)
     if t.starts_with("? ") or t == "?"
-        return fail("complex keys (?) are not supported: use a quoted string key")
+        return self.fail("complex keys (?) are not supported: use a quoted string key")
     if key_colon(t) >= 0
-        return map(ind)
-    start := pos + 1
-    pos += 1
-    inline_value(t, start, ind - 1, false)?
+        return self.map(ind)
+    start := self.pos + 1
+    self.pos += 1
+    self.inline_value(t, start, ind - 1, false)?
 
 fn YamlParser.seq(mut self, ind int) !Json
     mut items := List[Json]()
     while true
-        skip_blank_lines()?
-        if at_end()
+        self.skip_blank_lines()?
+        if self.at_end()
             break
-        k := indent_of(lines[pos])
+        k := indent_of(self.lines[self.pos])
         if k < ind
             break
         if k > ind
-            return fail("unexpected indentation")
-        t := body(pos)
+            return self.fail("unexpected indentation")
+        t := self.body(self.pos)
         if not is_seq_item(t)
             break
         rest := if t == "-" then "" else t.slice(2, t.len()).trim_start()
-        start := pos + 1
+        start := self.pos + 1
         if rest != "" and (key_colon(rest) >= 0 or is_seq_item(rest))
             # `- key: v` and `- - x`: the item's content starts where the
             # dash's text ends, so blank the dash and read the line as a node.
-            raw := lines[pos]
+            raw := self.lines[self.pos]
             pad := " ".repeat(ind + 1)
-            lines[pos] = "{pad}{raw.slice(ind + 1, raw.len())}"
-            items.push(node(indent_of(lines[pos]))?)
+            self.lines[self.pos] = "{pad}{raw.slice(ind + 1, raw.len())}"
+            items.push(self.node(indent_of(self.lines[self.pos]))?)
         else
-            pos += 1
-            items.push(inline_value(rest, start, ind, false)?)
+            self.pos += 1
+            items.push(self.inline_value(rest, start, ind, false)?)
     Json.Arr(items)
 
 fn YamlParser.map(mut self, ind int) !Json
     mut members := List[JsonMember]()
     while true
-        skip_blank_lines()?
-        if at_end()
+        self.skip_blank_lines()?
+        if self.at_end()
             break
-        k := indent_of(lines[pos])
+        k := indent_of(self.lines[self.pos])
         if k < ind
             break
-        t := body(pos)
+        t := self.body(self.pos)
         if k > ind
-            return fail("unexpected indentation (a plain value cannot continue on the next line: use | or > for a text block, or quote it)")
+            return self.fail("unexpected indentation (a plain value cannot continue on the next line: use | or > for a text block, or quote it)")
         if t == "..." or t == "---"
             break
         if is_seq_item(t)
-            return fail("expected 'key: value' but found a list item")
+            return self.fail("expected 'key: value' but found a list item")
         if t.starts_with("? ") or t == "?"
-            return fail("complex keys (?) are not supported: use a quoted string key")
+            return self.fail("complex keys (?) are not supported: use a quoted string key")
         c := key_colon(t)
         if c < 0
-            return fail("expected 'key: value' (a key ends with ':' followed by a space or the end of the line)")
-        start := pos + 1
-        key := read_key(t.slice(0, c).trim_end(), start)?
+            return self.fail("expected 'key: value' (a key ends with ':' followed by a space or the end of the line)")
+        start := self.pos + 1
+        key := self.read_key(t.slice(0, c).trim_end(), start)?
         for m in members
             if m.key == key
-                return fail("duplicate key '{key}'")
+                return self.fail("duplicate key '{key}'")
         rest := t.slice(c + 1, t.len()).trim_start()
-        pos += 1
-        v := inline_value(rest, start, ind, true)?
+        self.pos += 1
+        v := self.inline_value(rest, start, ind, true)?
         members.push(JsonMember(key, v))
     Json.Obj(members)
 
@@ -339,9 +339,9 @@ fn YamlParser.read_key(self, s str, ln int) !str
         return q
     m := refusal(s)
     if m != ""
-        return fail(m)
+        return self.fail(m)
     if s == "<<"
-        return fail("merge keys (<<) are not supported: write the merged entries out in full")
+        return self.fail("merge keys (<<) are not supported: write the merged entries out in full")
     s
 
 ## The value after `key:` or `- ` (`text`, already without its comment). `pos`
@@ -349,22 +349,22 @@ fn YamlParser.read_key(self, s str, ln int) !str
 ## construct that owns the value.
 fn YamlParser.inline_value(mut self, text str, start int, parent int, in_map bool) !Json
     if text == ""
-        skip_blank_lines()?
-        if at_end()
+        self.skip_blank_lines()?
+        if self.at_end()
             return Json.Null
-        k := indent_of(lines[pos])
+        k := indent_of(self.lines[self.pos])
         if k > parent
-            return node(k)
-        if in_map and k == parent and is_seq_item(body(pos))
-            return seq(k)
+            return self.node(k)
+        if in_map and k == parent and is_seq_item(self.body(self.pos))
+            return self.seq(k)
         return Json.Null
     if text.starts_with("|") or text.starts_with(">")
-        return block_scalar(text, parent, start)
+        return self.block_scalar(text, parent, start)
     mut buf := text
     if text.starts_with("[") or text.starts_with("\{")
-        while flow_depth(buf) > 0 and not at_end()
-            buf = "{buf} {body(pos)}"
-            pos += 1
+        while flow_depth(buf) > 0 and not self.at_end()
+            buf = "{buf} {self.body(self.pos)}"
+            self.pos += 1
     mut inl := Inline(chars: buf.chars(), pos: 0, line: start, depth: 0)
     v := inl.value()?
     inl.finish()?
@@ -387,11 +387,11 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
             return YamlError(why: "unexpected text after '{header.slice(0, 1)}'", line: start)
     mut raw := List[str]()
     mut blk := -1
-    while pos < lines.len()
-        l := lines[pos]
+    while self.pos < self.lines.len()
+        l := self.lines[self.pos]
         if l.trim() == ""
             raw.push("")
-            pos += 1
+            self.pos += 1
             continue
         k := indent_of(l)
         if blk < 0
@@ -401,7 +401,7 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
         if k < blk
             break
         raw.push(l.slice(blk, l.len()))
-        pos += 1
+        self.pos += 1
     mut last := raw.len()
     while last > 0 and raw[last - 1] == ""
         last -= 1
@@ -439,73 +439,74 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
     Json.Str("")
 
 fn Inline.fail(self, why str) YamlError
-    YamlError(why: why, line: line)
+    YamlError(why: why, line: self.line)
 
 fn Inline.at_end(self) bool
-    pos >= chars.len()
+    self.pos >= self.chars.len()
 
 fn Inline.peek(self) char?
-    if at_end()
+    if self.at_end()
         return none
-    chars[pos]
+    self.chars[self.pos]
 
 fn Inline.skip_blank(mut self)
-    while not at_end() and (chars[pos] == ' ' or chars[pos] == '\t')
-        pos += 1
+    while not self.at_end() and (self.chars[self.pos] == ' ' or self.chars[self.pos] == '\t')
+        self.pos += 1
 
 ## After a value on a block line nothing else may follow.
 fn Inline.finish(mut self) !
-    skip_blank()
-    if not at_end()
-        return fail("unexpected text after the value")
+    self.skip_blank()
+    if not self.at_end()
+        return self.fail("unexpected text after the value")
 
 fn Inline.value(mut self) !Json
-    skip_blank()
-    c := peek() else return Json.Null
+    self.skip_blank()
+    c := self.peek() else return Json.Null
     if c == '"' or c == '\''
-        return Json.Str(quoted()?)
+        return Json.Str(self.quoted()?)
     if c == '['
-        return flow_seq()
+        return self.flow_seq()
     if c == '{'
-        return flow_map()
-    word := plain_text()?
+        return self.flow_map()
+    word := self.plain_text()?
     m := refusal(word)
     if m != ""
-        return fail(m)
-    if depth == 0 and (word.contains(": ") or word.ends_with(":"))
-        return fail("a mapping cannot start on the same line as its key: put the inner map on its own indented lines or write it with braces")
+        return self.fail(m)
+    if self.depth == 0 and (word.contains(": ") or word.ends_with(":"))
+        return self.fail("a mapping cannot start on the same line as its key: put the inner map on its own indented lines or write it with braces")
     resolve(word)
 
 ## An unquoted scalar: to the end of the line, or in a flow collection to the
 ## next `,`, bracket or `: `.
 fn Inline.plain_text(mut self) !str
-    start := pos
-    while not at_end()
-        c := chars[pos]
-        if depth > 0
+    start := self.pos
+    while not self.at_end()
+        c := self.chars[self.pos]
+        if self.depth > 0
             if c == ',' or c == ']' or c == '}' or c == '[' or c == '{'
                 break
-            if c == ':' and (pos + 1 >= chars.len() or " ,]}".contains(chars[pos + 1]))
+            if c == ':'
+                and (self.pos + 1 >= self.chars.len() or " ,]}".contains(self.chars[self.pos + 1]))
                 break
-        pos += 1
-    chars[start..pos].join("").trim()
+        self.pos += 1
+    self.chars[start..self.pos].join("").trim()
 
 fn Inline.quoted(mut self) !str
-    c := peek() else return fail("expected a string")
+    c := self.peek() else return self.fail("expected a string")
     if c == '"'
-        return double_quoted()
-    single_quoted()
+        return self.double_quoted()
+    self.single_quoted()
 
 fn Inline.single_quoted(mut self) !str
-    pos += 1
+    self.pos += 1
     mut out := List[char]()
     while true
-        c := peek() else return fail("unterminated string (a quoted string must end on the line it starts, or use a | block)")
-        pos += 1
+        c := self.peek() else return self.fail("unterminated string (a quoted string must end on the line it starts, or use a | block)")
+        self.pos += 1
         if c == '\''
-            if peek() == '\''
+            if self.peek() == '\''
                 out.push('\'')
-                pos += 1
+                self.pos += 1
             else
                 break
         else
@@ -513,23 +514,23 @@ fn Inline.single_quoted(mut self) !str
     out.join("")
 
 fn Inline.double_quoted(mut self) !str
-    pos += 1
+    self.pos += 1
     mut out := List[char]()
     while true
-        c := peek() else return fail("unterminated string (a quoted string must end on the line it starts, or use a | block)")
-        pos += 1
+        c := self.peek() else return self.fail("unterminated string (a quoted string must end on the line it starts, or use a | block)")
+        self.pos += 1
         if c == '"'
             break
         if c == '\\'
-            out.push(escape()?)
+            out.push(self.escape()?)
         else
             out.push(c)
     out.join("")
 
 ## The escape after a backslash that `pos` has already passed (std.yaml.2).
 fn Inline.escape(mut self) !char
-    c := peek() else return fail("unterminated string")
-    pos += 1
+    c := self.peek() else return self.fail("unterminated string")
+    self.pos += 1
     match c
         '0' => '\u{0}'
         'a' => '\u{7}'
@@ -544,85 +545,85 @@ fn Inline.escape(mut self) !char
         '"' => '"'
         '/' => '/'
         '\\' => '\\'
-        'x' => hex_char(2)?
-        'u' => hex_char(4)?
-        'U' => hex_char(8)?
-        _ => return fail("invalid escape '\\{c}'")
+        'x' => self.hex_char(2)?
+        'u' => self.hex_char(4)?
+        'U' => self.hex_char(8)?
+        _ => return self.fail("invalid escape '\\{c}'")
 
 fn Inline.hex_char(mut self, n int) !char
-    stop := pos + n
-    if stop > chars.len()
-        return fail("invalid unicode escape")
+    stop := self.pos + n
+    if stop > self.chars.len()
+        return self.fail("invalid unicode escape")
     mut code := 0
-    for d in chars[pos..stop]
-        code = code * 16 + (d.to_digit(16) else return fail("invalid unicode escape"))
-    pos = stop
-    ch := char.from_code(code) else return fail("invalid unicode escape")
+    for d in self.chars[self.pos..stop]
+        code = code * 16 + (d.to_digit(16) else return self.fail("invalid unicode escape"))
+    self.pos = stop
+    ch := char.from_code(code) else return self.fail("invalid unicode escape")
     ch
 
 fn Inline.flow_seq(mut self) !Json
-    pos += 1
-    depth += 1
+    self.pos += 1
+    self.depth += 1
     mut items := List[Json]()
     while true
-        skip_blank()
-        c := peek() else return fail("unterminated '['")
+        self.skip_blank()
+        c := self.peek() else return self.fail("unterminated '['")
         if c == ']'
-            pos += 1
+            self.pos += 1
             break
-        items.push(value()?)
-        skip_blank()
-        d := peek() else return fail("unterminated '['")
+        items.push(self.value()?)
+        self.skip_blank()
+        d := self.peek() else return self.fail("unterminated '['")
         if d == ','
-            pos += 1
+            self.pos += 1
         elif d == ']'
-            pos += 1
+            self.pos += 1
             break
         else
-            return fail("expected ',' or ']' in list")
-    depth -= 1
+            return self.fail("expected ',' or ']' in list")
+    self.depth -= 1
     Json.Arr(items)
 
 fn Inline.flow_map(mut self) !Json
-    pos += 1
-    depth += 1
+    self.pos += 1
+    self.depth += 1
     mut members := List[JsonMember]()
     while true
-        skip_blank()
-        c := peek() else return fail("unterminated '\{'")
+        self.skip_blank()
+        c := self.peek() else return self.fail("unterminated '\{'")
         if c == '}'
-            pos += 1
+            self.pos += 1
             break
         mut key := ""
         if c == '"' or c == '\''
-            key = quoted()?
+            key = self.quoted()?
         else
-            key = plain_text()?
+            key = self.plain_text()?
             bad := refusal(key)
             if bad != ""
-                return fail(bad)
+                return self.fail(bad)
             if key == "<<"
-                return fail("merge keys (<<) are not supported: write the merged entries out in full")
+                return self.fail("merge keys (<<) are not supported: write the merged entries out in full")
         for m in members
             if m.key == key
-                return fail("duplicate key '{key}'")
-        skip_blank()
+                return self.fail("duplicate key '{key}'")
+        self.skip_blank()
         mut v := Json.Null
-        if peek() == ':'
-            pos += 1
-            skip_blank()
-            nxt := peek() else return fail("unterminated '\{'")
+        if self.peek() == ':'
+            self.pos += 1
+            self.skip_blank()
+            nxt := self.peek() else return self.fail("unterminated '\{'")
             if nxt != ',' and nxt != '}'
-                v = value()?
+                v = self.value()?
         members.push(JsonMember(key, v))
-        skip_blank()
-        d := peek() else return fail("unterminated '\{'")
+        self.skip_blank()
+        d := self.peek() else return self.fail("unterminated '\{'")
         if d == ','
-            pos += 1
+            self.pos += 1
         elif d == '}'
-            pos += 1
+            self.pos += 1
             break
         else
-            return fail("expected ',' or '}' in map")
-    depth -= 1
+            return self.fail("expected ',' or '}' in map")
+    self.depth -= 1
     Json.Obj(members)

@@ -32,7 +32,7 @@ extern c "kernel32" fn WriteFile(h int, buf *u8, n i32, put *u8, ov *u8) i32
 ESC := "\u{1b}"
 
 ## Why the terminal could not be used (std.term.8).
-pub error struct TermError "{why}"
+pub error struct TermError "{self.why}"
     pub why str
 
 ## What the user did. `Key` follows `std.ui.7`; `Mouse` and `Scroll` follow
@@ -598,26 +598,26 @@ fn open_windows(mouse bool) Term ! TermError
         )
 
 fn Term.restore(mut self)
-    if not active
+    if not self.active
         return
-    active = false
-    if mouse
+    self.active = false
+    if self.mouse
         send("{ESC}[?1006l{ESC}[?1002l{ESC}[?1000l")
     send("{reset()}{show_cursor()}{leave_alt()}")
     unsafe
         if is_windows()
-            SetConsoleMode(win_in(), word_at(saved).to_i32())
-            SetConsoleMode(win_out(), word_at(saved.offset(4)).to_i32())
+            SetConsoleMode(win_in(), word_at(self.saved).to_i32())
+            SetConsoleMode(win_out(), word_at(self.saved.offset(4)).to_i32())
         else
-            tcsetattr(0, 2, saved)
+            tcsetattr(0, 2, self.saved)
 
 ## Puts the terminal back as `open` found it (std.term.5).
 pub fn Term.close(mut self)
-    restore()
+    self.restore()
 
 ## The terminal's size in cells as of the last `open` or `poll` (std.term.6).
 pub fn Term.size(self) Size
-    Size(cols: cols, rows: rows)
+    Size(cols: self.cols, rows: self.rows)
 
 ## Writes `s` to the terminal at once (std.term.7).
 pub fn Term.write(self, s str)
@@ -629,18 +629,18 @@ pub fn Term.write(self, s str)
 pub fn Term.poll(mut self, ms int) Event?
     start := time.now_ms()
     while true
-        if not queue.is_empty()
-            first := queue[0]
-            queue.remove_at(0)
+        if not self.queue.is_empty()
+            first := self.queue[0]
+            self.queue.remove_at(0)
             return first
         now := time.now_ms()
-        if now - asked >= CHECK_MS
+        if now - self.asked >= CHECK_MS
             if is_windows()
                 sz := win_size()
-                note_size(sz.cols, sz.rows)
+                self.note_size(sz.cols, sz.rows)
             else
                 send(size_query())
-            asked = now
+            self.asked = now
         mut left := CHECK_MS
         if ms >= 0
             left = ms - (now - start)
@@ -654,12 +654,12 @@ pub fn Term.poll(mut self, ms int) Event?
                 return none
             for ev in parse_ints(chunk)
                 match ev
-                    Resize(c, r) => note_size(c, r)
-                    _ => queue.push(ev)
+                    Resize(c, r) => self.note_size(c, r)
+                    _ => self.queue.push(ev)
     none
 
 fn Term.note_size(mut self, c int, r int)
-    if c != cols or r != rows
-        cols = c
-        rows = r
-        queue.push(Resize(cols: c, rows: r))
+    if c != self.cols or r != self.rows
+        self.cols = c
+        self.rows = r
+        self.queue.push(Resize(cols: c, rows: r))

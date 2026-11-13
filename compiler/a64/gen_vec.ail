@@ -33,13 +33,13 @@ fn Gen.vpr(mut self, v int, scratch int) int
         return l - FB
     if not is_slot(l)
         unreachable("a64: the vector v{v} has no location")
-    vec_mem(true, scratch, SP, slot(l))
+    self.vec_mem(true, scratch, SP, slot(l))
     scratch
 
 fn Gen.put_vec(mut self, v int, x int)
     l := loc[v]
     if is_slot(l)
-        vec_mem(false, x, SP, slot(l))
+        self.vec_mem(false, x, SP, slot(l))
     elif is_reg(l) and l - FB != x
         a.vmov(l - FB, x)
 
@@ -47,26 +47,26 @@ fn Gen.put_vec(mut self, v int, x int)
 fn Gen.vec_elems(mut self, load bool, t int, i mir.Inst)
     base := gpr(i.arg(0), S0)
     if k := imm(i.arg(1))
-        vec_mem(load, t, base, 8 * (k + i.elem_off()))
+        self.vec_mem(load, t, base, 8 * (k + i.elem_off()))
         return
     x := gpr(i.arg(1), S1)
     a.add_lsl(S1, base, x, 3)
-    vec_mem(load, t, S1, 8 * i.elem_off())
+    self.vec_mem(load, t, S1, 8 * i.elem_off())
 
 fn Gen.vec_inst(mut self, i mir.Inst)
     match i.op
         "vldx" =>
             d := out_fpr(i.dst, X0)
-            vec_elems(true, d, i)
-            put_vec(i.dst, d)
+            self.vec_elems(true, d, i)
+            self.put_vec(i.dst, d)
         "vstx" =>
-            x := vpr(i.arg(2), X0)
-            vec_elems(false, x, i)
+            x := self.vpr(i.arg(2), X0)
+            self.vec_elems(false, x, i)
         "vsplat" =>
             xa := fpr(i.arg(0), X0)
             d := out_fpr(i.dst, X0)
             a.vdup(d, xa)
-            put_vec(i.dst, d)
+            self.put_vec(i.dst, d)
         "vpack" =>
             xa := fpr(i.arg(0), X0)
             xb := fpr(i.arg(1), X1)
@@ -80,9 +80,9 @@ fn Gen.vec_inst(mut self, i mir.Inst)
                 a.fop1("fmov", X1, xa)
                 a.vins_hi(X1, xb)
                 a.vmov(d, X1)
-            put_vec(i.dst, d)
+            self.put_vec(i.dst, d)
         "vlane" =>
-            xa := vpr(i.arg(0), X0)
+            xa := self.vpr(i.arg(0), X0)
             d := out_fpr(i.dst, X0)
             if i.imm == 1
                 a.vlane_hi(d, xa)
@@ -90,13 +90,13 @@ fn Gen.vec_inst(mut self, i mir.Inst)
                 a.fop1("fmov", d, xa)
             put_fpr(i.dst, d)
         "vhadd" =>
-            xa := vpr(i.arg(0), X0)
+            xa := self.vpr(i.arg(0), X0)
             d := out_fpr(i.dst, X0)
             a.vfaddp_d(d, xa)
             put_fpr(i.dst, d)
         _ =>
-            xa := vpr(i.arg(0), X0)
-            xb := vpr(i.arg(1), X1)
+            xa := self.vpr(i.arg(0), X0)
+            xb := self.vpr(i.arg(1), X1)
             d := out_fpr(i.dst, X0)
             name := match i.op
                 "vfadd" => "fadd"
@@ -104,4 +104,4 @@ fn Gen.vec_inst(mut self, i mir.Inst)
                 "vfmul" => "fmul"
                 _ => "fdiv"
             a.vop(name, d, xa, xb)
-            put_vec(i.dst, d)
+            self.put_vec(i.dst, d)

@@ -68,7 +68,7 @@ fn Lower.gen_table_eq(mut self, fkey str, t Ty)
     cur = found
     if is_map
         va := table_word(vws, i, vt)
-        vb := if vt == Ty.Bool then word_as(vt, load(e, 2, Ty.Int)) else load(e, 2, vt)
+        vb := if vt == Ty.Bool then self.word_as(vt, load(e, 2, Ty.Int)) else load(e, 2, vt)
         step := new_block()
         branch(field_eq(vt, va, vb), step, [], no, [])
         cur = step

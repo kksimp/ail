@@ -250,7 +250,7 @@ pub fn Jar.drop_expired(mut self)
 ## first (RFC 6265 5.4). `http_only` cookies are included: this is the
 ## transport. Expired cookies are skipped.
 pub fn Jar.matching(self, url str) List[Cookie]
-    matching_from(url, url, true)
+    self.matching_from(url, url, true)
 
 ## The site of a host: its last two labels (an IP address is its own site).
 ## There is no public suffix list, so `a.co.uk` and `b.co.uk` count as one.
@@ -290,15 +290,15 @@ pub fn Jar.matching_from(self, url str, from str, navigation bool) List[Cookie]
 
 ## The value of the `Cookie` header for `url`: `a=1; b=2`, or `""`.
 pub fn Jar.header(self, url str) str
-    ["{c.name}={c.value}" for c in matching(url)].join("; ")
+    ["{c.name}={c.value}" for c in self.matching(url)].join("; ")
 
 ## `header` for a request made from the page `from` (see `matching_from`).
 pub fn Jar.header_from(self, url str, from str, navigation bool) str
-    ["{c.name}={c.value}" for c in matching_from(url, from, navigation)].join("; ")
+    ["{c.name}={c.value}" for c in self.matching_from(url, from, navigation)].join("; ")
 
 ## The value of the cookie `name` that a request to `url` would carry.
 pub fn Jar.value(self, url str, name str) str?
-    for c in matching(url)
+    for c in self.matching(url)
         if c.name == name
             return c.value
     none
@@ -307,7 +307,7 @@ pub fn Jar.value(self, url str, name str) str?
 ## `HttpOnly` (spec std.net.20).
 pub fn Jar.for_script(self, url str) Map[str, str]
     mut out := Map[str, str]()
-    for c in matching(url)
+    for c in self.matching(url)
         if not c.http_only
             out[c.name] = c.value
     out
@@ -318,7 +318,7 @@ pub fn Jar.set_from_script(mut self, url str, line str) bool
     for attr in line.split(";")[1..]
         if attr.trim().to_lower() == "httponly"
             return false
-    set_cookie(url, line)
+    self.set_cookie(url, line)
 
 ## How many cookies are stored.
 pub fn Jar.len(self) int
@@ -361,7 +361,7 @@ pub fn Jar.request(mut self, method str, url str, opts net.Options) net.Response
         for k in o.headers.keys()
             if k.to_lower() != "cookie"
                 hop.headers[k] = o.headers[k]
-        jar_part := header(cur)
+        jar_part := self.header(cur)
         # What the program set goes only to the origin it asked for.
         here := parse_target(cur)
         mine := if here.scheme == first.scheme
@@ -370,7 +370,7 @@ pub fn Jar.request(mut self, method str, url str, opts net.Options) net.Response
         if both != ""
             hop.headers["Cookie"] = both
         r := net.request(method, cur, hop)?
-        store(cur, r)
+        self.store(cur, r)
         loc := r.headers.get("location") else ""
         redirect := r.status == 301
             or r.status == 302
@@ -391,4 +391,4 @@ pub fn Jar.request(mut self, method str, url str, opts net.Options) net.Response
 
 ## `GET url` through this jar, with the defaults of `net.get`.
 pub fn Jar.get(mut self, url str) net.Response ! net.NetError
-    request("GET", url, net.options())?
+    self.request("GET", url, net.options())?

@@ -12,7 +12,7 @@ fn Lower.settle_inferred(mut self, srcs List[Source], upto int)
     mut rounds := 0
     while rounds < 8
         rounds += 1
-        restart_sets(false)
+        self.restart_sets(false)
         before := fn_errs
         nf := funcs.len()
         np := problems.len()
@@ -31,7 +31,7 @@ fn Lower.settle_inferred(mut self, srcs List[Source], upto int)
         fl = saved_fl
         if same_sets(before, fn_errs)
             break
-    restart_sets(true)
+    self.restart_sets(true)
 
 ## Each round, and the real lowering (`last`), infers the sets afresh
 ## (`Unknown`: nothing seen yet), while callers see what the last round found:

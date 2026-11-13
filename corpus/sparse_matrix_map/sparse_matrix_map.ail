@@ -12,35 +12,35 @@ fn Sparse.new(nr int, nc int) Sparse
 
 fn Sparse.put(mut self, r int, c int, v int)
     if v == 0
-        cells.remove((r, c))
+        self.cells.remove((r, c))
     else
         self.cells[(r, c)] = v
 
 fn Sparse.at(self, r int, c int) int
-    cells.get((r, c)) else 0
+    self.cells.get((r, c)) else 0
 
 fn Sparse.nonzero(self) int
-    cells.len()
+    self.cells.len()
 
 fn Sparse.plus(self, other Sparse) Sparse
-    mut out := Sparse.new(rows, cols)
-    for i in 0..rows
-        for j in 0..cols
+    mut out := Sparse.new(self.rows, self.cols)
+    for i in 0..self.rows
+        for j in 0..self.cols
             v := self.at(i, j) + other.at(i, j)
             out.put(i, j, v)
     out
 
 fn Sparse.transpose(self) Sparse
-    mut out := Sparse.new(cols, rows)
-    for i in 0..rows
-        for j in 0..cols
+    mut out := Sparse.new(self.cols, self.rows)
+    for i in 0..self.rows
+        for j in 0..self.cols
             out.put(j, i, self.at(i, j))
     out
 
 fn Sparse.times(self, other Sparse) Sparse
-    mut out := Sparse.new(rows, other.cols)
-    for i in 0..rows
-        for k in 0..cols
+    mut out := Sparse.new(self.rows, other.cols)
+    for i in 0..self.rows
+        for k in 0..self.cols
             a := self.at(i, k)
             if a != 0
                 for j in 0..other.cols
@@ -49,9 +49,9 @@ fn Sparse.times(self, other Sparse) Sparse
 
 fn Sparse.dense(self) List[str]
     mut lines := List[str]()
-    for i in 0..rows
+    for i in 0..self.rows
         mut parts := List[str]()
-        for j in 0..cols
+        for j in 0..self.cols
             parts.push("{self.at(i, j):>3}")
         lines.push(parts.join(""))
     lines

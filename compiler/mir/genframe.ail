@@ -42,9 +42,9 @@ struct GenVals
     names List[str]
 
 fn GenVals.add(mut self, t Ty, name str) int
-    vals.push(t)
-    names.push(name)
-    vals.len() - 1
+    self.vals.push(t)
+    self.names.push(name)
+    self.vals.len() - 1
 
 ## `body`'s blocks, each cut after its `yield`s: the block ends at the
 ## `yield`, and what follows goes to a new block, the resume point.

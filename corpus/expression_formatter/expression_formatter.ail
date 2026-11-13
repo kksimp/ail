@@ -31,49 +31,49 @@ fn tokenize(src str) List[str]
     out
 
 fn Parser.peek(self) str
-    if pos < toks.len()
-        return toks[pos]
+    if self.pos < self.toks.len()
+        return self.toks[self.pos]
     ""
 
 fn Parser.take(mut self) str
-    t := peek()
-    pos += 1
+    t := self.peek()
+    self.pos += 1
     t
 
 fn Parser.expr(mut self) Expr
-    mut v := term()
-    while peek() == "+" or peek() == "-"
-        op := take()
-        r := term()
+    mut v := self.term()
+    while self.peek() == "+" or self.peek() == "-"
+        op := self.take()
+        r := self.term()
         v = Expr.Bin(op: op, left: v, right: r)
     v
 
 fn Parser.term(mut self) Expr
-    mut v := factor()
-    while peek() == "*" or peek() == "/"
-        op := take()
-        r := factor()
+    mut v := self.factor()
+    while self.peek() == "*" or self.peek() == "/"
+        op := self.take()
+        r := self.factor()
         v = Expr.Bin(op: op, left: v, right: r)
     v
 
 fn Parser.factor(mut self) Expr
-    t := take()
+    t := self.take()
     if t == "("
-        v := expr()
-        if take() != ")"
-            bad = true
+        v := self.expr()
+        if self.take() != ")"
+            self.bad = true
         return v
     if t == "-"
-        return Expr.Neg(inner: factor())
+        return Expr.Neg(inner: self.factor())
     first := t.char_at(0) else ' '
     if first.is_digit()
         n := t.to_int() else
-            bad = true
+            self.bad = true
             return Expr.Num(n: 0)
         return Expr.Num(n: n)
     if first.is_alpha()
         return Expr.Var(name: t)
-    bad = true
+    self.bad = true
     Expr.Num(n: 0)
 
 fn parse(src str) Expr?

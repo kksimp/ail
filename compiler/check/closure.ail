@@ -32,7 +32,7 @@ fn Checker.local_index(self, n str) int
 
 ## Whether `n` is a copy the literal being checked made of an outer local.
 fn Checker.is_capture(self, n str) bool
-    i := local_index(n)
+    i := self.local_index(n)
     i >= 0 and i < fn_lits.floor
 
 ## type.fn.5: a literal's copy can't be changed or moved.
@@ -157,14 +157,14 @@ fn Checker.closure_expr(
     fn_lits.in_local_fn = saved_local
     loop_depth = saved_loops
     catching = saved_catching
-    captures_ok(params, body)
+    self.captures_ok(params, body)
     mut ret := got
     if not has_unknown(ret_want)
         if not accepts(ret_want, got)
             mismatch("type.fn.4", expr_pos(body), ret_want, got)
         ret = ret_want
     else
-        ret = inferred_ret(got, errs_of(Errs.Inferred(slot)))
+        ret = self.inferred_ret(got, errs_of(Errs.Inferred(slot)))
     Ty.FnTy(ptys, ret)
 
 fn absent_parts() FnParts?
@@ -288,12 +288,12 @@ fn Checker.local_fn(mut self, d ast.FnDecl)
     for p in d.params
         names.remove(p.name)
     names.remove(d.name)
-    unique_captures(names, d.pos)
+    self.unique_captures(names, d.pos)
     # Once the body is checked, an inferred error set is the one it found.
     if slot >= 0
-        i := local_index(d.name)
+        i := self.local_index(d.name)
         if i >= 0
-            locals[i].ty = Ty.FnTy(ptys, settled_ret(ret, slot))
+            locals[i].ty = Ty.FnTy(ptys, self.settled_ret(ret, slot))
 
 ## Whether a written result is `!T` or `!`, errors inferred (err.type.2).
 @allow("expr.match.3") fn errors_inferred(t ast.TypeRef) bool

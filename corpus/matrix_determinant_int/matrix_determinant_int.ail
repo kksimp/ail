@@ -8,56 +8,57 @@ struct Mat
     cells List[int]
 
 fn Mat.at(self, i int, j int) int
-    cells[i * dim + j]
+    self.cells[i * self.dim + j]
 
 fn Mat.times(self, other Mat) Mat
     mut out := List[int]()
-    for i in 0..dim
-        for j in 0..dim
+    for i in 0..self.dim
+        for j in 0..self.dim
             mut acc := 0
-            for k in 0..dim
+            for k in 0..self.dim
                 acc += self.at(i, k) * other.at(k, j)
             out.push(acc)
-    Mat(dim: dim, cells: out)
+    Mat(dim: self.dim, cells: out)
 
 fn Mat.det_bareiss(self) int
-    mut a := cells
+    mut a := self.cells
     mut sign := 1
     mut prev := 1
-    for k in 0..dim - 1
-        if a[k * dim + k] == 0
+    for k in 0..self.dim - 1
+        if a[k * self.dim + k] == 0
             mut found := -1
-            for i in k + 1..dim
-                if found < 0 and a[i * dim + k] != 0
+            for i in k + 1..self.dim
+                if found < 0 and a[i * self.dim + k] != 0
                     found = i
             if found < 0
                 return 0
-            for jj in 0..dim
-                tmp := a[k * dim + jj]
-                a[k * dim + jj] = a[found * dim + jj]
-                a[found * dim + jj] = tmp
+            for jj in 0..self.dim
+                tmp := a[k * self.dim + jj]
+                a[k * self.dim + jj] = a[found * self.dim + jj]
+                a[found * self.dim + jj] = tmp
             sign = -sign
-        for i in k + 1..dim
-            for j in k + 1..dim
-                num := a[i * dim + j] * a[k * dim + k] - a[i * dim + k] * a[k * dim + j]
-                a[i * dim + j] = num / prev
-        prev = a[k * dim + k]
-    sign * a[dim * dim - 1]
+        for i in k + 1..self.dim
+            for j in k + 1..self.dim
+                num := a[i * self.dim + j] * a[k * self.dim + k] -
+                    a[i * self.dim + k] * a[k * self.dim + j]
+                a[i * self.dim + j] = num / prev
+        prev = a[k * self.dim + k]
+    sign * a[self.dim * self.dim - 1]
 
 fn Mat.minor(self, skip int) Mat
     mut out := List[int]()
-    for i in 1..dim
-        for j in 0..dim
+    for i in 1..self.dim
+        for j in 0..self.dim
             if j != skip
                 out.push(self.at(i, j))
-    Mat(dim: dim - 1, cells: out)
+    Mat(dim: self.dim - 1, cells: out)
 
 fn Mat.det_cofactor(self) int
-    if dim == 1
-        return cells[0]
+    if self.dim == 1
+        return self.cells[0]
     mut total := 0
-    for c in 0..dim
-        term := cells[c] * self.minor(c).det_cofactor()
+    for c in 0..self.dim
+        term := self.cells[c] * self.minor(c).det_cofactor()
         if c % 2 == 0
             total += term
         else
@@ -65,10 +66,10 @@ fn Mat.det_cofactor(self) int
     total
 
 fn Mat.with_column(self, col int, repl List[int]) Mat
-    mut out := cells
-    for i in 0..dim
-        out[i * dim + col] = repl[i]
-    Mat(dim: dim, cells: out)
+    mut out := self.cells
+    for i in 0..self.dim
+        out[i * self.dim + col] = repl[i]
+    Mat(dim: self.dim, cells: out)
 
 fn report(label str, m Mat)
     print("{label}: bareiss {m.det_bareiss()}, cofactor {m.det_cofactor()}")

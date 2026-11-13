@@ -35,7 +35,7 @@ fn Lower.lower_select(mut self, arms List[ast.SelectArm], pos ast.Pos)
                     problem(expr_pos(ch), "a `select` arm on a `{c.ty.name()}`")
                     return
                 elem = e
-                sel_row(tab, row, SEL_RECV, c.id, konst(0, Ty.Int))
+                self.sel_row(tab, row, SEL_RECV, c.id, konst(0, Ty.Int))
                 row += 1
             Send(ch, value) =>
                 c := lower_value(ch, none) else return
@@ -48,7 +48,7 @@ fn Lower.lower_select(mut self, arms List[ast.SelectArm], pos ast.Pos)
                     problem(expr_pos(value), "`send` of `{v.ty.name()}` on `{c.ty.name()}`")
                     return
                 w := if elem == Ty.Str then v else some(Val(id: copy_if_place(value, v), ty: elem))
-                sel_row(tab, row, SEL_SEND, c.id, w.id)
+                self.sel_row(tab, row, SEL_SEND, c.id, w.id)
                 row += 1
             After(t) =>
                 m := lower_value(t, Ty.Int) else return

@@ -28,7 +28,7 @@ fn Lower.check_mut_overlap(mut self, args List[ast.Arg], pos ast.Pos)
     for i in 0..args.len()
         for j in i + 1..args.len()
             if args[i].mutable and args[j].mutable
-                overlap_check(args[i].value, args[j].value, pos)
+                self.overlap_check(args[i].value, args[j].value, pos)
 
 fn Lower.overlap_check(mut self, a ast.Expr, b ast.Expr, pos ast.Pos)
     pa := place_path(a) else return

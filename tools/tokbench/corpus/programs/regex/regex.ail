@@ -1,4 +1,5 @@
 use std.regex
+
 fn main() ! regex.RegexError
     digits := regex.compile(r"\d+")?
     log := "order 66 shipped to 10.2 and 7 more"

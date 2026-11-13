@@ -51,7 +51,7 @@ fn Lower.lower_hw_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val
         return unsupported(npos, "`hw.at` of a `{addr.ty.name()}` address")
     if not ptr_target_ok(example.ty)
         return unsupported(npos, "`hw.at` with an example of type `{example.ty.name()}`")
-    ptr_trap_unless(
+    self.ptr_trap_unless(
         op("ge", [addr.id, konst(0, Ty.Int)], Ty.Bool),
         "unsafe.hw.2",
         "rt.hw_negative_msg",
@@ -72,15 +72,15 @@ fn Lower.ptr_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     volatile := name.ends_with("_volatile")
     base := if volatile then name.slice(0, name.len() - 9) else name
     if base == "read" and vs.len() == 0
-        return ptr_read(r, t, volatile, name, npos)
+        return self.ptr_read(r, t, volatile, name, npos)
     if base == "write" and vs.len() == 1
-        return ptr_write(r, t, vs[0], volatile, name, npos)
+        return self.ptr_write(r, t, vs[0], volatile, name, npos)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 
 ## The checks of an access: not null (unsafe.ptr.4), and for a volatile one
 ## a multiple of the width (unsafe.hw.3).
 fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.Pos)
-    ptr_trap_unless(
+    self.ptr_trap_unless(
         op("ge", [addr, konst(4096, Ty.Int)], Ty.Bool),
         "unsafe.ptr.4",
         "rt.ptr_null_msg",
@@ -90,14 +90,14 @@ fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.P
     w := ptr_size(t)
     # unsafe.ptr.5-6: within a live block of `std.mem`, when it is one.
     st := call("rt.memtab_check", [addr, konst(w, Ty.Int)], Ty.Int)
-    ptr_trap_unless(
+    self.ptr_trap_unless(
         op("ne", [st, konst(1, Ty.Int)], Ty.Bool),
         "unsafe.ptr.5",
         "rt.memtab_oob_msg",
         [addr, konst(w, Ty.Int)],
         npos,
     )
-    ptr_trap_unless(
+    self.ptr_trap_unless(
         op("ne", [st, konst(2, Ty.Int)], Ty.Bool),
         "unsafe.ptr.6",
         "rt.memtab_freed_msg",
@@ -110,7 +110,7 @@ fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.P
             [op("band", [addr, konst(w - 1, Ty.Int)], Ty.Int), konst(0, Ty.Int)],
             Ty.Bool,
         )
-        ptr_trap_unless(
+        self.ptr_trap_unless(
             aligned,
             "unsafe.hw.3",
             "rt.ptr_align_msg",
@@ -119,7 +119,7 @@ fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.P
         )
 
 fn Lower.ptr_read(mut self, r Val, t Ty, volatile bool, name str, npos ast.Pos) Val
-    ptr_check(r.id, t, volatile, name, npos)
+    self.ptr_check(r.id, t, volatile, name, npos)
     w := ptr_size(t)
     race_access(r.id, w, false, volatile, npos)
     load := "pload{w * 8}"
@@ -127,7 +127,7 @@ fn Lower.ptr_read(mut self, r Val, t Ty, volatile bool, name str, npos ast.Pos) 
     i.name = load
     raw := emit(i, Ty.Int)
     match t
-        Float => Val(id: bits_to_float(raw), ty: Ty.Float)
+        Float => Val(id: self.bits_to_float(raw), ty: Ty.Float)
         Bool => Val(id: op("ne", [raw, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
         Sized(k) =>
             if sized_lo(k) < 0
@@ -140,7 +140,7 @@ fn Lower.ptr_read(mut self, r Val, t Ty, volatile bool, name str, npos ast.Pos) 
 fn Lower.ptr_write(mut self, r Val, t Ty, v Val, volatile bool, name str, npos ast.Pos) Val?
     if not same_ty(v.ty, t)
         return unsupported(npos, "`.{name}()` of a `{v.ty.name()}` through a `{r.ty.name()}`")
-    ptr_check(r.id, t, volatile, name, npos)
+    self.ptr_check(r.id, t, volatile, name, npos)
     w := ptr_size(t)
     race_access(r.id, w, true, volatile, npos)
     mut bits := v.id

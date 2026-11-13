@@ -32,7 +32,7 @@ fn Lower.ct_call(mut self, name str, pos ast.Pos) str
     if tk.redirect != "" and name == tk.redirect
         return "{name}.seq"
     at_init := fname == "init.consts"
-    if not at_init and not in_ct_copy()
+    if not at_init and not self.in_ct_copy()
         return name
     if not fn_decl.contains(name)
         return name
@@ -42,7 +42,7 @@ fn Lower.ct_call(mut self, name str, pos ast.Pos) str
         ctsteps.name = new_global("ct.name", Ty.Str)
     if at_init
         store(global_addr(ctsteps.count), 0, konst(0, Ty.Int))
-        store(global_addr(ctsteps.name), 0, str_value(ct_const_at(pos)))
+        store(global_addr(ctsteps.name), 0, str_value(self.ct_const_at(pos)))
     if not ctsteps.seen.contains(name)
         ctsteps.seen.add(name)
         ctsteps.list.push(name)
@@ -65,7 +65,7 @@ fn Lower.ct_const_at(self, pos ast.Pos) str
 
 ## The start of statement `s` in a `.ct` copy counts one step.
 fn Lower.ct_stmt(mut self, s ast.Stmt)
-    if not in_ct_copy() or ctsteps.count < 0
+    if not self.in_ct_copy() or ctsteps.count < 0
         return
     at := stmt_start(s)
     name := load(global_addr(ctsteps.name), 0, Ty.Str)

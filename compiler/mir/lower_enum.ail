@@ -114,7 +114,7 @@ fn Lower.enum_ref(self, e ast.Expr) str?
     p := path_of(e)?
     if lookup(p.split(".")[0]) != none
         return none
-    enum_key(p)
+    self.enum_key(p)
 
 ## A bare variant name (type.enum.3): of the expected enum when there is
 ## one, else of the only enum of this module, or else of the program, that
@@ -122,13 +122,13 @@ fn Lower.enum_ref(self, e ast.Expr) str?
 fn Lower.bare_variant(self, name str, want Ty?) VariantRef?
     if w := want
         if n := enum_name(w)
-            k := case_index(n, name)
+            k := self.case_index(n, name)
             if k >= 0
                 return VariantRef(en: n, k: k)
     mut here := List[VariantRef]()
     mut found := List[VariantRef]()
     for n in enums.keys()
-        k := case_index(n, name)
+        k := self.case_index(n, name)
         if k >= 0
             found.push(VariantRef(en: n, k: k))
             if n == "{prefix}{n.split(".").last() else ""}"
@@ -147,25 +147,25 @@ fn Lower.call_variant(self, callee ast.Expr, want Ty?) VariantRef?
         return none
     if w := want
         if n := enum_name(w)
-            k := case_index(n, name)
+            k := self.case_index(n, name)
             if k >= 0
                 return VariantRef(en: n, k: k)
     if type_key(name) != none or sigs.contains("{prefix}{name}") or bad.contains("{prefix}{name}")
         return none
-    bare_variant(name, none)
+    self.bare_variant(name, none)
 
 ## `E.V` without arguments.
 fn Lower.variant_member(mut self, en str, name str, pos ast.Pos) Val?
-    k := case_index(en, name)
+    k := self.case_index(en, name)
     if k < 0
         return unsupported(pos, "`{en}` has no variant `{name}`")
-    new_variant(VariantRef(en: en, k: k), none, pos)
+    self.new_variant(VariantRef(en: en, k: k), none, pos)
 
 ## Build variant `v`; `args` is `none` for a bare `V` or `E.V`.
 fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) Val?
     t := Ty.Enum(v.en)
     c := enums[v.en][v.k]
-    if is_flat(v.en)
+    if self.is_flat(v.en)
         if a := args
             if a.len() > 0
                 return unsupported(pos, "arguments to variant `{c.name}`")
@@ -174,7 +174,7 @@ fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) V
         if a := args
             if a.len() > 0
                 return unsupported(pos, "arguments to variant `{c.name}`")
-        return Val(id: load(global_addr(singleton(v)), 0, t), ty: t)
+        return Val(id: load(global_addr(self.singleton(v)), 0, t), ty: t)
     a := args else return unsupported(pos, "variant `{c.name}` without its fields")
     if a.len() != c.fields.len()
         return unsupported(pos, "`{c.name}(...)` without every field")
@@ -189,7 +189,7 @@ fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) V
         ft := c.fields[at].ty
         x := lower_value(a[k].value, ft)?
         vs[at] = copy_if_place(a[k].value, Val(id: convert(x, ft, expr_pos(a[k].value)), ty: ft))
-    build_variant(v, vs)
+    self.build_variant(v, vs)
 
 ## A new object of variant `v` with field values `vs`.
 fn Lower.build_variant(mut self, v VariantRef, vs List[int]) Val
@@ -211,7 +211,7 @@ fn Lower.singleton(mut self, v VariantRef) int
 
 ## The variant index of enum value `x`.
 fn Lower.tag_of(mut self, n str, x int) int
-    if is_flat(n)
+    if self.is_flat(n)
         return x
     load(x, 0, Ty.Int)
 
@@ -227,28 +227,28 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
     if name != "eq" and name != "ne"
         # expr.cmp.1: variants order by their position, then by their fields.
-        if is_flat(n)
+        if self.is_flat(n)
             return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
         return tuple_compare(o, a, b, pos)
-    if k := user_eq(a.ty)
+    if k := self.user_eq(a.ty)
         eq := call(k, [a.id, b.id], Ty.Bool)
         if name == "ne"
             return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
         return Val(id: eq, ty: Ty.Bool)
-    if is_flat(n)
+    if self.is_flat(n)
         return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
-    if k := singleton_tag(b.id)
-        return Val(id: op(name, [tag_of(n, a.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
-    if k := singleton_tag(a.id)
-        return Val(id: op(name, [tag_of(n, b.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
-    if k := built_tag(b.id)
-        return variant_eq(name, a.id, b.id, VariantRef(en: n, k: k), pos)
-    if k := built_tag(a.id)
-        return variant_eq(name, b.id, a.id, VariantRef(en: n, k: k), pos)
+    if k := self.singleton_tag(b.id)
+        return Val(id: op(name, [self.tag_of(n, a.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    if k := self.singleton_tag(a.id)
+        return Val(id: op(name, [self.tag_of(n, b.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    if k := self.built_tag(b.id)
+        return self.variant_eq(name, a.id, b.id, VariantRef(en: n, k: k), pos)
+    if k := self.built_tag(a.id)
+        return self.variant_eq(name, b.id, a.id, VariantRef(en: n, k: k), pos)
     mut seen := Set[str]()
-    if not comparable(a.ty, pos, n, mut seen)
+    if not self.comparable(a.ty, pos, n, mut seen)
         return quiet
-    eq := call(eq_fn(a.ty), [a.id, b.id], Ty.Bool)
+    eq := call(self.eq_fn(a.ty), [a.id, b.id], Ty.Bool)
     if name == "ne"
         return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
     Val(id: eq, ty: Ty.Bool)
@@ -286,9 +286,9 @@ fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
         return quiet
     mut seen := Set[str]()
-    if not comparable(a.ty, pos, a.ty.name(), mut seen)
+    if not self.comparable(a.ty, pos, a.ty.name(), mut seen)
         return quiet
-    eq := call(eq_fn(a.ty), [a.id, b.id], Ty.Bool)
+    eq := call(self.eq_fn(a.ty), [a.id, b.id], Ty.Bool)
     if name == "ne"
         return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
     Val(id: eq, ty: Ty.Bool)
@@ -346,18 +346,24 @@ fn Lower.variant_eq(mut self, name str, a int, b int, v VariantRef, pos ast.Pos)
     fields := enums[n][k].fields
     mut seen := Set[str]()
     for fd in fields
-        if not comparable(fd.ty, pos, n, mut seen)
+        if not self.comparable(fd.ty, pos, n, mut seen)
             return Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     join := new_block()
     r := new_value(Ty.Bool, "")
     blocks[join].params.push(r)
     body := new_block()
-    branch(op("eq", [tag_of(n, a), konst(k, Ty.Int)], Ty.Bool), body, [], join, [konst(0, Ty.Bool)])
+    branch(
+        op("eq", [self.tag_of(n, a), konst(k, Ty.Int)], Ty.Bool),
+        body,
+        [],
+        join,
+        [konst(0, Ty.Bool)],
+    )
     seal(body)
     cur = body
     for j in 0..fields.len()
         ft := fields[j].ty
-        e := field_eq(ft, load(a, j + 1, ft), load(b, j + 1, ft))
+        e := self.field_eq(ft, load(a, j + 1, ft), load(b, j + 1, ft))
         next := new_block()
         branch(e, next, [], join, [konst(0, Ty.Bool)])
         seal(next)
@@ -383,7 +389,7 @@ fn Lower.user_eq(self, t Ty) str?
     none
 
 fn Lower.eq_fn(mut self, t Ty) str
-    if k := user_eq(t)
+    if k := self.user_eq(t)
         return k
     name := "eq.{t.name()}"
     if not sigs.contains(name)
@@ -396,19 +402,19 @@ fn Lower.eq_fn(mut self, t Ty) str
 fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
     if is_number(t) or t == Ty.Str or t == Ty.Bytes or t.is_ref() or t.is_tensor()
         return true
-    if user_eq(t) != none
+    if self.user_eq(t) != none
         return true
     if inner := t.opt_inner()
-        return comparable(inner, pos, outer, mut seen)
+        return self.comparable(inner, pos, outer, mut seen)
     if e := t.elem()
-        return comparable(e, pos, outer, mut seen)
+        return self.comparable(e, pos, outer, mut seen)
     if inner := t.opt_inner()
-        return comparable(inner, pos, outer, mut seen)
+        return self.comparable(inner, pos, outer, mut seen)
     if t.is_coll()
-        return comparable_table(t, pos, outer, mut seen)
+        return self.comparable_table(t, pos, outer, mut seen)
     if xs := tuple_elems(t)
         for x in xs
-            if not comparable(x, pos, outer, mut seen)
+            if not self.comparable(x, pos, outer, mut seen)
                 return false
         return true
     if s := struct_name(t)
@@ -416,7 +422,7 @@ fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) b
             return true
         seen.add(s)
         for sl in structs[s]
-            if not comparable(sl.ty, pos, outer, mut seen)
+            if not self.comparable(sl.ty, pos, outer, mut seen)
                 return false
         return true
     n := enum_name(t) else
@@ -430,15 +436,20 @@ fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) b
     seen.add(n)
     for c in enums[n]
         for fd in c.fields
-            if not comparable(fd.ty, pos, outer, mut seen)
+            if not self.comparable(fd.ty, pos, outer, mut seen)
                 return false
     true
 
 ## Whether `==` on a map or set is in the subset: its keys and values are.
 fn Lower.comparable_table(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
     match t
-        Map(k, v) => comparable(k, pos, outer, mut seen) and comparable(v, pos, outer, mut seen)
-        Set(e) => comparable(e, pos, outer, mut seen)
+        Map(k, v) => self.comparable(
+            k,
+            pos,
+            outer,
+            mut seen,
+        ) and self.comparable(v, pos, outer, mut seen)
+        Set(e) => self.comparable(e, pos, outer, mut seen)
         _ => false
 
 ## Generate each `eq.T` asked for, including those they ask for.
@@ -464,13 +475,13 @@ fn Lower.gen_enum_eqs(mut self)
             elif t.is_coll()
                 gen_table_eq(name, t)
             elif e := t.elem()
-                gen_list_eq(name, t, e)
+                self.gen_list_eq(name, t, e)
             elif xs := tuple_elems(t)
                 gen_tuple_eq(name, t, xs)
             elif s := struct_name(t)
-                gen_struct_eq(name, s)
+                self.gen_struct_eq(name, s)
             else
-                gen_eq(name, enum_name(t) else "")
+                self.gen_eq(name, enum_name(t) else "")
 
 ## `eq.E(a, b)`: the same object, or the same variant with equal fields.
 fn Lower.gen_eq(mut self, fkey str, n str)
@@ -501,7 +512,7 @@ fn Lower.gen_eq(mut self, fkey str, n str)
             ft := c.fields[j].ty
             x := load(a, j + 1, ft)
             y := load(b, j + 1, ft)
-            e := field_eq(ft, x, y)
+            e := self.field_eq(ft, x, y)
             next := new_block()
             branch(e, next, [], no, [])
             cur = next
@@ -509,7 +520,7 @@ fn Lower.gen_eq(mut self, fkey str, n str)
         cur = other
     # A variant without fields: the same index is enough.
     jump(yes, [])
-    end_eq(fkey, yes, no)
+    self.end_eq(fkey, yes, no)
 
 ## `eq.List[T](a, b)`: the same length and equal elements.
 fn Lower.gen_list_eq(mut self, fkey str, t Ty, e Ty)
@@ -527,12 +538,12 @@ fn Lower.gen_list_eq(mut self, fkey str, t Ty, e Ty)
     body := new_block()
     branch(op("lt", [i, n], Ty.Bool), body, [], yes, [])
     cur = body
-    same := field_eq(e, op("get", [a, i], e), op("get", [b, i], e))
+    same := self.field_eq(e, op("get", [a, i], e), op("get", [b, i], e))
     step := new_block()
     branch(same, step, [], no, [])
     cur = step
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
-    end_eq(fkey, yes, no)
+    self.end_eq(fkey, yes, no)
 
 ## `eq.M(a, b)` for a map or set: the same number of entries, and each entry
 ## of `a` has its key in `b` (and an equal value, for a map). Order is ignored.
@@ -566,13 +577,13 @@ fn Lower.gen_map_eq(mut self, fkey str, t Ty)
     branch(op("ne", [f, konst(0, Ty.Int)], Ty.Bool), has, [], no, [])
     cur = has
     if v := map_val(t)
-        same := field_eq(v, entry_value(e, v), entry_value(f, v))
+        same := self.field_eq(v, entry_value(e, v), entry_value(f, v))
         branch(same, next, [], no, [])
     else
         jump(next, [])
     cur = next
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
-    end_eq(fkey, yes, no)
+    self.end_eq(fkey, yes, no)
 
 ## `eq.S(a, b)`: every field equal.
 fn Lower.gen_struct_eq(mut self, fkey str, s str)
@@ -583,12 +594,12 @@ fn Lower.gen_struct_eq(mut self, fkey str, s str)
     slots := structs[s]
     for k in 0..slots.len()
         st := slots[k].ty
-        e := field_eq(st, load(ps[0], k, st), load(ps[1], k, st))
+        e := self.field_eq(st, load(ps[0], k, st), load(ps[1], k, st))
         next := new_block()
         branch(e, next, [], no, [])
         cur = next
     jump(yes, [])
-    end_eq(fkey, yes, no)
+    self.end_eq(fkey, yes, no)
 
 fn Lower.end_eq(mut self, fkey str, yes int, no int)
     cur = yes
@@ -611,12 +622,12 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
     if t.opt_inner() != none
         return opt_compare(false, Val(id: x, ty: t), Val(id: y, ty: t), ast.Pos(line: 1, col: 1)).id
     if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none or is_map_like(t)
-        return call(eq_fn(t), [x, y], Ty.Bool)
+        return call(self.eq_fn(t), [x, y], Ty.Bool)
     if t.is_coll() or t.opt_inner() != none
-        return call(eq_fn(t), [x, y], Ty.Bool)
+        return call(self.eq_fn(t), [x, y], Ty.Bool)
     if m := enum_name(t)
-        if not is_flat(m)
-            return call(eq_fn(t), [x, y], Ty.Bool)
+        if not self.is_flat(m)
+            return call(self.eq_fn(t), [x, y], Ty.Bool)
     op("eq", [x, y], Ty.Bool)
 
 ## Build the shared objects of the variants without fields: `init.enums`,

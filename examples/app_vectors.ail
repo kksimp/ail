@@ -10,7 +10,7 @@ struct Shapes
 
 impl app.App for Shapes
     fn update(mut self, ev app.Event)
-        n += 1
+        self.n += 1
 
     fn view(self) app.Node
         app.canvas("shapes", 360.0, 140.0, [

@@ -22,7 +22,7 @@ struct Decl
     props List[(str, str)]
 
 fn Decl.get(self, key str) str
-    for p in props
+    for p in self.props
         if p.0 == key
             return p.1
     ""

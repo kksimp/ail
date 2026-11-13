@@ -42,7 +42,7 @@ fn Checker.has_distinct(self) bool
 fn Checker.distinct_literal(mut self, s int, args List[ast.Arg], at ast.Pos) Ty
     name := prog.structs[s].name
     result := Ty.Struct(s, [])
-    base := distinct_base(result) else return result
+    base := self.distinct_base(result) else return result
     if args.len() != 1 or args[0].label != none or args[0].mutable
         args_only(args)
         err_help(
@@ -59,7 +59,7 @@ fn Checker.distinct_literal(mut self, s int, args List[ast.Arg], at ast.Pos) Ty
     consume(v, got)
     if not accepts(base, got)
         mut help := "`{name}(x)` takes a {show(base)}"
-        if got_base := distinct_base(got)
+        if got_base := self.distinct_base(got)
             help = "convert it to its base first: `{name}({ty_name(got_base)}(x))`, if the value really is a `{name}`"
         err_help(
             "type.distinct.2",
@@ -74,13 +74,13 @@ fn Checker.distinct_literal(mut self, s int, args List[ast.Arg], at ast.Pos) Ty
 ## program has no distinct type, so the call is checked as before.
 fn Checker.distinct_unwrap(mut self, n str, args List[ast.Arg], at ast.Pos) Ty?
     want := distinct_scalar(n)?
-    if args.len() != 1 or args[0].label != none or args[0].mutable or not has_distinct()
+    if args.len() != 1 or args[0].label != none or args[0].mutable or not self.has_distinct()
         return none
     v := args[0].value
     got := expr(v, none, true)
     if reject_unhandled(got, expr_pos(v)) or got == Ty.Unknown
         return Ty.Unknown
-    if base := distinct_base(got)
+    if base := self.distinct_base(got)
         if same(base, want)
             return want
         err_help(
@@ -97,7 +97,7 @@ fn Checker.distinct_unwrap(mut self, n str, args List[ast.Arg], at ast.Pos) Ty?
 ## `id.value` (type.distinct.3): a distinct type has no fields. True when
 ## `t` is one and the error is reported.
 fn Checker.distinct_field(mut self, t Ty, n str, at ast.Pos) bool
-    base := distinct_base(t) else return false
+    base := self.distinct_base(t) else return false
     err_help(
         "type.distinct.3",
         at,
@@ -108,7 +108,7 @@ fn Checker.distinct_field(mut self, t Ty, n str, at ast.Pos) bool
 
 ## `id.name(...)` that no standard trait of the base provides (type.distinct.3).
 fn Checker.distinct_no_method(mut self, t Ty, n str, at ast.Pos) bool
-    base := distinct_base(t) else return false
+    base := self.distinct_base(t) else return false
     err_help(
         "type.distinct.3",
         at,
@@ -121,7 +121,7 @@ fn Checker.distinct_no_method(mut self, t Ty, n str, at ast.Pos) bool
 ## operator on two operands of the same distinct type, which it gives back.
 ## `none` when `lt` isn't a distinct type.
 fn Checker.distinct_arith(mut self, op ast.BinOp, lt Ty, at ast.Pos) Ty?
-    base := distinct_base(lt)?
+    base := self.distinct_base(lt)?
     if operator(op, base, base, at) == Ty.Unknown
         return Ty.Unknown
     lt
@@ -129,11 +129,11 @@ fn Checker.distinct_arith(mut self, op ast.BinOp, lt Ty, at ast.Pos) Ty?
 ## The help for mixing a distinct type with another type in an operator
 ## (type.distinct.4); `none` when neither side is distinct.
 fn Checker.distinct_mix(self, lt Ty, rt Ty) str?
-    if lb := distinct_base(lt)
+    if lb := self.distinct_base(lt)
         if same(lb, rt)
             return "{show(lt)} and {show(rt)} don't mix: wrap the {show(rt)} as `{ty_name(lt)}(x)`, or unwrap with `{ty_name(lb)}(x)`"
         return "{show(lt)} and {show(rt)} are different types: convert one side explicitly"
-    if rb := distinct_base(rt)
+    if rb := self.distinct_base(rt)
         if same(rb, lt)
             return "{show(lt)} and {show(rt)} don't mix: wrap the {show(lt)} as `{ty_name(rt)}(x)`, or unwrap with `{ty_name(rb)}(x)`"
         return "{show(lt)} and {show(rt)} are different types: convert one side explicitly"
@@ -142,7 +142,7 @@ fn Checker.distinct_mix(self, lt Ty, rt Ty) str?
 ## Unary `-` and `not` on a distinct type (type.distinct.4): the base's, giving
 ## the same distinct type. `none` when the base has no such operator.
 fn Checker.distinct_unary(self, neg bool, t Ty) Ty?
-    base := distinct_base(t)?
+    base := self.distinct_base(t)?
     if neg
         if base == Ty.Int or base == Ty.Float
             return t
@@ -171,9 +171,9 @@ fn Checker.distinct_assoc(mut self, d Def, n str, at ast.Pos, args List[ast.Arg]
     if s < 0
         return none
     t := Ty.Struct(s, [])
-    base := distinct_base(t)?
+    base := self.distinct_base(t)?
     for tr in 0..prog.traits.len()
-        if distinct_passes(tr) and implements(base, tr)
+        if self.distinct_passes(tr) and implements(base, tr)
             if f := assoc_fn(tr, n)
                 assoc_calls[pos_key(at)] = tr
                 symbols[pos_key(at)] = "method:{prog.traits[tr].name}.{n}"

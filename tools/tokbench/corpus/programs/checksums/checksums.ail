@@ -1,4 +1,5 @@
 use std.hash
+
 fn main()
     print("sha256 of abc: {hash.sha256("abc")}")
     print("sha512 of empty: {hash.sha512("")}")

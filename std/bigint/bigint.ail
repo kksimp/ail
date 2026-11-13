@@ -3,7 +3,7 @@
 ## no zero limb at the top; zero has no limbs and is never negative.
 
 ## Why a text or an operation is refused (std.bigint.9).
-pub error struct BigIntError "{why}"
+pub error struct BigIntError "{self.why}"
     pub why str
 
 ## A big integer (std.bigint.1).
@@ -158,88 +158,88 @@ pub fn parse(text str) BigInt ! BigIntError
 
 ## The decimal text (std.bigint.3).
 pub fn BigInt.to_text(self) str
-    if limbs.len() == 0
+    if self.limbs.len() == 0
         return "0"
-    mut out := "{limbs[limbs.len() - 1]}"
-    mut i := limbs.len() - 2
+    mut out := "{self.limbs[self.limbs.len() - 1]}"
+    mut i := self.limbs.len() - 2
     while i >= 0
-        out = "{out}{"{limbs[i]}".pad_left(9, '0')}"
+        out = "{out}{"{self.limbs[i]}".pad_left(9, '0')}"
         i -= 1
-    if neg
+    if self.neg
         return "-{out}"
     out
 
 ## The value as an `int`, or `none` when it does not fit (std.bigint.3).
 pub fn BigInt.as_int(self) int?
-    if limbs.len() > 3
+    if self.limbs.len() > 3
         return none
     # 9223372036854775807 is the largest int; the smallest is its negation less one.
     limit := from_int(9223372036854775807)
-    if neg
-        if cmp_mag(limbs, add_mag(limit.limbs, [1])) > 0
+    if self.neg
+        if cmp_mag(self.limbs, add_mag(limit.limbs, [1])) > 0
             return none
         mut v := 0
-        mut i := limbs.len() - 1
+        mut i := self.limbs.len() - 1
         while i >= 0
-            v = v * BASE - limbs[i]
+            v = v * BASE - self.limbs[i]
             i -= 1
         return v
-    if cmp_mag(limbs, limit.limbs) > 0
+    if cmp_mag(self.limbs, limit.limbs) > 0
         return none
     mut v := 0
-    mut i := limbs.len() - 1
+    mut i := self.limbs.len() - 1
     while i >= 0
-        v = v * BASE + limbs[i]
+        v = v * BASE + self.limbs[i]
         i -= 1
     v
 
 pub fn BigInt.is_zero(self) bool
-    limbs.len() == 0
+    self.limbs.len() == 0
 
 pub fn BigInt.is_negative(self) bool
-    neg
+    self.neg
 
 ## -1, 0 or 1 as `self` is less than, equal to or greater than `o` (std.bigint.4).
 pub fn BigInt.cmp(self, o BigInt) int
-    if neg != o.neg
-        return if neg then -1 else 1
-    c := cmp_mag(limbs, o.limbs)
-    if neg
+    if self.neg != o.neg
+        return if self.neg then -1 else 1
+    c := cmp_mag(self.limbs, o.limbs)
+    if self.neg
         return -c
     c
 
 pub fn BigInt.negate(self) BigInt
-    make(not neg, limbs)
+    make(not self.neg, self.limbs)
 
 pub fn BigInt.abs(self) BigInt
-    make(false, limbs)
+    make(false, self.limbs)
 
 ## `self + o` (std.bigint.4).
 pub fn BigInt.add(self, o BigInt) BigInt
-    if neg == o.neg
-        return make(neg, add_mag(limbs, o.limbs))
-    c := cmp_mag(limbs, o.limbs)
+    if self.neg == o.neg
+        return make(self.neg, add_mag(self.limbs, o.limbs))
+    c := cmp_mag(self.limbs, o.limbs)
     if c == 0
         return make(false, List[int]())
     if c > 0
-        return make(neg, sub_mag(limbs, o.limbs))
-    make(o.neg, sub_mag(o.limbs, limbs))
+        return make(self.neg, sub_mag(self.limbs, o.limbs))
+    make(o.neg, sub_mag(o.limbs, self.limbs))
 
 ## `self - o` (std.bigint.4).
 pub fn BigInt.sub(self, o BigInt) BigInt
-    add(o.negate())
+    self.add(o.negate())
 
 ## `self * o` (std.bigint.4).
 pub fn BigInt.mul(self, o BigInt) BigInt
-    make(neg != o.neg, mul_mag(limbs, o.limbs))
+    make(self.neg != o.neg, mul_mag(self.limbs, o.limbs))
 
 ## `self / o` and `self % o`, truncated toward zero: the remainder has the
 ## sign of `self` (std.bigint.5). Dividing by zero is an error (std.bigint.9).
 pub fn BigInt.divmod(self, o BigInt) QuoRem ! BigIntError
     if o.limbs.len() == 0
         return BigIntError(why: "division by zero")
-    r := divmod_mag(limbs, o.limbs)
-    QuoRem(quo: make(neg != o.neg, r.quo.limbs), rem: make(neg, r.rem.limbs))
+    r := divmod_mag(self.limbs, o.limbs)
+    QuoRem(quo: make(self.neg != o.neg, r.quo.limbs), rem: make(self.neg, r.rem.limbs))
 
 ## `self` to the power `n`, for `n >= 0` (std.bigint.6).
 pub fn BigInt.pow(self, n int) BigInt ! BigIntError

@@ -50,7 +50,7 @@ fn Checker.conc_constructor(
         t := expr(v, none, true)
         if reject_unhandled(t, expr_pos(v))
             return Ty.Unknown
-        if n == "Atomic" and not atomic_inner(t, expr_pos(v))
+        if n == "Atomic" and not self.atomic_inner(t, expr_pos(v))
             return Ty.Unknown
         return Ty.Conc(n, t)
     else
@@ -88,7 +88,7 @@ fn Checker.conc_method(mut self, kind str, t Ty, n str, at ast.Pos, given List[a
     if kind == "Atomic" and args.len() > 0
         last := args[args.len() - 1]
         if (last.label?.name == "order" else false)
-            atomic_order(n, last)
+            self.atomic_order(n, last)
             args = args[..args.len() - 1]
     mut params := List[Ty]()
     mut ret := Ty.Unit
@@ -108,7 +108,7 @@ fn Checker.conc_method(mut self, kind str, t Ty, n str, at ast.Pos, given List[a
             errs = sort_errors(errs)
         ret = Ty.Res(ok, Errs.ErrSet(errs))
     elif kind == "TaskGroup" and n == "add" and args.len() == 1
-        group_add(args[0].value)
+        self.group_add(args[0].value)
         return Ty.Unit
     elif kind == "TaskGroup" and n == "wait_all"
         ret = Ty.Res(Ty.Unit, Errs.ErrSet([trapped]))
@@ -205,9 +205,9 @@ fn Checker.with_stmt(
             if k == "Mutex"
                 inner = x
             else
-                not_mutex(mutex, t)
+                self.not_mutex(mutex, t)
         Unknown => inner = Ty.Unknown
-        _ => not_mutex(mutex, t)
+        _ => self.not_mutex(mutex, t)
     if at := overlapping_use(mutex, body)
         err_help(
             "conc.share.6",
@@ -261,14 +261,14 @@ fn Checker.not_mutex(mut self, mutex ast.Expr, t Ty)
         _ => ok = false
     if not ok
         quiet_type(operand)
-        return not_spawnable(at)
+        return self.not_spawnable(at)
     t := expr(operand, none, false)
     key := pos_key(callee)
     declared := declared_fns.contains(key) or (assoc and targets.contains(key))
     if t == Ty.Unknown
         return Ty.Unknown
     if not declared
-        return not_spawnable(at)
+        return self.not_spawnable(at)
     # conc.share.1: the task gets its own copies, so nothing is passed `mut`.
     for a in args
         if a.mutable

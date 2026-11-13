@@ -27,16 +27,16 @@ fn SegTree.update(mut self, pos int, val int)
         self.tree[p] = self.tree[2 * p] + self.tree[2 * p + 1]
 
 fn SegTree.query(self, l int, r int) int
-    mut lo := l + size
-    mut hi := r + size
+    mut lo := l + self.size
+    mut hi := r + self.size
     mut total := 0
     while lo < hi
         if lo % 2 == 1
-            total += tree[lo]
+            total += self.tree[lo]
             lo += 1
         if hi % 2 == 1
             hi -= 1
-            total += tree[hi]
+            total += self.tree[hi]
         lo = lo / 2
         hi = hi / 2
     total

@@ -23,7 +23,7 @@ fn Checker.param_assoc_call(mut self, tn str, n str, at ast.Pos, args List[ast.A
         bound_traits.push(b)
         bound_traits.extend(supers[b])
     for tr in bound_traits
-        if f := assoc_fn(tr, n)
+        if f := self.assoc_fn(tr, n)
             binds := [Bind(param: trait_self[tr], ty: Ty.Param(p))]
             assoc_calls[pos_key(at)] = tr
             symbols[pos_key(at)] = "method:{prog.traits[tr].name}.{n}"
@@ -31,7 +31,7 @@ fn Checker.param_assoc_call(mut self, tn str, n str, at ast.Pos, args List[ast.A
     args_only(args)
     mut offer := -1
     for t in 0..prog.traits.len()
-        if offer < 0 and assoc_fn(t, n) != none
+        if offer < 0 and self.assoc_fn(t, n) != none
             offer = t
     bounds := tparams[p].bounds
     mut hint := ""
@@ -47,7 +47,7 @@ fn Checker.param_assoc_call(mut self, tn str, n str, at ast.Pos, args List[ast.A
     # binds and reports nothing more.
     if offer < 0
         return Ty.Unknown
-    f := assoc_fn(offer, n) else return Ty.Unknown
+    f := self.assoc_fn(offer, n) else return Ty.Unknown
     subst(sigs[f].ret, [Bind(param: trait_self[offer], ty: Ty.Unknown)])
 
 ## `Type.n(args)` naming an associated function of a trait that `Type`
@@ -69,7 +69,7 @@ fn Checker.impl_assoc_call(
     mut f := 0
     for t in 0..prog.traits.len()
         if found < 0
-            if decl := assoc_fn(t, n)
+            if decl := self.assoc_fn(t, n)
                 if i := impl_of.get(impl_key(t, con))
                     found = i
                     tr = t
@@ -114,7 +114,7 @@ fn Checker.builtin_assoc_call(
     mut f := 0
     for t in 0..prog.traits.len()
         if found < 0
-            if decl := assoc_fn(t, n)
+            if decl := self.assoc_fn(t, n)
                 if i := impl_of.get(impl_key(t, con))
                     found = i
                     tr = t

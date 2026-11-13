@@ -30,16 +30,16 @@ fn Checker.ask_hole(mut self, at ast.Pos, expect Ty?) Ty
         warn(
             "expr.hole.3",
             at,
-            "uhwhatnow?: the expected type isn't known here; in scope: {in_scope_text()}",
+            "uhwhatnow?: the expected type isn't known here; in scope: {self.in_scope_text()}",
             "give the place a type (a parameter, a return type or `x: T`) so candidates can be ranked",
         )
         return Ty.Unknown
-    fits := ranked_fits(t, at)
+    fits := self.ranked_fits(t, at)
     if fits.len() == 0
         warn(
             "expr.hole.3",
             at,
-            "uhwhatnow?: expected {show(t)}; nothing in scope fits; in scope: {in_scope_text()}",
+            "uhwhatnow?: expected {show(t)}; nothing in scope fits; in scope: {self.in_scope_text()}",
             "replace `uhwhatnow?` with a value of type {show(t)}",
         )
         return t
@@ -105,9 +105,9 @@ fn Checker.ranked_fits(mut self, want Ty, at ast.Pos) List[Fit]
         is_self := match l.how
             SelfParam => true
             _ => false
-        field_fits(want, l, is_self, at, mut out)
-        method_fits(want, l, at, mut out)
-    fn_fits(want, at, mut out)
+        self.field_fits(want, l, is_self, at, mut out)
+        self.method_fits(want, l, at, mut out)
+    self.fn_fits(want, at, mut out)
     out.sort(by: |f| (f.rank, f.near, f.text))
     out
 
@@ -157,7 +157,7 @@ fn Checker.method_fits(mut self, want Ty, l Local, at ast.Pos, mut out List[Fit]
         sig := sigs[i]
         if sig.receiver == none or sig.generics.len() > 0 or hidden(prog, prog.fns[i].pos, at)
             continue
-        if c := call_fit(want, sig, "{l.name}.{prog.fns[i].name}", i)
+        if c := self.call_fit(want, sig, "{l.name}.{prog.fns[i].name}", i)
             out.push(c)
 
 ## The functions of this module whose result fits, written as calls.
@@ -173,7 +173,7 @@ fn Checker.fn_fits(mut self, want Ty, at ast.Pos, mut out List[Fit])
         sig := sigs[i]
         if sig.generics.len() > 0
             continue
-        if c := call_fit(want, sig, f.name, i)
+        if c := self.call_fit(want, sig, f.name, i)
             out.push(c)
 
 ## `name(args)` when the result of `sig` fits: each argument is the local of
@@ -191,7 +191,7 @@ fn Checker.call_fit(mut self, want Ty, sig Sig, name str, i int) Fit?
     mut open := 0
     for k in 0..sig.params.len()
         pname := if k < sig.names.len() then sig.names[k] else ""
-        a := arg_for(sig.params[k].ty, pname)
+        a := self.arg_for(sig.params[k].ty, pname)
         if a == ""
             open += 1
             args.push("todo")

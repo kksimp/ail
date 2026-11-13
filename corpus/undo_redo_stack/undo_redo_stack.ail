@@ -28,25 +28,25 @@ struct History
     undone List[Edit]
 
 fn History.edit(mut self, e Edit)
-    doc = apply(doc, e)
-    done.push(e)
-    undone.clear()
+    self.doc = apply(self.doc, e)
+    self.done.push(e)
+    self.undone.clear()
 
 fn History.undo(mut self) bool
-    e := done.pop() else return false
+    e := self.done.pop() else return false
     inv := e.invert()
-    doc = apply(doc, inv)
-    undone.push(e)
+    self.doc = apply(self.doc, inv)
+    self.undone.push(e)
     true
 
 fn History.redo(mut self) bool
-    e := undone.pop() else return false
-    doc = apply(doc, e)
-    done.push(e)
+    e := self.undone.pop() else return false
+    self.doc = apply(self.doc, e)
+    self.done.push(e)
     true
 
 fn History.status(self) str
-    "\"{doc}\" (undo {done.len()}, redo {undone.len()})"
+    "\"{self.doc}\" (undo {self.done.len()}, redo {self.undone.len()})"
 
 fn main()
     mut h := History(doc: "", done: [], undone: [])

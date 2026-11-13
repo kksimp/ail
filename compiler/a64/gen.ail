@@ -217,63 +217,66 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
 ## The function a call is written in, for its row of a trap's stack: a call
 ## copied in by inlining another function (trace.frame.2) names that function.
 fn Gen.call_func(self, i mir.Inst) str
-    if i.site >= 0 and sites.list[i.site].from >= 0
-        return sites.list[i.site].func
-    f.name
+    if i.site >= 0 and self.sites.list[i.site].from >= 0
+        return self.sites.list[i.site].func
+    self.f.name
 
 ## `sp` moves by at most 4095 per `add`/`sub`.
 fn Gen.adjust_sp(mut self, op str, n int)
     mut left := n
     while left > 0
         k := if left > 4080 then 4080 else left
-        a.alu_ri(op, SP, SP, k)
+        self.a.alu_ri(op, SP, SP, k)
         left -= k
 
 fn Gen.prologue(mut self)
-    a.push_pair(FP, LR)
-    a.mov_rr(FP, SP)
-    frame = (8 * (saved.len() + slots) + 15) / 16 * 16
-    if 8 * (saved.len() + slots) > 32760
-        unreachable("a64: frame of {frame} bytes is too large")
-    adjust_sp("sub", frame)
-    if wrap < 0
-        save_saved(true)
+    self.a.push_pair(FP, LR)
+    self.a.mov_rr(FP, SP)
+    self.frame = (8 * (self.saved.len() + self.slots) + 15) / 16 * 16
+    if 8 * (self.saved.len() + self.slots) > 32760
+        unreachable("a64: frame of {self.frame} bytes is too large")
+    self.adjust_sp("sub", self.frame)
+    if self.wrap < 0
+        self.save_saved(true)
 
 ## Save or restore the callee-saved registers at the frame's start, two
 ## general registers at a time with `stp`/`ldp` (ADR 0890).
 fn Gen.save_saved(mut self, store bool)
     mut k := 0
-    while k < saved.len()
-        if k + 1 < saved.len() and saved[k] < FB and saved[k + 1] < FB and 8 * k <= 504
+    while k < self.saved.len()
+        if k + 1 < self.saved.len()
+            and self.saved[k] < FB
+            and self.saved[k + 1] < FB
+            and 8 * k <= 504
             if store
-                a.stp_off(saved[k], saved[k + 1], SP, 8 * k)
+                self.a.stp_off(self.saved[k], self.saved[k + 1], SP, 8 * k)
             else
-                a.ldp_off(saved[k], saved[k + 1], SP, 8 * k)
+                self.a.ldp_off(self.saved[k], self.saved[k + 1], SP, 8 * k)
             k += 2
         else
-            save(saved[k], 8 * k, store)
+            self.save(self.saved[k], 8 * k, store)
             k += 1
 
 fn Gen.save(mut self, r int, off int, store bool)
     if r >= FB
         if store
-            a.str_d(r - FB, SP, off)
+            self.a.str_d(r - FB, SP, off)
         else
-            a.ldr_d(r - FB, SP, off)
+            self.a.ldr_d(r - FB, SP, off)
     elif store
-        a.str(r, SP, off)
+        self.a.str(r, SP, off)
     else
-        a.ldr(r, SP, off)
+        self.a.ldr(r, SP, off)
 
 fn Gen.epilogue(mut self, block int)
-    if wrap < 0 or region[block]
-        save_saved(false)
-    a.mov_rr(SP, FP)
-    a.pop_pair(FP, LR)
-    a.ret()
+    if self.wrap < 0 or self.region[block]
+        self.save_saved(false)
+    self.a.mov_rr(SP, FP)
+    self.a.pop_pair(FP, LR)
+    self.a.ret()
 
 fn Gen.slot(self, l int) int
-    sp_shift + 8 * (saved.len() + l - codegen.SLOT_BASE)
+    self.sp_shift + 8 * (self.saved.len() + l - codegen.SLOT_BASE)
 
 fn is_reg(l int) bool
     l >= 0 and l < codegen.SLOT_BASE
@@ -284,26 +287,26 @@ fn is_slot(l int) bool
 # ---- operands ----
 
 fn Gen.imm(self, v int) int?
-    i := remat[v]
+    i := self.remat[v]
     if i.op == "const"
         return i.imm
     none
 
 ## `v` in a general register: its own, or `scratch` loaded with it.
 fn Gen.gpr(mut self, v int, scratch int) int
-    l := loc[v]
+    l := self.loc[v]
     if is_reg(l)
         return l
     if is_slot(l)
-        a.ldr(scratch, SP, slot(l))
+        self.a.ldr(scratch, SP, self.slot(l))
         return scratch
-    i := remat[v]
+    i := self.remat[v]
     if i.op == "const"
-        a.mov_ri(scratch, i.imm)
+        self.a.mov_ri(scratch, i.imm)
     elif i.op == "str"
-        a.adr_sym(scratch, "d:s{i.imm}")
+        self.a.adr_sym(scratch, "d:s{i.imm}")
     elif i.op == "fnaddr"
-        a.adr_sym(scratch, i.name)
+        self.a.adr_sym(scratch, i.name)
     else
         unreachable("value v{v} has no location")
     scratch
@@ -311,52 +314,52 @@ fn Gen.gpr(mut self, v int, scratch int) int
 ## `v` in a vector register: its own, or `scratch` loaded with it (through
 ## x8 for a constant).
 fn Gen.fpr(mut self, v int, scratch int) int
-    l := loc[v]
+    l := self.loc[v]
     if is_reg(l)
         return l - FB
     if is_slot(l)
-        a.ldr_d(scratch, SP, slot(l))
+        self.a.ldr_d(scratch, SP, self.slot(l))
         return scratch
-    a.mov_ri(S2, codegen.f64_bits(remat[v].fimm))
-    a.fmov_dx(scratch, S2)
+    self.a.mov_ri(S2, codegen.f64_bits(self.remat[v].fimm))
+    self.a.fmov_dx(scratch, S2)
     scratch
 
 fn Gen.out_gpr(self, v int, scratch int) int
-    if is_reg(loc[v]) then loc[v] else scratch
+    if is_reg(self.loc[v]) then self.loc[v] else scratch
 
 fn Gen.out_fpr(self, v int, scratch int) int
-    if is_reg(loc[v]) then loc[v] - FB else scratch
+    if is_reg(self.loc[v]) then self.loc[v] - FB else scratch
 
 ## The register to compute `v` into before a check that may report the
 ## operands: its own unless an operand lives there.
 fn Gen.out_checked(self, v int, i mir.Inst) int
-    d := loc[v]
+    d := self.loc[v]
     if not is_reg(d) or i.site < 0
-        return out_gpr(v, S1)
+        return self.out_gpr(v, S1)
     for x in i.operands()
-        if loc[x] == d
+        if self.loc[x] == d
             return S1
     d
 
 fn Gen.put_gpr(mut self, v int, r int)
-    l := loc[v]
+    l := self.loc[v]
     if is_slot(l)
-        a.str(r, SP, slot(l))
+        self.a.str(r, SP, self.slot(l))
     elif is_reg(l)
-        a.mov_rr(l, r)
+        self.a.mov_rr(l, r)
 
 fn Gen.put_fpr(mut self, v int, x int)
-    l := loc[v]
+    l := self.loc[v]
     if is_slot(l)
-        a.str_d(x, SP, slot(l))
+        self.a.str_d(x, SP, self.slot(l))
     elif is_reg(l) and l - FB != x
-        a.fop1("fmov", l - FB, x)
+        self.a.fop1("fmov", l - FB, x)
 
 # ---- parallel moves ----
 
 fn Gen.move_of(self, dst int, v int) Move
-    i := remat[v]
-    fl := f.vals[v].is_float()
+    i := self.remat[v]
+    fl := self.f.vals[v].is_float()
     if i.op == "const"
         return Move(dst: dst, src: -1, imm: i.imm, sym: "", float: fl)
     if i.op == "str"
@@ -365,7 +368,7 @@ fn Gen.move_of(self, dst int, v int) Move
         return Move(dst: dst, src: -1, imm: 0, sym: i.name, float: fl)
     if i.op == "fconst"
         return Move(dst: dst, src: -1, imm: codegen.f64_bits(i.fimm), sym: "", float: fl)
-    Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
+    Move(dst: dst, src: self.loc[v], imm: 0, sym: "", float: fl)
 
 ## Moves as if all at once; a cycle is broken through a scratch register.
 fn Gen.parallel(mut self, moves List[Move])
@@ -384,12 +387,12 @@ fn Gen.parallel(mut self, moves List[Move])
                 done = k
                 break
         if done >= 0
-            emit_move(pending[done])
+            self.emit_move(pending[done])
             pending.remove_at(done)
             continue
         d := pending[0].dst
         tmp := if pending[0].float then X1 + FB else S1
-        emit_move(Move(dst: tmp, src: d, imm: 0, sym: "", float: pending[0].float))
+        self.emit_move(Move(dst: tmp, src: d, imm: 0, sym: "", float: pending[0].float))
         for j in 0..pending.len()
             if pending[j].src == d
                 pending[j].src = tmp
@@ -398,52 +401,52 @@ fn Gen.emit_move(mut self, mv Move)
     if mv.float
         x := if is_reg(mv.dst) then mv.dst - FB else X0
         if mv.src < 0
-            a.mov_ri(S0, mv.imm)
-            a.fmov_dx(x, S0)
+            self.a.mov_ri(S0, mv.imm)
+            self.a.fmov_dx(x, S0)
         elif is_reg(mv.src)
-            a.fop1("fmov", x, mv.src - FB)
+            self.a.fop1("fmov", x, mv.src - FB)
         else
-            a.ldr_d(x, SP, slot(mv.src))
+            self.a.ldr_d(x, SP, self.slot(mv.src))
         if is_slot(mv.dst)
-            a.str_d(x, SP, slot(mv.dst))
+            self.a.str_d(x, SP, self.slot(mv.dst))
         return
     if is_slot(mv.dst) and is_reg(mv.src)
-        a.str(mv.src, SP, slot(mv.dst))
+        self.a.str(mv.src, SP, self.slot(mv.dst))
         return
     r := if is_reg(mv.dst) then mv.dst else S0
     if mv.src < 0
         if mv.sym != ""
-            a.adr_sym(r, mv.sym)
+            self.a.adr_sym(r, mv.sym)
         else
-            a.mov_ri(r, mv.imm)
+            self.a.mov_ri(r, mv.imm)
     elif is_reg(mv.src)
-        a.mov_rr(r, mv.src)
+        self.a.mov_rr(r, mv.src)
     else
-        a.ldr(r, SP, slot(mv.src))
+        self.a.ldr(r, SP, self.slot(mv.src))
     if is_slot(mv.dst)
-        a.str(r, SP, slot(mv.dst))
+        self.a.str(r, SP, self.slot(mv.dst))
 
 fn Gen.entry_moves(mut self)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
-    for p in f.params
-        if f.vals[p].is_float()
-            moves.push(Move(dst: loc[p], src: FB + nf, imm: 0, sym: "", float: true))
+    for p in self.f.params
+        if self.f.vals[p].is_float()
+            moves.push(Move(dst: self.loc[p], src: FB + nf, imm: 0, sym: "", float: true))
             nf += 1
         elif ni < INT_ARGS
-            moves.push(Move(dst: loc[p], src: ni, imm: 0, sym: "", float: false))
+            moves.push(Move(dst: self.loc[p], src: ni, imm: 0, sym: "", float: false))
             ni += 1
-    parallel(moves)
+    self.parallel(moves)
     # Integer parameters after the eighth are on the stack above the frame
     # record (native-abi.md §1).
     mut k := 0
-    for p in f.params
-        if not f.vals[p].is_float()
+    for p in self.f.params
+        if not self.f.vals[p].is_float()
             if k >= INT_ARGS
-                d := out_gpr(p, S0)
-                a.ldr(d, FP, 16 + 8 * (k - INT_ARGS))
-                put_gpr(p, d)
+                d := self.out_gpr(p, S0)
+                self.a.ldr(d, FP, 16 + 8 * (k - INT_ARGS))
+                self.put_gpr(p, d)
             k += 1
 
 # ---- blocks ----
@@ -451,20 +454,20 @@ fn Gen.entry_moves(mut self)
 ## The moves that park values in slots across a loop (ADR 0848): stores end
 ## the block before the loop, loads start each block after it.
 fn Gen.hole_moves(mut self, b int, store bool)
-    for h in holes
+    for h in self.holes
         if h.block == b and h.store == store
             if store
-                emit_move(Move(dst: h.slot, src: h.reg, imm: 0, sym: "", float: h.float))
+                self.emit_move(Move(dst: h.slot, src: h.reg, imm: 0, sym: "", float: h.float))
             else
-                emit_move(Move(dst: h.reg, src: h.slot, imm: 0, sym: "", float: h.float))
+                self.emit_move(Move(dst: h.reg, src: h.slot, imm: 0, sym: "", float: h.float))
 
 fn Gen.gen_block(mut self, b int)
-    blk := f.blocks[b]
+    blk := self.f.blocks[b]
     n := blk.insts.len()
     mut fused := -1
     if blk.term.kind == "branch" and n > 0
         last := blk.insts[n - 1]
-        if last.dst == blk.term.cond and uses[last.dst] == 1 and cond_of(last.op) >= 0
+        if last.dst == blk.term.cond and self.uses[last.dst] == 1 and cond_of(last.op) >= 0
             fused = n - 1
     # `x & m == 0` (or `!= 0`) as a branch condition is one `tst` (ADR 0623).
     mut masked := -1
@@ -472,40 +475,40 @@ fn Gen.gen_block(mut self, b int)
         cmp := blk.insts[fused]
         mask := blk.insts[fused - 1]
         if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.arg(0) == mask.dst
-            if uses[mask.dst] == 1 and imm(cmp.arg(1)) == 0
+            if self.uses[mask.dst] == 1 and self.imm(cmp.arg(1)) == 0
                 masked = fused - 1
-    if b == wrap
-        save_saved(true)
-    hole_moves(b, false)
+    if b == self.wrap
+        self.save_saved(true)
+    self.hole_moves(b, false)
     for k in 0..n
         if k != fused and k != masked
-            gen_inst(blk.insts[k])
-    hole_moves(b, true)
+            self.gen_inst(blk.insts[k])
+    self.hole_moves(b, true)
     t := blk.term
     match t.kind
-        "jump" => goto(t.targets[0], t.args[0], true)
+        "jump" => self.goto(t.targets[0], t.args[0], true)
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
             mut cc := NE
             if masked >= 0
                 bt := blk.insts[masked]
-                a.tst_rr(gpr(bt.arg(0), S0), gpr(bt.arg(1), S1))
+                self.a.tst_rr(self.gpr(bt.arg(0), S0), self.gpr(bt.arg(1), S1))
                 cc = cond_of(blk.insts[fused].op)
             elif fused >= 0
-                cc = compare(blk.insts[fused])
+                cc = self.compare(blk.insts[fused])
             else
-                a.cmp_ri(gpr(t.cond, S0), 0)
-            branch_to(cc, yes, no)
-        "switch" => switch_jump(t)
+                self.a.cmp_ri(self.gpr(t.cond, S0), 0)
+            self.branch_to(cc, yes, no)
+        "switch" => self.switch_jump(t)
         "return" =>
             if t.value >= 0
-                if f.vals[t.value].is_float()
-                    parallel([move_of(FB, t.value)])
+                if self.f.vals[t.value].is_float()
+                    self.parallel([self.move_of(FB, t.value)])
                 else
-                    parallel([move_of(0, t.value)])
-            epilogue(b)
-        _ => a.brk()
+                    self.parallel([self.move_of(0, t.value)])
+            self.epilogue(b)
+        _ => self.a.brk()
 
 ## A jump table (native.match.2): an index at or past the last entry (as an
 ## unsigned number) goes to the last target; else `br` to the entry's address
@@ -513,32 +516,32 @@ fn Gen.gen_block(mut self, b int)
 ## dispatch (§goto) has its own `br`, which predicts on its own.
 fn Gen.switch_jump(mut self, t mir.Term)
     n := t.targets.len() - 1
-    r := gpr(t.cond, S0)
+    r := self.gpr(t.cond, S0)
     if fits_imm12(n)
-        a.cmp_ri(r, n)
+        self.a.cmp_ri(r, n)
     else
-        a.mov_ri(S1, n)
-        a.cmp_rr(r, S1)
-    a.b_cond(HS, blabels[t.targets[n]])
-    table := a.label()
-    a.adr_label(S1, table)
-    a.add_lsl(S1, S1, r, 2)
-    a.ldrsw(S0, S1)
-    a.alu_rr("add", S0, S1, S0)
-    a.br(S0)
-    a.bind(table)
+        self.a.mov_ri(S1, n)
+        self.a.cmp_rr(r, S1)
+    self.a.b_cond(HS, self.blabels[t.targets[n]])
+    table := self.a.label()
+    self.a.adr_label(S1, table)
+    self.a.add_lsl(S1, S1, r, 2)
+    self.a.ldrsw(S0, S1)
+    self.a.alu_rr("add", S0, S1, S0)
+    self.a.br(S0)
+    self.a.bind(table)
     for k in 0..n
-        a.table_entry(blabels[t.targets[k]])
+        self.a.table_entry(self.blabels[t.targets[k]])
 
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the
 ## next block allows.
 fn Gen.branch_to(mut self, cc int, yes int, no int)
-    if yes == next_block
-        a.b_cond(invert(cc), blabels[no])
+    if yes == self.next_block
+        self.a.b_cond(invert(cc), self.blabels[no])
     else
-        a.b_cond(cc, blabels[yes])
-        if no != next_block
-            a.b(blabels[no])
+        self.a.b_cond(cc, self.blabels[yes])
+        if no != self.next_block
+            self.a.b(self.blabels[no])
 
 ## Whether block `to` is only a comparison and a branch: a jump to it is
 ## cheaper as the comparison and branch themselves, one instruction fewer
@@ -547,29 +550,29 @@ fn Gen.branch_to(mut self, cc int, yes int, no int)
 ## or two plain instructions that only jumps on is repeated here, instead of
 ## jumped to; `inline` is false inside such a copy.
 fn Gen.goto(mut self, to int, args List[int], inline bool)
-    ps := f.blocks[to].params
-    parallel([move_of(loc[ps[j]], args[j]) for j in 0..ps.len()])
-    if to == next_block
+    ps := self.f.blocks[to].params
+    self.parallel([self.move_of(self.loc[ps[j]], args[j]) for j in 0..ps.len()])
+    if to == self.next_block
         return
-    if rotates(to)
+    if self.rotates(to)
         # The loop test again here, instead of a jump back to it.
-        h := f.blocks[to]
-        cc := compare(h.insts[h.insts.len() - 1])
-        if inline and dispatch_chain(h.term.targets[0])
+        h := self.f.blocks[to]
+        cc := self.compare(h.insts[h.insts.len() - 1])
+        if inline and self.dispatch_chain(h.term.targets[0])
             # And the body's dispatch again too (native.match.2).
-            a.b_cond(invert(cc), blabels[h.term.targets[1]])
-            replay_dispatch(h.term.targets[0])
+            self.a.b_cond(invert(cc), self.blabels[h.term.targets[1]])
+            self.replay_dispatch(h.term.targets[0])
         else
-            branch_to(cc, h.term.targets[0], h.term.targets[1])
-    elif inline and dispatch_chain(to)
-        replay_dispatch(to)
-    elif inline and tail_block(to)
-        h := f.blocks[to]
+            self.branch_to(cc, h.term.targets[0], h.term.targets[1])
+    elif inline and self.dispatch_chain(to)
+        self.replay_dispatch(to)
+    elif inline and self.tail_block(to)
+        h := self.f.blocks[to]
         for i in h.insts
-            gen_inst(i)
-        goto(h.term.targets[0], h.term.args[0], false)
+            self.gen_inst(i)
+        self.goto(h.term.targets[0], h.term.args[0], false)
     else
-        a.b(blabels[to])
+        self.a.b(self.blabels[to])
 
 ## The most instructions a copied dispatch has (native.match.2).
 DISPATCH_MAX := 32
@@ -591,13 +594,13 @@ fn Gen.dispatch_chain(self, to int) bool
     mut b := to
     mut count := 0
     for _ in 0..4
-        if b == wrap or b == 0
+        if b == self.wrap or b == 0
             return false
-        h := f.blocks[b]
+        h := self.f.blocks[b]
         for i in h.insts
             if codegen.is_call(i)
                 return false
-        for hl in holes
+        for hl in self.holes
             if hl.block == b
                 return false
         count += h.insts.len()
@@ -605,7 +608,7 @@ fn Gen.dispatch_chain(self, to int) bool
             return false
         if h.term.kind == "switch"
             cost := 8 * count + 4 * h.term.targets.len()
-            if h.term.targets.len() > DISPATCH_ENTRIES + 1 or cost > dup_left
+            if h.term.targets.len() > DISPATCH_ENTRIES + 1 or cost > self.dup_left
                 return false
             return not mir.opt_off("taildup")
         if h.term.kind != "jump" or h.term.targets[0] == b
@@ -619,37 +622,37 @@ fn Gen.dispatch_chain(self, to int) bool
 fn Gen.replay_dispatch(mut self, to int)
     mut b := to
     while true
-        h := f.blocks[b]
-        dup_left -= 8 * h.insts.len()
+        h := self.f.blocks[b]
+        self.dup_left -= 8 * h.insts.len()
         for i in h.insts
-            gen_inst(i)
+            self.gen_inst(i)
         if h.term.kind == "switch"
-            dup_left -= 4 * h.term.targets.len()
-            switch_jump(h.term)
+            self.dup_left -= 4 * h.term.targets.len()
+            self.switch_jump(h.term)
             return
         nxt := h.term.targets[0]
-        ps := f.blocks[nxt].params
+        ps := self.f.blocks[nxt].params
         args := h.term.args[0]
-        parallel([move_of(loc[ps[j]], args[j]) for j in 0..ps.len()])
+        self.parallel([self.move_of(self.loc[ps[j]], args[j]) for j in 0..ps.len()])
         b = nxt
 
 ## Whether `to` is one or two instructions (no call) and a jump, with nothing
 ## the allocator moves in or out of it: cheaper to repeat than to jump to.
 fn Gen.tail_block(self, to int) bool
-    h := f.blocks[to]
+    h := self.f.blocks[to]
     n := h.insts.len()
-    if to == wrap or n == 0 or n > 2 or h.term.kind != "jump"
+    if to == self.wrap or n == 0 or n > 2 or h.term.kind != "jump"
         return false
     for i in h.insts
         if codegen.is_call(i)
             return false
-    for hl in holes
+    for hl in self.holes
         if hl.block == to
             return false
     true
 
 fn Gen.rotates(self, to int) bool
-    h := f.blocks[to]
+    h := self.f.blocks[to]
     n := h.insts.len()
     if h.term.kind != "branch" or n == 0
         return false
@@ -658,7 +661,7 @@ fn Gen.rotates(self, to int) bool
         if not codegen.is_remat(h.insts[k])
             return false
     last := h.insts[n - 1]
-    last.dst == h.term.cond and uses[last.dst] == 1 and cond_of(last.op) >= 0
+    last.dst == h.term.cond and self.uses[last.dst] == 1 and cond_of(last.op) >= 0
 
 ## The condition that means a comparison is true, or -1. After `fcmp`, these
 ## are false for an unordered pair, except `ne`.
@@ -688,172 +691,172 @@ fn Gen.compare(mut self, i mir.Inst) int
     y := i.arg(1)
     cc := cond_of(i.op)
     if i.op.starts_with("f")
-        a.fcmp(fpr(x, X0), fpr(y, X1))
+        self.a.fcmp(self.fpr(x, X0), self.fpr(y, X1))
         return cc
-    if k := imm(y)
+    if k := self.imm(y)
         if k >= 0 and k < 4096
-            a.cmp_ri(gpr(x, S0), k)
+            self.a.cmp_ri(self.gpr(x, S0), k)
             return cc
         if k < 0 and k > -4096
-            a.cmn_ri(gpr(x, S0), 0 - k)
+            self.a.cmn_ri(self.gpr(x, S0), 0 - k)
             return cc
-    if k := imm(x)
+    if k := self.imm(x)
         if k >= 0 and k < 4096
-            a.cmp_ri(gpr(y, S0), k)
+            self.a.cmp_ri(self.gpr(y, S0), k)
             return swapped(cc)
-    a.cmp_rr(gpr(x, S0), gpr(y, S1))
+    self.a.cmp_rr(self.gpr(x, S0), self.gpr(y, S1))
     cc
 
 # ---- instructions ----
 
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
-    l := a.label()
+    l := self.a.label()
     # An atomic add's overflow has its own message (conc.atomic.5).
-    mut k := if kind == 0 and sites.list[site].rule == "conc.atomic.5" then 16 else kind
+    mut k := if kind == 0 and self.sites.list[site].rule == "conc.atomic.5" then 16 else kind
     # A std module's `unreachable("RULE: why")` names its own rule.
-    if kind == 14 and sites.list[site].rule == "std.unreachable"
+    if kind == 14 and self.sites.list[site].rule == "std.unreachable"
         k = 17
-    stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op, undo: 0))
+    self.stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op, undo: 0))
     l
 
 fn Gen.gen_inst(mut self, i mir.Inst)
     if codegen.is_remat(i)
         return
     match i.op
-        "add" | "sub" => add_sub(i)
+        "add" | "sub" => self.add_sub(i)
         "mul" =>
-            if i.site < 0 and mul_by_power(i)
+            if i.site < 0 and self.mul_by_power(i)
                 return
-            ra := gpr(i.arg(0), S0)
-            rb := gpr(i.arg(1), S1)
-            d := out_checked(i.dst, i)
+            ra := self.gpr(i.arg(0), S0)
+            rb := self.gpr(i.arg(1), S1)
+            d := self.out_checked(i.dst, i)
             if i.site >= 0
-                a.smulh(S2, ra, rb)
-                a.mul(d, ra, rb)
-                a.cmp_sign(S2, d)
-                a.b_cond(NE, stub(0, i.arg(0), i.arg(1), i.site, "*"))
+                self.a.smulh(S2, ra, rb)
+                self.a.mul(d, ra, rb)
+                self.a.cmp_sign(S2, d)
+                self.a.b_cond(NE, self.stub(0, i.arg(0), i.arg(1), i.site, "*"))
             else
-                a.mul(d, ra, rb)
-            put_gpr(i.dst, d)
-        "div" | "rem" => divide(i)
+                self.a.mul(d, ra, rb)
+            self.put_gpr(i.dst, d)
+        "div" | "rem" => self.divide(i)
         "band" | "bor" | "bxor" =>
             alu := match i.op
                 "band" => "and"
                 "bor" => "orr"
                 _ => "eor"
-            d := out_gpr(i.dst, S1)
-            a.alu_rr(alu, d, gpr(i.arg(0), S0), gpr(i.arg(1), S1))
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.alu_rr(alu, d, self.gpr(i.arg(0), S0), self.gpr(i.arg(1), S1))
+            self.put_gpr(i.dst, d)
         "bnot" =>
-            d := out_gpr(i.dst, S1)
-            a.mvn(d, gpr(i.arg(0), S0))
-            put_gpr(i.dst, d)
-        "shl" | "shr" => shift(i)
+            d := self.out_gpr(i.dst, S1)
+            self.a.mvn(d, self.gpr(i.arg(0), S0))
+            self.put_gpr(i.dst, d)
+        "shl" | "shr" => self.shift(i)
         "neg" =>
-            r := gpr(i.arg(0), S0)
-            d := out_checked(i.dst, i)
+            r := self.gpr(i.arg(0), S0)
+            d := self.out_checked(i.dst, i)
             if i.site >= 0
-                a.negs(d, r)
-                kind := if sites.list[i.site].op == "abs" then 5 else 2
-                a.b_cond(VS, stub(kind, i.arg(0), i.arg(0), i.site, "-"))
+                self.a.negs(d, r)
+                kind := if self.sites.list[i.site].op == "abs" then 5 else 2
+                self.a.b_cond(VS, self.stub(kind, i.arg(0), i.arg(0), i.site, "-"))
             else
-                a.neg(d, r)
-            put_gpr(i.dst, d)
+                self.a.neg(d, r)
+            self.put_gpr(i.dst, d)
         "not" =>
-            d := out_gpr(i.dst, S1)
-            a.eor1(d, gpr(i.arg(0), S0))
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.eor1(d, self.gpr(i.arg(0), S0))
+            self.put_gpr(i.dst, d)
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" =>
-            cc := compare(i)
-            d := out_gpr(i.dst, S1)
-            a.cset(d, cc)
-            put_gpr(i.dst, d)
+            cc := self.compare(i)
+            d := self.out_gpr(i.dst, S1)
+            self.a.cset(d, cc)
+            self.put_gpr(i.dst, d)
         "fadd" | "fsub" | "fmul" | "fdiv" =>
-            xa := fpr(i.arg(0), X0)
-            xb := fpr(i.arg(1), X1)
-            d := out_fpr(i.dst, X0)
-            a.fop(i.op, d, xa, xb)
-            put_fpr(i.dst, d)
+            xa := self.fpr(i.arg(0), X0)
+            xb := self.fpr(i.arg(1), X1)
+            d := self.out_fpr(i.dst, X0)
+            self.a.fop(i.op, d, xa, xb)
+            self.put_fpr(i.dst, d)
         "fneg" | "abs" | "sqrt" | "floor" | "ceil" =>
-            xa := fpr(i.arg(0), X0)
-            d := out_fpr(i.dst, X0)
+            xa := self.fpr(i.arg(0), X0)
+            d := self.out_fpr(i.dst, X0)
             name := match i.op
                 "fneg" => "fneg"
                 "abs" => "fabs"
                 "sqrt" => "fsqrt"
                 "floor" => "frintm"
                 _ => "frintp"
-            a.fop1(name, d, xa)
-            put_fpr(i.dst, d)
+            self.a.fop1(name, d, xa)
+            self.put_fpr(i.dst, d)
         "itof" =>
-            d := out_fpr(i.dst, X0)
-            a.scvtf(d, gpr(i.arg(0), S0))
-            put_fpr(i.dst, d)
+            d := self.out_fpr(i.dst, X0)
+            self.a.scvtf(d, self.gpr(i.arg(0), S0))
+            self.put_fpr(i.dst, d)
         "ftoi" =>
-            xa := fpr(i.arg(0), X0)
-            d := out_gpr(i.dst, S1)
-            a.fcvtzs(S1, xa)
+            xa := self.fpr(i.arg(0), X0)
+            d := self.out_gpr(i.dst, S1)
+            self.a.fcvtzs(S1, xa)
             if i.site >= 0
                 # The conversion saturates: it was exact when it gives back
                 # the truncated value and isn't the largest `int`, which no
                 # float converts to exactly.
-                bad := stub(4, i.arg(0), i.arg(0), i.site, "")
-                a.fop1("frintz", X1, xa)
-                a.scvtf(X0, S1)
-                a.fcmp(X1, X0)
-                a.b_cond(NE, bad)
-                a.mov_ri(S2, 9223372036854775807)
-                a.cmp_rr(S1, S2)
-                a.b_cond(EQ, bad)
-            a.mov_rr(d, S1)
-            put_gpr(i.dst, d)
-        "call" => call(i)
-        "icall" => call_out(i)
-        "utrap" => a.b(stub(14, i.arg(0), i.arg(0), i.site, ""))
-        "prim" => prim(i)
-        "get" => list_get(i)
-        "set" => list_set(i)
-        "bounds" => bounds(i)
+                bad := self.stub(4, i.arg(0), i.arg(0), i.site, "")
+                self.a.fop1("frintz", X1, xa)
+                self.a.scvtf(X0, S1)
+                self.a.fcmp(X1, X0)
+                self.a.b_cond(NE, bad)
+                self.a.mov_ri(S2, 9223372036854775807)
+                self.a.cmp_rr(S1, S2)
+                self.a.b_cond(EQ, bad)
+            self.a.mov_rr(d, S1)
+            self.put_gpr(i.dst, d)
+        "call" => self.call(i)
+        "icall" => self.call_out(i)
+        "utrap" => self.a.b(self.stub(14, i.arg(0), i.arg(0), i.site, ""))
+        "prim" => self.prim(i)
+        "get" => self.list_get(i)
+        "set" => self.list_set(i)
+        "bounds" => self.bounds(i)
         "data" =>
-            d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.arg(0), S0), 16)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.ldr(d, self.gpr(i.arg(0), S0), 16)
+            self.put_gpr(i.dst, d)
         "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
         "vsplat" | "vpack" | "vlane" | "vhadd" => vec_inst(i)
-        "ldx" => indexed_load(i)
-        "stx" => indexed_store(i)
+        "ldx" => self.indexed_load(i)
+        "stx" => self.indexed_store(i)
         "len" =>
-            d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.arg(0), S0), 0)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.ldr(d, self.gpr(i.arg(0), S0), 0)
+            self.put_gpr(i.dst, d)
         "cap" =>
-            d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.arg(0), S0), 8)
-            put_gpr(i.dst, d)
-        "trap" => a.b(stub(i.imm, i.arg(0), i.arg(1), i.site, i.name))
+            d := self.out_gpr(i.dst, S1)
+            self.a.ldr(d, self.gpr(i.arg(0), S0), 8)
+            self.put_gpr(i.dst, d)
+        "trap" => self.a.b(self.stub(i.imm, i.arg(0), i.arg(1), i.site, i.name))
         "load" =>
-            r := gpr(i.arg(0), S0)
-            if f.vals[i.dst].is_float()
-                d := out_fpr(i.dst, X0)
-                a.ldr_d(d, r, i.imm)
-                put_fpr(i.dst, d)
+            r := self.gpr(i.arg(0), S0)
+            if self.f.vals[i.dst].is_float()
+                d := self.out_fpr(i.dst, X0)
+                self.a.ldr_d(d, r, i.imm)
+                self.put_fpr(i.dst, d)
             else
-                d := out_gpr(i.dst, S1)
-                a.ldr(d, r, i.imm)
-                put_gpr(i.dst, d)
+                d := self.out_gpr(i.dst, S1)
+                self.a.ldr(d, r, i.imm)
+                self.put_gpr(i.dst, d)
         "store" =>
-            r := gpr(i.arg(0), S0)
+            r := self.gpr(i.arg(0), S0)
             v := i.arg(1)
-            if f.vals[v].is_float()
-                a.str_d(fpr(v, X0), r, i.imm)
+            if self.f.vals[v].is_float()
+                self.a.str_d(self.fpr(v, X0), r, i.imm)
             else
-                a.str(gpr(v, S1), r, i.imm)
-        "copy" => parallel([move_of(loc[i.dst], i.arg(0))])
+                self.a.str(self.gpr(v, S1), r, i.imm)
+        "copy" => self.parallel([self.move_of(self.loc[i.dst], i.arg(0))])
         "salloc" =>
             # Slots count upwards from `sp`: the header word, then the fields.
-            d := out_gpr(i.dst, S1)
-            a.alu_ri("add", d, SP, slot(sallocs[i.dst] + 1))
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.alu_ri("add", d, SP, self.slot(self.sallocs[i.dst] + 1))
+            self.put_gpr(i.dst, d)
         _ => unreachable("a64: no code for `{i.op}`")
 
 fn Gen.add_sub(mut self, i mir.Inst)
@@ -862,35 +865,38 @@ fn Gen.add_sub(mut self, i mir.Inst)
     checked := i.site >= 0
     # In place when the result shares `x`'s register: the overflow stub
     # recovers `x` from the result and `y`.
-    inplace := checked and is_reg(loc[i.dst]) and loc[x] == loc[i.dst] and loc[y] != loc[x]
-    d := if inplace then loc[i.dst] else out_checked(i.dst, i)
+    inplace := checked
+        and is_reg(self.loc[i.dst])
+        and self.loc[x] == self.loc[i.dst]
+        and self.loc[y] != self.loc[x]
+    d := if inplace then self.loc[i.dst] else self.out_checked(i.dst, i)
     mut op := i.op
-    if k := imm(y)
+    if k := self.imm(y)
         if k > -4096 and k < 4096
             mut n := k
             if k < 0
                 op = if op == "add" then "sub" else "add"
                 n = 0 - k
-            a.alu_ri(if checked then "{op}s" else op, d, gpr(x, S0), n)
-            finish_add(i, d, inplace)
+            self.a.alu_ri(if checked then "{op}s" else op, d, self.gpr(x, S0), n)
+            self.finish_add(i, d, inplace)
             return
     # `1 + n`: the constant goes second; the stub still reports `x + y`.
     if op == "add"
-        if k := imm(x)
+        if k := self.imm(x)
             if k >= 0 and k < 4096
-                a.alu_ri(if checked then "adds" else "add", d, gpr(y, S0), k)
-                finish_add(i, d, false)
+                self.a.alu_ri(if checked then "adds" else "add", d, self.gpr(y, S0), k)
+                self.finish_add(i, d, false)
                 return
-    a.alu_rr(if checked then "{op}s" else op, d, gpr(x, S0), gpr(y, S1))
-    finish_add(i, d, inplace)
+    self.a.alu_rr(if checked then "{op}s" else op, d, self.gpr(x, S0), self.gpr(y, S1))
+    self.finish_add(i, d, inplace)
 
 fn Gen.finish_add(mut self, i mir.Inst, d int, inplace bool)
     if i.site >= 0
-        l := stub(0, i.arg(0), i.arg(1), i.site, if i.op == "add" then "+" else "-")
+        l := self.stub(0, i.arg(0), i.arg(1), i.site, if i.op == "add" then "+" else "-")
         if inplace
-            stubs[stubs.len() - 1].undo = if i.op == "add" then 1 else 2
-        a.b_cond(VS, l)
-    put_gpr(i.dst, d)
+            self.stubs[self.stubs.len() - 1].undo = if i.op == "add" then 1 else 2
+        self.a.b_cond(VS, l)
+    self.put_gpr(i.dst, d)
 
 ## `sdiv` doesn't trap: a zero divisor branches to the trap (expr.arith.3),
 ## and the smallest `int` divided by -1 traps on the negation
@@ -899,62 +905,62 @@ fn Gen.divide(mut self, i mir.Inst)
     x := i.arg(0)
     y := i.arg(1)
     sym := if i.op == "div" then "/" else "%"
-    if k := imm(y)
+    if k := self.imm(y)
         if k > 2 and k < 2147483648 and k.bit_and(k - 1) != 0
-            magic_divide(i, k)
+            self.magic_divide(i, k)
             return
-    ra := gpr(x, S0)
-    rb := gpr(y, S1)
-    d := out_checked(i.dst, i)
+    ra := self.gpr(x, S0)
+    rb := self.gpr(y, S1)
+    d := self.out_checked(i.dst, i)
     if i.site >= 0
-        a.cbz(rb, stub(1, x, y, i.site, sym))
+        self.a.cbz(rb, self.stub(1, x, y, i.site, sym))
     if i.op == "rem"
-        a.sdiv(S2, ra, rb)
-        a.msub(d, S2, rb, ra)
-        put_gpr(i.dst, d)
+        self.a.sdiv(S2, ra, rb)
+        self.a.msub(d, S2, rb, ra)
+        self.put_gpr(i.dst, d)
         return
     if i.site >= 0
-        go := a.label()
-        done := a.label()
-        a.cmn_ri(rb, 1)
-        a.b_cond(NE, go)
-        a.negs(d, ra)
-        a.b_cond(VS, stub(0, x, y, i.site, sym))
-        a.b(done)
-        a.bind(go)
-        a.sdiv(d, ra, rb)
-        a.bind(done)
+        go := self.a.label()
+        done := self.a.label()
+        self.a.cmn_ri(rb, 1)
+        self.a.b_cond(NE, go)
+        self.a.negs(d, ra)
+        self.a.b_cond(VS, self.stub(0, x, y, i.site, sym))
+        self.a.b(done)
+        self.a.bind(go)
+        self.a.sdiv(d, ra, rb)
+        self.a.bind(done)
     else
-        a.sdiv(d, ra, rb)
-    put_gpr(i.dst, d)
+        self.a.sdiv(d, ra, rb)
+    self.put_gpr(i.dst, d)
 
 ## Division and remainder by a constant `k` (not a power of two) with a high
 ## multiply (`codegen.div_magic`), not `sdiv`.
 fn Gen.magic_divide(mut self, i mir.Inst, k int)
-    ra := gpr(i.arg(0), S0)
+    ra := self.gpr(i.arg(0), S0)
     mg := codegen.div_magic(k)
-    a.mov_ri(S1, mg[0])
-    a.smulh(S2, ra, S1)
-    a.alu_rr("add", S2, S2, ra)
+    self.a.mov_ri(S1, mg[0])
+    self.a.smulh(S2, ra, S1)
+    self.a.alu_rr("add", S2, S2, ra)
     if mg[1] > 0
-        a.shift_ri("asr", S2, S2, mg[1])
-    a.shift_ri("lsr", S1, ra, 63)
-    a.alu_rr("add", S2, S2, S1)
-    d := out_gpr(i.dst, S1)
+        self.a.shift_ri("asr", S2, S2, mg[1])
+    self.a.shift_ri("lsr", S1, ra, 63)
+    self.a.alu_rr("add", S2, S2, S1)
+    d := self.out_gpr(i.dst, S1)
     if i.op == "div"
-        a.mov_rr(d, S2)
+        self.a.mov_rr(d, S2)
     else
-        a.mov_ri(S1, k)
-        a.msub(d, S2, S1, ra)
-    put_gpr(i.dst, d)
+        self.a.mov_ri(S1, k)
+        self.a.msub(d, S2, S1, ra)
+    self.put_gpr(i.dst, d)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
 ## An unchecked `n * 2^k` (either order) as one shift; false for anything else.
 fn Gen.mul_by_power(mut self, i mir.Inst) bool
-    mut k := imm(i.arg(1))
+    mut k := self.imm(i.arg(1))
     mut other := i.arg(0)
     if k == none
-        k = imm(i.arg(0))
+        k = self.imm(i.arg(0))
         other = i.arg(1)
     n := k else return false
     if n < 2 or n.bit_and(n - 1) != 0
@@ -962,94 +968,94 @@ fn Gen.mul_by_power(mut self, i mir.Inst) bool
     mut s := 0
     while 1.shl(s) < n
         s += 1
-    d := out_gpr(i.dst, S1)
-    a.shift_ri("lsl", d, gpr(other, S0), s)
-    put_gpr(i.dst, d)
+    d := self.out_gpr(i.dst, S1)
+    self.a.shift_ri("lsl", d, self.gpr(other, S0), s)
+    self.put_gpr(i.dst, d)
     true
 
 fn Gen.shift(mut self, i mir.Inst)
     left := i.op == "shl"
-    if k := imm(i.arg(1))
+    if k := self.imm(i.arg(1))
         if k >= 0 and k <= 63
-            d := out_gpr(i.dst, S1)
-            a.shift_ri(if left then "lsl" else "asr", d, gpr(i.arg(0), S0), k)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.shift_ri(if left then "lsl" else "asr", d, self.gpr(i.arg(0), S0), k)
+            self.put_gpr(i.dst, d)
             return
-    c := gpr(i.arg(1), S1)
+    c := self.gpr(i.arg(1), S1)
     if i.site >= 0
-        a.cmp_ri(c, 63)
-        a.b_cond(HI, stub(6, i.arg(1), i.arg(1), i.site, ""))
-    d := out_gpr(i.dst, S1)
-    a.shift_rr(if left then "lsl" else "asr", d, gpr(i.arg(0), S0), c)
-    put_gpr(i.dst, d)
+        self.a.cmp_ri(c, 63)
+        self.a.b_cond(HI, self.stub(6, i.arg(1), i.arg(1), i.site, ""))
+    d := self.out_gpr(i.dst, S1)
+    self.a.shift_rr(if left then "lsl" else "asr", d, self.gpr(i.arg(0), S0), c)
+    self.put_gpr(i.dst, d)
 
 fn Gen.call(mut self, i mir.Inst)
     if codegen.is_push(i)
-        push(i)
+        self.push(i)
         return
-    call_out(i)
+    self.call_out(i)
 
 ## `xs.push(v)` with room to spare is a store and a length update; only a
 ## full list calls the runtime, which grows it (native-abi.md §2).
 fn Gen.push(mut self, i mir.Inst)
     # The value first: building a constant may use the scratch registers.
     v := i.arg(1)
-    float := f.vals[v].is_float()
+    float := self.f.vals[v].is_float()
     # x0 is free between calls.
-    r := if float then fpr(v, X0) else gpr(v, 0)
-    l := gpr(i.arg(0), S0)
+    r := if float then self.fpr(v, X0) else self.gpr(v, 0)
+    l := self.gpr(i.arg(0), S0)
     # `imm` 1: a loop guard saw room for every push the loop makes (native.bce.6).
     room := i.imm == 1
-    slow := a.label()
-    done := a.label()
-    a.ldr(S2, l, 0)
+    slow := self.a.label()
+    done := self.a.label()
+    self.a.ldr(S2, l, 0)
     if not room
-        a.ldr(S1, l, 8)
-        a.cmp_rr(S2, S1)
-        a.b_cond(EQ, slow)
-    a.ldr(S1, l, 16)
+        self.a.ldr(S1, l, 8)
+        self.a.cmp_rr(S2, S1)
+        self.a.b_cond(EQ, slow)
+    self.a.ldr(S1, l, 16)
     if float
-        a.str_d_idx(r, S1, S2)
+        self.a.str_d_idx(r, S1, S2)
     else
-        store_elem(r, S1, S2, 0, mir.push_bytes(i.name))
-    a.alu_ri("add", S2, S2, 1)
-    a.str(S2, l, 0)
+        self.store_elem(r, S1, S2, 0, mir.push_bytes(i.name))
+    self.a.alu_ri("add", S2, S2, 1)
+    self.a.str(S2, l, 0)
     if room
         return
-    a.b(done)
-    a.bind(slow)
+    self.a.b(done)
+    self.a.bind(slow)
     # The runtime may use any caller-saved register: keep ours around it.
     # Spill slots are `sp`-relative, so the arguments go to scratch first.
-    a.mov_rr(S1, l)
+    self.a.mov_rr(S1, l)
     if float
-        a.fop1("fmov", X1, r)
+        self.a.fop1("fmov", X1, r)
     else
-        a.mov_rr(S0, r)
-    n := caller_used.len()
+        self.a.mov_rr(S0, r)
+    n := self.caller_used.len()
     size := (8 * n + 15) / 16 * 16
     if size > 0
-        adjust_sp("sub", size)
+        self.adjust_sp("sub", size)
     for k in 0..n
-        save(caller_used[k], 8 * k, true)
-    a.mov_rr(0, S1)
+        self.save(self.caller_used[k], 8 * k, true)
+    self.a.mov_rr(0, S1)
     if float
-        a.fop1("fmov", 0, X1)
+        self.a.fop1("fmov", 0, X1)
     else
-        a.mov_rr(1, S0)
-    a.bl(i.name)
+        self.a.mov_rr(1, S0)
+    self.a.bl(i.name)
     for k in 0..n
-        save(caller_used[k], 8 * k, false)
+        self.save(self.caller_used[k], 8 * k, false)
     if size > 0
-        adjust_sp("add", size)
-    a.bind(done)
+        self.adjust_sp("add", size)
+    self.a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
-    if i.site >= 0 and sites.list[i.site].kind != "frame"
+    if i.site >= 0 and self.sites.list[i.site].kind != "frame"
         # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
-        a.adr_sym(S0, "globals")
-        a.ldr(S0, S0, 8 * STACK_LIMIT)
-        a.cmp_sp(S0)
-        a.b_cond(LO, stub(11, -1, -1, i.site, sites.list[i.site].op))
+        self.a.adr_sym(S0, "globals")
+        self.a.ldr(S0, S0, 8 * STACK_LIMIT)
+        self.a.cmp_sp(S0)
+        self.a.b_cond(LO, self.stub(11, -1, -1, i.site, self.sites.list[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -1060,18 +1066,18 @@ fn Gen.call_out(mut self, i mir.Inst)
     # Apple arm64 passes every variadic argument of a `cv<N>` call on the stack,
     # in 8-byte slots, after the `N` named ones (ffi.var.4, ADR 1031).
     named := (i.name.replace("cv", "").to_int() else 0)
-    stack_va := os == MACOS and i.name.starts_with("cv")
+    stack_va := self.os == MACOS and i.name.starts_with("cv")
     for k in 0..i.argc()
         v := i.arg(k)
         if indirect and k == 0
-            moves.push(move_of(S2, v))
+            moves.push(self.move_of(S2, v))
         elif stack_va and k > named
             extra.push(v)
-        elif f.vals[v].is_float()
-            moves.push(move_of(FB + nf, v))
+        elif self.f.vals[v].is_float()
+            moves.push(self.move_of(FB + nf, v))
             nf += 1
         elif ni < INT_ARGS
-            moves.push(move_of(ni, v))
+            moves.push(self.move_of(ni, v))
             ni += 1
         else
             extra.push(v)
@@ -1079,54 +1085,54 @@ fn Gen.call_out(mut self, i mir.Inst)
     # (native-abi.md §1); spill slots move with the stack pointer meanwhile.
     room := (8 * extra.len() + 15) / 16 * 16
     if room > 0
-        adjust_sp("sub", room)
-        sp_shift = room
+        self.adjust_sp("sub", room)
+        self.sp_shift = room
         for k in 0..extra.len()
-            if f.vals[extra[k]].is_float()
-                a.str_d(fpr(extra[k], X0), SP, 8 * k)
+            if self.f.vals[extra[k]].is_float()
+                self.a.str_d(self.fpr(extra[k], X0), SP, 8 * k)
             else
-                a.str(gpr(extra[k], S0), SP, 8 * k)
-    parallel(moves)
+                self.a.str(self.gpr(extra[k], S0), SP, 8 * k)
+    self.parallel(moves)
     if indirect
-        a.blr(S2)
+        self.a.blr(S2)
     elif i.name.starts_with("libsys.")
         # An import: through the pointer slot dyld binds (native-abi.md §11).
         # On Linux the slot is bound by the dynamic loader to a libc symbol
         # (no leading `_`, ADR 0870); macOS names start with `_`. A name of
         # the other target's kind traps if ever reached.
         sym := i.name.replace("libsys.", "")
-        if (os == MACOS and not sym.starts_with("_"))
-            or (os == LINUX and not codegen.linux_import(sym))
-            a.brk()
+        if (self.os == MACOS and not sym.starts_with("_"))
+            or (self.os == LINUX and not codegen.linux_import(sym))
+            self.a.brk()
         else
-            imports.push(sym)
-            a.adr_sym(S0, "imp:{sym}")
-            a.ldr(S0, S0, 0)
-            a.blr(S0)
+            self.imports.push(sym)
+            self.a.adr_sym(S0, "imp:{sym}")
+            self.a.ldr(S0, S0, 0)
+            self.a.blr(S0)
     else
-        a.bl(i.name)
+        self.a.bl(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
-        calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: call_func(i)))
+        self.calls.push(codegen.CallRow(off: self.a.here(), pos: i.imm, func: self.call_func(i)))
         # A call copied in by inlining (trace.frame.2) also stands for the
         # frames it was inlined into: a row for each, innermost first.
         if i.site >= 0
-            mut fs := sites.list[i.site]
+            mut fs := self.sites.list[i.site]
             while fs.from >= 0
-                fs = sites.list[fs.from]
-                calls.push(codegen.CallRow(
-                    off: a.here(),
+                fs = self.sites.list[fs.from]
+                self.calls.push(codegen.CallRow(
+                    off: self.a.here(),
                     pos: mir.call_pos(fs.file, fs.line, fs.col),
                     func: fs.func,
                 ))
     if room > 0
-        adjust_sp("add", room)
-        sp_shift = 0
+        self.adjust_sp("add", room)
+        self.sp_shift = 0
     if i.dst >= 0
-        if f.vals[i.dst].is_float()
-            put_fpr(i.dst, 0)
+        if self.f.vals[i.dst].is_float()
+            self.put_fpr(i.dst, 0)
         else
-            put_gpr(i.dst, 0)
+            self.put_gpr(i.dst, 0)
 
 ## Where a load or store primitive reads or writes: a base register and
 ## either an offset or an index register (scaled by 8 for words, as the
@@ -1139,258 +1145,261 @@ struct Place
 
 fn Gen.address(mut self, i mir.Inst) Place
     store := i.name.starts_with("store")
-    mut b := gpr(i.arg(0), S0)
+    mut b := self.gpr(i.arg(0), S0)
     if i.argc() == (if store then 3 else 2)
         off := i.imm / 16
         if off != 0
-            a.alu_ri("add", S0, b, off)
+            self.a.alu_ri("add", S0, b, off)
             b = S0
-        return Place(base: b, index: gpr(i.arg(1), S2), off: 0)
+        return Place(base: b, index: self.gpr(i.arg(1), S2), off: 0)
     Place(base: b, index: -1, off: i.imm)
 
 fn Gen.prim(mut self, i mir.Inst)
     if i.name.starts_with("fn_addr:")
-        d := out_gpr(i.dst, S1)
-        a.adr_sym(d, i.name.replace("fn_addr:", ""))
-        put_gpr(i.dst, d)
+        d := self.out_gpr(i.dst, S1)
+        self.a.adr_sym(d, i.name.replace("fn_addr:", ""))
+        self.put_gpr(i.dst, d)
         return
     match i.name
         "load64" =>
-            pl := address(i)
-            d := out_gpr(i.dst, S1)
+            pl := self.address(i)
+            d := self.out_gpr(i.dst, S1)
             if pl.index >= 0
-                a.ldr_idx(d, pl.base, pl.index)
+                self.a.ldr_idx(d, pl.base, pl.index)
             else
-                a.ldr(d, pl.base, pl.off)
-            put_gpr(i.dst, d)
+                self.a.ldr(d, pl.base, pl.off)
+            self.put_gpr(i.dst, d)
         "load8" =>
-            pl := address(i)
-            d := out_gpr(i.dst, S1)
+            pl := self.address(i)
+            d := self.out_gpr(i.dst, S1)
             if pl.index >= 0
-                a.ldrb_idx(d, pl.base, pl.index)
+                self.a.ldrb_idx(d, pl.base, pl.index)
             else
-                a.ldrb_off(d, pl.base, pl.off)
-            put_gpr(i.dst, d)
+                self.a.ldrb_off(d, pl.base, pl.off)
+            self.put_gpr(i.dst, d)
         "loadf" =>
-            pl := address(i)
-            d := out_fpr(i.dst, X0)
+            pl := self.address(i)
+            d := self.out_fpr(i.dst, X0)
             if pl.index >= 0
-                a.ldr_d_idx(d, pl.base, pl.index)
+                self.a.ldr_d_idx(d, pl.base, pl.index)
             else
-                a.ldr_d(d, pl.base, pl.off)
-            put_fpr(i.dst, d)
+                self.a.ldr_d(d, pl.base, pl.off)
+            self.put_fpr(i.dst, d)
         "loadf32" =>
             # One packed single (ADR 0875), widened exactly.
-            pl := address(i)
-            d := out_fpr(i.dst, X0)
-            a.ldr_s(d, pl.base, pl.off)
-            a.fop1("fcvt_ds", d, d)
-            put_fpr(i.dst, d)
+            pl := self.address(i)
+            d := self.out_fpr(i.dst, X0)
+            self.a.ldr_s(d, pl.base, pl.off)
+            self.a.fop1("fcvt_ds", d, d)
+            self.put_fpr(i.dst, d)
         "storef32" =>
-            pl := address(i)
-            v := fpr(i.arg(i.argc() - 1), X0)
-            a.fop1("fcvt_sd", X1, v)
-            a.str_s(X1, pl.base, pl.off)
+            pl := self.address(i)
+            v := self.fpr(i.arg(i.argc() - 1), X0)
+            self.a.fop1("fcvt_sd", X1, v)
+            self.a.str_s(X1, pl.base, pl.off)
         "store64" =>
-            pl := address(i)
-            v := gpr(i.arg(i.argc() - 1), S1)
+            pl := self.address(i)
+            v := self.gpr(i.arg(i.argc() - 1), S1)
             if pl.index >= 0
-                a.str_idx(v, pl.base, pl.index)
+                self.a.str_idx(v, pl.base, pl.index)
             else
-                a.str(v, pl.base, pl.off)
+                self.a.str(v, pl.base, pl.off)
         "store8" =>
-            pl := address(i)
-            v := gpr(i.arg(i.argc() - 1), S1)
+            pl := self.address(i)
+            v := self.gpr(i.arg(i.argc() - 1), S1)
             if pl.index >= 0
-                a.strb_idx(v, pl.base, pl.index)
+                self.a.strb_idx(v, pl.base, pl.index)
             else
-                a.strb_off(v, pl.base, pl.off)
+                self.a.strb_off(v, pl.base, pl.off)
         "pload8" | "pload16" | "pload32" | "pload64" =>
             # A raw pointer's read (ADR 0835): the width in the name, the
             # result zero-extended. Never moved, merged or dropped.
-            base := gpr(i.arg(0), S0)
-            d := out_gpr(i.dst, S1)
+            base := self.gpr(i.arg(0), S0)
+            d := self.out_gpr(i.dst, S1)
             if i.name == "pload8"
-                a.ldrb(d, base)
+                self.a.ldrb(d, base)
             elif i.name == "pload16"
-                a.ldrh(d, base)
+                self.a.ldrh(d, base)
             elif i.name == "pload32"
-                a.ldr_w(d, base)
+                self.a.ldr_w(d, base)
             else
-                a.ldr(d, base, 0)
-            put_gpr(i.dst, d)
+                self.a.ldr(d, base, 0)
+            self.put_gpr(i.dst, d)
         "pstore8" | "pstore16" | "pstore32" | "pstore64" =>
-            base := gpr(i.arg(0), S0)
-            v := gpr(i.arg(1), S1)
+            base := self.gpr(i.arg(0), S0)
+            v := self.gpr(i.arg(1), S1)
             if i.name == "pstore8"
-                a.strb(v, base)
+                self.a.strb(v, base)
             elif i.name == "pstore16"
-                a.strh(v, base)
+                self.a.strh(v, base)
             elif i.name == "pstore32"
-                a.str_w(v, base)
+                self.a.str_w(v, base)
             else
-                a.str(v, base, 0)
+                self.a.str(v, base, 0)
         "pfence" =>
-            a.dmb_ish()
+            self.a.dmb_ish()
         "pfence_io" =>
-            a.dsb_sy()
+            self.a.dsb_sy()
         "storef" =>
-            pl := address(i)
-            v := fpr(i.arg(i.argc() - 1), X0)
+            pl := self.address(i)
+            v := self.fpr(i.arg(i.argc() - 1), X0)
             if pl.index >= 0
-                a.str_d_idx(v, pl.base, pl.index)
+                self.a.str_d_idx(v, pl.base, pl.index)
             else
-                a.str_d(v, pl.base, pl.off)
+                self.a.str_d(v, pl.base, pl.off)
         "syscall" =>
-            if os == WINDOWS
+            if self.os == WINDOWS
                 # `svc` is not a Windows interface: the runtime calls the
                 # kernel32 layer (`win.ail`) wherever `target()` is 3.
-                a.brk()
+                self.a.brk()
                 return
             # Linux: the number in x8, `svc #0`, `-errno` on failure. macOS:
             # the number in x16, `svc #0x80`, carry set and `errno` on
             # failure, which is negated here to match.
-            number := if os == MACOS then S0 else S2
+            number := if self.os == MACOS then S0 else S2
             regs := [number, 0, 1, 2, 3, 4, 5]
-            parallel([move_of(regs[k], i.arg(k)) for k in 0..i.argc()])
-            if os == MACOS
-                a.svc(128)
-                ok := a.label()
-                a.b_cond(LO, ok)
-                a.neg(0, 0)
-                a.bind(ok)
+            self.parallel([self.move_of(regs[k], i.arg(k)) for k in 0..i.argc()])
+            if self.os == MACOS
+                self.a.svc(128)
+                ok := self.a.label()
+                self.a.b_cond(LO, ok)
+                self.a.neg(0, 0)
+                self.a.bind(ok)
             else
-                a.svc(0)
-            put_gpr(i.dst, 0)
+                self.a.svc(0)
+            self.put_gpr(i.dst, 0)
         "global" =>
-            d := out_gpr(i.dst, S1)
-            a.adr_sym(d, "globals")
-            k := imm(i.arg(0)) else 0
+            d := self.out_gpr(i.dst, S1)
+            self.a.adr_sym(d, "globals")
+            k := self.imm(i.arg(0)) else 0
             if k > 0
-                a.alu_ri("add", d, d, 8 * k)
-            put_gpr(i.dst, d)
+                self.a.alu_ri("add", d, d, 8 * k)
+            self.put_gpr(i.dst, d)
         "globals_end" =>
-            d := out_gpr(i.dst, S1)
-            a.adr_sym(d, "globals")
-            a.alu_ri("add", d, d, 8 * nglobals)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.adr_sym(d, "globals")
+            self.a.alu_ri("add", d, d, 8 * self.nglobals)
+            self.put_gpr(i.dst, d)
         "gc_regs" =>
-            b := gpr(i.arg(0), S0)
+            b := self.gpr(i.arg(0), S0)
             for k in 0..10
-                a.str(19 + k, b, 8 * k)
-            d := out_gpr(i.dst, S1)
-            a.mov_rr(d, SP)
-            put_gpr(i.dst, d)
+                self.a.str(19 + k, b, 8 * k)
+            d := self.out_gpr(i.dst, S1)
+            self.a.mov_rr(d, SP)
+            self.put_gpr(i.dst, d)
         "target" =>
-            d := out_gpr(i.dst, S1)
-            a.mov_ri(d, os)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.mov_ri(d, self.os)
+            self.put_gpr(i.dst, d)
         "code_tab" =>
-            d := out_gpr(i.dst, S1)
-            a.adr_sym(d, "trace.tab")
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.adr_sym(d, "trace.tab")
+            self.put_gpr(i.dst, d)
         "frame_ptr" =>
-            d := out_gpr(i.dst, S1)
-            a.mov_rr(d, FP)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.mov_rr(d, FP)
+            self.put_gpr(i.dst, d)
         # Threads and atomics (ADRs 0599, 0600): ARMv8.1 LSE read-modify-write
         # operations, `ldar`/`stlr`, all sequentially consistent.
         "atomic_load" =>
-            d := out_gpr(i.dst, S1)
-            a.ldar(d, gpr(i.arg(0), S0))
-            put_gpr(i.dst, d)
-        "atomic_store" => a.stlr(gpr(i.arg(1), S1), gpr(i.arg(0), S0))
+            d := self.out_gpr(i.dst, S1)
+            self.a.ldar(d, self.gpr(i.arg(0), S0))
+            self.put_gpr(i.dst, d)
+        "atomic_store" => self.a.stlr(self.gpr(i.arg(1), S1), self.gpr(i.arg(0), S0))
         "atomic_xchg" =>
-            addr := gpr(i.arg(0), S0)
-            v := gpr(i.arg(1), S1)
-            a.swpal(v, S2, addr)
-            put_gpr(i.dst, S2)
+            addr := self.gpr(i.arg(0), S0)
+            v := self.gpr(i.arg(1), S1)
+            self.a.swpal(v, S2, addr)
+            self.put_gpr(i.dst, S2)
         "atomic_add" =>
-            addr := gpr(i.arg(0), S0)
-            v := gpr(i.arg(1), S1)
-            a.ldaddal(v, S2, addr)
-            put_gpr(i.dst, S2)
+            addr := self.gpr(i.arg(0), S0)
+            v := self.gpr(i.arg(1), S1)
+            self.a.ldaddal(v, S2, addr)
+            self.put_gpr(i.dst, S2)
         "atomic_cas" =>
-            addr := gpr(i.arg(0), S0)
-            e := gpr(i.arg(1), S2)
-            a.mov_rr(S2, e)
-            n := gpr(i.arg(2), S1)
-            a.casal(S2, n, addr)
-            put_gpr(i.dst, S2)
+            addr := self.gpr(i.arg(0), S0)
+            e := self.gpr(i.arg(1), S2)
+            self.a.mov_rr(S2, e)
+            n := self.gpr(i.arg(2), S1)
+            self.a.casal(S2, n, addr)
+            self.put_gpr(i.dst, S2)
         "sp" =>
-            d := out_gpr(i.dst, S1)
-            a.mov_rr(d, SP)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.mov_rr(d, SP)
+            self.put_gpr(i.dst, d)
         "clone" =>
-            if os != LINUX
-                a.brk()
+            if self.os != LINUX
+                self.a.brk()
                 return
             # clone(CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM, stack, 0, 0, arg)
             # as on x86-64; the child finds `arg` still in x4.
-            parallel([move_of(1, i.arg(0)), move_of(4, i.arg(1))])
-            a.mov_ri(0, 331520)
-            a.mov_ri(2, 0)
-            a.mov_ri(3, 0)
-            a.mov_ri(S2, 220)
-            a.svc(0)
-            parent := a.label()
-            a.cmp_ri(0, 0)
-            a.b_cond(NE, parent)
-            a.mov_rr(0, 4)
-            a.mov_ri(FP, 0)
-            a.bl("rt.worker_main")
-            a.brk()
-            a.bind(parent)
-            put_gpr(i.dst, 0)
+            self.parallel([self.move_of(1, i.arg(0)), self.move_of(4, i.arg(1))])
+            self.a.mov_ri(0, 331520)
+            self.a.mov_ri(2, 0)
+            self.a.mov_ri(3, 0)
+            self.a.mov_ri(S2, 220)
+            self.a.svc(0)
+            parent := self.a.label()
+            self.a.cmp_ri(0, 0)
+            self.a.b_cond(NE, parent)
+            self.a.mov_rr(0, 4)
+            self.a.mov_ri(FP, 0)
+            self.a.bl("rt.worker_main")
+            self.a.brk()
+            self.a.bind(parent)
+            self.put_gpr(i.dst, 0)
         "win_arg0" =>
             # Only the x86-64 Windows target calls back with the Win64 convention.
-            d := out_gpr(i.dst, S1)
-            a.mov_ri(d, 0)
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.mov_ri(d, 0)
+            self.put_gpr(i.dst, d)
         "sigreturn" =>
             # Linux ARM64 returns from a handler through the kernel's own stub.
-            a.brk()
+            self.a.brk()
         "restart" =>
-            parallel([move_of(S0, i.arg(0)), move_of(0, i.arg(1))])
-            a.mov_rr(SP, S0)
-            a.mov_ri(FP, 0)
-            a.bl("rt.worker_main")
-            a.brk()
-        "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(loc[i.dst], i.arg(0))])
+            self.parallel([self.move_of(S0, i.arg(0)), self.move_of(0, i.arg(1))])
+            self.a.mov_rr(SP, S0)
+            self.a.mov_ri(FP, 0)
+            self.a.bl("rt.worker_main")
+            self.a.brk()
+        "str_addr" | "str_at" | "list_addr" | "list_at" => self.parallel([self.move_of(
+            self.loc[i.dst],
+            i.arg(0),
+        )])
         "float_bits" =>
-            d := out_gpr(i.dst, S1)
-            a.fmov_xd(d, fpr(i.arg(0), X0))
-            put_gpr(i.dst, d)
+            d := self.out_gpr(i.dst, S1)
+            self.a.fmov_xd(d, self.fpr(i.arg(0), X0))
+            self.put_gpr(i.dst, d)
         "bits_float" =>
-            d := out_fpr(i.dst, X0)
-            a.fmov_dx(d, gpr(i.arg(0), S0))
-            put_fpr(i.dst, d)
+            d := self.out_fpr(i.dst, X0)
+            self.a.fmov_dx(d, self.gpr(i.arg(0), S0))
+            self.put_fpr(i.dst, d)
         "f32_round" =>
-            xa := fpr(i.arg(0), X0)
-            d := out_fpr(i.dst, X0)
-            a.fop1("fcvt_sd", X1, xa)
-            a.fop1("fcvt_ds", d, X1)
-            put_fpr(i.dst, d)
+            xa := self.fpr(i.arg(0), X0)
+            d := self.out_fpr(i.dst, X0)
+            self.a.fop1("fcvt_sd", X1, xa)
+            self.a.fop1("fcvt_ds", d, X1)
+            self.put_fpr(i.dst, d)
         _ => unreachable("a64: unknown primitive {i.name}")
 
 ## `xs[i]`: checks the index, then gives the elements' base in x8 and the
 ## index's register, or -1 with the byte offset for a constant index.
 fn Gen.list_index(mut self, i mir.Inst) List[int]
-    l := gpr(i.arg(0), S0)
-    if k := imm(i.arg(1))
+    l := self.gpr(i.arg(0), S0)
+    if k := self.imm(i.arg(1))
         if k >= 0 and k < 4095
             if i.site >= 0
-                a.ldr(S2, l, 0)
-                a.cmp_ri(S2, k)
-                a.b_cond(LS, stub(3, i.arg(1), i.arg(0), i.site, ""))
-            a.ldr(S2, l, 16)
+                self.a.ldr(S2, l, 0)
+                self.a.cmp_ri(S2, k)
+                self.a.b_cond(LS, self.stub(3, i.arg(1), i.arg(0), i.site, ""))
+            self.a.ldr(S2, l, 16)
             return [-1, 8 * k]
-    x := gpr(i.arg(1), S1)
+    x := self.gpr(i.arg(1), S1)
     if i.site >= 0
-        a.ldr(S2, l, 0)
-        a.cmp_rr(x, S2)
-        a.b_cond(HS, stub(3, i.arg(1), i.arg(0), i.site, ""))
-    a.ldr(S2, l, 16)
+        self.a.ldr(S2, l, 0)
+        self.a.cmp_rr(x, S2)
+        self.a.b_cond(HS, self.stub(3, i.arg(1), i.arg(0), i.site, ""))
+    self.a.ldr(S2, l, 16)
     [x, 0]
 
 ## `bounds idx, len`: the check of a `get` or `set` whose list header was
@@ -1399,163 +1408,163 @@ fn Gen.list_index(mut self, i mir.Inst) List[int]
 fn Gen.bounds(mut self, i mir.Inst)
     # A length that is a constant (a list built with a known count,
     # native.bce.15) is compared as an immediate.
-    if n := imm(i.arg(1))
-        if n >= 0 and n < 4095 and imm(i.arg(0)) == none
-            a.cmp_ri(gpr(i.arg(0), S1), n)
-            a.b_cond(HS, stub(3, i.arg(0), i.arg(1), i.site, ""))
-            stubs[stubs.len() - 1].undo = 4
+    if n := self.imm(i.arg(1))
+        if n >= 0 and n < 4095 and self.imm(i.arg(0)) == none
+            self.a.cmp_ri(self.gpr(i.arg(0), S1), n)
+            self.a.b_cond(HS, self.stub(3, i.arg(0), i.arg(1), i.site, ""))
+            self.stubs[self.stubs.len() - 1].undo = 4
             return
-    l := gpr(i.arg(1), S0)
-    if k := imm(i.arg(0))
+    l := self.gpr(i.arg(1), S0)
+    if k := self.imm(i.arg(0))
         if k >= 0 and k < 4095
-            a.cmp_ri(l, k)
-            a.b_cond(LS, stub(3, i.arg(0), i.arg(1), i.site, ""))
-            stubs[stubs.len() - 1].undo = 4
+            self.a.cmp_ri(l, k)
+            self.a.b_cond(LS, self.stub(3, i.arg(0), i.arg(1), i.site, ""))
+            self.stubs[self.stubs.len() - 1].undo = 4
             return
-    a.cmp_rr(gpr(i.arg(0), S1), l)
-    a.b_cond(HS, stub(3, i.arg(0), i.arg(1), i.site, ""))
-    stubs[stubs.len() - 1].undo = 4
+    self.a.cmp_rr(self.gpr(i.arg(0), S1), l)
+    self.a.b_cond(HS, self.stub(3, i.arg(0), i.arg(1), i.site, ""))
+    self.stubs[self.stubs.len() - 1].undo = 4
 
 fn Gen.list_get(mut self, i mir.Inst)
-    at := list_index(i)
-    if f.vals[i.dst].is_float()
-        d := out_fpr(i.dst, X0)
+    at := self.list_index(i)
+    if self.f.vals[i.dst].is_float()
+        d := self.out_fpr(i.dst, X0)
         if at[0] < 0
-            a.ldr_d(d, S2, at[1])
+            self.a.ldr_d(d, S2, at[1])
         else
-            a.ldr_d_idx(d, S2, at[0])
-        put_fpr(i.dst, d)
+            self.a.ldr_d_idx(d, S2, at[0])
+        self.put_fpr(i.dst, d)
         return
-    d := out_gpr(i.dst, S1)
+    d := self.out_gpr(i.dst, S1)
     # A `List[bool]` or `List[u8]` holds one byte per element, a `List[u16]`
     # two and a `List[u32]` four (native-abi.md §2).
-    load_elem(d, S2, at[0], at[1] / 8, f.vals[i.dst].elem_bytes())
-    put_gpr(i.dst, d)
+    self.load_elem(d, S2, at[0], at[1] / 8, self.f.vals[i.dst].elem_bytes())
+    self.put_gpr(i.dst, d)
 
 fn Gen.list_set(mut self, i mir.Inst)
     v := i.arg(2)
-    if f.vals[v].is_float()
-        x := fpr(v, X0)
-        at := list_index(i)
+    if self.f.vals[v].is_float()
+        x := self.fpr(v, X0)
+        at := self.list_index(i)
         if at[0] < 0
-            a.str_d(x, S2, at[1])
+            self.a.str_d(x, S2, at[1])
         else
-            a.str_d_idx(x, S2, at[0])
+            self.a.str_d_idx(x, S2, at[0])
         return
     # x0 is free between calls.
-    r := gpr(v, 0)
-    at := list_index(i)
-    store_elem(r, S2, at[0], at[1] / 8, f.vals[v].elem_bytes())
+    r := self.gpr(v, 0)
+    at := self.list_index(i)
+    self.store_elem(r, S2, at[0], at[1] / 8, self.f.vals[v].elem_bytes())
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577):
 ## the index's register, or -1 with a constant index's element number.
 fn Gen.indexed_at(mut self, i mir.Inst) int
-    if k := imm(i.arg(1))
+    if k := self.imm(i.arg(1))
         if k + i.elem_off() >= 0 and k + i.elem_off() < 4095
             return -1 - k - i.elem_off()
-    x := gpr(i.arg(1), S1)
+    x := self.gpr(i.arg(1), S1)
     if i.elem_off() > 0
-        a.alu_ri("add", S1, x, i.elem_off())
+        self.a.alu_ri("add", S1, x, i.elem_off())
         return S1
     if i.elem_off() < 0
-        a.alu_ri("sub", S1, x, 0 - i.elem_off())
+        self.a.alu_ri("sub", S1, x, 0 - i.elem_off())
         return S1
     x
 
 fn Gen.indexed_load(mut self, i mir.Inst)
-    base := gpr(i.arg(0), S0)
-    x := indexed_at(i)
-    if f.vals[i.dst].is_float()
-        d := out_fpr(i.dst, X0)
+    base := self.gpr(i.arg(0), S0)
+    x := self.indexed_at(i)
+    if self.f.vals[i.dst].is_float()
+        d := self.out_fpr(i.dst, X0)
         if x < 0
-            a.ldr_d(d, base, 8 * (-1 - x))
+            self.a.ldr_d(d, base, 8 * (-1 - x))
         else
-            a.ldr_d_idx(d, base, x)
-        put_fpr(i.dst, d)
+            self.a.ldr_d_idx(d, base, x)
+        self.put_fpr(i.dst, d)
         return
-    d := out_gpr(i.dst, S1)
-    load_elem(d, base, x, -1 - x, i.imm)
-    put_gpr(i.dst, d)
+    d := self.out_gpr(i.dst, S1)
+    self.load_elem(d, base, x, -1 - x, i.imm)
+    self.put_gpr(i.dst, d)
 
 fn Gen.indexed_store(mut self, i mir.Inst)
     v := i.arg(2)
-    base := gpr(i.arg(0), S0)
-    x := indexed_at(i)
-    if f.vals[v].is_float()
+    base := self.gpr(i.arg(0), S0)
+    x := self.indexed_at(i)
+    if self.f.vals[v].is_float()
         if x < 0
-            a.str_d(fpr(v, X0), base, 8 * (-1 - x))
+            self.a.str_d(self.fpr(v, X0), base, 8 * (-1 - x))
         else
-            a.str_d_idx(fpr(v, X0), base, x)
+            self.a.str_d_idx(self.fpr(v, X0), base, x)
         return
-    store_elem(gpr(v, 0), base, x, -1 - x, i.imm)
+    self.store_elem(self.gpr(v, 0), base, x, -1 - x, i.imm)
 
 ## An element of `w` bytes (1, 2, 4 or 8) at `base[x]` (`x` an index register)
 ## or, when `x` is negative, at element `k`. A load zero-extends.
 fn Gen.load_elem(mut self, d int, base int, x int, k int, w int)
     if w == 1
         if x < 0
-            a.ldrb_off(d, base, k)
+            self.a.ldrb_off(d, base, k)
         else
-            a.ldrb_idx(d, base, x)
+            self.a.ldrb_idx(d, base, x)
     elif w == 2
         if x < 0
-            a.ldrh_off(d, base, k)
+            self.a.ldrh_off(d, base, k)
         else
-            a.ldrh_idx(d, base, x)
+            self.a.ldrh_idx(d, base, x)
     elif w == 4
         if x < 0
-            a.ldr_w_off(d, base, k)
+            self.a.ldr_w_off(d, base, k)
         else
-            a.ldr_w_idx(d, base, x)
+            self.a.ldr_w_idx(d, base, x)
     elif x < 0
-        a.ldr(d, base, 8 * k)
+        self.a.ldr(d, base, 8 * k)
     else
-        a.ldr_idx(d, base, x)
+        self.a.ldr_idx(d, base, x)
 
 fn Gen.store_elem(mut self, r int, base int, x int, k int, w int)
     if w == 1
         if x < 0
-            a.strb_off(r, base, k)
+            self.a.strb_off(r, base, k)
         else
-            a.strb_idx(r, base, x)
+            self.a.strb_idx(r, base, x)
     elif w == 2
         if x < 0
-            a.strh_off(r, base, k)
+            self.a.strh_off(r, base, k)
         else
-            a.strh_idx(r, base, x)
+            self.a.strh_idx(r, base, x)
     elif w == 4
         if x < 0
-            a.str_w_off(r, base, k)
+            self.a.str_w_off(r, base, k)
         else
-            a.str_w_idx(r, base, x)
+            self.a.str_w_idx(r, base, x)
     elif x < 0
-        a.str(r, base, 8 * k)
+        self.a.str(r, base, 8 * k)
     else
-        a.str_idx(r, base, x)
+        self.a.str_idx(r, base, x)
 
 # ---- trap stubs ----
 
 fn Gen.gen_stubs(mut self)
-    for s in stubs
-        a.bind(s.label)
+    for s in self.stubs
+        self.a.bind(s.label)
         mut moves := List[Move]()
         moves.push(Move(dst: 0, src: -1, imm: s.kind, sym: "", float: false))
         if s.kind == 4
             # The float's bits.
-            a.fmov_xd(1, fpr(s.a, X0))
+            self.a.fmov_xd(1, self.fpr(s.a, X0))
         elif s.kind != 11
-            moves.push(move_of(1, s.a))
-            moves.push(move_of(2, s.b))
+            moves.push(self.move_of(1, s.a))
+            moves.push(self.move_of(2, s.b))
         moves.push(Move(dst: 3, src: -1, imm: 0, sym: "d:h{s.site}", float: false))
         moves.push(Move(dst: 4, src: -1, imm: 0, sym: "d:o{s.op}", float: false))
         moves.push(Move(dst: 5, src: -1, imm: 0, sym: "d:t{s.site}", float: false))
-        parallel(moves)
+        self.parallel(moves)
         if s.undo == 1
-            a.alu_rr("sub", 1, 1, 2)
+            self.a.alu_rr("sub", 1, 1, 2)
         elif s.undo == 2
-            a.alu_rr("add", 1, 1, 2)
+            self.a.alu_rr("add", 1, 1, 2)
         if s.kind == 3 and s.undo != 4
             # The list's length.
-            a.ldr(2, 2, 0)
-        a.bl("rt.trap")
-        a.brk()
+            self.a.ldr(2, 2, 0)
+        self.a.bl("rt.trap")
+        self.a.brk()

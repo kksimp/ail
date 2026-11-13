@@ -30,21 +30,21 @@ pub fn Tracker.update(mut self, vals List[Observed])
     mut bumped := false
     for v in vals
         mut at := -1
-        for k in 0..values.len()
-            if values[k].name == v.name
+        for k in 0..self.values.len()
+            if self.values[k].name == v.name
                 at = k
         if at < 0
             if not bumped
-                rev += 1
+                self.rev += 1
                 bumped = true
-            values.push(v)
-            changed.push(rev)
-        elif values[at].value != v.value or values[at].ty != v.ty
+            self.values.push(v)
+            self.changed.push(self.rev)
+        elif self.values[at].value != v.value or self.values[at].ty != v.ty
             if not bumped
-                rev += 1
+                self.rev += 1
                 bumped = true
-            values[at] = v
-            changed[at] = rev
+            self.values[at] = v
+            self.changed[at] = self.rev
 
 fn text(s str) str
     Json.Str(s).to_text()
@@ -61,14 +61,14 @@ pub fn authorized(req Json, token str) bool
 ## empty) that changed after revision `since`.
 pub fn Tracker.observe(self, names List[str], since int) str
     mut parts := List[str]()
-    for k in 0..values.len()
-        v := values[k]
-        if changed[k] <= since
+    for k in 0..self.values.len()
+        v := self.values[k]
+        if self.changed[k] <= since
             continue
         if names.len() > 0 and not names.contains(v.name)
             continue
         parts.push("{text(v.name)}:{v.value}")
-    "\{\"v\":1,\"rev\":{rev},\"values\":\{{parts.join(",")}}}"
+    "\{\"v\":1,\"rev\":{self.rev},\"values\":\{{parts.join(",")}}}"
 
 ## The `screen` reply (attach.wire.4): the std.screen query the request
 ## names, answered as text within its `budget`.

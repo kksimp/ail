@@ -13,11 +13,11 @@ fn Bucket.make(burst int, per_sec int) Bucket
 
 ## Level is kept in thousandths of a token so refills stay exact.
 fn Bucket.allow(mut self, now int) bool
-    elapsed := now - last
-    last = now
-    level = (level + elapsed * rate).min(cap * 1000)
-    if level >= 1000
-        level -= 1000
+    elapsed := now - self.last
+    self.last = now
+    self.level = (self.level + elapsed * self.rate).min(self.cap * 1000)
+    if self.level >= 1000
+        self.level -= 1000
         return true
     false
 
@@ -31,12 +31,12 @@ fn Window.make(max_requests int, window_ms int) Window
     Window(limit: max_requests, size: window_ms, start: 0, count: 0)
 
 fn Window.allow(mut self, now int) bool
-    slot := now - now % size
-    if slot != start
-        start = slot
-        count = 0
-    if count < limit
-        count += 1
+    slot := now - now % self.size
+    if slot != self.start
+        self.start = slot
+        self.count = 0
+    if self.count < self.limit
+        self.count += 1
         return true
     false
 

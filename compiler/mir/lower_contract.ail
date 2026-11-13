@@ -71,17 +71,17 @@ fn Lower.proofs_here(mut self) check.Proofs
 
 ## contract.prove.1: the `requires` `c` of `key` holds at the call at `pos`, so it isn't checked.
 fn Lower.req_proved(mut self, key str, c ast.Contract, pos ast.Pos) bool
-    if not proving() or (fn_file.get(key) else -1) != file or inh.of.contains(key)
+    if not self.proving() or (fn_file.get(key) else -1) != file or inh.of.contains(key)
         return false
     f := fn_decl.get(key) else return false
-    proofs_here().req.contains(check.site_key(f.name, pos, c.pos))
+    self.proofs_here().req.contains(check.site_key(f.name, pos, c.pos))
 
 ## contract.prove.1: the `ensures` `c` of the function being lowered holds at every return.
 fn Lower.ens_proved(mut self, c ast.Contract) bool
-    if not proving() or (fn_file.get(ens_label) else -1) != file
+    if not self.proving() or (fn_file.get(ens_label) else -1) != file
         return false
     f := fn_decl.get(ens_label) else return false
-    proofs_here().ens.contains(check.ens_key(f.name, c.pos))
+    self.proofs_here().ens.contains(check.ens_key(f.name, c.pos))
 
 # ---- positions ----
 
@@ -169,25 +169,25 @@ fn Lower.describe(mut self, v Val, pos ast.Pos)
         Str => call("rt.out_quoted", [v.id], Ty.Unit)
         Struct(n) =>
             slots := structs[n]
-            say("{n}(")
+            self.say("{n}(")
             for k in 0..slots.len()
                 if k > 0
-                    say(", ")
-                say("{slots[k].name}: ")
-                describe(Val(id: load(v.id, k, slots[k].ty), ty: slots[k].ty), pos)
-            say(")")
+                    self.say(", ")
+                self.say("{slots[k].name}: ")
+                self.describe(Val(id: load(v.id, k, slots[k].ty), ty: slots[k].ty), pos)
+            self.say(")")
         _ => out(v, pos)
 
 ## `a = 7, b = 0`: the receiver and parameters with their values.
 fn Lower.describe_args(mut self, args List[NameKey], pos ast.Pos)
     if args.len() == 0
-        say("no arguments")
+        self.say("no arguments")
         return
     for k in 0..args.len()
         if k > 0
-            say(", ")
-        say("{args[k].name} = ")
-        describe(Val(id: read_var(args[k].key, cur), ty: var_ty[args[k].key]), pos)
+            self.say(", ")
+        self.say("{args[k].name} = ")
+        self.describe(Val(id: read_var(args[k].key, cur), ty: var_ty[args[k].key]), pos)
 
 ## Start a contract trap: the head line is written, the message follows.
 fn Lower.trap_open(mut self, rule str, pos ast.Pos)
@@ -211,7 +211,7 @@ fn Lower.trap_close_values(mut self, pos ast.Pos, text str, args List[NameKey])
             while at > 0 and named[at - 1].name > a.name
                 at -= 1
             named.insert(at, a)
-    trap_close_listed(pos, [a.name for a in named], named)
+    self.trap_close_listed(pos, [a.name for a in named], named)
 
 ## `trap_close_values` with the values given: `labels[k]` names the value of `keys[k]`.
 fn Lower.trap_close_listed(mut self, pos ast.Pos, labels List[str], keys List[NameKey])
@@ -221,13 +221,13 @@ fn Lower.trap_close_listed(mut self, pos ast.Pos, labels List[str], keys List[Na
     call("rt.out_str", [str_value(excerpt(line, pos.line, pos.col))], Ty.Unit)
     mut extra := 0
     if keys.len() > 0
-        say("  values: ")
+        self.say("  values: ")
         for k in 0..keys.len()
             if k > 0
-                say(", ")
-            say("{labels[k]} = ")
-            describe(Val(id: read_var(keys[k].key, cur), ty: var_ty[keys[k].key]), pos)
-        say("\n")
+                self.say(", ")
+            self.say("{labels[k]} = ")
+            self.describe(Val(id: read_var(keys[k].key, cur), ty: var_ty[keys[k].key]), pos)
+        self.say("\n")
         extra = 1
     call("rt.trap_rest", [str_value(trap_frame(pos)), konst(extra, Ty.Int)], Ty.Unit)
     finish(unreachable_term())
@@ -336,17 +336,17 @@ fn Lower.req_trap(
     caller_file int,
 )
     trace_contract(label, "requires", c, konst(0, Ty.Bool))
-    trap_open("contract.req.1", pos)
-    say("`{label}` requires `{c.text}`{origin}, but it was called with ")
-    describe_args(args, pos)
+    self.trap_open("contract.req.1", pos)
+    self.say("`{label}` requires `{c.text}`{origin}, but it was called with ")
+    self.describe_args(args, pos)
     if also
-        say(", and neither do its own `requires` lines")
+        self.say(", and neither do its own `requires` lines")
     where := if callee_file != caller_file then "{src_paths[callee_file]}:" else ""
-    say(" (contract at {where}{c.pos.line}:{c.pos.col})")
+    self.say(" (contract at {where}{c.pos.line}:{c.pos.col})")
     if instr.vals
-        trap_close_values(pos, c.text, args)
+        self.trap_close_values(pos, c.text, args)
         return
-    trap_close(pos)
+    self.trap_close(pos)
 
 ## contract.req.1: before a call of `key` with the arguments `args_v`, each
 ## `requires` holds, or the program traps at the call, `pos`. An implementation's own
@@ -358,7 +358,7 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     f := contracted.get(key) else return
     mut reqs := List[ast.Contract]()
     for c in f.contracts
-        if not c.is_ensures and not req_proved(key, c, pos)
+        if not c.is_ensures and not self.req_proved(key, c, pos)
             reqs.push(c)
     mut theirs := List[ast.Contract]()
     tf := inh.of.get(key)
@@ -402,12 +402,12 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     if reqs.len() > 0 and theirs.len() > 0
         pass := new_block()
         for c in theirs
-            v := req_cond(c, their_scope, callee_file, caller_file) else break
-            ok := check_branch(v.id)
+            v := self.req_cond(c, their_scope, callee_file, caller_file) else break
+            ok := self.check_branch(v.id)
             for oc in reqs
-                w := req_cond(oc, own_scope, callee_file, caller_file) else break
-                held := check_branch(w.id)
-                req_trap(c, key, origin, true, args, pos, callee_file, caller_file)
+                w := self.req_cond(oc, own_scope, callee_file, caller_file) else break
+                held := self.check_branch(w.id)
+                self.req_trap(c, key, origin, true, args, pos, callee_file, caller_file)
                 cur = held
             jump(pass, [])
             cur = ok
@@ -416,14 +416,14 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
         cur = pass
     else
         for c in theirs
-            v := req_cond(c, their_scope, callee_file, caller_file) else break
-            ok := check_branch(v.id)
-            req_trap(c, key, origin, false, args, pos, callee_file, caller_file)
+            v := self.req_cond(c, their_scope, callee_file, caller_file) else break
+            ok := self.check_branch(v.id)
+            self.req_trap(c, key, origin, false, args, pos, callee_file, caller_file)
             cur = ok
         for c in reqs
-            v := req_cond(c, own_scope, callee_file, caller_file) else break
-            ok := check_branch(v.id)
-            req_trap(c, key, "", false, args, pos, callee_file, caller_file)
+            v := self.req_cond(c, own_scope, callee_file, caller_file) else break
+            ok := self.check_branch(v.id)
+            self.req_trap(c, key, "", false, args, pos, callee_file, caller_file)
             cur = ok
     unchecked = false
     scopes = saved
@@ -519,31 +519,31 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
     unchecked = true
     for i in 0..ens.len()
         c := ens[i]
-        if i >= inh.ens_n and ens_proved(c)
+        if i >= inh.ens_n and self.ens_proved(c)
             continue
         scopes = if i < inh.ens_n then their_scope else own_scope
         v := lower_value(c.cond, Ty.Bool) else break
         trace_contract(ens_label, "ensures", c, v.id)
-        ok := check_branch(v.id)
-        trap_open("contract.ens.1", c.pos)
+        ok := self.check_branch(v.id)
+        self.trap_open("contract.ens.1", c.pos)
         origin := if i < inh.ens_n then inh.ens_origin else ""
-        say("`{ens_label}` ensures `{c.text}`{origin}, but it returned")
+        self.say("`{ens_label}` ensures `{c.text}`{origin}, but it returned")
         if not unit
-            say(" ")
-            describe(Val(id: rv, ty: ret), c.pos)
-        say(" at {at.line}:{at.col} with ")
-        describe_args([ens_vars[k] for k in 0..ens_nargs], c.pos)
+            self.say(" ")
+            self.describe(Val(id: rv, ty: ret), c.pos)
+        self.say(" at {at.line}:{at.col} with ")
+        self.describe_args([ens_vars[k] for k in 0..ens_nargs], c.pos)
         if instr.vals
-            shown := ens_values(c)
-            trap_close_listed(c.pos, shown.0, shown.1)
+            shown := self.ens_values(c)
+            self.trap_close_listed(c.pos, shown.0, shown.1)
         else
-            trap_close(c.pos)
+            self.trap_close(c.pos)
         cur = ok
     unchecked = false
     scopes = saved
     if inv_key != ""
         me := lookup("self") else return
-        check_invariants(inv_key, read_var(me, cur), at, ens_label, at)
+        self.check_invariants(inv_key, read_var(me, cur), at, ens_label, at)
 
 # ---- invariants ----
 
@@ -572,18 +572,18 @@ fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at as
     for c in list
         v := lower_value(c.cond, Ty.Bool) else break
         trace_contract(name, "invariant", c, v.id)
-        ok := check_branch(v.id)
+        ok := self.check_branch(v.id)
         if by == ""
-            trap_open("contract.inv.2", c.pos)
-            say("`{name}` invariant `{c.text}` doesn't hold for ")
-            describe(Val(id: obj, ty: t), c.pos)
-            say(", built at {pos.line}:{pos.col} (invariant at {c.pos.line}:{c.pos.col})")
+            self.trap_open("contract.inv.2", c.pos)
+            self.say("`{name}` invariant `{c.text}` doesn't hold for ")
+            self.describe(Val(id: obj, ty: t), c.pos)
+            self.say(", built at {pos.line}:{pos.col} (invariant at {c.pos.line}:{c.pos.col})")
         else
-            trap_open("contract.inv.3", c.pos)
-            say("`{name}` invariant `{c.text}` was broken by `{by}`, which returned at {at.line}:{at.col} with self = ")
-            describe(Val(id: obj, ty: t), c.pos)
-            say(" (invariant at {c.pos.line}:{c.pos.col})")
-        trap_close(c.pos)
+            self.trap_open("contract.inv.3", c.pos)
+            self.say("`{name}` invariant `{c.text}` was broken by `{by}`, which returned at {at.line}:{at.col} with self = ")
+            self.describe(Val(id: obj, ty: t), c.pos)
+            self.say(" (invariant at {c.pos.line}:{c.pos.col})")
+        self.trap_close(c.pos)
         cur = ok
     unchecked = false
     scopes = saved

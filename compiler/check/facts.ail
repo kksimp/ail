@@ -73,6 +73,6 @@ fn Checker.anchor_locals(mut self, mark int, stmts List[ast.Stmt])
         match e
             Member(recv, _, name_pos) =>
                 fact_writes.push(name_pos)
-                record_write(recv)
-            Index(recv, _, _) => record_write(recv)
+                self.record_write(recv)
+            Index(recv, _, _) => self.record_write(recv)
             _ => return

@@ -40,31 +40,34 @@ pub fn Warm.run(
     pure bool,
     program str,
 ) Ran ! proc.ProcError
-    if native == ""
+    if self.native == ""
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
     # mcp.warm.3: a toolchain newer than the native CLI goes through the launcher, which
     # rebuilds it; the memo is dropped with the old toolchain.
-    stamp := newest([path.join(root, "compiler/**/*.ail"), path.join(root, "std/**/*.ail")])
-    built := fs.metadata(native) else
-        memo = Map[str, proc.Output]()
+    stamp := newest([
+        path.join(self.root, "compiler/**/*.ail"),
+        path.join(self.root, "std/**/*.ail"),
+    ])
+    built := fs.metadata(self.native) else
+        self.memo = Map[str, proc.Output]()
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
     if stamp > built.modified_ms
-        memo = Map[str, proc.Output]()
+        self.memo = Map[str, proc.Output]()
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
     mut key := ""
     if pure
         inputs := fingerprint(program, argv)
         if inputs != ""
             key = "{argv.join("\n")}\n{stamp}\n{hash.hash64(inputs)}"
-            if seen := memo.get(key)
+            if seen := self.memo.get(key)
                 return Ran(out: seen, how: "memo")
     plain := direct(argv) else
         return Ran(out: proc.run(ail, argv, stdin)?, how: "launcher")
-    out := proc.run(native, plain, stdin)?
+    out := proc.run(self.native, plain, stdin)?
     if key != ""
-        if memo.len() >= MEMO_MAX
-            memo = Map[str, proc.Output]()
-        memo[key] = out
+        if self.memo.len() >= MEMO_MAX
+            self.memo = Map[str, proc.Output]()
+        self.memo[key] = out
     Ran(out: out, how: "direct")
 
 ## The native CLI's arguments for `ail ARGV` when the launcher would only pass them on

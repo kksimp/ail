@@ -183,28 +183,28 @@ struct Folder
     insts List[Inst]
 
 fn Folder.int_of(self, v int) int?
-    d := defs[v]
+    d := self.defs[v]
     if d < 0
         return none
-    i := insts[d]
+    i := self.insts[d]
     if i.op == "const" then i.imm else none
 
 fn Folder.float_of(self, v int) float?
-    d := defs[v]
+    d := self.defs[v]
     if d < 0
         return none
-    i := insts[d]
+    i := self.insts[d]
     if i.op == "fconst" then i.fimm else none
 
 fn Folder.def(self, v int) Inst?
-    d := defs[v]
-    if d < 0 then none else insts[d]
+    d := self.defs[v]
+    if d < 0 then none else self.insts[d]
 
 ## `i` rewritten, preceded by any instruction it now needs.
 fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List[Inst]
     mut r := i
     if i.argc() == 1
-        if n := int_of(i.arg(0))
+        if n := self.int_of(i.arg(0))
             # `-1` is `neg 1`; only the smallest `int` can trap (expr.arith.1).
             if i.op == "neg" and n != MIN
                 r = konst(i.dst, 0 - n)
@@ -214,23 +214,23 @@ fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List
                 r = konst(i.dst, n.bit_not())
             elif i.op == "itof"
                 r = fkonst(i.dst, n.to_float())
-        elif x := float_of(i.arg(0))
+        elif x := self.float_of(i.arg(0))
             if i.op == "fneg"
                 r = fkonst(i.dst, -x)
     elif i.argc() == 2
-        if n := int_value(i)
+        if n := self.int_value(i)
             r = konst(i.dst, n)
-        elif x := float_value(i)
+        elif x := self.float_value(i)
             r = fkonst(i.dst, x)
         elif i.op == "div" or i.op == "rem"
             # expr.arith.3: a constant divisor other than 0 can't trap,
             # but for `MIN / -1` (expr.arith.1).
-            if d := int_of(i.arg(1))
+            if d := self.int_of(i.arg(1))
                 if d != 0 and (i.op == "rem" or d != -1)
                     r.site = -1
         elif i.op == "eq" or i.op == "ne"
-            if int_of(i.arg(1)) == 0
-                if m := low_bits(i.arg(0))
+            if self.int_of(i.arg(1)) == 0
+                if m := self.low_bits(i.arg(0))
                     # x % 2^k == 0 exactly when x's low k bits are 0.
                     mask := vals.len()
                     vals.push(Ty.Int)
@@ -238,31 +238,31 @@ fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List
                     vals.push(Ty.Int)
                     names.push("")
                     names.push("")
-                    rem := def(i.arg(0)) else i
+                    rem := self.def(i.arg(0)) else i
                     band := inst(masked, "band", [rem.arg(0), mask])
                     r = r.with_args([masked, i.arg(1)])
-                    defs.push(-1)
-                    defs.push(-1)
+                    self.defs.push(-1)
+                    self.defs.push(-1)
                     return [konst(mask, m), band, r]
     if r.dst >= 0
-        defs[r.dst] = insts.len()
-        insts.push(r)
+        self.defs[r.dst] = self.insts.len()
+        self.insts.push(r)
     [r]
 
 ## `k - 1` when `v` is `x % k` for a constant `k = 2^n`, n >= 1.
 fn Folder.low_bits(self, v int) int?
-    i := def(v)?
+    i := self.def(v)?
     if i.op != "rem"
         return none
-    k := int_of(i.arg(1))?
+    k := self.int_of(i.arg(1))?
     if k < 2 or k.bit_and(k - 1) != 0
         return none
     k - 1
 
 ## The result of an `int` operation on two constants, when it can't trap.
 fn Folder.int_value(self, i Inst) int?
-    a := int_of(i.arg(0))?
-    b := int_of(i.arg(1))?
+    a := self.int_of(i.arg(0))?
+    b := self.int_of(i.arg(1))?
     match i.op
         "add" => if b >= 0 and a <= MAX - b or b < 0 and a >= MIN - b then a + b else none
         "sub" => if b <= 0 and a <= MAX + b or b > 0 and a >= MIN + b then a - b else none
@@ -281,8 +281,8 @@ fn Folder.int_value(self, i Inst) int?
 
 ## The result of a `float` operation on two constants.
 fn Folder.float_value(self, i Inst) float?
-    a := float_of(i.arg(0))?
-    b := float_of(i.arg(1))?
+    a := self.float_of(i.arg(0))?
+    b := self.float_of(i.arg(1))?
     match i.op
         "fadd" => a + b
         "fsub" => a - b

@@ -106,18 +106,18 @@ fn num(f float) str
 ## The one-line answer for `it` (std.screen.2):
 ## `button 'Submit', red, at 412,300 100x32, enabled, links to /pay`.
 pub fn Item.line(self) str
-    mut s := "{role}"
-    if text != ""
-        s = "{s} '{text}'"
-    s = "{s}, {color_name(color)}, at {num(x)},{num(y)} {num(w)}x{num(h)}"
-    s = "{s}, {if enabled then "enabled" else "disabled"}"
-    if focused
+    mut s := "{self.role}"
+    if self.text != ""
+        s = "{s} '{self.text}'"
+    s = "{s}, {color_name(self.color)}, at {num(self.x)},{num(self.y)} {num(self.w)}x{num(self.h)}"
+    s = "{s}, {if self.enabled then "enabled" else "disabled"}"
+    if self.focused
         s = "{s}, focused"
-    if href != ""
-        s = "{s}, links to {href}"
-    if conf < 1.0
-        s = "{s}, probably ({conf}: {why})"
-    "#{id} {s}"
+    if self.href != ""
+        s = "{s}, links to {self.href}"
+    if self.conf < 1.0
+        s = "{s}, probably ({self.conf}: {self.why})"
+    "#{self.id} {s}"
 
 fn interactive(role str) bool
     role == "button"
@@ -173,18 +173,18 @@ pub fn lines(items List[Item], budget int) str
 
 ## The topmost item at point (`x`, `y`): the last one drawn (std.screen.2).
 pub fn Screen.what_is_at(self, x float, y float) str
-    mut k := items.len()
+    mut k := self.items.len()
     while k > 0
         k -= 1
-        if inside(items[k], x, y, 0.001, 0.001)
-            return items[k].line()
+        if inside(self.items[k], x, y, 0.001, 0.001)
+            return self.items[k].line()
     "nothing at {num(x)},{num(y)}"
 
 ## The items matching every non-empty criterion: `role`, colour name
 ## `color`, and `text` as a case-insensitive substring (std.screen.2).
 pub fn Screen.find(self, role str, color str, text str, budget int) str
     mut hits := List[Item]()
-    for it in items
+    for it in self.items
         if role != "" and it.role != role
             continue
         if color != "" and color_name(it.color) != color
@@ -197,7 +197,7 @@ pub fn Screen.find(self, role str, color str, text str, budget int) str
 ## The items that overlap the region (std.screen.2).
 pub fn Screen.describe(self, x float, y float, rw float, rh float, budget int) str
     mut hits := List[Item]()
-    for it in items
+    for it in self.items
         if inside(it, x, y, rw, rh)
             hits.push(it)
     lines(hits, budget)
@@ -207,7 +207,7 @@ pub fn Screen.describe(self, x float, y float, rw float, rh float, budget int) s
 pub fn Screen.changes_since(self, before Screen, budget int) str
     mut diff := List[str]()
     mut seen := Set[int]()
-    for it in items
+    for it in self.items
         seen.add(it.id)
         mut old := none
         for b in before.items

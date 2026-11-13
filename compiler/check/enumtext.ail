@@ -43,7 +43,7 @@ fn Checker.variant_for_text(self, e int, text str) str?
 fn Checker.enum_text_diag(mut self, e int, text str, at ast.Pos, what str)
     name := prog.enums[e].name
     msg := "{what} is a string, but `{name}` is an enum (type.enum.7)"
-    if v := variant_for_text(e, text)
+    if v := self.variant_for_text(e, text)
         diags.push(
             new_diag("type.enum.7", at, msg)
                 .with_help("write the variant: `{v}`")
@@ -64,7 +64,7 @@ fn Checker.enum_text_compare(mut self, op ast.BinOp, lt Ty, rhs ast.Expr) bool
         return false
     match rhs
         Str(text, at) =>
-            enum_text_diag(e, text, at, "this operand")
+            self.enum_text_diag(e, text, at, "this operand")
             true
         _ => false
 
@@ -74,8 +74,8 @@ fn Checker.enum_text_compare(mut self, op ast.BinOp, lt Ty, rhs ast.Expr) bool
 fn Checker.enum_text_pattern(mut self, e int, lit ast.Literal, at ast.Pos, mut cov Coverage) bool
     match lit
         StrLit(text) =>
-            enum_text_diag(e, text, at, "this pattern")
-            if v := variant_for_text(e, text)
+            self.enum_text_diag(e, text, at, "this pattern")
+            if v := self.variant_for_text(e, text)
                 vs := prog.enums[e].variants
                 for k in 0..vs.len()
                     if vs[k].name == v

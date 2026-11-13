@@ -107,33 +107,33 @@ fn is_member(id str) bool
 ## field and variant instead.
 fn Snap.texts_by_id(self, members bool) Map[str, str]
     mut out := Map[str, str]()
-    for d in decls
+    for d in self.decls
         if (if members then not is_member(d.1) else not is_top_decl(d.1)) or d.0.line >= 1073741824
             continue
         mut at := -1
-        for i in 0..prog.files.len()
-            if prog.files[i].base < d.0.line
+        for i in 0..self.prog.files.len()
+            if self.prog.files[i].base < d.0.line
                 at = i
-        if at < 0 or at >= texts.len()
+        if at < 0 or at >= self.texts.len()
             continue
-        out[d.1] = block_text(texts[at], d.0.line - prog.files[at].base)
+        out[d.1] = block_text(self.texts[at], d.0.line - self.prog.files[at].base)
     out
 
 ## Every id a function names, by function id.
 fn Snap.uses_of(self) Map[str, List[str]]
-    found := collect_refs(prog, analysis.symbols, analysis.weak_symbols)
+    found := collect_refs(self.prog, self.analysis.symbols, self.analysis.weak_symbols)
     mut out := Map[str, List[str]]()
     for r in found.refs
-        if r.within < 0 or r.within >= api.fn_ids.len()
+        if r.within < 0 or r.within >= self.api.fn_ids.len()
             continue
-        f := api.fn_ids[r.within]
+        f := self.api.fn_ids[r.within]
         mut list := out.get(f) else []
         list.push(r.id)
         out[f] = list
     out
 
 fn Snap.is_test(self, i int) bool
-    for a in prog.fns[i].attrs
+    for a in self.prog.fns[i].attrs
         if a.name == "test"
             return true
     false

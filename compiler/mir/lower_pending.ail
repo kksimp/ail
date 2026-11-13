@@ -33,11 +33,11 @@ fn Lower.var_of(self, v int) str?
 ## Give the pending value `v` (and every value of its variable) the type
 ## `t`; a table made by `pending_table` gets the kinds of `t`.
 fn Lower.settle_pending(mut self, v int, t Ty)
-    key := var_of(v) else
+    key := self.var_of(v) else
         vals[v] = t
         return
     for x in var_vals[key]
-        patch_table(x, t)
+        self.patch_table(x, t)
     var_ty[key] = t
     for x in var_vals[key]
         vals[x] = t
@@ -62,13 +62,13 @@ fn Lower.patch_table(mut self, v int, t Ty)
         for i in 0..blocks[b].insts.len()
             x := blocks[b].insts[i]
             if x.dst == v and x.op == "call" and x.name == "rt.map_new"
-                if const_at(x.arg(0)) != -1
+                if self.const_at(x.arg(0)) != -1
                     return
                 for a in 0..3
-                    set_const(x.arg(a), kinds[a])
+                    self.set_const(x.arg(a), kinds[a])
                 # A composite key's kind is its shape, a string (lower_keys.ail).
                 if not is_key_ty(kt)
-                    set_str(x.arg(0), shape_of(kt, []))
+                    self.set_str(x.arg(0), shape_of(kt, []))
                 return
 
 ## The value of the `const` that defines `v`, else -2.
@@ -101,7 +101,7 @@ fn Lower.settle_map(mut self, m Val, kt Ty, vt Ty, pos ast.Pos) bool
     if not key_ok(kt) or not is_value_ty(vt)
         problem(pos, "not in the native subset yet: a map of `{kt.name()}` to `{vt.name()}`")
         return false
-    settle_pending(m.id, Ty.Map(key: kt, val: vt))
+    self.settle_pending(m.id, Ty.Map(key: kt, val: vt))
     true
 
 ## `s.add(x)` on a pending table: it is a `Set` of `x`'s type.
@@ -110,7 +110,7 @@ fn Lower.settle_set_add(mut self, s Val, args List[ast.Arg], npos ast.Pos) Val?
     if not key_ok(x.ty)
         return unsupported(npos, "a set of `{x.ty.name()}`")
     t := Ty.Set(x.ty)
-    settle_pending(s.id, t)
+    self.settle_pending(s.id, t)
     Val(id: call("rt.map_add", [s.id, convert(x, x.ty, npos)], Ty.Bool), ty: Ty.Bool)
 
 ## `m.push(k, x)` on a pending table: it is a `Map` of `k`'s type to a
@@ -122,7 +122,7 @@ fn Lower.settle_map_push(mut self, m Val, args List[ast.Arg], npos ast.Pos) Val?
     if not key_ok(k.ty) or not is_value_ty(vt)
         return unsupported(npos, "a map of `{k.ty.name()}` to `{vt.name()}`")
     t := Ty.Map(key: k.ty, val: vt)
-    settle_pending(m.id, t)
+    self.settle_pending(m.id, t)
     map_push_vals(Val(id: m.id, ty: t), vt, convert(k, k.ty, npos), x, args[1].value, npos)
 
 ## `x = e` on a pending `[]` or `{}`: `e`'s type, when it gives one.
@@ -133,7 +133,7 @@ fn Lower.settle_coll(mut self, target ast.Expr, ty Ty, r Val) Ty
         Name(n, _) =>
             key := lookup(n) else return ty
             for x in var_vals[key]
-                patch_table(x, r.ty)
+                self.patch_table(x, r.ty)
             var_ty[key] = r.ty
             for x in var_vals[key]
                 vals[x] = r.ty
@@ -156,5 +156,5 @@ fn Lower.settle_by_want(mut self, v Val, want Ty) bool
         _ => true
     if not ok
         return false
-    settle_pending(v.id, want)
+    self.settle_pending(v.id, want)
     true

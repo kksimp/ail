@@ -33,7 +33,7 @@ fn Ant.step(mut self)
 
 fn Ant.coloured(self) int
     mut n := 0
-    for c in cells
+    for c in self.cells
         if c != 0
             n += 1
     n
@@ -44,9 +44,9 @@ fn Ant.render(self) List[str]
     for r in 0..SIZE
         mut row := List[str]()
         for c in 0..SIZE
-            if r == y and c == x
-                row.push(arrows[heading])
-            elif cells[r * SIZE + c] != 0
+            if r == self.y and c == self.x
+                row.push(arrows[self.heading])
+            elif self.cells[r * SIZE + c] != 0
                 row.push("#")
             else
                 row.push(".")

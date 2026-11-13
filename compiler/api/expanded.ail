@@ -16,7 +16,7 @@ fn Api.generated(self, im ast.ImplDecl) ast.Generated?
 ## (ct.gen.1), each with `origin` and `text`.
 fn Api.expanded_methods(self, im ast.ImplDecl) List[Item]
     mut items := [fn_item(m) for m in im.methods if not in_generated(im, prog.fns[m].pos)]
-    g := generated(im) else return items
+    g := self.generated(im) else return items
     base := prog.files[g.file].base
     lines := if g.file < texts.len() then texts[g.file].lines() else List[str]()
     mut fns := [i for i in 0..prog.fns.len() if in_generated(im, prog.fns[i].pos)]
@@ -46,7 +46,7 @@ fn Api.with_derived(self, im ast.ImplDecl, base List[Kv]) List[Kv]
     if not expanded
         return base
     mut out := base
-    if g := generated(im)
+    if g := self.generated(im)
         out.push(kv("derived_by", J.Str("fn:{g.generator}")))
         return out
     mut built_in := false

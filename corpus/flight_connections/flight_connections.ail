@@ -26,9 +26,9 @@ struct Trip
     legs int
 
 fn Trip.can_board(self, f Flight) bool
-    if legs == 0
+    if self.legs == 0
         return true
-    f.dep >= arrive + 45
+    f.dep >= self.arrive + 45
 
 fn Trip.take(self, f Flight) Trip
     mut ids2 := self.ids
@@ -39,9 +39,9 @@ fn Trip.take(self, f Flight) Trip
         here: f.dst,
         arrive: f.arr,
         ids: ids2,
-        price: price + f.cost,
+        price: self.price + f.cost,
         visited: seen2,
-        legs: legs + 1,
+        legs: self.legs + 1,
     )
 
 fn parse_time(s str) int ! RouteError

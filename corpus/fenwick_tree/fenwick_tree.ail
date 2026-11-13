@@ -23,26 +23,26 @@ fn Fenwick.prefix(self, pos int) int
     mut i := pos
     mut total := 0
     while i > 0
-        total += cells[i]
+        total += self.cells[i]
         low := i & (0 - i)
         i -= low
     total
 
 fn Fenwick.range(self, l int, r int) int
-    prefix(r) - prefix(l - 1)
+    self.prefix(r) - self.prefix(l - 1)
 
 ## Smallest position whose prefix sum reaches k (all cells must be >= 0).
 fn Fenwick.kth(self, k int) int
     mut pos := 0
     mut left := k
     mut step := 1
-    while step * 2 <= size
+    while step * 2 <= self.size
         step *= 2
     while step > 0
         nxt := pos + step
-        if nxt <= size and cells[nxt] < left
+        if nxt <= self.size and self.cells[nxt] < left
             pos = nxt
-            left -= cells[nxt]
+            left -= self.cells[nxt]
         step = step / 2
     pos + 1
 

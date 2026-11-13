@@ -7,7 +7,7 @@ use ast
 ## unsafe.block.3: the code at `at` is in a package that may contain `unsafe`.
 fn Checker.unsafe_opt_in(mut self, at ast.Pos)
     allowed := prog.unsafe_allowed else return
-    pkg := package_at(at)
+    pkg := self.package_at(at)
     if is_prelude_line(at.line) or allowed.contains(pkg)
         return
     who := if pkg == "" then "this package" else "dependency `{pkg}`"
@@ -24,7 +24,7 @@ fn Checker.unsafe_opt_in(mut self, at ast.Pos)
 fn Checker.driver_opt_in(mut self, what str, at ast.Pos)
     if is_prelude_line(at.line)
         return
-    pkg := package_at(at)
+    pkg := self.package_at(at)
     mut help := "run or build it with `--unsafe driver`, or give it an `ail.pkg` that says `unsafe driver`"
     mut who := "this program"
     if allowed := prog.unsafe_allowed
@@ -219,10 +219,10 @@ fn Checker.ptr_method(
         return Ty.Unknown
     std_any.add(pos_key(at))
     if n != "is_null"
-        note_unsafe_op("`{n}` on a raw pointer", at)
+        self.note_unsafe_op("`{n}` on a raw pointer", at)
     if n.ends_with("_volatile")
         # unsafe.hw.3: a volatile access is hardware access.
-        driver_opt_in("`{n}` on a raw pointer", at)
+        self.driver_opt_in("`{n}` on a raw pointer", at)
     mut params := List[Ty]()
     mut ret := Ty.Bool
     if n == "read" or n == "read_volatile"

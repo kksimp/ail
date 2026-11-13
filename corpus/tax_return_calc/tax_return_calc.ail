@@ -89,11 +89,11 @@ fn prepare(line str) Filing ! TaxError
     )
 
 fn Filing.describe(self) str
-    owed := tax - credit
-    diff := owed - withheld
-    eff := if gross > 0 then owed * 1000 / gross else 0
+    owed := self.tax - self.credit
+    diff := owed - self.withheld
+    eff := if self.gross > 0 then owed * 1000 / self.gross else 0
     result := if diff <= 0 then "refund {-diff}" else "due {diff}"
-    "{who}: gross {gross} taxable {taxable} tax {tax} credit {credit} owed {owed} -> {result} (eff {eff / 10}.{eff % 10}%)"
+    "{self.who}: gross {self.gross} taxable {self.taxable} tax {self.tax} credit {self.credit} owed {owed} -> {result} (eff {eff / 10}.{eff % 10}%)"
 
 fn main()
     lines := [

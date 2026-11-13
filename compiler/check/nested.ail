@@ -57,7 +57,7 @@ fn Checker.nest_errors(self) int
 ## (expr.match.5); an unguarded arm's alternatives join `st`.
 @allow("expr.match.3")
 fn Checker.nest_arm(mut self, t Ty, arm ast.Arm, mut st NestRows) List[Binding]
-    before := nest_errors()
+    before := self.nest_errors()
     mut alts := [arm.pat]
     match arm.pat
         Alt(xs, _) => alts = xs
@@ -72,7 +72,7 @@ fn Checker.nest_arm(mut self, t Ty, arm ast.Arm, mut st NestRows) List[Binding]
                 "`_` can't be one of several alternatives; it already matches everything",
             )
         mut names := List[Binding]()
-        shapes.push(npat(t, a, mut names))
+        shapes.push(self.npat(t, a, mut names))
         if alts.len() > 1 and names.len() > 0
             err_help(
                 "expr.match.8",
@@ -82,21 +82,21 @@ fn Checker.nest_arm(mut self, t Ty, arm ast.Arm, mut st NestRows) List[Binding]
             )
         elif alts.len() == 1
             binds = names
-    if nest_errors() > before
+    if self.nest_errors() > before
         st.broken = true
         return binds
     for k in 0..alts.len()
-        if not np_useful(st.rows, [shapes[k]], [t])
+        if not self.np_useful(st.rows, [shapes[k]], [t])
             err(
                 "expr.match.5",
                 pattern_pos(alts[k]),
                 "this arm can never match; earlier arms cover every value it matches",
             )
         elif arm.guard == none and is_wild(alts[k])
-            nest_wild_warn(t, st, pattern_pos(alts[k]))
+            self.nest_wild_warn(t, st, pattern_pos(alts[k]))
         if arm.guard == none
             st.rows.push([shapes[k]])
-            if v := top_variant(t, alts[k])
+            if v := self.top_variant(t, alts[k])
                 st.named[v] = true
     binds
 
@@ -133,7 +133,7 @@ fn Checker.nest_wild_warn(mut self, t Ty, st NestRows, at ast.Pos)
 fn Checker.nest_missing(mut self, t Ty, st NestRows, arms List[ast.Arm], at ast.Pos)
     if st.broken
         return
-    ws := np_missing(st.rows, [t], NEST_MISSING_MAX)
+    ws := self.np_missing(st.rows, [t], NEST_MISSING_MAX)
     if ws.len() == 0
         return
     cases := [w[0] for w in ws]
@@ -161,13 +161,13 @@ fn Checker.nest_missing(mut self, t Ty, st NestRows, arms List[ast.Arm], at ast.
     match p
         Wildcard => return NCov.Any
         BindName(n, at) =>
-            nbind(t, n, at, mut names)
+            self.nbind(t, n, at, mut names)
             return NCov.Any
         Alt(alts, _) =>
             mut out := List[NCov]()
             for a in alts
                 mut inner := List[Binding]()
-                out.push(npat(t, a, mut inner))
+                out.push(self.npat(t, a, mut inner))
                 if inner.len() > 0
                     err_help(
                         "expr.match.8",
@@ -207,20 +207,20 @@ fn Checker.nest_missing(mut self, t Ty, st NestRows, arms List[ast.Arm], at ast.
                 return NCov.Any
             mut out := List[NCov]()
             for k in 0..ps.len()
-                out.push(npat(xs[k], ps[k], mut names))
+                out.push(self.npat(xs[k], ps[k], mut names))
             return NCov.Con(key: "()", args: out)
         Variant(q, n, given, at) =>
             if is_record(t)
-                return nstruct(t, n, at, none, given, none, mut names)
-            return nvariant(t, q, n, at, none, given, none, mut names)
+                return self.nstruct(t, n, at, none, given, none, mut names)
+            return self.nvariant(t, q, n, at, none, given, none, mut names)
         Nested(q, n, fields, at) =>
             if is_record(t)
-                return nstruct(t, n, at, none, none, fields, mut names)
-            return nvariant(t, q, n, at, none, none, fields, mut names)
+                return self.nstruct(t, n, at, none, none, fields, mut names)
+            return self.nvariant(t, q, n, at, none, none, fields, mut names)
         StructPat(q, n, labels, fields, at) =>
             if is_record(t)
-                return nstruct(t, n, at, labels, none, fields, mut names)
-            return nvariant(t, q, n, at, labels, none, fields, mut names)
+                return self.nstruct(t, n, at, labels, none, fields, mut names)
+            return self.nvariant(t, q, n, at, labels, none, fields, mut names)
     NCov.Any
 
 ## The coverage key of a literal pattern; `true` and `false` are `bool`'s
@@ -293,13 +293,13 @@ fn Checker.nvariant(
             "match it with a pattern of its type, or `_`",
         )
     if e < 0
-        nquiet(given, subs, mut names)
+        self.nquiet(given, subs, mut names)
         return NCov.Any
     decl := prog.enums[e]
     if q := qualifier
         if q != decl.name
             err("expr.match.4", at, "`{q}.{n}` isn't a variant of `{decl.name}`")
-            nquiet(given, subs, mut names)
+            self.nquiet(given, subs, mut names)
             return NCov.Any
     v := variant_index(e, n) else
         known := [x.name for x in decl.variants]
@@ -307,7 +307,7 @@ fn Checker.nvariant(
         if near := suggest(n, known)
             d = d.did_you_mean(n, near)
         diags.push(d)
-        nquiet(given, subs, mut names)
+        self.nquiet(given, subs, mut names)
         return NCov.Any
     symbols[pos_key(at)] = "variant:{decl.name}.{n}"
     fields := decl.variants[v].fields
@@ -328,21 +328,21 @@ fn Checker.nvariant(
             "`{n}` has {count(fields.len(), "field")}, but the pattern gives {written}",
             hint,
         )
-        nquiet(given, subs, mut names)
+        self.nquiet(given, subs, mut names)
         return NCov.Any
     ts := subst_all(variant_types[e][v], binds_of(enum_params[e], args))
     mut out := List[NCov]()
     if l := labels
         given_subs := subs else []
-        out = by_label([f.name for f in fields], ts, l, given_subs, "`{n}`", mut names)
+        out = self.by_label([f.name for f in fields], ts, l, given_subs, "`{n}`", mut names)
     elif g := given
         for k in 0..g.len()
             if g[k].name != "_"
-                nbind(ts[k], g[k].name, g[k].pos, mut names)
+                self.nbind(ts[k], g[k].name, g[k].pos, mut names)
             out.push(NCov.Any)
     elif s := subs
         for k in 0..s.len()
-            out.push(npat(ts[k], s[k], mut names))
+            out.push(self.npat(ts[k], s[k], mut names))
     else
         out = [NCov.Any for _ in fields]
     NCov.Con(key: "v{v}", args: out)
@@ -411,7 +411,7 @@ fn Checker.by_label(
             names.extend(tuple_pattern_names(sub))
             continue
         seen.push(lab)
-        out[idx] = npat(ts[idx], sub, mut names)
+        out[idx] = self.npat(ts[idx], sub, mut names)
     out
 
 ## `Point`, `Point(x, y)` (`given`, each a field's name binding it) or
@@ -435,7 +435,7 @@ fn Checker.nstruct(
             args = a
         _ => si = -1
     if si < 0
-        nquiet(given, subs, mut names)
+        self.nquiet(given, subs, mut names)
         return NCov.Any
     decl := prog.structs[si]
     if n != decl.name
@@ -445,13 +445,20 @@ fn Checker.nstruct(
             "`{n}` doesn't name the struct of this value, {show(t)}",
             "write `{decl.name}(field: pattern, ...)`, or `_`",
         )
-        nquiet(given, subs, mut names)
+        self.nquiet(given, subs, mut names)
         return NCov.Any
     fnames := [f.name for f in decl.fields]
     ts := subst_all(field_types[si], binds_of(struct_params[si], args))
     if l := labels
         given_subs := subs else []
-        return NCov.Con(key: "rec", args: by_label(fnames, ts, l, given_subs, "`{n}`", mut names))
+        return NCov.Con(key: "rec", args: self.by_label(
+            fnames,
+            ts,
+            l,
+            given_subs,
+            "`{n}`",
+            mut names,
+        ))
     if s := subs
         first := if fnames.len() > 0 then fnames[0] else "x"
         err_help(
@@ -460,7 +467,7 @@ fn Checker.nstruct(
             "a struct pattern matches fields by name, not by position",
             "write each as `field: pattern`, e.g. `{n}({first}: _)`",
         )
-        nquiet(none, s, mut names)
+        self.nquiet(none, s, mut names)
         return NCov.Any
     mut out := [NCov.Any for _ in fnames]
     for g in given else []
@@ -484,7 +491,7 @@ fn Checker.nstruct(
                 d = d.with_help("a bare name in a struct pattern binds the field of that name; its fields are {list_names(fnames)}")
             diags.push(d)
             continue
-        nbind(ts[idx], g.name, g.pos, mut names)
+        self.nbind(ts[idx], g.name, g.pos, mut names)
     NCov.Con(key: "rec", args: out)
 
 ## The constructors of `t` when it has finitely many: an enum's variants,
@@ -500,7 +507,7 @@ fn Checker.nstruct(
 
 ## Whether the keys `hs` take every constructor of `t`.
 fn Checker.complete(self, t Ty, hs List[str]) bool
-    cs := ctors(t) else return false
+    cs := self.ctors(t) else return false
     for c in cs
         if not hs.contains(c)
             return false
@@ -611,29 +618,29 @@ fn Checker.np_useful(self, rows List[List[NCov]], q List[NCov], ts List[Ty]) boo
         Con(k, args) =>
             mut q2 := args
             q2.extend(rest)
-            mut t2 := ctor_types(ts[0], k)
+            mut t2 := self.ctor_types(ts[0], k)
             if t2.len() != args.len()
                 t2 = [Ty.Unknown for _ in args]
             t2.extend(trest)
-            return np_useful(spec_rows(rows, k, args.len()), q2, t2)
+            return self.np_useful(spec_rows(rows, k, args.len()), q2, t2)
         Or(alts) =>
             for a in alts
                 mut q2 := [a]
                 q2.extend(rest)
-                if np_useful(rows, q2, ts)
+                if self.np_useful(rows, q2, ts)
                     return true
             return false
         Any =>
-            if not complete(ts[0], heads(rows))
-                return np_useful(default_rows(rows), rest, trest)
-            for k in ctors(ts[0]) else []
-                fts := ctor_types(ts[0], k)
+            if not self.complete(ts[0], heads(rows))
+                return self.np_useful(default_rows(rows), rest, trest)
+            for k in self.ctors(ts[0]) else []
+                fts := self.ctor_types(ts[0], k)
                 n := fts.len()
                 mut q2 := [NCov.Any for _ in 0..n]
                 q2.extend(rest)
                 mut t2 := fts
                 t2.extend(trest)
-                if np_useful(spec_rows(rows, k, n), q2, t2)
+                if self.np_useful(spec_rows(rows, k, n), q2, t2)
                     return true
             return false
     false
@@ -649,27 +656,27 @@ fn Checker.np_missing(self, rows List[List[NCov]], ts List[Ty], max int) List[Li
     t := ts[0]
     trest := ts[1..]
     hs := heads(rows)
-    if complete(t, hs)
-        for k in ctors(t) else []
-            fts := ctor_types(t, k)
+    if self.complete(t, hs)
+        for k in self.ctors(t) else []
+            fts := self.ctor_types(t, k)
             n := fts.len()
             mut t2 := fts
             t2.extend(trest)
-            for w in np_missing(spec_rows(rows, k, n), t2, max - out.len())
-                mut row := [ctor_text(t, k, w[..n])]
+            for w in self.np_missing(spec_rows(rows, k, n), t2, max - out.len())
+                mut row := [self.ctor_text(t, k, w[..n])]
                 row.extend(w[n..])
                 out.push(row)
                 if out.len() >= max
                     return out
         return out
-    ws := np_missing(default_rows(rows), trest, max)
+    ws := self.np_missing(default_rows(rows), trest, max)
     if ws.len() == 0
         return out
     mut firsts := ["_"]
     if hs.len() > 0
-        if cs := ctors(t)
+        if cs := self.ctors(t)
             firsts = [
-                ctor_text(t, k, ["_" for _ in ctor_types(t, k)])
+                self.ctor_text(t, k, ["_" for _ in self.ctor_types(t, k)])
                 for k in cs if not hs.contains(k)
             ]
     for f in firsts

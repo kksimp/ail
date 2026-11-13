@@ -113,8 +113,8 @@ fn Lower.lower_net_module(mut self, name str, npos ast.Pos, args List[ast.Arg]) 
         # position, so the runtime gets their texts.
         t6 := trap_texts("std.net.6", npos)
         t19 := trap_texts("std.net.19", npos)
-        return net_call(f, [], args, npos, [t6[0], t19[0], t6[1]])
-    net_call(f, [], args, npos, [])
+        return self.net_call(f, [], args, npos, [t6[0], t19[0], t6[1]])
+    self.net_call(f, [], args, npos, [])
 
 ## `x.NAME(...)` on a `net.Conn` or `net.Listener`, from `struct_call`.
 fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
@@ -125,7 +125,7 @@ fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos 
     # a `Request` names its server in the last.
     word := if key.starts_with("net.Exchange.") then 1 else if key
         == "net.Request.stop" then 7 else if key.starts_with("net.Body.") then 3 else 0
-    net_call(f, [load(r.id, word, Ty.Int)], args, pos, [])
+    self.net_call(f, [load(r.id, word, Ty.Int)], args, pos, [])
 
 ## Emit the call of `f` with the leading values `lead`, `args`, and the
 ## trailing values `after`.

@@ -23,20 +23,20 @@ fn tokenize(src str) List[str]
     out
 
 fn Parser.peek(self) str
-    if pos < toks.len()
-        return toks[pos]
+    if self.pos < self.toks.len()
+        return self.toks[self.pos]
     ""
 
 fn Parser.take(mut self) str
-    t := peek()
-    pos += 1
+    t := self.peek()
+    self.pos += 1
     t
 
 fn Parser.expr(mut self) int
-    mut v := term()
-    while peek() == "+" or peek() == "-"
-        op := take()
-        r := term()
+    mut v := self.term()
+    while self.peek() == "+" or self.peek() == "-"
+        op := self.take()
+        r := self.term()
         if op == "+"
             v += r
         else
@@ -44,29 +44,29 @@ fn Parser.expr(mut self) int
     v
 
 fn Parser.term(mut self) int
-    mut v := factor()
-    while peek() == "*" or peek() == "/"
-        op := take()
-        r := factor()
+    mut v := self.factor()
+    while self.peek() == "*" or self.peek() == "/"
+        op := self.take()
+        r := self.factor()
         if op == "*"
             v *= r
         elif r == 0
-            bad = true
+            self.bad = true
         else
             v = v / r
     v
 
 fn Parser.factor(mut self) int
-    t := take()
+    t := self.take()
     if t == "("
-        v := expr()
-        if take() != ")"
-            bad = true
+        v := self.expr()
+        if self.take() != ")"
+            self.bad = true
         return v
     if t == "-"
-        return 0 - factor()
+        return 0 - self.factor()
     n := t.to_int() else
-        bad = true
+        self.bad = true
         return 0
     n
 

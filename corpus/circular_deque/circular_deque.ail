@@ -13,43 +13,43 @@ fn Ring.new() Ring
 
 fn Ring.grow(mut self)
     mut bigger := List[int]()
-    for i in 0..size
-        bigger.push(buf[(head + i) % buf.len()])
-    while bigger.len() < buf.len() * 2
+    for i in 0..self.size
+        bigger.push(self.buf[(self.head + i) % self.buf.len()])
+    while bigger.len() < self.buf.len() * 2
         bigger.push(0)
-    buf = bigger
-    head = 0
-    grows += 1
+    self.buf = bigger
+    self.head = 0
+    self.grows += 1
 
 fn Ring.push_back(mut self, x int)
-    if size == buf.len()
+    if self.size == self.buf.len()
         self.grow()
-    self.buf[(head + size) % buf.len()] = x
-    size += 1
+    self.buf[(self.head + self.size) % self.buf.len()] = x
+    self.size += 1
 
 fn Ring.push_front(mut self, x int)
-    if size == buf.len()
+    if self.size == self.buf.len()
         self.grow()
-    head = (head + buf.len() - 1) % buf.len()
-    self.buf[head] = x
-    size += 1
+    self.head = (self.head + self.buf.len() - 1) % self.buf.len()
+    self.buf[self.head] = x
+    self.size += 1
 
 fn Ring.pop_front(mut self) int?
-    if size == 0
+    if self.size == 0
         return none
-    v := buf[head]
-    head = (head + 1) % buf.len()
-    size -= 1
+    v := self.buf[self.head]
+    self.head = (self.head + 1) % self.buf.len()
+    self.size -= 1
     return v
 
 fn Ring.pop_back(mut self) int?
-    if size == 0
+    if self.size == 0
         return none
-    size -= 1
-    return buf[(head + size) % buf.len()]
+    self.size -= 1
+    return self.buf[(self.head + self.size) % self.buf.len()]
 
 fn Ring.items(self) List[int]
-    [buf[(head + i) % buf.len()] for i in 0..size]
+    [self.buf[(self.head + i) % self.buf.len()] for i in 0..self.size]
 
 fn run(script str) List[str]
     mut ring := Ring.new()

@@ -279,9 +279,9 @@ fn infer_effects(prog ast.Program, fx Facts) Effects
 fn Effects.of_walk(self, prog ast.Program, w Walked) Map[str, str]
     mut out := w.direct
     for j in w.calls
-        for e in sets[j]
+        for e in self.sets[j]
             if impure(e) and not out.contains(e)
-                out[e] = chain(prog, j, e)
+                out[e] = self.chain(prog, j, e)
     out
 
 ## `name` or `Type.name`; a function of an `impl` block is named after the
@@ -295,15 +295,15 @@ fn display_name(prog ast.Program, f ast.FnDecl) str
 ## The shortest chain of calls from function `from` to the source of effect
 ## `e`, e.g. `main -> save -> fs.write_text`.
 fn Effects.chain(self, prog ast.Program, from int, e str) str
-    mut prev := [-1 for _ in 0..sets.len()]
-    mut seen := [false for _ in 0..sets.len()]
+    mut prev := [-1 for _ in 0..self.sets.len()]
+    mut seen := [false for _ in 0..self.sets.len()]
     mut queue := [from]
     seen[from] = true
     mut head := 0
     while head < queue.len()
         i := queue[head]
         head += 1
-        if source := direct[i].get(e)
+        if source := self.direct[i].get(e)
             mut path := [source]
             mut at := i
             while at >= 0
@@ -311,8 +311,8 @@ fn Effects.chain(self, prog ast.Program, from int, e str) str
                 at = prev[at]
             path.reverse()
             return path.join(" -> ")
-        for j in calls[i]
-            if not seen[j] and sets[j].contains(e)
+        for j in self.calls[i]
+            if not seen[j] and self.sets[j].contains(e)
                 seen[j] = true
                 prev[j] = i
                 queue.push(j)
@@ -339,7 +339,7 @@ fn signature_effects(f ast.FnDecl) Map[str, str]
 fn Checker.check_pure(self) List[Diag]
     if [f for f in prog.fns if has_attr(f, "pure")].len() == 0
         return []
-    fx := infer_effects(prog, facts())
+    fx := infer_effects(prog, self.facts())
     mut out := List[Diag]()
     for i in 0..prog.fns.len()
         f := prog.fns[i]
@@ -364,7 +364,7 @@ fn Checker.check_pure(self) List[Diag]
 fn Checker.check_caps(self) List[Diag]
     if [f for f in prog.fns if has_attr(f, "caps")].len() == 0
         return []
-    fx := infer_effects(prog, facts())
+    fx := infer_effects(prog, self.facts())
     mut out := List[Diag]()
     for i in 0..prog.fns.len()
         f := prog.fns[i]
@@ -506,7 +506,7 @@ fn Checker.check_denied(self) List[Diag]
             main = i
     if main < 0
         return []
-    fx := infer_effects(prog, facts())
+    fx := infer_effects(prog, self.facts())
     mut out := List[Diag]()
     for e in fx.sets[main]
         if denied.contains(e)
@@ -562,7 +562,7 @@ fn Checker.check_contract_effects(self) List[Diag]
             named.push(NamedContract(c: c, owner: s.name, word: "invariant"))
     if named.len() == 0
         return []
-    facts_now := facts()
+    facts_now := self.facts()
     fx := infer_effects(prog, facts_now)
     mut out := List[Diag]()
     for nc in named
@@ -600,7 +600,7 @@ struct NamedContract
 fn Checker.check_constants(self) List[Diag]
     if prog.consts.len() == 0
         return []
-    facts_now := facts()
+    facts_now := self.facts()
     mut walked := List[Walked]()
     mut any_call := false
     for c in prog.consts
@@ -643,76 +643,76 @@ fn Checker.check_constants(self) List[Diag]
     out
 
 fn Walked.add(mut self, e str, source str)
-    if not direct.contains(e)
-        direct[e] = source
+    if not self.direct.contains(e)
+        self.direct[e] = source
 
 fn Walked.call(mut self, i int)
-    if not calls.contains(i)
-        calls.push(i)
+    if not self.calls.contains(i)
+        self.calls.push(i)
 
 fn Walked.std_traits(mut self, fx Facts)
     for m in fx.std_impls
-        call(m)
+        self.call(m)
 
 fn Walked.block(mut self, prog ast.Program, fx Facts, b List[ast.Stmt])
     for s in b
-        stmt(prog, fx, s)
+        self.stmt(prog, fx, s)
 
 fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
     match s
         Let(_, _, _, value, o) =>
-            expr(prog, fx, value)
+            self.expr(prog, fx, value)
             if e := o
-                otherwise(prog, fx, e)
+                self.otherwise(prog, fx, e)
         Assign(target, _, value, _) =>
-            ref_write(fx, target)
-            expr(prog, fx, target)
-            expr(prog, fx, value)
+            self.ref_write(fx, target)
+            self.expr(prog, fx, target)
+            self.expr(prog, fx, value)
         While(c, body, _) =>
-            expr(prog, fx, c)
-            block(prog, fx, body)
+            self.expr(prog, fx, c)
+            self.block(prog, fx, body)
         For(_, _, _, _, iter, body, _) =>
-            expr(prog, fx, iter)
+            self.expr(prog, fx, iter)
             # expr.iter.1: the loop calls the iterable's `next`.
             if i := fx.iter_nexts.get(pos_key(expr_pos(iter)))
-                call(i)
-            block(prog, fx, body)
+                self.call(i)
+            self.block(prog, fx, body)
         With(mutex, _, _, body, _) =>
-            expr(prog, fx, mutex)
-            block(prog, fx, body)
+            self.expr(prog, fx, mutex)
+            self.block(prog, fx, body)
         Break => return
         Continue => return
         Return(v, _) =>
             if e := v
-                expr(prog, fx, e)
-        Eval(e) => expr(prog, fx, e)
-        LetTuple(_, value, _) => expr(prog, fx, value)
+                self.expr(prog, fx, e)
+        Eval(e) => self.expr(prog, fx, e)
+        LetTuple(_, value, _) => self.expr(prog, fx, value)
         # type.fn.10: a local function's effects are the enclosing function's.
-        LocalFn(d) => block(prog, fx, d.body else [])
+        LocalFn(d) => self.block(prog, fx, d.body else [])
         Handle(value, o) =>
-            expr(prog, fx, value)
-            otherwise(prog, fx, o)
-        Defer(inner, _) => stmt(prog, fx, inner)
+            self.expr(prog, fx, value)
+            self.otherwise(prog, fx, o)
+        Defer(inner, _) => self.stmt(prog, fx, inner)
         # unsafe.block.5, eff.infer.4: an `unsafe` block gives `unsafe`.
         Unsafe(body, _) =>
-            add("unsafe", "an `unsafe` block")
-            block(prog, fx, body)
+            self.add("unsafe", "an `unsafe` block")
+            self.block(prog, fx, body)
         Select(arms, _) =>
             for h in ast.select_heads(arms)
-                expr(prog, fx, h)
+                self.expr(prog, fx, h)
             for body in ast.select_bodies(arms)
-                block(prog, fx, body)
+                self.block(prog, fx, body)
 
 ## eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`.
 fn Walked.ref_write(mut self, fx Facts, place ast.Expr)
     if fx.ref_writes.contains(pos_key(expr_pos(place)))
-        add("mutates", "a write through a `ref`")
+        self.add("mutates", "a write through a `ref`")
 
 fn Walked.otherwise(mut self, prog ast.Program, fx Facts, o ast.Else)
     match o
-        Fallback(e) => expr(prog, fx, e)
-        Leave(s) => stmt(prog, fx, s)
-        Handler(_, body, _) => block(prog, fx, body)
+        Fallback(e) => self.expr(prog, fx, e)
+        Leave(s) => self.stmt(prog, fx, s)
+        Handler(_, body, _) => self.block(prog, fx, body)
 
 fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
     match e
@@ -721,131 +721,131 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
         # the value can be called wherever it ends up.
         Name(_, at) =>
             if i := fx.fn_values.get(pos_key(at))
-                call(i)
+                self.call(i)
         Interp(parts, _) =>
-            std_traits(fx)
+            self.std_traits(fx)
             for p in parts
                 match p
                     Lit => continue
-                    Hole(x) => expr(prog, fx, x)
-                    Fmt(x, _) => expr(prog, fx, x)
+                    Hole(x) => self.expr(prog, fx, x)
+                    Fmt(x, _) => self.expr(prog, fx, x)
         ListLit(items, _) =>
             for x in items
-                expr(prog, fx, x)
+                self.expr(prog, fx, x)
         SetLit(items, _) =>
             for x in items
-                expr(prog, fx, x)
+                self.expr(prog, fx, x)
         TupleLit(items, _) =>
             for x in items
-                expr(prog, fx, x)
+                self.expr(prog, fx, x)
         Comp(_, elem, value, clauses, _) =>
             for c in clauses
-                expr(prog, fx, c.iter)
+                self.expr(prog, fx, c.iter)
                 if i := fx.iter_nexts.get(pos_key(expr_pos(c.iter)))
-                    call(i)
+                    self.call(i)
                 if x := c.cond
-                    expr(prog, fx, x)
-            expr(prog, fx, elem)
+                    self.expr(prog, fx, x)
+            self.expr(prog, fx, elem)
             if v := value
-                expr(prog, fx, v)
+                self.expr(prog, fx, v)
         MapLit(entries, _) =>
             for en in entries
-                expr(prog, fx, en.key)
-                expr(prog, fx, en.value)
+                self.expr(prog, fx, en.key)
+                self.expr(prog, fx, en.value)
         Call(callee, args, _) =>
             if n := callee_name(callee)
                 # eff.infer.4: `print` writes to standard output.
                 if n == "print"
-                    add("io", "print")
-                    std_traits(fx)
+                    self.add("io", "print")
+                    self.std_traits(fx)
                 elif i := fx.free.get(n)
-                    call(i)
+                    self.call(i)
             else
-                expr(prog, fx, callee)
+                self.expr(prog, fx, callee)
             for a in args
                 if a.mutable
-                    ref_write(fx, a.value)
+                    self.ref_write(fx, a.value)
             for a in args
-                expr(prog, fx, a.value)
+                self.expr(prog, fx, a.value)
         Method(recv, n, name_pos, args) =>
             key := pos_key(name_pos)
             if i := fx.targets.get(key)
-                call(i)
+                self.call(i)
             elif tr := fx.assoc_calls.get(key)
                 # `T.zero()` may run any implementation (trait.assoc.3, eff.infer.3).
                 for i in implementations(prog, tr, n)
-                    call(i)
+                    self.call(i)
             elif tr := fx.trait_calls.get(key)
                 for i in implementations(prog, tr, n)
-                    call(i)
+                    self.call(i)
             elif efs := std_fn_effects(fx, key, recv, n)
                 for ef in efs
-                    add(ef, "{std_head(fx, key, recv) else ""}.{n}")
+                    self.add(ef, "{std_head(fx, key, recv) else ""}.{n}")
             elif n.ends_with("_volatile") and fx.std_any.contains(key)
                 # unsafe.hw.5: a volatile access gives `hw`.
-                add("hw", "a pointer's `{n}`")
+                self.add("hw", "a pointer's `{n}`")
             elif m := fx.net_methods.get(key)
                 # std.net.14: the methods of the handles `net.serve`, `net.listen` and `net.connect` make.
                 for ef in ["net", "io"]
-                    add(ef, m)
+                    self.add(ef, m)
             elif fx.std_methods.contains(key)
                 for ef in ["ui", "io"]
-                    add(ef, "ui.Window.{n}")
+                    self.add(ef, "ui.Window.{n}")
             elif fx.regex_methods.contains(key)
                 # std.regex.9: text in, text out, so no effects.
                 regex_calls := 0
             elif not is_enum_name(prog, recv)
                 # A built-in method (`xs.sort()`, `m.get(k)`) may compare,
                 # hash or show its elements.
-                std_traits(fx)
-            ref_write(fx, recv)
+                self.std_traits(fx)
+            self.ref_write(fx, recv)
             for a in args
                 if a.mutable
-                    ref_write(fx, a.value)
-            expr(prog, fx, recv)
+                    self.ref_write(fx, a.value)
+            self.expr(prog, fx, recv)
             for a in args
-                expr(prog, fx, a.value)
-        Member(recv, _, _) => expr(prog, fx, recv)
+                self.expr(prog, fx, a.value)
+        Member(recv, _, _) => self.expr(prog, fx, recv)
         Index(recv, index, _) =>
-            expr(prog, fx, recv)
-            expr(prog, fx, index)
+            self.expr(prog, fx, recv)
+            self.expr(prog, fx, index)
         Unary(op, operand, _) =>
             # eff.infer.1: `spawn` starts a task (conc.task.1).
             if op == ast.UnOp.Spawn
-                add("spawn", "spawn")
-            expr(prog, fx, operand)
-        NewRef(value, _) => expr(prog, fx, value)
+                self.add("spawn", "spawn")
+            self.expr(prog, fx, operand)
+        NewRef(value, _) => self.expr(prog, fx, value)
         # type.fn.7: a function literal's body counts where the literal is written.
-        Closure(_, body, _) => expr(prog, fx, body)
+        Closure(_, body, _) => self.expr(prog, fx, body)
         Binary(op, lhs, rhs, _) =>
             if not is_arithmetic(op) and op != ast.BinOp.And and op != ast.BinOp.Or
-                std_traits(fx)
-            expr(prog, fx, lhs)
-            expr(prog, fx, rhs)
+                self.std_traits(fx)
+            self.expr(prog, fx, lhs)
+            self.expr(prog, fx, rhs)
         Range(lo, hi, _, _) =>
             if x := lo
-                expr(prog, fx, x)
+                self.expr(prog, fx, x)
             if x := hi
-                expr(prog, fx, x)
+                self.expr(prog, fx, x)
         If(branches, els, _, _) =>
             for br in branches
-                expr(prog, fx, cond_value(br.cond))
-                block(prog, fx, br.body)
+                self.expr(prog, fx, cond_value(br.cond))
+                self.block(prog, fx, br.body)
             if b := els
-                block(prog, fx, b)
+                self.block(prog, fx, b)
         Match(scrutinee, arms, _) =>
-            expr(prog, fx, scrutinee)
+            self.expr(prog, fx, scrutinee)
             for arm in arms
                 if g := arm.guard
-                    expr(prog, fx, g)
-                block(prog, fx, arm.body)
+                    self.expr(prog, fx, g)
+                self.block(prog, fx, arm.body)
         Try(x, context, _) =>
-            expr(prog, fx, x)
+            self.expr(prog, fx, x)
             if c := context
-                expr(prog, fx, c)
+                self.expr(prog, fx, c)
         OrElse(value, o, _) =>
-            expr(prog, fx, value)
-            otherwise(prog, fx, o)
+            self.expr(prog, fx, value)
+            self.otherwise(prog, fx, o)
 
 ## The effects of a recorded standard call `m.f(...)`; none when `f` has
 ## no listed effects.

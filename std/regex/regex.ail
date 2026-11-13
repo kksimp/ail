@@ -5,7 +5,7 @@
 ## agree on every vector (`tools/native-regex`). Offsets are characters.
 
 ## What a pattern that does not compile is (std.regex.23).
-pub error struct RegexError "{message}"
+pub error struct RegexError "{self.message}"
     pub pattern str
     pub at int
     pub kind RegexKind

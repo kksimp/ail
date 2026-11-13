@@ -33,28 +33,28 @@ fn SuffixArray.build(source str) SuffixArray
     SuffixArray(text: source, sa: order, lcp: common)
 
 fn SuffixArray.suffix(self, k int) str
-    text.slice(sa[k], text.len())
+    self.text.slice(self.sa[k], self.text.len())
 
 fn SuffixArray.distinct(self) int
-    n := text.len()
+    n := self.text.len()
     mut total := n * (n + 1) / 2
-    for v in lcp
+    for v in self.lcp
         total -= v
     total
 
 fn SuffixArray.longest_repeat(self) str
     mut best := 0
     mut loc := 0
-    for k in 0..lcp.len()
-        if lcp[k] > best
-            best = lcp[k]
+    for k in 0..self.lcp.len()
+        if self.lcp[k] > best
+            best = self.lcp[k]
             loc = k
-    text.slice(sa[loc], sa[loc] + best)
+    self.text.slice(self.sa[loc], self.sa[loc] + best)
 
 ## First rank whose suffix is >= pattern.
 fn SuffixArray.lower_bound(self, pattern str) int
     mut lo := 0
-    mut hi := sa.len()
+    mut hi := self.sa.len()
     while lo < hi
         mid := (lo + hi) / 2
         if self.suffix(mid) < pattern
@@ -66,9 +66,9 @@ fn SuffixArray.lower_bound(self, pattern str) int
 fn SuffixArray.find_all(self, pattern str) List[int]
     start := self.lower_bound(pattern)
     mut stop := start
-    while stop < sa.len() and self.suffix(stop).starts_with(pattern)
+    while stop < self.sa.len() and self.suffix(stop).starts_with(pattern)
         stop += 1
-    sa[start..stop].sorted()
+    self.sa[start..stop].sorted()
 
 fn main()
     arr := SuffixArray.build("mississippi")

@@ -867,8 +867,8 @@ fn shr_u(x int, n int) int
     x.shr(n).bit_and((1.shl(63 - n) - 1) * 2 + 1)
 
 fn Rng.next(mut self) int
-    state = state.wrapping_add(-7046029254386353131)
-    mut z := state
+    self.state = self.state.wrapping_add(-7046029254386353131)
+    mut z := self.state
     z = z.bit_xor(shr_u(z, 30)).wrapping_mul(-4658895280553007687)
     z = z.bit_xor(shr_u(z, 27)).wrapping_mul(-7723592293110705685)
     z.bit_xor(shr_u(z, 31))
@@ -881,10 +881,10 @@ fn mod_u(x int, n int) int
     ((h % n) * 2 + x.bit_and(1)) % n
 
 fn Rng.below(mut self, n int) int
-    if n == 0 then 0 else mod_u(next(), n)
+    if n == 0 then 0 else mod_u(self.next(), n)
 
 fn Rng.range(mut self, lo int, hi int) int
-    lo + below(hi - lo + 1)
+    lo + self.below(hi - lo + 1)
 
 ## FNV-1a of the name: the default seed (test.prop.3).
 fn default_seed(name str) int

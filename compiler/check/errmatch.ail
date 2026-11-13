@@ -79,8 +79,15 @@ fn Checker.member_arm(
                             )
                         else
                             mut ignored := List[Binding]()
-                            member_arm(members, a, mut whole, mut parts, mut wildcard, mut ignored)
-                    Literal | Alt | Range | TuplePat | BindName | Nested | StructPat => member_arm(
+                            self.member_arm(
+                                members,
+                                a,
+                                mut whole,
+                                mut parts,
+                                mut wildcard,
+                                mut ignored,
+                            )
+                    Literal | Alt | Range | TuplePat | BindName | Nested | StructPat => self.member_arm(
                         members,
                         a,
                         mut whole,
@@ -91,7 +98,7 @@ fn Checker.member_arm(
             none
         Variant(q, n, bindings, at) =>
             full := if qual := q then "{qual}.{n}" else n
-            hit := member_named(members, full)
+            hit := self.member_named(members, full)
             if hit >= 0
                 if bindings != none
                     err_help(
@@ -106,7 +113,7 @@ fn Checker.member_arm(
                 return members[hit]
             # `T.Variant(...)`: one variant of member error enum `T`.
             if qq := q
-                e := member_named(members, qq)
+                e := self.member_named(members, qq)
                 if e >= 0
                     match members[e]
                         Enum(index, args) =>
@@ -134,7 +141,7 @@ fn Checker.member_arm(
                                 "match the whole member: `{qq} =>`",
                             )
                             return none
-            not_member(members, full, at)
+            self.not_member(members, full, at)
             none
         _ =>
             err_help(
@@ -185,7 +192,7 @@ fn Checker.union_match(
         kept_parts := parts
         kept_wildcard := wildcard
         mut binds := List[Binding]()
-        narrowed := member_arm(members, arm.pat, mut whole, mut parts, mut wildcard, mut binds)
+        narrowed := self.member_arm(members, arm.pat, mut whole, mut parts, mut wildcard, mut binds)
         # expr.match.11: a guarded arm covers nothing.
         if arm.guard != none
             whole = kept_whole

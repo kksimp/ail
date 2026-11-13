@@ -20,13 +20,13 @@ fn Lower.text_ext_ok(mut self, t Ty) bool?
 ## The text of `x`, a value of a type `text_ext_ok` accepts.
 fn Lower.text_ext(mut self, t Ty, x int) int
     if inner := t.opt_inner()
-        return opt_text(inner, x)
+        return self.opt_text(inner, x)
     match t
         Char => call("rt.char_quoted", [x], Ty.Str)
         Bytes => call("rt.bytes_quoted", [x], Ty.Str)
         Tensor(_) => call("rt.tensor_text", [x], Ty.Str)
-        Map(k, v) => table_text(x, k, v)
-        Set(e) => table_text(x, e, none)
+        Map(k, v) => self.table_text(x, k, v)
+        Set(e) => self.table_text(x, e, none)
         Ref => ref_text(t, x)
         Any(tr) => any_text(tr, Val(id: x, ty: t)) else str_value("")
         _ => str_value("")
@@ -77,10 +77,10 @@ fn Lower.table_text(mut self, m int, kt Ty, vt Ty?) int
     seal(body)
     cur = body
     sep := call("rt.text_sep", [i], Ty.Str)
-    mut piece := value_text(kt, table_word(keys, i, kt))
+    mut piece := value_text(kt, self.table_word(keys, i, kt))
     if v := vt
         piece = call("rt.str_cat", [piece, str_value(": ")], Ty.Str)
-        piece = call("rt.str_cat", [piece, value_text(v, table_word(vws, i, v))], Ty.Str)
+        piece = call("rt.str_cat", [piece, value_text(v, self.table_word(vws, i, v))], Ty.Str)
     next := call("rt.str_cat", [call("rt.str_cat", [acc, sep], Ty.Str), piece], Ty.Str)
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int), next])
     seal(head)

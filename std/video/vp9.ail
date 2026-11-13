@@ -6,7 +6,7 @@
 ## (scaled prediction); both fail with a Vp9Error.
 
 ## Why a frame could not be decoded (std.vpx.1).
-pub error struct Vp9Error "vp9: {why}"
+pub error struct Vp9Error "vp9: {self.why}"
     pub why str
 
 ## One decoded picture (std.vpx.3): I420 planes without padding. `y` has
@@ -24,10 +24,10 @@ pub struct Frame
 
 ## The chroma plane width and height (std.vpx.3).
 pub fn Frame.cw(self) int
-    (width + 1) / 2
+    (self.width + 1) / 2
 
 pub fn Frame.ch(self) int
-    (height + 1) / 2
+    (self.height + 1) / 2
 
 # Block sizes (libvpx BLOCK_SIZE order).
 B4X4 := 0
@@ -901,12 +901,12 @@ pub fn decoder() Decoder
 ## WebM and IVF carry them. Returns the frames it shows, usually one; a hidden
 ## frame (an alternate reference) shows none.
 pub fn Decoder.decode(mut self, data bytes) List[Frame] ! Vp9Error
-    out = []
-    fail = ""
+    self.out = []
+    self.fail = ""
     n := data.len()
     if n == 0
         return Vp9Error(why: "empty packet")
-    buf = data.to_list()
+    self.buf = data.to_list()
     marker := data[n - 1].to_int()
     mut sizes := List[int]()
     if marker.bit_and(0xE0) == 0xC0
@@ -927,11 +927,11 @@ pub fn Decoder.decode(mut self, data bytes) List[Frame] ! Vp9Error
     for sz in sizes
         if sz == 0 or pos + sz > n
             return Vp9Error(why: "bad superframe index")
-        decode_frame(pos, sz)
-        if fail != ""
-            return Vp9Error(why: fail)
+        self.decode_frame(pos, sz)
+        if self.fail != ""
+            return Vp9Error(why: self.fail)
         pos += sz
-    out
+    self.out
 
 # ---------------------------------------------------------------- bit reading
 
@@ -940,65 +940,65 @@ fn Decoder.bits(self, at int, nb int) int
     mut v := 0
     for k in 0..nb
         i := (at + k).shr(3)
-        byte := if i < buf.len() then buf[i].to_int() else 0
+        byte := if i < self.buf.len() then self.buf[i].to_int() else 0
         v = v * 2 + byte.shr(7 - (at + k).bit_and(7)).bit_and(1)
     v
 
 ## The boolean decoder over `size` bytes at `p` (VP9 spec 9.2).
 fn Decoder.bd_init(mut self, p int, size int) bool
-    bd_pos = p
-    bd_end = p + size
-    bd_value = 0
-    bd_count = -8
-    bd_range = 255
-    bd_fill()
-    read(128) == 0
+    self.bd_pos = p
+    self.bd_end = p + size
+    self.bd_value = 0
+    self.bd_count = -8
+    self.bd_range = 255
+    self.bd_fill()
+    self.read(128) == 0
 
 fn Decoder.bd_fill(mut self)
-    mut shift := 40 - bd_count
+    mut shift := 40 - self.bd_count
     while shift >= 0
-        if bd_pos < bd_end
-            bd_value = bd_value.bit_or(buf[bd_pos].to_int().shl(shift))
-            bd_pos += 1
-        bd_count += 8
+        if self.bd_pos < self.bd_end
+            self.bd_value = self.bd_value.bit_or(self.buf[self.bd_pos].to_int().shl(shift))
+            self.bd_pos += 1
+        self.bd_count += 8
         shift -= 8
 
 fn Decoder.read(mut self, prob int) int
-    split := (bd_range * prob + 256 - prob).shr(8)
-    if bd_count < 0
-        bd_fill()
+    split := (self.bd_range * prob + 256 - prob).shr(8)
+    if self.bd_count < 0
+        self.bd_fill()
     big := split.shl(48)
     mut rng := split
     mut bit := 0
-    if bd_value >= big
-        rng = bd_range - split
-        bd_value -= big
+    if self.bd_value >= big
+        rng = self.bd_range - split
+        self.bd_value -= big
         bit = 1
-    sh := norm[rng]
-    bd_range = rng.shl(sh)
-    bd_value = bd_value.shl(sh)
-    bd_count -= sh
+    sh := self.norm[rng]
+    self.bd_range = rng.shl(sh)
+    self.bd_value = self.bd_value.shl(sh)
+    self.bd_count -= sh
     bit
 
 fn Decoder.literal(mut self, nb int) int
     mut v := 0
     for _ in 0..nb
-        v = v * 2 + read(128)
+        v = v * 2 + self.read(128)
     v
 
 ## The probability `i` of source `src`: the frame context, the key frame
 ## table or the segmentation probabilities.
 fn Decoder.prob(self, src int, i int) int
     if src == SRC_FC
-        return fc[i]
+        return self.fc[i]
     if src == SRC_KF
-        return kfp[i]
-    seg_probs[i]
+        return self.kfp[i]
+    self.seg_probs[i]
 
 fn Decoder.tree(mut self, t List[int], src int, base int) int
     mut i := 0
     while true
-        i = t[i + read(prob(src, base + i.shr(1)))]
+        i = t[i + self.read(self.prob(src, base + i.shr(1)))]
         if i <= 0
             break
     -i
@@ -1272,71 +1272,71 @@ INV_MAP := [
 
 ## A differential update of probability `i` of the frame context (VP9 spec 6.3.5).
 fn Decoder.diff_update(mut self, i int)
-    if read(252) == 0
+    if self.read(252) == 0
         return
     mut delp := 0
-    if read(128) == 0
-        delp = literal(4)
-    elif read(128) == 0
-        delp = literal(4) + 16
-    elif read(128) == 0
-        delp = literal(5) + 32
+    if self.read(128) == 0
+        delp = self.literal(4)
+    elif self.read(128) == 0
+        delp = self.literal(4) + 16
+    elif self.read(128) == 0
+        delp = self.literal(5) + 32
     else
-        v := literal(7)
+        v := self.literal(7)
         if v < 65
             delp = v + 64
         else
-            delp = v * 2 - 65 + read(128) + 64
+            delp = v * 2 - 65 + self.read(128) + 64
     v2 := INV_MAP[delp]
-    m := fc[i] - 1
+    m := self.fc[i] - 1
     if m * 2 <= 255
-        fc[i] = 1 + inv_recenter(v2, m)
+        self.fc[i] = 1 + inv_recenter(v2, m)
     else
-        fc[i] = 255 - inv_recenter(v2, 254 - m)
+        self.fc[i] = 255 - inv_recenter(v2, 254 - m)
 
 fn Decoder.mv_update(mut self, i int)
-    if read(252) == 1
-        fc[i] = literal(7) * 2 + 1
+    if self.read(252) == 1
+        self.fc[i] = self.literal(7) * 2 + 1
 # ---------------------------------------------------------------- frames and headers
 
 ## Sets the frame size; a new size reallocates the frame pool, so earlier
 ## references can no longer be used (std.vpx.5).
 fn Decoder.set_size(mut self, w int, h int)
-    if w == width and h == height and mem.len() > 0
+    if w == self.width and h == self.height and self.mem.len() > 0
         return
-    width = w
-    height = h
-    mi_cols = (w + 7).shr(3)
-    mi_rows = (h + 7).shr(3)
-    sb_cols = (mi_cols + 7).shr(3)
-    sb_rows = (mi_rows + 7).shr(3)
-    ystride = sb_cols * 64
-    yrows = sb_rows * 64
-    cstride = ystride / 2
-    crows = yrows / 2
-    slot_size = ystride * yrows + 2 * cstride * crows
-    nslots = 10
-    mem = bytes.zeros(slot_size * nslots).to_list()
-    slot_w = [0 for _ in 0..nslots]
-    slot_h = [0 for _ in 0..nslots]
-    mis := mi_rows * mi_cols
-    seg_cur = [0 for _ in 0..mis]
-    seg_last = [0 for _ in 0..mis]
-    prev_mvs = [0 for _ in 0..mis * 6]
-    above_part = [0 for _ in 0..sb_cols * 8]
-    above_nz = [0 for _ in 0..3 * sb_cols * 16]
+    self.width = w
+    self.height = h
+    self.mi_cols = (w + 7).shr(3)
+    self.mi_rows = (h + 7).shr(3)
+    self.sb_cols = (self.mi_cols + 7).shr(3)
+    self.sb_rows = (self.mi_rows + 7).shr(3)
+    self.ystride = self.sb_cols * 64
+    self.yrows = self.sb_rows * 64
+    self.cstride = self.ystride / 2
+    self.crows = self.yrows / 2
+    self.slot_size = self.ystride * self.yrows + 2 * self.cstride * self.crows
+    self.nslots = 10
+    self.mem = bytes.zeros(self.slot_size * self.nslots).to_list()
+    self.slot_w = [0 for _ in 0..self.nslots]
+    self.slot_h = [0 for _ in 0..self.nslots]
+    mis := self.mi_rows * self.mi_cols
+    self.seg_cur = [0 for _ in 0..mis]
+    self.seg_last = [0 for _ in 0..mis]
+    self.prev_mvs = [0 for _ in 0..mis * 6]
+    self.above_part = [0 for _ in 0..self.sb_cols * 8]
+    self.above_nz = [0 for _ in 0..3 * self.sb_cols * 16]
 
 ## Where plane `p` of frame slot `s` starts in `mem`.
 fn Decoder.plane_at(self, s int, p int) int
     if p == 0
-        return s * slot_size
-    s * slot_size + ystride * yrows + (p - 1) * cstride * crows
+        return s * self.slot_size
+    s * self.slot_size + self.ystride * self.yrows + (p - 1) * self.cstride * self.crows
 
 fn Decoder.free_slot(self) int
-    for s in 0..nslots
+    for s in 0..self.nslots
         mut used := false
         for i in 0..8
-            if ref_map[i] == s
+            if self.ref_map[i] == s
                 used = true
         if not used
             return s
@@ -1344,427 +1344,430 @@ fn Decoder.free_slot(self) int
 
 fn Decoder.setup_past_independence(mut self)
     for i in 0..32
-        seg_feat[i] = 0
-        seg_data[i] = 0
-    seg_abs = 0
-    for i in 0..seg_cur.len()
-        seg_cur[i] = 0
-        seg_last[i] = 0
-    ref_deltas = [1, 0, -1, -1]
-    mode_deltas = [0, 0]
-    fc = def_fc
-    if frame_type == 0 or error_res == 1 or reset_ctx == 3
+        self.seg_feat[i] = 0
+        self.seg_data[i] = 0
+    self.seg_abs = 0
+    for i in 0..self.seg_cur.len()
+        self.seg_cur[i] = 0
+        self.seg_last[i] = 0
+    self.ref_deltas = [1, 0, -1, -1]
+    self.mode_deltas = [0, 0]
+    self.fc = self.def_fc
+    if self.frame_type == 0 or self.error_res == 1 or self.reset_ctx == 3
         for k in 0..4
             for i in 0..FC_SIZE
-                fcs[k * FC_SIZE + i] = def_fc[i]
-    elif reset_ctx == 2
+                self.fcs[k * FC_SIZE + i] = self.def_fc[i]
+    elif self.reset_ctx == 2
         for i in 0..FC_SIZE
-            fcs[ctx_idx * FC_SIZE + i] = def_fc[i]
-    sign_bias = [0, 0, 0, 0]
-    ctx_idx = 0
+            self.fcs[self.ctx_idx * FC_SIZE + i] = self.def_fc[i]
+    self.sign_bias = [0, 0, 0, 0]
+    self.ctx_idx = 0
 
 ## Reads a frame size and the optional render size at bit `at`; returns the
 ## next bit.
 fn Decoder.read_size(mut self, at int) int
-    w := bits(at, 16) + 1
-    h := bits(at + 16, 16) + 1
-    set_size(w, h)
-    if bits(at + 32, 1) == 1
+    w := self.bits(at, 16) + 1
+    h := self.bits(at + 16, 16) + 1
+    self.set_size(w, h)
+    if self.bits(at + 32, 1) == 1
         return at + 65
     at + 33
 
 ## A signed value: `nb` bits of magnitude, then a sign bit.
 fn Decoder.sbits(self, at int, nb int) int
-    v := bits(at, nb)
-    if bits(at + nb, 1) == 1
+    v := self.bits(at, nb)
+    if self.bits(at + nb, 1) == 1
         return -v
     v
 
 fn Decoder.decode_frame(mut self, pos int, size int)
     end := pos + size
     mut at := pos * 8
-    last_frame_type = frame_type
-    last_intra_only = intra_only
-    if bits(at, 2) != 2
-        fail = "bad frame marker"
+    self.last_frame_type = self.frame_type
+    self.last_intra_only = self.intra_only
+    if self.bits(at, 2) != 2
+        self.fail = "bad frame marker"
         return
-    profile := bits(at + 2, 1) + 2 * bits(at + 3, 1)
+    profile := self.bits(at + 2, 1) + 2 * self.bits(at + 3, 1)
     at += 4
     if profile == 3
         at += 1
     if profile != 0
-        fail = "profile {profile} is not supported, only profile 0"
+        self.fail = "profile {profile} is not supported, only profile 0"
         return
-    if bits(at, 1) == 1
-        idx := bits(at + 1, 3)
-        if ref_map[idx] < 0 or slot_w[ref_map[idx]] <= 0
-            fail = "shows a missing frame"
+    if self.bits(at, 1) == 1
+        idx := self.bits(at + 1, 3)
+        if self.ref_map[idx] < 0 or self.slot_w[self.ref_map[idx]] <= 0
+            self.fail = "shows a missing frame"
             return
-        out.push(frame_out(ref_map[idx]))
+        self.out.push(self.frame_out(self.ref_map[idx]))
         return
-    frame_type = bits(at + 1, 1)
-    show_frame = bits(at + 2, 1)
-    error_res = bits(at + 3, 1)
+    self.frame_type = self.bits(at + 1, 1)
+    self.show_frame = self.bits(at + 2, 1)
+    self.error_res = self.bits(at + 3, 1)
     at += 4
-    reset_ctx = 0
+    self.reset_ctx = 0
     mut refresh := 0
-    if frame_type == 0
-        if bits(at, 24) != 0x498342
-            fail = "bad sync code"
+    if self.frame_type == 0
+        if self.bits(at, 24) != 0x498342
+            self.fail = "bad sync code"
             return
-        color_space = bits(at + 24, 3)
-        if color_space == 7
-            fail = "sRGB needs profile 1"
+        self.color_space = self.bits(at + 24, 3)
+        if self.color_space == 7
+            self.fail = "sRGB needs profile 1"
             return
-        color_range = bits(at + 27, 1)
-        at = read_size(at + 28)
+        self.color_range = self.bits(at + 27, 1)
+        at = self.read_size(at + 28)
         refresh = 255
     else
-        if show_frame == 0
-            intra_only = bits(at, 1)
+        if self.show_frame == 0
+            self.intra_only = self.bits(at, 1)
             at += 1
         else
-            intra_only = 0
-        if error_res == 0
-            reset_ctx = bits(at, 2)
+            self.intra_only = 0
+        if self.error_res == 0
+            self.reset_ctx = self.bits(at, 2)
             at += 2
-        if intra_only == 1
-            if bits(at, 24) != 0x498342
-                fail = "bad sync code"
+        if self.intra_only == 1
+            if self.bits(at, 24) != 0x498342
+                self.fail = "bad sync code"
                 return
-            refresh = bits(at + 24, 8)
-            color_space = 1
-            color_range = 0
-            at = read_size(at + 32)
+            refresh = self.bits(at + 24, 8)
+            self.color_space = 1
+            self.color_range = 0
+            at = self.read_size(at + 32)
         else
-            refresh = bits(at, 8)
+            refresh = self.bits(at, 8)
             at += 8
             for i in 0..3
-                ref_idx[i] = bits(at, 3)
-                sign_bias[1 + i] = bits(at + 3, 1)
+                self.ref_idx[i] = self.bits(at, 3)
+                self.sign_bias[1 + i] = self.bits(at + 3, 1)
                 at += 4
-                if ref_map[ref_idx[i]] < 0
-                    fail = "missing reference frame"
+                if self.ref_map[self.ref_idx[i]] < 0
+                    self.fail = "missing reference frame"
                     return
             mut found := -1
             for i in 0..3
                 if found < 0
-                    if bits(at, 1) == 1
+                    if self.bits(at, 1) == 1
                         found = i
                     at += 1
             if found >= 0
-                s := ref_map[ref_idx[found]]
-                if slot_w[s] <= 0
-                    fail = "references of another size are not supported yet"
+                s := self.ref_map[self.ref_idx[found]]
+                if self.slot_w[s] <= 0
+                    self.fail = "references of another size are not supported yet"
                     return
-                set_size(slot_w[s], slot_h[s])
-                if bits(at, 1) == 1
+                self.set_size(self.slot_w[s], self.slot_h[s])
+                if self.bits(at, 1) == 1
                     at += 33
                 else
                     at += 1
             else
-                at = read_size(at)
+                at = self.read_size(at)
             for i in 0..3
-                s := ref_map[ref_idx[i]]
-                if slot_w[s] != width or slot_h[s] != height
-                    fail = "references of another size are not supported yet"
+                s := self.ref_map[self.ref_idx[i]]
+                if self.slot_w[s] != self.width or self.slot_h[s] != self.height
+                    self.fail = "references of another size are not supported yet"
                     return
-            allow_hp = bits(at, 1)
-            if bits(at + 1, 1) == 1
-                interp_filter = SWITCHABLE
+            self.allow_hp = self.bits(at, 1)
+            if self.bits(at + 1, 1) == 1
+                self.interp_filter = SWITCHABLE
                 at += 2
             else
-                interp_filter = [1, 0, 2, 3][bits(at + 2, 2)]
+                self.interp_filter = [1, 0, 2, 3][self.bits(at + 2, 2)]
                 at += 4
-    intra = frame_type == 0 or intra_only == 1
-    if error_res == 0
-        refresh_ctx = bits(at, 1)
-        parallel = bits(at + 1, 1)
+    self.intra = self.frame_type == 0 or self.intra_only == 1
+    if self.error_res == 0
+        self.refresh_ctx = self.bits(at, 1)
+        self.parallel = self.bits(at + 1, 1)
         at += 2
     else
-        refresh_ctx = 0
-        parallel = 1
-    ctx_idx = bits(at, 2)
+        self.refresh_ctx = 0
+        self.parallel = 1
+    self.ctx_idx = self.bits(at, 2)
     at += 2
-    if intra or error_res == 1
-        setup_past_independence()
+    if self.intra or self.error_res == 1
+        self.setup_past_independence()
     # loop filter (VP9 spec 6.2.8)
-    lf_level = bits(at, 6)
-    sharpness = bits(at + 6, 3)
-    lf_delta_enabled = bits(at + 9, 1)
+    self.lf_level = self.bits(at, 6)
+    self.sharpness = self.bits(at + 6, 3)
+    self.lf_delta_enabled = self.bits(at + 9, 1)
     at += 10
-    if lf_delta_enabled == 1
+    if self.lf_delta_enabled == 1
         at += 1
-        if bits(at - 1, 1) == 1
+        if self.bits(at - 1, 1) == 1
             for i in 0..4
                 at += 1
-                if bits(at - 1, 1) == 1
-                    ref_deltas[i] = sbits(at, 6)
+                if self.bits(at - 1, 1) == 1
+                    self.ref_deltas[i] = self.sbits(at, 6)
                     at += 7
             for i in 0..2
                 at += 1
-                if bits(at - 1, 1) == 1
-                    mode_deltas[i] = sbits(at, 6)
+                if self.bits(at - 1, 1) == 1
+                    self.mode_deltas[i] = self.sbits(at, 6)
                     at += 7
     # quantizer (6.2.9)
-    base_q = bits(at, 8)
+    self.base_q = self.bits(at, 8)
     at += 8
-    y_dc_delta = 0
-    uv_dc_delta = 0
-    uv_ac_delta = 0
+    self.y_dc_delta = 0
+    self.uv_dc_delta = 0
+    self.uv_ac_delta = 0
     at += 1
-    if bits(at - 1, 1) == 1
-        y_dc_delta = sbits(at, 4)
+    if self.bits(at - 1, 1) == 1
+        self.y_dc_delta = self.sbits(at, 4)
         at += 5
     at += 1
-    if bits(at - 1, 1) == 1
-        uv_dc_delta = sbits(at, 4)
+    if self.bits(at - 1, 1) == 1
+        self.uv_dc_delta = self.sbits(at, 4)
         at += 5
     at += 1
-    if bits(at - 1, 1) == 1
-        uv_ac_delta = sbits(at, 4)
+    if self.bits(at - 1, 1) == 1
+        self.uv_ac_delta = self.sbits(at, 4)
         at += 5
-    lossless = base_q == 0 and y_dc_delta == 0 and uv_dc_delta == 0 and uv_ac_delta == 0
+    self.lossless = self.base_q == 0
+        and self.y_dc_delta == 0
+        and self.uv_dc_delta == 0
+        and self.uv_ac_delta == 0
     # segmentation (6.2.11)
-    seg_update_map = 0
-    seg_temporal = 0
-    seg_enabled = bits(at, 1)
+    self.seg_update_map = 0
+    self.seg_temporal = 0
+    self.seg_enabled = self.bits(at, 1)
     at += 1
-    if seg_enabled == 1
-        seg_update_map = bits(at, 1)
+    if self.seg_enabled == 1
+        self.seg_update_map = self.bits(at, 1)
         at += 1
-        if seg_update_map == 1
+        if self.seg_update_map == 1
             for i in 0..7
-                seg_probs[i] = 255
+                self.seg_probs[i] = 255
                 at += 1
-                if bits(at - 1, 1) == 1
-                    seg_probs[i] = bits(at, 8)
+                if self.bits(at - 1, 1) == 1
+                    self.seg_probs[i] = self.bits(at, 8)
                     at += 8
-            seg_temporal = bits(at, 1)
+            self.seg_temporal = self.bits(at, 1)
             at += 1
             for i in 0..3
-                seg_probs[7 + i] = 255
-                if seg_temporal == 1
+                self.seg_probs[7 + i] = 255
+                if self.seg_temporal == 1
                     at += 1
-                    if bits(at - 1, 1) == 1
-                        seg_probs[7 + i] = bits(at, 8)
+                    if self.bits(at - 1, 1) == 1
+                        self.seg_probs[7 + i] = self.bits(at, 8)
                         at += 8
         at += 1
-        if bits(at - 1, 1) == 1
-            seg_abs = bits(at, 1)
+        if self.bits(at - 1, 1) == 1
+            self.seg_abs = self.bits(at, 1)
             at += 1
             for i in 0..32
-                seg_feat[i] = 0
-                seg_data[i] = 0
+                self.seg_feat[i] = 0
+                self.seg_data[i] = 0
             for i in 0..8
                 for j in 0..4
                     at += 1
-                    if bits(at - 1, 1) == 1
-                        seg_feat[i * 4 + j] = 1
+                    if self.bits(at - 1, 1) == 1
+                        self.seg_feat[i * 4 + j] = 1
                         nb := [8, 6, 2, 0][j]
-                        mut v := bits(at, nb).min([255, 63, 3, 0][j])
+                        mut v := self.bits(at, nb).min([255, 63, 3, 0][j])
                         at += nb
                         if j < 2
-                            if bits(at, 1) == 1
+                            if self.bits(at, 1) == 1
                                 v = -v
                             at += 1
-                        seg_data[i * 4 + j] = v
+                        self.seg_data[i * 4 + j] = v
     for s in 0..8
-        mut q := base_q
-        if seg_feature(s, 0)
-            dv := seg_data[s * 4]
-            q = (if seg_abs == 1 then dv else q + dv).max(0).min(255)
-        dq[s * 4] = dcq[(q + y_dc_delta).max(0).min(255)]
-        dq[s * 4 + 1] = acq[q]
-        dq[s * 4 + 2] = dcq[(q + uv_dc_delta).max(0).min(255)]
-        dq[s * 4 + 3] = acq[(q + uv_ac_delta).max(0).min(255)]
+        mut q := self.base_q
+        if self.seg_feature(s, 0)
+            dv := self.seg_data[s * 4]
+            q = (if self.seg_abs == 1 then dv else q + dv).max(0).min(255)
+        self.dq[s * 4] = self.dcq[(q + self.y_dc_delta).max(0).min(255)]
+        self.dq[s * 4 + 1] = self.acq[q]
+        self.dq[s * 4 + 2] = self.dcq[(q + self.uv_dc_delta).max(0).min(255)]
+        self.dq[s * 4 + 3] = self.acq[(q + self.uv_ac_delta).max(0).min(255)]
     # tiles (6.2.13)
     mut min_log2 := 0
-    while (64).shl(min_log2) < sb_cols
+    while (64).shl(min_log2) < self.sb_cols
         min_log2 += 1
     mut max_log2 := 1
-    while sb_cols.shr(max_log2) >= 4
+    while self.sb_cols.shr(max_log2) >= 4
         max_log2 += 1
     max_log2 -= 1
-    log2_tile_cols = min_log2
-    while log2_tile_cols < max_log2
+    self.log2_tile_cols = min_log2
+    while self.log2_tile_cols < max_log2
         at += 1
-        if bits(at - 1, 1) == 0
+        if self.bits(at - 1, 1) == 0
             break
-        log2_tile_cols += 1
-    log2_tile_rows = bits(at, 1)
+        self.log2_tile_cols += 1
+    self.log2_tile_rows = self.bits(at, 1)
     at += 1
-    if log2_tile_rows == 1
-        log2_tile_rows += bits(at, 1)
+    if self.log2_tile_rows == 1
+        self.log2_tile_rows += self.bits(at, 1)
         at += 1
-    header_size := bits(at, 16)
+    header_size := self.bits(at, 16)
     at += 16
     if header_size == 0
-        fail = "empty compressed header"
+        self.fail = "empty compressed header"
         return
     p := (at + 7).shr(3)
     if p + header_size > end
-        fail = "truncated frame"
+        self.fail = "truncated frame"
         return
-    use_prev_mvs = error_res == 0
-        and width == last_width
-        and height == last_height
-        and last_intra_only == 0
-        and last_show == 1
-        and last_frame_type != 0
+    self.use_prev_mvs = self.error_res == 0
+        and self.width == self.last_width
+        and self.height == self.last_height
+        and self.last_intra_only == 0
+        and self.last_show == 1
+        and self.last_frame_type != 0
     for i in 0..FC_SIZE
-        fc[i] = fcs[ctx_idx * FC_SIZE + i]
+        self.fc[i] = self.fcs[self.ctx_idx * FC_SIZE + i]
     for i in 0..C_SIZE
-        counts[i] = 0
-    if not bd_init(p, header_size)
-        fail = "bad compressed header"
+        self.counts[i] = 0
+    if not self.bd_init(p, header_size)
+        self.fail = "bad compressed header"
         return
-    compressed_header()
-    cur = free_slot()
-    slot_w[cur] = width
-    slot_h[cur] = height
-    lf_setup()
-    decode_tiles(p + header_size, end)
-    if fail != ""
+    self.compressed_header()
+    self.cur = self.free_slot()
+    self.slot_w[self.cur] = self.width
+    self.slot_h[self.cur] = self.height
+    self.lf_setup()
+    self.decode_tiles(p + header_size, end)
+    if self.fail != ""
         return
-    if lf_level > 0
-        loop_filter()
-    if error_res == 0 and parallel == 0
-        adapt_coef()
-        if not intra
-            adapt_mode()
-    if refresh_ctx == 1
+    if self.lf_level > 0
+        self.loop_filter()
+    if self.error_res == 0 and self.parallel == 0
+        self.adapt_coef()
+        if not self.intra
+            self.adapt_mode()
+    if self.refresh_ctx == 1
         for i in 0..FC_SIZE
-            fcs[ctx_idx * FC_SIZE + i] = fc[i]
+            self.fcs[self.ctx_idx * FC_SIZE + i] = self.fc[i]
     for i in 0..8
         if refresh.shr(i).bit_and(1) == 1
-            ref_map[i] = cur
-    last_show = show_frame
-    prev_mvs = cur_mvs
-    if seg_enabled == 1
-        t := seg_cur
-        seg_cur = seg_last
-        seg_last = t
-    last_width = width
-    last_height = height
-    if show_frame == 1
-        out.push(frame_out(cur))
+            self.ref_map[i] = self.cur
+    self.last_show = self.show_frame
+    self.prev_mvs = self.cur_mvs
+    if self.seg_enabled == 1
+        t := self.seg_cur
+        self.seg_cur = self.seg_last
+        self.seg_last = t
+    self.last_width = self.width
+    self.last_height = self.height
+    if self.show_frame == 1
+        self.out.push(self.frame_out(self.cur))
 
 fn Decoder.seg_feature(self, s int, j int) bool
-    seg_enabled == 1 and seg_feat[s * 4 + j] == 1
+    self.seg_enabled == 1 and self.seg_feat[s * 4 + j] == 1
 
 ## The compressed header (VP9 spec 6.3).
 fn Decoder.compressed_header(mut self)
-    if lossless
-        tx_mode = 0
+    if self.lossless
+        self.tx_mode = 0
     else
-        tx_mode = literal(2)
-        if tx_mode == 3
-            tx_mode += read(128)
-    if tx_mode == 4
+        self.tx_mode = self.literal(2)
+        if self.tx_mode == 3
+            self.tx_mode += self.read(128)
+    if self.tx_mode == 4
         for i in 0..2
-            diff_update(FC_TX8 + i)
+            self.diff_update(FC_TX8 + i)
         for i in 0..4
-            diff_update(FC_TX16 + i)
+            self.diff_update(FC_TX16 + i)
         for i in 0..6
-            diff_update(FC_TX32 + i)
-    for t in 0..TX_MODE_BIGGEST[tx_mode] + 1
-        if read(128) == 1
+            self.diff_update(FC_TX32 + i)
+    for t in 0..TX_MODE_BIGGEST[self.tx_mode] + 1
+        if self.read(128) == 1
             for i in 0..2
                 for j in 0..2
                     for k in 0..6
                         nc := if k == 0 then 3 else 6
                         for l in 0..nc
                             for m in 0..3
-                                diff_update(FC_COEF + ((((t * 2 + i) * 2 + j) * 6 + k) * 6 + l) * 3 + m)
+                                self.diff_update(FC_COEF + ((((t * 2 + i) * 2 + j) * 6 + k) * 6 + l) * 3 + m)
     for k in 0..3
-        diff_update(FC_SKIP + k)
-    if intra
+        self.diff_update(FC_SKIP + k)
+    if self.intra
         return
     for i in 0..21
-        diff_update(FC_INTER_MODE + i)
-    if interp_filter == SWITCHABLE
+        self.diff_update(FC_INTER_MODE + i)
+    if self.interp_filter == SWITCHABLE
         for i in 0..8
-            diff_update(FC_INTERP + i)
+            self.diff_update(FC_INTERP + i)
     for i in 0..4
-        diff_update(FC_INTRA_INTER + i)
-    ref_mode = 0
-    if sign_bias[2] != sign_bias[1] or sign_bias[3] != sign_bias[1]
-        if read(128) == 1
-            ref_mode = if read(128) == 1 then 2 else 1
-    if ref_mode != 0
-        if sign_bias[1] == sign_bias[2]
-            comp_fixed = 3
-            comp_var0 = 1
-            comp_var1 = 2
-        elif sign_bias[1] == sign_bias[3]
-            comp_fixed = 2
-            comp_var0 = 1
-            comp_var1 = 3
+        self.diff_update(FC_INTRA_INTER + i)
+    self.ref_mode = 0
+    if self.sign_bias[2] != self.sign_bias[1] or self.sign_bias[3] != self.sign_bias[1]
+        if self.read(128) == 1
+            self.ref_mode = if self.read(128) == 1 then 2 else 1
+    if self.ref_mode != 0
+        if self.sign_bias[1] == self.sign_bias[2]
+            self.comp_fixed = 3
+            self.comp_var0 = 1
+            self.comp_var1 = 2
+        elif self.sign_bias[1] == self.sign_bias[3]
+            self.comp_fixed = 2
+            self.comp_var0 = 1
+            self.comp_var1 = 3
         else
-            comp_fixed = 1
-            comp_var0 = 2
-            comp_var1 = 3
-    if ref_mode == 2
+            self.comp_fixed = 1
+            self.comp_var0 = 2
+            self.comp_var1 = 3
+    if self.ref_mode == 2
         for i in 0..5
-            diff_update(FC_COMP_INTER + i)
-    if ref_mode != 1
+            self.diff_update(FC_COMP_INTER + i)
+    if self.ref_mode != 1
         for i in 0..10
-            diff_update(FC_SINGLE_REF + i)
-    if ref_mode != 0
+            self.diff_update(FC_SINGLE_REF + i)
+    if self.ref_mode != 0
         for i in 0..5
-            diff_update(FC_COMP_REF + i)
+            self.diff_update(FC_COMP_REF + i)
     for i in 0..36
-        diff_update(FC_Y_MODE + i)
+        self.diff_update(FC_Y_MODE + i)
     for i in 0..48
-        diff_update(FC_PART + i)
+        self.diff_update(FC_PART + i)
     for j in 0..3
-        mv_update(FC_MV_JOINT + j)
+        self.mv_update(FC_MV_JOINT + j)
     for c in 0..2
         b := FC_MV_COMP + c * 33
-        mv_update(b + MVC_SIGN)
+        self.mv_update(b + MVC_SIGN)
         for j in 0..10
-            mv_update(b + MVC_CLASSES + j)
-        mv_update(b + MVC_CLASS0)
+            self.mv_update(b + MVC_CLASSES + j)
+        self.mv_update(b + MVC_CLASS0)
         for j in 0..10
-            mv_update(b + MVC_BITS + j)
+            self.mv_update(b + MVC_BITS + j)
     for c in 0..2
         b := FC_MV_COMP + c * 33
         for j in 0..6
-            mv_update(b + MVC_CLASS0_FP + j)
+            self.mv_update(b + MVC_CLASS0_FP + j)
         for j in 0..3
-            mv_update(b + MVC_FP + j)
-    if allow_hp == 1
+            self.mv_update(b + MVC_FP + j)
+    if self.allow_hp == 1
         for c in 0..2
             b := FC_MV_COMP + c * 33
-            mv_update(b + MVC_CLASS0_HP)
-            mv_update(b + MVC_HP)
+            self.mv_update(b + MVC_CLASS0_HP)
+            self.mv_update(b + MVC_HP)
 
 ## Copies slot `s` out as a Frame (std.vpx.3).
 fn Decoder.frame_out(self, s int) Frame
-    w := slot_w[s]
-    h := slot_h[s]
+    w := self.slot_w[s]
+    h := self.slot_h[s]
     cw := (w + 1) / 2
     ch := (h + 1) / 2
     mut py := List[u8]()
     mut pu := List[u8]()
     mut pv := List[u8]()
-    ya := plane_at(s, 0)
+    ya := self.plane_at(s, 0)
     for r in 0..h
-        py.extend(mem[ya + r * ystride..ya + r * ystride + w])
-    ua := plane_at(s, 1)
-    va := plane_at(s, 2)
+        py.extend(self.mem[ya + r * self.ystride..ya + r * self.ystride + w])
+    ua := self.plane_at(s, 1)
+    va := self.plane_at(s, 2)
     for r in 0..ch
-        pu.extend(mem[ua + r * cstride..ua + r * cstride + cw])
-        pv.extend(mem[va + r * cstride..va + r * cstride + cw])
+        pu.extend(self.mem[ua + r * self.cstride..ua + r * self.cstride + cw])
+        pv.extend(self.mem[va + r * self.cstride..va + r * self.cstride + cw])
     Frame(
         width: w,
         height: h,
         y: bytes.from_list(py),
         u: bytes.from_list(pu),
         v: bytes.from_list(pv),
-        space: color_space,
-        full_range: color_range == 1,
+        space: self.color_space,
+        full_range: self.color_range == 1,
     )
 # ---------------------------------------------------------------- tiles and partitions
 
@@ -1775,91 +1778,91 @@ fn tile_offset(i int, mis int, log2 int) int
 ## Decodes the tiles in `start..end` (VP9 spec 6.4). Tile columns of one tile row
 ## share no state but the above contexts, so each is decoded whole in turn.
 fn Decoder.decode_tiles(mut self, start int, end int)
-    mis := mi_rows * mi_cols
-    c_sb = [0 for _ in 0..mis]
-    c_skip = [0 for _ in 0..mis]
-    c_tx = [0 for _ in 0..mis]
-    c_ref0 = [0 for _ in 0..mis]
-    c_ref1 = [-1 for _ in 0..mis]
-    c_mode = [0 for _ in 0..mis]
-    c_interp = [0 for _ in 0..mis]
-    c_segpred = [0 for _ in 0..mis]
-    c_bmode = [0 for _ in 0..mis * 4]
-    c_mv = [0 for _ in 0..mis * 16]
-    cur_mvs = [0 for _ in 0..mis * 6]
-    nsb := sb_cols * sb_rows
-    lf_ly = [0 for _ in 0..nsb * 64]
-    lf_ay = [0 for _ in 0..nsb * 64]
-    lf_iy = [0 for _ in 0..nsb * 64]
-    lf_lvl = [0 for _ in 0..nsb * 64]
-    lf_luv = [0 for _ in 0..nsb * 16]
-    lf_auv = [0 for _ in 0..nsb * 16]
-    lf_iuv = [0 for _ in 0..nsb * 16]
-    for i in 0..above_nz.len()
-        above_nz[i] = 0
-    for i in 0..above_part.len()
-        above_part[i] = 0
-    tc := (1).shl(log2_tile_cols)
-    tr := (1).shl(log2_tile_rows)
+    mis := self.mi_rows * self.mi_cols
+    self.c_sb = [0 for _ in 0..mis]
+    self.c_skip = [0 for _ in 0..mis]
+    self.c_tx = [0 for _ in 0..mis]
+    self.c_ref0 = [0 for _ in 0..mis]
+    self.c_ref1 = [-1 for _ in 0..mis]
+    self.c_mode = [0 for _ in 0..mis]
+    self.c_interp = [0 for _ in 0..mis]
+    self.c_segpred = [0 for _ in 0..mis]
+    self.c_bmode = [0 for _ in 0..mis * 4]
+    self.c_mv = [0 for _ in 0..mis * 16]
+    self.cur_mvs = [0 for _ in 0..mis * 6]
+    nsb := self.sb_cols * self.sb_rows
+    self.lf_ly = [0 for _ in 0..nsb * 64]
+    self.lf_ay = [0 for _ in 0..nsb * 64]
+    self.lf_iy = [0 for _ in 0..nsb * 64]
+    self.lf_lvl = [0 for _ in 0..nsb * 64]
+    self.lf_luv = [0 for _ in 0..nsb * 16]
+    self.lf_auv = [0 for _ in 0..nsb * 16]
+    self.lf_iuv = [0 for _ in 0..nsb * 16]
+    for i in 0..self.above_nz.len()
+        self.above_nz[i] = 0
+    for i in 0..self.above_part.len()
+        self.above_part[i] = 0
+    tc := (1).shl(self.log2_tile_cols)
+    tr := (1).shl(self.log2_tile_rows)
     mut tp := start
     for r in 0..tr
-        r0 := tile_offset(r, mi_rows, log2_tile_rows)
-        r1 := tile_offset(r + 1, mi_rows, log2_tile_rows)
+        r0 := tile_offset(r, self.mi_rows, self.log2_tile_rows)
+        r1 := tile_offset(r + 1, self.mi_rows, self.log2_tile_rows)
         for c in 0..tc
             mut sz := end - tp
             if r < tr - 1 or c < tc - 1
                 if tp + 4 > end
-                    fail = "truncated tile size"
+                    self.fail = "truncated tile size"
                     return
-                sz = buf[tp].to_int().shl(24)
-                    + buf[tp + 1].to_int().shl(16)
-                    + buf[tp + 2].to_int().shl(8)
-                    + buf[tp + 3].to_int()
+                sz = self.buf[tp].to_int().shl(24)
+                    + self.buf[tp + 1].to_int().shl(16)
+                    + self.buf[tp + 2].to_int().shl(8)
+                    + self.buf[tp + 3].to_int()
                 tp += 4
             if sz <= 0 or tp + sz > end
-                fail = "bad tile size"
+                self.fail = "bad tile size"
                 return
-            if not bd_init(tp, sz)
-                fail = "bad tile marker bit"
+            if not self.bd_init(tp, sz)
+                self.fail = "bad tile marker bit"
                 return
             tp += sz
-            tile_c0 = tile_offset(c, mi_cols, log2_tile_cols)
-            tile_c1 = tile_offset(c + 1, mi_cols, log2_tile_cols)
+            self.tile_c0 = tile_offset(c, self.mi_cols, self.log2_tile_cols)
+            self.tile_c1 = tile_offset(c + 1, self.mi_cols, self.log2_tile_cols)
             mut mi_row := r0
             while mi_row < r1
                 for i in 0..48
-                    left_nz[i] = 0
+                    self.left_nz[i] = 0
                 for i in 0..8
-                    left_part[i] = 0
-                mut mi_col := tile_c0
-                while mi_col < tile_c1
-                    decode_partition(mi_row, mi_col, B64X64, 4)
+                    self.left_part[i] = 0
+                mut mi_col := self.tile_c0
+                while mi_col < self.tile_c1
+                    self.decode_partition(mi_row, mi_col, B64X64, 4)
                     mi_col += 8
                 mi_row += 8
-            if fail != ""
+            if self.fail != ""
                 return
 
 fn Decoder.decode_partition(mut self, mi_row int, mi_col int, bsize int, n4l2 int)
-    if mi_row >= mi_rows or mi_col >= mi_cols
+    if mi_row >= self.mi_rows or mi_col >= self.mi_cols
         return
     n8l2 := n4l2 - 1
     num8 := (1).shl(n8l2)
     hbs := num8.shr(1)
-    has_rows := (mi_row + hbs) < mi_rows
-    has_cols := (mi_col + hbs) < mi_cols
-    ab := above_part[mi_col].shr(n8l2).bit_and(1)
-    lb := left_part[mi_row.bit_and(7)].shr(n8l2).bit_and(1)
+    has_rows := (mi_row + hbs) < self.mi_rows
+    has_cols := (mi_col + hbs) < self.mi_cols
+    ab := self.above_part[mi_col].shr(n8l2).bit_and(1)
+    lb := self.left_part[mi_row.bit_and(7)].shr(n8l2).bit_and(1)
     ctx := lb * 2 + ab + n8l2 * 4
-    src := if intra then SRC_KF else SRC_FC
-    base := if intra then KF_PART + ctx * 3 else FC_PART + ctx * 3
+    src := if self.intra then SRC_KF else SRC_FC
+    base := if self.intra then KF_PART + ctx * 3 else FC_PART + ctx * 3
     mut part := 3
     if has_rows and has_cols
-        part = tree(PARTITION_TREE, src, base)
+        part = self.tree(PARTITION_TREE, src, base)
     elif has_cols
-        part = if read(prob(src, base + 1)) == 1 then 3 else 1
+        part = if self.read(self.prob(src, base + 1)) == 1 then 3 else 1
     elif has_rows
-        part = if read(prob(src, base + 2)) == 1 then 3 else 2
-    counts[C_PART + ctx * 4 + part] += 1
+        part = if self.read(self.prob(src, base + 2)) == 1 then 3 else 2
+    self.counts[C_PART + ctx * 4 + part] += 1
     mut subsize := bsize
     if part == 1
         subsize = SUB_HORZ[bsize]
@@ -1871,30 +1874,30 @@ fn Decoder.decode_partition(mut self, mi_row int, mi_col int, bsize int, n4l2 in
         # an 8x8 block: 4x8, 8x4 and 4x4 are one block with sub-blocks
         if part == 3
             subsize = B4X4
-        b_wl = if part == 2 or part == 3 then 0 else 1
-        b_hl = if part == 1 or part == 3 then 0 else 1
-        decode_block(mi_row, mi_col, subsize, 1, 1)
+        self.b_wl = if part == 2 or part == 3 then 0 else 1
+        self.b_hl = if part == 1 or part == 3 then 0 else 1
+        self.decode_block(mi_row, mi_col, subsize, 1, 1)
     elif part == 0
-        decode_block(mi_row, mi_col, subsize, n4l2, n4l2)
+        self.decode_block(mi_row, mi_col, subsize, n4l2, n4l2)
     elif part == 1
-        decode_block(mi_row, mi_col, subsize, n4l2, n8l2)
+        self.decode_block(mi_row, mi_col, subsize, n4l2, n8l2)
         if has_rows
-            decode_block(mi_row + hbs, mi_col, subsize, n4l2, n8l2)
+            self.decode_block(mi_row + hbs, mi_col, subsize, n4l2, n8l2)
     elif part == 2
-        decode_block(mi_row, mi_col, subsize, n8l2, n4l2)
+        self.decode_block(mi_row, mi_col, subsize, n8l2, n4l2)
         if has_cols
-            decode_block(mi_row, mi_col + hbs, subsize, n8l2, n4l2)
+            self.decode_block(mi_row, mi_col + hbs, subsize, n8l2, n4l2)
     else
-        decode_partition(mi_row, mi_col, subsize, n8l2)
-        decode_partition(mi_row, mi_col + hbs, subsize, n8l2)
-        decode_partition(mi_row + hbs, mi_col, subsize, n8l2)
-        decode_partition(mi_row + hbs, mi_col + hbs, subsize, n8l2)
+        self.decode_partition(mi_row, mi_col, subsize, n8l2)
+        self.decode_partition(mi_row, mi_col + hbs, subsize, n8l2)
+        self.decode_partition(mi_row + hbs, mi_col, subsize, n8l2)
+        self.decode_partition(mi_row + hbs, mi_col + hbs, subsize, n8l2)
     if bsize == B8X8 or part != 3
         for i in 0..num8
-            if mi_col + i < above_part.len()
-                above_part[mi_col + i] = PART_CTX_ABOVE[subsize]
+            if mi_col + i < self.above_part.len()
+                self.above_part[mi_col + i] = PART_CTX_ABOVE[subsize]
             if mi_row.bit_and(7) + i < 8
-                left_part[mi_row.bit_and(7) + i] = PART_CTX_LEFT[subsize]
+                self.left_part[mi_row.bit_and(7) + i] = PART_CTX_LEFT[subsize]
 
 # ---------------------------------------------------------------- blocks
 
@@ -1902,94 +1905,94 @@ fn Decoder.decode_partition(mut self, mi_row int, mi_col int, bsize int, n4l2 in
 fn Decoder.decode_block(mut self, mi_row int, mi_col int, bsize int, bwl int, bhl int)
     bw := (1).shl(bwl - 1)
     bh := (1).shl(bhl - 1)
-    x_mis := bw.min(mi_cols - mi_col)
-    y_mis := bh.min(mi_rows - mi_row)
-    cell := mi_row * mi_cols + mi_col
-    b_row = mi_row
-    b_col = mi_col
-    b_size = bsize
-    b_w = bw
-    b_h = bh
-    to_top = -(mi_row * 64)
-    to_bottom = (mi_rows - bh - mi_row) * 64
-    to_left = -(mi_col * 64)
-    to_right = (mi_cols - bw - mi_col) * 64
-    above = if mi_row != 0 then cell - mi_cols else -1
-    left = if mi_col > tile_c0 then cell - 1 else -1
+    x_mis := bw.min(self.mi_cols - mi_col)
+    y_mis := bh.min(self.mi_rows - mi_row)
+    cell := mi_row * self.mi_cols + mi_col
+    self.b_row = mi_row
+    self.b_col = mi_col
+    self.b_size = bsize
+    self.b_w = bw
+    self.b_h = bh
+    self.to_top = -(mi_row * 64)
+    self.to_bottom = (self.mi_rows - bh - mi_row) * 64
+    self.to_left = -(mi_col * 64)
+    self.to_right = (self.mi_cols - bw - mi_col) * 64
+    self.above = if mi_row != 0 then cell - self.mi_cols else -1
+    self.left = if mi_col > self.tile_c0 then cell - 1 else -1
     for k in 0..4
-        m_bmode[k] = 0
+        self.m_bmode[k] = 0
     for k in 0..16
-        m_mv[k] = 0
-    if intra
-        intra_frame_mode_info(cell, x_mis, y_mis)
+        self.m_mv[k] = 0
+    if self.intra
+        self.intra_frame_mode_info(cell, x_mis, y_mis)
     else
-        inter_frame_mode_info(cell, x_mis, y_mis)
+        self.inter_frame_mode_info(cell, x_mis, y_mis)
     for yy in 0..y_mis
         for xx in 0..x_mis
-            store_cell(cell + yy * mi_cols + xx)
-    is_inter := m_ref0 > 0
+            self.store_cell(cell + yy * self.mi_cols + xx)
+    is_inter := self.m_ref0 > 0
     if is_inter
         for yy in 0..y_mis
             for xx in 0..x_mis
-                c6 := (cell + yy * mi_cols + xx) * 6
-                cur_mvs[c6] = m_ref0
-                cur_mvs[c6 + 1] = m_ref1
+                c6 := (cell + yy * self.mi_cols + xx) * 6
+                self.cur_mvs[c6] = self.m_ref0
+                self.cur_mvs[c6 + 1] = self.m_ref1
                 for k in 0..4
-                    cur_mvs[c6 + 2 + k] = m_mv[12 + k]
-    if m_skip == 1
+                    self.cur_mvs[c6 + 2 + k] = self.m_mv[12 + k]
+    if self.m_skip == 1
         for p in 0..3
             ss := if p == 0 then 0 else 1
-            ao := p * sb_cols * 16 + (mi_col * 2).shr(ss)
+            ao := p * self.sb_cols * 16 + (mi_col * 2).shr(ss)
             lo := p * 16 + (mi_row.bit_and(7) * 2).shr(ss)
             for i in 0..(bw * 2).shr(ss)
-                if (mi_col * 2).shr(ss) + i < sb_cols * 16
-                    above_nz[ao + i] = 0
+                if (mi_col * 2).shr(ss) + i < self.sb_cols * 16
+                    self.above_nz[ao + i] = 0
             for i in 0..(bh * 2).shr(ss)
                 if (mi_row.bit_and(7) * 2).shr(ss) + i < 16
-                    left_nz[lo + i] = 0
+                    self.left_nz[lo + i] = 0
     if is_inter
-        inter_predict(mi_row, mi_col)
+        self.inter_predict(mi_row, mi_col)
     mut eobtotal := 0
     for p in 0..3
         ss := if p == 0 then 0 else 1
-        tx := if p == 0 then m_tx else uv_tx(bsize, m_tx)
+        tx := if p == 0 then self.m_tx else uv_tx(bsize, self.m_tx)
         n4w := (bw * 2).shr(ss)
         n4h := (bh * 2).shr(ss)
-        maxw := if to_right >= 0 then n4w else n4w + to_right.shr(5 + ss)
-        maxh := if to_bottom >= 0 then n4h else n4h + to_bottom.shr(5 + ss)
-        max_wide = if to_right >= 0 then 0 else maxw
-        max_high = if to_bottom >= 0 then 0 else maxh
+        maxw := if self.to_right >= 0 then n4w else n4w + self.to_right.shr(5 + ss)
+        maxh := if self.to_bottom >= 0 then n4h else n4h + self.to_bottom.shr(5 + ss)
+        self.max_wide = if self.to_right >= 0 then 0 else maxw
+        self.max_high = if self.to_bottom >= 0 then 0 else maxh
         step := (1).shl(tx)
         mut row := 0
         while row < maxh
             mut col := 0
             while col < maxw
                 if not is_inter
-                    mut mode := if p == 0 then m_mode else m_uv
+                    mut mode := if p == 0 then self.m_mode else self.m_uv
                     if bsize < B8X8 and p == 0
-                        mode = m_bmode[row * 2 + col]
-                    intra_predict(p, mi_row, mi_col, row, col, tx, mode, n4w)
-                    if m_skip == 0
-                        tt := if p > 0 or lossless then 0 else MODE_TX_TYPE[mode]
-                        eob := tokens(p, mi_row, mi_col, row, col, tx, tt)
+                        mode = self.m_bmode[row * 2 + col]
+                    self.intra_predict(p, mi_row, mi_col, row, col, tx, mode, n4w)
+                    if self.m_skip == 0
+                        tt := if p > 0 or self.lossless then 0 else MODE_TX_TYPE[mode]
+                        eob := self.tokens(p, mi_row, mi_col, row, col, tx, tt)
                         if eob > 0
-                            inverse(p, mi_row, mi_col, row, col, tx, tt, eob)
-                elif m_skip == 0
-                    eob2 := tokens(p, mi_row, mi_col, row, col, tx, 0)
+                            self.inverse(p, mi_row, mi_col, row, col, tx, tt, eob)
+                elif self.m_skip == 0
+                    eob2 := self.tokens(p, mi_row, mi_col, row, col, tx, 0)
                     eobtotal += eob2
                     if eob2 > 0
-                        inverse(p, mi_row, mi_col, row, col, tx, 0, eob2)
+                        self.inverse(p, mi_row, mi_col, row, col, tx, 0, eob2)
                 col += step
             row += step
-    if is_inter and m_skip == 0 and bsize >= B8X8 and eobtotal == 0
+    if is_inter and self.m_skip == 0 and bsize >= B8X8 and eobtotal == 0
         # libvpx marks an inter block without coefficients as skipped, which
         # later contexts and the loop filter see
-        m_skip = 1
+        self.m_skip = 1
         for yy in 0..y_mis
             for xx in 0..x_mis
-                c_skip[cell + yy * mi_cols + xx] = 1
-    if lf_level > 0
-        build_mask(mi_row, mi_col, bw, bh)
+                self.c_skip[cell + yy * self.mi_cols + xx] = 1
+    if self.lf_level > 0
+        self.build_mask(mi_row, mi_col, bw, bh)
 
 fn uv_tx(bsize int, tx int) int
     if bsize < B8X8
@@ -1997,72 +2000,72 @@ fn uv_tx(bsize int, tx int) int
     tx.min(MAX_TX[UV_SIZE[bsize]])
 
 fn Decoder.store_cell(mut self, c int)
-    c_sb[c] = b_size
-    c_skip[c] = m_skip
-    c_tx[c] = m_tx
-    c_ref0[c] = m_ref0
-    c_ref1[c] = m_ref1
-    c_mode[c] = m_mode
-    c_interp[c] = m_interp
-    c_segpred[c] = m_segpred
+    self.c_sb[c] = self.b_size
+    self.c_skip[c] = self.m_skip
+    self.c_tx[c] = self.m_tx
+    self.c_ref0[c] = self.m_ref0
+    self.c_ref1[c] = self.m_ref1
+    self.c_mode[c] = self.m_mode
+    self.c_interp[c] = self.m_interp
+    self.c_segpred[c] = self.m_segpred
     for k in 0..4
-        c_bmode[c * 4 + k] = m_bmode[k]
+        self.c_bmode[c * 4 + k] = self.m_bmode[k]
     for k in 0..16
-        c_mv[c * 16 + k] = m_mv[k]
+        self.c_mv[c * 16 + k] = self.m_mv[k]
 
 fn Decoder.read_skip(mut self) int
-    if seg_feature(m_seg, 3)
+    if self.seg_feature(self.m_seg, 3)
         return 1
     mut ctx := 0
-    if above >= 0
-        ctx += c_skip[above]
-    if left >= 0
-        ctx += c_skip[left]
-    s := read(fc[FC_SKIP + ctx])
-    counts[C_SKIP + ctx * 2 + s] += 1
+    if self.above >= 0
+        ctx += self.c_skip[self.above]
+    if self.left >= 0
+        ctx += self.c_skip[self.left]
+    s := self.read(self.fc[FC_SKIP + ctx])
+    self.counts[C_SKIP + ctx * 2 + s] += 1
     s
 
 fn Decoder.read_tx(mut self, allow_select bool) int
-    maxtx := MAX_TX[b_size]
-    if allow_select and tx_mode == 4 and b_size >= B8X8
+    maxtx := MAX_TX[self.b_size]
+    if allow_select and self.tx_mode == 4 and self.b_size >= B8X8
         mut actx := maxtx
         mut lctx := maxtx
-        if above >= 0 and c_skip[above] == 0
-            actx = c_tx[above]
-        if left >= 0 and c_skip[left] == 0
-            lctx = c_tx[left]
-        if left < 0
+        if self.above >= 0 and self.c_skip[self.above] == 0
+            actx = self.c_tx[self.above]
+        if self.left >= 0 and self.c_skip[self.left] == 0
+            lctx = self.c_tx[self.left]
+        if self.left < 0
             lctx = actx
-        if above < 0
+        if self.above < 0
             actx = lctx
         ctx := if actx + lctx > maxtx then 1 else 0
         base := [0, FC_TX8, FC_TX16, FC_TX32][maxtx] + ctx * maxtx
-        mut tx := read(fc[base])
+        mut tx := self.read(self.fc[base])
         if tx != 0 and maxtx >= 2
-            tx += read(fc[base + 1])
+            tx += self.read(self.fc[base + 1])
             if tx != 1 and maxtx >= 3
-                tx += read(fc[base + 2])
+                tx += self.read(self.fc[base + 2])
         cb := [0, C_TX8, C_TX16, C_TX32][maxtx] + ctx * (maxtx + 1)
-        counts[cb + tx] += 1
+        self.counts[cb + tx] += 1
         return tx
-    maxtx.min(TX_MODE_BIGGEST[tx_mode])
+    maxtx.min(TX_MODE_BIGGEST[self.tx_mode])
 
 fn Decoder.set_seg(mut self, cell int, x_mis int, y_mis int, v int)
     for yy in 0..y_mis
         for xx in 0..x_mis
-            seg_cur[cell + yy * mi_cols + xx] = v
+            self.seg_cur[cell + yy * self.mi_cols + xx] = v
 
 fn Decoder.copy_seg(mut self, cell int, x_mis int, y_mis int)
     for yy in 0..y_mis
         for xx in 0..x_mis
-            i := cell + yy * mi_cols + xx
-            seg_cur[i] = seg_last[i]
+            i := cell + yy * self.mi_cols + xx
+            self.seg_cur[i] = self.seg_last[i]
 
 fn Decoder.seg_pred_id(self, cell int, x_mis int, y_mis int) int
     mut s := 8
     for yy in 0..y_mis
         for xx in 0..x_mis
-            s = s.min(seg_last[cell + yy * mi_cols + xx])
+            s = s.min(self.seg_last[cell + yy * self.mi_cols + xx])
     s
 
 ## The intra mode of sub-block `b` of the block above (`which` 0) or to the
@@ -2070,173 +2073,173 @@ fn Decoder.seg_pred_id(self, cell int, x_mis int, y_mis int) int
 fn Decoder.sub_mode(self, b int, which int) int
     if which == 0
         if b < 2
-            if above < 0 or c_ref0[above] > 0
+            if self.above < 0 or self.c_ref0[self.above] > 0
                 return DC_PRED
-            if c_sb[above] < B8X8
-                return c_bmode[above * 4 + b + 2]
-            return c_mode[above]
-        return m_bmode[b - 2]
+            if self.c_sb[self.above] < B8X8
+                return self.c_bmode[self.above * 4 + b + 2]
+            return self.c_mode[self.above]
+        return self.m_bmode[b - 2]
     if b == 0 or b == 2
-        if left < 0 or c_ref0[left] > 0
+        if self.left < 0 or self.c_ref0[self.left] > 0
             return DC_PRED
-        if c_sb[left] < B8X8
-            return c_bmode[left * 4 + b + 1]
-        return c_mode[left]
-    m_bmode[b - 1]
+        if self.c_sb[self.left] < B8X8
+            return self.c_bmode[self.left * 4 + b + 1]
+        return self.c_mode[self.left]
+    self.m_bmode[b - 1]
 
 fn Decoder.kf_mode(mut self, b int) int
-    a := sub_mode(b, 0)
-    l := sub_mode(b, 1)
-    tree(INTRA_TREE, SRC_KF, (a * 10 + l) * 9)
+    a := self.sub_mode(b, 0)
+    l := self.sub_mode(b, 1)
+    self.tree(INTRA_TREE, SRC_KF, (a * 10 + l) * 9)
 
 fn Decoder.intra_frame_mode_info(mut self, cell int, x_mis int, y_mis int)
-    m_segpred = 0
-    m_seg = 0
-    if seg_enabled == 1
-        if seg_update_map == 0
-            copy_seg(cell, x_mis, y_mis)
+    self.m_segpred = 0
+    self.m_seg = 0
+    if self.seg_enabled == 1
+        if self.seg_update_map == 0
+            self.copy_seg(cell, x_mis, y_mis)
         else
-            m_seg = tree(SEGMENT_TREE, SRC_SEG, 0)
-            set_seg(cell, x_mis, y_mis, m_seg)
-    m_skip = read_skip()
-    m_tx = read_tx(true)
-    m_ref0 = 0
-    m_ref1 = -1
-    m_interp = 0
-    if b_size == B4X4
+            self.m_seg = self.tree(SEGMENT_TREE, SRC_SEG, 0)
+            self.set_seg(cell, x_mis, y_mis, self.m_seg)
+    self.m_skip = self.read_skip()
+    self.m_tx = self.read_tx(true)
+    self.m_ref0 = 0
+    self.m_ref1 = -1
+    self.m_interp = 0
+    if self.b_size == B4X4
         for i in 0..4
-            m_bmode[i] = kf_mode(i)
-        m_mode = m_bmode[3]
-    elif b_size == B4X8
-        m_bmode[0] = kf_mode(0)
-        m_bmode[2] = m_bmode[0]
-        m_bmode[1] = kf_mode(1)
-        m_bmode[3] = m_bmode[1]
-        m_mode = m_bmode[1]
-    elif b_size == B8X4
-        m_bmode[0] = kf_mode(0)
-        m_bmode[1] = m_bmode[0]
-        m_bmode[2] = kf_mode(2)
-        m_bmode[3] = m_bmode[2]
-        m_mode = m_bmode[2]
+            self.m_bmode[i] = self.kf_mode(i)
+        self.m_mode = self.m_bmode[3]
+    elif self.b_size == B4X8
+        self.m_bmode[0] = self.kf_mode(0)
+        self.m_bmode[2] = self.m_bmode[0]
+        self.m_bmode[1] = self.kf_mode(1)
+        self.m_bmode[3] = self.m_bmode[1]
+        self.m_mode = self.m_bmode[1]
+    elif self.b_size == B8X4
+        self.m_bmode[0] = self.kf_mode(0)
+        self.m_bmode[1] = self.m_bmode[0]
+        self.m_bmode[2] = self.kf_mode(2)
+        self.m_bmode[3] = self.m_bmode[2]
+        self.m_mode = self.m_bmode[2]
     else
-        m_mode = kf_mode(0)
+        self.m_mode = self.kf_mode(0)
         for i in 0..4
-            m_bmode[i] = m_mode
-    m_uv = tree(INTRA_TREE, SRC_KF, KF_UV + m_mode * 9)
+            self.m_bmode[i] = self.m_mode
+    self.m_uv = self.tree(INTRA_TREE, SRC_KF, KF_UV + self.m_mode * 9)
 
 fn Decoder.read_y_mode(mut self, group int) int
-    m := tree(INTRA_TREE, SRC_FC, FC_Y_MODE + group * 9)
-    counts[C_Y_MODE + group * 10 + m] += 1
+    m := self.tree(INTRA_TREE, SRC_FC, FC_Y_MODE + group * 9)
+    self.counts[C_Y_MODE + group * 10 + m] += 1
     m
 
 fn Decoder.inter_frame_mode_info(mut self, cell int, x_mis int, y_mis int)
-    m_segpred = 0
-    m_seg = 0
-    if seg_enabled == 1
-        pred := seg_pred_id(cell, x_mis, y_mis)
-        if seg_update_map == 0
-            copy_seg(cell, x_mis, y_mis)
-            m_seg = pred
+    self.m_segpred = 0
+    self.m_seg = 0
+    if self.seg_enabled == 1
+        pred := self.seg_pred_id(cell, x_mis, y_mis)
+        if self.seg_update_map == 0
+            self.copy_seg(cell, x_mis, y_mis)
+            self.m_seg = pred
         else
-            if seg_temporal == 1
+            if self.seg_temporal == 1
                 mut ctx := 0
-                if above >= 0
-                    ctx += c_segpred[above]
-                if left >= 0
-                    ctx += c_segpred[left]
-                m_segpred = read(seg_probs[7 + ctx])
-                if m_segpred == 1
-                    m_seg = pred
+                if self.above >= 0
+                    ctx += self.c_segpred[self.above]
+                if self.left >= 0
+                    ctx += self.c_segpred[self.left]
+                self.m_segpred = self.read(self.seg_probs[7 + ctx])
+                if self.m_segpred == 1
+                    self.m_seg = pred
                 else
-                    m_seg = tree(SEGMENT_TREE, SRC_SEG, 0)
+                    self.m_seg = self.tree(SEGMENT_TREE, SRC_SEG, 0)
             else
-                m_seg = tree(SEGMENT_TREE, SRC_SEG, 0)
-            set_seg(cell, x_mis, y_mis, m_seg)
-    m_skip = read_skip()
+                self.m_seg = self.tree(SEGMENT_TREE, SRC_SEG, 0)
+            self.set_seg(cell, x_mis, y_mis, self.m_seg)
+    self.m_skip = self.read_skip()
     mut inter := 0
-    if seg_feature(m_seg, 2)
-        inter = if seg_data[m_seg * 4 + 2] != 0 then 1 else 0
+    if self.seg_feature(self.m_seg, 2)
+        inter = if self.seg_data[self.m_seg * 4 + 2] != 0 then 1 else 0
     else
         mut ictx := 0
-        if above >= 0 and left >= 0
-            ai := c_ref0[above] <= 0
-            li := c_ref0[left] <= 0
+        if self.above >= 0 and self.left >= 0
+            ai := self.c_ref0[self.above] <= 0
+            li := self.c_ref0[self.left] <= 0
             if ai and li
                 ictx = 3
             elif ai or li
                 ictx = 1
-        elif above >= 0
-            ictx = if c_ref0[above] <= 0 then 2 else 0
-        elif left >= 0
-            ictx = if c_ref0[left] <= 0 then 2 else 0
-        inter = read(fc[FC_INTRA_INTER + ictx])
-        counts[C_INTRA_INTER + ictx * 2 + inter] += 1
-    m_tx = read_tx(m_skip == 0 or inter == 0)
+        elif self.above >= 0
+            ictx = if self.c_ref0[self.above] <= 0 then 2 else 0
+        elif self.left >= 0
+            ictx = if self.c_ref0[self.left] <= 0 then 2 else 0
+        inter = self.read(self.fc[FC_INTRA_INTER + ictx])
+        self.counts[C_INTRA_INTER + ictx * 2 + inter] += 1
+    self.m_tx = self.read_tx(self.m_skip == 0 or inter == 0)
     if inter == 1
-        inter_block_mode_info()
+        self.inter_block_mode_info()
         return
-    if b_size == B4X4
+    if self.b_size == B4X4
         for i in 0..4
-            m_bmode[i] = read_y_mode(0)
-        m_mode = m_bmode[3]
-    elif b_size == B4X8
-        m_bmode[0] = read_y_mode(0)
-        m_bmode[2] = m_bmode[0]
-        m_bmode[1] = read_y_mode(0)
-        m_bmode[3] = m_bmode[1]
-        m_mode = m_bmode[1]
-    elif b_size == B8X4
-        m_bmode[0] = read_y_mode(0)
-        m_bmode[1] = m_bmode[0]
-        m_bmode[2] = read_y_mode(0)
-        m_bmode[3] = m_bmode[2]
-        m_mode = m_bmode[2]
+            self.m_bmode[i] = self.read_y_mode(0)
+        self.m_mode = self.m_bmode[3]
+    elif self.b_size == B4X8
+        self.m_bmode[0] = self.read_y_mode(0)
+        self.m_bmode[2] = self.m_bmode[0]
+        self.m_bmode[1] = self.read_y_mode(0)
+        self.m_bmode[3] = self.m_bmode[1]
+        self.m_mode = self.m_bmode[1]
+    elif self.b_size == B8X4
+        self.m_bmode[0] = self.read_y_mode(0)
+        self.m_bmode[1] = self.m_bmode[0]
+        self.m_bmode[2] = self.read_y_mode(0)
+        self.m_bmode[3] = self.m_bmode[2]
+        self.m_mode = self.m_bmode[2]
     else
-        m_mode = read_y_mode(SIZE_GROUP[b_size])
+        self.m_mode = self.read_y_mode(SIZE_GROUP[self.b_size])
         for i in 0..4
-            m_bmode[i] = m_mode
-    m_uv = tree(INTRA_TREE, SRC_FC, FC_UV_MODE + m_mode * 9)
-    counts[C_UV_MODE + m_mode * 10 + m_uv] += 1
-    m_interp = 3
-    m_ref0 = 0
-    m_ref1 = -1
+            self.m_bmode[i] = self.m_mode
+    self.m_uv = self.tree(INTRA_TREE, SRC_FC, FC_UV_MODE + self.m_mode * 9)
+    self.counts[C_UV_MODE + self.m_mode * 10 + self.m_uv] += 1
+    self.m_interp = 3
+    self.m_ref0 = 0
+    self.m_ref1 = -1
 # ---------------------------------------------------------------- reference frames
 
 fn Decoder.read_ref_frames(mut self)
-    if seg_feature(m_seg, 2)
-        m_ref0 = seg_data[m_seg * 4 + 2]
-        m_ref1 = -1
+    if self.seg_feature(self.m_seg, 2)
+        self.m_ref0 = self.seg_data[self.m_seg * 4 + 2]
+        self.m_ref1 = -1
         return
-    mut mode := ref_mode
-    if ref_mode == 2
-        ctx := comp_inter_ctx()
-        mode = read(fc[FC_COMP_INTER + ctx])
-        counts[C_COMP_INTER + ctx * 2 + mode] += 1
+    mut mode := self.ref_mode
+    if self.ref_mode == 2
+        ctx := self.comp_inter_ctx()
+        mode = self.read(self.fc[FC_COMP_INTER + ctx])
+        self.counts[C_COMP_INTER + ctx * 2 + mode] += 1
     if mode == 1
-        idx := sign_bias[comp_fixed]
-        ctx2 := comp_ref_ctx()
-        bit := read(fc[FC_COMP_REF + ctx2])
-        counts[C_COMP_REF + ctx2 * 2 + bit] += 1
-        vref := if bit == 1 then comp_var1 else comp_var0
+        idx := self.sign_bias[self.comp_fixed]
+        ctx2 := self.comp_ref_ctx()
+        bit := self.read(self.fc[FC_COMP_REF + ctx2])
+        self.counts[C_COMP_REF + ctx2 * 2 + bit] += 1
+        vref := if bit == 1 then self.comp_var1 else self.comp_var0
         if idx == 0
-            m_ref0 = comp_fixed
-            m_ref1 = vref
+            self.m_ref0 = self.comp_fixed
+            self.m_ref1 = vref
         else
-            m_ref0 = vref
-            m_ref1 = comp_fixed
+            self.m_ref0 = vref
+            self.m_ref1 = self.comp_fixed
         return
-    c0 := single_ref_p1()
-    b0 := read(fc[FC_SINGLE_REF + c0 * 2])
-    counts[C_SINGLE_REF + c0 * 4 + b0] += 1
-    m_ref1 = -1
+    c0 := self.single_ref_p1()
+    b0 := self.read(self.fc[FC_SINGLE_REF + c0 * 2])
+    self.counts[C_SINGLE_REF + c0 * 4 + b0] += 1
+    self.m_ref1 = -1
     if b0 == 1
-        c1 := single_ref_p2()
-        b1 := read(fc[FC_SINGLE_REF + c1 * 2 + 1])
-        counts[C_SINGLE_REF + c1 * 4 + 2 + b1] += 1
-        m_ref0 = if b1 == 1 then 3 else 2
+        c1 := self.single_ref_p2()
+        b1 := self.read(self.fc[FC_SINGLE_REF + c1 * 2 + 1])
+        self.counts[C_SINGLE_REF + c1 * 4 + 2 + b1] += 1
+        self.m_ref0 = if b1 == 1 then 3 else 2
     else
-        m_ref0 = 1
+        self.m_ref0 = 1
 
 fn bint(c bool) int
     if c
@@ -2244,55 +2247,56 @@ fn bint(c bool) int
     0
 
 fn Decoder.comp_inter_ctx(self) int
-    a := above
-    l := left
-    fix := comp_fixed
+    a := self.above
+    l := self.left
+    fix := self.comp_fixed
     if a >= 0 and l >= 0
-        if c_ref1[a] <= 0 and c_ref1[l] <= 0
-            return bint(c_ref0[a] == fix).bit_xor(bint(c_ref0[l] == fix))
-        if c_ref1[a] <= 0
-            return 2 + bint(c_ref0[a] == fix or c_ref0[a] <= 0)
-        if c_ref1[l] <= 0
-            return 2 + bint(c_ref0[l] == fix or c_ref0[l] <= 0)
+        if self.c_ref1[a] <= 0 and self.c_ref1[l] <= 0
+            return bint(self.c_ref0[a] == fix).bit_xor(bint(self.c_ref0[l] == fix))
+        if self.c_ref1[a] <= 0
+            return 2 + bint(self.c_ref0[a] == fix or self.c_ref0[a] <= 0)
+        if self.c_ref1[l] <= 0
+            return 2 + bint(self.c_ref0[l] == fix or self.c_ref0[l] <= 0)
         return 4
     if a >= 0 or l >= 0
         e := if a >= 0 then a else l
-        if c_ref1[e] <= 0
-            return bint(c_ref0[e] == fix)
+        if self.c_ref1[e] <= 0
+            return bint(self.c_ref0[e] == fix)
         return 3
     1
 
 ## Reference `i` (0 or 1) of cell `c`.
 fn Decoder.cref(self, c int, i int) int
     if i == 0
-        return c_ref0[c]
-    c_ref1[c]
+        return self.c_ref0[c]
+    self.c_ref1[c]
 
 fn Decoder.comp_ref_ctx(self) int
-    a := above
-    l := left
-    fix_idx := sign_bias[comp_fixed]
+    a := self.above
+    l := self.left
+    fix_idx := self.sign_bias[self.comp_fixed]
     var_idx := 1 - fix_idx
-    cv0 := comp_var0
-    cv1 := comp_var1
+    cv0 := self.comp_var0
+    cv1 := self.comp_var1
     if a >= 0 and l >= 0
-        ai := c_ref0[a] <= 0
-        li := c_ref0[l] <= 0
+        ai := self.c_ref0[a] <= 0
+        li := self.c_ref0[l] <= 0
         if ai and li
             return 2
         if ai or li
             e := if ai then l else a
-            if c_ref1[e] <= 0
-                return 1 + 2 * bint(c_ref0[e] != cv1)
-            return 1 + 2 * bint(cref(e, var_idx) != cv1)
-        l_sg := c_ref1[l] <= 0
-        a_sg := c_ref1[a] <= 0
-        vrfa := if a_sg then c_ref0[a] else cref(a, var_idx)
-        vrfl := if l_sg then c_ref0[l] else cref(l, var_idx)
+            if self.c_ref1[e] <= 0
+                return 1 + 2 * bint(self.c_ref0[e] != cv1)
+            return 1 + 2 * bint(self.cref(e, var_idx) != cv1)
+        l_sg := self.c_ref1[l] <= 0
+        a_sg := self.c_ref1[a] <= 0
+        vrfa := if a_sg then self.c_ref0[a] else self.cref(a, var_idx)
+        vrfl := if l_sg then self.c_ref0[l] else self.cref(l, var_idx)
         if vrfa == vrfl and cv1 == vrfa
             return 0
         if l_sg and a_sg
-            if (vrfa == comp_fixed and vrfl == cv0) or (vrfl == comp_fixed and vrfa == cv0)
+            if (vrfa == self.comp_fixed and vrfl == cv0)
+                or (vrfl == self.comp_fixed and vrfa == cv0)
                 return 4
             if vrfa == vrfl
                 return 3
@@ -2310,32 +2314,32 @@ fn Decoder.comp_ref_ctx(self) int
         return 2
     if a >= 0 or l >= 0
         e := if a >= 0 then a else l
-        if c_ref0[e] <= 0
+        if self.c_ref0[e] <= 0
             return 2
-        if c_ref1[e] > 0
-            return 4 * bint(cref(e, var_idx) != cv1)
-        return 3 * bint(c_ref0[e] != cv1)
+        if self.c_ref1[e] > 0
+            return 4 * bint(self.cref(e, var_idx) != cv1)
+        return 3 * bint(self.c_ref0[e] != cv1)
     2
 
 fn Decoder.single_ref_p1(self) int
-    a := above
-    l := left
+    a := self.above
+    l := self.left
     if a >= 0 and l >= 0
-        ai := c_ref0[a] <= 0
-        li := c_ref0[l] <= 0
+        ai := self.c_ref0[a] <= 0
+        li := self.c_ref0[l] <= 0
         if ai and li
             return 2
         if ai or li
             e := if ai then l else a
-            if c_ref1[e] <= 0
-                return 4 * bint(c_ref0[e] == 1)
-            return 1 + bint(c_ref0[e] == 1 or c_ref1[e] == 1)
-        a2 := c_ref1[a] > 0
-        l2 := c_ref1[l] > 0
-        a0 := c_ref0[a]
-        a1 := c_ref1[a]
-        l0 := c_ref0[l]
-        l1 := c_ref1[l]
+            if self.c_ref1[e] <= 0
+                return 4 * bint(self.c_ref0[e] == 1)
+            return 1 + bint(self.c_ref0[e] == 1 or self.c_ref1[e] == 1)
+        a2 := self.c_ref1[a] > 0
+        l2 := self.c_ref1[l] > 0
+        a0 := self.c_ref0[a]
+        a1 := self.c_ref1[a]
+        l0 := self.c_ref0[l]
+        l1 := self.c_ref1[l]
         if a2 and l2
             return 1 + bint(a0 == 1 or a1 == 1 or l0 == 1 or l1 == 1)
         if a2 or l2
@@ -2348,34 +2352,34 @@ fn Decoder.single_ref_p1(self) int
         return 2 * bint(a0 == 1) + 2 * bint(l0 == 1)
     if a >= 0 or l >= 0
         e := if a >= 0 then a else l
-        if c_ref0[e] <= 0
+        if self.c_ref0[e] <= 0
             return 2
-        if c_ref1[e] <= 0
-            return 4 * bint(c_ref0[e] == 1)
-        return 1 + bint(c_ref0[e] == 1 or c_ref1[e] == 1)
+        if self.c_ref1[e] <= 0
+            return 4 * bint(self.c_ref0[e] == 1)
+        return 1 + bint(self.c_ref0[e] == 1 or self.c_ref1[e] == 1)
     2
 
 fn Decoder.single_ref_p2(self) int
-    a := above
-    l := left
+    a := self.above
+    l := self.left
     if a >= 0 and l >= 0
-        ai := c_ref0[a] <= 0
-        li := c_ref0[l] <= 0
+        ai := self.c_ref0[a] <= 0
+        li := self.c_ref0[l] <= 0
         if ai and li
             return 2
         if ai or li
             e := if ai then l else a
-            if c_ref1[e] <= 0
-                if c_ref0[e] == 1
+            if self.c_ref1[e] <= 0
+                if self.c_ref0[e] == 1
                     return 3
-                return 4 * bint(c_ref0[e] == 2)
-            return 1 + 2 * bint(c_ref0[e] == 2 or c_ref1[e] == 2)
-        a2 := c_ref1[a] > 0
-        l2 := c_ref1[l] > 0
-        a0 := c_ref0[a]
-        a1 := c_ref1[a]
-        l0 := c_ref0[l]
-        l1 := c_ref1[l]
+                return 4 * bint(self.c_ref0[e] == 2)
+            return 1 + 2 * bint(self.c_ref0[e] == 2 or self.c_ref1[e] == 2)
+        a2 := self.c_ref1[a] > 0
+        l2 := self.c_ref1[l] > 0
+        a0 := self.c_ref0[a]
+        a1 := self.c_ref1[a]
+        l0 := self.c_ref0[l]
+        l1 := self.c_ref1[l]
         if a2 and l2
             if a0 == l0 and a1 == l1
                 return 3 * bint(a0 == 2 or a1 == 2 or l0 == 2 or l1 == 2)
@@ -2397,171 +2401,174 @@ fn Decoder.single_ref_p2(self) int
         return 2 * bint(a0 == 2) + 2 * bint(l0 == 2)
     if a >= 0 or l >= 0
         e := if a >= 0 then a else l
-        if c_ref0[e] <= 0 or (c_ref0[e] == 1 and c_ref1[e] <= 0)
+        if self.c_ref0[e] <= 0 or (self.c_ref0[e] == 1 and self.c_ref1[e] <= 0)
             return 2
-        if c_ref1[e] <= 0
-            return 4 * bint(c_ref0[e] == 2)
-        return 3 * bint(c_ref0[e] == 2 or c_ref1[e] == 2)
+        if self.c_ref1[e] <= 0
+            return 4 * bint(self.c_ref0[e] == 2)
+        return 3 * bint(self.c_ref0[e] == 2 or self.c_ref1[e] == 2)
     2
 
 # ---------------------------------------------------------------- motion vector prediction
 
 fn Decoder.inside(self, dr int, dc int) bool
-    r := b_row + dr
-    c := b_col + dc
-    r >= 0 and c >= tile_c0 and r < mi_rows and c < tile_c1
+    r := self.b_row + dr
+    c := self.b_col + dc
+    r >= 0 and c >= self.tile_c0 and r < self.mi_rows and c < self.tile_c1
 
 ## Adds a candidate to the list (libvpx ADD_MV_REF_LIST with early break).
 fn Decoder.add_cand(mut self, r int, c int)
-    if rf_n > 0
-        if r != rf_r0 or c != rf_c0
-            rf_r1 = r
-            rf_c1 = c
-            rf_n = 2
-            rf_done = true
+    if self.rf_n > 0
+        if r != self.rf_r0 or c != self.rf_c0
+            self.rf_r1 = r
+            self.rf_c1 = c
+            self.rf_n = 2
+            self.rf_done = true
     else
-        rf_r0 = r
-        rf_c0 = c
-        rf_n = 1
-        if rf_early
-            rf_done = true
+        self.rf_r0 = r
+        self.rf_c0 = c
+        self.rf_n = 1
+        if self.rf_early
+            self.rf_done = true
 
 ## Adds the motion vector of cell `c`, reference `which`, negated when its
 ## reference has the other sign bias.
 fn Decoder.add_scaled(mut self, c int, which int, ref_frame int)
-    rf := cref(c, which)
-    mut r := c_mv[c * 16 + 12 + which * 2]
-    mut col := c_mv[c * 16 + 13 + which * 2]
-    if sign_bias[rf] != sign_bias[ref_frame]
+    rf := self.cref(c, which)
+    mut r := self.c_mv[c * 16 + 12 + which * 2]
+    mut col := self.c_mv[c * 16 + 13 + which * 2]
+    if self.sign_bias[rf] != self.sign_bias[ref_frame]
         r = -r
         col = -col
-    add_cand(r, col)
+    self.add_cand(r, col)
 
 fn Decoder.add_prev(mut self, cell int, which int, ref_frame int, scaled bool)
-    rf := prev_mvs[cell * 6 + which]
-    mut r := prev_mvs[cell * 6 + 2 + which * 2]
-    mut col := prev_mvs[cell * 6 + 3 + which * 2]
-    if scaled and sign_bias[rf] != sign_bias[ref_frame]
+    rf := self.prev_mvs[cell * 6 + which]
+    mut r := self.prev_mvs[cell * 6 + 2 + which * 2]
+    mut col := self.prev_mvs[cell * 6 + 3 + which * 2]
+    if scaled and self.sign_bias[rf] != self.sign_bias[ref_frame]
         r = -r
         col = -col
-    add_cand(r, col)
+    self.add_cand(r, col)
 
 ## The candidate motion vectors for `ref_frame` (libvpx dec_find_mv_refs),
 ## clamped, in rf_r0/rf_c0 and rf_r1/rf_c1. `block` is the sub-block for
 ## 4x4 to 8x4 blocks, else -1.
 fn Decoder.find_mv_refs(mut self, mode int, ref_frame int, block int)
-    rf_n = 0
-    rf_r0 = 0
-    rf_c0 = 0
-    rf_r1 = 0
-    rf_c1 = 0
-    rf_early = mode != NEARMV
-    rf_done = false
-    mv_scan(ref_frame, block)
-    rf_r0 = rf_r0.max(to_top - 128).min(to_bottom + 128)
-    rf_c0 = rf_c0.max(to_left - 128).min(to_right + 128)
-    rf_r1 = rf_r1.max(to_top - 128).min(to_bottom + 128)
-    rf_c1 = rf_c1.max(to_left - 128).min(to_right + 128)
+    self.rf_n = 0
+    self.rf_r0 = 0
+    self.rf_c0 = 0
+    self.rf_r1 = 0
+    self.rf_c1 = 0
+    self.rf_early = mode != NEARMV
+    self.rf_done = false
+    self.mv_scan(ref_frame, block)
+    self.rf_r0 = self.rf_r0.max(self.to_top - 128).min(self.to_bottom + 128)
+    self.rf_c0 = self.rf_c0.max(self.to_left - 128).min(self.to_right + 128)
+    self.rf_r1 = self.rf_r1.max(self.to_top - 128).min(self.to_bottom + 128)
+    self.rf_c1 = self.rf_c1.max(self.to_left - 128).min(self.to_right + 128)
 
 fn Decoder.mv_scan(mut self, ref_frame int, block int)
-    cell0 := b_row * mi_cols + b_col
-    sb := b_size * 8
+    cell0 := self.b_row * self.mi_cols + self.b_col
+    sb := self.b_size * 8
     mut diff_found := false
     mut first := 0
     if block >= 0
         for i in 0..2
             dr := MV_REF_ROW[sb + i]
             dc := MV_REF_COL[sb + i]
-            if inside(dr, dc)
-                c := cell0 + dr * mi_cols + dc
+            if self.inside(dr, dc)
+                c := cell0 + dr * self.mi_cols + dc
                 diff_found = true
                 mut which := -1
-                if c_ref0[c] == ref_frame
+                if self.c_ref0[c] == ref_frame
                     which = 0
-                elif c_ref1[c] == ref_frame
+                elif self.c_ref1[c] == ref_frame
                     which = 1
                 if which >= 0
-                    if c_sb[c] < B8X8
+                    if self.c_sb[c] < B8X8
                         sub := [1, 2, 1, 3, 3, 2, 3, 3][block * 2 + bint(dc == 0)]
-                        add_cand(
-                            c_mv[(c * 4 + sub) * 4 + which * 2],
-                            c_mv[(c * 4 + sub) * 4 + which * 2 + 1],
+                        self.add_cand(
+                            self.c_mv[(c * 4 + sub) * 4 + which * 2],
+                            self.c_mv[(c * 4 + sub) * 4 + which * 2 + 1],
                         )
                     else
-                        add_cand(c_mv[c * 16 + 12 + which * 2], c_mv[c * 16 + 13 + which * 2])
-                    if rf_done
+                        self.add_cand(
+                            self.c_mv[c * 16 + 12 + which * 2],
+                            self.c_mv[c * 16 + 13 + which * 2],
+                        )
+                    if self.rf_done
                         return
         first = 2
     for i in first..8
         dr := MV_REF_ROW[sb + i]
         dc := MV_REF_COL[sb + i]
-        if inside(dr, dc)
-            c := cell0 + dr * mi_cols + dc
+        if self.inside(dr, dc)
+            c := cell0 + dr * self.mi_cols + dc
             diff_found = true
-            if c_ref0[c] == ref_frame
-                add_cand(c_mv[c * 16 + 12], c_mv[c * 16 + 13])
-                if rf_done
+            if self.c_ref0[c] == ref_frame
+                self.add_cand(self.c_mv[c * 16 + 12], self.c_mv[c * 16 + 13])
+                if self.rf_done
                     return
-            elif c_ref1[c] == ref_frame
-                add_cand(c_mv[c * 16 + 14], c_mv[c * 16 + 15])
-                if rf_done
+            elif self.c_ref1[c] == ref_frame
+                self.add_cand(self.c_mv[c * 16 + 14], self.c_mv[c * 16 + 15])
+                if self.rf_done
                     return
-    if use_prev_mvs
-        if prev_mvs[cell0 * 6] == ref_frame
-            add_prev(cell0, 0, ref_frame, false)
-            if rf_done
+    if self.use_prev_mvs
+        if self.prev_mvs[cell0 * 6] == ref_frame
+            self.add_prev(cell0, 0, ref_frame, false)
+            if self.rf_done
                 return
-        elif prev_mvs[cell0 * 6 + 1] == ref_frame
-            add_prev(cell0, 1, ref_frame, false)
-            if rf_done
+        elif self.prev_mvs[cell0 * 6 + 1] == ref_frame
+            self.add_prev(cell0, 1, ref_frame, false)
+            if self.rf_done
                 return
     if diff_found
         for i in 0..8
             dr := MV_REF_ROW[sb + i]
             dc := MV_REF_COL[sb + i]
-            if inside(dr, dc)
-                c := cell0 + dr * mi_cols + dc
-                if c_ref0[c] > 0
-                    if c_ref0[c] != ref_frame
-                        add_scaled(c, 0, ref_frame)
-                        if rf_done
+            if self.inside(dr, dc)
+                c := cell0 + dr * self.mi_cols + dc
+                if self.c_ref0[c] > 0
+                    if self.c_ref0[c] != ref_frame
+                        self.add_scaled(c, 0, ref_frame)
+                        if self.rf_done
                             return
-                    differs := c_mv[c * 16 + 14] != c_mv[c * 16 + 12]
-                        or c_mv[c * 16 + 15] != c_mv[c * 16 + 13]
-                    if c_ref1[c] > 0 and c_ref1[c] != ref_frame and differs
-                        add_scaled(c, 1, ref_frame)
-                        if rf_done
+                    differs := self.c_mv[c * 16 + 14] != self.c_mv[c * 16 + 12]
+                        or self.c_mv[c * 16 + 15] != self.c_mv[c * 16 + 13]
+                    if self.c_ref1[c] > 0 and self.c_ref1[c] != ref_frame and differs
+                        self.add_scaled(c, 1, ref_frame)
+                        if self.rf_done
                             return
-    if use_prev_mvs
-        r0 := prev_mvs[cell0 * 6]
-        r1 := prev_mvs[cell0 * 6 + 1]
+    if self.use_prev_mvs
+        r0 := self.prev_mvs[cell0 * 6]
+        r1 := self.prev_mvs[cell0 * 6 + 1]
         if r0 != ref_frame and r0 > 0
-            add_prev(cell0, 0, ref_frame, true)
-            if rf_done
+            self.add_prev(cell0, 0, ref_frame, true)
+            if self.rf_done
                 return
-        pdiff := prev_mvs[cell0 * 6 + 4] != prev_mvs[cell0 * 6 + 2]
-            or prev_mvs[cell0 * 6 + 5] != prev_mvs[cell0 * 6 + 3]
+        pdiff := self.prev_mvs[cell0 * 6 + 4] != self.prev_mvs[cell0 * 6 + 2]
+            or self.prev_mvs[cell0 * 6 + 5] != self.prev_mvs[cell0 * 6 + 3]
         if r1 > 0 and r1 != ref_frame and pdiff
-            add_prev(cell0, 1, ref_frame, true)
+            self.add_prev(cell0, 1, ref_frame, true)
 
 fn Decoder.mode_context(self) int
-    cell0 := b_row * mi_cols + b_col
+    cell0 := self.b_row * self.mi_cols + self.b_col
     mut cnt := 0
     for i in 0..2
-        dr := MV_REF_ROW[b_size * 8 + i]
-        dc := MV_REF_COL[b_size * 8 + i]
-        if inside(dr, dc)
-            cnt += MODE_2_COUNTER[c_mode[cell0 + dr * mi_cols + dc]]
+        dr := MV_REF_ROW[self.b_size * 8 + i]
+        dc := MV_REF_COL[self.b_size * 8 + i]
+        if self.inside(dr, dc)
+            cnt += MODE_2_COUNTER[self.c_mode[cell0 + dr * self.mi_cols + dc]]
     COUNTER_TO_CTX[cnt]
 
 fn Decoder.read_inter_mode(mut self, ctx int) int
-    m := tree(INTER_MODE_TREE, SRC_FC, FC_INTER_MODE + ctx * 3)
-    counts[C_INTER_MODE + ctx * 4 + m] += 1
+    m := self.tree(INTER_MODE_TREE, SRC_FC, FC_INTER_MODE + ctx * 3)
+    self.counts[C_INTER_MODE + ctx * 4 + m] += 1
     NEARESTMV + m
 
 ## Rounds odd components when high precision is off or the vector is long.
 fn Decoder.lower_prec(self, v int, ref_r int, ref_c int) int
-    usehp := allow_hp == 1 and ref_r.abs() < 64 and ref_c.abs() < 64
+    usehp := self.allow_hp == 1 and ref_r.abs() < 64 and ref_c.abs() < 64
     if usehp or v.bit_and(1) == 0
         return v
     if v > 0
@@ -2570,21 +2577,21 @@ fn Decoder.lower_prec(self, v int, ref_r int, ref_c int) int
 
 fn Decoder.read_mv_comp(mut self, comp int, usehp bool) int
     b := FC_MV_COMP + comp * 33
-    sign := read(fc[b + MVC_SIGN])
-    cls := tree(MV_CLASS_TREE, SRC_FC, b + MVC_CLASSES)
+    sign := self.read(self.fc[b + MVC_SIGN])
+    cls := self.tree(MV_CLASS_TREE, SRC_FC, b + MVC_CLASSES)
     mut d := 0
     mut mag := 0
     if cls == 0
-        d = read(fc[b + MVC_CLASS0])
+        d = self.read(self.fc[b + MVC_CLASS0])
     else
         for i in 0..cls
-            d += read(fc[b + MVC_BITS + i]).shl(i)
+            d += self.read(self.fc[b + MVC_BITS + i]).shl(i)
         mag = (2).shl(cls + 2)
     fbase := if cls == 0 then b + MVC_CLASS0_FP + d * 3 else b + MVC_FP
-    fr := tree(MV_FP_TREE, SRC_FC, fbase)
+    fr := self.tree(MV_FP_TREE, SRC_FC, fbase)
     mut hp := 1
     if usehp
-        hp = read(fc[b + (if cls == 0 then MVC_CLASS0_HP else MVC_HP)])
+        hp = self.read(self.fc[b + (if cls == 0 then MVC_CLASS0_HP else MVC_HP)])
     mag += d.shl(3) + fr.shl(1) + hp + 1
     if sign == 1
         return -mag
@@ -2593,40 +2600,40 @@ fn Decoder.read_mv_comp(mut self, comp int, usehp bool) int
 fn Decoder.inc_mv_comp(mut self, v int, comp int)
     cb := C_MV_COMP + comp * 51
     s := bint(v < 0)
-    counts[cb + CM_SIGN + s] += 1
+    self.counts[cb + CM_SIGN + s] += 1
     z := v.abs() - 1
-    c := if z >= (2).shl(12) then 10 else log2t[z.shr(3)]
+    c := if z >= (2).shl(12) then 10 else self.log2t[z.shr(3)]
     o := if c == 0 then z else z - (2).shl(c + 2)
-    counts[cb + CM_CLASSES + c] += 1
+    self.counts[cb + CM_CLASSES + c] += 1
     d := o.shr(3)
     f := o.shr(1).bit_and(3)
     e := o.bit_and(1)
     if c == 0
-        counts[cb + CM_CLASS0 + d] += 1
-        counts[cb + CM_CLASS0_FP + d * 4 + f] += 1
-        counts[cb + CM_CLASS0_HP + e] += 1
+        self.counts[cb + CM_CLASS0 + d] += 1
+        self.counts[cb + CM_CLASS0_FP + d * 4 + f] += 1
+        self.counts[cb + CM_CLASS0_HP + e] += 1
     else
         for i in 0..c
-            counts[cb + CM_BITS + i * 2 + d.shr(i).bit_and(1)] += 1
-        counts[cb + CM_FP + f] += 1
-        counts[cb + CM_HP + e] += 1
+            self.counts[cb + CM_BITS + i * 2 + d.shr(i).bit_and(1)] += 1
+        self.counts[cb + CM_FP + f] += 1
+        self.counts[cb + CM_HP + e] += 1
 
 ## Reads a motion vector difference and adds it to best_r/best_c[r].
 fn Decoder.read_mv(mut self, r int)(int, int)
-    j := tree(MV_JOINT_TREE, SRC_FC, FC_MV_JOINT)
-    usehp := allow_hp == 1 and best_r[r].abs() < 64 and best_c[r].abs() < 64
+    j := self.tree(MV_JOINT_TREE, SRC_FC, FC_MV_JOINT)
+    usehp := self.allow_hp == 1 and self.best_r[r].abs() < 64 and self.best_c[r].abs() < 64
     mut dr := 0
     mut dc := 0
     if j == 2 or j == 3
-        dr = read_mv_comp(0, usehp)
+        dr = self.read_mv_comp(0, usehp)
     if j == 1 or j == 3
-        dc = read_mv_comp(1, usehp)
-    counts[C_MV_JOINT + j] += 1
+        dc = self.read_mv_comp(1, usehp)
+    self.counts[C_MV_JOINT + j] += 1
     if dr != 0
-        inc_mv_comp(dr, 0)
+        self.inc_mv_comp(dr, 0)
     if dc != 0
-        inc_mv_comp(dc, 1)
-    (best_r[r] + dr, best_c[r] + dc)
+        self.inc_mv_comp(dc, 1)
+    (self.best_r[r] + dr, self.best_c[r] + dc)
 
 ## Sets m_mv of sub-block `k` (all four when `k` is -1) for `mode`.
 fn Decoder.assign_mv(mut self, mode int, comp int, k int)
@@ -2635,31 +2642,31 @@ fn Decoder.assign_mv(mut self, mode int, comp int, k int)
         mut vc := 0
         if r <= comp
             if mode == NEWMV
-                mv := read_mv(r)
+                mv := self.read_mv(r)
                 vr = mv.0
                 vc = mv.1
             elif mode != ZEROMV
-                vr = nn_r[r]
-                vc = nn_c[r]
+                vr = self.nn_r[r]
+                vc = self.nn_c[r]
         for j in 0..4
             if k < 0 or j == k
-                m_mv[j * 4 + r * 2] = vr
-                m_mv[j * 4 + r * 2 + 1] = vc
+                self.m_mv[j * 4 + r * 2] = vr
+                self.m_mv[j * 4 + r * 2 + 1] = vc
 
 fn Decoder.inter_block_mode_info(mut self)
-    read_ref_frames()
-    comp := bint(m_ref1 > 0)
-    ctx := mode_context()
-    if seg_feature(m_seg, 3)
-        m_mode = ZEROMV
-        if b_size < B8X8
-            fail = "segment skip on a block smaller than 8x8"
+    self.read_ref_frames()
+    comp := bint(self.m_ref1 > 0)
+    ctx := self.mode_context()
+    if self.seg_feature(self.m_seg, 3)
+        self.m_mode = ZEROMV
+        if self.b_size < B8X8
+            self.fail = "segment skip on a block smaller than 8x8"
             return
-    elif b_size >= B8X8
-        m_mode = read_inter_mode(ctx)
-    if interp_filter == SWITCHABLE
-        lt := if left >= 0 then c_interp[left] else 3
-        at := if above >= 0 then c_interp[above] else 3
+    elif self.b_size >= B8X8
+        self.m_mode = self.read_inter_mode(ctx)
+    if self.interp_filter == SWITCHABLE
+        lt := if self.left >= 0 then self.c_interp[self.left] else 3
+        at := if self.above >= 0 then self.c_interp[self.above] else 3
         mut ictx := 3
         if lt == at
             ictx = lt
@@ -2667,18 +2674,18 @@ fn Decoder.inter_block_mode_info(mut self)
             ictx = at
         elif at == 3
             ictx = lt
-        f := tree(INTERP_TREE, SRC_FC, FC_INTERP + ictx * 2)
-        counts[C_INTERP + ictx * 3 + f] += 1
-        m_interp = f
+        f := self.tree(INTERP_TREE, SRC_FC, FC_INTERP + ictx * 2)
+        self.counts[C_INTERP + ictx * 3 + f] += 1
+        self.m_interp = f
     else
-        m_interp = interp_filter
-    best_r[0] = 0
-    best_c[0] = 0
-    best_r[1] = 0
-    best_c[1] = 0
-    if b_size < B8X8
-        n4w := (1).shl(b_wl)
-        n4h := (1).shl(b_hl)
+        self.m_interp = self.interp_filter
+    self.best_r[0] = 0
+    self.best_c[0] = 0
+    self.best_r[1] = 0
+    self.best_c[1] = 0
+    if self.b_size < B8X8
+        n4w := (1).shl(self.b_wl)
+        n4h := (1).shl(self.b_hl)
         mut got_new := false
         mut bmode := 0
         mut idy := 0
@@ -2686,211 +2693,211 @@ fn Decoder.inter_block_mode_info(mut self)
             mut idx := 0
             while idx < 2
                 j := idy * 2 + idx
-                bmode = read_inter_mode(ctx)
-                nn_r[0] = 0
-                nn_c[0] = 0
-                nn_r[1] = 0
-                nn_c[1] = 0
+                bmode = self.read_inter_mode(ctx)
+                self.nn_r[0] = 0
+                self.nn_c[0] = 0
+                self.nn_r[1] = 0
+                self.nn_c[1] = 0
                 if bmode == NEARESTMV or bmode == NEARMV
                     for r in 0..comp + 1
-                        sub8x8_mv(bmode, j, r)
+                        self.sub8x8_mv(bmode, j, r)
                 elif bmode == NEWMV and not got_new
                     for r in 0..comp + 1
-                        rf := if r == 0 then m_ref0 else m_ref1
-                        find_mv_refs(NEWMV, rf, -1)
-                        best_r[r] = lower_prec(rf_r0, rf_r0, rf_c0)
-                        best_c[r] = lower_prec(rf_c0, rf_r0, rf_c0)
+                        rf := if r == 0 then self.m_ref0 else self.m_ref1
+                        self.find_mv_refs(NEWMV, rf, -1)
+                        self.best_r[r] = self.lower_prec(self.rf_r0, self.rf_r0, self.rf_c0)
+                        self.best_c[r] = self.lower_prec(self.rf_c0, self.rf_r0, self.rf_c0)
                         got_new = true
-                assign_mv(bmode, comp, j)
+                self.assign_mv(bmode, comp, j)
                 if n4h == 2
-                    copy_sub_mv(j, j + 2)
+                    self.copy_sub_mv(j, j + 2)
                 if n4w == 2
-                    copy_sub_mv(j, j + 1)
+                    self.copy_sub_mv(j, j + 1)
                 idx += n4w
             idy += n4h
-        m_mode = bmode
+        self.m_mode = bmode
     else
-        if m_mode != ZEROMV
+        if self.m_mode != ZEROMV
             for r in 0..comp + 1
-                rf := if r == 0 then m_ref0 else m_ref1
-                find_mv_refs(m_mode, rf, -1)
-                mut cr := rf_r0
-                mut cc := rf_c0
-                if m_mode == NEARMV
-                    cr = rf_r1
-                    cc = rf_c1
-                best_r[r] = lower_prec(cr, cr, cc)
-                best_c[r] = lower_prec(cc, cr, cc)
-                nn_r[r] = best_r[r]
-                nn_c[r] = best_c[r]
-        assign_mv(m_mode, comp, -1)
-    m_uv = 0
+                rf := if r == 0 then self.m_ref0 else self.m_ref1
+                self.find_mv_refs(self.m_mode, rf, -1)
+                mut cr := self.rf_r0
+                mut cc := self.rf_c0
+                if self.m_mode == NEARMV
+                    cr = self.rf_r1
+                    cc = self.rf_c1
+                self.best_r[r] = self.lower_prec(cr, cr, cc)
+                self.best_c[r] = self.lower_prec(cc, cr, cc)
+                self.nn_r[r] = self.best_r[r]
+                self.nn_c[r] = self.best_c[r]
+        self.assign_mv(self.m_mode, comp, -1)
+    self.m_uv = 0
     for k in 0..4
-        m_bmode[k] = m_mode
+        self.m_bmode[k] = self.m_mode
 
 fn Decoder.copy_sub_mv(mut self, src_k int, dst_k int)
     for k in 0..4
-        m_mv[dst_k * 4 + k] = m_mv[src_k * 4 + k]
+        self.m_mv[dst_k * 4 + k] = self.m_mv[src_k * 4 + k]
 
 ## Row and column of sub-block `k`'s vector for reference `r`.
 fn Decoder.sub_r(self, k int, r int) int
-    m_mv[k * 4 + r * 2]
+    self.m_mv[k * 4 + r * 2]
 
 fn Decoder.sub_c(self, k int, r int) int
-    m_mv[k * 4 + r * 2 + 1]
+    self.m_mv[k * 4 + r * 2 + 1]
 
 ## NEAREST and NEAR vectors of a sub-block (libvpx append_sub8x8_mvs_for_idx),
 ## into nn_r/nn_c[r].
 fn Decoder.sub8x8_mv(mut self, bmode int, block int, r int)
-    rf := if r == 0 then m_ref0 else m_ref1
+    rf := if r == 0 then self.m_ref0 else self.m_ref1
     mut vr := 0
     mut vc := 0
     if block == 0
-        find_mv_refs(bmode, rf, block)
+        self.find_mv_refs(bmode, rf, block)
         if bmode == NEARMV
-            vr = rf_r1
-            vc = rf_c1
+            vr = self.rf_r1
+            vc = self.rf_c1
         else
-            vr = rf_r0
-            vc = rf_c0
+            vr = self.rf_r0
+            vc = self.rf_c0
     elif block == 1 or block == 2
         if bmode == NEARESTMV
-            vr = sub_r(0, r)
-            vc = sub_c(0, r)
+            vr = self.sub_r(0, r)
+            vc = self.sub_c(0, r)
         else
-            find_mv_refs(bmode, rf, block)
-            if sub_r(0, r) != rf_r0 or sub_c(0, r) != rf_c0
-                vr = rf_r0
-                vc = rf_c0
-            elif sub_r(0, r) != rf_r1 or sub_c(0, r) != rf_c1
-                vr = rf_r1
-                vc = rf_c1
+            self.find_mv_refs(bmode, rf, block)
+            if self.sub_r(0, r) != self.rf_r0 or self.sub_c(0, r) != self.rf_c0
+                vr = self.rf_r0
+                vc = self.rf_c0
+            elif self.sub_r(0, r) != self.rf_r1 or self.sub_c(0, r) != self.rf_c1
+                vr = self.rf_r1
+                vc = self.rf_c1
     elif bmode == NEARESTMV
-        vr = sub_r(2, r)
-        vc = sub_c(2, r)
-    elif sub_r(2, r) != sub_r(1, r) or sub_c(2, r) != sub_c(1, r)
-        vr = sub_r(1, r)
-        vc = sub_c(1, r)
-    elif sub_r(2, r) != sub_r(0, r) or sub_c(2, r) != sub_c(0, r)
-        vr = sub_r(0, r)
-        vc = sub_c(0, r)
+        vr = self.sub_r(2, r)
+        vc = self.sub_c(2, r)
+    elif self.sub_r(2, r) != self.sub_r(1, r) or self.sub_c(2, r) != self.sub_c(1, r)
+        vr = self.sub_r(1, r)
+        vc = self.sub_c(1, r)
+    elif self.sub_r(2, r) != self.sub_r(0, r) or self.sub_c(2, r) != self.sub_c(0, r)
+        vr = self.sub_r(0, r)
+        vc = self.sub_c(0, r)
     else
-        find_mv_refs(bmode, rf, block)
-        if sub_r(2, r) != rf_r0 or sub_c(2, r) != rf_c0
-            vr = rf_r0
-            vc = rf_c0
-        elif sub_r(2, r) != rf_r1 or sub_c(2, r) != rf_c1
-            vr = rf_r1
-            vc = rf_c1
-    nn_r[r] = vr
-    nn_c[r] = vc
+        self.find_mv_refs(bmode, rf, block)
+        if self.sub_r(2, r) != self.rf_r0 or self.sub_c(2, r) != self.rf_c0
+            vr = self.rf_r0
+            vc = self.rf_c0
+        elif self.sub_r(2, r) != self.rf_r1 or self.sub_c(2, r) != self.rf_c1
+            vr = self.rf_r1
+            vc = self.rf_c1
+    self.nn_r[r] = vr
+    self.nn_c[r] = vc
 # ---------------------------------------------------------------- coefficients
 
 ## Reads the coefficients of one transform block and updates the nonzero
 ## contexts (VP9 spec 6.4.24); returns the end of block.
 fn Decoder.tokens(mut self, p int, mi_row int, mi_col int, row int, col int, tx int, tt int) int
     ss := if p == 0 then 0 else 1
-    an := p * sb_cols * 16
+    an := p * self.sb_cols * 16
     ln := p * 16
-    awid := sb_cols * 16
+    awid := self.sb_cols * 16
     ax := (mi_col * 2).shr(ss) + col
     ly := (mi_row.bit_and(7) * 2).shr(ss) + row
     n := (1).shl(tx)
     mut actx := 0
     mut lctx := 0
     for i in 0..n
-        if ax + i < awid and above_nz[an + ax + i] != 0
+        if ax + i < awid and self.above_nz[an + ax + i] != 0
             actx = 1
-        if ly + i < 16 and left_nz[ln + ly + i] != 0
+        if ly + i < 16 and self.left_nz[ln + ly + i] != 0
             lctx = 1
     mut at := SCAN_AT[tx]
     if tx < 3
         at += [0, 1, 2, 0][tt] * (16).shl(tx * 2)
-    eob := decode_coefs(p, tx, actx + lctx, at)
+    eob := self.decode_coefs(p, tx, actx + lctx, at)
     nz := bint(eob > 0)
     mut na := n
     mut nl := n
-    if max_wide > 0 and col + n > max_wide
-        na = (max_wide - col).max(0)
-    if max_high > 0 and row + n > max_high
-        nl = (max_high - row).max(0)
+    if self.max_wide > 0 and col + n > self.max_wide
+        na = (self.max_wide - col).max(0)
+    if self.max_high > 0 and row + n > self.max_high
+        nl = (self.max_high - row).max(0)
     for i in 0..n
         if ax + i < awid
-            above_nz[an + ax + i] = if i < na then nz else 0
+            self.above_nz[an + ax + i] = if i < na then nz else 0
         if ly + i < 16
-            left_nz[ln + ly + i] = if i < nl then nz else 0
+            self.left_nz[ln + ly + i] = if i < nl then nz else 0
     eob
 
 fn Decoder.decode_coefs(mut self, p int, tx int, ctx0 int, at int) int
     ptype := if p == 0 then 0 else 1
-    rf := bint(m_ref0 > 0)
+    rf := bint(self.m_ref0 > 0)
     maxeob := (16).shl(tx * 2)
     g := (tx * 2 + ptype) * 2 + rf
     pbase := FC_COEF + g * 108
     cbase := C_COEF + g * 144
     ebase := C_EOB + g * 36
-    dc_q := if p == 0 then dq[m_seg * 4] else dq[m_seg * 4 + 2]
-    ac_q := if p == 0 then dq[m_seg * 4 + 1] else dq[m_seg * 4 + 3]
+    dc_q := if p == 0 then self.dq[self.m_seg * 4] else self.dq[self.m_seg * 4 + 2]
+    ac_q := if p == 0 then self.dq[self.m_seg * 4 + 1] else self.dq[self.m_seg * 4 + 3]
     shift := if tx == 3 then 1 else 0
     # `co` is all zero here: `inverse` clears what it used.
     mut ctx := ctx0
     mut c := 0
     mut dqv := dc_q
     while c < maxeob
-        mut bnd := if tx == 0 then BAND4[c] else band8[c]
+        mut bnd := if tx == 0 then BAND4[c] else self.band8[c]
         mut pi := pbase + (bnd * 6 + ctx) * 3
-        counts[ebase + bnd * 6 + ctx] += 1
-        if read(fc[pi]) == 0
-            counts[cbase + (bnd * 6 + ctx) * 4 + 3] += 1
+        self.counts[ebase + bnd * 6 + ctx] += 1
+        if self.read(self.fc[pi]) == 0
+            self.counts[cbase + (bnd * 6 + ctx) * 4 + 3] += 1
             break
-        while read(fc[pi + 1]) == 0
-            counts[cbase + (bnd * 6 + ctx) * 4] += 1
+        while self.read(self.fc[pi + 1]) == 0
+            self.counts[cbase + (bnd * 6 + ctx) * 4] += 1
             dqv = ac_q
-            tcache[scans[at + c]] = 0
+            self.tcache[self.scans[at + c]] = 0
             c += 1
             if c >= maxeob
                 return c
-            ctx = (1 + tcache[nbrs[2 * (at + c)]] + tcache[nbrs[2 * (at + c) + 1]]).shr(1)
-            bnd = if tx == 0 then BAND4[c] else band8[c]
+            ctx = (1 + self.tcache[self.nbrs[2 * (at + c)]] + self.tcache[self.nbrs[2 * (at + c) + 1]]).shr(1)
+            bnd = if tx == 0 then BAND4[c] else self.band8[c]
             pi = pbase + (bnd * 6 + ctx) * 3
-        rc := scans[at + c]
+        rc := self.scans[at + c]
         mut v := 0
-        if read(fc[pi + 2]) == 0
-            counts[cbase + (bnd * 6 + ctx) * 4 + 1] += 1
-            tcache[rc] = 1
+        if self.read(self.fc[pi + 2]) == 0
+            self.counts[cbase + (bnd * 6 + ctx) * 4 + 1] += 1
+            self.tcache[rc] = 1
             v = dqv.shr(shift)
         else
-            counts[cbase + (bnd * 6 + ctx) * 4 + 2] += 1
-            pp := (fc[pi + 2] - 1) * 8
-            if read(pareto[pp]) == 1
+            self.counts[cbase + (bnd * 6 + ctx) * 4 + 2] += 1
+            pp := (self.fc[pi + 2] - 1) * 8
+            if self.read(self.pareto[pp]) == 1
                 mut k := 0
-                if read(pareto[pp + 3]) == 1
-                    tcache[rc] = 5
-                    if read(pareto[pp + 5]) == 1
-                        k = if read(pareto[pp + 7]) == 1 then 5 else 4
+                if self.read(self.pareto[pp + 3]) == 1
+                    self.tcache[rc] = 5
+                    if self.read(self.pareto[pp + 5]) == 1
+                        k = if self.read(self.pareto[pp + 7]) == 1 then 5 else 4
                     else
-                        k = if read(pareto[pp + 6]) == 1 then 3 else 2
+                        k = if self.read(self.pareto[pp + 6]) == 1 then 3 else 2
                 else
-                    tcache[rc] = 4
-                    k = if read(pareto[pp + 4]) == 1 then 1 else 0
+                    self.tcache[rc] = 4
+                    k = if self.read(self.pareto[pp + 4]) == 1 then 1 else 0
                 mut val := 0
                 if k == 5
                     for j in 0..14
-                        val = val * 2 + read(CAT6[j])
+                        val = val * 2 + self.read(CAT6[j])
                 else
                     for j in 0..CAT_LEN[k]
-                        val = val * 2 + read(CAT_PROBS[CAT_START[k] + j])
+                        val = val * 2 + self.read(CAT_PROBS[CAT_START[k] + j])
                 v = ((val + CAT_MIN[k]) * dqv).shr(shift)
-            elif read(pareto[pp + 1]) == 1
-                tcache[rc] = 3
-                v = ((3 + read(pareto[pp + 2])) * dqv).shr(shift)
+            elif self.read(self.pareto[pp + 1]) == 1
+                self.tcache[rc] = 3
+                v = ((3 + self.read(self.pareto[pp + 2])) * dqv).shr(shift)
             else
-                tcache[rc] = 2
+                self.tcache[rc] = 2
                 v = (2 * dqv).shr(shift)
-        co[rc] = if read(128) == 1 then -v else v
+        self.co[rc] = if self.read(128) == 1 then -v else v
         c += 1
         if c < maxeob
-            ctx = (1 + tcache[nbrs[2 * (at + c)]] + tcache[nbrs[2 * (at + c) + 1]]).shr(1)
+            ctx = (1 + self.tcache[self.nbrs[2 * (at + c)]] + self.tcache[self.nbrs[2 * (at + c) + 1]]).shr(1)
         dqv = ac_q
     c
 
@@ -2907,25 +2914,25 @@ fn Decoder.inverse(
     eob int,
 )
     ss := if p == 0 then 0 else 1
-    stride := if p == 0 then ystride else cstride
+    stride := if p == 0 then self.ystride else self.cstride
     x0 := (mi_col * 8).shr(ss) + col * 4
     y0 := (mi_row * 8).shr(ss) + row * 4
     n := (4).shl(tx)
-    base := plane_at(cur, p) + y0 * stride + x0
+    base := self.plane_at(self.cur, p) + y0 * stride + x0
     sh := [4, 5, 6, 6][tx]
-    if eob == 1 and tt == 0 and not lossless
+    if eob == 1 and tt == 0 and not self.lossless
         # Only the DC coefficient: one value for the whole block (libvpx
         # vpx_idct*_1_add).
-        dc := rs14(rs14(co[0] * 11585) * 11585)
+        dc := rs14(rs14(self.co[0] * 11585) * 11585)
         a1 := (dc + (1).shl(sh - 1)).shr(sh)
-        co[0] = 0
+        self.co[0] = 0
         for y in 0..n
             o := base + y * stride
             for x in 0..n
-                mem[o + x] = clip8(mem[o + x].to_int() + a1).to_u8()
+                self.mem[o + x] = clip8(self.mem[o + x].to_int() + a1).to_u8()
         return
-    if lossless
-        iwht()
+    if self.lossless
+        self.iwht()
     else
         row_adst := tt == 2 or tt == 3
         col_adst := tt == 1 or tt == 3
@@ -2933,21 +2940,21 @@ fn Decoder.inverse(
         for i in 0..n
             mut nonzero := false
             for j in 0..n
-                if co[i * n + j] != 0
+                if self.co[i * n + j] != 0
                     nonzero = true
                     break
             if nonzero
-                tx1d(tx, row_adst, i * n, 1)
+                self.tx1d(tx, row_adst, i * n, 1)
         for i in 0..n
-            tx1d(tx, col_adst, i, n)
+            self.tx1d(tx, col_adst, i, n)
         half := (1).shl(sh - 1)
         for i in 0..n * n
-            co[i] = (co[i] + half).shr(sh)
+            self.co[i] = (self.co[i] + half).shr(sh)
     for y in 0..n
         o := base + y * stride
         for x in 0..n
-            mem[o + x] = clip8(mem[o + x].to_int() + co[y * n + x]).to_u8()
-            co[y * n + x] = 0
+            self.mem[o + x] = clip8(self.mem[o + x].to_int() + self.co[y * n + x]).to_u8()
+            self.co[y * n + x] = 0
 
 fn clip8(v int) int
     if v < 0
@@ -2959,29 +2966,29 @@ fn clip8(v int) int
 fn Decoder.tx1d(mut self, tx int, adst bool, o int, s int)
     if tx == 0
         if adst
-            iadst4(o, s)
+            self.iadst4(o, s)
         else
-            idct4(o, s)
+            self.idct4(o, s)
     elif tx == 1
         if adst
-            iadst8(o, s)
+            self.iadst8(o, s)
         else
-            idct8(o, s)
+            self.idct8(o, s)
     elif tx == 2
         if adst
-            iadst16(o, s)
+            self.iadst16(o, s)
         else
-            idct16(o, s)
+            self.idct16(o, s)
     else
-        idct32(o, s)
+        self.idct32(o, s)
 
 ## The lossless 4x4 Walsh-Hadamard transform (libvpx vpx_iwht4x4_16_add).
 fn Decoder.iwht(mut self)
     for i in 0..4
-        mut a1 := co[i * 4].shr(2)
-        mut c1 := co[i * 4 + 1].shr(2)
-        mut d1 := co[i * 4 + 2].shr(2)
-        mut b1 := co[i * 4 + 3].shr(2)
+        mut a1 := self.co[i * 4].shr(2)
+        mut c1 := self.co[i * 4 + 1].shr(2)
+        mut d1 := self.co[i * 4 + 2].shr(2)
+        mut b1 := self.co[i * 4 + 3].shr(2)
         a1 += c1
         d1 -= b1
         e1 := (a1 - d1).shr(1)
@@ -2989,15 +2996,15 @@ fn Decoder.iwht(mut self)
         c1 = e1 - c1
         a1 -= b1
         d1 += c1
-        co[i * 4] = a1
-        co[i * 4 + 1] = b1
-        co[i * 4 + 2] = c1
-        co[i * 4 + 3] = d1
+        self.co[i * 4] = a1
+        self.co[i * 4 + 1] = b1
+        self.co[i * 4 + 2] = c1
+        self.co[i * 4 + 3] = d1
     for i in 0..4
-        mut a2 := co[i]
-        mut c2 := co[4 + i]
-        mut d2 := co[8 + i]
-        mut b2 := co[12 + i]
+        mut a2 := self.co[i]
+        mut c2 := self.co[4 + i]
+        mut d2 := self.co[8 + i]
+        mut b2 := self.co[12 + i]
         a2 += c2
         d2 -= b2
         e2 := (a2 - d2).shr(1)
@@ -3005,10 +3012,10 @@ fn Decoder.iwht(mut self)
         c2 = e2 - c2
         a2 -= b2
         d2 += c2
-        co[i] = a2
-        co[4 + i] = b2
-        co[8 + i] = c2
-        co[12 + i] = d2
+        self.co[i] = a2
+        self.co[4 + i] = b2
+        self.co[8 + i] = c2
+        self.co[12 + i] = d2
 
 fn rs14(x int) int
     (x + 8192).shr(14)
@@ -3040,7 +3047,7 @@ fn needs_above(mode int) bool
 
 ## The edge pixel `i` of the above row: `ea(-1)` is the top-left corner.
 fn Decoder.ea(self, i int) int
-    edge_a[i + 1]
+    self.edge_a[i + 1]
 
 ## Predicts one transform block from its decoded neighbours (VP9 spec 8.5.1,
 ## libvpx build_intra_predictors).
@@ -3056,352 +3063,379 @@ fn Decoder.intra_predict(
     n4w int,
 )
     ss := if p == 0 then 0 else 1
-    stride := if p == 0 then ystride else cstride
+    stride := if p == 0 then self.ystride else self.cstride
     bs := (4).shl(tx)
     x0 := (mi_col * 8).shr(ss) + col * 4
     y0 := (mi_row * 8).shr(ss) + row * 4
-    have_top := row != 0 or above >= 0
-    have_left := col != 0 or left >= 0
+    have_top := row != 0 or self.above >= 0
+    have_left := col != 0 or self.left >= 0
     have_right := col + (1).shl(tx) < n4w
-    fw := (mi_cols * 8).shr(ss)
-    fh := (mi_rows * 8).shr(ss)
-    base := plane_at(cur, p) + y0 * stride + x0
+    fw := (self.mi_cols * 8).shr(ss)
+    fh := (self.mi_rows * 8).shr(ss)
+    base := self.plane_at(self.cur, p) + y0 * stride + x0
     need_ar := mode == D45_PRED or mode == D63_PRED
     need_a := needs_above(mode)
     if needs_left(mode)
         if have_left
-            if to_bottom < 0 and y0 + bs > fh
+            if self.to_bottom < 0 and y0 + bs > fh
                 ext := fh - y0
                 for i in 0..bs
-                    edge_l[i] = mem[base + i.min(ext - 1) * stride - 1].to_int()
+                    self.edge_l[i] = self.mem[base + i.min(ext - 1) * stride - 1].to_int()
             else
                 for i in 0..bs
-                    edge_l[i] = mem[base + i * stride - 1].to_int()
+                    self.edge_l[i] = self.mem[base + i * stride - 1].to_int()
         else
             for i in 0..bs
-                edge_l[i] = 129
+                self.edge_l[i] = 129
     if need_a or need_ar
         if have_top
             ar := base - stride
-            if to_right < 0
+            if self.to_right < 0
                 if need_a
                     if x0 + bs <= fw
                         for i in 0..bs
-                            edge_a[1 + i] = mem[ar + i].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i].to_int()
                     elif x0 <= fw
                         r := fw - x0
                         for i in 0..bs
-                            edge_a[1 + i] = mem[ar + i.min(r - 1)].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i.min(r - 1)].to_int()
                 elif x0 + 2 * bs <= fw
                     if have_right and bs == 4
                         for i in 0..2 * bs
-                            edge_a[1 + i] = mem[ar + i].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i].to_int()
                     else
                         for i in 0..bs
-                            edge_a[1 + i] = mem[ar + i].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i].to_int()
                         for i in bs..2 * bs
-                            edge_a[1 + i] = edge_a[bs]
+                            self.edge_a[1 + i] = self.edge_a[bs]
                 elif x0 + bs <= fw
                     r2 := fw - x0
                     if have_right and bs == 4
                         for i in 0..2 * bs
-                            edge_a[1 + i] = mem[ar + i.min(r2 - 1)].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i.min(r2 - 1)].to_int()
                     else
                         for i in 0..bs
-                            edge_a[1 + i] = mem[ar + i].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i].to_int()
                         for i in bs..2 * bs
-                            edge_a[1 + i] = edge_a[bs]
+                            self.edge_a[1 + i] = self.edge_a[bs]
                 elif x0 <= fw
                     r3 := fw - x0
                     for i in 0..2 * bs
-                        edge_a[1 + i] = mem[ar + i.min(r3 - 1)].to_int()
+                        self.edge_a[1 + i] = self.mem[ar + i.min(r3 - 1)].to_int()
             else
                 for i in 0..bs
-                    edge_a[1 + i] = mem[ar + i].to_int()
+                    self.edge_a[1 + i] = self.mem[ar + i].to_int()
                 if need_ar
                     if bs == 4 and have_right
                         for i in bs..2 * bs
-                            edge_a[1 + i] = mem[ar + i].to_int()
+                            self.edge_a[1 + i] = self.mem[ar + i].to_int()
                     else
                         for i in bs..2 * bs
-                            edge_a[1 + i] = edge_a[bs]
-            edge_a[0] = if have_left then mem[ar - 1].to_int() else 129
+                            self.edge_a[1 + i] = self.edge_a[bs]
+            self.edge_a[0] = if have_left then self.mem[ar - 1].to_int() else 129
         else
             n := if need_a then bs else 2 * bs
             for i in 0..n
-                edge_a[1 + i] = 127
-            edge_a[0] = 127
+                self.edge_a[1 + i] = 127
+            self.edge_a[0] = 127
     if mode == DC_PRED
         mut v := 128
         mut sum := 0
         if have_left and have_top
             for i in 0..bs
-                sum += edge_l[i] + edge_a[1 + i]
+                sum += self.edge_l[i] + self.edge_a[1 + i]
             v = (sum + bs) / (2 * bs)
         elif have_left
             for i in 0..bs
-                sum += edge_l[i]
+                sum += self.edge_l[i]
             v = (sum + bs.shr(1)) / bs
         elif have_top
             for i in 0..bs
-                sum += edge_a[1 + i]
+                sum += self.edge_a[1 + i]
             v = (sum + bs.shr(1)) / bs
         for r in 0..bs
             for c in 0..bs
-                pd[r * bs + c] = v
+                self.pd[r * bs + c] = v
     elif mode == V_PRED
         for r in 0..bs
             for c in 0..bs
-                pd[r * bs + c] = edge_a[1 + c]
+                self.pd[r * bs + c] = self.edge_a[1 + c]
     elif mode == H_PRED
         for r in 0..bs
             for c in 0..bs
-                pd[r * bs + c] = edge_l[r]
+                self.pd[r * bs + c] = self.edge_l[r]
     elif mode == TM_PRED
         for r in 0..bs
             for c in 0..bs
-                pd[r * bs + c] = clip8(edge_l[r] + edge_a[1 + c] - edge_a[0])
+                self.pd[r * bs + c] = clip8(self.edge_l[r] + self.edge_a[1 + c] - self.edge_a[0])
     elif bs == 4
-        pred4(mode)
+        self.pred4(mode)
     else
-        predn(mode, bs)
+        self.predn(mode, bs)
     for r in 0..bs
         o := base + r * stride
         for c in 0..bs
-            mem[o + c] = pd[r * bs + c].to_u8()
+            self.mem[o + c] = self.pd[r * bs + c].to_u8()
 
 ## Sets pixel (x, y) of a 4x4 prediction.
 fn Decoder.put4(mut self, x int, y int, v int)
-    pd[y * 4 + x] = v
+    self.pd[y * 4 + x] = v
 
 ## The 4x4 directional predictors (libvpx vpx_dsp/intrapred.c).
 fn Decoder.pred4(mut self, mode int)
-    i0 := edge_l[0]
-    j0 := edge_l[1]
-    k0 := edge_l[2]
-    l0 := edge_l[3]
-    x := ea(-1)
-    a := ea(0)
-    b := ea(1)
-    c := ea(2)
-    d := ea(3)
-    e := ea(4)
-    f := ea(5)
-    g := ea(6)
-    h := ea(7)
+    i0 := self.edge_l[0]
+    j0 := self.edge_l[1]
+    k0 := self.edge_l[2]
+    l0 := self.edge_l[3]
+    x := self.ea(-1)
+    a := self.ea(0)
+    b := self.ea(1)
+    c := self.ea(2)
+    d := self.ea(3)
+    e := self.ea(4)
+    f := self.ea(5)
+    g := self.ea(6)
+    h := self.ea(7)
     if mode == D207_PRED
-        put4(0, 0, avg2(i0, j0))
-        put4(2, 0, avg2(j0, k0))
-        put4(0, 1, avg2(j0, k0))
-        put4(2, 1, avg2(k0, l0))
-        put4(0, 2, avg2(k0, l0))
-        put4(1, 0, avg3(i0, j0, k0))
-        put4(3, 0, avg3(j0, k0, l0))
-        put4(1, 1, avg3(j0, k0, l0))
-        put4(3, 1, avg3(k0, l0, l0))
-        put4(1, 2, avg3(k0, l0, l0))
-        put4(3, 2, l0)
-        put4(2, 2, l0)
-        put4(0, 3, l0)
-        put4(1, 3, l0)
-        put4(2, 3, l0)
-        put4(3, 3, l0)
+        self.put4(0, 0, avg2(i0, j0))
+        self.put4(2, 0, avg2(j0, k0))
+        self.put4(0, 1, avg2(j0, k0))
+        self.put4(2, 1, avg2(k0, l0))
+        self.put4(0, 2, avg2(k0, l0))
+        self.put4(1, 0, avg3(i0, j0, k0))
+        self.put4(3, 0, avg3(j0, k0, l0))
+        self.put4(1, 1, avg3(j0, k0, l0))
+        self.put4(3, 1, avg3(k0, l0, l0))
+        self.put4(1, 2, avg3(k0, l0, l0))
+        self.put4(3, 2, l0)
+        self.put4(2, 2, l0)
+        self.put4(0, 3, l0)
+        self.put4(1, 3, l0)
+        self.put4(2, 3, l0)
+        self.put4(3, 3, l0)
     elif mode == D63_PRED
-        put4(0, 0, avg2(a, b))
-        put4(1, 0, avg2(b, c))
-        put4(0, 2, avg2(b, c))
-        put4(2, 0, avg2(c, d))
-        put4(1, 2, avg2(c, d))
-        put4(3, 0, avg2(d, e))
-        put4(2, 2, avg2(d, e))
-        put4(3, 2, avg2(e, f))
-        put4(0, 1, avg3(a, b, c))
-        put4(1, 1, avg3(b, c, d))
-        put4(0, 3, avg3(b, c, d))
-        put4(2, 1, avg3(c, d, e))
-        put4(1, 3, avg3(c, d, e))
-        put4(3, 1, avg3(d, e, f))
-        put4(2, 3, avg3(d, e, f))
-        put4(3, 3, avg3(e, f, g))
+        self.put4(0, 0, avg2(a, b))
+        self.put4(1, 0, avg2(b, c))
+        self.put4(0, 2, avg2(b, c))
+        self.put4(2, 0, avg2(c, d))
+        self.put4(1, 2, avg2(c, d))
+        self.put4(3, 0, avg2(d, e))
+        self.put4(2, 2, avg2(d, e))
+        self.put4(3, 2, avg2(e, f))
+        self.put4(0, 1, avg3(a, b, c))
+        self.put4(1, 1, avg3(b, c, d))
+        self.put4(0, 3, avg3(b, c, d))
+        self.put4(2, 1, avg3(c, d, e))
+        self.put4(1, 3, avg3(c, d, e))
+        self.put4(3, 1, avg3(d, e, f))
+        self.put4(2, 3, avg3(d, e, f))
+        self.put4(3, 3, avg3(e, f, g))
     elif mode == D45_PRED
-        put4(0, 0, avg3(a, b, c))
-        put4(1, 0, avg3(b, c, d))
-        put4(0, 1, avg3(b, c, d))
-        put4(2, 0, avg3(c, d, e))
-        put4(1, 1, avg3(c, d, e))
-        put4(0, 2, avg3(c, d, e))
-        put4(3, 0, avg3(d, e, f))
-        put4(2, 1, avg3(d, e, f))
-        put4(1, 2, avg3(d, e, f))
-        put4(0, 3, avg3(d, e, f))
-        put4(3, 1, avg3(e, f, g))
-        put4(2, 2, avg3(e, f, g))
-        put4(1, 3, avg3(e, f, g))
-        put4(3, 2, avg3(f, g, h))
-        put4(2, 3, avg3(f, g, h))
-        put4(3, 3, h)
+        self.put4(0, 0, avg3(a, b, c))
+        self.put4(1, 0, avg3(b, c, d))
+        self.put4(0, 1, avg3(b, c, d))
+        self.put4(2, 0, avg3(c, d, e))
+        self.put4(1, 1, avg3(c, d, e))
+        self.put4(0, 2, avg3(c, d, e))
+        self.put4(3, 0, avg3(d, e, f))
+        self.put4(2, 1, avg3(d, e, f))
+        self.put4(1, 2, avg3(d, e, f))
+        self.put4(0, 3, avg3(d, e, f))
+        self.put4(3, 1, avg3(e, f, g))
+        self.put4(2, 2, avg3(e, f, g))
+        self.put4(1, 3, avg3(e, f, g))
+        self.put4(3, 2, avg3(f, g, h))
+        self.put4(2, 3, avg3(f, g, h))
+        self.put4(3, 3, h)
     elif mode == D117_PRED
-        put4(0, 0, avg2(x, a))
-        put4(1, 2, avg2(x, a))
-        put4(1, 0, avg2(a, b))
-        put4(2, 2, avg2(a, b))
-        put4(2, 0, avg2(b, c))
-        put4(3, 2, avg2(b, c))
-        put4(3, 0, avg2(c, d))
-        put4(0, 3, avg3(k0, j0, i0))
-        put4(0, 2, avg3(j0, i0, x))
-        put4(0, 1, avg3(i0, x, a))
-        put4(1, 3, avg3(i0, x, a))
-        put4(1, 1, avg3(x, a, b))
-        put4(2, 3, avg3(x, a, b))
-        put4(2, 1, avg3(a, b, c))
-        put4(3, 3, avg3(a, b, c))
-        put4(3, 1, avg3(b, c, d))
+        self.put4(0, 0, avg2(x, a))
+        self.put4(1, 2, avg2(x, a))
+        self.put4(1, 0, avg2(a, b))
+        self.put4(2, 2, avg2(a, b))
+        self.put4(2, 0, avg2(b, c))
+        self.put4(3, 2, avg2(b, c))
+        self.put4(3, 0, avg2(c, d))
+        self.put4(0, 3, avg3(k0, j0, i0))
+        self.put4(0, 2, avg3(j0, i0, x))
+        self.put4(0, 1, avg3(i0, x, a))
+        self.put4(1, 3, avg3(i0, x, a))
+        self.put4(1, 1, avg3(x, a, b))
+        self.put4(2, 3, avg3(x, a, b))
+        self.put4(2, 1, avg3(a, b, c))
+        self.put4(3, 3, avg3(a, b, c))
+        self.put4(3, 1, avg3(b, c, d))
     elif mode == D135_PRED
-        put4(0, 3, avg3(j0, k0, l0))
-        put4(1, 3, avg3(i0, j0, k0))
-        put4(0, 2, avg3(i0, j0, k0))
-        put4(2, 3, avg3(x, i0, j0))
-        put4(1, 2, avg3(x, i0, j0))
-        put4(0, 1, avg3(x, i0, j0))
-        put4(3, 3, avg3(a, x, i0))
-        put4(2, 2, avg3(a, x, i0))
-        put4(1, 1, avg3(a, x, i0))
-        put4(0, 0, avg3(a, x, i0))
-        put4(3, 2, avg3(b, a, x))
-        put4(2, 1, avg3(b, a, x))
-        put4(1, 0, avg3(b, a, x))
-        put4(3, 1, avg3(c, b, a))
-        put4(2, 0, avg3(c, b, a))
-        put4(3, 0, avg3(d, c, b))
+        self.put4(0, 3, avg3(j0, k0, l0))
+        self.put4(1, 3, avg3(i0, j0, k0))
+        self.put4(0, 2, avg3(i0, j0, k0))
+        self.put4(2, 3, avg3(x, i0, j0))
+        self.put4(1, 2, avg3(x, i0, j0))
+        self.put4(0, 1, avg3(x, i0, j0))
+        self.put4(3, 3, avg3(a, x, i0))
+        self.put4(2, 2, avg3(a, x, i0))
+        self.put4(1, 1, avg3(a, x, i0))
+        self.put4(0, 0, avg3(a, x, i0))
+        self.put4(3, 2, avg3(b, a, x))
+        self.put4(2, 1, avg3(b, a, x))
+        self.put4(1, 0, avg3(b, a, x))
+        self.put4(3, 1, avg3(c, b, a))
+        self.put4(2, 0, avg3(c, b, a))
+        self.put4(3, 0, avg3(d, c, b))
     else
-        put4(0, 0, avg2(i0, x))
-        put4(2, 1, avg2(i0, x))
-        put4(0, 1, avg2(j0, i0))
-        put4(2, 2, avg2(j0, i0))
-        put4(0, 2, avg2(k0, j0))
-        put4(2, 3, avg2(k0, j0))
-        put4(0, 3, avg2(l0, k0))
-        put4(3, 0, avg3(a, b, c))
-        put4(2, 0, avg3(x, a, b))
-        put4(1, 0, avg3(i0, x, a))
-        put4(3, 1, avg3(i0, x, a))
-        put4(1, 1, avg3(j0, i0, x))
-        put4(3, 2, avg3(j0, i0, x))
-        put4(1, 2, avg3(k0, j0, i0))
-        put4(3, 3, avg3(k0, j0, i0))
-        put4(1, 3, avg3(l0, k0, j0))
+        self.put4(0, 0, avg2(i0, x))
+        self.put4(2, 1, avg2(i0, x))
+        self.put4(0, 1, avg2(j0, i0))
+        self.put4(2, 2, avg2(j0, i0))
+        self.put4(0, 2, avg2(k0, j0))
+        self.put4(2, 3, avg2(k0, j0))
+        self.put4(0, 3, avg2(l0, k0))
+        self.put4(3, 0, avg3(a, b, c))
+        self.put4(2, 0, avg3(x, a, b))
+        self.put4(1, 0, avg3(i0, x, a))
+        self.put4(3, 1, avg3(i0, x, a))
+        self.put4(1, 1, avg3(j0, i0, x))
+        self.put4(3, 2, avg3(j0, i0, x))
+        self.put4(1, 2, avg3(k0, j0, i0))
+        self.put4(3, 3, avg3(k0, j0, i0))
+        self.put4(1, 3, avg3(l0, k0, j0))
 
 ## The directional predictors of 8x8 to 32x32 (libvpx d*_predictor).
 fn Decoder.predn(mut self, mode int, bs int)
     if mode == D207_PRED
         for r in 0..bs - 1
-            pd[r * bs] = avg2(edge_l[r], edge_l[r + 1])
-        pd[(bs - 1) * bs] = edge_l[bs - 1]
+            self.pd[r * bs] = avg2(self.edge_l[r], self.edge_l[r + 1])
+        self.pd[(bs - 1) * bs] = self.edge_l[bs - 1]
         for r in 0..bs - 2
-            pd[r * bs + 1] = avg3(edge_l[r], edge_l[r + 1], edge_l[r + 2])
-        pd[(bs - 2) * bs + 1] = avg3(edge_l[bs - 2], edge_l[bs - 1], edge_l[bs - 1])
-        pd[(bs - 1) * bs + 1] = edge_l[bs - 1]
+            self.pd[r * bs + 1] = avg3(self.edge_l[r], self.edge_l[r + 1], self.edge_l[r + 2])
+        self.pd[(bs - 2) * bs + 1] = avg3(
+            self.edge_l[bs - 2],
+            self.edge_l[bs - 1],
+            self.edge_l[bs - 1],
+        )
+        self.pd[(bs - 1) * bs + 1] = self.edge_l[bs - 1]
         for c in 0..bs - 2
-            pd[(bs - 1) * bs + 2 + c] = edge_l[bs - 1]
+            self.pd[(bs - 1) * bs + 2 + c] = self.edge_l[bs - 1]
         mut rr := bs - 2
         while rr >= 0
             for c in 0..bs - 2
-                pd[rr * bs + 2 + c] = pd[(rr + 1) * bs + c]
+                self.pd[rr * bs + 2 + c] = self.pd[(rr + 1) * bs + c]
             rr -= 1
     elif mode == D63_PRED
         for c in 0..bs
-            pd[c] = avg2(ea(c), ea(c + 1))
-            pd[bs + c] = avg3(ea(c), ea(c + 1), ea(c + 2))
+            self.pd[c] = avg2(self.ea(c), self.ea(c + 1))
+            self.pd[bs + c] = avg3(self.ea(c), self.ea(c + 1), self.ea(c + 2))
         mut size := bs - 2
         mut r2 := 2
         while r2 < bs
             for c in 0..size
-                pd[r2 * bs + c] = pd[r2.shr(1) + c]
-                pd[(r2 + 1) * bs + c] = pd[bs + r2.shr(1) + c]
+                self.pd[r2 * bs + c] = self.pd[r2.shr(1) + c]
+                self.pd[(r2 + 1) * bs + c] = self.pd[bs + r2.shr(1) + c]
             for c in size..bs
-                pd[r2 * bs + c] = ea(bs - 1)
-                pd[(r2 + 1) * bs + c] = ea(bs - 1)
+                self.pd[r2 * bs + c] = self.ea(bs - 1)
+                self.pd[(r2 + 1) * bs + c] = self.ea(bs - 1)
             size -= 1
             r2 += 2
     elif mode == D45_PRED
-        arv := ea(bs - 1)
+        arv := self.ea(bs - 1)
         for c in 0..bs - 1
-            pd[c] = avg3(ea(c), ea(c + 1), ea(c + 2))
-        pd[bs - 1] = arv
+            self.pd[c] = avg3(self.ea(c), self.ea(c + 1), self.ea(c + 2))
+        self.pd[bs - 1] = arv
         mut size2 := bs - 2
         for r3 in 1..bs
             for c in 0..size2
-                pd[r3 * bs + c] = pd[r3 + c]
+                self.pd[r3 * bs + c] = self.pd[r3 + c]
             for c in size2..bs
-                pd[r3 * bs + c] = arv
+                self.pd[r3 * bs + c] = arv
             size2 -= 1
     elif mode == D117_PRED
         for c in 0..bs
-            pd[c] = avg2(ea(c - 1), ea(c))
-        pd[bs] = avg3(edge_l[0], ea(-1), ea(0))
+            self.pd[c] = avg2(self.ea(c - 1), self.ea(c))
+        self.pd[bs] = avg3(self.edge_l[0], self.ea(-1), self.ea(0))
         for c in 1..bs
-            pd[bs + c] = avg3(ea(c - 2), ea(c - 1), ea(c))
-        pd[2 * bs] = avg3(ea(-1), edge_l[0], edge_l[1])
+            self.pd[bs + c] = avg3(self.ea(c - 2), self.ea(c - 1), self.ea(c))
+        self.pd[2 * bs] = avg3(self.ea(-1), self.edge_l[0], self.edge_l[1])
         for r4 in 3..bs
-            pd[r4 * bs] = avg3(edge_l[r4 - 3], edge_l[r4 - 2], edge_l[r4 - 1])
+            self.pd[r4 * bs] = avg3(self.edge_l[r4 - 3], self.edge_l[r4 - 2], self.edge_l[r4 - 1])
         for r4 in 2..bs
             for c in 1..bs
-                pd[r4 * bs + c] = pd[(r4 - 2) * bs + c - 1]
+                self.pd[r4 * bs + c] = self.pd[(r4 - 2) * bs + c - 1]
     elif mode == D135_PRED
         # the border runs from the bottom-left up to the top-right
         mut border := [0 for _ in 0..2 * bs - 1]
         for i in 0..bs - 2
-            border[i] = avg3(edge_l[bs - 3 - i], edge_l[bs - 2 - i], edge_l[bs - 1 - i])
-        border[bs - 2] = avg3(ea(-1), edge_l[0], edge_l[1])
-        border[bs - 1] = avg3(edge_l[0], ea(-1), ea(0))
-        border[bs] = avg3(ea(-1), ea(0), ea(1))
+            border[i] = avg3(
+                self.edge_l[bs - 3 - i],
+                self.edge_l[bs - 2 - i],
+                self.edge_l[bs - 1 - i],
+            )
+        border[bs - 2] = avg3(self.ea(-1), self.edge_l[0], self.edge_l[1])
+        border[bs - 1] = avg3(self.edge_l[0], self.ea(-1), self.ea(0))
+        border[bs] = avg3(self.ea(-1), self.ea(0), self.ea(1))
         for i in 0..bs - 2
-            border[bs + 1 + i] = avg3(ea(i), ea(i + 1), ea(i + 2))
+            border[bs + 1 + i] = avg3(self.ea(i), self.ea(i + 1), self.ea(i + 2))
         for i in 0..bs
             for c in 0..bs
-                pd[i * bs + c] = border[bs - 1 - i + c]
+                self.pd[i * bs + c] = border[bs - 1 - i + c]
     else
-        pd[0] = avg2(ea(-1), edge_l[0])
+        self.pd[0] = avg2(self.ea(-1), self.edge_l[0])
         for r5 in 1..bs
-            pd[r5 * bs] = avg2(edge_l[r5 - 1], edge_l[r5])
-        pd[1] = avg3(edge_l[0], ea(-1), ea(0))
-        pd[bs + 1] = avg3(ea(-1), edge_l[0], edge_l[1])
+            self.pd[r5 * bs] = avg2(self.edge_l[r5 - 1], self.edge_l[r5])
+        self.pd[1] = avg3(self.edge_l[0], self.ea(-1), self.ea(0))
+        self.pd[bs + 1] = avg3(self.ea(-1), self.edge_l[0], self.edge_l[1])
         for r5 in 2..bs
-            pd[r5 * bs + 1] = avg3(edge_l[r5 - 2], edge_l[r5 - 1], edge_l[r5])
+            self.pd[r5 * bs + 1] = avg3(self.edge_l[r5 - 2], self.edge_l[r5 - 1], self.edge_l[r5])
         for c in 0..bs - 2
-            pd[2 + c] = avg3(ea(c - 1), ea(c), ea(c + 1))
+            self.pd[2 + c] = avg3(self.ea(c - 1), self.ea(c), self.ea(c + 1))
         for r5 in 1..bs
             for c in 0..bs - 2
-                pd[r5 * bs + 2 + c] = pd[(r5 - 1) * bs + c]
+                self.pd[r5 * bs + 2 + c] = self.pd[(r5 - 1) * bs + c]
 
 # ---------------------------------------------------------------- inter prediction
 
 fn Decoder.inter_predict(mut self, mi_row int, mi_col int)
-    comp := bint(m_ref1 > 0)
-    kern := m_interp * 128
+    comp := bint(self.m_ref1 > 0)
+    kern := self.m_interp * 128
     for r in 0..comp + 1
-        rfr := if r == 0 then m_ref0 else m_ref1
-        rs := ref_map[ref_idx[rfr - 1]]
+        rfr := if r == 0 then self.m_ref0 else self.m_ref1
+        rs := self.ref_map[self.ref_idx[rfr - 1]]
         for p in 0..3
             ss := if p == 0 then 0 else 1
-            n4w := (b_w * 2).shr(ss)
-            n4h := (b_h * 2).shr(ss)
-            if b_size < B8X8
+            n4w := (self.b_w * 2).shr(ss)
+            n4h := (self.b_h * 2).shr(ss)
+            if self.b_size < B8X8
                 mut i := 0
                 for y in 0..n4h
                     for x in 0..n4w
-                        mut mvr := sub_r(i, r)
-                        mut mvc := sub_c(i, r)
+                        mut mvr := self.sub_r(i, r)
+                        mut mvc := self.sub_c(i, r)
                         if p > 0
-                            sr := sub_r(0, r) + sub_r(1, r) + sub_r(2, r) + sub_r(3, r)
-                            sc := sub_c(0, r) + sub_c(1, r) + sub_c(2, r) + sub_c(3, r)
+                            sr := self.sub_r(
+                                0,
+                                r,
+                            ) + self.sub_r(1, r) + self.sub_r(2, r) + self.sub_r(3, r)
+                            sc := self.sub_c(
+                                0,
+                                r,
+                            ) + self.sub_c(1, r) + self.sub_c(2, r) + self.sub_c(3, r)
                             mvr = (if sr < 0 then sr - 2 else sr + 2) / 4
                             mvc = (if sc < 0 then sc - 2 else sc + 2) / 4
-                        predict_block(p, rs, r, mi_row, mi_col, 4 * x, 4 * y, 4, 4, mvr, mvc, kern)
+                        self.predict_block(
+                            p,
+                            rs,
+                            r,
+                            mi_row,
+                            mi_col,
+                            4 * x,
+                            4 * y,
+                            4,
+                            4,
+                            mvr,
+                            mvc,
+                            kern,
+                        )
                         i += 1
             else
-                predict_block(
+                self.predict_block(
                     p,
                     rs,
                     r,
@@ -3411,8 +3445,8 @@ fn Decoder.inter_predict(mut self, mi_row int, mi_col int)
                     0,
                     4 * n4w,
                     4 * n4h,
-                    m_mv[12 + r * 2],
-                    m_mv[13 + r * 2],
+                    self.m_mv[12 + r * 2],
+                    self.m_mv[13 + r * 2],
                     kern,
                 )
 
@@ -3421,7 +3455,7 @@ fn Decoder.inter_predict(mut self, mi_row int, mi_col int)
 fn Decoder.ref_px(self, at int, stride int, fw int, fh int, x int, y int) int
     yy := y.max(0).min(fh - 1)
     xx := x.max(0).min(fw - 1)
-    mem[at + yy * stride + xx].to_int()
+    self.mem[at + yy * stride + xx].to_int()
 
 ## Motion compensated prediction of a w x h block (VP9 spec 8.5.2): 8-tap
 ## sub-pixel filters, horizontal then vertical; `which` 1 averages into the
@@ -3442,10 +3476,10 @@ fn Decoder.predict_block(
     kern int,
 )
     ss := if p == 0 then 0 else 1
-    stride := if p == 0 then ystride else cstride
-    fw := if p == 0 then width else (width + 1).shr(1)
-    fh := if p == 0 then height else (height + 1).shr(1)
-    src := plane_at(s, p)
+    stride := if p == 0 then self.ystride else self.cstride
+    fw := if p == 0 then self.width else (self.width + 1).shr(1)
+    fh := if p == 0 then self.height else (self.height + 1).shr(1)
+    src := self.plane_at(s, p)
     x0 := (mi_col * 8).shr(ss) + x
     y0 := (mi_row * 8).shr(ss) + y
     mvr := mv_r * (1).shl(1 - ss)
@@ -3454,7 +3488,7 @@ fn Decoder.predict_block(
     spy := mvr.bit_and(15)
     sx := x0 + mvc.shr(4)
     sy := y0 + mvr.shr(4)
-    dst := plane_at(cur, p) + y0 * stride + x0
+    dst := self.plane_at(self.cur, p) + y0 * stride + x0
     kx := kern + spx * 8
     ky := kern + spy * 8
     inside := sx >= 3 and sy >= 3 and sx + w + 4 <= fw and sy + h + 4 <= fh
@@ -3465,9 +3499,11 @@ fn Decoder.predict_block(
             q := src + (sy + yy) * stride + sx
             for xx in 0..w
                 if which == 1
-                    mem[o + xx] = (mem[o + xx].to_int() + mem[q + xx].to_int() + 1).shr(1).to_u8()
+                    self.mem[o + xx] = (self.mem[o + xx].to_int() + self.mem[q + xx].to_int() + 1)
+                        .shr(1)
+                        .to_u8()
                 else
-                    mem[o + xx] = mem[q + xx]
+                    self.mem[o + xx] = self.mem[q + xx]
         return
     # Rows the vertical filter needs: 3 above and 4 below, or just the block.
     y_lo := if spy == 0 then 3 else 0
@@ -3478,91 +3514,91 @@ fn Decoder.predict_block(
             q := src + (sy + yy - 3) * stride + sx
             if spx == 0
                 for xx in 0..w
-                    tmp[t + xx] = mem[q + xx].to_int()
+                    self.tmp[t + xx] = self.mem[q + xx].to_int()
             else
                 for xx in 0..w
                     qx := q + xx - 3
-                    sum := mem[qx].to_int() * filt[kx]
-                        + mem[qx + 1].to_int() * filt[kx + 1]
-                        + mem[qx + 2].to_int() * filt[kx + 2]
-                        + mem[qx + 3].to_int() * filt[kx + 3]
-                        + mem[qx + 4].to_int() * filt[kx + 4]
-                        + mem[qx + 5].to_int() * filt[kx + 5]
-                        + mem[qx + 6].to_int() * filt[kx + 6]
-                        + mem[qx + 7].to_int() * filt[kx + 7]
-                    tmp[t + xx] = clip8((sum + 64).shr(7))
+                    sum := self.mem[qx].to_int() * self.filt[kx]
+                        + self.mem[qx + 1].to_int() * self.filt[kx + 1]
+                        + self.mem[qx + 2].to_int() * self.filt[kx + 2]
+                        + self.mem[qx + 3].to_int() * self.filt[kx + 3]
+                        + self.mem[qx + 4].to_int() * self.filt[kx + 4]
+                        + self.mem[qx + 5].to_int() * self.filt[kx + 5]
+                        + self.mem[qx + 6].to_int() * self.filt[kx + 6]
+                        + self.mem[qx + 7].to_int() * self.filt[kx + 7]
+                    self.tmp[t + xx] = clip8((sum + 64).shr(7))
         else
             for xx in 0..w
                 mut v := 0
                 if spx == 0
-                    v = ref_px(src, stride, fw, fh, sx + xx, sy + yy - 3)
+                    v = self.ref_px(src, stride, fw, fh, sx + xx, sy + yy - 3)
                 else
                     mut sum := 0
                     for k in 0..8
-                        sum += ref_px(
+                        sum += self.ref_px(
                             src,
                             stride,
                             fw,
                             fh,
                             sx + xx + k - 3,
                             sy + yy - 3,
-                        ) * filt[kx + k]
+                        ) * self.filt[kx + k]
                     v = clip8((sum + 64).shr(7))
-                tmp[t + xx] = v
+                self.tmp[t + xx] = v
     for yy in 0..h
         o := dst + yy * stride
         t := yy * 64
         for xx in 0..w
-            mut v2 := tmp[t + 192 + xx]
+            mut v2 := self.tmp[t + 192 + xx]
             if spy != 0
                 q := t + xx
-                sum2 := tmp[q] * filt[ky]
-                    + tmp[q + 64] * filt[ky + 1]
-                    + tmp[q + 128] * filt[ky + 2]
-                    + tmp[q + 192] * filt[ky + 3]
-                    + tmp[q + 256] * filt[ky + 4]
-                    + tmp[q + 320] * filt[ky + 5]
-                    + tmp[q + 384] * filt[ky + 6]
-                    + tmp[q + 448] * filt[ky + 7]
+                sum2 := self.tmp[q] * self.filt[ky]
+                    + self.tmp[q + 64] * self.filt[ky + 1]
+                    + self.tmp[q + 128] * self.filt[ky + 2]
+                    + self.tmp[q + 192] * self.filt[ky + 3]
+                    + self.tmp[q + 256] * self.filt[ky + 4]
+                    + self.tmp[q + 320] * self.filt[ky + 5]
+                    + self.tmp[q + 384] * self.filt[ky + 6]
+                    + self.tmp[q + 448] * self.filt[ky + 7]
                 v2 = clip8((sum2 + 64).shr(7))
             if which == 1
-                mem[o + xx] = (mem[o + xx].to_int() + v2 + 1).shr(1).to_u8()
+                self.mem[o + xx] = (self.mem[o + xx].to_int() + v2 + 1).shr(1).to_u8()
             else
-                mem[o + xx] = v2.to_u8()
+                self.mem[o + xx] = v2.to_u8()
 
 # ---------------------------------------------------------------- loop filter
 
 ## Filter levels per segment, reference and mode, and the limits per level
 ## (VP9 spec 8.8.1).
 fn Decoder.lf_setup(mut self)
-    scale := (1).shl(lf_level.shr(5))
+    scale := (1).shl(self.lf_level.shr(5))
     for s in 0..8
-        mut ls := lf_level
-        if seg_feature(s, 1)
-            dv := seg_data[s * 4 + 1]
-            ls = (if seg_abs == 1 then dv else lf_level + dv).max(0).min(63)
+        mut ls := self.lf_level
+        if self.seg_feature(s, 1)
+            dv := self.seg_data[s * 4 + 1]
+            ls = (if self.seg_abs == 1 then dv else self.lf_level + dv).max(0).min(63)
         for r in 0..4
             for m in 0..2
                 mut v := ls
-                if lf_delta_enabled == 1
+                if self.lf_delta_enabled == 1
                     if r == 0
-                        v = ls + ref_deltas[0] * scale
+                        v = ls + self.ref_deltas[0] * scale
                     else
-                        v = ls + ref_deltas[r] * scale + mode_deltas[m] * scale
-                lvl[(s * 4 + r) * 2 + m] = v.max(0).min(63)
+                        v = ls + self.ref_deltas[r] * scale + self.mode_deltas[m] * scale
+                self.lvl[(s * 4 + r) * 2 + m] = v.max(0).min(63)
     for l in 0..64
         mut bl := l
-        if sharpness > 0
+        if self.sharpness > 0
             bl = bl.shr(1)
-        if sharpness > 4
+        if self.sharpness > 4
             bl = bl.shr(1)
-        if sharpness > 0 and bl > 9 - sharpness
-            bl = 9 - sharpness
+        if self.sharpness > 0 and bl > 9 - self.sharpness
+            bl = 9 - self.sharpness
         if bl < 1
             bl = 1
-        lim[l] = bl
-        mblim[l] = 2 * (l + 2) + bl
-        hevt[l] = l.shr(4)
+        self.lim[l] = bl
+        self.mblim[l] = 2 * (l + 2) + bl
+        self.hevt[l] = l.shr(4)
 
 ## The filter kind of a transform size: 1 is 4 taps, 2 is 8, 3 is 16.
 fn tx_kind(tx int) int
@@ -3570,14 +3606,14 @@ fn tx_kind(tx int) int
 
 ## Records the edges of a decoded block (libvpx build_masks).
 fn Decoder.build_mask(mut self, mi_row int, mi_col int, bw int, bh int)
-    txy := m_tx
-    txuv := uv_tx(b_size, txy)
-    mut level := lvl[(m_seg * 4) * 2]
-    if m_ref0 > 0
-        level = lvl[(m_seg * 4 + m_ref0) * 2 + MODE_LF[m_mode]]
+    txy := self.m_tx
+    txuv := uv_tx(self.b_size, txy)
+    mut level := self.lvl[(self.m_seg * 4) * 2]
+    if self.m_ref0 > 0
+        level = self.lvl[(self.m_seg * 4 + self.m_ref0) * 2 + MODE_LF[self.m_mode]]
     if level == 0
         return
-    sb := (mi_row.shr(3) * sb_cols + mi_col.shr(3))
+    sb := (mi_row.shr(3) * self.sb_cols + mi_col.shr(3))
     y64 := sb * 64
     uv16 := sb * 16
     r0 := mi_row.bit_and(7)
@@ -3585,193 +3621,193 @@ fn Decoder.build_mask(mut self, mi_row int, mi_col int, bw int, bh int)
     for i in 0..bh
         for j in 0..bw
             if r0 + i < 8 and c0 + j < 8
-                lf_lvl[y64 + (r0 + i) * 8 + c0 + j] = level
+                self.lf_lvl[y64 + (r0 + i) * 8 + c0 + j] = level
     build_uv := r0.bit_and(1) == 0 and c0.bit_and(1) == 0
-    n8w := N8W[b_size]
-    n8h := N8H[b_size]
+    n8w := N8W[self.b_size]
+    n8h := N8H[self.b_size]
     ky := tx_kind(txy)
     kuv := tx_kind(txuv)
     for j in 0..n8w
-        lf_ay[y64 + r0 * 8 + c0 + j] = ky
+        self.lf_ay[y64 + r0 * 8 + c0 + j] = ky
     for i in 0..n8h
-        lf_ly[y64 + (r0 + i) * 8 + c0] = ky
+        self.lf_ly[y64 + (r0 + i) * 8 + c0] = ky
     ur := r0.shr(1)
     uc := c0.shr(1)
     uvw := n8w.shr(1).max(1)
     uvh := n8h.shr(1).max(1)
     if build_uv
         for j in 0..uvw
-            lf_auv[uv16 + ur * 4 + uc + j] = kuv
+            self.lf_auv[uv16 + ur * 4 + uc + j] = kuv
         for i in 0..uvh
-            lf_luv[uv16 + (ur + i) * 4 + uc] = kuv
-    if m_skip == 1 and m_ref0 > 0
+            self.lf_luv[uv16 + (ur + i) * 4 + uc] = kuv
+    if self.m_skip == 1 and self.m_ref0 > 0
         return
     step := [1, 1, 2, 4][txy]
     for i in 0..n8h
         for j in 0..n8w
             if i % step == 0
-                lf_ay[y64 + (r0 + i) * 8 + c0 + j] = ky
+                self.lf_ay[y64 + (r0 + i) * 8 + c0 + j] = ky
             if j % step == 0
-                lf_ly[y64 + (r0 + i) * 8 + c0 + j] = ky
+                self.lf_ly[y64 + (r0 + i) * 8 + c0 + j] = ky
             if txy == 0
-                lf_iy[y64 + (r0 + i) * 8 + c0 + j] = 1
+                self.lf_iy[y64 + (r0 + i) * 8 + c0 + j] = 1
     if build_uv
         ustep := [1, 1, 2, 4][txuv]
         for i in 0..uvh
             for j in 0..uvw
                 if i % ustep == 0
-                    lf_auv[uv16 + (ur + i) * 4 + uc + j] = kuv
+                    self.lf_auv[uv16 + (ur + i) * 4 + uc + j] = kuv
                 if j % ustep == 0
-                    lf_luv[uv16 + (ur + i) * 4 + uc + j] = kuv
+                    self.lf_luv[uv16 + (ur + i) * 4 + uc + j] = kuv
                 if txuv == 0
-                    lf_iuv[uv16 + (ur + i) * 4 + uc + j] = 1
+                    self.lf_iuv[uv16 + (ur + i) * 4 + uc + j] = 1
 
 ## Filters the frame, one superblock at a time in raster order: Y, then U
 ## and V, each its vertical edges before its horizontal ones.
 fn Decoder.loop_filter(mut self)
-    for sbr in 0..sb_rows
-        for sbc in 0..sb_cols
-            sb := sbr * sb_cols + sbc
+    for sbr in 0..self.sb_rows
+        for sbc in 0..self.sb_cols
+            sb := sbr * self.sb_cols + sbc
             mi_row := sbr * 8
             mi_col := sbc * 8
-            adjust(sb, mi_row, mi_col)
-            filter_plane(0, sb, mi_row, mi_col)
-            filter_plane(1, sb, mi_row, mi_col)
-            filter_plane(2, sb, mi_row, mi_col)
+            self.adjust(sb, mi_row, mi_col)
+            self.filter_plane(0, sb, mi_row, mi_col)
+            self.filter_plane(1, sb, mi_row, mi_col)
+            self.filter_plane(2, sb, mi_row, mi_col)
 
 ## The masks of one superblock with libvpx's adjustments: 4-tap edges on
 ## 32-pixel lines become 8-tap, and edges past the frame are dropped.
 fn Decoder.adjust(mut self, sb int, mi_row int, mi_col int)
     for i in 0..64
-        k_ly[i] = lf_ly[sb * 64 + i]
-        k_ay[i] = lf_ay[sb * 64 + i]
-        k_iy[i] = lf_iy[sb * 64 + i]
+        self.k_ly[i] = self.lf_ly[sb * 64 + i]
+        self.k_ay[i] = self.lf_ay[sb * 64 + i]
+        self.k_iy[i] = self.lf_iy[sb * 64 + i]
     for i in 0..16
-        k_luv[i] = lf_luv[sb * 16 + i]
-        k_auv[i] = lf_auv[sb * 16 + i]
-        k_iuv[i] = lf_iuv[sb * 16 + i]
+        self.k_luv[i] = self.lf_luv[sb * 16 + i]
+        self.k_auv[i] = self.lf_auv[sb * 16 + i]
+        self.k_iuv[i] = self.lf_iuv[sb * 16 + i]
     for r in 0..8
         for c in 0..8
             i := r * 8 + c
-            if c % 4 == 0 and k_ly[i] == 1
-                k_ly[i] = 2
-            if r % 4 == 0 and k_ay[i] == 1
-                k_ay[i] = 2
+            if c % 4 == 0 and self.k_ly[i] == 1
+                self.k_ly[i] = 2
+            if r % 4 == 0 and self.k_ay[i] == 1
+                self.k_ay[i] = 2
     for r in 0..4
         for c in 0..4
             i := r * 4 + c
-            if c == 0 and k_luv[i] == 1
-                k_luv[i] = 2
-            if r == 0 and k_auv[i] == 1
-                k_auv[i] = 2
-    if mi_row + 8 > mi_rows
-        rows := mi_rows - mi_row
+            if c == 0 and self.k_luv[i] == 1
+                self.k_luv[i] = 2
+            if r == 0 and self.k_auv[i] == 1
+                self.k_auv[i] = 2
+    if mi_row + 8 > self.mi_rows
+        rows := self.mi_rows - mi_row
         urows := (rows + 1).shr(1)
         for i in rows * 8..64
-            k_ly[i] = 0
-            k_ay[i] = 0
-            k_iy[i] = 0
+            self.k_ly[i] = 0
+            self.k_ay[i] = 0
+            self.k_iy[i] = 0
         for i in urows * 4..16
-            k_luv[i] = 0
-            k_auv[i] = 0
-            k_iuv[i] = 0
+            self.k_luv[i] = 0
+            self.k_auv[i] = 0
+            self.k_iuv[i] = 0
         if rows == 1
             for i in 0..16
-                if k_auv[i] == 3
-                    k_auv[i] = 2
+                if self.k_auv[i] == 3
+                    self.k_auv[i] = 2
         if rows == 5
             for i in 8..16
-                if k_auv[i] == 3
-                    k_auv[i] = 2
-    if mi_col + 8 > mi_cols
-        cols := mi_cols - mi_col
+                if self.k_auv[i] == 3
+                    self.k_auv[i] = 2
+    if mi_col + 8 > self.mi_cols
+        cols := self.mi_cols - mi_col
         ucols := (cols + 1).shr(1)
         ucols_int := cols.shr(1)
         for r in 0..8
             for c in cols..8
-                k_ly[r * 8 + c] = 0
-                k_ay[r * 8 + c] = 0
-                k_iy[r * 8 + c] = 0
+                self.k_ly[r * 8 + c] = 0
+                self.k_ay[r * 8 + c] = 0
+                self.k_iy[r * 8 + c] = 0
         for r in 0..4
             for c in 0..4
                 if c >= ucols
-                    k_luv[r * 4 + c] = 0
-                    k_auv[r * 4 + c] = 0
+                    self.k_luv[r * 4 + c] = 0
+                    self.k_auv[r * 4 + c] = 0
                 if c >= ucols_int
-                    k_iuv[r * 4 + c] = 0
+                    self.k_iuv[r * 4 + c] = 0
         if cols == 1
             for i in 0..16
-                if k_luv[i] == 3
-                    k_luv[i] = 2
+                if self.k_luv[i] == 3
+                    self.k_luv[i] = 2
         if cols == 5
             for r in 0..4
                 for c in 2..4
-                    if k_luv[r * 4 + c] == 3
-                        k_luv[r * 4 + c] = 2
+                    if self.k_luv[r * 4 + c] == 3
+                        self.k_luv[r * 4 + c] = 2
     if mi_col == 0
         for r in 0..8
-            k_ly[r * 8] = 0
+            self.k_ly[r * 8] = 0
         for r in 0..4
-            k_luv[r * 4] = 0
+            self.k_luv[r * 4] = 0
 
 fn Decoder.filter_plane(mut self, p int, sb int, mi_row int, mi_col int)
     ss := if p == 0 then 0 else 1
-    stride := if p == 0 then ystride else cstride
-    at := plane_at(cur, p)
+    stride := if p == 0 then self.ystride else self.cstride
+    at := self.plane_at(self.cur, p)
     ox := (mi_col * 8).shr(ss)
     oy := (mi_row * 8).shr(ss)
     n := if p == 0 then 8 else 4
     for r in 0..n
-        if mi_row + r.shl(ss) < mi_rows
+        if mi_row + r.shl(ss) < self.mi_rows
             for c in 0..n
                 i := r * n + c
-                kl := if p == 0 then k_ly[i] else k_luv[i]
-                ki := if p == 0 then k_iy[i] else k_iuv[i]
-                lv := lf_lvl[sb * 64 + r.shl(ss) * 8 + c.shl(ss)]
+                kl := if p == 0 then self.k_ly[i] else self.k_luv[i]
+                ki := if p == 0 then self.k_iy[i] else self.k_iuv[i]
+                lv := self.lf_lvl[sb * 64 + r.shl(ss) * 8 + c.shl(ss)]
                 pos := at + (oy + r * 8) * stride + ox + c * 8
                 if kl > 0
-                    edge(pos, 1, stride, kl, lv)
+                    self.edge(pos, 1, stride, kl, lv)
                 if ki > 0
-                    edge(pos + 4, 1, stride, 1, lv)
+                    self.edge(pos + 4, 1, stride, 1, lv)
     for r in 0..n
-        if mi_row + r.shl(ss) < mi_rows
-            skip_int := ss == 1 and mi_row + r.shl(ss) == mi_rows - 1
+        if mi_row + r.shl(ss) < self.mi_rows
+            skip_int := ss == 1 and mi_row + r.shl(ss) == self.mi_rows - 1
             for c in 0..n
                 i := r * n + c
-                mut ka := if p == 0 then k_ay[i] else k_auv[i]
+                mut ka := if p == 0 then self.k_ay[i] else self.k_auv[i]
                 if mi_row + r.shl(ss) == 0
                     ka = 0
-                ki := if p == 0 then k_iy[i] else k_iuv[i]
-                lv := lf_lvl[sb * 64 + r.shl(ss) * 8 + c.shl(ss)]
+                ki := if p == 0 then self.k_iy[i] else self.k_iuv[i]
+                lv := self.lf_lvl[sb * 64 + r.shl(ss) * 8 + c.shl(ss)]
                 pos := at + (oy + r * 8) * stride + ox + c * 8
                 if ka > 0
-                    edge(pos, stride, 1, ka, lv)
+                    self.edge(pos, stride, 1, ka, lv)
                 if ki > 0 and not skip_int
-                    edge(pos + 4 * stride, stride, 1, 1, lv)
+                    self.edge(pos + 4 * stride, stride, 1, 1, lv)
 
 ## Pixel `k` steps across the edge at `s` (negative on the p side).
 fn Decoder.px(self, s int, step int, k int) int
-    mem[s + k * step].to_int()
+    self.mem[s + k * step].to_int()
 
 fn Decoder.setpx(mut self, s int, step int, k int, v int)
-    mem[s + k * step] = v.to_u8()
+    self.mem[s + k * step] = v.to_u8()
 
 ## Filters 8 pixels along one edge (libvpx loopfilter.c: filter4, filter8
 ## and filter16 with their masks).
 fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
-    lm := lim[level]
-    mbl := mblim[level]
-    thr := hevt[level]
+    lm := self.lim[level]
+    mbl := self.mblim[level]
+    thr := self.hevt[level]
     for i in 0..8
         s := pos + i * along
-        p3 := px(s, step, -4)
-        p2 := px(s, step, -3)
-        p1 := px(s, step, -2)
-        p0 := px(s, step, -1)
-        q0 := px(s, step, 0)
-        q1 := px(s, step, 1)
-        q2 := px(s, step, 2)
-        q3 := px(s, step, 3)
+        p3 := self.px(s, step, -4)
+        p2 := self.px(s, step, -3)
+        p1 := self.px(s, step, -2)
+        p0 := self.px(s, step, -1)
+        q0 := self.px(s, step, 0)
+        q1 := self.px(s, step, 1)
+        q2 := self.px(s, step, 2)
+        q3 := self.px(s, step, 3)
         mask := (p3 - p2).abs() <= lm
             and (p2 - p1).abs() <= lm
             and (p1 - p0).abs() <= lm
@@ -3789,14 +3825,14 @@ fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
                 and (q3 - q0).abs() <= 1
             mut done := false
             if kind == 3 and flat
-                p7 := px(s, step, -8)
-                p6 := px(s, step, -7)
-                p5 := px(s, step, -6)
-                p4 := px(s, step, -5)
-                q4 := px(s, step, 4)
-                q5 := px(s, step, 5)
-                q6 := px(s, step, 6)
-                q7 := px(s, step, 7)
+                p7 := self.px(s, step, -8)
+                p6 := self.px(s, step, -7)
+                p5 := self.px(s, step, -6)
+                p4 := self.px(s, step, -5)
+                q4 := self.px(s, step, 4)
+                q5 := self.px(s, step, 5)
+                q6 := self.px(s, step, 6)
+                q7 := self.px(s, step, 7)
                 flat2 := (p4 - p0).abs() <= 1
                     and (q4 - q0).abs() <= 1
                     and (p5 - p0).abs() <= 1
@@ -3806,85 +3842,85 @@ fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
                     and (p7 - p0).abs() <= 1
                     and (q7 - q0).abs() <= 1
                 if flat2
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -7,
                         (p7 * 7 + p6 * 2 + p5 + p4 + p3 + p2 + p1 + p0 + q0 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -6,
                         (p7 * 6 + p6 + p5 * 2 + p4 + p3 + p2 + p1 + p0 + q0 + q1 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -5,
                         (p7 * 5 + p6 + p5 + p4 * 2 + p3 + p2 + p1 + p0 + q0 + q1 + q2 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -4,
                         (p7 * 4 + p6 + p5 + p4 + p3 * 2 + p2 + p1 + p0 + q0 + q1 + q2 + q3 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -3,
                         (p7 * 3 + p6 + p5 + p4 + p3 + p2 * 2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -2,
                         (p7 * 2 + p6 + p5 + p4 + p3 + p2 + p1 * 2 + p0 + q0 + q1 + q2 + q3 + q4 + q5 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         -1,
                         (p7 + p6 + p5 + p4 + p3 + p2 + p1 + p0 * 2 + q0 + q1 + q2 + q3 + q4 + q5 + q6 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         0,
                         (p6 + p5 + p4 + p3 + p2 + p1 + p0 + q0 * 2 + q1 + q2 + q3 + q4 + q5 + q6 + q7 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         1,
                         (p5 + p4 + p3 + p2 + p1 + p0 + q0 + q1 * 2 + q2 + q3 + q4 + q5 + q6 + q7 * 2 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         2,
                         (p4 + p3 + p2 + p1 + p0 + q0 + q1 + q2 * 2 + q3 + q4 + q5 + q6 + q7 * 3 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         3,
                         (p3 + p2 + p1 + p0 + q0 + q1 + q2 + q3 * 2 + q4 + q5 + q6 + q7 * 4 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         4,
                         (p2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 * 2 + q5 + q6 + q7 * 5 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         5,
                         (p1 + p0 + q0 + q1 + q2 + q3 + q4 + q5 * 2 + q6 + q7 * 6 + 8).shr(4),
                     )
-                    setpx(
+                    self.setpx(
                         s,
                         step,
                         6,
@@ -3892,12 +3928,12 @@ fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
                     )
                     done = true
             if not done and flat
-                setpx(s, step, -3, (p3 + p3 + p3 + 2 * p2 + p1 + p0 + q0 + 4).shr(3))
-                setpx(s, step, -2, (p3 + p3 + p2 + 2 * p1 + p0 + q0 + q1 + 4).shr(3))
-                setpx(s, step, -1, (p3 + p2 + p1 + 2 * p0 + q0 + q1 + q2 + 4).shr(3))
-                setpx(s, step, 0, (p2 + p1 + p0 + 2 * q0 + q1 + q2 + q3 + 4).shr(3))
-                setpx(s, step, 1, (p1 + p0 + q0 + 2 * q1 + q2 + q3 + q3 + 4).shr(3))
-                setpx(s, step, 2, (p0 + q0 + q1 + 2 * q2 + q3 + q3 + q3 + 4).shr(3))
+                self.setpx(s, step, -3, (p3 + p3 + p3 + 2 * p2 + p1 + p0 + q0 + 4).shr(3))
+                self.setpx(s, step, -2, (p3 + p3 + p2 + 2 * p1 + p0 + q0 + q1 + 4).shr(3))
+                self.setpx(s, step, -1, (p3 + p2 + p1 + 2 * p0 + q0 + q1 + q2 + 4).shr(3))
+                self.setpx(s, step, 0, (p2 + p1 + p0 + 2 * q0 + q1 + q2 + q3 + 4).shr(3))
+                self.setpx(s, step, 1, (p1 + p0 + q0 + 2 * q1 + q2 + q3 + q3 + 4).shr(3))
+                self.setpx(s, step, 2, (p0 + q0 + q1 + 2 * q2 + q3 + q3 + q3 + 4).shr(3))
                 done = true
             if not done
                 hev := (p1 - p0).abs() > thr or (q1 - q0).abs() > thr
@@ -3909,12 +3945,12 @@ fn Decoder.edge(mut self, pos int, step int, along int, kind int, level int)
                 fl = sclamp(fl + 3 * (qs0 - ps0))
                 f1 := sclamp(fl + 4).shr(3)
                 f2 := sclamp(fl + 3).shr(3)
-                setpx(s, step, 0, sclamp(qs0 - f1) + 128)
-                setpx(s, step, -1, sclamp(ps0 + f2) + 128)
+                self.setpx(s, step, 0, sclamp(qs0 - f1) + 128)
+                self.setpx(s, step, -1, sclamp(ps0 + f2) + 128)
                 if not hev
                     f3 := (f1 + 1).shr(1)
-                    setpx(s, step, 1, sclamp(qs1 - f3) + 128)
-                    setpx(s, step, -2, sclamp(ps1 + f3) + 128)
+                    self.setpx(s, step, 1, sclamp(qs1 - f3) + 128)
+                    self.setpx(s, step, -2, sclamp(ps1 + f3) + 128)
 
 fn sclamp(v int) int
     if v < -128
@@ -3946,21 +3982,21 @@ fn mode_merge(pre int, c0 int, c1 int) int
 
 ## Adapts probability `i` from its value in the saved context.
 fn Decoder.merge1(mut self, i int, c0 int, c1 int)
-    fc[i] = mode_merge(fcs[ctx_idx * FC_SIZE + i], c0, c1)
+    self.fc[i] = mode_merge(self.fcs[self.ctx_idx * FC_SIZE + i], c0, c1)
 
 ## Adapts the probabilities of a tree from its leaf counts; returns the
 ## node's total count.
 fn Decoder.tree_merge(mut self, t List[int], pbase int, cbase int, i int) int
     l := t[i]
-    lc := if l <= 0 then counts[cbase - l] else tree_merge(t, pbase, cbase, l)
+    lc := if l <= 0 then self.counts[cbase - l] else self.tree_merge(t, pbase, cbase, l)
     r := t[i + 1]
-    rc := if r <= 0 then counts[cbase - r] else tree_merge(t, pbase, cbase, r)
-    merge1(pbase + i.shr(1), lc, rc)
+    rc := if r <= 0 then self.counts[cbase - r] else self.tree_merge(t, pbase, cbase, r)
+    self.merge1(pbase + i.shr(1), lc, rc)
     lc + rc
 
 fn Decoder.adapt_coef(mut self)
-    uf := if not intra and last_frame_type == 0 then 128 else 112
-    pre := ctx_idx * FC_SIZE
+    uf := if not self.intra and self.last_frame_type == 0 then 128 else 112
+    pre := self.ctx_idx * FC_SIZE
     for t in 0..4
         for i in 0..2
             for j in 0..2
@@ -3970,100 +4006,128 @@ fn Decoder.adapt_coef(mut self)
                         q := (((t * 2 + i) * 2 + j) * 6 + k) * 6 + l
                         ci := C_COEF + q * 4
                         pi := FC_COEF + q * 3
-                        n0 := counts[ci]
-                        n1 := counts[ci + 1]
-                        n2 := counts[ci + 2]
-                        neob := counts[ci + 3]
-                        ne := counts[C_EOB + q]
-                        fc[pi] = merge_prob(fcs[pre + pi], neob, ne - neob, 24, uf)
-                        fc[pi + 1] = merge_prob(fcs[pre + pi + 1], n0, n1 + n2, 24, uf)
-                        fc[pi + 2] = merge_prob(fcs[pre + pi + 2], n1, n2, 24, uf)
+                        n0 := self.counts[ci]
+                        n1 := self.counts[ci + 1]
+                        n2 := self.counts[ci + 2]
+                        neob := self.counts[ci + 3]
+                        ne := self.counts[C_EOB + q]
+                        self.fc[pi] = merge_prob(self.fcs[pre + pi], neob, ne - neob, 24, uf)
+                        self.fc[pi + 1] = merge_prob(self.fcs[pre + pi + 1], n0, n1 + n2, 24, uf)
+                        self.fc[pi + 2] = merge_prob(self.fcs[pre + pi + 2], n1, n2, 24, uf)
 
 fn Decoder.adapt_mode(mut self)
     for i in 0..4
-        merge1(FC_INTRA_INTER + i, counts[C_INTRA_INTER + i * 2], counts[C_INTRA_INTER + i * 2 + 1])
+        self.merge1(
+            FC_INTRA_INTER + i,
+            self.counts[C_INTRA_INTER + i * 2],
+            self.counts[C_INTRA_INTER + i * 2 + 1],
+        )
     for i in 0..5
-        merge1(FC_COMP_INTER + i, counts[C_COMP_INTER + i * 2], counts[C_COMP_INTER + i * 2 + 1])
-        merge1(FC_COMP_REF + i, counts[C_COMP_REF + i * 2], counts[C_COMP_REF + i * 2 + 1])
+        self.merge1(
+            FC_COMP_INTER + i,
+            self.counts[C_COMP_INTER + i * 2],
+            self.counts[C_COMP_INTER + i * 2 + 1],
+        )
+        self.merge1(
+            FC_COMP_REF + i,
+            self.counts[C_COMP_REF + i * 2],
+            self.counts[C_COMP_REF + i * 2 + 1],
+        )
         for j in 0..2
-            merge1(
+            self.merge1(
                 FC_SINGLE_REF + i * 2 + j,
-                counts[C_SINGLE_REF + i * 4 + j * 2],
-                counts[C_SINGLE_REF + i * 4 + j * 2 + 1],
+                self.counts[C_SINGLE_REF + i * 4 + j * 2],
+                self.counts[C_SINGLE_REF + i * 4 + j * 2 + 1],
             )
     for i in 0..7
-        tree_merge(INTER_MODE_TREE, FC_INTER_MODE + i * 3, C_INTER_MODE + i * 4, 0)
+        self.tree_merge(INTER_MODE_TREE, FC_INTER_MODE + i * 3, C_INTER_MODE + i * 4, 0)
     for i in 0..4
-        tree_merge(INTRA_TREE, FC_Y_MODE + i * 9, C_Y_MODE + i * 10, 0)
+        self.tree_merge(INTRA_TREE, FC_Y_MODE + i * 9, C_Y_MODE + i * 10, 0)
     for i in 0..10
-        tree_merge(INTRA_TREE, FC_UV_MODE + i * 9, C_UV_MODE + i * 10, 0)
+        self.tree_merge(INTRA_TREE, FC_UV_MODE + i * 9, C_UV_MODE + i * 10, 0)
     for i in 0..16
-        tree_merge(PARTITION_TREE, FC_PART + i * 3, C_PART + i * 4, 0)
-    if interp_filter == SWITCHABLE
+        self.tree_merge(PARTITION_TREE, FC_PART + i * 3, C_PART + i * 4, 0)
+    if self.interp_filter == SWITCHABLE
         for i in 0..4
-            tree_merge(INTERP_TREE, FC_INTERP + i * 2, C_INTERP + i * 3, 0)
-    if tx_mode == 4
+            self.tree_merge(INTERP_TREE, FC_INTERP + i * 2, C_INTERP + i * 3, 0)
+    if self.tx_mode == 4
         for i in 0..2
             a8 := C_TX8 + i * 2
-            merge1(FC_TX8 + i, counts[a8], counts[a8 + 1])
+            self.merge1(FC_TX8 + i, self.counts[a8], self.counts[a8 + 1])
             a16 := C_TX16 + i * 3
-            merge1(FC_TX16 + i * 2, counts[a16], counts[a16 + 1] + counts[a16 + 2])
-            merge1(FC_TX16 + i * 2 + 1, counts[a16 + 1], counts[a16 + 2])
-            a32 := C_TX32 + i * 4
-            merge1(
-                FC_TX32 + i * 3,
-                counts[a32],
-                counts[a32 + 1] + counts[a32 + 2] + counts[a32 + 3],
+            self.merge1(
+                FC_TX16 + i * 2,
+                self.counts[a16],
+                self.counts[a16 + 1] + self.counts[a16 + 2],
             )
-            merge1(FC_TX32 + i * 3 + 1, counts[a32 + 1], counts[a32 + 2] + counts[a32 + 3])
-            merge1(FC_TX32 + i * 3 + 2, counts[a32 + 2], counts[a32 + 3])
+            self.merge1(FC_TX16 + i * 2 + 1, self.counts[a16 + 1], self.counts[a16 + 2])
+            a32 := C_TX32 + i * 4
+            self.merge1(
+                FC_TX32 + i * 3,
+                self.counts[a32],
+                self.counts[a32 + 1] + self.counts[a32 + 2] + self.counts[a32 + 3],
+            )
+            self.merge1(
+                FC_TX32 + i * 3 + 1,
+                self.counts[a32 + 1],
+                self.counts[a32 + 2] + self.counts[a32 + 3],
+            )
+            self.merge1(FC_TX32 + i * 3 + 2, self.counts[a32 + 2], self.counts[a32 + 3])
     for i in 0..3
-        merge1(FC_SKIP + i, counts[C_SKIP + i * 2], counts[C_SKIP + i * 2 + 1])
-    tree_merge(MV_JOINT_TREE, FC_MV_JOINT, C_MV_JOINT, 0)
+        self.merge1(FC_SKIP + i, self.counts[C_SKIP + i * 2], self.counts[C_SKIP + i * 2 + 1])
+    self.tree_merge(MV_JOINT_TREE, FC_MV_JOINT, C_MV_JOINT, 0)
     for c in 0..2
         b := FC_MV_COMP + c * 33
         cb := C_MV_COMP + c * 51
-        merge1(b + MVC_SIGN, counts[cb + CM_SIGN], counts[cb + CM_SIGN + 1])
-        tree_merge(MV_CLASS_TREE, b + MVC_CLASSES, cb + CM_CLASSES, 0)
-        tree_merge(MV_CLASS0_TREE, b + MVC_CLASS0, cb + CM_CLASS0, 0)
+        self.merge1(b + MVC_SIGN, self.counts[cb + CM_SIGN], self.counts[cb + CM_SIGN + 1])
+        self.tree_merge(MV_CLASS_TREE, b + MVC_CLASSES, cb + CM_CLASSES, 0)
+        self.tree_merge(MV_CLASS0_TREE, b + MVC_CLASS0, cb + CM_CLASS0, 0)
         for j in 0..10
-            merge1(b + MVC_BITS + j, counts[cb + CM_BITS + j * 2], counts[cb + CM_BITS + j * 2 + 1])
+            self.merge1(
+                b + MVC_BITS + j,
+                self.counts[cb + CM_BITS + j * 2],
+                self.counts[cb + CM_BITS + j * 2 + 1],
+            )
         for d in 0..2
-            tree_merge(MV_FP_TREE, b + MVC_CLASS0_FP + d * 3, cb + CM_CLASS0_FP + d * 4, 0)
-        tree_merge(MV_FP_TREE, b + MVC_FP, cb + CM_FP, 0)
-        if allow_hp == 1
-            merge1(b + MVC_CLASS0_HP, counts[cb + CM_CLASS0_HP], counts[cb + CM_CLASS0_HP + 1])
-            merge1(b + MVC_HP, counts[cb + CM_HP], counts[cb + CM_HP + 1])
+            self.tree_merge(MV_FP_TREE, b + MVC_CLASS0_FP + d * 3, cb + CM_CLASS0_FP + d * 4, 0)
+        self.tree_merge(MV_FP_TREE, b + MVC_FP, cb + CM_FP, 0)
+        if self.allow_hp == 1
+            self.merge1(
+                b + MVC_CLASS0_HP,
+                self.counts[cb + CM_CLASS0_HP],
+                self.counts[cb + CM_CLASS0_HP + 1],
+            )
+            self.merge1(b + MVC_HP, self.counts[cb + CM_HP], self.counts[cb + CM_HP + 1])
 # ---------------------------------------------------------------- 1-D inverse transforms
 # Translated from libvpx vpx_dsp/inv_txfm.c (BSD-3-Clause). Each works in place on
 # co[o], co[o + s], ... co[o + (n - 1) * s].
 
 fn Decoder.idct4(mut self, o int, s int)
-    mut temp1 := (co[o + 0 * s] + co[o + 2 * s]) * 11585
-    mut temp2 := (co[o + 0 * s] - co[o + 2 * s]) * 11585
+    mut temp1 := (self.co[o + 0 * s] + self.co[o + 2 * s]) * 11585
+    mut temp2 := (self.co[o + 0 * s] - self.co[o + 2 * s]) * 11585
     step_0 := (rs14(temp1))
     step_1 := (rs14(temp2))
-    temp1 = co[o + 1 * s] * 6270 - co[o + 3 * s] * 15137
-    temp2 = co[o + 1 * s] * 15137 + co[o + 3 * s] * 6270
+    temp1 = self.co[o + 1 * s] * 6270 - self.co[o + 3 * s] * 15137
+    temp2 = self.co[o + 1 * s] * 15137 + self.co[o + 3 * s] * 6270
     step_2 := (rs14(temp1))
     step_3 := (rs14(temp2))
     o0 := (step_0 + step_3)
     o1 := (step_1 + step_2)
     o2 := (step_1 - step_2)
     o3 := (step_0 - step_3)
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
 
 fn Decoder.iadst4(mut self, o int, s int)
-    x0 := co[o + 0 * s]
-    x1 := co[o + 1 * s]
-    x2 := co[o + 2 * s]
-    x3 := co[o + 3 * s]
+    x0 := self.co[o + 0 * s]
+    x1 := self.co[o + 1 * s]
+    x2 := self.co[o + 2 * s]
+    x3 := self.co[o + 3 * s]
     if x0.bit_or(x1).bit_or(x2).bit_or(x3) == 0
         for k in 0..4
-            co[o + k * s] = 0
+            self.co[o + k * s] = 0
         return
     mut s0 := 5283 * x0
     mut s1 := 9929 * x0
@@ -4081,22 +4145,22 @@ fn Decoder.iadst4(mut self, o int, s int)
     o1 := (rs14(s1 + s3))
     o2 := (rs14(s2))
     o3 := (rs14(s0 + s1 - s3))
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
 
 fn Decoder.idct8(mut self, o int, s int)
-    mut step1_0 := co[o + 0 * s]
-    mut step1_2 := co[o + 4 * s]
-    mut step1_1 := co[o + 2 * s]
-    mut step1_3 := co[o + 6 * s]
-    mut temp1 := co[o + 1 * s] * 3196 - co[o + 7 * s] * 16069
-    mut temp2 := co[o + 1 * s] * 16069 + co[o + 7 * s] * 3196
+    mut step1_0 := self.co[o + 0 * s]
+    mut step1_2 := self.co[o + 4 * s]
+    mut step1_1 := self.co[o + 2 * s]
+    mut step1_3 := self.co[o + 6 * s]
+    mut temp1 := self.co[o + 1 * s] * 3196 - self.co[o + 7 * s] * 16069
+    mut temp2 := self.co[o + 1 * s] * 16069 + self.co[o + 7 * s] * 3196
     mut step1_4 := (rs14(temp1))
     mut step1_7 := (rs14(temp2))
-    temp1 = co[o + 5 * s] * 13623 - co[o + 3 * s] * 9102
-    temp2 = co[o + 5 * s] * 9102 + co[o + 3 * s] * 13623
+    temp1 = self.co[o + 5 * s] * 13623 - self.co[o + 3 * s] * 9102
+    temp2 = self.co[o + 5 * s] * 9102 + self.co[o + 3 * s] * 13623
     mut step1_5 := (rs14(temp1))
     mut step1_6 := (rs14(temp2))
     temp1 = (step1_0 + step1_2) * 11585
@@ -4129,27 +4193,27 @@ fn Decoder.idct8(mut self, o int, s int)
     o5 := (step1_2 - step1_5)
     o6 := (step1_1 - step1_6)
     o7 := (step1_0 - step1_7)
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
-    co[o + 4 * s] = o4
-    co[o + 5 * s] = o5
-    co[o + 6 * s] = o6
-    co[o + 7 * s] = o7
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
+    self.co[o + 4 * s] = o4
+    self.co[o + 5 * s] = o5
+    self.co[o + 6 * s] = o6
+    self.co[o + 7 * s] = o7
 
 fn Decoder.iadst8(mut self, o int, s int)
-    mut x0 := co[o + 7 * s]
-    mut x1 := co[o + 0 * s]
-    mut x2 := co[o + 5 * s]
-    mut x3 := co[o + 2 * s]
-    mut x4 := co[o + 3 * s]
-    mut x5 := co[o + 4 * s]
-    mut x6 := co[o + 1 * s]
-    mut x7 := co[o + 6 * s]
+    mut x0 := self.co[o + 7 * s]
+    mut x1 := self.co[o + 0 * s]
+    mut x2 := self.co[o + 5 * s]
+    mut x3 := self.co[o + 2 * s]
+    mut x4 := self.co[o + 3 * s]
+    mut x5 := self.co[o + 4 * s]
+    mut x6 := self.co[o + 1 * s]
+    mut x7 := self.co[o + 6 * s]
     if x0.bit_or(x1).bit_or(x2).bit_or(x3).bit_or(x4).bit_or(x5).bit_or(x6).bit_or(x7) == 0
         for k in 0..8
-            co[o + k * s] = 0
+            self.co[o + k * s] = 0
         return
     mut s0 := (16305 * x0 + 1606 * x1)
     mut s1 := (1606 * x0 - 16305 * x1)
@@ -4199,32 +4263,32 @@ fn Decoder.iadst8(mut self, o int, s int)
     o5 := (-x7)
     o6 := (x5)
     o7 := (-x1)
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
-    co[o + 4 * s] = o4
-    co[o + 5 * s] = o5
-    co[o + 6 * s] = o6
-    co[o + 7 * s] = o7
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
+    self.co[o + 4 * s] = o4
+    self.co[o + 5 * s] = o5
+    self.co[o + 6 * s] = o6
+    self.co[o + 7 * s] = o7
 
 fn Decoder.idct16(mut self, o int, s int)
-    mut step1_0 := co[o + 0 * s]
-    mut step1_1 := co[o + 8 * s]
-    mut step1_2 := co[o + 4 * s]
-    mut step1_3 := co[o + 12 * s]
-    mut step1_4 := co[o + 2 * s]
-    mut step1_5 := co[o + 10 * s]
-    mut step1_6 := co[o + 6 * s]
-    mut step1_7 := co[o + 14 * s]
-    mut step1_8 := co[o + 1 * s]
-    mut step1_9 := co[o + 9 * s]
-    mut step1_10 := co[o + 5 * s]
-    mut step1_11 := co[o + 13 * s]
-    mut step1_12 := co[o + 3 * s]
-    mut step1_13 := co[o + 11 * s]
-    mut step1_14 := co[o + 7 * s]
-    mut step1_15 := co[o + 15 * s]
+    mut step1_0 := self.co[o + 0 * s]
+    mut step1_1 := self.co[o + 8 * s]
+    mut step1_2 := self.co[o + 4 * s]
+    mut step1_3 := self.co[o + 12 * s]
+    mut step1_4 := self.co[o + 2 * s]
+    mut step1_5 := self.co[o + 10 * s]
+    mut step1_6 := self.co[o + 6 * s]
+    mut step1_7 := self.co[o + 14 * s]
+    mut step1_8 := self.co[o + 1 * s]
+    mut step1_9 := self.co[o + 9 * s]
+    mut step1_10 := self.co[o + 5 * s]
+    mut step1_11 := self.co[o + 13 * s]
+    mut step1_12 := self.co[o + 3 * s]
+    mut step1_13 := self.co[o + 11 * s]
+    mut step1_14 := self.co[o + 7 * s]
+    mut step1_15 := self.co[o + 15 * s]
     mut step2_0 := step1_0
     mut step2_1 := step1_1
     mut step2_2 := step1_2
@@ -4347,40 +4411,40 @@ fn Decoder.idct16(mut self, o int, s int)
     o13 := (step2_2 - step2_13)
     o14 := (step2_1 - step2_14)
     o15 := (step2_0 - step2_15)
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
-    co[o + 4 * s] = o4
-    co[o + 5 * s] = o5
-    co[o + 6 * s] = o6
-    co[o + 7 * s] = o7
-    co[o + 8 * s] = o8
-    co[o + 9 * s] = o9
-    co[o + 10 * s] = o10
-    co[o + 11 * s] = o11
-    co[o + 12 * s] = o12
-    co[o + 13 * s] = o13
-    co[o + 14 * s] = o14
-    co[o + 15 * s] = o15
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
+    self.co[o + 4 * s] = o4
+    self.co[o + 5 * s] = o5
+    self.co[o + 6 * s] = o6
+    self.co[o + 7 * s] = o7
+    self.co[o + 8 * s] = o8
+    self.co[o + 9 * s] = o9
+    self.co[o + 10 * s] = o10
+    self.co[o + 11 * s] = o11
+    self.co[o + 12 * s] = o12
+    self.co[o + 13 * s] = o13
+    self.co[o + 14 * s] = o14
+    self.co[o + 15 * s] = o15
 
 fn Decoder.iadst16(mut self, o int, s int)
-    mut x0 := co[o + 15 * s]
-    mut x1 := co[o + 0 * s]
-    mut x2 := co[o + 13 * s]
-    mut x3 := co[o + 2 * s]
-    mut x4 := co[o + 11 * s]
-    mut x5 := co[o + 4 * s]
-    mut x6 := co[o + 9 * s]
-    mut x7 := co[o + 6 * s]
-    mut x8 := co[o + 7 * s]
-    mut x9 := co[o + 8 * s]
-    mut x10 := co[o + 5 * s]
-    mut x11 := co[o + 10 * s]
-    mut x12 := co[o + 3 * s]
-    mut x13 := co[o + 12 * s]
-    mut x14 := co[o + 1 * s]
-    mut x15 := co[o + 14 * s]
+    mut x0 := self.co[o + 15 * s]
+    mut x1 := self.co[o + 0 * s]
+    mut x2 := self.co[o + 13 * s]
+    mut x3 := self.co[o + 2 * s]
+    mut x4 := self.co[o + 11 * s]
+    mut x5 := self.co[o + 4 * s]
+    mut x6 := self.co[o + 9 * s]
+    mut x7 := self.co[o + 6 * s]
+    mut x8 := self.co[o + 7 * s]
+    mut x9 := self.co[o + 8 * s]
+    mut x10 := self.co[o + 5 * s]
+    mut x11 := self.co[o + 10 * s]
+    mut x12 := self.co[o + 3 * s]
+    mut x13 := self.co[o + 12 * s]
+    mut x14 := self.co[o + 1 * s]
+    mut x15 := self.co[o + 14 * s]
     if x0
         .bit_or(x1)
         .bit_or(x2)
@@ -4399,7 +4463,7 @@ fn Decoder.iadst16(mut self, o int, s int)
         .bit_or(x15)
         == 0
         for k in 0..16
-            co[o + k * s] = 0
+            self.co[o + k * s] = 0
         return
     mut s0 := x0 * 16364 + x1 * 804
     mut s1 := x0 * 804 - x1 * 16364
@@ -4529,70 +4593,70 @@ fn Decoder.iadst16(mut self, o int, s int)
     o13 := (-x13)
     o14 := (x9)
     o15 := (-x1)
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
-    co[o + 4 * s] = o4
-    co[o + 5 * s] = o5
-    co[o + 6 * s] = o6
-    co[o + 7 * s] = o7
-    co[o + 8 * s] = o8
-    co[o + 9 * s] = o9
-    co[o + 10 * s] = o10
-    co[o + 11 * s] = o11
-    co[o + 12 * s] = o12
-    co[o + 13 * s] = o13
-    co[o + 14 * s] = o14
-    co[o + 15 * s] = o15
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
+    self.co[o + 4 * s] = o4
+    self.co[o + 5 * s] = o5
+    self.co[o + 6 * s] = o6
+    self.co[o + 7 * s] = o7
+    self.co[o + 8 * s] = o8
+    self.co[o + 9 * s] = o9
+    self.co[o + 10 * s] = o10
+    self.co[o + 11 * s] = o11
+    self.co[o + 12 * s] = o12
+    self.co[o + 13 * s] = o13
+    self.co[o + 14 * s] = o14
+    self.co[o + 15 * s] = o15
 
 fn Decoder.idct32(mut self, o int, s int)
-    mut step1_0 := co[o + 0 * s]
-    mut step1_1 := co[o + 16 * s]
-    mut step1_2 := co[o + 8 * s]
-    mut step1_3 := co[o + 24 * s]
-    mut step1_4 := co[o + 4 * s]
-    mut step1_5 := co[o + 20 * s]
-    mut step1_6 := co[o + 12 * s]
-    mut step1_7 := co[o + 28 * s]
-    mut step1_8 := co[o + 2 * s]
-    mut step1_9 := co[o + 18 * s]
-    mut step1_10 := co[o + 10 * s]
-    mut step1_11 := co[o + 26 * s]
-    mut step1_12 := co[o + 6 * s]
-    mut step1_13 := co[o + 22 * s]
-    mut step1_14 := co[o + 14 * s]
-    mut step1_15 := co[o + 30 * s]
-    mut temp1 := co[o + 1 * s] * 804 - co[o + 31 * s] * 16364
-    mut temp2 := co[o + 1 * s] * 16364 + co[o + 31 * s] * 804
+    mut step1_0 := self.co[o + 0 * s]
+    mut step1_1 := self.co[o + 16 * s]
+    mut step1_2 := self.co[o + 8 * s]
+    mut step1_3 := self.co[o + 24 * s]
+    mut step1_4 := self.co[o + 4 * s]
+    mut step1_5 := self.co[o + 20 * s]
+    mut step1_6 := self.co[o + 12 * s]
+    mut step1_7 := self.co[o + 28 * s]
+    mut step1_8 := self.co[o + 2 * s]
+    mut step1_9 := self.co[o + 18 * s]
+    mut step1_10 := self.co[o + 10 * s]
+    mut step1_11 := self.co[o + 26 * s]
+    mut step1_12 := self.co[o + 6 * s]
+    mut step1_13 := self.co[o + 22 * s]
+    mut step1_14 := self.co[o + 14 * s]
+    mut step1_15 := self.co[o + 30 * s]
+    mut temp1 := self.co[o + 1 * s] * 804 - self.co[o + 31 * s] * 16364
+    mut temp2 := self.co[o + 1 * s] * 16364 + self.co[o + 31 * s] * 804
     mut step1_16 := (rs14(temp1))
     mut step1_31 := (rs14(temp2))
-    temp1 = co[o + 17 * s] * 12140 - co[o + 15 * s] * 11003
-    temp2 = co[o + 17 * s] * 11003 + co[o + 15 * s] * 12140
+    temp1 = self.co[o + 17 * s] * 12140 - self.co[o + 15 * s] * 11003
+    temp2 = self.co[o + 17 * s] * 11003 + self.co[o + 15 * s] * 12140
     mut step1_17 := (rs14(temp1))
     mut step1_30 := (rs14(temp2))
-    temp1 = co[o + 9 * s] * 7005 - co[o + 23 * s] * 14811
-    temp2 = co[o + 9 * s] * 14811 + co[o + 23 * s] * 7005
+    temp1 = self.co[o + 9 * s] * 7005 - self.co[o + 23 * s] * 14811
+    temp2 = self.co[o + 9 * s] * 14811 + self.co[o + 23 * s] * 7005
     mut step1_18 := (rs14(temp1))
     mut step1_29 := (rs14(temp2))
-    temp1 = co[o + 25 * s] * 15426 - co[o + 7 * s] * 5520
-    temp2 = co[o + 25 * s] * 5520 + co[o + 7 * s] * 15426
+    temp1 = self.co[o + 25 * s] * 15426 - self.co[o + 7 * s] * 5520
+    temp2 = self.co[o + 25 * s] * 5520 + self.co[o + 7 * s] * 15426
     mut step1_19 := (rs14(temp1))
     mut step1_28 := (rs14(temp2))
-    temp1 = co[o + 5 * s] * 3981 - co[o + 27 * s] * 15893
-    temp2 = co[o + 5 * s] * 15893 + co[o + 27 * s] * 3981
+    temp1 = self.co[o + 5 * s] * 3981 - self.co[o + 27 * s] * 15893
+    temp2 = self.co[o + 5 * s] * 15893 + self.co[o + 27 * s] * 3981
     mut step1_20 := (rs14(temp1))
     mut step1_27 := (rs14(temp2))
-    temp1 = co[o + 21 * s] * 14053 - co[o + 11 * s] * 8423
-    temp2 = co[o + 21 * s] * 8423 + co[o + 11 * s] * 14053
+    temp1 = self.co[o + 21 * s] * 14053 - self.co[o + 11 * s] * 8423
+    temp2 = self.co[o + 21 * s] * 8423 + self.co[o + 11 * s] * 14053
     mut step1_21 := (rs14(temp1))
     mut step1_26 := (rs14(temp2))
-    temp1 = co[o + 13 * s] * 9760 - co[o + 19 * s] * 13160
-    temp2 = co[o + 13 * s] * 13160 + co[o + 19 * s] * 9760
+    temp1 = self.co[o + 13 * s] * 9760 - self.co[o + 19 * s] * 13160
+    temp2 = self.co[o + 13 * s] * 13160 + self.co[o + 19 * s] * 9760
     mut step1_22 := (rs14(temp1))
     mut step1_25 := (rs14(temp2))
-    temp1 = co[o + 29 * s] * 16207 - co[o + 3 * s] * 2404
-    temp2 = co[o + 29 * s] * 2404 + co[o + 3 * s] * 16207
+    temp1 = self.co[o + 29 * s] * 16207 - self.co[o + 3 * s] * 2404
+    temp2 = self.co[o + 29 * s] * 2404 + self.co[o + 3 * s] * 16207
     mut step1_23 := (rs14(temp1))
     mut step1_24 := (rs14(temp2))
     mut step2_0 := step1_0
@@ -4869,38 +4933,38 @@ fn Decoder.idct32(mut self, o int, s int)
     o29 := (step1_2 - step1_29)
     o30 := (step1_1 - step1_30)
     o31 := (step1_0 - step1_31)
-    co[o + 0 * s] = o0
-    co[o + 1 * s] = o1
-    co[o + 2 * s] = o2
-    co[o + 3 * s] = o3
-    co[o + 4 * s] = o4
-    co[o + 5 * s] = o5
-    co[o + 6 * s] = o6
-    co[o + 7 * s] = o7
-    co[o + 8 * s] = o8
-    co[o + 9 * s] = o9
-    co[o + 10 * s] = o10
-    co[o + 11 * s] = o11
-    co[o + 12 * s] = o12
-    co[o + 13 * s] = o13
-    co[o + 14 * s] = o14
-    co[o + 15 * s] = o15
-    co[o + 16 * s] = o16
-    co[o + 17 * s] = o17
-    co[o + 18 * s] = o18
-    co[o + 19 * s] = o19
-    co[o + 20 * s] = o20
-    co[o + 21 * s] = o21
-    co[o + 22 * s] = o22
-    co[o + 23 * s] = o23
-    co[o + 24 * s] = o24
-    co[o + 25 * s] = o25
-    co[o + 26 * s] = o26
-    co[o + 27 * s] = o27
-    co[o + 28 * s] = o28
-    co[o + 29 * s] = o29
-    co[o + 30 * s] = o30
-    co[o + 31 * s] = o31
+    self.co[o + 0 * s] = o0
+    self.co[o + 1 * s] = o1
+    self.co[o + 2 * s] = o2
+    self.co[o + 3 * s] = o3
+    self.co[o + 4 * s] = o4
+    self.co[o + 5 * s] = o5
+    self.co[o + 6 * s] = o6
+    self.co[o + 7 * s] = o7
+    self.co[o + 8 * s] = o8
+    self.co[o + 9 * s] = o9
+    self.co[o + 10 * s] = o10
+    self.co[o + 11 * s] = o11
+    self.co[o + 12 * s] = o12
+    self.co[o + 13 * s] = o13
+    self.co[o + 14 * s] = o14
+    self.co[o + 15 * s] = o15
+    self.co[o + 16 * s] = o16
+    self.co[o + 17 * s] = o17
+    self.co[o + 18 * s] = o18
+    self.co[o + 19 * s] = o19
+    self.co[o + 20 * s] = o20
+    self.co[o + 21 * s] = o21
+    self.co[o + 22 * s] = o22
+    self.co[o + 23 * s] = o23
+    self.co[o + 24 * s] = o24
+    self.co[o + 25 * s] = o25
+    self.co[o + 26 * s] = o26
+    self.co[o + 27 * s] = o27
+    self.co[o + 28 * s] = o28
+    self.co[o + 29 * s] = o29
+    self.co[o + 30 * s] = o30
+    self.co[o + 31 * s] = o31
 
 # ---------------------------------------------------------------- colour conversion
 
@@ -4916,28 +4980,28 @@ pub fn Frame.rgba(self) bytes
     mut ug := 6419
     mut vg := 13320
     mut ub := 33050
-    if space == 2
+    if self.space == 2
         vr = 29372
         ug = 3494
         vg = 8731
         ub = 34610
-    if full_range
+    if self.full_range
         ky = 16384
         yo = 0
-        vr = if space == 2 then 25802 else 22970
-        ug = if space == 2 then 3069 else 5638
-        vg = if space == 2 then 7669 else 11700
-        ub = if space == 2 then 30402 else 29032
-    cwid := cw()
-    mut out := bytes.zeros(width * height * 4).to_list()
+        vr = if self.space == 2 then 25802 else 22970
+        ug = if self.space == 2 then 3069 else 5638
+        vg = if self.space == 2 then 7669 else 11700
+        ub = if self.space == 2 then 30402 else 29032
+    cwid := self.cw()
+    mut out := bytes.zeros(self.width * self.height * 4).to_list()
     mut o := 0
-    for r in 0..height
-        yrow := r * width
+    for r in 0..self.height
+        yrow := r * self.width
         crow := r.shr(1) * cwid
-        for c in 0..width
-            l := (y[yrow + c].to_int() - yo) * ky
-            cu := u[crow + c.shr(1)].to_int() - 128
-            cv := v[crow + c.shr(1)].to_int() - 128
+        for c in 0..self.width
+            l := (self.y[yrow + c].to_int() - yo) * ky
+            cu := self.u[crow + c.shr(1)].to_int() - 128
+            cv := self.v[crow + c.shr(1)].to_int() - 128
             out[o] = clip8((l + vr * cv + 8192).shr(14)).to_u8()
             out[o + 1] = clip8((l - ug * cu - vg * cv + 8192).shr(14)).to_u8()
             out[o + 2] = clip8((l + ub * cu + 8192).shr(14)).to_u8()

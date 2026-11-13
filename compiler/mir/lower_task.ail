@@ -167,7 +167,7 @@ fn Lower.lower_spawn_let(mut self, name str, pos ast.Pos, value ast.Expr)
     at := match value
         Unary(_, _, p) => p
         _ => pos
-    h := lower_spawn(inner, at) else
+    h := self.lower_spawn(inner, at) else
         declare(name, Ty.Unknown, -1)
         return
     declare(name, Ty.Int, h.id)
@@ -183,7 +183,7 @@ fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
     match e
         Call(callee, args, cpos) =>
             match callee
-                Name(name, npos) => spawn_call("{prefix}{name}", name, npos, args, cpos, pos)
+                Name(name, npos) => self.spawn_call("{prefix}{name}", name, npos, args, cpos, pos)
                 _ => unsupported(cpos, "`spawn` of anything but a function")
         # `spawn m.f(..)`: a function of an imported module (mod.use.2).
         Method(recv, name, npos, args) =>
@@ -191,7 +191,7 @@ fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
                 pos,
                 "`spawn` of anything but a function call",
             )
-            spawn_call("{m}.{name}", name, npos, args, npos, pos)
+            self.spawn_call("{m}.{name}", name, npos, args, npos, pos)
         _ => unsupported(pos, "`spawn` of anything but a function call")
 
 ## Queues the task `key(args)` and returns its record.
@@ -223,7 +223,7 @@ fn Lower.spawn_call(
         w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
         traced.push(w)
         at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
-        prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
+        self.prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
     trace_spawn(key, sig.params, traced, rec, pos)
     call("rt.task_start", [rec], Ty.Unit)
     tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
@@ -253,7 +253,7 @@ fn Lower.lower_wait(mut self, inner ast.Expr, pos ast.Pos) Val?
                         if res.is_unit()
                             v = Val(id: -1, ty: Ty.Unit)
                         elif res.is_float()
-                            v = Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
+                            v = Val(id: self.prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
                         # The task's own error passes through `?` (conc.task.6).
                         if fails
                             return propagate_result(v, none, pos)
@@ -267,7 +267,7 @@ fn Lower.lower_wait_try(mut self, e ast.Expr) Maybe?
     match e
         Method(recv, _, npos, _) =>
             match recv
-                Name(tname, _) => wait_try_var(tname, npos)
+                Name(tname, _) => self.wait_try_var(tname, npos)
                 _ => none
         _ => none
 
@@ -285,7 +285,7 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     if res.is_unit()
         v = Val(id: -1, ty: Ty.Unit)
     elif res.is_float()
-        v = Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
+        v = Val(id: self.prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
     Maybe(
         val: v,
         present: op("not", [failure], Ty.Bool),
@@ -391,14 +391,14 @@ fn Lower.build_task_fns(mut self)
     for k in first..tk.sites.len()
         s := tk.sites[k]
         if s.loop >= 0
-            build_par_fn(k, tk.pars[s.loop])
+            self.build_par_fn(k, tk.pars[s.loop])
             continue
-        ps := synth_begin("task.{k}", [Ty.Int])
+        ps := self.synth_begin("task.{k}", [Ty.Int])
         rec := ps[0]
         mut vs := List[int]()
         for j in 0..s.params.len()
             at := op("add", [rec, konst(T_ARGS + 8 * j, Ty.Int)], Ty.Int)
-            vs.push(prim_op(
+            vs.push(self.prim_op(
                 if s.params[j].is_float() then "loadf" else "load64",
                 [at],
                 s.params[j],
@@ -406,15 +406,15 @@ fn Lower.build_task_fns(mut self)
         r := call(s.func, vs, s.ret)
         if not s.ret.is_unit()
             at := op("add", [rec, konst(T_RESULT, Ty.Int)], Ty.Int)
-            prim_op(if s.ret.is_float() then "storef" else "store64", [at, r], Ty.Unit)
+            self.prim_op(if s.ret.is_float() then "storef" else "store64", [at, r], Ty.Unit)
         finish(return_of(-1))
-        synth_end(ps)
+        self.synth_end(ps)
 
 ## `rt.dispatch`: the task function for a site number, once every site has one.
 fn Lower.gen_task_dispatch(mut self)
     if not tk.on
         return
-    ps := synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
+    ps := self.synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
     # The tensor kernels' chunks (task.ail, ADR 0876).
     tyes := new_block()
     tno := new_block()
@@ -446,7 +446,7 @@ fn Lower.gen_task_dispatch(mut self)
         finish(return_of(-1))
         cur = no
     finish(return_of(-1))
-    synth_end(ps)
+    self.synth_end(ps)
 
 # ---- parallel loops (conc.par.*, ADR 0601) ----
 
@@ -466,23 +466,23 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     match iter
         Range(a, b, incl, _) =>
             if a == none or b == none or incl
-                return decline("the loop is not `lo..hi` (an open or inclusive range)")
+                return self.decline("the loop is not `lo..hi` (an open or inclusive range)")
         Name(n, _) =>
-            key := lookup(n) else return decline("the loop is over `{n}`, which is not a local list")
-            e := var_ty[key].elem() else return decline("`{n}` is not a list")
+            key := lookup(n) else return self.decline("the loop is over `{n}`, which is not a local list")
+            e := var_ty[key].elem() else return self.decline("`{n}` is not a list")
             if e.elem() != none or mutates(body, iter)
-                return decline("the list `{n}` is nested or changed in the body")
+                return self.decline("the list `{n}` is nested or changed in the body")
             by_list = true
-        _ => return decline("the loop is not over `lo..hi` or a list variable")
+        _ => return self.decline("the loop is not over `lo..hi` or a list variable")
     mut sc := ast.new_scan()
     ast.scan_block(mut sc, body, 0)
     if sc.bad
-        return decline("the body has {sc.why}")
+        return self.decline("the body has {sc.why}")
     # A bare call of a method of `self` (`glyph(x, y)` inside a method) needs `self` itself, which a
     # chunk doesn't capture (only the fields the body names bare): left sequential.
     # As the call's lowering does, a method of a generic `self` is instantiated first, so it is in `sigs`.
     if self_ty != "" and sc.callees.len() >= 64
-        return decline("the body makes too many calls to check for methods of `self`")
+        return self.decline("the body makes too many calls to check for methods of `self`")
     if self_ty != ""
         for c in sc.callees
             if lookup(c) != none
@@ -490,7 +490,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
             if not sigs.contains("{self_ty}.{c}")
                 instance_method("{self_ty}.{c}")
             if sigs.contains("{self_ty}.{c}") or bad.contains("{self_ty}.{c}")
-                return decline("the body calls `{c}`, a method of `self`")
+                return self.decline("the body calls `{c}`, a method of `self`")
     mut caps := List[Cap]()
     mut accs := List[str]()
     mut atomic := false
@@ -503,7 +503,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         if key := lookup(n)
             ty = var_ty[key]
             if tk.rets.contains(key)
-                return decline("the body uses `{n}`, whose type or kind a chunk can't capture")
+                return self.decline("the body uses `{n}`, whose type or kind a chunk can't capture")
         else
             # A field of `self` the body names bare: the chunk gets its value,
             # read when the loop starts, as it gets a local's (`cap_value`).
@@ -513,30 +513,30 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
             ty = structs[self_ty][k].ty
             field = true
         if sc.decls.contains(n)
-            return decline("the body declares `{n}`, which an outer variable also has")
+            return self.decline("the body declares `{n}`, which an outer variable also has")
         if ty.is_unknown() or ty.is_unit()
-            return decline("the body uses `{n}`, whose type or kind a chunk can't capture")
+            return self.decline("the body uses `{n}`, whose type or kind a chunk can't capture")
         if field and (sc.adds.contains(n) or sc.other.contains(n))
-            return decline("the body assigns the field `{n}` of `self`")
+            return self.decline("the body assigns the field `{n}` of `self`")
         if sc.mutated.contains(n) and ty.elem() != none
-            return decline("the body changes the captured list `{n}` (`push` or a `mut` argument)")
+            return self.decline("the body changes the captured list `{n}` (`push` or a `mut` argument)")
         n_adds := sc.adds.get(n) else 0
         n_reads := sc.reads.get(n) else 0
         if n_adds > 0
             if ty != Ty.Int or n_adds != 1 or n_reads > 0 or sc.other.contains(n)
-                return decline("`{n}` is updated by more than one `+=`, is read, or is not an `int`")
+                return self.decline("`{n}` is updated by more than one `+=`, is read, or is not an `int`")
             accs.push(n)
         elif sc.other.contains(n)
-            return decline("the body assigns the outer variable `{n}`")
+            return self.decline("the body assigns the outer variable `{n}`")
         if ty.elem() == none and atomic_elem(ty) != none
             atomic = true
         caps.push(Cap(name: n, ty: ty))
     if accs.len() > 3 or atomic and accs.len() > 0
-        return decline("more than three `+=` accumulators, or an atomic with one")
+        return self.decline("more than three `+=` accumulators, or an atomic with one")
     if by_list
-        key := lookup(root_of(iter)) else return decline("the list is not a local")
+        key := lookup(root_of(iter)) else return self.decline("the list is not a local")
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
-    cw := callee_work(sc, prefix, 0)
+    cw := self.callee_work(sc, prefix, 0)
     ParSite(
         var: var,
         by_list: by_list,
@@ -574,7 +574,7 @@ fn Lower.lower_par_for(
     pos ast.Pos,
     auto bool,
 )
-    plan := par_plan(var, iter, body, pos) else
+    plan := self.par_plan(var, iter, body, pos) else
         # A written `par for` is a promise of speed: say when it isn't kept.
         # `ail check` already warned about what the shared scan refuses.
         shared := tk.why.starts_with("the body has") or tk.why.starts_with("the loop is not over")
@@ -634,7 +634,7 @@ fn Lower.lower_par_for(
     # 4096 is `PAR_HEAVY` in rt/native/task.ail.
     weight := konst(if not auto and plan.calls then 4096 else plan.work, Ty.Int)
     if auto and loops.len() > 0
-        nested_par_test(
+        self.nested_par_test(
             lo,
             hi,
             if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work),
@@ -647,13 +647,13 @@ fn Lower.lower_par_for(
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
     for i in 0..ncaps
         c := plan.caps[i]
-        v := cap_value(c, pos) else continue
+        v := self.cap_value(c, pos) else continue
         at := op("add", [env, konst(8 * i, Ty.Int)], Ty.Int)
-        prim_op(if c.ty.is_float() then "storef" else "store64", [at, v], Ty.Unit)
+        self.prim_op(if c.ty.is_float() then "storef" else "store64", [at, v], Ty.Unit)
     for a in 0..plan.accs.len()
         key := lookup(plan.accs[a]) else continue
         at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
-        prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
+        self.prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
     # A floor of the work (a loop or a heavy call inside) spreads over the whole pool.
     width := if plan.open then konst(65536, Ty.Int) else weight
     grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi, width], Ty.Int)
@@ -685,7 +685,7 @@ fn Lower.lower_par_for(
     for a in 0..plan.accs.len()
         key := lookup(plan.accs[a]) else continue
         at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
-        write_var(key, cur, prim_op("load64", [at], Ty.Int))
+        write_var(key, cur, self.prim_op("load64", [at], Ty.Int))
     gather_builds(pi, grp)
     jump(join, [])
     seal(join)
@@ -751,13 +751,13 @@ fn Lower.cap_value(mut self, c Cap, pos ast.Pos) int?
 ## Word `n` of the arguments of the task record `rec`.
 fn Lower.rec_word(mut self, rec int, n int) int
     at := op("add", [rec, konst(T_ARGS + 8 * n, Ty.Int)], Ty.Int)
-    prim_op("load64", [at], Ty.Int)
+    self.prim_op("load64", [at], Ty.Int)
 
 ## The chunk function of a parallel loop: `task.K(rec)` runs iterations
 ## `lo` to `hi` of the body over the captured values and leaves each
 ## accumulator's sum and the lowest and highest running sum in the record.
 fn Lower.build_par_fn(mut self, k int, p ParSite)
-    ps := synth_begin("task.{k}", [Ty.Int])
+    ps := self.synth_begin("task.{k}", [Ty.Int])
     rec := ps[0]
     tk.in_chunk = true
     tk.owner = p.owner
@@ -786,13 +786,17 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     aliases = p.aliases
     self_ty = p.self_ty
     pos := p.pos
-    env := rec_word(rec, 0)
+    env := self.rec_word(rec, 0)
     for i in 0..p.caps.len()
         c := p.caps[i]
         at := op("add", [env, konst(8 * i, Ty.Int)], Ty.Int)
-        declare(c.name, c.ty, prim_op(if c.ty.is_float() then "loadf" else "load64", [at], c.ty))
-    declare("__lo", Ty.Int, rec_word(rec, 1))
-    declare("__hi", Ty.Int, rec_word(rec, 2))
+        declare(c.name, c.ty, self.prim_op(
+            if c.ty.is_float() then "loadf" else "load64",
+            [at],
+            c.ty,
+        ))
+    declare("__lo", Ty.Int, self.rec_word(rec, 1))
+    declare("__hi", Ty.Int, self.rec_word(rec, 2))
     chunk_builds_begin(p)
     for a in p.accs
         declare(a, Ty.Int, konst(0, Ty.Int))
@@ -830,7 +834,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
                 == 1 then "{p.accs[a]}#min" else "{p.accs[a]}#max"
             key := lookup(name) else continue
             at := op("add", [rec, konst(base + 8 * part, Ty.Int)], Ty.Int)
-            prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
+            self.prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
     chunk_builds_end(rec, p)
     finish(return_of(-1))
     tk.in_chunk = false
@@ -841,7 +845,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     file = was.file
     aliases = was.aliases
     self_ty = was.self_ty
-    synth_end(ps)
+    self.synth_end(ps)
 
 ## After `acc += e` in a chunk: keep the lowest and highest running sum, so
 ## the sums of the chunks combine with the overflow checks the sequential
@@ -873,7 +877,7 @@ fn Lower.track_sum(mut self, target ast.Expr)
 fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     lower_assign_body(target, op, value, pos)
     if tk.in_chunk
-        track_sum(target)
+        self.track_sum(target)
 
 # ---- atomics (conc.atomic.*, ADR 0600) ----
 
@@ -898,7 +902,7 @@ fn Lower.lower_atomic_new(mut self, targs List[ast.TypeRef]?, args List[ast.Arg]
     if not want.is_unknown() and want != v.ty
         return unsupported(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     cell := call("rt.alloc", [konst(8, Ty.Int), konst(11, Ty.Int)], Ty.Int)
-    prim_op("atomic_store", [cell, v.id], Ty.Unit)
+    self.prim_op("atomic_store", [cell, v.id], Ty.Unit)
     Val(id: cell, ty: Ty.Atomic(v.ty))
 
 ## `load`, `store`, `cas` and `add` on an atomic; an `order:` argument is
@@ -926,16 +930,16 @@ fn Lower.lower_atomic_method(
     if (env.get("AIL_SCHEDULE") else "").starts_with("random")
         call("rt.det_yield", [], Ty.Unit)
     if name == "load" and vs.len() == 0
-        v := prim_op("atomic_load", [cell], elem)
+        v := self.prim_op("atomic_load", [cell], elem)
         race_sync(cell, true, false)
         return Val(id: v, ty: elem)
     if name == "store" and vs.len() == 1
         race_sync(cell, false, true)
-        prim_op("atomic_store", [cell, vs[0]], Ty.Unit)
+        self.prim_op("atomic_store", [cell, vs[0]], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
     if name == "cas" and vs.len() == 2
         race_sync(cell, false, true)
-        got := prim_op("atomic_cas", [cell, vs[0], vs[1]], Ty.Int)
+        got := self.prim_op("atomic_cas", [cell, vs[0], vs[1]], Ty.Int)
         race_sync(cell, true, false)
         return Val(id: op("eq", [got, vs[0]], Ty.Bool), ty: Ty.Bool)
     if name == "add" and vs.len() == 1 and elem == Ty.Int
@@ -947,10 +951,10 @@ fn Lower.lower_atomic_method(
         exit := new_block()
         jump(head, [])
         cur = head
-        old := prim_op("atomic_load", [cell], Ty.Int)
+        old := self.prim_op("atomic_load", [cell], Ty.Int)
         site := site("conc.atomic.5", "arith", "+", npos)
         next := checked("add", [old, vs[0]], site, Ty.Int)
-        got := prim_op("atomic_cas", [cell, old, next], Ty.Int)
+        got := self.prim_op("atomic_cas", [cell, old, next], Ty.Int)
         branch(op("eq", [got, old], Ty.Bool), exit, [], head, [])
         seal(head)
         seal(exit)
@@ -965,7 +969,7 @@ fn Lower.lower_atomic_method(
 fn Lower.callee_work(mut self, sc ast.ParScan, pre str, depth int) int
     mut total := 0
     for i in 0..sc.callees.len()
-        total += fn_cost("{pre}{sc.callees[i]}", depth) * sc.callee_mult[i]
+        total += self.fn_cost("{pre}{sc.callees[i]}", depth) * sc.callee_mult[i]
         if total > 1000000000
             return 1000000000
     total
@@ -982,7 +986,7 @@ fn Lower.fn_cost(mut self, key str, depth int) int
     mut sc := ast.new_scan()
     ast.scan_block(mut sc, body, 0)
     pre := key.slice(0, key.len() - f.name.len())
-    mut w := sc.work + callee_work(sc, pre, depth + 1)
+    mut w := sc.work + self.callee_work(sc, pre, depth + 1)
     # A loop in the callee may run any number of times: count it as heavy.
     if sc.looped and w < 4096
         w = 4096

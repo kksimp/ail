@@ -25,8 +25,8 @@ fn Sparse.build(data List[int]) Sparse
 
 ## Minimum of the half-open range [l, r), which must not be empty.
 fn Sparse.min_of(self, l int, r int) int
-    k := logs[r - l]
-    row := levels[k]
+    k := self.logs[r - l]
+    row := self.levels[k]
     row[l].min(row[r - (1 << k)])
 
 fn argmin_scan(data List[int], l int, r int) int

@@ -162,19 +162,19 @@ fn place_text(root str, steps List[str]) str
     "{root}{steps.join("")}"
 
 fn Scan.local(self, n str) bool
-    if n == var
+    if n == self.var
         return true
-    for s in scopes
+    for s in self.scopes
         if s.contains(n)
             return true
     false
 
 fn Scan.bind(mut self, n str)
-    if scopes.len() > 0
-        scopes[scopes.len() - 1].push(n)
+    if self.scopes.len() > 0
+        self.scopes[self.scopes.len() - 1].push(n)
 
 fn Scan.problem(mut self, rule str, at ast.Pos, provable bool, reason str, help str)
-    problems.push(Problem(
+    self.problems.push(Problem(
         rule: rule,
         reason: reason,
         help: help,
@@ -185,7 +185,7 @@ fn Scan.problem(mut self, rule str, at ast.Pos, provable bool, reason str, help 
     ))
 
 fn Scan.exit(mut self, what str, at ast.Pos)
-    problem(
+    self.problem(
         "conc.par.2",
         at,
         true,
@@ -194,103 +194,103 @@ fn Scan.exit(mut self, what str, at ast.Pos)
     )
 
 fn Scan.block(mut self, b List[ast.Stmt])
-    scopes.push([])
+    self.scopes.push([])
     for s in b
-        stmt(s)
-    scopes.pop()
+        self.stmt(s)
+    self.scopes.pop()
 
 fn Scan.scoped(mut self, names List[str], b List[ast.Stmt])
-    scopes.push(names)
-    block(b)
-    scopes.pop()
+    self.scopes.push(names)
+    self.block(b)
+    self.scopes.pop()
 
 fn Scan.stmt(mut self, s ast.Stmt)
     match s
         Let(n, _, _, value, o) =>
-            expr(value)
+            self.expr(value)
             if e := o
-                otherwise(e)
-            bind(n)
+                self.otherwise(e)
+            self.bind(n)
         LetTuple(names, value, _) =>
-            expr(value)
+            self.expr(value)
             for b in names
-                bind(b.name)
+                self.bind(b.name)
         # type.fn.9: a local function reads the names it copies; its parameters are its own.
         LocalFn(d) =>
-            bind(d.name)
+            self.bind(d.name)
             mut own := [p.name for p in d.params]
             own.push(d.name)
-            scoped(own, d.body else [])
+            self.scoped(own, d.body else [])
         Assign(target, op, value, _) =>
-            write(target, op, expr_pos(target))
-            expr(value)
+            self.write(target, op, expr_pos(target))
+            self.expr(value)
         While(c, body, _) =>
-            expr(c)
-            depth += 1
-            block(body)
-            depth -= 1
+            self.expr(c)
+            self.depth += 1
+            self.block(body)
+            self.depth -= 1
         For(_, v, _, mutable, iter, body, _) =>
             if mutable
-                write(iter, none, expr_pos(iter))
+                self.write(iter, none, expr_pos(iter))
             else
-                expr(iter)
-                channel_loop(iter)
-            depth += 1
-            scoped([v], body)
-            depth -= 1
+                self.expr(iter)
+                self.channel_loop(iter)
+            self.depth += 1
+            self.scoped([v], body)
+            self.depth -= 1
         Break(p, target) =>
             # A `break outer` leaves a loop the scan can't see inside (expr.loop.10).
-            if depth == 0 or target != none
-                exit("`break`", p)
+            if self.depth == 0 or target != none
+                self.exit("`break`", p)
         Continue(_, target) =>
-            if depth == 0 or target != none
-                skips = true
+            if self.depth == 0 or target != none
+                self.skips = true
         Return(e, p) =>
             if x := e
-                expr(x)
-            exit("`return`", p)
-        Eval(e) => expr(e)
+                self.expr(x)
+            self.exit("`return`", p)
+        Eval(e) => self.expr(e)
         Handle(value, o) =>
-            expr(value)
-            otherwise(o)
+            self.expr(value)
+            self.otherwise(o)
         # `defer` runs at block exit; its statement is part of the body (own.defer.1).
-        Defer(inner, _) => stmt(inner)
-        Unsafe(body, _) => block(body)
+        Defer(inner, _) => self.stmt(inner)
+        Unsafe(body, _) => self.block(body)
         # conc.share.6: holding a mutex synchronises with other tasks.
         With(mutex, v, _, body, p) =>
-            expr(mutex)
-            sync_problem(p, "holds a mutex with `with`")
-            scoped([v], body)
+            self.expr(mutex)
+            self.sync_problem(p, "holds a mutex with `with`")
+            self.scoped([v], body)
         # conc.select.3: waiting on channels synchronises with other tasks.
         Select(arms, p) =>
-            sync_problem(p, "waits on channels with `select`")
+            self.sync_problem(p, "waits on channels with `select`")
             for h in ast.select_heads(arms)
-                expr(h)
+                self.expr(h)
             for a in arms
                 mut names := List[str]()
                 if b := ast.select_var(a.op)
                     names.push(b.name)
-                scoped(names, a.body)
+                self.scoped(names, a.body)
 
 fn Scan.otherwise(mut self, o ast.Else)
     match o
-        Fallback(e) => expr(e)
-        Leave(s) => stmt(s)
+        Fallback(e) => self.expr(e)
+        Leave(s) => self.stmt(s)
         Handler(err_name, body, _) =>
             mut names := List[str]()
             if n := err_name
                 names.push(n.name)
-            scoped(names, body)
+            self.scoped(names, body)
 
 ## A write to `target`: a variable, a field or an element.
 fn Scan.write(mut self, target ast.Expr, op ast.BinOp?, at ast.Pos)
     place := place_path(target) else
-        expr(target)
+        self.expr(target)
         return
     for st in place.steps
         if i := index_of_step(st)
-            expr(i)
-    if local(place.root)
+            self.expr(i)
+    if self.local(place.root)
         return
     texts := [step_text(st) for st in place.steps]
     mut kind := WriteKind.Whole
@@ -300,13 +300,13 @@ fn Scan.write(mut self, target ast.Expr, op ast.BinOp?, at ast.Pos)
     else
         mut at_var := -1
         for k in 0..place.steps.len()
-            if at_var < 0 and is_var_index(place.steps[k], var)
+            if at_var < 0 and is_var_index(place.steps[k], self.var)
                 at_var = k
-        if at_var >= 0 and range and same_place(place.steps[..at_var])
+        if at_var >= 0 and self.range and self.same_place(place.steps[..at_var])
             kind = WriteKind.Element(texts[..at_var + 1])
         else
             kind = WriteKind.Unproven(texts)
-    writes.push(Write(root: place.root, kind: kind, pos: at, depth: depth))
+    self.writes.push(Write(root: place.root, kind: kind, pos: at, depth: self.depth))
 
 fn index_of_step(s Step) ast.Expr?
     match s
@@ -331,7 +331,7 @@ fn index_of_step(s Step) ast.Expr?
                 match i
                     Int => continue
                     Name(n, _) =>
-                        if local(n)
+                        if self.local(n)
                             return false
                     _ => return false
     true
@@ -340,9 +340,9 @@ fn Scan.read_place(mut self, e ast.Expr, len_only bool) bool
     place := place_path(e) else return false
     for st in place.steps
         if i := index_of_step(st)
-            expr(i)
-    if not local(place.root)
-        reads.push(Read(
+            self.expr(i)
+    if not self.local(place.root)
+        self.reads.push(Read(
             root: place.root,
             steps: [step_text(st) for st in place.steps],
             len_only: len_only,
@@ -353,28 +353,28 @@ fn Scan.read_place(mut self, e ast.Expr, len_only bool) bool
 ## A problem that orders the iterations because they synchronise through a
 ## handle (conc.par.2).
 fn Scan.sync_problem(mut self, at ast.Pos, reason str)
-    problem(
+    self.problem(
         "conc.par.2",
         at,
         true,
         reason,
         "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
     )
-    problems[problems.len() - 1].handle = true
+    self.problems[self.problems.len() - 1].handle = true
 
 ## `for v in ch` receives from a channel (conc.share.7), which synchronises.
 fn Scan.channel_loop(mut self, iter ast.Expr)
     at := expr_pos(iter)
-    if cx.fx.handle_calls.contains(pos_key(at))
-        sync_problem(at, "receives from a channel with `for ... in`")
+    if self.cx.fx.handle_calls.contains(pos_key(at))
+        self.sync_problem(at, "receives from a channel with `for ... in`")
 
 ## A call of function `i`, which may synchronise through a handle.
 fn Scan.calls_sync(mut self, i int, n str, at ast.Pos)
-    flags := if i < cx.sync.len() then cx.sync[i] else 0
+    flags := if i < self.cx.sync.len() then self.cx.sync[i] else 0
     if flags % 2 == 0 and flags / 2 % 2 == 1
-        atomic_problem(at, "calls `{n}`, which uses an `Atomic`")
+        self.atomic_problem(at, "calls `{n}`, which uses an `Atomic`")
     if flags % 2 == 1
-        problem(
+        self.problem(
             "conc.par.2",
             at,
             true,
@@ -385,28 +385,28 @@ fn Scan.calls_sync(mut self, i int, n str, at ast.Pos)
 ## conc.atomic.6: an atomic's operations may observe the order of the
 ## iterations, so only `par for` asserts that they don't matter.
 fn Scan.atomic_problem(mut self, at ast.Pos, reason str)
-    problem(
+    self.problem(
         "conc.atomic.6",
         at,
         false,
         reason,
         "iterations update the atomic in any order; write `par for` if the result doesn't depend on it",
     )
-    problems[problems.len() - 1].atomic = true
+    self.problems[self.problems.len() - 1].atomic = true
 
 fn Scan.arg(mut self, mutable bool, value ast.Expr)
     if mutable
-        write(value, none, expr_pos(value))
+        self.write(value, none, expr_pos(value))
     else
-        expr(value)
+        self.expr(value)
 
 fn Scan.expr(mut self, e ast.Expr)
     match e
         # A `ref` cell is shared by every copy of it (own.ref.1), so
         # iterations that make one may also write through it.
         NewRef(value, p) =>
-            expr(value)
-            problem(
+            self.expr(value)
+            self.problem(
                 "conc.par.2",
                 p,
                 false,
@@ -414,124 +414,124 @@ fn Scan.expr(mut self, e ast.Expr)
                 "iterations may write through the cell in any order; keep the loop sequential (drop `par`)",
             )
         Str | Bytes | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
-        Name => read_place(e, false)
+        Name => self.read_place(e, false)
         # type.fn.5: a function literal reads the names it copies; its parameters are its own.
-        Closure(params, body, _) => scoped([p.name for p in params], [ast.Stmt.Eval(body)])
+        Closure(params, body, _) => self.scoped([p.name for p in params], [ast.Stmt.Eval(body)])
         Member(recv, _, _) =>
-            if not read_place(e, false)
-                expr(recv)
+            if not self.read_place(e, false)
+                self.expr(recv)
         Index(recv, index, _) =>
-            if not read_place(e, false)
-                expr(recv)
-                expr(index)
+            if not self.read_place(e, false)
+                self.expr(recv)
+                self.expr(index)
         Interp(parts, _) =>
             for p in parts
                 match p
                     Lit => continue
-                    Hole(x) => expr(x)
-                    Fmt(x, _) => expr(x)
+                    Hole(x) => self.expr(x)
+                    Fmt(x, _) => self.expr(x)
         ListLit(items, _) =>
             for x in items
-                expr(x)
+                self.expr(x)
         SetLit(items, _) =>
             for x in items
-                expr(x)
+                self.expr(x)
         TupleLit(items, _) =>
             for x in items
-                expr(x)
+                self.expr(x)
         MapLit(entries, _) =>
             for en in entries
-                expr(en.key)
-                expr(en.value)
+                self.expr(en.key)
+                self.expr(en.value)
         Call(callee, args, _) =>
             if n := callee_name(callee)
-                if i := cx.fx.free.get(n)
-                    calls_sync(i, n, expr_pos(callee))
+                if i := self.cx.fx.free.get(n)
+                    self.calls_sync(i, n, expr_pos(callee))
             else
-                expr(callee)
+                self.expr(callee)
             for a in args
-                arg(a.mutable, a.value)
-        Method(recv, n, name_pos, args) => method_call(recv, n, name_pos, args)
-        Unary(_, operand, _) => expr(operand)
+                self.arg(a.mutable, a.value)
+        Method(recv, n, name_pos, args) => self.method_call(recv, n, name_pos, args)
+        Unary(_, operand, _) => self.expr(operand)
         Binary(_, lhs, rhs, _) =>
-            expr(lhs)
-            expr(rhs)
+            self.expr(lhs)
+            self.expr(rhs)
         Range(lo, hi, _, _) =>
             if x := lo
-                expr(x)
+                self.expr(x)
             if x := hi
-                expr(x)
+                self.expr(x)
         If(branches, els, _, _) =>
             for br in branches
                 match br.cond
                     Test(x) =>
-                        expr(x)
-                        block(br.body)
+                        self.expr(x)
+                        self.block(br.body)
                     Bind(n, _, value) =>
-                        expr(value)
-                        scoped([n], br.body)
+                        self.expr(value)
+                        self.scoped([n], br.body)
             if b := els
-                block(b)
+                self.block(b)
         Match(scrutinee, arms, _) =>
-            expr(scrutinee)
+            self.expr(scrutinee)
             for arm in arms
                 if g := arm.guard
-                    expr(g)
-                scoped(pattern_names(arm.pat), arm.body)
+                    self.expr(g)
+                self.scoped(pattern_names(arm.pat), arm.body)
         Try(x, context, p) =>
-            expr(x)
+            self.expr(x)
             if c := context
-                expr(c)
-            exit("`?`", p)
+                self.expr(c)
+            self.exit("`?`", p)
         OrElse(value, o, _) =>
-            expr(value)
-            otherwise(o)
+            self.expr(value)
+            self.otherwise(o)
         # expr.comp.1: the clauses' variables are local, and `else break`
         # ends the comprehension, not the loop.
         Comp(_, elem, value, clauses, _) =>
-            depth += 1
-            scopes.push([])
+            self.depth += 1
+            self.scopes.push([])
             for c in clauses
-                expr(c.iter)
-                channel_loop(c.iter)
-                bind(c.var)
+                self.expr(c.iter)
+                self.channel_loop(c.iter)
+                self.bind(c.var)
                 for b in c.unpack
-                    bind(b.name)
+                    self.bind(b.name)
                 if x := c.cond
-                    expr(x)
-            expr(elem)
+                    self.expr(x)
+            self.expr(elem)
             if v := value
-                expr(v)
-            scopes.pop()
-            depth -= 1
+                self.expr(v)
+            self.scopes.pop()
+            self.depth -= 1
 
 fn Scan.method_call(mut self, recv ast.Expr, n str, name_pos ast.Pos, args List[ast.Arg])
     key := pos_key(name_pos)
-    std_module := cx.fx.std_any.contains(key)
-    task_module := (cx.fx.std_fns.get(key) else "") == "task"
-    if cx.fx.atomic_calls.contains(key)
-        atomic_problem(name_pos, "calls `.{n}()` on an `Atomic`")
-    elif cx.fx.handle_calls.contains(key) or task_module
-        sync_problem(name_pos, "calls `.{n}()` on a task, channel or mutex handle")
-    elif i := cx.fx.targets.get(key)
-        calls_sync(i, n, name_pos)
+    std_module := self.cx.fx.std_any.contains(key)
+    task_module := (self.cx.fx.std_fns.get(key) else "") == "task"
+    if self.cx.fx.atomic_calls.contains(key)
+        self.atomic_problem(name_pos, "calls `.{n}()` on an `Atomic`")
+    elif self.cx.fx.handle_calls.contains(key) or task_module
+        self.sync_problem(name_pos, "calls `.{n}()` on a task, channel or mutex handle")
+    elif i := self.cx.fx.targets.get(key)
+        self.calls_sync(i, n, name_pos)
     mut mutating := false
-    if f := cx.fx.targets.get(key)
-        mutating = cx.prog.fns[f].receiver?.mutable else false
+    if f := self.cx.fx.targets.get(key)
+        mutating = self.cx.prog.fns[f].receiver?.mutable else false
     else
         # An atomic's methods change the shared cell, not the binding.
         mutating = not std_module
-            and not cx.fx.atomic_calls.contains(key)
-            and not cx.fx.trait_calls.contains(key)
+            and not self.cx.fx.atomic_calls.contains(key)
+            and not self.cx.fx.trait_calls.contains(key)
             and MUTATING.contains(n)
     if mutating
-        if n == "push" and not std_module and not cx.fx.targets.contains(key)
-            pushes.push(at_key(expr_pos(recv)))
-        write(recv, none, expr_pos(recv))
-    elif not (n == "len" and read_place(recv, true))
-        expr(recv)
+        if n == "push" and not std_module and not self.cx.fx.targets.contains(key)
+            self.pushes.push(at_key(expr_pos(recv)))
+        self.write(recv, none, expr_pos(recv))
+    elif not (n == "len" and self.read_place(recv, true))
+        self.expr(recv)
     for a in args
-        arg(a.mutable, a.value)
+        self.arg(a.mutable, a.value)
 
 fn pattern_names(p ast.Pattern) List[str]
     match p
@@ -1053,7 +1053,7 @@ fn Checker.check_par(self) List[Diag]
                     Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn | Select => any_par = any_par
     if not any_par
         return []
-    cx := par_context()
+    cx := self.par_context()
     mut verdicts := List[Verdict]()
     for f in prog.fns
         if is_prelude_line(f.pos.line)
@@ -1118,7 +1118,7 @@ fn native_refusal(iter ast.Expr, body List[ast.Stmt]) str
 ## The positions of the `for` loops (not `for mut`) of the user's functions
 ## that the judge finds independent (conc.par.8).
 fn Checker.proven_loops(self) List[ast.Pos]
-    cx := par_context()
+    cx := self.par_context()
     mut out := List[ast.Pos]()
     for f in prog.fns
         if is_prelude_line(f.pos.line)
@@ -1153,7 +1153,7 @@ pub struct ParRow
 
 ## Every `for` loop of the user's functions with its verdict, in source order (conc.par.6).
 fn Checker.parallel_rows(self) List[ParRow]
-    cx := par_context()
+    cx := self.par_context()
     mut out := List[ParRow]()
     for f in prog.fns
         if is_prelude_line(f.pos.line)
@@ -1383,7 +1383,7 @@ fn Checker.check_par_comps(self) List[Diag]
             par_comps_block(body, mut found, i)
     if found.len() == 0
         return []
-    cx := par_context()
+    cx := self.par_context()
     verdicts := [judge_comp(cx, pc.elem, pc.clause) for pc in found]
     mut out := List[Diag]()
     for v in verdicts.sorted(by: |v| v.pos.line * 100000 + v.pos.col)
@@ -1550,7 +1550,7 @@ fn flush_fork(cx ParContext, fname str, run List[ForkCall], mut out List[ForkRow
 ## Every run of independent pure calls in the user's functions, in source order
 ## (conc.par.15): `ail effects --parallel`.
 fn Checker.fork_rows(self) List[ForkRow]
-    cx := par_context()
+    cx := self.par_context()
     mut out := List[ForkRow]()
     for f in prog.fns
         if is_prelude_line(f.pos.line)
@@ -1569,7 +1569,7 @@ pub struct ForkSite
 
 fn Checker.fork_sites(self) List[ForkSite]
     mut out := List[ForkSite]()
-    for r in fork_rows()
+    for r in self.fork_rows()
         for k in 0..r.calls.len()
             out.push(ForkSite(pos: r.calls[k], mark: if k == 0 then "F" else "C"))
     out

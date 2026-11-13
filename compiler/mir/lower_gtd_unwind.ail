@@ -60,21 +60,21 @@ fn Lower.unwind_count(mut self)
 
 ## The owned local `key` is released by `drop.T` on a trap too.
 fn Lower.unwind_own(mut self, key str)
-    if not unwind_live() or unw.counts.len() == 0
+    if not self.unwind_live() or unw.counts.len() == 0
         return
     t := var_ty[key]
     name := "drop.{t.name()}"
     if not sigs.contains(name)
         sigs[name] = Sig(params: [t], ret: Ty.Unit, fails: false)
         uniq.wanted[name] = t
-    f := fn_word(name)
+    f := self.fn_word(name)
     i := call("rt.unwind_push", [f, read_var(key, cur)], Ty.Int)
     nvars += 1
     vk := "unwind#{nvars}"
     var_ty[vk] = Ty.Int
     write_var(vk, cur, i)
     unw.idx["{fname}|{key}"] = vk
-    unwind_count()
+    self.unwind_count()
 
 ## The value of `key` moved away or was released: a trap won't release it.
 fn Lower.unwind_disarm(mut self, key str)
@@ -89,7 +89,7 @@ fn Lower.fn_word(mut self, name str) int
 
 ## `defer st` runs on a trap too: as `unwind.F.N` of the locals in scope.
 fn Lower.unwind_defer(mut self, st ast.Stmt)
-    if not unwind_live() or unw.counts.len() == 0
+    if not self.unwind_live() or unw.counts.len() == 0
         return
     mut held := List[str]()
     mut tys := List[Ty]()
@@ -126,14 +126,14 @@ fn Lower.unwind_defer(mut self, st ast.Stmt)
         file: file,
         self_ty: self_ty,
     ))
-    call("rt.unwind_push", [fn_word(name), env], Ty.Int)
-    unwind_count()
+    call("rt.unwind_push", [self.fn_word(name), env], Ty.Int)
+    self.unwind_count()
 
 ## Generate the `unwind.F.N` functions (a body may ask for more).
 fn Lower.gen_unwinds(mut self)
     mut k := 0
     while k < unw.jobs.len()
-        gen_unwind(unw.jobs[k])
+        self.gen_unwind(unw.jobs[k])
         k += 1
 
 fn Lower.gen_unwind(mut self, job UnwindJob)

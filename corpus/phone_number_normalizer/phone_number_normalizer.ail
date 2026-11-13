@@ -69,15 +69,15 @@ fn normalize(raw str) Phone ! PhoneError
     return BadLength(digits: digits.len())
 
 fn Phone.e164(self) str
-    "+{country}{national}"
+    "+{self.country}{self.national}"
 
 fn Phone.pretty(self) str
-    mut base := "+{country} {national}"
-    if country == "1"
-        base = "+1 ({national.slice(0, 3)}) {national.slice(3, 6)}-{national.slice(6, 10)}"
-    if ext == ""
+    mut base := "+{self.country} {self.national}"
+    if self.country == "1"
+        base = "+1 ({self.national.slice(0, 3)}) {self.national.slice(3, 6)}-{self.national.slice(6, 10)}"
+    if self.ext == ""
         return base
-    "{base} x{ext}"
+    "{base} x{self.ext}"
 
 fn main()
     contacts := [

@@ -41,7 +41,7 @@ fn pending() List[str]
 fn Check.wanted(self, stem str) bool
     if pending().contains(stem)
         return false
-    names.is_empty() or names.contains(stem)
+    self.names.is_empty() or self.names.contains(stem)
 
 fn temp_dir() str
     base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
@@ -55,7 +55,7 @@ fn stems(dir str) List[str]
     out.sorted()
 
 fn Check.red(mut self, name str, why str)
-    fails += 1
+    self.fails += 1
     print("RED {name}")
     print(why.lines().take(3).join("\n"))
 
@@ -76,41 +76,44 @@ fn run_exe(exe str, src str, tmp str) proc.Output ! proc.ProcError
 fn Check.freeze(mut self, tmp str)
     _ := proc.run("mkdir", ["-p", GOLDEN_DIR]) else return
     for stem in stems(RUN_DIR)
-        if not wanted(stem)
+        if not self.wanted(stem)
             continue
         src := "{RUN_DIR}/{stem}.ail"
         # The goldens come from the native build, not the interpreter (the interpreter is going away).
         if why := build(src, "{tmp}/fz_{stem}")
-            red(src, "native build failed: {why}")
+            self.red(src, "native build failed: {why}")
             continue
         r := run_exe("{tmp}/fz_{stem}", src, tmp) else
-            red(src, "could not run the executable")
+            self.red(src, "could not run the executable")
             continue
         status_path := "{GOLDEN_DIR}/{stem}.status"
         fs.write_text("{GOLDEN_DIR}/{stem}.out", r.out) else
-            red(src, "could not write the golden")
+            self.red(src, "could not write the golden")
             continue
         if r.status != 0
             fs.write_text(status_path, "{r.status}\n") else
-                red(src, "could not write the status")
+                self.red(src, "could not write the status")
                 continue
         elif fs.exists(status_path)
             gone := proc.run("rm", ["-f", status_path]) else continue
-        checked += 1
+        self.checked += 1
 
 ## Run the native build of `src` and compare it with the golden stdout and status.
 fn Check.compare(mut self, src str, exe str, tmp str, want_out str, want_status int)
     if why := build(src, exe)
-        unbuilt.push(src)
-        if strict
-            red(src, "native build failed: {why}")
+        self.unbuilt.push(src)
+        if self.strict
+            self.red(src, "native build failed: {why}")
         return
-    checked += 1
+    self.checked += 1
     got := run_exe(exe, src, tmp) else
-        red(src, "could not run the executable")
+        self.red(src, "could not run the executable")
         return
     if got.status != want_status or got.out != want_out
-        red(src, "differs from its golden: exit {got.status} vs {want_status}\n{got.out}{got.err}")
+        self.red(
+            src,
+            "differs from its golden: exit {got.status} vs {want_status}\n{got.out}{got.err}",
+        )
 
 ## The programs `macos_known.txt` lists, on macOS (their output differs there by design).
 fn macos_known() List[str]
@@ -123,16 +126,16 @@ fn macos_known() List[str]
 fn Check.programs(mut self, tmp str)
     skip := macos_known()
     for stem in stems(RUN_DIR)
-        if not wanted(stem) or skip.contains(stem)
+        if not self.wanted(stem) or skip.contains(stem)
             continue
         src := "{RUN_DIR}/{stem}.ail"
         want_out := fs.read_text("{GOLDEN_DIR}/{stem}.out") else
-            red(src, "no golden: run `freeze` first")
+            self.red(src, "no golden: run `freeze` first")
             continue
         status_path := "{GOLDEN_DIR}/{stem}.status"
         text := if fs.exists(status_path) then (fs.read_text(status_path) else "1") else "0"
         want_status := text.trim().to_int() else 1
-        compare(src, "{tmp}/nt_{stem}", tmp, want_out, want_status)
+        self.compare(src, "{tmp}/nt_{stem}", tmp, want_out, want_status)
 
 ## Examples without a `native_` name that read files beside the executable or
 ## use constructs outside the native subset are left to `ail run` (gate.ail's list).
@@ -150,12 +153,12 @@ NATIVE_EXTRA := [
 
 fn Check.examples(mut self, tmp str)
     for stem in stems("examples")
-        if not wanted(stem) or not fs.exists("examples/{stem}.out")
+        if not self.wanted(stem) or not fs.exists("examples/{stem}.out")
             continue
         if not (stem.starts_with("native_") or NATIVE_EXTRA.contains(stem))
             continue
         want_out := fs.read_text("examples/{stem}.out") else ""
-        compare("examples/{stem}.ail", "{tmp}/ex_{stem}", tmp, want_out, 0)
+        self.compare("examples/{stem}.ail", "{tmp}/ex_{stem}", tmp, want_out, 0)
 
 fn main() !
     mut args := env.args()

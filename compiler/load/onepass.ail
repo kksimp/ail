@@ -127,7 +127,10 @@ pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Sh
         # the module would repeat it, so nothing more is reported, as before gram.rec.4.
         if seg.0 >= 1 and seg.0 <= lines.len()
             head := lines[seg.0 - 1]
-            if head.starts_with("use ") or head.starts_with("pub use ") or head.starts_with("import ") or head.starts_with("from ")
+            if head.starts_with("use ")
+                or head.starts_with("pub use ")
+                or head.starts_with("import ")
+                or head.starts_with("from ")
                 return []
         ranges.push((seg.0 + files[k].base, seg.1 + files[k].base))
         if seg.0 >= 1 and seg.0 <= lines.len()
@@ -136,7 +139,10 @@ pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Sh
     for d in semantic
         help_text := d.help else ""
         # `mod.main.1` judges the whole program, like a warning: a broken declaration may be the missing `main`.
-        if d.warning or d.rule == "mod.main.1" or inside(ranges, d.pos.line) or mentions("{d.message} {help_text}", names)
+        if d.warning or d.rule == "mod.main.1" or inside(ranges, d.pos.line) or mentions(
+            "{d.message} {help_text}",
+            names,
+        )
             continue
         mut touches := false
         for n in d.notes

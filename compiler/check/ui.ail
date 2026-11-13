@@ -62,9 +62,9 @@ fn Checker.ui_method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.A
     mut params := List[Ty]()
     mut ret := Ty.Unit
     if n == "size"
-        ret = std_named("ui.Size")
+        ret = self.std_named("ui.Size")
     elif n == "modifiers"
-        ret = std_named("ui.Modifiers")
+        ret = self.std_named("ui.Modifiers")
     elif n == "font_size"
         ret = Ty.Int
     elif n == "clear" or n == "set_font_size"
@@ -72,17 +72,17 @@ fn Checker.ui_method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.A
     elif n == "put"
         params = [Ty.Int, Ty.Int, Ty.Str, Ty.Int, Ty.Int]
     elif n == "put_styled"
-        params = [Ty.Int, Ty.Int, Ty.Str, Ty.Int, Ty.Int, std_named("ui.Style")]
+        params = [Ty.Int, Ty.Int, Ty.Str, Ty.Int, Ty.Int, self.std_named("ui.Style")]
     elif n == "set_cursor"
-        params = [Ty.Int, Ty.Int, std_named("ui.Cursor")]
+        params = [Ty.Int, Ty.Int, self.std_named("ui.Cursor")]
     elif n == "cursor"
         params = [Ty.Int, Ty.Int]
     elif n == "set_title"
         params = [Ty.Str]
     elif n == "next_event"
-        ret = std_named("ui.Event")
+        ret = self.std_named("ui.Event")
     elif n == "poll_event"
-        ret = Ty.Opt(std_named("ui.Event"))
+        ret = Ty.Opt(self.std_named("ui.Event"))
     check_call("ui.Window.{n}", plain_sig(mutable, params, ret), [], args, recv, at, expect)
 
 ## `ui.NAME`, a named color (std.ui.17).

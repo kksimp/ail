@@ -97,7 +97,7 @@ fn Lower.label_reads(mut self, s Val, name str, labels List[str], pos ast.Pos) F
 fn Lower.labeled_test(mut self, p ast.Pattern, s Val, tag int, yes int, no int) bool
     match p
         StructPat(_, name, labels, subs, ppos) =>
-            reads := label_reads(s, name, labels, ppos) else return false
+            reads := self.label_reads(s, name, labels, ppos) else return false
             if struct_name(s.ty) == none
                 n := enum_name(s.ty) else return false
                 mid := new_block()
@@ -130,7 +130,7 @@ fn Lower.labeled_test(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
 fn Lower.labeled_bind(mut self, p ast.Pattern, s Val)
     match p
         StructPat(_, name, labels, subs, ppos) =>
-            reads := label_reads(s, name, labels, ppos) else return
+            reads := self.label_reads(s, name, labels, ppos) else return
             for j in 0..subs.len()
                 ft := reads.tys[j]
                 bind_elem(subs[j], Val(id: load(s.id, reads.slots[j], ft), ty: ft))

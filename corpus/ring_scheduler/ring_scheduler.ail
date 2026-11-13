@@ -19,10 +19,10 @@ fn Job.new(label str, start int, dur int) Job
     Job(name: label, arrival: start, burst: dur, left: dur, finish: 0)
 
 fn Job.turnaround(self) int
-    finish - arrival
+    self.finish - self.arrival
 
 fn Job.waiting(self) int
-    finish - arrival - burst
+    self.finish - self.arrival - self.burst
 
 fn simulate(jobs List[Job], quantum int) Report
     mut work := jobs

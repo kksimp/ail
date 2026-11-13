@@ -124,7 +124,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
     module := std_module(head) else
         if std_like(head)
             args_only(args)
-            not_imported(head, at)
+            self.not_imported(head, at)
             return Ty.Unknown
         return none
     if module == "tensor" and n == "Tensor"
@@ -136,7 +136,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
             "use `{head}.from(xs, shape)` or `{head}.zeros(shape)`",
         )
         return Ty.Unknown
-    if s := struct_named("{module}.{n}")
+    if s := self.struct_named("{module}.{n}")
         std_any.add(pos_key(at))
         return struct_literal(s, none, args, at, expect)
     fns_of := std_functions(module)
@@ -171,14 +171,14 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
     if module == "tensor"
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
-        return eprint_call(args, at)
+        return self.eprint_call(args, at)
     if module == "hash" or (module == "compress" and ["deflate", "gzip", "zlib"].contains(n))
-        return bytes_like_call(module, n, args, at)
+        return self.bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
-        return shuffle_call(args, at)
+        return self.shuffle_call(args, at)
     if module == "task" and n == "select"
-        return select_call(args, at)
-    sig := std_signature(module, n)
+        return self.select_call(args, at)
+    sig := self.std_signature(module, n)
     mut params := sig.params
     if module == "proc" and (n == "run" or n == "run_bytes")
         # std.proc.2: `input` and `timeout_ms` may be left off from the end.
@@ -215,7 +215,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
     key := "{module}.{f}"
     text := Ty.Str
     u8_ptr := Ty.PtrOf(Ty.Num("u8"))
-    re_ty := std_struct("regex.Regex")
+    re_ty := self.std_struct("regex.Regex")
     # std.tensor.1-2 (ADR 0507): see the note on `from` in check/stdlib.rs.
     if key == "tensor.from"
         return StdSig(
@@ -227,53 +227,62 @@ fn Checker.std_signature(self, module str, f str) StdSig
     if key == "tensor.zeros"
         return StdSig(params: [Ty.ListOf(Ty.Int)], ret: self.tensor_ty(Ty.Unknown))
     if key == "fs.read_text"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", text))
     if key == "fs.write_text" or key == "fs.append_text"
-        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text, text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.read_bytes"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.write_bytes" or key == "fs.append_bytes"
-        return StdSig(params: [text, Ty.Bytes], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text, Ty.Bytes], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.exists"
         return StdSig(params: [text], ret: Ty.Bool)
     if key == "fs.list_dir" or key == "fs.walk"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.ListOf(text)))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.ListOf(text)))
     if key == "fs.remove" or key == "fs.make_dir"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.glob"
         return StdSig(params: [text], ret: Ty.ListOf(text))
     if key == "fs.metadata"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Metadata")))
+        return StdSig(params: [text], ret: self.fails_with(
+            "fs.IoError",
+            self.std_struct("fs.Metadata"),
+        ))
     if key == "fs.volume"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Volume")))
+        return StdSig(params: [text], ret: self.fails_with(
+            "fs.IoError",
+            self.std_struct("fs.Volume"),
+        ))
     if key == "fs.read_range"
-        return StdSig(params: [text, Ty.Int, Ty.Int], ret: fails_with("fs.IoError", Ty.Bytes))
+        return StdSig(params: [text, Ty.Int, Ty.Int], ret: self.fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.map"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.trash"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.temp_dir"
         return StdSig(params: [], ret: text)
     if key == "fs.make_temp_dir"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", text))
     if key == "fs.mode"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Int))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Int))
     if key == "fs.set_mode" or key == "fs.set_modified" or key == "fs.truncate"
-        return StdSig(params: [text, Ty.Int], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text, Ty.Int], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.sync"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.write_at"
-        return StdSig(params: [text, Ty.Int, Ty.Bytes], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text, Ty.Int, Ty.Bytes], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.read_link"
-        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", text))
     if key == "fs.symlink"
-        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text, text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.scan"
-        return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
+        return StdSig(
+            params: [text, Ty.Bool],
+            ret: self.fails_with("fs.IoError", self.std_struct("fs.Scan")),
+        )
     if key == "fs.scan_count"
-        return StdSig(params: [], ret: std_struct("fs.ScanCount"))
+        return StdSig(params: [], ret: self.std_struct("fs.ScanCount"))
     if key == "fs.rename" or key == "fs.copy"
-        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
+        return StdSig(params: [text, text], ret: self.fails_with("fs.IoError", Ty.Unit))
     # std.crypto.1-4 (ADR 0959): `bytes` in, `bytes` out.
     if key == "crypto.ct_eq"
         return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bool)
@@ -294,14 +303,14 @@ fn Checker.std_signature(self, module str, f str) StdSig
     if key == "env.vars"
         return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
     if ["compress.inflate", "compress.gunzip", "compress.unzlib"].contains(key)
-        return StdSig(params: [Ty.Bytes], ret: fails_with("compress.CompressError", Ty.Bytes))
+        return StdSig(params: [Ty.Bytes], ret: self.fails_with("compress.CompressError", Ty.Bytes))
     if [
         "compress.gzip_file",
         "compress.gunzip_file",
         "compress.zip_dir",
         "compress.unzip",
     ].contains(key)
-        return StdSig(params: [text, text], ret: fails_with("compress.CompressError", Ty.Unit))
+        return StdSig(params: [text, text], ret: self.fails_with("compress.CompressError", Ty.Unit))
     if ["path.dir", "path.base", "path.ext", "path.stem"].contains(key)
         return StdSig(params: [text], ret: text)
     if key == "path.join"
@@ -324,40 +333,46 @@ fn Checker.std_signature(self, module str, f str) StdSig
     if key == "proc.run"
         return StdSig(
             params: [text, Ty.ListOf(text), Ty.Opt(text), Ty.Opt(Ty.Int)],
-            ret: fails_with("proc.ProcError", std_struct("proc.Output")),
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.Output")),
         )
     if key == "proc.run_bytes"
         return StdSig(
             params: [text, Ty.ListOf(text), Ty.Opt(Ty.Bytes), Ty.Opt(Ty.Int)],
-            ret: fails_with("proc.ProcError", std_struct("proc.RawOutput")),
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.RawOutput")),
         )
     if key == "proc.which"
         return StdSig(params: [text], ret: Ty.Opt(text))
     if key == "proc.start"
         return StdSig(
             params: [text, Ty.ListOf(text), Ty.Opt(Ty.Int)],
-            ret: fails_with("proc.ProcError", std_struct("proc.Child")),
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.Child")),
         )
     if key == "proc.wait"
-        return StdSig(params: [std_struct("proc.Child")], ret: fails_with("proc.ProcError", Ty.Int))
+        return StdSig(
+            params: [self.std_struct("proc.Child")],
+            ret: self.fails_with("proc.ProcError", Ty.Int),
+        )
     if key == "proc.kill"
-        return StdSig(params: [std_struct("proc.Child")], ret: Ty.Int)
+        return StdSig(params: [self.std_struct("proc.Child")], ret: Ty.Int)
     if ["net.get", "net.get_bytes"].contains(key)
-        return StdSig(params: [text], ret: fails_with("net.NetError", std_struct(net_response(f))))
+        return StdSig(params: [text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct(net_response(f)),
+        ))
     if key == "net.post"
         return StdSig(
             params: [text, text, text],
-            ret: fails_with("net.NetError", std_struct(net_response(f))),
+            ret: self.fails_with("net.NetError", self.std_struct(net_response(f))),
         )
     if key == "net.post_bytes"
         return StdSig(
             params: [text, Ty.Bytes, text],
-            ret: fails_with("net.NetError", std_struct(net_response(f))),
+            ret: self.fails_with("net.NetError", self.std_struct(net_response(f))),
         )
     if key == "net.request" or key == "net.request_bytes"
         return StdSig(
-            params: [text, text, std_struct("net.Options")],
-            ret: fails_with("net.NetError", std_struct(net_response(f))),
+            params: [text, text, self.std_struct("net.Options")],
+            ret: self.fails_with("net.NetError", self.std_struct(net_response(f))),
         )
     # unsafe.mem.1: C strings in memory the program frees itself.
     if key == "mem.cstr"
@@ -370,37 +385,43 @@ fn Checker.std_signature(self, module str, f str) StdSig
     if key == "mem.null"
         return StdSig(params: [], ret: u8_ptr)
     if key == "net.options"
-        return StdSig(params: [], ret: std_struct("net.Options"))
+        return StdSig(params: [], ret: self.std_struct("net.Options"))
     # std.net.25: a response whose body is read in pieces.
     if key == "net.open"
         return StdSig(
-            params: [text, text, std_struct("net.Options")],
-            ret: fails_with("net.NetError", std_struct("net.Body")),
+            params: [text, text, self.std_struct("net.Options")],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Body")),
         )
     if key == "net.serve"
-        return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Server")))
+        return StdSig(params: [text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct("net.Server"),
+        ))
     if key == "net.listen"
-        return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Listener")))
+        return StdSig(params: [text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct("net.Listener"),
+        ))
     if key == "net.connect" or key == "net.connect_tls"
         return StdSig(
             params: [text, Ty.Int],
-            ret: fails_with("net.NetError", std_struct("net.Conn")),
+            ret: self.fails_with("net.NetError", self.std_struct("net.Conn")),
         )
     if key == "regex.compile"
         return StdSig(params: [text], ret: Ty.Res(
             re_ty,
-            Errs.ErrSet([std_struct("regex.RegexError")]),
+            Errs.ErrSet([self.std_struct("regex.RegexError")]),
         ))
     if key == "regex.is_match"
         return StdSig(params: [re_ty, text], ret: Ty.Bool)
     if key == "regex.find"
-        return StdSig(params: [re_ty, text], ret: Ty.Opt(std_struct("regex.Match")))
+        return StdSig(params: [re_ty, text], ret: Ty.Opt(self.std_struct("regex.Match")))
     if key == "regex.find_all"
-        return StdSig(params: [re_ty, text], ret: Ty.ListOf(std_struct("regex.Match")))
+        return StdSig(params: [re_ty, text], ret: Ty.ListOf(self.std_struct("regex.Match")))
     if key == "regex.group_all"
         return StdSig(params: [re_ty, text, Ty.Int], ret: Ty.ListOf(text))
     if key == "regex.captures"
-        return StdSig(params: [re_ty, text], ret: Ty.Opt(std_struct("regex.Captures")))
+        return StdSig(params: [re_ty, text], ret: Ty.Opt(self.std_struct("regex.Captures")))
     if key == "regex.replace" or key == "regex.replace_first"
         return StdSig(params: [re_ty, text, text], ret: text)
     if key == "regex.split"
@@ -417,7 +438,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
     if key == "task.cancelled"
         return StdSig(params: [], ret: Ty.Bool)
     if key == "task.check"
-        return StdSig(params: [], ret: Ty.Res(Ty.Unit, Errs.ErrSet([std_struct("Cancelled")])))
+        return StdSig(params: [], ret: Ty.Res(Ty.Unit, Errs.ErrSet([self.std_struct("Cancelled")])))
     # conc.par.18
     if key == "task.threads"
         return StdSig(params: [], ret: Ty.Int)
@@ -441,14 +462,14 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: std_named("ui.KeyCode"))
     if key == "ui.open"
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: Ty.Res(
-            std_struct("ui.Window"),
-            Errs.ErrSet([std_struct("ui.UiError")]),
+            self.std_struct("ui.Window"),
+            Errs.ErrSet([self.std_struct("ui.UiError")]),
         ))
     StdSig(params: [], ret: Ty.Unit)
 
 ## `t ! E` for the standard error type `err`.
 fn Checker.fails_with(self, err str, t Ty) Ty
-    Ty.Res(t, Errs.ErrSet([std_struct(err)]))
+    Ty.Res(t, Errs.ErrSet([self.std_struct(err)]))
 
 fn net_response(f str) str
     if f.ends_with("_bytes") then "net.RawResponse" else "net.Response"

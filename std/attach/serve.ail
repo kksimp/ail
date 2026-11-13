@@ -78,40 +78,40 @@ pub struct Watched[T app.App + attach.Observe]
 
 impl app.App for Watched[T app.App + attach.Observe]
     fn attach(mut self, inbox app.Inbox)
-        inner.attach(inbox)
+        self.inner.attach(inbox)
 
     fn update(mut self, ev app.Event)
         if ev.kind == app.EventKind.External and ev.id == "attach" and attach.is_input(ev.text)
-            why := attach.input_refusal(ev.text, token, input)
+            why := attach.input_refusal(ev.text, self.token, self.input)
             if why != ""
-                hub.replies.send(why)
+                self.hub.replies.send(why)
                 return
             req := parse_json(ev.text) else
-                hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
+                self.hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return
             mut sent := app.event_from_json(req)
             if sent.id != ""
                 # `id` is the control's own id or the `#N` that `screen` shows for it (attach.input.2).
-                found := view.control_id(inner.shown(), sent.id.strip_prefix("#") else sent.id)
+                found := view.control_id(self.inner.shown(), sent.id.strip_prefix("#") else sent.id)
                 if found == ""
-                    hub.replies.send(attach.input_unknown(sent.id))
+                    self.hub.replies.send(attach.input_unknown(sent.id))
                     return
                 sent.id = found
-            inner.update(sent)
-            hub.replies.send(attach.input_applied(app.kind_name(sent.kind)))
+            self.inner.update(sent)
+            self.hub.replies.send(attach.input_applied(app.kind_name(sent.kind)))
             return
         if ev.kind == app.EventKind.External
             and ev.id == "attach"
             and attach.query(ev.text) == "call"
             # A `call` runs a `@tool` method between events, like a person's input (attach.tool.4).
-            cwhy := attach.call_refusal(ev.text, token, input)
+            cwhy := attach.call_refusal(ev.text, self.token, self.input)
             if cwhy != ""
-                hub.replies.send(cwhy)
+                self.hub.replies.send(cwhy)
                 return
             creq := parse_json(ev.text) else
-                hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
+                self.hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return
-            hub.replies.send(inner.call(
+            self.hub.replies.send(self.inner.call(
                 creq.str("name") else "",
                 creq.get("args") else Json.Obj([]),
             ))
@@ -120,40 +120,40 @@ impl app.App for Watched[T app.App + attach.Observe]
             and ev.id == "attach"
             and attach.query(ev.text) == "tools"
             treq := parse_json(ev.text) else
-                hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
+                self.hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return
-            if not attach.authorized(treq, token)
-                hub.replies.send("\{\"v\":1,\"error\":\"missing or wrong token\"}")
+            if not attach.authorized(treq, self.token)
+                self.hub.replies.send("\{\"v\":1,\"error\":\"missing or wrong token\"}")
                 return
-            hub.replies.send(attach.tools_reply(inner.tools()))
+            self.hub.replies.send(attach.tools_reply(self.inner.tools()))
             return
         if ev.kind == app.EventKind.External and ev.id == "attach"
-            tr.update(inner.observed())
-            sc := view.of_node(inner.shown(), w, h, inner.focus())
-            hub.replies.send(attach.answer(ev.text, token, tr, sc, ""))
+            self.tr.update(self.inner.observed())
+            sc := view.of_node(self.inner.shown(), self.w, self.h, self.inner.focus())
+            self.hub.replies.send(attach.answer(ev.text, self.token, self.tr, sc, ""))
             return
         if ev.kind == app.EventKind.Resize
-            w = ev.dx
-            h = ev.dy
-        inner.update(ev)
+            self.w = ev.dx
+            self.h = ev.dy
+        self.inner.update(ev)
 
     fn view(self) app.Node
-        inner.view()
+        self.inner.view()
 
     fn title(self) str
-        inner.title()
+        self.inner.title()
 
     fn focus(self) str
-        inner.focus()
+        self.inner.focus()
 
     fn lines(mut self) List[str]
-        inner.lines()
+        self.inner.lines()
 
     fn measures(self) List[app.Measure]
-        inner.measures()
+        self.inner.measures()
 
     fn measured(mut self, runs List[app.Measure], widths List[float])
-        inner.measured(runs, widths)
+        self.inner.measured(runs, widths)
 
 ## Reads request lines from each connection until it closes and answers each
 ## through the app (attach.wire.3). One connection at a time; a silent client

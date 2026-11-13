@@ -48,5 +48,5 @@ use ast
         Member(recv, name, _) =>
             if name != "rows" and name != "cols" and name != "cells"
                 return false
-            grid_elem(quiet_type(recv)) != none
+            self.grid_elem(quiet_type(recv)) != none
         _ => false

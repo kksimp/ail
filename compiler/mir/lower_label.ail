@@ -60,7 +60,7 @@ fn Lower.label_params(self, callee ast.Expr) List[ast.Param]?
 
 ## A call by name with named arguments, with its arguments in parameter order.
 fn Lower.label_ordered(self, callee ast.Expr, args List[ast.Arg]) List[ast.Arg]?
-    ps := label_params(callee)?
+    ps := self.label_params(callee)?
     order_by_params(args, ps)
 
 ## The same for a method `key`, whose parameters leave out the receiver.

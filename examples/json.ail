@@ -81,7 +81,7 @@ enum Json
     Arr(items List[Json])
     Obj(members List[Member])
 
-error struct ParseError "parse error at {line}:{col}: {msg}"
+error struct ParseError "parse error at {self.line}:{self.col}: {self.msg}"
     line int
     col int
     msg str
@@ -91,133 +91,133 @@ struct Parser
     pos int
 
 fn Parser.fail_at(self, at int, msg str) ParseError
-    lines := chars[..at].join("").split('\n')
+    lines := self.chars[..at].join("").split('\n')
     last := lines.last() else ""
     ParseError(line: lines.len(), col: last.chars().len() + 1, msg)
 
 fn Parser.fail(self, msg str) ParseError
-    fail_at(pos, msg)
+    self.fail_at(self.pos, msg)
 
 fn Parser.at_end(self) bool
-    pos >= chars.len()
+    self.pos >= self.chars.len()
 
 fn Parser.peek(self) char?
-    if at_end()
+    if self.at_end()
         return none
-    chars[pos]
+    self.chars[self.pos]
 
 fn Parser.unexpected(self) ParseError
-    if c := peek()
-        return fail("unexpected character '{c}'")
-    fail("unexpected end of input")
+    if c := self.peek()
+        return self.fail("unexpected character '{c}'")
+    self.fail("unexpected end of input")
 
 fn Parser.skip_whitespace(mut self)
-    while not at_end() and WHITESPACE.contains(chars[pos])
-        pos += 1
+    while not self.at_end() and WHITESPACE.contains(self.chars[self.pos])
+        self.pos += 1
 
 fn Parser.parse_document(mut self) !Json
-    value := parse_value()?
-    skip_whitespace()
-    if not at_end()
-        return fail("extra data after value")
+    value := self.parse_value()?
+    self.skip_whitespace()
+    if not self.at_end()
+        return self.fail("extra data after value")
     value
 
 fn Parser.parse_value(mut self) !Json
-    skip_whitespace()
-    c := peek() else return unexpected()
+    self.skip_whitespace()
+    c := self.peek() else return self.unexpected()
     if c == '-' or c.is_digit()
-        return parse_number()
+        return self.parse_number()
     match c
-        '{' => parse_object()
-        '[' => parse_array()
-        '"' => Str(parse_string()?)
+        '{' => self.parse_object()
+        '[' => self.parse_array()
+        '"' => Str(self.parse_string()?)
         _ =>
-            if take_word("true")
+            if self.take_word("true")
                 return Bool(true)
-            if take_word("false")
+            if self.take_word("false")
                 return Bool(false)
-            if take_word("null")
+            if self.take_word("null")
                 return Null
-            unexpected()
+            self.unexpected()
 
 fn Parser.take_word(mut self, word str) bool
-    end := pos + word.chars().len()
-    if end > chars.len() or chars[pos..end].join("") != word
+    end := self.pos + word.chars().len()
+    if end > self.chars.len() or self.chars[self.pos..end].join("") != word
         return false
-    pos = end
+    self.pos = end
     true
 
 fn Parser.parse_object(mut self) !Json
-    pos += 1
-    skip_whitespace()
-    if peek() == '}'
-        pos += 1
+    self.pos += 1
+    self.skip_whitespace()
+    if self.peek() == '}'
+        self.pos += 1
         return Obj([])
     mut members := []
     while true
-        skip_whitespace()
-        if peek() != '"'
-            return unexpected()
-        key := parse_string()?
-        skip_whitespace()
-        if peek() != ':'
-            if at_end()
-                return unexpected()
-            return fail("expected ':' after object key")
-        pos += 1
-        members.push(Member(key, parse_value()?))
-        if end_of_container('}')?
+        self.skip_whitespace()
+        if self.peek() != '"'
+            return self.unexpected()
+        key := self.parse_string()?
+        self.skip_whitespace()
+        if self.peek() != ':'
+            if self.at_end()
+                return self.unexpected()
+            return self.fail("expected ':' after object key")
+        self.pos += 1
+        members.push(Member(key, self.parse_value()?))
+        if self.end_of_container('}')?
             return Obj(members)
 
 fn Parser.parse_array(mut self) !Json
-    pos += 1
-    skip_whitespace()
-    if peek() == ']'
-        pos += 1
+    self.pos += 1
+    self.skip_whitespace()
+    if self.peek() == ']'
+        self.pos += 1
         return Arr([])
     mut items := []
     while true
-        items.push(parse_value()?)
-        if end_of_container(']')?
+        items.push(self.parse_value()?)
+        if self.end_of_container(']')?
             return Arr(items)
 
 fn Parser.end_of_container(mut self, close char) !bool
-    skip_whitespace()
-    if peek() == close
-        pos += 1
+    self.skip_whitespace()
+    if self.peek() == close
+        self.pos += 1
         return true
-    if peek() != ','
-        return unexpected()
-    comma := pos
-    pos += 1
-    skip_whitespace()
-    if peek() == ']' or peek() == '}'
-        return fail_at(comma, "trailing comma")
+    if self.peek() != ','
+        return self.unexpected()
+    comma := self.pos
+    self.pos += 1
+    self.skip_whitespace()
+    if self.peek() == ']' or self.peek() == '}'
+        return self.fail_at(comma, "trailing comma")
     false
 
 fn Parser.parse_string(mut self) !str
-    start := pos
-    pos += 1
+    start := self.pos
+    self.pos += 1
     mut text := []
     while true
-        c := peek() else return fail_at(start, "unterminated string")
+        c := self.peek() else return self.fail_at(start, "unterminated string")
         match c
             '"' => break
-            '\n' => return fail_at(start, "unterminated string")
-            '\\' => text.push(parse_escape(start)?)
+            '\n' => return self.fail_at(start, "unterminated string")
+            '\\' => text.push(self.parse_escape(start)?)
             _ =>
                 if c.code() < 0x20
-                    return fail("control character in string")
+                    return self.fail("control character in string")
                 text.push(c)
-                pos += 1
-    pos += 1
+                self.pos += 1
+    self.pos += 1
     text.join("")
 
 fn Parser.parse_escape(mut self, start int) !char
-    escape := pos
-    pos += 1
-    c := peek() else return fail_at(start, "unterminated string")
-    pos += 1
+    escape := self.pos
+    self.pos += 1
+    c := self.peek() else return self.fail_at(start, "unterminated string")
+    self.pos += 1
     match c
         '"' | '\\' | '/' => c
         'b' => '\u{8}'
@@ -225,51 +225,55 @@ fn Parser.parse_escape(mut self, start int) !char
         'n' => '\n'
         'r' => '\r'
         't' => '\t'
-        'u' => parse_unicode(escape)
-        _ => return fail_at(escape, "invalid escape '\\{c}'")
+        'u' => self.parse_unicode(escape)
+        _ => return self.fail_at(escape, "invalid escape '\\{c}'")
 
 fn Parser.parse_unicode(mut self, escape int) !char
-    end := pos + 4
-    if end > chars.len()
-        return fail_at(escape, "invalid unicode escape")
+    end := self.pos + 4
+    if end > self.chars.len()
+        return self.fail_at(escape, "invalid unicode escape")
     mut code := 0
-    for d in chars[pos..end]
-        code = code * 16 + (d.to_digit(16) else return fail_at(escape, "invalid unicode escape"))
-    ch := char.from_code(code) else return fail_at(escape, "surrogate escapes are not supported")
-    pos = end
+    for d in self.chars[self.pos..end]
+        code = code * 16
+            + (d.to_digit(16) else return self.fail_at(escape, "invalid unicode escape"))
+    ch := char.from_code(code) else return self.fail_at(
+        escape,
+        "surrogate escapes are not supported",
+    )
+    self.pos = end
     ch
 
 fn Parser.skip_digits(mut self) int
-    start := pos
-    while not at_end() and chars[pos].is_digit()
-        pos += 1
-    pos - start
+    start := self.pos
+    while not self.at_end() and self.chars[self.pos].is_digit()
+        self.pos += 1
+    self.pos - start
 
 fn Parser.parse_number(mut self) !Json
-    start := pos
-    if peek() == '-'
-        pos += 1
-    if peek() == '0'
-        pos += 1
-    elif skip_digits() == 0
-        return fail("invalid number")
+    start := self.pos
+    if self.peek() == '-'
+        self.pos += 1
+    if self.peek() == '0'
+        self.pos += 1
+    elif self.skip_digits() == 0
+        return self.fail("invalid number")
     mut is_float := false
-    if peek() == '.'
-        pos += 1
-        if skip_digits() == 0
-            return fail("invalid number")
+    if self.peek() == '.'
+        self.pos += 1
+        if self.skip_digits() == 0
+            return self.fail("invalid number")
         is_float = true
-    if peek() == 'e' or peek() == 'E'
-        pos += 1
-        if peek() == '+' or peek() == '-'
-            pos += 1
-        if skip_digits() == 0
-            return fail("invalid number")
+    if self.peek() == 'e' or self.peek() == 'E'
+        self.pos += 1
+        if self.peek() == '+' or self.peek() == '-'
+            self.pos += 1
+        if self.skip_digits() == 0
+            return self.fail("invalid number")
         is_float = true
-    text := chars[start..pos].join("")
+    text := self.chars[start..self.pos].join("")
     if is_float
-        return Float(text.to_float() else return fail_at(start, "invalid number"))
-    Int(text.to_int() else return fail_at(start, "number out of range"))
+        return Float(text.to_float() else return self.fail_at(start, "invalid number"))
+    Int(text.to_int() else return self.fail_at(start, "number out of range"))
 
 fn parse(text str) Json ! ParseError
     mut p := Parser(text.chars(), 0)

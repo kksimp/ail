@@ -82,22 +82,22 @@ pub fn check_moves(prog ast.Program, moved List[Moved]) List[Diag]
     w.found
 
 fn Mover.block(mut self, b List[ast.Stmt])
-    mark := names_in.len()
+    mark := self.names_in.len()
     mut later := List[ast.Stmt]()
     for s in b
         if inner := deferred_stmt(s)
             later.push(inner)
-        stmt(s)
+        self.stmt(s)
     # own.defer.3: a deferred statement runs at the end of the block, so what
     # it uses must still be there.
     for s in later
-        saved := deferred
-        deferred = true
-        uses_only(s)
-        deferred = saved
-    for n in names_in[mark..]
-        flow = forget(flow, n)
-    names_in = names_in[..mark]
+        saved := self.deferred
+        self.deferred = true
+        self.uses_only(s)
+        self.deferred = saved
+    for n in self.names_in[mark..]
+        self.flow = forget(self.flow, n)
+    self.names_in = self.names_in[..mark]
 
 @allow("expr.match.3") fn deferred_stmt(s ast.Stmt) ast.Stmt?
     match s
@@ -106,96 +106,96 @@ fn Mover.block(mut self, b List[ast.Stmt])
 
 ## Check the uses in `s` against the current flow without moving anything.
 fn Mover.uses_only(mut self, s ast.Stmt)
-    saved := flow
-    stmt(s)
-    flow = saved
+    saved := self.flow
+    self.stmt(s)
+    self.flow = saved
 
 fn Mover.declare(mut self, n str)
-    names_in.push(n)
-    flow = forget(flow, n)
+    self.names_in.push(n)
+    self.flow = forget(self.flow, n)
 
 fn Mover.stmt(mut self, s ast.Stmt)
     match s
         Let(n, _, _, value, o) =>
-            expr(value)
+            self.expr(value)
             if e := o
-                otherwise(e)
-            declare(n)
+                self.otherwise(e)
+            self.declare(n)
         LetTuple(names, value, _) =>
-            expr(value)
+            self.expr(value)
             for b in names
-                declare(b.name)
+                self.declare(b.name)
         # type.fn.9: a local function's body is a function of its own; the outer
         # flow goes on past it unchanged.
         LocalFn(d) =>
-            declare(d.name)
-            saved_flow := flow
-            saved_loops := loops
-            mark := names_in.len()
-            flow = fresh()
-            loops = []
+            self.declare(d.name)
+            saved_flow := self.flow
+            saved_loops := self.loops
+            mark := self.names_in.len()
+            self.flow = fresh()
+            self.loops = []
             for p in d.params
-                names_in.push(p.name)
-            block(d.body else [])
-            names_in = names_in[..mark]
-            flow = saved_flow
-            loops = saved_loops
+                self.names_in.push(p.name)
+            self.block(d.body else [])
+            self.names_in = self.names_in[..mark]
+            self.flow = saved_flow
+            self.loops = saved_loops
         Assign(target, op, value, _) =>
-            expr(value)
+            self.expr(value)
             if n := whole_name(target)
                 # A whole binding gets a new value; `x += 1` reads it first.
                 if op != none
-                    expr(target)
-                flow = forget(flow, n)
+                    self.expr(target)
+                self.flow = forget(self.flow, n)
             else
-                expr(target)
+                self.expr(target)
         While(c, body, wpos) =>
-            expr(c)
-            loop_body(body, none, wpos)
-        Unsafe(body, _) => block(body)
+            self.expr(c)
+            self.loop_body(body, none, wpos)
+        Unsafe(body, _) => self.block(body)
         With(mutex, _, _, body, _) =>
-            expr(mutex)
-            block(body)
+            self.expr(mutex)
+            self.block(body)
         For(_, var, _, _, iter, body, fpos) =>
-            expr(iter)
-            loop_body(body, var, fpos)
+            self.expr(iter)
+            self.loop_body(body, var, fpos)
         Break(_, target) =>
-            st := flow
-            flow = dead()
-            k := loop_index(target)
+            st := self.flow
+            self.flow = dead()
+            k := self.loop_index(target)
             if k >= 0
-                loops[k].breaks = join(loops[k].breaks, st)
+                self.loops[k].breaks = join(self.loops[k].breaks, st)
         Continue(_, target) =>
-            st := flow
-            flow = dead()
-            k := loop_index(target)
+            st := self.flow
+            self.flow = dead()
+            k := self.loop_index(target)
             if k >= 0
-                loops[k].continues = join(loops[k].continues, st)
+                self.loops[k].continues = join(self.loops[k].continues, st)
         Return(value, _) =>
             if e := value
-                expr(e)
-            flow = dead()
-        Eval(e) => expr(e)
+                self.expr(e)
+            self.flow = dead()
+        Eval(e) => self.expr(e)
         Handle(value, o) =>
-            expr(value)
-            otherwise(o)
+            self.expr(value)
+            self.otherwise(o)
         # Checked at the end of the block, with the flow there.
         Defer => return
         # conc.select.3: the heads run in order, then at most one arm's block.
         Select(arms, _) =>
             for h in ast.select_heads(arms)
-                expr(h)
-            start := flow
+                self.expr(h)
+            start := self.flow
             mut out := if ast.select_always_runs(arms) then dead() else start
             for a in arms
-                flow = start
-                mark := names_in.len()
+                self.flow = start
+                mark := self.names_in.len()
                 if b := ast.select_var(a.op)
-                    declare(b.name)
-                block(a.body)
-                names_in = names_in[..mark]
-                out = join(out, flow)
-            flow = out
+                    self.declare(b.name)
+                self.block(a.body)
+                self.names_in = self.names_in[..mark]
+                out = join(out, self.flow)
+            self.flow = out
 
 @allow("expr.match.3") fn whole_name(e ast.Expr) str?
     match e
@@ -209,33 +209,33 @@ fn Mover.stmt(mut self, s ast.Stmt)
 ## `target` (expr.loop.10); -1 when there is none.
 fn Mover.loop_index(self, target ast.Pos?) int
     if t := target
-        mut k := loops.len() - 1
+        mut k := self.loops.len() - 1
         while k >= 0
-            if loops[k].at.line == t.line and loops[k].at.col == t.col
+            if self.loops[k].at.line == t.line and self.loops[k].at.col == t.col
                 return k
             k -= 1
         return -1
-    loops.len() - 1
+    self.loops.len() - 1
 
 fn Mover.loop_body(mut self, body List[ast.Stmt], var str?, at ast.Pos)
-    entry := flow
-    mark := names_in.len()
+    entry := self.flow
+    mark := self.names_in.len()
     if v := var
-        declare(v)
-    loops.push(LoopFlow(breaks: dead(), continues: dead(), outer: mark, at: at))
-    block(body)
-    l := loops.pop() else return
-    back := join(flow, l.continues)
-    flow = dead()
-    names_in = names_in[..mark]
+        self.declare(v)
+    self.loops.push(LoopFlow(breaks: dead(), continues: dead(), outer: mark, at: at))
+    self.block(body)
+    l := self.loops.pop() else return
+    back := join(self.flow, l.continues)
+    self.flow = dead()
+    self.names_in = self.names_in[..mark]
     if back.live
-        outer := names_in[..l.outer]
+        outer := self.names_in[..l.outer]
         mut again := List[Again]()
         for n in back.names.keys()
             if outer.contains(n) and not (entry.live and entry.names.contains(n))
                 again.push(Again(name: n, at: back.names[n]))
         for a in again.sorted(by: |a| a.at.at.line * 100000 + a.at.at.col)
-            found.push(
+            self.found.push(
                 new_diag(
                     "own.move.4",
                     a.at.at,
@@ -245,36 +245,36 @@ fn Mover.loop_body(mut self, body List[ast.Stmt], var str?, at ast.Pos)
     mut after := join(join(entry, l.breaks), back)
     if v := var
         after = forget(after, v)
-    flow = after
+    self.flow = after
 
 struct Again
     name str
     at MovedAt
 
 fn Mover.otherwise(mut self, o ast.Else)
-    before := flow
+    before := self.flow
     match o
-        Fallback(e) => expr(e)
-        Leave(s) => stmt(s)
+        Fallback(e) => self.expr(e)
+        Leave(s) => self.stmt(s)
         Handler(err_name, body, _) =>
-            mark := names_in.len()
+            mark := self.names_in.len()
             if n := err_name
-                declare(n.name)
-            block(body)
-            names_in = names_in[..mark]
+                self.declare(n.name)
+            self.block(body)
+            self.names_in = self.names_in[..mark]
     # The fallback runs only when the value is absent or failed.
-    flow = join(before, flow)
+    self.flow = join(before, self.flow)
 
 fn Mover.use_name(mut self, n str, at ast.Pos)
-    if not flow.live
+    if not self.flow.live
         return
-    if m := flow.names.get(n)
-        flow.names.remove(n)
+    if m := self.flow.names.get(n)
+        self.flow.names.remove(n)
         mut text := "`{n}` may have been moved on some paths to here"
         mut note := "moved here on some paths"
         # own.move.4: a move on only some paths still ends the binding.
         mut rule := "own.move.4"
-        if deferred
+        if self.deferred
             text = "the deferred statement uses `{n}`, which is moved before the block ends"
             note = "moved here"
             rule = "own.defer.3"
@@ -282,15 +282,15 @@ fn Mover.use_name(mut self, n str, at ast.Pos)
             text = "`{n}` is used after it was moved"
             note = "moved here"
             rule = m.rule
-        found.push(
+        self.found.push(
             new_diag(rule, at, text)
                 .with_note(m.at, note)
                 .with_help("use `{n}` before the move, or give it a new value with `{n} = ...` first"),
         )
         return
-    if rule := moves.get(pos_key(at))
-        if deferred
-            found.push(
+    if rule := self.moves.get(pos_key(at))
+        if self.deferred
+            self.found.push(
                 new_diag(
                     "own.defer.3",
                     at,
@@ -298,11 +298,11 @@ fn Mover.use_name(mut self, n str, at ast.Pos)
                 ).with_help("move it in an ordinary statement at the end of the block"),
             )
             return
-        flow.names[n] = MovedAt(at: at, rule: rule, certain: true)
+        self.flow.names[n] = MovedAt(at: at, rule: rule, certain: true)
 
 fn Mover.exprs(mut self, es List[ast.Expr])
     for e in es
-        expr(e)
+        self.expr(e)
 
 fn Mover.expr(mut self, e ast.Expr)
     match e
@@ -315,128 +315,128 @@ fn Mover.expr(mut self, e ast.Expr)
         NoneLit => return
         Hole => return
         TypeArgs => return
-        Name(n, at) => use_name(n, at)
+        Name(n, at) => self.use_name(n, at)
         Interp(parts, _) =>
             for p in parts
                 match p
                     Lit => continue
-                    Hole(x) => expr(x)
-                    Fmt(x, _) => expr(x)
-        ListLit(items, _) => exprs(items)
-        SetLit(items, _) => exprs(items)
-        TupleLit(items, _) => exprs(items)
+                    Hole(x) => self.expr(x)
+                    Fmt(x, _) => self.expr(x)
+        ListLit(items, _) => self.exprs(items)
+        SetLit(items, _) => self.exprs(items)
+        TupleLit(items, _) => self.exprs(items)
         MapLit(entries, _) =>
             for en in entries
-                expr(en.key)
-                expr(en.value)
+                self.expr(en.key)
+                self.expr(en.value)
         Call(callee, args, _) =>
             if whole_name(callee) == none
-                expr(callee)
+                self.expr(callee)
             for a in args
-                expr(a.value)
+                self.expr(a.value)
         Method(recv, _, _, args) =>
-            expr(recv)
+            self.expr(recv)
             for a in args
-                expr(a.value)
-        Member(recv, _, _) => expr(recv)
-        Unary(_, operand, _) => expr(operand)
-        NewRef(value, _) => expr(value)
+                self.expr(a.value)
+        Member(recv, _, _) => self.expr(recv)
+        Unary(_, operand, _) => self.expr(operand)
+        NewRef(value, _) => self.expr(value)
         # type.fn.5: a function literal copies what it names when it is made.
-        Closure(_, body, _) => expr(body)
+        Closure(_, body, _) => self.expr(body)
         Index(recv, index, _) =>
-            expr(recv)
-            expr(index)
+            self.expr(recv)
+            self.expr(index)
         Binary(op, lhs, rhs, _) =>
-            expr(lhs)
+            self.expr(lhs)
             if op == ast.BinOp.And or op == ast.BinOp.Or
-                before := flow
-                expr(rhs)
-                flow = join(before, flow)
+                before := self.flow
+                self.expr(rhs)
+                self.flow = join(before, self.flow)
             else
-                expr(rhs)
+                self.expr(rhs)
         Range(lo, hi, _, _) =>
             if x := lo
-                expr(x)
+                self.expr(x)
             if x := hi
-                expr(x)
-        If(branches, els, _, _) => if_flow(branches, els)
+                self.expr(x)
+        If(branches, els, _, _) => self.if_flow(branches, els)
         Match(scrutinee, arms, _) =>
-            expr(scrutinee)
-            start := flow
+            self.expr(scrutinee)
+            start := self.flow
             mut out := dead()
             for arm in arms
-                flow = start
-                mark := names_in.len()
-                pattern(arm.pat)
+                self.flow = start
+                mark := self.names_in.len()
+                self.pattern(arm.pat)
                 if g := arm.guard
-                    expr(g)
-                block(arm.body)
-                names_in = names_in[..mark]
-                out = join(out, flow)
-            flow = if arms.len() == 0 then start else out
+                    self.expr(g)
+                self.block(arm.body)
+                self.names_in = self.names_in[..mark]
+                out = join(out, self.flow)
+            self.flow = if arms.len() == 0 then start else out
         Try(x, context, _) =>
-            expr(x)
+            self.expr(x)
             # The context is evaluated only on the way out of the function.
             if c := context
-                saved := flow
-                expr(c)
-                flow = saved
+                saved := self.flow
+                self.expr(c)
+                self.flow = saved
         OrElse(value, o, _) =>
-            expr(value)
-            otherwise(o)
-        Comp(_, elem, value, clauses, _) => comp(elem, value, clauses)
+            self.expr(value)
+            self.otherwise(o)
+        Comp(_, elem, value, clauses, _) => self.comp(elem, value, clauses)
 
 fn Mover.if_flow(mut self, branches List[ast.Branch], els List[ast.Stmt]?)
     mut out := dead()
     for br in branches
-        mark := names_in.len()
+        mark := self.names_in.len()
         match br.cond
-            Test(c) => expr(c)
-            Bind(_, _, value) => expr(value)
-        after_cond := flow
+            Test(c) => self.expr(c)
+            Bind(_, _, value) => self.expr(value)
+        after_cond := self.flow
         match br.cond
-            Test => flow = flow
-            Bind(n, _, _) => declare(n)
-        block(br.body)
-        names_in = names_in[..mark]
-        out = join(out, flow)
-        flow = after_cond
+            Test => self.flow = self.flow
+            Bind(n, _, _) => self.declare(n)
+        self.block(br.body)
+        self.names_in = self.names_in[..mark]
+        out = join(out, self.flow)
+        self.flow = after_cond
     if b := els
-        block(b)
-    flow = join(out, flow)
+        self.block(b)
+    self.flow = join(out, self.flow)
 
 ## A comprehension (expr.comp.1): the first source is evaluated once and the
 ## rest repeats, like a loop body, so a move of an outer binding in it would
 ## repeat too (own.move.4).
 fn Mover.comp(mut self, elem ast.Expr, value ast.Expr?, clauses List[ast.CompFor])
-    mark := names_in.len()
+    mark := self.names_in.len()
     mut entry := dead()
     for i in 0..clauses.len()
         c := clauses[i]
-        expr(c.iter)
+        self.expr(c.iter)
         if i == 0
-            entry = flow
-        declare(c.var)
+            entry = self.flow
+        self.declare(c.var)
         for b in c.unpack
-            declare(b.name)
+            self.declare(b.name)
         if x := c.cond
-            expr(x)
-    expr(elem)
+            self.expr(x)
+    self.expr(elem)
     if v := value
-        expr(v)
-    names_in = names_in[..mark]
+        self.expr(v)
+    self.names_in = self.names_in[..mark]
     for c in clauses
-        flow = forget(flow, c.var)
+        self.flow = forget(self.flow, c.var)
         for b in c.unpack
-            flow = forget(flow, b.name)
-    if not entry.live or not flow.live
+            self.flow = forget(self.flow, b.name)
+    if not entry.live or not self.flow.live
         return
     mut again := List[Again]()
-    for n in flow.names.keys()
+    for n in self.flow.names.keys()
         if not entry.names.contains(n)
-            again.push(Again(name: n, at: flow.names[n]))
+            again.push(Again(name: n, at: self.flow.names[n]))
     for a in again.sorted(by: |a| a.at.at.line * 100000 + a.at.at.col)
-        found.push(
+        self.found.push(
             new_diag(
                 "own.move.4",
                 a.at.at,
@@ -449,20 +449,20 @@ fn Mover.pattern(mut self, p ast.Pattern)
         Variant(_, _, bindings, _) =>
             if bs := bindings
                 for b in bs
-                    declare(b.name)
+                    self.declare(b.name)
         Alt(alts, _) =>
             for a in alts
-                pattern(a)
+                self.pattern(a)
         TuplePat(elems, _) =>
             for a in elems
-                pattern(a)
-        BindName(n, _) => declare(n)
+                self.pattern(a)
+        BindName(n, _) => self.declare(n)
         Nested(_, _, nfields, _) =>
             for a in nfields
-                pattern(a)
+                self.pattern(a)
         StructPat(_, _, _, sfields, _) =>
             for a in sfields
-                pattern(a)
+                self.pattern(a)
         Wildcard => return
         Literal => return
         Range => return

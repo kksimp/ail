@@ -20,8 +20,8 @@ fn Lower.stable_place(self, e ast.Expr) bool
         Name(n, _) =>
             key := lookup(n) else return false
             facts.stable.contains("{fname}|{key}")
-        Index(r, _, _) => stable_place(r)
-        Member(r, _, _) => stable_place(r)
+        Index(r, _, _) => self.stable_place(r)
+        Member(r, _, _) => self.stable_place(r)
         _ => false
 
 ## A parameter without `mut` can't change while the function runs.
@@ -38,14 +38,14 @@ fn Lower.bind_let(mut self, name str, mutable bool, value ast.Expr, v Val)
     if not mutable
         and is_place(value)
         and (v.ty.is_coll() or needs_copy(v.ty))
-        and stable_place(value)
+        and self.stable_place(value)
         declare(name, v.ty, v.id)
         key := lookup(name) else return
         borrowed.add(key)
         facts.stable.add("{fname}|{key}")
         return
     declare(name, v.ty, copy_if_place(value, v))
-    note_owned(name, value)
+    self.note_owned(name, value)
 
 ## A plain `name := value` makes the local owned when `value` is fresh.
 fn Lower.note_owned(mut self, name str, value ast.Expr)
@@ -185,14 +185,14 @@ fn Lower.place_tail(self, e ast.Expr, any_name bool) bool
             any_name or borrowed.contains(key)
         If(branches, els, _, _) =>
             for br in branches
-                if body_place_tail(br.body, any_name)
+                if self.body_place_tail(br.body, any_name)
                     return true
             if b := els
-                return body_place_tail(b, any_name)
+                return self.body_place_tail(b, any_name)
             false
         Match(_, arms, _) =>
             for a in arms
-                if body_place_tail(a.body, any_name)
+                if self.body_place_tail(a.body, any_name)
                     return true
             false
         _ => false
@@ -201,7 +201,7 @@ fn Lower.body_place_tail(self, body List[ast.Stmt], any_name bool) bool
     if body.len() == 0
         return false
     match body[body.len() - 1]
-        Eval(x) => place_tail(x, any_name)
+        Eval(x) => self.place_tail(x, any_name)
         _ => false
 
 ## Whether the value of `e` can be an object that something else still holds: a place, or the

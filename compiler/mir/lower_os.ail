@@ -164,7 +164,7 @@ fn Lower.std_module(self, recv ast.Expr) str
 ## `lo <= hi` (std.random.2).
 fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
     if m == "random" and name == "shuffle"
-        return lower_shuffle(npos, args)
+        return self.lower_shuffle(npos, args)
     key := "rt.{m}_{name}"
     sig := sigs.get(key) else return unsupported(npos, "`{m}.{name}`")
     if args.len() != sig.params.len()
@@ -189,7 +189,7 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
         trap_close(npos)
         cur = ok
     if m == "crypto"
-        crypto_checks(name, npos, vs)
+        self.crypto_checks(name, npos, vs)
     res := call(key, vs, sig.ret)
     # `std.crypto` results are `bytes`, which has a `str`'s layout.
     if m == "crypto" and sig.ret == Ty.Str
@@ -207,18 +207,18 @@ fn Lower.crypto_require(mut self, cond int, rule str, npos ast.Pos, why str)
 ## `lo <= v <= hi` for the argument `v` of `crypto.name`, or a trap `rule: ...`.
 fn Lower.crypto_range(mut self, rule str, name str, npos ast.Pos, v int, lo int, hi int)
     why := "`{name}` needs a value from {lo} to {hi}"
-    crypto_require(op("le", [konst(lo, Ty.Int), v], Ty.Bool), rule, npos, why)
-    crypto_require(op("le", [v, konst(hi, Ty.Int)], Ty.Bool), rule, npos, why)
+    self.crypto_require(op("le", [konst(lo, Ty.Int), v], Ty.Bool), rule, npos, why)
+    self.crypto_require(op("le", [v, konst(hi, Ty.Int)], Ty.Bool), rule, npos, why)
 
 ## The length checks of `std.crypto` (std.crypto.2-4); `vs` are the lowered arguments.
 fn Lower.crypto_checks(mut self, name str, npos ast.Pos, vs List[int])
     if name == "random_bytes"
-        crypto_range("std.crypto.2", name, npos, vs[0], 0, 1073741824)
+        self.crypto_range("std.crypto.2", name, npos, vs[0], 0, 1073741824)
     if name == "hkdf_sha256"
-        crypto_range("std.crypto.3", name, npos, vs[3], 0, 8160)
+        self.crypto_range("std.crypto.3", name, npos, vs[3], 0, 8160)
     if name == "pbkdf2_sha256"
-        crypto_range("std.crypto.4", name, npos, vs[2], 1, 4611686018427387904)
-        crypto_range("std.crypto.4", name, npos, vs[3], 0, 1048576)
+        self.crypto_range("std.crypto.4", name, npos, vs[2], 1, 4611686018427387904)
+        self.crypto_range("std.crypto.4", name, npos, vs[3], 0, 1048576)
 
 ## `random.shuffle(mut xs)` (std.random.4) on any list: the runtime swaps
 ## elements of the list's element size.
@@ -233,7 +233,7 @@ fn Lower.lower_shuffle(mut self, npos ast.Pos, args List[ast.Arg]) Val?
 
 ## Whether the call `recv.name(...)` is an OS function that can fail.
 fn Lower.os_fails(self, recv ast.Expr, name str) bool
-    m := os_module(recv)
+    m := self.os_module(recv)
     if m == ""
         return false
     if m == "net"
@@ -245,7 +245,7 @@ fn Lower.os_fails(self, recv ast.Expr, name str) bool
 ## `lower_method`. `none` after a report.
 fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
     if m == "io" and name == "eprint"
-        return lower_eprint(args, npos)
+        return self.lower_eprint(args, npos)
     if m == "net"
         return lower_net_module(name, npos, args)
     if m == "hw"
@@ -260,10 +260,10 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
             return new_struct("{m}.{name}", args, npos)
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"
-        v := os_call(f, args, npos)?
+        v := self.os_call(f, args, npos)?
         finish(unreachable_term())
         return v
-    os_call(f, args, npos)
+    self.os_call(f, args, npos)
 
 ## Emit the call of `f` with `args`.
 fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
@@ -286,7 +286,7 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
     if f.fails
         vs.push(trace_line(pos))
     if f.rt == "rt.io_exit" or f.rt == "rt.time_sleep_ms"
-        os_range_check(f.rt == "rt.io_exit", vs[0], pos)
+        self.os_range_check(f.rt == "rt.io_exit", vs[0], pos)
     if instr.rec
         return rec_call(f, vs, pos)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
@@ -341,7 +341,7 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
                 match parts[k]
                     Lit(text) => call("rt.out_str", [str_value(text)], Ty.Unit)
                     Hole(_) => out(shown[k], ipos)?
-                    Fmt(_, spec) => lower_fmt_print(shown[k], spec, ipos)?
+                    Fmt(_, spec) => self.lower_fmt_print(shown[k], spec, ipos)?
         _ => out(shown[0], pos)?
     call("rt.out_nl", [], Ty.Unit)
     if tk.on
@@ -421,6 +421,6 @@ fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     if plain and not spec.hex and n >= 0 and v.ty.is_float()
         call("rt.out_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
-    s := fmt_text(v, spec, pos)?
+    s := self.fmt_text(v, spec, pos)?
     call("rt.out_str", [s.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)

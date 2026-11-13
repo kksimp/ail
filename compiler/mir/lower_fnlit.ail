@@ -215,8 +215,8 @@ fn Lower.partial_fn_want(mut self, pt ast.TypeRef, binds Map[str, Ty], params Li
             mut et := Ty.Unit
             if x := r
                 saved := enter_decl(k, binds)
-                rt = fn_ret_type(x) else Ty.Unknown
-                et = fn_err_type(x)
+                rt = self.fn_ret_type(x) else Ty.Unknown
+                et = self.fn_err_type(x)
                 leave_decl(saved)
             Ty.Fn(params: tys, ret: rt, err: et)
         _ => none
@@ -232,7 +232,7 @@ fn Lower.code_addr(mut self, name str) int
 ## A closure object for code `name` holding `words` (each with its type).
 fn Lower.closure_object(mut self, name str, words List[Val], t Ty) Val
     obj := call("rt.fnlit_new", [konst(1 + words.len(), Ty.Int)], Ty.Int)
-    prim_op("store64", [obj, code_addr(name)], Ty.Unit)
+    prim_op("store64", [obj, self.code_addr(name)], Ty.Unit)
     for i in 0..words.len()
         w := words[i]
         at := op("add", [obj, konst(8 * (i + 1), Ty.Int)], Ty.Int)
@@ -245,15 +245,15 @@ fn Lower.named_fn_value(mut self, key str, sig Sig, t Ty) Val
     thunk := "fnv#{key}"
     if not fl.thunks.contains(key)
         fl.thunks.add(key)
-        frame := frame_save()
+        frame := self.frame_save()
         mut ptys := [Ty.Int]
         ptys.extend(sig.params)
-        ps := frame_begin(thunk, sig.ret, ptys, sig.fails)
+        ps := self.frame_begin(thunk, sig.ret, ptys, sig.fails)
         r := call(key, ps[1..], sig.ret)
         finish(return_of(r))
         end_fn(thunk, ast.Pos(line: 1, col: 1))
-        frame_restore(frame)
-    closure_object(thunk, [], t)
+        self.frame_restore(frame)
+    self.closure_object(thunk, [], t)
 
 ## `|a, b| e` (type.fn.4-6): lower the body into a function of its own and
 ## make the closure object with the values the body copies.
@@ -307,11 +307,11 @@ fn Lower.lower_closure_lit(
         caps.push(Cap(name: n, ty: t))
     name := "fnlit#{fl.n}"
     fl.n += 1
-    frame := frame_save()
+    frame := self.frame_save()
     mut all := [Ty.Int]
     all.extend(ptys)
     inferring := want_ret.is_unknown()
-    ps := frame_begin(name, want_ret, all, inferring or not err.is_unit())
+    ps := self.frame_begin(name, want_ret, all, inferring or not err.is_unit())
     # With no expected result, the errors the body's `?` passes on are inferred
     # like a `!T` function's (note_inferred_err, keyed by the literal's name).
     if inferring
@@ -345,7 +345,7 @@ fn Lower.lower_closure_lit(
                 err = found
         infer_errs.remove(name)
         fn_errs.remove(name)
-        settle_zeros(rt)
+        self.settle_zeros(rt)
     if not done()
         if x := v
             if rt.is_unit() or x.id < 0
@@ -355,9 +355,9 @@ fn Lower.lower_closure_lit(
         else
             fn_failed = true
     end_fn(name, pos)
-    frame_restore(frame)
+    self.frame_restore(frame)
     t := Ty.Fn(params: ptys, ret: rt, err: err)
-    closure_object(name, words, t)
+    self.closure_object(name, words, t)
 
 fn absent_shape() FnShape?
     none
@@ -416,13 +416,13 @@ fn Lower.fn_value_ty(self, callee ast.Expr) Ty?
 
 ## Whether calling `callee` (a function value) can fail (type.fn.6).
 fn Lower.fn_value_fails(self, callee ast.Expr) bool
-    t := fn_value_ty(callee) else return false
+    t := self.fn_value_ty(callee) else return false
     s := fn_shape(t) else return false
     not s.err.is_unit()
 
 ## The error type a call of the function value `callee` names, else `Unknown`.
 fn Lower.fn_value_err(self, callee ast.Expr) Ty
-    t := fn_value_ty(callee) else return Ty.Unknown
+    t := self.fn_value_ty(callee) else return Ty.Unknown
     s := fn_shape(t) else return Ty.Unknown
     if s.err.is_unit() then Ty.Unknown else s.err
 
@@ -485,7 +485,7 @@ fn Lower.apply_elem(mut self, fe ElemFn, x int, want Ty?) Val?
         scopes.pop()
         return out
     s := fn_shape(fe.f.ty)?
-    mut vs := fn_value_head(fe.f.id)
+    mut vs := self.fn_value_head(fe.f.id)
     vs.push(x)
     i := inst(-1, "icall", vs)
     if s.ret.is_unit()
@@ -511,17 +511,17 @@ fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.P
     if e.is_unknown()
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     tests := name != "map" and name != "group_by"
-    fe := elem_fn(args[0], e, if tests then Ty.Bool else Ty.Unknown)?
+    fe := self.elem_fn(args[0], e, if tests then Ty.Bool else Ty.Unknown)?
     if name == "group_by"
-        return lower_group_by(r, e, fe, npos)
+        return self.lower_group_by(r, e, fe, npos)
     n := op("len", [r.id], Ty.Int)
     # The result: a flag, an index, or a list made before the loop.
     mut acc := ""
     mut out := -1
     if name == "any" or name == "all"
-        acc = loop_var(Ty.Bool, konst(if name == "all" then 1 else 0, Ty.Bool))
+        acc = self.loop_var(Ty.Bool, konst(if name == "all" then 1 else 0, Ty.Bool))
     elif name == "find"
-        acc = loop_var(Ty.Int, konst(-1, Ty.Int))
+        acc = self.loop_var(Ty.Int, konst(-1, Ty.Int))
     elif name == "filter"
         out = call("rt.list_new", [konst(0, Ty.Int)], r.ty)
     else
@@ -531,7 +531,7 @@ fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.P
     mut vw := absent_ty()
     if tests
         vw = Ty.Bool
-    v := apply_elem(fe, x, vw)
+    v := self.apply_elem(fe, x, vw)
     mut out_ty := Ty.Unknown
     if fv := v
         if tests
@@ -578,10 +578,10 @@ fn Lower.lower_list_fn(mut self, r Val, name str, args List[ast.Arg], npos ast.P
 ## lowered, so the map is made at the first element (or at the end, empty).
 fn Lower.lower_group_by(mut self, r Val, e Ty, fe ElemFn, npos ast.Pos) Val?
     n := op("len", [r.id], Ty.Int)
-    acc := loop_var(Ty.Int, konst(0, Ty.Int))
+    acc := self.loop_var(Ty.Int, konst(0, Ty.Int))
     c := count_open(n)
     x := op("get", [r.id, c.i], e)
-    k := apply_elem(fe, x, none)
+    k := self.apply_elem(fe, x, none)
     mut mt := Ty.Unknown
     if kv := k
         if kv.id >= 0
@@ -592,7 +592,7 @@ fn Lower.lower_group_by(mut self, r Val, e Ty, fe ElemFn, npos ast.Pos) Val?
                 )
             else
                 mt = Ty.Map(key: kv.ty, val: Ty.List(e))
-                m := made_table(acc, mt)
+                m := self.made_table(acc, mt)
                 kid := stored_key(ast.Expr.Int("0", npos), kv, kv.ty, npos)
                 item := if needs_copy(e) then copy_value(Val(id: x, ty: e)) else x
                 map_push_vals(
@@ -607,7 +607,7 @@ fn Lower.lower_group_by(mut self, r Val, e Ty, fe ElemFn, npos ast.Pos) Val?
     if mt.is_unknown()
         fn_failed = true
         return none
-    Val(id: made_table(acc, mt), ty: mt)
+    Val(id: self.made_table(acc, mt), ty: mt)
 
 ## The table the variable `acc` holds, made now if it is still 0.
 fn Lower.made_table(mut self, acc str, mt Ty) int
@@ -640,12 +640,12 @@ fn Lower.lower_local_fn(mut self, d ast.FnDecl)
     mut err := Ty.Unit
     mut infers := false
     if r := d.ret
-        rt := fn_ret_type(r) else
+        rt := self.fn_ret_type(r) else
             problem(r.pos, "not in the native subset yet: this result type")
             declare(d.name, Ty.Unknown, -1)
             return
         rty = rt
-        err = fn_err_type(r)
+        err = self.fn_err_type(r)
         infers = errs_inferred(r)
     body := d.body else []
     # The values the body copies: the outer locals it names (type.fn.5).
@@ -672,10 +672,10 @@ fn Lower.lower_local_fn(mut self, d ast.FnDecl)
         name = "{name}#{fl.n}"
         fl.n += 1
     fl.thunks.add(name)
-    frame := frame_save()
+    frame := self.frame_save()
     mut all := [Ty.Int]
     all.extend(ptys)
-    ps := frame_begin(name, rty, all, not err.is_unit())
+    ps := self.frame_begin(name, rty, all, not err.is_unit())
     if infers
         infer_errs[name] = Ty.Unknown
     env := ps[0]
@@ -712,9 +712,9 @@ fn Lower.lower_local_fn(mut self, d ast.FnDecl)
         infer_errs.remove(name)
         fn_errs.remove(name)
     end_fn(name, d.pos)
-    frame_restore(frame)
+    self.frame_restore(frame)
     t := Ty.Fn(params: ptys, ret: rty, err: err)
-    obj := closure_object(name, words, t)
+    obj := self.closure_object(name, words, t)
     declare(d.name, t, obj.id)
 
 ## Whether a written result is `!T` or `!`, its errors inferred (err.type.2).

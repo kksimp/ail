@@ -167,16 +167,16 @@ GEO := [
 ]
 
 fn Gen.emit(mut self, s str)
-    lines.push("{" ".repeat(4 * ind)}{s}")
+    self.lines.push("{" ".repeat(4 * self.ind)}{s}")
 
 fn Gen.with_type(self, ty str) List[Var]
-    [v for v in vars if v.ty == ty]
+    [v for v in self.vars if v.ty == ty]
 
 fn pick_of(xs List[str]) str
     xs[random.int(0, xs.len() - 1)]
 
 fn Gen.var_of(self, ty str) str?
-    vs := with_type(ty)
+    vs := self.with_type(ty)
     if vs.len() == 0
         return none
     vs[random.int(0, vs.len() - 1)].name
@@ -186,71 +186,71 @@ fn Gen.expr(self, ty str, depth int) str
     deep := depth <= 0
     match ty
         "int" =>
-            if v := var_of("int")
+            if v := self.var_of("int")
                 if deep or random.int(0, 2) == 0
                     return v
             k := random.int(0, 9)
             if deep or k < 2
                 return "{random.int(0, 20)}"
             if k == 2
-                return "({expr("int", depth - 1)} + {expr("int", depth - 1)})"
+                return "({self.expr("int", depth - 1)} + {self.expr("int", depth - 1)})"
             if k == 3
-                return "({expr("int", depth - 1)} - {expr("int", depth - 1)})"
+                return "({self.expr("int", depth - 1)} - {self.expr("int", depth - 1)})"
             if k == 4
-                return "mul({expr("int", depth - 1)}, {random.int(1, 5)})"
+                return "mul({self.expr("int", depth - 1)}, {random.int(1, 5)})"
             if k == 5
-                return "({expr("int", depth - 1)} % {random.int(2, 9)})"
+                return "({self.expr("int", depth - 1)} % {random.int(2, 9)})"
             if k == 6
-                if p := var_of("pt")
+                if p := self.var_of("pt")
                     return "{p}.sum()"
             if k == 7
-                if xs := var_of("ints")
+                if xs := self.var_of("ints")
                     return "{xs}.len()"
             if k == 8
-                if m := var_of("map")
-                    return "({m}.get({expr("str", 0)}) else 0)"
+                if m := self.var_of("map")
+                    return "({m}.get({self.expr("str", 0)}) else 0)"
             if k == 9
-                if o := var_of("opt")
+                if o := self.var_of("opt")
                     return "({o} else 0)"
             "{random.int(0, 20)}"
         "bool" =>
-            if v := var_of("bool")
+            if v := self.var_of("bool")
                 if deep or random.int(0, 2) == 0
                     return v
             k := random.int(0, 4)
             if deep or k == 0
                 return pick_of(["true", "false"])
             if k == 1
-                return "{expr("int", depth - 1)} {pick_of(["<", "<=", ">", ">=", "==", "!="])} {expr("int", depth - 1)}"
+                return "{self.expr("int", depth - 1)} {pick_of(["<", "<=", ">", ">=", "==", "!="])} {self.expr("int", depth - 1)}"
             if k == 2
-                return "not ({expr("bool", depth - 1)})"
+                return "not ({self.expr("bool", depth - 1)})"
             if k == 3
-                return "({expr("bool", depth - 1)} and {expr("bool", depth - 1)})"
-            "({expr("bool", depth - 1)} or {expr("bool", depth - 1)})"
+                return "({self.expr("bool", depth - 1)} and {self.expr("bool", depth - 1)})"
+            "({self.expr("bool", depth - 1)} or {self.expr("bool", depth - 1)})"
         "str" =>
-            if v := var_of("str")
+            if v := self.var_of("str")
                 if deep or random.int(0, 2) == 0
                     return v
             k := random.int(0, 3)
             if deep or k == 0
                 return pick_of(["\"a\"", "\"b\"", "\"ab\"", "\"\"", "\"Hi\""])
             if k == 1
-                return "\"n=\{{expr("int", depth - 1)}}\""
+                return "\"n=\{{self.expr("int", depth - 1)}}\""
             if k == 2
-                return "{expr("str", depth - 1)}.to_upper()"
-            "{expr("str", depth - 1)}.trim()"
+                return "{self.expr("str", depth - 1)}.to_upper()"
+            "{self.expr("str", depth - 1)}.trim()"
         "ints" =>
-            if v := var_of("ints")
+            if v := self.var_of("ints")
                 if deep or random.int(0, 2) == 0
                     return v
-            "[{expr("int", 0)}, {expr("int", 0)}, {expr("int", 0)}]"
+            "[{self.expr("int", 0)}, {self.expr("int", 0)}, {self.expr("int", 0)}]"
         "opt" =>
-            if xs := var_of("ints")
+            if xs := self.var_of("ints")
                 if random.int(0, 1) == 0
-                    return "pick({xs}, {expr("int", 0)})"
-            "pick([1, 2, 3], {expr("int", 0)})"
+                    return "pick({xs}, {self.expr("int", 0)})"
+            "pick([1, 2, 3], {self.expr("int", 0)})"
         "pt" =>
-            "Pt(a: {expr("int", 0)}, b: {expr("int", 0)})"
+            "Pt(a: {self.expr("int", 0)}, b: {self.expr("int", 0)})"
         "shape" =>
             pick_of([
                 "Shape.Dot",
@@ -261,225 +261,225 @@ fn Gen.expr(self, ty str, depth int) str
             "0"
 
 fn Gen.name(mut self) str
-    fresh += 1
-    "v{fresh}"
+    self.fresh += 1
+    "v{self.fresh}"
 
 fn Gen.declare(mut self, ty str, mutable bool) str
-    n := name()
-    vars.push(Var(name: n, ty: ty, mutable: mutable))
+    n := self.name()
+    self.vars.push(Var(name: n, ty: ty, mutable: mutable))
     n
 
 fn Gen.block(mut self, count int)
-    saved := vars.len()
-    ind += 1
+    saved := self.vars.len()
+    self.ind += 1
     for _ in 0..count
-        stmt()
+        self.stmt()
     # a block must not be empty
-    emit("print({expr("int", 1)})")
-    ind -= 1
-    while vars.len() > saved
-        vars.pop()
+    self.emit("print({self.expr("int", 1)})")
+    self.ind -= 1
+    while self.vars.len() > saved
+        self.vars.pop()
 
 fn Gen.stmt(mut self)
-    stmts += 1
-    if mistake > 0 and stmts == mistake_at
-        wrong()
+    self.stmts += 1
+    if self.mistake > 0 and self.stmts == self.mistake_at
+        self.wrong()
         return
     k := random.int(0, 31)
     if k <= 2
         ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
-        e := expr(ty, 2)
+        e := self.expr(ty, 2)
         mutable := ty != "opt" and random.int(0, 1) == 0
-        n := declare(ty, mutable)
-        emit("{if mutable then "mut " else ""}{n} := {e}")
+        n := self.declare(ty, mutable)
+        self.emit("{if mutable then "mut " else ""}{n} := {e}")
     elif k == 3
-        vs := [v for v in vars if v.mutable and v.ty == "int"]
+        vs := [v for v in self.vars if v.mutable and v.ty == "int"]
         if vs.len() > 0
             v := vs[random.int(0, vs.len() - 1)]
-            emit("{v.name} {pick_of(["=", "+=", "-="])} {expr("int", 2)}")
+            self.emit("{v.name} {pick_of(["=", "+=", "-="])} {self.expr("int", 2)}")
         else
-            emit("print({expr("str", 1)})")
+            self.emit("print({self.expr("str", 1)})")
     elif k == 4
-        emit("print({expr(pick_of(["int", "bool", "str", "ints"]), 2)})")
+        self.emit("print({self.expr(pick_of(["int", "bool", "str", "ints"]), 2)})")
     elif k == 5
-        emit("if {expr("bool", 2)}")
-        block(random.int(1, 2))
+        self.emit("if {self.expr("bool", 2)}")
+        self.block(random.int(1, 2))
         if random.int(0, 1) == 0
-            emit("else")
-            block(1)
+            self.emit("else")
+            self.block(1)
     elif k == 6
-        emit("for {name()} in 0..{random.int(1, 4)}")
-        loops += 1
-        block(random.int(1, 2))
-        loops -= 1
+        self.emit("for {self.name()} in 0..{random.int(1, 4)}")
+        self.loops += 1
+        self.block(random.int(1, 2))
+        self.loops -= 1
     elif k == 7
-        c := declare("int", true)
-        emit("mut {c} := 0")
-        emit("while {c} < {random.int(1, 3)}")
-        loops += 1
-        ind += 1
-        emit("{c} += 1")
-        ind -= 1
-        block(1)
-        loops -= 1
+        c := self.declare("int", true)
+        self.emit("mut {c} := 0")
+        self.emit("while {c} < {random.int(1, 3)}")
+        self.loops += 1
+        self.ind += 1
+        self.emit("{c} += 1")
+        self.ind -= 1
+        self.block(1)
+        self.loops -= 1
     elif k == 8
-        if xs := var_of("ints")
-            emit("{pick_of(["mut ", ""])}{name()} := {xs}.sorted()")
+        if xs := self.var_of("ints")
+            self.emit("{pick_of(["mut ", ""])}{self.name()} := {xs}.sorted()")
         else
-            emit("print(1)")
+            self.emit("print(1)")
     elif k == 9
-        if sh := var_of("shape")
-            emit("print({sh}.area())")
+        if sh := self.var_of("shape")
+            self.emit("print({sh}.area())")
         else
-            emit("print(2)")
+            self.emit("print(2)")
     elif k == 10
-        if sh := var_of("shape")
-            emit("match {sh}")
-            ind += 1
-            emit("Circle(r) => print(r)")
-            emit("Rect(w, h) => print(w + h)")
-            emit("Dot => print(0)")
-            ind -= 1
+        if sh := self.var_of("shape")
+            self.emit("match {sh}")
+            self.ind += 1
+            self.emit("Circle(r) => print(r)")
+            self.emit("Rect(w, h) => print(w + h)")
+            self.emit("Dot => print(0)")
+            self.ind -= 1
         else
-            emit("print(3)")
+            self.emit("print(3)")
     elif k == 14
-        emit("print(largest({expr("ints", 1)}))")
+        self.emit("print(largest({self.expr("ints", 1)}))")
     elif k == 15
-        s := name()
-        emit("mut {s} := Stack(items: {expr("ints", 1)})")
-        emit("{s}.push({expr("int", 1)})")
-        emit("print({s}.peek() else 0)")
-        emit("print({s}.max() else {expr("int", 0)} + {s}.len())")
+        s := self.name()
+        self.emit("mut {s} := Stack(items: {self.expr("ints", 1)})")
+        self.emit("{s}.push({self.expr("int", 1)})")
+        self.emit("print({s}.peek() else 0)")
+        self.emit("print({s}.max() else {self.expr("int", 0)} + {s}.len())")
     elif k == 16
-        p := name()
-        emit("{p} := Pair(first: {expr("int", 1)}, second: {expr("str", 1)})")
-        emit("print({p}.swap().first)")
-        emit("print({p}.swap().swap().second)")
+        p := self.name()
+        self.emit("{p} := Pair(first: {self.expr("int", 1)}, second: {self.expr("str", 1)})")
+        self.emit("print({p}.swap().first)")
+        self.emit("print({p}.swap().swap().second)")
     elif k == 17
-        emit("print(show(Sq(side: {expr("int", 1)})))")
-        emit("print(show(Pt(a: 1, b: {expr("int", 1)})))")
+        self.emit("print(show(Sq(side: {self.expr("int", 1)})))")
+        self.emit("print(show(Pt(a: 1, b: {self.expr("int", 1)})))")
     elif k == 18
-        emit("print(total([Sq(side: 1), Sq(side: {expr("int", 1)})]))")
+        self.emit("print(total([Sq(side: 1), Sq(side: {self.expr("int", 1)})]))")
     elif k == 19
-        emit("print(Sq(side: {expr("int", 0)}).area() + Pt(a: 2, b: 3).area())")
+        self.emit("print(Sq(side: {self.expr("int", 0)}).area() + Pt(a: 2, b: 3).area())")
     elif k == 20
-        emit("print(twice(inc, {expr("int", 1)}))")
+        self.emit("print(twice(inc, {self.expr("int", 1)}))")
     elif k == 21
-        g := name()
-        emit("{g} := inc")
-        emit("print({g}({expr("int", 1)}) + twice({g}, 2))")
+        g := self.name()
+        self.emit("{g} := inc")
+        self.emit("print({g}({self.expr("int", 1)}) + twice({g}, 2))")
     elif k == 22
-        t := name()
-        emit("{t} := spawn load({expr("int", 1)})")
-        emit("print({t}.wait() else 0)")
+        t := self.name()
+        self.emit("{t} := spawn load({self.expr("int", 1)})")
+        self.emit("print({t}.wait() else 0)")
     elif k == 23
-        a := name()
-        emit("{a} := Atomic(0)")
-        emit("{a}.add({expr("int", 1)})")
-        emit("print({a}.load())")
+        a := self.name()
+        self.emit("{a} := Atomic(0)")
+        self.emit("{a}.add({self.expr("int", 1)})")
+        self.emit("print({a}.load())")
     elif k == 24
-        m := name()
-        emit("{m} := Mutex(0)")
-        emit("with {m} as mut x")
-        ind += 1
-        emit("x += {random.int(1, 5)}")
-        ind -= 1
+        m := self.name()
+        self.emit("{m} := Mutex(0)")
+        self.emit("with {m} as mut x")
+        self.ind += 1
+        self.emit("x += {random.int(1, 5)}")
+        self.ind -= 1
     elif k == 25
-        o := name()
-        emit("mut {o} := [0, 0, 0]")
-        emit("par for i in 0..3")
-        ind += 1
-        emit("{o}[i] = i * {random.int(1, 4)}")
-        ind -= 1
-        emit("print({o})")
+        o := self.name()
+        self.emit("mut {o} := [0, 0, 0]")
+        self.emit("par for i in 0..3")
+        self.ind += 1
+        self.emit("{o}[i] = i * {random.int(1, 4)}")
+        self.ind -= 1
+        self.emit("print({o})")
     elif k == 26
-        c := name()
-        emit("{c} := Channel[int](4)")
-        emit("{c}.send({expr("int", 1)})")
-        emit("{c}.close()")
-        emit("for v in {c}")
-        ind += 1
-        emit("print(v)")
-        ind -= 1
-    elif k == 27 and mods
-        emit("print(geo.add({expr("int", 1)}, {expr("int", 1)}))")
-    elif k == 28 and mods
-        v := name()
-        emit("{v} := geo.Vec2(x: 1, y: {expr("int", 1)})")
-        emit("print(geo.len2({v}) + {v}.x)")
+        c := self.name()
+        self.emit("{c} := Channel[int](4)")
+        self.emit("{c}.send({self.expr("int", 1)})")
+        self.emit("{c}.close()")
+        self.emit("for v in {c}")
+        self.ind += 1
+        self.emit("print(v)")
+        self.ind -= 1
+    elif k == 27 and self.mods
+        self.emit("print(geo.add({self.expr("int", 1)}, {self.expr("int", 1)}))")
+    elif k == 28 and self.mods
+        v := self.name()
+        self.emit("{v} := geo.Vec2(x: 1, y: {self.expr("int", 1)})")
+        self.emit("print(geo.len2({v}) + {v}.x)")
     elif k == 29
-        emit("print([q1 * {random.int(1, 4)} + {expr("int", 1)} for q1 in 0..{random.int(0, 8)} if q1 % {random.int(2, 3)} != {random.int(0, 1)}])")
+        self.emit("print([q1 * {random.int(1, 4)} + {self.expr("int", 1)} for q1 in 0..{random.int(0, 8)} if q1 % {random.int(2, 3)} != {random.int(0, 1)}])")
     elif k == 30
-        emit("print([q1 + q2 * {random.int(1, 3)} for q1 in {expr("ints", 1)} for q2 in 0..{random.int(0, 4)} if q1 > q2])")
+        self.emit("print([q1 + q2 * {random.int(1, 3)} for q1 in {self.expr("ints", 1)} for q2 in 0..{random.int(0, 4)} if q1 > q2])")
     elif k == 31
-        emit("print(\{q1 % {random.int(2, 5)} for q1 in 0..{random.int(0, 9)}}.len())")
-        emit("print(\{q1: q1 * {expr("int", 1)} for q1 in 0..{random.int(1, 5)}}[0])")
+        self.emit("print(\{q1 % {random.int(2, 5)} for q1 in 0..{random.int(0, 9)}}.len())")
+        self.emit("print(\{q1: q1 * {self.expr("int", 1)} for q1 in 0..{random.int(1, 5)}}[0])")
     elif k == 11
-        emit("print(chain({expr("int", 1)}) else 0)")
+        self.emit("print(chain({self.expr("int", 1)}) else 0)")
     elif k == 12
-        if loops > 0
-            emit("if {expr("bool", 1)}")
-            ind += 1
-            emit(pick_of(["break", "continue"]))
-            ind -= 1
+        if self.loops > 0
+            self.emit("if {self.expr("bool", 1)}")
+            self.ind += 1
+            self.emit(pick_of(["break", "continue"]))
+            self.ind -= 1
         else
-            emit("print(4)")
+            self.emit("print(4)")
     else
-        emit("print({expr("int", 2)} {pick_of(["+", "*"])} {expr("int", 1)})")
+        self.emit("print({self.expr("int", 2)} {pick_of(["+", "*"])} {self.expr("int", 1)})")
 
 ## One typed mistake, of the kind `mistake`.
 fn Gen.wrong(mut self)
-    iv := var_of("int") else "7"
-    match mistake
-        1 => emit("{name()} := mul({iv})")
-        2 => emit("bump({iv})")
-        3 => emit("{pick_of(["x1", "x2"])} := 1")
-        4 => emit("{name()} := {name()}")
-        5 => emit("{name()} := {iv} + \"text\"")
-        6 => emit("{name()} := {iv}.nosuch()")
-        7 => emit("{name()} := check_pos({iv})")
-        8 => emit("{name()} := pick([1], 0) else \"x\"")
-        9 => emit("{name()} := pick([1], 0) + 1")
-        10 => emit("{name()} := [1, 2][0] + \"x\"")
-        11 => emit("return 1")
-        12 => emit("if {iv}")
-        13 => emit("break")
-        14 => emit("{name()} := Pt(a: 1, b: 2).zz")
-        15 => emit("{iv} = \"s\"")
-        16 => emit("{name()} := mul({iv}, {iv}, {iv})")
-        17 => emit("{name()} := Shape.Square")
-        18 => emit("print({name()}.len())")
-        19 => emit("{name()} := chain({iv})")
-        20 => emit("{name()} := largest([Pt(a: 1, b: 2)])")
-        21 => emit("{name()} := Stack(items: [{iv}]).push(\"x\")")
-        22 => emit("{name()} := Pair(first: {iv})")
-        23 => emit("{name()} := largest({iv})")
-        24 => emit("{name()} := Stack(items: [Pt(a: 1, b: 2)]).max()")
-        25 => emit("{name()} := show({iv})")
-        26 => emit("{name()} := total([{iv}])")
-        27 => emit("{name()} := Sq(side: 1).nosuch()")
-        28 => emit("{name()} := Sq(side: 1).area({iv})")
-        29 => emit("print(0)")
-        30 => emit("print(0)")
-        31 => emit("{name()} := total(Sq(side: 1))")
-        32 => emit("{name()} := twice(mul, {iv})")
-        33 => emit("{name()} := twice({iv}, {iv})")
-        34 => emit("{name()} := twice(inc)")
-        35 => emit("{name()} := twice(bump, {iv})")
-        36 => emit("print(twice(inc, 1)(2))")
-        37 => emit("{name()} := spawn load({iv})")
-        38 => emit("t := spawn load(1)\n{" ".repeat(4 * ind)}print(t.wait() else 0)\n{" ".repeat(4 * ind)}print(t.wait() else 0)")
-        39 => emit("mut o := [0, 0, 0]\n{" ".repeat(4 * ind)}par for i in 0..3\n{" ".repeat(4 * ind)}    o[0] = i")
-        40 => emit("mut tot := 0\n{" ".repeat(4 * ind)}par for i in 0..3\n{" ".repeat(4 * ind)}    tot += i")
-        41 => emit("{name()} := Atomic(0).add(\"x\")")
-        42 => emit("{name()} := Channel[int](4).send(\"x\")")
-        43 => emit("{name()} := spawn nosuch(1)")
-        44 => emit("{name()} := geo.hidden({iv})")
-        45 => emit("{name()} := geo.nosuch({iv})")
-        46 => emit("{name()} := geo.add(\"x\", {iv})")
-        47 => emit("{name()} := geo.Vec2(x: {iv})")
-        48 => emit("{name()} := add({iv}, 1)")
-        _ => emit("{name()} := nomod.add({iv}, 1)")
+    iv := self.var_of("int") else "7"
+    match self.mistake
+        1 => self.emit("{self.name()} := mul({iv})")
+        2 => self.emit("bump({iv})")
+        3 => self.emit("{pick_of(["x1", "x2"])} := 1")
+        4 => self.emit("{self.name()} := {self.name()}")
+        5 => self.emit("{self.name()} := {iv} + \"text\"")
+        6 => self.emit("{self.name()} := {iv}.nosuch()")
+        7 => self.emit("{self.name()} := check_pos({iv})")
+        8 => self.emit("{self.name()} := pick([1], 0) else \"x\"")
+        9 => self.emit("{self.name()} := pick([1], 0) + 1")
+        10 => self.emit("{self.name()} := [1, 2][0] + \"x\"")
+        11 => self.emit("return 1")
+        12 => self.emit("if {iv}")
+        13 => self.emit("break")
+        14 => self.emit("{self.name()} := Pt(a: 1, b: 2).zz")
+        15 => self.emit("{iv} = \"s\"")
+        16 => self.emit("{self.name()} := mul({iv}, {iv}, {iv})")
+        17 => self.emit("{self.name()} := Shape.Square")
+        18 => self.emit("print({self.name()}.len())")
+        19 => self.emit("{self.name()} := chain({iv})")
+        20 => self.emit("{self.name()} := largest([Pt(a: 1, b: 2)])")
+        21 => self.emit("{self.name()} := Stack(items: [{iv}]).push(\"x\")")
+        22 => self.emit("{self.name()} := Pair(first: {iv})")
+        23 => self.emit("{self.name()} := largest({iv})")
+        24 => self.emit("{self.name()} := Stack(items: [Pt(a: 1, b: 2)]).max()")
+        25 => self.emit("{self.name()} := show({iv})")
+        26 => self.emit("{self.name()} := total([{iv}])")
+        27 => self.emit("{self.name()} := Sq(side: 1).nosuch()")
+        28 => self.emit("{self.name()} := Sq(side: 1).area({iv})")
+        29 => self.emit("print(0)")
+        30 => self.emit("print(0)")
+        31 => self.emit("{self.name()} := total(Sq(side: 1))")
+        32 => self.emit("{self.name()} := twice(mul, {iv})")
+        33 => self.emit("{self.name()} := twice({iv}, {iv})")
+        34 => self.emit("{self.name()} := twice(inc)")
+        35 => self.emit("{self.name()} := twice(bump, {iv})")
+        36 => self.emit("print(twice(inc, 1)(2))")
+        37 => self.emit("{self.name()} := spawn load({iv})")
+        38 => self.emit("t := spawn load(1)\n{" ".repeat(4 * self.ind)}print(t.wait() else 0)\n{" ".repeat(4 * self.ind)}print(t.wait() else 0)")
+        39 => self.emit("mut o := [0, 0, 0]\n{" ".repeat(4 * self.ind)}par for i in 0..3\n{" ".repeat(4 * self.ind)}    o[0] = i")
+        40 => self.emit("mut tot := 0\n{" ".repeat(4 * self.ind)}par for i in 0..3\n{" ".repeat(4 * self.ind)}    tot += i")
+        41 => self.emit("{self.name()} := Atomic(0).add(\"x\")")
+        42 => self.emit("{self.name()} := Channel[int](4).send(\"x\")")
+        43 => self.emit("{self.name()} := spawn nosuch(1)")
+        44 => self.emit("{self.name()} := geo.hidden({iv})")
+        45 => self.emit("{self.name()} := geo.nosuch({iv})")
+        46 => self.emit("{self.name()} := geo.add(\"x\", {iv})")
+        47 => self.emit("{self.name()} := geo.Vec2(x: {iv})")
+        48 => self.emit("{self.name()} := add({iv}, 1)")
+        _ => self.emit("{self.name()} := nomod.add({iv}, 1)")
 
 fn program(seed int) str
     random.seed(seed)

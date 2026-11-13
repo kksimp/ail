@@ -462,96 +462,100 @@ struct Guard
     nonneg Set[int]
 
 fn Guard.value(mut self, t Ty) int
-    f.vals.push(t)
-    f.names.push("")
-    f.vals.len() - 1
+    self.f.vals.push(t)
+    self.f.names.push("")
+    self.f.vals.len() - 1
 
 fn Guard.emit(mut self, op str, args List[int], t Ty) int
-    v := value(t)
-    cur.push(inst(v, op, args))
+    v := self.value(t)
+    self.cur.push(inst(v, op, args))
     v
 
 fn Guard.konst(mut self, n int) int
-    v := value(Ty.Int)
+    v := self.value(Ty.Int)
     mut i := inst(v, "const", [])
     i.imm = n
-    cur.push(i)
+    self.cur.push(i)
     v
 
 fn Guard.len_of(mut self, x int) int
-    if known := lens.get(x)
+    if known := self.lens.get(x)
         return known
-    v := emit("len", [x], Ty.Int)
-    lens[x] = v
+    v := self.emit("len", [x], Ty.Int)
+    self.lens[x] = v
     v
 
 fn Guard.check(mut self, cond int)
-    next := base + blocks.len() + 1
-    blocks.push(Block(params: [], insts: cur, term: Term(
+    next := self.base + self.blocks.len() + 1
+    self.blocks.push(Block(params: [], insts: self.cur, term: Term(
         kind: "branch",
         cond: cond,
-        targets: [next, slow],
-        args: [[], slow_args],
+        targets: [next, self.slow],
+        args: [[], self.slow_args],
         value: -1,
     )))
-    cur = []
+    self.cur = []
 
 ## `0 <= idx < len x`, with `idx` the constant `k` if known.
 fn Guard.in_bounds(mut self, x int, idx int, k int?)
-    l := len_of(x)
+    l := self.len_of(x)
     mut known := -1
     if kk := k
         known = kk
     if known >= 0
-        check(emit("lt", [konst(known), l], Ty.Bool))
+        self.check(self.emit("lt", [self.konst(known), l], Ty.Bool))
     else
-        non_negative(idx)
-        check(emit("lt", [idx, l], Ty.Bool))
+        self.non_negative(idx)
+        self.check(self.emit("lt", [idx, l], Ty.Bool))
 
 ## `0 <= v`, once per value.
 fn Guard.non_negative(mut self, v int)
-    if nonneg.contains(v)
+    if self.nonneg.contains(v)
         return
-    nonneg.add(v)
-    if zero < 0
-        zero = konst(0)
-    check(emit("ge", [v, zero], Ty.Bool))
+    self.nonneg.add(v)
+    if self.zero < 0
+        self.zero = self.konst(0)
+    self.check(self.emit("ge", [v, self.zero], Ty.Bool))
 
 ## `-LIMIT <= x <= LIMIT`.
 fn Guard.within(mut self, x int)
-    if ranged.contains(x)
+    if self.ranged.contains(x)
         return
-    ranged.add(x)
-    check(emit("ge", [x, konst(0 - LIMIT)], Ty.Bool))
-    check(emit("le", [x, konst(LIMIT)], Ty.Bool))
+    self.ranged.add(x)
+    self.check(self.emit("ge", [x, self.konst(0 - LIMIT)], Ty.Bool))
+    self.check(self.emit("le", [x, self.konst(LIMIT)], Ty.Bool))
 
 fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
     match nd.kind
         "index" =>
             if hi_is_len
                 return
-            l := len_of(x)
-            check(emit("le", [hi, l], Ty.Bool))
+            l := self.len_of(x)
+            self.check(self.emit("le", [hi, l], Ty.Bool))
         "off" =>
-            l := len_of(x)
-            room := emit("sub", [l, konst(nd.arg)], Ty.Int)
-            check(emit("le", [hi, room], Ty.Bool))
-        "const" => in_bounds(x, -1, nd.arg)
+            l := self.len_of(x)
+            room := self.emit("sub", [l, self.konst(nd.arg)], Ty.Int)
+            self.check(self.emit("le", [hi, room], Ty.Bool))
+        "const" => self.in_bounds(x, -1, nd.arg)
         "invoff" =>
-            l := len_of(x)
-            non_negative(idx)
-            check(emit("lt", [idx, emit("sub", [l, konst(nd.off)], Ty.Int)], Ty.Bool))
+            l := self.len_of(x)
+            self.non_negative(idx)
+            self.check(self.emit(
+                "lt",
+                [idx, self.emit("sub", [l, self.konst(nd.off)], Ty.Int)],
+                Ty.Bool,
+            ))
         "ivoff" =>
             # `0 <= a` and `hi <= len - a - off`: `len - a` can't wrap with
             # both at least 0, and `a + i < len` then holds for every `i` below
             # `hi` (native.bce.16).
-            l := len_of(x)
-            non_negative(idx)
-            mut room := emit("sub", [l, idx], Ty.Int)
+            l := self.len_of(x)
+            self.non_negative(idx)
+            mut room := self.emit("sub", [l, idx], Ty.Int)
             if nd.off > 0
-                room = emit("sub", [room, konst(nd.off)], Ty.Int)
-            check(emit("le", [hi, room], Ty.Bool))
-        _ => in_bounds(x, idx, none)
+                room = self.emit("sub", [room, self.konst(nd.off)], Ty.Int)
+            self.check(self.emit("le", [hi, room], Ty.Bool))
+        _ => self.in_bounds(x, idx, none)
 
 ## A value's range from the loops around it, when the loops are counted from
 ## and to constants (or values with such ranges): `ok` says whether it is known.

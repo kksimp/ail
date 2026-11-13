@@ -115,4 +115,4 @@ fn Lower.shield_arg_on(mut self, rcv Recv, args List[ast.Arg], i int, v Val) int
             if mine := place_path(args[i].value)
                 if paths_overlap(rcv.path, mine)
                     return copy_value(v)
-    shield_arg(args, i, v)
+    self.shield_arg(args, i, v)

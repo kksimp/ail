@@ -10,7 +10,7 @@ use ast
 ## `mut` argument, or a method on a receiver, that overlaps it.
 fn Lower.rhs_touches(self, e ast.Expr, target List[str]) bool
     match e
-        Try(inner, _, _) => rhs_touches(inner, target)
+        Try(inner, _, _) => self.rhs_touches(inner, target)
         Call(callee, args, _) =>
             # `f(..)` inside a method may be a `mut self` method of the same type.
             match callee
@@ -40,9 +40,9 @@ fn mut_arg_overlaps(args List[ast.Arg], target List[str]) bool
 fn Lower.hoist_place(mut self, e ast.Expr) ast.Expr?
     match e
         Index(r, idx, p) =>
-            r2 := hoist_place(r)?
-            ast.Expr.Index(recv: r2, index: hoist_value(idx)?, pos: p)
-        Member(r, f, p) => Member(hoist_place(r)?, f, p)
+            r2 := self.hoist_place(r)?
+            ast.Expr.Index(recv: r2, index: self.hoist_value(idx)?, pos: p)
+        Member(r, f, p) => Member(self.hoist_place(r)?, f, p)
         _ => e
 
 ## The value of `e`, kept in a new hidden variable; a `Name` for it.
@@ -73,10 +73,10 @@ fn Lower.assign_after_rhs(
             if not is_nested(recv)
                 return false
             tp := place_path(target) else return false
-            if not rhs_touches(value, tp)
+            if not self.rhs_touches(value, tp)
                 return false
-            recv2 := hoist_place(recv) else return true
-            index2 := hoist_value(index) else return true
+            recv2 := self.hoist_place(recv) else return true
+            index2 := self.hoist_value(index) else return true
             v := lower_value(value, none) else return true
             name := "~r{nvars}"
             declare(name, v.ty, v.id)

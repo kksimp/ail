@@ -1,6 +1,8 @@
 use std.net
+
 fn ask(url str) net.Response ! net.NetError
     net.get(url)
+
 fn main() ! Trapped | net.NetError
     srv := net.serve("127.0.0.1:0")?
     url := "http://{srv.addr()}/hello?name=ail"

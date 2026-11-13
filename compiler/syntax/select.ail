@@ -23,7 +23,7 @@ fn Parser.select_stmt(mut self, pos ast.Pos) ast.Stmt?
     while peek() != Tok.Dedent and peek() != Tok.Eof
         if eat_newline()
             continue
-        if a := select_arm()
+        if a := self.select_arm()
             arms.push(a)
         else
             skip_statement()
@@ -37,7 +37,7 @@ SELECT_ARMS := "write one arm per line: `v := ch.recv() =>`, `ch.send(x) =>`, `a
 ## (as a `match` arm, expr.match.9).
 fn Parser.select_arm(mut self) ast.SelectArm?
     pos := here()
-    op := select_op()?
+    op := self.select_op()?
     if not eat_sym("=>")
         unexpected("`=>` after the arm's head", "conc.select.2")
         return none
