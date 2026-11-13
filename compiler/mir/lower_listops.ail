@@ -2,9 +2,10 @@
 ## ADR 0629): `chunks(n)`, `windows(n)`, `flatten()` and `counts()`. Each is a
 ## runtime call (`compiler/rt/native/list.ail`, `map.ail`).
 ##
-## Reported as outside the subset: elements that are lists, structs or tuples
-## (the pieces would share them), `flatten` of such inner lists, and `counts`
-## of anything but `int`, `str` and `char`.
+## Elements that are lists, structs, tuples or tables are shared by the
+## runtime's pieces, so the result is copied deep (own.val.1); `counts` of a
+## key the runtime's `rt.map_counts` doesn't take is a loop that adds one per
+## element (ADR 1109: what `ail check` accepts, the native build builds).
 use ast
 
 ## The methods this file lowers.
@@ -16,27 +17,63 @@ fn Lower.lower_list_build(mut self, r Val, e Ty, name str, npos ast.Pos, vs List
     if name == "chunks" or name == "windows"
         if vs.len() != 1
             return unsupported(npos, "`.{name}()` with these arguments")
-        if needs_copy(e)
-            return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
         n := convert(vs[0], Ty.Int, npos)
         texts := trap_texts("type.coll.17", npos)
         want := Ty.List(r.ty)
         win := konst(if name == "windows" then 1 else 0, Ty.Int)
         size := konst(elem_bytes(e), Ty.Int)
-        return Val(
+        runs := Val(
             id: call("rt.list_runs", [r.id, n, win, size, texts[0], texts[1]], want),
             ty: want,
         )
+        if needs_copy(e)
+            return Val(id: copy_value(runs), ty: want)
+        return runs
     if vs.len() != 0
         return unsupported(npos, "`.{name}()` with these arguments")
     if name == "flatten"
         inner := e.elem() else return unsupported(npos, "`.flatten()` on `{r.ty.name()}`")
-        if needs_copy(inner)
-            return unsupported(npos, "`.flatten()` on `{r.ty.name()}`")
         size := konst(elem_bytes(inner), Ty.Int)
-        return Val(id: call("rt.list_flatten", [r.id, size], e), ty: e)
+        flat := Val(id: call("rt.list_flatten", [r.id, size], e), ty: e)
+        if needs_copy(inner)
+            return Val(id: copy_value(flat), ty: e)
+        return flat
     if e != Ty.Int and e != Ty.Str and e != Ty.Char
-        return unsupported(npos, "`.counts()` on `{r.ty.name()}`")
+        return counts_loop(r, e, npos)
     want := Ty.Map(key: e, val: Ty.Int)
     kind := konst(key_kind(e), Ty.Int)
     Val(id: call("rt.map_counts", [kind, r.id], want), ty: want)
+
+## `xs.counts()` for any key type (type.coll.19): `m[x] += 1` for each element
+## into a new `Map[T, int]`, in the order keys first appear.
+fn Lower.counts_loop(mut self, r Val, e Ty, npos ast.Pos) Val?
+    if not key_ok(e) and e != Ty.Bool
+        return unsupported(npos, "`.counts()` on `{r.ty.name()}`")
+    t := Ty.Map(key: e, val: Ty.Int)
+    nvars += 1
+    src := "#cnt{nvars}s"
+    tab := "#cnt{nvars}m"
+    each := "#cnt{nvars}x"
+    declare(src, r.ty, r.id)
+    declare(tab, t, new_table(t))
+    bump := ast.Stmt.Assign(
+        target: ast.Expr.Index(
+            recv: ast.Expr.Name(name: tab, pos: npos),
+            index: ast.Expr.Name(name: each, pos: npos),
+            pos: npos,
+        ),
+        op: ast.BinOp.Add,
+        value: ast.Expr.Int(value: "1", pos: npos),
+        pos: npos,
+    )
+    lower_stmt(ast.Stmt.For(
+        is_par: false,
+        var: each,
+        var_pos: npos,
+        mutable: false,
+        iter: ast.Expr.Name(name: src, pos: npos),
+        body: [bump],
+        pos: npos,
+    ))
+    k := lookup(tab)?
+    Val(id: read_var(k, cur), ty: var_ty[k])

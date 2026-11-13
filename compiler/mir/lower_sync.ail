@@ -30,6 +30,13 @@ fn is_sync(t Ty) bool
         Group => true
         _ => false
 
+## A `Mutex`, `Atomic` or `Channel`: a pointer to a shared record, which a
+## list holds as it is; copying the list shares the handle (conc.share.5, ADR 1109).
+fn is_shared_handle(t Ty) bool
+    match t
+        Mutex | Atomic | Chan => true
+        _ => false
+
 ## `Mutex[T]`.
 fn Lower.mutex_type_of(mut self, args List[ast.TypeRef]) Ty?
     if args.len() != 1

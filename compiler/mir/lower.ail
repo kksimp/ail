@@ -658,6 +658,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or e.is_tensor()
                         or e.is_ref()
                         or e.is_fn()
+                        or is_shared_handle(e)
                         return Ty.List(e)
                     none
                 "Atomic" =>

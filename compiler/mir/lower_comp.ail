@@ -124,7 +124,7 @@ fn Lower.lower_comp_untyped(
     if form == ast.CompKind.SetComp
         xs := lower_comp(ast.CompKind.ListComp, elem, none, clauses, pos, none)?
         e := xs.ty.elem() else Ty.Unknown
-        if e == Ty.Bool or not key_ok(e)
+        if not key_ok(e)
             return unsupported(pos, "{what} comprehension whose type isn't known")
         words := words_of(xs, e)
         return Val(id: call("rt.set_from_list", [kind_val(e), words], Ty.Set(e)), ty: Ty.Set(e))
@@ -156,7 +156,7 @@ fn Lower.lower_comp_untyped(
     vkey := lookup(comp_var)?
     kt := var_ty[kkey].elem() else Ty.Unknown
     vt := var_ty[vkey].elem() else Ty.Unknown
-    if kt == Ty.Bool or not key_ok(kt) or not is_value_ty(vt)
+    if not key_ok(kt) or not is_value_ty(vt)
         return unsupported(pos, "{what} comprehension whose type isn't known")
     t := Ty.Map(key: kt, val: vt)
     declare(mname, t, keyed_table(t))
