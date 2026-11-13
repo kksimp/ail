@@ -123,7 +123,8 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Documentation index](docs/README.md)
 - [Vision and philosophy](docs/vision.md)
 - [Design decisions](docs/decisions/README.md)
-- [Language card](docs/language-card.md): the whole language in one short read
+- [For agents](docs/for-agents.md): the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most
+- [Language card](docs/language-card.md): the whole language in one read (the core card is `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
 - [Packages](docs/packages.md): `ail.pkg`, path and git dependencies, `ail.lock`, capability grants
 - [AIL on Windows](docs/windows.md): install and day-to-day notes for PowerShell
 - [Language specification](docs/spec/README.md)
@@ -133,7 +134,7 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
 - [Research: beating C on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
 
-AI agents: read [AGENTS.md](AGENTS.md) first, or [llms.txt](llms.txt) for the list of docs to load.
+AI agents: start with [For agents](docs/for-agents.md), then [llms.txt](llms.txt) for the list of docs to load. To work on AIL itself, read [AGENTS.md](AGENTS.md).
 
 ### Agent kit for your project
 

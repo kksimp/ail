@@ -6,9 +6,10 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 |---|---|
 | [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
 | [tutorial.md](tutorial.md) | A first hour with AIL, for people: run, write a tool, test, `check`, `explain`, `fix`, `fmt` |
+| [for-agents.md](for-agents.md) | AIL for agents: the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most and their fixes |
 | [how-to.md](how-to.md) | Checked answers to common tasks; `ail ask how WORDS` searches them |
-| [language-card.md](language-card.md) | The whole language in one read, under 8,000 tokens, for AI agents (non-normative) |
-| [language-card-core.md](language-card-core.md) | The core of the language in under 2,000 tokens; `ail card` prints it (non-normative) |
+| [language-card.md](language-card.md) | The whole language in one read, within 16,000 tokens (ADR 1110), for AI agents (non-normative) |
+| [language-card-core.md](language-card-core.md) | The core of the language in about 3,000 tokens; `ail card` prints it (non-normative) |
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [packages.md](packages.md) | Using packages: `ail.pkg`, path and git dependencies, `ail.lock`, capability grants, a worked example |
 | [windows.md](windows.md) | AIL on Windows: PowerShell 5.1 and 7, execution policy, where files go |

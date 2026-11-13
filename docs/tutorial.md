@@ -118,7 +118,9 @@ fn main()
 
 The report has one line per test, `ok NAME` or `FAIL NAME: MESSAGE at LINE:COL`,
 then a count ([test.run.3](spec/19-testing.md)). `ail test` exits 0 only if
-every test passed. `ail run` ignores tests, so they cost nothing in a shipped
+every test passed, and 1 if one failed. A file with no tests prints
+`no tests found in FILE` before the `0 passed, 0 failed` line and exits 0, since
+nothing failed ([check.exit.1](spec/22-tools.md)). `ail run` ignores tests, so they cost nothing in a shipped
 program. A test with parameters is a **property**: `ail test` generates inputs
 and shrinks a failure to the smallest one.
 
@@ -141,7 +143,22 @@ typo.ail:2:5: error[expr.name.1]: unknown name `prnt`
         ^
 help: did you mean `print`?
 fix: replace `prnt` with `print`
+next: ail fix typo.ail
 ```
+
+Every error ends with a `next:` line: `ail fix FILE` when the diagnostic carries a
+fix, otherwise `ail explain RULE` ([check.out.2](spec/22-tools.md)). When a
+file has no error, `ail check` says so, so a clean run is not mistaken for one that
+did not run:
+
+```text
+ok wc.ail: 3 functions, 0 warnings
+```
+
+`ail check` exits 0 when there is no error (warnings are allowed) and 2 when
+there is one. `ail run` of a program that does not compile prints the same
+diagnostics and exits 2 without running it; a program that traps exits 1
+([check.exit.1](spec/22-tools.md)).
 
 The ID in the brackets is the same one you find in the spec, in the code that
 enforces it, and in the tests. Two commands use it:
@@ -161,8 +178,11 @@ Where a diagnostic carries a fix, the compiler can apply it for you:
 ./ail fix typo.ail            # rewrite the file
 ```
 
-`ail check --json` gives the same diagnostics, one JSON object per line, with
-the exact edits. This is what editors and AI agents read.
+`ail check --json` gives the same diagnostics, one JSON object per line on
+standard error, with the exact edits, and a summary record on standard output,
+`{"api":1,"summary":true,"errors":1,"warnings":0,"fixable":1}`. The record's
+shape is [check-json.schema.json](design/check-json.schema.json). This is what
+editors and AI agents read.
 
 ## 5. One layout
 
@@ -180,6 +200,10 @@ The layout rules are in [design/formatting.md](design/formatting.md).
 
 - Read real programs in [`examples/`](../examples/README.md): `csvreport.ail`,
   `logscan.ail` and `shapes.ail` are good next steps.
+- [for-agents.md](for-agents.md) is the same language written for AI agents: the
+  loop, the canonical patterns, the mistakes that cost the most and their fixes.
+- `ail ask std "read a file by lines"` finds a std function, and `ail ask how "sort descending"`
+  a checked answer to a common task ([how-to.md](how-to.md)).
 - [quick-reference.md](quick-reference.md) covers structs, enums, `match`,
   traits, generics, errors and the standard library on one page.
 - [`ail build FILE.ail`](quick-reference.md) makes a static native executable.
