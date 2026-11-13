@@ -257,6 +257,8 @@ fn kind_noun(q Ask) str
 ## `ail ask PROGRAM QUESTION...`; the exit status: 0 answered, 1 nothing
 ## found, 2 an error (api.ask.6).
 pub fn ask_command(args List[str], std str) int
+    if args.len() > 0 and args[0] == "how"
+        return how_command(args[1..])
     if args.len() > 0 and args[0] == "std"
         return find_command(args[1..])
     if args.contains("--affected")

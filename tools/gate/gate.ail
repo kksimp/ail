@@ -1247,6 +1247,7 @@ fn Gate.docs(mut self)
         ["tools/check-doc-links.py"],
         ["tools/check-doc-dupes.py"],
         ["tools/check-doc-dupes.py", "--self-test"],
+        ["tools/check-method-table.py"],
     ]
         r := proc.run("python3", cat(["-I"], args)) else return
         if r.status != 0
@@ -3418,6 +3419,7 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(10, "ail_infer", "'program':'try.ail','function':'pay'"),
         mcp_call(11, "ail_merge_check", "'base':'prog.ail','ours':'ours.ail','theirs':'theirs.ail'"),
         mcp_call(12, "ail_verify_check", "'cert':'-x'"),
+        mcp_call(13, "ail_find", "'how':'sort descending'"),
     ])
     want("mcp card", reply_of(r2.out, 2), ["AIL core card", "\"isError\":false"])
     want("mcp card repeat is memoised", reply_of(r2.out, 3), [jm("'ail/warm':'memo'")])
@@ -3425,6 +3427,8 @@ fn Gate.agent_tools(mut self, tmp str)
     want("mcp find by words", reply_of(r2.out, 5), ["fs.read_text(path"])
     want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
     want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
+    # api.find.7: `how` reaches `ail ask how`.
+    want("mcp find how", reply_of(r2.out, 13), ["sorted(by:"])
     want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
     if slurp("{base}/mcp/try.ail") != ctx
         red("mcp try", "wrote the program")

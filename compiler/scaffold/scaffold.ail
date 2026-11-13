@@ -20,7 +20,7 @@ fn agents_md() str
         "",
         "AIL project: source is `.ail`, the CLI is `ail`.",
         "",
-        "- Load the core card once: `ail card`. More: `ail card TOPIC`, `ail ask std WORDS` (std functions).",
+        "- Load the core card once: `ail card`. More: `ail card TOPIC`, `ail ask std WORDS` (std and methods), `ail ask how WORDS`.",
         "- Every change is one loop:",
         "  1. `ail task start main.ail GOAL`",
         "  2. `ail context main.ail FN --budget 800` before you edit FN",

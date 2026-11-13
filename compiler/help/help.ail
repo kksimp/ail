@@ -117,7 +117,7 @@ fn commands() List[Cmd]
             "ask",
             "Ask the compiler",
             "who calls, reads, writes or uses something; std lookup",
-            "ail ask FILE QUESTION | ail ask std WORDS",
+            "ail ask FILE QUESTION | ail ask std WORDS | ail ask how WORDS",
             "api.ask.1",
         ),
         c(
