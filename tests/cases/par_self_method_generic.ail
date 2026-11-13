@@ -1,0 +1,20 @@
+## The generic case of par_self_method_call: `show(i)` in a method of `Shelf[T]`
+## is a method of `self` too, though `Shelf[int].show` is instantiated only when
+## a call needs it. The loop stays sequential (conc.par.8).
+
+struct Shelf[T]
+    items List[T]
+
+fn Shelf.show(self, i int) str
+    "{i}: {items[i]}"
+
+fn Shelf.lines(self) List[str]
+    mut out := List[str]()
+    for i in 0..items.len()
+        out.push(show(i))
+    out
+
+fn main()
+    s := Shelf(items: [10, 20, 30])
+    for l in s.lines()
+        print(l)
