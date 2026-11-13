@@ -1,3 +1,0 @@
-connected_components .sorted() on List[List[int]] is not native yet (compiler lane, batch 9)
-csv_sort_tool .sorted() on List[List[str]] is not native yet (compiler lane, batch 9)
-minesweeper_counts compiler trap in compiler/mir/simplify.ail:69 (mir.remove_trivial_params, index -1); kept as the repro, routed to the integrator
