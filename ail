@@ -472,7 +472,12 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
     # shellcheck disable=SC2086
-    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || exit $?
+    # eff.allow.10: with no `--allow`, the scopes of the package's `caps` lines become the run's policy.
+    policy_file=
+    if [ -z "$allow_list" ]; then policy_file="$(mktemp)"; check_opts="$check_opts --policy-out $policy_file"; fi
+    # shellcheck disable=SC2086
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || { [ -z "$policy_file" ] || rm -f "$policy_file"; exit 1; }
+    if [ -n "$policy_file" ]; then allow_list="$(cat "$policy_file")"; rm -f "$policy_file"; fi
     prep_err="$(mktemp)"
     # shellcheck disable=SC2086
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then

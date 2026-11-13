@@ -1,0 +1,6 @@
+use std.fs
+use std.net
+
+fn main() !
+    print(fs.read_text("data/a.txt")?.len())
+    print(net.get("http://example.com")?.status)

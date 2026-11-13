@@ -1,0 +1,4 @@
+use std.fs
+
+fn main() !
+    print(fs.read_text("data/a.txt")?.len())

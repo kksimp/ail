@@ -976,6 +976,11 @@ is new. `(none)` stands for an absent one.
 (ADR 1021) differs between the versions. It is
 empty until that command exists.
 
+**api.rev.12** — `effects` also has a line for each package whose `caps` entries
+in `ail.pkg` changed (`eff.allow.10-11`): `NEW CAPABILITY grant PACKAGE: +ENTRY` when
+an entry was gained or a scope widened or moved, counted as a new capability,
+else `grant PACKAGE: -ENTRY`. *(ADR 1105)*
+
 **api.rev.11** — `untested` has the id of each changed or new function, other than
 `main` and `@test` functions, that no `@test` function reaches by calls or by
 naming it (`api.impact.2`).

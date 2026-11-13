@@ -347,6 +347,33 @@ fn main()
     print("{21 * 2}")
 ```
 
+**eff.allow.10** — *(ADR 1105)* A manifest's `caps LIST` (`eff.cap.4-5`) takes the entries of
+`--allow` (`eff.allow.2`): `fs.read=./data,net=api.example.com` on a `package`
+or `dep` line, with no spaces. `fs.read` and `fs.write` count as `fs`, and
+`net.serve` as `net`, for the compile-time check of `eff.cap.4-5`. A
+scope on a name that takes none, or an empty scope, is error `eff.allow.2`
+at the line. When the root `package` line has a `caps` list and any list in
+the package graph has a scope, `ail run` with no `--allow` of its own runs the
+program with every entry of every list as its policy (`eff.allow.8`); `--allow`
+replaces that policy. Scopes are one policy for the whole process, so a
+dependency's scope also lets the root package's code reach it, as far as the
+root's own `caps` allow the capability. A root without a `caps` list, or with
+lists that have no scope, adds no run-time limit.
+
+```ail pkg=caps_scoped tool=check,DIR status=2 expect=eff.cap.5 rules=eff.allow.10
+```
+
+```ail pkg=caps_scoped_bad tool=check,DIR status=2 expect=eff.allow.2 rules=eff.allow.2
+```
+
+**eff.allow.11** — *(ADR 1105)* `ail review` (`api.rev.12`) lists a change to a `caps` list
+in the `effects` section: an entry gained, or a scope widened or moved, is a
+`NEW CAPABILITY grant PACKAGE: +ENTRY -ENTRY`, and a change that only removes
+entries is an ordinary line.
+
+```ail pkg=review_grants tool=review,--files,old,new status=0 expect=NEW CAPABILITY grant rules=eff.allow.11,api.rev.12
+```
+
 ## Deterministic execution
 
 **eff.det.1** — A program whose `main` reaches none of the capabilities
