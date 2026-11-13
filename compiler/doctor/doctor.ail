@@ -50,7 +50,8 @@ fn writable(dir str) bool
 ## The line for a shell profile (tool.path.1): it adds the toolchain's directory, where `ail` is, to PATH.
 fn path_line(root str) str
     if windows()
-        return "$env:Path = \"{root.replace("/", "\\")};\" + $env:Path"
+        # PowerShell reads environment names in any case: `PATH` reads the same as `Path` in every version.
+        return "$env:PATH = \"{root.replace("/", "\\")};\" + $env:PATH"
     "export PATH=\"{root}:$PATH\""
 
 ## Is `found`, the first `ail` on PATH, this toolchain's? Its directory is `root` (and so is a symlink's

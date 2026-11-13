@@ -51,6 +51,8 @@ pub struct check.Local
 pub struct check.Pending
 pub struct check.Moved
 pub fn check.new_checker(ast.Program) check.Checker
+pub struct check.LitState
+pub fn check.new_lit_state() check.LitState
 pub check.COVERED_RULES := ...
 pub struct check.Skip
 pub fn check.skipped(ast.Program, check.Report) List[check.Skip]
@@ -77,6 +79,7 @@ pub fn check.call_hint(str, int) check.CallHint?
 pub fn check.call_help(str) str?
 pub fn check.function_help(str) str?
 pub fn check.check_handles(ast.Program) List[check.Diag]
+pub check.LIST_FN_METHODS := ...
 pub fn check.check_moves(ast.Program, List[check.Moved]) List[check.Diag]
 pub check.PRELUDE_FNS := ...
 pub check.BUILTIN_TYPES := ...
@@ -116,4 +119,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1501); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1535); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

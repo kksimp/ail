@@ -1,0 +1,80 @@
+# type.fn.4-8, type.coll.21-26 (ADR 1067): function literals, captures by
+# copy, failing function values, generic higher-order functions and the list
+# methods that take a function.
+error struct BadPort
+    text str
+
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    n += 1
+
+struct Rule
+    name str
+    test fn(int) bool
+
+fn port(text str) int ! BadPort
+    n := text.to_int() else return BadPort(text: text)
+    n
+
+fn is_even(n int) bool
+    n % 2 == 0
+
+fn adder(n int) fn(int) int
+    |x| x + n
+
+fn compose(f fn(int) int, g fn(int) int) fn(int) int
+    |x| g(f(x))
+
+fn map_all[T, U](xs List[T], f fn(T) U) List[U]
+    mut out := List[U]()
+    for x in xs
+        out.push(f(x))
+    out
+
+fn first_ok(texts List[str], parse fn(str) int ! BadPort) int ! BadPort
+    mut total := 0
+    for t in texts
+        total += parse(t)?
+    total
+
+fn main()
+    mut base := 10
+    add_base := |x int| x + base
+    base = 100
+    print("{add_base(1)} {base}")
+    inc := adder(1)
+    twice_inc := compose(inc, inc)
+    print("{inc(5)} {twice_inc(5)}")
+    print(map_all([1, 2, 3], |x| "n{x}"))
+    print(map_all(["a", "bb"], |s| s.len()))
+    rules := [Rule(name: "even", test: is_even), Rule(name: "big", test: |n| n > 50)]
+    for r in rules
+        print("{r.name} {(r.test)(64)} {(r.test)(3)}")
+    c := ref Counter(n: 0)
+    tick := || c.bump()
+    tick()
+    tick()
+    print("{c.n}")
+    parse := |t str| port(t)? + 1
+    print("{parse("80") else 0}")
+    bad := parse("x") else err
+        print("failed: {err.text}")
+        -1
+    print("{bad}")
+    print("{first_ok(["1", "2"], port) else -1} {first_ok(["1", "y"], port) else -1}")
+    print("{first_ok(["5"], |t| t.len()) else -1}")
+    xs := [3, 8, 5, 12, 7]
+    limit := 6
+    print("{xs.any(|x| x > limit)} {xs.all(|x| x > 0)} {xs.all(is_even)}")
+    print("{xs.find(|x| x > limit) else 0} {xs.find(|x| x > 100) else 0}")
+    print(xs.filter(|x| x > limit))
+    print(xs.filter(is_even))
+    print(xs.map(|x| x * 2))
+    print(xs.map(|x| "<{x}>"))
+    groups := xs.group_by(|x| x % 2 == 0)
+    print(groups)
+    words := ["apple", "avocado", "banana", "cherry", "blueberry"]
+    print(words.group_by(|w| w.slice(0, 1)))
+    print(words.map(|w| w.len()).filter(|n| n > 5))

@@ -461,7 +461,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
-| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
+| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Superseded by [1070](1070-bit-operators.md) | 2026-10-20 |
 | [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
 | [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
 | [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
@@ -842,10 +842,16 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1055](1055-contracts-proved-by-interval-facts.md) | Prove contracts from interval facts and drop the proved checks; `ail prove` *(delegated)* | Accepted | 2026-11-10 |
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
 | [1064](1064-reserve-256-mib-ahead-of-push-loops.md) | Native: reserve up to 256 MiB of list elements ahead of a push loop *(delegated)* | Accepted | 2026-11-11 |
+| [1066](1066-pair-adjacent-float-operations.md) | Native: pair adjacent float element operations into two-lane vector operations (`Vec2`, native.vec.3) *(delegated)* | Accepted | 2026-11-12 |
+| [1077](1077-decision-order-ai-understanding-first.md) | Delegated decisions: AI understanding first, human readability second, then speed, then tokens *(designer)* | Accepted | 2026-11-12 |
 | [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
+| [1067](1067-closures.md) | Function literals that copy their locals, failing function values, and `any`/`all`/`find`/`filter`/`map`/`group_by` *(delegated)* | Accepted | 2026-11-12 |
 | [1061](1061-known-list-lengths.md) | Native: lists built to a known count check against that count *(delegated)* | Accepted | 2026-11-11 |
 | [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |
 | [1057](1057-ail-help.md) | `ail help`, `--help` and a real no-argument usage; JSON for agents *(delegated)* | Accepted | 2026-11-11 |
 | [1058](1058-ail-on-path-and-doctor.md) | `ail` works from PATH through symlinks; `ail doctor` and `ail doctor --path` *(delegated)* | Accepted | 2026-11-11 |
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
+| [1063](1063-function-wide-value-ranges.md) | Native: function-wide value ranges drop checks and fold comparisons they decide *(delegated)* | Accepted | 2026-11-12 |
+| [1070](1070-bit-operators.md) | Bit operators `& \| ^ ~ << >>` as sugar for the `int` methods; mixing needs parentheses; supersedes ADR 0465 *(delegated)* | Accepted | 2026-11-12 |
+| [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |

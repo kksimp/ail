@@ -477,11 +477,11 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             unsafe_depth -= 1
             t
         Break(at) =>
-            if loop_depth == 0
+            if loop_depth == 0 and not leaves_literal("break", at)
                 err("expr.loop.5", at, "`break` outside a loop")
             Ty.Never
         Continue(at) =>
-            if loop_depth == 0
+            if loop_depth == 0 and not leaves_literal("continue", at)
                 err("expr.loop.5", at, "`continue` outside a loop")
             Ty.Never
         Return(value, at) =>
@@ -557,6 +557,10 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         _ => ""
 
 fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
+    if leaves_literal("return", at)
+        if v := value
+            expr(v, none, true)
+        return
     want := fn_ret
     v := value else
         if not returns_nothing(want)
@@ -1259,6 +1263,9 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
         )
         return
     l := local(root) else return
+    if is_capture(root)
+        capture_written(root, expr_pos(e), action)
+        return
     if l.mutable
         return
     mut fallback_rule := ""
@@ -1446,6 +1453,7 @@ fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
         )
         Unary(_, operand, _) => overlap_in_expr(target, operand)
         NewRef(value, _) => overlap_in_expr(target, value)
+        Closure(_, body, _) => overlap_in_expr(target, body)
         Binary(_, lhs, rhs, _) => either(overlap_in_expr(target, lhs), overlap_in_expr(target, rhs))
         Range(lo, hi, _, _) => either(overlap_in_opt(target, lo), overlap_in_opt(target, hi))
         MapLit(entries, _) =>
@@ -1566,6 +1574,8 @@ fn args_break(args List[ast.Arg]) bool
         ListLit(items, _) => any_breaks(items)
         SetLit(items, _) => any_breaks(items)
         TupleLit(items, _) => any_breaks(items)
+        # A function literal's body can't leave the enclosing loop (type.fn.4).
+        Closure => false
         MapLit(entries, _) =>
             for en in entries
                 if breaks_in_expr(en.key) or breaks_in_expr(en.value)

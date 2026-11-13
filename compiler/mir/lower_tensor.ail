@@ -129,7 +129,7 @@ fn Lower.lower_tensor_from_fn(mut self, args List[ast.Arg], npos ast.Pos) Val?
     c := count_open(n)
     scopes.push(Map[str, str]())
     declare(x.name, Ty.Int, c.i)
-    r := lower_value(f.value, none)
+    r := lower_value(ast.key_body(f), none)
     scopes.pop()
     mut et := Ty.Unknown
     if rv := r
@@ -162,7 +162,7 @@ fn Lower.lower_tensor_map(mut self, r Val, args List[ast.Arg], npos ast.Pos) Val
     c := count_open(n)
     scopes.push(Map[str, str]())
     declare(x.name, xe, op("get", [items, c.i], xe))
-    v := lower_value(f.value, none)
+    v := lower_value(ast.key_body(f), none)
     scopes.pop()
     mut et := Ty.Unknown
     if vv := v

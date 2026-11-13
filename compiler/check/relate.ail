@@ -51,6 +51,22 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
                 Unit => false
                 Res => false
                 _ => implements(got, a)
+        # type.fn.6: a function that can't fail, or fails with fewer errors, fits
+        # where one that can fail is expected.
+        FnTy(wp, wr) =>
+            match got
+                FnTy(gp, gr) =>
+                    if not same_all(wp, gp)
+                        return false
+                    if same(wr, gr)
+                        return true
+                    match wr
+                        Res(w, _) =>
+                            match gr
+                                Res => accepts(wr, gr)
+                                _ => same(w, gr)
+                        _ => false
+                _ => same(want, got)
         _ => same(want, got)
 
 ## Report a value of type `got` where `want` was expected, under `rule`. An

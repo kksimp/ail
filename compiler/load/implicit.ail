@@ -303,9 +303,7 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
             r := self.expr(recv)
             mut out := List[ast.Arg]()
             for a in args
-                # expr.key.2: a key function's parameter is a new local.
-                if p := a.param
-                    self.declare(p.name, p.pos)
+                # expr.key.2: a key function's parameter is a new local (the literal declares it).
                 mut na := a
                 na.value = self.expr(a.value)
                 out.push(na)
@@ -316,6 +314,11 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
             ast.Expr.Index(recv: r, index: self.expr(index), pos: pos)
         Unary(op, operand, pos) => ast.Expr.Unary(op, self.expr(operand), pos)
         NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
+        # type.fn.4: a function literal's parameters are new locals.
+        Closure(params, body, pos) =>
+            for p in params
+                self.declare(p.name, p.pos)
+            ast.Expr.Closure(params, self.expr(body), pos)
         Binary(op, lhs, rhs, pos) =>
             l := self.expr(lhs)
             ast.Expr.Binary(op: op, lhs: l, rhs: self.expr(rhs), pos: pos)

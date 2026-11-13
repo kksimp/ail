@@ -1,6 +1,6 @@
 # 0465. Bit operations are `int` methods: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`
 
-- **Status:** Accepted
+- **Status:** Superseded by [1070](1070-bit-operators.md) (the methods stay; the operators are added)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 11 — Operators; integer arithmetic

@@ -61,7 +61,27 @@ pub fn keywords() List[str]
 
 ## Symbols of two characters, and of one. `..=` is checked first, then `..`,
 ## then these, so the longest spelling wins (`..=` over `..` over `.`).
-TWO_SYMBOLS := {"->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||"}
+TWO_SYMBOLS := {
+    "->",
+    "=>",
+    ":=",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&&",
+    "||",
+    "<<",
+    ">>",
+    "&=",
+    "|=",
+    "^=",
+}
 
 ONE_SYMBOLS := {
     ".",
@@ -85,10 +105,33 @@ ONE_SYMBOLS := {
     "?",
     "@",
     "|",
+    "&",
+    "^",
+    "~",
 }
 
 ## A line ending in one of these continues on the next line (lex.stmt.2).
-BINARY_SYMBOLS := {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="}
+## `|` is left out: it also closes a key function's `|x|` (expr.key.1), and a trailing
+## `a |` does not continue (expr.bit.3).
+BINARY_SYMBOLS := {
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "..",
+    "..=",
+    "&",
+    "^",
+    "<<",
+    ">>",
+}
 
 ## The indentation unit is exactly four spaces (lex.block.2, ADR 0040).
 UNIT := 4
@@ -657,50 +700,6 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             )
             attach([fix.trim_before(pos)])
             i += 1
-        elif (c == '<' or c == '>') and at(line, i + 1) == c
-            # expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
-            if c == '<'
-                diag_fix(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no `<<`",
-                    "shifts are methods: `a.shl(k)`, `k` in `0..=63` (expr.bit.1)",
-                    "write `.shl`",
-                )
-                attach([fix.operands(pos, "<<", "$l.shl($r)")])
-            else
-                diag_fix(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no `>>`",
-                    "shifts are methods: `a.shr(k)`, `k` in `0..=63` (expr.bit.1)",
-                    "write `.shr`",
-                )
-                attach([fix.operands(pos, ">>", "$l.shr($r)")])
-            i += 2
-        elif c == '&' and at(line, i + 1) != '&'
-            diag_fix(
-                "gram.foreign.1",
-                pos,
-                "AIL has no `&`",
-                "bit operations are methods: `a.bit_and(b)` (expr.bit.1); write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes",
-                "write `.bit_and`",
-            )
-            attach([fix.operands(pos, "&", "$l.bit_and($r)")])
-            i += 1
-        elif c == '^'
-            diag_fix(
-                "gram.foreign.1",
-                pos,
-                "AIL has no `^`",
-                "bit operations are methods: `a.bit_xor(b)` (expr.bit.1)",
-                "write `.bit_xor`",
-            )
-            attach([fix.operands(pos, "^", "$l.bit_xor($r)")])
-            i += 1
-        elif c == '~'
-            tilde(line, i, pos)
-            i += 1
         elif c.is_digit()
             i = number(line, i, line_no)
         elif c.is_alpha() or c == '_'
@@ -758,32 +757,6 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 i += sym.len()
     none
 
-## `~a` is `a.bit_not()` (expr.bit.1) when the operand is one name, not
-## followed by `.`, `(` or `[`, which would bind to the call instead.
-fn Lexer.tilde(mut self, line List[char], i int, pos ast.Pos)
-    mut end := i + 1
-    while end < line.len() and (ascii_alnum(line[end]) or line[end] == '_')
-        end += 1
-    after := if end < line.len() then line[end] else ' '
-    atom := end > i + 1
-        and not line[i + 1].is_digit()
-        and after != '.'
-        and after != '('
-        and after != '['
-    diags.push(Diag(
-        rule: "gram.foreign.1",
-        pos: pos,
-        msg: "AIL has no `~`",
-        fixed: atom,
-        help: "bitwise not is a method: `a.bit_not()` (expr.bit.1)",
-        fix: "write `.bit_not()`",
-        edits: if atom then [fix.span(
-            pos,
-            ast.Pos(line: pos.line, col: end + 1),
-            "{text_of(line, i + 1, end)}.bit_not()",
-        )] else [],
-    ))
-
 ## True when only blanks come before `at` on the line.
 ## The edit of lex.stmt.3: the `;` at `line[i]` goes, and what follows it on the
 ## line moves to a line of its own.
@@ -820,6 +793,9 @@ fn symbol_at(line List[char], i int) str?
             if i + 2 < line.len() and line[i + 2] == '='
                 return "..="
             return ".."
+        # `<<=` and `>>=` (expr.bit.5).
+        if (two == "<<" or two == ">>") and i + 2 < line.len() and line[i + 2] == '='
+            return "{two}="
         if TWO_SYMBOLS.contains(two)
             return two
     one := text_of(line, i, i + 1)

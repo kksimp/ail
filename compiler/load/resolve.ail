@@ -730,6 +730,16 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
             ast.Expr.Index(recv: r, index: self.expr(index), pos: pos)
         Unary(op, operand, pos) => ast.Expr.Unary(op, self.expr(operand), pos)
         NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
+        # type.fn.4: a function literal's parameters are new locals; their types resolve here.
+        Closure(params, body, pos) =>
+            mut ps := List[ast.ClosureParam]()
+            for p in params
+                self.local(p.name, p.pos)
+                mut np := p
+                if t := p.ty
+                    np.ty = self.type_ref(t)
+                ps.push(np)
+            ast.Expr.Closure(ps, self.expr(body), pos)
         Binary(op, lhs, rhs, pos) =>
             l := self.expr(lhs)
             ast.Expr.Binary(op: op, lhs: l, rhs: self.expr(rhs), pos: pos)

@@ -1,0 +1,41 @@
+# slp-expect: pairs
+# Pairs in loops bce versions (native.vec.3) whose accesses meet: the same index on
+# both sides (bi == bj), and pairs one element apart, so lane 1 of one pair is lane 0
+# of the next. The pass must keep the scalar order of every load and store.
+fn same(mut s List[float], n int, m float)
+    for i in 0..n
+        bi := i * 4
+        bj := i * 4
+        dx := s[bi] - s[bj + 2]
+        dy := s[bi + 1] - s[bj + 3]
+        s[bi] -= dx * m
+        s[bi + 1] -= dy * m
+        s[bj] += dx * m
+        s[bj + 1] += dy * m
+
+fn overlap(mut s List[float], n int, m float)
+    for i in 0..n
+        b := i * 3
+        dx := s[b] - s[b + 1]
+        dy := s[b + 1] - s[b + 2]
+        s[b] -= dx * m
+        s[b + 1] -= dy * m
+        s[b + 1] += dx * m
+        s[b + 2] += dy * m
+
+fn shift(mut s List[float], n int)
+    for i in 1..n
+        b := i * 2
+        x := s[b - 1] * 2.0
+        y := s[b] * 2.0
+        s[b] = x + 1.0
+        s[b + 1] = y + 1.0
+
+fn main()
+    mut s := [i.to_float() * 0.75 - 4.0 for i in 0..24]
+    same(mut s, 6, 0.5)
+    print(s)
+    overlap(mut s, 7, 0.25)
+    print(s)
+    shift(mut s, 11)
+    print(s)

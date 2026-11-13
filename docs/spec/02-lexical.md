@@ -15,8 +15,8 @@ false fn for if impl in invariant match move mut none not or par pub ref require
 return self spawn struct todo trait true uhwhatnow unique unsafe use while with`.
 `uhwhatnow?`, with no space before the `?`, is one keyword token, the hole
 that asks (`expr.hole.3`); where `uhwhatnow` alone stands as an expression,
-the error carries a fix that adds the `?`.
-*(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872)*
+the error carries a fix that adds the `?`. After `.` and before `(`, `any`
+names the list method `xs.any(f)` (`type.coll.22`). *(ADR 1067, ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872)*
 
 ```ail error=lex.kw.1
 fn main()

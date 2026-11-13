@@ -57,12 +57,19 @@ pub enum Ty
     Mutex(elem Ty)
     ## A `TaskGroup`: a pointer to the group record (conc.task.8).
     Group
-    ## A function value: the address of a declared function (ADR 0573).
-    Fn(params List[Ty], ret Ty)
+    ## A function value (ADR 0573): in user code a pointer to a closure object
+    ## whose word 0 is the code address (ADR 1067); in the runtime a code address.
+    ## `err` is `Unit` when calling it can't fail, else its error type (`Unknown`
+    ## when that isn't one struct, type.fn.6).
+    Fn(params List[Ty], ret Ty, err Ty)
     ## A sized integer `i8 i16 i32 u8 u16 u32` (ADR 0834): in a register like
     ## an `int`, sign- or zero-extended from its width, so its value is
     ## always inside the type's range. `kind` is the type's name.
     Sized(kind str)
+    ## Two `float`s in one 128-bit vector register, lane 0 in the low half (native.vec.3, ADR 1066). Only the
+    ## pairing pass (`slp.ail`) makes one, and it lives inside one block: never a block parameter, never across
+    ## a call, never a constant.
+    Vec2
 
 pub fn Ty.is_ref(self) bool
     match self
@@ -72,6 +79,18 @@ pub fn Ty.is_ref(self) bool
 pub fn Ty.is_float(self) bool
     match self
         Float | F32 => true
+        _ => false
+
+## A two-lane vector (`Vec2`).
+pub fn Ty.is_vec(self) bool
+    match self
+        Vec2 => true
+        _ => false
+
+## Held in a float or vector register: a `float`, an `f32` or a `Vec2`.
+pub fn Ty.in_float_reg(self) bool
+    match self
+        Float | F32 | Vec2 => true
         _ => false
 
 pub fn Ty.is_unit(self) bool
@@ -140,6 +159,7 @@ pub fn Ty.name(self) str
         Opt(t) => "{t.name()}?"
         Tensor(e) => "Tensor[{e.name()}]"
         F32 => "f32"
+        Vec2 => "float2"
         Ptr(t) => "*{t.name()}"
         Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
@@ -152,14 +172,16 @@ pub fn Ty.name(self) str
         Chan(e) => "Channel[{e.name()}]"
         Mutex(e) => "Mutex[{e.name()}]"
         Group => "TaskGroup"
-        Fn(ps, r) =>
+        Fn(ps, r, e) =>
             mut names := List[str]()
             for p in ps
                 names.push(p.name())
-            if r.is_unit()
-                "fn({names.join(", ")})"
-            else
-                "fn({names.join(", ")}) {r.name()}"
+            mut text := "fn({names.join(", ")})"
+            if not r.is_unit()
+                text = "{text} {r.name()}"
+            if not e.is_unit()
+                text = "{text} ! {e.name()}"
+            text
 
 ## One instruction: `dst` is the value it defines (-1 for none), `args`
 ## the values it reads. The operations (`op`):
@@ -193,6 +215,13 @@ pub fn Ty.name(self) str
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
 ## | `salloc` | | the address of the second word of `imm / 8 + 1` words in the function's frame (native.stack.1); the first word is the object header; written by the `stackify` pass, never by lowering |
+## | `vldx` | base, index | a `Vec2` of the elements `index + fimm` (lane 0) and `index + fimm + 1` (lane 1) of the 8-byte elements at `base`; not checked, not aligned (native.vec.3) |
+## | `vstx` | base, index, value | writes a `Vec2` to those two elements |
+## | `vfadd vfsub vfmul vfdiv` | a, b | `float` arithmetic on each lane of two `Vec2`s, operands in this order, never fused |
+## | `vsplat` | a | a `Vec2` with the `float` `a` in both lanes |
+## | `vpack` | a, b | a `Vec2` with the `float` `a` in lane 0 and `b` in lane 1 |
+## | `vlane` | a | lane `imm` (0 or 1) of a `Vec2`, a `float` |
+## | `vhadd` | a | lane 0 + lane 1 of a `Vec2`, a `float` |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst
     pub dst int
@@ -400,6 +429,7 @@ pub fn Inst.is_pure(self) bool
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
         "band" | "bor" | "bxor" | "bnot" => true
+        "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vsplat" | "vpack" | "vlane" | "vhadd" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => site < 0
         _ => false
 
