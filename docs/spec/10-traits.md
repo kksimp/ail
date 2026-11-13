@@ -7,8 +7,8 @@ Chapter key: `trait`
 > supertraits, associated functions in traits, call resolution, `Self`,
 > operator traits, `any` dynamic dispatch, and the standard traits `Eq`,
 > `Ord`, `ToStr`, `Hash` and `Default`. Not yet designed: associated types
-> (OQ-037), the arithmetic and indexing operator trait names, and custom
-> hashing.
+> (OQ-037), the arithmetic and indexing operator trait names (`trait.op.1`), and custom
+> hashing beyond the `uses` form (`trait.hash.1`, ADR 0955).
 
 ## Methods
 

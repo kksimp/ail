@@ -3,8 +3,9 @@
 Chapter key: `eff`
 
 > **Status:** Drafted (partial). Specified: inferred effect sets, `@pure`, and
-> denying capabilities to a program. Not yet designed: effects written in
-> signatures. Capability grants in package manifests are specified with
+> denying capabilities to a program. `@caps(LIST)` limits a function to listed capabilities
+> (`eff.cap.6`, ADR 1089). Not yet designed: effect names written in other
+> parts of a signature. Capability grants in package manifests are specified with
 > denial. Deterministic mode is specified in the last section.
 
 ## Inference

@@ -5,8 +5,8 @@ Chapter key: `conc`
 > **Status:** Drafted (partial). Specified: memory-model foundations, the task
 > model, scope-bound tasks, communication through `Channel[T]` and
 > `Mutex[T]`, `Atomic[int]` and `Atomic[bool]`, cancellation, random-schedule
-> testing, parallel loops and `select`. Not yet designed: weaker atomic
-> orderings and the formal model.
+> testing, parallel loops and `select`. Atomic orderings (`AtomicOrder`)
+> are specified with the atomics. Not yet designed: the formal weak-memory model.
 
 ## Memory model
 

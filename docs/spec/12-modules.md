@@ -4,8 +4,8 @@ Chapter key: `mod`
 
 > **Status:** Drafted (partial). Specified: modules, visibility, imports,
 > constants, single-file programs, the package root, manifests and path
-> dependencies, and the entry point. Designed but not yet specified: the
-> lockfile ([packages.md](../design/packages.md)). There is no registry and
+> dependencies, and the entry point. The lockfile `ail.lock` is specified in `mod.pkg.8`
+> ([packages.md](../design/packages.md)). There is no registry and
 > no version ranges (ADR 0383): a git `tag` is the version.
 
 ## Modules
