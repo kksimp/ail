@@ -6,7 +6,7 @@ fn save(path str, text str) ! fs.IoError
     fs.write_text(path, text)
 
 fn home() str
-    env.get("HOME") else ""
+    "{env.args().len()}"
 
 @caps(none) fn direct(path str) str ! fs.IoError
     save(path, "x")?
