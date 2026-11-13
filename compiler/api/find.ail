@@ -69,6 +69,8 @@ struct StdFn
     name str
     ## The words of the rule's text, lower case.
     words List[str]
+    ## A built-in method (api.find.5): its receiver is the first parameter of a shape (api.find.3).
+    method bool
 
 fn find_root() str
     r := env.get("AIL_ROOT") else ""
@@ -127,19 +129,62 @@ fn find_rule_id(line str) str
         return ""
     "std.{rest.slice(0, end)}"
 
+## The function name of a signature: after the last `.` of what precedes `(`.
+fn find_name_of(sig str) str
+    head := sig.slice(0, sig.find("(") else sig.len())
+    mut name := head
+    while true
+        dot := name.find(".") else
+            break
+        name = name.slice(dot + 1, name.len())
+    name.to_lower()
+
+## The signatures a rule opens with: a run of backticked signatures joined by
+## `, ` or ` and ` (`get(key) bytes?`, `has(key) bool`, ...). A rule that starts
+## `use std.M` provides ... skips that lead-in (`std.yaml.1`).
+fn find_provided(text str) List[str]
+    mut out := List[str]()
+    mut rest := text.trim()
+    rest = (rest.strip_prefix("—") else rest).trim()
+    if rest.starts_with("`use std.")
+        tail := rest.slice(1, rest.len())
+        close := tail.find("`") else
+            return out
+        rest = tail.slice(close + 1, tail.len()).trim()
+        rest = rest.strip_prefix("provides ") else rest
+    while rest.starts_with("`")
+        after := rest.slice(1, rest.len())
+        b := after.find("`") else
+            break
+        code := after.slice(0, b)
+        if find_signature("`{code}`") == ""
+            break
+        out.push(code)
+        rest = after.slice(b + 1, after.len())
+        for sep in [", and ", ", ", " and "]
+            if rest.starts_with(sep)
+                rest = rest.slice(sep.len(), rest.len())
+                break
+    out
+
 fn find_add(mut out List[StdFn], rule str, text str)
-    sig := find_signature(text)
-    if sig == ""
-        return
+    mut sigs := find_provided(text)
+    if sigs.is_empty()
+        sig := find_signature(text)
+        if sig == ""
+            return
+        sigs.push(sig)
     parts := rule.split(".")
     owner := parts[1..parts.len() - 1].join(".")
-    out.push(StdFn(
-        owner: owner,
-        sig: sig,
-        rule: rule,
-        name: sig.slice(0, sig.find("(") else 0).to_lower(),
-        words: find_words(text),
-    ))
+    for sig in sigs
+        out.push(StdFn(
+            owner: owner,
+            sig: sig,
+            rule: rule,
+            name: find_name_of(sig),
+            words: find_words(text),
+            method: false,
+        ))
 
 ## Every std function the spec's rules describe.
 fn find_index() List[StdFn]
@@ -208,6 +253,7 @@ fn find_methods() List[StdFn]
             rule: cells[1].trim(),
             name: name.to_lower(),
             words: find_words(cells[2]),
+            method: owner != "",
         ))
     out
 
@@ -314,26 +360,54 @@ fn find_param_type(p str) str
             return find_strip(t)
     find_strip(t.slice(sp + 1, t.len()))
 
-## How well a function's shape fits the asked one (api.find.3): equal parameter
-## lists 6, else 1 per asked type the function takes; the result type 4.
-fn find_score_sig(f StdFn, want_params List[str], want_ret str) int
-    got := find_shape(f.sig)
+## The shape of a function for `--sig`: a method takes its receiver, the type
+## before the `.`, as its first parameter, so `str.to_int() int?` is `(str) int?`.
+fn find_fn_shape(f StdFn)(List[str], str)
+    got := find_shape(f.sig.replace(" [mut self]", ""))
+    if not f.method
+        return got
+    mut params := [f.owner.to_lower()]
+    params.extend(got.0)
+    (params, got.1)
+
+## How well a function's shape fits the asked one (api.find.3), as `(score,
+## answers)`: equal parameter lists 6, else 1 per asked type the function takes;
+## the result type 4. A function answers with equal parameter lists, or with the
+## result type and at least one parameter type.
+fn find_score_sig(f StdFn, want_params List[str], want_ret str) (int, bool)
+    got := find_fn_shape(f)
     mut score := 0
+    mut hits := 0
+    mut same := false
     if got.0 == want_params
         score += 6
+        same = true
     else
         for t in want_params
             if got.0.contains(t)
                 score += 1
+                hits += 1
+    mut ret_ok := false
     if want_ret != "" and got.1 == want_ret
         score += 4
-    score
+        ret_ok = true
+    (score, (same and (want_ret == "" or ret_ok)) or (ret_ok and (same or hits > 0)))
 
 ## Does the query hold `w`, or its plural or singular?
 fn find_query_has(query List[str], w str) bool
     if query.contains(w) or query.contains("{w}s")
         return true
     w.ends_with("s") and query.contains(w.slice(0, w.len() - 1))
+
+## A line's text: the module and the signature, the module left out when the
+## signature already starts with it (`net.open(...)`, not `net.net.open(...)`).
+fn find_show(f StdFn) str
+    if f.owner == ""
+        return f.sig
+    last := f.owner.split(".").last() else f.owner
+    if f.sig.starts_with("{f.owner}.") or f.sig.starts_with("{last}.")
+        return f.sig
+    "{f.owner}.{f.sig}"
 
 ## The answer line of `docs/design/not-in-std.txt` for a query, else "" (api.find.5):
 ## the first row one of whose `|` alternatives has every word in the query.
@@ -370,8 +444,7 @@ pub fn find_command(args List[str]) int
     if index.is_empty()
         io.eprint("error: no std rules found under {path.join(find_root(), "docs/spec")} (api.find.4)")
         return 2
-    if not sig
-        index.extend(find_methods())
+    index.extend(find_methods())
     mut query := List[str]()
     for x in rest
         for w in find_words(x)
@@ -385,14 +458,11 @@ pub fn find_command(args List[str]) int
         want_params = shape.0
         want_ret = shape.1
     for f in index
-        if sig
-            scores.push(find_score_sig(f, want_params, want_ret))
+        r := if sig then find_score_sig(f, want_params, want_ret) else find_score_words(f, query)
+        if r.1
+            scores.push(r.0)
         else
-            r := find_score_words(f, query)
-            if r.1
-                scores.push(r.0)
-            else
-                scores.push(0)
+            scores.push(0)
     mut used := List[int]()
     mut shown := 0
     while shown < FIND_LIMIT
@@ -404,10 +474,7 @@ pub fn find_command(args List[str]) int
             break
         used.push(best)
         f := index[best]
-        if f.owner == ""
-            print("{f.sig}   ({f.rule})")
-        else
-            print("{f.owner}.{f.sig}   ({f.rule})")
+        print("{find_show(f)}   ({f.rule})")
         shown += 1
     if shown == 0
         if sig
