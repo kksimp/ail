@@ -708,7 +708,38 @@ HABITS = [
     sub_once("h_colon_if", r"^(\s+(?:if|while|for) .+?)\s*$", r"\1:"),
     sub_once("h_brace_if", r"^(\s+(?:if|while) .+?)\s*$", r"\1 {"),
     sub_once("h_switch", r"^(\s+)match\b", r"\1switch"),
+    # batch 8 review probes (2026-11-13)
+    sub_once("h_lifetime", r"^((?:pub\s+)?fn\s+" + IDENT + r")\(", r"\1<'a>(", header_rows),
+    sub_once("h_usize", r"(\(|, )(" + IDENT + r") int\b", r"\1\2 usize", header_rows),
+    sub_once("h_named_eq", r"\((" + IDENT + r"): ", r"(\1 = "),
+    sub_once("h_iter_map", r"\.(map|filter)\(", r".iter().\1("),
+    sub_once("h_generic_angle", r"\b(List|Map|Set)\[([^\[\]]+)\]", r"\1<\2>"),
 ]
+
+
+def h_derive(prog, rng):
+    """`#[derive(Debug)]` above a struct: Rust's attribute, a comment in AIL (silent unless warned)."""
+    cands = [i for i, l in enumerate(prog.lines) if re.match(r"(?:pub\s+)?struct\s", l)]
+    i = pick(rng, cands)
+    if i is None:
+        return None
+    return mk("h_derive", "habits", with_lines(prog, i, i, ["#[derive(Debug, Clone)]"]), i, i, "`#[derive]` above a struct")
+
+
+def h_format(prog, rng):
+    """`"text {x}"` written `format!("text {}", x)`."""
+    cands = []
+    for i in prog.body_lines():
+        l = prog.lines[i]
+        for m in re.finditer(r'"([^"{}\\]*)\{(' + IDENT + r')\}([^"{}\\]*)"', l):
+            if m.start() in prog.masks[i]:
+                cands.append((i, m))
+    c = pick(rng, cands)
+    if not c:
+        return None
+    i, m = c
+    new = f'format!("{m.group(1)}{{}}{m.group(3)}", {m.group(2)})'
+    return mk("h_format", "habits", edit(prog, i, m.start(), m.end(), new), i, i, "format! macro")
 
 
 def h_dollar(prog, rng):
@@ -786,6 +817,8 @@ MUTATORS = {
     "h_dollar": h_dollar,
     "h_plus_str": h_plus_str,
     "h_slash_comment": h_slash_comment,
+    "h_derive": h_derive,
+    "h_format": h_format,
 }
 for _h in HABITS:
     MUTATORS[_h.__name__] = _h
