@@ -61,7 +61,7 @@ fn Lower.declare_traits(mut self, prog ast.Program)
         if not traits.impls.contains(key)
             traits.impls[key] = []
     for imp in prog.impls
-        key := trait_key(imp.trait_name)
+        key := self.trait_key(imp.trait_name)
         if imp.target.params != none
             continue
         mut s := ""
@@ -109,7 +109,7 @@ fn any_of(t Ty?) str?
 
 ## `any T` of a trait in the program, as a MIR type.
 fn Lower.any_type(self, name str) Ty?
-    key := trait_key(name)
+    key := self.trait_key(name)
     if traits.impls.contains(key) then Ty.Any(key) else none
 
 ## `v` converted to `any T` (trait.any.3): boxed with its type's tag.
@@ -175,14 +175,14 @@ fn Lower.gen_dispatch(mut self)
                 sealed[yes] = true
                 sealed[no] = true
                 cur = yes
-                any_tail(m, target, ps)
+                self.any_tail(m, target, ps)
                 cur = no
             else
-                any_tail(m, target, ps)
+                self.any_tail(m, target, ps)
         for b in 0..blocks.len()
             sealed[b] = true
         end_fn(key, ast.Pos(line: 1, col: 1))
-    gen_texts()
+    self.gen_texts()
 
 ## Generate each default text function `text.T` asked for. The function of a
 ## type that holds itself (a tree, `Json`) calls itself, so a text is never
@@ -192,7 +192,7 @@ fn Lower.gen_texts(mut self)
     while k < traits.texts.len()
         key := traits.texts[k]
         k += 1
-        t := text_key_ty(key)
+        t := self.text_key_ty(key)
         ps := begin_fn("text.{key}", Ty.Str, [t])
         r := default_error_text(key, Val(id: ps[0], ty: t)) else
             fn_failed = true
@@ -234,7 +234,7 @@ fn Lower.gen_any_copy(mut self, x int, t str)
     store(b, 0, tag)
     impls := traits.impls[t]
     for k in 0..impls.len()
-        st := impl_ty(impls[k])
+        st := self.impl_ty(impls[k])
         if k + 1 < impls.len()
             yes := new_block()
             no := new_block()
@@ -242,11 +242,11 @@ fn Lower.gen_any_copy(mut self, x int, t str)
             sealed[yes] = true
             sealed[no] = true
             cur = yes
-            store(b, 1, any_payload(x, st))
+            store(b, 1, self.any_payload(x, st))
             finish(return_of(b))
             cur = no
         else
-            store(b, 1, any_payload(x, st))
+            store(b, 1, self.any_payload(x, st))
             finish(return_of(b))
 
 ## The value of box `x`, for a new box: a copy of a struct, else as it is.
@@ -273,7 +273,7 @@ fn Lower.any_text(mut self, t str, v Val) int?
             seal(yes)
             seal(no)
             cur = yes
-        st := impl_ty(impls[k])
+        st := self.impl_ty(impls[k])
         inner := load(v.id, 1, st)
         text := display_call(Val(id: inner, ty: st)) else value_text(st, inner)
         jump(join, [text])

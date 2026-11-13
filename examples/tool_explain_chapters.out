@@ -15,7 +15,7 @@ expr 83 22
 ffi 28 0
 fix 11 0
 gen 17 0
-gram 18 2
+gram 19 2
 http 3 0
 infer 10 0
 json 23 0
@@ -46,4 +46,4 @@ try 10 0
 type 167 12
 unsafe 21 0
 verify 9 0
-all 1566 67
+all 1567 67

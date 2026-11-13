@@ -463,25 +463,37 @@ fn lex_scaled(src str, scale int) Scaled
     Scaled(lexed: Lexed(tokens: lx.tokens, diags: lx.diags, comments: lx.comments), unit: unit)
 
 fn Lexer.push(mut self, tok Tok, pos ast.Pos)
-    tokens.push(Token(tok: tok, pos: pos))
+    self.tokens.push(Token(tok: tok, pos: pos))
 
 fn Lexer.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: "", edits: []))
+    self.diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: "", edits: []))
 
 ## A diagnostic with its message and a fix, as the Rust front end gives it.
 fn Lexer.diag_msg(mut self, rule str, pos ast.Pos, msg str, help str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: "", edits: []))
+    self.diags.push(Diag(
+        rule: rule,
+        pos: pos,
+        msg: msg,
+        fixed: false,
+        help: help,
+        fix: "",
+        edits: [],
+    ))
 
 ## lex.stmt.2: the innermost bracket left open at the end of the file. The fix
 ## closes them at the end of the line, when they all opened on it.
 fn Lexer.unclosed(mut self, lines List[List[char]])
-    last := open[open.len() - 1]
+    last := self.open[self.open.len() - 1]
     mut one_line := true
-    for o in open
+    for o in self.open
         if o.pos.line != last.pos.line
             one_line = false
     # `if x \{`: a brace that ends a block header is C's block, which AIL writes by indenting (checkbench, ADR 1111).
-    if one_line and open.len() == 1 and last.c == '\{' and last.pos.line >= 1 and last.pos.line <= lines.len()
+    if one_line
+        and self.open.len() == 1
+        and last.c == '\{'
+        and last.pos.line >= 1
+        and last.pos.line <= lines.len()
         text := lines[last.pos.line - 1]
         mut e := text.len()
         while e > 0 and text[e - 1] == ' '
@@ -490,21 +502,28 @@ fn Lexer.unclosed(mut self, lines List[List[char]])
             mut b := last.pos.col - 1
             while b > 0 and text[b - 1] == ' '
                 b -= 1
-            diags.push(Diag(
+            self.diags.push(Diag(
                 rule: "lex.stmt.2",
                 pos: last.pos,
                 msg: "this `\{` is never closed: AIL blocks are indented, not braced",
                 fixed: true,
                 help: "end the header line without `\{`; the block is the lines indented 4 spaces below it, and no `}` closes it",
                 fix: "remove the `\{`",
-                edits: [fix.delete(ast.Pos(line: last.pos.line, col: b + 1), ast.Pos(line: last.pos.line, col: e + 1))],
+                edits: [fix.delete(
+                    ast.Pos(line: last.pos.line, col: b + 1),
+                    ast.Pos(line: last.pos.line, col: e + 1),
+                )],
             ))
             return
     # One `[` left open: the `]` goes after the index or type argument when the line goes on (checkbench, ADR 1111).
-    if one_line and open.len() == 1 and last.c == '[' and last.pos.line >= 1 and last.pos.line <= lines.len()
+    if one_line
+        and self.open.len() == 1
+        and last.c == '['
+        and last.pos.line >= 1
+        and last.pos.line <= lines.len()
         k := bracket_close_at(lines[last.pos.line - 1], last.pos.col - 1)
         if k >= 0
-            diags.push(Diag(
+            self.diags.push(Diag(
                 rule: "lex.stmt.2",
                 pos: last.pos,
                 msg: "this `[` is never closed",
@@ -514,14 +533,14 @@ fn Lexer.unclosed(mut self, lines List[List[char]])
                 edits: [fix.insert(ast.Pos(line: last.pos.line, col: k + 1), "]")],
             ))
             return
-    diags.push(Diag(
+    self.diags.push(Diag(
         rule: "lex.stmt.2",
         pos: last.pos,
         msg: "this `{last.c}` is never closed",
         fixed: one_line,
         help: "",
         fix: "close the brackets at the end of the line",
-        edits: if one_line then [fix.at_line_end(last.pos, closers())] else [],
+        edits: if one_line then [fix.at_line_end(last.pos, self.closers())] else [],
     ))
 
 ## Where a `]` most likely belongs when the only bracket left open on a line is the `[` at `k`: after the name
@@ -555,9 +574,9 @@ fn bracket_close_at(line List[char], k int) int
 ## The brackets still open, innermost first, as the characters that close them.
 fn Lexer.closers(self) str
     mut out := ""
-    mut k := open.len() - 1
+    mut k := self.open.len() - 1
     while k >= 0
-        c := open[k].c
+        c := self.open[k].c
         if c == '('
             out = "{out})"
         elif c == '['
@@ -569,10 +588,10 @@ fn Lexer.closers(self) str
 
 ## Give the diagnostic just reported the edits of its fix.
 fn Lexer.attach(mut self, edits List[fix.Edit])
-    diags[diags.len() - 1].edits = edits
+    self.diags[self.diags.len() - 1].edits = edits
 
 fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed bool, title str)
-    diags.push(Diag(
+    self.diags.push(Diag(
         rule: rule,
         pos: pos,
         msg: msg,
@@ -583,7 +602,15 @@ fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed
     ))
 
 fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title, edits: []))
+    self.diags.push(Diag(
+        rule: rule,
+        pos: pos,
+        msg: msg,
+        fixed: true,
+        help: help,
+        fix: title,
+        edits: [],
+    ))
 
 ## Record the comment at `line[start..]`, if there is one.
 fn Lexer.comment(mut self, line List[char], start int, line_no int)
@@ -591,7 +618,7 @@ fn Lexer.comment(mut self, line List[char], start int, line_no int)
         mut end := line.len()
         while end > start and line[end - 1].is_space()
             end -= 1
-        comments.push(Comment(
+        self.comments.push(Comment(
             pos: ast.Pos(line: line_no, col: start + 1),
             text: text_of(line, start, end),
         ))
@@ -604,19 +631,19 @@ fn Lexer.rust_attribute(mut self, line List[char], lead int, line_no int)
     while end > lead and line[end - 1] == ' '
         end -= 1
     shown := text_of(line, lead, end)
-    diag_fix(
+    self.diag_fix(
         "gram.foreign.1",
         pos,
         "`{shown}` is a Rust attribute; in AIL `#` starts a comment, so it would do nothing",
         "delete it: `==`, `print`, copying and map keys work on every value with no derive, a test is `@test fn name()`, and a warning is allowed with `@allow(\"rule\")` before the `fn`",
         "delete the attribute",
     )
-    attach([fix.delete(pos, ast.Pos(line: line_no, col: end + 1))])
+    self.attach([fix.delete(pos, ast.Pos(line: line_no, col: end + 1))])
 
 ## Stand-in for a literal that was reported as an error, so the parser
 ## doesn't report the same mistake again.
 fn Lexer.placeholder(mut self, pos ast.Pos)
-    push(Int(0), pos)
+    self.push(Int(0), pos)
 
 ## Width of leading whitespace in indentation units of four. Tabs and
 ## other units are collected and reported once per file (`indent_diags`).
@@ -629,13 +656,13 @@ fn Lexer.indent_width(mut self, line List[char], lead int, line_no int) int
             width += UNIT
         else
             width += 1
-    logical.push(Lead(line: line_no, chars: lead, width: width))
+    self.logical.push(Lead(line: line_no, chars: lead, width: width))
     if tabbed
-        tabs.push(Lead(line: line_no, chars: lead, width: width))
-    elif scale > 1
-        return width / scale * UNIT
-    if not tabbed and width % UNIT != 0 and scale == 1
-        diag_msg(
+        self.tabs.push(Lead(line: line_no, chars: lead, width: width))
+    elif self.scale > 1
+        return width / self.scale * UNIT
+    if not tabbed and width % UNIT != 0 and self.scale == 1
+        self.diag_msg(
             "lex.block.2",
             ast.Pos(line: line_no, col: 1),
             "indentation of {width} spaces is not a multiple of 4",
@@ -649,53 +676,53 @@ fn Lexer.unit_guess(self) int
     mut g := 0
     mut odd := false
     mut first := 0
-    for l in logical
+    for l in self.logical
         if l.width > 0
             g = gcd(g, l.width)
             if first == 0 or l.width < first
                 first = l.width
         if l.width % UNIT != 0
             odd = true
-    if (g == 2 or g == 3) and odd and first == g and tabs.len() == 0 then g else 0
+    if (g == 2 or g == 3) and odd and first == g and self.tabs.len() == 0 then g else 0
 
 ## The file-level indentation diagnostics (lex.block.2, lex.block.4): one
 ## per file. Returns the unit to lex again with when the file doesn't
 ## indent by 4, or 0.
 fn Lexer.indent_diags(mut self) int
-    if tabs.len() > 0
-        diag_fix(
+    if self.tabs.len() > 0
+        self.diag_fix(
             "lex.block.4",
-            ast.Pos(line: tabs[0].line, col: 1),
+            ast.Pos(line: self.tabs[0].line, col: 1),
             "tab character in indentation",
             "indent with 4 spaces per level",
             "replace the tabs with 4 spaces per level",
         )
-        attach([
+        self.attach([
             fix.span(
                 ast.Pos(line: t.line, col: 1),
                 ast.Pos(line: t.line, col: t.chars + 1),
                 " ".repeat(t.width / UNIT * UNIT),
             )
-            for t in tabs
+            for t in self.tabs
         ])
-    if scale == 1
-        return unit_guess()
-    for l in logical
+    if self.scale == 1
+        return self.unit_guess()
+    for l in self.logical
         if l.width > 0
-            diag_fix(
+            self.diag_fix(
                 "lex.block.2",
                 ast.Pos(line: l.line, col: 1),
-                "this file indents by {scale} spaces; a block is indented by exactly 4",
+                "this file indents by {self.scale} spaces; a block is indented by exactly 4",
                 "use 4 spaces per level",
-                "re-indent the file from {scale} to 4 spaces per level",
+                "re-indent the file from {self.scale} to 4 spaces per level",
             )
-            attach([
+            self.attach([
                 fix.span(
                     ast.Pos(line: x.line, col: 1),
                     ast.Pos(line: x.line, col: x.chars + 1),
-                    " ".repeat(x.width / scale * UNIT),
+                    " ".repeat(x.width / self.scale * UNIT),
                 )
-                for x in logical if x.width > 0
+                for x in self.logical if x.width > 0
             ])
             return 0
     0
@@ -710,16 +737,21 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
         pos := ast.Pos(line: line_no, col: i + 1)
         if c == ' ' or c == '\t'
             i += 1
-        elif c == '#' and in_interp > 0
-            diag_msg("lex.str.2", pos, "a comment can't appear inside `\{...}` in a string", "")
+        elif c == '#' and self.in_interp > 0
+            self.diag_msg(
+                "lex.str.2",
+                pos,
+                "a comment can't appear inside `\{...}` in a string",
+                "",
+            )
             i += 1
         elif c == '#'
             # Comment to the end of the line (lex.comment.1, lex.comment.2).
-            comment(line, i, line_no)
+            self.comment(line, i, line_no)
             break
         elif c == '"' and starts_triple(line, i)
-            if in_interp > 0
-                diag_msg(
+            if self.in_interp > 0
+                self.diag_msg(
                     "lex.str.3",
                     pos,
                     "a multi-line string can't appear inside `\{...}` in a string",
@@ -728,43 +760,43 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 return none
             return Opening(col: i, raw: false)
         elif c == '"'
-            i = string(line, i, line_no)
+            i = self.string(line, i, line_no)
         elif c == 'r' and at(line, i + 1) == '"'
             # lex.str.6: `r"..."` and `r"""..."""` are raw strings.
-            if starts_triple(line, i + 1) and in_interp == 0
+            if starts_triple(line, i + 1) and self.in_interp == 0
                 return Opening(col: i, raw: true)
-            i = raw_string(line, i, line_no)
+            i = self.raw_string(line, i, line_no)
         elif c == 'b' and at(line, i + 1) == '"'
             # lex.bytes.1: `b"..."` is a `bytes` literal.
-            i = bytes_literal(line, i, line_no)
+            i = self.bytes_literal(line, i, line_no)
         elif c == '\''
-            after := lifetime(line, i, line_no)
-            i = if after >= 0 then after else char_literal(line, i, line_no)
+            after := self.lifetime(line, i, line_no)
+            i = if after >= 0 then after else self.char_literal(line, i, line_no)
         elif c == ';'
-            diag_fix(
+            self.diag_fix(
                 "lex.stmt.3",
                 pos,
                 "AIL has no `;`; a statement ends at the end of its line",
                 "remove the `;` and put the next statement on its own line",
                 "end the statement here, without the `;`",
             )
-            attach([semicolon_edit(line, i, pos)])
+            self.attach([semicolon_edit(line, i, pos)])
             # Recover as if the line ended here, so the parser doesn't report it again.
-            if open.len() == 0 and in_interp == 0
-                push(Newline, pos)
+            if self.open.len() == 0 and self.in_interp == 0
+                self.push(Newline, pos)
             i += 1
         elif c == '/' and at(line, i + 1) == '/'
             if blank_before(line, i)
-                diag_fix(
+                self.diag_fix(
                     "gram.foreign.1",
                     pos,
                     "`//` isn't a comment or an operator in AIL",
                     "comments start with `#`",
                     "write `#`",
                 )
-                attach([fix.span(pos, ast.Pos(line: line_no, col: i + 3), "#")])
+                self.attach([fix.span(pos, ast.Pos(line: line_no, col: i + 3), "#")])
             else
-                diag_fix(
+                self.diag_fix(
                     "gram.foreign.1",
                     pos,
                     "`//` isn't a comment or an operator in AIL",
@@ -773,7 +805,7 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 )
             break
         elif c == '/' and at(line, i + 1) == '*'
-            diag_fix(
+            self.diag_fix(
                 "gram.foreign.1",
                 pos,
                 "`/*` doesn't start a comment in AIL",
@@ -782,17 +814,17 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             )
             break
         elif c == '\\' and rest_is_space(line, i + 1)
-            diag_fix(
+            self.diag_fix(
                 "gram.foreign.1",
                 pos,
                 "AIL doesn't use `\\` to continue a line",
                 "end the line with an operator or a comma, or wrap the expression in parentheses",
                 "remove the `\\`",
             )
-            attach([fix.trim_before(pos)])
+            self.attach([fix.trim_before(pos)])
             i += 1
         elif c.is_digit()
-            i = number(line, i, line_no)
+            i = self.number(line, i, line_no)
         elif c.is_alpha() or c == '_'
             mut end := i
             while end < line.len() and name_char(line[end])
@@ -803,42 +835,42 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 if at(line, end) == '?'
                     end += 1
                 elif names_something(line, end)
-                    diag_fix(
+                    self.diag_fix(
                         "lex.kw.1",
                         pos,
                         "`uhwhatnow` is reserved and can't be used as a name",
                         "choose a different name, such as `what_next`",
                         "rename `uhwhatnow` to `what_next` here",
                     )
-                    attach([fix.span(pos, ast.Pos(line: line_no, col: end + 1), "what_next")])
+                    self.attach([fix.span(pos, ast.Pos(line: line_no, col: end + 1), "what_next")])
                 else
-                    diag_fix(
+                    self.diag_fix(
                         "lex.kw.1",
                         pos,
                         "`uhwhatnow` is written with its `?`",
                         "`uhwhatnow?` is the hole that asks what fits here (expr.hole.3); the word alone is reserved",
                         "write `uhwhatnow?`",
                     )
-                    attach([fix.insert(ast.Pos(line: line_no, col: end + 1), "?")])
-                push(Kw("uhwhatnow?"), pos)
+                    self.attach([fix.insert(ast.Pos(line: line_no, col: end + 1), "?")])
+                self.push(Kw("uhwhatnow?"), pos)
             elif KEYWORDS.contains(word)
-                push(Kw(word), pos)
+                self.push(Kw(word), pos)
             elif (word == "f" or word == "u") and at(line, end) == '"'
-                diag_fix(
+                self.diag_fix(
                     "gram.foreign.1",
                     pos,
                     "`{word}\"...\"` isn't a string prefix in AIL",
                     "every string interpolates `\{expression}`; write the string without the prefix",
                     "remove the `{word}`",
                 )
-                attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
+                self.attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
             else
-                push(Ident(word), pos)
+                self.push(Ident(word), pos)
             i = end
         else
             sym := symbol_at(line, i) else ""
             if sym == ""
-                diag_msg(
+                self.diag_msg(
                     "bootstrap.unsupported",
                     pos,
                     "the character `{c}` isn't part of AIL",
@@ -846,7 +878,7 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 )
                 i += 1
             else
-                symbol(sym, pos)
+                self.symbol(sym, pos)
                 i += sym.len()
     none
 
@@ -898,31 +930,37 @@ fn symbol_at(line List[char], i int) str?
 
 fn Lexer.symbol(mut self, sym str, pos ast.Pos)
     if sym == "(" or sym == "[" or sym == "\{"
-        open.push(Open(c: sym.chars()[0], pos: pos))
+        self.open.push(Open(c: sym.chars()[0], pos: pos))
     elif sym == ")" or sym == "]" or sym == "}"
-        if open.len() > 0
-            open.remove_at(open.len() - 1)
-    push(Sym(sym), pos)
+        if self.open.len() > 0
+            self.open.remove_at(self.open.len() - 1)
+    self.push(Sym(sym), pos)
 
 ## String literal starting at `line[start] == '"'`; returns the index after it.
 fn Lexer.string(mut self, line List[char], start int, line_no int) int
     pos := ast.Pos(line: line_no, col: start + 1)
     mut value := List[char]()
     mut parts := List[Part]()
-    mark := holes.len()
-    if close := content(line, start + 1, line.len(), line_no, true, mut value, mut parts)
-        if holes.len() > mark
-            found := holes[mark..holes.len()]
-            while holes.len() > mark
-                holes.remove_at(holes.len() - 1)
-            placeholders(line, start, close, line_no, found)
-        push(string_token(value, parts), pos)
+    mark := self.holes.len()
+    if close := self.content(line, start + 1, line.len(), line_no, true, mut value, mut parts)
+        if self.holes.len() > mark
+            found := self.holes[mark..self.holes.len()]
+            while self.holes.len() > mark
+                self.holes.remove_at(self.holes.len() - 1)
+            self.placeholders(line, start, close, line_no, found)
+        self.push(string_token(value, parts), pos)
         return close + 1
-    while holes.len() > mark
-        holes.remove_at(holes.len() - 1)
-    diag_fix("lex.str.1", pos, "unterminated string literal", "close the string with `\"`", "close the string")
-    attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
-    forget_brackets(line_no)
+    while self.holes.len() > mark
+        self.holes.remove_at(self.holes.len() - 1)
+    self.diag_fix(
+        "lex.str.1",
+        pos,
+        "unterminated string literal",
+        "close the string with `\"`",
+        "close the string",
+    )
+    self.attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
+    self.forget_brackets(line_no)
     line.len()
 
 ## Where the `"` of a string left open at `line[start]` most likely goes: before the brackets at the end of the
@@ -1025,14 +1063,14 @@ fn Lexer.placeholders(mut self, line List[char], q int, close int, line_no int, 
     args := trailing_args(line, close + 1)
     hole := found[0]
     if args.texts.len() != found.len()
-        diag_fix(
+        self.diag_fix(
             "lex.str.2",
             hole,
             "empty `\{}` in a string: AIL puts the value inside the braces",
             "write the expression inside, `\"total: \{n}\"`, or `\\\{` for a literal brace",
             "write `\\\{` for a literal brace",
         )
-        attach([fix.insert(h, "\\") for h in found])
+        self.attach([fix.insert(h, "\\") for h in found])
         return
     mut out := List[str]()
     mut n := 0
@@ -1046,27 +1084,30 @@ fn Lexer.placeholders(mut self, line List[char], q int, close int, line_no int, 
     filled := out.join("")
     end := ast.Pos(line: line_no, col: args.close + 1)
     # `format!(` just before the string: the string replaces the whole macro call.
-    t := tokens.len()
-    if t >= 3 and tokens[t - 1].tok == Tok.Sym("(") and tokens[t - 2].tok == Tok.Sym("!")
-        and tokens[t - 3].tok == Tok.Ident("format") and tokens[t - 1].pos.col == q
-        at_macro := tokens[t - 3].pos
-        diag_fix(
+    t := self.tokens.len()
+    if t >= 3
+        and self.tokens[t - 1].tok == Tok.Sym("(")
+        and self.tokens[t - 2].tok == Tok.Sym("!")
+        and self.tokens[t - 3].tok == Tok.Ident("format")
+        and self.tokens[t - 1].pos.col == q
+        at_macro := self.tokens[t - 3].pos
+        self.diag_fix(
             "gram.foreign.1",
             at_macro,
             "AIL has no `format!`: a string interpolates, with each value inside its braces",
             "write `{filled}`; a width or precision goes after a colon: `\{x:>6}`, `\{x:.2}`",
             "move the values into the braces",
         )
-        attach([fix.span(at_macro, ast.Pos(line: line_no, col: args.close + 2), filled)])
+        self.attach([fix.span(at_macro, ast.Pos(line: line_no, col: args.close + 2), filled)])
         return
-    diag_fix(
+    self.diag_fix(
         "lex.str.2",
         hole,
         "empty `\{}` in a string: AIL puts the value inside the braces",
         "write `{filled}`; a width or precision goes after a colon: `\{x:>6}`, `\{x:.2}`",
         "move the values into the braces",
     )
-    attach([fix.span(ast.Pos(line: line_no, col: q + 1), end, filled)])
+    self.attach([fix.span(ast.Pos(line: line_no, col: q + 1), end, filled)])
 
 ## `b"..."`: ASCII text with the escapes `\n \t \r \0 \\ \" \xHH` and no
 ## interpolation (lex.bytes.1). `line[start]` is the `b`. The token keeps the
@@ -1079,7 +1120,7 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
         here := ast.Pos(line: line_no, col: i + 1)
         c := line[i]
         if c == '"'
-            push(Bytes(hex.join("")), pos)
+            self.push(Bytes(hex.join("")), pos)
             return i + 1
         elif c == '\\'
             simple := match at(line, i + 1)
@@ -1100,7 +1141,7 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
                 i += 4
             else
                 fixed := bytes_unicode(line, i)
-                diag_help_fix(
+                self.diag_help_fix(
                     "lex.bytes.1",
                     here,
                     "invalid escape in a `bytes` literal",
@@ -1111,7 +1152,7 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
                 if fixed
                     close := close_brace(line, i + 3)
                     if cp := hex_char(line, i + 3, close)
-                        attach([fix.span(
+                        self.attach([fix.span(
                             here,
                             ast.Pos(line: here.line, col: here.col + close - i + 1),
                             utf8_escapes(cp),
@@ -1121,15 +1162,15 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
             hex.push(hex_byte(c.code()))
             i += 1
         else
-            diag_msg(
+            self.diag_msg(
                 "lex.bytes.1",
                 here,
                 "`{c}` is not ASCII, so it can't be in a `bytes` literal",
                 "write its UTF-8 bytes as `\\xHH` escapes, or use `\"...\".to_bytes()`",
             )
             i += 1
-    diag_msg("lex.bytes.1", pos, "unterminated `bytes` literal", "close the literal with `\"`")
-    forget_brackets(line_no)
+    self.diag_msg("lex.bytes.1", pos, "unterminated `bytes` literal", "close the literal with `\"`")
+    self.forget_brackets(line_no)
     line.len()
 
 ## `n`, a byte, as two lowercase hex digits.
@@ -1140,18 +1181,24 @@ fn hex_byte(n int) str
 ## After a string error, the brackets opened on its line don't continue
 ## the statement, so the error isn't followed by others about them.
 fn Lexer.forget_brackets(mut self, line_no int)
-    open = [o for o in open if o.pos.line != line_no]
+    self.open = [o for o in self.open if o.pos.line != line_no]
 
 ## `r"..."`: no escapes and no interpolation (lex.str.6). `line[start]` is the `r`.
 fn Lexer.raw_string(mut self, line List[char], start int, line_no int) int
     pos := ast.Pos(line: line_no, col: start + 1)
     for k in start + 2..line.len()
         if line[k] == '"'
-            push(Str(text_of(line, start + 2, k)), pos)
+            self.push(Str(text_of(line, start + 2, k)), pos)
             return k + 1
-    diag_fix("lex.str.1", pos, "unterminated string literal", "close the string with `\"`", "close the string")
-    attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
-    forget_brackets(line_no)
+    self.diag_fix(
+        "lex.str.1",
+        pos,
+        "unterminated string literal",
+        "close the string with `\"`",
+        "close the string",
+    )
+    self.attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
+    self.forget_brackets(line_no)
     line.len()
 
 ## The text of a string in `line[from..to]`, with escapes and `{...}`
@@ -1176,7 +1223,7 @@ fn Lexer.content(
         if c == '"' and quoted
             return i
         if c == '\\'
-            e := escape(line, i, line_no)
+            e := self.escape(line, i, line_no)
             if ch := e.ch
                 value.push(ch)
             i = e.next
@@ -1184,15 +1231,15 @@ fn Lexer.content(
             # lex.str.2: `{expression}` interpolates.
             close := find_close(line, to, i)
             if close < 0
-                diag_fix(
+                self.diag_fix(
                     "lex.str.2",
                     here,
                     "this `\{` in a string is never closed",
                     "close it with `}`, or write `\\\{` for a literal brace",
                     "write `\\\{` for a literal brace",
                 )
-                attach([fix.insert(here, "\\")])
-                forget_brackets(line_no)
+                self.attach([fix.insert(here, "\\")])
+                self.forget_brackets(line_no)
                 if quoted
                     return to
                 return none
@@ -1200,34 +1247,37 @@ fn Lexer.content(
                 # JSON or C code in a string: the brace was meant as text. One report and one fix for the whole
                 # `\{...}`, kept as text, so its inner braces and code aren't reported again (checkbench, ADR 1111).
                 inner := text_of(line, i + 1, close).trim()
-                diag_fix(
+                self.diag_fix(
                     "lex.str.2",
                     here,
                     "this `\{` starts an interpolation, but `{inner}` is not an expression",
                     "write `\\\{` for a literal brace: text such as JSON or C code in a string escapes each `\{`",
                     "escape the braces",
                 )
-                attach([fix.insert(ast.Pos(line: line_no, col: b + 1), "\\") for b in i..close if line[b] == '{'])
+                self.attach([
+                    fix.insert(ast.Pos(line: line_no, col: b + 1), "\\")
+                    for b in i..close if line[b] == '{'
+                ])
                 for ci in i..close + 1
                     value.push(line[ci])
                 i = close + 1
                 continue
             if value.len() > 0 and value[value.len() - 1] == '$'
                 # lex.str.8: `${n}` is not interpolation in AIL.
-                diag_fix(
+                self.diag_fix(
                     "lex.str.8",
                     here,
                     "`$\{...}` is not interpolation in AIL: the `$` stays in the text",
                     "write `\{name}` without the `$`; for the literal text `$\{` write `$\\\{`",
                     "remove the `$`",
                 )
-                attach([fix.delete(ast.Pos(line: line_no, col: i), here)])
+                self.attach([fix.delete(ast.Pos(line: line_no, col: i), here)])
             colon := spec_colon(line, close, i + 1)
-            code := sub_lex(line, i + 1, if colon >= 0 then colon else close, line_no)
+            code := self.sub_lex(line, i + 1, if colon >= 0 then colon else close, line_no)
             spec := if colon >= 0 then parse_spec(line[colon + 1..close]) else none
             if colon >= 0 and spec == none
                 shown := line[colon + 1..close].join("")
-                diag_msg(
+                self.diag_msg(
                     "lex.str.7",
                     ast.Pos(line: line_no, col: colon + 2),
                     "invalid format specification `{shown}`: {spec_why(line[colon + 1..close])}",
@@ -1235,17 +1285,17 @@ fn Lexer.content(
                 )
             if code.len() == 1 and quoted
                 # Reported once for the whole string, after it closes (`placeholders`).
-                holes.push(here)
+                self.holes.push(here)
             elif code.len() == 1
                 if not said
-                    diag_fix(
+                    self.diag_fix(
                         "lex.str.2",
                         here,
                         "empty `\{}` in a string",
                         "put an expression inside, or write `\\\{` for a literal brace",
                         "write `\\\{` for a literal brace",
                     )
-                    attach([fix.insert(here, "\\")])
+                    self.attach([fix.insert(here, "\\")])
                 said = true
             else
                 if value.len() > 0
@@ -1276,12 +1326,12 @@ fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw boo
         if raw
             value.extend(opening[open_end..one])
         else
-            _ := content(opening, open_end, one, first + 1, false, mut value, mut parts)
-        push(string_token(value, parts), pos)
+            _ := self.content(opening, open_end, one, first + 1, false, mut value, mut parts)
+        self.push(string_token(value, parts), pos)
         return Resume(line: first, col: one + 3)
     for k in open_end..opening.len()
         if opening[k] != ' '
-            diag_msg(
+            self.diag_msg(
                 "lex.str.3",
                 ast.Pos(line: first + 1, col: open_end + 1),
                 "text after the opening `\"\"\"`",
@@ -1293,8 +1343,13 @@ fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw boo
     mut close := -1
     while close < 0
         if li >= lines.len()
-            diag_msg("lex.str.3", pos, "unterminated multi-line string", "close it with `\"\"\"`")
-            push(Str(""), pos)
+            self.diag_msg(
+                "lex.str.3",
+                pos,
+                "unterminated multi-line string",
+                "close it with `\"\"\"`",
+            )
+            self.push(Str(""), pos)
             return Resume(line: lines.len() - 1, col: lines[lines.len() - 1].len())
         close = find_triple(lines[li], 0, raw)
         if close < 0
@@ -1310,7 +1365,7 @@ fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw boo
         while lead < upto and (whole[lead] == ' ' or whole[lead] == '\t')
             lead += 1
         if (k == last or not blank(whole, 0, upto)) and has_tab(whole, lead)
-            diag_msg(
+            self.diag_msg(
                 "lex.str.3",
                 ast.Pos(line: k + 1, col: 1),
                 "tab in a multi-line string's indentation",
@@ -1340,12 +1395,12 @@ fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw boo
         elif raw
             value.extend(line[t.chars..t.width])
         else
-            _ := content(line, t.chars, t.width, t.line + 1, false, mut value, mut parts)
+            _ := self.content(line, t.chars, t.width, t.line + 1, false, mut value, mut parts)
         # The text ends with its last line: a closing delimiter on a line of
         # its own adds no newline (lex.str.3).
         if j + 1 < n
             value.push('\n')
-    push(string_token(value, parts), pos)
+    self.push(string_token(value, parts), pos)
     Resume(line: last, col: close + 3)
 
 ## Whether `line[from..to]` is only spaces.
@@ -1385,7 +1440,9 @@ fn Lexer.lifetime(mut self, line List[char], start int, line_no int) int
     while b >= 0 and line[b] == ' '
         b -= 1
     before := if b >= 0 then line[b] else '\0'
-    if before != '<' and before != '&' and not (before == ',' and text_of(line, 0, start).contains("<"))
+    if before != '<'
+        and before != '&'
+        and not (before == ',' and text_of(line, 0, start).contains("<"))
         return -1
     mut from := start
     mut to := j
@@ -1395,37 +1452,40 @@ fn Lexer.lifetime(mut self, line List[char], start int, line_no int) int
         to += 1
         while at(line, to) == ' '
             to += 1
-    elif at(line, to) == '>' and before == '<' and b == start - 1 and tokens.len() > 0
-        opened := match tokens[tokens.len() - 1].tok
+    elif at(line, to) == '>' and before == '<' and b == start - 1 and self.tokens.len() > 0
+        opened := match self.tokens[self.tokens.len() - 1].tok
             Sym(s) => s == "<"
             _ => false
         if opened
-            tokens.remove_at(tokens.len() - 1)
+            self.tokens.remove_at(self.tokens.len() - 1)
             from = start - 1
             to += 1
     name := text_of(line, start, j)
     edit := fix.delete(ast.Pos(line: line_no, col: from + 1), ast.Pos(line: line_no, col: to + 1))
-    n := diags.len()
-    if n > 0 and diags[n - 1].rule == "gram.foreign.1" and diags[n - 1].pos.line == line_no and diags[n - 1].msg.starts_with("AIL has no lifetimes")
-        mut edits := diags[n - 1].edits
+    n := self.diags.len()
+    if n > 0
+        and self.diags[n - 1].rule == "gram.foreign.1"
+        and self.diags[n - 1].pos.line == line_no
+        and self.diags[n - 1].msg.starts_with("AIL has no lifetimes")
+        mut edits := self.diags[n - 1].edits
         edits.push(edit)
-        diags[n - 1].edits = edits
+        self.diags[n - 1].edits = edits
     else
-        diag_fix(
+        self.diag_fix(
             "gram.foreign.1",
             ast.Pos(line: line_no, col: start + 1),
             "AIL has no lifetimes: `{name}` and `<{name}>` are Rust's",
             "delete them: values are passed by value and a borrow never outlives its call (own.val.2), so there is nothing to name; a type parameter is `fn f[T](x T)`",
             "delete the lifetimes",
         )
-        attach([edit])
+        self.attach([edit])
     to
 
 ## `'a'` or `'\n'` (lex.str.4); gives the index after it.
 fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
     pos := ast.Pos(line: line_no, col: start + 1)
     e := if start + 1 < line.len() and line[start + 1] == '\\'
-        escape(line, start + 1, line_no)
+        self.escape(line, start + 1, line_no)
     elif start + 1 < line.len() and line[start + 1] != '\''
         Escaped(ch: line[start + 1], next: start + 2)
     else
@@ -1434,13 +1494,18 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
     next := e.next
     if next < line.len() and line[next] == '\'' and next > start + 1
         if c := ch
-            push(Char(c), pos)
+            self.push(Char(c), pos)
         else
-            placeholder(pos)
+            self.placeholder(pos)
         return next + 1
     if start + 2 < line.len() and line[start + 1] == '\'' and line[start + 2] == '\''
-        diag_msg("lex.str.4", pos, "a `'` in a character literal must be escaped", "write '\\''")
-        placeholder(pos)
+        self.diag_msg(
+            "lex.str.4",
+            pos,
+            "a `'` in a character literal must be escaped",
+            "write '\\''",
+        )
+        self.placeholder(pos)
         return start + 3
     mut end := line.len()
     for k in start + 1..line.len()
@@ -1450,7 +1515,7 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
     body := line[(start + 1).min(end)..(end - 1).max(start + 1).min(end)]
     closed := end <= line.len() and line[end - 1] == '\'' and end > start + 1
     stringy := closed and not has_special(body)
-    diag_help_fix(
+    self.diag_help_fix(
         "lex.str.4",
         pos,
         "a character literal holds exactly one character",
@@ -1459,28 +1524,28 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
         "write it as a string",
     )
     if stringy
-        attach([fix.span(pos, ast.Pos(line: line_no, col: start + 2), "\""), fix.span(
+        self.attach([fix.span(pos, ast.Pos(line: line_no, col: start + 2), "\""), fix.span(
             ast.Pos(line: line_no, col: end),
             ast.Pos(line: line_no, col: end + 1),
             "\"",
         )])
-    placeholder(pos)
+    self.placeholder(pos)
     end
 
 ## Tokens of the expression in `line[start..end]`, keeping real columns.
 fn Lexer.sub_lex(mut self, line List[char], start int, end int, line_no int) List[Token]
     # Lex onto the end of `tokens` and cut the new tail off, rather than
     # swapping the whole list out (a copy of every token so far per interpolation).
-    base := tokens.len()
-    saved_open := open
-    open = []
-    in_interp += 1
-    _ := lex_line(line[0..end], start, line_no)
-    in_interp -= 1
-    open = saved_open
-    mut code := tokens[base..]
-    while tokens.len() > base
-        tokens.pop()
+    base := self.tokens.len()
+    saved_open := self.open
+    self.open = []
+    self.in_interp += 1
+    _ := self.lex_line(line[0..end], start, line_no)
+    self.in_interp -= 1
+    self.open = saved_open
+    mut code := self.tokens[base..]
+    while self.tokens.len() > base
+        self.tokens.pop()
     code.push(Token(tok: Eof, pos: ast.Pos(line: line_no, col: end + 1)))
     code
 
@@ -1506,7 +1571,7 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
                 next := k + 1
                 ch := hex_char(line, i + 3, k)
                 if ch == none
-                    diag_msg(
+                    self.diag_msg(
                         "lex.str.1",
                         pos,
                         "`\\u\{{text_of(line, i + 3, k)}}` is not a valid Unicode scalar value",
@@ -1515,22 +1580,28 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
                 return Escaped(ch: ch, next: next)
     shown := if i + 1 < line.len() then text_of(line, i + 1, i + 2) else ""
     if shown == "}"
-        diag_fix(
+        self.diag_fix(
             "lex.str.1",
             pos,
             "unknown escape sequence `\\}`",
             "`}` needs no escape: write `}`; only `\\\{` is an escape, to keep `\{` from starting an interpolation",
             "remove the backslash",
         )
-        attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
+        self.attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
         return Escaped(ch: '}', next: i + 2)
     help := "valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\' \\\{ \\u\{hex}"
     if i + 1 < line.len() and not line[i + 1].is_alpha() and not line[i + 1].is_digit()
         # A punctuation character needs no escape: drop the backslash.
-        diag_fix("lex.str.1", pos, "unknown escape sequence `\\{shown}`", help, "remove the `\\`")
-        attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
+        self.diag_fix(
+            "lex.str.1",
+            pos,
+            "unknown escape sequence `\\{shown}`",
+            help,
+            "remove the `\\`",
+        )
+        self.attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
     else
-        diag_msg("lex.str.1", pos, "unknown escape sequence `\\{shown}`", help)
+        self.diag_msg("lex.str.1", pos, "unknown escape sequence `\\{shown}`", help)
     Escaped(ch: none, next: (i + 2).min(line.len()))
 
 ## The character whose hexadecimal code is `line[from..to]`, if it is one.
@@ -1555,30 +1626,30 @@ fn Lexer.number(mut self, line List[char], start int, line_no int) int
         while end < line.len() and line[end].is_digit()
             end += 1
         match parse_int(line[start..end], 10)
-            IntOk(v) => push(Int(v), pos)
+            IntOk(v) => self.push(Int(v), pos)
             TooBig | Overflow | Invalid =>
-                diag_msg(
+                self.diag_msg(
                     "lex.num.3",
                     pos,
                     "integer literal `{text_of(line, start, end)}` doesn't fit in `int` (64-bit signed)",
                     "",
                 )
-                placeholder(pos)
+                self.placeholder(pos)
         return end
     fe := float_end(line, start)
     if fe >= 0
         text := [c for c in line[start..fe] if c != '_'].join("")
         v := text.to_float() else 1.0 / 0.0
         if v - v == 0.0
-            push(Float(v), pos)
+            self.push(Float(v), pos)
         else
-            diag_msg(
+            self.diag_msg(
                 "lex.num.3",
                 pos,
                 "floating-point literal `{text_of(line, start, fe)}` doesn't fit in `float`",
                 "",
             )
-            placeholder(pos)
+            self.placeholder(pos)
         return fe
     mut radix := 10
     mut digits_start := start
@@ -1595,19 +1666,24 @@ fn Lexer.number(mut self, line List[char], start int, line_no int) int
         end += 1
     digits := [c for c in line[digits_start..end] if c != '_']
     match parse_int(digits, radix)
-        IntOk(v) => push(Int(v), pos)
-        TooBig => push(IntMin, pos)
+        IntOk(v) => self.push(Int(v), pos)
+        TooBig => self.push(IntMin, pos)
         Overflow =>
-            diag_msg(
+            self.diag_msg(
                 "lex.num.3",
                 pos,
                 "integer literal `{text_of(line, start, end)}` doesn't fit in `int` (64-bit signed)",
                 "",
             )
-            placeholder(pos)
+            self.placeholder(pos)
         Invalid =>
-            diag_msg("lex.num.1", pos, "invalid integer literal `{text_of(line, start, end)}`", "")
-            placeholder(pos)
+            self.diag_msg(
+                "lex.num.1",
+                pos,
+                "invalid integer literal `{text_of(line, start, end)}`",
+                "",
+            )
+            self.placeholder(pos)
     end
 
 ## How the digits of an integer literal read (lex.num.1, lex.num.3).

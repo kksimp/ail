@@ -91,16 +91,16 @@ fn Lower.rawop(mut self, name str, args List[int], ty Ty) int
 ## A value as the word a table stores.
 fn Lower.to_word(mut self, v int, t Ty) int
     if t.is_float()
-        return rawop("float_bits", [v], Ty.Int)
+        return self.rawop("float_bits", [v], Ty.Int)
     v
 
 ## The value of type `t` in the entry at address `e`.
 fn Lower.entry_value(mut self, e int, t Ty) int
     addr := op("add", [e, konst(16, Ty.Int)], Ty.Int)
     if t.is_float()
-        word := rawop("load64", [addr], Ty.Int)
-        return rawop("bits_float", [word], Ty.Float)
-    rawop("load64", [addr], t)
+        word := self.rawop("load64", [addr], Ty.Int)
+        return self.rawop("bits_float", [word], Ty.Float)
+    self.rawop("load64", [addr], t)
 
 ## `m.get(k)` as a `V?` (type.map.6): the entry's value, or `none`.
 fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
@@ -115,7 +115,7 @@ fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     branch(has, found, [], missing, [])
     seal(found)
     cur = found
-    jump(join, [some(Val(id: entry_value(e, vt), ty: vt)).id])
+    jump(join, [some(Val(id: self.entry_value(e, vt), ty: vt)).id])
     seal(missing)
     cur = missing
     jump(join, [konst(0, t)])
@@ -135,7 +135,7 @@ fn Lower.map_get_or(mut self, m Val, k int, d int, vt Ty) Val?
     branch(has, found, [], missing, [])
     seal(found)
     cur = found
-    jump(join, [entry_value(e, vt)])
+    jump(join, [self.entry_value(e, vt)])
     seal(missing)
     cur = missing
     jump(join, [d])
@@ -156,7 +156,7 @@ fn Lower.map_remove_value(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     branch(has, found, [], missing, [])
     seal(found)
     cur = found
-    held := some(Val(id: entry_value(e, vt), ty: vt)).id
+    held := some(Val(id: self.entry_value(e, vt), ty: vt)).id
     call("rt.map_remove", [m.id, k], Ty.Unit)
     jump(join, [held])
     seal(missing)
@@ -176,7 +176,7 @@ fn Lower.watch_map_remove(mut self, m Val, kid int, kt Ty, vt Ty, npos ast.Pos)
     branch(has, found, [], done_b, [])
     seal(found)
     cur = found
-    old := Val(id: entry_value(e, vt), ty: vt)
+    old := Val(id: self.entry_value(e, vt), ty: vt)
     call("rt.map_remove", [m.id, kid], Ty.Unit)
     watch_note(npos, m, "remove", old, "key", Val(id: kid, ty: kt))
     jump(done_b, [])
@@ -187,7 +187,7 @@ fn Lower.watch_map_remove(mut self, m Val, kid int, kt Ty, vt Ty, npos ast.Pos)
 fn Lower.word_call(mut self, name str, args List[int], t Ty) int
     if t.is_float()
         word := call(name, args, Ty.Int)
-        return rawop("bits_float", [word], Ty.Float)
+        return self.rawop("bits_float", [word], Ty.Float)
     call(name, args, t)
 
 fn Lower.new_table(mut self, ty Ty) int
@@ -236,7 +236,7 @@ fn Lower.entry_or(mut self, e int, t Ty, zero int) int
     branch(has, found, [], join, [zero])
     seal(found)
     cur = found
-    jump(join, [entry_value(e, t)])
+    jump(join, [self.entry_value(e, t)])
     seal(join)
     cur = join
     r
@@ -247,7 +247,7 @@ fn Lower.entry_or(mut self, e int, t Ty, zero int) int
 fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val?
     t := self.coll_type_of(name, targs) else
         return unsupported(pos, "`{name}` with these type arguments")
-    Val(id: new_table(t), ty: t)
+    Val(id: self.new_table(t), ty: t)
 
 fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want Ty?) Val?
     mut kt := Ty.Unknown
@@ -261,7 +261,7 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
                 vt = v
             Set(_) =>
                 if entries.len() == 0
-                    return Val(id: new_table(w), ty: w)
+                    return Val(id: self.new_table(w), ty: w)
             _ => kt = kt
     if entries.len() == 0 and kt.is_unknown()
         return pending_table()
@@ -277,12 +277,12 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
         if not key_ok(kt) or not is_value_ty(vt)
             return unsupported(pos, "a map of `{kt.name()}` to `{vt.name()}`")
         ks.push(stored_key(e.key, k, kt, expr_pos(e.key)))
-        vs.push(to_word(
+        vs.push(self.to_word(
             convert(Val(id: copy_if_place(e.value, v), ty: v.ty), vt, expr_pos(e.value)),
             vt,
         ))
     t := Ty.Map(key: kt, val: vt)
-    m := new_table(t)
+    m := self.new_table(t)
     for i in 0..ks.len()
         call("rt.map_set", [m, ks[i], vs[i]], Ty.Unit)
     Val(id: m, ty: t)
@@ -304,7 +304,7 @@ fn Lower.lower_set_lit(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Va
             return unsupported(pos, "a set of `{et.name()}`")
         xs.push(stored_key(x, v, et, expr_pos(x)))
     t := Ty.Set(et)
-    s := new_table(t)
+    s := self.new_table(t)
     for x in xs
         call("rt.map_add", [s, x], Ty.Unit)
     Val(id: s, ty: t)
@@ -319,10 +319,10 @@ fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
         Map(kt, vt) =>
             k := lower_value(index, kt)?
             kid := convert(k, kt, expr_pos(index))
-            texts := trap_texts("type.map.3", pos)
+            texts := self.trap_texts("type.map.3", pos)
             if not is_key_ty(kt)
                 return composite_at(m, kid, kt, vt, texts)
-            Val(id: word_call("rt.map_at", [m.id, kid, texts[0], texts[1]], vt), ty: vt)
+            Val(id: self.word_call("rt.map_at", [m.id, kid, texts[0], texts[1]], vt), ty: vt)
         _ => unsupported(pos, "indexing a `{m.ty.name()}`")
 
 ## `m[k] = v` and `m[k] op= v` (type.map.3, type.map.7). `k` is evaluated
@@ -361,12 +361,12 @@ fn Lower.lower_map_assign(
                         problem(pos, "`{vt.name()}` has no `op=` for a missing key")
                         return
                 e := call("rt.map_find", [m.id, kid], Ty.Int)
-                old := entry_or(e, vt, zero)
+                old := self.entry_or(e, vt, zero)
                 stored = binary(o, Val(id: old, ty: vt), r, pos).id
             else
                 stored = copy_if_place(value, Val(id: convert(r, vt, pos), ty: vt))
             uniq_drop_entry(m.id, kid, vt)
-            call("rt.map_set", [m.id, kid, to_word(stored, vt)], Ty.Unit)
+            call("rt.map_set", [m.id, kid, self.to_word(stored, vt)], Ty.Unit)
             watch_note(pos, m, "set", Val(id: stored, ty: vt), "key", Val(id: kid, ty: kt))
         _ => problem(ipos, "assigning into a `{m.ty.name()}`")
 
@@ -404,7 +404,7 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     branch(has, found, [], missing, [])
     seal(found)
     cur = found
-    got := entry_value(e, vt)
+    got := self.entry_value(e, vt)
     if removes
         call("rt.map_remove", [m.id, kid], Ty.Unit)
     jump(join, [got])
@@ -429,7 +429,10 @@ fn Lower.user_method(self, r ast.Expr, n str) bool
 ## `r.get(k)`, or `r.remove(k)` on a local: a map call that `else` can follow.
 fn Lower.is_table_call(self, r ast.Expr, n str) bool
     if n == "get"
-        return not (self.is_module(r, "env") or self.is_module(r, "net")) and not user_method(r, n)
+        return not (self.is_module(r, "env") or self.is_module(r, "net")) and not self.user_method(
+            r,
+            n,
+        )
     match r
         Name(nm, _) => n == "remove" and lookup(nm) != none
         _ => false
@@ -457,7 +460,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
     # `s.sorted(by: |x| e)` sorts the set's elements as a list (expr.key.1).
     if name == "sorted" and args.len() == 1 and not is_pending_table(r.ty)
         if et := set_elem(r.ty)
-            keys := table_keys(r.id, et)
+            keys := self.table_keys(r.id, et)
             return lower_sorted(Val(id: keys, ty: Ty.List(et)), name, args, npos)
     # `s.sorted()` of composite elements: as a list of them, by their order.
     if name == "sorted" and args.len() == 0 and not is_pending_table(r.ty)
@@ -479,7 +482,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
     match r.ty
         Map(kt, vt) =>
             if name == "push" and args.len() == 2
-                return map_push(r, kt, vt, args, npos)
+                return self.map_push(r, kt, vt, args, npos)
             want := if name == "contains"
                 or name == "remove"
                 or name == "get_or"
@@ -488,9 +491,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 w := if name == "get_or" and ai == 1 then vt else want
                 vs.push(lower_value(args[ai].value, if w.is_unknown() then none else w)?)
             if name == "len" and vs.len() == 0
-                return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
+                return Val(id: self.rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
             if name == "is_empty" and vs.len() == 0
-                n0 := rawop("load64", [r.id], Ty.Int)
+                n0 := self.rawop("load64", [r.id], Ty.Int)
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "contains" and vs.len() == 1
                 return Val(
@@ -500,9 +503,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
             if name == "remove" and vs.len() == 1
                 kid := convert(vs[0], kt, npos)
                 if not is_statement(npos)
-                    return map_remove_value(r, kid, vt, npos)
+                    return self.map_remove_value(r, kid, vt, npos)
                 if watch_here(npos)
-                    watch_map_remove(r, kid, kt, vt, npos)
+                    self.watch_map_remove(r, kid, kt, vt, npos)
                     return Val(id: -1, ty: Ty.Unit)
                 call("rt.map_remove", [r.id, kid], Ty.Unit)
                 return Val(id: -1, ty: Ty.Unit)
@@ -512,7 +515,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
             if name == "top" and vs.len() == 1 and vt == Ty.Int
                 return narrow_top(r, kt, convert(vs[0], Ty.Int, npos))
             if name == "keys" and vs.len() == 0
-                return Val(id: table_keys(r.id, kt), ty: Ty.List(kt))
+                return Val(id: self.table_keys(r.id, kt), ty: Ty.List(kt))
             if name == "values" and vs.len() == 0
                 if vt.elem_bytes() < 8
                     narrow := call(
@@ -523,24 +526,24 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                     return Val(id: narrow, ty: Ty.List(vt))
                 return Val(id: call("rt.map_values", [r.id], Ty.List(vt)), ty: Ty.List(vt))
             if name == "get" and vs.len() == 1
-                return map_get(r, convert(vs[0], kt, npos), vt, npos)
+                return self.map_get(r, convert(vs[0], kt, npos), vt, npos)
             if name == "get_or" and vs.len() == 2
-                return map_get_or(r, convert(vs[0], kt, npos), convert(vs[1], vt, npos), vt)
+                return self.map_get_or(r, convert(vs[0], kt, npos), convert(vs[1], vt, npos), vt)
         Set(et) =>
             if name == "is_subset" and args.len() == 1
                 b := lower_value(args[0].value, none)?
-                rest := set_op(r, "difference", b, npos)?
-                n0 := rawop("load64", [rest.id], Ty.Int)
+                rest := self.set_op(r, "difference", b, npos)?
+                n0 := self.rawop("load64", [rest.id], Ty.Int)
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if is_set_op(name) and args.len() == 1
                 b := lower_value(args[0].value, none)?
-                return set_op(r, name, b, npos)
+                return self.set_op(r, name, b, npos)
             for a in args
                 vs.push(lower_value(a.value, et)?)
             if name == "len" and vs.len() == 0
-                return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
+                return Val(id: self.rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
             if name == "is_empty" and vs.len() == 0
-                n0 := rawop("load64", [r.id], Ty.Int)
+                n0 := self.rawop("load64", [r.id], Ty.Int)
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "add" and vs.len() == 1
                 kid := stored_key(args[0].value, vs[0], et, npos)
@@ -579,7 +582,7 @@ fn Lower.map_push(mut self, m Val, kt Ty, vt Ty, args List[ast.Arg], npos ast.Po
     k := lower_value(args[0].value, kt)?
     kid := stored_key(args[0].value, k, kt, npos)
     x := lower_value(args[1].value, et)?
-    map_push_vals(m, vt, kid, x, args[1].value, npos)
+    self.map_push_vals(m, vt, kid, x, args[1].value, npos)
 
 ## The rest of `m.push(k, x)` once `k` (as `kid`) and `x` are lowered.
 fn Lower.map_push_vals(mut self, m Val, vt Ty, kid int, x Val, xe ast.Expr, npos ast.Pos) Val?
@@ -595,7 +598,7 @@ fn Lower.map_push_vals(mut self, m Val, vt Ty, kid int, x Val, xe ast.Expr, npos
     branch(has, found, [], missing, [])
     seal(found)
     cur = found
-    jump(join, [entry_value(e, vt)])
+    jump(join, [self.entry_value(e, vt)])
     seal(missing)
     cur = missing
     fresh := call("rt.list_new", [konst(0, Ty.Int)], vt)
@@ -613,7 +616,7 @@ fn Lower.map_push_vals(mut self, m Val, vt Ty, kid int, x Val, xe ast.Expr, npos
 fn Lower.iter_coll(mut self, v Val) Val
     match v.ty
         Set(e) =>
-            Val(id: table_keys(v.id, e), ty: Ty.List(e))
+            Val(id: self.table_keys(v.id, e), ty: Ty.List(e))
         # `for b in bytes` walks a list of the bytes as `u8`.
         Bytes =>
             t := Ty.List(Ty.Sized("u8"))
@@ -653,8 +656,8 @@ fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
     if not key_ok(e)
         return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
     want := Ty.Set(e)
-    sa := as_set(a, e, pos)?
-    sb := as_set(b, e, pos)?
+    sa := self.as_set(a, e, pos)?
+    sb := self.as_set(b, e, pos)?
     if name == "union"
         return Val(id: call("rt.set_union", [sa, sb], want), ty: want)
     keep := konst(if name == "intersect" then 1 else 0, Ty.Int)

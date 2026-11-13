@@ -46,7 +46,7 @@ fn is_sorting(name str, args List[ast.Arg]) bool
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
     if is_extreme_by(name, args)
-        return lower_extreme_by(r, name, args, npos)
+        return self.lower_extreme_by(r, name, args, npos)
     # type.coll.21-26: `any`, `all`, `find`, `filter`, `map`, `group_by` (lower_fnlit.ail).
     if is_list_fn_call(name, args)
         return lower_list_fn(r, name, args, npos)
@@ -69,7 +69,7 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         if by.name != "by" or a.mutable or a.moved
             return unsupported(npos, "`.{name}()` with this argument")
         keys = call("rt.list_new", [n], Ty.List(Ty.Int))
-        c := count_open(n)
+        c := self.count_open(n)
         scopes.push(Map[str, str]())
         declare(x.name, e, op("get", [r.id, c.i], e))
         k := lower_value(ast.key_body(a), Ty.Int)
@@ -86,7 +86,7 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
                     expr_pos(a.value),
                     "not in the native subset yet: a key of type `{kv.ty.name()}`",
                 )
-        count_close(c)
+        self.count_close(c)
     perm := if kt == Ty.Int then call(
         "rt.sort_perm",
         [keys],
@@ -98,19 +98,19 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
             Ty.List(Ty.Int),
         ) else tuple_sort_perm(keys, kt)
     out := call("rt.list_new", [n], r.ty)
-    c := count_open(n)
+    c := self.count_open(n)
     idx := op("get", [perm, c.i], Ty.Int)
     mut item := op("get", [r.id, idx], e)
     if name == "sorted" and needs_copy(e)
         item = copy_value(Val(id: item, ty: e))
     call(push_fn(e), [out, item], Ty.Unit)
-    count_close(c)
+    self.count_close(c)
     if name == "sorted"
         return Val(id: out, ty: r.ty)
     # `sort` puts the sorted elements back into the list itself.
-    c2 := count_open(n)
+    c2 := self.count_open(n)
     emit_void(inst(-1, "set", [r.id, c2.i, op("get", [out, c2.i], e)]))
-    count_close(c2)
+    self.count_close(c2)
     Val(id: -1, ty: Ty.Unit)
 
 ## Whether `name` with these arguments is `min` or `max` with a key function.
@@ -131,7 +131,7 @@ fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos as
     n := op("len", [r.id], Ty.Int)
     keys := call("rt.list_new", [n], Ty.List(Ty.Int))
     mut kt := Ty.Int
-    c := count_open(n)
+    c := self.count_open(n)
     scopes.push(Map[str, str]())
     declare(x.name, e, op("get", [r.id, c.i], e))
     k := lower_value(ast.key_body(a), Ty.Int)
@@ -147,7 +147,7 @@ fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos as
                 expr_pos(a.value),
                 "not in the native subset yet: a key of type `{kv.ty.name()}`",
             )
-    count_close(c)
+    self.count_close(c)
     greatest := konst(if name == "max" then 1 else 0, Ty.Int)
     idx := if kt == Ty.Int then call(
         "rt.list_extreme",
@@ -220,7 +220,7 @@ fn Lower.call_member_value(mut self, callee ast.Expr, args List[ast.Arg], pos as
     f := lower_value(callee, none)?
     if not f.ty.is_fn()
         return unsupported(pos, "this call")
-    call_value(f, args, expr_pos(callee))
+    self.call_value(f, args, expr_pos(callee))
 
 ## The rule a message names at its start, `std.regex.2: ...`: dotted lowercase words ending in a number.
 fn message_rule(head str) str

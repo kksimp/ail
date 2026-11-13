@@ -47,6 +47,16 @@ fn syntax_help(message str) str?
     found := halves[1]
     if found.starts_with("the keyword `")
         word := found.split("`")[1]
-        if ["return", "if", "for", "while", "match", "break", "continue", "fn", "let"].contains(word)
+        if [
+            "return",
+            "if",
+            "for",
+            "while",
+            "match",
+            "break",
+            "continue",
+            "fn",
+            "let",
+        ].contains(word)
             return "write {expected} here; `{word}` starts a statement, so it goes at the start of its own line"
     "write {expected} here, in place of {found}"

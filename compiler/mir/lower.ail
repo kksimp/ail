@@ -475,20 +475,20 @@ RT_ROOTS := [
 ## Lower the runtime functions the program reaches, and those they reach
 ## (ADR 0393): a program pays only for the runtime it uses.
 fn Lower.lower_rt(mut self, r ast.Program)
-    prefix = "rt."
-    aliases = {}
-    is_rt = true
+    self.prefix = "rt."
+    self.aliases = {}
+    self.is_rt = true
     mut decls := Map[str, ast.FnDecl]()
     for f in r.fns
         # `dispatch` is generated from the program's tasks (lower_task.ail).
-        if not PRIMS.contains(f.name) and not (f.name == "dispatch" and tk.on)
+        if not PRIMS.contains(f.name) and not (f.name == "dispatch" and self.tk.on)
             decls["rt.{f.name}"] = f
     mut done := Set[str]()
     mut queue := RT_ROOTS
     mut scanned := 0
     while true
-        while scanned < funcs.len()
-            for blk in funcs[scanned].blocks
+        while scanned < self.funcs.len()
+            for blk in self.funcs[scanned].blocks
                 for i in blk.insts
                     if (i.op == "call" or i.op == "fnaddr") and decls.contains(i.name)
                         queue.push(i.name)
@@ -505,46 +505,47 @@ fn Lower.lower_rt(mut self, r ast.Program)
         if done.contains(name) or not decls.contains(name)
             continue
         done.add(name)
-        lower_fn(decls[name])
-    is_rt = false
+        self.lower_fn(decls[name])
+    self.is_rt = false
 
 fn Lower.problem(mut self, pos ast.Pos, message str)
-    problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
+    self.problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for c in prog.consts
         if is_const_expr(c.value)
-            if pre == "rt." and consts.contains("rt.{c.name}")
-                problem(c.pos, "runtime constant `{c.name}` is defined in two runtime files")
-            consts["{pre}{c.name}"] = c.value
-            const_home["{pre}{c.name}"] = file
+            if pre == "rt." and self.consts.contains("rt.{c.name}")
+                self.problem(c.pos, "runtime constant `{c.name}` is defined in two runtime files")
+            self.consts["{pre}{c.name}"] = c.value
+            self.const_home["{pre}{c.name}"] = self.file
         elif pre != "rt."
-            global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
+            self.global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: self.file))
         else
-            problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
+            self.problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
     note_hash_uses(prog, pre)
     for f in program_fns(prog)
         if is_test(f)
             continue
-        before := problems.len()
-        declare_fn(f, pre)
+        before := self.problems.len()
+        self.declare_fn(f, pre)
         note_inherited(f, prog, pre)
-        if problems.len() > before
-            bad.add(fn_key(f, pre))
-            sigs.remove(fn_key(f, pre))
+        if self.problems.len() > before
+            self.bad.add(fn_key(f, pre))
+            self.sigs.remove(fn_key(f, pre))
             hold_lazy(fn_key(f, pre), before)
-    self_ty = ""
+    self.self_ty = ""
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if declare_generic_fn(anon_generic(f), pre)
         return
     mut params := List[Ty]()
-    self_ty = if o := f.owner then owner_key(o.name, pre) else ""
+    self.self_ty = if o := f.owner then owner_key(o.name, pre) else ""
     if o := f.owner
         owner := owner_key(o.name, pre)
         prim := ["int", "float", "bool", "str"].contains(owner)
-        if o.params != none or not (structs.contains(owner) or enums.contains(owner) or prim)
-            problem(
+        if o.params != none
+            or not (self.structs.contains(owner) or self.enums.contains(owner) or prim)
+            self.problem(
                 f.pos,
                 "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
             )
@@ -552,7 +553,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         if f.receiver != none
             params.push(self_param_ty(f, owner))
     elif f.receiver != none
-        problem(
+        self.problem(
             f.pos,
             "`{f.name}`: methods of traits and `impl` blocks aren't in the native subset yet",
         )
@@ -570,17 +571,17 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             and a.name != "fixture"
             and a.name != "needs"
             and a.name != "variadic c"
-            problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
+            self.problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
-        t := type_of(p.ty) else
-            problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
+        t := self.type_of(p.ty) else
+            self.problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
         if p.mutable and cell_param(t) != none
             params.push(cell_param(t) else t)
             continue
         if p.mutable and not needs_copy(t) and not t.is_unknown() and not t.is_coll()
-            problem(
+            self.problem(
                 p.pos,
                 "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
             )
@@ -590,30 +591,30 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     # Primitives are not called through the ABI. Integer arguments past the
     # registers go on the stack; float ones don't yet.
     if floats > 8 and not (pre == "rt." and PRIMS.contains(f.name))
-        problem(f.pos, "`{f.name}` has more than 8 float parameters")
+        self.problem(f.pos, "`{f.name}` has more than 8 float parameters")
     mut rty := Ty.Unit
     mut can_fail := false
     if r := f.ret
         can_fail = is_fallible(r)
-        t := (if can_fail then ok_type(r) else type_of(r)) else
-            problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
+        t := (if can_fail then ok_type(r) else self.type_of(r)) else
+            self.problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             Ty.Unknown
         rty = t
     # Codegen keys functions by name, so a second runtime definition would
     # silently replace the first, whatever its types (#771, `win_write`).
-    if pre == "rt." and sigs.contains(fn_key(f, pre))
-        problem(f.pos, "runtime function `{f.name}` is defined in two runtime files")
-    sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+    if pre == "rt." and self.sigs.contains(fn_key(f, pre))
+        self.problem(f.pos, "runtime function `{f.name}` is defined in two runtime files")
+    self.sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
     note_mut_self(f, fn_key(f, pre))
     if can_fail
         if r := f.ret
-            fn_errs[fn_key(f, pre)] = error_ty_of(r)
+            self.fn_errs[fn_key(f, pre)] = error_ty_of(r)
             note_inferred_set(fn_key(f, pre), r)
     if pre != "rt."
-        fn_decl[fn_key(f, pre)] = f
-        fn_file[fn_key(f, pre)] = file
+        self.fn_decl[fn_key(f, pre)] = f
+        self.fn_file[fn_key(f, pre)] = self.file
         if f.contracts.len() > 0
-            contracted[fn_key(f, pre)] = f
+            self.contracted[fn_key(f, pre)] = f
 
 ## Whether `f` is a `@test` function (test.attr.2): `ail build` leaves it out,
 ## so it may use what the native subset lacks (ADR 0613).
@@ -632,7 +633,7 @@ fn fn_key(f ast.FnDecl, pre str) str
 ## The MIR type of a written type, if it is in the subset.
 fn Lower.type_of(mut self, t ast.TypeRef) Ty?
     match t.shape
-        Optional(inner) => opt_of(type_of(inner)?)
+        Optional(inner) => opt_of(self.type_of(inner)?)
         PtrTo(inner) => ptr_type_of(inner)
         Named(name, args) =>
             match name
@@ -646,7 +647,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "List" =>
                     if args.len() != 1
                         return none
-                    e := type_of(args[0])?
+                    e := self.type_of(args[0])?
                     if is_number(e)
                         or e.is_sized()
                         or e == Ty.Str
@@ -664,7 +665,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "Atomic" =>
                     if args.len() != 1
                         return none
-                    e := type_of(args[0])?
+                    e := self.type_of(args[0])?
                     if e == Ty.Int or e == Ty.Bool
                         return Ty.Atomic(e)
                     none
@@ -674,10 +675,10 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
-                    if name == "Self" and self_ty != ""
+                    if name == "Self" and self.self_ty != ""
                         # A method's own type (trait.self.1), as derived
                         # methods write it (ADR 0807).
-                        return owner_ty(self_ty)
+                        return owner_ty(self.self_ty)
                     if g := generic_type(name, args)
                         return g
                     if args.len() == 0
@@ -692,7 +693,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
             for p in fparams
-                ps.push(type_of(p)?)
+                ps.push(self.type_of(p)?)
             mut r := Ty.Unit
             if rt := fret
                 r = fn_ret_type(rt)?
@@ -738,159 +739,159 @@ fn is_number(t Ty) bool
 # ---- building blocks and values ----
 
 fn Lower.new_value(mut self, ty Ty, name str) int
-    vals.push(ty)
-    names.push(name)
-    vals.len() - 1
+    self.vals.push(ty)
+    self.names.push(name)
+    self.vals.len() - 1
 
 fn Lower.new_block(mut self) int
-    blocks.push(Block(params: [], insts: [], term: unreachable_term()))
-    sealed.push(false)
-    closed.push(false)
-    preds.push([])
-    defs.push(Map[str, int]())
-    incomplete.push(Map[str, int]())
-    blocks.len() - 1
+    self.blocks.push(Block(params: [], insts: [], term: unreachable_term()))
+    self.sealed.push(false)
+    self.closed.push(false)
+    self.preds.push([])
+    self.defs.push(Map[str, int]())
+    self.incomplete.push(Map[str, int]())
+    self.blocks.len() - 1
 
 ## Append an instruction defining a new value of type `ty`.
 fn Lower.emit(mut self, i Inst, ty Ty) int
-    v := new_value(ty, "")
+    v := self.new_value(ty, "")
     mut x := i
     x.dst = v
-    blocks[cur].insts.push(x)
+    self.blocks[self.cur].insts.push(x)
     v
 
 fn Lower.emit_void(mut self, i Inst)
-    blocks[cur].insts.push(i)
+    self.blocks[self.cur].insts.push(i)
 
 fn Lower.op(mut self, op str, args List[int], ty Ty) int
-    emit(inst(-1, op, args), ty)
+    self.emit(inst(-1, op, args), ty)
 
 ## A checked operation: it traps at `site`.
 fn Lower.checked(mut self, op str, args List[int], site int, ty Ty) int
     mut i := inst(-1, op, args)
     i.site = site
-    emit(i, ty)
+    self.emit(i, ty)
 
 fn Lower.call(mut self, name str, args List[int], ty Ty) int
     mut i := inst(-1, "call", args)
     i.name = name
     if ty.is_unit()
-        emit_void(i)
+        self.emit_void(i)
         return -1
-    emit(i, ty)
+    self.emit(i, ty)
 
 ## A call of a program's function: it traps at its site when the stack is
 ## nearly exhausted (err.trap.1, ADR 0535). `shown` names the callee.
 fn Lower.user_call(mut self, name str, args List[int], ty Ty, pos ast.Pos, shown str) int
     mut i := inst(-1, "call", args)
     i.name = ct_call(name, pos)
-    i.site = site("err.trap.1", "call", shown, pos)
+    i.site = self.site("err.trap.1", "call", shown, pos)
     # The call position for a trap's stack (trace.frame.1). A constant's
     # initialiser runs before `main` here, but is lazy in the interpreter,
     # whose stack has no frame for it.
-    if not is_rt and not fname.starts_with("init.")
-        i.imm = call_pos(file, pos.line, pos.col)
+    if not self.is_rt and not self.fname.starts_with("init.")
+        i.imm = call_pos(self.file, pos.line, pos.col)
     if ty.is_unit()
-        emit_void(i)
+        self.emit_void(i)
         return -1
-    emit(i, ty)
+    self.emit(i, ty)
 
 fn Lower.konst(mut self, n int, ty Ty) int
     mut i := inst(-1, "const", [])
     i.imm = n
-    emit(i, ty)
+    self.emit(i, ty)
 
 fn Lower.fconst(mut self, x float) int
     mut i := inst(-1, "fconst", [])
     i.fimm = x
-    emit(i, Ty.Float)
+    self.emit(i, Ty.Float)
 
 fn Lower.str_value(mut self, s str) int
     mut i := inst(-1, "str", [])
-    i.imm = str_lit(s)
-    emit(i, Ty.Str)
+    i.imm = self.str_lit(s)
+    self.emit(i, Ty.Str)
 
 ## Whether the current block already ends (after `return`, `break`...).
 fn Lower.done(self) bool
-    closed[cur]
+    self.closed[self.cur]
 
 fn Lower.finish(mut self, term Term)
-    if done()
+    if self.done()
         return
-    if term.kind == "return" and tk.exits.len() > 0
+    if term.kind == "return" and self.tk.exits.len() > 0
         unwind_exits()
     for s in term.targets
-        preds[s].push(cur)
-    blocks[cur].term = term
-    closed[cur] = true
+        self.preds[s].push(self.cur)
+    self.blocks[self.cur].term = term
+    self.closed[self.cur] = true
 
 ## Start lowering into a block that nothing reaches: code after a jump.
 fn Lower.dead_block(mut self)
-    b := new_block()
-    sealed[b] = true
-    cur = b
+    b := self.new_block()
+    self.sealed[b] = true
+    self.cur = b
 
 fn Lower.jump(mut self, to int, args List[int])
-    finish(jump_to(to, args))
+    self.finish(jump_to(to, args))
 
 ## End the current block with a branch whose edges pass `yes_args` and
 ## `no_args`. The two targets must differ.
 fn Lower.branch(mut self, cond int, yes int, yes_args List[int], no int, no_args List[int])
     mut t := branch_on(cond, yes, no)
     t.args = [yes_args, no_args]
-    finish(t)
+    self.finish(t)
 
 fn Lower.seal(mut self, b int)
-    pending := incomplete[b]
+    pending := self.incomplete[b]
     for key in pending.keys()
-        add_edge_args(key, pending[key], b)
-    sealed[b] = true
+        self.add_edge_args(key, pending[key], b)
+    self.sealed[b] = true
 
 ## Give every edge into `b` the value of `key` for its new parameter.
 fn Lower.add_edge_args(mut self, key str, param int, b int)
-    for p in preds[b]
-        v := read_var(key, p)
-        for e in 0..blocks[p].term.targets.len()
-            if blocks[p].term.targets[e] == b
-                blocks[p].term.args[e].push(v)
+    for p in self.preds[b]
+        v := self.read_var(key, p)
+        for e in 0..self.blocks[p].term.targets.len()
+            if self.blocks[p].term.targets[e] == b
+                self.blocks[p].term.args[e].push(v)
 
 fn Lower.write_var(mut self, key str, b int, v int)
-    defs[b][key] = v
-    var_vals.push(key, v)
+    self.defs[b][key] = v
+    self.var_vals.push(key, v)
 
 fn Lower.read_var(mut self, key str, b int) int
-    if v := defs[b].get(key)
+    if v := self.defs[b].get(key)
         return v
     mut v := -1
-    if not sealed[b]
-        v = new_value(var_ty[key], key.split("#")[0])
-        blocks[b].params.push(v)
-        incomplete[b][key] = v
-    elif preds[b].len() == 1
-        v = read_var(key, preds[b][0])
+    if not self.sealed[b]
+        v = self.new_value(self.var_ty[key], key.split("#")[0])
+        self.blocks[b].params.push(v)
+        self.incomplete[b][key] = v
+    elif self.preds[b].len() == 1
+        v = self.read_var(key, self.preds[b][0])
     else
-        v = new_value(var_ty[key], key.split("#")[0])
-        blocks[b].params.push(v)
-        write_var(key, b, v)
-        add_edge_args(key, v, b)
-    write_var(key, b, v)
+        v = self.new_value(self.var_ty[key], key.split("#")[0])
+        self.blocks[b].params.push(v)
+        self.write_var(key, b, v)
+        self.add_edge_args(key, v, b)
+    self.write_var(key, b, v)
     v
 
 ## Declare a source name in the innermost scope and give it a value.
 fn Lower.declare(mut self, name str, ty Ty, v int)
-    nvars += 1
-    key := "{name}#{nvars}"
-    scopes[scopes.len() - 1][name] = key
-    var_ty[key] = ty
-    if v >= 0 and names[v] == ""
-        names[v] = name
-    write_var(key, cur, v)
+    self.nvars += 1
+    key := "{name}#{self.nvars}"
+    self.scopes[self.scopes.len() - 1][name] = key
+    self.var_ty[key] = ty
+    if v >= 0 and self.names[v] == ""
+        self.names[v] = name
+    self.write_var(key, self.cur, v)
     uniq_declared(name)
 
 fn Lower.lookup(self, name str) str?
-    mut i := scopes.len() - 1
+    mut i := self.scopes.len() - 1
     while i >= 0
-        if k := scopes[i].get(name)
+        if k := self.scopes[i].get(name)
             return k
         i -= 1
     none
@@ -898,159 +899,159 @@ fn Lower.lookup(self, name str) str?
 ## A check's trap site, or -1 in the runtime, whose arithmetic wraps and
 ## whose indexing is unchecked (native-abi.md §7).
 fn Lower.site(mut self, rule str, kind str, op str, pos ast.Pos) int
-    if is_rt
+    if self.is_rt
         return -1
-    sites.push(Site(
+    self.sites.push(Site(
         rule: rule,
         kind: kind,
         op: op,
         line: pos.line,
         col: pos.col,
-        func: if tk.owner != "" then tk.owner else fname,
-        file: file,
+        func: if self.tk.owner != "" then self.tk.owner else self.fname,
+        file: self.file,
         from: -1,
     ))
-    sites.len() - 1
+    self.sites.len() - 1
 
 fn Lower.str_lit(mut self, s str) int
-    if i := str_index.get(s)
+    if i := self.str_index.get(s)
         return i
-    strs.push(s)
-    str_index[s] = strs.len() - 1
-    strs.len() - 1
+    self.strs.push(s)
+    self.str_index[s] = self.strs.len() - 1
+    self.strs.len() - 1
 
 # ---- functions ----
 
 fn Lower.lower_fn(mut self, f ast.FnDecl)
-    owner := if o := f.owner then owner_key(o.name, prefix) else ""
-    lower_fn_as(f, fn_key(f, prefix), fn_key(f, prefix), owner)
+    owner := if o := f.owner then owner_key(o.name, self.prefix) else ""
+    self.lower_fn_as(f, fn_key(f, self.prefix), fn_key(f, self.prefix), owner)
 
 ## The type a method belongs to, as its key: `Tag` or `mod.Tag`; "" for a
 ## free function.
 fn Lower.fn_owner(self, f ast.FnDecl) str
-    if o := f.owner then owner_key(o.name, prefix) else ""
+    if o := f.owner then owner_key(o.name, self.prefix) else ""
 
 ## `f` under the MIR name `name`, with the signature of `key`: the function
 ## itself, or its `.nc` copy, which checks no contracts (contract.run.2). It is
 ## a method of type `owner` (ADR 0536: an instance of a generic function or
 ## method has its own key and owner).
 fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
-    sig := sigs.get(key) else return
+    sig := self.sigs.get(key) else return
     if lower_gen_fn(f, name, key, owner)
         return
-    params := begin_fn(name, sig.ret, sig.params)
-    fails = sig.fails
-    self_ty = ""
+    params := self.begin_fn(name, sig.ret, sig.params)
+    self.fails = sig.fails
+    self.self_ty = ""
     mut k := 0
     if f.owner != none
-        self_ty = owner
+        self.self_ty = owner
         if recv := f.receiver
-            self_ty = owner
+            self.self_ty = owner
             declare_self(recv, sig.params[0], params[0])
-            borrowed.add(lookup("self") else "")
+            self.borrowed.add(self.lookup("self") else "")
             note_stable_param("self", recv.mutable)
             k = 1
     for i in 0..f.params.len()
         p := f.params[i]
         declare_param(p, sig.params[k + i], params[k + i])
-        note_mut_param(p, lookup(p.name) else "", params[k + i])
+        note_mut_param(p, self.lookup(p.name) else "", params[k + i])
         note_stable_param(p.name, p.mutable)
-        borrowed.add(lookup(p.name) else "")
+        self.borrowed.add(self.lookup(p.name) else "")
     body := f.body else
         lower_extern(f, name, params)
         return
     if lower_ui_intrinsic(f, key, name, params) or lower_rt_flag(key, name, f.pos)
         return
-    if not unchecked
+    if not self.unchecked
         enter_contracts(f, key)
     uniq_params(f)
     instr_call(f, sig.params, params)
     race_enter()
-    want := not ret.is_unit()
+    want := not self.ret.is_unit()
     if want
-        tail_want = ret
+        self.tail_want = self.ret
         if body.len() > 0
             if e := final_expr(body[body.len() - 1])
-                tail_pos = expr_pos(e)
-    result := lower_block(body, want)
-    if not done()
+                self.tail_pos = expr_pos(e)
+    result := self.lower_block(body, want)
+    if not self.done()
         if want
             if r := result
-                v := Val(id: convert(r, ret, f.pos), ty: r.ty)
+                v := Val(id: self.convert(r, self.ret, f.pos), ty: r.ty)
                 e := final_expr(body[body.len() - 1]) else ast.Expr.NoneLit(f.pos)
-                rv := copy_if_borrowed(e, v)
+                rv := self.copy_if_borrowed(e, v)
                 check_ensures(rv, tail_pos(f, body))
-                finish(return_of(rv))
-            elif not failing()
-                problem(f.pos, "`{f.name}` must end with its result")
+                self.finish(return_of(rv))
+            elif not self.failing()
+                self.problem(f.pos, "`{f.name}` must end with its result")
         else
             check_ensures(-1, tail_pos(f, body))
-            finish(return_of(-1))
-    end_fn(name, f.pos)
+            self.finish(return_of(-1))
+    self.end_fn(name, f.pos)
 
 ## Start a function: fresh state, and an entry block whose parameters are
 ## the function's.
 fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
-    fname = name
-    ret = rty
-    fn_problems = problems.len()
-    fn_failed = false
-    blocks = []
-    vals = []
-    names = []
-    sealed = []
-    closed = []
-    preds = []
-    defs = []
-    incomplete = []
-    scopes = [Map[str, str]()]
-    var_ty = {}
-    var_vals = {}
-    nvars = 0
-    loops = []
-    ens = []
-    inv_key = ""
-    borrowed = Set[str]()
-    cur = new_block()
-    sealed[cur] = true
+    self.fname = name
+    self.ret = rty
+    self.fn_problems = self.problems.len()
+    self.fn_failed = false
+    self.blocks = []
+    self.vals = []
+    self.names = []
+    self.sealed = []
+    self.closed = []
+    self.preds = []
+    self.defs = []
+    self.incomplete = []
+    self.scopes = [Map[str, str]()]
+    self.var_ty = {}
+    self.var_vals = {}
+    self.nvars = 0
+    self.loops = []
+    self.ens = []
+    self.inv_key = ""
+    self.borrowed = Set[str]()
+    self.cur = self.new_block()
+    self.sealed[self.cur] = true
     for t in ptys
-        blocks[cur].params.push(new_value(t, ""))
-    blocks[cur].params
+        self.blocks[self.cur].params.push(self.new_value(t, ""))
+    self.blocks[self.cur].params
 
 ## Whether the current function already failed: later problems in it
 ## would only repeat the first.
 fn Lower.failing(self) bool
-    problems.len() > fn_problems or fn_failed
+    self.problems.len() > self.fn_problems or self.fn_failed
 
 ## Finish the function begun with `begin_fn`: simplify, fold, verify.
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
-    if problems.len() > fn_problems or fn_failed
-        facts.moves = []
+    if self.problems.len() > self.fn_problems or self.fn_failed
+        self.facts.moves = []
         return
     instr_end()
     mut func := elide_moves(
         Func(
             name: name,
-            params: blocks[0].params,
-            ret: ret,
-            blocks: blocks,
-            vals: vals,
-            names: names,
+            params: self.blocks[0].params,
+            ret: self.ret,
+            blocks: self.blocks,
+            vals: self.vals,
+            names: self.names,
         ),
-        facts.moves,
+        self.facts.moves,
     )
     simplify_in(mut func)
     fold_in(mut func)
     simplify_in(mut func)
-    facts.moves = []
+    self.facts.moves = []
     for err in verify(func)
-        problems.push(Problem(
+        self.problems.push(Problem(
             rule: "native.build.2",
             pos: pos,
             message: "internal error: invalid MIR: {err}",
         ))
-    funcs.push(func)
+    self.funcs.push(func)
 
 ## The value as the type the context expects: an `int` literal already
 ## became a `float` where one was expected; anything else must match.
@@ -1061,16 +1062,16 @@ fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
         return v.id
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
-        fn_failed = true
-    elif not fits_want(v.ty, want)
+        self.fn_failed = true
+    elif not self.fits_want(v.ty, want)
         # The runtime calls a function address it kept as an `int` (unwind.ail).
-        problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
+        self.problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
 
 ## Whether a value of type `got` fits `want`: the same type, a function value
 ## that fits (type.fn.6), or a function address the runtime keeps as an `int`.
 fn Lower.fits_want(self, got Ty, want Ty) bool
-    same_ty(got, want) or fn_fits(got, want) or (is_rt and want.is_fn() and got == Ty.Int)
+    same_ty(got, want) or fn_fits(got, want) or (self.is_rt and want.is_fn() and got == Ty.Int)
 
 fn same_ty(a Ty, b Ty) bool
     if p := a.opt_inner()
@@ -1083,16 +1084,16 @@ fn same_ty(a Ty, b Ty) bool
 ## Lower statements in a new scope. With `want`, a final expression
 ## statement is the block's value.
 fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
-    tail := tail_want
-    tail_want = none
-    top_unit_fails := scopes.len() == 1 and unit_fails()
-    scopes.push(Map[str, str]())
+    tail := self.tail_want
+    self.tail_want = none
+    top_unit_fails := self.scopes.len() == 1 and unit_fails()
+    self.scopes.push(Map[str, str]())
     defer_enter()
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
         s := body[i]
-        if done()
-            dead_block()
+        if self.done()
+            self.dead_block()
         if fork_stmt(body, i)
             continue
         instr_stmt(s)
@@ -1102,19 +1103,19 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                 if tail_error(e)
                     continue
                 if want
-                    result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
+                    result = self.lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                     uniq_take(e)
                     continue
             # An `unsafe` block gives its last expression's value.
             if want
                 if inner := unsafe_body(s)
-                    result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                    result = self.lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
-        lower_stmt(s)
+        self.lower_stmt(s)
         instr_after(s)
     defer_exit()
     end_scope_exits(if body.len() > 0 then group_end_at(body[body.len() - 1]) else none)
-    scopes.pop()
+    self.scopes.pop()
     if result.id == -2
         return none
     result
@@ -1137,16 +1138,16 @@ fn final_expr(s ast.Stmt) ast.Expr?
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
     if is_list_pop(value)
         got := lower_pop_else(value, other, pos) else
-            declare(name, Ty.Unknown, -1)
+            self.declare(name, Ty.Unknown, -1)
             return
-        declare(name, got.ty, got.id)
+        self.declare(name, got.ty, got.id)
         return
     if self.is_get_call(value)
         got := lower_get_else(value, other, pos) else
-            declare(name, Ty.Unknown, -1)
+            self.declare(name, Ty.Unknown, -1)
             return
         # `get` hands out the stored value; the binding owns a copy (own.val.1).
-        declare(name, got.ty, copy_if_place(value, got))
+        self.declare(name, got.ty, self.copy_if_place(value, got))
         return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
@@ -1154,21 +1155,21 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     if recv == none
         lower_bind_else(name, pos, value, other)
         return
-    got := lower_str_to_int_else(recv?, other, pos) else
-        declare(name, Ty.Unknown, -1)
+    got := self.lower_str_to_int_else(recv?, other, pos) else
+        self.declare(name, Ty.Unknown, -1)
         return
-    declare(name, got.ty, got.id)
+    self.declare(name, got.ty, got.id)
 
 ## An `else` fallback value, jumped to `join`; a fallback that leaves, such as
 ## `unreachable(...)` (err.model.2), ends the block and has no value to join.
 fn Lower.fallback_jump(mut self, x ast.Expr, t Ty, join int, pos ast.Pos)
-    v := lower_expr(x, t) else return
-    if done()
+    v := self.lower_expr(x, t) else return
+    if self.done()
         return
     if v.id < 0
-        problem(expr_pos(x), "this expression has no value")
+        self.problem(expr_pos(x), "this expression has no value")
         return
-    jump(join, [convert(v, t, pos)])
+    self.jump(join, [self.convert(v, t, pos)])
 
 ## The receiver of `s.to_int()` when `e` is that call.
 fn str_to_int_recv(e ast.Expr) ast.Expr?
@@ -1180,31 +1181,31 @@ fn str_to_int_recv(e ast.Expr) ast.Expr?
 ## `else` when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
     # A `?` in `recv` (`env.get("PORT")?.to_int()`) also runs the `else` (err.prop.4).
-    fail := new_block()
-    else_targets.push(fail)
-    got := lower_value(recv, Ty.Str)
-    else_targets.pop()
+    fail := self.new_block()
+    self.else_targets.push(fail)
+    got := self.lower_value(recv, Ty.Str)
+    self.else_targets.pop()
     s := got?
     if not (s.ty == Ty.Str)
-        problem(pos, "`.to_int()` on `{s.ty.name()}`")
+        self.problem(pos, "`.to_int()` on `{s.ty.name()}`")
         return none
-    n := call("rt.str_to_int", [s.id], Ty.Int)
-    ok := call("rt.parse_ok", [], Ty.Bool)
-    join := new_block()
-    r := new_value(Ty.Int, "")
-    blocks[join].params.push(r)
-    branch(ok, join, [n], fail, [])
-    seal(fail)
-    cur = fail
+    n := self.call("rt.str_to_int", [s.id], Ty.Int)
+    ok := self.call("rt.parse_ok", [], Ty.Bool)
+    join := self.new_block()
+    r := self.new_value(Ty.Int, "")
+    self.blocks[join].params.push(r)
+    self.branch(ok, join, [n], fail, [])
+    self.seal(fail)
+    self.cur = fail
     match other
-        Fallback(x) => fallback_jump(x, Ty.Int, join, pos)
+        Fallback(x) => self.fallback_jump(x, Ty.Int, join, pos)
         Leave(st) =>
-            lower_stmt(st)
-            if not done()
-                problem(pos, "this `else` must leave: `return`, `break` or `continue`")
+            self.lower_stmt(st)
+            if not self.done()
+                self.problem(pos, "this `else` must leave: `return`, `break` or `continue`")
         Handler(name, body, hpos) => handler_jump(name, body, hpos, Ty.Int, join)
-    seal(join)
-    cur = join
+    self.seal(join)
+    self.cur = join
     Val(id: r, ty: Ty.Int)
 
 fn Lower.lower_stmt(mut self, s ast.Stmt)
@@ -1214,55 +1215,55 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 lower_spawn_let(name, pos, value)
                 return
             if other := otherwise
-                lower_let_else(name, pos, value, other)
+                self.lower_let_else(name, pos, value, other)
                 return
-            v := lower_value(value, none) else
+            v := self.lower_value(value, none) else
                 # Reported; uses of the name stay quiet.
-                declare(name, Ty.Unknown, -1)
+                self.declare(name, Ty.Unknown, -1)
                 return
             bind_let(name, mutable, value, v)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
-        While(cond, body, wpos) => lower_while(cond, body, wpos)
+        While(cond, body, wpos) => self.lower_while(cond, body, wpos)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
             # A loop the compiler chose may sit inside a loop run in order; there it
             # tests its work inline before it asks the pool (conc.par.14, lower_task.ail).
-            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
+            if is_par or self.auto_par.contains("{self.file_paths[self.file]}:{pos.line}:{pos.col}")
                 if mutable
-                    problem(pos, "`for mut` isn't in the native subset yet")
+                    self.problem(pos, "`for mut` isn't in the native subset yet")
                     return
                 lower_par_for(var, iter, body, pos, auto)
                 return
-            lower_for(var, iter, body, mutable, pos)
+            self.lower_for(var, iter, body, mutable, pos)
         Break(pos, target) => lower_leave(pos, target, true)
         Continue(pos, target) => lower_leave(pos, target, false)
         Return(value, pos) =>
             if lower_fail_return(value, pos)
                 return
             if e := value
-                if ret.is_unit()
+                if self.ret.is_unit()
                     # `return f()` of a call that fails, in a function with no result:
                     # the failure travels in the error slot.
-                    lower_expr(e, Ty.Unit)
+                    self.lower_expr(e, Ty.Unit)
                     check_ensures(-1, pos)
-                    finish(return_of(-1))
+                    self.finish(return_of(-1))
                     return
-                v := lower_value(e, ret) else return
-                rv := copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))
+                v := self.lower_value(e, self.ret) else return
+                rv := self.copy_if_borrowed(e, Val(id: self.convert(v, self.ret, pos), ty: v.ty))
                 check_ensures(rv, pos)
-                finish(return_of(rv))
+                self.finish(return_of(rv))
             else
                 check_ensures(-1, pos)
-                finish(return_of(-1))
+                self.finish(return_of(-1))
         Eval(e) =>
             note_statement(e)
             if is_list_pop(e) and lower_pop_stmt(e) != none
                 return
-            uniq_discard(e, lower_expr(e, Ty.Unit))
+            uniq_discard(e, self.lower_expr(e, Ty.Unit))
         Handle(value, other) => lower_handle(value, other)
         Defer(st, _) => defer_note(st)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
-        Unsafe(body, _) => lower_block(body, false)
+        Unsafe(body, _) => self.lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
         LocalFn(d) => lower_local_fn(d)
         Select(arms, pos) => lower_select(arms, pos)
@@ -1292,8 +1293,8 @@ fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
     match e
         Member | Index => copy_value(v)
         Name(n, _) =>
-            key := lookup(n) else return copy_value(v)
-            if borrowed.contains(key) then copy_value(v) else v.id
+            key := self.lookup(n) else return copy_value(v)
+            if self.borrowed.contains(key) then copy_value(v) else v.id
         If | Match => if place_tail(e, false) then copy_value(v) else v.id
         _ => v.id
 
@@ -1305,10 +1306,10 @@ fn Lower.copy_list(mut self, v Val) int
         depth += 1
         t = t.elem() else Ty.Unknown
     # A `List[bool]` holds bytes (native-abi.md §2).
-    bytes := konst(t.elem_bytes(), Ty.Int)
+    bytes := self.konst(t.elem_bytes(), Ty.Int)
     if depth == 0
-        return call("rt.list_copy", [v.id, bytes], v.ty)
-    call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int), bytes], v.ty)
+        return self.call("rt.list_copy", [v.id, bytes], v.ty)
+    self.call("rt.list_copy_deep", [v.id, self.konst(depth, Ty.Int), bytes], v.ty)
 
 fn is_place(e ast.Expr) bool
     match e
@@ -1318,59 +1319,62 @@ fn is_place(e ast.Expr) bool
 fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     match target
         Name(name, npos) =>
-            key := lookup(name) else
+            key := self.lookup(name) else
                 k := self_slot(name)
                 if k < 0
-                    problem(npos, "unknown name `{name}`")
+                    self.problem(npos, "unknown name `{name}`")
                     return
-                assign_slot(self_value(), self_ty, k, op, value, pos)
+                assign_slot(self_value(), self.self_ty, k, op, value, pos)
                 return
-            ty := var_ty[key]
+            ty := self.var_ty[key]
             mut v := -1
             if o := op
-                old := Val(id: read_var(key, cur), ty: ty)
-                r := lower_value(value, ty) else return
+                old := Val(id: self.read_var(key, self.cur), ty: ty)
+                r := self.lower_value(value, ty) else return
                 v = binary(o, old, r, pos).id
             else
-                r := lower_value(value, ty) else return
+                r := self.lower_value(value, ty) else return
                 ty2 := settle_var(target, ty, r)
-                v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
+                v = self.copy_if_place(value, Val(id: self.convert(r, ty2, pos), ty: ty2))
             note_assigned(key, value)
             uniq_replace(key)
-            write_var(key, cur, assign_param(key, ty, v, pos))
+            self.write_var(key, self.cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
             if g := grid_place(recv, index, ipos)
-                lower_assign_body(g, op, value, pos)
+                self.lower_assign_body(g, op, value, pos)
                 return
             if assign_after_rhs(target, op, value, pos)
                 return
-            l := lower_value(recv, none) else return
+            l := self.lower_value(recv, none) else return
             if l.ty.is_coll()
                 lower_map_assign(l, index, op, value, pos, ipos)
                 return
             elem := l.ty.elem() else
-                problem(ipos, "indexing a `{l.ty.name()}` isn't in the native subset yet")
+                self.problem(ipos, "indexing a `{l.ty.name()}` isn't in the native subset yet")
                 return
-            i := lower_value(index, Ty.Int) else return
+            i := self.lower_value(index, Ty.Int) else return
             mut v := -1
             if o := op
-                old := Val(id: checked("get", [l.id, i.id], bounds_site(ipos), elem), ty: elem)
-                r := lower_value(value, elem) else return
+                old := Val(
+                    id: self.checked("get", [l.id, i.id], self.bounds_site(ipos), elem),
+                    ty: elem,
+                )
+                r := self.lower_value(value, elem) else return
                 v = binary(o, old, r, pos).id
             else
-                r := lower_value(value, elem) else return
-                v = copy_if_place(value, Val(id: convert(r, elem, pos), ty: elem))
+                r := self.lower_value(value, elem) else return
+                v = self.copy_if_place(value, Val(id: self.convert(r, elem, pos), ty: elem))
             uniq_drop_elem(l.id, i.id, elem, ipos)
             v = slot_val(v, elem)
             mut set := inst(-1, "set", [l.id, i.id, v])
-            set.site = bounds_site(ipos)
-            emit_void(set)
+            set.site = self.bounds_site(ipos)
+            self.emit_void(set)
             watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
         Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
-        _ => problem(pos, "this assignment target isn't in the native subset yet")
+        _ => self.problem(pos, "this assignment target isn't in the native subset yet")
 
 fn Lower.bounds_site(mut self, pos ast.Pos) int
-    site("type.coll.4", "bounds", "", pos)
+    self.site("type.coll.4", "bounds", "", pos)
 
 ## The runtime's `LIM_TICK` slot (rt/native/limits.ail): zero unless a time
 ## limit is on.
@@ -1381,48 +1385,48 @@ LIM_TICK_SLOT := 45
 ## emitted only when `ail build --timeout` baked a limit in.
 fn Lower.poll_limits(mut self, pos ast.Pos)
     # Only a build with a baked time limit pays for it (ADR 0727).
-    if not sigs.contains("rt.lim_loop_polls")
+    if not self.sigs.contains("rt.lim_loop_polls")
         return
     t := load(global_addr(LIM_TICK_SLOT), 0, Ty.Int)
-    on := op("ne", [t, konst(0, Ty.Int)], Ty.Bool)
-    slow := new_block()
-    rest := new_block()
-    branch(on, slow, [], rest, [])
-    seal(slow)
-    cur = slow
+    on := self.op("ne", [t, self.konst(0, Ty.Int)], Ty.Bool)
+    slow := self.new_block()
+    rest := self.new_block()
+    self.branch(on, slow, [], rest, [])
+    self.seal(slow)
+    self.cur = slow
     # The call position puts the loop in the trap's stack (run.limit.1, trace.snap.1).
     call_at("rt.limits_poll", [], Ty.Unit, pos)
-    jump(rest, [])
-    seal(rest)
-    cur = rest
+    self.jump(rest, [])
+    self.seal(rest)
+    self.cur = rest
 
 fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt], wpos ast.Pos)
-    head := new_block()
-    jump(head, [])
-    cur = head
-    poll_limits(expr_pos(cond))
+    head := self.new_block()
+    self.jump(head, [])
+    self.cur = head
+    self.poll_limits(expr_pos(cond))
     forever := match cond
         Bool(v, _) => v
         _ => false
-    inner := new_block()
-    exit := new_block()
+    inner := self.new_block()
+    exit := self.new_block()
     if forever
-        jump(inner, [])
+        self.jump(inner, [])
     else
-        c := lower_value(cond, Ty.Bool) else return
-        branch(c.id, inner, [], exit, [])
-    seal(inner)
-    cur = inner
-    loops.push(Loop(cont: head, exit: exit, at: wpos))
-    lower_block(body, false)
-    loops.pop()
-    jump(head, [])
-    seal(head)
-    seal(exit)
-    cur = exit
+        c := self.lower_value(cond, Ty.Bool) else return
+        self.branch(c.id, inner, [], exit, [])
+    self.seal(inner)
+    self.cur = inner
+    self.loops.push(Loop(cont: head, exit: exit, at: wpos))
+    self.lower_block(body, false)
+    self.loops.pop()
+    self.jump(head, [])
+    self.seal(head)
+    self.seal(exit)
+    self.cur = exit
     # `while true` with no `break` never falls out (expr.loop.1).
-    if forever and preds[exit].len() == 0
-        finish(unreachable_term())
+    if forever and self.preds[exit].len() == 0
+        self.finish(unreachable_term())
 
 ## `for x in a..b`, `a..=b` or a list (expr.loop.2-3). The index is a hidden
 ## variable; `continue` goes to the latch, which steps it.
@@ -1434,7 +1438,7 @@ fn Lower.lower_for(
     mutable bool,
     fpos ast.Pos,
 )
-    scopes.push(Map[str, str]())
+    self.scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1
     mut inclusive := false
@@ -1443,27 +1447,27 @@ fn Lower.lower_for(
     match iter
         Range(a, b, incl, rpos) =>
             if a == none or b == none
-                problem(rpos, "a `for` over an open range isn't in the native subset")
+                self.problem(rpos, "a `for` over an open range isn't in the native subset")
                 return
-            x := lower_value(a else iter, Ty.Int) else return
-            y := lower_value(b else iter, Ty.Int) else return
+            x := self.lower_value(a else iter, Ty.Int) else return
+            y := self.lower_value(b else iter, Ty.Int) else return
             lo = x.id
             hi = y.id
             inclusive = incl
         _ =>
-            l0 := lower_value(iter, none) else return
+            l0 := self.lower_value(iter, none) else return
             if chan_elem(l0.ty) != none
                 lower_chan_for(var, l0, body, expr_pos(iter), fpos)
                 return
             if lower_iter_for(var, iter, l0, body, fpos)
                 return
             if is_pair_loop(var, l0, body)
-                scopes.pop()
+                self.scopes.pop()
                 for_pairs(var, iter, l0, body, fpos)
                 return
             l := iter_coll(l0)
             e := l.ty.elem() else
-                problem(
+                self.problem(
                     expr_pos(iter),
                     "a `for` over a `{l.ty.name()}` isn't in the native subset yet",
                 )
@@ -1473,51 +1477,51 @@ fn Lower.lower_for(
             elem = e
             list = l.id
             if mutates(body, iter) and l.id == l0.id and not mutable
-                list = copy_list(l)
-            lo = konst(0, Ty.Int)
-            hi = op("len", [list], Ty.Int)
-    nvars += 1
-    ikey := "#i{nvars}"
-    var_ty[ikey] = Ty.Int
-    write_var(ikey, cur, lo)
-    head := new_block()
-    jump(head, [])
-    cur = head
-    i := read_var(ikey, head)
-    c := op(if inclusive then "le" else "lt", [i, hi], Ty.Bool)
-    inner := new_block()
-    exit := new_block()
-    latch := new_block()
-    branch(c, inner, [], exit, [])
-    seal(inner)
-    cur = inner
+                list = self.copy_list(l)
+            lo = self.konst(0, Ty.Int)
+            hi = self.op("len", [list], Ty.Int)
+    self.nvars += 1
+    ikey := "#i{self.nvars}"
+    self.var_ty[ikey] = Ty.Int
+    self.write_var(ikey, self.cur, lo)
+    head := self.new_block()
+    self.jump(head, [])
+    self.cur = head
+    i := self.read_var(ikey, head)
+    c := self.op(if inclusive then "le" else "lt", [i, hi], Ty.Bool)
+    inner := self.new_block()
+    exit := self.new_block()
+    latch := self.new_block()
+    self.branch(c, inner, [], exit, [])
+    self.seal(inner)
+    self.cur = inner
     if list >= 0
-        declare(var, elem, op("get", [list, i], elem))
-        borrowed.add(lookup(var) else "")
+        self.declare(var, elem, self.op("get", [list, i], elem))
+        self.borrowed.add(self.lookup(var) else "")
         if mutable
             note_elem(var, elem, list, i, fpos)
     else
-        declare(var, Ty.Int, i)
-    loops.push(Loop(cont: latch, exit: exit, at: fpos))
-    lower_block(body, false)
-    loops.pop()
-    jump(latch, [])
-    seal(latch)
-    cur = latch
-    j := read_var(ikey, latch)
+        self.declare(var, Ty.Int, i)
+    self.loops.push(Loop(cont: latch, exit: exit, at: fpos))
+    self.lower_block(body, false)
+    self.loops.pop()
+    self.jump(latch, [])
+    self.seal(latch)
+    self.cur = latch
+    j := self.read_var(ikey, latch)
     if inclusive
         # `i + 1` would overflow when `hi` is the largest `int`.
-        last := op("eq", [j, hi], Ty.Bool)
-        step := new_block()
-        branch(last, exit, [], step, [])
-        seal(step)
-        cur = step
-    write_var(ikey, cur, op("add", [j, konst(1, Ty.Int)], Ty.Int))
-    jump(head, [])
-    seal(head)
-    seal(exit)
-    cur = exit
-    scopes.pop()
+        last := self.op("eq", [j, hi], Ty.Bool)
+        step := self.new_block()
+        self.branch(last, exit, [], step, [])
+        self.seal(step)
+        self.cur = step
+    self.write_var(ikey, self.cur, self.op("add", [j, self.konst(1, Ty.Int)], Ty.Int))
+    self.jump(head, [])
+    self.seal(head)
+    self.seal(exit)
+    self.cur = exit
+    self.scopes.pop()
 
 ## Whether a loop body may change the list it iterates (so the loop needs
 ## a copy: `for x in xs` sees the list as it was, expr.loop.3).
@@ -1611,9 +1615,9 @@ fn expr_mutates(e ast.Expr, name str) bool
 
 ## An expression that must have a value.
 fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
-    v := lower_expr(e, want)?
+    v := self.lower_expr(e, want)?
     if v.id < 0
-        problem(expr_pos(e), "this expression has no value")
+        self.problem(expr_pos(e), "this expression has no value")
         return none
     if t := any_of(want)
         if any_of(v.ty) == none and not v.ty.is_unknown()
@@ -1627,24 +1631,24 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
     match e
         Int(text, pos) => lower_int_lit(text, pos, want)
         Float(x, _) => float_lit(x, want)
-        Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
+        Bool(b, _) => Val(id: self.konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
         Bytes(hex, pos) => lower_bytes_lit(hex, pos)
-        Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
-        Name(name, pos) => lower_name(name, pos, want)
+        Str(s, _) => Val(id: self.str_value(s), ty: Ty.Str)
+        Name(name, pos) => self.lower_name(name, pos, want)
         Unary(o, operand, pos) => lower_unary(o, operand, pos, want)
         Binary(o, lhs, rhs, pos) => lower_binary_expr(o, lhs, rhs, pos, want)
-        Call(callee, args, pos) => lower_call_expr(callee, args, pos, want)
-        Method(recv, name, npos, args) => lower_method(recv, name, npos, args, want)
+        Call(callee, args, pos) => self.lower_call_expr(callee, args, pos, want)
+        Method(recv, name, npos, args) => self.lower_method(recv, name, npos, args, want)
         Index(recv, index, pos) => lower_index(recv, index, pos)
-        ListLit(items, pos) => lower_list(items, pos, want)
-        If(branches, els, else_err, pos) => lower_if(branches, els, else_err, pos, want)
+        ListLit(items, pos) => self.lower_list(items, pos, want)
+        If(branches, els, else_err, pos) => self.lower_if(branches, els, else_err, pos, want)
         Interp(parts, pos) => lower_interp_value(parts, pos)
         Char(text, _) => lower_char(text)
         NoneLit(pos) => lower_none(want, pos)
         Hole(pos) => lower_hole(pos, want)
-        TypeArgs(_, _, pos) => unsupported(pos, "this expression")
+        TypeArgs(_, _, pos) => self.unsupported(pos, "this expression")
         Member(recv, name, pos) => lower_member_expr(recv, name, pos, e, want)
-        Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
+        Range(_, _, _, pos) => self.unsupported(pos, "a range outside `for`")
         MapLit(entries, pos) => lower_map_lit(entries, pos, want)
         SetLit(items, pos) => lower_set_lit(items, pos, want)
         Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
@@ -1664,43 +1668,43 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
 
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
 fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
-    key := lookup(name) else
+    key := self.lookup(name) else
         if v := const_param_value(name)
             return v
-        if consts.contains("{prefix}{name}")
-            return lower_const("{prefix}{name}", want)
+        if self.consts.contains("{self.prefix}{name}")
+            return lower_const("{self.prefix}{name}", want)
         k := self_slot(name)
         if k >= 0
-            t := structs[self_ty][k].ty
+            t := self.structs[self.self_ty][k].ty
             return Val(id: load(self_value(), k, t), ty: t)
         if v := fn_value(name, pos)
             return v
-        if globals.contains("{prefix}{name}")
-            return global_const("{prefix}{name}")
+        if self.globals.contains("{self.prefix}{name}")
+            return global_const("{self.prefix}{name}")
         if v := bare_variant(name, want)
             return new_variant(v, none, pos)
-        problem(
+        self.problem(
             pos,
             "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
         )
         return none
-    if var_ty[key].is_unknown()
-        fn_failed = true
+    if self.var_ty[key].is_unknown()
+        self.fn_failed = true
         return none
-    Val(id: read_var(key, cur), ty: var_ty[key])
+    Val(id: self.read_var(key, self.cur), ty: self.var_ty[key])
 
 ## A call `f(...)`, or a variant built by calling it.
 fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
     if ordered := label_ordered(callee, args)
-        return lower_call_expr(callee, ordered, pos, want)
+        return self.lower_call_expr(callee, ordered, pos, want)
     if is_generic_callee(callee)
         return lower_generic_callee(callee, args, pos, want)
     if v := call_variant(callee, want)
         return new_variant(v, args, pos)
-    lower_call(callee, args, pos)
+    self.lower_call(callee, args, pos)
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
-    problem(pos, "not in the native subset yet: {what}")
+    self.problem(pos, "not in the native subset yet: {what}")
     none
 
 fn is_range(e ast.Expr) bool
@@ -1718,22 +1722,22 @@ fn Lower.lower_if(
     pos ast.Pos,
     want Ty?,
 ) Val?
-    join := new_block()
+    join := self.new_block()
     mut taken := false
     mut taken_ty := Ty.Unknown
     value := els != none and want_value(want)
     mut result := -1
     mut rty := Ty.Unknown
     if value
-        result = new_value(Ty.Unknown, "")
-        blocks[join].params.push(result)
+        result = self.new_value(Ty.Unknown, "")
+        self.blocks[join].params.push(result)
         rty = arms_start(want, [br.body for br in branches], els)
     for br in branches
         mut bound := ""
         mut bval := Val(id: -1, ty: Ty.Unit)
         mut failable := false
         c := match br.cond
-            Test(x) => lower_value(x, Ty.Bool)?
+            Test(x) => self.lower_value(x, Ty.Bool)?
             Bind(bname, bpos, x) =>
                 # `if v := f(i)` on a call that can fail binds its value on success.
                 if fallible_call(x)
@@ -1744,49 +1748,49 @@ fn Lower.lower_if(
                     taken_ty = m.err
                     Val(id: m.present, ty: Ty.Bool)
                 else
-                    o := lower_value(x, none)?
+                    o := self.lower_value(x, none)?
                     if o.ty.opt_inner() == none
-                        return unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
+                        return self.unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
                     bound = bname
                     bval = o
-                    Val(id: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
-        yes := new_block()
-        no := new_block()
-        branch(c.id, yes, [], no, [])
-        seal(yes)
-        seal(no)
+                    Val(id: self.op("ne", [o.id, self.konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+        yes := self.new_block()
+        no := self.new_block()
+        self.branch(c.id, yes, [], no, [])
+        self.seal(yes)
+        self.seal(no)
         if failable
             # The failure is handled by taking the `else` side, which may name it.
-            cur = no
+            self.cur = no
             if else_err == none
-                call("rt.err_clear", [], Ty.Unit)
+                self.call("rt.err_clear", [], Ty.Unit)
             else
                 taken = true
-        cur = yes
-        scopes.push(Map[str, str]())
+        self.cur = yes
+        self.scopes.push(Map[str, str]())
         if bound != ""
             u := if failable then bval else unwrap(bval)
-            declare(bound, u.ty, u.id)
-        tail_want = if value and not rty.is_unknown() then rty else none
-        v := lower_block(br.body, value)
-        scopes.pop()
-        rty = arm_end(join, value, v, pos, rty)
-        cur = no
+            self.declare(bound, u.ty, u.id)
+        self.tail_want = if value and not rty.is_unknown() then rty else none
+        v := self.lower_block(br.body, value)
+        self.scopes.pop()
+        rty = self.arm_end(join, value, v, pos, rty)
+        self.cur = no
     if body := els
-        scopes.push(Map[str, str]())
+        self.scopes.push(Map[str, str]())
         if taken
             if n := else_err
                 bind_taken_error(n.name, taken_ty)
-        tail_want = if value and not rty.is_unknown() then rty else none
-        v := lower_block(body, value)
-        scopes.pop()
-        rty = arm_end(join, value, v, pos, rty)
+        self.tail_want = if value and not rty.is_unknown() then rty else none
+        v := self.lower_block(body, value)
+        self.scopes.pop()
+        rty = self.arm_end(join, value, v, pos, rty)
     else
-        jump(join, [])
-    seal(join)
-    cur = join
+        self.jump(join, [])
+    self.seal(join)
+    self.cur = join
     if value
-        vals[result] = rty
+        self.vals[result] = rty
         return Val(id: result, ty: rty)
     Val(id: -1, ty: Ty.Unit)
 
@@ -1797,34 +1801,34 @@ fn want_value(want Ty?) bool
 
 ## Finish an arm of an `if`; gives the `if`'s type as known so far.
 fn Lower.arm_end(mut self, join int, value bool, v Val?, pos ast.Pos, rty Ty) Ty
-    if done()
+    if self.done()
         return rty
     if not value
-        jump(join, [])
+        self.jump(join, [])
         return rty
     x := v else
-        if not failing()
-            problem(pos, "this `if` needs a value in every branch")
-        jump(join, [])
+        if not self.failing()
+            self.problem(pos, "this `if` needs a value in every branch")
+        self.jump(join, [])
         return rty
     mut t := rty
     if t.is_unknown() or is_pending_opt(t)
         t = settle_arm_ty(t, x.ty)
-    jump(join, [convert(x, t, pos)])
+    self.jump(join, [self.convert(x, t, pos)])
     t
 
 fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
     mut elem := Ty.Unknown
     if w := want
         elem = w.elem() else Ty.Unknown
-    n := konst(items.len(), Ty.Int)
+    n := self.konst(items.len(), Ty.Int)
     mut has_none := false
     for x in items
         if is_none_lit(x)
             has_none = true
     mut vs := List[int]()
     for x in items
-        v := lower_value(x, if elem.is_unknown() then none else elem)?
+        v := self.lower_value(x, if elem.is_unknown() then none else elem)?
         if elem.is_unknown() or is_pending_opt(elem)
             # A `none` among the items makes the element type optional.
             elem = if has_none and v.ty.opt_inner() == none then (opt_of(v.ty) else v.ty) else v.ty
@@ -1841,11 +1845,11 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not elem.is_fn()
             and not elem.is_tensor()
             and not is_shared_handle(elem)
-            return unsupported(pos, "a list of `{elem.name()}`")
-        vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
-    l := call("rt.list_new", [n], Ty.List(elem))
+            return self.unsupported(pos, "a list of `{elem.name()}`")
+        vs.push(self.convert(Val(id: self.copy_if_place(x, v), ty: v.ty), elem, pos))
+    l := self.call("rt.list_new", [n], Ty.List(elem))
     for v in vs
-        call(push_fn(elem), [l, v], Ty.Unit)
+        self.call(push_fn(elem), [l, v], Ty.Unit)
     Val(id: l, ty: Ty.List(elem))
 
 fn push_fn(elem Ty) str
@@ -1856,100 +1860,104 @@ fn push_fn(elem Ty) str
 fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) Val?
     match callee
         Name(name, npos) =>
-            if name == "print" and not is_rt
+            if name == "print" and not self.is_rt
                 return lower_print(args, pos)
-            if name == ast.YIELD and not is_rt
+            if name == ast.YIELD and not self.is_rt
                 return lower_yield(args, pos)
-            if ASSERT_FNS.contains(name) and not is_rt and lookup(name) == none
+            if ASSERT_FNS.contains(name) and not self.is_rt and self.lookup(name) == none
                 return lower_assert(name, args, pos)
-            if name == "Atomic" and tk.on and not is_rt
+            if name == "Atomic" and self.tk.on and not self.is_rt
                 return lower_atomic_new(none, args, pos)
-            if is_rt and PRIMS.contains(name)
-                return lower_prim(name, args)
-            if name == "unreachable" and not is_rt and lookup(name) == none
+            if self.is_rt and PRIMS.contains(name)
+                return self.lower_prim(name, args)
+            if name == "unreachable" and not self.is_rt and self.lookup(name) == none
                 return lower_unreachable(args, pos)
             # A local that isn't a function value doesn't shadow a function or method.
-            if k := lookup(name)
-                if var_ty[k].is_fn()
-                    return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, npos)
+            if k := self.lookup(name)
+                if self.var_ty[k].is_fn()
+                    return call_value(
+                        Val(id: self.read_var(k, self.cur), ty: self.var_ty[k]),
+                        args,
+                        npos,
+                    )
             if (name == "TaskGroup" or name == "Mutex")
-                and tk.on
-                and not is_rt
-                and lookup(name) == none
+                and self.tk.on
+                and not self.is_rt
+                and self.lookup(name) == none
                 return lower_sync_new(name, args, pos)
-            if lookup(name) == none
+            if self.lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
-            if self_ty != "" and not sigs.contains("{self_ty}.{name}")
-                instance_method("{self_ty}.{name}")
-            if self_ty != "" and sigs.contains("{self_ty}.{name}")
+            if self.self_ty != "" and not self.sigs.contains("{self.self_ty}.{name}")
+                instance_method("{self.self_ty}.{name}")
+            if self.self_ty != "" and self.sigs.contains("{self.self_ty}.{name}")
                 return struct_call(
-                    "{self_ty}.{name}",
-                    Val(id: self_value(), ty: owner_ty(self_ty)),
+                    "{self.self_ty}.{name}",
+                    Val(id: self_value(), ty: owner_ty(self.self_ty)),
                     args,
                     npos,
                 )
-            if self_ty != "" and bad.contains("{self_ty}.{name}")
-                release("{self_ty}.{name}")
-                fn_failed = true
+            if self.self_ty != "" and self.bad.contains("{self.self_ty}.{name}")
+                release("{self.self_ty}.{name}")
+                self.fn_failed = true
                 return none
-            mut key := "{prefix}{name}"
-            if not sigs.contains(key) and not bad.contains(key)
+            mut key := "{self.prefix}{name}"
+            if not self.sigs.contains(key) and not self.bad.contains(key)
                 key = prelude_key(name) else key
-            if bad.contains(key)
+            if self.bad.contains(key)
                 release(key)
-                fn_failed = true
+                self.fn_failed = true
                 return none
-            if name == "zip" and not sigs.contains(key)
+            if name == "zip" and not self.sigs.contains(key)
                 return lower_zip(args, pos)
-            sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
+            sig := self.sigs.get(key) else return self.unsupported(npos, "calling `{name}`")
             if c_call_site(key)
                 return lower_variadic(key, sig, args, pos, npos)
             if args.len() != sig.params.len()
-                return unsupported(pos, "this call")
+                return self.unsupported(pos, "this call")
             mut vs := List[int]()
             mut cells := List[Cell]()
             for i in 0..args.len()
                 a := args[i]
                 if a.label != none
-                    return unsupported(pos, "labelled arguments")
+                    return self.unsupported(pos, "labelled arguments")
                 if t := cell_ty(sig.params[i])
                     vs.push(cell_arg(a, t, mut cells)?)
                     continue
-                v := lower_value(a.value, sig.params[i])?
+                v := self.lower_value(a.value, sig.params[i])?
                 retype_arg(a.value, v, sig.params[i])
                 uniq_arg(a)
                 vs.push(shield_arg(args, i, Val(
-                    id: convert(v, sig.params[i], expr_pos(a.value)),
+                    id: self.convert(v, sig.params[i], expr_pos(a.value)),
                     ty: v.ty,
                 )))
             check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
             instr_watch_cells(cells)
-            res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            res := Val(id: self.user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
             instr_watch_cells_end(cells)
             cells_back(cells)
             res
         Member =>
-            if k := type_name(callee)
+            if k := self.type_name(callee)
                 return new_struct(k, args, pos)
             call_member_value(callee, args, pos)
         TypeArgs(name, targs, tpos) =>
-            if name == "Atomic" and tk.on and not is_rt
+            if name == "Atomic" and self.tk.on and not self.is_rt
                 return lower_atomic_new(targs, args, pos)
-            if name == "Channel" and tk.on and not is_rt
+            if name == "Channel" and self.tk.on and not self.is_rt
                 return lower_chan_new(targs, args, pos)
-            if name == "Mutex" and tk.on and not is_rt
+            if name == "Mutex" and self.tk.on and not self.is_rt
                 return lower_mutex_new(targs, args, pos)
             if (name == "Map" or name == "Set") and args.len() == 0
                 return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
-                t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
-                    return unsupported(tpos, "this list type")
-                return Val(id: call("rt.list_new", [konst(0, Ty.Int)], t), ty: t)
-            unsupported(tpos, "`{name}[...]`")
+                t := self.type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
+                    return self.unsupported(tpos, "this list type")
+                return Val(id: self.call("rt.list_new", [self.konst(0, Ty.Int)], t), ty: t)
+            self.unsupported(tpos, "`{name}[...]`")
         _ =>
-            f := lower_value(callee, none)?
+            f := self.lower_value(callee, none)?
             call_value(f, args, expr_pos(callee))
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
@@ -1961,14 +1969,14 @@ fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
         if k == 0 and (name == "import_call" or name == "fn_addr")
             match args[0].value
                 Str(s, _) => sym = s
-                _ => return unsupported(expr_pos(args[0].value), "a computed symbol name")
+                _ => return self.unsupported(expr_pos(args[0].value), "a computed symbol name")
             continue
-        v := lower_value(args[k].value, none)?
+        v := self.lower_value(args[k].value, none)?
         vs.push(v.id)
     # An import is an ordinary call whose name carries the `libsys.` prefix
     # (native-abi.md §11); the code generator calls it through its GOT slot.
     if name == "import_call"
-        return Val(id: call("libsys.{sym}", vs, Ty.Int), ty: Ty.Int)
+        return Val(id: self.call("libsys.{sym}", vs, Ty.Int), ty: Ty.Int)
     t := match PRIMS[name]
         "int" => Ty.Int
         "float" => Ty.Float
@@ -1979,30 +1987,30 @@ fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     # The symbol rides in the name: `fn_addr:rt.f`.
     i.name = if sym == "" then name else "{name}:{sym}"
     if t.is_unit()
-        emit_void(i)
+        self.emit_void(i)
         return Val(id: -1, ty: t)
-    Val(id: emit(i, t), ty: t)
+    Val(id: self.emit(i, t), ty: t)
 
 ## `print(x)`: a number, `bool`, string literal, list of numbers, or an
 ## interpolation of those (17-std, native-abi.md §8).
 fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() != 1
-        return unsupported(pos, "this `print`")
+        return self.unsupported(pos, "this `print`")
     match args[0].value
         Interp(parts, ipos) =>
             for p in parts
                 match p
-                    Lit(text) => call("rt.out_str", [str_value(text)], Ty.Unit)
+                    Lit(text) => self.call("rt.out_str", [self.str_value(text)], Ty.Unit)
                     Hole(x) =>
-                        v := lower_value(x, none)?
-                        out(v, ipos)?
+                        v := self.lower_value(x, none)?
+                        self.out(v, ipos)?
                     Fmt(x, spec) =>
-                        v := lower_value(x, none)?
+                        v := self.lower_value(x, none)?
                         lower_fmt_print(v, spec, ipos)?
         _ =>
-            v := lower_value(args[0].value, none)?
-            out(v, pos)?
-    call("rt.out_nl", [], Ty.Unit)
+            v := self.lower_value(args[0].value, none)?
+            self.out(v, pos)?
+    self.call("rt.out_nl", [], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 
 fn out_fn(t Ty) str
@@ -2052,15 +2060,19 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         if leaf.is_sized() and leaf.elem_bytes() < 8
             k = narrow_leaf(leaf.elem_bytes())
         if k >= 0 and (depth > 0 or k >= 3)
-            call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
+            self.call(
+                "rt.out_list_deep",
+                [v.id, self.konst(depth, Ty.Int), self.konst(k, Ty.Int)],
+                Ty.Unit,
+            )
             return Val(id: -1, ty: Ty.Unit)
     if s := display_call(v)
-        call("rt.out_str", [s], Ty.Unit)
+        self.call("rt.out_str", [s], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
-        return unsupported(pos, "printing a `{v.ty.name()}`")
-    call(f, [v.id], Ty.Unit)
+        return self.unsupported(pos, "printing a `{v.ty.name()}`")
+    self.call(f, [v.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 
 fn Lower.lower_method(
@@ -2072,14 +2084,14 @@ fn Lower.lower_method(
     want Ty?,
 ) Val?
     if rest := trait_call_args(recv, args)
-        return lower_method(args[0].value, name, npos, rest, want)
+        return self.lower_method(args[0].value, name, npos, rest, want)
     if ta := module_type_args(recv)
-        return lower_method(ta, name, npos, args, want)
+        return self.lower_method(ta, name, npos, args, want)
     # std.env.1
-    if name == "args" and args.len() == 0 and is_module(recv, "env")
+    if name == "args" and args.len() == 0 and self.is_module(recv, "env")
         t := Ty.List(Ty.Str)
-        return Val(id: call("rt.args", [], t), ty: t)
-    if name == "select" and tk.on and is_module(recv, "task")
+        return Val(id: self.call("rt.args", [], t), ty: t)
+    if name == "select" and self.tk.on and self.is_module(recv, "task")
         return lower_chan_select(args, npos)
     om := os_module(recv)
     if om != ""
@@ -2087,13 +2099,13 @@ fn Lower.lower_method(
     sm := std_module(recv)
     if sm != ""
         return lower_std_call(sm, name, npos, args)
-    if name == "from_code" and is_module(recv, "char")
+    if name == "from_code" and self.is_module(recv, "char")
         return lower_char_from_code(args, npos)
-    if is_module(recv, "tensor")
+    if self.is_module(recv, "tensor")
         return lower_tensor_call(name, args, npos, want)
-    if name == "select" and tk.on and is_module(recv, "task")
+    if name == "select" and self.tk.on and self.is_module(recv, "task")
         return lower_chan_select(args, npos)
-    if is_module(recv, "mem")
+    if self.is_module(recv, "mem")
         return lower_mem_call(name, npos, args)
     if g := generic_member_ref(recv)
         return generic_member(g, recv, name, args, npos, none)
@@ -2106,18 +2118,18 @@ fn Lower.lower_method(
     if a := assoc_owner(recv)
         assoc_instance(recv, name)
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
-    if n := type_name(recv)
+    if n := self.type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
     if cal := qualified_generic_callee(recv, name, npos)
         return lower_generic_callee(cal, args, npos, want)
-    if m := module_name(recv)
-        if structs.contains("{m}.{name}")
+    if m := self.module_name(recv)
+        if self.structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
     if name == "sum" and args.len() == 0
         if ws := tensor_widen_sum(recv)
             return ws
-    r := deref_use(lower_value(recv, none)?, expr_pos(recv))
+    r := deref_use(self.lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
@@ -2149,13 +2161,13 @@ fn Lower.lower_method(
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable
-            return unsupported(npos, "this method call")
+            return self.unsupported(npos, "this method call")
         mut arg_want := str_arg_want(r.ty, name)
         if e := r.ty.elem()
             arg_want = if name == "push" then e else Ty.Int
             if name == "join"
                 arg_want = Ty.Str
-        vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
+        vs.push(self.lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
     if name == "to_str" and vs.len() == 0 and r.ty != Ty.Bytes
         # type.str.3
         text := text_of(r, npos)?
@@ -2168,13 +2180,13 @@ fn Lower.lower_method(
         Ptr(_) => return ptr_method(r, name, npos, vs)
         Char => return lower_char_method(r, name, npos, vs)
         List(e) => return list_method(e, r, name, npos, vs, args, recv)
-        _ => return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
-    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+        _ => return self.unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    self.unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 
 ## The struct `e` names, when it names one and no local: `T.f(...)`.
 fn Lower.type_name(self, e ast.Expr) str?
     match e
-        Name(n, _) => if lookup(n) == none then type_key(n) else none
+        Name(n, _) => if self.lookup(n) == none then type_key(n) else none
         Member =>
             p := path_of(e)?
             type_key(p)
@@ -2189,7 +2201,7 @@ fn Lower.module_name(self, e ast.Expr) str?
 ## Whether `e` names module `m` (not a local or a field of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool
     match e
-        Name(n, _) => (n == m or std_alias(n) == m) and lookup(n) == none and self_slot(n) < 0
+        Name(n, _) => (n == m or std_alias(n) == m) and self.lookup(n) == none and self_slot(n) < 0
         _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes
@@ -2198,10 +2210,10 @@ fn Lower.retype(mut self, recv ast.Expr, t Ty)
     n := match recv
         Name(n, _) => n
         _ => return
-    key := lookup(n) else return
-    var_ty[key] = t
-    for v in var_vals[key]
-        vals[v] = t
+    key := self.lookup(n) else return
+    self.var_ty[key] = t
+    for v in self.var_vals[key]
+        self.vals[v] = t
 
 pub fn expr_pos(e ast.Expr) ast.Pos
     match e
