@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bytes
+    items List[bytes]
+
+fn add_bytes(mut xs List[bytes], x bytes)
+    xs.push(x)
+
+fn wrap_bytes(x bytes) bytes?
+    x
+
+fn nothing_bytes() bytes?
+    none
+
+K_bytes := [b"a", b"b"]
+
+## set.literal[bytes]
+fn s0()
+    s := {b"a", b"b"}
+    print(s.len())
+
+## set.empty[bytes]
+fn s1()
+    s := Set[bytes]()
+    print(s.len())
+
+## set.from_list[bytes]
+fn s2()
+    s := {x for x in [b"a", b"b", b"a"]}
+    print(s.len())
+
+## set.add_remove[bytes]
+fn s3()
+    mut s := Set[bytes]()
+    print(s.add(b"a"))
+    print(s.remove(b"a"))
+
+## set.contains[bytes]
+fn s4()
+    s := {b"a", b"b"}
+    print(s.contains(b"a"))
+
+## set.is_empty[bytes]
+fn s5()
+    s := {b"a"}
+    print(s.is_empty())
+
+## set.sorted[bytes]
+fn s6()
+    s := {b"b", b"a"}
+    print(s.sorted().len())
+
+## set.is_subset[bytes]
+fn s7()
+    s := {b"a"}
+    t := {b"a", b"b"}
+    print(s.is_subset(t))
+
+## set.set_ops[bytes]
+fn s8()
+    s := {b"a", b"b"}
+    t := {b"b", b"c"}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[bytes]
+fn s9()
+    s := {b"a", b"b"}
+    print(s.any(|x| x == b"a"))
+    print(s.all(|x| x == b"a"))
+    if x := s.find(|x| x == b"b")
+        print(1)
+
+## set.filter_map[bytes]
+fn s10()
+    s := {b"a", b"b"}
+    print(s.filter(|x| x == b"a").len() + s.map(|x| x.len()).len())
+
+## set.group_by[bytes]
+fn s11()
+    s := {b"a", b"b"}
+    print(s.group_by(|x| x.len()).len())
+
+## set.count_fold[bytes]
+fn s12()
+    s := {b"a", b"b"}
+    print(s.count(|x| x == b"a"))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[bytes]
+fn s13()
+    s := {b"a", b"b"}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[bytes]
+fn s14()
+    s := {b"a", b"b", b"c"}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == b"a").len() + s.skip_while(|x| x == b"a").len())
+
+## set.zip_enumerate[bytes]
+fn s15()
+    s := {b"a", b"b"}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.min_max[bytes]
+fn s16()
+    s := {b"a", b"b"}
+    if x := s.min()
+        print(1)
+    if x := s.max()
+        print(2)
+
+## set.for[bytes]
+fn s17()
+    s := {b"a", b"b"}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[bytes]
+fn s18()
+    s := {b"a", b"b"}
+    print(s == {b"b", b"a"})
+
+## set.print[bytes]
+fn s19()
+    s := {b"a"}
+    print(s)
+
+## set.in_map[bytes]
+fn s20()
+    mut m := Map[str, Set[bytes]]()
+    m["a"] = Set[bytes]()
+    m["a"].add(b"a")
+    print(m["a"].len())
+
+## set.in_list[bytes]
+fn s21()
+    mut xs := [Set[bytes]()]
+    xs[0].add(b"a")
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[bytes]")
+    s0()
+    print("-- set.empty[bytes]")
+    s1()
+    print("-- set.from_list[bytes]")
+    s2()
+    print("-- set.add_remove[bytes]")
+    s3()
+    print("-- set.contains[bytes]")
+    s4()
+    print("-- set.is_empty[bytes]")
+    s5()
+    print("-- set.sorted[bytes]")
+    s6()
+    print("-- set.is_subset[bytes]")
+    s7()
+    print("-- set.set_ops[bytes]")
+    s8()
+    print("-- set.any_all_find[bytes]")
+    s9()
+    print("-- set.filter_map[bytes]")
+    s10()
+    print("-- set.group_by[bytes]")
+    s11()
+    print("-- set.count_fold[bytes]")
+    s12()
+    print("-- set.flat_map[bytes]")
+    s13()
+    print("-- set.take_skip[bytes]")
+    s14()
+    print("-- set.zip_enumerate[bytes]")
+    s15()
+    print("-- set.min_max[bytes]")
+    s16()
+    print("-- set.for[bytes]")
+    s17()
+    print("-- set.eq[bytes]")
+    s18()
+    print("-- set.print[bytes]")
+    s19()
+    print("-- set.in_map[bytes]")
+    s20()
+    print("-- set.in_list[bytes]")
+    s21()

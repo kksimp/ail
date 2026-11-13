@@ -1,0 +1,451 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_set
+    items List[Set[int]]
+
+fn add_set(mut xs List[Set[int]], x Set[int])
+    xs.push(x)
+
+fn wrap_set(x Set[int]) Set[int]?
+    x
+
+fn nothing_set() Set[int]?
+    none
+
+K_set := [{1}, {2}]
+
+## list.literal[set]
+fn s0()
+    xs := [{1}, {2}, {3}]
+    print(xs.len())
+
+## list.empty[set]
+fn s1()
+    xs := List[Set[int]]()
+    print(xs.len())
+
+## list.typed_by_push[set]
+fn s2()
+    mut xs := []
+    xs.push({1})
+    print(xs.len())
+
+## list.len[set]
+fn s3()
+    xs := [{1}, {2}]
+    print(xs.len())
+
+## list.is_empty[set]
+fn s4()
+    xs := [{1}]
+    print(xs.is_empty())
+
+## list.index[set]
+fn s5()
+    xs := [{1}, {2}]
+    x := xs[1]
+    print(x.len() == x.len())
+
+## list.index_assign[set]
+fn s6()
+    mut xs := [{1}, {2}]
+    xs[0] = {3}
+    print(xs.len())
+
+## list.slice[set]
+fn s7()
+    xs := [{1}, {2}, {3}]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[set]
+fn s8()
+    mut xs := [{1}]
+    xs.push({2})
+    print(xs.len())
+
+## list.pop[set]
+fn s9()
+    mut xs := [{1}, {2}]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[set]
+fn s10()
+    mut xs := [{1}, {2}]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[set]
+fn s11()
+    xs := [{1}, {2}]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[set]
+fn s12()
+    mut xs := [{1}]
+    xs.insert(0, {2})
+    print(xs.len())
+
+## list.remove_at[set]
+fn s13()
+    mut xs := [{1}, {2}]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[set]
+fn s14()
+    mut xs := [{1}]
+    xs.extend([{2}, {3}])
+    print(xs.len())
+
+## list.clear[set]
+fn s15()
+    mut xs := [{1}]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[set]
+fn s16()
+    mut xs := [{1}, {2}]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[set]
+fn s17()
+    xs := [{1}, {2}]
+    print(xs.reversed().len())
+
+## list.contains[set]
+fn s18()
+    xs := [{1}, {2}]
+    print(xs.contains({2}))
+
+## list.index_of[set]
+fn s19()
+    xs := [{1}, {2}]
+    print(xs.index_of({2}) else -1)
+
+## list.join[set]
+fn s20()
+    xs := [{1}, {2}]
+    print(xs.join(",").len() > 0)
+
+## list.sorted_by[set]
+fn s21()
+    xs := [{3}, {1}, {2}]
+    print(xs.sorted(by: |x| x.len()).len())
+
+## list.sort_by[set]
+fn s22()
+    mut xs := [{3}, {1}, {2}]
+    xs.sort(by: |x| x.len())
+    print(xs.len())
+
+## list.min_by[set]
+fn s23()
+    xs := [{3}, {1}, {2}]
+    if x := xs.min(by: |x| x.len())
+        print(1)
+    if x := xs.max(by: |x| x.len())
+        print(2)
+
+## list.take_skip[set]
+fn s24()
+    xs := [{1}, {2}, {3}]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.chunks_windows[set]
+fn s25()
+    xs := [{1}, {2}, {3}]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.flatten[set]
+fn s26()
+    xs := [[{1}], [{2}, {3}]]
+    print(xs.flatten().len())
+
+## list.enumerate[set]
+fn s27()
+    xs := [{1}, {2}]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[set]
+fn s28()
+    xs := [{1}, {2}]
+    print(xs.any(|x| x == {1}))
+    print(xs.all(|x| x == {1}))
+
+## list.find[set]
+fn s29()
+    xs := [{1}, {2}]
+    if x := xs.find(|x| x == {2})
+        print(1)
+
+## list.filter[set]
+fn s30()
+    xs := [{1}, {2}]
+    print(xs.filter(|x| x == {1}).len())
+
+## list.map[set]
+fn s31()
+    xs := [{1}, {2}]
+    print(xs.map(|x| x.len()).len())
+
+## list.map_to_self[set]
+fn s32()
+    xs := [{1}, {2}]
+    print(xs.map(|x| x).len())
+
+## list.group_by[set]
+fn s33()
+    xs := [{1}, {2}, {1}]
+    g := xs.group_by(|x| x.len())
+    print(g.len())
+
+## list.count[set]
+fn s34()
+    xs := [{1}, {2}, {1}]
+    print(xs.count(|x| x == {1}))
+
+## list.fold[set]
+fn s35()
+    xs := [{1}, {2}]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[set]
+fn s36()
+    xs := [{1}, {2}]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[set]
+fn s37()
+    xs := [{1}, {2}]
+    print(xs.take_while(|x| x == {1}).len() + xs.skip_while(|x| x == {1}).len())
+
+## list.zip[set]
+fn s38()
+    xs := [{1}, {2}]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[set]
+fn s39()
+    xs := [{1}, {2}]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[set]
+fn s40()
+    xs := [{1}, {2}]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[set]
+fn s41()
+    mut xs := [{1}, {2}]
+    for mut x in xs
+        x = {3}
+    print(xs.len())
+
+## list.comprehension[set]
+fn s42()
+    xs := [{1}, {2}]
+    ys := [x for x in xs if x == {1}]
+    print(ys.len())
+
+## list.eq[set]
+fn s43()
+    xs := [{1}, {2}]
+    ys := [{1}, {2}]
+    print(xs == ys)
+    print(xs != [{3}])
+
+## list.print[set]
+fn s44()
+    xs := [{1}, {2}]
+    print(xs)
+
+## list.interp[set]
+fn s45()
+    xs := [{1}, {2}]
+    print("{xs}".len() > 0)
+
+## list.nested_push[set]
+fn s46()
+    mut xs := [[{1}]]
+    xs[0].push({2})
+    print(xs[0].len())
+
+## list.in_struct[set]
+fn s47()
+    mut b := Box_set(items: [{1}])
+    b.items.push({2})
+    print(b.items.len())
+
+## list.pass_mut[set]
+fn s48()
+    mut xs := [{1}]
+    add_set(mut xs, {2})
+    print(xs.len())
+
+## list.generic_first[set]
+fn s49()
+    xs := [{1}, {2}]
+    if x := first_of(xs)
+        print(1)
+
+## list.contains_list[set]
+fn s50()
+    xs := [[{1}], [{2}]]
+    print(xs.contains([{2}]))
+
+fn main()
+    print("-- list.literal[set]")
+    s0()
+    print("-- list.empty[set]")
+    s1()
+    print("-- list.typed_by_push[set]")
+    s2()
+    print("-- list.len[set]")
+    s3()
+    print("-- list.is_empty[set]")
+    s4()
+    print("-- list.index[set]")
+    s5()
+    print("-- list.index_assign[set]")
+    s6()
+    print("-- list.slice[set]")
+    s7()
+    print("-- list.push[set]")
+    s8()
+    print("-- list.pop[set]")
+    s9()
+    print("-- list.swap[set]")
+    s10()
+    print("-- list.first_last[set]")
+    s11()
+    print("-- list.insert[set]")
+    s12()
+    print("-- list.remove_at[set]")
+    s13()
+    print("-- list.extend[set]")
+    s14()
+    print("-- list.clear[set]")
+    s15()
+    print("-- list.reverse[set]")
+    s16()
+    print("-- list.reversed[set]")
+    s17()
+    print("-- list.contains[set]")
+    s18()
+    print("-- list.index_of[set]")
+    s19()
+    print("-- list.join[set]")
+    s20()
+    print("-- list.sorted_by[set]")
+    s21()
+    print("-- list.sort_by[set]")
+    s22()
+    print("-- list.min_by[set]")
+    s23()
+    print("-- list.take_skip[set]")
+    s24()
+    print("-- list.chunks_windows[set]")
+    s25()
+    print("-- list.flatten[set]")
+    s26()
+    print("-- list.enumerate[set]")
+    s27()
+    print("-- list.any_all[set]")
+    s28()
+    print("-- list.find[set]")
+    s29()
+    print("-- list.filter[set]")
+    s30()
+    print("-- list.map[set]")
+    s31()
+    print("-- list.map_to_self[set]")
+    s32()
+    print("-- list.group_by[set]")
+    s33()
+    print("-- list.count[set]")
+    s34()
+    print("-- list.fold[set]")
+    s35()
+    print("-- list.flat_map[set]")
+    s36()
+    print("-- list.take_skip_while[set]")
+    s37()
+    print("-- list.zip[set]")
+    s38()
+    print("-- list.zip_into[set]")
+    s39()
+    print("-- list.for[set]")
+    s40()
+    print("-- list.for_mut[set]")
+    s41()
+    print("-- list.comprehension[set]")
+    s42()
+    print("-- list.eq[set]")
+    s43()
+    print("-- list.print[set]")
+    s44()
+    print("-- list.interp[set]")
+    s45()
+    print("-- list.nested_push[set]")
+    s46()
+    print("-- list.in_struct[set]")
+    s47()
+    print("-- list.pass_mut[set]")
+    s48()
+    print("-- list.generic_first[set]")
+    s49()
+    print("-- list.contains_list[set]")
+    s50()

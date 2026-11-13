@@ -1,0 +1,181 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bytes
+    items List[bytes]
+
+fn add_bytes(mut xs List[bytes], x bytes)
+    xs.push(x)
+
+fn wrap_bytes(x bytes) bytes?
+    x
+
+fn nothing_bytes() bytes?
+    none
+
+K_bytes := [b"a", b"b"]
+
+## mapv.literal[bytes]
+fn s0()
+    m := {"a": b"a", "b": b"b"}
+    print(m.len())
+
+## mapv.empty[bytes]
+fn s1()
+    m := Map[str, bytes]()
+    print(m.len())
+
+## mapv.index[bytes]
+fn s2()
+    m := {"a": b"a"}
+    x := m["a"]
+    print(x.len() == x.len())
+
+## mapv.assign[bytes]
+fn s3()
+    mut m := Map[str, bytes]()
+    m["a"] = b"a"
+    print(m.len())
+
+## mapv.get[bytes]
+fn s4()
+    m := {"a": b"a"}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[bytes]
+fn s5()
+    m := {"a": b"a"}
+    x := m.get("z") else b"b"
+    print(1)
+
+## mapv.get_or[bytes]
+fn s6()
+    m := {"a": b"a"}
+    x := m.get_or("b", b"c")
+    print(1)
+
+## mapv.remove[bytes]
+fn s7()
+    mut m := {"a": b"a"}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[bytes]
+fn s8()
+    m := {"a": b"a", "b": b"b"}
+    print(m.values().len())
+
+## mapv.values_sorted[bytes]
+fn s9()
+    m := {"a": b"b", "b": b"a"}
+    print(m.values().sorted().len())
+
+## mapv.for[bytes]
+fn s10()
+    m := {"a": b"a", "b": b"b"}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[bytes]
+fn s11()
+    m := {"a": b"a"}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[bytes]
+fn s12()
+    m := {"a": b"a", "b": b"b"}
+    print(m.filter(|k, v| v == b"a").len())
+
+## mapv.nested_update[bytes]
+fn s13()
+    mut m := Map[str, List[bytes]]()
+    m["a"] = [b"a"]
+    m["a"].push(b"b")
+    print(m["a"].len())
+
+## mapv.eq[bytes]
+fn s14()
+    m := {"a": b"a"}
+    print(m == {"a": b"a"})
+
+## mapv.print[bytes]
+fn s15()
+    m := {"a": b"a"}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[bytes]")
+    s0()
+    print("-- mapv.empty[bytes]")
+    s1()
+    print("-- mapv.index[bytes]")
+    s2()
+    print("-- mapv.assign[bytes]")
+    s3()
+    print("-- mapv.get[bytes]")
+    s4()
+    print("-- mapv.get_else[bytes]")
+    s5()
+    print("-- mapv.get_or[bytes]")
+    s6()
+    print("-- mapv.remove[bytes]")
+    s7()
+    print("-- mapv.values[bytes]")
+    s8()
+    print("-- mapv.values_sorted[bytes]")
+    s9()
+    print("-- mapv.for[bytes]")
+    s10()
+    print("-- mapv.map_values[bytes]")
+    s11()
+    print("-- mapv.filter[bytes]")
+    s12()
+    print("-- mapv.nested_update[bytes]")
+    s13()
+    print("-- mapv.eq[bytes]")
+    s14()
+    print("-- mapv.print[bytes]")
+    s15()

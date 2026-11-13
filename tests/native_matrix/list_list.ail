@@ -1,0 +1,531 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_list
+    items List[List[int]]
+
+fn add_list(mut xs List[List[int]], x List[int])
+    xs.push(x)
+
+fn wrap_list(x List[int]) List[int]?
+    x
+
+fn nothing_list() List[int]?
+    none
+
+K_list := [[1], [1, 2]]
+
+## list.literal[list]
+fn s0()
+    xs := [[1], [1, 2], [2]]
+    print(xs.len())
+
+## list.empty[list]
+fn s1()
+    xs := List[List[int]]()
+    print(xs.len())
+
+## list.typed_by_push[list]
+fn s2()
+    mut xs := []
+    xs.push([1])
+    print(xs.len())
+
+## list.len[list]
+fn s3()
+    xs := [[1], [1, 2]]
+    print(xs.len())
+
+## list.is_empty[list]
+fn s4()
+    xs := [[1]]
+    print(xs.is_empty())
+
+## list.index[list]
+fn s5()
+    xs := [[1], [1, 2]]
+    x := xs[1]
+    print(x.len() == x.len())
+
+## list.index_assign[list]
+fn s6()
+    mut xs := [[1], [1, 2]]
+    xs[0] = [2]
+    print(xs.len())
+
+## list.slice[list]
+fn s7()
+    xs := [[1], [1, 2], [2]]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[list]
+fn s8()
+    mut xs := [[1]]
+    xs.push([1, 2])
+    print(xs.len())
+
+## list.pop[list]
+fn s9()
+    mut xs := [[1], [1, 2]]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[list]
+fn s10()
+    mut xs := [[1], [1, 2]]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[list]
+fn s11()
+    xs := [[1], [1, 2]]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[list]
+fn s12()
+    mut xs := [[1]]
+    xs.insert(0, [1, 2])
+    print(xs.len())
+
+## list.remove_at[list]
+fn s13()
+    mut xs := [[1], [1, 2]]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[list]
+fn s14()
+    mut xs := [[1]]
+    xs.extend([[1, 2], [2]])
+    print(xs.len())
+
+## list.clear[list]
+fn s15()
+    mut xs := [[1]]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[list]
+fn s16()
+    mut xs := [[1], [1, 2]]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[list]
+fn s17()
+    xs := [[1], [1, 2]]
+    print(xs.reversed().len())
+
+## list.contains[list]
+fn s18()
+    xs := [[1], [1, 2]]
+    print(xs.contains([1, 2]))
+
+## list.index_of[list]
+fn s19()
+    xs := [[1], [1, 2]]
+    print(xs.index_of([1, 2]) else -1)
+
+## list.join[list]
+fn s20()
+    xs := [[1], [1, 2]]
+    print(xs.join(",").len() > 0)
+
+## list.min_max[list]
+fn s21()
+    xs := [[1, 2], [1], [2]]
+    if x := xs.min()
+        print(1)
+    if x := xs.max()
+        print(2)
+
+## list.sorted[list]
+fn s22()
+    xs := [[2], [1], [1, 2]]
+    print(xs.sorted().len())
+
+## list.sort[list]
+fn s23()
+    mut xs := [[2], [1], [1, 2]]
+    xs.sort()
+    print(xs.len())
+
+## list.sorted_by[list]
+fn s24()
+    xs := [[2], [1], [1, 2]]
+    print(xs.sorted(by: |x| x.len()).len())
+
+## list.sort_by[list]
+fn s25()
+    mut xs := [[2], [1], [1, 2]]
+    xs.sort(by: |x| x.len())
+    print(xs.len())
+
+## list.min_by[list]
+fn s26()
+    xs := [[2], [1], [1, 2]]
+    if x := xs.min(by: |x| x.len())
+        print(1)
+    if x := xs.max(by: |x| x.len())
+        print(2)
+
+## list.take_skip[list]
+fn s27()
+    xs := [[1], [1, 2], [2]]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[list]
+fn s28()
+    xs := [[1], [1, 2]]
+    ys := [[1, 2], [2]]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[list]
+fn s29()
+    xs := [[1], [1, 2], [2]]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[list]
+fn s30()
+    xs := [[1], [1, 2], [1]]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[list]
+fn s31()
+    xs := [[[1]], [[1, 2], [2]]]
+    print(xs.flatten().len())
+
+## list.enumerate[list]
+fn s32()
+    xs := [[1], [1, 2]]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[list]
+fn s33()
+    xs := [[1], [1, 2]]
+    print(xs.any(|x| x == [1]))
+    print(xs.all(|x| x == [1]))
+
+## list.find[list]
+fn s34()
+    xs := [[1], [1, 2]]
+    if x := xs.find(|x| x == [1, 2])
+        print(1)
+
+## list.filter[list]
+fn s35()
+    xs := [[1], [1, 2]]
+    print(xs.filter(|x| x == [1]).len())
+
+## list.map[list]
+fn s36()
+    xs := [[1], [1, 2]]
+    print(xs.map(|x| x.len()).len())
+
+## list.map_to_self[list]
+fn s37()
+    xs := [[1], [1, 2]]
+    print(xs.map(|x| x).len())
+
+## list.group_by[list]
+fn s38()
+    xs := [[1], [1, 2], [1]]
+    g := xs.group_by(|x| x.len())
+    print(g.len())
+
+## list.count[list]
+fn s39()
+    xs := [[1], [1, 2], [1]]
+    print(xs.count(|x| x == [1]))
+
+## list.fold[list]
+fn s40()
+    xs := [[1], [1, 2]]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[list]
+fn s41()
+    xs := [[1], [1, 2]]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[list]
+fn s42()
+    xs := [[1], [1, 2]]
+    print(xs.take_while(|x| x == [1]).len() + xs.skip_while(|x| x == [1]).len())
+
+## list.zip[list]
+fn s43()
+    xs := [[1], [1, 2]]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[list]
+fn s44()
+    xs := [[1], [1, 2]]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[list]
+fn s45()
+    xs := [[1], [1, 2]]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[list]
+fn s46()
+    mut xs := [[1], [1, 2]]
+    for mut x in xs
+        x = [2]
+    print(xs.len())
+
+## list.comprehension[list]
+fn s47()
+    xs := [[1], [1, 2]]
+    ys := [x for x in xs if x == [1]]
+    print(ys.len())
+
+## list.set_comprehension[list]
+fn s48()
+    xs := [[1], [1, 2], [1]]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[list]
+fn s49()
+    xs := [[1], [1, 2]]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[list]
+fn s50()
+    xs := [[1], [1, 2]]
+    ys := [[1], [1, 2]]
+    print(xs == ys)
+    print(xs != [[2]])
+
+## list.lt[list]
+fn s51()
+    xs := [[1]]
+    ys := [[1, 2]]
+    print(xs < ys)
+
+## list.print[list]
+fn s52()
+    xs := [[1], [1, 2]]
+    print(xs)
+
+## list.interp[list]
+fn s53()
+    xs := [[1], [1, 2]]
+    print("{xs}".len() > 0)
+
+## list.nested_push[list]
+fn s54()
+    mut xs := [[[1]]]
+    xs[0].push([1, 2])
+    print(xs[0].len())
+
+## list.in_struct[list]
+fn s55()
+    mut b := Box_list(items: [[1]])
+    b.items.push([1, 2])
+    print(b.items.len())
+
+## list.pass_mut[list]
+fn s56()
+    mut xs := [[1]]
+    add_list(mut xs, [1, 2])
+    print(xs.len())
+
+## list.generic_first[list]
+fn s57()
+    xs := [[1], [1, 2]]
+    if x := first_of(xs)
+        print(1)
+
+## list.generic_ord[list]
+fn s58()
+    xs := [[1], [1, 2]]
+    if x := biggest(xs)
+        print(1)
+
+## list.contains_list[list]
+fn s59()
+    xs := [[[1]], [[1, 2]]]
+    print(xs.contains([[1, 2]]))
+
+## list.sorted_nested[list]
+fn s60()
+    xs := [[[1, 2]], [[1]]]
+    print(xs.sorted().len())
+
+fn main()
+    print("-- list.literal[list]")
+    s0()
+    print("-- list.empty[list]")
+    s1()
+    print("-- list.typed_by_push[list]")
+    s2()
+    print("-- list.len[list]")
+    s3()
+    print("-- list.is_empty[list]")
+    s4()
+    print("-- list.index[list]")
+    s5()
+    print("-- list.index_assign[list]")
+    s6()
+    print("-- list.slice[list]")
+    s7()
+    print("-- list.push[list]")
+    s8()
+    print("-- list.pop[list]")
+    s9()
+    print("-- list.swap[list]")
+    s10()
+    print("-- list.first_last[list]")
+    s11()
+    print("-- list.insert[list]")
+    s12()
+    print("-- list.remove_at[list]")
+    s13()
+    print("-- list.extend[list]")
+    s14()
+    print("-- list.clear[list]")
+    s15()
+    print("-- list.reverse[list]")
+    s16()
+    print("-- list.reversed[list]")
+    s17()
+    print("-- list.contains[list]")
+    s18()
+    print("-- list.index_of[list]")
+    s19()
+    print("-- list.join[list]")
+    s20()
+    print("-- list.min_max[list]")
+    s21()
+    print("-- list.sorted[list]")
+    s22()
+    print("-- list.sort[list]")
+    s23()
+    print("-- list.sorted_by[list]")
+    s24()
+    print("-- list.sort_by[list]")
+    s25()
+    print("-- list.min_by[list]")
+    s26()
+    print("-- list.take_skip[list]")
+    s27()
+    print("-- list.set_ops[list]")
+    s28()
+    print("-- list.chunks_windows[list]")
+    s29()
+    print("-- list.counts[list]")
+    s30()
+    print("-- list.flatten[list]")
+    s31()
+    print("-- list.enumerate[list]")
+    s32()
+    print("-- list.any_all[list]")
+    s33()
+    print("-- list.find[list]")
+    s34()
+    print("-- list.filter[list]")
+    s35()
+    print("-- list.map[list]")
+    s36()
+    print("-- list.map_to_self[list]")
+    s37()
+    print("-- list.group_by[list]")
+    s38()
+    print("-- list.count[list]")
+    s39()
+    print("-- list.fold[list]")
+    s40()
+    print("-- list.flat_map[list]")
+    s41()
+    print("-- list.take_skip_while[list]")
+    s42()
+    print("-- list.zip[list]")
+    s43()
+    print("-- list.zip_into[list]")
+    s44()
+    print("-- list.for[list]")
+    s45()
+    print("-- list.for_mut[list]")
+    s46()
+    print("-- list.comprehension[list]")
+    s47()
+    print("-- list.set_comprehension[list]")
+    s48()
+    print("-- list.map_comprehension[list]")
+    s49()
+    print("-- list.eq[list]")
+    s50()
+    print("-- list.lt[list]")
+    s51()
+    print("-- list.print[list]")
+    s52()
+    print("-- list.interp[list]")
+    s53()
+    print("-- list.nested_push[list]")
+    s54()
+    print("-- list.in_struct[list]")
+    s55()
+    print("-- list.pass_mut[list]")
+    s56()
+    print("-- list.generic_first[list]")
+    s57()
+    print("-- list.generic_ord[list]")
+    s58()
+    print("-- list.contains_list[list]")
+    s59()
+    print("-- list.sorted_nested[list]")
+    s60()

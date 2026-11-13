@@ -658,6 +658,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or e.is_tensor()
                         or e.is_ref()
                         or e.is_fn()
+                        or is_shared_handle(e)
                         return Ty.List(e)
                     none
                 "Atomic" =>
@@ -1839,6 +1840,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not elem.is_ref()
             and not elem.is_fn()
             and not elem.is_tensor()
+            and not is_shared_handle(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))

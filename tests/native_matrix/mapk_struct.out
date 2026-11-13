@@ -1,0 +1,48 @@
+-- mapk.literal[struct]
+2
+-- mapk.empty[struct]
+0
+-- mapk.typed_by_use[struct]
+1
+-- mapk.index[struct]
+1
+-- mapk.assign[struct]
+2
+-- mapk.op_assign[struct]
+3
+-- mapk.get[struct]
+1
+-- mapk.get_or[struct]
+7
+-- mapk.contains[struct]
+true
+-- mapk.remove[struct]
+1
+-- mapk.keys_values[struct]
+4
+-- mapk.top[struct]
+1
+-- mapk.for[struct]
+3
+-- mapk.any_all_count[struct]
+true
+false
+1
+-- mapk.fold[struct]
+3
+-- mapk.filter[struct]
+1
+-- mapk.map[struct]
+2
+-- mapk.flat_map[struct]
+4
+-- mapk.map_values[struct]
+2
+-- mapk.push[struct]
+2
+-- mapk.eq[struct]
+true
+-- mapk.print[struct]
+{P(name: "a", n: 1): 1}
+-- mapk.is_empty[struct]
+false

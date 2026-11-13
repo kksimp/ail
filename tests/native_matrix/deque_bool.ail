@@ -1,0 +1,162 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bool
+    items List[bool]
+
+fn add_bool(mut xs List[bool], x bool)
+    xs.push(x)
+
+fn wrap_bool(x bool) bool?
+    x
+
+fn nothing_bool() bool?
+    none
+
+K_bool := [false, true]
+
+## deque.empty_push[bool]
+fn s0()
+    mut d := Deque[bool]()
+    d.push_back(false)
+    d.push_front(true)
+    print(d.len())
+
+## deque.from[bool]
+fn s1()
+    d := Deque.from([false, true])
+    print(d.len())
+
+## deque.pop[bool]
+fn s2()
+    mut d := Deque.from([false, true, true])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[bool]
+fn s3()
+    d := Deque.from([false, true])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[bool]
+fn s4()
+    d := Deque.from([false, true])
+    x := d[1]
+    print(x == x)
+
+## deque.at_set[bool]
+fn s5()
+    mut d := Deque.from([false, true])
+    d.set(0, true)
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[bool]
+fn s6()
+    d := Deque.from([false, true])
+    print(d.to_list().len())
+
+## deque.for[bool]
+fn s7()
+    d := Deque.from([false, true])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[bool]
+fn s8()
+    d := Deque.from([false, true])
+    print(d.filter(|x| x == false).len() + d.map(|x| x).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == false))
+    print(d.all(|x| x == false))
+    print(d.count(|x| x == false))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == false)
+        print(1)
+
+## deque.take_skip[bool]
+fn s9()
+    d := Deque.from([false, true, true])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == false).len() + d.skip_while(|x| x == false).len())
+
+## deque.enumerate_zip[bool]
+fn s10()
+    d := Deque.from([false, true])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[bool]
+fn s11()
+    d := Deque[bool]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[bool]")
+    s0()
+    print("-- deque.from[bool]")
+    s1()
+    print("-- deque.pop[bool]")
+    s2()
+    print("-- deque.first_last[bool]")
+    s3()
+    print("-- deque.index[bool]")
+    s4()
+    print("-- deque.at_set[bool]")
+    s5()
+    print("-- deque.to_list[bool]")
+    s6()
+    print("-- deque.for[bool]")
+    s7()
+    print("-- deque.vocab[bool]")
+    s8()
+    print("-- deque.take_skip[bool]")
+    s9()
+    print("-- deque.enumerate_zip[bool]")
+    s10()
+    print("-- deque.is_empty[bool]")
+    s11()

@@ -1,0 +1,531 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_tuple
+    items List[(int, str)]
+
+fn add_tuple(mut xs List[(int, str)], x (int, str))
+    xs.push(x)
+
+fn wrap_tuple(x (int, str)) (int, str)?
+    x
+
+fn nothing_tuple() (int, str)?
+    none
+
+K_tuple := [(1, "a"), (2, "b")]
+
+## list.literal[tuple]
+fn s0()
+    xs := [(1, "a"), (2, "b"), (3, "c")]
+    print(xs.len())
+
+## list.empty[tuple]
+fn s1()
+    xs := List[(int, str)]()
+    print(xs.len())
+
+## list.typed_by_push[tuple]
+fn s2()
+    mut xs := []
+    xs.push((1, "a"))
+    print(xs.len())
+
+## list.len[tuple]
+fn s3()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.len())
+
+## list.is_empty[tuple]
+fn s4()
+    xs := [(1, "a")]
+    print(xs.is_empty())
+
+## list.index[tuple]
+fn s5()
+    xs := [(1, "a"), (2, "b")]
+    x := xs[1]
+    print(x.0 == x.0)
+
+## list.index_assign[tuple]
+fn s6()
+    mut xs := [(1, "a"), (2, "b")]
+    xs[0] = (3, "c")
+    print(xs.len())
+
+## list.slice[tuple]
+fn s7()
+    xs := [(1, "a"), (2, "b"), (3, "c")]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[tuple]
+fn s8()
+    mut xs := [(1, "a")]
+    xs.push((2, "b"))
+    print(xs.len())
+
+## list.pop[tuple]
+fn s9()
+    mut xs := [(1, "a"), (2, "b")]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[tuple]
+fn s10()
+    mut xs := [(1, "a"), (2, "b")]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[tuple]
+fn s11()
+    xs := [(1, "a"), (2, "b")]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[tuple]
+fn s12()
+    mut xs := [(1, "a")]
+    xs.insert(0, (2, "b"))
+    print(xs.len())
+
+## list.remove_at[tuple]
+fn s13()
+    mut xs := [(1, "a"), (2, "b")]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[tuple]
+fn s14()
+    mut xs := [(1, "a")]
+    xs.extend([(2, "b"), (3, "c")])
+    print(xs.len())
+
+## list.clear[tuple]
+fn s15()
+    mut xs := [(1, "a")]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[tuple]
+fn s16()
+    mut xs := [(1, "a"), (2, "b")]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[tuple]
+fn s17()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.reversed().len())
+
+## list.contains[tuple]
+fn s18()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.contains((2, "b")))
+
+## list.index_of[tuple]
+fn s19()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.index_of((2, "b")) else -1)
+
+## list.join[tuple]
+fn s20()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.join(",").len() > 0)
+
+## list.min_max[tuple]
+fn s21()
+    xs := [(2, "b"), (1, "a"), (3, "c")]
+    if x := xs.min()
+        print(1)
+    if x := xs.max()
+        print(2)
+
+## list.sorted[tuple]
+fn s22()
+    xs := [(3, "c"), (1, "a"), (2, "b")]
+    print(xs.sorted().len())
+
+## list.sort[tuple]
+fn s23()
+    mut xs := [(3, "c"), (1, "a"), (2, "b")]
+    xs.sort()
+    print(xs.len())
+
+## list.sorted_by[tuple]
+fn s24()
+    xs := [(3, "c"), (1, "a"), (2, "b")]
+    print(xs.sorted(by: |x| x.0).len())
+
+## list.sort_by[tuple]
+fn s25()
+    mut xs := [(3, "c"), (1, "a"), (2, "b")]
+    xs.sort(by: |x| x.0)
+    print(xs.len())
+
+## list.min_by[tuple]
+fn s26()
+    xs := [(3, "c"), (1, "a"), (2, "b")]
+    if x := xs.min(by: |x| x.0)
+        print(1)
+    if x := xs.max(by: |x| x.0)
+        print(2)
+
+## list.take_skip[tuple]
+fn s27()
+    xs := [(1, "a"), (2, "b"), (3, "c")]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[tuple]
+fn s28()
+    xs := [(1, "a"), (2, "b")]
+    ys := [(2, "b"), (3, "c")]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[tuple]
+fn s29()
+    xs := [(1, "a"), (2, "b"), (3, "c")]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[tuple]
+fn s30()
+    xs := [(1, "a"), (2, "b"), (1, "a")]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[tuple]
+fn s31()
+    xs := [[(1, "a")], [(2, "b"), (3, "c")]]
+    print(xs.flatten().len())
+
+## list.enumerate[tuple]
+fn s32()
+    xs := [(1, "a"), (2, "b")]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[tuple]
+fn s33()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.any(|x| x == (1, "a")))
+    print(xs.all(|x| x == (1, "a")))
+
+## list.find[tuple]
+fn s34()
+    xs := [(1, "a"), (2, "b")]
+    if x := xs.find(|x| x == (2, "b"))
+        print(1)
+
+## list.filter[tuple]
+fn s35()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.filter(|x| x == (1, "a")).len())
+
+## list.map[tuple]
+fn s36()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.map(|x| x.0).len())
+
+## list.map_to_self[tuple]
+fn s37()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.map(|x| x).len())
+
+## list.group_by[tuple]
+fn s38()
+    xs := [(1, "a"), (2, "b"), (1, "a")]
+    g := xs.group_by(|x| x.0)
+    print(g.len())
+
+## list.count[tuple]
+fn s39()
+    xs := [(1, "a"), (2, "b"), (1, "a")]
+    print(xs.count(|x| x == (1, "a")))
+
+## list.fold[tuple]
+fn s40()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[tuple]
+fn s41()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[tuple]
+fn s42()
+    xs := [(1, "a"), (2, "b")]
+    print(xs.take_while(|x| x == (1, "a")).len() + xs.skip_while(|x| x == (1, "a")).len())
+
+## list.zip[tuple]
+fn s43()
+    xs := [(1, "a"), (2, "b")]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[tuple]
+fn s44()
+    xs := [(1, "a"), (2, "b")]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[tuple]
+fn s45()
+    xs := [(1, "a"), (2, "b")]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[tuple]
+fn s46()
+    mut xs := [(1, "a"), (2, "b")]
+    for mut x in xs
+        x = (3, "c")
+    print(xs.len())
+
+## list.comprehension[tuple]
+fn s47()
+    xs := [(1, "a"), (2, "b")]
+    ys := [x for x in xs if x == (1, "a")]
+    print(ys.len())
+
+## list.set_comprehension[tuple]
+fn s48()
+    xs := [(1, "a"), (2, "b"), (1, "a")]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[tuple]
+fn s49()
+    xs := [(1, "a"), (2, "b")]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[tuple]
+fn s50()
+    xs := [(1, "a"), (2, "b")]
+    ys := [(1, "a"), (2, "b")]
+    print(xs == ys)
+    print(xs != [(3, "c")])
+
+## list.lt[tuple]
+fn s51()
+    xs := [(1, "a")]
+    ys := [(2, "b")]
+    print(xs < ys)
+
+## list.print[tuple]
+fn s52()
+    xs := [(1, "a"), (2, "b")]
+    print(xs)
+
+## list.interp[tuple]
+fn s53()
+    xs := [(1, "a"), (2, "b")]
+    print("{xs}".len() > 0)
+
+## list.nested_push[tuple]
+fn s54()
+    mut xs := [[(1, "a")]]
+    xs[0].push((2, "b"))
+    print(xs[0].len())
+
+## list.in_struct[tuple]
+fn s55()
+    mut b := Box_tuple(items: [(1, "a")])
+    b.items.push((2, "b"))
+    print(b.items.len())
+
+## list.pass_mut[tuple]
+fn s56()
+    mut xs := [(1, "a")]
+    add_tuple(mut xs, (2, "b"))
+    print(xs.len())
+
+## list.generic_first[tuple]
+fn s57()
+    xs := [(1, "a"), (2, "b")]
+    if x := first_of(xs)
+        print(1)
+
+## list.generic_ord[tuple]
+fn s58()
+    xs := [(1, "a"), (2, "b")]
+    if x := biggest(xs)
+        print(1)
+
+## list.contains_list[tuple]
+fn s59()
+    xs := [[(1, "a")], [(2, "b")]]
+    print(xs.contains([(2, "b")]))
+
+## list.sorted_nested[tuple]
+fn s60()
+    xs := [[(2, "b")], [(1, "a")]]
+    print(xs.sorted().len())
+
+fn main()
+    print("-- list.literal[tuple]")
+    s0()
+    print("-- list.empty[tuple]")
+    s1()
+    print("-- list.typed_by_push[tuple]")
+    s2()
+    print("-- list.len[tuple]")
+    s3()
+    print("-- list.is_empty[tuple]")
+    s4()
+    print("-- list.index[tuple]")
+    s5()
+    print("-- list.index_assign[tuple]")
+    s6()
+    print("-- list.slice[tuple]")
+    s7()
+    print("-- list.push[tuple]")
+    s8()
+    print("-- list.pop[tuple]")
+    s9()
+    print("-- list.swap[tuple]")
+    s10()
+    print("-- list.first_last[tuple]")
+    s11()
+    print("-- list.insert[tuple]")
+    s12()
+    print("-- list.remove_at[tuple]")
+    s13()
+    print("-- list.extend[tuple]")
+    s14()
+    print("-- list.clear[tuple]")
+    s15()
+    print("-- list.reverse[tuple]")
+    s16()
+    print("-- list.reversed[tuple]")
+    s17()
+    print("-- list.contains[tuple]")
+    s18()
+    print("-- list.index_of[tuple]")
+    s19()
+    print("-- list.join[tuple]")
+    s20()
+    print("-- list.min_max[tuple]")
+    s21()
+    print("-- list.sorted[tuple]")
+    s22()
+    print("-- list.sort[tuple]")
+    s23()
+    print("-- list.sorted_by[tuple]")
+    s24()
+    print("-- list.sort_by[tuple]")
+    s25()
+    print("-- list.min_by[tuple]")
+    s26()
+    print("-- list.take_skip[tuple]")
+    s27()
+    print("-- list.set_ops[tuple]")
+    s28()
+    print("-- list.chunks_windows[tuple]")
+    s29()
+    print("-- list.counts[tuple]")
+    s30()
+    print("-- list.flatten[tuple]")
+    s31()
+    print("-- list.enumerate[tuple]")
+    s32()
+    print("-- list.any_all[tuple]")
+    s33()
+    print("-- list.find[tuple]")
+    s34()
+    print("-- list.filter[tuple]")
+    s35()
+    print("-- list.map[tuple]")
+    s36()
+    print("-- list.map_to_self[tuple]")
+    s37()
+    print("-- list.group_by[tuple]")
+    s38()
+    print("-- list.count[tuple]")
+    s39()
+    print("-- list.fold[tuple]")
+    s40()
+    print("-- list.flat_map[tuple]")
+    s41()
+    print("-- list.take_skip_while[tuple]")
+    s42()
+    print("-- list.zip[tuple]")
+    s43()
+    print("-- list.zip_into[tuple]")
+    s44()
+    print("-- list.for[tuple]")
+    s45()
+    print("-- list.for_mut[tuple]")
+    s46()
+    print("-- list.comprehension[tuple]")
+    s47()
+    print("-- list.set_comprehension[tuple]")
+    s48()
+    print("-- list.map_comprehension[tuple]")
+    s49()
+    print("-- list.eq[tuple]")
+    s50()
+    print("-- list.lt[tuple]")
+    s51()
+    print("-- list.print[tuple]")
+    s52()
+    print("-- list.interp[tuple]")
+    s53()
+    print("-- list.nested_push[tuple]")
+    s54()
+    print("-- list.in_struct[tuple]")
+    s55()
+    print("-- list.pass_mut[tuple]")
+    s56()
+    print("-- list.generic_first[tuple]")
+    s57()
+    print("-- list.generic_ord[tuple]")
+    s58()
+    print("-- list.contains_list[tuple]")
+    s59()
+    print("-- list.sorted_nested[tuple]")
+    s60()

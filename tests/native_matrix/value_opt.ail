@@ -1,0 +1,188 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## value.eq[opt]
+fn s0()
+    print(oi(1) == oi(1))
+    print(oi(1) != oi(2))
+
+## value.print[opt]
+fn s1()
+    print(oi(1))
+
+## value.interp[opt]
+fn s2()
+    x := oi(1)
+    print("<{x}>")
+
+## value.to_str_len[opt]
+fn s3()
+    x := oi(1)
+    print("{x}".len() > 0)
+
+## value.optional_none[opt]
+fn s4()
+    o := nothing_opt()
+    print(o == none)
+
+## value.tuple[opt]
+fn s5()
+    t := (oi(1), 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[opt]
+fn s6()
+    t := (oi(1), 1)
+    print(t == (oi(1), 1))
+
+## value.tuple_print[opt]
+fn s7()
+    t := (oi(1), 1)
+    print(t)
+
+## value.tuple_key[opt]
+fn s8()
+    mut m := Map[(int?, int), int]()
+    m[(oi(1), 1)] = 2
+    print(m[(oi(1), 1)])
+
+## value.struct_field[opt]
+fn s9()
+    b := Box_opt(items: [oi(1)])
+    c := b
+    print(c == b)
+
+## value.struct_print[opt]
+fn s10()
+    b := Box_opt(items: [oi(1)])
+    print(b)
+
+## value.ref[opt]
+fn s11()
+    r := ref Box_opt(items: [oi(1)])
+    s := r
+    s.items.push(oi(2))
+    print(r.items.len())
+
+## value.generic_id[opt]
+fn s12()
+    x := ident(oi(1))
+    print(1)
+
+## value.generic_box[opt]
+fn s13()
+    g := GBox(v: oi(1))
+    print(g.v == oi(1))
+
+## value.fn_value[opt]
+fn s14()
+    f := |x int?| x
+    y := f(oi(1))
+    print(1)
+
+## value.closure_capture[opt]
+fn s15()
+    a := oi(1)
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[opt]
+fn s16()
+    x := oi(1)
+    print(if x == oi(1) then 1 else 0)
+
+## value.const_list[opt]
+fn s17()
+    print(K_opt.len())
+
+fn main()
+    print("-- value.eq[opt]")
+    s0()
+    print("-- value.print[opt]")
+    s1()
+    print("-- value.interp[opt]")
+    s2()
+    print("-- value.to_str_len[opt]")
+    s3()
+    print("-- value.optional_none[opt]")
+    s4()
+    print("-- value.tuple[opt]")
+    s5()
+    print("-- value.tuple_eq[opt]")
+    s6()
+    print("-- value.tuple_print[opt]")
+    s7()
+    print("-- value.tuple_key[opt]")
+    s8()
+    print("-- value.struct_field[opt]")
+    s9()
+    print("-- value.struct_print[opt]")
+    s10()
+    print("-- value.ref[opt]")
+    s11()
+    print("-- value.generic_id[opt]")
+    s12()
+    print("-- value.generic_box[opt]")
+    s13()
+    print("-- value.fn_value[opt]")
+    s14()
+    print("-- value.closure_capture[opt]")
+    s15()
+    print("-- value.match_eq[opt]")
+    s16()
+    print("-- value.const_list[opt]")
+    s17()

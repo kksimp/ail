@@ -179,6 +179,7 @@ tools/
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
   native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
+  native-matrix/          matrix.py: every built-in method x element type that `ail check` accepts, built natively; writes tests/native_matrix/ (ADR 1109)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   perfbench/              drag-race programs: AIL, C and Python twins
   self-compile/           survey of the native subset over the compiler's own source

@@ -1,0 +1,220 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_float
+    items List[float]
+
+fn add_float(mut xs List[float], x float)
+    xs.push(x)
+
+fn wrap_float(x float) float?
+    x
+
+fn nothing_float() float?
+    none
+
+K_float := [1.5, 2.5]
+
+## value.eq[float]
+fn s0()
+    print(1.5 == 1.5)
+    print(1.5 != 2.5)
+
+## value.lt[float]
+fn s1()
+    print(1.5 < 2.5)
+    print(2.5 >= 1.5)
+
+## value.print[float]
+fn s2()
+    print(1.5)
+
+## value.interp[float]
+fn s3()
+    x := 1.5
+    print("<{x}>")
+
+## value.to_str_len[float]
+fn s4()
+    x := 1.5
+    print("{x}".len() > 0)
+
+## value.optional_else[float]
+fn s5()
+    o := wrap_float(1.5)
+    x := o else 2.5
+    print(1)
+
+## value.optional_if[float]
+fn s6()
+    o := wrap_float(1.5)
+    if x := o
+        print(1)
+
+## value.optional_none[float]
+fn s7()
+    o := nothing_float()
+    print(o == none)
+
+## value.optional_print[float]
+fn s8()
+    o := wrap_float(1.5)
+    print(o)
+
+## value.tuple[float]
+fn s9()
+    t := (1.5, 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[float]
+fn s10()
+    t := (1.5, 1)
+    print(t == (1.5, 1))
+
+## value.tuple_print[float]
+fn s11()
+    t := (1.5, 1)
+    print(t)
+
+## value.tuple_list_sorted[float]
+fn s12()
+    xs := [(2.5, 1), (1.5, 2)]
+    print(xs.sorted().len())
+
+## value.struct_field[float]
+fn s13()
+    b := Box_float(items: [1.5])
+    c := b
+    print(c == b)
+
+## value.struct_print[float]
+fn s14()
+    b := Box_float(items: [1.5])
+    print(b)
+
+## value.ref[float]
+fn s15()
+    r := ref Box_float(items: [1.5])
+    s := r
+    s.items.push(2.5)
+    print(r.items.len())
+
+## value.generic_id[float]
+fn s16()
+    x := ident(1.5)
+    print(1)
+
+## value.generic_box[float]
+fn s17()
+    g := GBox(v: 1.5)
+    print(g.v == 1.5)
+
+## value.fn_value[float]
+fn s18()
+    f := |x float| x
+    y := f(1.5)
+    print(1)
+
+## value.closure_capture[float]
+fn s19()
+    a := 1.5
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[float]
+fn s20()
+    x := 1.5
+    print(if x == 1.5 then 1 else 0)
+
+## value.const_list[float]
+fn s21()
+    print(K_float.len())
+
+fn main()
+    print("-- value.eq[float]")
+    s0()
+    print("-- value.lt[float]")
+    s1()
+    print("-- value.print[float]")
+    s2()
+    print("-- value.interp[float]")
+    s3()
+    print("-- value.to_str_len[float]")
+    s4()
+    print("-- value.optional_else[float]")
+    s5()
+    print("-- value.optional_if[float]")
+    s6()
+    print("-- value.optional_none[float]")
+    s7()
+    print("-- value.optional_print[float]")
+    s8()
+    print("-- value.tuple[float]")
+    s9()
+    print("-- value.tuple_eq[float]")
+    s10()
+    print("-- value.tuple_print[float]")
+    s11()
+    print("-- value.tuple_list_sorted[float]")
+    s12()
+    print("-- value.struct_field[float]")
+    s13()
+    print("-- value.struct_print[float]")
+    s14()
+    print("-- value.ref[float]")
+    s15()
+    print("-- value.generic_id[float]")
+    s16()
+    print("-- value.generic_box[float]")
+    s17()
+    print("-- value.fn_value[float]")
+    s18()
+    print("-- value.closure_capture[float]")
+    s19()
+    print("-- value.match_eq[float]")
+    s20()
+    print("-- value.const_list[float]")
+    s21()

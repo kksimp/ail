@@ -1,0 +1,31 @@
+-- deque.empty_push[ordstruct]
+2
+-- deque.from[ordstruct]
+2
+-- deque.pop[ordstruct]
+1
+2
+-- deque.first_last[ordstruct]
+1
+2
+-- deque.index[ordstruct]
+true
+-- deque.at_set[ordstruct]
+2
+-- deque.to_list[ordstruct]
+2
+-- deque.for[ordstruct]
+2
+-- deque.vocab[ordstruct]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[ordstruct]
+6
+-- deque.enumerate_zip[ordstruct]
+4
+-- deque.is_empty[ordstruct]
+true

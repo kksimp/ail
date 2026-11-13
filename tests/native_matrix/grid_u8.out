@@ -1,0 +1,14 @@
+-- grid.fill[u8]
+6
+-- grid.from[u8]
+4
+-- grid.index[u8]
+true
+-- grid.index_assign[u8]
+2
+-- grid.row[u8]
+2
+-- grid.to_list[u8]
+2
+-- grid.cells_for[u8]
+4

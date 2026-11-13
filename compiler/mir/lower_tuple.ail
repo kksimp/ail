@@ -16,10 +16,11 @@ fn tuple_elems(t Ty) List[Ty]?
         _ => none
 
 ## Whether a value of type `t` can be an element of a native tuple: a
-## table or a function value is not (its copy would share state).
+## function value is not (its copy would share state). A table is: the
+## tuple's copy (`copy.T`) copies it (own.val.1, ADR 1109).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Fn(_, _, _) | Unit | Unknown => false
+        Fn(_, _, _) | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.

@@ -1,0 +1,109 @@
+-- list.literal[set]
+3
+-- list.empty[set]
+0
+-- list.typed_by_push[set]
+1
+-- list.len[set]
+2
+-- list.is_empty[set]
+false
+-- list.index[set]
+true
+-- list.index_assign[set]
+2
+-- list.slice[set]
+5
+-- list.push[set]
+2
+-- list.pop[set]
+1
+-- list.swap[set]
+2
+-- list.first_last[set]
+1
+2
+-- list.insert[set]
+2
+-- list.remove_at[set]
+1
+-- list.extend[set]
+3
+-- list.clear[set]
+0
+-- list.reverse[set]
+2
+-- list.reversed[set]
+2
+-- list.contains[set]
+true
+-- list.index_of[set]
+1
+-- list.join[set]
+true
+-- list.sorted_by[set]
+3
+-- list.sort_by[set]
+3
+-- list.min_by[set]
+1
+2
+-- list.take_skip[set]
+4
+-- list.chunks_windows[set]
+4
+-- list.flatten[set]
+3
+-- list.enumerate[set]
+0
+1
+-- list.any_all[set]
+true
+false
+-- list.find[set]
+1
+-- list.filter[set]
+1
+-- list.map[set]
+2
+-- list.map_to_self[set]
+2
+-- list.group_by[set]
+1
+-- list.count[set]
+2
+-- list.fold[set]
+2
+-- list.flat_map[set]
+4
+-- list.take_skip_while[set]
+2
+-- list.zip[set]
+1
+2
+-- list.zip_into[set]
+1
+2
+-- list.for[set]
+2
+-- list.for_mut[set]
+2
+-- list.comprehension[set]
+1
+-- list.eq[set]
+true
+true
+-- list.print[set]
+[{1}, {2}]
+-- list.interp[set]
+true
+-- list.nested_push[set]
+2
+-- list.in_struct[set]
+2
+-- list.pass_mut[set]
+2
+-- list.generic_first[set]
+1
+-- list.contains_list[set]
+true

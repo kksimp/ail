@@ -52,7 +52,9 @@ accepts. A construct the lowering cannot yet build (a corner of the language,
 named in the message) is reported at its position under this rule, all of
 them at once with a `help:` line saying how to write it with what is built,
 and nothing is built. The report is a gap in the compiler, not a language
-rule: the other chapters say what each construct means. *(ADRs 0384, 0904)*
+rule: the other chapters say what each construct means. The `native_matrix`
+gate suite builds every built-in method on every element type `ail check`
+accepts, so such a gap is found before a release. *(ADRs 0384, 0904, 1109)*
 
 ```ail
 fn steps(n int) int
@@ -1040,9 +1042,11 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
+fn nine(a float, b float, c float, d float, e float, f float, g float, h float, i float) float
+    a + i
+
 fn main()
-    cs := ['b', 'a']
-    print(cs.sorted(by: |c| c))
+    print(nine(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))
 ```
 
 ```ail norun rules=native.build.2

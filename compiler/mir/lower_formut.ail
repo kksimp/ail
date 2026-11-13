@@ -11,13 +11,24 @@ fn Lower.for_mut_ok(mut self, e Ty, pos ast.Pos) bool
         Struct(_) => true
         # A list or table element is a pointer too: writes through it land in place.
         List(_) | Map(_, _) | Set(_) => true
-        Int | Bool | Char | Float | Str => true
         _ =>
+            if whole_elem(e)
+                return true
             problem(pos, "`for mut` isn't in the native subset yet")
             false
 
+## Whether a `for mut` variable of type `e` changes only by a whole assignment
+## (`x = v`), which sets the list's element: a scalar, `str`, `bytes`, an enum,
+## an optional or a tuple (ADR 1109).
+fn whole_elem(e Ty) bool
+    if e.opt_inner() != none
+        return true
+    match e
+        Int | Bool | Char | Float | Str | Bytes | Sized(_) | Enum(_) | Tuple(_) => true
+        _ => false
+
 ## Note that `var`, declared as the element at `index` of `list`, writes through.
 fn Lower.note_elem(mut self, var str, elem Ty, list int, index int, pos ast.Pos)
-    if elem == Ty.Int or elem == Ty.Bool or elem == Ty.Char or elem == Ty.Float or elem == Ty.Str
+    if whole_elem(elem)
         key := lookup(var) else return
         facts.elem_ref["{fname}|{key}"] = ElemRef(list: list, index: index, pos: pos)

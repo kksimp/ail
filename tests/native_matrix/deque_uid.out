@@ -1,0 +1,31 @@
+-- deque.empty_push[uid]
+2
+-- deque.from[uid]
+2
+-- deque.pop[uid]
+1
+2
+-- deque.first_last[uid]
+1
+2
+-- deque.index[uid]
+true
+-- deque.at_set[uid]
+2
+-- deque.to_list[uid]
+2
+-- deque.for[uid]
+2
+-- deque.vocab[uid]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[uid]
+6
+-- deque.enumerate_zip[uid]
+4
+-- deque.is_empty[uid]
+true

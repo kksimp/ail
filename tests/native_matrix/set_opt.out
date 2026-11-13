@@ -1,0 +1,44 @@
+-- set.literal[opt]
+2
+-- set.empty[opt]
+0
+-- set.from_list[opt]
+2
+-- set.add_remove[opt]
+true
+true
+-- set.contains[opt]
+true
+-- set.is_empty[opt]
+false
+-- set.is_subset[opt]
+true
+-- set.set_ops[opt]
+5
+-- set.any_all_find[opt]
+true
+false
+1
+-- set.filter_map[opt]
+3
+-- set.group_by[opt]
+2
+-- set.count_fold[opt]
+1
+2
+-- set.flat_map[opt]
+2
+-- set.take_skip[opt]
+6
+-- set.zip_enumerate[opt]
+4
+-- set.for[opt]
+2
+-- set.eq[opt]
+true
+-- set.print[opt]
+{1}
+-- set.in_map[opt]
+1
+-- set.in_list[opt]
+1

@@ -1,0 +1,31 @@
+-- deque.empty_push[bytes]
+2
+-- deque.from[bytes]
+2
+-- deque.pop[bytes]
+1
+2
+-- deque.first_last[bytes]
+1
+2
+-- deque.index[bytes]
+true
+-- deque.at_set[bytes]
+2
+-- deque.to_list[bytes]
+2
+-- deque.for[bytes]
+2
+-- deque.vocab[bytes]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[bytes]
+6
+-- deque.enumerate_zip[bytes]
+4
+-- deque.is_empty[bytes]
+true

@@ -1,0 +1,32 @@
+-- mapv.literal[tuple]
+2
+-- mapv.empty[tuple]
+0
+-- mapv.index[tuple]
+true
+-- mapv.assign[tuple]
+1
+-- mapv.get[tuple]
+1
+-- mapv.get_else[tuple]
+1
+-- mapv.get_or[tuple]
+1
+-- mapv.remove[tuple]
+0
+-- mapv.values[tuple]
+2
+-- mapv.values_sorted[tuple]
+2
+-- mapv.for[tuple]
+2
+-- mapv.map_values[tuple]
+1
+-- mapv.filter[tuple]
+1
+-- mapv.nested_update[tuple]
+2
+-- mapv.eq[tuple]
+true
+-- mapv.print[tuple]
+{"a": (1, "a")}

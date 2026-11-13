@@ -1,0 +1,32 @@
+-- mapv.literal[uid]
+2
+-- mapv.empty[uid]
+0
+-- mapv.index[uid]
+true
+-- mapv.assign[uid]
+1
+-- mapv.get[uid]
+1
+-- mapv.get_else[uid]
+1
+-- mapv.get_or[uid]
+1
+-- mapv.remove[uid]
+0
+-- mapv.values[uid]
+2
+-- mapv.values_sorted[uid]
+2
+-- mapv.for[uid]
+2
+-- mapv.map_values[uid]
+1
+-- mapv.filter[uid]
+1
+-- mapv.nested_update[uid]
+2
+-- mapv.eq[uid]
+true
+-- mapv.print[uid]
+{"a": 1}

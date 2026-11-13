@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_str
+    items List[str]
+
+fn add_str(mut xs List[str], x str)
+    xs.push(x)
+
+fn wrap_str(x str) str?
+    x
+
+fn nothing_str() str?
+    none
+
+K_str := ["a", "b"]
+
+## value.eq[str]
+fn s0()
+    print("a" == "a")
+    print("a" != "b")
+
+## value.lt[str]
+fn s1()
+    print("a" < "b")
+    print("b" >= "a")
+
+## value.print[str]
+fn s2()
+    print("a")
+
+## value.interp[str]
+fn s3()
+    x := "a"
+    print("<{x}>")
+
+## value.to_str_len[str]
+fn s4()
+    x := "a"
+    print("{x}".len() > 0)
+
+## value.optional_else[str]
+fn s5()
+    o := wrap_str("a")
+    x := o else "b"
+    print(1)
+
+## value.optional_if[str]
+fn s6()
+    o := wrap_str("a")
+    if x := o
+        print(1)
+
+## value.optional_none[str]
+fn s7()
+    o := nothing_str()
+    print(o == none)
+
+## value.optional_print[str]
+fn s8()
+    o := wrap_str("a")
+    print(o)
+
+## value.tuple[str]
+fn s9()
+    t := ("a", 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[str]
+fn s10()
+    t := ("a", 1)
+    print(t == ("a", 1))
+
+## value.tuple_print[str]
+fn s11()
+    t := ("a", 1)
+    print(t)
+
+## value.tuple_list_sorted[str]
+fn s12()
+    xs := [("b", 1), ("a", 2)]
+    print(xs.sorted().len())
+
+## value.tuple_key[str]
+fn s13()
+    mut m := Map[(str, int), int]()
+    m[("a", 1)] = 2
+    print(m[("a", 1)])
+
+## value.struct_field[str]
+fn s14()
+    b := Box_str(items: ["a"])
+    c := b
+    print(c == b)
+
+## value.struct_print[str]
+fn s15()
+    b := Box_str(items: ["a"])
+    print(b)
+
+## value.ref[str]
+fn s16()
+    r := ref Box_str(items: ["a"])
+    s := r
+    s.items.push("b")
+    print(r.items.len())
+
+## value.generic_id[str]
+fn s17()
+    x := ident("a")
+    print(1)
+
+## value.generic_box[str]
+fn s18()
+    g := GBox(v: "a")
+    print(g.v == "a")
+
+## value.fn_value[str]
+fn s19()
+    f := |x str| x
+    y := f("a")
+    print(1)
+
+## value.closure_capture[str]
+fn s20()
+    a := "a"
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[str]
+fn s21()
+    x := "a"
+    print(if x == "a" then 1 else 0)
+
+## value.const_list[str]
+fn s22()
+    print(K_str.len())
+
+fn main()
+    print("-- value.eq[str]")
+    s0()
+    print("-- value.lt[str]")
+    s1()
+    print("-- value.print[str]")
+    s2()
+    print("-- value.interp[str]")
+    s3()
+    print("-- value.to_str_len[str]")
+    s4()
+    print("-- value.optional_else[str]")
+    s5()
+    print("-- value.optional_if[str]")
+    s6()
+    print("-- value.optional_none[str]")
+    s7()
+    print("-- value.optional_print[str]")
+    s8()
+    print("-- value.tuple[str]")
+    s9()
+    print("-- value.tuple_eq[str]")
+    s10()
+    print("-- value.tuple_print[str]")
+    s11()
+    print("-- value.tuple_list_sorted[str]")
+    s12()
+    print("-- value.tuple_key[str]")
+    s13()
+    print("-- value.struct_field[str]")
+    s14()
+    print("-- value.struct_print[str]")
+    s15()
+    print("-- value.ref[str]")
+    s16()
+    print("-- value.generic_id[str]")
+    s17()
+    print("-- value.generic_box[str]")
+    s18()
+    print("-- value.fn_value[str]")
+    s19()
+    print("-- value.closure_capture[str]")
+    s20()
+    print("-- value.match_eq[str]")
+    s21()
+    print("-- value.const_list[str]")
+    s22()

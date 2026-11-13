@@ -1,0 +1,130 @@
+-- list.literal[tuple]
+3
+-- list.empty[tuple]
+0
+-- list.typed_by_push[tuple]
+1
+-- list.len[tuple]
+2
+-- list.is_empty[tuple]
+false
+-- list.index[tuple]
+true
+-- list.index_assign[tuple]
+2
+-- list.slice[tuple]
+5
+-- list.push[tuple]
+2
+-- list.pop[tuple]
+1
+-- list.swap[tuple]
+2
+-- list.first_last[tuple]
+1
+2
+-- list.insert[tuple]
+2
+-- list.remove_at[tuple]
+1
+-- list.extend[tuple]
+3
+-- list.clear[tuple]
+0
+-- list.reverse[tuple]
+2
+-- list.reversed[tuple]
+2
+-- list.contains[tuple]
+true
+-- list.index_of[tuple]
+1
+-- list.join[tuple]
+true
+-- list.min_max[tuple]
+1
+2
+-- list.sorted[tuple]
+3
+-- list.sort[tuple]
+3
+-- list.sorted_by[tuple]
+3
+-- list.sort_by[tuple]
+3
+-- list.min_by[tuple]
+1
+2
+-- list.take_skip[tuple]
+4
+-- list.set_ops[tuple]
+5
+-- list.chunks_windows[tuple]
+4
+-- list.counts[tuple]
+2
+-- list.flatten[tuple]
+3
+-- list.enumerate[tuple]
+0
+1
+-- list.any_all[tuple]
+true
+false
+-- list.find[tuple]
+1
+-- list.filter[tuple]
+1
+-- list.map[tuple]
+2
+-- list.map_to_self[tuple]
+2
+-- list.group_by[tuple]
+2
+-- list.count[tuple]
+2
+-- list.fold[tuple]
+2
+-- list.flat_map[tuple]
+4
+-- list.take_skip_while[tuple]
+2
+-- list.zip[tuple]
+1
+2
+-- list.zip_into[tuple]
+1
+2
+-- list.for[tuple]
+2
+-- list.for_mut[tuple]
+2
+-- list.comprehension[tuple]
+1
+-- list.set_comprehension[tuple]
+2
+-- list.map_comprehension[tuple]
+2
+-- list.eq[tuple]
+true
+true
+-- list.lt[tuple]
+true
+-- list.print[tuple]
+[(1, "a"), (2, "b")]
+-- list.interp[tuple]
+true
+-- list.nested_push[tuple]
+2
+-- list.in_struct[tuple]
+2
+-- list.pass_mut[tuple]
+2
+-- list.generic_first[tuple]
+1
+-- list.generic_ord[tuple]
+1
+-- list.contains_list[tuple]
+true
+-- list.sorted_nested[tuple]
+2

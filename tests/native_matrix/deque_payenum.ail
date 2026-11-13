@@ -1,0 +1,162 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_payenum
+    items List[Shape]
+
+fn add_payenum(mut xs List[Shape], x Shape)
+    xs.push(x)
+
+fn wrap_payenum(x Shape) Shape?
+    x
+
+fn nothing_payenum() Shape?
+    none
+
+K_payenum := [Shape.Circle(r: 1), Shape.Square(s: 2)]
+
+## deque.empty_push[payenum]
+fn s0()
+    mut d := Deque[Shape]()
+    d.push_back(Shape.Circle(r: 1))
+    d.push_front(Shape.Square(s: 2))
+    print(d.len())
+
+## deque.from[payenum]
+fn s1()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    print(d.len())
+
+## deque.pop[payenum]
+fn s2()
+    mut d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2), Shape.Circle(r: 3)])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[payenum]
+fn s3()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[payenum]
+fn s4()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    x := d[1]
+    print(1 == 1)
+
+## deque.at_set[payenum]
+fn s5()
+    mut d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    d.set(0, Shape.Circle(r: 3))
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[payenum]
+fn s6()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    print(d.to_list().len())
+
+## deque.for[payenum]
+fn s7()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[payenum]
+fn s8()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    print(d.filter(|x| x == Shape.Circle(r: 1)).len() + d.map(|x| 1).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == Shape.Circle(r: 1)))
+    print(d.all(|x| x == Shape.Circle(r: 1)))
+    print(d.count(|x| x == Shape.Circle(r: 1)))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == Shape.Circle(r: 1))
+        print(1)
+
+## deque.take_skip[payenum]
+fn s9()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2), Shape.Circle(r: 3)])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == Shape.Circle(r: 1)).len() + d.skip_while(|x| x == Shape.Circle(r: 1)).len())
+
+## deque.enumerate_zip[payenum]
+fn s10()
+    d := Deque.from([Shape.Circle(r: 1), Shape.Square(s: 2)])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[payenum]
+fn s11()
+    d := Deque[Shape]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[payenum]")
+    s0()
+    print("-- deque.from[payenum]")
+    s1()
+    print("-- deque.pop[payenum]")
+    s2()
+    print("-- deque.first_last[payenum]")
+    s3()
+    print("-- deque.index[payenum]")
+    s4()
+    print("-- deque.at_set[payenum]")
+    s5()
+    print("-- deque.to_list[payenum]")
+    s6()
+    print("-- deque.for[payenum]")
+    s7()
+    print("-- deque.vocab[payenum]")
+    s8()
+    print("-- deque.take_skip[payenum]")
+    s9()
+    print("-- deque.enumerate_zip[payenum]")
+    s10()
+    print("-- deque.is_empty[payenum]")
+    s11()

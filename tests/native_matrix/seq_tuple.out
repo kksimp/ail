@@ -1,0 +1,28 @@
+-- seq.of_collect[tuple]
+2
+-- seq.map_filter[tuple]
+1
+-- seq.take_skip[tuple]
+1
+-- seq.enumerate[tuple]
+2
+-- seq.zip_chain[tuple]
+2
+-- seq.chain[tuple]
+2
+-- seq.next[tuple]
+1
+-- seq.for[tuple]
+2
+-- seq.count_any[tuple]
+1
+-- seq.fold[tuple]
+2
+-- seq.find[tuple]
+1
+-- seq.flat_map[tuple]
+4
+-- seq.while[tuple]
+1
+-- seq.skip_while[tuple]
+1

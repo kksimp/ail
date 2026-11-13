@@ -1,0 +1,109 @@
+## What `ail check` accepts the native build builds (ADR 1109): list, set and
+## map methods on the element types the runtime's fast paths don't take, as
+## loops over the operations every element type has (`==`, `<`, text).
+use ast
+
+## The position of the first element of `l` equal to `x`, or -1: `index_of`
+## by the element type's own `==` (type.coll.12), as `list_contains_eq` tests
+## membership. `none` when the type can't be compared.
+fn Lower.list_index_eq(mut self, l Val, e Ty, x int) int?
+    mut seen := Set[str]()
+    if not comparable(e, ast.Pos(line: 1, col: 1), e.name(), mut seen)
+        return none
+    n := op("len", [l.id], Ty.Int)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    join := new_block()
+    at := new_value(Ty.Int, "")
+    blocks[join].params.push(at)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    body := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], join, [konst(-1, Ty.Int)])
+    seal(body)
+    cur = body
+    step := new_block()
+    branch(field_eq(e, op("get", [l.id, i], e), x), join, [i], step, [])
+    seal(step)
+    cur = step
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    seal(head)
+    seal(join)
+    cur = join
+    at
+
+## The text of `v` as `print` shows it, for the types `text_of` has no
+## direct form for: an optional (`none`, or the value's own text) and a table.
+fn Lower.shown_text(mut self, v Val, pos ast.Pos) int?
+    if not text_ok(v.ty)
+        return none
+    inner := v.ty.opt_inner() else return value_text(v.ty, v.id)
+    absent := new_block()
+    present := new_block()
+    join := new_block()
+    result := new_value(Ty.Str, "")
+    blocks[join].params.push(result)
+    branch(op("eq", [v.id, konst(0, Ty.Int)], Ty.Bool), absent, [], present, [])
+    seal(absent)
+    seal(present)
+    cur = absent
+    jump(join, [str_value("none")])
+    cur = present
+    shown := text_of(unwrap(v), pos)?
+    jump(join, [shown])
+    seal(join)
+    cur = join
+    result
+
+## Whether a sort key of type `t` orders as the `int` of its word: a `char`
+## (by code point) or a sized integer but `u64`, whose top half `int` would
+## read as negative (expr.key.4).
+fn word_key(t Ty) bool
+    if t == Ty.Char
+        return true
+    t.is_sized() and t != Ty.Sized("u64")
+
+## `m.top(n)` (std.count.2) on a map whose keys are narrower than a word
+## (`bool`, `u8`): the runtime's word list, copied into a list of the key type.
+fn Lower.narrow_top(mut self, m Val, kt Ty, n int) Val?
+    wide := call("rt.map_top", [m.id, n], Ty.List(Ty.Int))
+    count := op("len", [wide], Ty.Int)
+    out := call("rt.list_new", [count], Ty.List(kt))
+    c := count_open(count)
+    call(push_fn(kt), [out, op("copy", [op("get", [wide, c.i], Ty.Int)], kt)], Ty.Unit)
+    count_close(c)
+    Val(id: out, ty: Ty.List(kt))
+
+## `s.sorted()` (type.coll.16) on a set of any element type `<` orders: its
+## elements as a list, sorted as `xs.sort()` sorts a list of them.
+fn Lower.set_sorted_any(mut self, s Val, et Ty, npos ast.Pos) Val?
+    keys := Val(id: table_keys(s.id, et), ty: Ty.List(et))
+    lower_list_edit(keys, et, "sort", npos, [], [])?
+    keys
+
+## `xs.join(sep)` (type.coll.9) on a list of any element type with a text:
+## each element's text as `"{x}"` makes it, with `sep` between them.
+fn Lower.join_texts(mut self, r Val, e Ty, sep int, npos ast.Pos) Val?
+    if not text_ok(e) and e.opt_inner() == none
+        return unsupported(npos, "`.join()` on `{r.ty.name()}`")
+    nvars += 1
+    ak := "#jt{nvars}"
+    var_ty[ak] = Ty.Str
+    write_var(ak, cur, str_value(""))
+    c := count_open(op("len", [r.id], Ty.Int))
+    shown := text_of(Val(id: op("get", [r.id, c.i], e), ty: e), npos)?
+    acc := read_var(ak, cur)
+    later := new_block()
+    join := new_block()
+    piece := new_value(Ty.Str, "")
+    blocks[join].params.push(piece)
+    branch(op("eq", [c.i, konst(0, Ty.Int)], Ty.Bool), join, [acc], later, [])
+    seal(later)
+    cur = later
+    jump(join, [call("rt.str_cat", [acc, sep], Ty.Str)])
+    seal(join)
+    cur = join
+    write_var(ak, cur, call("rt.str_cat", [piece, shown], Ty.Str))
+    count_close(c)
+    Val(id: read_var(ak, cur), ty: Ty.Str)

@@ -258,7 +258,9 @@ fn Lower.lower_list_edit(
     if name == "index_of" and vs.len() == 1
         k := eq_kind(e)
         if k < 0
-            return unsupported(npos, "`.index_of()` on `{r.ty.name()}`")
+            idx := list_index_eq(r, e, convert(vs[0], e, npos)) else
+                return unsupported(npos, "`.index_of()` on `{r.ty.name()}`")
+            return opt_at(r, op("le", [konst(0, Ty.Int), idx], Ty.Bool), idx, Ty.Int, true, npos)
         mut w := convert(vs[0], e, npos)
         if e.is_float()
             w = list_prim("float_bits", [w], Ty.Int)
@@ -445,6 +447,7 @@ fn Lower.list_method(
     if name == "join" and vs.len() == 1 and vs[0].ty == Ty.Str
         if j := join_shown(r, e, vs[0].id)
             return j
+        return join_texts(r, e, vs[0].id, npos)
     if name == "cmp" and vs.len() == 1
         return list_cmp_method(r, vs[0], npos)
     if is_list_edit(name)

@@ -1,0 +1,242 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+## str.0
+fn s0()
+    print("a,b".split(","))
+
+## str.1
+fn s1()
+    print("12".to_int() else 0)
+
+## str.2
+fn s2()
+    print("1.5".to_float() else 0.0)
+
+## str.3
+fn s3()
+    print("ab".chars())
+
+## str.4
+fn s4()
+    print(" a ".trim())
+
+## str.5
+fn s5()
+    print("abc".slice(1, 2))
+
+## str.6
+fn s6()
+    print("Ab".to_lower())
+
+## str.7
+fn s7()
+    print("ab".to_upper())
+
+## str.8
+fn s8()
+    print("abc".find("b") else -1)
+
+## str.9
+fn s9()
+    print("abc".replace("b", "x"))
+
+## str.10
+fn s10()
+    print("abc".char_at(1) else 'z')
+
+## str.11
+fn s11()
+    print("abc".starts_with("a"))
+
+## str.12
+fn s12()
+    print("abc".ends_with("c"))
+
+## str.13
+fn s13()
+    print("abc".strip_prefix("a") else "")
+
+## str.14
+fn s14()
+    print("abc".strip_suffix("c") else "")
+
+## str.15
+fn s15()
+    print("abc".contains("b"))
+
+## str.16
+fn s16()
+    print("ab".repeat(2))
+
+## str.17
+fn s17()
+    print("a".pad_left(3, '.'))
+
+## str.18
+fn s18()
+    print("a".pad_right(3, '.'))
+
+## str.19
+fn s19()
+    print("a".center(3, '.'))
+
+## str.20
+fn s20()
+    print("a b".words())
+
+## str.21
+fn s21()
+    print(" a".trim_start())
+
+## str.22
+fn s22()
+    print("a ".trim_end())
+
+## str.23
+fn s23()
+    print("aaa".count("a"))
+
+## str.24
+fn s24()
+    print("aba".rfind("a") else -1)
+
+## str.25
+fn s25()
+    print("a\nb".lines())
+
+## str.26
+fn s26()
+    print("ab".len())
+
+## str.27
+fn s27()
+    print("".is_empty())
+
+## str.28
+fn s28()
+    print("é".byte_len())
+
+## str.29
+fn s29()
+    print("ab".to_bytes().len())
+
+## str.30
+fn s30()
+    print("b" < "c")
+
+## str.33
+fn s31()
+    print("ab".chars().sorted())
+
+## str.35
+fn s32()
+    print(["b", "a"].sorted())
+
+fn main()
+    print("-- str.0")
+    s0()
+    print("-- str.1")
+    s1()
+    print("-- str.2")
+    s2()
+    print("-- str.3")
+    s3()
+    print("-- str.4")
+    s4()
+    print("-- str.5")
+    s5()
+    print("-- str.6")
+    s6()
+    print("-- str.7")
+    s7()
+    print("-- str.8")
+    s8()
+    print("-- str.9")
+    s9()
+    print("-- str.10")
+    s10()
+    print("-- str.11")
+    s11()
+    print("-- str.12")
+    s12()
+    print("-- str.13")
+    s13()
+    print("-- str.14")
+    s14()
+    print("-- str.15")
+    s15()
+    print("-- str.16")
+    s16()
+    print("-- str.17")
+    s17()
+    print("-- str.18")
+    s18()
+    print("-- str.19")
+    s19()
+    print("-- str.20")
+    s20()
+    print("-- str.21")
+    s21()
+    print("-- str.22")
+    s22()
+    print("-- str.23")
+    s23()
+    print("-- str.24")
+    s24()
+    print("-- str.25")
+    s25()
+    print("-- str.26")
+    s26()
+    print("-- str.27")
+    s27()
+    print("-- str.28")
+    s28()
+    print("-- str.29")
+    s29()
+    print("-- str.30")
+    s30()
+    print("-- str.33")
+    s31()
+    print("-- str.35")
+    s32()

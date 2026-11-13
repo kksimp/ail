@@ -1,0 +1,112 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## grid.fill[ordstruct]
+fn s0()
+    g := Grid.fill(2, 3, Q(n: 1, name: "a"))
+    print(g.rows * g.cols)
+
+## grid.from[ordstruct]
+fn s1()
+    g := Grid.from([[Q(n: 1, name: "a"), Q(n: 2, name: "b")], [Q(n: 3, name: "c"), Q(n: 1, name: "a")]])
+    print(g.cells.len())
+
+## grid.index[ordstruct]
+fn s2()
+    g := Grid.fill(2, 2, Q(n: 1, name: "a"))
+    x := g[1, 1]
+    print(x.n == x.n)
+
+## grid.index_assign[ordstruct]
+fn s3()
+    mut g := Grid.fill(2, 2, Q(n: 1, name: "a"))
+    g[0, 1] = Q(n: 2, name: "b")
+    print(g.rows)
+
+## grid.row[ordstruct]
+fn s4()
+    g := Grid.from([[Q(n: 1, name: "a"), Q(n: 2, name: "b")], [Q(n: 3, name: "c"), Q(n: 1, name: "a")]])
+    print(g.row(1).len())
+
+## grid.to_list[ordstruct]
+fn s5()
+    g := Grid.fill(2, 2, Q(n: 1, name: "a"))
+    print(g.to_list().len())
+
+## grid.cells_for[ordstruct]
+fn s6()
+    g := Grid.fill(2, 2, Q(n: 1, name: "a"))
+    mut n := 0
+    for x in g.cells
+        n += 1
+    print(n)
+
+fn main()
+    print("-- grid.fill[ordstruct]")
+    s0()
+    print("-- grid.from[ordstruct]")
+    s1()
+    print("-- grid.index[ordstruct]")
+    s2()
+    print("-- grid.index_assign[ordstruct]")
+    s3()
+    print("-- grid.row[ordstruct]")
+    s4()
+    print("-- grid.to_list[ordstruct]")
+    s5()
+    print("-- grid.cells_for[ordstruct]")
+    s6()

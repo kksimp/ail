@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_int
+    items List[int]
+
+fn add_int(mut xs List[int], x int)
+    xs.push(x)
+
+fn wrap_int(x int) int?
+    x
+
+fn nothing_int() int?
+    none
+
+K_int := [1, 2]
+
+## value.eq[int]
+fn s0()
+    print(1 == 1)
+    print(1 != 2)
+
+## value.lt[int]
+fn s1()
+    print(1 < 2)
+    print(2 >= 1)
+
+## value.print[int]
+fn s2()
+    print(1)
+
+## value.interp[int]
+fn s3()
+    x := 1
+    print("<{x}>")
+
+## value.to_str_len[int]
+fn s4()
+    x := 1
+    print("{x}".len() > 0)
+
+## value.optional_else[int]
+fn s5()
+    o := wrap_int(1)
+    x := o else 2
+    print(1)
+
+## value.optional_if[int]
+fn s6()
+    o := wrap_int(1)
+    if x := o
+        print(1)
+
+## value.optional_none[int]
+fn s7()
+    o := nothing_int()
+    print(o == none)
+
+## value.optional_print[int]
+fn s8()
+    o := wrap_int(1)
+    print(o)
+
+## value.tuple[int]
+fn s9()
+    t := (1, 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[int]
+fn s10()
+    t := (1, 1)
+    print(t == (1, 1))
+
+## value.tuple_print[int]
+fn s11()
+    t := (1, 1)
+    print(t)
+
+## value.tuple_list_sorted[int]
+fn s12()
+    xs := [(2, 1), (1, 2)]
+    print(xs.sorted().len())
+
+## value.tuple_key[int]
+fn s13()
+    mut m := Map[(int, int), int]()
+    m[(1, 1)] = 2
+    print(m[(1, 1)])
+
+## value.struct_field[int]
+fn s14()
+    b := Box_int(items: [1])
+    c := b
+    print(c == b)
+
+## value.struct_print[int]
+fn s15()
+    b := Box_int(items: [1])
+    print(b)
+
+## value.ref[int]
+fn s16()
+    r := ref Box_int(items: [1])
+    s := r
+    s.items.push(2)
+    print(r.items.len())
+
+## value.generic_id[int]
+fn s17()
+    x := ident(1)
+    print(1)
+
+## value.generic_box[int]
+fn s18()
+    g := GBox(v: 1)
+    print(g.v == 1)
+
+## value.fn_value[int]
+fn s19()
+    f := |x int| x
+    y := f(1)
+    print(1)
+
+## value.closure_capture[int]
+fn s20()
+    a := 1
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[int]
+fn s21()
+    x := 1
+    print(if x == 1 then 1 else 0)
+
+## value.const_list[int]
+fn s22()
+    print(K_int.len())
+
+fn main()
+    print("-- value.eq[int]")
+    s0()
+    print("-- value.lt[int]")
+    s1()
+    print("-- value.print[int]")
+    s2()
+    print("-- value.interp[int]")
+    s3()
+    print("-- value.to_str_len[int]")
+    s4()
+    print("-- value.optional_else[int]")
+    s5()
+    print("-- value.optional_if[int]")
+    s6()
+    print("-- value.optional_none[int]")
+    s7()
+    print("-- value.optional_print[int]")
+    s8()
+    print("-- value.tuple[int]")
+    s9()
+    print("-- value.tuple_eq[int]")
+    s10()
+    print("-- value.tuple_print[int]")
+    s11()
+    print("-- value.tuple_list_sorted[int]")
+    s12()
+    print("-- value.tuple_key[int]")
+    s13()
+    print("-- value.struct_field[int]")
+    s14()
+    print("-- value.struct_print[int]")
+    s15()
+    print("-- value.ref[int]")
+    s16()
+    print("-- value.generic_id[int]")
+    s17()
+    print("-- value.generic_box[int]")
+    s18()
+    print("-- value.fn_value[int]")
+    s19()
+    print("-- value.closure_capture[int]")
+    s20()
+    print("-- value.match_eq[int]")
+    s21()
+    print("-- value.const_list[int]")
+    s22()

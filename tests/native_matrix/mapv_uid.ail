@@ -1,0 +1,181 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_uid
+    items List[Uid]
+
+fn add_uid(mut xs List[Uid], x Uid)
+    xs.push(x)
+
+fn wrap_uid(x Uid) Uid?
+    x
+
+fn nothing_uid() Uid?
+    none
+
+K_uid := [Uid(1), Uid(2)]
+
+## mapv.literal[uid]
+fn s0()
+    m := {"a": Uid(1), "b": Uid(2)}
+    print(m.len())
+
+## mapv.empty[uid]
+fn s1()
+    m := Map[str, Uid]()
+    print(m.len())
+
+## mapv.index[uid]
+fn s2()
+    m := {"a": Uid(1)}
+    x := m["a"]
+    print(x == x)
+
+## mapv.assign[uid]
+fn s3()
+    mut m := Map[str, Uid]()
+    m["a"] = Uid(1)
+    print(m.len())
+
+## mapv.get[uid]
+fn s4()
+    m := {"a": Uid(1)}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[uid]
+fn s5()
+    m := {"a": Uid(1)}
+    x := m.get("z") else Uid(2)
+    print(1)
+
+## mapv.get_or[uid]
+fn s6()
+    m := {"a": Uid(1)}
+    x := m.get_or("b", Uid(3))
+    print(1)
+
+## mapv.remove[uid]
+fn s7()
+    mut m := {"a": Uid(1)}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[uid]
+fn s8()
+    m := {"a": Uid(1), "b": Uid(2)}
+    print(m.values().len())
+
+## mapv.values_sorted[uid]
+fn s9()
+    m := {"a": Uid(2), "b": Uid(1)}
+    print(m.values().sorted().len())
+
+## mapv.for[uid]
+fn s10()
+    m := {"a": Uid(1), "b": Uid(2)}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[uid]
+fn s11()
+    m := {"a": Uid(1)}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[uid]
+fn s12()
+    m := {"a": Uid(1), "b": Uid(2)}
+    print(m.filter(|k, v| v == Uid(1)).len())
+
+## mapv.nested_update[uid]
+fn s13()
+    mut m := Map[str, List[Uid]]()
+    m["a"] = [Uid(1)]
+    m["a"].push(Uid(2))
+    print(m["a"].len())
+
+## mapv.eq[uid]
+fn s14()
+    m := {"a": Uid(1)}
+    print(m == {"a": Uid(1)})
+
+## mapv.print[uid]
+fn s15()
+    m := {"a": Uid(1)}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[uid]")
+    s0()
+    print("-- mapv.empty[uid]")
+    s1()
+    print("-- mapv.index[uid]")
+    s2()
+    print("-- mapv.assign[uid]")
+    s3()
+    print("-- mapv.get[uid]")
+    s4()
+    print("-- mapv.get_else[uid]")
+    s5()
+    print("-- mapv.get_or[uid]")
+    s6()
+    print("-- mapv.remove[uid]")
+    s7()
+    print("-- mapv.values[uid]")
+    s8()
+    print("-- mapv.values_sorted[uid]")
+    s9()
+    print("-- mapv.for[uid]")
+    s10()
+    print("-- mapv.map_values[uid]")
+    s11()
+    print("-- mapv.filter[uid]")
+    s12()
+    print("-- mapv.nested_update[uid]")
+    s13()
+    print("-- mapv.eq[uid]")
+    s14()
+    print("-- mapv.print[uid]")
+    s15()

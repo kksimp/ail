@@ -1,0 +1,170 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+## float.0
+fn s0()
+    print((-1.5).abs())
+
+## float.1
+fn s1()
+    print(1.5.floor())
+
+## float.2
+fn s2()
+    print(1.5.ceil())
+
+## float.3
+fn s3()
+    print(1.5.round())
+
+## float.4
+fn s4()
+    print(4.0.sqrt())
+
+## float.5
+fn s5()
+    print(0.0.sin())
+
+## float.6
+fn s6()
+    print(0.0.cos())
+
+## float.7
+fn s7()
+    print(0.0.tan())
+
+## float.8
+fn s8()
+    print(0.0.atan())
+
+## float.9
+fn s9()
+    print(0.0.atan2(1.0))
+
+## float.10
+fn s10()
+    print(0.0.exp())
+
+## float.11
+fn s11()
+    print(1.0.ln())
+
+## float.12
+fn s12()
+    print(10.0.log10())
+
+## float.13
+fn s13()
+    print(2.0.pow(3.0))
+
+## float.14
+fn s14()
+    print(3.0.hypot(4.0))
+
+## float.15
+fn s15()
+    print(8.0.cbrt())
+
+## float.16
+fn s16()
+    print(1.5.to_int())
+
+## float.17
+fn s17()
+    print(1.5.to_f32())
+
+## float.18
+fn s18()
+    print([1.5, 0.5].sorted())
+
+## float.19
+fn s19()
+    print([1.5, 0.5].sum())
+
+## float.20
+fn s20()
+    print([1.5, 0.5].max() else 0.0)
+
+fn main()
+    print("-- float.0")
+    s0()
+    print("-- float.1")
+    s1()
+    print("-- float.2")
+    s2()
+    print("-- float.3")
+    s3()
+    print("-- float.4")
+    s4()
+    print("-- float.5")
+    s5()
+    print("-- float.6")
+    s6()
+    print("-- float.7")
+    s7()
+    print("-- float.8")
+    s8()
+    print("-- float.9")
+    s9()
+    print("-- float.10")
+    s10()
+    print("-- float.11")
+    s11()
+    print("-- float.12")
+    s12()
+    print("-- float.13")
+    s13()
+    print("-- float.14")
+    s14()
+    print("-- float.15")
+    s15()
+    print("-- float.16")
+    s16()
+    print("-- float.17")
+    s17()
+    print("-- float.18")
+    s18()
+    print("-- float.19")
+    s19()
+    print("-- float.20")
+    s20()

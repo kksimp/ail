@@ -1,0 +1,458 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bool
+    items List[bool]
+
+fn add_bool(mut xs List[bool], x bool)
+    xs.push(x)
+
+fn wrap_bool(x bool) bool?
+    x
+
+fn nothing_bool() bool?
+    none
+
+K_bool := [false, true]
+
+## list.literal[bool]
+fn s0()
+    xs := [false, true, true]
+    print(xs.len())
+
+## list.empty[bool]
+fn s1()
+    xs := List[bool]()
+    print(xs.len())
+
+## list.typed_by_push[bool]
+fn s2()
+    mut xs := []
+    xs.push(false)
+    print(xs.len())
+
+## list.len[bool]
+fn s3()
+    xs := [false, true]
+    print(xs.len())
+
+## list.is_empty[bool]
+fn s4()
+    xs := [false]
+    print(xs.is_empty())
+
+## list.index[bool]
+fn s5()
+    xs := [false, true]
+    x := xs[1]
+    print(x == x)
+
+## list.index_assign[bool]
+fn s6()
+    mut xs := [false, true]
+    xs[0] = true
+    print(xs.len())
+
+## list.slice[bool]
+fn s7()
+    xs := [false, true, true]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[bool]
+fn s8()
+    mut xs := [false]
+    xs.push(true)
+    print(xs.len())
+
+## list.pop[bool]
+fn s9()
+    mut xs := [false, true]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[bool]
+fn s10()
+    mut xs := [false, true]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[bool]
+fn s11()
+    xs := [false, true]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[bool]
+fn s12()
+    mut xs := [false]
+    xs.insert(0, true)
+    print(xs.len())
+
+## list.remove_at[bool]
+fn s13()
+    mut xs := [false, true]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[bool]
+fn s14()
+    mut xs := [false]
+    xs.extend([true, true])
+    print(xs.len())
+
+## list.clear[bool]
+fn s15()
+    mut xs := [false]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[bool]
+fn s16()
+    mut xs := [false, true]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[bool]
+fn s17()
+    xs := [false, true]
+    print(xs.reversed().len())
+
+## list.contains[bool]
+fn s18()
+    xs := [false, true]
+    print(xs.contains(true))
+
+## list.index_of[bool]
+fn s19()
+    xs := [false, true]
+    print(xs.index_of(true) else -1)
+
+## list.join[bool]
+fn s20()
+    xs := [false, true]
+    print(xs.join(",").len() > 0)
+
+## list.take_skip[bool]
+fn s21()
+    xs := [false, true, true]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[bool]
+fn s22()
+    xs := [false, true]
+    ys := [true, true]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[bool]
+fn s23()
+    xs := [false, true, true]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[bool]
+fn s24()
+    xs := [false, true, false]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[bool]
+fn s25()
+    xs := [[false], [true, true]]
+    print(xs.flatten().len())
+
+## list.enumerate[bool]
+fn s26()
+    xs := [false, true]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[bool]
+fn s27()
+    xs := [false, true]
+    print(xs.any(|x| x == false))
+    print(xs.all(|x| x == false))
+
+## list.find[bool]
+fn s28()
+    xs := [false, true]
+    if x := xs.find(|x| x == true)
+        print(1)
+
+## list.filter[bool]
+fn s29()
+    xs := [false, true]
+    print(xs.filter(|x| x == false).len())
+
+## list.map[bool]
+fn s30()
+    xs := [false, true]
+    print(xs.map(|x| x).len())
+
+## list.map_to_self[bool]
+fn s31()
+    xs := [false, true]
+    print(xs.map(|x| x).len())
+
+## list.group_by[bool]
+fn s32()
+    xs := [false, true, false]
+    g := xs.group_by(|x| x)
+    print(g.len())
+
+## list.count[bool]
+fn s33()
+    xs := [false, true, false]
+    print(xs.count(|x| x == false))
+
+## list.fold[bool]
+fn s34()
+    xs := [false, true]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[bool]
+fn s35()
+    xs := [false, true]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[bool]
+fn s36()
+    xs := [false, true]
+    print(xs.take_while(|x| x == false).len() + xs.skip_while(|x| x == false).len())
+
+## list.zip[bool]
+fn s37()
+    xs := [false, true]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[bool]
+fn s38()
+    xs := [false, true]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[bool]
+fn s39()
+    xs := [false, true]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[bool]
+fn s40()
+    mut xs := [false, true]
+    for mut x in xs
+        x = true
+    print(xs.len())
+
+## list.comprehension[bool]
+fn s41()
+    xs := [false, true]
+    ys := [x for x in xs if x == false]
+    print(ys.len())
+
+## list.set_comprehension[bool]
+fn s42()
+    xs := [false, true, false]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[bool]
+fn s43()
+    xs := [false, true]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[bool]
+fn s44()
+    xs := [false, true]
+    ys := [false, true]
+    print(xs == ys)
+    print(xs != [true])
+
+## list.print[bool]
+fn s45()
+    xs := [false, true]
+    print(xs)
+
+## list.interp[bool]
+fn s46()
+    xs := [false, true]
+    print("{xs}".len() > 0)
+
+## list.nested_push[bool]
+fn s47()
+    mut xs := [[false]]
+    xs[0].push(true)
+    print(xs[0].len())
+
+## list.in_struct[bool]
+fn s48()
+    mut b := Box_bool(items: [false])
+    b.items.push(true)
+    print(b.items.len())
+
+## list.pass_mut[bool]
+fn s49()
+    mut xs := [false]
+    add_bool(mut xs, true)
+    print(xs.len())
+
+## list.generic_first[bool]
+fn s50()
+    xs := [false, true]
+    if x := first_of(xs)
+        print(1)
+
+## list.contains_list[bool]
+fn s51()
+    xs := [[false], [true]]
+    print(xs.contains([true]))
+
+fn main()
+    print("-- list.literal[bool]")
+    s0()
+    print("-- list.empty[bool]")
+    s1()
+    print("-- list.typed_by_push[bool]")
+    s2()
+    print("-- list.len[bool]")
+    s3()
+    print("-- list.is_empty[bool]")
+    s4()
+    print("-- list.index[bool]")
+    s5()
+    print("-- list.index_assign[bool]")
+    s6()
+    print("-- list.slice[bool]")
+    s7()
+    print("-- list.push[bool]")
+    s8()
+    print("-- list.pop[bool]")
+    s9()
+    print("-- list.swap[bool]")
+    s10()
+    print("-- list.first_last[bool]")
+    s11()
+    print("-- list.insert[bool]")
+    s12()
+    print("-- list.remove_at[bool]")
+    s13()
+    print("-- list.extend[bool]")
+    s14()
+    print("-- list.clear[bool]")
+    s15()
+    print("-- list.reverse[bool]")
+    s16()
+    print("-- list.reversed[bool]")
+    s17()
+    print("-- list.contains[bool]")
+    s18()
+    print("-- list.index_of[bool]")
+    s19()
+    print("-- list.join[bool]")
+    s20()
+    print("-- list.take_skip[bool]")
+    s21()
+    print("-- list.set_ops[bool]")
+    s22()
+    print("-- list.chunks_windows[bool]")
+    s23()
+    print("-- list.counts[bool]")
+    s24()
+    print("-- list.flatten[bool]")
+    s25()
+    print("-- list.enumerate[bool]")
+    s26()
+    print("-- list.any_all[bool]")
+    s27()
+    print("-- list.find[bool]")
+    s28()
+    print("-- list.filter[bool]")
+    s29()
+    print("-- list.map[bool]")
+    s30()
+    print("-- list.map_to_self[bool]")
+    s31()
+    print("-- list.group_by[bool]")
+    s32()
+    print("-- list.count[bool]")
+    s33()
+    print("-- list.fold[bool]")
+    s34()
+    print("-- list.flat_map[bool]")
+    s35()
+    print("-- list.take_skip_while[bool]")
+    s36()
+    print("-- list.zip[bool]")
+    s37()
+    print("-- list.zip_into[bool]")
+    s38()
+    print("-- list.for[bool]")
+    s39()
+    print("-- list.for_mut[bool]")
+    s40()
+    print("-- list.comprehension[bool]")
+    s41()
+    print("-- list.set_comprehension[bool]")
+    s42()
+    print("-- list.map_comprehension[bool]")
+    s43()
+    print("-- list.eq[bool]")
+    s44()
+    print("-- list.print[bool]")
+    s45()
+    print("-- list.interp[bool]")
+    s46()
+    print("-- list.nested_push[bool]")
+    s47()
+    print("-- list.in_struct[bool]")
+    s48()
+    print("-- list.pass_mut[bool]")
+    s49()
+    print("-- list.generic_first[bool]")
+    s50()
+    print("-- list.contains_list[bool]")
+    s51()

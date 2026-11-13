@@ -1,0 +1,171 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## mapv.literal[opt]
+fn s0()
+    m := {"a": oi(1), "b": oi(2)}
+    print(m.len())
+
+## mapv.empty[opt]
+fn s1()
+    m := Map[str, int?]()
+    print(m.len())
+
+## mapv.index[opt]
+fn s2()
+    m := {"a": oi(1)}
+    x := m["a"]
+    print((x else 0) == (x else 0))
+
+## mapv.assign[opt]
+fn s3()
+    mut m := Map[str, int?]()
+    m["a"] = oi(1)
+    print(m.len())
+
+## mapv.get[opt]
+fn s4()
+    m := {"a": oi(1)}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[opt]
+fn s5()
+    m := {"a": oi(1)}
+    x := m.get("z") else oi(2)
+    print(1)
+
+## mapv.get_or[opt]
+fn s6()
+    m := {"a": oi(1)}
+    x := m.get_or("b", oi(-1))
+    print(1)
+
+## mapv.remove[opt]
+fn s7()
+    mut m := {"a": oi(1)}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[opt]
+fn s8()
+    m := {"a": oi(1), "b": oi(2)}
+    print(m.values().len())
+
+## mapv.for[opt]
+fn s9()
+    m := {"a": oi(1), "b": oi(2)}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[opt]
+fn s10()
+    m := {"a": oi(1)}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[opt]
+fn s11()
+    m := {"a": oi(1), "b": oi(2)}
+    print(m.filter(|k, v| v == oi(1)).len())
+
+## mapv.nested_update[opt]
+fn s12()
+    mut m := Map[str, List[int?]]()
+    m["a"] = [oi(1)]
+    m["a"].push(oi(2))
+    print(m["a"].len())
+
+## mapv.eq[opt]
+fn s13()
+    m := {"a": oi(1)}
+    print(m == {"a": oi(1)})
+
+## mapv.print[opt]
+fn s14()
+    m := {"a": oi(1)}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[opt]")
+    s0()
+    print("-- mapv.empty[opt]")
+    s1()
+    print("-- mapv.index[opt]")
+    s2()
+    print("-- mapv.assign[opt]")
+    s3()
+    print("-- mapv.get[opt]")
+    s4()
+    print("-- mapv.get_else[opt]")
+    s5()
+    print("-- mapv.get_or[opt]")
+    s6()
+    print("-- mapv.remove[opt]")
+    s7()
+    print("-- mapv.values[opt]")
+    s8()
+    print("-- mapv.for[opt]")
+    s9()
+    print("-- mapv.map_values[opt]")
+    s10()
+    print("-- mapv.filter[opt]")
+    s11()
+    print("-- mapv.nested_update[opt]")
+    s12()
+    print("-- mapv.eq[opt]")
+    s13()
+    print("-- mapv.print[opt]")
+    s14()

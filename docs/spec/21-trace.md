@@ -45,7 +45,7 @@ events dropped, and the count of each kind. *(ADR 0266)*
 
 **trace.run.5** — Tracing MUST NOT change the program's behaviour: standard
 output, exit status, and the output of a `--deterministic` or `--seed` run
-are the same with and without it. With no tracing option, the interpreter's
+are the same with and without it. With no tracing option, the program's
 speed is within measurement noise of a build without tracing. *(ADR 0265)*
 
 ```ail
@@ -266,11 +266,11 @@ fn main()
 error with `"severity":"trap"`, the rule, position and message, the source
 line, the condition's values, and the stack. Natively `./ail` builds the program with
 `--values --verbose` and `tools/trapjson.awk` turns the report into that object, so
-the arguments and locals of every frame are given as in the interpreter's. Without
+the arguments and locals of every frame are given as in the trap report. Without
 `--trace`, `--json` is the only option that does this; with it, trace.run.1 applies. *(ADR 0267)*
 
 **trace.frame.1** — An executable built by `ail build` reports a trap with
-the stack the interpreter reports (trace.snap.2, trace.snap.3), without the
+the stack `ail run --trace` reports (trace.snap.2, trace.snap.3), without the
 frames' values: the trap's first line and source excerpt, then one line
 `  at [FILE:]LINE:COL in NAME(..)` per frame, innermost first (`NAME()` for a
 function without parameters; `FILE:` only outside the first file), where
@@ -288,7 +288,7 @@ stack lists every source frame. *(ADRs 0643, 0890, 0940)*
 
 **trace.frame.3** — `ail run --values FILE` builds the program so that its
 own functions keep their arguments and locals where a trap can print them. The
-trap then reports each frame as the interpreter does (trace.snap.2,
+trap then reports each frame as `--trace` does (trace.snap.2,
 trace.snap.3): `  at LINE:COL in NAME(a = 1, b = 2); c = 3` (the arguments,
 then `; ` and the locals in scope at the statement that was running, in
 declaration order; the values of types the runtime can print), a contract

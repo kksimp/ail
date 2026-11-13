@@ -1,0 +1,162 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_tuple
+    items List[(int, str)]
+
+fn add_tuple(mut xs List[(int, str)], x (int, str))
+    xs.push(x)
+
+fn wrap_tuple(x (int, str)) (int, str)?
+    x
+
+fn nothing_tuple() (int, str)?
+    none
+
+K_tuple := [(1, "a"), (2, "b")]
+
+## deque.empty_push[tuple]
+fn s0()
+    mut d := Deque[(int, str)]()
+    d.push_back((1, "a"))
+    d.push_front((2, "b"))
+    print(d.len())
+
+## deque.from[tuple]
+fn s1()
+    d := Deque.from([(1, "a"), (2, "b")])
+    print(d.len())
+
+## deque.pop[tuple]
+fn s2()
+    mut d := Deque.from([(1, "a"), (2, "b"), (3, "c")])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[tuple]
+fn s3()
+    d := Deque.from([(1, "a"), (2, "b")])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[tuple]
+fn s4()
+    d := Deque.from([(1, "a"), (2, "b")])
+    x := d[1]
+    print(x.0 == x.0)
+
+## deque.at_set[tuple]
+fn s5()
+    mut d := Deque.from([(1, "a"), (2, "b")])
+    d.set(0, (3, "c"))
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[tuple]
+fn s6()
+    d := Deque.from([(1, "a"), (2, "b")])
+    print(d.to_list().len())
+
+## deque.for[tuple]
+fn s7()
+    d := Deque.from([(1, "a"), (2, "b")])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[tuple]
+fn s8()
+    d := Deque.from([(1, "a"), (2, "b")])
+    print(d.filter(|x| x == (1, "a")).len() + d.map(|x| x.0).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == (1, "a")))
+    print(d.all(|x| x == (1, "a")))
+    print(d.count(|x| x == (1, "a")))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == (1, "a"))
+        print(1)
+
+## deque.take_skip[tuple]
+fn s9()
+    d := Deque.from([(1, "a"), (2, "b"), (3, "c")])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == (1, "a")).len() + d.skip_while(|x| x == (1, "a")).len())
+
+## deque.enumerate_zip[tuple]
+fn s10()
+    d := Deque.from([(1, "a"), (2, "b")])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[tuple]
+fn s11()
+    d := Deque[(int, str)]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[tuple]")
+    s0()
+    print("-- deque.from[tuple]")
+    s1()
+    print("-- deque.pop[tuple]")
+    s2()
+    print("-- deque.first_last[tuple]")
+    s3()
+    print("-- deque.index[tuple]")
+    s4()
+    print("-- deque.at_set[tuple]")
+    s5()
+    print("-- deque.to_list[tuple]")
+    s6()
+    print("-- deque.for[tuple]")
+    s7()
+    print("-- deque.vocab[tuple]")
+    s8()
+    print("-- deque.take_skip[tuple]")
+    s9()
+    print("-- deque.enumerate_zip[tuple]")
+    s10()
+    print("-- deque.is_empty[tuple]")
+    s11()

@@ -1,0 +1,30 @@
+-- mapv.literal[set]
+2
+-- mapv.empty[set]
+0
+-- mapv.index[set]
+true
+-- mapv.assign[set]
+1
+-- mapv.get[set]
+1
+-- mapv.get_else[set]
+1
+-- mapv.get_or[set]
+1
+-- mapv.remove[set]
+0
+-- mapv.values[set]
+2
+-- mapv.for[set]
+2
+-- mapv.map_values[set]
+1
+-- mapv.filter[set]
+1
+-- mapv.nested_update[set]
+2
+-- mapv.eq[set]
+true
+-- mapv.print[set]
+{"a": {1}}

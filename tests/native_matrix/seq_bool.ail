@@ -1,0 +1,163 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bool
+    items List[bool]
+
+fn add_bool(mut xs List[bool], x bool)
+    xs.push(x)
+
+fn wrap_bool(x bool) bool?
+    x
+
+fn nothing_bool() bool?
+    none
+
+K_bool := [false, true]
+
+## seq.of_collect[bool]
+fn s0()
+    s := Seq.of([false, true])
+    print(s.collect().len())
+
+## seq.map_filter[bool]
+fn s1()
+    s := Seq.of([false, true])
+    print(s.filter(|x| x == false).map(|x| x).collect().len())
+
+## seq.take_skip[bool]
+fn s2()
+    s := Seq.of([false, true, true])
+    print(s.skip(1).take(1).collect().len())
+
+## seq.enumerate[bool]
+fn s3()
+    s := Seq.of([false, true])
+    print(s.enumerate().collect().len())
+
+## seq.zip_chain[bool]
+fn s4()
+    s := Seq.of([false, true])
+    t := Seq.of([1, 2])
+    print(s.zip(move t).collect().len())
+
+## seq.chain[bool]
+fn s5()
+    s := Seq.of([false])
+    t := Seq.of([true])
+    print(s.chain(move t).collect().len())
+
+## seq.next[bool]
+fn s6()
+    mut s := Seq.of([false, true])
+    if x := s.next()
+        print(1)
+
+## seq.for[bool]
+fn s7()
+    s := Seq.of([false, true])
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## seq.count_any[bool]
+fn s8()
+    s := Seq.of([false, true])
+    print(s.count(|x| x == false))
+
+## seq.fold[bool]
+fn s9()
+    s := Seq.of([false, true])
+    print(s.fold(0, |acc, x| acc + 1))
+
+## seq.find[bool]
+fn s10()
+    s := Seq.of([false, true])
+    if x := s.find(|x| x == true)
+        print(1)
+
+## seq.flat_map[bool]
+fn s11()
+    s := Seq.of([false, true])
+    print(s.flat_map(|x| [x, x]).collect().len())
+
+## seq.while[bool]
+fn s12()
+    s := Seq.of([false, true])
+    print(s.take_while(|x| x == false).collect().len())
+
+## seq.skip_while[bool]
+fn s13()
+    s := Seq.of([false, true])
+    print(s.skip_while(|x| x == false).collect().len())
+
+fn main()
+    print("-- seq.of_collect[bool]")
+    s0()
+    print("-- seq.map_filter[bool]")
+    s1()
+    print("-- seq.take_skip[bool]")
+    s2()
+    print("-- seq.enumerate[bool]")
+    s3()
+    print("-- seq.zip_chain[bool]")
+    s4()
+    print("-- seq.chain[bool]")
+    s5()
+    print("-- seq.next[bool]")
+    s6()
+    print("-- seq.for[bool]")
+    s7()
+    print("-- seq.count_any[bool]")
+    s8()
+    print("-- seq.fold[bool]")
+    s9()
+    print("-- seq.find[bool]")
+    s10()
+    print("-- seq.flat_map[bool]")
+    s11()
+    print("-- seq.while[bool]")
+    s12()
+    print("-- seq.skip_while[bool]")
+    s13()

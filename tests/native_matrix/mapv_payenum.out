@@ -1,0 +1,30 @@
+-- mapv.literal[payenum]
+2
+-- mapv.empty[payenum]
+0
+-- mapv.index[payenum]
+true
+-- mapv.assign[payenum]
+1
+-- mapv.get[payenum]
+1
+-- mapv.get_else[payenum]
+1
+-- mapv.get_or[payenum]
+1
+-- mapv.remove[payenum]
+0
+-- mapv.values[payenum]
+2
+-- mapv.for[payenum]
+2
+-- mapv.map_values[payenum]
+1
+-- mapv.filter[payenum]
+1
+-- mapv.nested_update[payenum]
+2
+-- mapv.eq[payenum]
+true
+-- mapv.print[payenum]
+{"a": Shape.Circle(r: 1)}

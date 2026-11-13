@@ -1,0 +1,230 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_struct
+    items List[P]
+
+fn add_struct(mut xs List[P], x P)
+    xs.push(x)
+
+fn wrap_struct(x P) P?
+    x
+
+fn nothing_struct() P?
+    none
+
+K_struct := [P(name: "a", n: 1), P(name: "b", n: 2)]
+
+## mapk.literal[struct]
+fn s0()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.len())
+
+## mapk.empty[struct]
+fn s1()
+    m := Map[P, int]()
+    print(m.len())
+
+## mapk.typed_by_use[struct]
+fn s2()
+    mut m := {}
+    m[P(name: "a", n: 1)] += 1
+    print(m.len())
+
+## mapk.index[struct]
+fn s3()
+    m := {P(name: "a", n: 1): 1}
+    print(m[P(name: "a", n: 1)])
+
+## mapk.assign[struct]
+fn s4()
+    mut m := Map[P, int]()
+    m[P(name: "a", n: 1)] = 1
+    m[P(name: "b", n: 2)] = 2
+    print(m.len())
+
+## mapk.op_assign[struct]
+fn s5()
+    mut m := Map[P, int]()
+    m[P(name: "a", n: 1)] += 3
+    print(m[P(name: "a", n: 1)])
+
+## mapk.get[struct]
+fn s6()
+    m := {P(name: "a", n: 1): 1}
+    print(m.get(P(name: "a", n: 1)) else 0)
+
+## mapk.get_or[struct]
+fn s7()
+    m := {P(name: "a", n: 1): 1}
+    print(m.get_or(P(name: "b", n: 2), 7))
+
+## mapk.contains[struct]
+fn s8()
+    m := {P(name: "a", n: 1): 1}
+    print(m.contains(P(name: "a", n: 1)))
+
+## mapk.remove[struct]
+fn s9()
+    mut m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.remove(P(name: "a", n: 1)) else 0)
+
+## mapk.keys_values[struct]
+fn s10()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.top[struct]
+fn s11()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.top(1).len())
+
+## mapk.for[struct]
+fn s12()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[struct]
+fn s13()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[struct]
+fn s14()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[struct]
+fn s15()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[struct]
+fn s16()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[struct]
+fn s17()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[struct]
+fn s18()
+    m := {P(name: "a", n: 1): 1, P(name: "b", n: 2): 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[struct]
+fn s19()
+    mut m := Map[P, List[int]]()
+    m.push(P(name: "a", n: 1), 1)
+    m.push(P(name: "a", n: 1), 2)
+    print(m[P(name: "a", n: 1)].len())
+
+## mapk.eq[struct]
+fn s20()
+    m := {P(name: "a", n: 1): 1}
+    print(m == {P(name: "a", n: 1): 1})
+
+## mapk.print[struct]
+fn s21()
+    m := {P(name: "a", n: 1): 1}
+    print(m)
+
+## mapk.is_empty[struct]
+fn s22()
+    m := {P(name: "a", n: 1): 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[struct]")
+    s0()
+    print("-- mapk.empty[struct]")
+    s1()
+    print("-- mapk.typed_by_use[struct]")
+    s2()
+    print("-- mapk.index[struct]")
+    s3()
+    print("-- mapk.assign[struct]")
+    s4()
+    print("-- mapk.op_assign[struct]")
+    s5()
+    print("-- mapk.get[struct]")
+    s6()
+    print("-- mapk.get_or[struct]")
+    s7()
+    print("-- mapk.contains[struct]")
+    s8()
+    print("-- mapk.remove[struct]")
+    s9()
+    print("-- mapk.keys_values[struct]")
+    s10()
+    print("-- mapk.top[struct]")
+    s11()
+    print("-- mapk.for[struct]")
+    s12()
+    print("-- mapk.any_all_count[struct]")
+    s13()
+    print("-- mapk.fold[struct]")
+    s14()
+    print("-- mapk.filter[struct]")
+    s15()
+    print("-- mapk.map[struct]")
+    s16()
+    print("-- mapk.flat_map[struct]")
+    s17()
+    print("-- mapk.map_values[struct]")
+    s18()
+    print("-- mapk.push[struct]")
+    s19()
+    print("-- mapk.eq[struct]")
+    s20()
+    print("-- mapk.print[struct]")
+    s21()
+    print("-- mapk.is_empty[struct]")
+    s22()

@@ -1,0 +1,40 @@
+-- set.literal[bool]
+2
+-- set.empty[bool]
+0
+-- set.from_list[bool]
+2
+-- set.add_remove[bool]
+true
+true
+-- set.contains[bool]
+true
+-- set.is_empty[bool]
+false
+-- set.is_subset[bool]
+true
+-- set.any_all_find[bool]
+true
+false
+1
+-- set.filter_map[bool]
+3
+-- set.group_by[bool]
+2
+-- set.count_fold[bool]
+1
+2
+-- set.flat_map[bool]
+2
+-- set.zip_enumerate[bool]
+4
+-- set.for[bool]
+2
+-- set.eq[bool]
+true
+-- set.print[bool]
+{false}
+-- set.in_map[bool]
+1
+-- set.in_list[bool]
+1

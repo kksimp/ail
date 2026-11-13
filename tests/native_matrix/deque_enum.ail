@@ -1,0 +1,162 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_enum
+    items List[Color]
+
+fn add_enum(mut xs List[Color], x Color)
+    xs.push(x)
+
+fn wrap_enum(x Color) Color?
+    x
+
+fn nothing_enum() Color?
+    none
+
+K_enum := [Color.Red, Color.Green]
+
+## deque.empty_push[enum]
+fn s0()
+    mut d := Deque[Color]()
+    d.push_back(Color.Red)
+    d.push_front(Color.Green)
+    print(d.len())
+
+## deque.from[enum]
+fn s1()
+    d := Deque.from([Color.Red, Color.Green])
+    print(d.len())
+
+## deque.pop[enum]
+fn s2()
+    mut d := Deque.from([Color.Red, Color.Green, Color.Blue])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[enum]
+fn s3()
+    d := Deque.from([Color.Red, Color.Green])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[enum]
+fn s4()
+    d := Deque.from([Color.Red, Color.Green])
+    x := d[1]
+    print(1 == 1)
+
+## deque.at_set[enum]
+fn s5()
+    mut d := Deque.from([Color.Red, Color.Green])
+    d.set(0, Color.Blue)
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[enum]
+fn s6()
+    d := Deque.from([Color.Red, Color.Green])
+    print(d.to_list().len())
+
+## deque.for[enum]
+fn s7()
+    d := Deque.from([Color.Red, Color.Green])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[enum]
+fn s8()
+    d := Deque.from([Color.Red, Color.Green])
+    print(d.filter(|x| x == Color.Red).len() + d.map(|x| 1).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == Color.Red))
+    print(d.all(|x| x == Color.Red))
+    print(d.count(|x| x == Color.Red))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == Color.Red)
+        print(1)
+
+## deque.take_skip[enum]
+fn s9()
+    d := Deque.from([Color.Red, Color.Green, Color.Blue])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == Color.Red).len() + d.skip_while(|x| x == Color.Red).len())
+
+## deque.enumerate_zip[enum]
+fn s10()
+    d := Deque.from([Color.Red, Color.Green])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[enum]
+fn s11()
+    d := Deque[Color]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[enum]")
+    s0()
+    print("-- deque.from[enum]")
+    s1()
+    print("-- deque.pop[enum]")
+    s2()
+    print("-- deque.first_last[enum]")
+    s3()
+    print("-- deque.index[enum]")
+    s4()
+    print("-- deque.at_set[enum]")
+    s5()
+    print("-- deque.to_list[enum]")
+    s6()
+    print("-- deque.for[enum]")
+    s7()
+    print("-- deque.vocab[enum]")
+    s8()
+    print("-- deque.take_skip[enum]")
+    s9()
+    print("-- deque.enumerate_zip[enum]")
+    s10()
+    print("-- deque.is_empty[enum]")
+    s11()

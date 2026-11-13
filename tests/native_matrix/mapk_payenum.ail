@@ -1,0 +1,230 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_payenum
+    items List[Shape]
+
+fn add_payenum(mut xs List[Shape], x Shape)
+    xs.push(x)
+
+fn wrap_payenum(x Shape) Shape?
+    x
+
+fn nothing_payenum() Shape?
+    none
+
+K_payenum := [Shape.Circle(r: 1), Shape.Square(s: 2)]
+
+## mapk.literal[payenum]
+fn s0()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.len())
+
+## mapk.empty[payenum]
+fn s1()
+    m := Map[Shape, int]()
+    print(m.len())
+
+## mapk.typed_by_use[payenum]
+fn s2()
+    mut m := {}
+    m[Shape.Circle(r: 1)] += 1
+    print(m.len())
+
+## mapk.index[payenum]
+fn s3()
+    m := {Shape.Circle(r: 1): 1}
+    print(m[Shape.Circle(r: 1)])
+
+## mapk.assign[payenum]
+fn s4()
+    mut m := Map[Shape, int]()
+    m[Shape.Circle(r: 1)] = 1
+    m[Shape.Square(s: 2)] = 2
+    print(m.len())
+
+## mapk.op_assign[payenum]
+fn s5()
+    mut m := Map[Shape, int]()
+    m[Shape.Circle(r: 1)] += 3
+    print(m[Shape.Circle(r: 1)])
+
+## mapk.get[payenum]
+fn s6()
+    m := {Shape.Circle(r: 1): 1}
+    print(m.get(Shape.Circle(r: 1)) else 0)
+
+## mapk.get_or[payenum]
+fn s7()
+    m := {Shape.Circle(r: 1): 1}
+    print(m.get_or(Shape.Square(s: 2), 7))
+
+## mapk.contains[payenum]
+fn s8()
+    m := {Shape.Circle(r: 1): 1}
+    print(m.contains(Shape.Circle(r: 1)))
+
+## mapk.remove[payenum]
+fn s9()
+    mut m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.remove(Shape.Circle(r: 1)) else 0)
+
+## mapk.keys_values[payenum]
+fn s10()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.top[payenum]
+fn s11()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.top(1).len())
+
+## mapk.for[payenum]
+fn s12()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[payenum]
+fn s13()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[payenum]
+fn s14()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[payenum]
+fn s15()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[payenum]
+fn s16()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[payenum]
+fn s17()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[payenum]
+fn s18()
+    m := {Shape.Circle(r: 1): 1, Shape.Square(s: 2): 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[payenum]
+fn s19()
+    mut m := Map[Shape, List[int]]()
+    m.push(Shape.Circle(r: 1), 1)
+    m.push(Shape.Circle(r: 1), 2)
+    print(m[Shape.Circle(r: 1)].len())
+
+## mapk.eq[payenum]
+fn s20()
+    m := {Shape.Circle(r: 1): 1}
+    print(m == {Shape.Circle(r: 1): 1})
+
+## mapk.print[payenum]
+fn s21()
+    m := {Shape.Circle(r: 1): 1}
+    print(m)
+
+## mapk.is_empty[payenum]
+fn s22()
+    m := {Shape.Circle(r: 1): 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[payenum]")
+    s0()
+    print("-- mapk.empty[payenum]")
+    s1()
+    print("-- mapk.typed_by_use[payenum]")
+    s2()
+    print("-- mapk.index[payenum]")
+    s3()
+    print("-- mapk.assign[payenum]")
+    s4()
+    print("-- mapk.op_assign[payenum]")
+    s5()
+    print("-- mapk.get[payenum]")
+    s6()
+    print("-- mapk.get_or[payenum]")
+    s7()
+    print("-- mapk.contains[payenum]")
+    s8()
+    print("-- mapk.remove[payenum]")
+    s9()
+    print("-- mapk.keys_values[payenum]")
+    s10()
+    print("-- mapk.top[payenum]")
+    s11()
+    print("-- mapk.for[payenum]")
+    s12()
+    print("-- mapk.any_all_count[payenum]")
+    s13()
+    print("-- mapk.fold[payenum]")
+    s14()
+    print("-- mapk.filter[payenum]")
+    s15()
+    print("-- mapk.map[payenum]")
+    s16()
+    print("-- mapk.flat_map[payenum]")
+    s17()
+    print("-- mapk.map_values[payenum]")
+    s18()
+    print("-- mapk.push[payenum]")
+    s19()
+    print("-- mapk.eq[payenum]")
+    s20()
+    print("-- mapk.print[payenum]")
+    s21()
+    print("-- mapk.is_empty[payenum]")
+    s22()

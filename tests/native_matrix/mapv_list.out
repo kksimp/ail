@@ -1,0 +1,32 @@
+-- mapv.literal[list]
+2
+-- mapv.empty[list]
+0
+-- mapv.index[list]
+true
+-- mapv.assign[list]
+1
+-- mapv.get[list]
+1
+-- mapv.get_else[list]
+1
+-- mapv.get_or[list]
+1
+-- mapv.remove[list]
+0
+-- mapv.values[list]
+2
+-- mapv.values_sorted[list]
+2
+-- mapv.for[list]
+2
+-- mapv.map_values[list]
+1
+-- mapv.filter[list]
+1
+-- mapv.nested_update[list]
+2
+-- mapv.eq[list]
+true
+-- mapv.print[list]
+{"a": [1]}

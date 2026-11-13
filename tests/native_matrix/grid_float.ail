@@ -1,0 +1,112 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_float
+    items List[float]
+
+fn add_float(mut xs List[float], x float)
+    xs.push(x)
+
+fn wrap_float(x float) float?
+    x
+
+fn nothing_float() float?
+    none
+
+K_float := [1.5, 2.5]
+
+## grid.fill[float]
+fn s0()
+    g := Grid.fill(2, 3, 1.5)
+    print(g.rows * g.cols)
+
+## grid.from[float]
+fn s1()
+    g := Grid.from([[1.5, 2.5], [3.5, 1.5]])
+    print(g.cells.len())
+
+## grid.index[float]
+fn s2()
+    g := Grid.fill(2, 2, 1.5)
+    x := g[1, 1]
+    print(x == x)
+
+## grid.index_assign[float]
+fn s3()
+    mut g := Grid.fill(2, 2, 1.5)
+    g[0, 1] = 2.5
+    print(g.rows)
+
+## grid.row[float]
+fn s4()
+    g := Grid.from([[1.5, 2.5], [3.5, 1.5]])
+    print(g.row(1).len())
+
+## grid.to_list[float]
+fn s5()
+    g := Grid.fill(2, 2, 1.5)
+    print(g.to_list().len())
+
+## grid.cells_for[float]
+fn s6()
+    g := Grid.fill(2, 2, 1.5)
+    mut n := 0
+    for x in g.cells
+        n += 1
+    print(n)
+
+fn main()
+    print("-- grid.fill[float]")
+    s0()
+    print("-- grid.from[float]")
+    s1()
+    print("-- grid.index[float]")
+    s2()
+    print("-- grid.index_assign[float]")
+    s3()
+    print("-- grid.row[float]")
+    s4()
+    print("-- grid.to_list[float]")
+    s5()
+    print("-- grid.cells_for[float]")
+    s6()

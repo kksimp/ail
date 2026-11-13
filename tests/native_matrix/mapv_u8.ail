@@ -1,0 +1,181 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_u8
+    items List[u8]
+
+fn add_u8(mut xs List[u8], x u8)
+    xs.push(x)
+
+fn wrap_u8(x u8) u8?
+    x
+
+fn nothing_u8() u8?
+    none
+
+K_u8 := [1.to_u8(), 2.to_u8()]
+
+## mapv.literal[u8]
+fn s0()
+    m := {"a": 1.to_u8(), "b": 2.to_u8()}
+    print(m.len())
+
+## mapv.empty[u8]
+fn s1()
+    m := Map[str, u8]()
+    print(m.len())
+
+## mapv.index[u8]
+fn s2()
+    m := {"a": 1.to_u8()}
+    x := m["a"]
+    print(x == x)
+
+## mapv.assign[u8]
+fn s3()
+    mut m := Map[str, u8]()
+    m["a"] = 1.to_u8()
+    print(m.len())
+
+## mapv.get[u8]
+fn s4()
+    m := {"a": 1.to_u8()}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[u8]
+fn s5()
+    m := {"a": 1.to_u8()}
+    x := m.get("z") else 2.to_u8()
+    print(1)
+
+## mapv.get_or[u8]
+fn s6()
+    m := {"a": 1.to_u8()}
+    x := m.get_or("b", 3.to_u8())
+    print(1)
+
+## mapv.remove[u8]
+fn s7()
+    mut m := {"a": 1.to_u8()}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[u8]
+fn s8()
+    m := {"a": 1.to_u8(), "b": 2.to_u8()}
+    print(m.values().len())
+
+## mapv.values_sorted[u8]
+fn s9()
+    m := {"a": 2.to_u8(), "b": 1.to_u8()}
+    print(m.values().sorted().len())
+
+## mapv.for[u8]
+fn s10()
+    m := {"a": 1.to_u8(), "b": 2.to_u8()}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[u8]
+fn s11()
+    m := {"a": 1.to_u8()}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[u8]
+fn s12()
+    m := {"a": 1.to_u8(), "b": 2.to_u8()}
+    print(m.filter(|k, v| v == 1.to_u8()).len())
+
+## mapv.nested_update[u8]
+fn s13()
+    mut m := Map[str, List[u8]]()
+    m["a"] = [1.to_u8()]
+    m["a"].push(2.to_u8())
+    print(m["a"].len())
+
+## mapv.eq[u8]
+fn s14()
+    m := {"a": 1.to_u8()}
+    print(m == {"a": 1.to_u8()})
+
+## mapv.print[u8]
+fn s15()
+    m := {"a": 1.to_u8()}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[u8]")
+    s0()
+    print("-- mapv.empty[u8]")
+    s1()
+    print("-- mapv.index[u8]")
+    s2()
+    print("-- mapv.assign[u8]")
+    s3()
+    print("-- mapv.get[u8]")
+    s4()
+    print("-- mapv.get_else[u8]")
+    s5()
+    print("-- mapv.get_or[u8]")
+    s6()
+    print("-- mapv.remove[u8]")
+    s7()
+    print("-- mapv.values[u8]")
+    s8()
+    print("-- mapv.values_sorted[u8]")
+    s9()
+    print("-- mapv.for[u8]")
+    s10()
+    print("-- mapv.map_values[u8]")
+    s11()
+    print("-- mapv.filter[u8]")
+    s12()
+    print("-- mapv.nested_update[u8]")
+    s13()
+    print("-- mapv.eq[u8]")
+    s14()
+    print("-- mapv.print[u8]")
+    s15()

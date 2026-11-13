@@ -1,0 +1,47 @@
+-- value.eq[float]
+true
+true
+-- value.lt[float]
+true
+true
+-- value.print[float]
+1.5
+-- value.interp[float]
+<1.5>
+-- value.to_str_len[float]
+true
+-- value.optional_else[float]
+1
+-- value.optional_if[float]
+1
+-- value.optional_none[float]
+true
+-- value.optional_print[float]
+1.5
+-- value.tuple[float]
+1
+1
+-- value.tuple_eq[float]
+true
+-- value.tuple_print[float]
+(1.5, 1)
+-- value.tuple_list_sorted[float]
+2
+-- value.struct_field[float]
+true
+-- value.struct_print[float]
+Box_float(items: [1.5])
+-- value.ref[float]
+2
+-- value.generic_id[float]
+1
+-- value.generic_box[float]
+true
+-- value.fn_value[float]
+1
+-- value.closure_capture[float]
+1
+-- value.match_eq[float]
+1
+-- value.const_list[float]
+2

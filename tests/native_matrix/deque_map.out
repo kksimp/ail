@@ -1,0 +1,31 @@
+-- deque.empty_push[map]
+2
+-- deque.from[map]
+2
+-- deque.pop[map]
+1
+2
+-- deque.first_last[map]
+1
+2
+-- deque.index[map]
+true
+-- deque.at_set[map]
+2
+-- deque.to_list[map]
+2
+-- deque.for[map]
+2
+-- deque.vocab[map]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[map]
+6
+-- deque.enumerate_zip[map]
+4
+-- deque.is_empty[map]
+true

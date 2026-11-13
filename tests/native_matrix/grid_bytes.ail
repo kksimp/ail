@@ -1,0 +1,112 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bytes
+    items List[bytes]
+
+fn add_bytes(mut xs List[bytes], x bytes)
+    xs.push(x)
+
+fn wrap_bytes(x bytes) bytes?
+    x
+
+fn nothing_bytes() bytes?
+    none
+
+K_bytes := [b"a", b"b"]
+
+## grid.fill[bytes]
+fn s0()
+    g := Grid.fill(2, 3, b"a")
+    print(g.rows * g.cols)
+
+## grid.from[bytes]
+fn s1()
+    g := Grid.from([[b"a", b"b"], [b"c", b"a"]])
+    print(g.cells.len())
+
+## grid.index[bytes]
+fn s2()
+    g := Grid.fill(2, 2, b"a")
+    x := g[1, 1]
+    print(x.len() == x.len())
+
+## grid.index_assign[bytes]
+fn s3()
+    mut g := Grid.fill(2, 2, b"a")
+    g[0, 1] = b"b"
+    print(g.rows)
+
+## grid.row[bytes]
+fn s4()
+    g := Grid.from([[b"a", b"b"], [b"c", b"a"]])
+    print(g.row(1).len())
+
+## grid.to_list[bytes]
+fn s5()
+    g := Grid.fill(2, 2, b"a")
+    print(g.to_list().len())
+
+## grid.cells_for[bytes]
+fn s6()
+    g := Grid.fill(2, 2, b"a")
+    mut n := 0
+    for x in g.cells
+        n += 1
+    print(n)
+
+fn main()
+    print("-- grid.fill[bytes]")
+    s0()
+    print("-- grid.from[bytes]")
+    s1()
+    print("-- grid.index[bytes]")
+    s2()
+    print("-- grid.index_assign[bytes]")
+    s3()
+    print("-- grid.row[bytes]")
+    s4()
+    print("-- grid.to_list[bytes]")
+    s5()
+    print("-- grid.cells_for[bytes]")
+    s6()

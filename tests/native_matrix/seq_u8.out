@@ -1,0 +1,28 @@
+-- seq.of_collect[u8]
+2
+-- seq.map_filter[u8]
+1
+-- seq.take_skip[u8]
+1
+-- seq.enumerate[u8]
+2
+-- seq.zip_chain[u8]
+2
+-- seq.chain[u8]
+2
+-- seq.next[u8]
+1
+-- seq.for[u8]
+2
+-- seq.count_any[u8]
+1
+-- seq.fold[u8]
+2
+-- seq.find[u8]
+1
+-- seq.flat_map[u8]
+4
+-- seq.while[u8]
+1
+-- seq.skip_while[u8]
+1

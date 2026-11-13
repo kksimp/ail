@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_char
+    items List[char]
+
+fn add_char(mut xs List[char], x char)
+    xs.push(x)
+
+fn wrap_char(x char) char?
+    x
+
+fn nothing_char() char?
+    none
+
+K_char := ['a', 'b']
+
+## set.literal[char]
+fn s0()
+    s := {'a', 'b'}
+    print(s.len())
+
+## set.empty[char]
+fn s1()
+    s := Set[char]()
+    print(s.len())
+
+## set.from_list[char]
+fn s2()
+    s := {x for x in ['a', 'b', 'a']}
+    print(s.len())
+
+## set.add_remove[char]
+fn s3()
+    mut s := Set[char]()
+    print(s.add('a'))
+    print(s.remove('a'))
+
+## set.contains[char]
+fn s4()
+    s := {'a', 'b'}
+    print(s.contains('a'))
+
+## set.is_empty[char]
+fn s5()
+    s := {'a'}
+    print(s.is_empty())
+
+## set.sorted[char]
+fn s6()
+    s := {'b', 'a'}
+    print(s.sorted().len())
+
+## set.is_subset[char]
+fn s7()
+    s := {'a'}
+    t := {'a', 'b'}
+    print(s.is_subset(t))
+
+## set.set_ops[char]
+fn s8()
+    s := {'a', 'b'}
+    t := {'b', 'c'}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[char]
+fn s9()
+    s := {'a', 'b'}
+    print(s.any(|x| x == 'a'))
+    print(s.all(|x| x == 'a'))
+    if x := s.find(|x| x == 'b')
+        print(1)
+
+## set.filter_map[char]
+fn s10()
+    s := {'a', 'b'}
+    print(s.filter(|x| x == 'a').len() + s.map(|x| x).len())
+
+## set.group_by[char]
+fn s11()
+    s := {'a', 'b'}
+    print(s.group_by(|x| x).len())
+
+## set.count_fold[char]
+fn s12()
+    s := {'a', 'b'}
+    print(s.count(|x| x == 'a'))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[char]
+fn s13()
+    s := {'a', 'b'}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[char]
+fn s14()
+    s := {'a', 'b', 'c'}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == 'a').len() + s.skip_while(|x| x == 'a').len())
+
+## set.zip_enumerate[char]
+fn s15()
+    s := {'a', 'b'}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.min_max[char]
+fn s16()
+    s := {'a', 'b'}
+    if x := s.min()
+        print(1)
+    if x := s.max()
+        print(2)
+
+## set.for[char]
+fn s17()
+    s := {'a', 'b'}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[char]
+fn s18()
+    s := {'a', 'b'}
+    print(s == {'b', 'a'})
+
+## set.print[char]
+fn s19()
+    s := {'a'}
+    print(s)
+
+## set.in_map[char]
+fn s20()
+    mut m := Map[str, Set[char]]()
+    m["a"] = Set[char]()
+    m["a"].add('a')
+    print(m["a"].len())
+
+## set.in_list[char]
+fn s21()
+    mut xs := [Set[char]()]
+    xs[0].add('a')
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[char]")
+    s0()
+    print("-- set.empty[char]")
+    s1()
+    print("-- set.from_list[char]")
+    s2()
+    print("-- set.add_remove[char]")
+    s3()
+    print("-- set.contains[char]")
+    s4()
+    print("-- set.is_empty[char]")
+    s5()
+    print("-- set.sorted[char]")
+    s6()
+    print("-- set.is_subset[char]")
+    s7()
+    print("-- set.set_ops[char]")
+    s8()
+    print("-- set.any_all_find[char]")
+    s9()
+    print("-- set.filter_map[char]")
+    s10()
+    print("-- set.group_by[char]")
+    s11()
+    print("-- set.count_fold[char]")
+    s12()
+    print("-- set.flat_map[char]")
+    s13()
+    print("-- set.take_skip[char]")
+    s14()
+    print("-- set.zip_enumerate[char]")
+    s15()
+    print("-- set.min_max[char]")
+    s16()
+    print("-- set.for[char]")
+    s17()
+    print("-- set.eq[char]")
+    s18()
+    print("-- set.print[char]")
+    s19()
+    print("-- set.in_map[char]")
+    s20()
+    print("-- set.in_list[char]")
+    s21()

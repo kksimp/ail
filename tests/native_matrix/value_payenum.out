@@ -1,0 +1,44 @@
+-- value.eq[payenum]
+true
+true
+-- value.print[payenum]
+Shape.Circle(r: 1)
+-- value.interp[payenum]
+<Shape.Circle(r: 1)>
+-- value.to_str_len[payenum]
+true
+-- value.optional_else[payenum]
+1
+-- value.optional_if[payenum]
+1
+-- value.optional_none[payenum]
+true
+-- value.optional_print[payenum]
+Shape.Circle(r: 1)
+-- value.tuple[payenum]
+1
+1
+-- value.tuple_eq[payenum]
+true
+-- value.tuple_print[payenum]
+(Shape.Circle(r: 1), 1)
+-- value.tuple_key[payenum]
+2
+-- value.struct_field[payenum]
+true
+-- value.struct_print[payenum]
+Box_payenum(items: [Shape.Circle(r: 1)])
+-- value.ref[payenum]
+2
+-- value.generic_id[payenum]
+1
+-- value.generic_box[payenum]
+true
+-- value.fn_value[payenum]
+1
+-- value.closure_capture[payenum]
+1
+-- value.match_eq[payenum]
+1
+-- value.const_list[payenum]
+2

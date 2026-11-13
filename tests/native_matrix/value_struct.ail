@@ -1,0 +1,214 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_struct
+    items List[P]
+
+fn add_struct(mut xs List[P], x P)
+    xs.push(x)
+
+fn wrap_struct(x P) P?
+    x
+
+fn nothing_struct() P?
+    none
+
+K_struct := [P(name: "a", n: 1), P(name: "b", n: 2)]
+
+## value.eq[struct]
+fn s0()
+    print(P(name: "a", n: 1) == P(name: "a", n: 1))
+    print(P(name: "a", n: 1) != P(name: "b", n: 2))
+
+## value.print[struct]
+fn s1()
+    print(P(name: "a", n: 1))
+
+## value.interp[struct]
+fn s2()
+    x := P(name: "a", n: 1)
+    print("<{x}>")
+
+## value.to_str_len[struct]
+fn s3()
+    x := P(name: "a", n: 1)
+    print("{x}".len() > 0)
+
+## value.optional_else[struct]
+fn s4()
+    o := wrap_struct(P(name: "a", n: 1))
+    x := o else P(name: "b", n: 2)
+    print(1)
+
+## value.optional_if[struct]
+fn s5()
+    o := wrap_struct(P(name: "a", n: 1))
+    if x := o
+        print(1)
+
+## value.optional_none[struct]
+fn s6()
+    o := nothing_struct()
+    print(o == none)
+
+## value.optional_print[struct]
+fn s7()
+    o := wrap_struct(P(name: "a", n: 1))
+    print(o)
+
+## value.tuple[struct]
+fn s8()
+    t := (P(name: "a", n: 1), 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[struct]
+fn s9()
+    t := (P(name: "a", n: 1), 1)
+    print(t == (P(name: "a", n: 1), 1))
+
+## value.tuple_print[struct]
+fn s10()
+    t := (P(name: "a", n: 1), 1)
+    print(t)
+
+## value.tuple_key[struct]
+fn s11()
+    mut m := Map[(P, int), int]()
+    m[(P(name: "a", n: 1), 1)] = 2
+    print(m[(P(name: "a", n: 1), 1)])
+
+## value.struct_field[struct]
+fn s12()
+    b := Box_struct(items: [P(name: "a", n: 1)])
+    c := b
+    print(c == b)
+
+## value.struct_print[struct]
+fn s13()
+    b := Box_struct(items: [P(name: "a", n: 1)])
+    print(b)
+
+## value.ref[struct]
+fn s14()
+    r := ref Box_struct(items: [P(name: "a", n: 1)])
+    s := r
+    s.items.push(P(name: "b", n: 2))
+    print(r.items.len())
+
+## value.generic_id[struct]
+fn s15()
+    x := ident(P(name: "a", n: 1))
+    print(1)
+
+## value.generic_box[struct]
+fn s16()
+    g := GBox(v: P(name: "a", n: 1))
+    print(g.v == P(name: "a", n: 1))
+
+## value.fn_value[struct]
+fn s17()
+    f := |x P| x
+    y := f(P(name: "a", n: 1))
+    print(1)
+
+## value.closure_capture[struct]
+fn s18()
+    a := P(name: "a", n: 1)
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[struct]
+fn s19()
+    x := P(name: "a", n: 1)
+    print(if x == P(name: "a", n: 1) then 1 else 0)
+
+## value.const_list[struct]
+fn s20()
+    print(K_struct.len())
+
+fn main()
+    print("-- value.eq[struct]")
+    s0()
+    print("-- value.print[struct]")
+    s1()
+    print("-- value.interp[struct]")
+    s2()
+    print("-- value.to_str_len[struct]")
+    s3()
+    print("-- value.optional_else[struct]")
+    s4()
+    print("-- value.optional_if[struct]")
+    s5()
+    print("-- value.optional_none[struct]")
+    s6()
+    print("-- value.optional_print[struct]")
+    s7()
+    print("-- value.tuple[struct]")
+    s8()
+    print("-- value.tuple_eq[struct]")
+    s9()
+    print("-- value.tuple_print[struct]")
+    s10()
+    print("-- value.tuple_key[struct]")
+    s11()
+    print("-- value.struct_field[struct]")
+    s12()
+    print("-- value.struct_print[struct]")
+    s13()
+    print("-- value.ref[struct]")
+    s14()
+    print("-- value.generic_id[struct]")
+    s15()
+    print("-- value.generic_box[struct]")
+    s16()
+    print("-- value.fn_value[struct]")
+    s17()
+    print("-- value.closure_capture[struct]")
+    s18()
+    print("-- value.match_eq[struct]")
+    s19()
+    print("-- value.const_list[struct]")
+    s20()

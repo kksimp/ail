@@ -1,0 +1,50 @@
+-- mapk.literal[tuple]
+2
+-- mapk.empty[tuple]
+0
+-- mapk.typed_by_use[tuple]
+1
+-- mapk.index[tuple]
+1
+-- mapk.assign[tuple]
+2
+-- mapk.op_assign[tuple]
+3
+-- mapk.get[tuple]
+1
+-- mapk.get_or[tuple]
+7
+-- mapk.contains[tuple]
+true
+-- mapk.remove[tuple]
+1
+-- mapk.keys_values[tuple]
+4
+-- mapk.keys_sorted[tuple]
+2
+-- mapk.top[tuple]
+1
+-- mapk.for[tuple]
+3
+-- mapk.any_all_count[tuple]
+true
+false
+1
+-- mapk.fold[tuple]
+3
+-- mapk.filter[tuple]
+1
+-- mapk.map[tuple]
+2
+-- mapk.flat_map[tuple]
+4
+-- mapk.map_values[tuple]
+2
+-- mapk.push[tuple]
+2
+-- mapk.eq[tuple]
+true
+-- mapk.print[tuple]
+{(1, "a"): 1}
+-- mapk.is_empty[tuple]
+false

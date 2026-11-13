@@ -1,0 +1,112 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_map
+    items List[Map[str, int]]
+
+fn add_map(mut xs List[Map[str, int]], x Map[str, int])
+    xs.push(x)
+
+fn wrap_map(x Map[str, int]) Map[str, int]?
+    x
+
+fn nothing_map() Map[str, int]?
+    none
+
+K_map := [{"a": 1}, {"b": 2}]
+
+## grid.fill[map]
+fn s0()
+    g := Grid.fill(2, 3, {"a": 1})
+    print(g.rows * g.cols)
+
+## grid.from[map]
+fn s1()
+    g := Grid.from([[{"a": 1}, {"b": 2}], [{"c": 3}, {"a": 1}]])
+    print(g.cells.len())
+
+## grid.index[map]
+fn s2()
+    g := Grid.fill(2, 2, {"a": 1})
+    x := g[1, 1]
+    print(x.len() == x.len())
+
+## grid.index_assign[map]
+fn s3()
+    mut g := Grid.fill(2, 2, {"a": 1})
+    g[0, 1] = {"b": 2}
+    print(g.rows)
+
+## grid.row[map]
+fn s4()
+    g := Grid.from([[{"a": 1}, {"b": 2}], [{"c": 3}, {"a": 1}]])
+    print(g.row(1).len())
+
+## grid.to_list[map]
+fn s5()
+    g := Grid.fill(2, 2, {"a": 1})
+    print(g.to_list().len())
+
+## grid.cells_for[map]
+fn s6()
+    g := Grid.fill(2, 2, {"a": 1})
+    mut n := 0
+    for x in g.cells
+        n += 1
+    print(n)
+
+fn main()
+    print("-- grid.fill[map]")
+    s0()
+    print("-- grid.from[map]")
+    s1()
+    print("-- grid.index[map]")
+    s2()
+    print("-- grid.index_assign[map]")
+    s3()
+    print("-- grid.row[map]")
+    s4()
+    print("-- grid.to_list[map]")
+    s5()
+    print("-- grid.cells_for[map]")
+    s6()

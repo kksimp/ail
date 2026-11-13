@@ -95,13 +95,16 @@ fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
             if s := display_call(v)
                 return s
             # A list of strings, floats, bools or sized numbers: its elements in order (type.str.3).
-            if e == Ty.Str or e == Ty.Float or e == Ty.Bool or e.is_sized()
+            if e == Ty.Str or e == Ty.Float or e == Ty.Bool or e.is_sized() or text_ok(e)
                 return list_text(v.id, e)
             problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
             none
         _ =>
             if s := display_call(v)
                 return s
+            # An optional, a map or a set: as `print` shows it (type.str.3, ADR 1109).
+            if t := shown_text(v, pos)
+                return t
             problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
             none
 

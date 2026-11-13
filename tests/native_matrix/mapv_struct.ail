@@ -1,0 +1,174 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_struct
+    items List[P]
+
+fn add_struct(mut xs List[P], x P)
+    xs.push(x)
+
+fn wrap_struct(x P) P?
+    x
+
+fn nothing_struct() P?
+    none
+
+K_struct := [P(name: "a", n: 1), P(name: "b", n: 2)]
+
+## mapv.literal[struct]
+fn s0()
+    m := {"a": P(name: "a", n: 1), "b": P(name: "b", n: 2)}
+    print(m.len())
+
+## mapv.empty[struct]
+fn s1()
+    m := Map[str, P]()
+    print(m.len())
+
+## mapv.index[struct]
+fn s2()
+    m := {"a": P(name: "a", n: 1)}
+    x := m["a"]
+    print(x.n == x.n)
+
+## mapv.assign[struct]
+fn s3()
+    mut m := Map[str, P]()
+    m["a"] = P(name: "a", n: 1)
+    print(m.len())
+
+## mapv.get[struct]
+fn s4()
+    m := {"a": P(name: "a", n: 1)}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[struct]
+fn s5()
+    m := {"a": P(name: "a", n: 1)}
+    x := m.get("z") else P(name: "b", n: 2)
+    print(1)
+
+## mapv.get_or[struct]
+fn s6()
+    m := {"a": P(name: "a", n: 1)}
+    x := m.get_or("b", P(name: "c", n: 3))
+    print(1)
+
+## mapv.remove[struct]
+fn s7()
+    mut m := {"a": P(name: "a", n: 1)}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[struct]
+fn s8()
+    m := {"a": P(name: "a", n: 1), "b": P(name: "b", n: 2)}
+    print(m.values().len())
+
+## mapv.for[struct]
+fn s9()
+    m := {"a": P(name: "a", n: 1), "b": P(name: "b", n: 2)}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[struct]
+fn s10()
+    m := {"a": P(name: "a", n: 1)}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[struct]
+fn s11()
+    m := {"a": P(name: "a", n: 1), "b": P(name: "b", n: 2)}
+    print(m.filter(|k, v| v == P(name: "a", n: 1)).len())
+
+## mapv.nested_update[struct]
+fn s12()
+    mut m := Map[str, List[P]]()
+    m["a"] = [P(name: "a", n: 1)]
+    m["a"].push(P(name: "b", n: 2))
+    print(m["a"].len())
+
+## mapv.eq[struct]
+fn s13()
+    m := {"a": P(name: "a", n: 1)}
+    print(m == {"a": P(name: "a", n: 1)})
+
+## mapv.print[struct]
+fn s14()
+    m := {"a": P(name: "a", n: 1)}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[struct]")
+    s0()
+    print("-- mapv.empty[struct]")
+    s1()
+    print("-- mapv.index[struct]")
+    s2()
+    print("-- mapv.assign[struct]")
+    s3()
+    print("-- mapv.get[struct]")
+    s4()
+    print("-- mapv.get_else[struct]")
+    s5()
+    print("-- mapv.get_or[struct]")
+    s6()
+    print("-- mapv.remove[struct]")
+    s7()
+    print("-- mapv.values[struct]")
+    s8()
+    print("-- mapv.for[struct]")
+    s9()
+    print("-- mapv.map_values[struct]")
+    s10()
+    print("-- mapv.filter[struct]")
+    s11()
+    print("-- mapv.nested_update[struct]")
+    s12()
+    print("-- mapv.eq[struct]")
+    s13()
+    print("-- mapv.print[struct]")
+    s14()

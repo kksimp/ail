@@ -1,0 +1,12 @@
+-- heap.empty_push_pop[float]
+1
+-- heap.max_first[float]
+2
+-- heap.from[float]
+3
+-- heap.from_max[float]
+3
+-- heap.is_empty[float]
+true
+-- heap.drain[float]
+3

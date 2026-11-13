@@ -1,0 +1,174 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_set
+    items List[Set[int]]
+
+fn add_set(mut xs List[Set[int]], x Set[int])
+    xs.push(x)
+
+fn wrap_set(x Set[int]) Set[int]?
+    x
+
+fn nothing_set() Set[int]?
+    none
+
+K_set := [{1}, {2}]
+
+## mapv.literal[set]
+fn s0()
+    m := {"a": {1}, "b": {2}}
+    print(m.len())
+
+## mapv.empty[set]
+fn s1()
+    m := Map[str, Set[int]]()
+    print(m.len())
+
+## mapv.index[set]
+fn s2()
+    m := {"a": {1}}
+    x := m["a"]
+    print(x.len() == x.len())
+
+## mapv.assign[set]
+fn s3()
+    mut m := Map[str, Set[int]]()
+    m["a"] = {1}
+    print(m.len())
+
+## mapv.get[set]
+fn s4()
+    m := {"a": {1}}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[set]
+fn s5()
+    m := {"a": {1}}
+    x := m.get("z") else {2}
+    print(1)
+
+## mapv.get_or[set]
+fn s6()
+    m := {"a": {1}}
+    x := m.get_or("b", {3})
+    print(1)
+
+## mapv.remove[set]
+fn s7()
+    mut m := {"a": {1}}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[set]
+fn s8()
+    m := {"a": {1}, "b": {2}}
+    print(m.values().len())
+
+## mapv.for[set]
+fn s9()
+    m := {"a": {1}, "b": {2}}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[set]
+fn s10()
+    m := {"a": {1}}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[set]
+fn s11()
+    m := {"a": {1}, "b": {2}}
+    print(m.filter(|k, v| v == {1}).len())
+
+## mapv.nested_update[set]
+fn s12()
+    mut m := Map[str, List[Set[int]]]()
+    m["a"] = [{1}]
+    m["a"].push({2})
+    print(m["a"].len())
+
+## mapv.eq[set]
+fn s13()
+    m := {"a": {1}}
+    print(m == {"a": {1}})
+
+## mapv.print[set]
+fn s14()
+    m := {"a": {1}}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[set]")
+    s0()
+    print("-- mapv.empty[set]")
+    s1()
+    print("-- mapv.index[set]")
+    s2()
+    print("-- mapv.assign[set]")
+    s3()
+    print("-- mapv.get[set]")
+    s4()
+    print("-- mapv.get_else[set]")
+    s5()
+    print("-- mapv.get_or[set]")
+    s6()
+    print("-- mapv.remove[set]")
+    s7()
+    print("-- mapv.values[set]")
+    s8()
+    print("-- mapv.for[set]")
+    s9()
+    print("-- mapv.map_values[set]")
+    s10()
+    print("-- mapv.filter[set]")
+    s11()
+    print("-- mapv.nested_update[set]")
+    s12()
+    print("-- mapv.eq[set]")
+    s13()
+    print("-- mapv.print[set]")
+    s14()

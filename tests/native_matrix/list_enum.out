@@ -1,0 +1,117 @@
+-- list.literal[enum]
+3
+-- list.empty[enum]
+0
+-- list.typed_by_push[enum]
+1
+-- list.len[enum]
+2
+-- list.is_empty[enum]
+false
+-- list.index[enum]
+true
+-- list.index_assign[enum]
+2
+-- list.slice[enum]
+5
+-- list.push[enum]
+2
+-- list.pop[enum]
+1
+-- list.swap[enum]
+2
+-- list.first_last[enum]
+1
+2
+-- list.insert[enum]
+2
+-- list.remove_at[enum]
+1
+-- list.extend[enum]
+3
+-- list.clear[enum]
+0
+-- list.reverse[enum]
+2
+-- list.reversed[enum]
+2
+-- list.contains[enum]
+true
+-- list.index_of[enum]
+1
+-- list.join[enum]
+true
+-- list.sorted_by[enum]
+3
+-- list.sort_by[enum]
+3
+-- list.min_by[enum]
+1
+2
+-- list.take_skip[enum]
+4
+-- list.set_ops[enum]
+5
+-- list.chunks_windows[enum]
+4
+-- list.counts[enum]
+2
+-- list.flatten[enum]
+3
+-- list.enumerate[enum]
+0
+1
+-- list.any_all[enum]
+true
+false
+-- list.find[enum]
+1
+-- list.filter[enum]
+1
+-- list.map[enum]
+2
+-- list.map_to_self[enum]
+2
+-- list.group_by[enum]
+1
+-- list.count[enum]
+2
+-- list.fold[enum]
+2
+-- list.flat_map[enum]
+4
+-- list.take_skip_while[enum]
+2
+-- list.zip[enum]
+1
+2
+-- list.zip_into[enum]
+1
+2
+-- list.for[enum]
+2
+-- list.for_mut[enum]
+2
+-- list.comprehension[enum]
+1
+-- list.set_comprehension[enum]
+2
+-- list.map_comprehension[enum]
+2
+-- list.eq[enum]
+true
+true
+-- list.print[enum]
+[Color.Red, Color.Green]
+-- list.interp[enum]
+true
+-- list.nested_push[enum]
+2
+-- list.in_struct[enum]
+2
+-- list.pass_mut[enum]
+2
+-- list.generic_first[enum]
+1
+-- list.contains_list[enum]
+true

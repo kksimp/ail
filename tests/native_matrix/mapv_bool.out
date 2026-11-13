@@ -1,0 +1,30 @@
+-- mapv.literal[bool]
+2
+-- mapv.empty[bool]
+0
+-- mapv.index[bool]
+true
+-- mapv.assign[bool]
+1
+-- mapv.get[bool]
+1
+-- mapv.get_else[bool]
+1
+-- mapv.get_or[bool]
+1
+-- mapv.remove[bool]
+0
+-- mapv.values[bool]
+2
+-- mapv.for[bool]
+2
+-- mapv.map_values[bool]
+1
+-- mapv.filter[bool]
+1
+-- mapv.nested_update[bool]
+2
+-- mapv.eq[bool]
+true
+-- mapv.print[bool]
+{"a": false}

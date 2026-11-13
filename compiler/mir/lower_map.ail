@@ -509,6 +509,8 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
             if name == "top" and vs.len() == 1 and vt == Ty.Int and kt.elem_bytes() == 8
                 n := convert(vs[0], Ty.Int, npos)
                 return Val(id: call("rt.map_top", [r.id, n], Ty.List(kt)), ty: Ty.List(kt))
+            if name == "top" and vs.len() == 1 and vt == Ty.Int
+                return narrow_top(r, kt, convert(vs[0], Ty.Int, npos))
             if name == "keys" and vs.len() == 0
                 return Val(id: table_keys(r.id, kt), ty: Ty.List(kt))
             if name == "values" and vs.len() == 0
@@ -553,6 +555,8 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 keys := call("rt.map_keys", [r.id], Ty.List(et))
                 call("rt.list_sort", [keys, konst(if et == Ty.Str then 1 else 0, Ty.Int)], Ty.Unit)
                 return Val(id: keys, ty: Ty.List(et))
+            if name == "sorted" and vs.len() == 0
+                return set_sorted_any(r, et, npos)
             if name == "contains" and vs.len() == 1
                 return Val(
                     id: call("rt.map_has", [r.id, convert(vs[0], et, npos)], Ty.Bool),
@@ -646,7 +650,7 @@ fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
         Set(x) => x
         List(x) => x
         _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
-    if e == Ty.Bool or not key_ok(e)
+    if not key_ok(e)
         return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
     want := Ty.Set(e)
     sa := as_set(a, e, pos)?

@@ -1,0 +1,31 @@
+-- deque.empty_push[struct]
+2
+-- deque.from[struct]
+2
+-- deque.pop[struct]
+1
+2
+-- deque.first_last[struct]
+1
+2
+-- deque.index[struct]
+true
+-- deque.at_set[struct]
+2
+-- deque.to_list[struct]
+2
+-- deque.for[struct]
+2
+-- deque.vocab[struct]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[struct]
+6
+-- deque.enumerate_zip[struct]
+4
+-- deque.is_empty[struct]
+true

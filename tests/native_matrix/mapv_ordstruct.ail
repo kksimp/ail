@@ -1,0 +1,181 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## mapv.literal[ordstruct]
+fn s0()
+    m := {"a": Q(n: 1, name: "a"), "b": Q(n: 2, name: "b")}
+    print(m.len())
+
+## mapv.empty[ordstruct]
+fn s1()
+    m := Map[str, Q]()
+    print(m.len())
+
+## mapv.index[ordstruct]
+fn s2()
+    m := {"a": Q(n: 1, name: "a")}
+    x := m["a"]
+    print(x.n == x.n)
+
+## mapv.assign[ordstruct]
+fn s3()
+    mut m := Map[str, Q]()
+    m["a"] = Q(n: 1, name: "a")
+    print(m.len())
+
+## mapv.get[ordstruct]
+fn s4()
+    m := {"a": Q(n: 1, name: "a")}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[ordstruct]
+fn s5()
+    m := {"a": Q(n: 1, name: "a")}
+    x := m.get("z") else Q(n: 2, name: "b")
+    print(1)
+
+## mapv.get_or[ordstruct]
+fn s6()
+    m := {"a": Q(n: 1, name: "a")}
+    x := m.get_or("b", Q(n: 3, name: "c"))
+    print(1)
+
+## mapv.remove[ordstruct]
+fn s7()
+    mut m := {"a": Q(n: 1, name: "a")}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[ordstruct]
+fn s8()
+    m := {"a": Q(n: 1, name: "a"), "b": Q(n: 2, name: "b")}
+    print(m.values().len())
+
+## mapv.values_sorted[ordstruct]
+fn s9()
+    m := {"a": Q(n: 2, name: "b"), "b": Q(n: 1, name: "a")}
+    print(m.values().sorted().len())
+
+## mapv.for[ordstruct]
+fn s10()
+    m := {"a": Q(n: 1, name: "a"), "b": Q(n: 2, name: "b")}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[ordstruct]
+fn s11()
+    m := {"a": Q(n: 1, name: "a")}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[ordstruct]
+fn s12()
+    m := {"a": Q(n: 1, name: "a"), "b": Q(n: 2, name: "b")}
+    print(m.filter(|k, v| v == Q(n: 1, name: "a")).len())
+
+## mapv.nested_update[ordstruct]
+fn s13()
+    mut m := Map[str, List[Q]]()
+    m["a"] = [Q(n: 1, name: "a")]
+    m["a"].push(Q(n: 2, name: "b"))
+    print(m["a"].len())
+
+## mapv.eq[ordstruct]
+fn s14()
+    m := {"a": Q(n: 1, name: "a")}
+    print(m == {"a": Q(n: 1, name: "a")})
+
+## mapv.print[ordstruct]
+fn s15()
+    m := {"a": Q(n: 1, name: "a")}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[ordstruct]")
+    s0()
+    print("-- mapv.empty[ordstruct]")
+    s1()
+    print("-- mapv.index[ordstruct]")
+    s2()
+    print("-- mapv.assign[ordstruct]")
+    s3()
+    print("-- mapv.get[ordstruct]")
+    s4()
+    print("-- mapv.get_else[ordstruct]")
+    s5()
+    print("-- mapv.get_or[ordstruct]")
+    s6()
+    print("-- mapv.remove[ordstruct]")
+    s7()
+    print("-- mapv.values[ordstruct]")
+    s8()
+    print("-- mapv.values_sorted[ordstruct]")
+    s9()
+    print("-- mapv.for[ordstruct]")
+    s10()
+    print("-- mapv.map_values[ordstruct]")
+    s11()
+    print("-- mapv.filter[ordstruct]")
+    s12()
+    print("-- mapv.nested_update[ordstruct]")
+    s13()
+    print("-- mapv.eq[ordstruct]")
+    s14()
+    print("-- mapv.print[ordstruct]")
+    s15()

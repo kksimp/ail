@@ -1,0 +1,48 @@
+-- mapk.literal[payenum]
+2
+-- mapk.empty[payenum]
+0
+-- mapk.typed_by_use[payenum]
+1
+-- mapk.index[payenum]
+1
+-- mapk.assign[payenum]
+2
+-- mapk.op_assign[payenum]
+3
+-- mapk.get[payenum]
+1
+-- mapk.get_or[payenum]
+7
+-- mapk.contains[payenum]
+true
+-- mapk.remove[payenum]
+1
+-- mapk.keys_values[payenum]
+4
+-- mapk.top[payenum]
+1
+-- mapk.for[payenum]
+3
+-- mapk.any_all_count[payenum]
+true
+false
+1
+-- mapk.fold[payenum]
+3
+-- mapk.filter[payenum]
+1
+-- mapk.map[payenum]
+2
+-- mapk.flat_map[payenum]
+4
+-- mapk.map_values[payenum]
+2
+-- mapk.push[payenum]
+2
+-- mapk.eq[payenum]
+true
+-- mapk.print[payenum]
+{Shape.Circle(r: 1): 1}
+-- mapk.is_empty[payenum]
+false

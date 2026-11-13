@@ -1,0 +1,66 @@
+-- str.0
+["a", "b"]
+-- str.1
+12
+-- str.2
+1.5
+-- str.3
+['a', 'b']
+-- str.4
+a
+-- str.5
+b
+-- str.6
+ab
+-- str.7
+AB
+-- str.8
+1
+-- str.9
+axc
+-- str.10
+b
+-- str.11
+true
+-- str.12
+true
+-- str.13
+bc
+-- str.14
+ab
+-- str.15
+true
+-- str.16
+abab
+-- str.17
+..a
+-- str.18
+a..
+-- str.19
+.a.
+-- str.20
+["a", "b"]
+-- str.21
+a
+-- str.22
+a
+-- str.23
+3
+-- str.24
+2
+-- str.25
+["a", "b"]
+-- str.26
+2
+-- str.27
+true
+-- str.28
+2
+-- str.29
+2
+-- str.30
+true
+-- str.33
+['a', 'b']
+-- str.35
+["a", "b"]

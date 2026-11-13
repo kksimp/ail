@@ -1,0 +1,28 @@
+-- seq.of_collect[list]
+2
+-- seq.map_filter[list]
+1
+-- seq.take_skip[list]
+1
+-- seq.enumerate[list]
+2
+-- seq.zip_chain[list]
+2
+-- seq.chain[list]
+2
+-- seq.next[list]
+1
+-- seq.for[list]
+2
+-- seq.count_any[list]
+1
+-- seq.fold[list]
+2
+-- seq.find[list]
+1
+-- seq.flat_map[list]
+4
+-- seq.while[list]
+1
+-- seq.skip_while[list]
+1

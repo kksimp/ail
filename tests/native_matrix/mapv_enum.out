@@ -1,0 +1,30 @@
+-- mapv.literal[enum]
+2
+-- mapv.empty[enum]
+0
+-- mapv.index[enum]
+true
+-- mapv.assign[enum]
+1
+-- mapv.get[enum]
+1
+-- mapv.get_else[enum]
+1
+-- mapv.get_or[enum]
+1
+-- mapv.remove[enum]
+0
+-- mapv.values[enum]
+2
+-- mapv.for[enum]
+2
+-- mapv.map_values[enum]
+1
+-- mapv.filter[enum]
+1
+-- mapv.nested_update[enum]
+2
+-- mapv.eq[enum]
+true
+-- mapv.print[enum]
+{"a": Color.Red}

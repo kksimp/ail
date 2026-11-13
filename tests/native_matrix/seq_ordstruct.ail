@@ -1,0 +1,163 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## seq.of_collect[ordstruct]
+fn s0()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.collect().len())
+
+## seq.map_filter[ordstruct]
+fn s1()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.filter(|x| x == Q(n: 1, name: "a")).map(|x| x.n).collect().len())
+
+## seq.take_skip[ordstruct]
+fn s2()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")])
+    print(s.skip(1).take(1).collect().len())
+
+## seq.enumerate[ordstruct]
+fn s3()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.enumerate().collect().len())
+
+## seq.zip_chain[ordstruct]
+fn s4()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    t := Seq.of([1, 2])
+    print(s.zip(move t).collect().len())
+
+## seq.chain[ordstruct]
+fn s5()
+    s := Seq.of([Q(n: 1, name: "a")])
+    t := Seq.of([Q(n: 2, name: "b")])
+    print(s.chain(move t).collect().len())
+
+## seq.next[ordstruct]
+fn s6()
+    mut s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    if x := s.next()
+        print(1)
+
+## seq.for[ordstruct]
+fn s7()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## seq.count_any[ordstruct]
+fn s8()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.count(|x| x == Q(n: 1, name: "a")))
+
+## seq.fold[ordstruct]
+fn s9()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.fold(0, |acc, x| acc + 1))
+
+## seq.find[ordstruct]
+fn s10()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    if x := s.find(|x| x == Q(n: 2, name: "b"))
+        print(1)
+
+## seq.flat_map[ordstruct]
+fn s11()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.flat_map(|x| [x, x]).collect().len())
+
+## seq.while[ordstruct]
+fn s12()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.take_while(|x| x == Q(n: 1, name: "a")).collect().len())
+
+## seq.skip_while[ordstruct]
+fn s13()
+    s := Seq.of([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(s.skip_while(|x| x == Q(n: 1, name: "a")).collect().len())
+
+fn main()
+    print("-- seq.of_collect[ordstruct]")
+    s0()
+    print("-- seq.map_filter[ordstruct]")
+    s1()
+    print("-- seq.take_skip[ordstruct]")
+    s2()
+    print("-- seq.enumerate[ordstruct]")
+    s3()
+    print("-- seq.zip_chain[ordstruct]")
+    s4()
+    print("-- seq.chain[ordstruct]")
+    s5()
+    print("-- seq.next[ordstruct]")
+    s6()
+    print("-- seq.for[ordstruct]")
+    s7()
+    print("-- seq.count_any[ordstruct]")
+    s8()
+    print("-- seq.fold[ordstruct]")
+    s9()
+    print("-- seq.find[ordstruct]")
+    s10()
+    print("-- seq.flat_map[ordstruct]")
+    s11()
+    print("-- seq.while[ordstruct]")
+    s12()
+    print("-- seq.skip_while[ordstruct]")
+    s13()

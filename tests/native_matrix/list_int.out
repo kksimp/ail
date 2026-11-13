@@ -1,0 +1,132 @@
+-- list.literal[int]
+3
+-- list.empty[int]
+0
+-- list.typed_by_push[int]
+1
+-- list.len[int]
+2
+-- list.is_empty[int]
+false
+-- list.index[int]
+true
+-- list.index_assign[int]
+2
+-- list.slice[int]
+5
+-- list.push[int]
+2
+-- list.pop[int]
+1
+-- list.swap[int]
+2
+-- list.first_last[int]
+1
+2
+-- list.insert[int]
+2
+-- list.remove_at[int]
+1
+-- list.extend[int]
+3
+-- list.clear[int]
+0
+-- list.reverse[int]
+2
+-- list.reversed[int]
+2
+-- list.contains[int]
+true
+-- list.index_of[int]
+1
+-- list.join[int]
+true
+-- list.sum[int]
+1
+-- list.min_max[int]
+1
+2
+-- list.sorted[int]
+3
+-- list.sort[int]
+3
+-- list.sorted_by[int]
+3
+-- list.sort_by[int]
+3
+-- list.min_by[int]
+1
+2
+-- list.take_skip[int]
+4
+-- list.set_ops[int]
+5
+-- list.chunks_windows[int]
+4
+-- list.counts[int]
+2
+-- list.flatten[int]
+3
+-- list.enumerate[int]
+0
+1
+-- list.any_all[int]
+true
+false
+-- list.find[int]
+1
+-- list.filter[int]
+1
+-- list.map[int]
+2
+-- list.map_to_self[int]
+2
+-- list.group_by[int]
+2
+-- list.count[int]
+2
+-- list.fold[int]
+2
+-- list.flat_map[int]
+4
+-- list.take_skip_while[int]
+2
+-- list.zip[int]
+1
+2
+-- list.zip_into[int]
+1
+2
+-- list.for[int]
+2
+-- list.for_mut[int]
+2
+-- list.comprehension[int]
+1
+-- list.set_comprehension[int]
+2
+-- list.map_comprehension[int]
+2
+-- list.eq[int]
+true
+true
+-- list.lt[int]
+true
+-- list.print[int]
+[1, 2]
+-- list.interp[int]
+true
+-- list.nested_push[int]
+2
+-- list.in_struct[int]
+2
+-- list.pass_mut[int]
+2
+-- list.generic_first[int]
+1
+-- list.generic_ord[int]
+1
+-- list.contains_list[int]
+true
+-- list.sorted_nested[int]
+2

@@ -1,0 +1,174 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_payenum
+    items List[Shape]
+
+fn add_payenum(mut xs List[Shape], x Shape)
+    xs.push(x)
+
+fn wrap_payenum(x Shape) Shape?
+    x
+
+fn nothing_payenum() Shape?
+    none
+
+K_payenum := [Shape.Circle(r: 1), Shape.Square(s: 2)]
+
+## mapv.literal[payenum]
+fn s0()
+    m := {"a": Shape.Circle(r: 1), "b": Shape.Square(s: 2)}
+    print(m.len())
+
+## mapv.empty[payenum]
+fn s1()
+    m := Map[str, Shape]()
+    print(m.len())
+
+## mapv.index[payenum]
+fn s2()
+    m := {"a": Shape.Circle(r: 1)}
+    x := m["a"]
+    print(1 == 1)
+
+## mapv.assign[payenum]
+fn s3()
+    mut m := Map[str, Shape]()
+    m["a"] = Shape.Circle(r: 1)
+    print(m.len())
+
+## mapv.get[payenum]
+fn s4()
+    m := {"a": Shape.Circle(r: 1)}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[payenum]
+fn s5()
+    m := {"a": Shape.Circle(r: 1)}
+    x := m.get("z") else Shape.Square(s: 2)
+    print(1)
+
+## mapv.get_or[payenum]
+fn s6()
+    m := {"a": Shape.Circle(r: 1)}
+    x := m.get_or("b", Shape.Circle(r: 3))
+    print(1)
+
+## mapv.remove[payenum]
+fn s7()
+    mut m := {"a": Shape.Circle(r: 1)}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[payenum]
+fn s8()
+    m := {"a": Shape.Circle(r: 1), "b": Shape.Square(s: 2)}
+    print(m.values().len())
+
+## mapv.for[payenum]
+fn s9()
+    m := {"a": Shape.Circle(r: 1), "b": Shape.Square(s: 2)}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[payenum]
+fn s10()
+    m := {"a": Shape.Circle(r: 1)}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[payenum]
+fn s11()
+    m := {"a": Shape.Circle(r: 1), "b": Shape.Square(s: 2)}
+    print(m.filter(|k, v| v == Shape.Circle(r: 1)).len())
+
+## mapv.nested_update[payenum]
+fn s12()
+    mut m := Map[str, List[Shape]]()
+    m["a"] = [Shape.Circle(r: 1)]
+    m["a"].push(Shape.Square(s: 2))
+    print(m["a"].len())
+
+## mapv.eq[payenum]
+fn s13()
+    m := {"a": Shape.Circle(r: 1)}
+    print(m == {"a": Shape.Circle(r: 1)})
+
+## mapv.print[payenum]
+fn s14()
+    m := {"a": Shape.Circle(r: 1)}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[payenum]")
+    s0()
+    print("-- mapv.empty[payenum]")
+    s1()
+    print("-- mapv.index[payenum]")
+    s2()
+    print("-- mapv.assign[payenum]")
+    s3()
+    print("-- mapv.get[payenum]")
+    s4()
+    print("-- mapv.get_else[payenum]")
+    s5()
+    print("-- mapv.get_or[payenum]")
+    s6()
+    print("-- mapv.remove[payenum]")
+    s7()
+    print("-- mapv.values[payenum]")
+    s8()
+    print("-- mapv.for[payenum]")
+    s9()
+    print("-- mapv.map_values[payenum]")
+    s10()
+    print("-- mapv.filter[payenum]")
+    s11()
+    print("-- mapv.nested_update[payenum]")
+    s12()
+    print("-- mapv.eq[payenum]")
+    s13()
+    print("-- mapv.print[payenum]")
+    s14()

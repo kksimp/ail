@@ -1,0 +1,214 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_payenum
+    items List[Shape]
+
+fn add_payenum(mut xs List[Shape], x Shape)
+    xs.push(x)
+
+fn wrap_payenum(x Shape) Shape?
+    x
+
+fn nothing_payenum() Shape?
+    none
+
+K_payenum := [Shape.Circle(r: 1), Shape.Square(s: 2)]
+
+## value.eq[payenum]
+fn s0()
+    print(Shape.Circle(r: 1) == Shape.Circle(r: 1))
+    print(Shape.Circle(r: 1) != Shape.Square(s: 2))
+
+## value.print[payenum]
+fn s1()
+    print(Shape.Circle(r: 1))
+
+## value.interp[payenum]
+fn s2()
+    x := Shape.Circle(r: 1)
+    print("<{x}>")
+
+## value.to_str_len[payenum]
+fn s3()
+    x := Shape.Circle(r: 1)
+    print("{x}".len() > 0)
+
+## value.optional_else[payenum]
+fn s4()
+    o := wrap_payenum(Shape.Circle(r: 1))
+    x := o else Shape.Square(s: 2)
+    print(1)
+
+## value.optional_if[payenum]
+fn s5()
+    o := wrap_payenum(Shape.Circle(r: 1))
+    if x := o
+        print(1)
+
+## value.optional_none[payenum]
+fn s6()
+    o := nothing_payenum()
+    print(o == none)
+
+## value.optional_print[payenum]
+fn s7()
+    o := wrap_payenum(Shape.Circle(r: 1))
+    print(o)
+
+## value.tuple[payenum]
+fn s8()
+    t := (Shape.Circle(r: 1), 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[payenum]
+fn s9()
+    t := (Shape.Circle(r: 1), 1)
+    print(t == (Shape.Circle(r: 1), 1))
+
+## value.tuple_print[payenum]
+fn s10()
+    t := (Shape.Circle(r: 1), 1)
+    print(t)
+
+## value.tuple_key[payenum]
+fn s11()
+    mut m := Map[(Shape, int), int]()
+    m[(Shape.Circle(r: 1), 1)] = 2
+    print(m[(Shape.Circle(r: 1), 1)])
+
+## value.struct_field[payenum]
+fn s12()
+    b := Box_payenum(items: [Shape.Circle(r: 1)])
+    c := b
+    print(c == b)
+
+## value.struct_print[payenum]
+fn s13()
+    b := Box_payenum(items: [Shape.Circle(r: 1)])
+    print(b)
+
+## value.ref[payenum]
+fn s14()
+    r := ref Box_payenum(items: [Shape.Circle(r: 1)])
+    s := r
+    s.items.push(Shape.Square(s: 2))
+    print(r.items.len())
+
+## value.generic_id[payenum]
+fn s15()
+    x := ident(Shape.Circle(r: 1))
+    print(1)
+
+## value.generic_box[payenum]
+fn s16()
+    g := GBox(v: Shape.Circle(r: 1))
+    print(g.v == Shape.Circle(r: 1))
+
+## value.fn_value[payenum]
+fn s17()
+    f := |x Shape| x
+    y := f(Shape.Circle(r: 1))
+    print(1)
+
+## value.closure_capture[payenum]
+fn s18()
+    a := Shape.Circle(r: 1)
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[payenum]
+fn s19()
+    x := Shape.Circle(r: 1)
+    print(if x == Shape.Circle(r: 1) then 1 else 0)
+
+## value.const_list[payenum]
+fn s20()
+    print(K_payenum.len())
+
+fn main()
+    print("-- value.eq[payenum]")
+    s0()
+    print("-- value.print[payenum]")
+    s1()
+    print("-- value.interp[payenum]")
+    s2()
+    print("-- value.to_str_len[payenum]")
+    s3()
+    print("-- value.optional_else[payenum]")
+    s4()
+    print("-- value.optional_if[payenum]")
+    s5()
+    print("-- value.optional_none[payenum]")
+    s6()
+    print("-- value.optional_print[payenum]")
+    s7()
+    print("-- value.tuple[payenum]")
+    s8()
+    print("-- value.tuple_eq[payenum]")
+    s9()
+    print("-- value.tuple_print[payenum]")
+    s10()
+    print("-- value.tuple_key[payenum]")
+    s11()
+    print("-- value.struct_field[payenum]")
+    s12()
+    print("-- value.struct_print[payenum]")
+    s13()
+    print("-- value.ref[payenum]")
+    s14()
+    print("-- value.generic_id[payenum]")
+    s15()
+    print("-- value.generic_box[payenum]")
+    s16()
+    print("-- value.fn_value[payenum]")
+    s17()
+    print("-- value.closure_capture[payenum]")
+    s18()
+    print("-- value.match_eq[payenum]")
+    s19()
+    print("-- value.const_list[payenum]")
+    s20()

@@ -42,6 +42,8 @@ cert
 crypto
 try
 parity
+native_matrix@0/2
+native_matrix@1/2
 corpus@0/4
 corpus@1/4
 corpus@2/4

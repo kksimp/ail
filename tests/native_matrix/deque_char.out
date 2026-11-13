@@ -1,0 +1,31 @@
+-- deque.empty_push[char]
+2
+-- deque.from[char]
+2
+-- deque.pop[char]
+1
+2
+-- deque.first_last[char]
+1
+2
+-- deque.index[char]
+true
+-- deque.at_set[char]
+2
+-- deque.to_list[char]
+2
+-- deque.for[char]
+2
+-- deque.vocab[char]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[char]
+6
+-- deque.enumerate_zip[char]
+4
+-- deque.is_empty[char]
+true

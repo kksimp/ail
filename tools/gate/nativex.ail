@@ -131,9 +131,10 @@ fn Run.mir(mut self)
             elif "{problems.join("\n")}\n" != slurp("{stem}.err")
                 red(case, "differs from the expected output; got:\n{problems.join("\n")}")
     # ADR 0722: each `native.subset.1` problem is followed by its `help:` line. Every help
-    # form of subset_help.ail is native now (its .mir golden), so this uses a refused program.
+    # form of subset_help.ail is native now (its .mir golden), so this uses a refused program
+    # (a function with more than 8 float parameters, still outside the subset; ADR 1109).
     checks += 1
-    case := "tests/native/tuples_subset.ail"
+    case := "tests/native/subset_ext.ail"
     r := comp("mir {case}")
     mut lines := List[str]()
     mut prev := false
@@ -146,7 +147,7 @@ fn Run.mir(mut self)
             prev = false
         else
             prev = false
-    if "{lines.join("\n")}\n" != slurp("tests/native/tuples_subset.help")
+    if "{lines.join("\n")}\n" != slurp("tests/native/subset_ext.help")
         red("subset help lines", lines.join("\n"))
 
 ## ADR 0814: a batch build gives the same bytes as one `ail build` per program.
@@ -435,10 +436,9 @@ fn Run.misc_builds(mut self)
     checks += 1
     out := "{tmp}/refused"
     sh("rm -f {out}")
-    # Any program with an expected-problems golden (`.err`) is still outside the subset.
-    names := fs.list_dir("tests/native") else []
-    refused := [n for n in names if n.ends_with(".err")].sorted()
-    src := "tests/native/{(refused.first() else "subset_ext.err").replace(".err", ".ail")}"
+    # subset_ext.ail stays outside the subset on purpose (ADR 1109): other `.err`
+    # programs may be refused by the checker before lowering.
+    src := "tests/native/subset_ext.ail"
     r := ail("", "build {src} -o {out}")
     if r.status == 0 or fs.exists(out) or not r.err.contains("error[native.subset.1]")
         red("build refuses programs outside the subset", r.err)

@@ -1,0 +1,211 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_struct
+    items List[P]
+
+fn add_struct(mut xs List[P], x P)
+    xs.push(x)
+
+fn wrap_struct(x P) P?
+    x
+
+fn nothing_struct() P?
+    none
+
+K_struct := [P(name: "a", n: 1), P(name: "b", n: 2)]
+
+## set.literal[struct]
+fn s0()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.len())
+
+## set.empty[struct]
+fn s1()
+    s := Set[P]()
+    print(s.len())
+
+## set.from_list[struct]
+fn s2()
+    s := {x for x in [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "a", n: 1)]}
+    print(s.len())
+
+## set.add_remove[struct]
+fn s3()
+    mut s := Set[P]()
+    print(s.add(P(name: "a", n: 1)))
+    print(s.remove(P(name: "a", n: 1)))
+
+## set.contains[struct]
+fn s4()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.contains(P(name: "a", n: 1)))
+
+## set.is_empty[struct]
+fn s5()
+    s := {P(name: "a", n: 1)}
+    print(s.is_empty())
+
+## set.is_subset[struct]
+fn s6()
+    s := {P(name: "a", n: 1)}
+    t := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.is_subset(t))
+
+## set.set_ops[struct]
+fn s7()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    t := {P(name: "b", n: 2), P(name: "c", n: 3)}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[struct]
+fn s8()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.any(|x| x == P(name: "a", n: 1)))
+    print(s.all(|x| x == P(name: "a", n: 1)))
+    if x := s.find(|x| x == P(name: "b", n: 2))
+        print(1)
+
+## set.filter_map[struct]
+fn s9()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.filter(|x| x == P(name: "a", n: 1)).len() + s.map(|x| x.n).len())
+
+## set.group_by[struct]
+fn s10()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.group_by(|x| x.n).len())
+
+## set.count_fold[struct]
+fn s11()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.count(|x| x == P(name: "a", n: 1)))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[struct]
+fn s12()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[struct]
+fn s13()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2), P(name: "c", n: 3)}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == P(name: "a", n: 1)).len() + s.skip_while(|x| x == P(name: "a", n: 1)).len())
+
+## set.zip_enumerate[struct]
+fn s14()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.for[struct]
+fn s15()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[struct]
+fn s16()
+    s := {P(name: "a", n: 1), P(name: "b", n: 2)}
+    print(s == {P(name: "b", n: 2), P(name: "a", n: 1)})
+
+## set.print[struct]
+fn s17()
+    s := {P(name: "a", n: 1)}
+    print(s)
+
+## set.in_map[struct]
+fn s18()
+    mut m := Map[str, Set[P]]()
+    m["a"] = Set[P]()
+    m["a"].add(P(name: "a", n: 1))
+    print(m["a"].len())
+
+## set.in_list[struct]
+fn s19()
+    mut xs := [Set[P]()]
+    xs[0].add(P(name: "a", n: 1))
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[struct]")
+    s0()
+    print("-- set.empty[struct]")
+    s1()
+    print("-- set.from_list[struct]")
+    s2()
+    print("-- set.add_remove[struct]")
+    s3()
+    print("-- set.contains[struct]")
+    s4()
+    print("-- set.is_empty[struct]")
+    s5()
+    print("-- set.is_subset[struct]")
+    s6()
+    print("-- set.set_ops[struct]")
+    s7()
+    print("-- set.any_all_find[struct]")
+    s8()
+    print("-- set.filter_map[struct]")
+    s9()
+    print("-- set.group_by[struct]")
+    s10()
+    print("-- set.count_fold[struct]")
+    s11()
+    print("-- set.flat_map[struct]")
+    s12()
+    print("-- set.take_skip[struct]")
+    s13()
+    print("-- set.zip_enumerate[struct]")
+    s14()
+    print("-- set.for[struct]")
+    s15()
+    print("-- set.eq[struct]")
+    s16()
+    print("-- set.print[struct]")
+    s17()
+    print("-- set.in_map[struct]")
+    s18()
+    print("-- set.in_list[struct]")
+    s19()

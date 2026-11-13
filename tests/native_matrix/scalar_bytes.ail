@@ -1,0 +1,177 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+## bytes.0
+fn s0()
+    print(b"ab".len())
+
+## bytes.1
+fn s1()
+    print(b"ab".to_str() else "")
+
+## bytes.2
+fn s2()
+    print(b"ab".text())
+
+## bytes.3
+fn s3()
+    print(b"ab".to_list())
+
+## bytes.4
+fn s4()
+    print(b"a".concat(b"b").len())
+
+## bytes.5
+fn s5()
+    print(b"ab".find(b"b") else -1)
+
+## bytes.6
+fn s6()
+    print(b"ab".starts_with(b"a"))
+
+## bytes.7
+fn s7()
+    print(b"ab".ends_with(b"b"))
+
+## bytes.8
+fn s8()
+    print(b"ab".contains(b"b"))
+
+## bytes.9
+fn s9()
+    print(b"ab".hex())
+
+## bytes.10
+fn s10()
+    print(b"ab".base64())
+
+## bytes.11
+fn s11()
+    print(b"ab"[0])
+
+## bytes.12
+fn s12()
+    print(b"abc"[1..].len())
+
+## bytes.13
+fn s13()
+    print((b"a" + b"b").len())
+
+## bytes.14
+fn s14()
+    for x in b"ab"
+        print(x)
+
+## bytes.15
+fn s15()
+    print(bytes.from_list([1.to_u8()]).len())
+
+## bytes.16
+fn s16()
+    print((bytes.from_hex("6162") else b"").len())
+
+## bytes.17
+fn s17()
+    print((bytes.from_base64("YWI=") else b"").len())
+
+## bytes.18
+fn s18()
+    print(bytes.zeros(3).len())
+
+## bytes.19
+fn s19()
+    print(b"a" == b"a")
+
+## bytes.20
+fn s20()
+    print(b"a")
+
+## bytes.21
+fn s21()
+    print(b"a" < b"b")
+
+fn main()
+    print("-- bytes.0")
+    s0()
+    print("-- bytes.1")
+    s1()
+    print("-- bytes.2")
+    s2()
+    print("-- bytes.3")
+    s3()
+    print("-- bytes.4")
+    s4()
+    print("-- bytes.5")
+    s5()
+    print("-- bytes.6")
+    s6()
+    print("-- bytes.7")
+    s7()
+    print("-- bytes.8")
+    s8()
+    print("-- bytes.9")
+    s9()
+    print("-- bytes.10")
+    s10()
+    print("-- bytes.11")
+    s11()
+    print("-- bytes.12")
+    s12()
+    print("-- bytes.13")
+    s13()
+    print("-- bytes.14")
+    s14()
+    print("-- bytes.15")
+    s15()
+    print("-- bytes.16")
+    s16()
+    print("-- bytes.17")
+    s17()
+    print("-- bytes.18")
+    s18()
+    print("-- bytes.19")
+    s19()
+    print("-- bytes.20")
+    s20()
+    print("-- bytes.21")
+    s21()

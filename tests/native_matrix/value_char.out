@@ -1,0 +1,49 @@
+-- value.eq[char]
+true
+true
+-- value.lt[char]
+true
+true
+-- value.print[char]
+a
+-- value.interp[char]
+<a>
+-- value.to_str_len[char]
+true
+-- value.optional_else[char]
+1
+-- value.optional_if[char]
+1
+-- value.optional_none[char]
+true
+-- value.optional_print[char]
+a
+-- value.tuple[char]
+1
+1
+-- value.tuple_eq[char]
+true
+-- value.tuple_print[char]
+('a', 1)
+-- value.tuple_list_sorted[char]
+2
+-- value.tuple_key[char]
+2
+-- value.struct_field[char]
+true
+-- value.struct_print[char]
+Box_char(items: ['a'])
+-- value.ref[char]
+2
+-- value.generic_id[char]
+1
+-- value.generic_box[char]
+true
+-- value.fn_value[char]
+1
+-- value.closure_capture[char]
+1
+-- value.match_eq[char]
+1
+-- value.const_list[char]
+2
