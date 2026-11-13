@@ -1795,12 +1795,12 @@ fn Parser.statement_inner(mut self) ast.Stmt?
 ## loop, so `break outer` and `continue outer` in a nested loop leave or
 ## continue this one (expr.loop.10).
 fn Parser.labeled_loop(mut self, name str) ast.Stmt?
-    name_pos := here()
+    lpos := here()
     for l in loops
         if l.name == name
             error_text(
                 "expr.loop.9",
-                name_pos,
+                lpos,
                 "the loop label `{name}` is already used by an enclosing loop",
                 "give this loop a different label, for example `{name}2`",
                 "",
