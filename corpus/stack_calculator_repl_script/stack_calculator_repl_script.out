@@ -1,0 +1,43 @@
+ 2> push 10
+ 3> push 4
+ 4> add
+ 5> dup
+ 6> mul
+ 7> dump
+    stack: 196
+ 8> store sq
+ 9> load sq
+10> push 3
+11> div
+12> dump
+    stack: 65
+13> div
+    error: div needs 2 values, stack has 1
+14> push 0
+15> div
+    error: div by zero
+16> load nope
+    error: no variable nope
+17> bogus 1
+    error: unknown command 'bogus 1'
+18> push x1
+    error: bad number 'x1'
+19> 5
+20> 7
+21> swap
+22> sub
+23> dump
+    stack: 65 0 2
+25> -7
+26> 2
+27> div
+28> dump
+    stack: 65 0 2 -3
+29> 17
+30> 5
+31> mod
+32> dump
+    stack: 65 0 2 -3 2
+stack: 65 0 2 -3 2
+sq = 196
+5 errors

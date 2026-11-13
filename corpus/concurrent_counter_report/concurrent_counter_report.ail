@@ -1,0 +1,87 @@
+## Concurrent counter report: worker tasks each process a slice of a synthetic
+## event stream, update a shared mutex-protected level histogram, an atomic
+## byte total and an atomic longest-event record, and send a per-worker
+## summary over a channel. Main prints the sorted report and checks it against
+## a single-threaded pass.
+
+struct Summary
+    worker int
+    events int
+    volume int
+
+fn level_of(i int) str
+    levels := ["info", "warn", "error", "debug"]
+    levels[(i * 7 + i / 3) % 4]
+
+fn size_of(i int) int
+    10 + (i * 13) % 50
+
+fn worker(id int, workers int, total int, hist Mutex[Map[str, int]], total_bytes Atomic[int], longest Atomic[int], out Channel[Summary])
+    mut events := 0
+    mut mine := 0
+    for i in 0..total
+        if i % workers != id
+            continue
+        events += 1
+        sz := size_of(i)
+        mine += sz
+        with hist as mut h
+            h[level_of(i)] += 1
+        total_bytes.add(sz)
+        while true
+            cur := longest.load()
+            if sz <= cur
+                break
+            if longest.cas(cur, sz)
+                break
+    out.send(Summary(worker: id, events: events, volume: mine))
+
+fn sequential(total int) Map[str, int]
+    mut h := Map[str, int]()
+    for i in 0..total
+        h[level_of(i)] += 1
+    h
+
+fn main() !
+    total := 240
+    workers := 4
+    hist := Mutex(Map[str, int]())
+    total_bytes := Atomic(0)
+    longest := Atomic(0)
+    out := Channel[Summary](workers)
+    g := TaskGroup()
+    for id in 0..workers
+        g.add(spawn worker(id, workers, total, hist, total_bytes, longest, out))
+    g.wait_all()?
+    out.close()
+    mut sums := List[Summary]()
+    for item in out
+        sums.push(item)
+    ordered := sums.sorted(by: |x| x.worker)
+    for s in ordered
+        print("worker {s.worker}: {s.events} events, {s.volume} bytes")
+    counts := hist.get()
+    for level in counts.keys().sorted()
+        print("{level:<6}{counts[level]:>4}")
+    print("total events {counts.values().sum()}, bytes {total_bytes.load()}, longest {longest.load()}")
+    base := sequential(total)
+    mut same := base.len() == counts.len()
+    for k in base.keys()
+        got := counts.get(k) else -1
+        if got != base[k]
+            same = false
+    print("matches sequential pass: {same}")
+
+@test fn levels_cycle_deterministically()
+    assert_eq(level_of(0), "info")
+    assert_eq(size_of(0), 10)
+    assert_eq(size_of(4), 10 + 52 % 50)
+
+@test fn sequential_counts_everything()
+    h := sequential(40)
+    assert_eq(h.values().sum(), 40)
+    assert(h.len() <= 4, "at most four levels")
+
+@test fn histogram_sizes_stay_in_range()
+    for i in 0..100
+        assert(size_of(i) >= 10 and size_of(i) < 60, "size in range")

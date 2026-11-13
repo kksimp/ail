@@ -1,0 +1,146 @@
+## Tic-tac-toe solved by game-tree search. Plain minimax and minimax with
+## alpha-beta pruning give the same value; the program prints how many nodes
+## each visits, the best move for several positions, and a full self-play
+## game in which both sides pick the first best move.
+
+struct Eval
+    score int
+    nodes int
+
+fn lines() List[int]
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 3, 6, 1, 4, 7, 2, 5, 8, 0, 4, 8, 2, 4, 6]
+
+fn winner(board List[int]) int
+    ls := lines()
+    for k in 0..8
+        total := board[ls[3 * k]] + board[ls[3 * k + 1]] + board[ls[3 * k + 2]]
+        if total == 3
+            return 1
+        if total == -3
+            return -1
+    0
+
+fn read_board(text str) List[int]
+    mut out := List[int]()
+    for ch in text.chars()
+        match ch
+            'X' => out.push(1)
+            'O' => out.push(-1)
+            _ => out.push(0)
+    out
+
+fn plain(board List[int], player int) Eval
+    w := winner(board)
+    if w != 0
+        return Eval(score: w, nodes: 1)
+    mut nodes := 1
+    mut moved := false
+    mut best := if player == 1 then -2 else 2
+    for i in 0..9
+        if board[i] != 0
+            continue
+        moved = true
+        mut next := board
+        next[i] = player
+        r := plain(next, -player)
+        nodes += r.nodes
+        if player == 1 and r.score > best
+            best = r.score
+        if player == -1 and r.score < best
+            best = r.score
+    if not moved
+        best = 0
+    Eval(score: best, nodes: nodes)
+
+fn pruned(board List[int], player int, alpha int, beta int) Eval
+    w := winner(board)
+    if w != 0
+        return Eval(score: w, nodes: 1)
+    mut nodes := 1
+    mut moved := false
+    mut lo := alpha
+    mut hi := beta
+    mut best := if player == 1 then -2 else 2
+    for i in 0..9
+        if board[i] != 0
+            continue
+        moved = true
+        mut next := board
+        next[i] = player
+        r := pruned(next, -player, lo, hi)
+        nodes += r.nodes
+        if player == 1
+            if r.score > best
+                best = r.score
+            if best > lo
+                lo = best
+        else
+            if r.score < best
+                best = r.score
+            if best < hi
+                hi = best
+        if lo >= hi
+            break
+    if not moved
+        best = 0
+    Eval(score: best, nodes: nodes)
+
+fn to_move(board List[int]) int
+    if board.sum() == 0 then 1 else -1
+
+fn best_move(board List[int], player int) int
+    mut pick := -1
+    mut pick_score := 0
+    for i in 0..9
+        if board[i] == 0
+            mut next := board
+            next[i] = player
+            r := pruned(next, -player, -2, 2)
+            if pick < 0 or r.score * player > pick_score * player
+                pick = i
+                pick_score = r.score
+    pick
+
+fn verdict(score int) str
+    if score == 1
+        return "X wins"
+    if score == -1
+        return "O wins"
+    "draw"
+
+fn main()
+    for pos in [".........", "XX.OO....", "X...O....", "XO.XO....", "XOXOXO..."]
+        board := read_board(pos)
+        side := to_move(board)
+        slow := plain(board, side)
+        fast := pruned(board, side, -2, 2)
+        print("{pos}: {verdict(fast.score)}, move {best_move(board, side)}, nodes {slow.nodes} vs {fast.nodes}")
+    mut game := read_board(".........")
+    mut side_now := 1
+    mut moves := List[int]()
+    while winner(game) == 0 and game.contains(0)
+        m := best_move(game, side_now)
+        game[m] = side_now
+        moves.push(m)
+        side_now = -side_now
+    print("self-play moves: {moves}")
+    print("result: {verdict(winner(game))}")
+
+@test fn finds_the_winning_move()
+    board := read_board("XX.OO....")
+    assert_eq(best_move(board, 1), 2)
+    assert_eq(pruned(board, 1, -2, 2).score, 1)
+
+@test fn pruning_agrees_with_minimax()
+    board := read_board("X...O....")
+    assert_eq(plain(board, 1).score, pruned(board, 1, -2, 2).score)
+    assert(pruned(board, 1, -2, 2).nodes < plain(board, 1).nodes)
+
+@test fn blocks_an_open_two()
+    board := read_board("XX..O....")
+    assert_eq(best_move(board, -1), 2)
+
+@test fn detects_wins()
+    assert_eq(winner(read_board("XXXOO....")), 1)
+    assert_eq(winner(read_board("OXXXO...O")), -1)
+    assert_eq(winner(read_board("XOXOXOOXO")), 0)

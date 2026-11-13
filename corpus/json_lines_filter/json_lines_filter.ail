@@ -1,0 +1,122 @@
+## JSON lines filter: writes a small JSON-lines log to a temp file, streams it
+## back line by line, parses each flat object by hand, and keeps the records
+## matching a list of filters such as level=warn or ms>100. Malformed lines are
+## counted, not fatal. Matches are written to a second file and re-read.
+use std.file
+
+struct Filter
+    key str
+    op str
+    val str
+
+fn parse_filter(spec str) Filter?
+    if idx := spec.find(">")
+        return Filter(key: spec.slice(0, idx), op: ">", val: spec.slice(idx + 1, spec.len()))
+    eq := spec.find("=") else return none
+    Filter(key: spec.slice(0, eq), op: "=", val: spec.slice(eq + 1, spec.len()))
+
+fn unquote(s str) str
+    t := s.trim()
+    if t.len() >= 2 and t.starts_with("\"") and t.ends_with("\"")
+        return t.slice(1, t.len() - 1)
+    t
+
+## A flat object with no commas or colons inside values; none when malformed.
+fn parse_record(line str) Map[str, str]?
+    t := line.trim()
+    if t.len() < 2 or not t.starts_with("\{") or not t.ends_with("}")
+        return none
+    mut rec := Map[str, str]()
+    inner := t.slice(1, t.len() - 1)
+    if inner.trim().is_empty()
+        return rec
+    for pair in inner.split(",")
+        at := pair.find(":") else return none
+        rec[unquote(pair.slice(0, at))] = unquote(pair.slice(at + 1, pair.len()))
+    rec
+
+fn matches(rec Map[str, str], f Filter) bool
+    v := rec.get(f.key) else return false
+    if f.op == "="
+        return v == f.val
+    n := v.to_int() else return false
+    limit := f.val.to_int() else return false
+    n > limit
+
+fn keep(rec Map[str, str], filters List[Filter]) bool
+    filters.all(|f| matches(rec, f))
+
+fn write_log(p str, lines List[str]) !
+    mut w := file.create(p)?
+    for l in lines
+        w.write_line(l)?
+    w.close()?
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_json_lines_filter")?
+    src := path.join(dir, "events.jsonl")
+    dst := path.join(dir, "hits.jsonl")
+    write_log(src, [
+        "\{\"level\":\"info\",\"user\":\"ann\",\"ms\":120}",
+        "\{\"level\":\"warn\",\"user\":\"bob\",\"ms\":340}",
+        "not json at all",
+        "\{\"level\":\"error\",\"user\":\"ann\",\"ms\":15}",
+        "\{\"level\":\"warn\",\"user\":\"cy\",\"ms\":95}",
+        "\{\"level\":\"warn\",\"user\":\"ann\",\"ms\":410}",
+        "\{\"level\":\"warn\",\"user\":\"dee\"}",
+    ])?
+    mut filters := List[Filter]()
+    for spec in ["level=warn", "ms>100"]
+        if f := parse_filter(spec)
+            filters.push(f)
+    print("filters: {filters.len()}")
+    mut r := file.open(src)?
+    mut w := file.create(dst)?
+    mut total := 0
+    mut bad := 0
+    mut kept := 0
+    while true
+        line := r.read_line()? else break
+        total += 1
+        if rec := parse_record(line)
+            if keep(rec, filters)
+                kept += 1
+                w.write_line(line)?
+        else
+            bad += 1
+    r.close()
+    w.close()?
+    print("read {total} lines, {bad} malformed, {kept} kept")
+    for row in fs.read_text(dst)?.lines()
+        hit := parse_record(row) else continue
+        print("  {hit["user"]} took {hit["ms"]} ms")
+    fs.remove(src)?
+    fs.remove(dst)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn parses_flat_objects()
+    rec := parse_record("\{\"a\":\"x\", \"n\": 5}") else return
+    assert_eq(rec["a"], "x")
+    assert_eq(rec["n"], "5")
+    assert_eq(rec.len(), 2)
+
+fn has_fields(line str) bool
+    rec := parse_record(line) else return false
+    rec.len() > 0
+
+@test fn rejects_malformed_lines()
+    assert(not has_fields("hello"))
+    assert(not has_fields("\{\"a\" 1}"))
+    assert(has_fields("\{\"a\": 1}"))
+
+@test fn filters_compare_text_and_numbers()
+    rec := {"level": "warn", "ms": "200"}
+    f1 := parse_filter("level=warn") else return
+    f2 := parse_filter("ms>100") else return
+    f3 := parse_filter("ms>200") else return
+    f4 := parse_filter("user=ann") else return
+    assert(matches(rec, f1))
+    assert(matches(rec, f2))
+    assert(not matches(rec, f3))
+    assert(not matches(rec, f4))

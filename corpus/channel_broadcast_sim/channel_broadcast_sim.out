@@ -1,0 +1,6 @@
+publishing 30 messages to 4 subscribers
+alice *       30 msgs  sum  451917  last news-update-900
+bob   news    10 msgs  sum  851058  last news-update-900
+carol sport   10 msgs  sum  167062  last sport-update-784
+dave  tides    0 msgs  sum       0  last -
+total deliveries: 50

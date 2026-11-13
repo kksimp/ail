@@ -1,0 +1,109 @@
+## Exact integer determinants of small square matrices. The Bareiss algorithm
+## eliminates with only exact integer divisions, so no fractions or floats
+## appear. Each result is cross-checked by cofactor expansion, the product rule
+## det(AB) = det(A) det(B) is tested, and Cramer's rule solves a 3x3 system.
+
+struct Mat
+    dim int
+    cells List[int]
+
+fn Mat.at(self, i int, j int) int
+    cells[i * dim + j]
+
+fn Mat.times(self, other Mat) Mat
+    mut out := List[int]()
+    for i in 0..dim
+        for j in 0..dim
+            mut acc := 0
+            for k in 0..dim
+                acc += self.at(i, k) * other.at(k, j)
+            out.push(acc)
+    Mat(dim: dim, cells: out)
+
+fn Mat.det_bareiss(self) int
+    mut a := cells
+    mut sign := 1
+    mut prev := 1
+    for k in 0..dim - 1
+        if a[k * dim + k] == 0
+            mut found := -1
+            for i in k + 1..dim
+                if found < 0 and a[i * dim + k] != 0
+                    found = i
+            if found < 0
+                return 0
+            for jj in 0..dim
+                tmp := a[k * dim + jj]
+                a[k * dim + jj] = a[found * dim + jj]
+                a[found * dim + jj] = tmp
+            sign = -sign
+        for i in k + 1..dim
+            for j in k + 1..dim
+                num := a[i * dim + j] * a[k * dim + k] - a[i * dim + k] * a[k * dim + j]
+                a[i * dim + j] = num / prev
+        prev = a[k * dim + k]
+    sign * a[dim * dim - 1]
+
+fn Mat.minor(self, skip int) Mat
+    mut out := List[int]()
+    for i in 1..dim
+        for j in 0..dim
+            if j != skip
+                out.push(self.at(i, j))
+    Mat(dim: dim - 1, cells: out)
+
+fn Mat.det_cofactor(self) int
+    if dim == 1
+        return cells[0]
+    mut total := 0
+    for c in 0..dim
+        term := cells[c] * self.minor(c).det_cofactor()
+        if c % 2 == 0
+            total += term
+        else
+            total -= term
+    total
+
+fn Mat.with_column(self, col int, repl List[int]) Mat
+    mut out := cells
+    for i in 0..dim
+        out[i * dim + col] = repl[i]
+    Mat(dim: dim, cells: out)
+
+fn report(label str, m Mat)
+    print("{label}: bareiss {m.det_bareiss()}, cofactor {m.det_cofactor()}")
+
+fn main()
+    ident := Mat(dim: 4, cells: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    tri := Mat(dim: 3, cells: [2, -1, 0, -1, 2, -1, 0, -1, 2])
+    pivot := Mat(dim: 3, cells: [0, 2, 1, 1, 0, 3, 4, 1, 0])
+    flat := Mat(dim: 3, cells: [1, 2, 3, 4, 5, 6, 7, 8, 9])
+    big := Mat(dim: 4, cells: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3])
+    report("identity", ident)
+    report("tridiagonal", tri)
+    report("needs a row swap", pivot)
+    report("singular", flat)
+    report("4x4", big)
+    prod := tri.times(pivot)
+    print("det(A) * det(B) = {tri.det_bareiss() * pivot.det_bareiss()}, det(AB) = {prod.det_bareiss()}")
+    system := Mat(dim: 3, cells: [2, 1, -1, -3, -1, 2, -2, 1, 2])
+    rhs := [8, -11, -3]
+    den := system.det_bareiss()
+    print("system determinant: {den}")
+    for c in 0..3
+        num := system.with_column(c, rhs).det_bareiss()
+        print("x{c} = {num}/{den} = {num / den}")
+
+@test fn two_by_two()
+    m := Mat(dim: 2, cells: [3, 8, 4, 6])
+    assert_eq(m.det_bareiss(), -14)
+    assert_eq(m.det_cofactor(), -14)
+
+@test fn row_swap_flips_sign()
+    a := Mat(dim: 2, cells: [0, 1, 1, 0])
+    assert_eq(a.det_bareiss(), -1)
+
+@test fn product_rule()
+    a := Mat(dim: 3, cells: [2, 0, 1, 1, 3, 2, 1, 1, 2])
+    b := Mat(dim: 3, cells: [1, 2, 0, 0, 1, 4, 3, 0, 1])
+    assert_eq(a.times(b).det_bareiss(), a.det_bareiss() * b.det_bareiss())

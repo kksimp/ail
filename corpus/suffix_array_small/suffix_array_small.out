@@ -1,0 +1,17 @@
+sa:  [10, 7, 4, 1, 0, 9, 8, 6, 3, 5, 2]
+lcp: [0, 1, 1, 4, 0, 0, 1, 0, 2, 1, 3]
+suffix 0: i
+suffix 1: ippi
+suffix 2: issippi
+suffix 3: ississippi
+distinct substrings: 53
+longest repeat: issi
+ss: 2 at [2, 5]
+i: 4 at [1, 4, 7, 10]
+issi: 2 at [1, 4]
+pp: 1 at [8]
+x: 0 at []
+mississippi: 1 at [0]
+ippi: 1 at [7]
+abracadabra sa: [10, 7, 0, 3, 5, 8, 1, 4, 6, 9, 2]
+abracadabra distinct: 54, repeat: abra

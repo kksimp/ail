@@ -1,0 +1,13 @@
+Ann  (555) 123-4567         +15551234567 | +1 (555) 123-4567
+Bob  555.123.4567 ext. 22   +15551234567 | +1 (555) 123-4567 x22
+Cy   1-555-123-4567         +15551234567 | +1 (555) 123-4567
+Dee  +44 20 7946 0958       +442079460958 | +44 2079460958
+Eli  020 7946 0958          error: 11 digits do not fit the country
+Fay  +49 30 1234 5678 x5    +493012345678 | +49 3012345678 x5
+Gus  123-4567               error: only 7 digits
+Hal  (055) 123-4567         error: area code 055 cannot start with 0 or 1
+Ivy  +81 3 1234 5678        error: unknown country code in +81
+Jo   +33 1 23 45 67 89      +33123456789 | +33 123456789
+Kit  +1 555 123 456         error: 9 digits do not fit the country
+duplicates:
+  +15551234567: Ann, Bob, Cy

@@ -1,0 +1,132 @@
+## A fixed-size bit set packed into 32-bit words held in ints. It supports add,
+## remove, membership, popcount, union, intersection and difference on whole
+## words, and listing members. The demo builds a prime sieve in one bit set and
+## compares multiples of 3 and 5 with set algebra.
+
+WORD := 32
+
+struct BitSet
+    words List[int]
+    limit int
+
+fn BitSet.new(n int) BitSet
+    mut cells := List[int]()
+    for _ in 0..(n + WORD - 1) / WORD
+        cells.push(0)
+    BitSet(words: cells, limit: n)
+
+fn BitSet.has(self, i int) bool
+    ((words[i / WORD] >> (i % WORD)) & 1) == 1
+
+fn BitSet.add(mut self, i int)
+    if not self.has(i)
+        k := i / WORD
+        self.words[k] = self.words[k] | (1 << (i % WORD))
+
+fn BitSet.remove(mut self, i int)
+    if self.has(i)
+        k := i / WORD
+        self.words[k] = self.words[k] ^ (1 << (i % WORD))
+
+fn popcount(w int) int
+    mut x := w
+    mut c := 0
+    while x > 0
+        c += (x & 1)
+        x = x >> 1
+    c
+
+fn BitSet.count(self) int
+    mut total := 0
+    for w in words
+        total += popcount(w)
+    total
+
+fn BitSet.members(self) List[int]
+    mut out := List[int]()
+    for i in 0..limit
+        if self.has(i)
+            out.push(i)
+    out
+
+fn word_op(a int, b int, mode int) int
+    if mode == 0
+        return a | b
+    if mode == 1
+        return a & b
+    a ^ (a & b)
+
+fn BitSet.combine(self, other BitSet, mode int) BitSet
+    mut res := BitSet.new(limit)
+    for i in 0..words.len()
+        res.words[i] = word_op(words[i], other.words[i], mode)
+    res
+
+fn sieve(n int) BitSet
+    mut composite := BitSet.new(n)
+    for i in 2..n
+        if not composite.has(i)
+            mut j := i * i
+            while j < n
+                composite.add(j)
+                j += i
+    mut primes := BitSet.new(n)
+    for i in 2..n
+        if not composite.has(i)
+            primes.add(i)
+    primes
+
+fn multiples(step int, n int) BitSet
+    mut s := BitSet.new(n)
+    for i in 0..n
+        if i % step == 0
+            s.add(i)
+    s
+
+fn main()
+    primes := sieve(100)
+    print("primes below 100: {primes.count()}")
+    print("primes below 40: {primes.members().take(12)}")
+    threes := multiples(3, 100)
+    fives := multiples(5, 100)
+    print("multiples of 3: {threes.count()}, of 5: {fives.count()}")
+    print("either: {threes.combine(fives, 0).count()}")
+    print("both: {threes.combine(fives, 1).members()}")
+    print("3 but not 5: {threes.combine(fives, 2).count()}")
+    print("prime multiples of 3 or 5: {primes.combine(threes.combine(fives, 0), 1).members()}")
+    mut s := BitSet.new(70)
+    for i in [0, 31, 32, 33, 63, 64, 69]
+        s.add(i)
+    print("edge bits: {s.members()} in {s.words.len()} words")
+    s.remove(32)
+    s.remove(5)
+    print("after removes: {s.count()} members, words {s.words}")
+
+@test fn add_remove_has()
+    mut s := BitSet.new(40)
+    s.add(3)
+    s.add(35)
+    s.add(3)
+    assert(s.has(3))
+    assert(s.has(35))
+    assert(not s.has(4))
+    assert_eq(s.count(), 2)
+    s.remove(3)
+    assert(not s.has(3))
+    assert_eq(s.members(), [35])
+
+@test fn set_algebra()
+    mut a := BitSet.new(20)
+    mut b := BitSet.new(20)
+    for i in [1, 2, 3, 10]
+        a.add(i)
+    for i in [3, 4, 10, 19]
+        b.add(i)
+    assert_eq(a.combine(b, 0).members(), [1, 2, 3, 4, 10, 19])
+    assert_eq(a.combine(b, 1).members(), [3, 10])
+    assert_eq(a.combine(b, 2).members(), [1, 2])
+
+@test fn popcount_counts_bits()
+    assert_eq(popcount(0), 0)
+    assert_eq(popcount(255), 8)
+    assert_eq(popcount(4294967295), 32)

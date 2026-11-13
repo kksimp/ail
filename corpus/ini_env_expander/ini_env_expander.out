@@ -1,0 +1,9 @@
+7 entries, 3 env vars
+[paths] root = /home/ci/app
+[paths] logs = /home/ci/app/logs
+[paths] cache = /cache-prod
+[service] url = http://localhost:8443/prod
+[service] broken = ${missing_close
+[service] ping = <loop>
+[service] pong = <loop>
+cleaned up: true

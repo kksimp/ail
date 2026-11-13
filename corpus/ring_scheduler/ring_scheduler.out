@@ -1,0 +1,9 @@
+q=2: Ax2 Bx2 Cx2 Ax2 Dx2 Bx1 Cx2 Ax1 Cx2 Cx2 Ex2 Ex2
+  turnaround total 51, waiting total 29, preemptions 7
+  finish: A@14 B@11 C@18 D@10 E@24
+q=4: Ax4 Bx3 Cx4 Dx2 Ax1 Cx4 Ex4
+  turnaround total 50, waiting total 28, preemptions 2
+  finish: A@14 B@7 C@18 D@13 E@24
+q=100 (first come first served): Ax5 Bx3 Cx8 Dx2 Ex4
+  turnaround total 45, waiting total 23, preemptions 0
+  finish: A@5 B@8 C@16 D@18 E@24
