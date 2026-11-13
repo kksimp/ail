@@ -1,0 +1,14 @@
+enum Expr
+    Num(n int)
+    Neg(e Expr)
+
+fn eval(e Expr) int
+    match e
+        Num(n) => n
+        Neg(Num(n)) => -n
+        Neg(Neg(_)) => 0
+        Neg(Num(1)) => 1
+        Neg(_) | Num(5) => 2
+
+fn main()
+    print(eval(Expr.Num(n: 1)))

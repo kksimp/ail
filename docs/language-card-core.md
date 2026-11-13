@@ -62,6 +62,8 @@ p := Point(x: 1, y: 2)           # fields by name, any order
 print(p.sum())                   # calls always have `()`
 ```
 
+Patterns nest in fields, `Add(Num(a), Num(b)) =>`; there a bare name binds, so write a fieldless variant qualified (`Expr.Nil`).
+
 ## Absence and errors
 
 ```ail skip=context

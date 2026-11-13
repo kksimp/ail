@@ -1,0 +1,103 @@
+enum Expr
+    Num(n int)
+    Neg(e Expr)
+    Add(a Expr, b Expr)
+    Var(name str)
+    Nil
+
+enum Maybe[T]
+    Some(value T)
+    Empty
+
+enum Token
+    Word(text str, at (int, int))
+    Mark(c char)
+
+enum Cell
+    Op(c char)
+    Flag(on bool)
+
+fn cell(c Cell) str
+    match c
+        Op('-') => "minus"
+        Op(_) => "op"
+        Flag(true) => "on"
+        Flag(false) => "off"
+
+fn show(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Neg(x) => "-{show(x)}"
+        Add(a, b) => "({show(a)} + {show(b)})"
+        Var(name) => name
+        Nil => "nil"
+
+## Constant folding, three levels deep.
+fn fold(e Expr) Expr
+    match e
+        Add(Num(0), Num(b)) => Expr.Num(n: b)
+        Add(Num(a), Num(b)) => Expr.Num(n: a + b)
+        Add(Neg(Num(a)), Num(b)) => Expr.Num(n: b - a)
+        Add(x, Expr.Nil) => x
+        Neg(Neg(x)) => x
+        Neg(Num(1..=9)) => Expr.Var(name: "small")
+        Var("pi") => Expr.Num(n: 3)
+        Var(_) | Num | Neg | Add | Nil => e
+
+fn first_small(o Maybe[Maybe[int]]) str
+    match o
+        Some(Some(0)) => "zero"
+        Some(Some(n)) if n < 0 => "negative {n}"
+        Some(Some(n)) => "some {n}"
+        Some(Maybe.Empty) => "inner empty"
+        Empty => "empty"
+
+fn token(t Token) str
+    match t
+        Word("fn", (1, _)) => "keyword at line 1"
+        Word(w, (line, col)) => "{w} at {line}:{col}"
+        Mark('(' | ')') => "paren"
+        Mark(c) => "mark {c}"
+
+fn wrap(m Maybe[int]) Maybe[Maybe[int]]
+    Maybe.Some(value: m)
+
+fn empty_int() Maybe[int]
+    Maybe.Empty
+
+fn empty_outer() Maybe[Maybe[int]]
+    Maybe.Empty
+
+fn pair(p (Expr, int)) str
+    match p
+        (Num(n), 0) => "num {n} at 0"
+        (Neg(Num(_)), k) => "neg num at {k}"
+        _ => "other"
+
+fn main()
+    print(show(fold(Expr.Add(a: Expr.Num(n: 0), b: Expr.Num(n: 4)))))
+    print(show(fold(Expr.Add(a: Expr.Num(n: 2), b: Expr.Num(n: 3)))))
+    print(show(fold(Expr.Add(a: Expr.Neg(e: Expr.Num(n: 2)), b: Expr.Num(n: 10)))))
+    print(show(fold(Expr.Add(a: Expr.Var(name: "x"), b: Expr.Nil))))
+    print(show(fold(Expr.Neg(e: Expr.Neg(e: Expr.Var(name: "y"))))))
+    print(show(fold(Expr.Neg(e: Expr.Num(n: 5)))))
+    print(show(fold(Expr.Neg(e: Expr.Num(n: 50)))))
+    print(show(fold(Expr.Var(name: "pi"))))
+    print(show(fold(Expr.Var(name: "tau"))))
+    print(first_small(wrap(Maybe.Some(value: 0))))
+    print(first_small(wrap(Maybe.Some(value: -3))))
+    print(first_small(wrap(Maybe.Some(value: 8))))
+    print(first_small(wrap(empty_int())))
+    print(first_small(empty_outer()))
+    print(token(Token.Word(text: "fn", at: (1, 4))))
+    print(token(Token.Word(text: "fn", at: (2, 4))))
+    print(token(Token.Mark(c: ')')))
+    print(token(Token.Mark(c: ';')))
+    print(pair((Expr.Num(n: 7), 0)))
+    print(pair((Expr.Neg(e: Expr.Num(n: 1)), 3)))
+    print(pair((Expr.Neg(e: Expr.Nil), 3)))
+    print(pair((Expr.Num(n: 7), 1)))
+    print(cell(Cell.Op(c: '-')))
+    print(cell(Cell.Op(c: '+')))
+    print(cell(Cell.Flag(on: true)))
+    print(cell(Cell.Flag(on: false)))

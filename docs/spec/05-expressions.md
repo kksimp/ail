@@ -325,8 +325,9 @@ and name those variants, unless the function allows it with
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`), or written bare to match any fields
-(`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183)*
+for each of its fields (`expr.match.6`, `expr.match.13`), or written bare to
+match any fields (`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183,
+ADR 1069)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -335,7 +336,8 @@ redundant), and the rule applies to each alternative of an or-pattern.
 
 **expr.match.6** — In a pattern `Variant(p1, ..., pn)`, there MUST be one
 `pi` per field, in declaration order. Each `pi` is a new immutable binding
-name or `_`, which ignores the field. *(ADR 0123)*
+name, `_`, which ignores the field, or a pattern of the field's type
+(`expr.match.13`). *(ADR 0123, ADR 1069)*
 
 **expr.match.7** — A literal pattern is an `int` literal (with an optional
 `-`), a `char` literal, a `str` literal without interpolation (a raw string is
@@ -423,8 +425,46 @@ fn main()
     print(grade(30))
 ```
 
-> **Note:** not yet designed: or-patterns that bind names, patterns nested
-> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+**expr.match.13** — A field of a variant pattern may hold a pattern of the
+field's type: a variant pattern, nested to any depth, a literal, a range, a
+tuple pattern, or an or-pattern. A plain name binds the field and `_` ignores
+it; a name that is a variant of the field's enum is an error, so a variant
+without fields is written qualified, `Expr.Nil`. A `match` on an enum whose
+arms nest is exhaustive (`expr.match.2`) only when every value is taken by an
+unguarded arm, and the diagnostic names each missing case as a pattern, such
+as `Add(Num(_), Neg(_))`. An arm, or an alternative of an or-pattern, that
+matches no value the earlier arms leave is redundant (`expr.match.5`).
+*(ADR 1069)*
+
+```ail rules=expr.match.13
+enum Expr
+    Num(n int)
+    Neg(e Expr)
+    Add(a Expr, b Expr)
+    Nil
+
+fn simplify(e Expr) Expr
+    match e
+        Add(Num(a), Num(b)) => Expr.Num(n: a + b)
+        Add(x, Expr.Nil) => x
+        Neg(Neg(x)) => x
+        Neg(Num(0)) => Expr.Num(n: 0)
+        Num | Neg | Add | Nil => e
+
+fn show(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Neg(x) => "-{show(x)}"
+        Add(a, b) => "({show(a)} + {show(b)})"
+        Nil => "nil"
+
+fn main()
+    print(show(simplify(Expr.Add(a: Expr.Num(n: 2), b: Expr.Num(n: 3)))))    # 5
+    print(show(simplify(Expr.Neg(e: Expr.Neg(e: Expr.Num(n: 7))))))         # 7
+    print(show(simplify(Expr.Add(a: Expr.Neg(e: Expr.Nil), b: Expr.Nil))))  # -nil
+```
+
+> **Note:** not yet designed: or-patterns that bind names, a binding pattern for a whole
 > scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
 > suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
 > ADR 0453)*

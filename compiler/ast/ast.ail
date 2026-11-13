@@ -388,6 +388,9 @@ pub enum Pattern
     TuplePat(elems List[Pattern], pos Pos)
     ## A name inside a tuple pattern, bound to the element (type.tuple.6)
     BindName(name str, pos Pos)
+    ## `Variant(p, ...)` whose fields hold patterns of their own
+    ## (expr.match.13): a plain name binds its field, `_` ignores it.
+    Nested(qualifier str?, name str, fields List[Pattern], pos Pos)
 
 pub enum Literal
     IntLit(value str)

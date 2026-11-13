@@ -180,6 +180,9 @@ fn area(s Shape) int
 ```
 
 A bare variant pattern matches any fields and binds none (`Circle => true`).
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Neg(Num(0..=9))`,
+`Word("fn", (1, _))`. A bare name in a field binds it, so a variant without
+fields is written qualified there (`Cons(_, Items.Nil)`).
 
 ## Absence and errors
 
