@@ -1,0 +1,133 @@
+## Seat reservation for a small hall (rows A.., numbered seats). "pick PARTY
+## SEAT" takes one named seat; "block PARTY N" takes N adjacent seats in the
+## row nearest the middle, as close to the centre as possible. Conflicts and
+## bad seats are typed errors. Prints the seating map at the end.
+
+ROW_NAMES := "ABCDEFGH"
+
+error enum SeatError
+    BadCommand(text str) "bad command '{text}'"
+    BadSeat(label str) "no such seat {label}"
+    Taken(label str, holder int) "seat {label} is taken by party {holder}"
+    NoBlock(size int) "no block of {size} seats together"
+
+struct Hall
+    rows int
+    cols int
+    seats List[int]
+
+fn Hall.empty(nr int, nc int) Hall
+    mut cells := List[int]()
+    for i in 0..nr * nc
+        cells.push(0)
+    Hall(rows: nr, cols: nc, seats: cells)
+
+fn Hall.name(self, row int, col int) str
+    "{ROW_NAMES.slice(row, row + 1)}{col + 1}"
+
+fn Hall.pick(mut self, party int, label str) ! SeatError
+    if label.len() < 2
+        return BadSeat(label: label)
+    r := ROW_NAMES.find(label.slice(0, 1)) else return BadSeat(label: label)
+    c := label.slice(1, label.len()).to_int() else return BadSeat(label: label)
+    if r >= self.rows or c < 1 or c > self.cols
+        return BadSeat(label: label)
+    at := r * self.cols + c - 1
+    if self.seats[at] != 0
+        return Taken(label: label, holder: self.seats[at])
+    self.seats[at] = party
+
+fn Hall.block(mut self, party int, size int) str ! SeatError
+    if size < 1 or size > self.cols
+        return NoBlock(size: size)
+    mut found := false
+    mut best := 0
+    mut best_row := 0
+    mut best_col := 0
+    for r in 0..self.rows
+        for c in 0..=(self.cols - size)
+            mut free := true
+            for k in 0..size
+                if self.seats[r * self.cols + c + k] != 0
+                    free = false
+            if free
+                score := (2 * r - (self.rows - 1)).abs() * 100 + (2 * c + size - self.cols).abs()
+                if not found or score < best
+                    found = true
+                    best = score
+                    best_row = r
+                    best_col = c
+    if not found
+        return NoBlock(size: size)
+    for k in 0..size
+        self.seats[best_row * self.cols + best_col + k] = party
+    "{self.name(best_row, best_col)}-{self.name(best_row, best_col + size - 1)}"
+
+fn Hall.run(mut self, line str) str ! SeatError
+    parts := line.split(" ")
+    if parts.len() != 3
+        return BadCommand(text: line)
+    party := parts[1].to_int() else return BadCommand(text: line)
+    if parts[0] == "pick"
+        self.pick(party, parts[2])?
+        return "party {party} has {parts[2]}"
+    if parts[0] == "block"
+        n := parts[2].to_int() else return BadCommand(text: line)
+        got := self.block(party, n)?
+        return "party {party} has {got}"
+    return BadCommand(text: line)
+
+fn Hall.render(self) List[str]
+    mut out := List[str]()
+    for r in 0..self.rows
+        mut cells := List[str]()
+        for c in 0..self.cols
+            v := self.seats[r * self.cols + c]
+            cells.push(if v == 0 then "." else "{v}")
+        out.push("{ROW_NAMES.slice(r, r + 1)} {cells.join("")}")
+    out
+
+fn main()
+    mut hall := Hall.empty(5, 8)
+    script := [
+        "block 1 3",
+        "block 2 4",
+        "pick 3 C4",
+        "pick 4 C4",
+        "pick 4 Z9",
+        "pick 4 C9",
+        "block 5 9",
+        "block 6 5",
+        "block 7 6",
+        "block 8 2",
+        "sit 1 A1",
+    ]
+    for line in script
+        msg := hall.run(line) else err
+            print("{line}: {err}")
+            continue
+        print("{line}: {msg}")
+    for row in hall.render()
+        print(row)
+    mut free := 0
+    for v in hall.seats
+        if v == 0
+            free += 1
+    print("{free} of {hall.seats.len()} seats free")
+
+@test fn block_prefers_the_middle()
+    mut h := Hall.empty(3, 6)
+    assert_eq(h.block(1, 2)?, "B3-B4")
+
+@test fn taken_seats_conflict()
+    mut h := Hall.empty(2, 4)
+    h.pick(1, "A2")?
+    assert_err(h.pick(2, "A2"))
+    assert_err(h.pick(2, "A9"))
+    assert_err(h.pick(2, "C1"))
+
+@test fn full_rows_are_skipped()
+    mut h := Hall.empty(2, 3)
+    h.block(1, 3)?
+    h.block(2, 3)?
+    assert_err(h.block(3, 1))

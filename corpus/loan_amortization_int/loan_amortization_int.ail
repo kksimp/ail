@@ -1,0 +1,101 @@
+## Integer loan amortization. Money is in cents, the rate in annual basis
+## points. The level payment is found by binary search on whole cents (no
+## floats), interest is rounded half up each month and the last payment clears
+## the remaining balance.
+
+error enum LoanError
+    BadPrincipal(cents int) "principal must be positive, got {cents}"
+    BadRate(bps int) "rate out of range: {bps}"
+    BadTerm(months int) "term must be 1-480 months, got {months}"
+
+struct Row
+    month int
+    paid int
+    interest int
+    balance int
+
+struct Plan
+    payment int
+    rows List[Row]
+    total_interest int
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn interest_of(balance int, bps int) int
+    (balance * bps + 60000) / 120000
+
+fn clears(principal int, bps int, months int, pay int) bool
+    mut bal := principal
+    for step in 0..months
+        due := bal + interest_of(bal, bps)
+        if due <= pay
+            bal = 0
+        else
+            bal = due - pay
+    bal == 0
+
+fn level_payment(principal int, bps int, months int) int
+    mut lo := 0
+    mut hi := principal * 2
+    while lo < hi
+        mid := (lo + hi) / 2
+        if clears(principal, bps, months, mid)
+            hi = mid
+        else
+            lo = mid + 1
+    lo
+
+fn schedule(principal int, bps int, months int) Plan ! LoanError
+    if principal <= 0
+        return BadPrincipal(cents: principal)
+    if bps < 0 or bps > 100000
+        return BadRate(bps: bps)
+    if months < 1 or months > 480
+        return BadTerm(months: months)
+    pay := level_payment(principal, bps, months)
+    mut bal := principal
+    mut rows := List[Row]()
+    mut total := 0
+    for m in 1..=months
+        i := interest_of(bal, bps)
+        due := bal + i
+        paid := if due < pay then due else pay
+        bal = due - paid
+        total += i
+        rows.push(Row(month: m, paid: paid, interest: i, balance: bal))
+    Plan(payment: pay, rows: rows, total_interest: total)
+
+fn show(principal int, bps int, months int)
+    plan := schedule(principal, bps, months) else err
+        print("loan {principal} cents at {bps}bps for {months}: {err}")
+        return
+    print("loan {principal} cents at {bps}bps for {months} months: payment {money(plan.payment)}, interest {money(plan.total_interest)}")
+    last := plan.rows.len() - 1
+    for k in [0, 1, last]
+        r := plan.rows[k]
+        print("  month {r.month:>3}: paid {money(r.paid):>9} interest {money(r.interest):>8} balance {money(r.balance):>10}")
+
+fn main()
+    show(1000000, 600, 12)
+    show(25000000, 450, 360)
+    show(120000, 0, 10)
+    show(-5, 500, 12)
+    show(50000, 100001, 12)
+    show(50000, 500, 0)
+
+@test fn zero_rate_splits_evenly()
+    plan := schedule(120000, 0, 10)?
+    assert_eq(plan.payment, 12000)
+    assert_eq(plan.total_interest, 0)
+
+@test fn final_balance_is_zero()
+    plan := schedule(1000000, 600, 12)?
+    assert_eq(plan.rows[11].balance, 0)
+    assert_eq(plan.rows.len(), 12)
+
+@test fn bad_input_is_typed()
+    assert_err(schedule(0, 500, 12))
+    assert_err(schedule(100, -1, 12))
+    assert_err(schedule(100, 500, 481))

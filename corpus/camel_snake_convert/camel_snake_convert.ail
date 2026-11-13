@@ -1,0 +1,98 @@
+## Identifier case converter: splits camelCase, PascalCase, snake_case,
+## kebab-case and acronym runs (HTTPServer) into words and rewrites them in
+## any style, and detects the style of an identifier.
+
+fn is_upper(c char) bool
+    match c
+        'A'..='Z' => true
+        _ => false
+
+fn is_lower(c char) bool
+    match c
+        'a'..='z' => true
+        _ => false
+
+fn split_words(ident str) List[str]
+    cs := ident.chars()
+    mut words := List[str]()
+    mut cur := ""
+    for i in 0..cs.len()
+        c := cs[i]
+        if c == '_' or c == '-' or c == ' '
+            if cur != ""
+                words.push(cur.to_lower())
+            cur = ""
+            continue
+        if is_upper(c) and cur != ""
+            prev := cs[i - 1]
+            lower_next := i + 1 < cs.len() and is_lower(cs[i + 1])
+            if is_lower(prev) or prev.is_digit() or lower_next
+                words.push(cur.to_lower())
+                cur = ""
+        cur = "{cur}{c}"
+    if cur != ""
+        words.push(cur.to_lower())
+    words
+
+fn capitalize(w str) str
+    "{w.slice(0, 1).to_upper()}{w.slice(1, w.len())}"
+
+fn to_snake(ident str) str
+    split_words(ident).join("_")
+
+fn to_kebab(ident str) str
+    split_words(ident).join("-")
+
+fn to_screaming(ident str) str
+    to_snake(ident).to_upper()
+
+fn to_pascal(ident str) str
+    [capitalize(w) for w in split_words(ident)].join("")
+
+fn to_camel(ident str) str
+    ws := split_words(ident)
+    mut out := ""
+    for i in 0..ws.len()
+        if i == 0
+            out = ws[0]
+        else
+            out = "{out}{capitalize(ws[i])}"
+    out
+
+fn detect(ident str) str
+    if ident.contains('_')
+        if ident == ident.to_upper()
+            return "SCREAMING"
+        return "snake"
+    if ident.contains('-')
+        return "kebab"
+    if is_upper(ident.chars()[0])
+        return "Pascal"
+    if ident != ident.to_lower()
+        return "camel"
+    "lower"
+
+fn main()
+    names := ["parseHttpResponse", "HTTPServerConfig", "user_id_map", "MAX_RETRY_COUNT", "background-color", "getHTTP2Client", "x", "XMLParser"]
+    for n in names
+        print("{n:<18} {detect(n):<9} {to_snake(n)} | {to_camel(n)} | {to_pascal(n)} | {to_kebab(n)}")
+    print(to_screaming("retryLimitMs"))
+
+@test fn splits_acronyms()
+    assert_eq(split_words("HTTPServer"), ["http", "server"])
+    assert_eq(split_words("getHTTP"), ["get", "http"])
+    assert_eq(split_words("a1B2"), ["a1", "b2"])
+
+@test fn converts()
+    assert_eq(to_snake("parseHttpResponse"), "parse_http_response")
+    assert_eq(to_camel("user_id_map"), "userIdMap")
+    assert_eq(to_pascal("background-color"), "BackgroundColor")
+    assert_eq(to_screaming("retryLimit"), "RETRY_LIMIT")
+
+@test fn detects_styles()
+    assert_eq(detect("MAX_COUNT"), "SCREAMING")
+    assert_eq(detect("some_name"), "snake")
+    assert_eq(detect("SomeName"), "Pascal")
+    assert_eq(detect("someName"), "camel")
+    assert_eq(detect("a-b"), "kebab")
+    assert_eq(detect("name"), "lower")

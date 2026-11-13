@@ -1,0 +1,74 @@
+## CSV sort tool: sorts an embedded CSV table by a named column, numerically
+## or as text, ascending or descending. Sorts are stable, so sorting by a
+## secondary column first and the primary one second gives a two-key order.
+## The result is written to a temp file and read back.
+
+DATA := r"""
+name,dept,salary,age
+ann,eng,120,34
+bob,ops,95,45
+cy,eng,150,29
+dee,ops,95,38
+eve,hr,70,51
+fay,eng,120,41
+"""
+
+fn num(s str) int
+    s.to_int() else 0
+
+fn parse(text str) List[List[str]]
+    [line.split(",") for line in text.lines()]
+
+fn sort_rows(rows List[List[str]], col int, numeric bool, desc bool) List[List[str]]
+    if numeric
+        sign := if desc then -1 else 1
+        return rows.sorted(by: |r| sign * num(r[col]))
+    out := rows.sorted(by: |r| r[col])
+    if desc
+        return out.reversed()
+    out
+
+fn column(header List[str], name str) int
+    header.index_of(name) else 0
+
+fn render(header List[str], rows List[List[str]]) str
+    mut lines := [header.join(",")]
+    for r in rows
+        lines.push(r.join(","))
+    lines.join("\n")
+
+fn show(title str, rows List[List[str]])
+    print("{title}: {[r[0] for r in rows].join(" ")}")
+
+fn main() !
+    table := parse(DATA)
+    header := table[0]
+    body := table[1..]
+    show("by name", sort_rows(body, column(header, "name"), false, false))
+    show("by age desc", sort_rows(body, column(header, "age"), true, true))
+    show("by salary", sort_rows(body, column(header, "salary"), true, false))
+    by_name := sort_rows(body, column(header, "name"), false, false)
+    two_key := sort_rows(sort_rows(by_name, column(header, "salary"), true, true), column(header, "dept"), false, false)
+    show("dept, then salary desc", two_key)
+    dir := fs.make_temp_dir("corpus_csv_sort_tool")?
+    out := path.join(dir, "sorted.csv")
+    fs.write_text(out, render(header, two_key))?
+    back := fs.read_text(out)?
+    print("wrote {back.lines().len()} lines, {back.byte_len()} bytes")
+    print("first row: {back.lines()[1]}")
+    fs.remove(out)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn numeric_sort_is_not_text_sort()
+    rows := [["a", "10"], ["b", "9"], ["c", "100"]]
+    assert_eq([r[0] for r in sort_rows(rows, 1, true, false)], ["b", "a", "c"])
+    assert_eq([r[0] for r in sort_rows(rows, 1, false, false)], ["a", "c", "b"])
+
+@test fn descending_numeric_keeps_ties_stable()
+    rows := [["a", "5"], ["b", "7"], ["c", "5"]]
+    assert_eq([r[0] for r in sort_rows(rows, 1, true, true)], ["b", "a", "c"])
+
+@test fn unknown_column_falls_back_to_first()
+    assert_eq(column(["x", "y"], "zzz"), 0)
+    assert_eq(column(["x", "y"], "y"), 1)

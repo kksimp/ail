@@ -1,0 +1,81 @@
+## Text justify: lays out a paragraph at a column width as left, right,
+## centered or fully justified lines, and prints each inside a ruler frame.
+
+fn spaces(n int) str
+    mut out := ""
+    mut k := 0
+    while k < n
+        out = "{out} "
+        k += 1
+    out
+
+fn wrap(text str, width int) List[str]
+    mut lines := List[str]()
+    mut cur := ""
+    for w in text.words()
+        if cur == ""
+            cur = w
+        elif cur.len() + 1 + w.len() <= width
+            cur = "{cur} {w}"
+        else
+            lines.push(cur)
+            cur = w
+    if cur != ""
+        lines.push(cur)
+    lines
+
+fn full_line(line str, width int) str
+    ws := line.words()
+    if ws.len() < 2
+        return line
+    mut letters := 0
+    for w in ws
+        letters += w.len()
+    gaps := ws.len() - 1
+    spare := width - letters
+    mut out := ws[0]
+    for i in 1..ws.len()
+        mut n := spare / gaps
+        if i <= spare % gaps
+            n += 1
+        out = "{out}{spaces(n)}{ws[i]}"
+    out
+
+fn centered(line str, width int) str
+    total := width - line.len()
+    left := total / 2
+    "{spaces(left)}{line}{spaces(total - left)}"
+
+fn layout(text str, width int, mode str) List[str]
+    lines := wrap(text, width)
+    mut out := List[str]()
+    for i in 0..lines.len()
+        line := lines[i]
+        padded := match mode
+            "left" => line.pad_right(width, ' ')
+            "right" => line.pad_left(width, ' ')
+            "center" => centered(line, width)
+            _ => if i + 1 < lines.len() then full_line(line, width) else line.pad_right(width, ' ')
+        out.push(padded)
+    out
+
+fn main()
+    text := "Plain text tools should be boring and predictable. A justified paragraph spreads the spare space across the gaps, and the last line stays left aligned."
+    for mode in ["left", "right", "center", "full"]
+        print("{mode}:")
+        print("+{"-".pad_right(26, '-')}+")
+        for line in layout(text, 26, mode)
+            print("|{line}|")
+
+@test fn full_line_fills_width()
+    assert_eq(full_line("a b c", 9), "a   b   c")
+    assert_eq(full_line("a b c", 8), "a   b  c")
+    assert_eq(full_line("solo", 9), "solo")
+
+@test fn every_line_has_the_width()
+    for mode in ["left", "right", "center", "full"]
+        for line in layout("one two three four five six seven", 12, mode)
+            assert_eq(line.len(), 12)
+
+@test fn right_aligns()
+    assert_eq(layout("ab", 5, "right"), ["   ab"])

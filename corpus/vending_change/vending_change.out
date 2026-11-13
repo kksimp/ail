@@ -1,0 +1,10 @@
+sale 60 paid 100: 2x20
+sale 75 paid 100: 1x25
+sale 35 paid 200: 1x100 2x25 3x5
+sale 100 paid 100: no coins
+sale 120 paid 100: paid 100 for a price of 120
+sale 45 paid 100: cannot make exact change for 55
+sale 45 paid 100: cannot make exact change for 55
+sale 10 paid 100: cannot make exact change for 90
+sale 85 paid 100: 3x5
+box left: 1 0 1 2

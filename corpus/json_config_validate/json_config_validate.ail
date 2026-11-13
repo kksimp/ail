@@ -1,0 +1,63 @@
+## Validates JSON service configs against a small schema: a non-empty `name`,
+## an integer `port` in 1..65535, an integer `workers` in 1..64 and an
+## optional `level` from a fixed list. Every problem is listed, not just the
+## first, and malformed JSON is reported as such. Documents are embedded.
+
+DOCS := r"""
+{"name": "api", "port": 8080, "workers": 8, "level": "info", "debug": false}
+{"name": "", "port": 70000, "workers": 0, "level": "loud"}
+{"name": "web", "port": "80", "workers": 4}
+{"name": "x",
+{"name": "batch", "port": 9000, "workers": 64, "level": "debug"}
+"""
+
+fn levels() List[str]
+    ["debug", "info", "warn", "error"]
+
+fn validate(text str) List[str]
+    doc := parse_json(text) else return ["not valid json"]
+    mut problems := List[str]()
+    name := doc.str("name") else ""
+    if name == ""
+        problems.push("name: required, non-empty text")
+    port := doc.int("port") else -1
+    if port < 1 or port > 65535
+        problems.push("port: need an integer in 1..65535")
+    workers := doc.int("workers") else -1
+    if workers < 1 or workers > 64
+        problems.push("workers: need an integer in 1..64")
+    level := doc.text("level", "info")
+    if not levels().contains(level)
+        problems.push("level: '{level}' is not one of {levels().join("|")}")
+    problems
+
+fn main()
+    mut bad := 0
+    mut n := 0
+    for text in DOCS.lines()
+        n += 1
+        problems := validate(text)
+        if problems.is_empty()
+            print("doc {n}: ok")
+        else
+            bad += 1
+            print("doc {n}: {problems.len()} problems")
+            for p in problems
+                print("  - {p}")
+    print("{n - bad} of {n} documents valid")
+
+@test fn good_config_has_no_problems()
+    ok := validate("\{\"name\": \"a\", \"port\": 80, \"workers\": 2}")
+    assert_eq(ok.len(), 0)
+
+@test fn bad_port_is_named()
+    got := validate("\{\"name\": \"a\", \"port\": 99999, \"workers\": 2}")
+    assert_eq(got.len(), 1)
+    assert(got[0].starts_with("port"))
+
+@test fn broken_json_is_one_problem()
+    assert_eq(validate("\{\"name\": "), ["not valid json"])
+
+@test fn unknown_level_is_rejected()
+    got := validate("\{\"name\": \"a\", \"port\": 1, \"workers\": 1, \"level\": \"x\"}")
+    assert_eq(got, ["level: 'x' is not one of debug|info|warn|error"])

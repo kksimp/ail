@@ -1,0 +1,13 @@
+79927398713            valid    other
+4111 1111 1111 1111    valid    visa
+5500-0000-0000-0004    valid    mastercard
+3782 822463 10005      valid    amex
+6011111111111117       valid    discover
+4111 1111 1111 1112    invalid  visa
+1234 5678 9012 3456    invalid  other
+12a4                   invalid  unknown
+0                      invalid  unknown
+8                      invalid  unknown
+7992739871 -> 79927398713 (true)
+411111111111111 -> 4111111111111111 (true)
+37828224631000 -> 378282246310005 (true)

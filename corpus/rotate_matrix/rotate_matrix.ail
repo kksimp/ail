@@ -1,0 +1,74 @@
+## Rotating square and rectangular matrices stored as flat row-major lists.
+## Squares rotate in place, layer by layer, by cycling four cells at a time.
+## Rectangles are rotated into a new list. Also transpose and a 180 turn.
+
+fn rotate_in_place(mut m List[int], n int)
+    for layer in 0..n / 2
+        lo := layer
+        hi := n - 1 - layer
+        for i in lo..hi
+            off := i - lo
+            saved := m[lo * n + i]
+            m[lo * n + i] = m[(hi - off) * n + lo]
+            m[(hi - off) * n + lo] = m[hi * n + hi - off]
+            m[hi * n + hi - off] = m[i * n + hi]
+            m[i * n + hi] = saved
+
+fn rotate_ccw(data List[int], rows int, cols int) List[int]
+    mut out := List[int]()
+    for i in 0..cols
+        for j in 0..rows
+            out.push(data[j * cols + cols - 1 - i])
+    out
+
+fn transpose(data List[int], rows int, cols int) List[int]
+    mut out := List[int]()
+    for i in 0..cols
+        for j in 0..rows
+            out.push(data[j * cols + i])
+    out
+
+fn turn_half(data List[int]) List[int]
+    data.reversed()
+
+fn sequence(count int) List[int]
+    [k + 1 for k in 0..count]
+
+fn show(label str, data List[int], cols int)
+    print("{label}:")
+    for r in 0..data.len() / cols
+        cells := [data[r * cols + c] for c in 0..cols]
+        line := [" {v:>2}" for v in cells].join("")
+        print(line)
+
+fn main()
+    mut sq := sequence(16)
+    show("4x4", sq, 4)
+    rotate_in_place(mut sq, 4)
+    show("4x4 clockwise", sq, 4)
+    rotate_in_place(mut sq, 4)
+    rotate_in_place(mut sq, 4)
+    rotate_in_place(mut sq, 4)
+    print("after four turns equals start: {sq == sequence(16)}")
+    odd := sequence(9)
+    mut turned := odd
+    rotate_in_place(mut turned, 3)
+    show("3x3 clockwise", turned, 3)
+    rect := sequence(15)
+    show("3x5", rect, 5)
+    show("3x5 counter-clockwise", rotate_ccw(rect, 3, 5), 3)
+    show("3x5 transposed", transpose(rect, 3, 5), 3)
+    print("half turn: {turn_half(sequence(6)).join(" ")}")
+
+@test fn two_by_two_turn()
+    mut m := [1, 2, 3, 4]
+    rotate_in_place(mut m, 2)
+    assert_eq(m, [3, 1, 4, 2])
+
+@test fn ccw_undoes_cw_on_squares()
+    mut m := sequence(9)
+    rotate_in_place(mut m, 3)
+    assert_eq(rotate_ccw(m, 3, 3), sequence(9))
+
+@test fn rectangle_turn()
+    assert_eq(rotate_ccw([1, 2, 3, 4, 5, 6], 2, 3), [3, 6, 2, 5, 1, 4])

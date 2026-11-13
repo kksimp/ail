@@ -1,0 +1,96 @@
+## Directory size summary: builds a small project tree of files with known
+## sizes in a temp directory, then walks it recursively and prints each
+## directory's total (like `du`), the totals per file extension, and the
+## largest file. Entries are visited in sorted order so output is stable.
+
+struct Found
+    name str
+    size int
+
+fn extension(name str) str
+    parts := name.split(".")
+    if parts.len() == 1
+        return "(none)"
+    parts[parts.len() - 1]
+
+fn measure(dir str, depth int, mut by_ext Map[str, int], mut files List[Found], mut lines List[str]) !int
+    mut total := 0
+    for name in fs.list_dir(dir)?.sorted()
+        child := path.join(dir, name)
+        if fs.metadata(child)?.is_dir
+            slot := lines.len()
+            lines.push("")
+            sub := measure(child, depth + 1, mut by_ext, mut files, mut lines)?
+            pad := "  ".repeat(depth)
+            lines[slot] = "{pad}{name}/ {sub}"
+            total += sub
+        else
+            size := fs.metadata(child)?.size
+            by_ext[extension(name)] += size
+            files.push(Found(name: name, size: size))
+            total += size
+    total
+
+fn add_file(root str, rel str, size int) !
+    fs.write_text(path.join(root, rel), "x".repeat(size))?
+
+fn remove_tree(dir str) !
+    for name in fs.list_dir(dir)?
+        child := path.join(dir, name)
+        if fs.metadata(child)?.is_dir
+            remove_tree(child)?
+        else
+            fs.remove(child)?
+    fs.remove(dir)?
+
+fn build(root str) !
+    fs.make_dir(path.join(root, "src/util"))?
+    fs.make_dir(path.join(root, "assets"))?
+    add_file(root, "README", 120)?
+    add_file(root, "src/main.ail", 900)?
+    add_file(root, "src/lexer.ail", 1500)?
+    add_file(root, "src/util/strings.ail", 640)?
+    add_file(root, "src/util/notes.txt", 75)?
+    add_file(root, "assets/logo.png", 2048)?
+    add_file(root, "assets/icon.png", 512)?
+
+fn main() !
+    root := fs.make_temp_dir("corpus_dir_size_summary")?
+    build(root)?
+    mut by_ext := Map[str, int]()
+    mut files := List[Found]()
+    mut lines := List[str]()
+    total := measure(root, 0, mut by_ext, mut files, mut lines)?
+    for l in lines
+        print(l)
+    print("total {total} bytes in {files.len()} files")
+    for ext in by_ext.keys().sorted()
+        print("{ext:<8}{by_ext[ext]:>6}")
+    big := files.sorted(by: |f| -f.size)[0]
+    print("largest: {big.name} ({big.size})")
+    remove_tree(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn extension_of_names()
+    assert_eq(extension("a.tar.gz"), "gz")
+    assert_eq(extension("Makefile"), "(none)")
+
+@test fn measures_a_tree()
+    root := fs.make_temp_dir("corpus_dir_size_summary_t")?
+    build(root)?
+    mut by_ext := Map[str, int]()
+    mut files := List[Found]()
+    mut lines := List[str]()
+    total := measure(root, 0, mut by_ext, mut files, mut lines)?
+    assert_eq(total, 5795)
+    assert_eq(files.len(), 7)
+    assert_eq(by_ext["png"], 2560)
+    remove_tree(root)?
+
+@test fn empty_directory_is_zero()
+    root := fs.make_temp_dir("corpus_dir_size_summary_e")?
+    mut by_ext := Map[str, int]()
+    mut files := List[Found]()
+    mut lines := List[str]()
+    assert_eq(measure(root, 0, mut by_ext, mut files, mut lines)?, 0)
+    remove_tree(root)?

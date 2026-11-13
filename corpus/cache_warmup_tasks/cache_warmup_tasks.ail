@@ -1,0 +1,72 @@
+## Cache warm-up: worker tasks fill a shared cache (a mutex-protected map)
+## with the value of each key they are given. The check and the insert happen
+## under one lock, so every distinct key is computed exactly once even when
+## workers overlap; atomic counters track computed and skipped keys. A second
+## warm-up finds everything cached, then lookups count hits and misses.
+
+fn slow_value(key str) int
+    mut h := 7
+    for c in key.chars()
+        h = (h * 31 + c.code()) % 100003
+    h
+
+fn warm(keys List[str], cache Mutex[Map[str, int]], computed Atomic[int], skipped Atomic[int])
+    for key in keys
+        with cache as mut c
+            if c.contains(key)
+                skipped.add(1)
+            else
+                c[key] = slow_value(key)
+                computed.add(1)
+
+fn warm_up(shards List[List[str]], cache Mutex[Map[str, int]]) !List[int]
+    computed := Atomic(0)
+    skipped := Atomic(0)
+    g := TaskGroup()
+    for keys in shards
+        g.add(spawn warm(keys, cache, computed, skipped))
+    g.wait_all()?
+    [computed.load(), skipped.load()]
+
+fn lookup_all(queries List[str], cache Mutex[Map[str, int]]) List[int]
+    snapshot := cache.get()
+    mut hits := 0
+    mut misses := 0
+    for q in queries
+        if snapshot.contains(q)
+            hits += 1
+        else
+            misses += 1
+    [hits, misses]
+
+fn main() !
+    shards := [
+        ["alpha", "beta", "gamma", "delta"],
+        ["gamma", "epsilon", "alpha"],
+        ["zeta", "beta", "eta", "theta"],
+    ]
+    cache := Mutex(Map[str, int]())
+    first := warm_up(shards, cache)?
+    print("first warm-up: computed {first[0]}, skipped {first[1]}")
+    second := warm_up(shards, cache)?
+    print("second warm-up: computed {second[0]}, skipped {second[1]}")
+    snapshot := cache.get()
+    for key in snapshot.keys().sorted()
+        print("{key:<8}{snapshot[key]:>6}")
+    got := lookup_all(["alpha", "omega", "eta", "kappa", "zeta"], cache)
+    print("lookups: {got[0]} hits, {got[1]} misses")
+
+@test fn value_is_stable()
+    assert_eq(slow_value("a"), slow_value("a"))
+    assert(slow_value("a") != slow_value("b"))
+
+@test fn overlapping_shards_compute_each_key_once()
+    cache := Mutex(Map[str, int]())
+    got := warm_up([["a", "b", "c"], ["b", "c", "d"], ["a", "d"]], cache)?
+    assert_eq(got, [4, 4])
+    assert_eq(cache.get().len(), 4)
+
+@test fn lookups_count_hits_and_misses()
+    cache := Mutex(Map[str, int]())
+    _ := warm_up([["x", "y"]], cache)?
+    assert_eq(lookup_all(["x", "q", "y", "z"], cache), [2, 2])
