@@ -633,7 +633,7 @@ fn Lower.generic_struct(
     s := gt.sdecl else return unsupported(pos, "this call")
     mut binds := explicit_binds(gt.params, targs, pos)?
     binds_from_want(g, gt.params, want, mut binds)
-    if args.len() != s.fields.len()
+    if args.len() != s.fields.len() and not has_defaults(g)
         return unsupported(pos, "`{s.name}(...)` without every field")
     mut at := List[int]()
     mut vs := List[Val]()
@@ -658,6 +658,8 @@ fn Lower.generic_struct(
     mut ids := [-1 for _ in slots]
     for k in 0..vs.len()
         ids[at[k]] = convert(vs[k], slots[at[k]].ty, expr_pos(args[k].value))
+    if not fill_defaults(key, slots, mut ids)
+        return none
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..ids.len()
         store(obj, k, ids[k])
