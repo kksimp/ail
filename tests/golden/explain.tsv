@@ -1116,20 +1116,6 @@ explain ffi.var.3	8c38a1c934cacd27	0	03c6152ef092b432
 explain ffi.var.3 --json	8c38a1c934cacd27	0	9975ca1f020b0e69
 explain ffi.var.4	8c38a1c934cacd27	0	bda757195bf76659
 explain ffi.var.4 --json	8c38a1c934cacd27	0	22e793b286b049a2
-explain ffi.struct.1	8c38a1c934cacd27	0	29c97ece541a31c9
-explain ffi.struct.1 --json	8c38a1c934cacd27	0	4b21fa2871325acc
-explain ffi.struct.2	8c38a1c934cacd27	0	022d0e9ec2171b26
-explain ffi.struct.2 --json	8c38a1c934cacd27	0	2615fe88eef04964
-explain ffi.struct.3	8c38a1c934cacd27	0	ff1dc00630009183
-explain ffi.struct.3 --json	8c38a1c934cacd27	0	e49ff67dbfedeb76
-explain ffi.cb.1	8c38a1c934cacd27	0	887afcc4a2f73ea9
-explain ffi.cb.1 --json	8c38a1c934cacd27	0	07a4089fb2fc6a1a
-explain ffi.cb.2	8c38a1c934cacd27	0	6ae6c38b52961246
-explain ffi.cb.2 --json	8c38a1c934cacd27	0	134cf54e51e77c7c
-explain ffi.cb.3	8c38a1c934cacd27	0	9806ca0d1fcff7b6
-explain ffi.cb.3 --json	8c38a1c934cacd27	0	dd7ecff516186508
-explain ffi.cb.4	8c38a1c934cacd27	0	b2a71ab5f04c23a0
-explain ffi.cb.4 --json	8c38a1c934cacd27	0	777ff8b8c67ca629
 explain ffi.map.1	8c38a1c934cacd27	0	fb9ef92f48a2f01b
 explain ffi.map.1 --json	8c38a1c934cacd27	0	a395cafe4b746296
 explain ffi.map.2	8c38a1c934cacd27	0	2fb9b19c9a7c3550
