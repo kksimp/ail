@@ -332,7 +332,11 @@ change in the loop, `k` is a constant from 0 to 64, and `xs` is a list that
 the loop does not resize or whose elements it does not replace through
 another name: the loop is versioned on `0 <= y` and `y < len - k`, and the
 original loop, which traps at the same access with the same message, runs
-when they do not hold. *(ADR 0816)*
+when they do not hold. When the counted loops around the loop keep `y` within
+`lo..=hi` with `lo >= 0` (their counters run between constants, and a counter
+is below its bound everywhere in its loop but the header), the test may
+instead be `hi + k < len`, one test per list with the largest such index.
+*(ADR 0816, ADR 1080)*
 
 ```ail rules=native.bce.10
 fn main()
