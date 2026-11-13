@@ -380,7 +380,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
 
 - Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
   align (numbers default right, others left); `.N` needs a float, `x` an int.
-- `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?`,
+- `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?` (`"ff".to_int(16)` reads another base),
   `"2.5".to_float()` a `float?`.
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
@@ -406,7 +406,7 @@ n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
-Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`; `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; descending is `xs.sorted().reversed()`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`. Slices
 don't clamp and negative indexes are errors. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)`, also `sort`, `min`, `max`.
@@ -439,7 +439,7 @@ mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
 mut counts := {}                       # typed by first use: counts[w] += 1
-b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
+b := ages.get("dan") else 0            # `ages["dan"]` traps if missing; same: `ages.get_or("dan", 0)`
 for name, age in ages                  # each entry; also keys(), values()
     print("{name}: {age}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
@@ -543,23 +543,28 @@ fn main()
 ## Tests
 
 ```ail
+use std.fs
+
 fn double(x int) int
     x * 2
 
 @test fn doubles()                  # `ail test`; `?` works inside a test
     assert_eq(double(4), 8)         # traps showing both values
-    assert(double(1) == 2)
+    assert(double(1) == 2, "message")   # optional `str` message
+    assert_near(0.1 + 0.2, 0.3, 0.0001) # three floats: |a - b| <= eps
+    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
-```ail fragment
+```ail
 @fixture("drop")                    # made per test run, `drop` always runs after it
 fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
     "x"
 
 fn drop(v str)                      # takes the value, returns nothing
+    print("dropped {v}")
 
 @test @needs("tmp")
 fn uses(tmp str)                    # parameter named like the fixture
@@ -570,15 +575,15 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 ## Packages, effects and the system
 
-`ail.pkg` lists the package and its `dep`s; each `dep` reaches only its `caps` (spec `mod.pkg.*`).
+`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.1` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
-one. A call whose value is dropped and that has no effect is an error: `xs.sorted()` alone
+one; `@caps(fs)` limits a function to the listed capabilities and everything it calls, `@caps(none)` allows none (`eff.cap.6`). A call whose value is dropped and that has no effect is an error: `xs.sorted()` alone
 means `xs.sort()`; write `_ := f()` to drop a value on purpose (`eff.use.1`).
 `ail run --deterministic` denies `clock`, `random`, `proc` and `net`. `ail run --allow fs.read=./data,net=host:443` allows only what it names, and a use outside the scope ends with `trap[eff.allow.N]`.
 
-`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`. Structs of C-typed fields pass to C by value; a `fn(...)` parameter of an `extern c fn` takes a declared function's name as a callback (`mem.c_fn(f)` gives a `*u8`).
+`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`.
 
 A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
 

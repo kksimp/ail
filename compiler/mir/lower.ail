@@ -1130,7 +1130,7 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
-    if is_pop_call(value)
+    if is_list_pop(value)
         got := lower_pop_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
             return
@@ -1263,7 +1263,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             note_statement(e)
-            if is_pop_call(e) and lower_pop_stmt(e) != none
+            if is_list_pop(e) and lower_pop_stmt(e) != none
                 return
             uniq_discard(e, lower_expr(e, Ty.Unit))
         Handle(value, other) => lower_handle(value, other)
@@ -1907,7 +1907,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if name == "zip" and not sigs.contains(key)
                 return lower_zip(args, pos)
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
-            if c_call_site(key)
+            if variadic_decl(key)
                 return lower_variadic(key, sig, args, pos, npos)
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")

@@ -120,6 +120,11 @@ List.clear() [mut self] ; type.coll.14 ; remove all empty
 List.reverse() [mut self] ; type.coll.14 ; reverse in place flip order
 List.reversed() List[T] ; type.coll.27 ; reversed copy reverse order descending new list
 List.any(f) bool ; type.coll.22 ; any some exists predicate test true for one element
+List.all(f) bool ; type.coll.22 ; all every each predicate test true for every element
+List.find(f) T? ; type.coll.23 ; find first element matching predicate search lookup
+List.filter(f) List[T] ; type.coll.24 ; filter keep select elements matching predicate where
+List.map(f) List[U] ; type.coll.25 ; map transform each element apply function convert list
+List.group_by(f) Map[K, List[T]] ; type.coll.26 ; group bucket partition by key categorize
 List.swap(i, j) [mut self] ; type.coll.7 ; swap exchange two elements
 List.contains(x) bool ; type.coll.9 ; contains includes has member
 List.index_of(x) int? ; type.coll.9 ; index position search find element
@@ -145,6 +150,7 @@ List.difference(ys) Set[T] ; type.coll.16 ; difference except minus sets
 Map.len() int ; type.map.6 ; length size count entries
 Map.is_empty() bool ; type.coll.20 ; empty length zero
 Map.get(k) V? ; type.map.6 ; lookup read value for key optional default else
+Map.get_or(k, d) V ; type.map.12 ; lookup value for key with default fallback
 Map.contains(k) bool ; type.map.6 ; has key contains member
 Map.remove(k) V? [mut self] ; type.map.6 ; delete remove entry key
 Map.keys() List[K] ; type.map.6 ; keys list iterate

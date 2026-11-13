@@ -130,8 +130,8 @@ imply `a == b`. *(ADR 0130)*
 
 ```ail fragment
 n := 0.0 / 0.0
-[2.0, n, 1.0].sorted()  # [1.0, 2.0, nan]
-n < 1.0                 # false: the operator is IEEE
+print([2.0, n, 1.0].sorted())  # [1.0, 2.0, nan]
+print(n < 1.0)                 # false: the operator is IEEE
 ```
 
 > **Note:** float literal patterns are an error (`expr.match.7`). The same
@@ -155,9 +155,9 @@ values are the default methods of `Ord` (ADR 0137).
 
 ```ail fragment
 x := 9223372036854775807
-x.checked_add(1)        # none
-x.wrapping_add(1)       # -9223372036854775808
-x.saturating_add(1)     # 9223372036854775807
+print(x.checked_add(1))        # none
+print(x.wrapping_add(1))       # -9223372036854775808
+print(x.saturating_add(1))     # 9223372036854775807
 ```
 
 **type.num.13** — A sized number is a value of one of the types of
@@ -798,11 +798,11 @@ arguments; a `char` means the one-character string. `strip_prefix` and
   `str?`, or `none` when `s` doesn't start (end) with `p`.
 
 ```ail fragment
-"a\r\nb\n".lines()             # ["a", "b"]
-"a\n\n".lines()                # ["a", ""]
-"  hi ".trim()                # hi
-"key=v".strip_prefix("key=")  # v
-"h\u{e9}".chars()              # ['h', 'é']
+print("a\r\nb\n".lines())      # ["a", "b"]
+print("a\n\n".lines())         # ["a", ""]
+print("  hi ".trim())         # hi
+print("key=v".strip_prefix("key=")) # v
+print("h\u{e9}".chars())       # ['h', 'é']
 ```
 
 **type.str.8** — `s.to_float()` returns a `float?` (`type.num.8`).
@@ -817,8 +817,8 @@ characters (scalar values). A string already that wide, or any string when
 arguments. *(ADR 0135)*
 
 ```ail fragment
-"7".pad_left(3, '0')        # 007
-"ab".pad_right(4, ' ')      # "ab  "
+print("7".pad_left(3, '0')) # 007
+print("ab".pad_right(4, ' ')) # "ab  "
 ```
 
 **type.str.16** — `s.center(width, fill)` pads with copies of the `char` `fill`
@@ -1111,11 +1111,11 @@ outside the scalar range. The diagnostics for `ord(c)`, `chr(n)` and
 
 ```ail fragment
 c := 'f'
-c.is_alpha()            # true
-c.to_digit(16)          # 15
-c.to_digit(10)          # none
-c.code()                # 102
-char.from_code(0x41)    # 'A'
+print(c.is_alpha())     # true
+print(c.to_digit(16))   # 15
+print(c.to_digit(10))   # none
+print(c.code())         # 102
+print(char.from_code(0x41)) # 'A'
 ```
 
 ## Collections
@@ -1178,9 +1178,9 @@ names := List[str]()
 
 ```ail fragment
 xs := ["a", "b"]
-xs.join(", ")           # a, b
-[1, 2, 3].join("")      # 123
-xs.index_of("b")        # 1
+print(xs.join(", "))    # a, b
+print([1, 2, 3].join("")) # 123
+print(xs.index_of("b")) # 1
 ```
 
 **type.coll.14** — A list has these further methods. *(ADR 0214)*
@@ -1385,7 +1385,7 @@ mut seen := Set[str]()
 first := seen.add("a")  # true
 again := seen.add("a")  # false: already there
 mut ages := {"ann": 31, "bob": 27}
-ages.get("cy")          # none
+print(ages.get("cy"))   # none
 for k in ages.keys()
     print("{k}: {ages[k]}")
 ```

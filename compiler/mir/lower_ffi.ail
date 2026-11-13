@@ -50,10 +50,6 @@ fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
     if ffi_k >= FFI_CELLS
         problem(f.pos, "`extern c fn {f.name}`: more than {FFI_CELLS} C functions in one program")
         return
-    # A struct by value goes through the runtime's call frame (ffi.struct.2).
-    if cs_needed(sig)
-        lower_extern_cs(f, name, params, sig)
-        return
     mut ints := 0
     mut floats := 0
     for t in sig.params
@@ -108,9 +104,7 @@ fn Lower.variadic_decl(self, key str) bool
 ## register count on System V, Win64 repeats a float in the paired integer
 ## register, and Apple arm64 passes all variadic arguments on the stack. Other
 ## targets use the plain C convention. This is the entry for any variadic
-## prototype, including one imported from a C header (`ffi.decl.1`). A C
-## function with a `fn` parameter is called here too, as `c`, so that the
-## callback's argument is the C entry of the function it names (ffi.cb.2).
+## prototype, including one imported from a C header (`ffi.decl.1`).
 fn Lower.lower_variadic(
     mut self,
     key str,
@@ -121,7 +115,7 @@ fn Lower.lower_variadic(
 ) Val?
     f := fn_decl.get(key) else return unsupported(npos, "this call")
     nfixed := sig.params.len()
-    if args.len() < nfixed or (args.len() > nfixed and not variadic_decl(key))
+    if args.len() < nfixed
         return unsupported(pos, "this call")
     if ffi_k >= FFI_CELLS
         return unsupported(pos, "more than {FFI_CELLS} C functions")
@@ -132,11 +126,6 @@ fn Lower.lower_variadic(
         if a.label != none
             return unsupported(pos, "labelled arguments")
         mut v := Val(id: -1, ty: Ty.Unit)
-        if k < nfixed and sig.params[k].is_fn()
-            # A callback: the C entry of the function named (ffi.cb.2).
-            cbv := cb_arg(a.value)?
-            vs.push(cbv.id)
-            continue
         if k < nfixed
             v = lower_value(a.value, sig.params[k])?
             retype_arg(a.value, v, sig.params[k])
@@ -145,23 +134,18 @@ fn Lower.lower_variadic(
             v = lower_value(a.value, none)?
         if v.ty == Ty.Float or v.ty == Ty.F32
             floats += 1
-        # A named C `float` takes the single in its register (ffi.map.1); the
-        # runtime's call frame narrows it itself (ffi.struct.2).
-        if k < nfixed and sig.params[k] == Ty.F32 and not cs_needed(sig)
+        # A named C `float` takes the single in its register (ffi.map.1).
+        if k < nfixed and sig.params[k] == Ty.F32
             vs.push(call("rt.ffi_f32_arg", [v.id], Ty.Float))
         else
             vs.push(v.id)
     if floats > 8
         return unsupported(pos, "more than 8 float arguments in a C call")
     lib := if e := f.ext then e.lib else none
-    variadic := variadic_decl(key)
-    addr := ffi_bound(lib, f.name, f.pos)
-    if cs_needed(sig) and not variadic
-        return cs_call(addr, sig, vs, pos)
-    mut cargs := [addr]
+    mut cargs := [ffi_bound(lib, f.name, f.pos)]
     cargs.extend(vs)
     mut i := inst(-1, "icall", cargs)
-    i.name = if variadic then "cv{nfixed}" else "c"
+    i.name = "cv{nfixed}"
     if not is_rt
         i.imm = call_pos(file, pos.line, pos.col)
     if sig.ret.is_unit()
