@@ -1,0 +1,23 @@
+stocked A1 with 5 cola
+stocked A2 with 3 chips
+stocked B1 with 2 water
+! stock B2 gum 50 99: slot B2 would overflow
+sold cola, change: 2x25
+! buy A1 100: need 150, got 100
+sold chips, change: 4x100
+sold water, change: no change
+sold water, change: no change
+! buy B1 125: slot B1 is sold out
+! buy C9 100: no slot C9
+B1 now holds 4
+! restock A1 9: slot A1 would overflow
+chips now costs 1.10
+! buy A2 100: need 110, got 100
+sold chips, change: no change
+! refund A2: bad command 'refund A2'
+! price A1 0: bad command 'price A1 0'
+! stock A3 mints x 5: bad command 'stock A3 mints x 5'
+A1 cola   price 1.50 qty 4 sold 1
+A2 chips  price 1.10 qty 1 sold 2 LOW
+B1 water  price 1.25 qty 4 sold 2
+revenue 6.10

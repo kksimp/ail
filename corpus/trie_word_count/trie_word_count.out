@@ -1,0 +1,9 @@
+words: 20, nodes: 30
+and=2 cat=2 hat=2 mat=1 on=1 ran=2 sat=1 thatch=1 the=6 then=1 to=1
+prefix th: 8 words, exact 0
+prefix t: 9 words, exact 0
+prefix ca: 2 words, exact 0
+prefix h: 2 words, exact 0
+prefix x: 0 words, exact 0
+prefix the: 7 words, exact 6
+prefix that: 1 words, exact 0

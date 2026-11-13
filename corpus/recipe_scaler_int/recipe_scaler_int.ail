@@ -1,0 +1,105 @@
+## Recipe scaler in integer arithmetic. Ingredient lines are "QTY UNIT NAME"
+## (units g, ml, tbsp, tsp, pc). Scaling from one serving count to another
+## rounds half up and never drops a used ingredient to zero. Amounts print in
+## friendly units: kg/l above 1000, tbsp when whole teaspoon thirds line up.
+
+enum Unit
+    Gram
+    Milli
+    Tbsp
+    Tsp
+    Piece
+
+error enum ScaleError
+    BadLine(text str) "cannot read '{text}'"
+    UnknownUnit(name str) "unknown unit {name}"
+    BadServings(count int) "cannot scale to {count} servings"
+
+struct Ingredient
+    qty int
+    unit Unit
+    name str
+
+fn parse_unit(s str) Unit ! ScaleError
+    if s == "g"
+        return Unit.Gram
+    if s == "ml"
+        return Unit.Milli
+    if s == "tbsp"
+        return Unit.Tbsp
+    if s == "tsp"
+        return Unit.Tsp
+    if s == "pc"
+        return Unit.Piece
+    return UnknownUnit(name: s)
+
+fn parse_line(line str) Ingredient ! ScaleError
+    p := line.words()
+    if p.len() < 3
+        return BadLine(text: line)
+    n := p[0].to_int() else return BadLine(text: line)
+    u := parse_unit(p[1])?
+    Ingredient(qty: n, unit: u, name: p[2])
+
+fn scale_qty(q int, old int, want int) int
+    requires old > 0
+    scaled := (q * want * 2 + old) / (2 * old)
+    if q > 0 and scaled == 0
+        return 1
+    scaled
+
+fn thousandths(q int, big str) str
+    whole := q / 1000
+    frac := q % 1000
+    "{whole}.{frac:0>3} {big}"
+
+fn show(q int, u Unit) str
+    match u
+        Gram => if q >= 1000 then thousandths(q, "kg") else "{q} g"
+        Milli => if q >= 1000 then thousandths(q, "l") else "{q} ml"
+        Tbsp => "{q} tbsp"
+        Tsp => if q >= 3 and q % 3 == 0 then "{q / 3} tbsp" else "{q} tsp"
+        Piece => "{q} pc"
+
+fn scale_recipe(lines List[str], old int, want int) List[str] ! ScaleError
+    if want < 1 or old < 1
+        return BadServings(count: want)
+    mut out := List[str]()
+    for line in lines
+        item := parse_line(line)?
+        label := item.name.pad_right(8, ' ')
+        amount := show(scale_qty(item.qty, old, want), item.unit)
+        out.push("{label}{amount}")
+    out
+
+fn main()
+    base := ["200 g flour", "300 ml milk", "2 pc egg", "1 tsp salt", "2 tbsp sugar", "40 g butter"]
+    for servings in [4, 6, 1, 20, 0]
+        print("serves {servings}:")
+        rows := scale_recipe(base, 4, servings) else err
+            print("  error: {err}")
+            continue
+        for row in rows
+            print("  {row}")
+    for bad in [["5 cups rice"], ["x g salt"], ["3 g"]]
+        done := scale_recipe(bad, 1, 2) else err
+            print("error: {err}")
+            continue
+        print(done.len())
+
+@test fn rounds_half_up()
+    assert_eq(scale_qty(3, 2, 1), 2)
+    assert_eq(scale_qty(1, 4, 1), 1)
+    assert_eq(scale_qty(1, 10, 1), 1)
+    assert_eq(scale_qty(0, 4, 8), 0)
+
+@test fn friendly_units()
+    assert_eq(show(1500, Unit.Gram), "1.500 kg")
+    assert_eq(show(999, Unit.Milli), "999 ml")
+    assert_eq(show(6, Unit.Tsp), "2 tbsp")
+    assert_eq(show(4, Unit.Tsp), "4 tsp")
+
+@test fn parse_errors()
+    assert_err(parse_line("2 cups tea"))
+    assert_err(parse_line("two g tea"))
+    assert_err(scale_recipe(["1 g a"], 2, 0))

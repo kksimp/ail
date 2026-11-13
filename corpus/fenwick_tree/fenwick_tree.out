@@ -1,0 +1,11 @@
+prefix sums: [1, 5, 7, 9, 13, 14, 14, 15, 19, 21]
+range 3..7 = 9
+range 1..10 = 21
+after add 10 at 4: range 3..7 = 19
+k-th smallest, k=1: 1
+k-th smallest, k=4: 3
+k-th smallest, k=6: 4
+k-th smallest, k=11: 8
+inversions: 23 (slow check 23)
+sorted input: 0
+reversed input: 10

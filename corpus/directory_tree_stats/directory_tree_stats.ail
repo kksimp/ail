@@ -1,0 +1,102 @@
+## Directory tree stats: builds a small tree in a temp directory and gathers
+## statistics in one recursive walk: files and directories per depth, empty
+## directories, the deepest file, the file count per extension and the
+## directory with the most direct entries.
+
+struct Stats
+    files_at List[int]
+    dirs_at List[int]
+    empty_dirs int
+    deepest str
+    deepest_depth int
+    ext_counts Map[str, int]
+    busiest str
+    busiest_count int
+
+fn grow(mut st Stats, depth int)
+    while st.files_at.len() <= depth
+        st.files_at.push(0)
+        st.dirs_at.push(0)
+
+fn extension(name str) str
+    parts := name.split(".")
+    if parts.len() == 1
+        return "none"
+    parts[parts.len() - 1]
+
+fn walk(dir str, rel str, depth int, mut st Stats) !
+    names := fs.list_dir(dir)?.sorted()
+    if names.is_empty()
+        st.empty_dirs += 1
+    if names.len() > st.busiest_count
+        st.busiest = if rel == "" then "." else rel
+        st.busiest_count = names.len()
+    for name in names
+        child := path.join(dir, name)
+        label := if rel == "" then name else "{rel}/{name}"
+        if fs.metadata(child)?.is_dir
+            grow(mut st, depth)
+            st.dirs_at[depth] += 1
+            walk(child, label, depth + 1, mut st)?
+        else
+            grow(mut st, depth)
+            st.files_at[depth] += 1
+            st.ext_counts[extension(name)] += 1
+            if depth > st.deepest_depth
+                st.deepest = label
+                st.deepest_depth = depth
+
+fn build(root str, files List[str]) !
+    for rel in files
+        full := path.join(root, rel)
+        fs.write_text(full, "data")?
+
+fn remove_tree(dir str) !
+    for name in fs.list_dir(dir)?
+        child := path.join(dir, name)
+        if fs.metadata(child)?.is_dir
+            remove_tree(child)?
+        else
+            fs.remove(child)?
+    fs.remove(dir)?
+
+fn collect(root str) !Stats
+    mut st := Stats(files_at: [], dirs_at: [], empty_dirs: 0, deepest: "", deepest_depth: -1, ext_counts: {}, busiest: "", busiest_count: 0)
+    walk(root, "", 0, mut st)?
+    st
+
+fn main() !
+    root := fs.make_temp_dir("corpus_directory_tree_stats")?
+    for d in ["src/core/deep", "docs", "empty/inner", "tests"]
+        fs.make_dir(path.join(root, d))?
+    build(root, ["Makefile", "src/main.ail", "src/util.ail", "src/core/lex.ail", "src/core/deep/x.tmp", "docs/a.md", "docs/b.md", "docs/c.md", "tests/t1.ail"])?
+    st := collect(root)?
+    for lvl in 0..st.files_at.len()
+        dirs := if lvl < st.dirs_at.len() then st.dirs_at[lvl] else 0
+        print("depth {lvl}: {st.files_at[lvl]} files, {dirs} dirs")
+    print("empty dirs: {st.empty_dirs}")
+    print("deepest file: {st.deepest} (depth {st.deepest_depth})")
+    print("busiest dir: {st.busiest} with {st.busiest_count} entries")
+    for ext in st.ext_counts.keys().sorted()
+        print("  .{ext}: {st.ext_counts[ext]}")
+    remove_tree(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn grow_extends_both_lists()
+    mut st := Stats(files_at: [], dirs_at: [], empty_dirs: 0, deepest: "", deepest_depth: -1, ext_counts: {}, busiest: "", busiest_count: 0)
+    grow(mut st, 2)
+    st.files_at[2] += 1
+    assert_eq(st.files_at, [0, 0, 1])
+    assert_eq(st.dirs_at, [0, 0, 0])
+
+@test fn extensions()
+    assert_eq(extension("a.b.rs"), "rs")
+    assert_eq(extension("Makefile"), "none")
+
+@test fn empty_tree_has_one_empty_dir()
+    root := fs.make_temp_dir("corpus_directory_tree_stats_t")?
+    st := collect(root)?
+    assert_eq(st.empty_dirs, 1)
+    assert_eq(st.files_at.len(), 0)
+    assert_eq(st.deepest_depth, -1)
+    remove_tree(root)?

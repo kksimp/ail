@@ -1,0 +1,93 @@
+## CSV split by key: splits one CSV into a file per distinct value of a key
+## column (like `split --by region`), each file keeping the header. The pieces
+## are written to a temp directory, read back, and totalled per key.
+
+fn sample() str
+    rows := [
+        "region,item,qty",
+        "north,bolt,12",
+        "south,nut,7",
+        "north,washer,30",
+        "east,bolt,5",
+        "south,bolt,9",
+        "north,nut,4",
+        "",
+        "east,screw,x",
+    ]
+    rows.join("\n")
+
+## Groups data rows by the value in column `col`; rows too short are skipped.
+fn group_rows(text str, col int) Map[str, List[str]]
+    mut groups := Map[str, List[str]]()
+    mut first := true
+    for line in text.lines()
+        if first
+            first = false
+            continue
+        if line.trim() == ""
+            continue
+        cells := line.split(",")
+        if cells.len() <= col
+            continue
+        groups.push(cells[col], line)
+    groups
+
+fn safe_name(key str) str
+    "part_{key.to_lower()}.csv"
+
+fn write_parts(dir str, header str, groups Map[str, List[str]]) !List[str]
+    mut names := List[str]()
+    for key in groups.keys().sorted()
+        name := safe_name(key)
+        body := "{header}\n{groups[key].join("\n")}\n"
+        fs.write_text(path.join(dir, name), body)?
+        names.push(name)
+    names
+
+## Sum of the numeric last column; rows with a bad number count as zero.
+fn total_qty(text str) int
+    mut sum := 0
+    mut first := true
+    for line in text.lines()
+        if first
+            first = false
+            continue
+        cells := line.split(",")
+        qty := cells[cells.len() - 1].to_int() else 0
+        sum += qty
+    sum
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_csv_split_by_key")?
+    text := sample()
+    header := text.lines()[0]
+    groups := group_rows(text, 0)
+    names := write_parts(dir, header, groups)?
+    print("wrote {names.len()} files for key 'region'")
+    mut grand := 0
+    for name in names
+        body := fs.read_text(path.join(dir, name))?
+        rows := body.lines().len() - 1
+        sub := total_qty(body)
+        grand += sub
+        print("{name:<16}{rows:>2} rows  qty {sub:>3}")
+    print("grand total {grand}, original {total_qty(text)}")
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn groups_by_column()
+    g := group_rows("k,v\na,1\nb,2\na,3", 0)
+    assert_eq(g["a"], ["a,1", "a,3"])
+    assert_eq(g["b"].len(), 1)
+    assert_eq(g.len(), 2)
+
+@test fn short_rows_are_skipped()
+    g := group_rows("k,v\n\nx,1", 0)
+    assert_eq(g.len(), 1)
+    assert_eq(group_rows("k,v\na,1", 5).len(), 0)
+
+@test fn totals_ignore_bad_numbers()
+    assert_eq(total_qty("h,q\na,4\nb,zz\nc,6"), 10)
+    assert_eq(safe_name("North"), "part_north.csv")

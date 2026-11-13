@@ -1,0 +1,120 @@
+## CSV validator: checks a CSV text against a typed header such as
+## "id:int,name:text,email:email,joined:date". Reports wrong field counts, bad
+## integers, malformed e-mail addresses, impossible dates and duplicate ids,
+## each with its line number.
+
+fn is_int(s str) bool
+    cs := s.chars()
+    mut start := 0
+    if not cs.is_empty() and cs[0] == '-'
+        start = 1
+    if cs.len() <= start
+        return false
+    for i in start..cs.len()
+        if not cs[i].is_digit()
+            return false
+    true
+
+fn all_digits(s str) bool
+    if s.is_empty()
+        return false
+    for c in s.chars()
+        if not c.is_digit()
+            return false
+    true
+
+fn days_in_month(y int, m int) int
+    if m == 2
+        leap := y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
+        if leap
+            return 29
+        return 28
+    if m == 4 or m == 6 or m == 9 or m == 11
+        return 30
+    31
+
+fn valid_date(s str) bool
+    parts := s.split("-")
+    if parts.len() != 3
+        return false
+    if parts[0].len() != 4 or parts[1].len() != 2 or parts[2].len() != 2
+        return false
+    if not (all_digits(parts[0]) and all_digits(parts[1]) and all_digits(parts[2]))
+        return false
+    y := parts[0].to_int() else return false
+    m := parts[1].to_int() else return false
+    d := parts[2].to_int() else return false
+    m >= 1 and m <= 12 and d >= 1 and d <= days_in_month(y, m)
+
+fn valid_email(s str) bool
+    parts := s.split("@")
+    if parts.len() != 2 or parts[0].is_empty() or parts[1].is_empty()
+        return false
+    domain := parts[1]
+    dot := domain.find(".") else return false
+    dot > 0 and not domain.ends_with(".")
+
+## Returns "" when the cell is fine, otherwise a short message.
+fn check_cell(kind str, v str) str
+    match kind
+        "int" => if is_int(v) then "" else "not an integer"
+        "email" => if valid_email(v) then "" else "bad e-mail address"
+        "date" => if valid_date(v) then "" else "bad date"
+        _ => if v.trim().is_empty() then "empty" else ""
+
+fn validate(text str) List[str]
+    lines := text.split("\n")
+    mut problems := List[str]()
+    mut names := List[str]()
+    mut kinds := List[str]()
+    for col in lines[0].split(",")
+        pair := col.split(":")
+        names.push(pair[0])
+        kinds.push(pair[1])
+    mut seen := Set[str]()
+    for i in 1..lines.len()
+        cells := lines[i].split(",")
+        line_no := i + 1
+        if cells.len() != names.len()
+            problems.push("line {line_no}: expected {names.len()} fields, found {cells.len()}")
+            continue
+        for j in 0..cells.len()
+            msg := check_cell(kinds[j], cells[j])
+            if msg != ""
+                problems.push("line {line_no}: {names[j]} '{cells[j]}': {msg}")
+        if names[0] == "id" and not seen.add(cells[0])
+            problems.push("line {line_no}: duplicate id {cells[0]}")
+    problems
+
+fn main()
+    text := [
+        "id:int,name:text,email:email,joined:date",
+        "1,Ann,ann@example.com,2024-02-29",
+        "2,Bob,bob@example,2023-13-01",
+        "3,,cy@mail.org,2023-02-29",
+        "x4,Dee,dee@site.io,2022-12-31",
+        "5,Eve,eve@site.io",
+        "1,Fay,fay@site.io,2021-04-31",
+        "6,Gus,@site.io,2020-06-30",
+    ].join("\n")
+    problems := validate(text)
+    for p in problems
+        print(p)
+    rows := text.split("\n").len() - 1
+    print("{rows} rows checked, {problems.len()} problems")
+
+@test fn dates()
+    assert(valid_date("2024-02-29"))
+    assert(not valid_date("2023-02-29"))
+    assert(not valid_date("2023-4-01"))
+    assert(valid_date("2000-02-29"))
+    assert(not valid_date("1900-02-29"))
+
+@test fn emails()
+    assert(valid_email("a@b.co"))
+    assert(not valid_email("a@b"))
+    assert(not valid_email("@b.co"))
+    assert(not valid_email("a@b."))
+
+@test fn clean_text_has_no_problems()
+    assert(validate("id:int,name:text\n1,Ann\n2,Bob").is_empty())

@@ -1,0 +1,14 @@
+CAR1 enters at 0
+CAR2 enters at 5
+M77 enters at 10
+rejected 'in CAR1 12': CAR1 is already inside
+rejected 'in CAR3 15': garage full
+CAR2 leaves after 15 min, pays 0.00
+CAR3 enters at 21
+CAR1 leaves after 100 min, pays 4.00
+M77 leaves after 240 min, pays 4.00
+rejected 'out XYZ 260': XYZ is not inside
+rejected 'park CAR4 270': bad event 'park CAR4 270'
+rejected 'in CAR4 abc': bad event 'in CAR4 abc'
+CAR3 leaves after 979 min, pays 15.00
+served 4, still inside 0, revenue 23.00
