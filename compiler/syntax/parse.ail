@@ -656,7 +656,8 @@ fn Parser.keyword_as_name(mut self, k int)
         return
     help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
     if not rename_is_safe(word)
-        error_text("lex.kw.1", pos, msg, help, "")
+        # A word the language itself uses in bodies: rename this declaration only.
+        error_fix("lex.kw.1", pos, msg, help, "rename `{word}` to `{better}` here", [rename_edit(pos, word, better)])
         return
     misnamed.add(word)
     error_fix(
@@ -706,6 +707,11 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
                 return
             if j > 0 and toks[j - 1].tok == Tok.Sym(".")
                 return
+            # The keyword itself, not a name: `for x in xs`, `match -x`.
+            if word == "in" and j > 0 and (tok_tag(toks[j - 1].tok) == "id" or toks[j - 1].tok == Tok.Sym(")") or toks[j - 1].tok == Tok.Sym("]"))
+                return
+            if word == "match" and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
+                return
             if name_use_follows(toks[j + 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
         Ident(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return
@@ -722,7 +728,11 @@ fn keyword_rename(word str) str
     match word
         "error" => "err"
         "todo" => "pending"
-        "any" => "found"
+        "any" => "some"
+        "unique" => "distinct"
+        "all" => "every"
+        "with" => "using"
+        "par" => "parallel"
         "ref" => "reference"
         "enum" => "kind"
         "struct" => "record"
@@ -732,14 +742,14 @@ fn keyword_rename(word str) str
         "match" => "matched"
         "fn" => "func"
         "move" => "step"
-        _ => ""
+        _ => "{word}_"
 
 ## Whether the keyword `word` has no use inside a function body that a
 ## rename could hit, so the rename can be applied (lex.kw.1, ADR 1085).
 fn rename_is_safe(word str) bool
     match word
-        "error" | "todo" | "any" | "ref" | "enum" | "struct" | "use" | "pub" => true
-        _ => false
+        "return" | "break" | "continue" | "true" | "false" | "none" | "self" | "else" | "elif" | "and" | "or" | "not" | "if" | "while" | "for" | "defer" | "unsafe" | "fn" | "move" | "mut" | "spawn" | "yield" | "as" => false
+        _ => true
 
 ## `Name`, or a qualified `m.Name` of an imported module (mod.use.2).
 fn Parser.dotted_name(mut self, expected str, rule str) ast.Ident?
