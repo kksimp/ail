@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.compress`, `std.fs`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
+> and `std.compress`, `std.fs`, `std.file`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -42,14 +42,17 @@ fn main()
 ## Errors
 
 **std.err.1** — A failure of `std.fs` is the error struct `fs.IoError`, with
-fields `path str` (the path the function was given) and `kind str`. A
-failure to start a process is the error struct `proc.ProcError`, with
-fields `cmd str` and `kind str`. `kind` is one of `not_found`,
-`permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`,
-`timed_out` (a process killed at its time limit, `std.proc.2`),
-`cancelled` (`proc.run` in a cancelled task, `conc.cancel.2`) and `other`,
-and is the same for the same failure on every platform. `std.net` fails
-with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282, ADR 0321)*
+fields `path str` (the path the function was given) and `kind fs.IoKind`,
+the enum `NotFound`, `Permission`, `Exists`, `IsDir`, `NotDir`, `NotEmpty`,
+`InvalidUtf8`, `Other`. A failure to start a process is the error struct
+`proc.ProcError`, with fields `cmd str` and `kind proc.ProcKind`: the
+variants of `fs.IoKind` in the same order, then `TimedOut` (a process killed
+at its time limit, `std.proc.2`) and `Cancelled` (`proc.run` in a cancelled
+task, `conc.cancel.2`). A kind is the same for the same failure on every
+platform, and is told apart with `==` or an exhaustive `match`
+(`expr.match.2`). Every kind of the standard library is an enum
+(`type.enum.7`). `std.net` fails with `net.NetError` (`std.net.4`).
+*(ADR 0158, ADR 0282, ADR 0321, ADR 1068)*
 
 ```ail rules=std.err.1
 use std.fs
@@ -59,8 +62,12 @@ fn load(path str) str ! fs.IoError
 
 fn main()
     text := fs.read_text("notes.txt") else err
-        print("{err.kind}: {err.path}")
+        match err.kind
+            NotFound => print("no {err.path} yet")
+            Permission => print("{err.path} is locked")
+            Exists | IsDir | NotDir | NotEmpty | InvalidUtf8 | Other => print("{err.kind}")
         ""
+    print(text)
 ```
 
 ## Files: `std.fs`
@@ -571,10 +578,12 @@ They have no effects.
 **std.compress.2** — `inflate(data bytes) bytes ! compress.CompressError`
 and `gunzip(data bytes) bytes ! compress.CompressError` reverse them; use
 `.to_str()` (`type.bytes.8`) when the result is text.
-`CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
-data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
-CRC-32 or size mismatch), `too_big` (std.compress.4), `unsafe_path`, `unsupported`, or an I/O kind of
-`std.err.1` for file functions. *(ADR 0443)*
+`CompressError { kind compress.CompressKind, message str }`; the kind is
+`Corrupt` (malformed data, including trailing bytes after a DEFLATE stream),
+`Checksum` (gzip CRC-32 or size mismatch), `TooBig` (std.compress.4),
+`UnsafePath`, `Unsupported`, or, for file functions, an I/O kind of
+`std.err.1` (`NotFound` to `InvalidUtf8`, and `Other`). *(ADR 0443,
+ADR 1068)*
 
 **std.compress.3** — `gunzip` accepts the optional header fields of
 RFC 1952 and several members in a row, and checks every member's CRC-32 and
@@ -795,6 +804,21 @@ fn main()
     io.write_bytes(b"he")
     io.write_bytes(b"llo\n")
     print("mid")
+```
+
+**std.io.7** — `read_exact(n int) bytes?` reads exactly `n` bytes of standard
+input, undecoded, through the buffer `read_line`, `read_all` and `read_bytes`
+share, so the calls mix in order. It returns `none` when the input ends before
+`n` bytes; the bytes read are consumed. `n` of `0` returns empty bytes. A
+negative `n`, or one above 1073741824, traps. A protocol that frames messages
+by length (`Content-Length: N`) reads each body with it. *(ADR 1071)*
+
+```ail rules=std.io.7
+use std.io
+
+fn main()
+    body := io.read_exact(4) else b""
+    print(body.len())
 ```
 
 ## Processes: `std.proc`
@@ -1029,16 +1053,17 @@ Connecting, and each read and write, time out after 30 seconds.
 sends `body` as an HTTP/1.1 `POST` with that `Content-Type`, and returns
 the response as `get` does, without following redirects. *(ADR 0283)*
 
-**std.net.4** — A failure is `error struct NetError { url str, kind str,
-message str }`: the URL given, a short kind, and a sentence for people.
-`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`, or not
-an address `HOST:PORT`), `bad_request` (a method, header name or header value
-the request or response may not carry, `std.net.6`), `tls` (the TLS handshake
-or connection failed, `std.net.5`), `not_found` (the host has no address),
-`refused`, `timed_out`, `closed` (the connection or server was closed, or the
-waiting task was cancelled, `std.net.9`), `bind` (the address is in use or
-not permitted, `std.net.9`), `protocol` (a malformed response, or too many
-redirects) or `other`. *(ADR 0283, ADR 0369, ADR 0418, ADR 0419)*
+**std.net.4** — A failure is `error struct NetError { url str,
+kind net.NetKind, message str }`: the URL given, a kind, and a sentence for
+people. `net.NetKind` is `BadUrl` (not `http://` or
+`https://HOST[:PORT][/PATH]`, or not an address `HOST:PORT`), `BadRequest`
+(a method, header name or header value the request or response may not
+carry, `std.net.6`), `Tls` (the TLS handshake or connection failed,
+`std.net.5`), `NotFound` (the host has no address), `Refused`, `TimedOut`,
+`Closed` (the connection or server was closed, or the waiting task was
+cancelled, `std.net.9`), `Bind` (the address is in use or not permitted,
+`std.net.9`), `Protocol` (a malformed response, or too many redirects) or
+`Other`. *(ADR 0283, ADR 0369, ADR 0418, ADR 0419, ADR 1068)*
 
 **std.net.5** — An `https` URL (default port 443) is fetched over TLS 1.3.
 The server's certificate chain **MUST** lead to a trusted root, be within
@@ -1378,7 +1403,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1390,7 +1415,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1402,7 +1427,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1414,7 +1439,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1426,7 +1451,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1438,7 +1463,7 @@ use std.net
 
 fn kind_of(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     return "ok"
 
 fn main()
@@ -1826,6 +1851,100 @@ fn main()
     print(random.int(1, 6) <= 6)
 ```
 
+## Streaming files: `std.file`
+
+`use std.file` opens a file as a handle read or written a piece at a time;
+`std.fs` reads and writes whole files. The handles are written over
+`std.fs` (`read_range`, `write_at`, `append_bytes`), so they hold no operating-system
+resource and act the same on macOS, Linux and Windows. Both are `unique`
+(`own.uniq.1`). A failure is the `fs.IoError` of `std.fs` (`std.err.1`);
+misuse by the program (a negative offset or count, `seek` on an appending
+writer) traps. *(ADR 1071)*
+
+**std.file.1** — `open(path str) Reader ! fs.IoError` opens `path` for reading
+at byte 0 and fails as `fs.read_range` does (`not_found`, `permission`,
+`is_dir`). `r.close()` ends the reader; a reader that goes out of scope ends
+too. No file is held open, so the file may be renamed or removed meanwhile.
+*(ADR 1071)*
+
+**std.file.2** — `r.read(n int) bytes ! fs.IoError` returns up to `n` bytes
+from the position and moves it past them. It returns fewer than `n` only when
+the file ends, and empty bytes at the end. A negative `n` traps. *(ADR 1071)*
+
+**std.file.3** — `r.read_exact(n int) bytes? ! fs.IoError` returns exactly `n`
+bytes, or `none` when fewer remain; then the position is unchanged, so a
+reader following a growing file may try again. (`io.read_exact`,
+`std.io.7`, cannot do that: standard input has no position to restore.)
+*(ADR 1071)*
+
+**std.file.4** — `r.read_line() str? ! fs.IoError` returns the next line without
+its `\n` or `\r\n` (invalid UTF-8 becomes U+FFFD), or `none` at the end of
+the file; a last line with no ending is returned. `r.read_complete_line()`
+returns a line only when its `\n` is already in the file and otherwise returns
+`none` and leaves the position, so a program following a log that is being
+written never sees half a line. A reader at the end of the file sees what is
+added later on its next read. *(ADR 1071)*
+
+**std.file.5** — `r.tell() int` is the offset of the next byte; `r.seek(pos
+int)` moves it (a negative `pos` traps; a position past the end reads nothing
+until the file grows); `r.size() int ! fs.IoError` is the file's size now.
+*(ADR 1071)*
+
+```ail norun rules=std.file.1,std.file.2,std.file.3,std.file.4,std.file.5
+use std.file
+
+fn main() !
+    mut r := file.open("app.log")?
+    r.seek(r.size()?)
+    while true
+        line := r.read_complete_line()? else break
+        print(line)
+    head := r.read_exact(16)? else b""
+    print(head.len())
+    r.close()
+```
+
+**std.file.6** — `create(path str)`, `append(path str)` and `update(path str)`
+each give `Writer ! fs.IoError`. `create` makes the file or empties it and
+writes from byte 0; `append` makes it when missing and adds at the end, each
+flush being one append, so several writers may add to one file; `update`
+makes it when missing, empties nothing and writes from byte 0 so that `seek`
+can patch it. They fail as `fs.write_bytes` does. *(ADR 1071)*
+
+**std.file.7** — `w.write(text str)`, `w.write_line(text str)` (adds `\n`) and
+`w.write_bytes(data bytes)`, each `! fs.IoError`, add to a buffer. At 65536
+bytes held the buffer is written, and `w.flush() ! fs.IoError` writes it at
+once; after a failed flush the bytes stay buffered. A reader of the file sees
+only what has been flushed. *(ADR 1071)*
+
+**std.file.8** — `w.tell() int` is the offset the next byte will have,
+counting what is buffered; `w.seek(pos int) ! fs.IoError` flushes and moves the
+write position (bytes between the old end and a position past it are zero). A
+negative `pos`, or `seek` on a writer made by `append`, traps. *(ADR 1071)*
+
+**std.file.9** — `w.close() ! fs.IoError` flushes and ends the writer, and is
+the way to see a failure. A writer that goes out of scope is flushed by its
+`drop` (`own.uniq.3`) on every path, a trap included, but a `drop` cannot
+report a failure, so write `w.close()?` where the data matters. *(ADR 1071)*
+
+```ail norun rules=std.file.6,std.file.7,std.file.8,std.file.9
+use std.file
+
+fn main() !
+    mut w := file.create("report.csv")?
+    w.write_line("id,name")?
+    for i in 0..100000
+        w.write_line("{i},row {i}")?
+    w.flush()?
+    print(w.tell())
+    w.close()?
+    mut log := file.append("report.log")?
+    log.write("done\n")?
+    mut patch := file.update("report.csv")?
+    patch.seek(3)?
+    patch.write("ID")?
+```
+
 ## Tables of text: `std.csv`
 
 **std.csv.1** — `use std.csv` provides `parse(text str)` and
@@ -2121,7 +2240,9 @@ takes a value. `short` is one letter or `""`. *(ADR 0627)*
 **std.args.2** — `pos(name, help)` is a required positional word; the
 positionals are taken in the order the specs list them. `rest(name, help)`
 allows any number of further positionals, which `Args.rest` returns. Without a
-`rest` spec, an extra word is an error. *(ADR 0627)*
+`rest` spec, an extra word is an error. A `Spec`'s `kind` is the `SpecKind`
+of the maker that made it: `Flag`, `Opt`, `Pos` or `Rest`. *(ADR 0627,
+ADR 1068)*
 
 **std.args.3** — `parse(name str, about str, specs List[Spec], words
 List[str]) Args ! ArgsError` reads `words` (usually `env.args()`). `--NAME` and
@@ -2256,24 +2377,53 @@ struct Modifiers
     alt bool
     shift bool
 enum Event
-    Key(key str, ctrl bool, alt bool, shift bool)
+    Key(key KeyCode, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
-    Mouse(col int, row int, button str, kind str)
+    Mouse(col int, row int, button MouseButton, kind MouseKind)
     Scroll(lines int)
+enum KeyCode
+    Text(text str)
+    Enter
+    Tab
+    Backspace
+    Delete
+    Insert
+    Escape
+    Up
+    Down
+    Left
+    Right
+    Home
+    End
+    PageUp
+    PageDown
+    F(n int)
+enum MouseButton
+    Left
+    Middle
+    Right
+enum MouseKind
+    Down
+    Up
+    Drag
 error struct UiError
-    kind str               # "no_display", "closed" or "other"
+    kind UiKind
     message str
+enum UiKind
+    NoDisplay
+    Closed
+    Other
 ```
 
 **std.ui.1** — `open(title str, cols int, rows int) Window ! UiError` opens
 a window `cols` by `rows` cells in size, with every cell blank (a space,
-light grey on black). It fails with `kind` `no_display` when no window can
-be shown (no display, or a run without a window host), and `other` when
+light grey on black). It fails with `kind` `NoDisplay` when no window can
+be shown (no display, or a run without a window host), and `Other` when
 `cols` or `rows` is outside 1 to 1000 or a window is already open. In a native build the window is drawn by the
-`std.app` host (`std.app.10`) as one canvas of the cell grid: `no_display` when
+`std.app` host (`std.app.10`) as one canvas of the cell grid: `NoDisplay` when
 the host can't start, `click` is a `down` mouse event (no `up` or `drag` yet),
-and the clipboard is the program's own. *(ADR 0177, ADR 0863)*
+and the clipboard is the program's own. *(ADR 0177, ADR 0863, ADR 1068)*
 
 **std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
 `present`, `next_event`, `poll_event`, `modifiers`, `set_title` and `close`; naming another is a
@@ -2304,14 +2454,18 @@ such as (-1, -1), hides it. *(ADR 0177)*
 event is returned: cells that still fit are kept, new cells are blank.
 `Close` means the window was closed (std.ui.8). *(ADR 0177)*
 
-**std.ui.7** — In `Key(key, ctrl, alt, shift)`, `key` is either the typed
-character (`"a"`, `"A"`, `" "`, `"é"`, following the keyboard layout and
-Shift) or one of the names `enter`, `tab`, `backspace`, `delete`, `escape`,
-`up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown` and `f1`
-to `f12`. While Ctrl is held, a text key gives its unshifted character
-(Ctrl-S is `Key("s", true, false, false)`, Ctrl-Shift-S has `shift` true),
-and no typed character is reported. On macOS, Command reports as `ctrl`.
-Modifier keys alone give no event. *(ADR 0177)*
+**std.ui.7** — In `Key(key, ctrl, alt, shift)`, `key` is a `KeyCode`:
+either `Text(text)`, the typed character (`"a"`, `"A"`, `" "`, `"é"`,
+following the keyboard layout and Shift), or a named key `Enter`, `Tab`,
+`Backspace`, `Delete`, `Insert`, `Escape`, `Up`, `Down`, `Left`, `Right`,
+`Home`, `End`, `PageUp`, `PageDown` or `F(n)` for `n` from 1 to 12. While
+Ctrl is held, a text key gives its unshifted character (Ctrl-S is
+`Key(Text("s"), true, false, false)`, Ctrl-Shift-S has `shift` true), and no
+typed character is reported. On macOS, Command reports as `ctrl`. Modifier
+keys alone give no event. `key.name()` is the key's text or its name in lower
+case (`enter`, `pageup`, `f5`); `key.text()` is the text, or `none` for a
+named key; `key_code(name)` is the inverse of `name()`. *(ADR 0177,
+ADR 1068)*
 
 **std.ui.8** — When the user closes the window, the next event is `Close`.
 After that, and after `close(mut self)`, the window is closed: `next_event`
@@ -2336,7 +2490,7 @@ fn main()
         w.present()
         match w.next_event()
             Key(key, _, _, _) =>
-                if key == "escape"
+                if key == Escape
                     break
             Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => continue
             Close => break
@@ -2344,10 +2498,10 @@ fn main()
 ```
 
 **std.ui.10** — `Mouse(col, row, button, kind)` reports a mouse button over
-cell (`col`, `row`): `button` is `left`, `right` or `middle`, and `kind` is
-`down` when it is pressed, `up` when it is released, and `drag` when the
-mouse moves to another cell while it is held. Movement with no button held
-gives no event. *(ADR 0240)*
+cell (`col`, `row`): `button` is a `MouseButton` (`Left`, `Right` or
+`Middle`), and `kind` is a `MouseKind`: `Down` when it is pressed, `Up` when
+it is released, and `Drag` when the mouse moves to another cell while it is
+held. Movement with no button held gives no event. *(ADR 0240, ADR 1068)*
 
 **std.ui.11** — `Scroll(lines)` reports the wheel or a trackpad: `lines` is
 the number of text lines to scroll, positive towards the end of a document.
@@ -2995,7 +3149,7 @@ use std.ui
 use std.ui.widgets
 
 fn press(k str) ui.Event
-    Key(key: k, ctrl: false, alt: false, shift: false)
+    Key(key: ui.key_code(k), ctrl: false, alt: false, shift: false)
 
 fn main()
     theme := Map[str, int]()
@@ -3235,4 +3389,61 @@ fn main() !
 fn main()
     data := io.read_bytes()                 # reads the rest of standard input, undecoded
     print(data.len())
+```
+
+## Tool servers: `std.mcp`
+
+**std.mcp.1** — `use std.mcp` provides `connect(cmd str, args List[str]) Client !
+McpError`. It starts the program as `proc.start` does (`std.proc.4`) and speaks
+MCP (the Model Context Protocol) to it as JSON-RPC 2.0 over its standard input
+and output, one JSON message per line. A `Client` is a unique value
+(`own.uniq.1`) that owns the server process; the program is killed when the
+client is released (`std.proc.7`). Tests need no network: the server is any
+program that speaks the protocol. *(ADR 1091)*
+
+**std.mcp.2** — `connect` sends `initialize` with protocol revision
+`2025-03-26`, waits for the reply, then sends the `notifications/initialized`
+notification. A server that can't start fails with kind `start`. *(ADR 1091)*
+
+**std.mcp.3** — `c.tools() List[Tool] ! McpError` is the server's `tools/list`,
+following `nextCursor` until there is none. `struct Tool { name str,
+description str, schema Json }`; `description` is `""` and `schema` is `Null`
+when the server gives none. *(ADR 1091)*
+
+**std.mcp.4** — `c.call(name str, args Json) Json ! McpError` is `tools/call`
+with `args` (a `Json` object) as the arguments. It returns the reply's
+`structuredContent` when it has one, and otherwise the whole `result` object.
+*(ADR 1091)*
+
+**std.mcp.5** — `mcp.text(result Json) str` joins the `text` blocks of a result's
+`content` with newlines. A result whose `isError` is true fails `call` with kind
+`tool` and that text as the message. *(ADR 1091)*
+
+**std.mcp.6** — A line from the server that is not JSON, has no `id` or has an
+`id` other than the pending request's is skipped, so notifications and log
+lines don't disturb a call. A reply with an `error` member fails with kind
+`rpc`; the message is the server's text and `(code N)`. *(ADR 1091)*
+
+**std.mcp.7** — `McpError` is an error with `kind str` and `message str`. The
+kinds are `start`, `closed`, `protocol`, `rpc`, `tool` and `timeout`. A request
+waits at most 30 seconds for its reply (`c.set_timeout(ms int)` changes it);
+when the time runs out or the server has exited it fails with kind `timeout`.
+*(ADR 1091)*
+
+**std.mcp.8** — `c.close()` takes the client with `move` and closes the server's
+standard input; the server is then killed as in `std.mcp.1`. *(ADR 1091)*
+
+```ail norun rules=std.mcp.1,std.mcp.2,std.mcp.3,std.mcp.4,std.mcp.5,std.mcp.6,std.mcp.7,std.mcp.8
+use std.mcp
+
+fn main() !
+    mut c := mcp.connect("my-mcp-server", ["--stdio"])?
+    for t in c.tools()?
+        print("{t.name}: {t.description}")
+    args := Json.Obj([JsonMember(key: "text", value: Json.Str("hi"))])
+    r := c.call("echo", args) else err
+        print("{err.kind}: {err.message}")
+        return
+    print(mcp.text(r))
+    c.close()
 ```

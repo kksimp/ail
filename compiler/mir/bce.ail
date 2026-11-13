@@ -53,7 +53,7 @@ MAX_PER := 8
 ## to this value.
 MAX_REACH := 16777216
 
-## `AIL_OPT_OFF=bce,mexit,reserve,keep,inline,fill,fold,forward,fwdjoin,fwdjoinmem,fwdslot,fwdcheck,pure,memo,reuse,unroll,datarange` (comma list) turns the named
+## `AIL_OPT_OFF=bce,mexit,reserve,keep,inline,fill,fold,forward,fwdjoin,fwdjoinmem,fwdslot,fwdcheck,pure,memo,reuse,unroll,datarange,slp` (comma list) turns the named
 ## optimizations off in the compiler's output, to bisect a miscompile.
 pub fn opt_off(name str) bool
     off := env.get("AIL_OPT_OFF") else ""

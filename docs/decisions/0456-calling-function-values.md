@@ -1,6 +1,6 @@
 # 0456. Calling a function value, and its effects
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 1067](1067-closures.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 4 — Type system

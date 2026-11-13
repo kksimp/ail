@@ -1,0 +1,29 @@
+# expr.iter.3 (ADR 1073): the `Seq` adapters that take a function, with
+# function literals (type.fn.4, ADR 1067) and named functions.
+fn count(n int) Seq[int]
+    for i in 0..n
+        yield i
+
+fn odd(x int) bool
+    x % 2 == 1
+
+fn naturals() Seq[int]
+    mut n := 1
+    while true
+        yield n
+        n += 1
+
+fn main()
+    print(count(5).map(|x| x * 10).collect())
+    print(count(7).filter(odd).collect())
+    print(count(10).take_while(|x| x < 4).collect())
+    limit := 3
+    print(count(10).filter(|x| x > limit).map(|x| "n{x}").take(2).collect())
+    squares := naturals().map(|n| n * n).filter(|n| n % 2 == 0).take(3)
+    for s in squares
+        print(s)
+    mut total := 0
+    for i, w in Seq.of(["a", "bb", "ccc"]).map(|s| s.len()).enumerate()
+        total += i * w
+    print(total)
+    print(Seq.of([3, 1, 2]).map(|x| x.to_float() / 2.0).collect())

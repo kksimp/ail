@@ -1,4 +1,4 @@
-# `compress.unzlib` fails with: compress.CompressError(kind: "unsupported", message: "zlib preset dictionaries are not supported")
+# `compress.unzlib` fails with: compress.CompressError(kind: compress.CompressKind.Unsupported, message: "zlib preset dictionaries are not supported")
 use std.compress
 
 fn main() !

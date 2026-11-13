@@ -1,0 +1,7 @@
+echo: Repeats text. object
+boom: Always fails. object
+echo: hi
+{"sum":5.5}
+tool: it broke
+rpc: unknown tool nope (code -32602)
+start

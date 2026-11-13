@@ -104,6 +104,8 @@ fn zip_sort(names List[int], datas List[int])
 
 ## `compress.zip_dir(dir, dst)`.
 fn compress_zip_dir(dir str, dst str, at str)
+    pol_fs(dir, false, "compress.zip_dir")
+    pol_fs(dst, true, "compress.zip_dir")
     names := list_new(16)
     datas := list_new(16)
     bad := cz_words(1)
@@ -235,6 +237,8 @@ fn zip_safe(name str) bool
 ## `compress.unzip(archive, dir)`: every entry is read and checked first;
 ## then `dir` is created and the entries are written.
 fn compress_unzip(archive str, dir str, at str)
+    pol_fs(archive, false, "compress.unzip")
+    pol_fs(dir, true, "compress.unzip")
     data := os_fs_read_bytes(archive)
     if not os_ok()
         cz_io_fail(archive, os_kind(), at)

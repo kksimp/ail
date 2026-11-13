@@ -1,6 +1,6 @@
 fn fail(n int) net.Response ! net.NetError
     if n > 0
-        return net.NetError(url: "u", kind: "protocol", message: "bad {n}")
+        return net.NetError(url: "u", kind: Protocol, message: "bad {n}")
     net.Response(status: 200, headers: {}, body: "ok", all_headers: {})
 
 fn main()

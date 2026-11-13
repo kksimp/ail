@@ -44,10 +44,12 @@ STD_MODULES := [
     ("std.attach", "attach/attach.ail"),
     ("std.attach.serve", "attach/serve.ail"),
     ("std.csv", "csv/csv.ail"),
+    ("std.file", "file/file.ail"),
     ("std.gfx", "gfx/gfx.ail"),
     ("std.gfx.host", "gfx/host.ail"),
     ("std.gfx.watch", "gfx/watch.ail"),
     ("std.log", "log/log.ail"),
+    ("std.mcp", "mcp/mcp.ail"),
     ("std.media.webm", "media/webm.ail"),
     ("std.net.http", "net/http.ail"),
     ("std.screen", "screen/screen.ail"),
@@ -66,7 +68,9 @@ STD_MODULES := [
 ## Each type of a standard module, declared in `std/types.ail`, and its module.
 STD_TYPES := {
     "CompressError": "compress",
+    "CompressKind": "compress",
     "IoError": "fs",
+    "IoKind": "fs",
     "Metadata": "fs",
     "Volume": "fs",
     "Entry": "fs",
@@ -76,6 +80,7 @@ STD_TYPES := {
     "RawResponse": "net",
     "RawOutput": "proc",
     "NetError": "net",
+    "NetKind": "net",
     "Options": "net",
     "Request": "net",
     "Server": "net",
@@ -86,6 +91,7 @@ STD_TYPES := {
     "Output": "proc",
     "Child": "proc",
     "ProcError": "proc",
+    "ProcKind": "proc",
     "Window": "ui",
     "Size": "ui",
     "Modifiers": "ui",
@@ -93,9 +99,14 @@ STD_TYPES := {
     "Style": "ui",
     "Cursor": "ui",
     "UiError": "ui",
+    "UiKind": "ui",
+    "KeyCode": "ui",
+    "MouseButton": "ui",
+    "MouseKind": "ui",
     "Tensor": "tensor",
     "Regex": "regex",
     "RegexError": "regex",
+    "RegexKind": "regex",
     "Match": "regex",
     "Captures": "regex",
 }
@@ -363,8 +374,8 @@ fn assemble(
     named and not declared
 
 ## The always-read prelude, plus the optional modules the program names
-## (json.prelude.1, ADR 0161): `json`, `jsonderive`, `default`, `argsderive`, `derive`
-## and `grid` (ADR 0937).
+## (json.prelude.1, ADR 0161): `json`, `jsonderive`, `default`, `argsderive`, `derive`,
+## `grid` (ADR 0937), `heap` and `deque` (ADR 1086), and `seq` (ADR 1073).
 @allow("expr.match.3") fn prelude_text(tokens List[syntax.Token]) str
     parts := split_modules(mir.PRELUDE_EMBED)
     want_json_derive := wants(tokens, JSON_DERIVE_NAMES)
@@ -395,10 +406,17 @@ fn assemble(
         text = "{text}{parts[5]}"
     if wants(tokens, ["Grid"])
         text = "{text}{parts[6]}"
+    if wants(tokens, ["Heap"])
+        text = "{text}{parts[7]}"
+    if wants(tokens, ["Deque"])
+        text = "{text}{parts[8]}"
+    # expr.yield.1: `Seq[T]`, what a generator returns (ADR 1073).
+    if wants(tokens, ["Seq"])
+        text = "{text}{parts[9]}"
     text
 
 ## The prelude cut at its `## @module` markers: core, json, jsonderive,
-## default, argsderive, derive, grid. Each part after the first starts after its marker line.
+## default, argsderive, derive, grid, heap, deque, seq. Each part after the first starts after its marker line.
 fn split_modules(text str) List[str]
     mut parts := List[str]()
     mut cur := List[str]()

@@ -34,3 +34,6 @@ fn main()
     show(["--out"])
     show([])
     print(args.usage("tool", "does things", spec()))
+    # std.args.2 (ADR 1068): a spec's kind is an enum.
+    print([s.kind == Flag or s.kind == Opt for s in spec()])
+    print(args.rest("more", "x").kind == Rest)

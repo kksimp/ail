@@ -17,7 +17,7 @@ fn rogue(l net.Listener, line str) int
 
 fn visit(url str) str
     r := net.get(url) else err
-        return err.kind
+        return "{err.kind}"
     "ok {r.status}"
 
 fn try(line str) str

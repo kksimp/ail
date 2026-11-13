@@ -5,12 +5,12 @@ b"hello"
 31 139 8
 true
 0
-corrupt
+compress.CompressKind.Corrupt
 0
-checksum
+compress.CompressKind.Checksum
 0
 b"hello"
 true
-checksum
+compress.CompressKind.Checksum
 0
 true

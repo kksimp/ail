@@ -1,0 +1,423 @@
+## Pairing adjacent `float` element operations into two-lane vector operations (native.vec.3, ADR 1066).
+##
+## Inside one block, two stores of `float`s to elements `k` and `k + 1` of the same base and index seed a pair.
+## The two stored values become one `Vec2` when they are the same arithmetic operation (`fadd fsub fmul fdiv`)
+## on operands that pair in turn, down to two loads of adjacent elements; a value both lanes share is splat,
+## and two unrelated values are packed. `x * x + y * y` over a pair's lanes becomes one multiply and a `vhadd`.
+##
+## Every lane does what its scalar instruction did, with the operands in the same order, so each result has the
+## same bits. A paired load happens at the earlier of its two loads and a paired store at the later of its two
+## stores; the block is left alone unless every access that may touch the same memory keeps its order, no access
+## crosses an instruction that can trap or call, and no vector is alive over a call. A lane that scalar code still
+## reads is taken out of the vector with `vlane`, or its scalar instruction stays when the reader comes first.
+
+## One vector instruction to make.
+struct SlpPack
+    ## `load`, `op`, `store`, `hadd`, `splat` or `gather`.
+    kind str
+    ## Lane 0 and lane 1: values; for a `store` the two store instructions' indexes; for a `hadd` the index of
+    ## the `fadd` it replaces, in `a`.
+    a int
+    b int
+    op str
+    ## The operand packs of an `op`; the value pack of a `store` or a `hadd` in `x`.
+    x int
+    y int
+    ## The index of the instruction it is emitted at.
+    at int
+    ## Its `Vec2` value, once emitted.
+    dst int
+
+struct SlpState
+    insts List[Inst]
+    ## The index of the instruction of this block that defines a value, else -1.
+    pos List[int]
+    ## Whether a value is a `float`.
+    floats List[bool]
+    packs List[SlpPack]
+    ## The `load` or `op` pack a value is a lane of, else -1, and which lane.
+    lane_pack List[int]
+    lane_no List[int]
+    ## The `store` or `hadd` pack an instruction belongs to, else -1.
+    inst_pack List[int]
+
+## The least number of instructions a block's pairs must save.
+SLP_GAIN := 2
+
+pub fn slp_pairs(mut g Func)
+    mut total := [0 for _ in 0..g.vals.len()]
+    for blk in g.blocks
+        for i in blk.insts
+            for u in i.operands()
+                total[u] += 1
+        for u in blk.term.uses()
+            total[u] += 1
+    for b in 0..g.blocks.len()
+        mut stores := 0
+        for i in g.blocks[b].insts
+            if i.op == "stx" and i.imm == 8
+                stores += 1
+        if stores >= 2
+            slp_block(mut g, b, total)
+
+fn slp_block(mut g Func, b int, total List[int])
+    insts := g.blocks[b].insts
+    n := insts.len()
+    nv := total.len()
+    mut pos := [-1 for _ in 0..nv]
+    mut inner := [0 for _ in 0..nv]
+    for k in 0..n
+        if insts[k].dst >= 0
+            pos[insts[k].dst] = k
+        for u in insts[k].operands()
+            inner[u] += 1
+    mut s := SlpState(
+        insts: insts,
+        pos: pos,
+        floats: [g.vals[v] == Ty.Float for v in 0..nv],
+        packs: [],
+        lane_pack: [-1 for _ in 0..nv],
+        lane_no: [0 for _ in 0..nv],
+        inst_pack: [-1 for _ in 0..n],
+    )
+    slp_seed(mut s)
+    if s.packs.len() == 0
+        return
+    slp_sums(mut s, total)
+    # A splat or a gather is made just before the first operation that reads it.
+    for k in 0..s.packs.len()
+        if s.packs[k].kind == "op"
+            at := s.packs[k].at
+            px := s.packs[k].x
+            py := s.packs[k].y
+            if not slp_is_real(s, px) and s.packs[px].at > at
+                s.packs[px].at = at
+            if not slp_is_real(s, py) and s.packs[py].at > at
+                s.packs[py].at = at
+    if not slp_legal(s)
+        return
+    # Which lanes scalar code still needs: `keep` leaves the scalar instruction, `extract` reads the vector.
+    mut keep := [false for _ in 0..nv]
+    mut extract := [false for _ in 0..nv]
+    mut changed := true
+    while changed
+        changed = false
+        for k in 0..s.packs.len()
+            if not slp_is_real(s, k)
+                continue
+            for lane in [s.packs[k].a, s.packs[k].b]
+                if keep[lane]
+                    continue
+                mut reader := slp_first_use(s, lane, keep)
+                if reader < 0 and total[lane] != inner[lane]
+                    reader = n
+                if reader < 0
+                    extract[lane] = false
+                elif reader > s.packs[k].at
+                    extract[lane] = true
+                else
+                    keep[lane] = true
+                    extract[lane] = false
+                    changed = true
+    # The count of instructions before and after.
+    mut gone := [false for _ in 0..n]
+    mut saved := 0
+    for k in 0..n
+        d := insts[k].dst
+        if s.inst_pack[k] >= 0 or (d >= 0 and s.lane_pack[d] >= 0 and not keep[d])
+            gone[k] = true
+            saved += 1
+    for p in s.packs
+        if p.kind == "gather"
+            if p.at < n
+                saved -= 2
+        elif p.kind != "splat" or p.at < n
+            saved -= 1
+    for v in 0..nv
+        if extract[v]
+            saved -= 1
+    if saved < SLP_GAIN
+        return
+    mut by_at := [List[int]() for _ in 0..n]
+    for k in 0..s.packs.len()
+        if s.packs[k].at < n
+            by_at[s.packs[k].at].push(k)
+    mut out := List[Inst]()
+    for k in 0..n
+        for pk in by_at[k]
+            cur := s.packs[pk]
+            if cur.kind == "store"
+                low := insts[cur.a]
+                mut st := inst(-1, "vstx", [low.arg(0), low.arg(1), s.packs[cur.x].dst])
+                st.imm = 8
+                st.fimm = low.fimm
+                out.push(st)
+                continue
+            if cur.kind == "hadd"
+                out.push(inst(insts[cur.a].dst, "vhadd", [s.packs[cur.x].dst]))
+                continue
+            g.vals.push(Ty.Vec2)
+            g.names.push("")
+            dst := g.vals.len() - 1
+            s.packs[pk].dst = dst
+            if cur.kind == "load"
+                lane0 := insts[pos[cur.a]]
+                mut ld := inst(dst, "vldx", [lane0.arg(0), lane0.arg(1)])
+                ld.imm = 8
+                ld.fimm = lane0.fimm
+                out.push(ld)
+            elif cur.kind == "op"
+                out.push(inst(dst, "v{cur.op}", [s.packs[cur.x].dst, s.packs[cur.y].dst]))
+            elif cur.kind == "splat"
+                out.push(inst(dst, "vsplat", [cur.a]))
+            else
+                out.push(inst(dst, "vpack", [cur.a, cur.b]))
+            if cur.kind == "load" or cur.kind == "op"
+                if extract[cur.a]
+                    out.push(inst(cur.a, "vlane", [dst]))
+                if extract[cur.b]
+                    mut hi := inst(cur.b, "vlane", [dst])
+                    hi.imm = 1
+                    out.push(hi)
+        if not gone[k]
+            out.push(insts[k])
+    g.blocks[b].insts = out
+
+## An `ldx` (`op` "ldx") or `stx` of a whole `float` element.
+fn slp_elem(s SlpState, i Inst, op str) bool
+    if i.op != op or i.imm != 8
+        return false
+    v := if op == "stx" then i.arg(2) else i.dst
+    v >= 0 and s.floats[v]
+
+fn slp_arith(op str) bool
+    op == "fadd" or op == "fsub" or op == "fmul" or op == "fdiv"
+
+## A pack that is one vector of two different instructions' results (not a splat or a gather).
+fn slp_is_real(s SlpState, k int) bool
+    s.packs[k].kind == "load" or s.packs[k].kind == "op"
+
+## Pair the stores of two adjacent elements whose values pair.
+fn slp_seed(mut s SlpState)
+    n := s.insts.len()
+    for k in 0..n
+        i := s.insts[k]
+        if s.inst_pack[k] >= 0 or not slp_elem(s, i, "stx")
+            continue
+        for j in k + 1..n
+            o := s.insts[j]
+            if s.inst_pack[j] >= 0 or not slp_elem(s, o, "stx")
+                continue
+            if o.arg(0) != i.arg(0) or o.arg(1) != i.arg(1)
+                continue
+            step := o.elem_off() - i.elem_off()
+            if step != 1 and step != -1
+                continue
+            low := if step == 1 then k else j
+            high := if step == 1 then j else k
+            mark := s.packs.len()
+            v0 := s.insts[low].arg(2)
+            v1 := s.insts[high].arg(2)
+            v := slp_real(mut s, v0, v1)
+            if v < 0
+                slp_undo(mut s, mark)
+                continue
+            made := slp_push(mut s, "store", low, high, v, j)
+            s.inst_pack[k] = made
+            s.inst_pack[j] = made
+            break
+
+## The pack with `a` in lane 0 and `b` in lane 1, made now if the two can be one vector instruction; else -1.
+fn slp_real(mut s SlpState, a int, b int) int
+    if a == b
+        return -1
+    if s.lane_pack[a] >= 0 or s.lane_pack[b] >= 0
+        return if slp_lanes(s, a, b) then s.lane_pack[a] else -1
+    pa := s.pos[a]
+    pb := s.pos[b]
+    if pa < 0 or pb < 0
+        return -1
+    ia := s.insts[pa]
+    ib := s.insts[pb]
+    if slp_elem(s, ia, "ldx") and slp_elem(s, ib, "ldx")
+        if ia.arg(0) != ib.arg(0) or ia.arg(1) != ib.arg(1) or ib.elem_off() != ia.elem_off() + 1
+            return -1
+        return slp_add(mut s, "load", a, b, "", -1, -1, if pa < pb then pa else pb)
+    if ia.op != ib.op or not slp_arith(ia.op) or not s.floats[a] or not s.floats[b]
+        return -1
+    x := slp_operand(mut s, ia.arg(0), ib.arg(0))
+    y := slp_operand(mut s, ia.arg(1), ib.arg(1))
+    if not slp_is_real(s, x) and not slp_is_real(s, y)
+        return -1
+    # An operand may have taken one of the two as its own lane.
+    if s.lane_pack[a] >= 0 or s.lane_pack[b] >= 0
+        return -1
+    slp_add(mut s, "op", a, b, ia.op, x, y, if pa > pb then pa else pb)
+
+fn slp_add(mut s SlpState, kind str, a int, b int, op str, x int, y int, at int) int
+    s.packs.push(SlpPack(kind: kind, a: a, b: b, op: op, x: x, y: y, at: at, dst: -1))
+    k := s.packs.len() - 1
+    s.lane_pack[a] = k
+    s.lane_no[a] = 0
+    s.lane_pack[b] = k
+    s.lane_no[b] = 1
+    k
+
+## A pack with no lanes to record: a store, a `hadd`, a splat or a gather.
+fn slp_push(mut s SlpState, kind str, a int, b int, x int, at int) int
+    s.packs.push(SlpPack(kind: kind, a: a, b: b, op: "", x: x, y: -1, at: at, dst: -1))
+    s.packs.len() - 1
+
+## Whether `a` is lane 0 and `b` lane 1 of one pack.
+fn slp_lanes(s SlpState, a int, b int) bool
+    s.lane_pack[a] >= 0
+        and s.lane_pack[a] == s.lane_pack[b]
+        and s.lane_no[a] == 0
+        and s.lane_no[b] == 1
+
+## Forget the packs made since there were `mark` of them.
+fn slp_undo(mut s SlpState, mark int)
+    while s.packs.len() > mark
+        p := s.packs[s.packs.len() - 1]
+        if p.kind == "load" or p.kind == "op"
+            s.lane_pack[p.a] = -1
+            s.lane_pack[p.b] = -1
+        s.packs.pop()
+
+## The pack an operation reads for the operands `a` (lane 0) and `b` (lane 1): their pair, else a splat of the
+## one value or a gather of the two.
+fn slp_operand(mut s SlpState, a int, b int) int
+    mark := s.packs.len()
+    r := slp_real(mut s, a, b)
+    if r >= 0
+        return r
+    slp_undo(mut s, mark)
+    kind := if a == b then "splat" else "gather"
+    for k in 0..s.packs.len()
+        if s.packs[k].kind == kind and s.packs[k].a == a and s.packs[k].b == b
+            return k
+    unused := s.insts.len()
+    slp_push(mut s, kind, a, b, -1, unused)
+
+## `u + w` where `u` and `w` are the same operation on the two lanes of pairs (or on a shared value) and feed
+## nothing else: one vector operation and a `vhadd`, which adds lane 0 and lane 1 in that order.
+fn slp_sums(mut s SlpState, total List[int])
+    for k in 0..s.insts.len()
+        r := s.insts[k]
+        if r.op != "fadd" or r.dst < 0 or not s.floats[r.dst] or s.lane_pack[r.dst] >= 0
+            continue
+        u := r.arg(0)
+        w := r.arg(1)
+        if u == w or total[u] != 1 or total[w] != 1 or s.lane_pack[u] >= 0 or s.lane_pack[w] >= 0
+            continue
+        pu := s.pos[u]
+        pw := s.pos[w]
+        if pu < 0 or pw < 0 or not s.floats[u] or not s.floats[w]
+            continue
+        iu := s.insts[pu]
+        iw := s.insts[pw]
+        if iu.op != iw.op or not slp_arith(iu.op)
+            continue
+        mut fits := true
+        mut paired := false
+        for q in 0..2
+            c := iu.arg(q)
+            e := iw.arg(q)
+            if c == e
+                continue
+            if slp_lanes(s, c, e)
+                paired = true
+            else
+                fits = false
+        if not fits or not paired
+            continue
+        x := slp_operand(mut s, iu.arg(0), iw.arg(0))
+        y := slp_operand(mut s, iu.arg(1), iw.arg(1))
+        v := slp_add(mut s, "op", u, w, iu.op, x, y, if pu > pw then pu else pw)
+        s.inst_pack[k] = slp_push(mut s, "hadd", k, -1, v, k)
+
+## What an instruction does to element memory: 0 nothing, 1 a load, 2 a store, 3 anything else that may read
+## or write memory, trap or call (nothing may move across it).
+fn slp_access(i Inst) int
+    if i.op == "ldx"
+        return 1
+    if i.op == "stx"
+        return 2
+    if i.is_pure() or i.op == "data"
+        return 0
+    3
+
+## Whether two element accesses may touch the same bytes: unless they have the same base, index and element
+## size and different offsets.
+fn slp_alias(x Inst, y Inst) bool
+    x.arg(0) != y.arg(0) or x.arg(1) != y.arg(1) or x.imm != y.imm or x.elem_off() == y.elem_off()
+
+fn slp_callish(i Inst) bool
+    i.op == "call" or i.op == "icall" or i.op == "prim" or i.op == "utrap" or i.op == "trap"
+
+## Whether the pairs keep the block's meaning: every two accesses that may touch the same memory, one of them a
+## store, stay in their order; no access crosses an instruction of kind 3; and no vector is alive over a call.
+fn slp_legal(s SlpState) bool
+    n := s.insts.len()
+    mut fin := [k for k in 0..n]
+    mut what := [0 for _ in 0..n]
+    mut calls := [0 for _ in 0..n + 1]
+    for k in 0..n
+        i := s.insts[k]
+        what[k] = slp_access(i)
+        calls[k + 1] = calls[k] + (if slp_callish(i) then 1 else 0)
+        if i.op == "ldx" and i.dst >= 0 and s.lane_pack[i.dst] >= 0
+            fin[k] = s.packs[s.lane_pack[i.dst]].at
+        elif i.op == "stx" and s.inst_pack[k] >= 0
+            fin[k] = s.packs[s.inst_pack[k]].at
+    for k in 0..n
+        if fin[k] == k or what[k] == 0
+            continue
+        for j in 0..n
+            if j == k or what[j] == 0 or (what[j] == 1 and what[k] == 1)
+                continue
+            if what[j] != 3 and not slp_alias(s.insts[k], s.insts[j])
+                continue
+            if fin[j] == fin[k] or (j < k) != (fin[j] < fin[k])
+                return false
+    # A vector lives from where it is made to the last pack that reads it.
+    mut last := [-1 for _ in 0..s.packs.len()]
+    for p in s.packs
+        if p.x >= 0 and p.at > last[p.x]
+            last[p.x] = p.at
+        if p.y >= 0 and p.at > last[p.y]
+            last[p.y] = p.at
+    for k in 0..s.packs.len()
+        from := s.packs[k].at
+        if last[k] > from and calls[last[k]] != calls[from]
+            return false
+    true
+
+## The first position at which scalar code reads lane value `v`, else -1. A reader that is itself a lane of an
+## operation whose operand pack holds `v` reads the vector, unless its own scalar instruction is kept; one whose
+## operand pack is a gather reads `v` where the gather is made.
+fn slp_first_use(s SlpState, v int, keep List[bool]) int
+    n := s.insts.len()
+    mut earliest := -1
+    for k in s.pos[v] + 1..n
+        u := s.insts[k]
+        for q in 0..u.argc()
+            if u.arg(q) != v
+                continue
+            mut at := k
+            if s.inst_pack[k] >= 0
+                # A paired store's value, or an operand of the sum a `vhadd` replaces.
+                if u.op == "fadd" or q == 2
+                    continue
+            elif u.dst >= 0 and s.lane_pack[u.dst] >= 0
+                p := s.packs[s.lane_pack[u.dst]]
+                if p.kind == "op"
+                    from := if q == 0 then p.x else p.y
+                    if slp_is_real(s, from)
+                        if not keep[u.dst]
+                            continue
+                    elif not keep[u.dst] or s.packs[from].at < k
+                        at = s.packs[from].at
+            if earliest < 0 or at < earliest
+                earliest = at
+    earliest

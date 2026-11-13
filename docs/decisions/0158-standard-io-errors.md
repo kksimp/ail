@@ -1,6 +1,6 @@
 # 0158. Standard failures are `fs.IoError` and `proc.ProcError` with a short `kind`
 
-- **Status:** Accepted
+- **Status:** Accepted; `kind` is an enum since [ADR 1068](1068-std-error-kinds-are-enums.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** 8 — Errors; standard library

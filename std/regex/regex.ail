@@ -8,9 +8,24 @@
 pub error struct RegexError "{message}"
     pub pattern str
     pub at int
-    pub kind str
+    pub kind RegexKind
     pub rule str
     pub message str
+
+## What is wrong with a pattern (std.regex.11-22, ADR 1068).
+pub enum RegexKind
+    UnclosedGroup
+    UnopenedGroup
+    UnclosedClass
+    BadEscape
+    BadRepeat
+    NothingToRepeat
+    BadRange
+    BadClass
+    BadGroupName
+    BadFlag
+    Unsupported
+    TooLarge
 
 ## A compiled pattern: `pat` is the source (std.regex.2).
 pub struct Regex
@@ -1248,6 +1263,22 @@ fn C.emit(mut self, n int)
                 else
                     self.patch(s, end, s + 1)
 
+## The kind a parser failure names.
+fn kind_of(kind str) RegexKind
+    match kind
+        "unclosed_group" => UnclosedGroup
+        "unopened_group" => UnopenedGroup
+        "unclosed_class" => UnclosedClass
+        "bad_escape" => BadEscape
+        "bad_repeat" => BadRepeat
+        "nothing_to_repeat" => NothingToRepeat
+        "bad_range" => BadRange
+        "bad_class" => BadClass
+        "bad_group_name" => BadGroupName
+        "bad_flag" => BadFlag
+        "too_large" => TooLarge
+        _ => Unsupported
+
 fn rule_of(kind str) str
     mut rule := "std.regex.22"
     if kind == "unclosed_group"
@@ -1440,7 +1471,7 @@ pub fn compile(pattern str) Regex ! RegexError
         return RegexError(
             pattern: pattern,
             at: p.fail_at,
-            kind: p.fail_kind,
+            kind: kind_of(p.fail_kind),
             rule: rule_of(p.fail_kind),
             message: p.fail_msg,
         )
@@ -1453,7 +1484,7 @@ pub fn compile(pattern str) Regex ! RegexError
         return RegexError(
             pattern: pattern,
             at: 0,
-            kind: "too_large",
+            kind: TooLarge,
             rule: "std.regex.22",
             message: "the pattern compiles to more than 50000 instructions; use smaller repetition counts",
         )
@@ -2092,7 +2123,7 @@ fn m_find_all(re Regex, text str) List[Match]
 
 fn m_group_all(re Regex, text str, group int) List[str]
     if group < 0 or group >= re.groups
-        no_group("std.regex.24", "the pattern has groups 0 to {re.groups - 1}, not group {group}")
+        _ := no_group("std.regex.24", "the pattern has groups 0 to {re.groups - 1}, not group {group}")
     cs := text.chars()
     mut vm := new_vm(re, 2 * re.groups)
     sp := spans(re, cs, 1073741824, mut vm)
@@ -2197,7 +2228,7 @@ fn template(re Regex, rep str) Template
 fn replace_n(re Regex, text str, rep str, limit int) str
     t := template(re, rep)
     if t.bad != ""
-        no_group("std.regex.7", "the replacement refers to {t.bad}")
+        _ := no_group("std.regex.7", "the replacement refers to {t.bad}")
     cs := text.chars()
     stride := if t.refs.len() == 0 then 2 else 2 * re.groups
     mut vm := new_vm(re, stride)

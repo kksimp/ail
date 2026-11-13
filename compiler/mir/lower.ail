@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## Each struct's field defaults, in field order (type.struct.8, lower_fielddef.ail).
+    field_defaults Map[str, List[ast.Expr?]]
     ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
     hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
@@ -180,6 +182,10 @@ struct Lower
     else_targets List[int]
     ## Instrumentation sites, when asked for (lower_instr.ail).
     instr Instr
+    ## The generator being lowered (lower_gen.ail, ADR 1073, expr.yield.1).
+    gen_lower GenLower
+    ## Function literals (type.fn.4, lower_fnlit.ail).
+    fl FnLitState
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -293,6 +299,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        field_defaults: {},
         hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),
@@ -337,6 +344,8 @@ pub fn lower_package_par(
         ffi_k: 0,
         else_targets: [],
         instr: new_instr(),
+        gen_lower: new_gen_lower(),
+        fl: new_fn_lit_state(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
@@ -549,11 +558,14 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5); `@tool` only feeds the attach derive (attach.tool.1).
         if a.name != "inline"
             and a.name != "pure"
+            and a.name != "caps"
             and a.name != "allow"
             and a.name != "deprecated"
             and a.name != "test"
             and a.name != "export c"
             and a.name != "tool"
+            and a.name != "fixture"
+            and a.name != "needs"
             and a.name != "variadic c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
@@ -679,8 +691,8 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 ps.push(type_of(p)?)
             mut r := Ty.Unit
             if rt := fret
-                r = type_of(rt)?
-            Ty.Fn(params: ps, ret: r)
+                r = fn_ret_type(rt)?
+            Ty.Fn(params: ps, ret: r, err: fn_err_type(fret))
         _ => none
 
 fn is_literal(e ast.Expr) bool
@@ -915,6 +927,8 @@ fn Lower.fn_owner(self, f ast.FnDecl) str
 ## method has its own key and owner).
 fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     sig := sigs.get(key) else return
+    if lower_gen_fn(f, name, key, owner)
+        return
     params := begin_fn(name, sig.ret, sig.params)
     fails = sig.fails
     self_ty = ""
@@ -936,7 +950,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     body := f.body else
         lower_extern(f, name, params)
         return
-    if lower_ui_intrinsic(f, key, name, params)
+    if lower_ui_intrinsic(f, key, name, params) or lower_rt_flag(key, name, f.pos)
         return
     if not unchecked
         enter_contracts(f, key)
@@ -1039,10 +1053,15 @@ fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
-    elif not same_ty(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
+    elif not fits_want(v.ty, want)
         # The runtime calls a function address it kept as an `int` (unwind.ail).
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
+
+## Whether a value of type `got` fits `want`: the same type, a function value
+## that fits (type.fn.6), or a function address the runtime keeps as an `int`.
+fn Lower.fits_want(self, got Ty, want Ty) bool
+    same_ty(got, want) or fn_fits(got, want) or (is_rt and want.is_fn() and got == Ty.Int)
 
 fn same_ty(a Ty, b Ty) bool
     if p := a.opt_inner()
@@ -1436,6 +1455,8 @@ fn Lower.lower_for(
             if chan_elem(l0.ty) != none
                 lower_chan_for(var, l0, body, expr_pos(iter))
                 return
+            if lower_iter_for(var, iter, l0, body, fpos)
+                return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
                 for_pairs(var, iter, l0, body)
@@ -1639,6 +1660,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         OrElse(x, other, pos) => lower_or_else(x, other, pos)
         NewRef(x, pos) => lower_new_ref(x, pos, want)
         TupleLit(items, pos) => lower_tuple_lit(items, pos, want)
+        Closure(ps, body, pos) => lower_closure_lit(ps, body, pos, want)
 
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
 fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
@@ -1835,7 +1857,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
-            if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
+            if name == ast.YIELD and not is_rt
+                return lower_yield(args, pos)
+            if ASSERT_FNS.contains(name) and not is_rt and lookup(name) == none
                 return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(none, args, pos)
@@ -1878,7 +1902,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if name == "zip" and not sigs.contains(key)
                 return lower_zip(args, pos)
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
-            if variadic_decl(key)
+            if c_call_site(key)
                 return lower_variadic(key, sig, args, pos, npos)
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")
@@ -2202,3 +2226,4 @@ pub fn expr_pos(e ast.Expr) ast.Pos
         OrElse(_, _, p) => p
         NewRef(_, p) => p
         TupleLit(_, p) => p
+        Closure(_, _, p) => p

@@ -138,7 +138,7 @@ v0.1.0 is the first public tag: the compiler builds itself from a published seed
 
 Planned for 0.2 (none of it is a promise; status.md says what exists):
 
-- **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, generators (ADR 0965), variadic C and `export c` (#1117), `@tool` functions (#1098).
+- **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, variadic C and `export c` (#1117), `@tool` functions (#1098).
 - **Toolchain:** debug info (`ail build -g`, DWARF and PDB, ADR 0021); one native launcher, so routing leaves `ail` and `ail.ps1` and the scripts only fetch the seed and build; a prebuilt `ail` per release.
 - **Gate:** a gate suite for `ail merge`, and a Linux ARM64 and a Windows ARM64 machine in the gate.
 - **Hardware:** GPU compute (#1104), Linux ARM64 on hardware, Windows ARM64, a TLS server (needs constant-time signing first, ADR 0959).

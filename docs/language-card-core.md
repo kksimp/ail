@@ -2,7 +2,7 @@
 
 > Non-normative; budget 2,000 tokens (`tools/tokbench/run.sh docs/language-card-core.md`).
 > The [full card](language-card.md) has the rest: `ail card TOPIC` prints one of its
-> sections (`ail card errors`), `ail ask std "read a file by lines"` finds a std function,
+> sections (`ail card errors`), `ail ask std "read a file by lines"` finds a std function or built-in method, `ail ask how "sort descending"` a checked how-to,
 > `ail explain RULE` gives the text of any rule a diagnostic cites.
 
 ## Loop
@@ -62,6 +62,8 @@ p := Point(x: 1, y: 2)           # fields by name, any order
 print(p.sum())                   # calls always have `()`
 ```
 
+Patterns nest in fields, `Add(Num(a), Num(b)) =>`; there a bare name binds, so write a fieldless variant qualified (`Expr.Nil`).
+
 ## Absence and errors
 
 ```ail skip=context
@@ -91,6 +93,7 @@ A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plai
 5. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
 6. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
 7. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
+   A field may default (`retries int = 3`, type.struct.8): a literal may leave it out; the default is a plain constant.
 8. `=` on a name that is undeclared or immutable (expr.bind.3): declare with `:=`, or `mut`.
 9. A failure left unhandled (err.use.1): `?`, `else`, or return it.
 10. A parameter written `name: Type` or an arrow (gram.fn.2): `fn f(name Type) Ret`.

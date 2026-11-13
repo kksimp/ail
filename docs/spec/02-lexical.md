@@ -12,11 +12,14 @@ Chapter key: `lex`
 **lex.kw.1** — These words are reserved keywords and MUST NOT be used as
 names: `and any as break continue defer elif else ensures enum error extern
 false fn for if impl in invariant match move mut none not or par pub ref requires
-return self spawn struct todo trait true uhwhatnow unique unsafe use while with`.
+return self spawn struct todo trait true uhwhatnow unique unsafe use while with
+yield`.
 `uhwhatnow?`, with no space before the `?`, is one keyword token, the hole
 that asks (`expr.hole.3`); where `uhwhatnow` alone stands as an expression,
-the error carries a fix that adds the `?`.
-*(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872)*
+the error carries a fix that adds the `?`. In the positions of `lex.kw.3` a
+keyword is a name. The error's help names a replacement; for `error`, `todo`,
+`any`, `ref`, `enum`, `struct`, `use` and `pub` its fix renames the binding and
+each later use of the word in the function. *(ADR 1085, ADR 1067, ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872, ADR 1073)*
 
 ```ail error=lex.kw.1
 fn main()
@@ -39,12 +42,34 @@ fn main()
     print(c)
 ```
 
+**lex.kw.3** — A keyword is a plain name where nothing else can stand: as a
+field of a struct or of an enum variant (except `pub`, `fn` and `invariant`,
+which begin a member line), after `.` (`o.error`, `xs.any(f)`), as a label
+before `:` in a call or literal (`Outcome(error: "")`), as a method name
+(`fn T.any(self)`, and `fn error(self)` inside a `trait` or `impl` block), and
+after `uses` (`trait.hash.1`). Inside a method a keyword-named field is
+reached as `self.error`; the bare word is the keyword. *(ADR 1085)*
+
+```ail rules=lex.kw.3
+struct Outcome
+    job str
+    error str
+
+fn Outcome.any(self) bool
+    self.error != ""
+
+fn main()
+    o := Outcome(job: "sync", error: "disk full")
+    print("{o.job}: {o.error} {o.any()}")
+```
+
 ## Names
 
 **lex.name.1** — A name starts with a letter (the Unicode `Alphabetic`
 property) or `_`, and continues with letters, ASCII digits `0`–`9` and `_`:
 the characters for which `char.is_alpha()` and `char.is_alnum()` are true
-(`type.char.2`). A name that is a keyword is the keyword (`lex.kw.1`).
+(`type.char.2`). A name that is a keyword is the keyword (`lex.kw.1`), except
+in the positions of `lex.kw.3`.
 *(ADR 0372)*
 
 ```ail rules=lex.name.1
@@ -301,29 +326,34 @@ src := r"""
 
 **lex.str.7** — An interpolation may carry a format specification:
 `{expression:spec}`. The `:` is the first one outside brackets, strings and
-character literals. The specification is `[[fill]align][width][.decimals][x]`
-and nothing else:
+character literals. The specification is
+`[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else:
 
 - `align` is `<` (left), `>` (right) or `^` (centre); `fill` is any one
   character before it. The default fill is a space. Without `align`, numbers
   are right-aligned and everything else is left-aligned.
-- `width` is a decimal number with no leading `0` (write `0>4`); text longer
-  than `width` isn't cut. Width counts characters.
-- `.decimals` and `x` are typed by `type.str.11`.
-- `width` and `decimals` are at most 1000. `x` and `.decimals` don't combine.
+- `width` is a decimal number. A `0` before it (`{n:08}`) pads a number with
+  zeros after its sign and can't combine with `align`; to fill text or to
+  align, write the fill (`0>8`). Text longer than `width` isn't cut. Width
+  counts characters.
+- `+` writes a `+` before a number that isn't negative. `,` puts a `,` between
+  each three digits of a number's integer part.
+- `.decimals`, `x`, `b` and `e` are typed by `type.str.11`.
+- `width` and `decimals` are at most 1000. `x` and `b` don't combine with
+  `.decimals`, and `,` doesn't combine with `x`, `b` or `e`.
 
 Anything else is a compile-time error whose help shows the grammar. There is
-no `{x!r}`, sign, `#`, `,` or `e` form. *(ADR 0173)*
+no `{x!r}` or `#` form. *(ADR 0173, ADR 1087)*
 
 ```ail fragment
 n := 255
 r := 3.14159
-print("[{n:>6}][{r:.2}][{n:0>4x}][{"ab":^6}][{"ab":*<5}]")
+print("[{n:>6}][{r:.2}][{n:0>4x}][{"ab":^6}][{"ab":*<5}][{n:08}][{n:b}][{n:+}]")
 ```
 
 ```ail error=lex.str.7
 n := 1
-print("{n:03}")      # compile-time error: write {n:0>3}
+print("{n:#x}")      # compile-time error: there is no `#` form
 ```
 
 ## Numeric literals
@@ -364,6 +394,17 @@ fn main()
 fn main()
     c := 2          # `c` is not reserved outside `extern` and `use`
     print(c)        # 2
+```
+
+```ail rules=lex.kw.3
+struct Reply
+    in str          # a keyword names a field
+    match bool
+
+fn main()
+    r := Reply(in: "ping", match: true)
+    print(r.in)     # ping
+    print(r.match)  # true
 ```
 
 ```ail rules=lex.name.1

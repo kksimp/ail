@@ -5,9 +5,8 @@ Chapter key: `err`
 > **Status:** Drafted (partial). Specified: the error model, error-type
 > declarations and spelling, unions, results with no success value,
 > propagation, handling, `else` (including statement `else`), error context,
-> the default error form, and trap behaviour. Not yet designed:
-> matching on error unions, safe member access (OQ-029), and converting an
-> inferred set to a public error type (OQ-030).
+> the default error form, matching on error unions, and trap behaviour. Not
+> yet designed: converting an inferred set to a public error type (OQ-030).
 
 ## Model
 
@@ -425,7 +424,8 @@ block binds the error value to `name` within that block. The same holds for
 `if ... else name` (`expr.if.6`) and for statement `else` (`err.else.5`). The
 type of `name` is the error part's type: when the error type is an inferred or
 explicit set with one member, that member's type (so field access works); with
-two or more members, field access waits for OQ-029. *(ADR 0049, ADR 0139)*
+two or more members, a union of them, which `match name` narrows to one member
+(`err.match.1-3`). *(ADR 0049, ADR 0139, ADR 1078)*
 
 **err.else.4** — After a declaration with an `else` part, the declared name
 holds a success value on every path that reaches the following statement.
@@ -491,6 +491,111 @@ data := read(path) else err
 save(path, text) else err
     print("save failed: {err}")       # completes normally; execution continues
 save(path, text) else return          # in a function with no success value, a bare return succeeds
+```
+
+## Matching on an error union
+
+**err.match.1** — When `else name` binds an error of two or more types,
+`match name` takes as patterns the member types (`T`, or `m.T` for a type of
+module `m`), the variants of a member error enum written with its name
+(`T.Variant` and `T.Variant(a, b)`), `_`, and alternatives of these
+(`A | B`). Any other pattern, or a type that isn't a member, is a
+compile-time error whose help lists the members. *(ADR 1078)*
+
+**err.match.2** — In an arm whose pattern is a member type `T`, or a variant
+of member `T`, the matched name has type `T`, so its fields and variants can
+be used. A member type pattern takes no fields. The scrutinee MUST be the name
+`else` bound; any other expression of a union type is a compile-time error.
+*(ADR 1078)*
+
+**err.match.3** — Every member MUST be covered: by an arm of its type, by
+arms for all of its variants, or by `_`. A missing member is a compile-time
+error whose fix adds `T => todo` for each one; an arm after its member is
+covered is `expr.match.5`, and `_` warns as `expr.match.3`. A failure records
+its type, so the arm taken is the one for the error's actual type.
+*(ADR 1078)*
+
+```ail rules=err.match.1,err.match.2,err.match.3
+error struct Missing
+    path str
+
+error enum Parse
+    Empty "empty input"
+    BadDigit(c char) "not a digit"
+
+fn load(text str) int ! Missing | Parse
+    if text == ""
+        return Parse.Empty
+    if text == "?"
+        return Missing(path: "conf.txt")
+    for c in text.chars()
+        if c < '0' or c > '9'
+            return Parse.BadDigit(c)
+    text.to_int() else 0
+
+fn describe(text str) str
+    n := load(text) else err
+        msg := match err
+            Missing => "no file {err.path}"
+            Parse.BadDigit(c) => "bad digit '{c}'"
+            Parse.Empty => "nothing to read"
+        return msg
+    "read {n}"
+
+fn main()
+    print(describe("42"))    # read 42
+    print(describe("?"))     # no file conf.txt
+    print(describe("4x"))    # bad digit 'x'
+    print(describe(""))      # nothing to read
+```
+
+```ail error=err.match.3
+error struct A
+    why str
+
+error struct B
+    why str
+
+fn f(n int) int ! A | B
+    if n == 0
+        return A(why: "zero")
+    if n < 0
+        return B(why: "neg")
+    n
+
+fn main()
+    n := f(1) else err
+        match err
+            A => print("a: {err.why}")
+        0
+    print(n)
+```
+
+```ail error=err.match.1
+error struct A
+    why str
+
+error struct B
+    why str
+
+error struct C
+    why str
+
+fn f(n int) int ! A | B
+    if n == 0
+        return A(why: "zero")
+    if n < 0
+        return B(why: "neg")
+    n
+
+fn main()
+    n := f(1) else err
+        match err
+            A => print("a")
+            C => print("c")
+            _ => print("other")
+        0
+    print(n)
 ```
 
 ## Context and traces
@@ -691,20 +796,25 @@ fn main()
     print(parse("ab") else 0)   # 2
 ```
 
-```ail skip=bootstrap rules=err.type.4
+```ail rules=err.type.4
 error struct A
     why str
 
 error struct B
     why str
 
-fn f(n int) int ! A | B
+fn f(n int) !
     if n == 0
         return A(why: "zero")
-    n
+    if n < 0
+        return B(why: "neg")
+    print(n)
 
 fn main()
-    f(1) else err          # matching the error set must cover every member
+    f(0) else err              # the inferred set is A | B
+        match err              # every member must be covered (err.match.3)
+            A => print("a: {err.why}")
+            B => print("b: {err.why}")
 ```
 
 ```ail rules=err.type.5

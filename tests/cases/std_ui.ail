@@ -9,18 +9,30 @@ fn describe(e ui.Event) str
                 "ctrl-"
             else
                 ""
-            "key {mods}{key} alt={alt} shift={shift}"
+            "key {mods}{key.name()} alt={alt} shift={shift}"
         Resize(cols, rows) => "resize {cols}x{rows}"
         Close => "close"
-        Mouse(col, row, button, kind) => "mouse {button} {kind} {col},{row}"
+        Mouse(col, row, button, kind) => "mouse {button_name(button)} {mouse_kind(kind)} {col},{row}"
         Scroll(lines) => "scroll {lines}"
+
+fn button_name(b ui.MouseButton) str
+    match b
+        Left => "left"
+        Middle => "middle"
+        Right => "right"
+
+fn mouse_kind(k ui.MouseKind) str
+    match k
+        Down => "down"
+        Up => "up"
+        Drag => "drag"
 
 fn main()
     mut all := List[ui.Event]()
-    all.push(Key(key: "s", ctrl: true, alt: false, shift: false))
+    all.push(Key(key: Text("s"), ctrl: true, alt: false, shift: false))
     all.push(Resize(cols: 100, rows: 30))
     all.push(Close)
-    all.push(Mouse(col: 3, row: 4, button: "left", kind: "drag"))
+    all.push(Mouse(col: 3, row: 4, button: Left, kind: Drag))
     all.push(Scroll(lines: -3))
     for e in all
         print(describe(e))
@@ -53,5 +65,11 @@ fn main()
     if e := w.poll_event()
         print(describe(e))
     w.close()
-    err := ui.UiError(kind: "no_display", message: "none")
+    err := ui.UiError(kind: NoDisplay, message: "none")
     print(err)
+    # std.ui.7 (ADR 1068): keys are `ui.KeyCode`.
+    print(ui.key_code("f5").name())
+    print(ui.key_code("pagedown") == PageDown)
+    print(ui.key_code("x").text() else "none")
+    print(ui.key_code("enter").text() else "none")
+    print(ui.key_code("é") == Text("é"))

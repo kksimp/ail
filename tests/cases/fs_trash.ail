@@ -1,7 +1,7 @@
 ## std.fs.26: trash moves a file out of its directory and never destroys it.
 ## A refusal across volumes (kind `other`, Linux and macOS) leaves the file, which the case removes.
 ## Only Windows must succeed; elsewhere a trash on another volume is refused.
-fn refused(kind str)
+fn refused(kind fs.IoKind)
     if (env.get("OS") else "") == "Windows_NT"
         print("windows trash failed: {kind}")
 

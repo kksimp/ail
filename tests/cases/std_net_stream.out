@@ -2,6 +2,6 @@
 100000 bytes in true pieces
 100000 bytes in true pieces
 connection reused after a full read: true
-after close: closed
+after close: net.NetKind.Closed
 0
 hello world

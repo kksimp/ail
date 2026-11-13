@@ -4,7 +4,7 @@ use std.ui
 use std.ui.widgets
 
 fn key(k str) ui.Event
-    Key(key: k, ctrl: false, alt: false, shift: false)
+    Key(key: ui.key_code(k), ctrl: false, alt: false, shift: false)
 
 fn show(runs List[widgets.Run])
     for r in runs
@@ -29,7 +29,7 @@ fn main()
     l.on_event(key("down"), r)
     print("{l.chosen() else "none"} {l.on_event(key("enter"), r)}")
     show(l.render(r, theme))
-    print(l.on_event(Mouse(col: 2, row: 0, button: "left", kind: "down"), r))
+    print(l.on_event(Mouse(col: 2, row: 0, button: Left, kind: Down), r))
     print(l.chosen() else "none")
     l.on_event(key("q"), r)
     show(l.render(r, theme))
@@ -43,7 +43,7 @@ fn main()
     d.on_event(key("right"), r)
     print("{d.selected} {d.on_event(key("escape"), r)}")
     dr := widgets.Rect(col: 0, row: 0, cols: 30, rows: 3)
-    print(d.on_event(Mouse(col: 11, row: 2, button: "left", kind: "down"), dr))
+    print(d.on_event(Mouse(col: 11, row: 2, button: Left, kind: Down), dr))
     print(d.selected)
     # Pane: moving, scrolling, choosing a line.
     mut p := widgets.Pane.new(["one", "two", "three", "four", "five"])

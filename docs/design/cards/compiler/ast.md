@@ -34,6 +34,7 @@ pub enum ast.Else  ## The `else` part of `x := e else ...` (err.else.1-3).
 pub enum ast.BinOp
 pub enum ast.UnOp
 pub enum ast.Expr
+pub struct ast.ClosureParam  ## A parameter of a function literal: `x`, or `x int` with its type (type.fn.4).
 pub struct ast.MapEntry
 pub struct ast.Branch  ## One `if`/`elif` condition and its block.
 pub enum ast.CompKind
@@ -45,9 +46,16 @@ pub struct ast.Arg  ## A call argument (own.param.2, own.move.2, type.struct.3, 
 pub struct ast.Arm
 pub enum ast.Pattern
 pub enum ast.Literal
+pub fn ast.key_body(ast.Arg) ast.Expr  ## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
+pub fn ast.expr_names(ast.Expr, mut Set[str]) [mutates]  ## Add each name `e` reads to `out`.
 pub struct ast.ParScan  ## What a loop body does, for deciding whether its chunks can run apart.
 pub fn ast.new_scan() ast.ParScan
 pub fn ast.scan_block(mut ast.ParScan, List[ast.Stmt], int) [mutates]
+pub ast.YIELD := "yield"  ## The reserved callee of a `yield` statement.
+pub fn ast.yield_stmt(ast.Expr, ast.Pos) ast.Stmt  ## The statement `yield value` at `pos`.
+pub fn ast.is_yield_callee(ast.Expr) bool  ## Whether `callee` is the reserved name of a `yield`.
+pub fn ast.yield_value(ast.Stmt) ast.Expr?  ## The operand of `s` when it is `yield e`.
+pub fn ast.has_yield(List[ast.Stmt]) bool  ## Whether a function body contains a `yield`, at any depth of its blocks:
 ```
 
-trimmed to fit 2000 tokens (~877); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1165); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

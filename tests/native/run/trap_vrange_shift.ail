@@ -1,0 +1,8 @@
+# `k & 127` can exceed 63, so the shift keeps its check and traps on 64
+# (native.range.1, expr.bit.2).
+fn sh(k int) int
+    1.shl(k.bit_and(127))
+
+fn main()
+    print(sh(130))
+    print(sh(64))

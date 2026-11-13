@@ -24,7 +24,7 @@ fn worker(srv net.Server) !
 
 fn kind_of(method str, url str, o net.Options) str
     r := net.request(method, url, o) else err
-        return err.kind
+        return "{err.kind}"
     "{r.status}"
 
 fn main() !
@@ -39,5 +39,7 @@ fn main() !
     print("client name: {kind_of("GET", base, o2)}")
     print("client method: {kind_of("GE T", base, net.options())}")
     r := net.get(base)?
-    print("{r.status} {r.headers["x-a"]} {r.headers["content-length"]} {r.body}")
+    # The worker prints its last line after it has sent this response: wait for it,
+    # so the order of the two tasks' output does not depend on the schedule.
     w.wait()?
+    print("{r.status} {r.headers["x-a"]} {r.headers["content-length"]} {r.body}")

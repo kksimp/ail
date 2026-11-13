@@ -5,7 +5,18 @@
 ## std.fs
 error struct IoError
     path str
-    kind str
+    kind fs.IoKind
+
+## std.err.1 (ADR 1068): why a file call failed.
+enum IoKind
+    NotFound
+    Permission
+    Exists
+    IsDir
+    NotDir
+    NotEmpty
+    InvalidUtf8
+    Other
 
 ## std.fs.10 (ADR 0281)
 struct Metadata
@@ -20,8 +31,24 @@ struct Volume
 
 ## std.compress (ADR 0443)
 error struct CompressError
-    kind str
+    kind compress.CompressKind
     message str
+
+## std.compress.2 (ADR 1068): why a call failed; the file functions add the I/O kinds of std.err.1.
+enum CompressKind
+    Corrupt
+    Checksum
+    TooBig
+    UnsafePath
+    Unsupported
+    NotFound
+    Permission
+    Exists
+    IsDir
+    NotDir
+    NotEmpty
+    InvalidUtf8
+    Other
 
 ## std.fs.23 (ADR 0927): one entry of `fs.scan`, and the scan.
 struct Entry
@@ -58,7 +85,20 @@ struct RawOutput
 
 error struct ProcError
     cmd str
-    kind str
+    kind proc.ProcKind
+
+## std.err.1 (ADR 1068): why a process couldn't run.
+enum ProcKind
+    NotFound
+    Permission
+    Exists
+    IsDir
+    NotDir
+    NotEmpty
+    InvalidUtf8
+    Other
+    TimedOut
+    Cancelled
 
 ## std.proc.4 (ADR 0424): a child; `stdin` takes `send` and `close`, `out` and `err` give lines.
 unique struct Child
@@ -83,8 +123,21 @@ struct RawResponse
 
 error struct NetError
     url str
-    kind str
+    kind net.NetKind
     message str
+
+## std.net.4 (ADR 1068): why a network call failed.
+enum NetKind
+    BadUrl
+    BadRequest
+    Tls
+    NotFound
+    Refused
+    TimedOut
+    Closed
+    Bind
+    Protocol
+    Other
 
 ## std.net.6: what a request can set beyond its method and URL.
 struct Options
@@ -143,11 +196,40 @@ struct Modifiers
     shift bool
 
 enum Event
-    Key(key str, ctrl bool, alt bool, shift bool)
+    Key(key ui.KeyCode, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
-    Mouse(col int, row int, button str, kind str)
+    Mouse(col int, row int, button ui.MouseButton, kind ui.MouseKind)
     Scroll(lines int)
+
+## std.ui.7 (ADR 1068): a key, as typed text or a named key.
+enum KeyCode
+    Text(text str)
+    Enter
+    Tab
+    Backspace
+    Delete
+    Insert
+    Escape
+    Up
+    Down
+    Left
+    Right
+    Home
+    End
+    PageUp
+    PageDown
+    F(n int)
+
+enum MouseButton
+    Left
+    Middle
+    Right
+
+enum MouseKind
+    Down
+    Up
+    Drag
 
 ## std.ui.16: how `put_styled` draws text.
 struct Style
@@ -162,8 +244,14 @@ enum Cursor
     Underline
 
 error struct UiError
-    kind str
+    kind ui.UiKind
     message str
+
+## std.ui.1 (ADR 1068): why a window couldn't open.
+enum UiKind
+    NoDisplay
+    Closed
+    Other
 
 ## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
 ## `tensor.zeros(shape)`, read with its methods. The elements live in the
@@ -180,9 +268,24 @@ struct Regex
 error struct RegexError
     pattern str
     at int
-    kind str
+    kind regex.RegexKind
     rule str
     message str
+
+## std.regex.23 (ADR 1068): what is wrong with a pattern (std.regex.11-22).
+enum RegexKind
+    UnclosedGroup
+    UnopenedGroup
+    UnclosedClass
+    BadEscape
+    BadRepeat
+    NothingToRepeat
+    BadRange
+    BadClass
+    BadGroupName
+    BadFlag
+    Unsupported
+    TooLarge
 
 struct Match
     start int

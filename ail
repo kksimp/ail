@@ -30,7 +30,7 @@ if [ -n "$on_windows" ]; then
             explain | fmt | fix | card | ask | edit | diff | pkg | header | attach | new | prove | context | review)
                 fast=pass
                 for a in "${@:2}"; do
-                    case "$a" in --trace | --trace=* | --trace-limit | --watch | --watch=* | --verbose | --at | --show | --record | --replay | --deterministic | --deny) fast= ;; esac
+                    case "$a" in --trace | --trace=* | --trace-limit | --watch | --watch=* | --verbose | --at | --show | --record | --replay | --deterministic | --deny | --allow) fast= ;; esac
                 done ;;
             check)
                 # `check FILE...` and `check --json FILE...` only: every other option is ail.ps1's.
@@ -149,6 +149,7 @@ run_opts=
 budget_opts=
 run_skip=0
 check_opts=
+allow_list=
 if [ "${1:-}" = run ]; then
     run_args=("$@")
     k=1
@@ -208,6 +209,11 @@ if [ "${1:-}" = run ]; then
                 v="${run_args[$((k + 1))]-}"
                 [ -n "$v" ] || die "\`--deny\` needs a list of capabilities, e.g. \`--deny fs,proc\`"
                 check_opts="$check_opts --deny $v"; k=$((k + 2)) ;;
+            --allow)
+                v="${run_args[$((k + 1))]-}"
+                [ -n "$v" ] || die "error[eff.allow.2]: \`--allow\` needs a list, e.g. \`--allow fs.read=./data,net=api.example.com:443\` or \`--allow none\` (eff.allow.2)"
+                case "$v" in *[[:space:]]*) die "error[eff.allow.2]: \`--allow\` entries can't hold spaces (eff.allow.2)" ;; esac
+                check_opts="$check_opts --allow $v"; allow_list="${allow_list:+$allow_list,}$v"; k=$((k + 2)) ;;
             --parallel) export AIL_PARALLEL=1; k=$((k + 1)) ;;
             --unsafe)
                 [ "${run_args[$((k + 1))]-}" = driver ] || break
@@ -283,7 +289,7 @@ if [ "${1:-}" = api ]; then
 fi
 # `ail check --deny/--deterministic/--unsafe ...` is native too (eff.cap.1, eff.det.1, unsafe.hw.1).
 native_check=
-if [ "${1:-}" = check ]; then case "${2:-}" in --deny | --deterministic | --unsafe) native_check=1 ;; esac; fi
+if [ "${1:-}" = check ]; then case "${2:-}" in --deny | --allow | --deterministic | --unsafe) native_check=1 ;; esac; fi
 # `ail check --fix FILE` applies the safe fixes first, then checks (fix.check.1).
 if [ "${1:-}" = check ]; then for a in "${@:2}"; do [ "$a" = --fix ] && native_check=1; done; fi
 # `ail effects [--json] FILE` is native too (#695).
@@ -449,6 +455,8 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then
         rm -f "$prep_err"
         shift "$run_skip"
+        # eff.allow.1: the scoped capabilities reach the program only, not the compiler that ran before it.
+        if [ -n "$allow_list" ]; then export AIL_ALLOW="$allow_list"; fi
         # shellcheck disable=SC2086
         if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget run $budget_opts -- "$exe" "$@"; fi
         if [ -n "${snap_json:-}" ]; then

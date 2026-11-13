@@ -1,8 +1,8 @@
-client value: bad_request
-client name: bad_request
-client method: bad_request
-status: bad_request
-name: bad_request
-value: bad_request
-twice: other
+client value: net.NetKind.BadRequest
+client name: net.NetKind.BadRequest
+client method: net.NetKind.BadRequest
+status: net.NetKind.BadRequest
+name: net.NetKind.BadRequest
+value: net.NetKind.BadRequest
+twice: net.NetKind.Other
 201 1 4 made

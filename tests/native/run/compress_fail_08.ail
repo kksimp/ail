@@ -1,4 +1,4 @@
-# `compress.inflate` fails with: compress.CompressError(kind: "corrupt", message: "invalid length symbol")
+# `compress.inflate` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "invalid length symbol")
 use std.compress
 
 fn main() !

@@ -1,0 +1,56 @@
+## Finds duplicate files: writes a few files into a temp directory, hashes
+## each one's contents with SHA-256, and reports every group of identical
+## files with the space the extra copies waste.
+use std.hash
+
+## Groups of names whose texts are identical, each group in input order,
+## the groups sorted. Names must come in sorted order.
+fn dupe_groups(names List[str], texts List[str]) List[List[str]]
+    mut by_hash := Map[str, List[str]]()
+    for i in 0..names.len()
+        by_hash.push(hash.sha256(texts[i]), names[i])
+    groups := [g for g in by_hash.values() if g.len() > 1]
+    groups.sorted()
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_file_dedupe")?
+    names := ["a.txt", "b.txt", "c.log", "d.txt", "e.cfg", "f.log", "g.txt"]
+    texts := [
+        "alpha beta gamma\n",
+        "unique content here\n",
+        "retry=3\ntimeout=30\n",
+        "alpha beta gamma\n",
+        "retry=3\ntimeout=30\n",
+        "retry=3\ntimeout=30\n",
+        "alpha beta gamma!\n",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    files := fs.walk(dir)?
+    mut found := List[str]()
+    mut contents := List[str]()
+    for p in files
+        found.push(path.base(p))
+        contents.push(fs.read_text(p)?)
+    print("scanned {found.len()} files")
+    groups := dupe_groups(found, contents)
+    mut wasted := 0
+    for i in 0..groups.len()
+        g := groups[i]
+        size := contents[found.index_of(g[0]) else 0].byte_len()
+        wasted += size * (g.len() - 1)
+        print("group {i + 1}: {g.join(", ")} ({size} bytes each)")
+    print("{groups.len()} duplicate groups, {wasted} bytes wasted")
+    for p in files
+        fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn groups_identical_texts()
+    g := dupe_groups(["a", "b", "c"], ["x", "y", "x"])
+    assert_eq(g, [["a", "c"]])
+
+@test fn no_duplicates_gives_no_groups()
+    assert_eq(dupe_groups(["a", "b"], ["x", "y"]).len(), 0)
+
+@test fn digest_differs_on_one_byte()
+    assert(hash.sha256("abc") != hash.sha256("abd"))

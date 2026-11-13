@@ -102,6 +102,7 @@ pub INT_METHODS := [
     "abs",
     "to_float",
     "to_hex",
+    "to_str",
     "to_i8",
     "to_i16",
     "to_i32",
@@ -151,6 +152,7 @@ pub SIZED_INT_METHODS := [
     "to_int",
     "to_float",
     "to_hex",
+    "to_str",
     "to_i8",
     "to_i16",
     "to_i32",
@@ -175,6 +177,7 @@ pub LIST_METHODS := [
     "extend",
     "clear",
     "reverse",
+    "reversed",
     "contains",
     "index_of",
     "join",
@@ -193,9 +196,25 @@ pub LIST_METHODS := [
     "flatten",
     "is_empty",
     "enumerate",
+    "any",
+    "all",
+    "find",
+    "filter",
+    "map",
+    "group_by",
 ]
 
-pub MAP_METHODS := ["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"]
+pub MAP_METHODS := [
+    "len",
+    "is_empty",
+    "get",
+    "get_or",
+    "contains",
+    "remove",
+    "keys",
+    "values",
+    "top",
+]
 
 pub SET_METHODS := [
     "len",
@@ -330,6 +349,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Float)
             if n == "to_hex"
                 return read([], Ty.Str)
+            if n == "to_str"
+                return read([], Ty.Str)
             k := convert(n) else return none
             read([], Ty.Num(k))
         Float =>
@@ -391,13 +412,16 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Int)
             if n == "to_float"
                 return read([], Ty.Float)
-            if n == "to_hex"
+            if n == "to_hex" or n == "to_str"
                 return read([], Ty.Str)
             c := convert(n) else return none
             if c == k
                 return none
             read([], Ty.Num(c))
         ListOf(e) =>
+            # type.coll.21-26: the methods that take a function (listfn.ail).
+            if LIST_FN_METHODS.contains(n)
+                return list_fn_builtin(e, n)
             if n == "is_empty"
                 return read([], Ty.Bool)
             if n == "len"
@@ -433,6 +457,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return make(true, [Ty.ListOf(e)], Ty.Unit, Need.NoNeed)
             if n == "clear" or n == "reverse"
                 return make(true, [], Ty.Unit, Need.NoNeed)
+            if n == "reversed"
+                return make(false, [], Ty.ListOf(e), Need.NoNeed)
             if n == "contains"
                 return make(false, [e], Ty.Bool, Need.NeedEq)
             if n == "index_of"
@@ -455,6 +481,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Int)
             if n == "get"
                 return read([k], Ty.Opt(v))
+            if n == "get_or"
+                return read([k, v], v)
             if n == "contains"
                 return read([k], Ty.Bool)
             if n == "remove"
@@ -514,7 +542,9 @@ fn read(params List[Ty], result Ty) Builtin?
 
 ## `x.name(args)` for a built-in method of `x`'s type.
 fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
-    if keyed(args)
+    if is_list_fn(rt, n)
+        return list_fn_call(rt, n, at, args)
+    if keyed(args, n)
         return keyed_call(recv, rt, n, at, args)
     b := builtin(rt, n) else return Ty.Unknown
     # type.str.6: these take a `str` or a `char`.
@@ -523,6 +553,9 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
         "starts_with",
         "ends_with",
         "split",
+        "find",
+        "rfind",
+        "count",
     ].contains(n) and (args.len() == 1 or (n == "split" and args.len() == 2))
         a := args[0]
         t := expr(a.value, none, true)
@@ -551,6 +584,55 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
                     "the limit of `split` is an `int`, not {show(lt)}",
                 )
         return b.ret
+    # type.str.6: `replace` takes a `str` or a `char` for each of its two arguments.
+    if rt == Ty.Str and n == "replace" and args.len() == 2
+        for a in args
+            t := expr(a.value, none, true)
+            if a.mutable
+                err_help(
+                    "own.param.2",
+                    expr_pos(a.value),
+                    "this parameter isn't `mut`",
+                    "remove the `mut`",
+                )
+            if t != Ty.Str
+                and t != Ty.Char
+                and t != Ty.Unknown
+                and t != Ty.Never
+                and not reject_unhandled(t, expr_pos(a.value))
+                err(
+                    "expr.call.2",
+                    expr_pos(a.value),
+                    "`replace` takes a `str` or a `char`, not {show(t)}",
+                )
+        return b.ret
+    # type.str.20: `s.to_int(radix)`, `n.to_str(radix)` and `n.to_str()`.
+    if (n == "to_int" and rt == Ty.Str and args.len() == 1)
+        or (n == "to_str" and args.len() <= 1 and radix_receiver(rt))
+        if args.len() == 1
+            a := args[0]
+            if a.mutable
+                err_help(
+                    "own.param.2",
+                    expr_pos(a.value),
+                    "this parameter isn't `mut`",
+                    "remove the `mut`",
+                )
+            t := expr(a.value, Ty.Int, true)
+            if t != Ty.Int and t != Ty.Unknown and t != Ty.Never and not reject_unhandled(
+                t,
+                expr_pos(a.value),
+            )
+                err("expr.call.2", expr_pos(a.value), "the radix is an `int`, not {show(t)}")
+            if v := int_literal_value(a.value)
+                if v < 2 or v > 36
+                    err_help(
+                        "type.str.20",
+                        expr_pos(a.value),
+                        "a radix is 2 to 36, found {v}",
+                        "use 2 for binary, 8 for octal, 16 for hexadecimal",
+                    )
+        return b.ret
     # type.bytes.14: `b.hex(sep)` puts `sep` between the byte pairs.
     if rt == Ty.Bytes and n == "hex" and args.len() == 1
         a := args[0]
@@ -578,7 +660,7 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
             "expr.call.1",
             at,
             "`m.get(k)` takes only the key, and gives a `V?`",
-            "for a default, write `v := m.get(k) else default`",
+            "for a default, write `m.get_or(k, default)` or `v := m.get(k) else default`",
         )
         return b.ret
     elem := elem_of(rt)
@@ -617,10 +699,11 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
     sig.moves = moves
     check_call(n, sig, [], args, recv, at, none)
 
-## A call with a `by:` argument or a `|x|` key function.
-fn keyed(args List[ast.Arg]) bool
+## A call with a `by:` argument, or a `|x|` key function given to a method
+## that takes one (any other method takes it as a function value, type.fn.4).
+fn keyed(args List[ast.Arg], n str) bool
     for a in args
-        if a.param != none
+        if a.param != none and ["sorted", "sort", "min", "max"].contains(n)
             return true
         if l := a.label
             if l.name == "by"
@@ -672,7 +755,7 @@ fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args Li
     mark := locals.len()
     if declare(p.name, p.pos)
         locals.push(Local(name: p.name, ty: e, mutable: false, how: LocalKind.LoopVar, decl: none))
-    kt := expr(a.value, none, true)
+    kt := expr(ast.key_body(a), none, true)
     end_scope(mark)
     if kt != Ty.Unknown and not implements(kt, std_ord)
         err_help(
@@ -697,3 +780,16 @@ fn Checker.key_misplaced(mut self, at ast.Pos)
         "a `|x|` key function is only allowed as `by:` of `sorted`, `sort`, `min` or `max`",
         "use a comprehension or a loop, e.g. `[f(x) for x in xs]`",
     )
+
+## Whether `t` is an `int` or a sized integer, which `to_str(radix)` formats.
+@allow("expr.match.3") fn radix_receiver(t Ty) bool
+    match t
+        Int => true
+        Num(k) => k != "f32"
+        _ => false
+
+## The value of an integer literal, when `e` is one.
+@allow("expr.match.3") fn int_literal_value(e ast.Expr) int?
+    match e
+        Int(v, _) => v.to_int()
+        _ => none

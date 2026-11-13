@@ -1,4 +1,5 @@
-## `ail ask std WORDS...` and `ail ask std --sig "(PARAMS) RET"` (api.find.1-4, ADR 1051):
+## `ail ask std WORDS...`, `ail ask std --sig "(PARAMS) RET"` and `ail ask how WORDS...`
+## (api.find.1-7, ADRs 1051 and 1083):
 ## ranked std functions, at most ten lines, with no grep. The index is the
 ## standard library's rules in `docs/spec/*.md`: a rule `**std.M.N**` whose
 ## text starts with a backticked signature `name(params) ret ! Err` is one
@@ -32,6 +33,30 @@ FIND_FILLER := [
     "do",
     "i",
     "std",
+]
+
+## Words that name a type or a common noun: hitting a name with one of these
+## never answers alone (api.find.2), so `sort list by key` is not answered by
+## `fs.list_dir`.
+FIND_GENERIC := [
+    "list",
+    "map",
+    "set",
+    "str",
+    "string",
+    "int",
+    "float",
+    "char",
+    "bytes",
+    "key",
+    "value",
+    "get",
+    "file",
+    "text",
+    "data",
+    "new",
+    "make",
+    "use",
 ]
 
 struct StdFn
@@ -144,26 +169,100 @@ fn find_index() List[StdFn]
             find_add(mut out, rule, para)
     out
 
+## The rows of a table file under `docs/design`: the non-blank lines that do
+## not start with `#`.
+fn find_table(name str) List[str]
+    text := fs.read_text(path.join(find_root(), "docs/design/{name}")) else
+        return []
+    mut out := List[str]()
+    for line in text.lines()
+        if line.trim() != "" and not line.starts_with("#")
+            out.push(line)
+    out
+
+## The built-in methods (api.find.5): rows `SIGNATURE ; RULE ; WORDS` of
+## `docs/design/builtin-methods.txt`, as `Type.name(params) Result`. A row with
+## no `Type.` before its name (`zip(a, b) ...`) has no owner.
+fn find_methods() List[StdFn]
+    mut out := List[StdFn]()
+    for row in find_table("builtin-methods.txt")
+        cells := row.split(" ; ")
+        if cells.len() < 3
+            continue
+        head := cells[0].trim()
+        dot := head.find(".") else -1
+        paren := head.find("(") else head.len()
+        mut owner := ""
+        mut sig := head
+        if dot >= 0 and dot < paren
+            owner = head.slice(0, dot)
+            sig = head.slice(dot + 1, head.len())
+        mut name := ""
+        for c in sig.chars()
+            if not find_is_ident(c)
+                break
+            name = "{name}{c}"
+        out.push(StdFn(
+            owner: owner,
+            sig: sig,
+            rule: cells[1].trim(),
+            name: name.to_lower(),
+            words: find_words(cells[2]),
+        ))
+    out
+
 ## Does the doc hold `w`, or its plural or singular?
 fn find_has_word(f StdFn, w str) bool
     if f.words.contains(w) or f.words.contains("{w}s")
         return true
     w.ends_with("s") and f.words.contains(w.slice(0, w.len() - 1))
 
-## How well a function fits the words (api.find.2): its name equal to a word is
-## worth 6, containing one 3, its module 2, and each word of its doc 1.
-fn find_score_words(f StdFn, query List[str]) int
+## Does a piece of a name start with `w`?
+fn find_piece_starts(pieces List[str], w str) bool
+    for p in pieces
+        if p.starts_with(w)
+            return true
+    false
+
+## How well a function fits the words (api.find.2), as `(score, answers)`. A
+## word that is the name, a `_` piece of it, or the start of one (`sort` for
+## `sorted`) is worth 6, 5 or 4 and answers alone unless it is generic; a word
+## the name contains is worth 3, the module 2 and the doc 1, and these answer
+## only two words together. A single word that is the module answers alone.
+fn find_score_words(f StdFn, query List[str])(int, bool)
     mut score := 0
+    mut strong := false
+    mut hit := 0
+    pieces := f.name.split("_")
     for w in query
+        mut got := false
+        generic := FIND_GENERIC.contains(w)
         if f.name == w
             score += 6
+            got = true
+            strong = strong or not generic
+        elif pieces.contains(w)
+            score += 5
+            got = true
+            strong = strong or not generic
+        elif w.len() >= 4 and find_piece_starts(pieces, w)
+            score += 4
+            got = true
+            strong = strong or not generic
         elif w.len() >= 3 and f.name.contains(w)
             score += 3
+            got = true
         if f.owner == w
             score += 2
+            got = true
+            if query.len() == 1
+                strong = true
         if find_has_word(f, w)
             score += 1
-    score
+            got = true
+        if got
+            hit += 1
+    (score, strong or hit >= 2)
 
 fn find_strip(s str) str
     s.replace(" ", "")
@@ -230,7 +329,29 @@ fn find_score_sig(f StdFn, want_params List[str], want_ret str) int
         score += 4
     score
 
-## `ail ask std ...` (api.find.1-4).
+## Does the query hold `w`, or its plural or singular?
+fn find_query_has(query List[str], w str) bool
+    if query.contains(w) or query.contains("{w}s")
+        return true
+    w.ends_with("s") and query.contains(w.slice(0, w.len() - 1))
+
+## The answer line of `docs/design/not-in-std.txt` for a query, else "" (api.find.5):
+## the first row one of whose `|` alternatives has every word in the query.
+fn find_hint(query List[str]) str
+    for row in find_table("not-in-std.txt")
+        cut := row.find(" -> ") else
+            continue
+        for alt in row.slice(0, cut).split("|")
+            aw := find_words(alt)
+            mut every := not aw.is_empty()
+            for w in aw
+                if not find_query_has(query, w)
+                    every = false
+            if every
+                return row.slice(cut + 4, row.len()).trim()
+    ""
+
+## `ail ask std ...` (api.find.1-5).
 pub fn find_command(args List[str]) int
     mut sig := false
     mut rest := List[str]()
@@ -245,10 +366,12 @@ pub fn find_command(args List[str]) int
     if rest.is_empty()
         io.eprint(FIND_USAGE)
         return 2
-    index := find_index()
+    mut index := find_index()
     if index.is_empty()
         io.eprint("error: no std rules found under {path.join(find_root(), "docs/spec")} (api.find.4)")
         return 2
+    if not sig
+        index.extend(find_methods())
     mut query := List[str]()
     for x in rest
         for w in find_words(x)
@@ -265,7 +388,11 @@ pub fn find_command(args List[str]) int
         if sig
             scores.push(find_score_sig(f, want_params, want_ret))
         else
-            scores.push(find_score_words(f, query))
+            r := find_score_words(f, query)
+            if r.1
+                scores.push(r.0)
+            else
+                scores.push(0)
     mut used := List[int]()
     mut shown := 0
     while shown < FIND_LIMIT
@@ -277,8 +404,122 @@ pub fn find_command(args List[str]) int
             break
         used.push(best)
         f := index[best]
-        print("{f.owner}.{f.sig}   ({f.rule})")
+        if f.owner == ""
+            print("{f.sig}   ({f.rule})")
+        else
+            print("{f.owner}.{f.sig}   ({f.rule})")
         shown += 1
     if shown == 0
+        if sig
+            print("nothing in std has the shape {rest.join(" ")}")
+        else
+            print("nothing in std matches {rest.join(" ")}")
+            hint := find_hint(query)
+            if hint != ""
+                print(hint)
         return 1
+    0
+
+struct HowEntry
+    title str
+    ## The lower-case words of the title and its `Words:` line.
+    words List[str]
+    ## The title's own words.
+    title_words List[str]
+    ## The lines of the entry's text and code, as the file has them.
+    body List[str]
+
+## The entries of `docs/how-to.md`: each `##` section (api.find.6).
+fn how_entries() List[HowEntry]
+    text := fs.read_text(path.join(find_root(), "docs/how-to.md")) else
+        return []
+    mut out := List[HowEntry]()
+    mut title := ""
+    mut words := List[str]()
+    mut tw := List[str]()
+    mut body := List[str]()
+    for line in text.lines()
+        if line.starts_with("## ")
+            if title != ""
+                out.push(HowEntry(title: title, words: words, title_words: tw, body: body))
+            title = line.slice(3, line.len()).trim()
+            tw = find_words(title)
+            words = find_words(title)
+            body = []
+        elif title != ""
+            extra := line.strip_prefix("Words:") else
+                body.push(line)
+                continue
+            words.extend(find_words(extra))
+    if title != ""
+        out.push(HowEntry(title: title, words: words, title_words: tw, body: body))
+    out
+
+## The text of an entry: its lines without blank edges and without the code fences.
+fn how_text(e HowEntry) List[str]
+    mut out := List[str]()
+    for line in e.body
+        if line.starts_with("```")
+            continue
+        if line.trim() == "" and (out.is_empty() or out[out.len() - 1] == "")
+            continue
+        out.push(line)
+    while not out.is_empty() and out[out.len() - 1] == ""
+        out.pop()
+    out
+
+## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
+## with its checked code, then the titles of the next two. No words lists every title.
+pub fn how_command(args List[str]) int
+    entries := how_entries()
+    if entries.is_empty()
+        io.eprint("error: no how-to entries found under {path.join(find_root(), "docs/how-to.md")} (api.find.6)")
+        return 2
+    mut query := List[str]()
+    for x in args
+        for w in find_words(x)
+            if not FIND_FILLER.contains(w)
+                query.push(w)
+    if query.is_empty()
+        for e in entries
+            print(e.title)
+        return 0
+    mut scores := List[int]()
+    for e in entries
+        mut score := 0
+        mut hit := 0
+        mut strong := false
+        for w in query
+            if e.title_words.contains(w) and not FIND_GENERIC.contains(w)
+                score += 3
+                hit += 1
+                strong = true
+            elif e.words.contains(w)
+                or e.words.contains("{w}s")
+                or (w.ends_with("s") and e.words.contains(w.slice(0, w.len() - 1)))
+                score += 1
+                hit += 1
+        if hit >= 2 or strong
+            scores.push(score)
+        else
+            scores.push(0)
+    mut order := List[int]()
+    while order.len() < 3
+        mut best := -1
+        for i in 0..entries.len()
+            if scores[i] > 0 and not order.contains(i) and (best < 0 or scores[i] > scores[best])
+                best = i
+        if best < 0
+            break
+        order.push(best)
+    if order.is_empty()
+        print("no how-to matches {args.join(" ")}")
+        print("titles: {[e.title for e in entries].join("; ")}")
+        return 1
+    best := entries[order[0]]
+    print("{best.title}   (docs/how-to.md)")
+    for line in how_text(best)
+        print(line)
+    if order.len() > 1
+        print("also: {[entries[i].title for i in order[1..]].join("; ")}")
     0

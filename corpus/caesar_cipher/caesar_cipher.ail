@@ -1,0 +1,57 @@
+## Caesar cipher: shifts letters by a key, decodes, applies ROT13, and cracks
+## a message by picking the shift that yields the most common English letters.
+
+fn rotate(c char, base int, k int) char
+    char.from_code((c.code() - base + k) % 26 + base)
+
+fn shift(text str, key int) str
+    k := (key % 26 + 26) % 26
+    mut out := ""
+    for c in text.chars()
+        ch := match c
+            'a'..='z' => rotate(c, 97, k)
+            'A'..='Z' => rotate(c, 65, k)
+            _ => c
+        out = "{out}{ch}"
+    out
+
+fn score(text str) int
+    mut n := 0
+    for c in text.to_lower().chars()
+        if "etaoin".contains(c)
+            n += 1
+    n
+
+fn crack(cipher str) int
+    mut best := 0
+    mut best_score := -1
+    for k in 0..26
+        s := score(shift(cipher, -k))
+        if s > best_score
+            best = k
+            best_score = s
+    best
+
+fn main()
+    plain := "Attack the east gate at noon, then retreat."
+    enc := shift(plain, 3)
+    print(enc)
+    print(shift(enc, -3))
+    print(shift(plain, 13))
+    print(shift(shift(plain, 13), 13) == plain)
+    secret := shift("the treasure is hidden in the old stone tower", 11)
+    print(secret)
+    k := crack(secret)
+    print("guessed key {k}: {shift(secret, -k)}")
+
+@test fn round_trip()
+    assert_eq(shift(shift("Hello, World!", 7), -7), "Hello, World!")
+    assert_eq(shift("abc", 27), "bcd")
+
+@test fn wraps_and_keeps_other_chars()
+    assert_eq(shift("xyz XYZ 123", 3), "abc ABC 123")
+    assert_eq(shift("abc", -1), "zab")
+
+@test fn cracks()
+    msg := "meet me at the entrance in the evening"
+    assert_eq(crack(shift(msg, 5)), 5)

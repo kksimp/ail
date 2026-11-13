@@ -633,6 +633,11 @@ fn pv_param(f PvFacts, p ast.Param) PvFacts
                 g3 = pv_pattern(g3, q)
             g3
         BindName(name, _) => pv_forget(f, name)
+        Nested(_, _, nfields, _) =>
+            mut g4 := f
+            for q in nfields
+                g4 = pv_pattern(g4, q)
+            g4
         _ => f
 
 ## Whether a block always leaves: it ends in `return`, `break` or `continue`, or in an
@@ -982,16 +987,19 @@ fn PvProver.walk_else(mut self, o ast.Else, f PvFacts)
             walk_expr(value, f)
             walk_else(otherwise, f)
         NewRef(value, _) => walk_expr(value, f)
+        # type.fn.4: the body runs later, so it assumes nothing about its parameters.
+        Closure(params, body, _) =>
+            mut g := f
+            for p in params
+                g = pv_forget(g, p.name)
+            walk_expr(body, g)
         _ => return
     return
 
 ## The arguments of a call; a key function `|x| e` (expr.key.1) binds `x` in `e`.
 fn PvProver.walk_args(mut self, args List[ast.Arg], f PvFacts)
     for a in args
-        if p := a.param
-            walk_expr(a.value, pv_forget(f, p.name))
-        else
-            walk_expr(a.value, f)
+        walk_expr(a.value, f)
 
 ## A call `name(args)` at `at`: try each `requires` of the function it reaches.
 fn PvProver.see_call(mut self, name str, at ast.Pos, args List[ast.Arg], f PvFacts)

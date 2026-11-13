@@ -39,10 +39,89 @@ pub error struct TermError "{why}"
 ## `std.ui.10-11`, with `col` and `row` counted from 0; `Resize` is the new
 ## size in cells.
 pub enum Event
-    Key(key str, ctrl bool, alt bool, shift bool)
-    Mouse(col int, row int, button str, kind str)
+    Key(key KeyCode, ctrl bool, alt bool, shift bool)
+    Mouse(col int, row int, button MouseButton, kind MouseKind)
     Scroll(lines int)
     Resize(cols int, rows int)
+
+## A key, as `ui.KeyCode` (std.ui.7, ADR 1068): the typed text, or a named key.
+pub enum KeyCode
+    Text(text str)
+    Enter
+    Tab
+    Backspace
+    Delete
+    Insert
+    Escape
+    Up
+    Down
+    Left
+    Right
+    Home
+    End
+    PageUp
+    PageDown
+    F(n int)
+
+pub enum MouseButton
+    Left
+    Middle
+    Right
+
+pub enum MouseKind
+    Down
+    Up
+    Drag
+
+## The key named `name` as std.ui.7 names it: a named key, or the typed text.
+pub fn key_code(name str) KeyCode
+    match name
+        "enter" => Enter
+        "tab" => Tab
+        "backspace" => Backspace
+        "delete" => Delete
+        "insert" => Insert
+        "escape" => Escape
+        "up" => Up
+        "down" => Down
+        "left" => Left
+        "right" => Right
+        "home" => Home
+        "end" => End
+        "pageup" => PageUp
+        "pagedown" => PageDown
+        _ =>
+            if name.len() >= 2 and name.len() <= 3 and name.starts_with("f")
+                if n := name.slice(1, name.len()).to_int()
+                    if n >= 1 and n <= 12
+                        return F(n)
+            Text(name)
+
+## The std.ui.7 name of `key`: its text, or `enter`, `pageup`, `f5` and so on.
+pub fn KeyCode.name(self) str
+    match self
+        Text(t) => t
+        Enter => "enter"
+        Tab => "tab"
+        Backspace => "backspace"
+        Delete => "delete"
+        Insert => "insert"
+        Escape => "escape"
+        Up => "up"
+        Down => "down"
+        Left => "left"
+        Right => "right"
+        Home => "home"
+        End => "end"
+        PageUp => "pageup"
+        PageDown => "pagedown"
+        F(n) => "f{n}"
+
+## The typed text of `key`, or `none` for a named key.
+pub fn KeyCode.text(self) str?
+    match self
+        Text(t) => t
+        Enter | Tab | Backspace | Delete | Insert | Escape | Up | Down | Left | Right | Home | End | PageUp | PageDown | F => none
 
 pub struct Size
     pub cols int
@@ -185,16 +264,16 @@ fn mouse_event(ps str, down bool, mut out List[Event])
     moving := b.bit_and(32) != 0
     if which == 3 and moving
         return
-    mut button := "left"
+    mut button := MouseButton.Left
     if which == 1
-        button = "middle"
+        button = MouseButton.Middle
     elif which == 2
-        button = "right"
-    mut kind := "up"
+        button = MouseButton.Right
+    mut kind := MouseKind.Up
     if moving
-        kind = "drag"
+        kind = MouseKind.Drag
     elif down
-        kind = "down"
+        kind = MouseKind.Down
     out.push(Mouse(col: v[1] - 1, row: v[2] - 1, button: button, kind: kind))
 
 ## One sequence `ESC [ ps fin` (std.term.2).
@@ -209,7 +288,7 @@ fn csi_event(ps str, fin int, mut out List[Event])
         out.push(Resize(cols: v[1], rows: v[0]))
         return
     if fin == 90
-        out.push(Key("tab", ctrl: false, alt: false, shift: true))
+        out.push(Key(KeyCode.Tab, ctrl: false, alt: false, shift: true))
         return
     mut name := arrow_name(fin)
     if name == "" and fin == 126
@@ -217,32 +296,32 @@ fn csi_event(ps str, fin int, mut out List[Event])
     if name == "" and fin >= 80 and fin <= 83
         name = pf_name(fin)
     if name != ""
-        out.push(Key(name, ctrl: has_ctrl, alt: has_alt, shift: has_shift))
+        out.push(Key(key_code(name), ctrl: has_ctrl, alt: has_alt, shift: has_shift))
 
 ## One key that is not an escape sequence, starting at byte `i`; returns the
 ## bytes it used (std.term.2).
 fn char_key(d List[int], i int, alt bool, mut out List[Event]) int
     c := d[i]
     if c == 13 or c == 10
-        out.push(Key("enter", ctrl: false, alt: alt, shift: false))
+        out.push(Key(KeyCode.Enter, ctrl: false, alt: alt, shift: false))
         return 1
     if c == 9
-        out.push(Key("tab", ctrl: false, alt: alt, shift: false))
+        out.push(Key(KeyCode.Tab, ctrl: false, alt: alt, shift: false))
         return 1
     if c == 8 or c == 127
-        out.push(Key("backspace", ctrl: false, alt: alt, shift: false))
+        out.push(Key(KeyCode.Backspace, ctrl: false, alt: alt, shift: false))
         return 1
     if c == 0
-        out.push(Key(" ", ctrl: true, alt: alt, shift: false))
+        out.push(Key(KeyCode.Text(" "), ctrl: true, alt: alt, shift: false))
         return 1
     if c < 27
-        out.push(Key("{chr(c + 96)}", ctrl: true, alt: alt, shift: false))
+        out.push(Key(KeyCode.Text("{chr(c + 96)}"), ctrl: true, alt: alt, shift: false))
         return 1
     if c < 32
-        out.push(Key("{chr(c + 64)}", ctrl: true, alt: alt, shift: false))
+        out.push(Key(KeyCode.Text("{chr(c + 64)}"), ctrl: true, alt: alt, shift: false))
         return 1
     if c < 127
-        out.push(Key("{chr(c)}", ctrl: false, alt: alt, shift: false))
+        out.push(Key(KeyCode.Text("{chr(c)}"), ctrl: false, alt: alt, shift: false))
         return 1
     mut n := 1
     mut mask := 0
@@ -263,13 +342,13 @@ fn char_key(d List[int], i int, alt bool, mut out List[Event]) int
     for k in 1..n
         cp = cp.shl(6).bit_or(d[i + k].bit_and(63))
     if cp <= 1114111 and (cp < 55296 or cp > 57343)
-        out.push(Key("{chr(cp)}", ctrl: false, alt: alt, shift: false))
+        out.push(Key(KeyCode.Text("{chr(cp)}"), ctrl: false, alt: alt, shift: false))
     n
 
 ## The escape sequence or Alt key starting at byte `i`; returns its length.
 fn escape_at(d List[int], i int, mut out List[Event]) int
     if i + 1 >= d.len()
-        out.push(Key("escape", ctrl: false, alt: false, shift: false))
+        out.push(Key(KeyCode.Escape, ctrl: false, alt: false, shift: false))
         return 1
     n := d[i + 1]
     if n == 91
@@ -292,10 +371,10 @@ fn escape_at(d List[int], i int, mut out List[Event]) int
         if name == ""
             name = pf_name(f)
         if name != ""
-            out.push(Key(name, ctrl: false, alt: false, shift: false))
+            out.push(Key(key_code(name), ctrl: false, alt: false, shift: false))
         return 3
     if n == 27
-        out.push(Key("escape", ctrl: false, alt: true, shift: false))
+        out.push(Key(KeyCode.Escape, ctrl: false, alt: true, shift: false))
         return 2
     1 + char_key(d, i + 1, true, mut out)
 

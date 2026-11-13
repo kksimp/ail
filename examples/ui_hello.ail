@@ -20,9 +20,9 @@ fn main()
     while true
         match w.next_event()
             Key(key, ctrl, _, _) =>
-                if key == "escape"
+                if key == Escape
                     break
-                last = if ctrl then "ctrl-{key}" else key
+                last = if ctrl then "ctrl-{key.name()}" else key.name()
                 draw(mut w, last)
             Mouse(col, row, button, kind) =>
                 last = "{button} {kind} at {col},{row}"

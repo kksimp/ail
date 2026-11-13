@@ -382,7 +382,7 @@ pub fn Jar.request(mut self, method str, url str, opts net.Options) net.Response
         if hops >= opts.max_redirects
             return net.NetError(
                 url: cur,
-                kind: "protocol",
+                kind: Protocol,
                 message: "more than {opts.max_redirects} redirects",
             )
         hops += 1

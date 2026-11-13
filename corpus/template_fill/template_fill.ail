@@ -1,0 +1,59 @@
+## Template fill: replaces [[name]] placeholders from a map, supports the
+## |upper and |lower filters, and reports the names that were missing.
+
+fn apply_filter(value str, filter str) str
+    match filter
+        "upper" => value.to_upper()
+        "lower" => value.to_lower()
+        _ => value
+
+fn fill(text str, vars Map[str, str])(str, List[str])
+    mut out := ""
+    mut missing := List[str]()
+    mut rest := text
+    while true
+        i := rest.find("[[") else break
+        tail := rest.slice(i + 2, rest.len())
+        j := tail.find("]]") else break
+        parts := tail.slice(0, j).split("|")
+        key := parts[0].trim()
+        mut val := "<{key}?>"
+        if vars.contains(key)
+            val = vars[key]
+            if parts.len() > 1
+                val = apply_filter(val, parts[1].trim())
+        else
+            missing.push(key)
+        out = "{out}{rest.slice(0, i)}{val}"
+        rest = tail.slice(j + 2, tail.len())
+    out = "{out}{rest}"
+    (out, missing)
+
+fn main()
+    vars := {"name": "Ada Lovelace", "team": "Compilers", "city": "London"}
+    letter := [
+        "Dear [[name]],",
+        "Welcome to the [[ team|upper ]] team in [[city|lower]].",
+        "Your badge says [[badge]] and your desk is [[desk]].",
+        "Unclosed [[marker stays as is.",
+    ]
+    for line in letter
+        out, missing := fill(line, vars)
+        print(out)
+        if not missing.is_empty()
+            print("  missing: {missing.join(", ")}")
+
+@test fn fills_known_names()
+    out, missing := fill("hi [[a]] and [[b|upper]]", {"a": "x", "b": "y"})
+    assert_eq(out, "hi x and Y")
+    assert(missing.is_empty())
+
+@test fn reports_missing()
+    out, missing := fill("[[a]][[c]]", {"a": "1"})
+    assert_eq(out, "1<c?>")
+    assert_eq(missing, ["c"])
+
+@test fn leaves_plain_text()
+    out, missing := fill("no placeholders", {"a": "1"})
+    assert_eq(out, "no placeholders")
+    assert_eq(missing.len(), 0)

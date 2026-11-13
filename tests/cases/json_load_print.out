@@ -5,5 +5,5 @@ bad file: unexpected end of input
 0
 bad shape: missing age
 {"name":"none","age":0}
-missing: json_load_print_case.tmp: not_found
+missing: json_load_print_case.tmp: fs.IoKind.NotFound
 {"name":"","age":0}

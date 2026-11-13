@@ -1,4 +1,4 @@
-# `compress.inflate` fails with: compress.CompressError(kind: "corrupt", message: "over-subscribed Huffman code")
+# `compress.inflate` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "over-subscribed Huffman code")
 use std.compress
 
 fn main() !

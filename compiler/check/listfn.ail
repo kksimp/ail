@@ -1,0 +1,94 @@
+## The list methods that take a function (type.coll.21-26, ADR 1067):
+## `any`, `all`, `find`, `filter`, `map` and `group_by`. The argument is any
+## value of the function type, a literal `|x| e` included; it can't fail.
+use ast
+
+pub LIST_FN_METHODS := ["any", "all", "find", "filter", "map", "group_by"]
+
+## Whether `x.n(...)` on a value of type `t` is one of them.
+@allow("expr.match.3") fn is_list_fn(t Ty, n str) bool
+    match t
+        ListOf => LIST_FN_METHODS.contains(n)
+        _ => false
+
+## The signature `builtin` reports for them; the call is checked by `list_fn_call`.
+fn list_fn_builtin(e Ty, n str) Builtin?
+    if n == "any" or n == "all"
+        return read([Ty.FnTy([e], Ty.Bool)], Ty.Bool)
+    if n == "find"
+        return read([Ty.FnTy([e], Ty.Bool)], Ty.Opt(e))
+    if n == "filter"
+        return read([Ty.FnTy([e], Ty.Bool)], Ty.ListOf(e))
+    if n == "map"
+        return read([Ty.FnTy([e], Ty.Unknown)], Ty.ListOf(Ty.Unknown))
+    if n == "group_by"
+        return read([Ty.FnTy([e], Ty.Unknown)], Ty.MapOf(key: Ty.Unknown, value: Ty.ListOf(e)))
+    none
+
+## `xs.any(f)` and the others (type.coll.21-26).
+@allow("expr.match.3")
+fn Checker.list_fn_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
+    e := elem_of(rt)
+    tests := n != "map" and n != "group_by"
+    if args.len() != 1 or args[0].label != none or args[0].mutable or args[0].moved
+        args_only(args)
+        err_help(
+            "expr.call.1",
+            at,
+            "`{n}` takes one function, `xs.{n}(|x| ...)`",
+            "pass one function value or literal, with no label, `mut` or `move`",
+        )
+        return Ty.Unknown
+    a := args[0]
+    want := Ty.FnTy([e], if tests then Ty.Bool else Ty.Unknown)
+    ft := expr(a.value, want, true)
+    if ft == Ty.Unknown or ft == Ty.Never
+        return Ty.Unknown
+    fp := fn_parts(ft) else
+        err_help(
+            "expr.call.2",
+            expr_pos(a.value),
+            "`{n}` takes a function `fn({show(e)}) ...`, not {show(ft)}",
+            "write a literal, e.g. `xs.{n}(|x| x > 0)`",
+        )
+        return Ty.Unknown
+    if fp.params.len() != 1 or not accepts(fp.params[0], e)
+        mismatch("expr.call.2", expr_pos(a.value), want, ft)
+        return Ty.Unknown
+    r := fp.ret
+    if is_res(r)
+        err_help(
+            "type.coll.21",
+            expr_pos(a.value),
+            "the function given to `{n}` can't fail",
+            "handle the error inside it with `else`, or use a `for` loop and `?`",
+        )
+        return Ty.Unknown
+    if tests
+        if not accepts(Ty.Bool, r)
+            mismatch("expr.call.2", expr_pos(a.value), want, ft)
+        if n == "any" or n == "all"
+            return Ty.Bool
+        if n == "find"
+            return Ty.Opt(e)
+        return Ty.ListOf(e)
+    if r == Ty.Unit
+        err_help(
+            "expr.call.2",
+            expr_pos(a.value),
+            "the function given to `{n}` must return a value",
+            "for an action on each element, use a `for` loop",
+        )
+        return Ty.Unknown
+    if n == "map"
+        return Ty.ListOf(r)
+    if r != Ty.Unknown and not implements(r, std_hash)
+        mut d := new_diag(
+            "gen.bound.3",
+            expr_pos(a.value),
+            "`group_by` needs a key that can be hashed (`Hash`), and this is {show(r)}",
+        )
+        if h := how_to_implement(r, std_hash)
+            d = d.with_help(h)
+        diags.push(d)
+    Ty.MapOf(key: r, value: Ty.ListOf(e))

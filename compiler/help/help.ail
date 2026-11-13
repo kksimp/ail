@@ -32,7 +32,7 @@ fn commands() List[Cmd]
             "run",
             "Build and run",
             "check and run a program",
-            "ail run [--timeout MS] [--max-memory MB] [--trace] [--budget [N]] FILE|DIR [ARGS...]",
+            "ail run [--timeout MS] [--max-memory MB] [--allow LIST] [--trace] [--budget [N]] FILE|DIR [ARGS...]",
             "run.limit.4",
         ),
         c(
@@ -46,8 +46,8 @@ fn commands() List[Cmd]
             "test",
             "Build and run",
             "run the @test functions",
-            "ail test [--json] [--fuzz NAME | --mutate | --contracts] [--budget [N]] FILE|DIR",
-            "test.run.1,test.fuzz.1,test.mutate.1",
+            "ail test [--json] [--filter PATTERN] [--list] [--fuzz NAME | --mutate | --contracts] [--budget [N]] FILE|DIR",
+            "test.run.1,test.filter.1,test.list.1,test.fixture.4,test.fuzz.1,test.mutate.1",
         ),
         c(
             "leak",
@@ -67,7 +67,7 @@ fn commands() List[Cmd]
             "check",
             "Check and fix",
             "check a program without running it",
-            "ail check [--json] [--fix] [--errors] [--deny CAPS] [--budget [N]] FILE|DIR",
+            "ail check [--json] [--fix] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
             "fix.check.1",
         ),
         c("fmt", "Check and fix", "format source files", "ail fmt [--check] FILE|DIR", ""),
@@ -75,7 +75,7 @@ fn commands() List[Cmd]
             "fix",
             "Check and fix",
             "apply the fixes that diagnostics carry",
-            "ail fix [--dry-run] FILE",
+            "ail fix [--dry-run] FILE | ail fix --migrate [DIR]",
             "fix.check.1",
         ),
         c(
@@ -117,7 +117,7 @@ fn commands() List[Cmd]
             "ask",
             "Ask the compiler",
             "who calls, reads, writes or uses something; std lookup",
-            "ail ask FILE QUESTION | ail ask std WORDS",
+            "ail ask FILE QUESTION | ail ask std WORDS | ail ask how WORDS",
             "api.ask.1",
         ),
         c(

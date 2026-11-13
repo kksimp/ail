@@ -1,0 +1,105 @@
+## std.file.1-9: readers, line reading, exact reads, seek, writers and drop.
+use std.file
+
+fn fill_lines(path str, n int) ! fs.IoError
+    mut w := file.create(path)?
+    for i in 0..n
+        w.write_line("line {i}")?
+    w.close()?
+
+fn dropped(path str) ! fs.IoError
+    mut w := file.create(path)?
+    w.write("kept by drop")?
+
+fn main() !
+    base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-std-file-case"
+    fs.make_dir(base)?
+    f := "{base}/a.txt"
+
+    # std.file.6, std.file.7: a writer buffers; the file is complete after close.
+    mut w := file.create(f)?
+    w.write("hello\n")?
+    w.write_bytes(b"wor")?
+    w.write("ld\r\n")?
+    print(w.tell())
+    print(fs.read_text(f)?.len())
+    w.flush()?
+    print(fs.read_text(f)?.len())
+    w.write("last")?
+    w.close()?
+
+    # std.file.1, std.file.4: lines, with \r\n stripped and an unterminated last line.
+    mut r := file.open(f)?
+    print(r.read_line()? else "none")
+    print(r.read_line()? else "none")
+    print(r.read_line()? else "none")
+    print(r.read_line()? else "none")
+
+    # std.file.2, std.file.3, std.file.5: read, read_exact, seek, tell, size.
+    r.seek(0)
+    print(r.read(3)?.text())
+    print(r.tell())
+    got := r.read_exact(100)? else b"short"
+    print(got.text())
+    print(r.tell())
+    r.seek(6)
+    print(r.read(5)?.text())
+    print(r.read(100)?.len())
+    print(r.read(10)?.len())
+    print(r.size()?)
+    r.close()
+
+    # std.file.4: a log that grows; read_complete_line never returns half a line.
+    log := "{base}/log.txt"
+    mut lw := file.create(log)?
+    lw.write("one\ntw")?
+    lw.flush()?
+    mut tail := file.open(log)?
+    print(tail.read_complete_line()? else "none")
+    print(tail.read_complete_line()? else "none")
+    lw.write("o\n")?
+    lw.flush()?
+    print(tail.read_complete_line()? else "none")
+    print(tail.read_complete_line()? else "none")
+    tail.close()
+    lw.close()?
+
+    # A file larger than one chunk, read line by line.
+    big := "{base}/big.txt"
+    fill_lines(big, 20000)?
+    mut br := file.open(big)?
+    mut count := 0
+    mut last := ""
+    while true
+        line := br.read_line()? else break
+        count += 1
+        last = line
+    print("{count} {last}")
+    br.close()
+
+    # std.file.6: append adds at the end; update patches in place (std.file.8).
+    mut ap := file.append(f)?
+    print(ap.tell())
+    ap.write("+")?
+    ap.close()?
+    mut up := file.update(f)?
+    up.seek(1)?
+    up.write("E")?
+    print(up.tell())
+    up.close()?
+    print(fs.read_text(f)?.replace("\r", "").replace("\n", "|"))
+
+    # std.file.9: a writer that goes out of scope is flushed.
+    dropped("{base}/drop.txt")?
+    print(fs.read_text("{base}/drop.txt")?)
+
+    fs.remove(f)?
+    fs.remove(log)?
+    fs.remove(big)?
+    fs.remove("{base}/drop.txt")?
+    fs.remove(base)?
+
+    # std.fs failures pass through (std.err.1).
+    _ := file.open("{base}/missing") else err
+        print(err.kind)
+        return

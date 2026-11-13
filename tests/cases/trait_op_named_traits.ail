@@ -1,0 +1,9 @@
+struct V
+    x int
+
+impl Add for V
+    fn add(self, o V) V
+        V(x: self.x + o.x)
+
+fn main()
+    print(V(x: 1).add(V(x: 2)).x)

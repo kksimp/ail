@@ -12,7 +12,7 @@
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
 ./ail check [--json] [--budget N [--from K]] FILE|DIR
 ./ail build FILE.ail [-o OUT]       # native executable
-./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --fuzz NAME, --mutate, --contracts
+./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
 ./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
 ./ail pkg [COMMAND]                 # a program's packages: fetch, lock, list
 ./ail header FILE.ail [-o OUT.h]    # a C header of the exports
@@ -65,10 +65,10 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 ./native_fib                          # same output as ./ail run
 ```
 
-- A native build covers free functions over numbers, strings, bools and lists
-  of them: loops, calls, `print`, `join`, `chars`, `env.args()` (native.subset.1).
-  Structs, enums, methods, traits, maps and generics are not built yet, and
-  `ail build` names the first one it meets (`error[native.subset.1]`).
+- Native is the only backend: `ail run` builds the program natively and runs it, so
+  both commands accept the same language (structs, enums, methods, traits, maps,
+  generics, errors, tasks). A rare construct the lowering cannot build yet is reported
+  as `error[native.subset.1]` with its position and a `help:` line (native.subset.1).
 - A trap prints the same first line as `ail run` and exits 1.
 - Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
 - An unchanged program rebuilds from `~/.cache/ail/build`; `--no-cache` skips it (native.build.5).
@@ -131,7 +131,7 @@ fn squares(n int) List[int]
 ```ail
 struct Point
     x int
-    y int
+    y int = 0                     # a default: Point(x: 1) is Point(x: 1, y: 0)
 
 enum Color
     Red
@@ -180,6 +180,9 @@ fn area(s Shape) int
 ```
 
 A bare variant pattern matches any fields and binds none (`Circle => true`).
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Neg(Num(0..=9))`,
+`Word("fn", (1, _))`. A bare name in a field binds it, so a variant without
+fields is written qualified there (`Cons(_, Items.Nil)`).
 
 ## Absence and errors
 
@@ -231,6 +234,9 @@ fn main() !                                 # main can fail; the error is report
 - Inferred-error functions and tests: `?` on `none` fails with the prelude error
   `Absent`, with context: `text.to_int()? "port {text}"`. `T ! E` needs `else`.
 - `error struct NotFound "nothing at {path}"` gives a struct a message.
+- Several error types (`! IoError | ParseError`): `match err` takes member types
+  and their variants, and covers every member (err.match.1-3): `IoError =>`
+  (`err` is an `IoError` there), `ParseError.Empty =>`, `_ =>`.
 - `print` of a `T?` shows the value or `none`; `return i` needs no wrapping.
 - `mut best := none` gets its type at the first assignment (`best = 3`);
   `x := if c then 4 else none` is an `int?`.
@@ -344,6 +350,8 @@ pad := 2 + (if n < 0 then 1 else 0)  # a one-line `if` as an operand: in parenth
 
 while n > 0
     n -= 1
+while top := xs.pop()      # loops while the T? or T ! E has a value, binding it
+    print(top)
 
 for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x == 0
@@ -375,6 +383,38 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 either one, and its value is the function's result. A `while true` loop with
 no `break` can end a function too.
 
+### Generators and `Seq` (expr.yield.1-4, expr.iter.1-3)
+
+```ail
+fn count(n int) Seq[int]             # `yield` in the body makes it a generator
+    for i in 0..n
+        yield i                      # the next element; a bare `return` ends it
+
+struct Countdown
+    n int
+
+fn Countdown.next(mut self) int?     # any type with this `next` works in `for`
+    if n == 0
+        return none
+    n -= 1
+    n + 1
+
+fn main()
+    for i in count(3)                # runs the body up to each `yield`
+        print(i)
+    print(count(10).filter(|x| x % 2 == 0).map(|x| x * x).take(3).collect())   # [0, 4, 16]
+    mut s := count(2)
+    print(s.next() else -1)          # 0
+    for k in Countdown(n: 2)         # 2 1; the loop reads a copy
+        print(k)
+```
+
+A `Seq[T]` is unique: `for` and the adapters take it over, so it is read once.
+Adapters (lazy): `Seq.of(xs)`, `map`, `filter`, `take_while`, `take`, `skip`,
+`enumerate`, `zip`, `chain`; `collect()` and `count()` read to the end.
+`Seq(step: f)` wraps any `fn() T?`. A generator keeps copies of its arguments,
+so it takes no `mut` parameters, `mut self`, `defer` or contracts.
+
 ## Operators and strings
 
 - `+ - * / %` on `int`. Overflow and division by zero stop the program (a
@@ -399,8 +439,11 @@ no `break` can end a function too.
   annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
-- Bits on `int` (64-bit two's complement): `a.bit_and(b)`, `bit_or`, `bit_xor`,
-  `n.bit_not()`, `n.shl(k)`, `n.shr(k)` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`).
+- Bits on `int` (64-bit two's complement): `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`,
+  `a >> k` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`); the methods `bit_and`,
+  `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` mean the same. `x &= e` (also `|= ^= <<= >>=`)
+  works on a plain name. A bit operator never mixes with another operator without
+  parentheses (`expr.bit.4`): write `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 
@@ -413,13 +456,13 @@ t := """
 q := """say "hi""""        # on one line, for text with quotes: say "hi"
 r := r"C:\dir\{x}"         # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
-print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, hex
+print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{r:e}|{n:+}|{s:^8}|{s:*<5}")  # width, decimals, zero pad, binary, thousands, exponent, sign, fill, align
 ```
 
-- Format specs: `[[fill]align][width][.decimals][x]` only; `.N` needs a float, `x` an int.
+- Format specs: `[[fill]align][+][0][width][,][.decimals][x|b|e]` only; `.N` and `e` need a float, `x` and `b` an int, `+` `0` `,` a number.
 - `"a,b".split(",")` gives `["a", "b"]`, `"k=v=w".split("=", 2)` gives `["k", "v=w"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
-- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
+- `s.chars()` (a `List[char]`; strings have no indexing or `for`), `s.len()` (characters; `s.byte_len()` is UTF-8 bytes),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.center(width, ' ')`, `s.words()` (split on whitespace), `s.trim_start()`, `s.trim_end()`, `s.count(sub)`, `s.rfind(sub)`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
@@ -470,6 +513,11 @@ Inside a `for mut` loop the body can't use the list itself.
 
 `Grid[T]`, a flat 2-D list: `mut g := Grid.fill(rows, cols, v)` (or
 `Grid.from(xs)`), `g[i, j] += 1`, `g.rows`, `g.cols`, `g.cells`, `g.row(i)`.
+
+`Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
+for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
+`Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
+`last()`, `d.at(i)`, `d.to_list()`.
 
 A comprehension builds a list, set or map in one expression:
 
@@ -568,7 +616,25 @@ Your functions' arguments can be named (`show(tag, scale: 3, n: 4)`): positional
 first, then named in any order. Built-ins take no names.
 
 A declared function is a value of type `fn(A, B) R` (`f := double`, `f(21)`).
-Not generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+Not generic functions, methods, or ones with `mut` parameters.
+
+A function literal `|a, b| e` is a value too (`|| e` takes nothing). The body
+is one expression on the same line. Parameter types come from the expected
+`fn(...)` type, or are written: `|x int| x * 2`. It copies the locals its body
+names when it is made, and can't change them; to share state, capture a `ref`.
+`fn(A) R ! E` is a function that can fail; `?` in a literal leaves the literal.
+
+```ail
+fn adder(n int) fn(int) int
+    |x| x + n                         # copies n
+
+fn main()
+    xs := [3, 8, 5, 12]
+    lo := 4
+    print(xs.filter(|x| x > lo))      # [8, 5, 12]
+    print(xs.map(adder(1)))           # [4, 9, 6, 13]
+    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by
+```
 
 ## Shared cells, resources and `move`
 
@@ -661,34 +727,36 @@ re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`). User guide: `
 
 ## Files, processes and the system
 
-Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or item with the module's name hides it. Failures are values: `fs.IoError(path, kind)`, `proc.ProcError(cmd, kind)` (`kind`: `not_found`, `permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`), `net.NetError(url, kind, message)`.
+Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or item with the module's name hides it. Failures are values: `fs.IoError(path, kind)`, `proc.ProcError(cmd, kind)`, `net.NetError(url, kind, message)`. Every `kind` is an enum (ADR 1068): `fs.IoKind` is `NotFound`, `Permission`, `Exists`, `IsDir`, `NotDir`, `NotEmpty`, `InvalidUtf8`, `Other`; `proc.ProcKind` adds `TimedOut`, `Cancelled`; test with `err.kind == NotFound` or an exhaustive `match err.kind` (a string there is type.enum.7, and `ail fix` rewrites it).
 
 | Module | Functions |
 |---|---|
-| `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
+| `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind CompressKind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
 | `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
 | `std.crypto` | `ct_eq(a, b) bool` (constant time; use it, never `==`, for MACs and tags), `random_bytes(n) bytes` (system generator, effect `random`), `hkdf_sha256(ikm, salt, info, len) bytes`, `pbkdf2_sha256(password, salt, iterations, len) bytes` (all `bytes`) |
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `temp_dir() str` (`TMPDIR`, else `TEMP`, else `/tmp`), `make_temp_dir(prefix) str` (a new empty directory there, owner only; you remove it), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob`, `scan_count` and `temp_dir` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
-| `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `write_bytes(b)` (raw bytes to stdout), `eprint(value)`, `exit(code)` |
+| `std.file` | `use std.file`; handles read or written a piece at a time, `unique` (never copied); `mut r := file.open(p)?` then `r.read(n)`, `r.read_exact(n)` (`bytes?`, none and no move when fewer remain), `r.read_line()` (`str?`), `r.read_complete_line()` (only a line whose `\n` is written: follow a log), `r.tell()`, `r.seek(pos)`, `r.size()`, `r.close()`; `mut w := file.create(p)?` (or `file.append(p)?`, `file.update(p)?` to patch in place), `w.write(text)?`, `w.write_line(text)?`, `w.write_bytes(b)?` (buffered to 64 KiB), `w.flush()?`, `w.tell()`, `w.seek(pos)?`, `w.close()?` (a writer leaving scope is flushed, but cannot report a failure); loop `line := r.read_line()? else break`; all `! fs.IoError` |
+| `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `read_exact(n) bytes?` (none if input ends first), `write_bytes(b)` (raw bytes to stdout), `eprint(value)`, `exit(code)` |
 | `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
 | `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
 | `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
+| `std.mcp` | `use std.mcp`; `connect(cmd, args) Client ! mcp.McpError { kind, message }`; `c.tools() List[Tool]`, `c.call(name, Json) Json` (`structuredContent` or the result; `mcp.text(r)` joins text blocks), `c.close()` |
 | `std.toml` | `use std.toml`; `parse(text) Json ! toml.TomlError { why, line }`; tables are `Obj`, arrays `Arr`, numbers `Num`, dates `Str` (read with `get`, `str`, `num`) |
 | `std.yaml` | `use std.yaml`; `parse(text) Json ! yaml.YamlError { why, line }`; maps `Obj` (string keys), lists `Arr`, `yes`/`no` stay strings; anchors, aliases, tags, several documents and multi-line plain scalars are refused with a message |
-| `std.term` | `use std.term`; `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
+| `std.term` | `use std.term`; `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)` with `term.KeyCode` as `ui.KeyCode`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
 | `std.bigint` | `use std.bigint`; `from_int(n)`, `parse(text) BigInt ! bigint.BigIntError { why }`, `factorial(n)`; methods `add sub mul divmod pow cmp negate abs to_text as_int is_zero is_negative` (no operators) |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
-| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; the same as methods: `re.is_match(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |
+| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind RegexKind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; the same as methods: `re.is_match(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |
 | `std.tensor` | `from(xs)`, `from(xs, shape)`, `from_fn(shape, \|i\| e)` (`i` is the flat index), `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side (`t * 2.0`); `Tensor[f32]` (`to_f32()`, `to_float()`; mixing with `float` is an error); `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()`, `softmax()` (float; softmax along the last axis); `transpose()`, `matmul(b)` (2-D), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)`, `date.parse_in(text, zone)`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); zones `"UTC"`, `"+05:30"`, `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)`, `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format(p)` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
 | `std.os` | `signals(names) Channel[str]` (`"HUP"`, `"INT"`, `"QUIT"`, `"TERM"`, `"WINCH"`); effect `proc` |
 | `std.tz` | `offset(zone, secs) int?`, `system() str`; effects `fs`, `env` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://`, `https://` (TLS 1.3, system roots or `SSL_CERT_FILE`; kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data`, `o.timeout_ms`, `o.max_redirects`, `o.connect_ms`, `o.total_ms`; `o.headers["Connection"] = "close"` opens a fresh connection; `"Transfer-Encoding": "chunked"` sends chunks; connections are kept alive); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?`, `j.request(method, url, o)?`, `j.header(url)`, `j.header_from(url, from_page, navigation)`, `j.set_cookie(url, line)`, `j.store(url, r)`, `j.value(url, name)`; gzip and deflate are decoded unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` (`net.Body`: `b.status`, `b.headers`, `b.read_bytes(max)?`, `b.close()`); server: `srv := net.serve(addr)?` (`srv.addr()`, `srv.close()`, `srv.shutdown()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`; `ex.request.data` is the body as bytes), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (repeated headers, e.g. `set-cookie`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response`; `r.stop()` ends the server after its answer; `http.serve_dir(addr, dir)` / `http.run_dir(srv, dir)` serve files |
-| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size()`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(..., ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar\|Block\|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers()`, `set_font_size(px)` (10 to 40), `font_size()`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.RED` and nine others |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://`, `https://` (TLS 1.3, system roots or `SSL_CERT_FILE`; kind `Tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data`, `o.timeout_ms`, `o.max_redirects`, `o.connect_ms`, `o.total_ms`; `o.headers["Connection"] = "close"` opens a fresh connection; `"Transfer-Encoding": "chunked"` sends chunks; connections are kept alive); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?`, `j.request(method, url, o)?`, `j.header(url)`, `j.header_from(url, from_page, navigation)`, `j.set_cookie(url, line)`, `j.store(url, r)`, `j.value(url, name)`; gzip and deflate are decoded unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` (`net.Body`: `b.status`, `b.headers`, `b.read_bytes(max)?`, `b.close()`); server: `srv := net.serve(addr)?` (`srv.addr()`, `srv.close()`, `srv.shutdown()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`; `ex.request.data` is the body as bytes), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; `net.NetKind`: `BadUrl`, `BadRequest`, `Tls`, `NotFound`, `Refused`, `TimedOut`, `Closed`, `Bind`, `Protocol`, `Other`; `Response.all_headers Map[str, List[str]]` (repeated headers, e.g. `set-cookie`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response`; `r.stop()` ends the server after its answer; `http.serve_dir(addr, dir)` / `http.run_dir(srv, dir)` serve files |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError` (`kind`: `NoDisplay`, `Closed`, `Other`); `Window`: `size()`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(..., ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar\|Block\|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers()`, `set_font_size(px)` (10 to 40), `font_size()`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)` (`key` a `ui.KeyCode`: `Text(t)`, `Enter`, `Escape`, `Up`, `PageDown`, `F(n)`, ...; `key.name()`, `key.text()`), `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)` (`ui.MouseButton` `Left`/`Middle`/`Right`, `ui.MouseKind` `Down`/`Up`/`Drag`), `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.RED` and nine others |
 | `std.ui.widgets` | `TextField`, `ListView` (fuzzy `filter`), `Button`, `Dialog`, `Pane`, `Tree`: `render(rect, theme) List[widgets.Run]`, `draw(mut w, rect, theme)`, `on_event(ev[, rect]) widgets.Action` (`Ignored`, `Changed`, `Submit`, `Cancel`); `widgets.Rect(col, row, cols, rows)`; `text_rows(runs, cols, rows)` prints a screen headless |
 
 ## Tests and assertions
@@ -707,6 +775,16 @@ A test with parameters is a **property**: `ail test` runs generated inputs
 (`--cases N`, default 100; `--seed S` replays) and shrinks a failure to the
 smallest input. Parameters: `int`, `float`, `bool`, `char`, `str`, `List`, `Map`,
 `Set`, optionals, and structs and enums of those.
+
+`ail test --filter PATTERN FILE` runs the tests whose name contains PATTERN (`*` is
+any text; repeat `--filter` for several); `--list` prints the names without running.
+
+A **fixture** is shared setup made fresh for each run of a test: `@fixture fn tmp() T`
+(or `!T` if setup can fail; a failure fails the test, with `context: setup of fixture tmp` shown).
+`@fixture("drop")` names a teardown `fn drop(v T)` that always runs, in reverse
+order, after pass, fail or trap. A test takes it with `@test @needs("tmp")` and a
+parameter `tmp T`: `@test @needs("a") @needs("b") fn t(a A, b B, n int)`
+(`n` is still a generated input).
 
 A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
 `# => text` after a `print` asserts its output:
@@ -764,12 +842,15 @@ If every task is blocked, the program traps (deadlock).
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), `spawn`, and the capabilities
 `fs`, `env`, `proc`, `clock`, `random`, `net`, `net.serve` (`net.serve`, `net.listen`), `ui`. A call through `any Trait` counts every
-implementation.
+implementation. `ail run --allow LIST FILE` runs with only the listed capabilities: `fs.read=PATH`, `fs.write=PATH`, `net=HOST[:PORT]`, `net.serve=PORT`, `proc=NAME`, `env=NAME`, or a bare name for no limit (`none` allows nothing). A use outside a scope ends the program with `trap[eff.allow.N]` naming the entry to add (`eff.allow.1-9`).
 
 ```ail
 @pure fn area(w int, h int) int   # error if it reaches print or a capability
     w * h
 ```
+
+A call whose value is dropped must do something (`eff.use.1`): `area(3, 4)` alone is an
+error, `xs.sorted()` alone is fixed to `xs.sort()`, and `_ := area(3, 4)` drops a value on purpose.
 
 `@inline` is accepted and ignored. `@deprecated("use area")` warns at each call.
 Unknown attributes are errors.
@@ -796,7 +877,10 @@ fn safe_twice(x int) int
 
 C functions are declared, not imported. Types: `int`, `float`, `bool`,
 `i8`...`u64`, `f32`, and `*T` pointers; at most 6 integer-like and 8 float
-arguments; no `mut`. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
+arguments; no `mut`. A struct of those types passes and returns by value in the
+platform's C layout. A `fn(...)` parameter is a C callback: pass a declared
+function's name (`qsort(p, n, 8, compare)`), or `mem.c_fn(compare)` where C
+wants a `*u8`; state goes through a `*u8` user-data argument. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
 A narrow C `int` result is declared `i32`.
 Pointers: `p.read()`, `p.write(v)`, `p.offset(n)`, `p.is_null()`;
 `mem.alloc(n, 0)` allocates `n` ints set to the example (`0.0` gives `*float`),

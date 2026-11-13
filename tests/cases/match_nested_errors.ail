@@ -1,0 +1,15 @@
+enum Expr
+    Num(n int)
+    Neg(e Expr)
+    Nil
+
+@allow("expr.match.3") fn eval(e Expr) int
+    match e
+        Neg(Num("1")) => 1
+        Neg(Num(a) | Expr.Nil) => 2
+        Neg(Num(_, _)) => 3
+        Neg((a, b)) => 4
+        _ => 0
+
+fn main()
+    print(eval(Expr.Nil))

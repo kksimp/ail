@@ -53,6 +53,7 @@ KEYWORDS := {
     "use",
     "while",
     "with",
+    "yield",
 }
 
 ## The reserved words, sorted: what `ail help --keywords` prints for editors (tool.help.3).
@@ -61,7 +62,27 @@ pub fn keywords() List[str]
 
 ## Symbols of two characters, and of one. `..=` is checked first, then `..`,
 ## then these, so the longest spelling wins (`..=` over `..` over `.`).
-TWO_SYMBOLS := {"->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||"}
+TWO_SYMBOLS := {
+    "->",
+    "=>",
+    ":=",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&&",
+    "||",
+    "<<",
+    ">>",
+    "&=",
+    "|=",
+    "^=",
+}
 
 ONE_SYMBOLS := {
     ".",
@@ -85,10 +106,33 @@ ONE_SYMBOLS := {
     "?",
     "@",
     "|",
+    "&",
+    "^",
+    "~",
 }
 
 ## A line ending in one of these continues on the next line (lex.stmt.2).
-BINARY_SYMBOLS := {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="}
+## `|` is left out: it also closes a key function's `|x|` (expr.key.1), and a trailing
+## `a |` does not continue (expr.bit.3).
+BINARY_SYMBOLS := {
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "..",
+    "..=",
+    "&",
+    "^",
+    "<<",
+    ">>",
+}
 
 ## The indentation unit is exactly four spaces (lex.block.2, ADR 0040).
 UNIT := 4
@@ -130,7 +174,8 @@ pub struct Token
     pub tok Tok
     pub pos ast.Pos
 
-## `[[fill]align][width][.precision][x]` after the `:` in `{expression:spec}` (lex.str.7).
+## `[[fill]align][+][0][width][,][.precision][x|b|e]` after the `:` in `{expression:spec}`
+## (lex.str.7).
 pub struct FormatSpec
     pub fill char?
     ## `<`, `>` or `^`.
@@ -140,6 +185,9 @@ pub struct FormatSpec
     pub precision int?
     ## `x`: lowercase hexadecimal for an int.
     pub hex bool
+    ## The other marks, each at most once: `+` (always a sign), `0` (zero padding), `,`
+    ## (thousands separators), `b` (binary int), `e` (exponent form of a float).
+    pub flags str
 
 ## A mistake: the rule it breaks and where. The parser keeps the message
 ## of a diagnostic with a fix, to join repeats on one line (gram.rec.1).
@@ -657,50 +705,6 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             )
             attach([fix.trim_before(pos)])
             i += 1
-        elif (c == '<' or c == '>') and at(line, i + 1) == c
-            # expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
-            if c == '<'
-                diag_fix(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no `<<`",
-                    "shifts are methods: `a.shl(k)`, `k` in `0..=63` (expr.bit.1)",
-                    "write `.shl`",
-                )
-                attach([fix.operands(pos, "<<", "$l.shl($r)")])
-            else
-                diag_fix(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no `>>`",
-                    "shifts are methods: `a.shr(k)`, `k` in `0..=63` (expr.bit.1)",
-                    "write `.shr`",
-                )
-                attach([fix.operands(pos, ">>", "$l.shr($r)")])
-            i += 2
-        elif c == '&' and at(line, i + 1) != '&'
-            diag_fix(
-                "gram.foreign.1",
-                pos,
-                "AIL has no `&`",
-                "bit operations are methods: `a.bit_and(b)` (expr.bit.1); write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes",
-                "write `.bit_and`",
-            )
-            attach([fix.operands(pos, "&", "$l.bit_and($r)")])
-            i += 1
-        elif c == '^'
-            diag_fix(
-                "gram.foreign.1",
-                pos,
-                "AIL has no `^`",
-                "bit operations are methods: `a.bit_xor(b)` (expr.bit.1)",
-                "write `.bit_xor`",
-            )
-            attach([fix.operands(pos, "^", "$l.bit_xor($r)")])
-            i += 1
-        elif c == '~'
-            tilde(line, i, pos)
-            i += 1
         elif c.is_digit()
             i = number(line, i, line_no)
         elif c.is_alpha() or c == '_'
@@ -758,32 +762,6 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 i += sym.len()
     none
 
-## `~a` is `a.bit_not()` (expr.bit.1) when the operand is one name, not
-## followed by `.`, `(` or `[`, which would bind to the call instead.
-fn Lexer.tilde(mut self, line List[char], i int, pos ast.Pos)
-    mut end := i + 1
-    while end < line.len() and (ascii_alnum(line[end]) or line[end] == '_')
-        end += 1
-    after := if end < line.len() then line[end] else ' '
-    atom := end > i + 1
-        and not line[i + 1].is_digit()
-        and after != '.'
-        and after != '('
-        and after != '['
-    diags.push(Diag(
-        rule: "gram.foreign.1",
-        pos: pos,
-        msg: "AIL has no `~`",
-        fixed: atom,
-        help: "bitwise not is a method: `a.bit_not()` (expr.bit.1)",
-        fix: "write `.bit_not()`",
-        edits: if atom then [fix.span(
-            pos,
-            ast.Pos(line: pos.line, col: end + 1),
-            "{text_of(line, i + 1, end)}.bit_not()",
-        )] else [],
-    ))
-
 ## True when only blanks come before `at` on the line.
 ## The edit of lex.stmt.3: the `;` at `line[i]` goes, and what follows it on the
 ## line moves to a line of its own.
@@ -820,6 +798,9 @@ fn symbol_at(line List[char], i int) str?
             if i + 2 < line.len() and line[i + 2] == '='
                 return "..="
             return ".."
+        # `<<=` and `>>=` (expr.bit.5).
+        if (two == "<<" or two == ">>") and i + 2 < line.len() and line[i + 2] == '='
+            return "{two}="
         if TWO_SYMBOLS.contains(two)
             return two
     one := text_of(line, i, i + 1)
@@ -981,7 +962,7 @@ fn Lexer.content(
                     "lex.str.7",
                     ast.Pos(line: line_no, col: colon + 2),
                     "invalid format specification `{shown}`: {spec_why(line[colon + 1..close])}",
-                    "a specification is `[[fill]align][width][.decimals][x]`, e.g. `\{n:>8}`, `\{r:.2}`, `\{n:0>4x}`",
+                    "a specification is `[[fill]align][+][0][width][,][.decimals][x|b|e]`, e.g. `\{n:>8}`, `\{n:08}`, `\{r:.2}`, `\{n:,}`, `\{n:b}`",
                 )
             if code.len() == 1
                 diag_fix(
@@ -1480,7 +1461,14 @@ fn skip_string(line List[char], n int, start int) int
 ## A format specification, the text after the `:`, or `none` when it is
 ## invalid (lex.str.7).
 fn parse_spec(c List[char]) FormatSpec?
-    mut f := FormatSpec(fill: none, align: none, width: none, precision: none, hex: false)
+    mut f := FormatSpec(
+        fill: none,
+        align: none,
+        width: none,
+        precision: none,
+        hex: false,
+        flags: "",
+    )
     mut i := 0
     if c.len() >= 2 and is_align(c[1])
         f.fill = c[0]
@@ -1489,8 +1477,14 @@ fn parse_spec(c List[char]) FormatSpec?
     elif c.len() > 0 and is_align(c[0])
         f.align = c[0]
         i = 1
+    if at(c, i) == '+' and i < c.len()
+        f.flags = "{f.flags}+"
+        i += 1
     if at(c, i) == '0' and at(c, i + 1).is_digit()
-        return none
+        if f.align != none
+            return none
+        f.flags = "{f.flags}0"
+        i += 1
     start := i
     while i < c.len() and c[i].is_digit()
         i += 1
@@ -1498,6 +1492,9 @@ fn parse_spec(c List[char]) FormatSpec?
         f.width = spec_number(c, start, i)
         if f.width == none
             return none
+    if at(c, i) == ',' and i < c.len()
+        f.flags = "{f.flags},"
+        i += 1
     if at(c, i) == '.' and i < c.len()
         i += 1
         from := i
@@ -1511,11 +1508,22 @@ fn parse_spec(c List[char]) FormatSpec?
     if at(c, i) == 'x' and i < c.len()
         f.hex = true
         i += 1
+    elif (at(c, i) == 'b' or at(c, i) == 'e') and i < c.len()
+        f.flags = "{f.flags}{c[i]}"
+        i += 1
     if i < c.len()
         return none
-    if f.hex and f.precision != none
+    if spec_clash(f) != ""
         return none
     f
+
+## Why the marks of `f` can't be combined, or "" when they can (lex.str.7).
+fn spec_clash(f FormatSpec) str
+    if (f.hex or f.flags.contains("b")) and f.precision != none
+        return "`x` and `b` take no `.N`"
+    if (f.hex or f.flags.contains("b") or f.flags.contains("e")) and f.flags.contains(",")
+        return "`,` goes with a decimal number, not `x`, `b` or `e`"
+    ""
 
 fn is_align(c char) bool
     c == '<' or c == '>' or c == '^'
@@ -1561,12 +1569,19 @@ fn bytes_unicode(line List[char], i int) bool
 ## words it in the Rust front end.
 fn spec_why(c List[char]) str
     mut i := 0
+    mut aligned := false
     if c.len() >= 2 and is_align(c[1])
         i = 2
+        aligned = true
     elif c.len() > 0 and is_align(c[0])
         i = 1
+        aligned = true
+    if at(c, i) == '+' and i < c.len()
+        i += 1
     if at(c, i) == '0' and at(c, i + 1).is_digit()
-        return "a width can't start with 0; write the fill and alignment, e.g. `0>4`"
+        if aligned
+            return "`0` pads with zeros by itself; drop the alignment, or write the fill as `0>8`"
+        i += 1
     start := i
     while i < c.len() and c[i].is_digit()
         i += 1
@@ -1575,6 +1590,8 @@ fn spec_why(c List[char]) str
     mut width := 0
     if i > start
         width = spec_number(c, start, i) else MAX_FORMAT_WIDTH + 1
+    if at(c, i) == ',' and i < c.len()
+        i += 1
     mut precision := 0
     mut has_precision := false
     if at(c, i) == '.' and i < c.len()
@@ -1588,9 +1605,9 @@ fn spec_why(c List[char]) str
             return "`{c[from..i].join("")}` is too large"
         has_precision = true
         precision = spec_number(c, from, i) else MAX_FORMAT_WIDTH + 1
-    mut hex := false
-    if at(c, i) == 'x' and i < c.len()
-        hex = true
+    mut typed := ""
+    if (at(c, i) == 'x' or at(c, i) == 'b' or at(c, i) == 'e') and i < c.len()
+        typed = "{c[i]}"
         i += 1
     if i < c.len()
         return "unexpected `{c[i..].join("")}`"
@@ -1598,7 +1615,10 @@ fn spec_why(c List[char]) str
         return "a width is at most {MAX_FORMAT_WIDTH}"
     if has_precision and precision > MAX_FORMAT_WIDTH
         return "decimal places are at most {MAX_FORMAT_WIDTH}"
-    "`x` and `.N` can't be combined"
+    if typed == "x" or typed == "b"
+        if has_precision
+            return "`x` and `b` take no `.N`"
+    "`,` goes with a decimal number, not `x`, `b` or `e`"
 
 ## Whether a character literal's text holds a `"`, `\` or `{`, which a string
 ## would need escaped (so no fix is offered).

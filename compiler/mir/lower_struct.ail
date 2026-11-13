@@ -95,6 +95,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[NET_RESPONSE] = []
     structs[NET_OPTIONS] = []
     for s in prog.structs
+        note_field_defaults(s)
         if s.generics.len() > 0
             declare_generic_struct(s)
         elif s.is_unique
@@ -106,15 +107,21 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
                 inv_file["{prefix}{s.name}"] = file
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
-    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Enum(IO_KIND))]
     structs[TRAPPED] = [Slot(name: "rule", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
-    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[PROC_ERROR] = [
+        Slot(name: "cmd", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Enum(PROC_KIND)),
+    ]
     structs[NET_ERROR] = [
         Slot(name: "url", ty: Ty.Str),
-        Slot(name: "kind", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Enum(NET_KIND)),
         Slot(name: "message", ty: Ty.Str),
     ]
-    structs[COMPRESS_ERROR] = [Slot(name: "kind", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
+    structs[COMPRESS_ERROR] = [
+        Slot(name: "kind", ty: Ty.Enum(COMPRESS_KIND)),
+        Slot(name: "message", ty: Ty.Str),
+    ]
     structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_SERVER] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_REQUEST] = [
@@ -254,7 +261,7 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     # std.net.17: `net.Response(...)` may leave `all_headers` out; it is empty.
     left_out := n == NET_RESPONSE and args.len() + 1 == slots.len()
     partial := std_partial(n, args)
-    if args.len() != slots.len() and not left_out and not partial
+    if args.len() != slots.len() and not left_out and not partial and not has_defaults(n)
         return unsupported(pos, "`{n}(...)` without every field")
     mut vs := [-1 for _ in slots]
     ats := arg_fields([sl.name for sl in slots], args)
@@ -269,6 +276,8 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         v := lower_value(a.value, t)?
         vs[at] = copy_if_place(a.value, Val(id: convert(v, t, expr_pos(a.value)), ty: t))
     if partial and not fill_private(slots, mut vs, pos)
+        return none
+    if not fill_defaults(n, slots, mut vs)
         return none
     if left_out
         for k in 0..vs.len()

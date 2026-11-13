@@ -19,7 +19,7 @@ fn tuple_elems(t Ty) List[Ty]?
 ## table or a function value is not (its copy would share state).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Fn(_, _) | Unit | Unknown => false
+        Map(_, _) | Set(_) | Fn(_, _, _) | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
@@ -191,7 +191,7 @@ fn Lower.bind_elem(mut self, p ast.Pattern, e Val)
             declare(n, e.ty, e.id)
             borrowed.add(lookup(n) else "")
         TuplePat => tuple_bind(p, e)
-        Variant => bind_fields(p, e)
+        Variant | Nested => bind_fields(p, e)
         _ => return
 
 ## `a OP b` on tuples: `==` and `!=` through `eq.T`, the orderings through
@@ -595,7 +595,7 @@ fn Lower.lower_zip(mut self, args List[ast.Arg], pos ast.Pos) Val?
 fn Lower.compare_fn(mut self, name str) int
     mut i := inst(-1, "fnaddr", [])
     i.name = name
-    emit(i, Ty.Fn(params: [Ty.Int, Ty.Int], ret: Ty.Bool))
+    emit(i, Ty.Fn(params: [Ty.Int, Ty.Int], ret: Ty.Bool, err: Ty.Unit))
 
 ## The comparison functions of a list element type: the runtime's for `bytes`.
 fn Lower.eq_name(mut self, e Ty) str

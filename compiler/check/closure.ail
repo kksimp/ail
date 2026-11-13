@@ -1,0 +1,194 @@
+## Function literals `|a, b| e` (type.fn.4-8, ADR 1067): their parameter
+## types come from the expected `fn(...)` type or are written; the result
+## type is the body's. A literal copies the outer locals its body names when
+## it is made (type.fn.5): inside the body they are read-only. `?` in the body
+## leaves the literal, which then can fail (type.fn.6). The body's effects are
+## the enclosing function's (type.fn.7, effects.ail).
+use ast
+
+## The state of the function literal being checked.
+pub struct LitState
+    ## The number of locals outside the innermost literal: those below it are
+    ## its copies (type.fn.5). -1 outside any literal.
+    pub floor int
+    ## The inferred error set (an index of `inferred`) of each literal that has
+    ## no expected result type, by position: the same set on every pass of the
+    ## inference (err.type.6).
+    pub slots Map[int, int]
+
+pub fn new_lit_state() LitState
+    LitState(floor: -1, slots: {})
+
+## The index of the innermost local named `n`, or -1.
+fn Checker.local_index(self, n str) int
+    for k in 0..locals.len()
+        i := locals.len() - 1 - k
+        if locals[i].name == n
+            return i
+    -1
+
+## Whether `n` is a copy the literal being checked made of an outer local.
+fn Checker.is_capture(self, n str) bool
+    i := local_index(n)
+    i >= 0 and i < fn_lits.floor
+
+## type.fn.5: a literal's copy can't be changed or moved.
+fn Checker.capture_written(mut self, n str, at ast.Pos, action str)
+    err_help(
+        "type.fn.5",
+        at,
+        "`{n}` is the function literal's copy of a local, so it can't be {action}",
+        "to share a value the literal can change, make it a `ref` cell (`c := ref Counter(n: 0)`) and capture that",
+    )
+
+## type.fn.4: `return`, `break` and `continue` can't leave a function literal.
+fn Checker.leaves_literal(mut self, what str, at ast.Pos) bool
+    if fn_lits.floor < 0
+        return false
+    err_help(
+        "type.fn.4",
+        at,
+        "`{what}` can't leave a function literal",
+        "the literal's body is its result; for more control flow, declare a function",
+    )
+    true
+
+## `|a, b| e`, with `expect` the type the context wants.
+fn Checker.closure_expr(
+    mut self,
+    params List[ast.ClosureParam],
+    body ast.Expr,
+    at ast.Pos,
+    expect Ty?,
+) Ty
+    mut want := absent_parts()
+    # Where the context wants a value that isn't a function, the context
+    # reports the mismatch once; the parameters' types are left unknown.
+    mut not_fn := false
+    if t := expect
+        not_fn = t != Ty.Unknown and fn_parts(t) == none
+        if fp := fn_parts(t)
+            if fp.params.len() == params.len()
+                want = fp
+            else
+                err(
+                    "type.fn.4",
+                    at,
+                    "this function literal takes {count(params.len(), "parameter")}, but {show(t)} takes {fp.params.len()}",
+                )
+    mut ptys := List[Ty]()
+    for k in 0..params.len()
+        p := params[k]
+        mut given := Ty.Unknown
+        if w := want
+            given = w.params[k]
+        if written := p.ty
+            pt := resolve_type(written)
+            if not has_unknown(given) and not same(given, pt)
+                mismatch("type.fn.4", written.pos, given, pt)
+            ptys.push(pt)
+        elif has_unknown(given) and not_fn
+            ptys.push(Ty.Unknown)
+        elif has_unknown(given)
+            err_help(
+                "type.fn.4",
+                p.pos,
+                "the type of `{p.name}` isn't known here",
+                "write it after the name: `|{p.name} int| ...`",
+            )
+            ptys.push(Ty.Unknown)
+        else
+            ptys.push(given)
+    mut ret_want := Ty.Unknown
+    if w := want
+        ret_want = w.ret
+    # The body's `?` leaves the literal: it has its own result type for `?`.
+    mut slot := -1
+    saved_ret := fn_ret
+    saved_floor := fn_lits.floor
+    saved_loops := loop_depth
+    saved_catching := catching
+    if has_unknown(ret_want)
+        key := pos_key(at)
+        slot = fn_lits.slots.get(key) else inferred.len()
+        if slot == inferred.len()
+            inferred.push([])
+            fn_lits.slots[key] = slot
+        fn_ret = Ty.Res(Ty.Unknown, Errs.Inferred(slot))
+    else
+        fn_ret = ret_want
+    fn_lits.floor = locals.len()
+    loop_depth = 0
+    catching = 0
+    mark := locals.len()
+    for k in 0..params.len()
+        p := params[k]
+        if declare(p.name, p.pos)
+            locals.push(Local(
+                name: p.name,
+                ty: ptys[k],
+                mutable: false,
+                how: LocalKind.ParamLocal,
+                decl: p.pos,
+            ))
+    mut hint := no_ty()
+    if not has_unknown(ret_want)
+        hint = ok_part(ret_want)
+    got := expr(body, hint, true)
+    end_scope(mark)
+    fn_ret = saved_ret
+    fn_lits.floor = saved_floor
+    loop_depth = saved_loops
+    catching = saved_catching
+    captures_ok(params, body)
+    mut ret := got
+    if not has_unknown(ret_want)
+        if not accepts(ret_want, got)
+            mismatch("type.fn.4", expr_pos(body), ret_want, got)
+        ret = ret_want
+    else
+        ret = inferred_ret(got, errs_of(Errs.Inferred(slot)))
+    Ty.FnTy(ptys, ret)
+
+fn absent_parts() FnParts?
+    none
+
+## The success part of a result type, else the type itself.
+@allow("expr.match.3") fn ok_part(t Ty) Ty
+    match t
+        Res(ok, _) => ok
+        _ => t
+
+## The result of a literal with no expected result type: the body's type,
+## failing with the errors its `?` passes on and those of a failing body.
+@allow("expr.match.3") fn Checker.inferred_ret(mut self, got Ty, passed List[Ty]) Ty
+    if got == Ty.Never
+        return Ty.Unit
+    mut ok := got
+    mut errs := passed
+    match got
+        Res(o, e) =>
+            ok = o
+            for x in errs_of(e)
+                if not errs.contains(x)
+                    errs.push(x)
+        _ => ok = got
+    if errs.len() == 0
+        return got
+    Ty.Res(ok, Errs.ErrSet(sort_errors(errs)))
+
+## type.fn.5: a literal can't copy a value of a unique type.
+fn Checker.captures_ok(mut self, params List[ast.ClosureParam], body ast.Expr)
+    mut names := Set[str]()
+    ast.expr_names(body, mut names)
+    for n in names.sorted()
+        if [q for q in params if q.name == n].len() > 0
+            continue
+        l := local(n) else continue
+        if is_unique(l.ty)
+            err_help(
+                "type.fn.5",
+                expr_pos(body),
+                "the function literal would copy `{n}`, of the unique type {show(l.ty)}",
+                "a unique value has one owner; pass it to the literal as an argument instead",
+            )

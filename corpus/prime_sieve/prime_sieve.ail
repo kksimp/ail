@@ -1,0 +1,78 @@
+## The sieve of Eratosthenes plus tools built on it: prime counts, twin
+## primes, prime factorisation as "2^2 * 3 * 7", and Goldbach decompositions
+## of even numbers.
+
+fn sieve(limit int) List[bool]
+    mut flags := List[bool]()
+    for i in 0..=limit
+        flags.push(i >= 2)
+    mut p := 2
+    while p * p <= limit
+        if flags[p]
+            mut j := p * p
+            while j <= limit
+                flags[j] = false
+                j += p
+        p += 1
+    flags
+
+fn primes_upto(flags List[bool]) List[int]
+    mut out := List[int]()
+    for i in 0..flags.len()
+        if flags[i]
+            out.push(i)
+    out
+
+fn factorize(n int, primes List[int]) str
+    mut left := n
+    mut parts := List[str]()
+    for p in primes
+        if p * p > left
+            break
+        mut e := 0
+        while left % p == 0
+            left /= p
+            e += 1
+        if e == 1
+            parts.push("{p}")
+        elif e > 1
+            parts.push("{p}^{e}")
+    if left > 1
+        parts.push("{left}")
+    parts.join(" * ")
+
+fn goldbach(n int, flags List[bool]) str
+    for a in 2..=n / 2
+        if flags[a] and flags[n - a]
+            return "{n} = {a} + {n - a}"
+    "{n} has no decomposition"
+
+fn main()
+    flags := sieve(200)
+    primes := primes_upto(flags)
+    print("primes below 200: {primes.len()}")
+    print("first twenty: {primes.take(20)}")
+    print("sum of primes below 200: {primes.sum()}")
+    mut twins := List[str]()
+    for i in 1..primes.len()
+        if primes[i] - primes[i - 1] == 2
+            twins.push("({primes[i - 1]},{primes[i]})")
+    print("twin pairs: {twins.len()}")
+    start := twins.len() - 3
+    tail := twins[start..].join(" ")
+    print("last three: {tail}")
+    for n in [84, 97, 120, 169, 198]
+        print("{n} = {factorize(n, primes)}")
+    for m in [28, 100, 198]
+        print(goldbach(m, flags))
+
+@test fn counts_primes_to_100()
+    assert_eq(primes_upto(sieve(100)).len(), 25)
+
+@test fn factorizes_composites()
+    ps := primes_upto(sieve(50))
+    assert_eq(factorize(84, ps), "2^2 * 3 * 7")
+    assert_eq(factorize(97, ps), "97")
+
+@test fn goldbach_small_even()
+    assert_eq(goldbach(10, sieve(20)), "10 = 3 + 7")

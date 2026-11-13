@@ -1,6 +1,6 @@
-# Generators (proposed)
+# Generators
 
-Status: proposed by lane H, [ADR 0965](../decisions/0965-generators.md). Gap 11 of the C/C++/Rust gap survey.
+Status: accepted as [ADR 1073](../decisions/1073-generators-and-user-iteration.md) (built in 0.1.0; the plan below was ADR 0965). The as-built design differs: `Seq[T]` is a prelude `unique struct`, adapters are prelude generator methods, and `for` takes any type with `next(mut self) T?`. Gap 11 of the C/C++/Rust gap survey.
 
 ## Why
 

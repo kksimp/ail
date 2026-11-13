@@ -379,7 +379,10 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
         if h == '-' or h == '+'
             chomp = h
         elif h.is_digit()
-            return YamlError(why: "explicit indentation indicators are not supported: indent the block under its key", line: start)
+            return YamlError(
+                why: "explicit indentation indicators are not supported: indent the block under its key",
+                line: start,
+            )
         else
             return YamlError(why: "unexpected text after '{header.slice(0, 1)}'", line: start)
     mut raw := List[str]()

@@ -12,11 +12,18 @@ pub error struct ArgsError "{why}\n{usage}"
 
 ## One accepted argument: made by `flag`, `opt`, `pos` or `rest`.
 pub struct Spec
-    pub kind str
+    pub kind SpecKind
     pub name str
     pub short str
     pub help str
     pub default str
+
+## Which builder made a `Spec` (std.args.1-2, ADR 1068).
+pub enum SpecKind
+    Flag
+    Opt
+    Pos
+    Rest
 
 ## What the command line said (std.args.4).
 pub struct Args
@@ -29,21 +36,21 @@ pub struct Args
 
 ## A switch: `--NAME` or `-SHORT`; `short` may be "" (std.args.1).
 pub fn flag(name str, short str, help str) Spec
-    Spec(kind: "flag", name: name, short: short, help: help, default: "")
+    Spec(kind: Flag, name: name, short: short, help: help, default: "")
 
 ## An option that takes a value: `--NAME V`, `--NAME=V` or `-SHORT V`;
 ## `default` is its value when absent (std.args.1).
 pub fn opt(name str, short str, help str, default str) Spec
-    Spec(kind: "opt", name: name, short: short, help: help, default: default)
+    Spec(kind: Opt, name: name, short: short, help: help, default: default)
 
 ## A required positional word, in the order the specs list them (std.args.2).
 pub fn pos(name str, help str) Spec
-    Spec(kind: "pos", name: name, short: "", help: help, default: "")
+    Spec(kind: Pos, name: name, short: "", help: help, default: "")
 
 ## Collects every positional word after the required ones into `rest`
 ## (std.args.2).
 pub fn rest(name str, help str) Spec
-    Spec(kind: "rest", name: name, short: "", help: help, default: "")
+    Spec(kind: Rest, name: name, short: "", help: help, default: "")
 
 ## Whether option or positional `name` was given on the command line
 ## (std.args.8).
@@ -98,25 +105,25 @@ pub fn usage(name str, about str, specs List[Spec]) str
     mut line := "usage: {name}"
     mut body := ""
     for s in specs
-        if s.kind == "pos"
+        if s.kind == Pos
             line = "{line} {s.name.to_upper()}"
-        elif s.kind == "rest"
+        elif s.kind == Rest
             line = "{line} [{s.name.to_upper()}...]"
         else
             line = "{line} [--{s.name}]"
         label := if s.short == "" then "--{s.name}" else "-{s.short}, --{s.name}"
         mut label2 := label
-        if s.kind == "opt"
+        if s.kind == Opt
             label2 = "{label} V"
-        elif s.kind != "flag"
+        elif s.kind != Flag
             label2 = s.name.to_upper()
-        dflt := if s.kind == "opt" and s.default != "" then " (default {s.default})" else ""
+        dflt := if s.kind == Opt and s.default != "" then " (default {s.default})" else ""
         body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}\n"
     "{line}\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n"
 
 fn find_long(specs List[Spec], name str) Spec?
     for s in specs
-        if s.name == name and (s.kind == "flag" or s.kind == "opt")
+        if s.name == name and (s.kind == Flag or s.kind == Opt)
             return s
     none
 
@@ -136,7 +143,7 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
     mut given := Set[str]()
     mut positional := List[str]()
     for s in specs
-        if s.kind == "opt"
+        if s.kind == Opt
             values[s.name] = s.default
     mut i := 0
     mut literal := false
@@ -159,7 +166,7 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
             found := if long then find_long(specs, key) else find_short(specs, key)
             s := found else
                 return ArgsError(why: "unknown option {w}", usage: text)
-            if s.kind == "flag"
+            if s.kind == Flag
                 if inline != ""
                     return ArgsError(why: "--{s.name} takes no value", usage: text)
                 flags.add(s.name)
@@ -175,7 +182,7 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
     mut next := 0
     mut left := List[str]()
     for s in specs
-        if s.kind == "pos"
+        if s.kind == Pos
             if next >= positional.len()
                 return ArgsError(why: "missing {s.name.to_upper()}", usage: text)
             values[s.name] = positional[next]
@@ -184,7 +191,7 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
     left = positional[next..]
     mut has_rest := false
     for s in specs
-        if s.kind == "rest"
+        if s.kind == Rest
             has_rest = true
     if left.len() > 0 and not has_rest
         return ArgsError(why: "unexpected argument {left[0]}", usage: text)

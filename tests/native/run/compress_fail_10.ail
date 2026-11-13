@@ -1,4 +1,4 @@
-# `compress.unzlib` fails with: compress.CompressError(kind: "corrupt", message: "not zlib data")
+# `compress.unzlib` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "not zlib data")
 use std.compress
 
 fn main() !

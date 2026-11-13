@@ -90,6 +90,41 @@ fn Gate.examples(mut self, tmp str)
                 "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
 
+## The public corpus (corpus/NAME/{NAME.ail, NAME.py, NAME.out}): each program builds natively, prints its `.out`, and passes
+## its own `@test`s. The `.out` is the Python twin's output, so the twin is the oracle (tools/check-corpus-py.py checks it).
+fn Gate.corpus(mut self, tmp str)
+    for name in (fs.list_dir("corpus") else []).sorted()
+        dir := "corpus/{name}"
+        meta := fs.metadata(dir) else continue
+        if not meta.is_dir
+            continue
+        src := "{dir}/{name}.ail"
+        if not fs.exists(src)
+            or not fs.exists("{dir}/{name}.py")
+            or not fs.exists("{dir}/{name}.out")
+            red(dir, "needs {name}.ail, {name}.py and {name}.out")
+            continue
+        exe := "{tmp}/co_{name}"
+        if why := build(src, exe)
+            red(src, "does not build: {why}")
+            continue
+        self.built += 1
+        got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
+            red(src, "could not run the executable")
+            continue
+        want := fs.read_text("{dir}/{name}.out") else ""
+        if got.status != 0 or lf(got.out) != lf(want)
+            red(
+                src,
+                "exit {got.status}; output differs from {name}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
+            )
+            continue
+        t := proc.run("./ail", ["test", src], none, 120000) else
+            red(src, "could not start ail test")
+            continue
+        if t.status != 0
+            red(src, "ail test failed\n{t.out}{t.err}")
+
 fn Gate.selfhost(mut self)
     # Windows has the fixed point in PowerShell (stages 1 to 3); its native test programs are nativex's.
     mut cmd := "tools/self-host/run.sh"
@@ -1247,6 +1282,7 @@ fn Gate.docs(mut self)
         ["tools/check-doc-links.py"],
         ["tools/check-doc-dupes.py"],
         ["tools/check-doc-dupes.py", "--self-test"],
+        ["tools/check-method-table.py"],
     ]
         r := proc.run("python3", cat(["-I"], args)) else return
         if r.status != 0
@@ -1703,7 +1739,7 @@ fn Gate.replay(mut self, tmp str)
     fs.write_text("{d}/input.txt", "a\nb\nc\n") else return
     first := rpl(d, "hello\n", ["run", "--record", "r.json", "prog.ail"])
     if first.status != 1
-        or not first.out.contains(" first hello 3 not_found")
+        or not first.out.contains(" first hello 3 fs.IoKind.NotFound")
         or not first.err.contains("prog.ail:11:13: trap[type.coll.4]")
         red("replay record", "exit {first.status}\n{first.out}{first.err}")
     rec := slurp("{d}/r.json")
@@ -2297,15 +2333,15 @@ fn Gate.net(mut self)
         by_ip := "https://127.0.0.1:{tport}/"
         a := sh_run("SSL_CERT_FILE={data}/root.pem {root}/ail run tests/net/https.ail {ok} {by_ip}")
         if a.status != 0
-            or a.out != "200 <HTML><BODY BGCOLOR=\"#ffffff\">\ntls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
+            or a.out != "200 <HTML><BODY BGCOLOR=\"#ffffff\">\nnet.NetKind.Tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
             red("net https", "exit {a.status}\n{a.out}{a.err}")
         b := sh_run("SSL_CERT_FILE={data}/rsa_leaf.pem {root}/ail run tests/net/https.ail {ok}")
         if b.out
-            != "tls: the certificate for `localhost` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store\n"
+            != "net.NetKind.Tls: the certificate for `localhost` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store\n"
             red("net https untrusted root", "{b.out}{b.err}")
         t := sh_run("SSL_CERT_FILE={data}/root.pem {root}/ail run tests/net/tls_conn.ail {tport}")
         if t.status != 0
-            or t.out != "HTTP/1.0 200 ok\ntls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
+            or t.out != "HTTP/1.0 200 ok\nnet.NetKind.Tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
             red("net tls conn", "exit {t.status}\n{t.out}{t.err}")
         net_stop(spid)
         sh_run("pkill -f 'openssl s_server.*{tport}' 2>/dev/null")
@@ -2419,7 +2455,7 @@ fn Gate.native_misc(mut self)
                 row.push(cells[i].trim())
             if row.len() == 3 and row[0] != "Construct" and not row[0].starts_with("---")
                 rows.push(row)
-    if rows.len() < 20
+    if rows.len() < 10
         red("native subset table", "the table has {rows.len()} rows")
     mut text := slurp("docs/design/native-coverage.md").replace("`", "")
     for f in fs.glob("compiler/**/*.ail")
@@ -3134,6 +3170,288 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     fs.write_text("{base}/leak/small.ail", "fn main()\n    print(1)\n") else return
     tool("leak quiet", "{base}/leak", ["leak", "small.ail"], 0, ["no growth"])
+    # eff.allow.1-9 (ADR 1072): scoped capabilities. Each program runs under `ail run --allow`; a denial is one trap line.
+    sh_run("mkdir -p {base}/allow/data {base}/allow/secret")
+    fs.write_text("{base}/allow/data/a.txt", "alpha") else return
+    fs.write_text("{base}/allow/secret/s.txt", "hidden") else return
+    fs.write_text("{base}/allow/inside.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"data/a.txt\") else \"no\")",
+    ])) else return
+    tool(
+        "allow read in scope",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./data", "inside.ail"],
+        0,
+        ["alpha"],
+    )
+    tool(
+        "allow read, bare fs",
+        "{base}/allow",
+        ["run", "--allow", "fs", "inside.ail"],
+        0,
+        ["alpha"],
+    )
+    tool(
+        "allow read, two entries",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./nothing,fs.read=./data", "inside.ail"],
+        0,
+        ["alpha"],
+    )
+    tool(
+        "allow read out of scope",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./secret", "inside.ail"],
+        1,
+        ["trap[eff.allow.3]", "fs.read of", "by fs.read_text", "--allow fs.read="],
+    )
+    tool(
+        "allow nothing",
+        "{base}/allow",
+        ["run", "--allow", "none", "inside.ail"],
+        2,
+        ["eff.cap.1", "fs"],
+    )
+    fs.write_text("{base}/allow/outside.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"secret/s.txt\") else \"no\")",
+    ])) else return
+    tool(
+        "allow read outside",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./data", "outside.ail"],
+        1,
+        ["trap[eff.allow.3]", "secret", "--allow fs.read="],
+    )
+    fs.write_text("{base}/allow/dots.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"data/../secret/s.txt\") else \"no\")",
+    ])) else return
+    tool(
+        "allow dotdot traversal",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./data", "dots.ail"],
+        1,
+        ["trap[eff.allow.3]", "secret"],
+    )
+    fs.write_text("{base}/allow/dots2.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.read_text(\"./data/../data/a.txt\") else \"no\")",
+    ])) else return
+    tool(
+        "allow dotdot inside scope",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./data", "dots2.ail"],
+        0,
+        ["alpha"],
+    )
+    fs.write_text("{base}/allow/prefix.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    print(fs.exists(\"data_extra/a.txt\"))",
+    ])) else return
+    tool(
+        "allow sibling with the same prefix",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./data", "prefix.ail"],
+        1,
+        ["trap[eff.allow.3]", "data_extra"],
+    )
+    fs.write_text("{base}/allow/writer.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    fs.write_text(\"data/b.txt\", \"beta\") else print(\"failed\")",
+        "    print(\"done\")",
+    ])) else return
+    tool(
+        "allow write needs fs.write",
+        "{base}/allow",
+        ["run", "--allow", "fs.read=./data", "writer.ail"],
+        1,
+        ["trap[eff.allow.3]", "fs.write of", "--allow fs.write="],
+    )
+    tool(
+        "allow write in scope",
+        "{base}/allow",
+        ["run", "--allow", "fs.write=./data", "writer.ail"],
+        0,
+        ["done"],
+    )
+    if slurp("{base}/allow/data/b.txt") != "beta"
+        red("allow write in scope", "the file was not written")
+    # A link made inside the scope that points out of it (skipped where links can't be made, Windows without developer mode).
+    fs.write_text("{base}/allow/linker.ail", src_of([
+        "use std.fs",
+        "",
+        "fn main()",
+        "    fs.symlink(\"../secret\", \"data/escape\") else",
+        "        print(\"nolink\")",
+        "        return",
+        "    print(fs.read_text(\"data/escape/s.txt\") else \"no\")",
+    ])) else return
+    sh_run("rm -rf {base}/allow/data/escape")
+    link := ail_in(repo_root(), "{base}/allow", [
+        "run",
+        "--allow",
+        "fs.read=./data,fs.write=./data",
+        "linker.ail",
+    ])
+    if not link.out.contains("nolink")
+        if link.status != 1
+            or not link.err.contains("trap[eff.allow.3]")
+            or not link.err.contains("secret")
+            red("allow link escape", "exit {link.status}\n{link.out}{link.err}")
+    sh_run("rm -rf {base}/allow/data/escape")
+    fs.write_text("{base}/allow/net.ail", src_of([
+        "use std.net",
+        "",
+        "fn main()",
+        "    r := net.get(\"http://127.0.0.1:1/\") else err",
+        "        print(\"not-trapped\")",
+        "        return",
+        "    print(r.status)",
+    ])) else return
+    tool(
+        "allow net host",
+        "{base}/allow",
+        ["run", "--allow", "net=api.example.com", "net.ail"],
+        1,
+        ["trap[eff.allow.4]", "127.0.0.1:1", "--allow net=127.0.0.1:1"],
+    )
+    tool(
+        "allow net by address",
+        "{base}/allow",
+        ["run", "--allow", "net=127.0.0.1:1", "net.ail"],
+        0,
+        ["not-trapped"],
+    )
+    tool(
+        "allow net wrong port",
+        "{base}/allow",
+        ["run", "--allow", "net=127.0.0.1:2", "net.ail"],
+        1,
+        ["trap[eff.allow.4]"],
+    )
+    tool(
+        "allow net domain scope",
+        "{base}/allow",
+        ["run", "--allow", "net=*.example.com", "net.ail"],
+        1,
+        ["trap[eff.allow.4]"],
+    )
+    tool(
+        "allow net is not fs",
+        "{base}/allow",
+        ["run", "--allow", "fs", "net.ail"],
+        2,
+        ["eff.cap.1", "net"],
+    )
+    fs.write_text("{base}/allow/proc.ail", src_of([
+        "use std.proc",
+        "",
+        "fn main()",
+        "    r := proc.run(\"echo\", [\"hi\"]) else err",
+        "        print(\"not-trapped\")",
+        "        return",
+        "    print(r.status >= 0)",
+    ])) else return
+    tool(
+        "allow proc by name",
+        "{base}/allow",
+        ["run", "--allow", "proc=git", "proc.ail"],
+        1,
+        ["trap[eff.allow.5]", "`echo`", "--allow proc=echo"],
+    )
+    fs.write_text("{base}/allow/env.ail", src_of([
+        "use std.env",
+        "",
+        "fn main()",
+        "    print(env.get(\"PATH\") else \"unset\") ",
+        "    print(env.get(\"HOME\") else \"unset\")",
+    ])) else return
+    tool(
+        "allow env by name",
+        "{base}/allow",
+        ["run", "--allow", "env=PATH", "env.ail"],
+        1,
+        ["trap[eff.allow.6]", "`HOME`", "--allow env=HOME"],
+    )
+    fs.write_text("{base}/allow/vars.ail", src_of([
+        "use std.env",
+        "",
+        "fn main()",
+        "    vs := env.vars()",
+        "    print(vs.contains(\"PATH\") or vs.contains(\"Path\") or vs.contains(\"AIL_ALLOW\"))",
+        "    print(vs.contains(\"HOME\") or vs.contains(\"USERPROFILE\") or vs.contains(\"USER\"))",
+    ])) else return
+    tool(
+        "allow env.vars is filtered",
+        "{base}/allow",
+        ["run", "--allow", "env=AIL_*", "vars.ail"],
+        0,
+        ["true\nfalse"],
+    )
+    fs.write_text("{base}/allow/unsafe.ail", src_of([
+        "use std.mem",
+        "",
+        "fn main()",
+        "    unsafe",
+        "        xs := mem.alloc(4, 0)",
+        "        print(\"ok\")",
+    ])) else return
+    tool(
+        "allow refuses unsafe code",
+        "{base}/allow",
+        ["check", "--allow", "fs", "unsafe.ail"],
+        2,
+        ["eff.cap.1", "unsafe"],
+    )
+    tool(
+        "allow accepts unsafe when listed",
+        "{base}/allow",
+        ["check", "--allow", "fs,unsafe", "unsafe.ail"],
+        0,
+        [],
+    )
+    tool(
+        "allow unknown name",
+        "{base}/allow",
+        ["check", "--allow", "disk", "inside.ail"],
+        2,
+        ["eff.allow.2", "disk"],
+    )
+    tool(
+        "allow empty scope",
+        "{base}/allow",
+        ["check", "--allow", "fs=", "inside.ail"],
+        2,
+        ["eff.allow.2"],
+    )
+    tool(
+        "allow scope on a name without scopes",
+        "{base}/allow",
+        ["check", "--allow", "clock=now", "inside.ail"],
+        2,
+        ["eff.allow.2"],
+    )
+    tool(
+        "allow with deny",
+        "{base}/allow",
+        ["check", "--allow", "fs", "--deny", "fs", "inside.ail"],
+        2,
+        ["eff.cap.1"],
+    )
     # test.fuzz.1-5 (ADR 1015)
     fs.write_text("{base}/fuzz/prog.ail", src_of([
         "@test fn small(n int)",
@@ -3418,6 +3736,7 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(10, "ail_infer", "'program':'try.ail','function':'pay'"),
         mcp_call(11, "ail_merge_check", "'base':'prog.ail','ours':'ours.ail','theirs':'theirs.ail'"),
         mcp_call(12, "ail_verify_check", "'cert':'-x'"),
+        mcp_call(13, "ail_find", "'how':'sort descending'"),
     ])
     want("mcp card", reply_of(r2.out, 2), ["AIL core card", "\"isError\":false"])
     want("mcp card repeat is memoised", reply_of(r2.out, 3), [jm("'ail/warm':'memo'")])
@@ -3425,6 +3744,8 @@ fn Gate.agent_tools(mut self, tmp str)
     want("mcp find by words", reply_of(r2.out, 5), ["fs.read_text(path"])
     want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
     want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
+    # api.find.7: `how` reaches `ail ask how`.
+    want("mcp find how", reply_of(r2.out, 13), ["sorted(by:"])
     want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
     if slurp("{base}/mcp/try.ail") != ctx
         red("mcp try", "wrote the program")
@@ -3578,6 +3899,7 @@ fn main() !
         "cert",
         "try",
         "parity",
+        "corpus",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -3586,6 +3908,7 @@ fn main() !
     for s in suites
         match s
             "examples" => g.examples(tmp)
+            "corpus" => g.corpus(tmp)
             "cases" => g.cases()
             "explain" => g.explain_coverage()
             "fix" => g.fix(tmp)

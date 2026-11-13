@@ -1,6 +1,7 @@
 ## `ail doctor [--json] [--path]` (spec tool.doctor.1-2, tool.path.1, ADR 1058): one line per check, `ok` or what to
 ## run, and the one line that puts `ail` on the shell's PATH. It reads and reports; the only thing it writes is a
 ## probe file in the build cache directory, removed at once.
+use pkg
 
 ## One check: its name, `ok`, `warn` or `fail`, what was found, the fix to run (empty when ok), and whether a
 ## failure is fatal (exit status 1).
@@ -50,7 +51,8 @@ fn writable(dir str) bool
 ## The line for a shell profile (tool.path.1): it adds the toolchain's directory, where `ail` is, to PATH.
 fn path_line(root str) str
     if windows()
-        return "$env:Path = \"{root.replace("/", "\\")};\" + $env:Path"
+        # PowerShell reads environment names in any case: `PATH` reads the same as `Path` in every version.
+        return "$env:PATH = \"{root.replace("/", "\\")};\" + $env:PATH"
     "export PATH=\"{root}:$PATH\""
 
 ## Is `found`, the first `ail` on PATH, this toolchain's? Its directory is `root` (and so is a symlink's
@@ -86,6 +88,12 @@ fn check_version(root str) Check
             false,
         )
     good("version", "{version}, seed {if seed == "" then "unknown" else seed}")
+
+## The language version of the project in the current directory (mod.pkg.10).
+fn check_language() Check
+    version := pkg.tree_version(".")
+    from := if fs.exists("ail.pkg") then "ail.pkg" else "no ail.pkg, so this compiler's own"
+    good("language", "{version} ({from}), this compiler implements {pkg.lang_version()}")
 
 fn check_path(root str) Check
     found := proc.which("ail") else ""
@@ -233,6 +241,7 @@ fn checks(root str, cache str, target str) List[Check]
     [
         check_root(root),
         check_version(root),
+        check_language(),
         check_path(root),
         check_git(),
         check_curl(),

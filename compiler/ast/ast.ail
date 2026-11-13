@@ -118,6 +118,9 @@ pub struct Field
     pub ty TypeRef
     ## Marked `@observe`: an attached agent may read it (attach.observe.1).
     pub observe bool
+    ## `name Type = value`: the value a struct literal that leaves the field out gets
+    ## (type.struct.8). Only struct fields have one.
+    pub default Expr?
 
 pub struct EnumDecl
     pub name str
@@ -309,6 +312,14 @@ pub enum Expr
     Comp(form CompKind, elem Expr, value Expr?, clauses List[CompFor], pos Pos)
     OrElse(value Expr, otherwise Else, pos Pos)
     NewRef(value Expr, pos Pos)
+    ## `|a, b| e`, a function literal whose body is one expression (type.fn.4, ADR 1067).
+    Closure(params List[ClosureParam], body Expr, pos Pos)
+
+## A parameter of a function literal: `x`, or `x int` with its type (type.fn.4).
+pub struct ClosureParam
+    pub name str
+    pub pos Pos
+    pub ty TypeRef?
 
 pub struct MapEntry
     pub key Expr
@@ -351,6 +362,8 @@ pub struct FormatSpec
     pub width int?
     pub precision int?
     pub hex bool
+    ## Marks of the specification: `+`, `0`, `,`, `b`, `e` (lex.str.7).
+    pub flags str
 
 ## A call argument (own.param.2, own.move.2, type.struct.3, expr.key.1).
 pub struct Arg
@@ -375,6 +388,9 @@ pub enum Pattern
     TuplePat(elems List[Pattern], pos Pos)
     ## A name inside a tuple pattern, bound to the element (type.tuple.6)
     BindName(name str, pos Pos)
+    ## `Variant(p, ...)` whose fields hold patterns of their own
+    ## (expr.match.13): a plain name binds its field, `_` ignores it.
+    Nested(qualifier str?, name str, fields List[Pattern], pos Pos)
 
 pub enum Literal
     IntLit(value str)
@@ -462,9 +478,18 @@ impl ToJson for FormatSpec
 impl FromJson for FormatSpec
 impl ToJson for Arg
 impl FromJson for Arg
+impl ToJson for ClosureParam
+impl FromJson for ClosureParam
 impl ToJson for Arm
 impl FromJson for Arm
 impl ToJson for Pattern
 impl FromJson for Pattern
 impl ToJson for Literal
 impl FromJson for Literal
+
+## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
+## the argument's value is the function literal, and `Arg.param` names `x`.
+pub fn key_body(a Arg) Expr
+    match a.value
+        Closure(_, body, _) => body
+        _ => a.value

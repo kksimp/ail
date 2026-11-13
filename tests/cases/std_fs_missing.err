@@ -1,4 +1,4 @@
-error: fs.IoError(path: "no_such_file.ail.cfg", kind: "not_found")
+error: fs.IoError(path: "no_such_file.ail.cfg", kind: fs.IoKind.NotFound)
   context: reading the config
   at $FILE:5:8
   at $FILE:5:23

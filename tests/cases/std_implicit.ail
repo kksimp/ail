@@ -7,7 +7,7 @@ fn main()
     print(path.dir("a/b/c.txt"))
     print(path.ext("c.txt"))
     text := load("std_implicit_missing.txt") else err
-        err.kind
+        "{err.kind}"
     print(text)
     path := "x/y"
     print(path.len())

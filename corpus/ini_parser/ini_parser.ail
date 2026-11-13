@@ -1,0 +1,74 @@
+## INI parser: reads sections and key=value pairs (with comments and blank
+## lines) into a flat list, then looks values up with typed getters.
+
+struct Entry
+    sec str
+    name str
+    val str
+
+fn sample() str
+    lines := [
+        "; global settings",
+        "debug = true",
+        "",
+        "[server]",
+        "host = example.org",
+        "port = 8080",
+        "# comment",
+        "",
+        "[client]",
+        "retries=3",
+        "timeout = 2500 ",
+        "bogus line without equals",
+    ]
+    lines.join("\n")
+
+fn parse(text str) List[Entry]
+    mut out := List[Entry]()
+    mut current := ""
+    for raw in text.lines()
+        line := raw.trim()
+        if line == "" or line.starts_with("#") or line.starts_with(";")
+            continue
+        if line.starts_with("[") and line.ends_with("]")
+            current = line.slice(1, line.len() - 1).trim()
+            continue
+        idx := line.find("=") else continue
+        out.push(Entry(
+            sec: current,
+            name: line.slice(0, idx).trim(),
+            val: line.slice(idx + 1, line.len()).trim(),
+        ))
+    out
+
+fn lookup(entries List[Entry], sec str, name str) str?
+    for e in entries
+        if e.sec == sec and e.name == name
+            return e.val
+    none
+
+fn get_int(entries List[Entry], sec str, name str, fallback int) int
+    v := lookup(entries, sec, name) else return fallback
+    v.to_int() else fallback
+
+fn main()
+    entries := parse(sample())
+    print("entries: {entries.len()}")
+    for e in entries
+        label := if e.sec == "" then "(global)" else e.sec
+        print("{label}.{e.name} = {e.val}")
+    print("port: {get_int(entries, "server", "port", 80)}")
+    print("retries: {get_int(entries, "client", "retries", 0)}")
+    print("missing: {get_int(entries, "client", "nope", -1)}")
+    print("host: {lookup(entries, "server", "host") else "none"}")
+
+@test fn parses_sections()
+    es := parse("a=1\n[s]\nb = 2")
+    assert_eq(es.len(), 2)
+    assert_eq(lookup(es, "", "a") else "", "1")
+    assert_eq(lookup(es, "s", "b") else "", "2")
+
+@test fn int_getter_falls_back()
+    es := parse("[s]\nn = x\nm = 7")
+    assert_eq(get_int(es, "s", "n", 5), 5)
+    assert_eq(get_int(es, "s", "m", 5), 7)

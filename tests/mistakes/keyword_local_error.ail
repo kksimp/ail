@@ -1,0 +1,4 @@
+fn main()
+    error := "disk full"
+    if error != ""
+        print("failed: {error}")

@@ -398,6 +398,8 @@ fn Scan.expr(mut self, e ast.Expr)
             )
         Str | Bytes | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
         Name => read_place(e, false)
+        # type.fn.5: a function literal reads the names it copies; its parameters are its own.
+        Closure(params, body, _) => scoped([p.name for p in params], [ast.Stmt.Eval(body)])
         Member(recv, _, _) =>
             if not read_place(e, false)
                 expr(recv)
@@ -525,6 +527,11 @@ fn pattern_names(p ast.Pattern) List[str]
             for q in ps
                 out.extend(pattern_names(q))
             out
+        Nested(_, _, nfields, _) =>
+            mut out := List[str]()
+            for q in nfields
+                out.extend(pattern_names(q))
+            out
         Wildcard | Literal | Alt | Range => []
 
 ## Whether `n`, declared in `f`, holds an `int` (1), a float (0), or
@@ -645,6 +652,7 @@ fn else_blocks(o ast.Else) List[List[ast.Stmt]]
         OrElse(value, o, _) =>
             out.extend(expr_blocks(value))
             out.extend(else_blocks(o))
+        Closure(_, body, _) => out.extend(expr_blocks(body))
         Call(callee, args, _) =>
             out.extend(expr_blocks(callee))
             for a in args
@@ -1088,6 +1096,10 @@ fn Checker.proven_loops(self) List[ast.Pos]
         if is_prelude_line(f.pos.line)
             continue
         body := f.body else continue
+        # A generator's loops run one element per `next()`, never on the pool
+        # (expr.yield.4, ADR 1073).
+        if ast.has_yield(body)
+            continue
         for s in loops(body)
             match s
                 For(_, _, _, mutable, _, _, _) =>
@@ -1190,6 +1202,7 @@ struct ParComp
         Unary(_, x, _) => par_comps_expr(x, mut out, fi)
         Try(x, _, _) => par_comps_expr(x, mut out, fi)
         NewRef(x, _) => par_comps_expr(x, mut out, fi)
+        Closure(_, body, _) => par_comps_expr(body, mut out, fi)
         Index(a, b, _) =>
             par_comps_expr(a, mut out, fi)
             par_comps_expr(b, mut out, fi)

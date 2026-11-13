@@ -1,5 +1,5 @@
-not_found docs/no-such-file.md
-is_dir docs
-not_found a "quoted" path\x
+fs.IoKind.NotFound docs/no-such-file.md
+fs.IoKind.IsDir docs
+fs.IoKind.NotFound a "quoted" path\x
 true
-not_found no-such-command-ail
+proc.ProcKind.NotFound no-such-command-ail

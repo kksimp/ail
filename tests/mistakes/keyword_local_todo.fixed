@@ -1,0 +1,7 @@
+fn main()
+    mut pending := List[str]()
+    pending.push("write tests")
+    pending.push("ship")
+    for t in pending
+        print(t)
+    print("{pending.len()} left")

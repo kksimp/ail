@@ -811,6 +811,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.ldr(d, gpr(i.arg(0), S0), 16)
             put_gpr(i.dst, d)
+        "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
+        "vsplat" | "vpack" | "vlane" | "vhadd" => vec_inst(i)
         "ldx" => indexed_load(i)
         "stx" => indexed_store(i)
         "len" =>

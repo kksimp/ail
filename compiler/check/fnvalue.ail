@@ -13,8 +13,6 @@ fn Checker.fn_value(mut self, n str, i int, at ast.Pos) Ty
         why = "generic"
     elif [p for p in sig.params if p.mutable].len() > 0 or sig.moves.contains(true)
         why = "a function with a `mut` or `move` parameter"
-    elif is_res(sig.ret)
-        why = "a function that can fail"
     elif has_attr(f, "test")
         why = "a test"
     if why != ""
@@ -27,10 +25,17 @@ fn Checker.fn_value(mut self, n str, i int, at ast.Pos) Ty
         return Ty.Unknown
     fn_values[pos_key(at)] = i
     symbols[pos_key(at)] = "fn:{n}"
-    Ty.FnTy([p.ty for p in sig.params], sig.ret)
+    # type.fn.6: a function that can fail is a value that can; an inferred error set is spelled out.
+    mut r := sig.ret
+    match sig.ret
+        Res(ok, errs) => r = Ty.Res(ok, Errs.ErrSet(errs_of(errs)))
+        _ => r = sig.ret
+    Ty.FnTy([p.ty for p in sig.params], r)
 
 ## type.fn.3: call a value of function type.
 fn Checker.call_value(mut self, what str, t Ty, args List[ast.Arg], at ast.Pos) Ty
+    # eff.use.1: what a function value does isn't known here.
+    effect_marks += 1
     fp := fn_parts(t) else
         args_only(args)
         if t != Ty.Unknown

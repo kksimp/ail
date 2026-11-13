@@ -6,12 +6,12 @@ struct Where
 
 impl app.App for Where
     fn update(mut self, ev app.Event)
-        if ev.kind == "press" and ev.id == "choose"
+        if ev.kind == Press and ev.id == "choose"
             asking = true
-        if ev.kind == "picked"
+        if ev.kind == Picked
             path = ev.text
             asking = false
-        if ev.kind == "pick_error"
+        if ev.kind == PickError
             asking = false
 
     fn view(self) app.Node
@@ -26,7 +26,7 @@ fn main()
     mut w := Where(path: "", asking: false)
     app.script(mut w, [app.press("choose")])
     print(w.pick() != none)
-    mut done := app.event("picked")
+    mut done := app.event(Picked)
     done.id = "folder"
     done.text = "/tmp"
     app.script(mut w, [done])

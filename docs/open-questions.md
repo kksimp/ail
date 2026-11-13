@@ -110,17 +110,14 @@ context ([ADR 0050](decisions/0050-error-return-traces.md)), `?` on optionals
 ([ADR 0051](decisions/0051-no-implicit-optional-to-error.md)), and handling
 success *or* failure as a statement ([ADR 0125](decisions/0125-if-binding.md):
 `if x := e` … `else err`).
-**Still open:** safe member access (`a?.b`), and matching on specific errors,
-including on a set of error types (`IoError | ParseError`). Options for the
-latter:
-- qualified variant patterns from every member type (`ParseError.Empty =>`),
-  plus a pattern for a whole error type;
-- `match` with success and error arms.
+Matching on a set of error types is resolved by
+[ADR 1078](decisions/1078-error-union-member-matching.md) (`match err` with
+member types and their variants).
+**Still open:** safe member access (`a?.b`).
 **Measured 2026-10-24** (the corpus, `examples/`, `tools/` and `compiler/`, about
-148,000 lines): no `match` on a specific error variant follows an `else err`
-(errors are tested by field, e.g. `err.kind == "timed_out"`), and about eight
-places reach a field through an optional that `a?.b` would shorten. Both stay
-open until a program needs them; the ADR 0029 measurement is then rerun.
+148,000 lines): about eight places reach a field through an optional that
+`a?.b` would shorten. It stays open until a program needs it; the ADR 0029
+measurement is then rerun.
 
 ## OQ-030 — What is an error type?
 **Partly resolved:** error types are declared with `error`
@@ -362,15 +359,9 @@ Recommendation: **a.** The model stays affine, not linear, which is simpler
 for agents; the exit-time kill is the `Drop` of the child and needs no new
 rule. Reopen only if stray handles cause real bugs.
 ## OQ-121 — Closures as `std.net.http` handlers
-`std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
-because AIL has no anonymous functions or captured variables (`type.fn.3`,
-ADR 0456). A handler that needs state (a counter, a store) has to reach it
-through a `ref` global or a struct method. The question is whether function
-values should grow captures. Options: keep the rule (handlers are named
-functions plus explicit state) or add closures as a later language feature
-with their own ADR. Recommendation: keep the rule until a program shows the
-need; the AI-first measurement (ADR 0076) is tokens per handler, and the
-named form costs few.
+**Resolved** by [ADR 1067](decisions/1067-closures.md): function literals copy
+the locals they name (`type.fn.4`-`5`), so a handler is `|req| reply(req, store)`
+with shared state in a captured `ref`.
 
 ## OQ-122 — What `t[i][j]` on a one-dimensional tensor means
 
@@ -405,7 +396,7 @@ Lane 238 implemented the rules of the lane 223 and lane 225 lists that a checker
 | Rule | What's missing | Options | Recommendation |
 |---|---|---|---|
 | `gen.anon.2`, `type.enum.4` | They define a *canonical form* that rewrites tokens (`fn f[T Shape](s T)` to `fn f(s Shape)`, `Shape.Circle(r)` to `Circle(r)`). `ail fmt` only changes whitespace and refuses output whose tokens differ (fmt.safe, ADR 0169); `type.enum.4` also needs expected types. | (a) an `ail fix` rewrite with a lint-style diagnostic (new rule IDs); (b) let `ail fmt` rewrite tokens; (c) reword the rules as advice | (a): `ail fix` already rewrites tokens from checker information, and fmt.safe stays true. |
-| `err.type.4` | Matching on an inferred error set (OQ-029, "not designed yet"). | Decide OQ-029 first. | Wait for OQ-029. |
+| `err.type.4` | Resolved by [ADR 1078](decisions/1078-error-union-member-matching.md) (err.match.1-3). | | |
 | `ct.eval.4` | A MAY rule (reuse of compile-time results); nothing observable to test. | (a) implement with the build cache (lane 200); (b) keep it untested | (a) once `ail build` has its cache; no work before. |
 | `own.copy.1` | The "performance report" (ADR 0026) doesn't exist in any tool, so there is nothing to list copy sites in. | (a) a new `ail effects --copies FILE` listing each site where a list, map, set or struct is copied by assignment, argument or return; (b) wait for the report | (a), as the first line of the report: it follows the existing `--parallel` listing. |
 | `plat.isa.3` | A native start-up check of the CPU level needs the code generator's entry sequence (`compiler/mir/lower.ail`, the merge queue's critical path) or a start-up stub in the object writers. | (a) a stub in `compiler/obj/` that runs `cpuid` before `main`, x86-64 only (ARM64's baseline is checked by the OS); (b) wait for the queue to empty | (a) after the queue empties, so it lands without conflicts. |
@@ -532,27 +523,11 @@ approved syntax (ADR 0879 item 1).
 
 ## OQ-141 — Reading an exact byte count from standard input (ADR 0966)
 
-`std.io` reads a line, the rest of input, or the rest as bytes (`std.io.1-5`). The language server protocol frames each message with `Content-Length: N` and then exactly N bytes with no line ending, so `ail lsp` reads the body as a line and cuts it by byte count (lsp.proto.1).
-
-- **a.** Keep the line trick. Pro: no runtime change. Con: breaks if a client sends a body with a raw newline, and reads past the body into the next header.
-- **b.** Add `io.read_exact(n int) bytes?` (none at end of input). Pro: exact, also serves binary protocols and agents' own stdio servers. Con: one runtime primitive on three targets.
-
-Recommendation: **b** when the std lane next touches `std.io`; `ail lsp` then drops the carry.
+**Resolved** by [ADR 1071](decisions/1071-streaming-file-handles.md): `io.read_exact(n int) bytes?` (std.io.7); `ail lsp` drops its line trick after the next seed.
 
 ## OQ-142 — ADR 0076's order after the 2026-11-11 goals (ADR 1065)
 
-ADR 1065 accepts more tokens when they buy speed or a better AI-first feature. ADR 0076 still
-puts token usage first among the criteria for delegated decisions.
-
-- **A. Keep the order.** Tokens still break ties. Pro: stable and measurable. Con: it can work
-  against the new goal on a close call.
-- **B. Put AI understanding first, tokens second.** Pro: matches ADR 1065. Con: AI understanding
-  is harder to measure than tokens.
-- **C. Put speed (runtime) first.** Pro: the C-parity target is the most concrete. Con: it ranks
-  speed above clarity for agents.
-
-**Recommendation:** B. Measurements still back every syntax choice (ADR 0029).
-**Decision needed from:** the designer.
+Resolved 2026-11-12 by the designer: [ADR 1077](decisions/1077-decision-order-ai-understanding-first.md).
 
 ## OQ-143 — Input hashes for the explain golden (tools/golden/golden.py)
 

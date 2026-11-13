@@ -60,6 +60,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
         c.check_invariants(i)
         if c.gap_now
             c.gapped_structs.add(i)
+        c.check_field_defaults(i)
     # err.type.6: inferred error sets are the least fixed point, found by
     # re-checking the functions silently until nothing changes.
     inferring := [i for i in 0..p.fns.len() if is_inferred(c.sigs[i].ret)]
@@ -72,6 +73,8 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
             c.diags = c.diags[..saved]
             if c.inferred == before
                 break
+    # eff.use.1: only the last pass's discards count.
+    c.discards = Map[int, Discard]()
     c.record = full
     for i in 0..p.fns.len()
         c.check_fn(i)
@@ -110,6 +113,8 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_caps())
+    c.diags.extend(c.check_discards())
     c.diags.extend(c.check_denied())
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
@@ -287,9 +292,13 @@ fn Checker.check_fn(mut self, idx int)
         unsafe_opt_in(f.pos)
     catching = 0
     fn_ret = sig.ret
+    # expr.yield.1: a generator's body gives elements, not a result.
+    gen.elem = gen_start(f, sig.ret)
+    if gen.elem != none
+        fn_ret = Ty.Unit
     push_params(f, sig)
     check_contracts(f, sig.ret)
-    need := not returns_nothing(sig.ret)
+    need := not returns_nothing(sig.ret) and gen.elem == none
     mut want := none
     if need
         want = sig.ret
@@ -320,6 +329,7 @@ fn Checker.check_fn(mut self, idx int)
 
 fn Checker.end_fn(mut self, idx int)
     record_locals(0)
+    gen.elem = none
     scope = []
     self_ty = none
     if gap_now
@@ -391,6 +401,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         mut want := none
         if last
             want = expect
+        marks := effect_marks
         ty = stmt(s, want, last and need)
         if ty == Ty.Never
             leaves = true
@@ -401,6 +412,8 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         # err.use.1: a failure can't be discarded.
         if (not last or not need) and is_stmt_eval(s) and reject_unhandled(ty, stmt_pos(s))
             ty = Ty.Unknown
+        elif not last or not need
+            note_discard(s, ty, marks)
     end_scope(mark)
     if leaves then Ty.Never else ty
 
@@ -477,11 +490,11 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             unsafe_depth -= 1
             t
         Break(at) =>
-            if loop_depth == 0
+            if loop_depth == 0 and not leaves_literal("break", at)
                 err("expr.loop.5", at, "`break` outside a loop")
             Ty.Never
         Continue(at) =>
-            if loop_depth == 0
+            if loop_depth == 0 and not leaves_literal("continue", at)
                 err("expr.loop.5", at, "`continue` outside a loop")
             Ty.Never
         Return(value, at) =>
@@ -557,6 +570,12 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         _ => ""
 
 fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
+    if leaves_literal("return", at)
+        if v := value
+            expr(v, none, true)
+        return
+    if gen_return(value, at)
+        return
     want := fn_ret
     v := value else
         if not returns_nothing(want)
@@ -1005,6 +1024,8 @@ fn Checker.condition(mut self, cond ast.Expr)
         Str =>
             err_help("expr.loop.4", at, "`for` can't iterate over a `str`", "iterate `s.chars()`")
             Ty.Unknown
+        # expr.iter.1: a type with `fn next(mut self) T?`, a `Seq[T]` among them.
+        Struct | Enum => iter_next(t, at, iter)
         _ => iterate_error(t, at, iter)
 
 @allow("expr.match.3") fn Checker.range_loop(mut self, iter ast.Expr) Ty
@@ -1246,6 +1267,7 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
 ## Report if `e` isn't a mutable place (own.place.1). `rule` is the rule for
 ## this context; without one, it is chosen by the kind of root.
 fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
+    effect_marks += 1
     record_write(e)
     # own.ref.4: a `ref` cell's contents are mutable through any copy.
     if writes_through_ref(e, rule == "trait.method.3")
@@ -1259,6 +1281,9 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
         )
         return
     l := local(root) else return
+    if is_capture(root)
+        capture_written(root, expr_pos(e), action)
+        return
     if l.mutable
         return
     mut fallback_rule := ""
@@ -1446,6 +1471,7 @@ fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
         )
         Unary(_, operand, _) => overlap_in_expr(target, operand)
         NewRef(value, _) => overlap_in_expr(target, value)
+        Closure(_, body, _) => overlap_in_expr(target, body)
         Binary(_, lhs, rhs, _) => either(overlap_in_expr(target, lhs), overlap_in_expr(target, rhs))
         Range(lo, hi, _, _) => either(overlap_in_opt(target, lo), overlap_in_opt(target, hi))
         MapLit(entries, _) =>
@@ -1566,6 +1592,8 @@ fn args_break(args List[ast.Arg]) bool
         ListLit(items, _) => any_breaks(items)
         SetLit(items, _) => any_breaks(items)
         TupleLit(items, _) => any_breaks(items)
+        # A function literal's body can't leave the enclosing loop (type.fn.4).
+        Closure => false
         MapLit(entries, _) =>
             for en in entries
                 if breaks_in_expr(en.key) or breaks_in_expr(en.value)
@@ -1620,6 +1648,73 @@ fn Checker.check_invariants(mut self, struct_index int)
         if not accepts(Ty.Bool, got)
             mismatch("contract.decl.2", expr_pos(c.cond), Ty.Bool, got)
     locals = []
+
+## type.struct.8: a field's default is a plain constant of the field's type:
+## literals, `none`, `[]`, `{}`, `List[T]()`, `Map[K, V]()`, `Set[T]()` and
+## lists, sets, maps and tuples of them. It has no names, so a literal in any
+## module reads the same value, and it has no effects.
+fn Checker.check_field_defaults(mut self, struct_index int)
+    st := prog.structs[struct_index]
+    declared := struct_params[struct_index]
+    locals = []
+    scope = scope_of(declared)
+    for k in 0..st.fields.len()
+        d := st.fields[k].default else continue
+        if bad := plain_default(d)
+            err_help(
+                "type.struct.8",
+                expr_pos(bad),
+                "`{st.fields[k].name}`'s default isn't a plain constant",
+                "write literals, `none`, `[]`, `\{}`, or lists, sets, maps and tuples of them; a default has no names or calls, so build anything else where you write the literal",
+            )
+            continue
+        want := field_types[struct_index][k]
+        got := expr(d, want, true)
+        if not accepts(want, got)
+            mismatch("type.struct.5", expr_pos(d), want, got)
+    locals = []
+
+## The first part of a field default that isn't a plain constant (type.struct.8).
+@allow("expr.match.3") fn plain_default(e ast.Expr) ast.Expr?
+    match e
+        Str | Bytes | Int | Float | Char | Bool | NoneLit => none
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    _ => return e
+            none
+        ListLit(items, _) => first_not_plain(items)
+        SetLit(items, _) => first_not_plain(items)
+        TupleLit(items, _) => first_not_plain(items)
+        MapLit(entries, _) =>
+            for m in entries
+                if b := plain_default(m.key)
+                    return b
+                if b := plain_default(m.value)
+                    return b
+            none
+        Unary(_, x, _) => plain_default(x)
+        Call(callee, args, _) => empty_collection(callee, args, e)
+        _ => e
+
+fn first_not_plain(items List[ast.Expr]) ast.Expr?
+    for x in items
+        if b := plain_default(x)
+            return b
+    none
+
+## `List[T]()`, `Map[K, V]()` and `Set[T]()`.
+@allow("expr.match.3")
+fn empty_collection(callee ast.Expr, args List[ast.Arg], e ast.Expr) ast.Expr?
+    if args.len() > 0
+        return e
+    match callee
+        TypeArgs(n, _, _) =>
+            if n == "List" or n == "Map" or n == "Set"
+                return none
+            e
+        _ => e
 
 ## Check `f`'s contracts with its parameters in scope; `ensures` also sees
 ## `result`, the success value (contract.ens.1).

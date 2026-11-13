@@ -1,5 +1,5 @@
-kind=not_found path=/nonexistent/file.txt
-fs.IoError(path: "/nonexistent/file.txt", kind: "not_found")
+kind=fs.IoKind.NotFound path=/nonexistent/file.txt
+fs.IoError(path: "/nonexistent/file.txt", kind: fs.IoKind.NotFound)
 none
-proc kind=not_found cmd=/nonexistent/prog
-proc.ProcError(cmd: "/nonexistent/prog", kind: "not_found")
+proc kind=proc.ProcKind.NotFound cmd=/nonexistent/prog
+proc.ProcError(cmd: "/nonexistent/prog", kind: proc.ProcKind.NotFound)

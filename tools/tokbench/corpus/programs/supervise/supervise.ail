@@ -1,4 +1,3 @@
-
 struct Job
     cmd str
     args List[str]
@@ -6,7 +5,7 @@ struct Job
 
 fn run_job(job Job) str
     r := proc.run(job.cmd, job.args, "", job.limit) else err
-        if err.kind == "timed_out"
+        if err.kind == TimedOut
             return "timed out after {job.limit} ms"
         return "could not start"
     if r.ok()

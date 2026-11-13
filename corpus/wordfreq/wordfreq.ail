@@ -1,0 +1,56 @@
+## Word frequency: splits a text into lowercase words, counts them and prints
+## the most common ones (count descending, ties alphabetical).
+
+fn sample() str
+    lines := [
+        "The quick brown fox jumps over the lazy dog.",
+        "The dog barks; the fox runs away, and the dog follows the fox.",
+        "A quick fox is a happy fox, and a lazy dog is a sleepy dog.",
+    ]
+    lines.join(" ")
+
+fn split_words(text str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in text.to_lower().chars()
+        if c.is_alpha()
+            cur = "{cur}{c}"
+        elif cur != ""
+            out.push(cur)
+            cur = ""
+    if cur != ""
+        out.push(cur)
+    out
+
+fn count_words(words List[str]) Map[str, int]
+    mut counts := Map[str, int]()
+    for w in words
+        counts[w] += 1
+    counts
+
+fn rank(counts Map[str, int]) List[str]
+    counts.keys().sorted().sorted(by: |w| -counts[w])
+
+fn main()
+    words := split_words(sample())
+    counts := count_words(words)
+    print("words: {words.len()}, unique: {counts.len()}")
+    ranked := rank(counts)
+    for w in ranked.take(6)
+        print("{w:<8}{counts[w]:>3}")
+    longest := words.sorted(by: |w| -w.len())[0]
+    print("longest: {longest} ({longest.len()})")
+    mut once := 0
+    for w in counts.keys()
+        if counts[w] == 1
+            once += 1
+    print("seen once: {once}")
+
+@test fn splits_on_punctuation()
+    assert_eq(split_words("Hi, there; HI!"), ["hi", "there", "hi"])
+    assert_eq(split_words("...").len(), 0)
+
+@test fn counts_and_ranks()
+    counts := count_words(["b", "a", "b", "c", "a", "b"])
+    assert_eq(counts["b"], 3)
+    assert_eq(rank(counts), ["b", "a", "c"])

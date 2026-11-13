@@ -313,10 +313,13 @@ fn Lower.fallible_call(self, e ast.Expr) bool
         Call(callee, _, _) =>
             match callee
                 Name(n, _) =>
+                    # A local holding a function value that can fail (type.fn.6) hides a function.
+                    if lookup(n) != none
+                        return fn_value_fails(callee)
                     s := callee_sig(n) else return generic_fails(callee_key(n))
                     s.fails
                 TypeArgs(n, _, _) => generic_fails(callee_key(n))
-                _ => false
+                _ => fn_value_fails(callee)
         Method(recv, name, _, _) => os_fails(recv, name)
             or method_fails(recv, name)
             or net_fails(recv, name)
@@ -450,6 +453,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
         return true
     call("rt.err_set", [msg, trace_line(pos)], Ty.Unit)
     call("rt.err_value", [v.id], Ty.Unit)
+    tag_error(v.ty)
     defer_all()
     finish(return_of(zero_of(ret)))
     true
@@ -524,6 +528,7 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
         finish(return_of(konst(0, ret)))
     elif fails
         call("rt.err_set", [str_value("a value is absent"), trace_line(pos)], Ty.Unit)
+        tag_absent()
         add_context(context)
         defer_all()
         finish(return_of(zero_of(ret)))
@@ -570,7 +575,7 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
 ## one, else its display text.
 fn Lower.bind_taken_error(mut self, name str, ty Ty)
     if ty == Ty.Unknown
-        declare(name, Ty.Str, call("rt.err_take", [], Ty.Str))
+        bind_text_error(name)
     else
         raw := call("rt.err_take_value", [], Ty.Int)
         declare(name, ty, op("copy", [raw], ty))
@@ -641,7 +646,7 @@ fn Lower.else_part(
                 if opt
                     problem(n.pos, "an absent value has no error to bind")
                 elif err == Ty.Unknown
-                    declare(n.name, Ty.Str, call("rt.err_take", [], Ty.Str))
+                    bind_text_error(n.name)
                 else
                     raw := call("rt.err_take_value", [], Ty.Int)
                     declare(n.name, err, op("copy", [raw], err))
@@ -740,6 +745,7 @@ fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[TRAPPED] = ""
     err_msgs[NET_ERROR] = ""
     err_msgs[COMPRESS_ERROR] = ""
+    declare_std_kinds()
     # What `Task.wait()` fails with (conc.task.6), named in `! Trapped`.
     err_msgs["Trapped"] = ""
     for s in prog.structs
@@ -860,9 +866,12 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
     match e
         Call(callee, _, _) =>
             match callee
-                Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
+                Name(n, _) =>
+                    if lookup(n) != none
+                        return fn_value_err(callee)
+                    fn_errs.get(callee_key(n)) else Ty.Unknown
                 TypeArgs(n, _, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
-                _ => Ty.Unknown
+                _ => fn_value_err(callee)
         Method(recv, name, _, _) =>
             match recv
                 TypeArgs(n, _, _) =>
@@ -927,8 +936,10 @@ SHOWN_STD_AIL := [
     "std.audio.",
     "std.bigint.",
     "std.csv.",
+    "std.file.",
     "std.gfx.",
     "std.log.",
+    "std.mcp.",
     "std.media.webm.",
     "std.net.http.",
     "std.screen.",

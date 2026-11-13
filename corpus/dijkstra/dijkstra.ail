@@ -1,0 +1,111 @@
+## Shortest paths with Dijkstra's algorithm on a small undirected road map.
+## Edges come from text lines "A B 4"; node names get dense ids in sorted
+## order, and the program prints distance and route from the source to every
+## node, or "unreachable".
+
+INF := 1000000000
+
+struct Graph
+    names List[str]
+    us List[int]
+    vs List[int]
+    cost List[int]
+
+fn build(lines List[str]) Graph
+    mut seen := Set[str]()
+    for line in lines
+        p := line.split(" ")
+        seen.add(p[0])
+        seen.add(p[1])
+    mut names := List[str]()
+    for n in seen
+        names.push(n)
+    names.sort()
+    mut g := Graph(names: names, us: [], vs: [], cost: [])
+    for text in lines
+        q := text.split(" ")
+        a := names.index_of(q[0]) else 0
+        b := names.index_of(q[1]) else 0
+        c := q[2].to_int() else 0
+        g.us.push(a)
+        g.vs.push(b)
+        g.cost.push(c)
+        g.us.push(b)
+        g.vs.push(a)
+        g.cost.push(c)
+    g
+
+struct Paths
+    dist List[int]
+    prev List[int]
+
+fn shortest(g Graph, src int) Paths
+    count := g.names.len()
+    mut dist := List[int]()
+    mut prev := List[int]()
+    mut done := List[bool]()
+    for v in 0..count
+        dist.push(INF)
+        prev.push(-1)
+        done.push(false)
+    dist[src] = 0
+    for step in 0..count
+        mut u := -1
+        for i in 0..count
+            if not done[i] and dist[i] < INF and (u == -1 or dist[i] < dist[u])
+                u = i
+        if u == -1
+            break
+        done[u] = true
+        for e in 0..g.us.len()
+            if g.us[e] == u and dist[u] + g.cost[e] < dist[g.vs[e]]
+                dist[g.vs[e]] = dist[u] + g.cost[e]
+                prev[g.vs[e]] = u
+    Paths(dist: dist, prev: prev)
+
+fn route(g Graph, p Paths, target int) str
+    mut hops := [g.names[target]]
+    mut cur := target
+    while p.prev[cur] != -1
+        cur = p.prev[cur]
+        hops.push(g.names[cur])
+    hops.reverse()
+    hops.join(" -> ")
+
+fn main()
+    lines := [
+        "A B 4",
+        "A C 2",
+        "B C 1",
+        "B D 5",
+        "C D 8",
+        "C E 10",
+        "D E 2",
+        "D F 6",
+        "E F 3",
+        "X Y 2",
+    ]
+    g := build(lines)
+    src := g.names.index_of("A") else 0
+    p := shortest(g, src)
+    for i in 0..g.names.len()
+        if p.dist[i] == INF
+            print("{g.names[i]}: unreachable")
+        else
+            print("{g.names[i]}: {p.dist[i]} via {route(g, p, i)}")
+
+@test fn finds_the_cheaper_detour()
+    g := build(["A B 10", "A C 3", "C B 4"])
+    p := shortest(g, 0)
+    assert_eq(p.dist[1], 7)
+    assert_eq(route(g, p, 1), "A -> C -> B")
+
+@test fn separate_components_are_unreachable()
+    g := build(["A B 1", "C D 1"])
+    p := shortest(g, 0)
+    assert_eq(p.dist[2], INF)
+    assert_eq(p.dist[1], 1)
+
+@test fn names_are_sorted_ids()
+    g := build(["Z A 1"])
+    assert_eq(g.names, ["A", "Z"])
