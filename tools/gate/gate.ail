@@ -188,7 +188,10 @@ fn Gate.native_matrix(mut self, tmp str)
             red(src, "could not start ail check")
             continue
         if c.status != 0
-            red(src, "ail check refuses it (regenerate with tools/native-matrix/matrix.py)\n{c.out}{c.err}")
+            red(
+                src,
+                "ail check refuses it (regenerate with tools/native-matrix/matrix.py)\n{c.out}{c.err}",
+            )
             continue
         exe := "{tmp}/nm_{stem}"
         if why := build(src, exe)
