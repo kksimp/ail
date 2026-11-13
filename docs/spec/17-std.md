@@ -2,10 +2,9 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.compress`, `std.fs`, `std.file`, `std.kv`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
-> designed: the rest of the standard library, and capability effects
-> (plan §3.2), which another lane adds.
+> **Status:** Specified. Every standard module below has numbered rules and
+> a runnable example. Modules with a chapter of their own are linked in the
+> index under Imports.
 
 The standard modules reach the machine through small, typed functions whose
 failures are values (ADR 0157). There is no string-typed shell.
@@ -14,9 +13,36 @@ failures are values (ADR 0157). There is no string-typed shell.
 
 **std.use.1** — `use std.NAME` imports the standard module `NAME`, available
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
-The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time` and `ui`. Importing
-`std` itself, a submodule of a standard module, or any other `std.NAME` is a
+The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
+`hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
+`task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
+`std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
+`std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.net.http`,
+`std.screen`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
+`std.yaml` and the submodules in the index below; they are imported by their
+whole path (`use std.time.date`) and used under the last name (`date`).
+`use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157)*
+
+### Index of the standard modules
+
+One line per module: what it is for, and the rules that define it. `ail ask
+std WORDS` finds a function by what it does, and `ail card std.NAME` prints
+its signatures.
+
+| Module | For | Rules |
+|---|---|---|
+| `fs`, `file`, `kv` | files, streaming files, a key-value file | `std.fs`, `std.file`, `std.kv` |
+| `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
+| `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
+| `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
+| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
+| `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
+| `csv`, `toml`, `yaml`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
+| `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
+| `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
+| `Heap`, `Deque`, `Grid` | collections in the prelude, no `use` | `type.heap`, `type.deque` ([04](04-types.md)) |
 
 **std.use.2** — A standard module's functions and types are referred to by
 qualified name, `fs.read_text(path)` and `fs.IoError` (`mod.use.2`). A
@@ -3551,7 +3577,9 @@ lines don't disturb a call. A reply with an `error` member fails with kind
 `rpc`; the message is the server's text and `(code N)`. *(ADR 1091)*
 
 **std.mcp.7** — `McpError` is an error with `kind str` and `message str`. The
-kinds are `start`, `closed`, `protocol`, `rpc`, `tool` and `timeout`. A request
+kinds are the strings `start`, `rpc`, `tool` and `timeout` (unlike the enum
+kinds of `std.err.1`, because a server's failures are open-ended); a server
+that has exited fails with `timeout`, not a kind of its own. A request
 waits at most 30 seconds for its reply (`c.set_timeout(ms int)` changes it);
 when the time runs out or the server has exited it fails with kind `timeout`,
 and the message ends with ` (server stderr: ...)`, the first ten lines the
