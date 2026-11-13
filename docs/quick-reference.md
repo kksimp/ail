@@ -800,6 +800,9 @@ implementation.
     w * h
 ```
 
+A call whose value is dropped must do something (`eff.use.1`): `area(3, 4)` alone is an
+error, `xs.sorted()` alone is fixed to `xs.sort()`, and `_ := area(3, 4)` drops a value on purpose.
+
 `@inline` is accepted and ignored. `@deprecated("use area")` warns at each call.
 Unknown attributes are errors.
 `@inline` is a speed hint, accepted and ignored for now. `@deprecated("use

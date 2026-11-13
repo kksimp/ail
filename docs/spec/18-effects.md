@@ -74,7 +74,20 @@ fn main()
     print(double(21))
 ```
 
-## Denying capabilities
+## Discarded values
+
+**eff.use.1** — A call or method call whose value is thrown away (an
+expression statement that is not its block's value) MUST do something
+else: a call whose value is neither unit, `Never` nor `T ! E` (`err.use.1`)
+is an error when its effects (`eff.infer.1–5`) include none of `io`,
+`unsafe`, `hw`, `spawn`, `mutates` or a capability and it changes no place
+passed `mut` or used as a `mut` receiver. A call through a function value,
+a method of a channel, task, mutex or atomic, a function without a body,
+and a call inside an `unsafe` block are never reported. `_ := expr` throws a
+value away on purpose. The fix offers the in-place twin of a copying
+built-in (`xs.sorted()` → `xs.sort()`) when there is one, and `_ := ` always.
+*(ADR 1082)*
+
 
 **eff.cap.1** — `ail run --deny LIST FILE` and `ail check --deny LIST FILE`
 reject, at compile time, a program whose `main` has a denied capability. The
@@ -279,6 +292,28 @@ fn log(msg str)
 
 fn main()
     print(double(21))
+```
+
+```ail error=eff.use.1
+fn area(w int, h int) int
+    w * h
+
+fn main()
+    area(3, 4)                  # error: the value is thrown away, and area does nothing else
+    print("done")
+```
+
+```ail rules=eff.use.1
+fn noisy(n int) int
+    print("noisy {n}")
+    n
+
+fn main()
+    mut xs := [3, 1, 2]
+    noisy(1)                    # clean: noisy prints
+    xs.pop()                    # clean: pop changes xs
+    _ := xs.len()               # clean: thrown away on purpose
+    print(xs)
 ```
 
 ```ail flags=--deny,fs rules=eff.cap.3
