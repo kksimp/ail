@@ -97,8 +97,16 @@ fn main()
         Dish(name: "cola", cents: 300, kind: Kind.Drink, stock: 4),
     ]
     lines := [
-        "t1 steak 2", "t2 salad 1", "t1 cola 2", "t3 pizza 1", "t2 steak 2",
-        "t3 cola 0", "t3 cola 2", "t2 cola 3", "oops", "t1 salad x",
+        "t1 steak 2",
+        "t2 salad 1",
+        "t1 cola 2",
+        "t3 pizza 1",
+        "t2 steak 2",
+        "t3 cola 0",
+        "t3 cola 2",
+        "t2 cola 3",
+        "oops",
+        "t1 salad x",
     ]
     mut k := Kitchen(menu: menu, totals: {})
     for line in lines

@@ -70,7 +70,13 @@ fn Warehouse.plan(mut self, lines List[str], strat any Strategy) List[Pick] ! Pi
         if asked[parts[0]] > have
             return ShortStock(sku: parts[0], have: have, want: asked[parts[0]])
         b := self.bins[at]
-        picks.push(Pick(sku: b.sku, aisle: b.aisle, slot: b.slot, qty: want, key: strat.key(b.aisle, b.slot)))
+        picks.push(Pick(
+            sku: b.sku,
+            aisle: b.aisle,
+            slot: b.slot,
+            qty: want,
+            key: strat.key(b.aisle, b.slot),
+        ))
     for p in picks
         at2 := self.find(p.sku) else continue
         self.bins[at2].qty -= p.qty

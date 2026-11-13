@@ -1,0 +1,89 @@
+## Channel broadcast simulation: a publisher sends each message to every
+## subscriber's own channel. Subscriber tasks keep only the topics they follow
+## ("*" follows all), build a checksum of what they saw and report back over a
+## shared results channel. Main sorts the reports by subscriber name.
+
+struct Msg
+    topic str
+    seq int
+    body str
+
+struct Report
+    name str
+    topic str
+    received int
+    checksum int
+    last str
+
+fn wanted(filter str, topic str) bool
+    filter == "*" or filter == topic
+
+fn mix(sum int, m Msg) int
+    (sum * 31 + m.seq * m.body.len()) % 1000003
+
+fn subscriber(name str, filter str, inbox Channel[Msg], results Channel[Report])
+    mut got := 0
+    mut sum := 0
+    mut last := "-"
+    for m in inbox
+        if wanted(filter, m.topic)
+            got += 1
+            sum = mix(sum, m)
+            last = m.body
+    results.send(Report(name: name, topic: filter, received: got, checksum: sum, last: last))
+
+fn make_messages(n int) List[Msg]
+    topics := ["news", "sport", "weather"]
+    mut msgs := List[Msg]()
+    for i in 1..=n
+        t := topics[i % 3]
+        msgs.push(Msg(topic: t, seq: i, body: "{t}-update-{i * i}"))
+    msgs
+
+fn broadcast(msgs List[Msg], names List[str], filters List[str]) !List[Report]
+    results := Channel[Report](names.len())
+    mut inboxes := List[Channel[Msg]]()
+    g := TaskGroup()
+    for i in 0..names.len()
+        inbox := Channel[Msg](2)
+        inboxes.push(inbox)
+        g.add(spawn subscriber(names[i], filters[i], inbox, results))
+    for m in msgs
+        for box in inboxes
+            box.send(m)
+    for box in inboxes
+        box.close()
+    g.wait_all()?
+    results.close()
+    mut reports := List[Report]()
+    for r in results
+        reports.push(r)
+    reports.sorted(by: |x| x.name)
+
+fn main() !
+    msgs := make_messages(30)
+    names := ["alice", "bob", "carol", "dave"]
+    filters := ["*", "news", "sport", "tides"]
+    print("publishing {msgs.len()} messages to {names.len()} subscribers")
+    reports := broadcast(msgs, names, filters)?
+    for r in reports
+        print("{r.name:<6}{r.topic:<7}{r.received:>3} msgs  sum {r.checksum:>7}  last {r.last}")
+    delivered := reports.map(|x| x.received).sum()
+    print("total deliveries: {delivered}")
+
+@test fn filters_match_topics()
+    assert(wanted("*", "news"))
+    assert(wanted("news", "news"))
+    assert(not wanted("news", "sport"))
+
+@test fn messages_cycle_topics()
+    msgs := make_messages(6)
+    assert_eq(msgs.len(), 6)
+    assert_eq(msgs[0].topic, "sport")
+    assert_eq(msgs[2].body, "news-update-9")
+
+@test fn every_subscriber_sees_its_share()
+    reports := broadcast(make_messages(9), ["a", "b"], ["*", "nothing"])?
+    assert_eq(reports[0].received, 9)
+    assert_eq(reports[1].received, 0)
+    assert_eq(reports[1].last, "-")

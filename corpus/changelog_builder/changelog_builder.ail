@@ -107,7 +107,12 @@ fn main()
         print(line)
 
 @test fn parses_scope_and_break()
-    c := parse_commit("feat(ui)!: new menu") else Commit(kind: "", scope: "", desc: "", breaking: false)
+    c := parse_commit("feat(ui)!: new menu") else Commit(
+        kind: "",
+        scope: "",
+        desc: "",
+        breaking: false,
+    )
     assert_eq(c.kind, "feat")
     assert_eq(c.scope, "ui")
     assert_eq(c.desc, "new menu")

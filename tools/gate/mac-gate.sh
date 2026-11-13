@@ -88,6 +88,16 @@ fullrun=1; [ $# -gt 0 ] && fullrun=0
 [ $# -gt 0 ] && native_suites="$*"
 [ -n "$rerun" ] && fullrun=0
 [ -n "$rerun" ] && native_suites="$rerun"
+# GATE_SKIP_HOSTFREE=1: leave out the suites of hostfree.txt (see there); the verdict line says so.
+skipped=""
+if [ "${GATE_SKIP_HOSTFREE:-}" = 1 ]; then
+  kept=""
+  for s in $native_suites; do
+    if grep -qx "$s" tools/gate/hostfree.txt; then skipped="$skipped $s"; else kept="$kept $s"; fi
+  done
+  native_suites=${kept# }
+  [ -z "$skipped" ] || echo "SKIPPED host-free suites (the Mac gate must have been green on this head):$skipped"
+fi
 # selfhost1 goes in right after the first (lone) suite, so it overlaps the long suites; the nativex shards need it, and wait for it.
 # nativex is sharded into the pool (`nativex@K/N`, one process each): its parts ran serially while three cores idled.
 sel=""
@@ -121,5 +131,5 @@ sort -rn "$out/times.unsorted" >"$out/times.log" 2>/dev/null; rm -f "$out/times.
 if [ "$arith_ok" = 1 ]; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }
 else fails=$((fails+1)); echo "RED native build of arith.ail"; fi
-[ "$fails" = 0 ] && echo "GATE GREEN" || echo "GATE RED ($fails failures); logs in $out"
+[ "$fails" = 0 ] && echo "GATE GREEN${skipped:+ (not run:$skipped)}" || echo "GATE RED ($fails failures); logs in $out"
 exit $((fails > 0))

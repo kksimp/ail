@@ -51,7 +51,14 @@ fn scan(name str, fileno int, text str) List[Note]
         c := comment_text(raw) else continue
         found := parse_note(c) else continue
         rank := TAGS.index_of(found.tag) else 0
-        out.push(Note(name: name, line: n, tag: found.tag, owner: found.owner, msg: found.msg, key: rank * 100000 + fileno * 1000 + n))
+        out.push(Note(
+            name: name,
+            line: n,
+            tag: found.tag,
+            owner: found.owner,
+            msg: found.msg,
+            key: rank * 100000 + fileno * 1000 + n,
+        ))
     out
 
 fn main()

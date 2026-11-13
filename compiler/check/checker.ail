@@ -512,8 +512,10 @@ fn Checker.collect_types(mut self)
         if BUILTIN_TYPES.contains(n) or SPEC_TYPES_NOT_YET.contains(n) or built_in
             alt := prelude_alt(n)
             diags.push(
-                new_diag("mod.unit.1", at, "`{n}` is a prelude type; rename yours, e.g. `{alt}`")
-                    .with_fix("rename `{n}` to `{alt}` in this file", [fix.rename_all(at, n, alt)]),
+                new_diag("mod.unit.1", at, "`{n}` is a prelude type; rename yours, e.g. `{alt}`").with_fix(
+                    "rename `{n}` to `{alt}` in this file",
+                    [fix.rename_all(at, n, alt)],
+                ),
             )
         elif types.contains(n) or traits.contains(n)
             mut dg := new_diag("mod.unit.1", at, "`{n}` is declared more than once in this module")

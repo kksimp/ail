@@ -1,0 +1,14 @@
+alice B101 (book) held 19, fine 0.00
+alice D7 (dvd) held 12, fine 5.00
+bob B102 (book) held 39, fine 4.50
+bob M9 (magazine) held 28, fine 1.40
+carol D8 (dvd) held 70, fine 20.00
+skipped: unknown item kind X
+skipped: B103 returned before it was borrowed
+skipped: bad record 'erin B104 5'
+erin M3 (magazine) held 14, fine 0.00
+alice M4 (magazine) held 22, fine 0.80
+alice owes 5.80
+bob owes 5.90
+carol owes 20.00
+erin owes 0.00

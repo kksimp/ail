@@ -1,0 +1,26 @@
+== flat
+t=0 ann -> driver 1, pickup 2, trip 11, free at 13, fare 1620
+t=2 bob -> driver 2, pickup 2, trip 16, free at 20, fare 2220
+t=3 cy -> driver 3, pickup 2, trip 13, free at 18, fare 1860
+! no free driver for dee at t=4
+t=15 eli -> driver 1, pickup 0, trip 13, free at 28, fare 1860
+! fay is outside the service zone
+! bad request '17 gus 1 1 x 2'
+t=21 hal -> driver 2, pickup 0, trip 8, free at 29, fare 1260
+! bad request '22 ivy 2 2 2 2'
+driver 1: 2 trips, earned 3480, at 2,2
+driver 2: 2 trips, earned 3480, at 5,5
+driver 3: 1 trips, earned 1860, at 17,15
+== surge 150%
+t=0 ann -> driver 1, pickup 2, trip 11, free at 13, fare 1620
+t=2 bob -> driver 2, pickup 2, trip 16, free at 20, fare 2220
+t=3 cy -> driver 3, pickup 2, trip 13, free at 18, fare 1860
+! no free driver for dee at t=4
+t=15 eli -> driver 1, pickup 0, trip 13, free at 28, fare 2790
+! fay is outside the service zone
+! bad request '17 gus 1 1 x 2'
+t=21 hal -> driver 2, pickup 0, trip 8, free at 29, fare 1260
+! bad request '22 ivy 2 2 2 2'
+driver 1: 2 trips, earned 4410, at 2,2
+driver 2: 2 trips, earned 3480, at 5,5
+driver 3: 1 trips, earned 1860, at 17,15

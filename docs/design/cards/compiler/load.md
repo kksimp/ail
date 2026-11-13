@@ -36,6 +36,7 @@ pub fn load.shown_syntax(d syntax.Diag) load.Shown  ## A syntax or loading diagn
 pub fn load.shown_check(d check.Diag) load.Shown  ## A checker diagnostic.
 pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## The file path and in-file position of `at`. Prelude positions stay as they
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
+pub fn load.report_next(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## `report` for `ail check` (check.out.2): each error also says what to run next.
 ```
 
-trimmed to fit 2000 tokens (~960); dropped: private items
+trimmed to fit 2000 tokens (~1024); dropped: private items

@@ -1,0 +1,7 @@
+.........: draw, move 0, nodes 549946 vs 18297
+XX.OO....: X wins, move 2, nodes 157 vs 36
+X...O....: draw, move 1, nodes 7332 vs 844
+XO.XO....: X wins, move 6, nodes 157 vs 60
+XOXOXO...: X wins, move 6, nodes 8 vs 6
+self-play moves: [0, 4, 1, 2, 6, 3, 5, 7, 8]
+result: draw

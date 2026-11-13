@@ -1,0 +1,105 @@
+## Parking garage simulation. Text events ("in PLATE minute", "out PLATE minute")
+## are applied in order. Plates starting with M are motorbikes (half fee). The
+## first 30 minutes are free, then 200 cents per started hour, capped at 1500.
+## Bad events fail with a typed error and are skipped.
+
+enum Kind
+    Car
+    Moto
+
+error enum GarageError
+    Full "garage full"
+    Duplicate(plate str) "{plate} is already inside"
+    Missing(plate str) "{plate} is not inside"
+    BadEvent(text str) "bad event '{text}'"
+
+struct Garage
+    capacity int
+    inside Map[str, int]
+    revenue int
+    served int
+
+fn kind_of(plate str) Kind
+    if plate.starts_with("M")
+        return Kind.Moto
+    Kind.Car
+
+fn fee(minutes int, kind Kind) int
+    billable := minutes - 30
+    if billable <= 0
+        return 0
+    hours := (billable + 59) / 60
+    full := (hours * 200).min(1500)
+    match kind
+        Car => full
+        Moto => full / 2
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn Garage.apply(mut self, line str) str ! GarageError
+    parts := line.words()
+    if parts.len() != 3
+        return BadEvent(text: line)
+    stamp := parts[2].to_int() else return BadEvent(text: line)
+    plate := parts[1]
+    if parts[0] == "in"
+        if self.inside.contains(plate)
+            return Duplicate(plate: plate)
+        if self.inside.len() >= self.capacity
+            return Full
+        self.inside[plate] = stamp
+        return "{plate} enters at {stamp}"
+    if parts[0] != "out"
+        return BadEvent(text: line)
+    since := self.inside.get(plate) else return Missing(plate: plate)
+    charge := fee(stamp - since, kind_of(plate))
+    self.inside.remove(plate)
+    self.revenue += charge
+    self.served += 1
+    "{plate} leaves after {stamp - since} min, pays {money(charge)}"
+
+fn main()
+    events := [
+        "in CAR1 0",
+        "in CAR2 5",
+        "in M77 10",
+        "in CAR1 12",
+        "in CAR3 15",
+        "out CAR2 20",
+        "in CAR3 21",
+        "out CAR1 100",
+        "out M77 250",
+        "out XYZ 260",
+        "park CAR4 270",
+        "in CAR4 abc",
+        "out CAR3 1000",
+    ]
+    mut g := Garage(capacity: 3, inside: {}, revenue: 0, served: 0)
+    for ev in events
+        msg := g.apply(ev) else err
+            print("rejected '{ev}': {err}")
+            continue
+        print(msg)
+    print("served {g.served}, still inside {g.inside.len()}, revenue {money(g.revenue)}")
+
+@test fn fee_tiers()
+    assert_eq(fee(30, Kind.Car), 0)
+    assert_eq(fee(31, Kind.Car), 200)
+    assert_eq(fee(90, Kind.Car), 200)
+    assert_eq(fee(91, Kind.Car), 400)
+    assert_eq(fee(5000, Kind.Car), 1500)
+    assert_eq(fee(91, Kind.Moto), 200)
+
+@test fn full_and_duplicates()
+    mut g := Garage(capacity: 1, inside: {}, revenue: 0, served: 0)
+    _ := g.apply("in A 0")?
+    assert_err(g.apply("in B 1"))
+    assert_err(g.apply("in A 2"))
+
+@test fn missing_and_bad()
+    mut g := Garage(capacity: 2, inside: {}, revenue: 0, served: 0)
+    assert_err(g.apply("out Q 1"))
+    assert_err(g.apply("in Q"))
+    assert_err(g.apply("go Q 1"))

@@ -115,8 +115,14 @@ fn demo() Network
 
 fn main()
     rides := [
-        ["Park", "Mall"], ["Depot", "Park"], ["Pier", "Library"], ["Mall", "Zoo"],
-        ["Park", "Pier"], ["Mall", "Mall"], ["Mall", "Depot"], ["Mall", "Depot"],
+        ["Park", "Mall"],
+        ["Depot", "Park"],
+        ["Pier", "Library"],
+        ["Mall", "Zoo"],
+        ["Park", "Pier"],
+        ["Mall", "Mall"],
+        ["Mall", "Depot"],
+        ["Mall", "Depot"],
         ["Library", "Park"],
     ]
     mut net := demo()

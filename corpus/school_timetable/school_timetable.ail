@@ -107,9 +107,18 @@ fn Timetable.week(self, cls str) str
 fn main()
     mut t := Timetable.new()
     plan := [
-        [Entry(class: "9A", subject: "math", teacher: "Kim", room: "R1"), Entry(class: "9B", subject: "math", teacher: "Kim", room: "R1")],
-        [Entry(class: "9A", subject: "art", teacher: "Lee", room: "R2"), Entry(class: "9B", subject: "art", teacher: "Lee", room: "R2")],
-        [Entry(class: "9A", subject: "pe", teacher: "Ray", room: "gym"), Entry(class: "9B", subject: "pe", teacher: "Ray", room: "gym")],
+        [
+            Entry(class: "9A", subject: "math", teacher: "Kim", room: "R1"),
+            Entry(class: "9B", subject: "math", teacher: "Kim", room: "R1"),
+        ],
+        [
+            Entry(class: "9A", subject: "art", teacher: "Lee", room: "R2"),
+            Entry(class: "9B", subject: "art", teacher: "Lee", room: "R2"),
+        ],
+        [
+            Entry(class: "9A", subject: "pe", teacher: "Ray", room: "gym"),
+            Entry(class: "9B", subject: "pe", teacher: "Ray", room: "gym"),
+        ],
     ]
     hours := [3, 2, 2]
     mut unplaced := 0

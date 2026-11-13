@@ -1,0 +1,5 @@
+filters: 2
+read 7 lines, 1 malformed, 2 kept
+  bob took 340 ms
+  ann took 410 ms
+cleaned up: true

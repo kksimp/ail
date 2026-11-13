@@ -1,0 +1,13 @@
+table 1: 3 columns, 3 rows
+  | item  | qty |     note     |
+  | ----- | --- | ------------ |
+  | apple |  12 |    fresh     |
+  | pear  |   7 |              |
+  | fig   | 130 | dried, sweet |
+  sum of qty: 149
+table 2: 2 columns, 2 rows
+  | name | score |
+  | ---- | ----- |
+  | ann  | 90    |
+  | bob  | x     |
+block 3: not a table (1 lines)

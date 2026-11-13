@@ -93,7 +93,11 @@ fn main()
 
 @test fn reports_missing_and_unknown_keys()
     got := validate("zzz=1\n")
-    assert_eq(got, ["line 1: unknown key zzz", "missing required key name", "missing required key port"])
+    assert_eq(got, [
+        "line 1: unknown key zzz",
+        "missing required key name",
+        "missing required key port",
+    ])
 
 @test fn duplicates_are_flagged()
     got := validate("name=a\nname=b\nport=5\n")

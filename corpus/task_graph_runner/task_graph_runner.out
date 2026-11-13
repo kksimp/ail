@@ -1,0 +1,9 @@
+wave 1: assets compile
+wave 2: build docs
+wave 3: pack
+assets      62
+build     9393
+compile    248
+docs      1116
+pack      1375
+ran 5 of 9 jobs, stuck: deploy,lint,a,b

@@ -21,7 +21,12 @@ fn digest_of(idx int, names List[str], texts List[str]) Digest
     for i in 0..names.len()
         parts.push("{names[i]}:{crc_hex(texts[i])}")
         total += texts[i].byte_len()
-    Digest(idx: idx, files: names.len(), size: total, check: hash.sha256(parts.join("\n")).slice(0, 10))
+    Digest(
+        idx: idx,
+        files: names.len(),
+        size: total,
+        check: hash.sha256(parts.join("\n")).slice(0, 10),
+    )
 
 fn dir_digest(idx int, dir str) !Digest
     names := fs.list_dir(dir)?.sorted()
