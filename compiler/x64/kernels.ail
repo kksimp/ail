@@ -30,6 +30,9 @@ pub fn is_kernel(name str) bool
 ## Add the kernel `name` to `img`.
 pub fn gen_kernel(mut img codegen.Image, name str)
     mut a := new_asm()
+    # As in `gen_func`: jumps stay inside 32-byte lines (native.jump.1).
+    lined := jump_lines()
+    a.window = if lined then JUMP_LINE else 0
     match name
         "rt.vec_axpy" => kernel_axpy(mut a)
         "rt.vec_axpyi" => kernel_axpyi(mut a)
@@ -48,6 +51,9 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.aes_hw_ok" | "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         _ => kernel_scal(mut a)
     a.resolve_labels()
+    int3 := 204
+    while lined and img.code.len() % JUMP_LINE != 0
+        img.code.push(int3.to_u8())
     base := img.code.len()
     img.funcs[name] = base
     img.code.extend(a.code)

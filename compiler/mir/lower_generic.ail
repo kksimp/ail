@@ -1008,6 +1008,7 @@ fn Lower.builtin_method(mut self, t Ty, name str) str?
             gen.owner_tys[t.name()] = t
             instance(key, gf.decl, {ps[0].name: e}, t.name(), gf.file)?
             key
+        Map | Opt => json_builtin_method(t, name)
         _ => none
 
 ## The type an associated call `T.f(...)` names when `T` is a type

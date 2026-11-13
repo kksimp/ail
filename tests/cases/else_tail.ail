@@ -1,0 +1,36 @@
+## err.else.7 (ADR 1095): `e else return ...`, `else break` and `else
+## continue` as the last statement of a block whose value is used give the
+## value of `e`: a function tail, an `if` branch and a `match` arm.
+error enum CfgError
+    Missing(key str) "missing key {key}"
+
+fn need(m Map[str, str], key str) str ! CfgError
+    m.get(key) else return Missing(key: key)
+
+fn sum_until_missing(m Map[str, int], keys List[str]) int
+    mut total := 0
+    for k in keys
+        v := if k != ""
+            m.get(k) else break
+        else
+            0
+        total += v
+    total
+
+fn sum_present(m Map[str, int], keys List[str]) int
+    mut total := 0
+    for k in keys
+        got := match k
+            "" => 0
+            _ =>
+                m.get(k) else continue
+        total += got
+    total
+
+fn main()
+    cfg := {"host": "x", "port": "80"}
+    print(need(cfg, "port") else "none")
+    print(need(cfg, "user") else "none")
+    m := {"a": 1, "b": 20}
+    print(sum_until_missing(m, ["a", "b", "zz", "a"]))
+    print(sum_present(m, ["b", "", "zz", "b"]))

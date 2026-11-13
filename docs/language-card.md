@@ -103,10 +103,10 @@ enum Color
     Green
 
 fn Point.sum(self) int            # method; `self` is read-only
-    x + y                         # fields and methods by bare name (self.x)
+    self.x + self.y               # canonical; bare `x + y` works too
 
 fn Point.shift(mut self, dx int)  # may change self
-    x += dx
+    self.x += dx
 
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
@@ -183,7 +183,8 @@ fn main() !                                 # main can fail; the error is report
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
   `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
-  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
+  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`);
+  a function can end with `m.get(k) else return Missing(key: k)` (`err.else.7`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
 - Which one failed: `match err` with `IoError =>` (there `err` is an
@@ -269,7 +270,8 @@ fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
   `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
 - `impl ToJson for T` and `impl FromJson for T` with no body derive
   `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name; lists,
-  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
+  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`); maps and
+  optionals of `ToJson` values are `ToJson` themselves (`print_json(m)`). A trait
   `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
   that writes an empty `impl`'s methods; `ail api --expanded` shows them.
   Generic types derive through bounds: `impl FromJson for Pair[A FromJson,
@@ -349,6 +351,8 @@ calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A li
 (`|x int| ...`). It copies the locals it names when made; they are read-only inside
 (share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
 Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x| x > lo)`.
+A `fn name(params) R` with a block inside a body is a local function: it copies the
+same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
 ## Operators and strings
 

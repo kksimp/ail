@@ -753,8 +753,8 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 diag_msg(
                     "bootstrap.unsupported",
                     pos,
-                    "the `{c}` symbol is not supported by the bootstrap yet (spec chapter 05)",
-                    "",
+                    "the character `{c}` isn't part of AIL",
+                    "remove it; source uses ASCII symbols, with UTF-8 text only in strings, chars and comments (lex.*)",
                 )
                 i += 1
             else
@@ -953,6 +953,16 @@ fn Lexer.content(
                 if quoted
                     return to
                 return none
+            if value.len() > 0 and value[value.len() - 1] == '$'
+                # lex.str.8: `${n}` is not interpolation in AIL.
+                diag_fix(
+                    "lex.str.8",
+                    here,
+                    "`$\{...}` is not interpolation in AIL: the `$` stays in the text",
+                    "write `\{name}` without the `$`; for the literal text `$\{` write `$\\\{`",
+                    "remove the `$`",
+                )
+                attach([fix.delete(ast.Pos(line: line_no, col: i), here)])
             colon := spec_colon(line, close, i + 1)
             code := sub_lex(line, i + 1, if colon >= 0 then colon else close, line_no)
             spec := if colon >= 0 then parse_spec(line[colon + 1..close]) else none

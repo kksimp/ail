@@ -99,7 +99,10 @@ The native gate is `.\ail.ps1 selftest` (the same as `tools\gate\win-gate.ps1`).
 It needs the Git for Windows tools above on `PATH`, prints only failures, and
 ends with `GATE GREEN` or `GATE RED`. It runs several suites at once, one per
 core up to 4 (`GATE_JOBS=N` sets the number; 1 runs them one after another),
-and writes each suite's seconds to `%TEMP%\ail-gate\times.log`. It runs the suites of
+and writes each suite's seconds to `%TEMP%\ail-gate\times.log`. A red suite prints all its failing lines
+(`GATE_SHOW=N`, default 60); `tools\gate\win-gate.ps1 cases@2/4 spec@1/4` reruns named suites or shards. Most suites run
+`./ail run` through its fast path (`AIL_FAST_RUN=1`, no PowerShell start per program; `GATE_FAST_RUN=0` turns it off).
+It runs the suites of
 `tools/gate/suites.txt`, the list the Mac and Linux gate runs, and it must be
 green on Windows x86-64 before every release, with the fixed point of
 `tools\self-host\run.ps1`

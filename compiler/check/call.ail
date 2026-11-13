@@ -153,7 +153,10 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         return check_call(n, s, binds, args, none, npos, expect)
     if v := bare_variant(n, npos, expect)
         return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
-    args_only(args)
+    # A habit call such as `make(Map[str, int])` (a call hint of expr.name.1) is one mistake: its fix rewrites the
+    # whole call, so its argument, often a type written as a value, isn't reported again.
+    if call_hint(n, args.len()) == none or traits.contains(n)
+        args_only(args)
     if traits.contains(n)
         err_help(
             "expr.name.1",
@@ -652,7 +655,11 @@ fn Checker.finish(mut self, what str, vars List[int], mut binds List[Bind], at a
 fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(
+                l.pos,
+                "this call takes no named arguments (expr.call.3: only functions and methods you declare do)",
+                "pass the arguments positionally: `f(a, b)`",
+            )
         if a.mutable
             err_help(
                 "own.param.2",
@@ -1026,6 +1033,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0
+        if t := enum_name_method(rt, n, at, args)
+            return t
         args_only(args)
         if not hidden_std_module(recv, n, at)
             no_method(rt, n, at)
@@ -1213,6 +1222,9 @@ fn Checker.associated(
     i := method_index(tn, n) else
         if t := impl_assoc_call(d, explicit, n, at, args, expect)
             return t
+        if e := enum_of_def(d)
+            if t := enum_static(e, n, at, args)
+                return t
         args_only(args)
         err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
         return Ty.Unknown
@@ -1600,7 +1612,11 @@ fn Checker.reject_test_call(mut self, i int, at ast.Pos)
 fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(
+                l.pos,
+                "this call takes no named arguments (expr.call.3: only functions and methods you declare do)",
+                "pass the arguments positionally: `f(a, b)`",
+            )
         if a.mutable
             err_help(
                 "own.param.2",

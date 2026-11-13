@@ -1,0 +1,10 @@
+## json.derive.4: a map or optional is `ToJson` only when its values are;
+## `Raw` has no `impl ToJson` (gen.bound.3, ADR 1093).
+struct Raw
+    n int
+
+fn main()
+    print_json({"a": Raw(n: 1)})
+    r := Raw(n: 2)
+    maybe := if r.n > 1 then r else none
+    print_json(maybe)

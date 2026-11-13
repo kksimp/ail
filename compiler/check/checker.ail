@@ -177,6 +177,9 @@ pub struct Checker
     pub atomic_calls Set[int]
     pub std_any Set[int]
     pub float_literals Set[int]
+    ## expr.bind.14: the `:=` bindings of the function being checked, and where they were seen.
+    pub bind_decls List[BindDecl]
+    pub bind_seen Set[int]
     ## eff.use.1: statements that throw a value away, by `pos_key`, and a
     ## count of mutations and function-value calls typed so far.
     pub discards Map[int, Discard]
@@ -290,6 +293,8 @@ pub fn new_checker(p ast.Program) Checker
         atomic_calls: Set[int](),
         std_any: Set[int](),
         float_literals: Set[int](),
+        bind_decls: [],
+        bind_seen: Set[int](),
         discards: Map[int, Discard](),
         effect_marks: 0,
         gen: new_gen_check(),
@@ -320,6 +325,10 @@ fn Checker.fix_last(mut self, title str, edits List[fix.Edit])
 
 fn Checker.unsupported(mut self, at ast.Pos, text str)
     diags.push(new_diag("bootstrap.unsupported", at, text))
+
+## A construct with no AIL form in 0.1: what it is, and what to write instead.
+fn Checker.unsupported_help(mut self, at ast.Pos, text str, help str)
+    diags.push(new_diag("bootstrap.unsupported", at, text).with_help(help))
 
 fn Checker.new_param(mut self, n str, bounds List[int]) int
     tparams.push(TParam(name: n, bounds: bounds, is_const: false))
@@ -707,17 +716,19 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
         match f.within
             InTrait =>
                 if f.generics.len() > 0
-                    unsupported(
+                    unsupported_help(
                         f.pos,
-                        "type parameters on a trait's methods are not supported by the bootstrap yet",
+                        "a trait method can't have type parameters of its own",
+                        "declare a generic free function `fn f[T](x T)`, or put the parameter on the implementors",
                     )
                 if is_inferred(ret)
                     mut at := f.pos
                     if r := f.ret
                         at = r.pos
-                    unsupported(
+                    unsupported_help(
                         at,
-                        "a trait method lists its errors (`T ! E`); the bootstrap can't infer them across implementations",
+                        "a trait method that can fail must name its error type",
+                        "write `T ! E` in the trait and in every `impl` (err.type.1)",
                     )
             TopLevel | InImpl => ret = ret
         fn_scopes.push(scope)
@@ -763,9 +774,10 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     o := f.owner?.name else ""
     if f.owner == none
         if PRELUDE_FNS.contains(n)
-            unsupported(
+            unsupported_help(
                 f.pos,
-                "redeclaring the prelude function `{n}` is not supported by the bootstrap",
+                "`{n}` is a built-in function and can't be redeclared",
+                "choose another name, e.g. `my_{n}`",
             )
         elif fns.contains(n) or types.contains(n) or traits.contains(n)
             mut d := new_diag(
@@ -934,7 +946,7 @@ fn Checker.not_constant(mut self, at ast.Pos, what str, rule str)
     err_help(
         "bootstrap.unsupported",
         at,
-        "the bootstrap can't compute {what} in a constant yet ({rule})",
+        "{what} isn't allowed in a constant ({rule})",
         "move the logic into a function and call it: `NAME := build()`",
     )
 

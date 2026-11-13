@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2]
+    for i, x in xs.enumerate()
+        print("{i} {x}")

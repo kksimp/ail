@@ -1,0 +1,60 @@
+## Reflection on field-less enums (type.enum.20, ADR 1087): `Color.variants()`,
+## `Color.from_str(s)` and `c.name()`, for an enum no variant of which has fields and that
+## doesn't declare a function of that name.
+use ast
+
+## Whether enum `e` has no type parameters and no variant with fields.
+fn Checker.fieldless(self, e int) bool
+    if prog.enums[e].generics.len() > 0
+        return false
+    for v in prog.enums[e].variants
+        if v.fields.len() > 0
+            return false
+    true
+
+## `Enum.variants()` and `Enum.from_str(s)`: their type, or `none` when `n` isn't one of them or
+## the enum isn't field-less.
+fn Checker.enum_static(mut self, e int, n str, at ast.Pos, args List[ast.Arg]) Ty?
+    if not fieldless(e) or (n != "variants" and n != "from_str")
+        return none
+    t := Ty.Enum(e, [])
+    want := if n == "variants" then 0 else 1
+    if args.len() != want
+        args_only(args)
+        err_help(
+            "type.enum.20",
+            at,
+            "`{prog.enums[e].name}.{n}` takes {want} argument(s), but {was_were(args.len())} given",
+            "write `{prog.enums[e].name}.variants()` or `{prog.enums[e].name}.from_str(text)`",
+        )
+        return Ty.Unknown
+    if n == "variants"
+        return Ty.ListOf(t)
+    a := args[0]
+    st := expr(a.value, Ty.Str, true)
+    if st != Ty.Str and st != Ty.Unknown and st != Ty.Never and not reject_unhandled(
+        st,
+        expr_pos(a.value),
+    )
+        err_help(
+            "type.enum.20",
+            expr_pos(a.value),
+            "`from_str` takes a `str`, found {show(st)}",
+            "pass the variant's name as text, e.g. `{prog.enums[e].name}.from_str(\"Name\")`",
+        )
+    Ty.Opt(t)
+
+## `c.name()` on a value of a field-less enum: the variant's name.
+@allow("expr.match.3")
+fn Checker.enum_name_method(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty?
+    if n != "name"
+        return none
+    match rt
+        Enum(e, _) =>
+            if not fieldless(e)
+                return none
+            args_only(args)
+            if args.len() > 0
+                err_help("type.enum.20", at, "`name` takes no arguments", "write `c.name()`")
+            Ty.Str
+        _ => none

@@ -1,0 +1,9 @@
+fn helper(n int) int
+    scratch := n * 2
+    n + 1
+
+fn main()
+    used := 3
+    _ignored := 4
+    _ := 5
+    print(helper(used))

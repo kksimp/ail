@@ -148,7 +148,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0138](0138-literal-and-or-patterns.md) | Literal patterns, or-patterns, and one-line statement arms *(delegated)* | Accepted | 2026-10-05 |
 | [0139](0139-unit-results-statement-else-and-divergence.md) | `! E` results; statement `else`; divergence is a rule, not a type (amends 0125) *(delegated)* | Accepted | 2026-10-05 |
 | [0140](0140-diagnostics-for-other-languages.md) | Names other languages spell differently get a fixed help *(delegated)* | Accepted | 2026-10-05 |
-| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted | 2026-10-05 |
+| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted (formatter clause superseded by 1081) | 2026-10-05 |
 | [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
 | [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
@@ -762,6 +762,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0937](0937-grid-flat-2d-list.md) | `Grid[T]`: a flat 2-D list in the prelude, indexed `g[i, j]` *(delegated)* | Accepted | 2026-11-04 |
 | [0938](0938-auto-parallel-push-builder-loops.md) | Run push-builder loops on the pool: one push per iteration, chunks joined in order *(delegated)* | Accepted | 2026-11-04 |
 | [0939](0939-match-jump-tables.md) | Native: `match` through a jump table, with the dispatch repeated in each arm *(delegated)* | Accepted | 2026-11-04 |
+| [0940](0940-inliner-cost-model.md) | Native: inlining functions that call others, by a call-graph cost model *(delegated)* | Accepted | 2026-11-05 |
 | [0941](0941-data-range-loop-guards.md) | Native: data-range guards for loop nests, and ikj interchange of reduction nests *(delegated)* | Accepted | 2026-11-04 |
 | [0942](0942-user-loop-vector-kernels.md) | Native: vector kernels for swapped reduction nests (ADR 0845 stage 3, first step) *(delegated)* | Accepted | 2026-11-04 |
 | [0943](0943-per-thread-allocation-caches.md) | Native: per-thread allocation caches once the pool exists, so allocation takes no lock after a parallel loop *(delegated)* | Accepted | 2026-11-04 |
@@ -865,6 +866,8 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1076](1076-struct-field-defaults.md) | Struct field defaults `name Type = value`, plain constants only *(delegated)* | Accepted | 2026-11-12 |
 | [1078](1078-error-union-member-matching.md) | `match err` on an error union takes member types and their variants, narrows the name, and must cover every member *(designer; details delegated)* | Accepted | 2026-11-12 |
 | [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |
+| [1080](1080-one-guard-per-list-for-bounded-indexes.md) | Native: one guard test per list for indexes bounded by the counted loops around *(delegated)* | Accepted | 2026-11-12 |
+| [1081](1081-formatter-writes-self.md) | The formatter writes `self.` before a bare member | Accepted | 2026-11-12 |
 | [1082](1082-discarded-result-is-an-error.md) | A call whose value is thrown away and that does nothing else is an error (`eff.use.1`) | Accepted | 2026-11-12 |
 | [1083](1083-ail-ask-answers-honestly.md) | `ail ask` answers honestly: built-in methods, a minimum score, misses with a hint, `ail ask how` *(delegated)* | Accepted | 2026-11-12 |
 | [1086](1086-heap-and-deque.md) | `Heap[T]` and `Deque[T]` in the prelude *(delegated)* | Accepted | 2026-11-12 |
@@ -873,3 +876,9 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1089](1089-caps-attribute-on-functions.md) | `@caps(LIST)` limits a function to the listed capabilities *(delegated)* | Accepted | 2026-11-12 |
 | [1090](1090-std-yaml.md) | `std.yaml`: the common subset of YAML read into the `Json` value *(delegated)* | Accepted | 2026-11-13 |
 | [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |
+| [1092](1092-foreign-habit-diagnostics.md) | Rust, Go and TypeScript habits get an AIL message and a fix; `${` in a string is an error *(delegated)* | Accepted | 2026-11-13 |
+| [1093](1093-tojson-maps-optionals.md) | `ToJson` on `Map[K, V]` and `T?` without an `impl` block *(delegated)* | Accepted | 2026-11-13 |
+| [1094](1094-local-functions.md) | Named local functions: `fn name(...)` inside a body copies the locals it names, can recurse and is a value *(delegated)* | Accepted | 2026-11-13 |
+| [1095](1095-else-leave-as-block-tail.md) | `e else return ...`, `else break` or `else continue` as a block's last statement gives `e`'s value (`err.else.7`) *(delegated)* | Accepted | 2026-11-13 |
+| [1096](1096-x64-jumps-inside-32-byte-lines.md) | Native x86-64: keep jumps inside 32-byte lines *(delegated)* | Accepted | 2026-11-13 |
+| [1097](1097-faster-gates.md) | Faster gates: `NAME@K/N` shards, one process per runnable spec fence, stage 1 in the pool, `--failed` rerun, fast `run` on Windows *(delegated)* | Accepted | 2026-11-13 |

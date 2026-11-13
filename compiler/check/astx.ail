@@ -43,6 +43,7 @@ pub fn stmt_pos(s ast.Stmt) ast.Pos
     match s
         Let(_, p, _, _, _) => p
         LetTuple(_, _, p) => p
+        LocalFn(d) => d.pos
         While(_, _, p) => p
         For(_, _, _, _, _, _, p) => p
         With(_, _, _, _, p) => p

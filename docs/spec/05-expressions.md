@@ -42,6 +42,20 @@ the function for the rest of its block, and a call of that name there is
 **expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
 (`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
 
+**expr.bind.14** — A name bound by `x := e` or `mut x := e` that the function
+never reads is a warning; the program still runs. The warning's fix renames the
+binding `_`. A name that starts with `_`, a parameter, a loop variable and a
+pattern binding are not reported, and only the functions of the program's own
+main file are checked. A program that has an error gets no such warning.
+*(ADR 1087)*
+
+```ail rules=expr.bind.14
+fn main()
+    total := 40 + 2     # warns: `total` is bound but never used
+    _ := 7              # ignored on purpose
+    print("done")
+```
+
 ## Names
 
 **expr.name.1** — Every name used in an expression MUST refer to a declaration
