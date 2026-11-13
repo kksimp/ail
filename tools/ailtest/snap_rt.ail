@@ -1,4 +1,3 @@
-
 ## Appended to the rewritten copy under `ail test --update` (snap.update.2): a failing `assert_eq(actual,
 ## LITERAL)` writes `ail-snapshot LINE COL TEXT` to standard error and the test goes on.
 fn ail_snap_quote(s str) str

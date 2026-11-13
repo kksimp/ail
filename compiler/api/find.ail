@@ -374,7 +374,7 @@ fn find_fn_shape(f StdFn)(List[str], str)
 ## answers)`: equal parameter lists 6, else 1 per asked type the function takes;
 ## the result type 4. A function answers with equal parameter lists, or with the
 ## result type and at least one parameter type.
-fn find_score_sig(f StdFn, want_params List[str], want_ret str) (int, bool)
+fn find_score_sig(f StdFn, want_params List[str], want_ret str)(int, bool)
     got := find_fn_shape(f)
     mut score := 0
     mut hits := 0

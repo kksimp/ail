@@ -11,7 +11,7 @@ edit 21 0
 eff 29 1
 err 44 7
 explain 6 0
-expr 83 21
+expr 83 22
 ffi 28 0
 fix 11 0
 gen 17 0
@@ -24,7 +24,7 @@ lsp 15 0
 mcp 12 0
 mem 18 0
 merge 15 0
-mod 32 2
+mod 32 3
 native 59 0
 own 39 2
 plat 8 0
@@ -46,4 +46,4 @@ try 10 0
 type 167 12
 unsafe 21 0
 verify 9 0
-all 1566 65
+all 1566 67
