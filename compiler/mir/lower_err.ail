@@ -946,6 +946,7 @@ SHOWN_STD_AIL := [
     "std.toml.",
     "std.ui.widgets.",
     "std.video.",
+    "std.yaml.",
 ]
 
 fn shown_type(key str) str

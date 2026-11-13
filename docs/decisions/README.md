@@ -864,4 +864,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1087](1087-std-papercuts.md) | Std papercuts: `assert(c, msg)`, `assert_err`, `assert_near`, format specs `08` `b` `,` `+` `e` *(delegated)* | Accepted | 2026-11-13 |
 | [1088](1088-while-binding.md) | `while name := e` loops while a value is present *(delegated)* | Accepted | 2026-11-12 |
 | [1089](1089-caps-attribute-on-functions.md) | `@caps(LIST)` limits a function to the listed capabilities *(delegated)* | Accepted | 2026-11-12 |
+| [1090](1090-std-yaml.md) | `std.yaml`: the common subset of YAML read into the `Json` value *(delegated)* | Accepted | 2026-11-13 |
 | [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |

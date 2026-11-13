@@ -2089,6 +2089,83 @@ fn main()
     print(doc.to_text())
 ```
 
+## Configuration files: `std.yaml`
+
+**std.yaml.1** — `use std.yaml` provides `parse(text str) Json ! YamlError`,
+which reads one YAML 1.2 document, in the subset these rules list, into the
+`Json` value ([std-json](std-json.md)): maps are `Obj` (members in document
+order, keys always `Str`), lists are `Arr`. An empty document, or one that is
+only comments, is `Null`. A leading byte order mark and `\r\n` line ends are
+accepted. *(ADR 1090)*
+
+**std.yaml.2** — A block map is `key: value` lines at one indentation; a block
+list is `- item` lines. A nested block is indented deeper than its parent; a
+list may sit at the same indentation as its key. `- key: v` starts a map
+inside a list item, and `- - x` a list. A key is plain, `'single'` or
+`"double"` quoted. Flow lists `[a, b]` and maps `{k: v}` may span lines and
+nest. Double-quoted strings take the escapes `\0 \a \b \t \n \v \f \r \e \"
+\/ \\ \xXX \uXXXX \UXXXXXXXX`; single-quoted strings take `''` for `'`.
+*(ADR 1090)*
+
+**std.yaml.3** — A plain scalar is, by the YAML 1.2 core schema: `null`, `Null`,
+`NULL`, `~` or empty is `Null`; `true`/`True`/`TRUE` and `false`/`False`/`FALSE`
+are `Bool`; decimal integers (a leading `+` or `-`), `0x` and `0o` integers
+and floats (`.5`, `1e3`) are `Num`; anything else is `Str`. `yes`, `no`, `on`,
+`off` and `1.2.3` are strings. A quoted scalar is always a `Str`. An integer
+beyond 2^53 loses precision. *(ADR 1090)*
+
+**std.yaml.4** — `#` starts a comment at the start of a line or after a blank,
+outside quotes; `a#b` is not a comment. *(ADR 1090)*
+
+**std.yaml.5** — `key: |` reads the indented lines below it literally; `key:
+>` folds a single line break between text lines into a space and keeps a blank
+line as a line break. The block ends at the first line indented no deeper than
+the key. Chomping: `-` removes the final line break, none keeps one, `+` keeps
+the trailing blank lines too. *(ADR 1090)*
+
+**std.yaml.6** — A key set twice in one map fails with `YamlError`. *(ADR 1090)*
+
+**std.yaml.7** — Outside the subset the parser fails with a message that says
+what to write instead; it never reads such text another way. Refused: anchors
+(`&a`), aliases (`*a`), tags (`!t`), merge keys (`<<`), complex keys (`?`),
+directives (`%`), explicit block indentation indicators (`|2`), several
+documents in the text, multi-line plain or quoted scalars, and a map that
+starts on its key's line (`a: b: c`). *(ADR 1090)*
+
+**std.yaml.8** — Indentation is spaces. A tab in the indentation fails.
+*(ADR 1090)*
+
+**std.yaml.9** — `---` may start the document and `...` may end it; nothing but
+comments and blank lines may follow `...`. *(ADR 1090)*
+
+**std.yaml.10** — `YamlError` is an error with `why str` and `line int`
+(1-based, the line where the parser stopped); its text is `WHY (line N)`.
+*(ADR 1090)*
+
+```ail rules=std.yaml.1,std.yaml.2,std.yaml.3,std.yaml.4,std.yaml.5,std.yaml.9
+use std.yaml
+
+fn main() !
+    src := "---\nname: demo   # a comment\nport: 8080\nflag: no\ntags: [a, \"b c\"]\nbuild:\n  - name: test\n    run: |\n      make\n      make test\n...\n"
+    doc := yaml.parse(src)?
+    print(doc.str("name") else "")
+    print(doc.num("port") else 0.0)
+    print(doc.str("flag") else "")
+    print((doc.get("tags") else Json.Null).to_text())
+    print((doc.get("build") else Json.Null).to_text())
+```
+
+```ail rules=std.yaml.6,std.yaml.7,std.yaml.8,std.yaml.10
+use std.yaml
+
+fn main()
+    for src in ["a: 1\na: 2\n", "base: &b 1\n", "a:\n\tb: 1\n"]
+        doc := yaml.parse(src) else err
+            print(err)   # duplicate key 'a' (line 2), then the anchor and tab errors
+            Json.Null
+        print(doc.to_text())
+```
+
 ## Integers of any size: `std.bigint`
 
 **std.bigint.1** — `use std.bigint` provides `struct BigInt`, an integer of
