@@ -242,7 +242,8 @@ fn main() !
 
 **json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the
 generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
-`Json` and `List[T ToJson]` implement it. A derived struct gives an object of
+`Json` and `List[T ToJson]` implement it, and `Map[K, V]` and `T?` do when
+their values do (`json.derive.4`). A derived struct gives an object of
 its fields in declaration order, a `T?` field that is `none` giving `null`; a
 derived enum gives a variant without fields as its name, and one with fields
 as an object `{"kind": "Name", fields...}`. Fields of type `Map[str, T]`,
@@ -300,6 +301,29 @@ fn main()
         print(err.message)    # id: expected a string, found number
         return
     print(wrong)
+```
+
+**json.derive.4** — `Map[K, V]` implements `ToJson` when `V` does, and `T?`
+when `T` does, with no `impl` block, as `T?` is `Eq` when `T` is
+(`trait.auto.1`). A map gives an object of its entries in insertion order,
+each member named by its key's text (`"{k}"`, so the `int` key `404` gives
+`"404"`); `none` gives `null` and a present value its own JSON. So
+`print_json(m)`, `m.to_json()` and a `[T ToJson]` bound take a map or an
+optional at any depth: `List[int?]`, `Map[str, List[U]]`. A map or optional
+whose values aren't `ToJson` is a `gen.bound.3` error naming the value
+type. *(ADR 1093)*
+
+```ail rules=json.derive.4
+struct Stats
+    count int
+
+impl ToJson for Stats
+
+fn main()
+    m := {"get": Stats(count: 3)}
+    print_json(m)                     # {"get":{"count":3}}
+    print_json(m.get("put"))          # null
+    print_json([m.get("get"), m.get("put")])  # [{"count":3},null]
 ```
 
 ## Availability

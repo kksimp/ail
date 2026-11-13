@@ -269,7 +269,8 @@ fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
   `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
 - `impl ToJson for T` and `impl FromJson for T` with no body derive
   `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name; lists,
-  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
+  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`); maps and
+  optionals of `ToJson` values are `ToJson` themselves (`print_json(m)`). A trait
   `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
   that writes an empty `impl`'s methods; `ail api --expanded` shows them.
   Generic types derive through bounds: `impl FromJson for Pair[A FromJson,
