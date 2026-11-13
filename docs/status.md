@@ -257,6 +257,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Token measurement tool (`tools/tokbench/`) | D, implemented | [0070](decisions/0070-token-bench-tool.md) |
 | Delegated decisions by priority order | D | [0076](decisions/0076-delegated-decisions.md) |
 | Goals: speed equal to C, AI-first features ahead of the market, more tokens acceptable | D | [1065](decisions/1065-goals-c-parity-ai-first.md) |
+| `ail check` measured against injected mistakes (`tools/checkbench/`), floors in the gate suite `checkbench` | D+I | [1111](decisions/1111-checkbench.md) |
 | Delegated-decision order: AI understanding, human readability, speed, tokens | D | [1077](decisions/1077-decision-order-ai-understanding-first.md) |
 | The kinds of standard errors are enums (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`, ...), as are `app.EventKind`, `ui`/`term` `KeyCode`, `MouseButton` and `MouseKind`; a string compared with an enum is type.enum.7, with a fix | D+I | [1068](decisions/1068-std-error-kinds-are-enums.md) |
 | `match err` on an error union: member types and their variants, the name narrowed in the arm, every member covered (err.match.1-3); failures record their type | D+I | [1078](decisions/1078-error-union-member-matching.md) |

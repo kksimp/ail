@@ -182,6 +182,7 @@ tools/
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   perfbench/              drag-race programs: AIL, C and Python twins
   self-compile/           survey of the native subset over the compiler's own source
+  checkbench/             `ail check` against injected mistakes: per-class table, floors for the gate suite `checkbench` (ADR 1111)
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
   vscode/                 VS Code extension: TextMate grammar and `ail lsp` client (not published)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)

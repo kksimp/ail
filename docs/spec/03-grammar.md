@@ -80,7 +80,9 @@ name as declared, so later uses don't add reports about it. *(ADR 0263)*
 **gram.rec.3** — A "did you mean" suggestion, and the fix that comes with it,
 is made only for names of 3 or more characters: with fewer, nearly any name is
 one edit away, and applying the fix would change the program's meaning.
-*(ADR 0263)*
+An edit inserts, deletes or changes a character, or swaps two neighbouring
+ones; a suggestion is at most one edit away up to 4 characters and two from 5.
+*(ADR 0263, ADR 1111)*
 
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*
