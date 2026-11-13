@@ -398,6 +398,9 @@ EXTRA = {
     "dyn_fallible_else_value": "m := Plur(tag: \"p\")\nw := m.winner([]) else \"none\"\nprint(w)",
     # corpus sharded_counter_tasks: a list of mutexes, passed to a task.
     "list_of_mutex": "mut shards := List[Mutex[Map[str, int]]]()\nshards.push(Mutex(Map[str, int]()))\nbump_shard(shards, \"a\")\nprint([s.get() for s in shards].len())",
+    # corpus channel_broadcast_sim: a list of channels.
+    "list_of_channels": "mut chans := List[Channel[int]]()\nfor _ in 0..2\n    chans.push(Channel[int](4))\nfor c in chans\n    c.send(1)\nprint(chans.len())",
+    "list_of_atomics": "xs := [Atomic(0), Atomic(0)]\nxs[1].add(2)\nprint(xs[1].load())",
     "list_of_mutex_tasks": "mut shards := List[Mutex[Map[str, int]]]()\nfor _ in 0..2\n    shards.push(Mutex(Map[str, int]()))\ng := TaskGroup()\nfor k in 0..2\n    g.add(spawn bump_shard(shards, \"a\"))\ng.wait_all() else return\nprint(shards[0].get().len())",
 }
 
