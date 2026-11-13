@@ -204,6 +204,9 @@ pub struct Param
     pub mutable bool
     pub moved bool
     pub ty TypeRef
+    ## `name Type = value`: the value a call that leaves the parameter out passes
+    ## (expr.call.4). A plain constant, as a struct field's default.
+    pub default Expr?
 
 ## A type as written.
 pub struct TypeRef

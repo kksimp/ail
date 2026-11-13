@@ -7,6 +7,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 |---|---|
 | **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
 | **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
+| **Parameter default** | `name Type = value` in a function's parameters: the plain constant a call that leaves the parameter out passes; given only by name (`expr.call.4`, ADR 1104). |
 | **Field default** | `name Type = value` in a struct: the plain constant a literal that omits the field gets (`type.struct.8`, ADR 1076). |
 | **Task ledger** | `.ail/task-log.jsonl`: one line per `ail task verify` (stage, result, tokens printed, fixes, rules hit, wall ms); nothing leaves the machine ([ADR 1048](decisions/1048-task-ledger.md)). |
 | **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |

@@ -1,0 +1,17 @@
+# expr.call.4: a defaulted parameter is passed by name; a default is a plain constant of its type.
+LIMIT := 5
+
+fn fetch(url str, retries int = 3) str
+    "{url} {retries}"
+
+fn bad(a int = LIMIT) int
+    a
+
+fn typed(a int = "x") int
+    a
+
+fn main()
+    print(fetch("a", 5))
+    print(bad())
+    print(typed())
+    print(fetch("a", retries: "x"))

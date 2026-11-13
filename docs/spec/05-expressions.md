@@ -93,13 +93,12 @@ applies, except optional wrapping (`type.opt.5`) and conversion to `any Trait`
 **expr.call.3** — An argument of a call to a user-declared function or
 method may be named, `name: value`, where `name` is a parameter. Positional
 arguments come first and fill the leading parameters; the named ones follow
-and fill the rest in any order. Every parameter MUST be given exactly once, so
-a missing one is `expr.call.1`, and an unknown name, a repeated name, a name
+and fill the rest in any order. Every parameter without a default (`expr.call.4`) MUST be given exactly once,
+so a missing one is `expr.call.1`, and an unknown name, a repeated name, a name
 for a parameter already given by position, or a positional argument after a
 named one is an error. Arguments are evaluated in parameter order, not source
 order. `mut` and `move` go before the value (`f(mut v: xs)`). Built-in
-functions and methods don't take named arguments. There are no default
-values, so a named argument never leaves a parameter out. *(ADR 0454)*
+functions and methods don't take named arguments. *(ADR 0454, ADR 1104)*
 
 ```ail rules=expr.call.3
 fn show(tag str, n int, scale int) str
@@ -107,6 +106,36 @@ fn show(tag str, n int, scale int) str
 
 fn main()
     print(show("a", scale: 3, n: 4))
+```
+
+**expr.call.4** — A parameter of a function or method may declare a default,
+written `name Type = value`. Parameters with defaults come after those without.
+A call may leave a defaulted parameter out, and gives it only by name:
+`fetch(u, retries: 5)`; passing it by position is an error that says to name
+it. The value follows the rule of a struct field's default (`type.struct.8`):
+a plain constant of the parameter's type with no names or calls, evaluated at
+each call. A `mut` or `move` parameter has no default, nor has a method of a
+`trait` or of an `impl Trait` block; a function value's type has every
+parameter, so `fn(str, int, int) Response` accepts only a full call. Adding a
+defaulted parameter after the others doesn't break callers (`ail diff`).
+*(ADR 1104)*
+
+```ail rules=expr.call.4
+fn fetch(url str, retries int = 3, timeout_ms int = 5000) str
+    "{url} {retries} {timeout_ms}"
+
+fn main()
+    print(fetch("a"))
+    print(fetch("b", timeout_ms: 10))
+    print(fetch("c", timeout_ms: 1, retries: 2))
+```
+
+```ail error=expr.call.4
+fn fetch(url str, retries int = 3) str
+    "{url} {retries}"
+
+fn main()
+    print(fetch("a", 5))     # error: `retries` has a default, so it is passed by name
 ```
 
 ## Blocks

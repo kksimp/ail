@@ -146,6 +146,9 @@ fn Point.shift(mut self, dx int)  # may change self
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
 
+fn Point.scaled(self, k int = 2) Point   # a default: p.scaled() or p.scaled(k: 3), by name only
+    Point(x: x * k, y: y * k)
+
 fn is_red(c Color) bool
     match c
         Red => true

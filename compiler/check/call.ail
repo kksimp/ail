@@ -185,6 +185,7 @@ fn plain_sig(receiver bool?, params List[Ty], result Ty) Sig
         receiver: receiver,
         params: [SigParam(mutable: false, ty: t) for t in params],
         names: [],
+        required: params.len(),
         moves: [],
         ret: result,
         generics: [],
@@ -538,6 +539,18 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             first = i
             break
     if first < 0
+        # expr.call.4: positional arguments fill the parameters without a default.
+        if args.len() == sig.required and sig.required < sig.params.len()
+            return [i for i in 0..args.len()]
+        if args.len() > sig.required and args.len() <= sig.params.len() and sig.required < sig.params.len()
+            skipped := sig.names[sig.required]
+            err_help(
+                "expr.call.4",
+                expr_pos(args[sig.required].value),
+                "`{what}`'s parameter `{skipped}` has a default, so it is passed by name",
+                "write `{skipped}: value`",
+            )
+            return none
         if args.len() != sig.params.len()
             mut d := new_diag("expr.call.1", at, miscount)
             # `t.reshape(2, 3)`: the shape is one list.
@@ -580,6 +593,16 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                 diags.push(d)
                 ok = false
                 continue
+        elif i >= sig.required and sig.required < sig.params.len()
+            skipped := sig.names[sig.required]
+            err_help(
+                "expr.call.4",
+                expr_pos(a.value),
+                "`{what}`'s parameter `{skipped}` has a default, so it is passed by name",
+                "write `{skipped}: value`",
+            )
+            ok = false
+            continue
         elif i > first
             mut d := new_diag(
                 "expr.call.3",
@@ -613,11 +636,11 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             filled[slot] = i
     if not ok
         return none
-    missing := [sig.names[k] for k in 0..filled.len() if filled[k] < 0]
+    missing := [sig.names[k] for k in 0..filled.len() if filled[k] < 0 and k < sig.required]
     if missing.len() > 0
         err("expr.call.1", at, "`{what}` is missing {list_names(missing)}")
         return none
-    filled
+    [x for x in filled if x >= 0]
 
 @allow("expr.match.3") fn is_index(e ast.Expr) bool
     match e
