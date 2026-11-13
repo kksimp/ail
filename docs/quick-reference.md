@@ -578,6 +578,9 @@ is one expression on the same line. Parameter types come from the expected
 `fn(...)` type, or are written: `|x int| x * 2`. It copies the locals its body
 names when it is made, and can't change them; to share state, capture a `ref`.
 `fn(A) R ! E` is a function that can fail; `?` in a literal leaves the literal.
+A `fn` declared inside a function body is a local function: a block body that
+copies the outer locals it names, can call itself, and is a value. It isn't
+generic, and its parameters aren't `mut`.
 
 ```ail
 fn adder(n int) fn(int) int

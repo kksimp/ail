@@ -201,6 +201,16 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
             ast.Stmt.Handle(v, self.otherwise(otherwise))
         Defer(inner, pos) => ast.Stmt.Defer(self.stmt(inner), pos)
         Break(_) | Continue(_) => s
+        # type.fn.9: a local function's name and parameters are locals; its body
+        # reads the fields as the method does (it copies `self`, type.fn.5).
+        LocalFn(d) =>
+            self.declare(d.name, d.pos)
+            for p in d.params
+                self.declare(p.name, p.pos)
+            mut nd := d
+            if body := d.body
+                nd.body = self.block(body)
+            ast.Stmt.LocalFn(nd)
 
 fn SelfCx.otherwise(mut self, o ast.Else) ast.Else
     match o

@@ -244,6 +244,9 @@ pub enum Stmt
     ## `a, mut b := t`, one name per element (type.tuple.4); `for a, b in xs`
     ## starts its body with one, over the hidden variable `(a, b)`.
     LetTuple(names List[Binder], value Expr, pos Pos)
+    ## `fn name(params) R` and its block inside a function body: a named
+    ## local function (type.fn.9-10, ADR 1094).
+    LocalFn(decl FnDecl)
 
 ## One name of a destructuring binding (type.tuple.4).
 pub struct Binder

@@ -434,6 +434,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         LetTuple(names, value, at) =>
             let_tuple(names, value, at)
             Ty.Unit
+        LocalFn(d) =>
+            local_fn(d)
+            Ty.Unit
         Assign(target, op, value, at) =>
             assign(target, op, value, at)
             Ty.Unit
@@ -1388,6 +1391,8 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
         )
         Defer(st, _) => overlap_in_stmt(target, st)
         LetTuple(_, value, _) => overlap_in_expr(target, value)
+        # A local function's body works on copies (type.fn.5).
+        LocalFn => none
         Break => none
         Continue => none
 
@@ -1527,6 +1532,8 @@ fn stmt_breaks(s ast.Stmt) bool
         While(cond, _, _) => breaks_in_expr(cond)
         For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
         LetTuple(_, value, _) => breaks_in_expr(value)
+        # A local function's body can't leave the enclosing loop (type.fn.9).
+        LocalFn => false
         Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool

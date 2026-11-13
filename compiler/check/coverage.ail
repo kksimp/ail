@@ -183,6 +183,7 @@ pub COVERED_RULES := [
     "type.fn.2",
     "type.fn.4",
     "type.fn.5",
+    "type.fn.9",
     "type.map.1",
     "type.map.2",
     "type.map.3",

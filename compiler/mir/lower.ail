@@ -1255,6 +1255,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
+        LocalFn(d) => lower_local_fn(d)
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
