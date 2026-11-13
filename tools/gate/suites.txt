@@ -1,8 +1,17 @@
 # The gate's suites, one per line, in start order: mac-gate.sh (Mac and Linux) and win-gate.ps1 both read this file,
 # so the three hosts run the same list (ADR 0925). `docs` is first: the first suite runs alone and builds gate.ail.
+# `NAME@K/N` is shard K (from 0) of N of a suite: the slowest suites are split so no one of them is the longest pole
+# of a run (the four shards of each together check exactly what the whole suite checked). Slowest first, so the
+# pool starts the long ones early. `ail selftest cases` (no shard) still runs the whole suite.
 docs
-cases
-spec
+cases@0/4
+spec@0/4
+cases@1/4
+spec@1/4
+cases@2/4
+spec@2/4
+cases@3/4
+spec@3/4
 api_card
 examples
 agent_tools
