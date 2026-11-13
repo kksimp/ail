@@ -1899,14 +1899,23 @@ struct Box
     envs List[str]
 
 ## test.sandbox.1: the environment for one run of a test that lists the capabilities `caps`
-## (comma-joined; `all` for `--allow all`, which sandboxes nothing). The run may write only in a
+## (comma-joined; `all` for `--allow all`, which sandboxes nothing but still has the directory). The run may write only in a
 ## fresh directory (which is also its `TMPDIR`), read the package, and use `env`; `net`, `net.serve`
 ## and `proc` are denied unless `caps` has them, and `fs` lifts the file limit. A directory that can't
 ## be made leaves the run with no file access outside the package (it fails closed).
 fn box_open(w World, exe str, caps str) Box
-    if caps.split(",").contains("all")
-        return Box(dir: "", envs: [])
     dir := fs.make_temp_dir(SCRAP_PREFIX) else ""
+    mut envs := List[str]()
+    if not dir.is_empty()
+        # The stub table (test.stub.1): `std.test` finds it as `fs.temp_dir()/.ail-stubs`.
+        table := "{dir}/.ail-stubs"
+        fs.write_text(table, "") else return Box(dir: dir, envs: ["AIL_ALLOW=env"])
+        envs.push("AIL_STUBS={table}")
+        envs.push("TMPDIR={dir}")
+        envs.push("TEMP={dir}")
+        envs.push("TMP={dir}")
+    if caps.split(",").contains("all")
+        return Box(dir: dir, envs: envs)
     mut entries := ["env"]
     if caps.split(",").contains("fs")
         entries.push("fs")
@@ -1921,11 +1930,7 @@ fn box_open(w World, exe str, caps str) Box
     for c in ["net", "net.serve", "proc"]
         if caps.split(",").contains(c)
             entries.push(c)
-    mut envs := ["AIL_ALLOW={entries.join(",")}"]
-    if not dir.is_empty()
-        envs.push("TMPDIR={dir}")
-        envs.push("TEMP={dir}")
-        envs.push("TMP={dir}")
+    envs.push("AIL_ALLOW={entries.join(",")}")
     Box(dir: dir, envs: envs)
 
 ## Removes the directory of `box` and what the test left in it.

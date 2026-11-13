@@ -3,7 +3,7 @@
 Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
-> functions, the `ail test` runner and its result format, test filtering and listing, fixtures, the test sandbox,
+> functions, the `ail test` runner and its result format, test filtering and listing, fixtures, the test sandbox, stubs,
 > `assert`, `assert_eq`, `assert_err` and `assert_near`, property tests, fuzzing, mutation testing,
 > and doc examples as tests. Not yet designed: parallel runs and expected-failure tests.
 
@@ -319,13 +319,87 @@ affected. *(ADR 1100)*
     fs.write_text(".ail-sandbox-denied.txt", "x")?
 ```
 
-**test.sandbox.4** — `ail test --allow all` runs every test with no sandbox, as before `test.sandbox.1`. It takes
+**test.sandbox.4** — `ail test --allow all` runs every test with no sandbox, as before `test.sandbox.1` (the test
+still gets its temporary directory as `fs.temp_dir()`, for stubs). It takes
 no other list (`@needs` is the way to widen one test), and `ail task verify` runs without it. *(ADR 1100)*
 
 ```ail tool=test,--allow,all,FILE expect=passed rules=test.sandbox.4
 @test fn writes_beside_the_program() !
     fs.write_text(".ail-sandbox-all.txt", "x")?
     fs.remove(".ail-sandbox-all.txt")?
+```
+
+## Stubs
+
+**test.stub.1** — `use std.test` provides stubs for one test: `files`, `env`, `clock`, `advance` and `http`. A stub is
+active from the call until the test ends, and each test starts with none. They are for tests run by `ail test`
+(`test.run.1`); anywhere else a call fails with a message that says so. A stub answers without the sandbox
+(`test.sandbox.1`) asking: a stubbed request needs no `@needs(net)`. *(ADR 1101)*
+
+**test.stub.2** — `test.files(content Map[str, str])` makes `fs.read_text`, `fs.read_bytes` and `fs.exists` of each
+path answer with the text, and writes nothing to disk. Paths are compared as `eff.allow.3` compares them, so `a.txt`
+and `./a.txt` are one file. A path that is not stubbed reads the real file system as before; `fs.list_dir`,
+`fs.walk` and the other calls do not see stubbed files. A later call for a path replaces its text. *(ADR 1101)*
+
+**test.stub.3** — `test.env(vars Map[str, str])` makes `env.get(name)` return the value for each name. Other
+variables, `env.vars()` and `env.home()` are unchanged. *(ADR 1101)*
+
+**test.stub.4** — `test.clock(ms int)` fixes the clock: `time.now_ms()` and everything built on it return `ms`, which
+stands still. `time.sleep_ms(n)` then returns at once and moves the clock on by `n`, and `test.advance(ms)` moves it
+on by `ms`. `test.advance` before `test.clock`, and a negative time, are failures of the test. The monotonic clock
+that deadlines use is not stubbed. *(ADR 1101)*
+
+**test.stub.5** — `test.http(call str, status int, body str)` makes a request `call`, written `METHOD URL` with the
+method in capitals and the URL as the program writes it (`"GET https://api.example.com/items"`), answer with `status`,
+`body` and no headers, with no connection. Any call of `std.net` that sends that method to that URL gets it; a request
+with no stub goes on as without stubs (and is refused by the sandbox unless the test has `@needs(net)`). A `call`
+that is not `METHOD URL` is a failure of the test. *(ADR 1101)*
+
+**test.stub.6** — Stubs are made by `ail test` and kept in a file in the test's temporary directory, which is
+`fs.temp_dir()` for that test (`test.sandbox.1`). Nothing outlives the test, and a stub can't leak into another. *(ADR 1101)*
+
+```ail tool=test,FILE expect=passed rules=test.stub.1,test.stub.2,test.stub.3,test.stub.6
+use std.test
+
+@test fn reads_a_stubbed_file_and_variable() !
+    test.files({"config.txt": "mode=fast"})
+    test.env({"APP_MODE": "test"})
+    assert(fs.exists("./config.txt"))
+    assert_eq(fs.read_text("config.txt")?, "mode=fast")
+    assert_eq(env.get("APP_MODE") else "", "test")
+
+@test fn the_next_test_starts_clean()
+    assert(not fs.exists("config.txt"))
+    assert_eq(env.get("APP_MODE") else "none", "none")
+```
+
+```ail tool=test,FILE expect=passed rules=test.stub.4
+use std.test
+
+@test fn the_clock_moves_only_when_told()
+    test.clock(1000)
+    assert_eq(time.now_ms(), 1000)
+    time.sleep_ms(500)
+    assert_eq(time.now_ms(), 1500)
+    test.advance(250)
+    assert_eq(time.now_ms(), 1750)
+```
+
+```ail tool=test,FILE expect=passed rules=test.stub.5
+use std.test
+
+@test fn a_stubbed_request_needs_no_network() !
+    test.http("GET https://api.example.com/items", 200, "one,two")
+    r := net.get("https://api.example.com/items")?
+    assert_eq(r.status, 200)
+    assert_eq(r.body, "one,two")
+```
+
+```ail tool=test,FILE status=1 expect=test.stub.5 rules=test.stub.5
+use std.test
+
+@test fn the_call_needs_a_method()
+    test.http("https://api.example.com/items", 200, "x")
 ```
 
 ## Assertions

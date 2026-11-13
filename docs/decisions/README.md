@@ -874,3 +874,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1090](1090-std-yaml.md) | `std.yaml`: the common subset of YAML read into the `Json` value *(delegated)* | Accepted | 2026-11-13 |
 | [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |
 | [1100](1100-sandboxed-tests.md) | `ail test` sandboxes each test; `@needs(net)`, `@needs(proc)`, `@needs(fs)` lift it; `--allow all` *(delegated)* | Accepted | 2026-11-13 |
+| [1101](1101-test-stubs.md) | `std.test` stubs for files, variables, the clock and HTTP in tests *(delegated)* | Accepted | 2026-11-13 |
