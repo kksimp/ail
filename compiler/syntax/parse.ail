@@ -1692,7 +1692,10 @@ fn Parser.statement_inner(mut self) ast.Stmt?
                     "AIL has no `while let`; write `while name := e`",
                     "`while name := e` loops while `e` has a value, binding `name` each time",
                     "write `while name := e`",
-                    [fix.delete(here(), tokens[i + 1].pos), fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")],
+                    [
+                        fix.delete(here(), tokens[i + 1].pos),
+                        fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":="),
+                    ],
                 )
                 return none
             if sym_at(1) == ":="

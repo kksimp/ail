@@ -1461,7 +1461,14 @@ fn skip_string(line List[char], n int, start int) int
 ## A format specification, the text after the `:`, or `none` when it is
 ## invalid (lex.str.7).
 fn parse_spec(c List[char]) FormatSpec?
-    mut f := FormatSpec(fill: none, align: none, width: none, precision: none, hex: false, flags: "")
+    mut f := FormatSpec(
+        fill: none,
+        align: none,
+        width: none,
+        precision: none,
+        hex: false,
+        flags: "",
+    )
     mut i := 0
     if c.len() >= 2 and is_align(c[1])
         f.fill = c[0]

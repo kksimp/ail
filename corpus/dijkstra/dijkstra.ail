@@ -74,8 +74,16 @@ fn route(g Graph, p Paths, target int) str
 
 fn main()
     lines := [
-        "A B 4", "A C 2", "B C 1", "B D 5", "C D 8", "C E 10",
-        "D E 2", "D F 6", "E F 3", "X Y 2",
+        "A B 4",
+        "A C 2",
+        "B C 1",
+        "B D 5",
+        "C D 8",
+        "C E 10",
+        "D E 2",
+        "D F 6",
+        "E F 3",
+        "X Y 2",
     ]
     g := build(lines)
     src := g.names.index_of("A") else 0

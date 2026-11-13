@@ -19,6 +19,7 @@ fn doctor.path_line(root str) str [env]  ## The line for a shell profile (tool.p
 fn doctor.same_toolchain(found str, root str) bool [env io proc]  ## Is `found`, the first `ail` on PATH, this toolchain's? Its directory is `root` (and so is a symlink's
 fn doctor.check_root(root str) doctor.Check [fs io]
 fn doctor.check_version(root str) doctor.Check [fs io]
+fn doctor.check_language() doctor.Check [fs io]  ## The language version of the project in the current directory (mod.pkg.10).
 fn doctor.check_path(root str) doctor.Check [env io proc]
 fn doctor.check_git() doctor.Check [io proc]
 fn doctor.check_curl() doctor.Check [env io proc]

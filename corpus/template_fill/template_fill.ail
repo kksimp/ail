@@ -7,7 +7,7 @@ fn apply_filter(value str, filter str) str
         "lower" => value.to_lower()
         _ => value
 
-fn fill(text str, vars Map[str, str]) (str, List[str])
+fn fill(text str, vars Map[str, str])(str, List[str])
     mut out := ""
     mut missing := List[str]()
     mut rest := text

@@ -31,12 +31,13 @@ pub enum syntax.Part  ## A piece of an interpolated string: literal text, or the
 pub struct syntax.Token
     pub tok syntax.Tok
     pub pos ast.Pos
-pub struct syntax.FormatSpec  ## `[[fill]align][width][.precision][x]` after the `:` in `{expression:spec}` (lex.str.7).
+pub struct syntax.FormatSpec  ## `[[fill]align][+][0][width][,][.precision][x|b|e]` after the `:` in `{expression:spec}`
     pub fill char?
     pub align char?  ## `<`, `>` or `^`.
     pub width int?
     pub precision int?  ## Decimal places of a float (`.N`).
     pub hex bool  ## `x`: lowercase hexadecimal for an int.
+    pub flags str  ## The other marks, each at most once: `+` (always a sign), `0` (zero padding), `,`
 pub struct syntax.Diag  ## A mistake: the rule it breaks and where. The parser keeps the message
     pub rule str
     pub pos ast.Pos
@@ -61,4 +62,4 @@ pub fn syntax.parse(tokens List[syntax.Token]) syntax.Parsed  ## Parse a file's 
 pub fn syntax.parse_with(tokens List[syntax.Token], extra Set[str]) syntax.Parsed  ## `parse` of a file whose module's other files declare generic names too:
 ```
 
-trimmed to fit 2000 tokens (~1161); dropped: private items
+trimmed to fit 2000 tokens (~1203); dropped: private items

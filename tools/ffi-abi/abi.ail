@@ -60,7 +60,21 @@ extern c "ailabi" fn tiny_echo(t Tiny) Tiny
 extern c "ailabi" fn nest_make(a i32, b i32, w float) Nest
 extern c "ailabi" fn nest_sum(n Nest) float
 extern c "ailabi" fn bv_flip(x BV) BV
-extern c "ailabi" fn many(a int, b D2, c I3, d int, e D2, f int, g int, h F3, i int, j int, k float) float
+
+extern c "ailabi" fn many(
+    a int,
+    b D2,
+    c I3,
+    d int,
+    e D2,
+    f int,
+    g int,
+    h F3,
+    i int,
+    j int,
+    k float,
+) float
+
 extern c "ailabi" fn hfa_spill(a D4, b D4, c f32, d i32, e D2) float
 extern c "ailabi" fn apply_cb(f fn(int, float) int, x int, y float) int
 extern c "ailabi" fn call_narrow(f fn(i8, u16, bool, f32) i32) i32

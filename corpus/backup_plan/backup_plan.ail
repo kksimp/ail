@@ -46,7 +46,11 @@ fn main() !
     dest := path.join(root, "dest")
     fs.make_dir(src)?
     fs.make_dir(dest)?
-    write_all(src, ["notes.txt", "todo.txt", "old.log", "data.csv"], ["meeting at 10\n", "buy milk\n", "boot ok\n", "a,b\n1,2\n"])?
+    write_all(
+        src,
+        ["notes.txt", "todo.txt", "old.log", "data.csv"],
+        ["meeting at 10\n", "buy milk\n", "boot ok\n", "a,b\n1,2\n"],
+    )?
     for run_no in 1..=2
         print("== backup {run_no} ==")
         now := snapshot(src)?

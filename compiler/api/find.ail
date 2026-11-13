@@ -229,7 +229,7 @@ fn find_piece_starts(pieces List[str], w str) bool
 ## `sorted`) is worth 6, 5 or 4 and answers alone unless it is generic; a word
 ## the name contains is worth 3, the module 2 and the doc 1, and these answer
 ## only two words together. A single word that is the module answers alone.
-fn find_score_words(f StdFn, query List[str]) (int, bool)
+fn find_score_words(f StdFn, query List[str])(int, bool)
     mut score := 0
     mut strong := false
     mut hit := 0
@@ -494,7 +494,9 @@ pub fn how_command(args List[str]) int
                 score += 3
                 hit += 1
                 strong = true
-            elif e.words.contains(w) or e.words.contains("{w}s") or (w.ends_with("s") and e.words.contains(w.slice(0, w.len() - 1)))
+            elif e.words.contains(w)
+                or e.words.contains("{w}s")
+                or (w.ends_with("s") and e.words.contains(w.slice(0, w.len() - 1)))
                 score += 1
                 hit += 1
         if hit >= 2 or strong

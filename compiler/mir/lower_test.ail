@@ -12,7 +12,8 @@ ASSERT_FNS := ["assert", "assert_eq", "assert_err", "assert_near"]
 fn Lower.lower_assert(mut self, name str, args List[ast.Arg], pos ast.Pos) Val?
     if name == "assert_err" or name == "assert_near"
         return lower_assert_more(name, args, pos)
-    if args.len() != (if name == "assert" then 1 else 2) and not (name == "assert" and args.len() == 2)
+    if args.len() != (if name == "assert" then 1 else 2)
+        and not (name == "assert" and args.len() == 2)
         return unsupported(pos, "this call of `{name}`")
     if name == "assert"
         c := lower_value(args[0].value, Ty.Bool)?

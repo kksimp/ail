@@ -47,7 +47,10 @@ fn pol_has(spec str, kind str) bool
 
 ## The trap that ends a program for a use the policy does not allow.
 fn pol_deny(rule str, what str, need str, spec str)
-    os_usage_trap(rule, "{what} is not allowed; allow it with --allow {need} (this run allows: {spec})")
+    os_usage_trap(
+        rule,
+        "{what} is not allowed; allow it with --allow {need} (this run allows: {spec})",
+    )
 
 # ---- paths (eff.allow.3) ----
 
@@ -145,7 +148,15 @@ fn pol_win_bad(c str) bool
     if ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"].contains(stem)
         return true
     if pol_len(stem) == 4 and (stem.starts_with("COM") or stem.starts_with("LPT"))
-        return stem.ends_with("1") or stem.ends_with("2") or stem.ends_with("3") or stem.ends_with("4") or stem.ends_with("5") or stem.ends_with("6") or stem.ends_with("7") or stem.ends_with("8") or stem.ends_with("9")
+        return stem.ends_with("1")
+            or stem.ends_with("2")
+            or stem.ends_with("3")
+            or stem.ends_with("4")
+            or stem.ends_with("5")
+            or stem.ends_with("6")
+            or stem.ends_with("7")
+            or stem.ends_with("8")
+            or stem.ends_with("9")
     false
 
 ## Windows: `path` as an absolute `c:/dir/file` in lower case with links resolved, "" when it
@@ -334,7 +345,10 @@ fn pol_fs(path str, write bool, what str)
         if pol_covered(spec, "fs", 1, canon, 0) or pol_covered(spec, kind, 1, canon, 0)
             return
         pol_deny("eff.allow.3", "{kind} of `{canon}` by {what}", "{kind}={canon}", spec)
-    os_usage_trap("eff.allow.3", "{kind} of `{path}` by {what} is not allowed: the path can't be resolved to one plain absolute path (a stream, device or network path, or a link loop); this run allows: {spec}")
+    os_usage_trap(
+        "eff.allow.3",
+        "{kind} of `{path}` by {what} is not allowed: the path can't be resolved to one plain absolute path (a stream, device or network path, or a link loop); this run allows: {spec}",
+    )
 
 ## eff.allow.3: a glob `pattern` is read from its first component with a wildcard down; a `..`
 ## after a wildcard could leave the scope, so it is refused.
@@ -348,7 +362,10 @@ fn pol_glob(pattern str)
         if c.contains("*") or c.contains("?") or c.contains("[") or c.contains("\{")
             wild = true
         if wild and c == ".."
-            os_usage_trap("eff.allow.3", "fs.read by fs.glob of `{pattern}` is not allowed: `..` after a wildcard can leave the allowed scope; this run allows: {spec}")
+            os_usage_trap(
+                "eff.allow.3",
+                "fs.read by fs.glob of `{pattern}` is not allowed: `..` after a wildcard can leave the allowed scope; this run allows: {spec}",
+            )
         if not wild
             base.push(c)
     mut root := base.join("/")

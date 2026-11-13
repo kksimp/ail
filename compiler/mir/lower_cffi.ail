@@ -114,7 +114,13 @@ fn Lower.cb_entry(mut self, name str, pos ast.Pos) int?
         c.contracts = []
         c.attrs = [ast.Attr(name: "c callback", pos: pos, arg: key)]
         sigs[entry] = Sig(params: sig.params, ret: sig.ret, fails: false)
-        gen.queue.push(Instance(key: entry, decl: c, binds: {}, owner: "", file: fn_file.get(key) else file))
+        gen.queue.push(Instance(
+            key: entry,
+            decl: c,
+            binds: {},
+            owner: "",
+            file: fn_file.get(key) else file,
+        ))
     mut i := inst(-1, "fnaddr", [])
     i.name = entry
     emit(i, Ty.Int)
@@ -124,7 +130,10 @@ fn Lower.cb_entry(mut self, name str, pos ast.Pos) int?
 fn Lower.cb_arg(mut self, e ast.Expr) Val?
     match e
         Name(n, p) =>
-            a := cb_entry(n, p) else return unsupported(p, "a C callback that isn't a declared function")
+            a := cb_entry(n, p) else return unsupported(
+                p,
+                "a C callback that isn't a declared function",
+            )
             Val(id: a, ty: Ty.Int)
         _ => unsupported(expr_pos(e), "a C callback that isn't the name of a declared function")
 

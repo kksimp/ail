@@ -145,7 +145,8 @@ fn Checker.format_spec(mut self, t Ty, spec ast.FormatSpec, at ast.Pos)
             "drop the `x` or `b`, or convert the value to an `int` first",
         )
     plain_number := int_like or is_float
-    if (spec.flags.contains("+") or spec.flags.contains("0") or spec.flags.contains(",")) and not plain_number
+    if (spec.flags.contains("+") or spec.flags.contains("0") or spec.flags.contains(","))
+        and not plain_number
         err_help(
             "type.str.11",
             at,

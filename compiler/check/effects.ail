@@ -374,7 +374,9 @@ fn Checker.check_caps(self) List[Diag]
             want := (a.arg else "").split(",")
             mut ok := true
             for cap in want
-                if cap == "" or (cap == "none" and want.len() > 1) or (cap != "none" and not CAPABILITIES.contains(cap))
+                if cap == ""
+                    or (cap == "none" and want.len() > 1)
+                    or (cap != "none" and not CAPABILITIES.contains(cap))
                     ok = false
                     shown := if cap == "" then "an empty entry" else "`{cap}`"
                     out.push(
@@ -437,7 +439,21 @@ pub fn parse_deny(list str)(List[str], str)
     (uniq, "")
 
 ## The entry names `--allow` takes (eff.allow.2) and the ones that may carry a `=SCOPE`.
-ALLOW_NAMES := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env", "clock", "random", "ui", "app", "unsafe"]
+ALLOW_NAMES := [
+    "fs",
+    "fs.read",
+    "fs.write",
+    "net",
+    "net.serve",
+    "proc",
+    "env",
+    "clock",
+    "random",
+    "ui",
+    "app",
+    "unsafe",
+]
+
 ALLOW_SCOPED := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env"]
 
 ## `--allow LIST` (eff.allow.1-2): what the list leaves out, as the capabilities `--deny` takes

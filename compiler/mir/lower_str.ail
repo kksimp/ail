@@ -261,11 +261,7 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                 b := text_arg(vs[1], name, npos)?
                 h := trap_head("type.str.14", npos)
                 return Val(
-                    id: call(
-                        "rt.str_replace",
-                        [r.id, a, b, h, trap_tail(npos)],
-                        Ty.Str,
-                    ),
+                    id: call("rt.str_replace", [r.id, a, b, h, trap_tail(npos)], Ty.Str),
                     ty: Ty.Str,
                 )
             "pad_left" | "pad_right" | "center" =>
@@ -375,8 +371,18 @@ fn Lower.str_to_int_radix(mut self, r Val, radix Val, pos ast.Pos) Val?
 
 ## Trap `type.str.20` unless `radix` is 2 to 36.
 fn Lower.check_radix(mut self, radix int, pos ast.Pos)
-    lo := binary(ast.BinOp.Ge, Val(id: radix, ty: Ty.Int), Val(id: konst(2, Ty.Int), ty: Ty.Int), pos)
-    hi := binary(ast.BinOp.Le, Val(id: radix, ty: Ty.Int), Val(id: konst(36, Ty.Int), ty: Ty.Int), pos)
+    lo := binary(
+        ast.BinOp.Ge,
+        Val(id: radix, ty: Ty.Int),
+        Val(id: konst(2, Ty.Int), ty: Ty.Int),
+        pos,
+    )
+    hi := binary(
+        ast.BinOp.Le,
+        Val(id: radix, ty: Ty.Int),
+        Val(id: konst(36, Ty.Int), ty: Ty.Int),
+        pos,
+    )
     ok1 := check_branch(lo.id)
     radix_trap(radix, pos)
     cur = ok1

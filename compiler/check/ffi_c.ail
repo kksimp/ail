@@ -4,8 +4,7 @@ use ast
 ## Why the struct type `t` can't cross a C call by value, or none when it can
 ## (ffi.struct.1): every field has a C layout or is such a struct, and the
 ## struct is plain (no type parameters, unique values, invariants or error).
-@allow("expr.match.3")
-fn Checker.c_struct_why(self, t Ty, depth int) str?
+@allow("expr.match.3") fn Checker.c_struct_why(self, t Ty, depth int) str?
     match t
         Struct(s, _) =>
             d := prog.structs[s]
@@ -37,8 +36,7 @@ fn Checker.c_struct_why(self, t Ty, depth int) str?
 ## Whether `t` is a C callback type (ffi.cb.1): `fn(...)` whose parameters and
 ## result have C layouts, or no result, and whose arguments fit the registers
 ## of a C call (six integer-like and eight float, as ffi.decl.3).
-@allow("expr.match.3")
-fn c_callback_ty(t Ty) bool
+@allow("expr.match.3") fn c_callback_ty(t Ty) bool
     match t
         FnTy(ps, r) =>
             mut ints := 0

@@ -1615,11 +1615,7 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
     if args.len() < lo or args.len() > hi
         args_only(args)
         want := if hi == lo then "{lo}" else "{lo} or {hi}"
-        err(
-            "test.assert.2",
-            at,
-            "`{n}` takes {want} argument(s), but {was_were(args.len())} given",
-        )
+        err("test.assert.2", at, "`{n}` takes {want} argument(s), but {was_were(args.len())} given")
         return Ty.Unit
     if n == "assert"
         v := args[0].value
@@ -1656,7 +1652,11 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
         if args.len() == 2
             hint := if errs.len() == 1 then errs[0] else Ty.Unknown
             st := expr(args[1].value, if hint == Ty.Unknown then none else hint, true)
-            if is_res(t) and st != Ty.Unknown and st != Ty.Never and errs.len() > 0 and not errs.contains(st)
+            if is_res(t)
+                and st != Ty.Unknown
+                and st != Ty.Never
+                and errs.len() > 0
+                and not errs.contains(st)
                 err_help(
                     "test.assert.3",
                     expr_pos(args[1].value),

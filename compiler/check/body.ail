@@ -1705,7 +1705,8 @@ fn first_not_plain(items List[ast.Expr]) ast.Expr?
     none
 
 ## `List[T]()`, `Map[K, V]()` and `Set[T]()`.
-@allow("expr.match.3") fn empty_collection(callee ast.Expr, args List[ast.Arg], e ast.Expr) ast.Expr?
+@allow("expr.match.3")
+fn empty_collection(callee ast.Expr, args List[ast.Arg], e ast.Expr) ast.Expr?
     if args.len() > 0
         return e
     match callee

@@ -106,7 +106,7 @@ fn is_name(s str) bool
     true
 
 ## `MAJOR.MINOR` as two numbers, or none (mod.pkg.10).
-fn version_parts(s str) (int, int)?
+fn version_parts(s str)(int, int)?
     cut := s.split(".")
     if cut.len() != 2
         return none
@@ -189,7 +189,12 @@ pub fn parse(src str) Parsed
             if version_pos.line != 0
                 diags.push(diag("mod.pkg.10", kw_pos, "an `ail.pkg` has one `ail` line", ""))
             elif ws.len() != 2
-                diags.push(diag("mod.pkg.10", kw_pos, "`ail` needs one version", "write `ail {lang_version()}`"))
+                diags.push(diag(
+                    "mod.pkg.10",
+                    kw_pos,
+                    "`ail` needs one version",
+                    "write `ail {lang_version()}`",
+                ))
             elif parts := version_parts(ws[1].text)
                 version = ws[1].text
                 version_pos = ws[1].pos

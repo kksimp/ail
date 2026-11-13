@@ -58,4 +58,4 @@ pub fn api.review_command(args List[str], std str) int [clock env fs io proc ran
 pub fn api.semantic_diff_command(args List[str], std str) int [clock env fs io proc random]  ## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
 ```
 
-trimmed to fit 2000 tokens (~1754); dropped: private items
+trimmed to fit 2000 tokens (~1810); dropped: private items
