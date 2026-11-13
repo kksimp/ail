@@ -93,25 +93,9 @@ fn solve(label str, rows List[str])
         print("  {cells[y * width..(y + 1) * width].join("")}")
 
 fn main()
-    solve("open field", [
-        "S.......",
-        "........",
-        "........",
-        ".......G",
-    ])
-    solve("with walls", [
-        "S..#......",
-        ".#.#.####.",
-        ".#...#....",
-        ".#####.##.",
-        "......#..G",
-    ])
-    solve("sealed off", [
-        "S.#.",
-        "..#.",
-        "###.",
-        "...G",
-    ])
+    solve("open field", ["S.......", "........", "........", ".......G"])
+    solve("with walls", ["S..#......", ".#.#.####.", ".#...#....", ".#####.##.", "......#..G"])
+    solve("sealed off", ["S.#.", "..#.", "###.", "...G"])
 
 @test fn straight_line()
     cells := "S..G".chars()

@@ -40,11 +40,11 @@ struct FnBody
     contracts List[ast.Contract]
 
 ## An enclosing loop: `name` is its label ("" for none), `at` the loop
-## keyword's position, `par` a `par for`, which `break` can't leave (conc.par.2).
+## keyword's position, `in_par` a `par for`, which `break` can't leave (conc.par.2).
 struct LoopLabel
     name str
     at ast.Pos
-    par bool
+    in_par bool
 
 struct Parser
     tokens List[Token]
@@ -687,7 +687,14 @@ fn Parser.keyword_as_name(mut self, k int)
     help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
     if not rename_is_safe(word)
         # A word the language itself uses in bodies: rename this declaration only.
-        error_fix("lex.kw.1", pos, msg, help, "rename `{word}` to `{better}` here", [rename_edit(pos, word, better)])
+        error_fix(
+            "lex.kw.1",
+            pos,
+            msg,
+            help,
+            "rename `{word}` to `{better}` here",
+            [rename_edit(pos, word, better)],
+        )
         return
     misnamed.add(word)
     error_fix(
@@ -738,9 +745,12 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
             if j > 0 and toks[j - 1].tok == Tok.Sym(".")
                 return
             # The keyword itself, not a name: `for x in xs`, `match -x`.
-            if word == "in" and j > 0 and (tok_tag(toks[j - 1].tok) == "id" or toks[j - 1].tok == Tok.Sym(")") or toks[j - 1].tok == Tok.Sym("]"))
+            if word == "in"
+                and j > 0
+                and (tok_tag(toks[j - 1].tok) == "id" or toks[j - 1].tok == Tok.Sym(")") or toks[j - 1].tok == Tok.Sym("]"))
                 return
-            if word == "match" and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
+            if word == "match"
+                and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
                 return
             if name_use_follows(toks[j + 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
@@ -1785,7 +1795,7 @@ fn Parser.statement_inner(mut self) ast.Stmt?
     if tag == "id" and sym_at(1) == ":" and (kw_at(2) == "for" or kw_at(2) == "while")
         return labeled_loop(text)
     if tag == "kw" and (text == "for" or text == "while" or text == "par")
-        loops.push(LoopLabel(name: "", at: here(), par: text == "par"))
+        loops.push(LoopLabel(name: "", at: here(), in_par: text == "par"))
         s := statement_core()
         loops.pop()
         return s
@@ -1807,7 +1817,7 @@ fn Parser.labeled_loop(mut self, name str) ast.Stmt?
             )
             return none
     i += 2
-    loops.push(LoopLabel(name: name, at: here(), par: false))
+    loops.push(LoopLabel(name: name, at: here(), in_par: false))
     s := statement_core()
     loops.pop()
     s
@@ -2028,7 +2038,7 @@ fn Parser.leave_stmt(mut self, is_break bool, pos ast.Pos) ast.Stmt?
             l := loops[k]
             if l.name == n.name
                 target = l.at
-            elif l.par
+            elif l.in_par
                 crossed = true
                 break
             k -= 1
@@ -2056,12 +2066,12 @@ fn Parser.unknown_label(mut self, word str, n ast.Ident, crossed bool)
     mut names := List[str]()
     mut outermost := absent[ast.Pos]()
     for l in loops
-        if l.par
+        if l.in_par
             names = []
             outermost = none
         elif l.name != ""
             names.push(l.name)
-        if not l.par and outermost == none
+        if not l.in_par and outermost == none
             outermost = l.at
     if names.len() == 0 and outermost == none
         error_text(

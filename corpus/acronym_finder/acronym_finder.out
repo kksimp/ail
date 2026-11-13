@@ -1,0 +1,12 @@
+defined:
+  CPU   Central Processing Unit (used 3x)
+  DNS   Domain Name System (used 1x)
+  PNG   Portable Network Graphics (used 2x)
+  TLS   Transport Layer Security (used 2x)
+undefined:
+  HTTP  2
+  GIF   1
+  GPU   1
+  OK    1
+  RAM   1
+  SSL   1

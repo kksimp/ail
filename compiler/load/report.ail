@@ -164,7 +164,13 @@ pub fn report(files List[ast.SourceFile], texts List[str], diags List[Shown], js
 pub fn report_next(files List[ast.SourceFile], texts List[str], diags List[Shown], json bool) str
     report_in(files, texts, diags, json, true)
 
-fn report_in(files List[ast.SourceFile], texts List[str], diags List[Shown], json bool, follow bool) str
+fn report_in(
+    files List[ast.SourceFile],
+    texts List[str],
+    diags List[Shown],
+    json bool,
+    follow bool,
+) str
     mut groups := [List[Shown]() for _ in files]
     mut nodes := List[Shown]()
     for d in diags

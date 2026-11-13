@@ -56,13 +56,13 @@ fn main()
     text := "Wrapping text is mostly bookkeeping: count the characters on the line, break before a word that does not fit, and carry the hanging indent onto every continuation line."
     show("plain 30", wrap_indent(text, 30, "", ""))
     show("bullet 36", wrap_indent(text, 36, "- ", "  "))
-    show("quote 28", wrap_indent("short words only here and a verylongunbreakableword too", 28, "> ", "> "))
-    code := [
-        "        if ready:",
-        "            go()",
-        "",
-        "        stop()",
-    ]
+    show("quote 28", wrap_indent(
+        "short words only here and a verylongunbreakableword too",
+        28,
+        "> ",
+        "> ",
+    ))
+    code := ["        if ready:", "            go()", "", "        stop()"]
     show("dedent", dedent(code))
     show("reindent", indent_block(dedent(code), "    "))
 

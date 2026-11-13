@@ -1,0 +1,106 @@
+## Text statistics report: counts characters, lines, sentences and words of an
+## embedded passage, then prints the average word length, the longest word,
+## the most frequent words, the commonest letters and a word-length histogram.
+
+struct Tally
+    name str
+    hits int
+
+fn extract_words(text str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in text.to_lower().chars()
+        if c.is_alpha()
+            cur = "{cur}{c}"
+        elif cur != ""
+            out.push(cur)
+            cur = ""
+    if cur != ""
+        out.push(cur)
+    out
+
+fn count_sentences(text str) int
+    mut n := 0
+    for c in text.chars()
+        if c == '.' or c == '!' or c == '?'
+            n += 1
+    n
+
+fn top_words(words List[str], limit int) List[Tally]
+    mut counts := Map[str, int]()
+    for w in words
+        counts[w] += 1
+    mut items := List[Tally]()
+    for w in counts.keys().sorted()
+        items.push(Tally(name: w, hits: counts[w]))
+    ranked := items.sorted(by: |t| -t.hits)
+    ranked.take(limit)
+
+fn top_letters(words List[str], limit int) List[Tally]
+    mut freq := List[int]()
+    for i in 0..26
+        freq.push(0)
+    for w in words
+        for c in w.chars()
+            freq[c.code() - 97] += 1
+    mut items := List[Tally]()
+    for i in 0..26
+        if freq[i] > 0
+            letter := char.from_code(97 + i) else 'a'
+            items.push(Tally(name: "{letter}", hits: freq[i]))
+    ranked := items.sorted(by: |t| -t.hits)
+    ranked.take(limit)
+
+fn bar(n int) str
+    mut out := ""
+    for i in 0..n
+        out = "{out}#"
+    out
+
+fn main()
+    text := [
+        "The quick brown fox jumps over the lazy dog. The dog sleeps!",
+        "Is the fox quick? Yes, the fox is quick and the dog is lazy.",
+        "",
+        "A third paragraph ends here, quickly.",
+    ].join("\n")
+    words := extract_words(text)
+    line_count := text.split("\n").len()
+    mut letters := 0
+    mut longest := ""
+    for w in words
+        letters += w.len()
+        if w.len() > longest.len()
+            longest = w
+    avg := letters * 100 / words.len()
+    print("characters: {text.len()}")
+    print("lines: {line_count}")
+    print("sentences: {count_sentences(text)}")
+    print("words: {words.len()}")
+    print("average word length: {avg / 100}.{avg % 100:02}")
+    print("longest word: {longest}")
+    print("top words:")
+    for t in top_words(words, 4)
+        print("  {t.name:<8}{t.hits}")
+    print("top letters:")
+    for t in top_letters(words, 3)
+        print("  {t.name} {t.hits}")
+    print("word lengths:")
+    mut by_len := Map[int, int]()
+    for w in words
+        by_len[w.len()] += 1
+    for n in 1..=longest.len()
+        hits := by_len.get(n) else 0
+        print("  {n:>2} {bar(hits)} {hits}")
+
+@test fn extracts_words()
+    assert_eq(extract_words("Hi, there! It's 9am."), ["hi", "there", "it", "s", "am"])
+
+@test fn counts_sentences()
+    assert_eq(count_sentences("One. Two! Three? Four"), 3)
+
+@test fn ranks_by_hits_then_alphabet()
+    top := top_words(["b", "a", "b", "c", "a", "d"], 3)
+    assert_eq(top[0].name, "a")
+    assert_eq(top[1].name, "b")
+    assert_eq(top[2].name, "c")

@@ -1,0 +1,11 @@
+gcd(84, 36) = 12, gcd(17, 5) = 1
+ext_gcd(240, 46): g=2 x=-9 y=47, check 2
+17^-1 mod 3120 = 2753, 6^-1 mod 9 = 0
+360 = 2^3 * 3^2 * 5, phi = 96
+97 = 97, phi = 96
+1001 = 7 * 11 * 13, phi = 720
+65536 = 2^16, phi = 32768
+999999 = 3^3 * 7 * 11 * 13 * 37, phi = 466560
+123456789 = 3^2 * 3607 * 3803, phi = 82260072
+miller-rabin agrees with trial division on 2000 of 2000, primes found: 303
+561 prime: false, 1000000007 prime: true, 2147483647 prime: true

@@ -39,7 +39,8 @@ fn range_items(body str) List[str]
         return []
     lo := parts[0].to_int() else return []
     hi := parts[1].to_int() else return []
-    padded := (parts[0].len() > 1 and parts[0].starts_with("0")) or (parts[1].len() > 1 and parts[1].starts_with("0"))
+    padded := (parts[0].len() > 1 and parts[0].starts_with("0"))
+        or (parts[1].len() > 1 and parts[1].starts_with("0"))
     width := if padded then parts[0].len().max(parts[1].len()) else 0
     mut out := List[str]()
     mut n := lo
@@ -94,9 +95,28 @@ fn pick_files(pattern str, files List[str]) List[str]
     hits
 
 fn main()
-    for p in [r"file{1,2,3}.txt", r"{a,b}{x,y}", r"img{08..11}.png", r"n{3..1}", r"src/{lib,bin/{cli,srv}}.ail", r"{solo}", r"a{b,c", r"pre{,s}"]
+    for p in [
+        r"file{1,2,3}.txt",
+        r"{a,b}{x,y}",
+        r"img{08..11}.png",
+        r"n{3..1}",
+        r"src/{lib,bin/{cli,srv}}.ail",
+        r"{solo}",
+        r"a{b,c",
+        r"pre{,s}",
+    ]
         print("{p} => {expand(p).join(" ")}")
-    files := ["main.c", "main.h", "util.c", "util.h", "util.o", "README.md", "a1.txt", "a2.txt", "a10.txt"]
+    files := [
+        "main.c",
+        "main.h",
+        "util.c",
+        "util.h",
+        "util.o",
+        "README.md",
+        "a1.txt",
+        "a2.txt",
+        "a10.txt",
+    ]
     for q in [r"*.{c,h}", "a?.txt", r"{util,main}.*", r"*.{py,rs}"]
         print("{q}: {pick_files(q, files).join(" ")}")
 

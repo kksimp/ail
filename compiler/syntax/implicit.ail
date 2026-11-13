@@ -233,7 +233,7 @@ fn SelfCx.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
                 ast.SelectOp.Recv(var, var_pos, c)
             Send(ch, v) =>
                 c := self.expr(ch)
-                ast.SelectOp.Send(c, self.expr(v))
+                ast.SelectOp.Send(chan: c, value: self.expr(v))
             After(ms) => ast.SelectOp.After(self.expr(ms))
             Closed => a.op
         out.push(ast.SelectArm(op: op, body: self.block(a.body), pos: a.pos))

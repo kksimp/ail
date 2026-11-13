@@ -78,14 +78,24 @@ fn Billing.run(mut self, line str) int ! BillError
     if not acct.active
         return NoSuchCustomer(who: who)
     if act == "cancel" and parts.len() == 4
-        self.accounts[who] = Account(plan: acct.plan, months: acct.months, active: false, disc: acct.disc)
+        self.accounts[who] = Account(
+            plan: acct.plan,
+            months: acct.months,
+            active: false,
+            disc: acct.disc,
+        )
         return 0
     if act == "upgrade" and parts.len() == 5
         old := price(acct.plan)?
         fresh := price(parts[4])?
         if fresh <= old
             return NotAnUpgrade(who: who, plan: parts[4])
-        self.accounts[who] = Account(plan: parts[4], months: acct.months, active: true, disc: acct.disc)
+        self.accounts[who] = Account(
+            plan: parts[4],
+            months: acct.months,
+            active: true,
+            disc: acct.disc,
+        )
         return (fresh - old) * (30 - day) / 30
     return BadLine(text: line)
 
@@ -93,7 +103,12 @@ fn Billing.invoice(mut self, who str) int
     acct := self.accounts[who]
     base := price(acct.plan) else 0
     off := self.discounts[acct.disc].percent_off(acct.months)
-    self.accounts[who] = Account(plan: acct.plan, months: acct.months + 1, active: true, disc: acct.disc)
+    self.accounts[who] = Account(
+        plan: acct.plan,
+        months: acct.months + 1,
+        active: true,
+        disc: acct.disc,
+    )
     base - base * off / 100
 
 fn new_billing() Billing
@@ -105,11 +120,19 @@ fn new_billing() Billing
 
 fn main()
     events := [
-        "1 1 subscribe ann basic plain", "1 10 subscribe bob pro student",
-        "1 12 subscribe cy gold plain", "1 15 subscribe ann pro plain",
-        "2 3 upgrade ann pro", "2 5 upgrade bob basic", "2 9 upgrade dan team",
-        "2 20 subscribe dee team loyal", "3 7 cancel bob", "3 8 cancel bob",
-        "3 9 upgrade dee basic", "4 2 subscribe bob basic plain", "4 4 bogus",
+        "1 1 subscribe ann basic plain",
+        "1 10 subscribe bob pro student",
+        "1 12 subscribe cy gold plain",
+        "1 15 subscribe ann pro plain",
+        "2 3 upgrade ann pro",
+        "2 5 upgrade bob basic",
+        "2 9 upgrade dan team",
+        "2 20 subscribe dee team loyal",
+        "3 7 cancel bob",
+        "3 8 cancel bob",
+        "3 9 upgrade dee basic",
+        "4 2 subscribe bob basic plain",
+        "4 4 bogus",
         "4 5 subscribe cy basic plain",
     ]
     mut b := new_billing()

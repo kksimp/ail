@@ -126,7 +126,11 @@ fn main()
     assert_eq(substitute("[[gone]]|[[open", {"x": "1"}), "|[[open")
 
 @test fn loops_count_from_one()
-    out := render(["[% for v in vs %]", "[[loop.index]]=[[v]]", "[% endfor %]"], Map[str, str](), {"vs": ["a", "b"]})
+    out := render(
+        ["[% for v in vs %]", "[[loop.index]]=[[v]]", "[% endfor %]"],
+        Map[str, str](),
+        {"vs": ["a", "b"]},
+    )
     assert_eq(out, ["1=a", "2=b"])
 
 @test fn conditionals_pick_a_branch()

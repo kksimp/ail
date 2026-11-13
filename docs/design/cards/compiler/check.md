@@ -98,6 +98,7 @@ pub check.STD_MODULES := ...
 pub check.AIL_STD_MODULES := ...
 pub check.PRELUDE_LINE := 1073741824
 pub fn check.is_prelude_line(int) bool
+pub fn check.prelude_alt(str) str
 pub fn check.list_names(List[str]) str
 pub fn check.count(int, str) str
 pub fn check.was_were(int) str
@@ -129,4 +130,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1651); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1663); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

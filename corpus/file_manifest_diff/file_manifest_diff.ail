@@ -1,0 +1,95 @@
+## File manifest diff: writes two snapshot directories into a temp directory,
+## builds a manifest (name, size, CRC-32) of each, and prints what was added,
+## removed, changed or left unchanged between the snapshots.
+use std.hash
+
+struct Entry
+    size int
+    crc str
+
+fn digest(text str) Entry
+    Entry(size: text.byte_len(), crc: hash.crc32(text).to_hex().pad_left(8, '0'))
+
+fn manifest(dir str) !Map[str, Entry]
+    mut m := Map[str, Entry]()
+    for name in fs.list_dir(dir)?
+        m[name] = digest(fs.read_text(path.join(dir, name))?)
+    m
+
+## One line per differing or unchanged name, in sorted order.
+fn diff(prev Map[str, Entry], cur Map[str, Entry]) List[str]
+    mut names := Set[str]()
+    for k in prev.keys()
+        names.add(k)
+    for k in cur.keys()
+        names.add(k)
+    mut lines := List[str]()
+    for name in names.sorted()
+        if not prev.contains(name)
+            lines.push("+ {name} ({cur[name].size} bytes)")
+        elif not cur.contains(name)
+            lines.push("- {name}")
+        elif prev[name] != cur[name]
+            lines.push("~ {name} {prev[name].crc} -> {cur[name].crc}")
+        else
+            lines.push("= {name}")
+    lines
+
+fn write_all(dir str, names List[str], texts List[str]) !
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+
+fn clean(dir str) !
+    for name in fs.list_dir(dir)?
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+
+fn main() !
+    root := fs.make_temp_dir("corpus_file_manifest_diff")?
+    a := path.join(root, "v1")
+    b := path.join(root, "v2")
+    fs.make_dir(a)?
+    fs.make_dir(b)?
+    write_all(a, ["main.c", "util.c", "README", "old.txt"], [
+        "int main() \{}\n",
+        "void u() \{}\n",
+        "docs\n",
+        "legacy\n",
+    ])?
+    write_all(b, ["main.c", "util.c", "README", "new.txt"], [
+        "int main() \{ return 0; }\n",
+        "void u() \{}\n",
+        "docs\n",
+        "fresh data\n",
+    ])?
+    ma := manifest(a)?
+    mb := manifest(b)?
+    print("v1: {ma.len()} files, v2: {mb.len()} files")
+    lines := diff(ma, mb)
+    for l in lines
+        print(l)
+    changes := lines.filter(|l| not l.starts_with("="))
+    print("{changes.len()} of {lines.len()} entries differ")
+    clean(a)?
+    clean(b)?
+    fs.remove(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn digest_detects_content()
+    assert_eq(digest("abc"), digest("abc"))
+    assert(digest("abc") != digest("abd"))
+    assert_eq(digest("").crc, "00000000")
+
+@test fn diff_classifies_names()
+    prev := {"a": digest("1"), "b": digest("2"), "c": digest("3")}
+    cur := {"a": digest("1"), "b": digest("22"), "d": digest("4")}
+    lines := diff(prev, cur)
+    assert_eq(lines.len(), 4)
+    assert_eq(lines[0], "= a")
+    assert(lines[1].starts_with("~ b"))
+    assert_eq(lines[2], "- c")
+    assert_eq(lines[3], "+ d (1 bytes)")
+
+@test fn identical_maps_have_no_changes()
+    m := {"x": digest("same")}
+    assert_eq(diff(m, m), ["= x"])

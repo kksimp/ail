@@ -99,10 +99,13 @@ fn Checker.select_channel(mut self, ch ast.Expr, what str) Ty
 ## A second `after` or `closed` arm (conc.select.4-5).
 fn Checker.select_twice(mut self, word str, at ast.Pos, first ast.Pos)
     rule := if word == "after" then "conc.select.4" else "conc.select.5"
-    diags.push(new_diag(rule, at, "a `select` has at most one `{word}` arm").with_note(
-        first,
-        "the first `{word}` arm is here",
-    ))
+    diags.push(
+        new_diag(
+            rule,
+            at,
+            "a `select` has at most one `{word}` arm",
+        ).with_note(first, "the first `{word}` arm is here"),
+    )
 
 ## The element type of a `Channel[T]`, or none.
 @allow("expr.match.3") fn channel_elem(t Ty) Ty?

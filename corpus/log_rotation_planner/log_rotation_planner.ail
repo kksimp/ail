@@ -87,7 +87,11 @@ fn main() !
 
 @test fn applying_a_plan_changes_files()
     dir := fs.make_temp_dir("corpus_log_rotation_planner_t")?
-    es := [Entry(name: "x", size: 3, age: 0), Entry(name: "y", size: 3, age: 20), Entry(name: "z", size: 3, age: 50)]
+    es := [
+        Entry(name: "x", size: 3, age: 0),
+        Entry(name: "y", size: 3, age: 20),
+        Entry(name: "z", size: 3, age: 50),
+    ]
     for e in es
         fs.write_text(path.join(dir, e.name), "abc")?
     apply(dir, es, plan(es, Policy(max_age: 30, keep: 9, compress_after: 7)))?

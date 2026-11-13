@@ -1,0 +1,142 @@
+## Expression formatter: parses arithmetic with numbers, variables, + - * /,
+## unary minus and parentheses into a tree, then prints it two ways:
+## normalised with the fewest parentheses, and fully parenthesised.
+## Re-parsing the normalised text must give the same tree.
+
+enum Expr
+    Num(n int)
+    Var(name str)
+    Neg(inner Expr)
+    Bin(op str, left Expr, right Expr)
+
+struct Parser
+    toks List[str]
+    pos int
+    bad bool
+
+fn tokenize(src str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in src.chars()
+        if c.is_digit() or c.is_alpha()
+            cur = "{cur}{c}"
+            continue
+        if cur != ""
+            out.push(cur)
+            cur = ""
+        if not c.is_space()
+            out.push("{c}")
+    if cur != ""
+        out.push(cur)
+    out
+
+fn Parser.peek(self) str
+    if pos < toks.len()
+        return toks[pos]
+    ""
+
+fn Parser.take(mut self) str
+    t := peek()
+    pos += 1
+    t
+
+fn Parser.expr(mut self) Expr
+    mut v := term()
+    while peek() == "+" or peek() == "-"
+        op := take()
+        r := term()
+        v = Expr.Bin(op: op, left: v, right: r)
+    v
+
+fn Parser.term(mut self) Expr
+    mut v := factor()
+    while peek() == "*" or peek() == "/"
+        op := take()
+        r := factor()
+        v = Expr.Bin(op: op, left: v, right: r)
+    v
+
+fn Parser.factor(mut self) Expr
+    t := take()
+    if t == "("
+        v := expr()
+        if take() != ")"
+            bad = true
+        return v
+    if t == "-"
+        return Expr.Neg(inner: factor())
+    first := t.char_at(0) else ' '
+    if first.is_digit()
+        n := t.to_int() else
+            bad = true
+            return Expr.Num(n: 0)
+        return Expr.Num(n: n)
+    if first.is_alpha()
+        return Expr.Var(name: t)
+    bad = true
+    Expr.Num(n: 0)
+
+fn parse(src str) Expr?
+    mut p := Parser(toks: tokenize(src), pos: 0, bad: false)
+    e := p.expr()
+    if p.bad or p.pos != p.toks.len()
+        return none
+    e
+
+fn prec(op str) int
+    if op == "+" or op == "-"
+        return 1
+    2
+
+fn prec_of(e Expr) int
+    match e
+        Bin(op, _, _) => prec(op)
+        _ => 9
+
+fn render(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Var(name) => name
+        Neg(inner) =>
+            if prec_of(inner) < 9
+                "-({render(inner)})"
+            else
+                "-{render(inner)}"
+        Bin(op, l, r) =>
+            ls := if prec_of(l) < prec(op) then "({render(l)})" else render(l)
+            rs := if prec_of(r) <= prec(op) then "({render(r)})" else render(r)
+            "{ls} {op} {rs}"
+
+fn full(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Var(name) => name
+        Neg(inner) => "-{full(inner)}"
+        Bin(op, l, r) => "({full(l)} {op} {full(r)})"
+
+fn show(src str)
+    e := parse(src) else
+        print("{src}: syntax error")
+        return
+    text := render(e)
+    again := parse(text) else Expr.Num(n: -1)
+    stable := again == e
+    print("{src}")
+    print("  normal:  {text}")
+    print("  full:    {full(e)}")
+    print("  re-parse stable: {stable}")
+
+fn main()
+    for src in ["1+2*3", "(1+2)*3", "a - (b - c)", "((a*b))/(c*d)", "-(x+1)*-y", "1 + * 2", "(1+2"]
+        show(src)
+
+@test fn minimal_parentheses()
+    assert_eq(render(parse("((1)+(2*3))")?), "1 + 2 * 3")
+    assert_eq(render(parse("a-(b-c)")?), "a - (b - c)")
+
+@test fn full_form()
+    assert_eq(full(parse("1+2*-x")?), "(1 + (2 * -x))")
+
+@test fn bad_input()
+    assert(parse("1 +") == none)
+    assert(parse(")") == none)

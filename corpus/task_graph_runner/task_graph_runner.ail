@@ -1,0 +1,96 @@
+## Task graph runner: jobs declare "name:weight:dep,dep" dependencies. The
+## runner schedules them in waves: every job whose dependencies are finished
+## runs as a task, the wave's results come back over a channel, and the next
+## wave starts. Jobs stuck behind a cycle or a missing dependency are reported.
+
+struct Job
+    name str
+    weight int
+    deps List[str]
+
+struct Done
+    name str
+    value int
+
+fn parse_job(spec str) Job
+    parts := spec.split(":")
+    mut deps := List[str]()
+    if parts.len() > 2 and parts[2] != ""
+        deps = parts[2].split(",")
+    weight := parts[1].to_int() else 0
+    Job(name: parts[0], weight: weight, deps: deps)
+
+## The job's result: a mix of its weight and its inputs' results.
+fn compute(weight int, inputs List[int]) int
+    mut v := weight * 31
+    for x in inputs
+        v = (v * 7 + x) % 10007
+    v
+
+fn run_job(job Job, inputs List[int], out Channel[Done])
+    out.send(Done(name: job.name, value: compute(job.weight, inputs)))
+
+fn ready_wave(jobs List[Job], finished Set[str]) List[Job]
+    mut wave := List[Job]()
+    for j in jobs
+        if finished.contains(j.name)
+            continue
+        if j.deps.all(|d| finished.contains(d))
+            wave.push(j)
+    wave.sorted(by: |x| x.name)
+
+fn main() !
+    specs := [
+        "pack:3:build,docs",
+        "build:5:compile,assets",
+        "compile:8:",
+        "assets:2:",
+        "docs:4:compile",
+        "deploy:1:pack,lint",
+        "lint:6:ghost",
+        "a:1:b",
+        "b:1:a",
+    ]
+    jobs := [parse_job(s) for s in specs]
+    mut finished := Set[str]()
+    mut values := Map[str, int]()
+    mut round := 1
+    while true
+        wave := ready_wave(jobs, finished)
+        if wave.is_empty()
+            break
+        out := Channel[Done](wave.len())
+        g := TaskGroup()
+        for job in wave
+            inputs := [values[d] for d in job.deps]
+            g.add(spawn run_job(job, inputs, out))
+        g.wait_all()?
+        out.close()
+        for r in out
+            values[r.name] = r.value
+            finished.add(r.name)
+        print("wave {round}: {[w.name for w in wave].join(" ")}")
+        round += 1
+    for name in values.keys().sorted()
+        print("{name:<8}{values[name]:>6}")
+    stuck := [k.name for k in jobs if not finished.contains(k.name)]
+    print("ran {finished.len()} of {jobs.len()} jobs, stuck: {stuck.join(",")}")
+
+@test fn parses_specs()
+    j := parse_job("x:4:a,b")
+    assert_eq(j.name, "x")
+    assert_eq(j.weight, 4)
+    assert_eq(j.deps, ["a", "b"])
+    assert_eq(parse_job("y:2:").deps.len(), 0)
+
+@test fn waves_respect_dependencies()
+    jobs := [parse_job("b:1:a"), parse_job("a:1:")]
+    first := ready_wave(jobs, Set[str]())
+    assert_eq(first.len(), 1)
+    assert_eq(first[0].name, "a")
+    second := ready_wave(jobs, {"a"})
+    assert_eq(second[0].name, "b")
+
+@test fn compute_is_deterministic()
+    assert_eq(compute(2, []), 62)
+    assert_eq(compute(2, [5]), (62 * 7 + 5) % 10007)
