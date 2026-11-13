@@ -99,8 +99,13 @@ least code and risk.
 - Follow-up: relations between two values (difference bounds) would let the
   same pass drop `xs[i]` checks outside counted loops; F7's wider inlining
   gives it more to see.
-- Measurements: see the PR for this ADR and the F9 job reports
-  (`f9-report-HOST-SHA8.txt`); numbers are added here when it merges.
+- Measurements (F9 job reports, 2026-11-12; wall ms, best of 11, after/before):
+  ail-linux x86-64: wordfreq 0.862; lzr 1.040 and vm 1.080 slower although
+  lzr runs 0.5% fewer instructions and vm the same, so code layout, not the
+  pass's output (lzr text 148,720 vs 156,448 bytes with the pass off).
+  Mac arm64: lzr 0.989, wordfreq 1.032 (a 6 ms run), vm equal. The compiler
+  is 4% smaller (10,320,065 vs 10,765,889 bytes). x86-64 loop placement is a
+  follow-up; the release run re-measures vm and lzr against the pre-F9 tree.
 
 ## Rejected alternatives
 
