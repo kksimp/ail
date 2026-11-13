@@ -444,7 +444,7 @@ fn lex_scaled(src str, scale int) Scaled
         li += 1
     end := ast.Pos(line: last_line, col: 1)
     if lx.open.len() > 0
-        lx.unclosed()
+        lx.unclosed(lines)
         # Close them for the parser too, so one report isn't followed by another.
         mut k := lx.open.len() - 1
         while k >= 0
@@ -474,12 +474,26 @@ fn Lexer.diag_msg(mut self, rule str, pos ast.Pos, msg str, help str)
 
 ## lex.stmt.2: the innermost bracket left open at the end of the file. The fix
 ## closes them at the end of the line, when they all opened on it.
-fn Lexer.unclosed(mut self)
+fn Lexer.unclosed(mut self, lines List[List[char]])
     last := open[open.len() - 1]
     mut one_line := true
     for o in open
         if o.pos.line != last.pos.line
             one_line = false
+    # One `[` left open: the `]` goes after the index or type argument when the line goes on (checkbench, ADR 1111).
+    if one_line and open.len() == 1 and last.c == '[' and last.pos.line >= 1 and last.pos.line <= lines.len()
+        k := bracket_close_at(lines[last.pos.line - 1], last.pos.col - 1)
+        if k >= 0
+            diags.push(Diag(
+                rule: "lex.stmt.2",
+                pos: last.pos,
+                msg: "this `[` is never closed",
+                fixed: true,
+                help: "",
+                fix: "close it after the index",
+                edits: [fix.insert(ast.Pos(line: last.pos.line, col: k + 1), "]")],
+            ))
+            return
     diags.push(Diag(
         rule: "lex.stmt.2",
         pos: last.pos,
@@ -489,6 +503,34 @@ fn Lexer.unclosed(mut self)
         fix: "close the brackets at the end of the line",
         edits: if one_line then [fix.at_line_end(last.pos, closers())] else [],
     ))
+
+## Where a `]` most likely belongs when the only bracket left open on a line is the `[` at `k`: after the name
+## that follows it, when the line goes on with `(` after a type argument (`List[str()`) or with `else`, `=`, `)`,
+## `,`, `and`, `or`, `then` after an index (`counts[w else 0`). -1 for the end of the line.
+fn bracket_close_at(line List[char], k int) int
+    mut j := k + 1
+    while j < line.len() and (name_char(line[j]) or line[j] == '.')
+        j += 1
+    if j == k + 1 or j >= line.len()
+        return -1
+    mut w := k - 1
+    while w >= 0 and name_char(line[w])
+        w -= 1
+    typed := w + 1 < k and line[w + 1].is_upper()
+    if line[j] == '('
+        return if typed then j else -1
+    mut r := j
+    while r < line.len() and line[r] == ' '
+        r += 1
+    if r >= line.len()
+        return -1
+    c := line[r]
+    if c == '=' or c == ')' or c == ',' or c == ':'
+        return j
+    for word in ["else", "then", "and", "or", "if"]
+        if word_at(line, r, word)
+            return j
+    -1
 
 ## The brackets still open, innermost first, as the characters that close them.
 fn Lexer.closers(self) str
@@ -862,6 +904,19 @@ fn Lexer.string(mut self, line List[char], start int, line_no int) int
     forget_brackets(line_no)
     line.len()
 
+## Whether the text of a `\{...}` in a string is plainly not an expression: JSON (`"key": 1`), a statement
+## (`return 1`, `int x;`), so the `\{` was meant as a literal brace (lex.str.2).
+fn literal_brace(line List[char], from int, to int) bool
+    inner := text_of(line, from, to).trim()
+    if inner.is_empty()
+        return false
+    if inner.starts_with("\"") or inner.contains("\":") or inner.contains(";")
+        return true
+    for w in ["return ", "fn ", "let ", "var ", "const ", "int ", "void ", "func ", "def "]
+        if inner.starts_with(w)
+            return true
+    false
+
 ## The arguments after a string that is a call's first argument: `, a, b)`. `close` is the index of the
 ## call's `)`, or -1 when the rest isn't plain arguments (a string, a brace or a char in it).
 struct TrailingArgs
@@ -1076,6 +1131,22 @@ fn Lexer.content(
                 if quoted
                     return to
                 return none
+            if literal_brace(line, i + 1, close)
+                # JSON or C code in a string: the brace was meant as text. One report and one fix for the whole
+                # `\{...}`, kept as text, so its inner braces and code aren't reported again (checkbench, ADR 1111).
+                inner := text_of(line, i + 1, close).trim()
+                diag_fix(
+                    "lex.str.2",
+                    here,
+                    "this `\{` starts an interpolation, but `{inner}` is not an expression",
+                    "write `\\\{` for a literal brace: text such as JSON or C code in a string escapes each `\{`",
+                    "escape the braces",
+                )
+                attach([fix.insert(ast.Pos(line: line_no, col: b + 1), "\\") for b in i..close if line[b] == '{'])
+                for ci in i..close + 1
+                    value.push(line[ci])
+                i = close + 1
+                continue
             if value.len() > 0 and value[value.len() - 1] == '$'
                 # lex.str.8: `${n}` is not interpolation in AIL.
                 diag_fix(

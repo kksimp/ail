@@ -32,6 +32,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -41,7 +42,7 @@ import mutate  # noqa: E402
 GENERIC = [
     r"docs/language-card\.md lists",
     r"declare it first",
-    r"choose a different name(?! `)",
+    r"choose a different name(?!,? such as `| `)",
     r"see docs/status\.md",
     r"lists the (?:methods|declarations)",
     r"^check the spelling\.?$",
@@ -102,7 +103,8 @@ class Bench:
         self.root = os.getcwd()
         self.ail = a.ail.split()
         self.tmp = tempfile.mkdtemp(prefix="checkbench-")
-        self.baseline = {}
+        self.oracle = {}
+        self.lock = threading.Lock()
 
     def check(self, path):
         rc, out, err, dt = run(self.ail + ["check", "--json", path], self.root)
@@ -119,6 +121,33 @@ class Bench:
         if rc != 0 or got != want:
             return "differs", f"exit {rc}\n{got[-400:]}"
         return "same", ""
+
+    def siblings(self, src, d):
+        """Link the program's sibling directories (examples/configs, data) next to its copy, as it reads them."""
+        here = os.path.dirname(src)
+        for n in os.listdir(here):
+            p = os.path.join(here, n)
+            if os.path.isdir(p) and not os.path.exists(os.path.join(d, n)):
+                try:
+                    os.symlink(os.path.abspath(p), os.path.join(d, n))
+                except OSError:
+                    pass
+
+    def oracle_ok(self, src, want):
+        """Whether the unchanged copy builds and prints the expected output from a temp directory (else a fix
+        can't be judged by output, and is counted unverified, not wrong)."""
+        with self.lock:
+            if src in self.oracle:
+                return self.oracle[src]
+        d = os.path.join(self.tmp, "oracle", os.path.basename(src)[:-4])
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, os.path.basename(src))
+        shutil.copy(src, p)
+        self.siblings(src, d)
+        ok = self.build_run(p, want)[0] == "same"
+        with self.lock:
+            self.oracle[src] = ok
+        return ok
 
     def clean_inputs(self):
         """The programs that check clean as copies (a copy may lose sibling files)."""
@@ -174,6 +203,7 @@ class Bench:
         p = os.path.join(d, stem + ".ail")
         with open(p, "w", encoding="utf-8") as f:
             f.write(m.text)
+        self.siblings(src, d)
         r = {"id": k, "mutator": m.mutator, "group": m.group, "program": os.path.relpath(src, self.root), "what": m.what,
              "lo": m.lo, "hi": m.hi, "silent_ok": m.silent_ok}
         rc, recs, dt, err = self.check(p)
@@ -191,6 +221,8 @@ class Bench:
         if not errs:
             res, detail = self.build_run(p, want)
             r["outcome"] = "benign" if res == "same" else "silent"
+            if res != "same" and not self.oracle_ok(src, want):
+                r["outcome"] = "unverified"
             r["detail"] = detail
             return r
         first = errs[0]
@@ -214,6 +246,10 @@ class Bench:
                 else:
                     res, detail = self.build_run(p, want)
                     r["fix"] = {"same": "right", "differs": "changes_output", "nobuild": "does_not_build"}[res]
+                    if res == "differs" and not m.restores:
+                        r["fix"] = "right"  # fills in what the mistake deleted: clean and builds is right
+                    elif res != "same" and not self.oracle_ok(src, want):
+                        r["fix"] = "unverified"
                     r["detail"] = detail
                 if r["fix"] != "right":
                     with open(p + ".fixed", "w", encoding="utf-8") as f:
@@ -242,8 +278,10 @@ def stats(rs):
         "on_line_pct": pct(sum(1 for r in rep if r["on_line"]), len(rep)),
         "generic_pct": pct(sum(r["generic"] for r in rep), nerr),
         "fixable_pct": pct(sum(1 for r in rep if r["fixable"]), len(rep)),
-        "fix_ok_pct": pct(sum(1 for r in fixes if r["fix"] == "right"), len(fixes)),
+        "fix_ok_pct": pct(sum(1 for r in fixes if r["fix"] == "right"),
+                          sum(1 for r in fixes if r["fix"] != "unverified")),
         "fixes_applied": len(fixes),
+        "unverified": sum(1 for r in rs if r.get("fix") == "unverified" or r["outcome"] == "unverified"),
         "silent": sum(1 for r in rs if r["outcome"] == "silent" and not r["silent_ok"]),
         "silent_ok": sum(1 for r in rs if r["outcome"] == "silent" and r["silent_ok"]),
         "benign": sum(1 for r in rs if r["outcome"] == "benign"),
@@ -257,7 +295,7 @@ def pct(a, b):
 
 
 COLS = ["mutants", "reported", "median_errors", "le2_pct", "on_line_pct", "generic_pct", "fixable_pct", "fix_ok_pct",
-        "fixes_applied", "silent", "silent_ok", "benign", "crash"]
+        "fixes_applied", "unverified", "silent", "silent_ok", "benign", "crash"]
 
 
 def table(summary):
@@ -273,7 +311,7 @@ def badness(r):
         return 1000
     if r["outcome"] == "silent" and not r["silent_ok"]:
         return 500
-    if r.get("fix") and r["fix"] != "right":
+    if r.get("fix") and r["fix"] not in ("right", "unverified"):
         return 400
     if r["outcome"] != "reported":
         return 0

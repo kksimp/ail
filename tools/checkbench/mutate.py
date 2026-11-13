@@ -28,6 +28,13 @@ class Mutant:
     hi: int
     what: str
     silent_ok: bool = False
+    # False when the mistake deletes information no fix can know (a match arm, a field's value, an argument):
+    # a fix is then right when the file checks clean and builds, not when it prints the original output.
+    restores: bool = True
+
+
+PLACEHOLDER = {"delete_arm", "delete_field", "arg_count", "delete_tail", "return_wrong_type", "drop_else",
+               "opt_as_value", "int_for_float"}
 
 
 @dataclass
@@ -186,7 +193,7 @@ def pick(rng, xs):
 
 
 def mk(name, group, text, lo, hi, what, silent_ok=False):
-    return Mutant(name, group, text, lo + 1, hi + 1, what, silent_ok)
+    return Mutant(name, group, text, lo + 1, hi + 1, what, silent_ok, name not in PLACEHOLDER)
 
 
 # ---------------------------------------------------------------- names
@@ -316,12 +323,13 @@ def m_keyword_local(prog, rng):
 # ---------------------------------------------------------------- types
 
 def m_int_for_float(prog, rng):
-    cands = finds(prog, r"(?<![\w.])(\d+)\.(\d+)(?![\w.])", prog.body_lines())
+    # `2.0` written `2`: the same value, so a clean check that prints the same is fine (silent_ok)
+    cands = finds(prog, r"(?<![\w.])(\d+)\.0(?![\w.\d])", prog.body_lines())
     c = pick(rng, cands)
     if not c:
         return None
     i, s, e, m = c
-    return mk("int_for_float", "types", edit(prog, i, s, e, m.group(1)), i, i, f"{m.group(0)} -> {m.group(1)}")
+    return mk("int_for_float", "types", edit(prog, i, s, e, m.group(1)), i, i, f"{m.group(0)} -> {m.group(1)}", True)
 
 
 def m_drop_to_float(prog, rng):

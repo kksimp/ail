@@ -1266,7 +1266,22 @@ fn Checker.associated(
         if dt := distinct_assoc(d, n, at, args, expect)
             return dt
         args_only(args)
-        err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        # The type's associated functions and variants are the names to suggest (checkbench, ADR 1111).
+        mut known := List[str]()
+        for key in methods.keys()
+            if rest := key.strip_prefix("{tn}.")
+                known.push(rest)
+        if e := enum_of_def(d)
+            for v in prog.enums[e].variants
+                known.push(v.name)
+        mut nd := new_diag("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        if s := suggest(n, known)
+            nd = nd.did_you_mean(n, s)
+        elif known.len() > 0
+            nd = nd.with_help("`{tn}` has {list_names(known.sorted())}; `ail api FILE` lists each signature")
+        else
+            nd = nd.with_help("`{tn}` has no associated functions; declare one with `fn {tn}.{n}(...)`")
+        diags.push(nd)
         return Ty.Unknown
     private_fn(i, at)
     sig := sigs[i]
@@ -1378,7 +1393,14 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         match rt
             Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
             Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
-            _ => d = d.with_help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types")
+            _ =>
+                # Name what there is, so the next try needs no lookup (checkbench, ADR 1111).
+                if names.len() > 0
+                    shown := names.sorted()
+                    more := if shown.len() > 24 then ", ..." else ""
+                    d = d.with_help("{show(rt)} has {list_names(shown.take(24))}{more}; `ail ask std \"WORDS\"` finds a method by what it does")
+                else
+                    d = d.with_help("{show(rt)} has no methods; `ail ask std \"WORDS\"` finds a std function by what it does")
     diags.push(d)
 
 ## `iter`, `collect` and their kin on a list or a set: Rust's and Java's iterator words. A list is iterable and
