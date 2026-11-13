@@ -1,0 +1,4 @@
+type Celsius float
+
+fn main()
+    print(1)

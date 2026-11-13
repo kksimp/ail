@@ -49,9 +49,10 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
             ptr_target(inner_ty, inner.pos)
             return Ty.PtrOf(inner_ty)
         Fallible =>
-            unsupported(
+            unsupported_help(
                 t.pos,
-                "a type that can fail is only supported as a function's return type in the bootstrap (spec err.type.1)",
+                "`T ! E` is only a function's result type (err.type.1)",
+                "to keep a result in a variable or field, handle it with `else` or `?` first, or use `T?`",
             )
             return Ty.Unknown
         AnyTrait(tr) =>
@@ -259,6 +260,10 @@ fn Checker.unknown_type(mut self, n str, at ast.Pos)
     mut d := new_diag("expr.name.1", at, "unknown type `{n}`")
     if t := foreign_type_word(n)
         d = d.with_help("write `{t}`").with_fix("write `{t}`", [fix.replace(at, n, t)])
+    elif n == "Result"
+        d = d.with_help("a result type is written `T ! E`: `fn f(n int) int ! MyError`, where `MyError` is declared with `error enum`; the success value is returned as it is and the failure with `return Variant` (err.type.1)")
+    elif n == "Box" or n == "Rc" or n == "Arc" or n == "RefCell"
+        d = d.with_help("AIL has no `{n}`: values are owned, the collector frees them, and shared mutation goes through `ref T` (own.ref.1)")
     elif s := suggest(n, candidates)
         d = d.did_you_mean(n, s)
     elif n.len() == 1 and n.chars()[0] >= 'A' and n.chars()[0] <= 'Z'

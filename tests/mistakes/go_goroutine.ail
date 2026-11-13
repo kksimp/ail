@@ -1,0 +1,5 @@
+fn work(n int)
+    print(n)
+
+fn main()
+    go work(1)

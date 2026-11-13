@@ -89,9 +89,10 @@ use fix
         Comp(form, elem, value, clauses, _) => comprehension(form, elem, value, clauses, expect)
         Range(lo, hi, _, at) =>
             range_bounds(lo, hi)
-            unsupported(
+            unsupported_help(
                 at,
-                "a range outside `for` and list slicing is not supported by the bootstrap yet (spec expr.loop.3)",
+                "a range `a..b` is only a `for` bound, a slice index `xs[a..b]` or a `match` pattern (expr.loop.3)",
+                "to get the values as a list write `[i for i in a..b]`; to test membership write `x >= a and x < b`",
             )
             Ty.Unknown
         If(branches, els, else_err, at) => if_expr(branches, els, else_err, at, expect, need)
@@ -211,9 +212,10 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if i := fns.get(n)
         return fn_value(n, i, at)
     if PRELUDE_FNS.contains(n)
-        unsupported(
+        unsupported_help(
             at,
-            "using the built-in function `{n}` as a value is not supported by the bootstrap yet",
+            "the built-in `{n}` can't be used as a value (only functions you declare can, type.fn.2)",
+            "wrap it in a function you declare, then pass that function's name",
         )
         return Ty.Unknown
     if d := types.get(n)
@@ -1499,6 +1501,8 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
         )])
     elif s := suggest(n, candidates)
         d = d.did_you_mean(n, s)
+    elif nargs != none and n.chars().len() > 0 and n.chars()[0].is_upper()
+        d = d.with_help("no type or variant named `{n}` is in scope here; declare it with `struct`, `enum` or `error enum`, or import its module with `use`")
     else
         d = d.with_help("no variable, function or type named `{n}` is in scope here; declare it first, e.g. `{n} := value`")
     diags.push(d)

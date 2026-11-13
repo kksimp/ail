@@ -1,0 +1,5 @@
+fn f(s str) int
+    s.len()
+
+fn main()
+    print(f("a"))

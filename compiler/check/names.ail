@@ -168,12 +168,12 @@ pub fn edit_distance(a str, b str) int
 ## A type name from another language and the AIL type for it.
 pub fn foreign_type_word(name str) str?
     match name
-        "Integer" | "Int" | "long" | "Long" | "short" | "Number" | "number" | "integer" | "int32" | "int64" | "size_t" => "int"
+        "Integer" | "Int" | "long" | "Long" | "short" | "Number" | "number" | "integer" | "int32" | "int64" | "size_t" | "usize" | "isize" | "uint" | "uint64" | "ssize_t" | "i128" | "u128" => "int"
         "String" | "string" | "std::string" | "Str" | "text" => "str"
         "Boolean" | "boolean" | "Bool" => "bool"
         "double" | "Double" | "float64" | "Float" | "float32" | "real" => "float"
-        "Vec" | "Array" | "array" | "list" | "ArrayList" | "vector" => "List"
-        "dict" | "Dict" | "HashMap" | "Dictionary" | "map" | "object" => "Map"
-        "HashSet" | "set" | "TreeSet" => "Set"
+        "Vec" | "Array" | "array" | "list" | "ArrayList" | "vector" | "VecDeque" => "List"
+        "dict" | "Dict" | "HashMap" | "Dictionary" | "map" | "object" | "BTreeMap" => "Map"
+        "HashSet" | "set" | "TreeSet" | "BTreeSet" => "Set"
         "Character" | "rune" => "char"
         _ => none

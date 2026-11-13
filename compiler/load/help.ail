@@ -34,5 +34,5 @@
         "contract.decl.2" => "a contract is a pure `bool` expression, e.g. `requires n >= 0`"
         "trait.impl.1" | "trait.impl.4" | "trait.std.2" => "`impl Trait for Type` then each method; `ail api FILE` lists the traits"
         "gen.infer.2" => "give as many type arguments as the type declares, in `[]`"
-        "bootstrap.unsupported" => "this part of the spec isn't implemented in the bootstrap yet; see docs/status.md"
+        "bootstrap.unsupported" => "this construct has no AIL form in 0.1; docs/language-card.md lists what AIL has, and docs/status.md what is planned"
         _ => none

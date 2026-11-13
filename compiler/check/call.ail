@@ -652,7 +652,7 @@ fn Checker.finish(mut self, what str, vars List[int], mut binds List[Bind], at a
 fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(l.pos, "this call takes no named arguments (expr.call.3: only functions and methods you declare do)", "pass the arguments positionally: `f(a, b)`")
         if a.mutable
             err_help(
                 "own.param.2",
@@ -1600,7 +1600,7 @@ fn Checker.reject_test_call(mut self, i int, at ast.Pos)
 fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(l.pos, "this call takes no named arguments (expr.call.3: only functions and methods you declare do)", "pass the arguments positionally: `f(a, b)`")
         if a.mutable
             err_help(
                 "own.param.2",

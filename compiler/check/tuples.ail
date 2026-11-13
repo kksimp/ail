@@ -169,7 +169,9 @@ fn Checker.let_tuple(mut self, names List[ast.Binder], value ast.Expr, at ast.Po
                     "type.tuple.4",
                     at,
                     "several names take a tuple apart, but the value is {show(vt)}",
-                    "bind it to one name",
+                    if names.len() == 2 and ["err", "e", "error", "ok"].contains(names[1].name)
+                        then "AIL has no `(value, err)` pairs: a call that can fail is `v := f()?` to pass the error on, or `v := f() else d`; `T ! E` is the result type (err.type.1)"
+                        else "bind it to one name",
                 )
     for k in 0..names.len()
         b := names[k]
