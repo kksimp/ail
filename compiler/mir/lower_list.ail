@@ -16,6 +16,7 @@ fn is_list_edit(name str) bool
         or name == "insert"
         or name == "clear"
         or name == "reverse"
+        or name == "reversed"
         or name == "pop"
         or name == "contains"
         or name == "sort"
@@ -114,6 +115,10 @@ fn Lower.lower_list_edit(
         call("rt.list_clear", [r.id], Ty.Unit)
         watch_plain(npos, r, "clear")
         return unit
+    if name == "reversed" and vs.len() == 0
+        copy := call("rt.list_copy", [r.id, size], r.ty)
+        call("rt.list_reverse", [copy, size], Ty.Unit)
+        return Val(id: copy, ty: r.ty)
     if name == "reverse" and vs.len() == 0
         call("rt.list_reverse", [r.id, size], Ty.Unit)
         watch_plain(npos, r, "reverse")

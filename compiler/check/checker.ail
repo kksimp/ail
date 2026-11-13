@@ -413,6 +413,16 @@ fn Checker.provides(self, b int, tr int) bool
 
 ## Traits other languages use to define operators AIL has none of (trait.op.2).
 OTHER_OPERATOR_TRAITS := [
+    "Add",
+    "Sub",
+    "Mul",
+    "Div",
+    "Rem",
+    "Neg",
+    "Index",
+    "IndexMut",
+    "PartialEq",
+    "PartialOrd",
     "Pow",
     "Not",
     "BitAnd",
@@ -449,7 +459,7 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
             "trait.op.2",
             at,
             "`{n}` would define an operator, and no operator beyond those of `trait.op.1` can be defined",
-            "write a named method instead, e.g. `fn pow(self, other Self) Self`, and call it as `a.pow(b)`",
+            "the operator traits are `Eq` (`==` and `!=`) and `Ord` (`<`, `<=`, `>` and `>=`); for anything else write a named method, e.g. `fn add(self, other Self) Self`, and call it as `a.add(b)`",
         )
         return none
     mut d := new_diag("expr.name.1", at, "unknown trait `{n}`")

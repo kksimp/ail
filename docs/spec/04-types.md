@@ -1154,8 +1154,26 @@ set. *(ADR 0340)*
 `x` to the list at `k`, and starts an empty list first when `k` is missing. On
 a map with any other value type it is a compile-time error. *(ADR 0341)*
 
+**type.map.12** — `m.get_or(k, d)` returns the value stored under `k`, or `d` when
+`k` is missing; `d` has the value type and is always evaluated. It is the same
+as `m.get(k) else d`. *(ADR 1087)*
+
+**type.coll.21** — `xs.reversed()` returns a new list with the elements of `xs`
+in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
+in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
+
+```ail rules=type.map.12,type.coll.21
+fn main()
+    m := {"a": 1}
+    print(m.get_or("a", 0))                 # 1
+    print(m.get_or("b", 0))                 # 0
+    xs := [3, 1, 2]
+    print(xs.reversed())                    # [2, 1, 3]
+    print(xs.sorted().reversed())           # [3, 2, 1]
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
-`v := m.get(k) else d`, `contains`, and iterating `keys()` and indexing.
+`m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 
 ```ail fragment
 mut seen := Set[str]()

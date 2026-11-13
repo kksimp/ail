@@ -177,6 +177,7 @@ pub LIST_METHODS := [
     "extend",
     "clear",
     "reverse",
+    "reversed",
     "contains",
     "index_of",
     "join",
@@ -197,7 +198,7 @@ pub LIST_METHODS := [
     "enumerate",
 ]
 
-pub MAP_METHODS := ["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"]
+pub MAP_METHODS := ["len", "is_empty", "get", "get_or", "contains", "remove", "keys", "values", "top"]
 
 pub SET_METHODS := [
     "len",
@@ -437,6 +438,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return make(true, [Ty.ListOf(e)], Ty.Unit, Need.NoNeed)
             if n == "clear" or n == "reverse"
                 return make(true, [], Ty.Unit, Need.NoNeed)
+            if n == "reversed"
+                return make(false, [], Ty.ListOf(e), Need.NoNeed)
             if n == "contains"
                 return make(false, [e], Ty.Bool, Need.NeedEq)
             if n == "index_of"
@@ -459,6 +462,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Int)
             if n == "get"
                 return read([k], Ty.Opt(v))
+            if n == "get_or"
+                return read([k, v], v)
             if n == "contains"
                 return read([k], Ty.Bool)
             if n == "remove"
@@ -626,7 +631,7 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
             "expr.call.1",
             at,
             "`m.get(k)` takes only the key, and gives a `V?`",
-            "for a default, write `v := m.get(k) else default`",
+            "for a default, write `m.get_or(k, default)` or `v := m.get(k) else default`",
         )
         return b.ret
     elem := elem_of(rt)
