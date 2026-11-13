@@ -1202,7 +1202,7 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
             "lex.str.1",
             pos,
             "unknown escape sequence `\\}`",
-            "`}` needs no escape: write `}`; only `\\\{` is an escape, to keep `{` from starting an interpolation",
+            "`}` needs no escape: write `}`; only `\\\{` is an escape, to keep `\{` from starting an interpolation",
             "remove the backslash",
         )
         attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
