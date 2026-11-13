@@ -715,7 +715,8 @@ fn main() !
     if args.len() > 1 and args[0] == "--shard"
         kn := args[1].split("/")
         shard_k = kn[0].to_int() else 0
-        shard_n = if kn.len() == 2 then kn[1].to_int() else 1
+        if kn.len() == 2
+            shard_n = kn[1].to_int() else 1
         if shard_n < 1 or shard_k < 0 or shard_k >= shard_n
             io.eprint("bad shard `{args[1]}`: write K/N with 0 <= K < N")
             io.exit(2)
