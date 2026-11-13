@@ -47,3 +47,4 @@ nativex@0/4
 nativex@1/4
 nativex@2/4
 nativex@3/4
+checkfuzz

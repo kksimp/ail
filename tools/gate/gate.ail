@@ -3973,6 +3973,15 @@ fn Gate.crypto(mut self)
     if w.status != 0
         red("crypto wire fuzz", "exit {w.status}\n{w.out}")
 
+## The checker fuzz in its fast form (fuzz.chk.1-3, ADR 1112): 300 mutants, the extremes, and files of
+## five functions with one mistake each. `ail check` must neither hang nor trap, and must report all five.
+fn Gate.checkfuzz(mut self, tmp str)
+    r := sh_run(
+        "perl -e 'alarm 900; exec @ARGV' \"$PWD/ail\" run tools/fuzz/check_fuzz.ail 300 1 \"{tmp}/checkfuzz\" 2>&1",
+    )
+    if r.status != 0 or not r.out.contains("CHECKFUZZ GREEN")
+        red("checkfuzz", "exit {r.status}\n{r.out}")
+
 fn main() !
     args := env.args()
     all := [
@@ -3995,6 +4004,7 @@ fn main() !
         "try",
         "parity",
         "corpus",
+        "checkfuzz",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -4059,6 +4069,7 @@ fn main() !
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
             "parity" => g.parity()
+            "checkfuzz" => g.checkfuzz(tmp)
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
