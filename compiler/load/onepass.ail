@@ -10,21 +10,21 @@
 ## dropped: they judge the whole program, and a broken declaration changes it.
 use ast
 
-## The lines [first, last] (1-based, in the file's own numbering) of the segment
+## The lines [first, end_row] (1-based, in the file's own numbering) of the segment
 ## around `at`, in `lines`.
 fn segment_around(lines List[str], at int)(int, int)
-    mut at_line := at
-    if at_line > lines.len()
-        at_line = lines.len()
-    if at_line < 1
-        at_line = 1
-    mut first := at_line
+    mut row_in := at
+    if row_in > lines.len()
+        row_in = lines.len()
+    if row_in < 1
+        row_in = 1
+    mut first := row_in
     while first > 1 and not opens_segment(lines, first)
         first -= 1
-    mut last := at_line
-    while last < lines.len() and not opens_segment(lines, last + 1)
-        last += 1
-    (first, last)
+    mut end_row := row_in
+    while end_row < lines.len() and not opens_segment(lines, end_row + 1)
+        end_row += 1
+    (first, end_row)
 
 ## Does line `n` start a declaration: text in column 1 that is not a comment? An
 ## attribute line starts one unless the line above it is an attribute, and a
