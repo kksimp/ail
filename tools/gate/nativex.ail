@@ -131,9 +131,10 @@ fn Run.mir(mut self)
             elif "{problems.join("\n")}\n" != slurp("{stem}.err")
                 red(case, "differs from the expected output; got:\n{problems.join("\n")}")
     # ADR 0722: each `native.subset.1` problem is followed by its `help:` line. Every help
-    # form of subset_help.ail is native now (its .mir golden), so this uses a refused program.
+    # form of subset_help.ail is native now (its .mir golden), so this uses a refused program
+    # (an enum converted to `any Trait`, still outside the subset; ADR 1109 closed the tuple ones).
     checks += 1
-    case := "tests/native/tuples_subset.ail"
+    case := "tests/native/traits_out.ail"
     r := comp("mir {case}")
     mut lines := List[str]()
     mut prev := false
@@ -146,7 +147,7 @@ fn Run.mir(mut self)
             prev = false
         else
             prev = false
-    if "{lines.join("\n")}\n" != slurp("tests/native/tuples_subset.help")
+    if "{lines.join("\n")}\n" != slurp("tests/native/traits_out.help")
         red("subset help lines", lines.join("\n"))
 
 ## ADR 0814: a batch build gives the same bytes as one `ail build` per program.

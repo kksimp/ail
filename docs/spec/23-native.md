@@ -1042,9 +1042,21 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
+trait Named
+    fn name(self) str
+
+enum Color
+    Red
+
+impl Named for Color
+    fn name(self) str
+        "red"
+
+fn show(n any Named) str
+    n.name()
+
 fn main()
-    cs := ['b', 'a']
-    print(cs.sorted(by: |c| c))
+    print(show(Color.Red))
 ```
 
 ```ail norun rules=native.build.2

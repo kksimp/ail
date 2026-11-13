@@ -1,5 +1,5 @@
 ## One construct per `native.subset.1` help form (ADR 0722). Every one of them is native
-## now, so this is a .mir golden; the help-lines check uses tuples_subset.ail.
+## now, so this is a .mir golden; the help-lines check uses traits_out.ail.
 struct Job
     name str
 

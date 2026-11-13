@@ -1,3 +1,0 @@
-fn main()
-    cs := ['b', 'a']
-    print(cs.sorted(by: |c| c))
