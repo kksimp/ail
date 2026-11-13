@@ -23,7 +23,7 @@ is an error, `assert_err` doesn't exist (and `ail fix` offered to rename it to `
 - `FormatSpec` gets one field, `flags`, a string of the marks `+0,be`, so the AST JSON gains `"flags"`.
 - `s.to_int(radix)`, `n.to_str(radix)`, `n.to_str()` (`type.str.20`); `find`, `rfind`, `count`
   and `replace` take a `char` (`type.str.6`); `m.get_or(k, d)` (`type.map.12`); `xs.reversed()`
-  (`type.coll.21`); the unknown-trait help for `Add`, `Index` and friends names the two operator
+  (`type.coll.27`); the unknown-trait help for `Add`, `Index` and friends names the two operator
   traits there are, `Eq` and `Ord` (`trait.op.2`).
 - Descending order is `xs.sorted().reversed()`; no `desc:` flag (one way to write it, and
   `reversed()` is needed anyway). Package S11 (collection vocabulary) keeps this.

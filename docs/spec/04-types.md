@@ -1337,11 +1337,11 @@ a map with any other value type it is a compile-time error. *(ADR 0341)*
 `k` is missing; `d` has the value type and is always evaluated. It is the same
 as `m.get(k) else d`. *(ADR 1087)*
 
-**type.coll.21** — `xs.reversed()` returns a new list with the elements of `xs`
+**type.coll.27** — `xs.reversed()` returns a new list with the elements of `xs`
 in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
 in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
 
-```ail rules=type.map.12,type.coll.21
+```ail rules=type.map.12,type.coll.27
 fn main()
     m := {"a": 1}
     print(m.get_or("a", 0))                 # 1
