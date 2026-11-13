@@ -66,6 +66,9 @@ struct Parser
     ## The struct whose members are being parsed ("" outside one), for the
     ## fix that moves its methods out (type.struct.2).
     member_owner str
+    ## Keywords already reported as a binding's name: later uses read as that
+    ## name, so the one `lex.kw.1` with its rename fix is the only error (ADR 1085).
+    misnamed Set[str]
 
 ## The kind of a token, in one word.
 fn tok_tag(t Tok) str
@@ -160,6 +163,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         consts: [],
         uses: [],
         member_owner: "",
+        misnamed: Set[str](),
     )
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
@@ -643,6 +647,7 @@ fn Parser.keyword_as_name(mut self, k int)
     if not rename_is_safe(word)
         error_text("lex.kw.1", pos, msg, help, "")
         return
+    misnamed.add(word)
     error_fix(
         "lex.kw.1",
         pos,
@@ -2555,6 +2560,10 @@ fn Parser.primary(mut self) ast.Expr?
             i += 1
             return ast.Expr.Name(name: n, pos: pos)
         Kw(k) =>
+            # `if error != ""` after `error := ...` was reported (lex.kw.1, ADR 1085).
+            if misnamed.contains(k)
+                i += 1
+                return ast.Expr.Name(name: k, pos: pos)
             if k == "true" or k == "false"
                 i += 1
                 return ast.Expr.Bool(value: k == "true", pos: pos)
@@ -2725,6 +2734,7 @@ fn Parser.sub_expression(mut self, code List[Token]) ast.Expr?
     sub.in_interp = true
     sub.generic_names = generic_names
     sub.aliases = aliases
+    sub.misnamed = misnamed
     e := sub.expression()
     if e != none and sub.peek() != Tok.Eof
         sub.unexpected("`}` after the interpolated expression", "lex.str.2")
