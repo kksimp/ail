@@ -413,6 +413,11 @@ PKGS = {
         "util/util.ail": "fn nothing[T]() T?\n    none\n\npub fn size() int\n    x := nothing[int]() else 3\n    x\n",
         "other/other.ail": "pub fn run() int\n    y := nothing[int]() else 4\n    y\n",
     },
+    # A program's own `Heap` beside the prelude's `Grid` (ai-review p2_route; dd083278 fixed it in the tree,
+    # the seed before it still refused `Grid.fill`).
+    "own_heap_with_grid": {
+        "main.ail": "struct Heap[T Ord]\n    items List[T]\n\nfn Heap[T].new() Heap[T]\n    Heap[T](items: [])\n\nfn main()\n    mut g := Grid.fill(2, 3, -1)\n    g[1, 2] = 4\n    h := Heap[int].new()\n    print(g[1, 2] + h.items.len())\n",
+    },
     # The same in the root module, across two files.
     "dup_fn_in_root": {
         "main.ail": "fn twice(x int) int\n    x * 2\n\nfn main()\n    print(twice(2))\n",
