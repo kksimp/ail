@@ -57,6 +57,7 @@ STD_EFFECTS := [
             "read_link",
             "symlink",
             "truncate",
+            "sync",
             "write_at",
         ],
         effects: ["fs", "io"],
