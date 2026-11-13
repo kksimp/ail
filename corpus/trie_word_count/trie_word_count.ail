@@ -1,0 +1,92 @@
+## A word-frequency trie. Every word of a text is inserted; each node counts
+## the words that end there and the words that pass through it, so the number
+## of words with a given prefix is one lookup. The program lists the words in
+## alphabetical order with their counts and answers prefix queries.
+
+ALPHABET := "abcdefghijklmnopqrstuvwxyz"
+
+TEXT := "the cat and the hat sat on the mat then the cat ran and the hat ran to the thatch"
+
+struct Trie
+    edges Map[str, int]
+    ends List[int]
+    through List[int]
+
+fn Trie.new() Trie
+    Trie(edges: {}, ends: [0], through: [0])
+
+fn Trie.insert(mut self, word str)
+    mut cur := 0
+    self.through[0] += 1
+    for ch in word.chars()
+        key := "{cur}:{ch}"
+        if nxt := self.edges.get(key)
+            cur = nxt
+        else
+            nid := self.ends.len()
+            self.ends.push(0)
+            self.through.push(0)
+            self.edges[key] = nid
+            cur = nid
+        self.through[cur] += 1
+    self.ends[cur] += 1
+
+fn Trie.node_of(self, prefix str) int
+    mut cur := 0
+    for ch in prefix.chars()
+        key := "{cur}:{ch}"
+        nxt := self.edges.get(key) else return -1
+        cur = nxt
+    cur
+
+fn Trie.count_word(self, word str) int
+    node := self.node_of(word)
+    if node < 0
+        return 0
+    self.ends[node]
+
+fn Trie.count_prefix(self, prefix str) int
+    node := self.node_of(prefix)
+    if node < 0
+        return 0
+    self.through[node]
+
+fn Trie.walk(self, node int, text str) List[str]
+    mut out := List[str]()
+    if self.ends[node] > 0
+        out.push("{text}={self.ends[node]}")
+    for letter in ALPHABET.chars()
+        key := "{node}:{letter}"
+        if nxt := self.edges.get(key)
+            out.extend(self.walk(nxt, "{text}{letter}"))
+    out
+
+fn main()
+    mut t := Trie.new()
+    for w in TEXT.split(" ")
+        t.insert(w)
+    print("words: {t.count_prefix("")}, nodes: {t.ends.len()}")
+    print(t.walk(0, "").join(" "))
+    for p in ["th", "t", "ca", "h", "x", "the", "that"]
+        print("prefix {p}: {t.count_prefix(p)} words, exact {t.count_word(p)}")
+
+@test fn counts_exact_and_prefix()
+    mut t := Trie.new()
+    for w in ["to", "tea", "to", "ten"]
+        t.insert(w)
+    assert_eq(t.count_word("to"), 2)
+    assert_eq(t.count_word("te"), 0)
+    assert_eq(t.count_prefix("te"), 2)
+    assert_eq(t.count_prefix("t"), 4)
+
+@test fn missing_prefix_counts_zero()
+    mut t := Trie.new()
+    t.insert("abc")
+    assert_eq(t.count_prefix("abd"), 0)
+    assert_eq(t.count_word("abcd"), 0)
+
+@test fn walk_is_alphabetical()
+    mut t := Trie.new()
+    for w in ["b", "a", "ab", "b"]
+        t.insert(w)
+    assert_eq(t.walk(0, ""), ["a=1", "ab=1", "b=2"])

@@ -1,0 +1,37 @@
+seed 1: Bears (91)
+seed 2: Lions (88)
+seed 3: Tigers (84)
+seed 4: Hawks (84)
+seed 5: Wolves (77)
+seed 6: Eagles (70)
+seed 7: Sharks (65)
+-- chalk bracket
+R1: Bears has a bye
+R1: Hawks beats Wolves
+R1: Lions beats Sharks
+R1: Tigers beats Eagles
+R2: Bears beats Hawks
+R2: Lions beats Tigers
+R3: Bears beats Lions
+champion: Bears
+-- underdog +0
+R1: Bears has a bye
+R1: Hawks beats Wolves
+R1: Lions beats Sharks
+R1: Tigers beats Eagles
+R2: Bears beats Hawks
+R2: Lions beats Tigers
+R3: Bears beats Lions
+champion: Bears
+-- underdog +8
+R1: Bears has a bye
+R1: Wolves beats Hawks
+R1: Lions beats Sharks
+R1: Tigers beats Eagles
+R2: Bears beats Wolves
+R2: Tigers beats Lions
+R3: Tigers beats Bears
+champion: Tigers
+error: need at least 2 teams, got 1
+error: team A listed twice
+error: bad team line 'B x'

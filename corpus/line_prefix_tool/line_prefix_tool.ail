@@ -1,0 +1,80 @@
+## Line prefix tool: streams a file line by line through a chain of edits
+## (number, prefix, strip a prefix, indent, comment out) into a second file,
+## the way a small sed/nl utility would, then reads the result back.
+use std.file
+
+enum Edit
+    Numbered(width int)
+    Prefix(text str)
+    Strip(text str)
+    Indent(spaces int)
+    Comment
+
+fn strip_text(line str, t str) str
+    line.strip_prefix(t) else line
+
+fn number_text(idx int, width int) str
+    "{idx}".pad_left(width, ' ')
+
+fn apply(e Edit, line str, idx int) str
+    match e
+        Numbered(w) => "{number_text(idx, w)}  {line}"
+        Prefix(t) => "{t}{line}"
+        Strip(t) => strip_text(line, t)
+        Indent(n) => if line.is_empty() then line else "{" ".repeat(n)}{line}"
+        Comment => if line.is_empty() then "#" else "# {line}"
+
+fn apply_all(edits List[Edit], line str, idx int) str
+    mut cur := line
+    for e in edits
+        cur = apply(e, cur, idx)
+    cur
+
+## Streams `src` into `dst` applying the edits; returns the line count.
+fn transform(src str, dst str, edits List[Edit]) !int
+    mut r := file.open(src)?
+    mut w := file.create(dst)?
+    mut n := 0
+    while true
+        line := r.read_line()? else break
+        n += 1
+        w.write_line(apply_all(edits, line, n))?
+    r.close()
+    w.close()?
+    n
+
+fn show(title str, p str) !
+    print(title)
+    for line in fs.read_text(p)?.lines()
+        print("|{line}")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_line_prefix_tool")?
+    src := path.join(dir, "in.txt")
+    fs.write_text(src, "alpha\n> beta\n\n> gamma\ndelta\n")?
+    out := path.join(dir, "out.txt")
+    n := transform(src, out, [Edit.Strip(text: "> "), Edit.Indent(spaces: 2), Edit.Numbered(width: 3)])?
+    print("pass 1: {n} lines")
+    show("numbered and indented:", out)?
+    n2 := transform(src, out, [Edit.Comment, Edit.Prefix(text: "//")])?
+    print("pass 2: {n2} lines")
+    show("commented:", out)?
+    fs.remove(src)?
+    fs.remove(out)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn single_edits()
+    assert_eq(apply(Edit.Prefix(text: "- "), "x", 1), "- x")
+    assert_eq(apply(Edit.Strip(text: "> "), "> q", 1), "q")
+    assert_eq(apply(Edit.Strip(text: "> "), "plain", 1), "plain")
+    assert_eq(apply(Edit.Numbered(width: 4), "x", 7), "   7  x")
+
+@test fn blank_lines_stay_blank()
+    assert_eq(apply(Edit.Indent(spaces: 4), "", 1), "")
+    assert_eq(apply(Edit.Comment, "", 1), "#")
+    assert_eq(apply(Edit.Comment, "a", 1), "# a")
+
+@test fn edits_chain_in_order()
+    got := apply_all([Edit.Strip(text: "> "), Edit.Comment], "> hi", 3)
+    assert_eq(got, "# hi")

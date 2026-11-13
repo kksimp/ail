@@ -1,0 +1,19 @@
+run 1 (interrupted)
+  start at item 0, total 0
+  batch ends at  8, batch sum 196, total  196
+  batch ends at 16, batch sum 380, total  576
+  batch ends at 24, batch sum 327, total  903
+  killed before batch 4
+saved: pos 24, total 903
+run 2 (resumed)
+  start at item 24, total 903
+  batch ends at 32, batch sum 328, total 1231
+  batch ends at 40, batch sum 480, total 1711
+  batch ends at 48, batch sum 395, total 2106
+  batch ends at 50, batch sum 160, total 2266
+final total 2266, expected 2266
+resumed matches uninterrupted: true
+run 3 (already finished)
+  start at item 50, total 2266
+unchanged: true
+cleaned up: true

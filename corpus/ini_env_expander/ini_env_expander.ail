@@ -1,0 +1,94 @@
+## INI env expander: reads a config file from a temp directory and expands
+## ${NAME} and ${NAME:-default} references in the values. NAME is looked up in
+## a given environment map first, then among the file's own keys (expanded
+## recursively, with a depth limit that reports loops). The environment is a
+## fixed map, never the real one.
+
+struct Entry
+    section str
+    name str
+    raw str
+
+fn parse_ini(text str) List[Entry]
+    mut out := List[Entry]()
+    mut section := ""
+    for raw in text.lines()
+        line := raw.trim()
+        if line == "" or line.starts_with("#")
+            continue
+        if line.starts_with("[") and line.ends_with("]")
+            section = line.slice(1, line.len() - 1)
+            continue
+        at := line.find("=") else continue
+        out.push(Entry(section: section, name: line.slice(0, at).trim(), raw: line.slice(at + 1, line.len()).trim()))
+    out
+
+fn expand(text str, env Map[str, str], conf Map[str, str], depth int) str
+    if depth > 4
+        return "<loop>"
+    mut out := ""
+    mut rest := text
+    while true
+        i := rest.find("$\{") else break
+        after := rest.slice(i + 2, rest.len())
+        j := after.find("}") else break
+        out = "{out}{rest.slice(0, i)}"
+        spec := after.slice(0, j)
+        rest = after.slice(j + 1, after.len())
+        mut name := spec
+        mut fallback := ""
+        if k := spec.find(":-")
+            name = spec.slice(0, k)
+            fallback = spec.slice(k + 2, spec.len())
+        if value := env.get(name)
+            out = "{out}{value}"
+        else
+            if other := conf.get(name)
+                out = "{out}{expand(other, env, conf, depth + 1)}"
+            else
+                out = "{out}{fallback}"
+    "{out}{rest}"
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_ini_env_expander")?
+    p := path.join(dir, "app.ini")
+    lines := [
+        "# deployment settings",
+        "[paths]",
+        "root = $\{HOME_DIR:-/srv}/app",
+        "logs = $\{root}/logs",
+        "cache = $\{CACHE_DIR}/cache-$\{ENV_NAME:-dev}",
+        "[service]",
+        "url = http://$\{HOST:-localhost}:$\{PORT:-80}/$\{ENV_NAME}",
+        "broken = $\{missing_close",
+        "ping = $\{pong}",
+        "pong = $\{ping}",
+    ]
+    fs.write_text(p, lines.join("\n"))?
+    entries := parse_ini(fs.read_text(p)?)
+    env := {"HOME_DIR": "/home/ci", "ENV_NAME": "prod", "PORT": "8443"}
+    mut conf := Map[str, str]()
+    for e in entries
+        conf[e.name] = e.raw
+    print("{entries.len()} entries, {env.len()} env vars")
+    for e in entries
+        print("[{e.section}] {e.name} = {expand(e.raw, env, conf, 0)}")
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn plain_text_is_unchanged()
+    assert_eq(expand("no refs", {}, {}, 0), "no refs")
+    assert_eq(expand("", {}, {}, 0), "")
+
+@test fn env_default_and_key_lookup()
+    env := {"A": "1"}
+    conf := {"B": "b-$\{A}"}
+    assert_eq(expand("$\{A}$\{B}", env, conf, 0), "1b-1")
+    assert_eq(expand("x$\{NOPE:-dflt}y", env, conf, 0), "xdflty")
+    assert_eq(expand("x$\{NOPE}y", env, conf, 0), "xy")
+
+@test fn loops_and_unclosed_references()
+    conf := {"p": "$\{q}", "q": "$\{p}"}
+    assert_eq(expand("$\{p}", {}, conf, 0), "<loop>")
+    assert_eq(expand("a$\{b", {}, {}, 0), "a$\{b")

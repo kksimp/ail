@@ -1,0 +1,15 @@
+pass 1: 5 lines
+numbered and indented:
+|  1    alpha
+|  2    beta
+|  3  
+|  4    gamma
+|  5    delta
+pass 2: 5 lines
+commented:
+|//# alpha
+|//# > beta
+|//#
+|//# > gamma
+|//# delta
+cleaned up: true

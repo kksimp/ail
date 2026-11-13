@@ -114,8 +114,9 @@ fn replay(data bytes) Replay ! KvError
         key := data[at + 8..at + 8 + klen].to_str() else break
         if items.contains(key)
             live -= record_size(key, items[key].len())
+        if vraw == REMOVED
             items.remove(key)
-        if vraw != REMOVED
+        else
             items[key] = data[at + 8 + klen..stop]
             live += record_size(key, vlen)
         at = stop + 4

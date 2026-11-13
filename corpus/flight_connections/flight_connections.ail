@@ -1,0 +1,137 @@
+## Flight connection finder. A timetable of "ID FROM TO DEP ARR PRICE" lines
+## (times as HHMM) is parsed into flights. A search expands itineraries leg by
+## leg (at most 3 legs, never revisiting an airport, with a 45 minute minimum
+## layover) and reports the cheapest and the earliest-arriving one. Bad
+## timetable lines and unknown airports are typed errors.
+
+error enum RouteError
+    BadFlight(text str) "bad flight data '{text}'"
+    UnknownAirport(code str) "unknown airport {code}"
+    NoRoute(src str, dst str) "no route {src} -> {dst}"
+
+struct Flight
+    id str
+    src str
+    dst str
+    dep int
+    arr int
+    cost int
+
+struct Trip
+    here str
+    arrive int
+    ids List[str]
+    price int
+    visited List[str]
+    legs int
+
+fn Trip.can_board(self, f Flight) bool
+    if legs == 0
+        return true
+    f.dep >= arrive + 45
+
+fn Trip.take(self, f Flight) Trip
+    mut ids2 := self.ids
+    ids2.push(f.id)
+    mut seen2 := self.visited
+    seen2.push(f.dst)
+    Trip(here: f.dst, arrive: f.arr, ids: ids2, price: price + f.cost, visited: seen2, legs: legs + 1)
+
+fn parse_time(s str) int ! RouteError
+    if s.len() != 4
+        return BadFlight(text: s)
+    hh := s.slice(0, 2).to_int() else return BadFlight(text: s)
+    mm := s.slice(2, 4).to_int() else return BadFlight(text: s)
+    if hh > 23 or mm > 59
+        return BadFlight(text: s)
+    hh * 60 + mm
+
+fn parse_flight(line str) Flight ! RouteError
+    p := line.words()
+    if p.len() != 6
+        return BadFlight(text: line)
+    cost := p[5].to_int() else return BadFlight(text: line)
+    dep := parse_time(p[3])?
+    arr := parse_time(p[4])?
+    Flight(id: p[0], src: p[1], dst: p[2], dep: dep, arr: arr, cost: cost)
+
+fn known(flights List[Flight], code str) bool
+    for f in flights
+        if f.src == code or f.dst == code
+            return true
+    false
+
+fn clock(t int) str
+    h := t / 60
+    m := t % 60
+    "{h:0>2}:{m:0>2}"
+
+fn search(flights List[Flight], src str, dst str, max_legs int) List[Trip] ! RouteError
+    for code in [src, dst]
+        if not known(flights, code)
+            return UnknownAirport(code: code)
+    mut found := List[Trip]()
+    mut frontier := [Trip(here: src, arrive: 0, ids: [], price: 0, visited: [src], legs: 0)]
+    mut rounds := 0
+    while rounds < max_legs and not frontier.is_empty()
+        mut grown := List[Trip]()
+        for t in frontier
+            for f in flights
+                if f.src == t.here and t.can_board(f) and not t.visited.contains(f.dst)
+                    n := t.take(f)
+                    if n.here == dst
+                        found.push(n)
+                    else
+                        grown.push(n)
+        frontier = grown
+        rounds += 1
+    if found.is_empty()
+        return NoRoute(src: src, dst: dst)
+    found
+
+fn describe(t Trip) str
+    "{t.ids.join("+")} cost {t.price} arrive {clock(t.arrive)} ({t.legs} legs)"
+
+fn main()
+    lines := [
+        "UA1 SFO DEN 0800 1100 150", "UA2 DEN JFK 1200 1600 200", "UA3 SFO ORD 0700 1300 300",
+        "UA4 ORD JFK 1400 1700 120", "UA5 SFO JFK 0900 1700 520", "UA6 DEN ORD 1130 1400 90",
+        "UA7 DEN MIA 1245 1630 180", "UA8 MIA JFK 1800 2100 100", "UA9 SEA SFO 0600 0800 80",
+        "UA10 SEA DEN 0900 1200 140", "UA11 ORD MIA 1445 1900 150", "UA99 SFO LAX 25xx 1000 50",
+        "UA98 SFO LAX 0900", "UA97 SFO LAX 0900 1000 abc",
+    ]
+    mut flights := List[Flight]()
+    for line in lines
+        f := parse_flight(line) else err
+            print("skip: {err}")
+            continue
+        flights.push(f)
+    print("{flights.len()} flights loaded")
+    queries := [("SFO", "JFK"), ("SEA", "MIA"), ("SEA", "JFK"), ("JFK", "SFO"), ("SFO", "XXX")]
+    for q in queries
+        trips := search(flights, q.0, q.1, 3) else err
+            print("{q.0} -> {q.1}: {err}")
+            continue
+        cheapest := trips.sorted(by: |t| t.price * 10000 + t.arrive)
+        earliest := trips.sorted(by: |t| t.arrive * 10000 + t.price)
+        print("{q.0} -> {q.1}: {trips.len()} itineraries")
+        print("  cheapest: {describe(cheapest[0])}")
+        print("  earliest: {describe(earliest[0])}")
+
+@test fn layover_is_enforced()
+    a := parse_flight("A1 AAA BBB 0800 1000 10")?
+    b := parse_flight("B1 BBB CCC 1030 1200 10")?
+    assert_err(search([a, b], "AAA", "CCC", 3))
+    c := parse_flight("B2 BBB CCC 1045 1200 10")?
+    assert_eq(search([a, c], "AAA", "CCC", 3)?.len(), 1)
+
+@test fn parses_times()
+    assert_eq(parse_time("0830")?, 510)
+    assert_eq(clock(510), "08:30")
+    assert_err(parse_time("2460"))
+    assert_err(parse_flight("X AAA BBB 0800"))
+
+@test fn search_errors()
+    f := parse_flight("A1 AAA BBB 0800 1000 10")?
+    assert_err(search([f], "AAA", "ZZZ", 3))
+    assert_err(search([f], "BBB", "AAA", 3))

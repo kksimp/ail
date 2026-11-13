@@ -1,0 +1,150 @@
+## A number theory toolkit on plain ints: gcd, the extended Euclid algorithm,
+## modular inverse and power, trial-division factoring, Euler's totient, and a
+## deterministic Miller-Rabin primality test checked against trial division.
+
+struct Egcd
+    g int
+    x int
+    y int
+
+fn gcd(a int, b int) int
+    mut p := a
+    mut q := b
+    while q != 0
+        r := p % q
+        p = q
+        q = r
+    p
+
+fn ext_gcd(a int, b int) Egcd
+    mut old_r := a
+    mut cur_r := b
+    mut old_s := 1
+    mut cur_s := 0
+    while cur_r != 0
+        q := old_r / cur_r
+        nr := old_r - q * cur_r
+        old_r = cur_r
+        cur_r = nr
+        ns := old_s - q * cur_s
+        old_s = cur_s
+        cur_s = ns
+    Egcd(g: old_r, x: old_s, y: (old_r - a * old_s) / b)
+
+fn norm(x int, m int) int
+    ((x % m) + m) % m
+
+fn mod_inv(a int, m int) int
+    e := ext_gcd(norm(a, m), m)
+    if e.g != 1
+        return 0
+    norm(e.x, m)
+
+fn mod_pow(base int, power int, m int) int
+    mut result := 1
+    mut b := base % m
+    mut e := power
+    while e > 0
+        if e % 2 == 1
+            result = result * b % m
+        b = b * b % m
+        e = e / 2
+    result
+
+fn factors(n int) List[int]
+    mut out := List[int]()
+    mut x := n
+    mut p := 2
+    while p * p <= x
+        while x % p == 0
+            out.push(p)
+            x = x / p
+        p += 1
+    if x > 1
+        out.push(x)
+    out
+
+fn factor_text(n int) str
+    fl := factors(n)
+    mut parts := List[str]()
+    mut i := 0
+    while i < fl.len()
+        mut j := i
+        while j < fl.len() and fl[j] == fl[i]
+            j += 1
+        if j - i == 1
+            parts.push("{fl[i]}")
+        else
+            parts.push("{fl[i]}^{j - i}")
+        i = j
+    parts.join(" * ")
+
+fn totient(n int) int
+    mut res := n
+    mut last := 0
+    for p in factors(n)
+        if p != last
+            res = res / p * (p - 1)
+            last = p
+    res
+
+fn is_prime_slow(n int) bool
+    n >= 2 and factors(n).len() == 1
+
+fn witness(n int, a int) bool
+    mut d := n - 1
+    mut s := 0
+    while d % 2 == 0
+        d = d / 2
+        s += 1
+    mut x := mod_pow(a, d, n)
+    if x == 1 or x == n - 1
+        return false
+    for _ in 1..s
+        x = x * x % n
+        if x == n - 1
+            return false
+    true
+
+fn is_prime_mr(n int) bool
+    if n < 2
+        return false
+    for p in [2, 3, 5, 7]
+        if n == p
+            return true
+        if n % p == 0
+            return false
+    for a in [2, 3, 5, 7]
+        if witness(n, a)
+            return false
+    true
+
+fn main()
+    print("gcd(84, 36) = {gcd(84, 36)}, gcd(17, 5) = {gcd(17, 5)}")
+    e := ext_gcd(240, 46)
+    print("ext_gcd(240, 46): g={e.g} x={e.x} y={e.y}, check {240 * e.x + 46 * e.y}")
+    print("17^-1 mod 3120 = {mod_inv(17, 3120)}, 6^-1 mod 9 = {mod_inv(6, 9)}")
+    for n in [360, 97, 1001, 65536, 999999, 123456789]
+        print("{n} = {factor_text(n)}, phi = {totient(n)}")
+    mut agree := 0
+    mut primes := 0
+    for n in 0..2000
+        if is_prime_mr(n) == is_prime_slow(n)
+            agree += 1
+        if is_prime_mr(n)
+            primes += 1
+    print("miller-rabin agrees with trial division on {agree} of 2000, primes found: {primes}")
+    print("561 prime: {is_prime_mr(561)}, 1000000007 prime: {is_prime_mr(1000000007)}, 2147483647 prime: {is_prime_mr(2147483647)}")
+
+@test fn inverse_multiplies_to_one()
+    inv := mod_inv(7, 40)
+    assert_eq(7 * inv % 40, 1)
+
+@test fn factoring_and_totient()
+    assert_eq(factors(360), [2, 2, 2, 3, 3, 5])
+    assert_eq(factor_text(360), "2^3 * 3^2 * 5")
+    assert_eq(totient(36), 12)
+
+@test fn miller_rabin_basics()
+    assert(is_prime_mr(97))
+    assert(not is_prime_mr(91))

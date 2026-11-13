@@ -1,0 +1,17 @@
+# Suites whose verdict comes from the compiler's front end and text tools alone: they run no generated program and
+# touch no OS service, so their output is the same on any host that built the same sources. GATE_SKIP_HOSTFREE=1 on
+# mac-gate.sh (the Linux VM, after the Mac gate was green on the SAME head) leaves them out. Off by default, never for a
+# release gate, and never on Windows (path separators and line ends are what differ there). The caveat: the front end
+# runs here as code of this host's native backend, so these suites also exercise the x86-64 backend; skipping them
+# trades that for time, and only the designer decides to (ADR 1097).
+api_card
+explain
+fmt
+corpus
+mistakes
+contracts
+diff
+edit
+fix
+api_queries
+docs

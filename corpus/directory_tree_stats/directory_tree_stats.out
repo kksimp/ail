@@ -1,0 +1,12 @@
+depth 0: 1 files, 4 dirs
+depth 1: 6 files, 2 dirs
+depth 2: 1 files, 1 dirs
+depth 3: 1 files, 0 dirs
+empty dirs: 1
+deepest file: src/core/deep/x.tmp (depth 3)
+busiest dir: . with 5 entries
+  .ail: 4
+  .md: 3
+  .none: 1
+  .tmp: 1
+cleaned up: true

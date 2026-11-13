@@ -1,0 +1,28 @@
+ok P e2e4
+ok p e7e5
+rejected d1d3: path blocked for d1d3
+rejected a7a6: it is not that piece's turn on a7
+rejected a1a3: path blocked for a1a3
+ok B f1c4
+ok n b8c6
+ok Q d1h5
+ok n g8f6
+ok Q h5f7 takes p
+ok k e8e7
+rejected e4: cannot read move 'e4'
+rejected z9e4: cannot read move 'z9'
+rejected c1c1: c1 holds a friendly piece
+rejected e7e6: it is not that piece's turn on e7
+ok Q f7e8
+ok p d7d5
+ok P a2a4
+8 r.bqQb.r
+7 ppp.k.pp
+6 ..n..n..
+5 ...pp...
+4 P.B.P...
+3 ........
+2 .PPP.PPP
+1 RNB.K.NR
+  abcdefgh
+moves played 11, captured p
