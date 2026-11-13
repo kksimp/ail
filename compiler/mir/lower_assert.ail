@@ -29,16 +29,36 @@ fn Lower.lower_assert_err(mut self, args List[ast.Arg], pos ast.Pos) Val?
         return Val(id: -1, ty: Ty.Unit)
     if m.err == Ty.Unknown
         return unsupported(pos, "`assert_err` with an error whose type isn't known here")
-    want := lower_value(args[1].value, m.err)?
     raw := call("rt.err_take_value", [], Ty.Int)
     got := Val(id: op("copy", [raw], m.err), ty: m.err)
-    eq := binary(ast.BinOp.Eq, got, want, pos)
-    ok := check_branch(eq.id)
+    mut same := -1
+    if k := bare_data_variant(args[1].value, m.err)
+        # `E.V` for a variant with data: the kind alone is compared.
+        en := enum_name(m.err) else ""
+        same = op("eq", [tag_of(en, got.id), konst(k, Ty.Int)], Ty.Bool)
+    else
+        want := lower_value(args[1].value, m.err)?
+        same = binary(ast.BinOp.Eq, got, want, pos).id
+    ok := check_branch(same)
     trap_open("test.assert.1", pos)
     say("assertion failed: the call failed with a different error than the one expected")
     trap_close(pos)
     cur = ok
     Val(id: -1, ty: Ty.Unit)
+
+## The index of variant `V` in `E.V` when `E` is the enum of `err` and `V` carries data.
+fn Lower.bare_data_variant(self, e ast.Expr, err Ty) int?
+    match e
+        Member(recv, name, _) =>
+            en := enum_ref(recv)?
+            own := enum_name(err)?
+            if own != en
+                return none
+            k := case_index(en, name)
+            if k >= 0 and enums[en][k].fields.len() > 0
+                return k
+            none
+        _ => none
 
 ## `|a - b| <= eps`, false when any is NaN.
 fn Lower.lower_assert_near(mut self, args List[ast.Arg], pos ast.Pos) Val?

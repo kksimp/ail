@@ -1649,7 +1649,12 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
             )
         if args.len() == 2
             hint := if errs.len() == 1 then errs[0] else Ty.Unknown
-            st := expr(args[1].value, if hint == Ty.Unknown then none else hint, true)
+            mut st := Ty.Unknown
+            if b := bare_variant_ty(args[1].value)
+                # `assert_err(call, E.V)` for a variant with data checks the kind alone (test.assert.3).
+                st = b
+            else
+                st = expr(args[1].value, if hint == Ty.Unknown then none else hint, true)
             if is_res(t)
                 and st != Ty.Unknown
                 and st != Ty.Never
@@ -1677,6 +1682,25 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
         operator(ast.BinOp.Eq, lt, rt, at)
         text_form(lt, expr_pos(args[0].value), "test.assert.2")
     Ty.Unit
+
+## `E.V` where `V` is a variant of the non-generic enum `E` that carries data:
+## the enum's type, so `assert_err(call, E.V)` can name the kind alone.
+@allow("expr.match.3")
+fn Checker.bare_variant_ty(self, e ast.Expr) Ty?
+    match e
+        Member(recv, n, _) =>
+            match recv
+                Name(head, _) =>
+                    d := types.get(head)?
+                    match d
+                        DEnum(i) =>
+                            v := variant_index(i, n)?
+                            if prog.enums[i].variants[v].fields.len() > 0 and enum_params[i].len() == 0
+                                return Ty.Enum(i, [])
+                            none
+                        _ => none
+                _ => none
+        _ => none
 
 fn assert_arity(n str) int
     match n
