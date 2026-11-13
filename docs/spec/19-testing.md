@@ -306,6 +306,16 @@ fn read_into(p str, out Channel[str])
     assert_eq([x for x in out].join(","), "hello,hello")
 ```
 
+The runner's own imports use hidden names, so a program may name a parameter or a local `env` or `io`:
+
+```ail tool=test,FILE expect=passed rules=test.run.1
+fn show(env str, io int) str
+    "{env}{io}"
+
+@test fn names_may_be_env_and_io()
+    assert_eq(show("a", 1), "a1")
+```
+
 **test.sandbox.2** — `@needs(CAP)` after `@test` lifts the limit for one test: `@needs(fs)` allows every file
 (read and write), `@needs(net)` the network, `@needs(net.serve)` listening, and `@needs(proc)` running programs.
 Several are written `@needs(net, proc)`. A capability name in bare words is a capability; a name in quotes is a

@@ -1,6 +1,0 @@
-struct Heap
-    id int
-
-fn main()
-    t := Heap(id: 1)
-    print(t.id)

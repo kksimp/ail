@@ -48,6 +48,27 @@ fn Gate.mine(mut self) bool
         ran += 1
     owned
 
+## The names directly under `dir`, sorted. A sharded run takes them from git (`git ls-files`), not the working tree: each
+## shard is its own process, started at its own time, and a file a running test writes beside the sources (the hidden
+## copy of an `ail fix` round, say) gave one shard of `cases` a different total from the others. Outside a git checkout,
+## and in an unsharded run, it is the directory listing.
+fn Gate.listing(self, dir str) List[str]
+    listed := (fs.list_dir(dir) else []).sorted()
+    if shard_count <= 1
+        return listed
+    r := proc.run("git", ["ls-files", "--", dir]) else return listed
+    if r.status != 0
+        return listed
+    mut found := Set[str]()
+    mut picked := List[str]()
+    for l in r.out.lines()
+        if l.starts_with("{dir}/")
+            first := l.slice(dir.len() + 1, l.len()).split("/")[0]
+            if not found.contains(first)
+                found.add(first)
+                picked.push(first)
+    if picked.is_empty() then listed else picked.sorted()
+
 fn temp_dir() str
     # A Windows TMPDIR has backslashes, which `sh -c` scripts would eat: use `/`, which Windows takes too.
     raw := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
@@ -110,7 +131,7 @@ fn Gate.examples(mut self, tmp str)
 fn Gate.corpus(mut self, tmp str)
     # corpus/waiting.txt: `NAME reason` lines for programs that wait on a compiler fix; the gate skips them (and says so).
     waiting := (fs.read_text("corpus/waiting.txt") else "").lines()
-    for name in (fs.list_dir("corpus") else []).sorted()
+    for name in self.listing("corpus")
         dir := "corpus/{name}"
         meta := fs.metadata(dir) else continue
         if not meta.is_dir
@@ -362,8 +383,7 @@ fn stem_list(path str) List[str]
 
 fn Gate.case_dir(mut self, dir str)
     pending_cases := stem_list("tests/native/golden/pending.txt")
-    mut names := fs.list_dir(dir) else []
-    names.sort()
+    names := self.listing(dir)
     for name in names
         if not name.ends_with(".ail")
             continue
@@ -383,8 +403,7 @@ fn Gate.case_dir(mut self, dir str)
 
 fn Gate.packages(mut self)
     root := "tests/cases/packages"
-    mut names := fs.list_dir(root) else []
-    names.sort()
+    names := self.listing(root)
     for name in names
         at := "{root}/{name}"
         if not fs.exists("{at}/expected.out")
@@ -446,13 +465,17 @@ fn Gate.cli_checks(mut self)
     un := ail_run(["check", "tests/mistakes/abs_function.ail"]) else return
     if un.status != 2 or not un.err.contains("\nnext: ail ")
         red("check next line", "exit {un.status}\n{un.err}")
-    # check.exit.1: a program that doesn't compile stops `ail run` (1) and `ail test` (not 0) before anything runs.
+    # check.exit.1: a program that doesn't compile stops `ail run` (2, as `check`) and `ail test` (not 0) before anything runs.
     rb := ail_run(["run", "tests/mistakes/abs_function.ail"]) else return
-    if rb.status != 1 or not rb.out.is_empty()
+    if rb.status != 2 or not rb.out.is_empty()
         red("run of a program with errors", "exit {rb.status}\n{rb.out}{rb.err}")
     tb := ail_run(["test", "tests/mistakes/abs_function.ail"]) else return
     if tb.status == 0
         red("test of a program with errors", "exit 0\n{tb.out}{tb.err}")
+    nt := ail_run(["test", "examples/hello.ail"]) else return
+    if nt.status != 0
+        or not nt.out.starts_with("no tests found in examples/hello.ail\n0 passed, 0 failed")
+        red("test of a file with no tests", "exit {nt.status}\n{nt.out}{nt.err}")
     nf := ail_run(["check", "tests/cases/no_such_file.ail"]) else return
     if nf.status != 2
         red("check missing file exit", "exit {nf.status}, want 2")
@@ -1392,7 +1415,7 @@ fn Gate.checkbench(mut self)
         return
     r := proc.run(
         "python3",
-        ["-I", "tools/checkbench/checkbench.py", "--fast", "--floors", "tools/checkbench/floors.txt"],
+        ["-I", "tools/checkbench/checkbench.py", "--fast", "--jobs", "2", "--floors", "tools/checkbench/floors.txt"],
     ) else return
     if r.status != 0
         red("checkbench", "{r.out}{r.err}")

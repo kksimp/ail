@@ -42,6 +42,7 @@ cert
 crypto
 try
 parity
+checkbench
 corpus@0/4
 corpus@1/4
 corpus@2/4
