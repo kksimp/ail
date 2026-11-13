@@ -359,7 +359,7 @@ print("{n:#x}")      # compile-time error: there is no `#` form
 **lex.str.8** — A `{` that directly follows a `$` in a string literal is a
 compile-time error: `"${n}"` is another language's interpolation and AIL
 would print `$` and then the value. The help says to write `{n}`, and the fix
-removes the `$`. The literal text `${` is written `$\{`.
+removes the `$`. The literal text `${` is written `$\{`. *(ADR 1092)*
 
 ```ail error=lex.str.8
 fn main()
