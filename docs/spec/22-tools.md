@@ -711,7 +711,7 @@ for `api.find.6`).
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
-rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
 same.
 
 **tool.card.2** — `ail card TOPIC` prints the section of the full card
