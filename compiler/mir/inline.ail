@@ -251,8 +251,12 @@ fn inlinable_with(f Func, allocs bool) bool
     inlinable_upto(f, allocs, INLINE_LIMIT)
 
 fn inlinable_upto(f Func, allocs bool, limit int) bool
-    # `rt.vec_*` are replaced by assembled kernels where the target has them.
-    if f.name.starts_with("rt.vec_") or f.name == "rt.fill" or f.name.starts_with("rt.aes_hw_")
+    # `rt.vec_*` are replaced by assembled kernels where the target has them,
+    # and the C call kernels `rt.ffi_ccall*` everywhere (ADR 1074).
+    if f.name.starts_with("rt.vec_")
+        or f.name == "rt.fill"
+        or f.name.starts_with("rt.aes_hw_")
+        or f.name.starts_with("rt.ffi_ccall")
         return false
     mut n := 0
     for blk in f.blocks
