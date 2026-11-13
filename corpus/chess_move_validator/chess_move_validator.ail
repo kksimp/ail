@@ -1,0 +1,150 @@
+## Chess move validator. A board is 64 one-letter cells (uppercase white, "."
+## empty). Moves like "e2e4" are checked for notation, ownership, turn, piece
+## geometry and blocked paths, then applied (pawns promote to queens). No check,
+## castling or en passant. Failures are typed errors.
+
+enum Verdict
+    Legal
+    Illegal
+    Obstructed
+
+error enum MoveError
+    BadNotation(text str) "cannot read move '{text}'"
+    EmptySquare(sq str) "no piece on {sq}"
+    WrongColour(sq str) "it is not that piece's turn on {sq}"
+    OwnPiece(sq str) "{sq} holds a friendly piece"
+    IllegalShape(piece str, text str) "{piece} cannot move {text}"
+    Blocked(text str) "path blocked for {text}"
+
+struct Game
+    cells List[str]
+    white bool
+    taken List[str]
+    played int
+
+fn is_upper(p str) bool
+    p != p.to_lower()
+
+fn Game.start() Game
+    mut cs := List[str]()
+    for rank in "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR".split("/")
+        for ch in rank.chars()
+            if ch.is_digit()
+                n := ch.to_digit(10) else 0
+                mut k := 0
+                while k < n
+                    cs.push(".")
+                    k += 1
+            else
+                cs.push("{ch}")
+    Game(cells: cs, white: true, taken: [], played: 0)
+
+fn square(text str) int ! MoveError
+    col := "abcdefgh".find(text.slice(0, 1)) else return BadNotation(text: text)
+    rank := text.slice(1, 2).to_int() else return BadNotation(text: text)
+    if rank < 1 or rank > 8
+        return BadNotation(text: text)
+    (8 - rank) * 8 + col
+
+fn slide(cells List[str], a int, b int) Verdict
+    dr := b / 8 - a / 8
+    dc := b % 8 - a % 8
+    step := dr.min(1).max(-1) * 8 + dc.min(1).max(-1)
+    mut pos := a + step
+    while pos != b
+        if cells[pos] != "."
+            return Verdict.Obstructed
+        pos += step
+    Verdict.Legal
+
+fn judge(cells List[str], piece str, a int, b int) Verdict
+    dr := b / 8 - a / 8
+    dc := b % 8 - a % 8
+    adr := dr.abs()
+    adc := dc.abs()
+    kind := piece.to_lower()
+    if kind == "n"
+        return if adr * adc == 2 then Verdict.Legal else Verdict.Illegal
+    if kind == "k"
+        return if adr.max(adc) == 1 then Verdict.Legal else Verdict.Illegal
+    if kind == "r" and (dr == 0 or dc == 0)
+        return slide(cells, a, b)
+    if kind == "b" and adr == adc
+        return slide(cells, a, b)
+    if kind == "q" and (dr == 0 or dc == 0 or adr == adc)
+        return slide(cells, a, b)
+    if kind == "p"
+        fwd := if is_upper(piece) then -1 else 1
+        home := if is_upper(piece) then 6 else 1
+        if dc == 0 and dr == fwd
+            return if cells[b] == "." then Verdict.Legal else Verdict.Obstructed
+        if dc == 0 and dr == 2 * fwd and a / 8 == home
+            free := cells[a + fwd * 8] == "." and cells[b] == "."
+            return if free then Verdict.Legal else Verdict.Obstructed
+        if adc == 1 and dr == fwd and cells[b] != "."
+            return Verdict.Legal
+    Verdict.Illegal
+
+fn Game.try_move(mut self, text str) str ! MoveError
+    if text.len() != 4
+        return BadNotation(text: text)
+    from_sq := text.slice(0, 2)
+    to_sq := text.slice(2, 4)
+    a := square(from_sq)?
+    b := square(to_sq)?
+    piece := self.cells[a]
+    if piece == "."
+        return EmptySquare(sq: from_sq)
+    if is_upper(piece) != self.white
+        return WrongColour(sq: from_sq)
+    target := self.cells[b]
+    if target != "." and is_upper(target) == is_upper(piece)
+        return OwnPiece(sq: to_sq)
+    v := judge(self.cells, piece, a, b)
+    if v == Verdict.Illegal
+        return IllegalShape(piece: piece, text: text)
+    if v == Verdict.Obstructed
+        return Blocked(text: text)
+    mut placed := piece
+    if piece.to_lower() == "p" and (b / 8 == 0 or b / 8 == 7)
+        placed = if is_upper(piece) then "Q" else "q"
+    self.cells[b] = placed
+    self.cells[a] = "."
+    self.white = not self.white
+    self.played += 1
+    if target == "."
+        return "{piece} {text}"
+    self.taken.push(target)
+    "{piece} {text} takes {target}"
+
+fn Game.render(self) List[str]
+    mut rows := List[str]()
+    for r in 0..8
+        line := self.cells[r * 8..r * 8 + 8].join("")
+        rows.push("{8 - r} {line}")
+    rows.push("  abcdefgh")
+    rows
+
+fn main()
+    moves := ["e2e4", "e7e5", "d1d3", "a7a6", "a1a3", "f1c4", "b8c6", "d1h5", "g8f6",
+        "h5f7", "e8e7", "e4", "z9e4", "c1c1", "e7e6", "f7e8", "d7d5", "a2a4"]
+    mut g := Game.start()
+    for m in moves
+        msg := g.try_move(m) else err
+            print("rejected {m}: {err}")
+            continue
+        print("ok {msg}")
+    for row in g.render()
+        print(row)
+    print("moves played {g.played}, captured {g.taken.join(",")}")
+
+@test fn opening_moves()
+    mut g := Game.start()
+    assert_eq(g.try_move("e2e4")?, "P e2e4")
+    assert_eq(g.try_move("g8f6")?, "n g8f6")
+    assert_eq(g.cells[36], "P")
+
+@test fn illegal_moves()
+    mut g := Game.start()
+    for bad in ["e2e5", "a1a3", "e7e5", "e4e5", "d1d2", "e2"]
+        assert_err(g.try_move(bad))

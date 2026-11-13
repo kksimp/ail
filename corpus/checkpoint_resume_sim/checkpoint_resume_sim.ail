@@ -1,0 +1,91 @@
+## Checkpoint and resume simulation: a job processes items in batches and
+## saves its position and running total to a checkpoint file after every
+## batch. The first run is "killed" after a few batches; the second run reads
+## the checkpoint, continues from there and must reach the same total as an
+## uninterrupted run.
+
+struct Ckpt
+    pos int
+    total int
+
+fn weight(i int) int
+    (i * i + 7) % 97
+
+fn save(p str, c Ckpt) !
+    fs.write_text(p, "pos={c.pos}\ntotal={c.total}\n")?
+
+fn field(text str, key str) int
+    for line in text.lines()
+        if line.starts_with("{key}=")
+            n := line.slice(key.len() + 1, line.len()).to_int() else 0
+            return n
+    0
+
+fn load(p str) !Ckpt
+    if not fs.exists(p)
+        return Ckpt(pos: 0, total: 0)
+    text := fs.read_text(p)?
+    Ckpt(pos: field(text, "pos"), total: field(text, "total"))
+
+## Runs until `items` are done or `max_batches` batches have been processed
+## (negative means no limit). Returns the last saved state.
+fn run(p str, items int, size int, max_batches int) !Ckpt
+    mut c := load(p)?
+    print("  start at item {c.pos}, total {c.total}")
+    mut done := 0
+    while c.pos < items
+        if max_batches >= 0 and done >= max_batches
+            print("  killed before batch {done + 1}")
+            return c
+        stop := (c.pos + size).min(items)
+        mut part := 0
+        for i in c.pos..stop
+            part += weight(i)
+        c.pos = stop
+        c.total += part
+        save(p, c)?
+        done += 1
+        print("  batch ends at {c.pos:>2}, batch sum {part:>3}, total {c.total:>4}")
+    c
+
+fn expected(items int) int
+    mut t := 0
+    for i in 0..items
+        t += weight(i)
+    t
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_checkpoint_resume_sim")?
+    p := path.join(dir, "job.ckpt")
+    items := 50
+    print("run 1 (interrupted)")
+    first := run(p, items, 8, 3)?
+    print("saved: pos {first.pos}, total {first.total}")
+    print("run 2 (resumed)")
+    second := run(p, items, 8, -1)?
+    print("final total {second.total}, expected {expected(items)}")
+    print("resumed matches uninterrupted: {second.total == expected(items)}")
+    print("run 3 (already finished)")
+    third := run(p, items, 8, -1)?
+    print("unchanged: {third == second}")
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn checkpoint_round_trips()
+    dir := fs.make_temp_dir("corpus_checkpoint_resume_sim_t")?
+    p := path.join(dir, "c")
+    assert_eq(load(p)?, Ckpt(pos: 0, total: 0))
+    save(p, Ckpt(pos: 12, total: 345))?
+    assert_eq(load(p)?, Ckpt(pos: 12, total: 345))
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn field_reads_keys()
+    assert_eq(field("pos=4\ntotal=9\n", "total"), 9)
+    assert_eq(field("pos=4\n", "total"), 0)
+
+@test fn weights_are_bounded()
+    assert_eq(weight(0), 7)
+    assert_eq(expected(1), 7)
+    assert(weight(96) < 97, "weights stay below 97")

@@ -1,0 +1,11 @@
+data: [12, 8, 36, 85, 5, 86, 21, 1, 97, 37, 44, 69, 95]
+total: 596
+sum[0, 5) = 146
+sum[3, 9) = 295
+sum[7, 8) = 1
+sum[4, 4) = 0
+sum[10, 13) = 208
+set 2 = 500: total 1060
+set 12 = 0: total 965
+set 6 = 77: total 1021
+mismatches against brute force: 0
