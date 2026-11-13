@@ -1,0 +1,7 @@
+# conc.select.5: a `select` with a receive arm needs a `closed` arm.
+
+fn main()
+    ch := Channel[int](1)
+    select
+        v := ch.recv() => print(v)
+        after 0 => print("nothing")

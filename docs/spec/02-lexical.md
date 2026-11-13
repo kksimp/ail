@@ -12,14 +12,14 @@ Chapter key: `lex`
 **lex.kw.1** — These words are reserved keywords and MUST NOT be used as
 names: `and any as break continue defer elif else ensures enum error extern
 false fn for if impl in invariant match move mut none not or par pub ref requires
-return self spawn struct todo trait true uhwhatnow unique unsafe use while with
-yield`.
+return select self spawn struct todo trait true uhwhatnow unique unsafe use while
+with yield`.
 `uhwhatnow?`, with no space before the `?`, is one keyword token, the hole
 that asks (`expr.hole.3`); where `uhwhatnow` alone stands as an expression,
 the error carries a fix that adds the `?`. In the positions of `lex.kw.3` a
 keyword is a name. The error's help names a replacement; for `error`, `todo`,
 `any`, `ref`, `enum`, `struct`, `use` and `pub` its fix renames the binding and
-each later use of the word in the function. *(ADR 1085, ADR 1067, ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872, ADR 1073)*
+each later use of the word in the function. *(ADR 1085, ADR 1102, ADR 1067, ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872, ADR 1073)*
 
 ```ail error=lex.kw.1
 fn main()

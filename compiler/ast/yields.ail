@@ -63,6 +63,11 @@ pub fn has_yield(body List[Stmt]) bool
         Defer(inner, _) => stmt_yields(inner)
         With(_, _, _, body, _) => has_yield(body)
         Unsafe(body, _) => has_yield(body)
+        Select(arms, _) =>
+            for body in select_bodies(arms)
+                if has_yield(body)
+                    return true
+            false
         _ => false
 
 ## The statement blocks inside an expression: `if`, `match` and an `else` handler.

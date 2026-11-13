@@ -829,6 +829,12 @@ task.set_threads(4)           # cap the pool from the next loop; task.threads() 
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions
+select                        # waits; runs the first arm in order that can go
+    n := nums.recv() =>       # a value from nums, as an int (not int?)
+        total += n
+    out.send(job) => sent += 1  # room in out: job is queued
+    after 50 => print("idle") # no arm ready for 50 ms; `after 0` never waits
+    closed => break           # every recv channel closed and empty (required with recv)
 ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
 with m as mut x               # read-modify-write: holds m, stores x back

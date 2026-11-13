@@ -21,3 +21,9 @@ gen_mut_param
 gen_defer
 gen_bad_next
 gen_seq_reuse
+conc_select_mixed
+conc_select_order
+conc_select_after
+conc_select_deadlock
+conc_select_send_closed
+conc_select_cancel

@@ -1946,11 +1946,11 @@ fn tf_decode(mut d RangeDecoder, start int, end int, transient bool, lm int, tot
         res[i] = curr
         logp = if transient then 4 else 5
     t := if transient then 4 else 0
-    mut select := 0
+    mut tf_select := 0
     if reserve and TF_SELECT[lm * 8 + t + changed] != TF_SELECT[lm * 8 + t + 2 + changed]
-        select = if d.bit_logp(1) then 1 else 0
+        tf_select = if d.bit_logp(1) then 1 else 0
     for i in start..end
-        res[i] = TF_SELECT[lm * 8 + t + 2 * select + res[i]]
+        res[i] = TF_SELECT[lm * 8 + t + 2 * tf_select + res[i]]
     res
 
 ## The most bits each band can take (RFC 6716 §4.3.3).

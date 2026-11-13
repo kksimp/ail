@@ -243,6 +243,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Second-class borrow** | Temporary access to an argument that lasts only for a call and can't be stored or returned, so no lifetimes are needed (ADR 0062). |
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
 | **Seed** | A native `ail` binary published as a release asset for one host (`ail-seed-ARCH-OS`). `./ail` downloads it, checks its SHA-256 against `tools/release/seeds.sha256` and uses it to build the compiler from source; only the designer publishes seeds ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md), [ADR 0976](decisions/0976-public-release-and-seed-trust.md)). |
+| **`select`** | A statement that waits on several channel operations (receive, send, a timeout) and runs the block of the first arm in source order that can go ahead; `closed =>` runs once every receive channel is closed ([ADR 1102](decisions/1102-select-statement.md), conc.select.2). |
 | **Context pack** | `ail context PROGRAM FN --budget N`: the body, callee and caller signatures, types, tests and cited spec rules that an edit to `FN` needs, cut to N tokens (ADR 1020). |
 | **Review report** | `ail review BASE..HEAD`: effects, public API, contracts, performance and untested code of a change, cut to a token budget (ADR 1024). |
 | **Proved contract** | A `requires` at a call, or an `ensures` at every return, that the checker shows holds from interval facts; its run-time check is left out. `ail prove` lists them (ADR 1055). |

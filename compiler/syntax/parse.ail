@@ -1872,6 +1872,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         return for_loop(false, pos)
     if tag == "kw" and text == "with"
         return with_stmt(pos)
+    if tag == "kw" and text == "select"
+        return select_stmt(pos)
     if tag == "kw" and text == "unsafe" and kw_at(1) != "fn"
         # unsafe.block.1: `unsafe` and an indented block.
         bump()

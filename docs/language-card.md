@@ -513,6 +513,11 @@ v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
 for v in ch                 # receives until closed and empty
     print(v)
+select                      # first ready arm in order; channels of any types
+    n := nums.recv() => total += n
+    out.send(job) => sent += 1
+    after 50 => print("idle")   # optional; `after 0` never waits
+    closed => break         # required with a recv arm: all recv channels closed
 m := Mutex(0)               # get, set, swap
 with m as mut x             # holds m; stores x back on any exit
     x += 1

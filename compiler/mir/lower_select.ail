@@ -1,0 +1,109 @@
+## `select` (conc.select.2-6, ADR 1102) in the native subset. The heads are
+## lowered in source order into a table the runtime reads
+## (compiler/rt/native/chansel.ail): three words for each receive or send arm
+## (its kind, the channel, and the value to send or the value taken) and one
+## for a trap's message. `rt.sel_wait` gives the arm to run, and a chain of
+## tests runs that arm's block.
+use ast
+
+## The kinds of a table row (chansel.ail).
+SEL_RECV := 0
+SEL_SEND := 1
+## What `rt.sel_wait` gives besides a row's index (chansel.ail).
+SEL_AFTER := -1
+SEL_CLOSED := -2
+
+fn Lower.lower_select(mut self, arms List[ast.SelectArm], pos ast.Pos)
+    mut n := 0
+    for a in arms
+        if select_waits(a.op)
+            n += 1
+    tab := call("rt.alloc", [konst(8 * (3 * n + 1), Ty.Int), konst(13, Ty.Int)], Ty.Int)
+    mut ms := konst(0, Ty.Int)
+    mut has_after := 0
+    # Each arm's code from `rt.sel_wait` and, for a receive arm, its element type.
+    mut codes := List[int]()
+    mut elems := List[Ty]()
+    mut row := 0
+    for a in arms
+        mut elem := Ty.Unit
+        mut code := row
+        match a.op
+            Recv(_, _, ch) =>
+                c := lower_value(ch, none) else return
+                e := chan_elem(c.ty) else
+                    problem(expr_pos(ch), "a `select` arm on a `{c.ty.name()}`")
+                    return
+                elem = e
+                sel_row(tab, row, SEL_RECV, c.id, konst(0, Ty.Int))
+                row += 1
+            Send(ch, value) =>
+                c := lower_value(ch, none) else return
+                e := chan_elem(c.ty) else
+                    problem(expr_pos(ch), "a `select` arm on a `{c.ty.name()}`")
+                    return
+                elem = e
+                v := lower_value(value, elem) else return
+                if not same_ty(v.ty, elem)
+                    problem(expr_pos(value), "`send` of `{v.ty.name()}` on `{c.ty.name()}`")
+                    return
+                w := if elem == Ty.Str then v else some(Val(id: copy_if_place(value, v), ty: elem))
+                sel_row(tab, row, SEL_SEND, c.id, w.id)
+                row += 1
+            After(t) =>
+                m := lower_value(t, Ty.Int) else return
+                if m.ty != Ty.Int
+                    problem(expr_pos(t), "an `after` time of `{m.ty.name()}`")
+                    return
+                ms = m.id
+                has_after = 1
+                code = SEL_AFTER
+            Closed => code = SEL_CLOSED
+        codes.push(code)
+        elems.push(elem)
+    r := call("rt.sel_wait", [tab, konst(n, Ty.Int), ms, konst(has_after, Ty.Int)], Ty.Int)
+    # conc.share.4: a send arm on a closed channel; conc.task.7: a deadlock.
+    sent := call("rt.sel_sent_closed", [tab, konst(n, Ty.Int), r], Ty.Int)
+    tensor_trap_if(sent, "conc.share.4", pos)
+    tensor_trap_if(call("rt.sel_deadlock", [r], Ty.Int), "conc.task.7", pos)
+    join := new_block()
+    for k in 0..arms.len()
+        yes := new_block()
+        no := new_block()
+        branch(op("eq", [r, konst(codes[k], Ty.Int)], Ty.Bool), yes, [], no, [])
+        seal(yes)
+        seal(no)
+        cur = yes
+        scopes.push(Map[str, str]())
+        if b := ast.select_var(arms[k].op)
+            # conc.select.3: the value the arm took.
+            t := Ty.Opt(elems[k])
+            got := call("rt.sel_got", [tab, konst(codes[k], Ty.Int)], t)
+            x := unwrap(Val(id: got, ty: t))
+            if b.name != "_"
+                declare(b.name, elems[k], x.id)
+        lower_block(arms[k].body, false)
+        scopes.pop()
+        if not done()
+            jump(join, [])
+        cur = no
+    # No arm ran: a cancelled task's `select` with no `closed` or `after` arm
+    # (conc.select.6); a `select` that has one always runs an arm.
+    if ast.select_always_runs(arms)
+        finish(unreachable_term())
+    else
+        jump(join, [])
+    seal(join)
+    cur = join
+    if preds[join].len() == 0
+        finish(unreachable_term())
+
+## Whether an arm waits on a channel (a row of the runtime's table).
+fn select_waits(o ast.SelectOp) bool
+    match o
+        Recv | Send => true
+        After | Closed => false
+
+## Row `row` of the table: its kind, its channel and the value to send.
+fn Lower.sel_row(mut self, tab int, row int, kind int, ch int, v int)
+    call("rt.sel_row", [tab, konst(row, Ty.Int), konst(kind, Ty.Int), ch, v], Ty.Unit)
