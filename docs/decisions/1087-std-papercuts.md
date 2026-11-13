@@ -21,9 +21,14 @@ is an error, `assert_err` doesn't exist (and `ail fix` offered to rename it to `
   and replaces the `0>8` spelling only for numbers; `0>8` stays valid as a fill. `e` writes the
   shortest digits as `d.ddde` with a plain decimal exponent.
 - `FormatSpec` gets one field, `flags`, a string of the marks `+0,be`, so the AST JSON gains `"flags"`.
-- The rest of the package (enum `variants`/`from_str`/`name`, `get_or`, `reversed`, `sorted(desc:)`,
-  char arguments, `ToJson` for collections, operator trait list, unused-local warning) is in the
-  second PR and recorded here when it lands.
+- `s.to_int(radix)`, `n.to_str(radix)`, `n.to_str()` (`type.str.20`); `find`, `rfind`, `count`
+  and `replace` take a `char` (`type.str.6`); `m.get_or(k, d)` (`type.map.12`); `xs.reversed()`
+  (`type.coll.21`); the unknown-trait help for `Add`, `Index` and friends names the two operator
+  traits there are, `Eq` and `Ord` (`trait.op.2`).
+- Descending order is `xs.sorted().reversed()`; no `desc:` flag (one way to write it, and
+  `reversed()` is needed anyway). Package S11 (collection vocabulary) keeps this.
+- Deferred to a follow-up: enum `variants()`/`from_str()`/`name()`, `ToJson` on `Map`, `List` of
+  optionals and `T?` at top level, and the unused-local warning (needs use tracking in the checker).
 
 ## Rejected alternatives
 
