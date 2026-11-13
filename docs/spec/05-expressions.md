@@ -46,7 +46,8 @@ the function for the rest of its block, and a call of that name there is
 never reads is a warning; the program still runs. The warning's fix renames the
 binding `_`. A name that starts with `_`, a parameter, a loop variable and a
 pattern binding are not reported, and only the functions of the program's own
-main file are checked. *(ADR 1087)*
+main file are checked. A program that has an error gets no such warning.
+*(ADR 1087)*
 
 ```ail rules=expr.bind.14
 fn main()

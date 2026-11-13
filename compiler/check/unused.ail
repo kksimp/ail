@@ -40,3 +40,18 @@ fn Checker.report_unused(mut self)
             fix_last("name it `_`", [fix.replace(b.at, b.name, "_")])
     bind_decls = []
     bind_seen = Set[int]()
+
+## A program with an error gets no unused-local warnings (expr.bind.14): they would bury the
+## error under noise, and a draft that fails to check often has names it hasn't used yet.
+fn quiet_unused(ds List[Diag]) List[Diag]
+    mut failing := false
+    for d in ds
+        if not d.warning
+            failing = true
+    if not failing
+        return ds
+    mut out := List[Diag]()
+    for d in ds
+        if d.rule != "expr.bind.14"
+            out.push(d)
+    out

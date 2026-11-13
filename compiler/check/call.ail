@@ -153,7 +153,10 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         return check_call(n, s, binds, args, none, npos, expect)
     if v := bare_variant(n, npos, expect)
         return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
-    args_only(args)
+    # A habit call such as `make(Map[str, int])` (a call hint of expr.name.1) is one mistake: its fix rewrites the
+    # whole call, so its argument, often a type written as a value, isn't reported again.
+    if call_hint(n, args.len()) == none or traits.contains(n)
+        args_only(args)
     if traits.contains(n)
         err_help(
             "expr.name.1",
