@@ -1311,6 +1311,8 @@ fn Gate.docs(mut self)
         return
     for args in [
         ["tools/check-doc-links.py"],
+        ["tools/check-grammar.py", "--self-test"],
+        ["tools/check-grammar.py"],
         ["tools/check-doc-dupes.py"],
         ["tools/check-doc-dupes.py", "--self-test"],
         ["tools/check-method-table.py"],

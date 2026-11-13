@@ -894,3 +894,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1110](1110-language-card-budget-16000.md) | The language card budget is 16,000 tokens (core about 3,000); coverage is checked by a docs-gate script, and `llms-full.txt` holds the card and how-tos *(designer)* | Accepted | 2026-11-13 |
 | [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |
 | [1107](1107-labeled-break-continue.md) | Labeled loops: `outer: for`, `break outer`, `continue outer` *(delegated)* | Accepted | 2026-11-13 |
+| [1108](1108-grammar-file.md) | `docs/spec/grammar.ebnf`, the whole grammar, checked against the tree by `tools/check-grammar.py` *(delegated)* | Accepted | 2026-11-13 |
