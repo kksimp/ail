@@ -123,6 +123,23 @@ pub PRELUDE_LINE := 1073741824
 pub fn is_prelude_line(line int) bool
     line >= PRELUDE_LINE
 
+## A name for a user type that clashes with the prelude type `n` (mod.unit.1).
+pub fn prelude_alt(n str) str
+    match n
+        "Task" => "Job"
+        "TaskGroup" => "JobGroup"
+        "Channel" => "Pipe"
+        "Mutex" => "Lock"
+        "Atomic" => "Counter"
+        "Heap" => "PriorityQueue"
+        "Deque" => "DoubleQueue"
+        "Seq" => "Sequence"
+        "Grid" => "Board"
+        "List" => "Items"
+        "Map" => "Table"
+        "Set" => "Group"
+        _ => "My{n}"
+
 ## "`a`, `b` and `c`"
 pub fn list_names(names List[str]) str
     quoted := ["`{n}`" for n in names]
@@ -149,6 +166,9 @@ pub fn suggest(name str, candidates List[str]) str?
     mut best := ""
     mut best_d := limit + 1
     for c in candidates
+        # Never offer the name that was given.
+        if c == name
+            continue
         d := edit_distance(name, c)
         if d < best_d or (d == best_d and c < best)
             best = c

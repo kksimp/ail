@@ -1,0 +1,139 @@
+## Template engine with loops: renders a line-oriented template. Block tags
+## sit on their own line: `[% for x in xs %]` ... `[% endfor %]` and
+## `[% if flag %]` ... `[% else %]` ... `[% endif %]` (`not flag` works too).
+## `[[name]]` prints a variable; inside a loop `[[loop.index]]` counts from 1.
+## Blocks nest.
+
+fn tag(line str) str
+    t := line.trim()
+    if t.starts_with("[%") and t.ends_with("%]")
+        return t.slice(2, t.len() - 2).trim()
+    ""
+
+fn block_end(lines List[str], start int, opener str, closer str) int
+    mut depth := 0
+    for i in start..lines.len()
+        t := tag(lines[i])
+        if t.starts_with(opener)
+            depth += 1
+        elif t == closer
+            depth -= 1
+            if depth == 0
+                return i
+    lines.len()
+
+fn else_at(lines List[str], start int, stop int) int
+    mut depth := 0
+    first_i := start + 1
+    for i in first_i..stop
+        t := tag(lines[i])
+        if t.starts_with("if ")
+            depth += 1
+        elif t == "endif"
+            depth -= 1
+        elif t == "else" and depth == 0
+            return i
+    -1
+
+fn substitute(line str, vars Map[str, str]) str
+    mut out := ""
+    mut rest := line
+    while true
+        i := rest.find("[[") else break
+        tail := rest.slice(i + 2, rest.len())
+        j := tail.find("]]") else break
+        key := tail.slice(0, j).trim()
+        val := vars.get(key) else ""
+        out = "{out}{rest.slice(0, i)}{val}"
+        rest = tail.slice(j + 2, tail.len())
+    "{out}{rest}"
+
+fn truthy(cond str, vars Map[str, str], lists Map[str, List[str]]) bool
+    words := cond.words()
+    name := words[words.len() - 1]
+    mut yes := false
+    if lists.contains(name)
+        yes = not lists[name].is_empty()
+    else
+        v := vars.get(name) else ""
+        yes = v != "" and v != "false"
+    if words.len() == 2 and words[0] == "not"
+        return not yes
+    yes
+
+fn render(lines List[str], vars Map[str, str], lists Map[str, List[str]]) List[str]
+    mut out := List[str]()
+    mut i := 0
+    while i < lines.len()
+        t := tag(lines[i])
+        if t.starts_with("for ")
+            w := t.words()
+            fin := block_end(lines, i, "for ", "endfor")
+            body_lo := i + 1
+            body := lines[body_lo..fin]
+            items := lists.get(w[3]) else List[str]()
+            mut n := 0
+            for item in items
+                n += 1
+                mut inner := vars
+                inner[w[1]] = item
+                inner["loop.index"] = "{n}"
+                out.extend(render(body, inner, lists))
+            i = fin + 1
+        elif t.starts_with("if ")
+            done := block_end(lines, i, "if ", "endif")
+            mid := else_at(lines, i, done)
+            stop := if mid < 0 then done else mid
+            then_lo := i + 1
+            else_lo := mid + 1
+            if truthy(t.slice(3, t.len()), vars, lists)
+                out.extend(render(lines[then_lo..stop], vars, lists))
+            elif mid >= 0
+                out.extend(render(lines[else_lo..done], vars, lists))
+            i = done + 1
+        else
+            out.push(substitute(lines[i], vars))
+            i += 1
+    out
+
+fn main()
+    tpl_lines := [
+        "Report for [[user]]",
+        "[% if admin %]",
+        "  (admin view)",
+        "[% else %]",
+        "  (read-only view)",
+        "[% endif %]",
+        "[% for team in teams %]",
+        "Team [[loop.index]]: [[team]]",
+        "[% for who in members %]",
+        "  - [[who]] ([[team]])",
+        "[% endfor %]",
+        "[% endfor %]",
+        "[% if not extras %]",
+        "No extras.",
+        "[% endif %]",
+        "Missing: <[[nothing]]>",
+    ]
+    lists := {"teams": ["core", "tools"], "members": ["ann", "bo"], "extras": List[str]()}
+    for admin in ["true", ""]
+        print("== admin={admin}")
+        for line in render(tpl_lines, {"user": "kim", "admin": admin}, lists)
+            print(line)
+
+@test fn substitutes_variables()
+    assert_eq(substitute("a [[x]] b [[ y ]] c", {"x": "1", "y": "2"}), "a 1 b 2 c")
+    assert_eq(substitute("[[gone]]|[[open", {"x": "1"}), "|[[open")
+
+@test fn loops_count_from_one()
+    out := render(
+        ["[% for v in vs %]", "[[loop.index]]=[[v]]", "[% endfor %]"],
+        Map[str, str](),
+        {"vs": ["a", "b"]},
+    )
+    assert_eq(out, ["1=a", "2=b"])
+
+@test fn conditionals_pick_a_branch()
+    tpl := ["[% if on %]", "yes", "[% else %]", "no", "[% endif %]"]
+    assert_eq(render(tpl, {"on": "1"}, {"z": List[str]()}), ["yes"])
+    assert_eq(render(tpl, {"on": "false"}, {"z": List[str]()}), ["no"])

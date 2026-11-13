@@ -1,0 +1,90 @@
+## An iterative bottom-up segment tree over ints: point update and half-open
+## range sum in O(log n). Data comes from an integer LCG, and every range
+## query is checked against a plain loop over the array.
+
+struct SegTree
+    size int
+    tree List[int]
+
+fn SegTree.build(data List[int]) SegTree
+    count := data.len()
+    mut nodes := List[int]()
+    for _ in 0..2 * count
+        nodes.push(0)
+    for i in 0..count
+        nodes[count + i] = data[i]
+    mut j := count - 1
+    while j >= 1
+        nodes[j] = nodes[2 * j] + nodes[2 * j + 1]
+        j -= 1
+    SegTree(size: count, tree: nodes)
+
+fn SegTree.update(mut self, pos int, val int)
+    mut p := pos + self.size
+    self.tree[p] = val
+    while p > 1
+        p = p / 2
+        self.tree[p] = self.tree[2 * p] + self.tree[2 * p + 1]
+
+fn SegTree.query(self, l int, r int) int
+    mut lo := l + size
+    mut hi := r + size
+    mut total := 0
+    while lo < hi
+        if lo % 2 == 1
+            total += tree[lo]
+            lo += 1
+        if hi % 2 == 1
+            hi -= 1
+            total += tree[hi]
+        lo = lo / 2
+        hi = hi / 2
+    total
+
+fn brute(data List[int], l int, r int) int
+    mut total := 0
+    for i in l..r
+        total += data[i]
+    total
+
+fn next_rand(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn main()
+    mut seed := 2024
+    mut data := List[int]()
+    for _ in 0..13
+        seed = next_rand(seed)
+        data.push(seed / 65536 % 100)
+    print("data: {data}")
+    mut st := SegTree.build(data)
+    print("total: {st.query(0, 13)}")
+    for rg in [(0, 5), (3, 9), (7, 8), (4, 4), (10, 13)]
+        print("sum[{rg.0}, {rg.1}) = {st.query(rg.0, rg.1)}")
+    for u in [(2, 500), (12, 0), (6, 77)]
+        st.update(u.0, u.1)
+        data[u.0] = u.1
+        print("set {u.0} = {u.1}: total {st.query(0, 13)}")
+    mut mismatches := 0
+    for l in 0..13
+        for r in l..14
+            if st.query(l, r) != brute(data, l, r)
+                mismatches += 1
+    print("mismatches against brute force: {mismatches}")
+
+@test fn builds_prefix_totals()
+    st := SegTree.build([1, 2, 3, 4, 5])
+    assert_eq(st.query(0, 5), 15)
+    assert_eq(st.query(1, 4), 9)
+    assert_eq(st.query(2, 2), 0)
+
+@test fn update_changes_sums()
+    mut st := SegTree.build([5, 5, 5, 5])
+    st.update(1, 0)
+    assert_eq(st.query(0, 4), 15)
+    assert_eq(st.query(1, 2), 0)
+
+@test fn odd_sizes_work()
+    st := SegTree.build([4, 1, 7])
+    assert_eq(st.query(0, 3), 12)
+    assert_eq(st.query(2, 3), 7)

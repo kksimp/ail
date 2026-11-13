@@ -40,6 +40,19 @@ mostly serial, and `api_card` (490 s, one process) starting after the shards. `n
 shards are the last jobs of the pool and wait for `selfhost1`, and `api_card` starts first. The cover check counts
 nativex items too.
 
+## Amendment 2026-11-13 (2): fewer core-seconds
+
+Batch 8c on a 4-vCPU Linux VM: the suites add up to about 5900 core-seconds, so the 1612 s wall time is CPU-bound
+(91% utilised). Two changes cut work, not scheduling:
+
+- nativex checks each program once per run, not once per target (`ail check` doesn't depend on the target) and once
+  per halving of a failed batch (a marker file in the run's scratch directory).
+- `GATE_SKIP_HOSTFREE=1` on `mac-gate.sh` leaves out the suites of `tools/gate/hostfree.txt` (about 1000 core-seconds:
+  api_card, explain, fmt, corpus and the other front-end and text suites). Off by default; for the Linux VM, after a
+  green Mac gate on the same head, never for a release gate and never on Windows. The verdict line says `(not run: ...)`.
+  The suites are not host-independent in the strict sense: the front end runs as this host's native backend's output,
+  so they also exercise the x86-64 backend. Skipping them is the designer's trade of that coverage for time.
+
 ## Rejected alternatives
 
 - **More jobs by default.** The Mac was overloaded into a reboot by too many concurrent processes; the default

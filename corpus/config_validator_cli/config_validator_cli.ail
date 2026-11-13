@@ -1,0 +1,104 @@
+## Config validator CLI: checks `key = value` configuration text against a
+## schema and reports every problem with its line number, like a lint tool
+## would. Rules cover types (int with a range, bool, one-of choices, plain
+## text), required keys, unknown keys and duplicates. Three embedded configs
+## are validated and each gets an exit code (0 clean, 1 with problems).
+
+struct Rule
+    key str
+    kind str
+    arg str
+    required bool
+
+fn schema() List[Rule]
+    [
+        Rule(key: "name", kind: "text", arg: "", required: true),
+        Rule(key: "port", kind: "int", arg: "1-65535", required: true),
+        Rule(key: "mode", kind: "choice", arg: "fast|slow|safe", required: false),
+        Rule(key: "debug", kind: "bool", arg: "", required: false),
+        Rule(key: "workers", kind: "int", arg: "1-64", required: false),
+    ]
+
+fn check_value(r Rule, value str) str
+    if value.is_empty()
+        return "empty value"
+    if r.kind == "int"
+        n := value.to_int() else return "not an integer: {value}"
+        bounds := r.arg.split("-")
+        lo := bounds[0].to_int() else 0
+        hi := bounds[1].to_int() else 0
+        if n < lo or n > hi
+            return "{n} outside {lo}..{hi}"
+    elif r.kind == "bool"
+        if value != "true" and value != "false"
+            return "not a bool: {value}"
+    elif r.kind == "choice"
+        if not r.arg.split("|").contains(value)
+            return "{value} not one of {r.arg.replace("|", ", ")}"
+    ""
+
+fn validate(text str) List[str]
+    rules := schema()
+    mut problems := List[str]()
+    mut seen := Set[str]()
+    lines := text.lines()
+    for i in 0..lines.len()
+        line := lines[i].trim()
+        if line.is_empty() or line.starts_with("#")
+            continue
+        num := i + 1
+        pos := line.find("=") else
+            problems.push("line {num}: expected key = value")
+            continue
+        key := line.slice(0, pos).trim()
+        value := line.slice(pos + 1, line.len()).trim()
+        if not seen.add(key)
+            problems.push("line {num}: duplicate key {key}")
+            continue
+        matching := [x for x in rules if x.key == key]
+        if matching.is_empty()
+            problems.push("line {num}: unknown key {key}")
+            continue
+        msg := check_value(matching[0], value)
+        if not msg.is_empty()
+            problems.push("line {num}: {key}: {msg}")
+    for r in rules
+        if r.required and not seen.contains(r.key)
+            problems.push("missing required key {r.key}")
+    problems
+
+fn main()
+    names := ["good.conf", "bad.conf", "sloppy.conf"]
+    texts := [
+        "# web service\nname = api\nport = 8080\nmode = fast\ndebug = false\n",
+        "name = web\nport = 70000\nmode = turbo\nworkers = many\ndebug = yes\n",
+        "port = 80\nport = 81\ncolour = red\nthis line is wrong\nname =\n",
+    ]
+    mut worst := 0
+    for i in 0..names.len()
+        problems := validate(texts[i])
+        code := if problems.is_empty() then 0 else 1
+        worst = worst.max(code)
+        print("{names[i]}: {problems.len()} problems, exit {code}")
+        for p in problems
+            print("  {p}")
+    print("overall exit code {worst}")
+
+@test fn accepts_a_clean_config()
+    assert_eq(validate("name=x\nport=1\n"), List[str]())
+
+@test fn reports_range_and_type_errors()
+    got := validate("name=x\nport=0\nworkers=2.5\n")
+    assert_eq(got, ["line 2: port: 0 outside 1..65535", "line 3: workers: not an integer: 2.5"])
+
+@test fn reports_missing_and_unknown_keys()
+    got := validate("zzz=1\n")
+    assert_eq(got, [
+        "line 1: unknown key zzz",
+        "missing required key name",
+        "missing required key port",
+    ])
+
+@test fn duplicates_are_flagged()
+    got := validate("name=a\nname=b\nport=5\n")
+    assert_eq(got, ["line 2: duplicate key name"])

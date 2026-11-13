@@ -1,0 +1,6 @@
+struct Task
+    id int
+
+fn main()
+    t := Task(id: 1)
+    print(t.id)

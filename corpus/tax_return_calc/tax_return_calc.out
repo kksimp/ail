@@ -1,0 +1,10 @@
+ann: gross 52300 taxable 38300 tax 4376 credit 0 owed 4376 -> refund 424 (eff 8.3%)
+bo: gross 122500 taxable 94500 tax 11550 credit 4000 owed 7550 -> refund 1450 (eff 6.1%)
+cy: gross 38000 taxable 17000 tax 1820 credit 1820 owed 0 -> refund 2000 (eff 0.0%)
+di: gross 9100 taxable 0 tax 0 credit 0 owed 0 -> refund 0 (eff 0.0%)
+error: unknown filing status widow
+error: flo reports a negative amount
+error: cannot read return 'gus single abc 0 0 0'
+hal: gross 450000 taxable 422000 tax 94620 credit 6000 owed 88620 -> due 18620 (eff 19.6%)
+ivy: gross 200000 taxable 186000 tax 38560 credit 0 owed 38560 -> due 8560 (eff 19.2%)
+total tax owed 139106

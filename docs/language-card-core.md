@@ -1,6 +1,6 @@
 # AIL core card
 
-> Non-normative; budget 2,000 tokens (`tools/tokbench/run.sh docs/language-card-core.md`).
+> Non-normative; budget 3,000 tokens (ADR 1110) (`tools/tokbench/run.sh docs/language-card-core.md`).
 > The [full card](language-card.md) has the rest: `ail card TOPIC` prints one of its
 > sections (`ail card errors`), `ail ask std "read a file by lines"` finds a std function or built-in method, `ail ask how "sort descending"` a checked how-to,
 > `ail explain RULE` gives the text of any rule a diagnostic cites.

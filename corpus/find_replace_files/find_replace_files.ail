@@ -84,5 +84,5 @@ fn main() !
     ])
     assert_eq(total, 7)
 
-@test fn missing_file_fails()
+@needs(fs) @test fn missing_file_fails()
     assert_err(count_in_file("/no/such/dir/file.txt"))

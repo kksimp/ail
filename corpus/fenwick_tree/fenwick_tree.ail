@@ -1,0 +1,107 @@
+## A Fenwick (binary indexed) tree: point add, prefix sum, range sum and a
+## k-th smallest search by binary lifting. It also counts the inversions of a
+## sequence by sweeping it once, and the answer is checked with a double loop.
+
+struct Fenwick
+    size int
+    cells List[int]
+
+fn Fenwick.new(n int) Fenwick
+    mut zeros := List[int]()
+    for _ in 0..n + 1
+        zeros.push(0)
+    Fenwick(size: n, cells: zeros)
+
+fn Fenwick.add(mut self, pos int, delta int)
+    mut i := pos
+    while i <= self.size
+        self.cells[i] += delta
+        low := i & (0 - i)
+        i += low
+
+fn Fenwick.prefix(self, pos int) int
+    mut i := pos
+    mut total := 0
+    while i > 0
+        total += cells[i]
+        low := i & (0 - i)
+        i -= low
+    total
+
+fn Fenwick.range(self, l int, r int) int
+    prefix(r) - prefix(l - 1)
+
+## Smallest position whose prefix sum reaches k (all cells must be >= 0).
+fn Fenwick.kth(self, k int) int
+    mut pos := 0
+    mut left := k
+    mut step := 1
+    while step * 2 <= size
+        step *= 2
+    while step > 0
+        nxt := pos + step
+        if nxt <= size and cells[nxt] < left
+            pos = nxt
+            left -= cells[nxt]
+        step = step / 2
+    pos + 1
+
+fn inversions(xs List[int], top int) int
+    mut fw := Fenwick.new(top)
+    mut count := 0
+    mut seen := 0
+    for x in xs
+        count += seen - fw.prefix(x)
+        fw.add(x, 1)
+        seen += 1
+    count
+
+fn inversions_slow(xs List[int]) int
+    mut count := 0
+    for i in 0..xs.len()
+        for j in i + 1..xs.len()
+            if xs[i] > xs[j]
+                count += 1
+    count
+
+fn main()
+    mut fw := Fenwick.new(10)
+    for p in 1..=10
+        fw.add(p, p * p % 7)
+    sums := [fw.prefix(q) for q in 1..=10]
+    print("prefix sums: {sums}")
+    print("range 3..7 = {fw.range(3, 7)}")
+    print("range 1..10 = {fw.range(1, 10)}")
+    fw.add(4, 10)
+    print("after add 10 at 4: range 3..7 = {fw.range(3, 7)}")
+    mut counts := Fenwick.new(8)
+    for v in [3, 1, 4, 1, 5, 8, 2, 6, 5, 3, 5]
+        counts.add(v, 1)
+    for k in [1, 4, 6, 11]
+        print("k-th smallest, k={k}: {counts.kth(k)}")
+    seq := [5, 3, 8, 1, 9, 2, 7, 4, 6, 3]
+    print("inversions: {inversions(seq, 9)} (slow check {inversions_slow(seq)})")
+    print("sorted input: {inversions([1, 2, 3, 4, 5], 5)}")
+    print("reversed input: {inversions([5, 4, 3, 2, 1], 5)}")
+
+@test fn prefix_and_range()
+    mut fw := Fenwick.new(6)
+    for p in 1..=6
+        fw.add(p, p)
+    assert_eq(fw.prefix(6), 21)
+    assert_eq(fw.range(2, 4), 9)
+    assert_eq(fw.prefix(0), 0)
+
+@test fn kth_finds_order_statistics()
+    mut fw := Fenwick.new(5)
+    for v in [2, 2, 4, 5]
+        fw.add(v, 1)
+    assert_eq(fw.kth(1), 2)
+    assert_eq(fw.kth(2), 2)
+    assert_eq(fw.kth(3), 4)
+    assert_eq(fw.kth(4), 5)
+
+@test fn inversions_match_slow_count()
+    xs := [4, 2, 5, 1, 3]
+    assert_eq(inversions(xs, 5), inversions_slow(xs))
+    assert_eq(inversions(xs, 5), 6)

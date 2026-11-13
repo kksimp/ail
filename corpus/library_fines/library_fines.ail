@@ -1,0 +1,135 @@
+## Library overdue fines. Each loan record is "patron item out_day in_day"; the
+## first letter of the item picks a policy (B book, D dvd, M magazine). Every
+## policy is a trait implementation with its own loan period, daily rate and
+## cap. Bad records are rejected with a typed error; fines are totalled per patron.
+
+error enum FineError
+    BadRecord(text str) "bad record '{text}'"
+    UnknownKind(code str) "unknown item kind {code}"
+    BackwardsDates(item str) "{item} returned before it was borrowed"
+
+trait Policy
+    fn label(self) str
+    fn limit_days(self) int
+    fn rate(self) int
+    fn cap(self) int
+    fn fine(self, held int) int
+        late := held - self.limit_days()
+        if late <= 0
+            return 0
+        (late * self.rate()).min(self.cap())
+
+struct Book
+    weeks int
+
+struct Dvd
+    grace int
+
+struct Magazine
+    issues int
+
+impl Policy for Book
+    fn label(self) str
+        "book"
+    fn limit_days(self) int
+        self.weeks * 7
+    fn rate(self) int
+        25
+    fn cap(self) int
+        1000
+
+impl Policy for Dvd
+    fn label(self) str
+        "dvd"
+    fn limit_days(self) int
+        7 + self.grace
+    fn rate(self) int
+        100
+    fn cap(self) int
+        2000
+
+impl Policy for Magazine
+    fn label(self) str
+        "magazine"
+    fn limit_days(self) int
+        14 * self.issues
+    fn rate(self) int
+        10
+    fn cap(self) int
+        200
+
+fn policies() List[any Policy]
+    mut ps := List[any Policy]()
+    ps.push(Book(weeks: 3))
+    ps.push(Dvd(grace: 0))
+    ps.push(Magazine(issues: 1))
+    ps
+
+fn slot_for(item str) int ! FineError
+    code := item.slice(0, 1)
+    if code == "B"
+        return 0
+    if code == "D"
+        return 1
+    if code == "M"
+        return 2
+    return UnknownKind(code: code)
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn assess(line str, ps List[any Policy]) int ! FineError
+    parts := line.words()
+    if parts.len() != 4
+        return BadRecord(text: line)
+    out_day := parts[2].to_int() else return BadRecord(text: line)
+    in_day := parts[3].to_int() else return BadRecord(text: line)
+    if in_day < out_day
+        return BackwardsDates(item: parts[1])
+    slot := slot_for(parts[1])?
+    p := ps[slot]
+    held := in_day - out_day
+    cents := p.fine(held)
+    print("{parts[0]} {parts[1]} ({p.label()}) held {held}, fine {money(cents)}")
+    cents
+
+fn main()
+    records := [
+        "alice B101 1 20",
+        "alice D7 3 15",
+        "bob B102 1 40",
+        "bob M9 2 30",
+        "carol D8 10 80",
+        "carol X1 5 9",
+        "dave B103 30 25",
+        "erin B104 5",
+        "erin M3 1 15",
+        "alice M4 2 24",
+    ]
+    ps := policies()
+    mut totals := Map[str, int]()
+    for rec in records
+        cents := assess(rec, ps) else err
+            print("skipped: {err}")
+            continue
+        who := rec.words()[0]
+        totals[who] += cents
+    for name in totals.keys().sorted()
+        print("{name} owes {money(totals[name])}")
+
+@test fn fine_is_capped()
+    ps := policies()
+    assert_eq(assess("c D1 0 200", ps)?, 2000)
+
+@test fn on_time_is_free()
+    ps := policies()
+    assert_eq(assess("c B1 0 21", ps)?, 0)
+    assert_eq(assess("c B1 0 22", ps)?, 25)
+
+@test fn bad_records()
+    ps := policies()
+    assert_err(assess("c Z1 0 5", ps))
+    assert_err(assess("c B1 9 5", ps))
+    assert_err(assess("c B1 x 5", ps))
+    assert_err(assess("c B1", ps))

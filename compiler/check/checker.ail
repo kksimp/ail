@@ -145,6 +145,9 @@ pub struct Checker
     pub allow_wildcards bool
     ## How many `unsafe` blocks enclose the code being checked (unsafe.block.1).
     pub unsafe_depth int
+    ## `pos_key` of each labeled loop that a `break outer` names (expr.loop.10),
+    ## for the divergence of `outer: while true` (expr.loop.7).
+    pub label_breaks Set[int]
     ## Calls resolved to a declared function, or an associated function of a
     ## type, by `pos_key` of the name: the calls `spawn` can start (conc.task.1).
     pub declared_fns Set[int]
@@ -278,6 +281,7 @@ pub fn new_checker(p ast.Program) Checker
         gap_now: false,
         allow_wildcards: false,
         unsafe_depth: 0,
+        label_breaks: Set[int](),
         declared_fns: Set[int](),
         targets: Map[int, int](),
         symbols: Map[int, str](),
@@ -506,7 +510,13 @@ fn Checker.collect_types(mut self)
         if first := types.get(n)
             built_in = is_prelude_line(def_pos(first).line)
         if BUILTIN_TYPES.contains(n) or SPEC_TYPES_NOT_YET.contains(n) or built_in
-            err("mod.unit.1", at, "`{n}` is already a built-in type")
+            alt := prelude_alt(n)
+            diags.push(
+                new_diag("mod.unit.1", at, "`{n}` is a prelude type; rename yours, e.g. `{alt}`").with_fix(
+                    "rename `{n}` to `{alt}` in this file",
+                    [fix.rename_all(at, n, alt)],
+                ),
+            )
         elif types.contains(n) or traits.contains(n)
             mut dg := new_diag("mod.unit.1", at, "`{n}` is declared more than once in this module")
             if first := types.get(n)

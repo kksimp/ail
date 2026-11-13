@@ -1,0 +1,12 @@
+good.conf: 0 problems, exit 0
+bad.conf: 4 problems, exit 1
+  line 2: port: 70000 outside 1..65535
+  line 3: mode: turbo not one of fast, slow, safe
+  line 4: workers: not an integer: many
+  line 5: debug: not a bool: yes
+sloppy.conf: 4 problems, exit 1
+  line 2: duplicate key port
+  line 3: unknown key colour
+  line 4: expected key = value
+  line 5: name: empty value
+overall exit code 1

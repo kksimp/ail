@@ -238,11 +238,12 @@ fn Scan.stmt(mut self, s ast.Stmt)
             depth += 1
             scoped([v], body)
             depth -= 1
-        Break(p) =>
-            if depth == 0
+        Break(p, target) =>
+            # A `break outer` leaves a loop the scan can't see inside (expr.loop.10).
+            if depth == 0 or target != none
                 exit("`break`", p)
-        Continue =>
-            if depth == 0
+        Continue(_, target) =>
+            if depth == 0 or target != none
                 skips = true
         Return(e, p) =>
             if x := e

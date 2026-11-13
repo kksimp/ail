@@ -1,0 +1,131 @@
+## Changelog builder: parses conventional commit subjects (`feat(ui)!: text`),
+## groups them into release-note sections in a fixed order, and suggests the
+## next semantic version from the kinds of change seen.
+
+struct Commit
+    kind str
+    scope str
+    desc str
+    breaking bool
+
+fn parse_commit(line str) Commit?
+    idx := line.find(": ") else return none
+    head := line.slice(0, idx)
+    desc := line.slice(idx + 2, line.len()).trim()
+    breaking := head.ends_with("!")
+    core := if breaking then head.slice(0, head.len() - 1) else head
+    mut kind := core
+    mut scope := ""
+    lp := core.find("(") else -1
+    if lp >= 0
+        if not core.ends_with(")")
+            return none
+        kind = core.slice(0, lp)
+        scope = core.slice(lp + 1, core.len() - 1)
+    if kind == "" or desc == ""
+        return none
+    Commit(kind: kind, scope: scope, desc: desc, breaking: breaking)
+
+fn section_title(kind str) str
+    match kind
+        "feat" => "Features"
+        "fix" => "Bug Fixes"
+        "perf" => "Performance"
+        "docs" => "Documentation"
+        _ => ""
+
+fn bump(version str, commits List[Commit]) str
+    parts := version.split(".")
+    mut major := parts[0].to_int() else 0
+    mut minor := parts[1].to_int() else 0
+    mut patch := parts[2].to_int() else 0
+    mut any_break := false
+    mut any_feat := false
+    for c in commits
+        if c.breaking
+            any_break = true
+        if c.kind == "feat"
+            any_feat = true
+    if any_break
+        major += 1
+        minor = 0
+        patch = 0
+    elif any_feat
+        minor += 1
+        patch = 0
+    else
+        patch += 1
+    "{major}.{minor}.{patch}"
+
+fn build(version str, subjects List[str]) List[str]
+    mut commits := List[Commit]()
+    for s in subjects
+        c := parse_commit(s) else continue
+        commits.push(c)
+    skipped := subjects.len() - commits.len()
+    nxt := bump(version, commits)
+    mut out := ["## {nxt}"]
+    mut breaking := List[str]()
+    for c in commits
+        if c.breaking
+            breaking.push(c.desc)
+    if not breaking.is_empty()
+        out.push("")
+        out.push("### BREAKING CHANGES")
+        for b in breaking
+            out.push("- {b}")
+    for kind in ["feat", "fix", "perf", "docs"]
+        mut rows := List[str]()
+        for c in commits
+            if c.kind == kind
+                tag := if c.scope == "" then "" else "**{c.scope}:** "
+                rows.push("- {tag}{c.desc}")
+        if not rows.is_empty()
+            out.push("")
+            out.push("### {section_title(kind)}")
+            out.extend(rows)
+    out.push("")
+    out.push("({commits.len()} commits, {skipped} skipped)")
+    out
+
+fn main()
+    subjects := [
+        "feat(parser): accept trailing commas",
+        "fix(fmt): keep blank line after imports",
+        "chore: bump seed",
+        "feat!: drop the old module syntax",
+        "docs(spec): clarify shadowing",
+        "fix: crash on empty file",
+        "perf(check): cache lookups",
+        "update stuff",
+        "fix(: broken scope",
+    ]
+    for line in build("1.4.2", subjects)
+        print(line)
+    print("---")
+    for line in build("2.0.9", ["fix: one", "fix(io): two"])
+        print(line)
+
+@test fn parses_scope_and_break()
+    c := parse_commit("feat(ui)!: new menu") else Commit(
+        kind: "",
+        scope: "",
+        desc: "",
+        breaking: false,
+    )
+    assert_eq(c.kind, "feat")
+    assert_eq(c.scope, "ui")
+    assert_eq(c.desc, "new menu")
+    assert(c.breaking)
+
+@test fn rejects_plain_messages()
+    assert(parse_commit("just words") == none)
+    assert(parse_commit("fix(x: oops") == none)
+
+@test fn version_bumps()
+    fixes := [Commit(kind: "fix", scope: "", desc: "a", breaking: false)]
+    feats := [Commit(kind: "feat", scope: "", desc: "a", breaking: false)]
+    brk := [Commit(kind: "fix", scope: "", desc: "a", breaking: true)]
+    assert_eq(bump("1.2.3", fixes), "1.2.4")
+    assert_eq(bump("1.2.3", feats), "1.3.0")
+    assert_eq(bump("1.2.3", brk), "2.0.0")

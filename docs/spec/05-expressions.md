@@ -198,7 +198,8 @@ it has an `else` and every branch produces a value of the same type.
 `while c` runs its block while `c` is true. *(ADR 0091)*
 
 **expr.loop.2** — `break` exits the innermost loop. `continue` starts its
-next iteration. *(ADR 0091)*
+next iteration. `break name` and `continue name` name an enclosing loop
+instead (`expr.loop.10`). *(ADR 0091, ADR 1107)*
 
 **expr.loop.3** — `a..b` is the half-open range from `a` up to but excluding
 `b`. `a..=b` includes `b`. *(ADR 0091)*
@@ -228,8 +229,8 @@ present, or the loop traps (`type.map.3`). *(ADR 0121, ADR 0131)*
 **expr.loop.7** — A `while` whose condition is the literal `true` and whose
 body contains no `break` for that loop never completes normally, so as a
 statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
-to that loop. AIL has no `loop` keyword: the help for it says `while true`.
-*(ADR 0139)*
+to that loop, unless it names an outer loop (`expr.loop.10`). AIL has no
+`loop` keyword: the help for it says `while true`. *(ADR 0139, ADR 1107)*
 
 **expr.loop.8** — `while name := e` runs its block while `e`, of type `T?` or
 `T ! E`, has a value. Each iteration evaluates `e` first. When `e` is present
@@ -242,6 +243,27 @@ that has a value is never a diverging statement (`expr.loop.7`). There is no
 `else err` part and no `elif`. The Rust spelling `while let x = e` is a
 compile-time error whose fix writes `while x := e`. If `e` is neither optional
 nor a result, that is a compile-time error that names the `while` binding. *(ADR 1088)*
+
+**expr.loop.9** — A loop may start with a label: `name: for x in e` or
+`name: while c`, on one line, with no space before the `:`. A label is a name
+in a namespace of its own: it never clashes with a binding, a function or a
+type. It is visible in the loop's header and block and nowhere else, so two
+loops one after the other may reuse a label. A label that an enclosing loop of
+the same function already has is a compile-time error. A `par for` can't be
+labeled. A function literal or a local function does not see the labels
+around it. *(ADR 1107)*
+
+**expr.loop.10** — `break name` leaves, and `continue name` continues, the
+enclosing loop labeled `name`; both also leave every loop inside it, run the
+`defer` statements of the blocks they leave (`own.defer.1`) and end the task
+scopes they leave, as `break` does. The statement then diverges
+(`expr.block.3`). `name` MUST label an enclosing loop of the same function,
+and no `par for` may lie between the statement and that loop
+(`conc.par.2`); otherwise it is a compile-time error whose fix writes the
+label of the enclosing loop, or labels the outermost enclosing loop `name`
+when none is labeled. A `break name` inside a nested loop is a `break` of the
+labeled loop for `expr.loop.7`. `break 'name` and `for x in e as name` are not
+labels. *(ADR 1107)*
 
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
@@ -1138,6 +1160,47 @@ fn find_first(xs List[int], target int) int
 
 fn main()
     print(find_first([4, 5, 6], 6))   # 2
+```
+
+```ail rules=expr.loop.9,expr.loop.10
+fn first_pair(grid List[List[int]], want int) int
+    rows: for r in 0..grid.len()
+        for c in 0..grid[r].len()
+            if grid[r][c] == want
+                return r * 10 + c
+    -1
+
+fn main()
+    mut found := 0
+    outer: for i in 0..5
+        for j in 0..5
+            if i * j == 6
+                found = i * 10 + j
+                break outer           # leaves both loops
+    print(found)                      # 23
+    mut sum := 0
+    rows: for i in 0..4
+        for j in 0..4
+            if j > i
+                continue rows         # the next iteration of the outer loop
+            sum += 1
+    print(sum)                        # 10
+    print(first_pair([[1, 2], [3, 4]], 4))   # 11
+```
+
+```ail error=expr.loop.10
+fn main()
+    for i in 0..3
+        for j in 0..3
+            if i + j == 2
+                break outer           # error: no loop is labeled `outer`
+```
+
+```ail error=expr.loop.9
+fn main()
+    outer: for i in 0..3
+        outer: for j in 0..3          # error: an enclosing loop is already `outer`
+            print(i + j)
 ```
 
 ```ail rules=expr.prec.1,expr.op.1,expr.op.2,expr.op.3

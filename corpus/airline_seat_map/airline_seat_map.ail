@@ -1,0 +1,131 @@
+## An airline seat map. Bookings like "3C" are checked against a 6 row, 4 seat
+## cabin; bad codes, missing rows and taken seats fail with a typed error. Fares
+## come from a `Fare` trait (premium rows 1-2, standard after), window seats cost
+## extra. Prints each result, the seat map and the revenue.
+
+ROWS := 6
+COLS := 4
+
+error enum SeatError
+    BadCode(text str) "bad seat code {text}"
+    OutOfRange(text str) "{text} is not in this cabin"
+    Taken(text str, by str) "{text} already taken by {by}"
+
+trait Fare
+    fn cost(self, window bool) int
+
+struct Premium
+    base int
+
+struct Standard
+    base int
+
+impl Fare for Premium
+    fn cost(self, window bool) int
+        if window
+            self.base + 25
+        else
+            self.base
+
+impl Fare for Standard
+    fn cost(self, window bool) int
+        if window
+            self.base + 10
+        else
+            self.base
+
+struct Booking
+    who str
+    code str
+
+struct Cabin
+    seats List[str]
+    booked int
+
+fn Cabin.new() Cabin
+    mut s := List[str]()
+    for i in 0..ROWS * COLS
+        s.push("")
+    Cabin(seats: s, booked: 0)
+
+fn Cabin.book(mut self, who str, code str) int ! SeatError
+    n := code.len()
+    if n < 2
+        return BadCode(text: code)
+    row := code.slice(0, n - 1).to_int() else return BadCode(text: code)
+    letter := code.char_at(n - 1) else return BadCode(text: code)
+    col := match letter
+        'A' => 0
+        'B' => 1
+        'C' => 2
+        'D' => 3
+        _ => -1
+    if col < 0
+        return BadCode(text: code)
+    if row < 1 or row > ROWS
+        return OutOfRange(text: code)
+    idx := (row - 1) * COLS + col
+    if self.seats[idx] != ""
+        return Taken(text: code, by: self.seats[idx])
+    self.seats[idx] = who
+    self.booked += 1
+    window := col == 0 or col == COLS - 1
+    if row <= 2
+        p := Premium(base: 150)
+        p.cost(window)
+    else
+        s := Standard(base: 80)
+        s.cost(window)
+
+fn Cabin.render(self) List[str]
+    mut lines := List[str]()
+    for r in 0..ROWS
+        mut cells := List[str]()
+        for c in 0..COLS
+            who := self.seats[r * COLS + c]
+            cells.push(if who == "" then "." else who.slice(0, 1))
+        lines.push("{r + 1:>2} {cells[0]} {cells[1]} | {cells[2]} {cells[3]}")
+    lines
+
+fn main()
+    list := [
+        Booking(who: "Ann", code: "1A"),
+        Booking(who: "Bob", code: "1A"),
+        Booking(who: "Cy", code: "2D"),
+        Booking(who: "Dee", code: "7B"),
+        Booking(who: "Eve", code: "3E"),
+        Booking(who: "Fay", code: "x"),
+        Booking(who: "Gus", code: "4B"),
+        Booking(who: "Hal", code: "6C"),
+        Booking(who: "Ivy", code: "6D"),
+    ]
+    mut cabin := Cabin.new()
+    mut revenue := 0
+    for b in list
+        fare := cabin.book(b.who, b.code) else err
+            print("{b.who}: {err}")
+            continue
+        print("{b.who}: {b.code} for {fare}")
+        revenue += fare
+    for line in cabin.render()
+        print(line)
+    print("booked {cabin.booked}, revenue {revenue}")
+
+@test fn window_costs_more()
+    mut c := Cabin.new()
+    assert_eq(c.book("a", "1A")?, 175)
+    assert_eq(c.book("b", "1B")?, 150)
+    assert_eq(c.book("c", "5D")?, 90)
+
+@test fn rejects_bad_and_taken()
+    mut c := Cabin.new()
+    assert_err(c.book("a", "9A"))
+    assert_err(c.book("a", "1Z"))
+    _ := c.book("a", "2B")?
+    assert_err(c.book("b", "2B"))
+    assert_eq(c.booked, 1)
+
+@test fn map_marks_seats()
+    mut c := Cabin.new()
+    _ := c.book("Zed", "1C")?
+    assert_eq(c.render()[0], " 1 . . | Z .")

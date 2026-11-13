@@ -686,7 +686,7 @@ fn Lower.is_pair_loop(self, var str, m Val, body List[ast.Stmt]) bool
 ## over their indexes. `for a, b in xs` starts its body with a `LetTuple`
 ## over the hidden loop variable `var`. Any other `for a, b in xs` is a loop
 ## over tuples and takes the general path.
-fn Lower.for_pairs(mut self, var str, iter ast.Expr, m Val, body List[ast.Stmt])
+fn Lower.for_pairs(mut self, var str, iter ast.Expr, m Val, body List[ast.Stmt], fpos ast.Pos)
     pair := pair_binders(var, body[0])
     pos := expr_pos(iter)
     nvars += 1
@@ -742,5 +742,5 @@ fn Lower.for_pairs(mut self, var str, iter ast.Expr, m Val, body List[ast.Stmt])
             pos: pos,
         ),
         body: inner,
-        pos: pos,
+        pos: fpos,
     ))

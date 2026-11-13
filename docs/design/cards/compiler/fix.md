@@ -27,12 +27,14 @@ pub fn fix.after_block(pos ast.Pos, text str) fix.Edit  ## Append the lines `tex
 pub fn fix.operands(pos ast.Pos, op str, template str) fix.Edit  ## Rewrite `l op r` around the operator at `pos`; `text` is a template: `$l` `$r`
 pub fn fix.c_for(pos ast.Pos) fix.Edit  ## `for (i := a; i < b; i += 1)` as `for i in a..b`, from the parenthesis at `pos`.
 pub fn fix.empty_decl(pos ast.Pos) fix.Edit  ## `xs: List[int] = []` as `xs := List[int]()`, from the statement start.
+pub fn fix.rename_all(pos ast.Pos, old str, text str) fix.Edit  ## Rename every use of the name `old` in the file, from the declaration at `pos`, to `text`.
 pub fn fix.new_fix(title str, edits List[fix.Edit]) fix.Fix
 pub fn fix.split_lines(src str) List[List[char]]  ## The source as lines of characters, as `settle` splits it (a final empty
 fix.SYMBOLS := ...
 pub fn fix.token_end(lines List[List[char]], pos ast.Pos) ast.Pos  ## The exclusive end of the token starting at `pos`: a word, a number, a
 pub fn fix.resolve(e fix.Edit, lines List[List[char]]) fix.Edit?  ## Settle one edit.
 pub fn fix.settle_fixes(fixes List[fix.Fix], lines List[List[char]]) List[fix.Fix]  ## The fixes whose edits all settle, with the settled edits.
+fn fix.whole_word_renames(e fix.Edit, lines List[List[char]]) List[fix.Edit]  ## Every whole-word `e.old` outside strings and comments, as edits that write `e.text`.
 fn fix.exact(e fix.Edit, pos ast.Pos, end ast.Pos, text str) fix.Edit
 fn fix.resolve_exact(e fix.Edit, lines List[List[char]]) fix.Edit?
 struct fix.CallArgs

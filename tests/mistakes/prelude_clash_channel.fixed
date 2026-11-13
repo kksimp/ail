@@ -1,0 +1,6 @@
+struct Pipe
+    id int
+
+fn main()
+    t := Pipe(id: 1)
+    print(t.id)

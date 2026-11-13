@@ -113,7 +113,7 @@ fn Checker.nest_wild_warn(mut self, t Ty, st NestRows, at ast.Pos)
             "expr.match.3",
             at,
             "`_` covers {list_names(unnamed)}, so a variant added later won't be flagged here",
-            "list the variants instead of `_`, or mark the function `@allow(\"expr.match.3\")`",
+            "write `{unnamed.join(" | ")} =>` instead of `_`, or mark the function `@allow(\"expr.match.3\")` to keep the catch-all",
         )
 
 ## The variant a top-level pattern names, if it names one.

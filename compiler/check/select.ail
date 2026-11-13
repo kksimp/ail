@@ -3,6 +3,10 @@
 ## to the channel's element type for its block.
 use ast
 
+## An absent position, for an arm not seen yet.
+fn no_pos() ast.Pos?
+    none
+
 ## A `select` statement. It never finishes without running an arm when it
 ## has a `closed` or an `after` arm, so it leaves when all its arms do.
 fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
@@ -10,8 +14,8 @@ fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
     handle_calls.add(pos_key(at))
     mut waits := 0
     mut recvs := 0
-    mut closed_at := absent[ast.Pos]()
-    mut after_at := absent[ast.Pos]()
+    mut closed_at := no_pos()
+    mut after_at := no_pos()
     mut elems := List[Ty]()
     for a in arms
         mut elem := Ty.Unit
@@ -95,10 +99,13 @@ fn Checker.select_channel(mut self, ch ast.Expr, what str) Ty
 ## A second `after` or `closed` arm (conc.select.4-5).
 fn Checker.select_twice(mut self, word str, at ast.Pos, first ast.Pos)
     rule := if word == "after" then "conc.select.4" else "conc.select.5"
-    diags.push(new_diag(rule, at, "a `select` has at most one `{word}` arm").with_note(
-        first,
-        "the first `{word}` arm is here",
-    ))
+    diags.push(
+        new_diag(
+            rule,
+            at,
+            "a `select` has at most one `{word}` arm",
+        ).with_note(first, "the first `{word}` arm is here"),
+    )
 
 ## The element type of a `Channel[T]`, or none.
 @allow("expr.match.3") fn channel_elem(t Ty) Ty?

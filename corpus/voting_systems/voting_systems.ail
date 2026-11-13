@@ -1,0 +1,164 @@
+## Three voting systems over the same ranked ballots ("Ada>Ben>Cyd"): plurality,
+## Borda count and instant runoff, each a `Method` implementation. A tie at the
+## top, an empty ballot box or a bad ballot fails with a typed error. Prints
+## the winner (or the error) of every method for two ballot boxes.
+
+error enum VoteError
+    NoBallots "no ballots"
+    BadBallot(text str) "bad ballot '{text}'"
+    Tie(names str) "tie between {names}"
+
+fn cands() List[str]
+    ["Ada", "Ben", "Cyd", "Dee"]
+
+trait Method
+    fn label(self) str
+    fn winner(self, ballots List[List[str]]) str ! VoteError
+
+struct Plurality
+    tag str
+
+struct Borda
+    tag str
+
+struct Runoff
+    tag str
+
+fn parse_ballot(text str) List[str] ! VoteError
+    cs := cands()
+    names := text.split(">")
+    mut seen := List[str]()
+    for n in names
+        if (not cs.contains(n)) or seen.contains(n)
+            return BadBallot(text: text)
+        seen.push(n)
+    seen
+
+fn leader(score List[int]) str ! VoteError
+    cs := cands()
+    mut best := 0
+    for s in score
+        best = best.max(s)
+    mut names := List[str]()
+    for i in 0..score.len()
+        if score[i] == best
+            names.push(cs[i])
+    if names.len() > 1
+        return Tie(names: names.join("/"))
+    names[0]
+
+fn zeros() List[int]
+    cs := cands()
+    mut z := List[int]()
+    for c in cs
+        z.push(0)
+    z
+
+impl Method for Plurality
+    fn label(self) str
+        self.tag
+    fn winner(self, ballots List[List[str]]) str ! VoteError
+        if ballots.is_empty()
+            return NoBallots
+        cs := cands()
+        mut score := zeros()
+        for b in ballots
+            i := cs.index_of(b[0]) else 0
+            score[i] += 1
+        leader(score)
+
+impl Method for Borda
+    fn label(self) str
+        self.tag
+    fn winner(self, ballots List[List[str]]) str ! VoteError
+        if ballots.is_empty()
+            return NoBallots
+        cs := cands()
+        mut score := zeros()
+        for b in ballots
+            for r in 0..b.len()
+                i := cs.index_of(b[r]) else 0
+                score[i] += cs.len() - 1 - r
+        leader(score)
+
+impl Method for Runoff
+    fn label(self) str
+        self.tag
+    fn winner(self, ballots List[List[str]]) str ! VoteError
+        if ballots.is_empty()
+            return NoBallots
+        cs := cands()
+        mut alive := [true, true, true, true]
+        mut left := cs.len()
+        while left > 1
+            mut counts := zeros()
+            mut active := 0
+            for b in ballots
+                for name in b
+                    i := cs.index_of(name) else 0
+                    if alive[i]
+                        counts[i] += 1
+                        active += 1
+                        break
+            mut low := -1
+            for k in 0..cs.len()
+                if alive[k] and counts[k] * 2 > active
+                    return cs[k]
+                if alive[k] and (low < 0 or counts[k] < counts[low])
+                    low = k
+            alive[low] = false
+            left -= 1
+        win := alive.index_of(true) else 0
+        cs[win]
+
+fn parse_all(texts List[str]) List[List[str]] ! VoteError
+    mut out := List[List[str]]()
+    for t in texts
+        out.push(parse_ballot(t)?)
+    out
+
+fn report(title str, texts List[str])
+    print(title)
+    ballots := parse_all(texts) else err
+        print("  {err}")
+        return
+    mut methods := List[any Method]()
+    methods.push(Plurality(tag: "plurality"))
+    methods.push(Borda(tag: "borda"))
+    methods.push(Runoff(tag: "runoff"))
+    for m in methods
+        w := m.winner(ballots) else err2
+            print("  {m.label()}: {err2}")
+            continue
+        print("  {m.label()}: {w}")
+
+fn main()
+    report("box one", [
+        "Ada>Ben>Cyd",
+        "Ada>Cyd",
+        "Ben>Cyd>Ada",
+        "Ben>Cyd>Ada",
+        "Cyd>Ben>Ada",
+        "Cyd>Ben",
+        "Dee>Cyd>Ben",
+        "Cyd>Dee>Ben>Ada",
+        "Ada>Dee",
+        "Ben>Ada",
+    ])
+    report("box two", ["Ada>Ben", "Ben>Ada", "Cyd>Dee", "Dee>Cyd"])
+    report("box three", ["Ada>Ben", "Ada>Zed"])
+    report("box four", [])
+
+@test fn clear_winner_under_plurality()
+    b := parse_all(["Ada>Ben", "Ada>Cyd", "Ben>Ada"])?
+    assert_eq(Plurality(tag: "p").winner(b)?, "Ada")
+
+@test fn ties_and_empties_fail()
+    b := parse_all(["Ada", "Ben"])?
+    assert_err(Plurality(tag: "p").winner(b))
+    assert_err(Borda(tag: "b").winner([]))
+
+@test fn bad_ballots_fail()
+    assert_err(parse_ballot("Ada>Ada"))
+    assert_err(parse_ballot("Eve"))
+    assert_eq(parse_ballot("Cyd>Dee")?, ["Cyd", "Dee"])

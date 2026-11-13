@@ -86,6 +86,8 @@ fn shortest(rows List[str]) int?
             step := cost(cells[nr][nc]) else continue
             if dist[nr, nc] == -1
                 heap.push((d + step, nr, nc))
+    none
+
 fn main()
     d := shortest(MAP) else -1
     print("shortest: {d}")

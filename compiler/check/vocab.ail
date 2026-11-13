@@ -75,7 +75,10 @@ fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
             args_only(args)
             return Ty.Unknown
     if args.len() != want_args
-        args_only(args)
+        # The miscount is the one mistake: a function literal here has no parameter types to check against.
+        for one in args
+            if not is_closure_lit(one.value)
+                expr(one.value, none, true)
         if n == "fold"
             err_help(
                 "expr.call.1",

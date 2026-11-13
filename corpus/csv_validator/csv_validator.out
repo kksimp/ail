@@ -1,0 +1,10 @@
+line 3: email 'bob@example': bad e-mail address
+line 3: joined '2023-13-01': bad date
+line 4: name '': empty
+line 4: joined '2023-02-29': bad date
+line 5: id 'x4': not an integer
+line 6: expected 4 fields, found 3
+line 7: joined '2021-04-31': bad date
+line 7: duplicate id 1
+line 8: email '@site.io': bad e-mail address
+7 rows checked, 9 problems

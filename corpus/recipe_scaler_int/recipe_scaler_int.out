@@ -1,0 +1,33 @@
+serves 4:
+  flour   200 g
+  milk    300 ml
+  egg     2 pc
+  salt    1 tsp
+  sugar   2 tbsp
+  butter  40 g
+serves 6:
+  flour   300 g
+  milk    450 ml
+  egg     3 pc
+  salt    2 tsp
+  sugar   3 tbsp
+  butter  60 g
+serves 1:
+  flour   50 g
+  milk    75 ml
+  egg     1 pc
+  salt    1 tsp
+  sugar   1 tbsp
+  butter  10 g
+serves 20:
+  flour   1.000 kg
+  milk    1.500 l
+  egg     10 pc
+  salt    5 tsp
+  sugar   10 tbsp
+  butter  200 g
+serves 0:
+  error: cannot scale to 0 servings
+error: unknown unit cups
+error: cannot read 'x g salt'
+error: cannot read '3 g'

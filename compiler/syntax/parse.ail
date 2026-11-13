@@ -39,6 +39,13 @@ struct FnBody
     body List[ast.Stmt]?
     contracts List[ast.Contract]
 
+## An enclosing loop: `name` is its label ("" for none), `at` the loop
+## keyword's position, `in_par` a `par for`, which `break` can't leave (conc.par.2).
+struct LoopLabel
+    name str
+    at ast.Pos
+    in_par bool
+
 struct Parser
     tokens List[Token]
     i int
@@ -66,6 +73,9 @@ struct Parser
     ## The struct whose members are being parsed ("" outside one), for the
     ## fix that moves its methods out (type.struct.2).
     member_owner str
+    ## The loops enclosing the statement being parsed in this function, outermost
+    ## first, for `break outer` (expr.loop.10).
+    loops List[LoopLabel]
     ## Keywords already reported as a binding's name: later uses read as that
     ## name, so the one `lex.kw.1` with its rename fix is the only error (ADR 1085).
     misnamed Set[str]
@@ -164,6 +174,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         uses: [],
         member_owner: "",
         misnamed: Set[str](),
+        loops: [],
     )
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
@@ -675,7 +686,15 @@ fn Parser.keyword_as_name(mut self, k int)
         return
     help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
     if not rename_is_safe(word)
-        error_text("lex.kw.1", pos, msg, help, "")
+        # A word the language itself uses in bodies: rename this declaration only.
+        error_fix(
+            "lex.kw.1",
+            pos,
+            msg,
+            help,
+            "rename `{word}` to `{better}` here",
+            [rename_edit(pos, word, better)],
+        )
         return
     misnamed.add(word)
     error_fix(
@@ -725,6 +744,14 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
                 return
             if j > 0 and toks[j - 1].tok == Tok.Sym(".")
                 return
+            # The keyword itself, not a name: `for x in xs`, `match -x`.
+            if word == "in"
+                and j > 0
+                and (tok_tag(toks[j - 1].tok) == "id" or toks[j - 1].tok == Tok.Sym(")") or toks[j - 1].tok == Tok.Sym("]"))
+                return
+            if word == "match"
+                and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
+                return
             if name_use_follows(toks[j + 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
         Ident(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return
@@ -741,7 +768,11 @@ fn keyword_rename(word str) str
     match word
         "error" => "err"
         "todo" => "pending"
-        "any" => "found"
+        "any" => "some"
+        "unique" => "distinct"
+        "all" => "every"
+        "with" => "using"
+        "par" => "parallel"
         "ref" => "reference"
         "enum" => "kind"
         "struct" => "record"
@@ -751,14 +782,14 @@ fn keyword_rename(word str) str
         "match" => "matched"
         "fn" => "func"
         "move" => "step"
-        _ => ""
+        _ => "{word}_"
 
 ## Whether the keyword `word` has no use inside a function body that a
 ## rename could hit, so the rename can be applied (lex.kw.1, ADR 1085).
 fn rename_is_safe(word str) bool
     match word
-        "error" | "todo" | "any" | "ref" | "enum" | "struct" | "use" | "pub" => true
-        _ => false
+        "return" | "break" | "continue" | "true" | "false" | "none" | "self" | "else" | "elif" | "and" | "or" | "not" | "if" | "while" | "for" | "defer" | "unsafe" | "fn" | "move" | "mut" | "spawn" | "yield" | "as" => false
+        _ => true
 
 ## `Name`, or a qualified `m.Name` of an imported module (mod.use.2).
 fn Parser.dotted_name(mut self, expected str, rule str) ast.Ident?
@@ -1756,7 +1787,42 @@ fn Parser.statement(mut self) ast.Stmt?
     skip_statement()
     none
 
+## A statement. A loop is on `loops` while its header and block are parsed, so
+## `break outer` finds it (expr.loop.9-10, ADR 1107).
 fn Parser.statement_inner(mut self) ast.Stmt?
+    tag := tag_at(0)
+    text := tok_text(peek())
+    if tag == "id" and sym_at(1) == ":" and (kw_at(2) == "for" or kw_at(2) == "while")
+        return labeled_loop(text)
+    if tag == "kw" and (text == "for" or text == "while" or text == "par")
+        loops.push(LoopLabel(name: "", at: here(), in_par: text == "par"))
+        s := statement_core()
+        loops.pop()
+        return s
+    statement_core()
+
+## `outer: for ...` and `outer: while ...` (expr.loop.9): the name labels the
+## loop, so `break outer` and `continue outer` in a nested loop leave or
+## continue this one (expr.loop.10).
+fn Parser.labeled_loop(mut self, name str) ast.Stmt?
+    lpos := here()
+    for l in loops
+        if l.name == name
+            error_text(
+                "expr.loop.9",
+                lpos,
+                "the loop label `{name}` is already used by an enclosing loop",
+                "give this loop a different label, for example `{name}2`",
+                "",
+            )
+            return none
+    i += 2
+    loops.push(LoopLabel(name: name, at: here(), in_par: false))
+    s := statement_core()
+    loops.pop()
+    s
+
+fn Parser.statement_core(mut self) ast.Stmt?
     pos := here()
     tag := tag_at(0)
     text := tok_text(peek())
@@ -1861,7 +1927,7 @@ fn Parser.statement_inner(mut self) ast.Stmt?
                     pos: bind_pos,
                     mutable: false,
                     value: value,
-                    otherwise: ast.Else.Leave(ast.Stmt.Break(pos)),
+                    otherwise: ast.Else.Leave(ast.Stmt.Break(pos, none)),
                 )]
                 for st in body
                     stmts.push(st)
@@ -1891,12 +1957,8 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             unexpected("`for` after `par`", "conc.par.5")
             return none
         return for_loop(true, pos)
-    if tag == "kw" and text == "break"
-        bump()
-        return ast.Stmt.Break(pos)
-    if tag == "kw" and text == "continue"
-        bump()
-        return ast.Stmt.Continue(pos)
+    if tag == "kw" and (text == "break" or text == "continue")
+        return leave_stmt(text == "break", pos)
     if tag == "kw" and text == "return"
         bump()
         t := tag_at(0)
@@ -1961,6 +2023,85 @@ fn Parser.bit_assignment(mut self, target ast.Expr, s str) ast.Stmt?
         "",
     )
     none
+
+## `break`, `continue`, `break outer` or `continue outer` (expr.loop.2, expr.loop.10).
+## The label names an enclosing loop of this function; it can't leave a `par for`.
+fn Parser.leave_stmt(mut self, is_break bool, pos ast.Pos) ast.Stmt?
+    word := if is_break then "break" else "continue"
+    bump()
+    mut target := absent[ast.Pos]()
+    if tag_at(0) == "id"
+        n := take_name("a loop label", "expr.loop.10")?
+        mut k := loops.len() - 1
+        mut crossed := false
+        while k >= 0 and target == none
+            l := loops[k]
+            if l.name == n.name
+                target = l.at
+            elif l.in_par
+                crossed = true
+                break
+            k -= 1
+        if target == none
+            unknown_label(word, n, crossed)
+            return none
+    if is_break
+        return ast.Stmt.Break(pos, target)
+    ast.Stmt.Continue(pos, target)
+
+## `break outer` where no enclosing loop of the function is labeled `outer`
+## (expr.loop.10), or one is but a `par for` lies between (conc.par.2).
+fn Parser.unknown_label(mut self, word str, n ast.Ident, crossed bool)
+    if crossed
+        error_text(
+            "conc.par.2",
+            n.pos,
+            "`{word} {n.name}` would leave a `par for`",
+            "a later iteration must not run after an earlier one leaves; keep the loop sequential (drop `par`), or collect the results and decide after the loop",
+            "",
+        )
+        return
+    at_label := n.pos
+    at_end := ast.Pos(line: at_label.line, col: at_label.col + n.name.len())
+    mut names := List[str]()
+    mut outermost := absent[ast.Pos]()
+    for l in loops
+        if l.in_par
+            names = []
+            outermost = none
+        elif l.name != ""
+            names.push(l.name)
+        if not l.in_par and outermost == none
+            outermost = l.at
+    if names.len() == 0 and outermost == none
+        error_text(
+            "expr.loop.5",
+            at_label,
+            "`{word} {n.name}` is outside a loop",
+            "`{word}` is only allowed inside a `for` or `while` loop",
+            "",
+        )
+        return
+    if names.len() > 0
+        last := names[names.len() - 1]
+        error_text(
+            "expr.loop.10",
+            at_label,
+            "`{word} {n.name}` names no enclosing loop; the labeled loops here are {names.join(", ")}",
+            "write the label of the loop to {word}, such as `{word} {last}`",
+            "write `{word} {last}`",
+        )
+        attach("write `{word} {last}`", [fix.span(at_label, at_end, last)])
+        return
+    start := outermost else return
+    error_text(
+        "expr.loop.10",
+        at_label,
+        "`{word} {n.name}` names no enclosing loop; no loop here is labeled",
+        "label the outer loop with `{n.name}: for ...` (or `{n.name}: while ...`), then `{word} {n.name}` leaves it",
+        "label the outermost loop `{n.name}`",
+    )
+    attach("label the outermost loop `{n.name}`", [fix.span(start, start, "{n.name}: ")])
 
 ## `for x in e` or `for mut x in e` (expr.loop.1, expr.loop.6), at `for`.
 fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
@@ -2185,7 +2326,12 @@ fn Parser.closure(mut self) ast.Expr?
             "",
         )
         return none
-    body := expression()?
+    # A loop label isn't visible inside a function literal (expr.loop.10).
+    saved := loops
+    loops = []
+    parsed := expression()
+    loops = saved
+    body := parsed?
     ast.Expr.Closure(params: params, body: body, pos: pos)
 
 ## `fn name(params) R` and its block inside a function body: a named local

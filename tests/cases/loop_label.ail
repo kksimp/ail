@@ -1,0 +1,56 @@
+# expr.loop.9, expr.loop.10: a labeled loop is left or continued from a nested loop.
+fn first_pair(grid List[List[int]], want int) int
+    rows: for r in 0..grid.len()
+        for c in 0..grid[r].len()
+            if grid[r][c] == want
+                return r * 10 + c
+    -1
+
+fn drain(xs List[int]) int
+    mut total := 0
+    mut k := 0
+    pass: while true
+        for x in xs
+            total += x
+            k += 1
+            if k >= 5
+                break pass
+    total
+
+fn deferred()
+    outer: for i in 0..3
+        for j in 0..3
+            defer print("d{i}{j}")
+            if j == 1
+                continue outer
+
+fn main()
+    mut found := 0
+    outer: for i in 0..5
+        for j in 0..5
+            if i * j == 6
+                found = i * 10 + j
+                break outer
+    print(found)
+    mut sum := 0
+    rows: for i in 0..4
+        for j in 0..4
+            if j > i
+                continue rows
+            sum += 1
+    print(sum)
+    mut n := 0
+    scan: while true
+        mut m := 0
+        while true
+            m += 1
+            n += 1
+            if m == 3
+                break
+            if n >= 7
+                break scan
+    print(n)
+    print(first_pair([[1, 2], [3, 4], [5, 6]], 4))
+    print(first_pair([[1]], 9))
+    print(drain([1, 2]))
+    deferred()

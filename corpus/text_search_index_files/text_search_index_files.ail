@@ -1,0 +1,90 @@
+## Text search index over files: writes a handful of small documents into a
+## temp directory, reads them back and builds an inverted index from each
+## lowercase word to the sorted list of files containing it. Queries then run
+## in "all" mode (every term must appear) or "any" mode (ranked by how many
+## terms match, ties by file name).
+
+fn normalize(word str) str
+    mut kept := List[char]()
+    for c in word.to_lower().chars()
+        if c.is_alpha()
+            kept.push(c)
+    kept.join("")
+
+fn build_index(dir str) !Map[str, List[str]]
+    mut index := Map[str, List[str]]()
+    for name in fs.list_dir(dir)?.sorted()
+        text := fs.read_text(path.join(dir, name))?
+        mut seen := Set[str]()
+        for raw in text.words()
+            w := normalize(raw)
+            if w.len() >= 2 and seen.add(w)
+                index.push(w, name)
+    index
+
+fn search(index Map[str, List[str]], terms List[str], need_all bool) List[str]
+    mut scores := Map[str, int]()
+    for t in terms
+        found := index.get(normalize(t)) else List[str]()
+        for name in found
+            scores[name] += 1
+    mut hits := List[str]()
+    for name in scores.keys().sorted()
+        if not need_all or scores[name] == terms.len()
+            hits.push(name)
+    hits.sorted(by: |n| -scores[n])
+
+fn show(index Map[str, List[str]], terms List[str], need_all bool)
+    mode := if need_all then "all" else "any"
+    hits := search(index, terms, need_all)
+    print("{mode} of {terms.join(" ")}: {hits.join(", ")} ({hits.len()})")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_text_search_index_files")?
+    names := ["cats.txt", "dogs.txt", "pets.txt", "zoo.txt", "farm.txt"]
+    texts := [
+        "Cats sleep a lot. Cats purr, and cats hunt mice.\n",
+        "Dogs bark and dogs fetch; some dogs hunt too.\n",
+        "Pets: cats, dogs, fish. Fish sleep little!\n",
+        "The zoo has lions and tigers; tigers hunt at night.\n",
+        "A farm has dogs, cows and mice. Mice are small.\n",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    index := build_index(dir)?
+    print("{index.len()} words indexed from {names.len()} files")
+    for w in ["hunt", "sleep", "mice", "tigers"]
+        files := index.get(w) else List[str]()
+        print("{w:<7}{files.join(",")}")
+    show(index, ["cats", "dogs"], true)
+    show(index, ["cats", "dogs"], false)
+    show(index, ["hunt", "mice", "fish"], false)
+    show(index, ["hunt", "mice"], true)
+    show(index, ["unicorn"], false)
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn normalize_strips_punctuation()
+    assert_eq(normalize("Hello,"), "hello")
+    assert_eq(normalize("(a-b)"), "ab")
+    assert_eq(normalize("123"), "")
+
+@test fn index_lists_each_file_once()
+    dir := fs.make_temp_dir("corpus_text_search_index_files_t")?
+    fs.write_text(path.join(dir, "a.txt"), "red red blue\n")?
+    fs.write_text(path.join(dir, "b.txt"), "blue green\n")?
+    index := build_index(dir)?
+    assert_eq(index.get("red") else List[str](), ["a.txt"])
+    assert_eq(index.get("blue") else List[str](), ["a.txt", "b.txt"])
+    assert_eq(search(index, ["blue", "green"], true), ["b.txt"])
+    assert_eq(search(index, ["blue", "green"], false), ["b.txt", "a.txt"])
+    fs.remove(path.join(dir, "a.txt"))?
+    fs.remove(path.join(dir, "b.txt"))?
+    fs.remove(dir)?
+
+@test fn unknown_terms_match_nothing()
+    index := {"cat": ["a.txt"]}
+    assert_eq(search(index, ["dog"], false).len(), 0)
+    assert_eq(search(index, ["cat", "dog"], true).len(), 0)

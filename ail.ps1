@@ -333,7 +333,7 @@ if ($route) {
                 $bopts = @($sp.B); $copts = @($sp.C)
                 & $native budget check @bopts -- $native check-program @copts; exit $LASTEXITCODE
             }
-            & $native check-program @rest; exit $LASTEXITCODE
+            & $native check-program --summary @rest; exit $LASTEXITCODE
         }
         'verify' { Run-Tool (Fwd (Join-Path $root 'tools\verify\verify.ail')) }
         'infer' { Run-Tool (Fwd (Join-Path $root 'tools\infer\infer.ail')) }
