@@ -4,5 +4,5 @@ column
   [Add] #add
   "milk"
 {"v":1,"t":"view","title":"Todo (1)","focus":"","tree":{"kind":"Column","kids":[{"kind":"Field","id":"draft","value":"","hint":"new item"},{"kind":"Button","id":"add","caption":"Add"},{"kind":"Label","text":"milk"}]}}
-host_exited: the app host exited with status 3
-start
+app.AppKind.HostExited: the app host exited with status 3
+app.AppKind.Start
