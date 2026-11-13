@@ -336,7 +336,11 @@ fn main() !
             # separate `ail check` is redundant (one process less per fence; on Windows each is a PowerShell start).
             # When it fails, the check below reports why, as before.
             mut quick := false
-            if b.kind == "clean" and b.run and b.flags.is_empty() and has_main(code) and not code.contains("ui.open(")
+            if b.kind == "clean"
+                and b.run
+                and b.flags.is_empty()
+                and has_main(code)
+                and not code.contains("ui.open(")
                 if why := run_both_tiers(file)
                     _ := why
                 else
@@ -358,7 +362,12 @@ fn main() !
             if b.kind == "error" and not errors.contains(b.error_rule)
                 ok = false
                 fails.push("{at}: expected error {b.error_rule}, got {errors}\n{r.err}")
-            if ok and not quick and b.run and b.flags.is_empty() and b.kind == "clean" and has_main(code)
+            if ok
+                and not quick
+                and b.run
+                and b.flags.is_empty()
+                and b.kind == "clean"
+                and has_main(code)
                 if why := run_both_tiers(file)
                     ok = false
                     fails.push("{at}: {why}")
