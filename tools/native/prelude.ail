@@ -545,7 +545,7 @@ impl ToJson for List[T ToJson]
 ## json.derive.4: a map is an object of its entries, each key's text form
 ## naming its member, in the map's order (ADR 1093). `m.to_json()` on a
 ## `Map[K, V ToJson]` calls this.
-fn json_of_map[K, V ToJson](m Map[K, V]) Json
+fn json_of_map[K Hash, V ToJson](m Map[K, V]) Json
     Json.Obj([JsonMember("{k}", m[k].to_json()) for k in m.keys()])
 
 ## json.derive.4: `none` is `null` and a present value its own JSON

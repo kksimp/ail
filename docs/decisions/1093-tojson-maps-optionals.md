@@ -27,7 +27,7 @@ lowering. A log analyzer an agent wrote in the AI-first review failed on it.
   names the innermost value type and says that a bare `impl ToJson for U`
   derives it.
 - The lowering turns `.to_json()` on a map or optional into an instance of the
-  prelude's generic `json_of_map[K, V ToJson]` or `json_of_opt[T ToJson]`, keyed
+  prelude's generic `json_of_map[K Hash, V ToJson]` or `json_of_opt[T ToJson]`, keyed
   `Map[str, int].to_json` like a `List[T]` method (`compiler/mir/lower_json_builtin.ail`).
 
 ## Rejected alternatives
