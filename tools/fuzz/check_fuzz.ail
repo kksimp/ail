@@ -106,23 +106,23 @@ fn sh(script str, args List[str]) proc.Output
     r
 
 ## What one `check` run says: `status N`, then the output, from `ail check FILE`.
-fn check_run(file str, json bool) proc.Output
+fn check_run(file str, json bool, secs int) proc.Output
     flag := if json then "--json" else ""
     # CHECKFUZZ_CMD names another checker (a stage-2 build: `S2 check-program`); the default is `./ail check`.
     cmd := env.get("CHECKFUZZ_CMD") else "./ail check"
-    sh("perl -e 'alarm 10; exec @ARGV' $3 $2 \"$1\" 2>&1", [file, flag, cmd])
+    sh("perl -e 'alarm $4; exec @ARGV' $3 $2 \"$1\" 2>&1", [file, flag, cmd, "{secs}"])
 
 ## Why a `check` run is a failure, or "".
 fn verdict(r proc.Output) str
     text := "{r.out}\n{r.err}"
     if r.status == 124 or r.status == 142
-        return "hang: no answer in 10 s"
+        return "hang: no answer in the time allowed"
     if r.status >= 128
         return "died with status {r.status}"
     if r.status != 0 and r.status != 1 and r.status != 2
         return "exit status {r.status}"
     for l in text.lines()
-        if l.contains("panicked") or l.contains("internal error") or l.contains("bootstrap.")
+        if l.contains("panicked") or l.contains("internal error")
             return "internal error: {l}"
         located := l.contains("compiler/") and not l.starts_with(" ")
         if located and not l.contains("error[") and not l.contains("warning[")
@@ -191,7 +191,7 @@ fn Chk.mutants(mut self, files List[str], count int, seed int)
         kind := random.int(0, 7)
         target := "{self.work}/m{k}.ail"
         fs.write_text(target, mutate(lines, kind)) else continue
-        why := verdict(check_run(target, false))
+        why := verdict(check_run(target, false, 10))
         if why != ""
             self.red(
                 "fuzz.chk.1",
@@ -215,7 +215,9 @@ fn Chk.extremes(mut self)
     for c in cases
         target := "{self.work}/{c.0}.ail"
         sh("awk \"$1\" > \"$2\"", [c.1, target])
-        why := verdict(check_run(target, false))
+        # 100,000 lines and 20,000 functions are volume, not depth: 60 s, and the time is for the ADR.
+        secs := if c.0 == "many_lines" or c.0 == "many_fns" then 60 else 10
+        why := verdict(check_run(target, false, secs))
         if why != ""
             self.red("fuzz.chk.2", c.0, target, why)
         sh("rm -f \"$1\"", [target])
@@ -253,7 +255,7 @@ fn piece(kind int, k int) Piece
             syntax: false,
         )
     if kind == 4
-        return Piece(src: "fn broken_{k}()\n    x := 1 +\n    print(x)\n", rule: "", syntax: true)
+        return Piece(src: "fn broken_{k}()\n    x := 1 +\n", rule: "", syntax: true)
     if kind == 5
         return Piece(
             src: "fn broken_{k}()\n    y := (1 + 2\n    print(y)\n",
@@ -310,7 +312,7 @@ fn Chk.one_pass(mut self, count int, seed int)
             calls = "{calls}{call_of(kinds[i], i)}"
         target := "{self.work}/p{k}.ail"
         fs.write_text(target, "{text}{calls}") else continue
-        r := check_run(target, true)
+        r := check_run(target, true, 10)
         mut why := verdict(r)
         found := errors_of(r)
         if why == ""

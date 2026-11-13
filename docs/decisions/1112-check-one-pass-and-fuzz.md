@@ -54,3 +54,18 @@ gate: one mistake must stay one diagnostic. The extra checker pass adds nothing
 after an import error (`use`, a foreign `import`), drops `mod.main.1` like a
 warning, and counts short declared names (`fn f`, `const N`) too; without that,
 `fn f() int !` added "unknown name `f`" at every call.
+
+## Amendment 2026-11-13: what the fuzz found
+
+- An unclosed `(` or `[`, or a line ending in an operator, swallowed every
+  declaration after it (lex.stmt.2 ran to the end of the file), so one-pass
+  could not reach them. A column-1 declaration line now ends the unfinished one
+  (gram.rec.5).
+- 10,000 nested `(`, `[` or `not` overflowed the parser's native stack. The
+  parser stops at 200 levels with `gram.syntax.1`. Rejected: a larger limit
+  (no program nests 200 levels) and a rewrite of the descent as a loop (a large
+  change for no real program).
+- `bootstrap.unsupported` is a documented rule for constructs AIL doesn't have
+  (`ail explain bootstrap.unsupported`); the fuzz no longer counts it as an internal error.
+- 100,000 lines and 20,000 functions are checked under 60 s, not 10 s: they test
+  scale, and the measured time goes in this ADR once the gate has run it.

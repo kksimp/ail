@@ -1,0 +1,17 @@
+# gram.rec.5: a declaration in column 1 ends the declaration above it, even with a bracket open or a line ending in an
+# operator, so each unfinished function is one report and the functions after it are still checked.
+fn open_bracket()
+    x := (1 + 2
+
+fn immutable()
+    y := 1
+    y = 2
+    print(y)
+
+fn open_operator()
+    z := 1 +
+
+fn main()
+    open_bracket()
+    immutable()
+    open_operator()
