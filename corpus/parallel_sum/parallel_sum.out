@@ -1,0 +1,8 @@
+chunk 0: 25195
+chunk 1: 24920
+chunk 2: 25001
+chunk 3: 24933
+tasks total:      100049
+sequential total: 100049
+par comprehension: 6855061 vs 6855061
+atomic total:     100049

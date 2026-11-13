@@ -1,0 +1,5 @@
+capacity 0: value 0, weight 0: nothing
+capacity 5: value 13, weight 5: stove, camera
+capacity 10: value 23, weight 10: stove, food, camera
+capacity 15: value 32, weight 14: stove, water, food, camera
+capacity 30: value 53, weight 30: tent, stove, water, food, camera, books, jacket

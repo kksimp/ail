@@ -1,0 +1,17 @@
+> Report Final.TXT  -> report_final.txt
+> report-final.txt  -> report_final_2.txt
+> notes (draft).md  -> notes_draft.md
+> Notes-Draft.md    -> notes_draft_2.md
+> IMG 001.png       -> img_001.png
+= img_002.png       -> img_002.png
+= already_ok.txt    -> already_ok.txt
+> Build Notes       -> build_notes
+renamed 6 of 8 files
+  already_ok.txt
+  build_notes
+  img_001.png
+  img_002.png
+  notes_draft.md
+  notes_draft_2.md
+  report_final.txt
+  report_final_2.txt

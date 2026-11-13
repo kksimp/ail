@@ -1,0 +1,10 @@
+lines: 20, bytes: 344, longest: 17
+last 5 lines:
+  line 016 value=8
+  line 017 value=2
+  line 018 value=9
+  line 019 value=3
+  line 020 value=10
+asking for 100 gives 20 lines, first: line 001 value=7
+asking for 0 gives 0 lines
+cleaned up: true

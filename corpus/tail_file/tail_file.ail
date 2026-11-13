@@ -1,0 +1,66 @@
+## Tail: writes a numbered log file into a temp directory, then streams it
+## back one line at a time keeping only the last N lines, like `tail -n`.
+## Also counts the lines and the bytes without holding the file in memory.
+use std.file
+
+fn write_log(p str, count int) !
+    mut w := file.create(p)?
+    for i in 1..=count
+        w.write_line("line {i:03} value={i * 7 % 13}")?
+    w.close()?
+
+fn tail(p str, n int) !List[str]
+    mut r := file.open(p)?
+    mut window := List[str]()
+    while true
+        line := r.read_line()? else break
+        window.push(line.trim_end())
+        if window.len() > n
+            window.remove_at(0)
+    r.close()?
+    window
+
+fn longest_line(p str) !int
+    mut r := file.open(p)?
+    mut best := 0
+    while true
+        line := r.read_line()? else break
+        best = best.max(line.trim_end().byte_len())
+    r.close()?
+    best
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_tail_file")?
+    p := path.join(dir, "app.log")
+    write_log(p, 20)?
+    print("lines: {tail(p, 1000)?.len()}, bytes: {fs.metadata(p)?.size}, longest: {longest_line(p)?}")
+    print("last 5 lines:")
+    for l in tail(p, 5)?
+        print("  {l}")
+    short := tail(p, 100)?
+    print("asking for 100 gives {short.len()} lines, first: {short[0]}")
+    none_left := tail(p, 0)?
+    print("asking for 0 gives {none_left.len()} lines")
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn tail_keeps_the_last_lines()
+    dir := fs.make_temp_dir("corpus_tail_file_t")?
+    p := path.join(dir, "t.log")
+    write_log(p, 20)?
+    got := tail(p, 3)?
+    assert_eq(got.len(), 3)
+    assert_eq(got[0], "line 018 value=9")
+    assert_eq(got[2], "line 020 value=10")
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn tail_of_a_short_file_is_everything()
+    dir := fs.make_temp_dir("corpus_tail_file_s")?
+    p := path.join(dir, "s.log")
+    write_log(p, 2)?
+    assert_eq(tail(p, 10)?.len(), 2)
+    assert_eq(longest_line(p)?, 16)
+    fs.remove(p)?
+    fs.remove(dir)?

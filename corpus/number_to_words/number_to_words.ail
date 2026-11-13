@@ -1,0 +1,123 @@
+## Number to words: spells integers in English ("one thousand two hundred
+## thirty-four") up to the billions, and parses such phrases back to numbers.
+
+fn small_names() List[str]
+    [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+        "seventeen", "eighteen", "nineteen",
+    ]
+
+fn tens_names() List[str]
+    ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+fn scale_names() List[str]
+    ["", "thousand", "million", "billion"]
+
+fn below_thousand(n int) str
+    small := small_names()
+    tens := tens_names()
+    mut parts := List[str]()
+    mut rest := n
+    if rest >= 100
+        parts.push("{small[rest / 100]} hundred")
+        rest = rest % 100
+    if rest >= 20
+        t := tens[rest / 10]
+        if rest % 10 > 0
+            parts.push("{t}-{small[rest % 10]}")
+        else
+            parts.push(t)
+    elif rest > 0
+        parts.push(small[rest])
+    parts.join(" ")
+
+fn to_words(n int) str
+    if n == 0
+        return "zero"
+    if n < 0
+        return "minus {to_words(0 - n)}"
+    scales := scale_names()
+    mut parts := List[str]()
+    mut rest := n
+    mut level := 0
+    while rest > 0
+        chunk := rest % 1000
+        if chunk > 0
+            name := scales[level]
+            text := below_thousand(chunk)
+            if name == ""
+                parts.push(text)
+            else
+                parts.push("{text} {name}")
+        rest = rest / 1000
+        level += 1
+    parts.reversed().join(" ")
+
+fn word_values() Map[str, int]
+    mut m := Map[str, int]()
+    small := small_names()
+    for i in 0..small.len()
+        m[small[i]] = i
+    tens := tens_names()
+    for i in 2..tens.len()
+        m[tens[i]] = i * 10
+    m
+
+fn from_words(text str) int?
+    values := word_values()
+    mut negative := false
+    mut total := 0
+    mut chunk := 0
+    for w in text.replace("-", " ").words()
+        if w == "minus"
+            negative = true
+        elif w == "hundred"
+            chunk = chunk * 100
+        elif w == "thousand" or w == "million" or w == "billion"
+            mut scale := 1000
+            if w == "million"
+                scale = 1000000
+            if w == "billion"
+                scale = 1000000000
+            total += chunk * scale
+            chunk = 0
+        elif values.contains(w)
+            chunk += values[w]
+        else
+            return none
+    total += chunk
+    if negative
+        return 0 - total
+    total
+
+fn main()
+    for n in [0, 7, 13, 20, 42, 100, 101, 999, 1000, 1234, 20000, 100001, 1000000, 7654321, 2000000000, 1234567891, -45]
+        print("{n:>11}  {to_words(n)}")
+    for p in ["forty-two", "one thousand two hundred thirty-four", "minus nine", "seven bazillion"]
+        v := from_words(p) else
+            print("{p} -> invalid")
+            continue
+        print("{p} -> {v}")
+    mut bad := 0
+    for n in 0..5000
+        back := from_words(to_words(n)) else -1
+        if back != n
+            bad += 1
+    print("round trip failures in 0..4999: {bad}")
+
+@test fn spells_numbers()
+    assert_eq(to_words(0), "zero")
+    assert_eq(to_words(21), "twenty-one")
+    assert_eq(to_words(110), "one hundred ten")
+    assert_eq(to_words(1005), "one thousand five")
+    assert_eq(to_words(-3), "minus three")
+
+@test fn spells_big_numbers()
+    assert_eq(to_words(1000000), "one million")
+    assert_eq(to_words(2500300), "two million five hundred thousand three hundred")
+
+@test fn parses_back()
+    assert_eq(from_words("one hundred twenty-three thousand four")?, 123004)
+    assert_eq(from_words("minus twelve")?, -12)
+    assert(from_words("twelve apples") == none)

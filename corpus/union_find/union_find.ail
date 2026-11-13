@@ -1,0 +1,97 @@
+## A disjoint-set forest (union by size, path halving) driving Kruskal's
+## minimum spanning tree. Edges are sorted by weight; an edge is kept when its
+## endpoints are in different sets. The program prints the tree and components.
+
+struct Dsu
+    parent List[int]
+    sizes List[int]
+    groups int
+
+fn Dsu.new(n int) Dsu
+    mut p := List[int]()
+    mut s := List[int]()
+    for i in 0..n
+        p.push(i)
+        s.push(1)
+    Dsu(parent: p, sizes: s, groups: n)
+
+fn Dsu.find(mut self, x int) int
+    mut cur := x
+    while self.parent[cur] != cur
+        self.parent[cur] = self.parent[self.parent[cur]]
+        cur = self.parent[cur]
+    cur
+
+fn Dsu.merge(mut self, a int, b int) bool
+    ra := self.find(a)
+    rb := self.find(b)
+    if ra == rb
+        return false
+    big := if self.sizes[ra] >= self.sizes[rb] then ra else rb
+    small := if big == ra then rb else ra
+    self.parent[small] = big
+    self.sizes[big] = self.sizes[big] + self.sizes[small]
+    self.groups -= 1
+    true
+
+struct Edge
+    a int
+    b int
+    w int
+
+fn kruskal(n int, edges List[Edge]) List[Edge]
+    mut sets := Dsu.new(n)
+    mut tree := List[Edge]()
+    for e in edges.sorted(by: |x| x.w)
+        if sets.merge(e.a, e.b)
+            tree.push(e)
+    tree
+
+fn main()
+    labels := "ABCDEFGHI".chars()
+    edges := [
+        Edge(a: 0, b: 1, w: 7),
+        Edge(a: 0, b: 3, w: 5),
+        Edge(a: 1, b: 2, w: 8),
+        Edge(a: 1, b: 3, w: 9),
+        Edge(a: 1, b: 4, w: 7),
+        Edge(a: 2, b: 4, w: 5),
+        Edge(a: 3, b: 4, w: 15),
+        Edge(a: 3, b: 5, w: 6),
+        Edge(a: 4, b: 5, w: 8),
+        Edge(a: 4, b: 6, w: 9),
+        Edge(a: 5, b: 6, w: 11),
+        Edge(a: 7, b: 8, w: 2),
+    ]
+    tree := kruskal(9, edges)
+    mut total := 0
+    for e in tree
+        total += e.w
+        print("{labels[e.a]}-{labels[e.b]} {e.w}")
+    print("tree edges: {tree.len()}")
+    print("total weight: {total}")
+    mut sets := Dsu.new(9)
+    for e2 in tree
+        sets.merge(e2.a, e2.b)
+    print("components: {sets.groups}")
+    print("A and G connected: {sets.find(0) == sets.find(6)}")
+    print("A and I connected: {sets.find(0) == sets.find(8)}")
+
+@test fn merge_reports_new_unions()
+    mut d := Dsu.new(4)
+    assert(d.merge(0, 1))
+    assert(d.merge(2, 3))
+    assert(not d.merge(1, 0))
+    assert_eq(d.groups, 2)
+
+@test fn find_follows_chains()
+    mut d := Dsu.new(5)
+    d.merge(0, 1)
+    d.merge(1, 2)
+    d.merge(2, 3)
+    assert_eq(d.find(3), d.find(0))
+    assert(d.find(4) != d.find(0))
+
+@test fn kruskal_skips_cycle_edge()
+    t := kruskal(3, [Edge(a: 0, b: 1, w: 1), Edge(a: 1, b: 2, w: 2), Edge(a: 0, b: 2, w: 3)])
+    assert_eq(t.len(), 2)

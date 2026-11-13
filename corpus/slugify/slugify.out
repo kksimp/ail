@@ -1,0 +1,17 @@
+Hello, World!                                              -> 'hello-world'
+  Parsing JSON: A Practical Guide                          -> 'parsing-json-a-practical-guide'
+C++ vs. Rust vs. AIL (2026 edition)                        -> 'c-vs-rust-vs-ail-2026-edition'
+Hello, World!                                              -> 'hello-world'
+100% Memory-Safe                                           -> '100-memory-safe'
+!!!                                                        -> ''
+Hello World                                                -> 'hello-world'
+An extraordinarily long title that keeps going and going   -> 'an-extraordinarily-long-title'
+unique:
+  hello-world
+  parsing-json-a-practical-guide
+  c-vs-rust-vs-ail-2026-edition
+  hello-world-2
+  100-memory-safe
+  
+  hello-world-3
+  an-extraordinarily-long-title

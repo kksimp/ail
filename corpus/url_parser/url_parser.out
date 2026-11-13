@@ -1,0 +1,21 @@
+https://example.org/a/b?q=hello+world&lang=en#top
+  scheme=https host=example.org port=443
+  path=/a/b fragment=top
+  param lang = en
+  param q = hello world
+http://localhost:8080/api/v1/items?id=42&tag=a%26b&tag2=%7Ex
+  scheme=http host=localhost port=8080
+  path=/api/v1/items fragment=
+  param id = 42
+  param tag = a&b
+  param tag2 = ~x
+ftp://files.example.net
+  scheme=ftp host=files.example.net port=21
+  path=/ fragment=
+https://example.org:99/?
+  scheme=https host=example.org port=99
+  path=/ fragment=
+not a url
+  invalid
+http:///nohost
+  invalid

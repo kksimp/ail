@@ -1,0 +1,89 @@
+## Key-value store on a file: a tiny Redis-like command language (set, get,
+## del, incr, count) over a Map that is saved as sorted `key=value` lines and
+## reloaded in a second session, so data survives between runs.
+
+fn load(p str) !Map[str, str]
+    mut m := Map[str, str]()
+    if not fs.exists(p)
+        return m
+    for line in fs.read_text(p)?.lines()
+        parts := line.split("=", 2)
+        if parts.len() == 2
+            m[parts[0]] = parts[1]
+    m
+
+fn save(p str, m Map[str, str]) !
+    mut out := List[str]()
+    for k in m.keys().sorted()
+        out.push("{k}={m[k]}")
+    fs.write_text(p, "{out.join("\n")}\n")?
+
+fn apply(line str, mut store Map[str, str]) str
+    parts := line.split(" ", 3)
+    op := parts[0]
+    if op == "set" and parts.len() == 3
+        store[parts[1]] = parts[2]
+        return "OK"
+    if op == "get" and parts.len() == 2
+        v := store.get(parts[1]) else "(nil)"
+        return v
+    if op == "del" and parts.len() == 2
+        if store.contains(parts[1])
+            store.remove(parts[1])
+            return "1"
+        return "0"
+    if op == "incr" and parts.len() == 2
+        n := (store.get(parts[1]) else "0").to_int() else 0
+        store[parts[1]] = "{n + 1}"
+        return "{n + 1}"
+    if op == "count"
+        return "{store.len()}"
+    "ERR unknown command"
+
+fn session(p str, cmds List[str]) !
+    mut store := load(p)?
+    for c in cmds
+        print("> {c}")
+        print(apply(c, mut store))
+    save(p, store)?
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_kv_store_file")?
+    p := path.join(dir, "store.db")
+    print("-- session 1")
+    session(p, ["set name ada", "set url http://x.org/?a=b", "incr visits", "incr visits", "get name", "get missing", "frobnicate"])?
+    print("-- file after session 1")
+    for l in fs.read_text(p)?.lines()
+        print(l)
+    print("-- session 2")
+    session(p, ["get visits", "incr visits", "del name", "del name", "set city rome", "count"])?
+    print("-- file after session 2")
+    for l in fs.read_text(p)?.lines()
+        print(l)
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn commands_change_the_store()
+    mut s := Map[str, str]()
+    assert_eq(apply("set a 1 2", mut s), "OK")
+    assert_eq(apply("get a", mut s), "1 2")
+    assert_eq(apply("incr n", mut s), "1")
+    assert_eq(apply("count", mut s), "2")
+    assert_eq(apply("del a", mut s), "1")
+    assert_eq(apply("del a", mut s), "0")
+
+@test fn data_survives_a_reload()
+    dir := fs.make_temp_dir("corpus_kv_store_file_t")?
+    p := path.join(dir, "t.db")
+    session(p, ["set k v=w", "incr c"])?
+    m := load(p)?
+    assert_eq(m["k"], "v=w")
+    assert_eq(m["c"], "1")
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn missing_file_loads_empty()
+    dir := fs.make_temp_dir("corpus_kv_store_file_m")?
+    m := load(path.join(dir, "none.db"))?
+    assert_eq(m.len(), 0)
+    fs.remove(dir)?

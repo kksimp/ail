@@ -1,0 +1,79 @@
+## N-queens by backtracking. cols[r] is the column of the queen in row r. The
+## program counts the solutions for boards 1 to 8 and draws the first
+## solution (in column order) for a 6 by 6 board.
+
+fn safe(cols List[int], col int) bool
+    row := cols.len()
+    for r in 0..row
+        d := cols[r] - col
+        if d == 0 or d.abs() == row - r
+            return false
+    true
+
+fn count(n int, mut cols List[int]) int
+    if cols.len() == n
+        return 1
+    mut total := 0
+    for col in 0..n
+        if safe(cols, col)
+            cols.push(col)
+            total += count(n, mut cols)
+            cols.remove_at(cols.len() - 1)
+    total
+
+fn first(n int, mut cols List[int]) bool
+    if cols.len() == n
+        return true
+    for col in 0..n
+        if safe(cols, col)
+            cols.push(col)
+            if first(n, mut cols)
+                return true
+            cols.remove_at(cols.len() - 1)
+    false
+
+fn solutions(n int) int
+    mut cols := List[int]()
+    count(n, mut cols)
+
+fn draw(cols List[int]) List[str]
+    mut lines := List[str]()
+    for r in 0..cols.len()
+        mut cells := List[str]()
+        for c in 0..cols.len()
+            mark := if cols[r] == c then "Q" else "."
+            cells.push(mark)
+        lines.push(cells.join(" "))
+    lines
+
+fn main()
+    for n in 1..=8
+        print("{n} queens: {solutions(n)} solutions")
+    mut cols := List[int]()
+    if first(6, mut cols)
+        print("first 6x6 solution: {cols}")
+        for line in draw(cols)
+            print(line)
+    else
+        print("no 6x6 solution")
+
+@test fn known_counts()
+    assert_eq(solutions(4), 2)
+    assert_eq(solutions(5), 10)
+    assert_eq(solutions(6), 4)
+
+@test fn small_boards()
+    assert_eq(solutions(1), 1)
+    assert_eq(solutions(2), 0)
+    assert_eq(solutions(3), 0)
+
+@test fn first_solution_is_valid()
+    mut cols := List[int]()
+    found := first(8, mut cols)
+    assert(found)
+    assert_eq(cols.len(), 8)
+    for i in 0..8
+        for j in 0..8
+            if j > i
+                assert(cols[i] != cols[j])
+                assert((cols[i] - cols[j]).abs() != j - i)

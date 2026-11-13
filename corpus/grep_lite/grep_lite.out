@@ -1,0 +1,23 @@
+$ grep the story.txt
+jumps over the lazy dog.
+THE END of the first act
+A dog barks; the fox runs away
+the last line
+-- 4 of 7 lines
+$ grep -i the story.txt
+The quick brown fox
+jumps over the lazy dog.
+THE END of the first act
+A dog barks; the fox runs away
+the last line
+-- 5 of 7 lines
+$ grep -n fox story.txt
+1:The quick brown fox
+5:A dog barks; the fox runs away
+-- 2 of 7 lines
+$ grep -v -n o story.txt
+4:
+7:the last line
+-- 2 of 7 lines
+$ grep -ic dog story.txt
+2

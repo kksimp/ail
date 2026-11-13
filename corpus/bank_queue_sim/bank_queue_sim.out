@@ -1,0 +1,19 @@
+t= 3 teller 1 takes customer 1 (waited 0, needs 5)
+t= 6 teller 2 takes customer 2 (waited 0, needs 2)
+t= 8 teller 1 takes customer 3 (waited 1, needs 5)
+t= 8 teller 2 takes customer 4 (waited 0, needs 4)
+t=12 teller 2 takes customer 5 (waited 1, needs 2)
+t=13 teller 1 takes customer 6 (waited 1, needs 2)
+t=15 teller 1 takes customer 7 (waited 0, needs 6)
+t=16 teller 2 takes customer 8 (waited 0, needs 4)
+t=20 teller 2 takes customer 9 (waited 1, needs 2)
+t=21 teller 1 takes customer 10 (waited 1, needs 6)
+t=22 teller 2 takes customer 11 (waited 1, needs 5)
+t=27 teller 1 takes customer 12 (waited 5, needs 3)
+served: 12
+total wait: 11
+average wait x10: 9
+worst wait: 5
+longest line: 2
+last teller free at: 30
+with one teller: total wait 123, finished at 49
