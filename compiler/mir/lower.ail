@@ -257,7 +257,8 @@ pub fn lower_package_par(
     lazy int,
     pooled Set[str],
 ) Module ! Problems
-    srcs := with_error_owners(shadow_free(input, lazy))
+    # type.distinct.7: distinct types are their bases in native code (lower_distinct.ail).
+    srcs := with_error_owners(shadow_free(erase_distinct(input), lazy))
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],

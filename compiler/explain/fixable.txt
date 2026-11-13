@@ -53,6 +53,7 @@ trait.op.3
 type.bool.1
 type.bytes.13
 type.coll.4
+type.distinct.1
 type.enum.7
 type.map.5
 type.opt.3

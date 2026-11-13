@@ -1,0 +1,5 @@
+## Go declares a named type without `=` (type.distinct.1).
+type UserId = int
+
+fn main()
+    print("ok")

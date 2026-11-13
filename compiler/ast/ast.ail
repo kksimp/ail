@@ -109,6 +109,9 @@ pub struct StructDecl
     pub doc str?
     pub is_error bool
     pub is_unique bool
+    ## `type Name = Base` (type.distinct.1, ADR 1103): one field `value` of the
+    ## base, which no program can name; native code erases the type to its base.
+    pub is_distinct bool
     pub generics List[GenericParam]
     pub fields List[Field]
     pub invariants List[Contract]

@@ -1,0 +1,215 @@
+## Distinct types (type.distinct.1-7, ADR 1103): `type UserId = int` is a new
+## type over a built-in scalar. The parser gives it to the checker as a struct
+## of one field `value` marked `is_distinct`, so it is nominal like any struct:
+## a `UserId` is never an `int` or an `OrderId`. This file adds what a distinct
+## type has beyond that: `UserId(x)` takes one value of the base, `int(id)`
+## converts back, the base's operators work on two operands of the type, and
+## the standard traits pass through to the base. It has no fields and no
+## methods of its own. Native code erases it to the base (mir/lower_distinct.ail).
+use ast
+
+## The base type of a distinct type, or `none` for any other type.
+@allow("expr.match.3") fn Checker.distinct_base(self, t Ty) Ty?
+    match t
+        Struct(s, _) =>
+            if s >= field_types.len() or not prog.structs[s].is_distinct
+                return none
+            if field_types[s].len() != 1
+                return none
+            field_types[s][0]
+        _ => none
+
+## The type a scalar type name stands for, when it can be a distinct type's base.
+fn distinct_scalar(n str) Ty?
+    match n
+        "int" | "i64" => Ty.Int
+        "float" | "f64" => Ty.Float
+        "str" => Ty.Str
+        "bool" => Ty.Bool
+        "char" => Ty.Char
+        "bytes" => Ty.Bytes
+        "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "u64" | "f32" => Ty.Num(n)
+        _ => none
+
+## Whether the program declares a distinct type.
+fn Checker.has_distinct(self) bool
+    for s in prog.structs
+        if s.is_distinct
+            return true
+    false
+
+## `UserId(x)` (type.distinct.2): one positional value of the base type.
+fn Checker.distinct_literal(mut self, s int, args List[ast.Arg], at ast.Pos) Ty
+    name := prog.structs[s].name
+    result := Ty.Struct(s, [])
+    base := distinct_base(result) else return result
+    if args.len() != 1 or args[0].label != none or args[0].mutable
+        args_only(args)
+        err_help(
+            "type.distinct.2",
+            at,
+            "`{name}(...)` takes one value: the {show(base)} it wraps",
+            "write `{name}(x)` with `x` a {show(base)}; a distinct type has no fields to name",
+        )
+        return result
+    v := args[0].value
+    got := expr(v, base, true)
+    if reject_unhandled(got, expr_pos(v))
+        return result
+    consume(v, got)
+    if not accepts(base, got)
+        mut help := "`{name}(x)` takes a {show(base)}"
+        if got_base := distinct_base(got)
+            help = "convert it to its base first: `{name}({ty_name(got_base)}(x))`, if the value really is a `{name}`"
+        err_help(
+            "type.distinct.2",
+            expr_pos(v),
+            "`{name}(...)` takes {show(base)}, but this is {show(got)}",
+            help,
+        )
+    result
+
+## `int(id)` (type.distinct.3): a distinct type's value as its base. `none`
+## when `n` isn't a base type name, the call isn't one plain argument, or the
+## program has no distinct type, so the call is checked as before.
+fn Checker.distinct_unwrap(mut self, n str, args List[ast.Arg], at ast.Pos) Ty?
+    want := distinct_scalar(n)?
+    if args.len() != 1 or args[0].label != none or args[0].mutable or not has_distinct()
+        return none
+    v := args[0].value
+    got := expr(v, none, true)
+    if reject_unhandled(got, expr_pos(v)) or got == Ty.Unknown
+        return Ty.Unknown
+    if base := distinct_base(got)
+        if same(base, want)
+            return want
+        err_help(
+            "type.distinct.3",
+            at,
+            "`{n}(...)` can't convert {show(got)}: its base is {show(base)}",
+            "write `{ty_name(base)}(x)`",
+        )
+        return Ty.Unknown
+    # Not a distinct type: the call is the habit `int(x)`, reported as it was before.
+    unknown_name(n, at, 1)
+    Ty.Unknown
+
+## `id.value` (type.distinct.3): a distinct type has no fields. True when
+## `t` is one and the error is reported.
+fn Checker.distinct_field(mut self, t Ty, n str, at ast.Pos) bool
+    base := distinct_base(t) else return false
+    err_help(
+        "type.distinct.3",
+        at,
+        "{show(t)} is a distinct type, so it has no field `{n}`",
+        "its value as {show(base)} is `{ty_name(base)}(x)`",
+    )
+    true
+
+## `id.name(...)` that no standard trait of the base provides (type.distinct.3).
+fn Checker.distinct_no_method(mut self, t Ty, n str, at ast.Pos) bool
+    base := distinct_base(t) else return false
+    err_help(
+        "type.distinct.3",
+        at,
+        "{show(t)} is a distinct type, so it has no method `{n}`",
+        "call the method on its value: `{ty_name(base)}(x).{n}(...)`, then wrap the result again if it is a `{ty_name(t)}`",
+    )
+    true
+
+## `a + b`, `a - b`, ... on a distinct type (type.distinct.4): the base's
+## operator on two operands of the same distinct type, which it gives back.
+## `none` when `lt` isn't a distinct type.
+fn Checker.distinct_arith(mut self, op ast.BinOp, lt Ty, at ast.Pos) Ty?
+    base := distinct_base(lt)?
+    if operator(op, base, base, at) == Ty.Unknown
+        return Ty.Unknown
+    lt
+
+## The help for mixing a distinct type with another type in an operator
+## (type.distinct.4); `none` when neither side is distinct.
+fn Checker.distinct_mix(self, lt Ty, rt Ty) str?
+    if lb := distinct_base(lt)
+        if same(lb, rt)
+            return "{show(lt)} and {show(rt)} don't mix: wrap the {show(rt)} as `{ty_name(lt)}(x)`, or unwrap with `{ty_name(lb)}(x)`"
+        return "{show(lt)} and {show(rt)} are different types: convert one side explicitly"
+    if rb := distinct_base(rt)
+        if same(rb, lt)
+            return "{show(lt)} and {show(rt)} don't mix: wrap the {show(lt)} as `{ty_name(rt)}(x)`, or unwrap with `{ty_name(rb)}(x)`"
+        return "{show(lt)} and {show(rt)} are different types: convert one side explicitly"
+    none
+
+## Unary `-` and `not` on a distinct type (type.distinct.4): the base's, giving
+## the same distinct type. `none` when the base has no such operator.
+fn Checker.distinct_unary(self, neg bool, t Ty) Ty?
+    base := distinct_base(t)?
+    if neg
+        if base == Ty.Int or base == Ty.Float
+            return t
+        if k := num_name(base)
+            if k.starts_with("i") or k == "f32"
+                return t
+        return none
+    if base == Ty.Bool
+        return t
+    none
+
+## Whether a standard trait passes through a distinct type to its base
+## (type.distinct.5): only the prelude's traits (`Eq`, `Ord`, `Hash`, `ToStr`,
+## `ToJson`, `FromJson`, `Default`); a program's own trait needs a function.
+fn Checker.distinct_passes(self, tr int) bool
+    is_prelude_line(prog.traits[tr].pos.line)
+
+## `UserId.from_json(j)` and `UserId.default()` (type.distinct.5): an
+## associated function of a standard trait the base implements, with `Self`
+## the distinct type. `none` when `d` isn't a distinct type or no such
+## trait offers `n`.
+fn Checker.distinct_assoc(mut self, d Def, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty?
+    s := match d
+        DStruct(i) => i
+        DEnum(_) => -1
+    if s < 0
+        return none
+    t := Ty.Struct(s, [])
+    base := distinct_base(t)?
+    for tr in 0..prog.traits.len()
+        if distinct_passes(tr) and implements(base, tr)
+            if f := assoc_fn(tr, n)
+                assoc_calls[pos_key(at)] = tr
+                symbols[pos_key(at)] = "method:{prog.traits[tr].name}.{n}"
+                return check_call(
+                    "{prog.structs[s].name}.{n}",
+                    sigs[f],
+                    [Bind(param: trait_self[tr], ty: t)],
+                    args,
+                    none,
+                    at,
+                    expect,
+                )
+    none
+
+## type.distinct.6: a distinct type declares no methods and no `impl`.
+fn Checker.check_distinct_decls(mut self)
+    mut names := Set[str]()
+    for s in prog.structs
+        if s.is_distinct
+            names.add(s.name)
+    if names.len() == 0
+        return
+    for f in prog.fns
+        if o := f.owner
+            if names.contains(o.name) and f.within == ast.Within.TopLevel
+                err_help(
+                    "type.distinct.6",
+                    f.pos,
+                    "`{o.name}` is a distinct type, so it can't declare the method `{f.name}`",
+                    "write a function that takes it: `fn {f.name}(x {o.name})`",
+                )
+    for im in prog.impls
+        if names.contains(im.target.name)
+            err_help(
+                "type.distinct.6",
+                im.pos,
+                "`{im.target.name}` is a distinct type, so it can't implement `{im.trait_name}`",
+                "it has the standard traits of its base already; for another trait, declare a `struct` with one field instead",
+            )

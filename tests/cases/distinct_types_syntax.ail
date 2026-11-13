@@ -1,0 +1,5 @@
+## type.distinct.1: a distinct type wraps a built-in scalar.
+type Ids = List[int]
+
+fn main()
+    print(1)

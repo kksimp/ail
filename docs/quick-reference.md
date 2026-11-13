@@ -189,6 +189,22 @@ fields is written qualified there (`Cons(_, Items.Nil)`). A struct is matched by
 field name, `Point(x: 0, y) =>`: a bare field name binds that field and
 unnamed fields match anything; `Rect(w: 0)` names a variant's fields.
 
+A distinct type wraps a built-in scalar so that IDs and units can't be swapped
+(type.distinct.1-7). It has its base's operators, `==`, `<`, text, hashing and
+JSON, no fields or methods, and costs nothing at run time:
+
+```ail
+type UserId = int                 # never an int, never another id type
+
+fn greet(id UserId) str
+    "user {id}"                   # prints as its int
+
+fn main()
+    id := UserId(42)              # in: Type(value)
+    print(greet(id))
+    print(int(id) + 1)            # out: int(id); `id + 1` is an error
+```
+
 ## Absence and errors
 
 ```ail

@@ -55,6 +55,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     c.check_main()
     c.check_attrs()
     c.check_impls()
+    c.check_distinct_decls()
     for i in 0..p.structs.len()
         c.gap_now = false
         c.check_invariants(i)

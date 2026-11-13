@@ -246,6 +246,10 @@ fn Parser.top_level(mut self)
         elif tag == "kw" and text == "struct"
             if s := struct_decl(false)
                 structs.push(s)
+        elif tag == "id" and text == "type" and tag_at(1) == "id"
+            # `type Name = Base`: a distinct type (type.distinct.1, ADR 1103).
+            if s := distinct_decl()
+                structs.push(s)
         elif tag == "kw" and text == "unique"
             # `unique struct` and `unique enum` (own.uniq.1).
             if kw_at(1) == "struct"
@@ -1639,6 +1643,7 @@ fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
         doc: none,
         is_error: is_error,
         is_unique: false,
+        is_distinct: false,
         generics: generics,
         fields: fields,
         invariants: invariants,
