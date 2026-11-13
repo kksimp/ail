@@ -3,7 +3,7 @@
 Chapter key: `refl`
 
 > **Status:** Drafted (skeleton). Specified: the type information derive
-> generators receive, and the absence of run-time reflection. The bootstrap
+> generators receive, and the absence of run-time reflection. The compiler
 > implements `refl.info.1–3` (ADR 0306). Design note:
 > [reflection.md](../design/reflection.md).
 

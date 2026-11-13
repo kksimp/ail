@@ -1208,9 +1208,8 @@ refuse both, and a package's `caps` list names `net.serve` separately
 (`eff.cap.4–5`). *(ADR 0422)*
 
 **std.net.15** — Targets: Linux x86-64 and macOS ARM64 run the same code
-over the platform's sockets. On Windows the sockets are the Rust standard
-library's (Winsock); the code uses nothing else, and it is untested there
-(ADR 0004, lane 153). *(ADR 0423)*
+over the platform's sockets. On Windows the sockets are Winsock, called
+by the native runtime (`win_net`); the code uses nothing else (ADR 0004). *(ADR 0423)*
 
 **std.net.16** — Bodies as `bytes`. *(ADR 0416)*
 - `get_bytes(url str)`, `post_bytes(url str, data bytes, content_type str)`

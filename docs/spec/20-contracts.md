@@ -10,7 +10,7 @@ Chapter key: `contract`
 > [open-questions.md](../open-questions.md), OQ-060).
 
 A contract states what a function needs and what it promises, in the
-function's signature, as ordinary `bool` expressions. The bootstrap checks
+function's signature, as ordinary `bool` expressions. The compiler checks
 them at run time. The compiler proves some contracts statically and drops
 their checks (`contract.prove.1`); that changes nothing observable except that
 the trap can't occur.

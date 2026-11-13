@@ -721,8 +721,8 @@ of a result), or `absent` (`?` or `else` on an optional, which has no error).
 
 Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
 report the named rule. Blocks that trap, or that describe tool output the
-fence can't check, are `norun`; blocks the bootstrap doesn't implement yet are
-`skip=bootstrap`.
+fence can't check, are `norun`; blocks the compiler doesn't implement yet are
+`skip=bootstrap` (the fence word keeps its old name).
 
 ```ail rules=err.model.1
 error struct Bad

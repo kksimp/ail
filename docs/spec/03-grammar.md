@@ -167,12 +167,12 @@ an attribute from the next attribute or the declaration. *(ADR 0083, ADR 0324)*
 
 **gram.attr.3** — `@inline` is a hint that the function is worth inlining. It
 takes no arguments and never changes behaviour; an implementation MAY ignore
-it. The bootstrap accepts it and ignores it. *(ADR 0196)*
+it. The compiler accepts it and ignores it. *(ADR 0196)*
 
 **gram.attr.4** — `@deprecated("reason")` marks a function as deprecated. The
 reason is one string literal and is required. Each call of the function is a
 warning that names the function and gives the reason; the program still runs.
-The attributes known to the bootstrap are `@test`, `@pure`, `@inline`,
+The attributes the compiler knows are `@test`, `@pure`, `@inline`,
 `@deprecated` and `@allow`; any other attribute is an error (`test.attr.1`).
 *(ADR 0197, ADR 0379)*
 
@@ -184,7 +184,7 @@ The attributes known to the bootstrap are `@test`, `@pure`, `@inline`,
 **gram.attr.5** — `@allow("rule")` before a function allows the warning with
 that rule ID anywhere in the function: the checker doesn't report it. The
 argument is one string literal naming a warning that can be allowed; the
-bootstrap allows `expr.match.3` only. A missing or other argument is a
+compiler allows `expr.match.3` only. A missing or other argument is a
 compile-time error. *(ADR 0379)*
 
 ```ail fragment
