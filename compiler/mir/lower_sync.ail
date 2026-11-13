@@ -236,8 +236,12 @@ fn Lower.unwind_exits(mut self)
 
 ## `break` and `continue` leave the scopes opened inside the innermost loop.
 fn Lower.unwind_loop(mut self)
+    unwind_loop_to(loops.len())
+
+## The same for a `break outer` that leaves the loops from the `depth`-th inward.
+fn Lower.unwind_loop_to(mut self, depth int)
     mut i := tk.exits.len() - 1
-    while i >= 0 and tk.exits[i].loopn >= loops.len()
+    while i >= 0 and tk.exits[i].loopn >= depth
         run_exit(tk.exits[i])
         i -= 1
 

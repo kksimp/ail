@@ -658,8 +658,8 @@ fn instr_line(s ast.Stmt) int
         Assign(_, _, _, pos) => pos.line
         While(_, _, pos) => pos.line
         For(_, _, _, _, _, _, pos) => pos.line
-        Break(pos) => pos.line
-        Continue(pos) => pos.line
+        Break(pos, _) => pos.line
+        Continue(pos, _) => pos.line
         Return(_, pos) => pos.line
         Eval(value) => expr_pos(value).line
         Handle(value, _) => expr_pos(value).line
@@ -675,8 +675,8 @@ fn instr_col(s ast.Stmt) int
         Assign(_, _, _, pos) => pos.col
         While(_, _, pos) => pos.col
         For(_, _, _, _, _, _, pos) => pos.col
-        Break(pos) => pos.col
-        Continue(pos) => pos.col
+        Break(pos, _) => pos.col
+        Continue(pos, _) => pos.col
         Return(_, pos) => pos.col
         Eval(value) => expr_pos(value).col
         Handle(value, _) => expr_pos(value).col

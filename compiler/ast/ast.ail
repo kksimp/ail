@@ -240,8 +240,10 @@ pub enum Stmt
     Assign(target Expr, op BinOp?, value Expr, pos Pos)
     While(cond Expr, body List[Stmt], pos Pos)
     For(is_par bool, var str, var_pos Pos, mutable bool, iter Expr, body List[Stmt], pos Pos)
-    Break(pos Pos)
-    Continue(pos Pos)
+    ## `break` / `continue`; `target` is the position of the labeled loop it
+    ## names (`break outer`, expr.loop.10), none for the innermost loop.
+    Break(pos Pos, target Pos?)
+    Continue(pos Pos, target Pos?)
     Return(value Expr?, pos Pos)
     Eval(value Expr)
     Handle(value Expr, otherwise Else)

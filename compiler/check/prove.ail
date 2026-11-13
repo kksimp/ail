@@ -651,8 +651,8 @@ fn pv_param(f PvFacts, p ast.Param) PvFacts
     last := stmts.last() else return false
     match last
         Return(_, _) => true
-        Break(_) => true
-        Continue(_) => true
+        Break(_, _) => true
+        Continue(_, _) => true
         Eval(e) =>
             match e
                 If(branches, els, _, _) =>

@@ -46,7 +46,6 @@ marked *fix*):
 | `for cond` (*fix*), `for i, x := range xs` (*fix*) | `while cond`, `for i, x in xs.enumerate()` |
 | `a, b = b, a`, `v, err := f()` | a temporary, `v := f()?` |
 | `fn (p P) name()`, `append(xs, x)`, `make(..)` (*fix*) | `fn P.name(self)`, `xs.push(x)`, `Map[K, V]()` |
-| `outer: for` | no labels: a function or a flag |
 | `===` (*fix*), `??` (*fix*), `[...xs, 3]`, `(x) => e` | `==`, `else`, `xs.extend(ys)`, `\|x\| e` |
 | `for (const x of xs)` (*fix*), `console.log` | `for x in xs`, `print` |
 
