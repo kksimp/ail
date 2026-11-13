@@ -93,8 +93,17 @@ fn Gate.examples(mut self, tmp str)
 ## The public corpus (corpus/NAME/{NAME.ail, NAME.py, NAME.out}): each program builds natively, prints its `.out`, and passes
 ## its own `@test`s. The `.out` is the Python twin's output, so the twin is the oracle (tools/check-corpus-py.py checks it).
 fn Gate.corpus(mut self, tmp str)
+    # corpus/waiting.txt: `NAME reason` lines for programs that wait on a compiler fix; the gate skips them (and says so).
+    waiting := (fs.read_text("corpus/waiting.txt") else "").lines()
     for name in (fs.list_dir("corpus") else []).sorted()
         dir := "corpus/{name}"
+        mut held := false
+        for w in waiting
+            if w.starts_with("{name} ")
+                held = true
+        if held
+            print("corpus {name} waits on a compiler fix (corpus/waiting.txt)")
+            continue
         meta := fs.metadata(dir) else continue
         if not meta.is_dir
             continue

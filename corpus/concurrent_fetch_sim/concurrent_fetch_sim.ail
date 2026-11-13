@@ -70,14 +70,14 @@ fn main()
     ]
     done := fetch_all(urls, 3)
     mut by_status := Map[int, int]()
-    mut bytes := 0
+    mut fetched := 0
     for resp in done
         print("{resp.id} {resp.status} {resp.size:>5} {resp.url}")
         by_status[resp.status] += 1
-        bytes += resp.size
+        fetched += resp.size
     for code in by_status.keys().sorted()
         print("status {code}: {by_status[code]}")
-    print("{done.len()} pages, {bytes} bytes fetched")
+    print("{done.len()} pages, {fetched} bytes fetched")
 
 @test fn statuses_follow_the_url()
     assert_eq(fake_fetch(Req(id: 0, url: "a/missing", attempt: 1)).status, 404)
