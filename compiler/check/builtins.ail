@@ -597,6 +597,16 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
         return list_fn_call(rt, n, at, args)
     if is_vocab(rt, n)
         return vocab_call(rt, n, at, args)
+    if ["sorted", "sort"].contains(n) and desc_label(args)
+        for a in args
+            expr(a.value, none, true)
+        err_help(
+            "expr.key.1",
+            at,
+            "`{n}` has no descending option",
+            "write `xs.sorted().reversed()` for descending order (type.coll.27), or `xs.sort()` then `xs.reverse()` in place",
+        )
+        return Ty.Unknown
     if keyed(args, n)
         return keyed_call(recv, rt, n, at, args)
     b := builtin(rt, n) else return Ty.Unknown
@@ -751,6 +761,14 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
     mut sig := plain_sig(b.mutates, b.params, b.ret)
     sig.moves = moves
     check_call(n, sig, [], args, recv, at, none)
+
+## Whether an argument is labelled the way other languages ask for a descending sort.
+fn desc_label(args List[ast.Arg]) bool
+    for a in args
+        if l := a.label
+            if ["desc", "descending", "reverse", "reversed", "rev"].contains(l.name)
+                return true
+    false
 
 ## A call with a `by:` argument, or a `|x|` key function given to a method
 ## that takes one (any other method takes it as a function value, type.fn.4).

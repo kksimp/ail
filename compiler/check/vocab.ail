@@ -50,6 +50,12 @@ fn vocab_builtin() Builtin?
         SetOf(e) => e
         _ => Ty.Unknown
 
+## Whether `e` is a function literal `|x| e`.
+@allow("expr.match.3") fn is_closure_lit(e ast.Expr) bool
+    match e
+        Closure => true
+        _ => false
+
 ## The `U` of a `List[U]`, else `Unknown`.
 @allow("expr.match.3") fn vocab_list_of(t Ty) Ty
     match t
@@ -74,6 +80,13 @@ fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
                 at,
                 "`fold` takes a starting value and a function, `xs.fold(0, |acc, x| acc + x)`",
                 "pass the starting value, then the function, with no label, `mut` or `move`",
+            )
+        elif n == "count"
+            err_help(
+                "expr.call.1",
+                at,
+                "`count` takes a function and counts the elements it accepts",
+                "write `xs.count(|x| x == v)` for a value, or `xs.len()` for the number of elements",
             )
         else
             err_help(
@@ -109,10 +122,18 @@ fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
     a := args[args.len() - 1]
     tests := ["any", "all", "find", "filter", "count", "take_while", "skip_while"].contains(n)
     want := Ty.FnTy(fargs, if tests then Ty.Bool else if n == "fold" then init else Ty.Unknown)
-    ft := expr(a.value, want, true)
+    ft := expr(a.value, if is_closure_lit(a.value) then want else none, true)
     if ft == Ty.Unknown or ft == Ty.Never
         return Ty.Unknown
     fp := fn_parts(ft) else
+        if n == "count"
+            err_help(
+                "expr.call.2",
+                expr_pos(a.value),
+                "`count` takes a function, not {show(ft)}",
+                "to count a value write `xs.count(|x| x == v)`; for the number of elements, `xs.len()`",
+            )
+            return Ty.Unknown
         err_help(
             "expr.call.2",
             expr_pos(a.value),

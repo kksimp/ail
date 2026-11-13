@@ -1365,7 +1365,9 @@ as `m.get(k) else d`. *(ADR 1087)*
 
 **type.coll.27** — `xs.reversed()` returns a new list with the elements of `xs`
 in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
-in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
+in place. A list in descending order is `xs.sorted().reversed()`; `sorted` and
+`sort` take no `desc:` argument, and the diagnostic says so (`expr.key.1`).
+*(ADR 1087)*
 
 ```ail rules=type.map.12,type.coll.27
 fn main()
@@ -1382,7 +1384,10 @@ same name, argument order and meaning on a `List`, a `Set`, a `Map`, a `Deque`
 and a `Seq` wherever it has a meaning there (`type.coll.32`; `tools/collection-vocab-audit.py`
 checks it, ADR 1099). A function argument is as in `type.coll.21`; on a map it
 takes the key and the value, `|k, v| e`. `xs.count(f)` is the number of
-elements for which `f` returns `true`. *(ADR 1099)*
+elements for which `f` returns `true`; it takes only a function, so counting a
+value is `xs.count(|x| x == v)` and the number of elements is `xs.len()`. A
+list has no `dedup` or `unique`: the distinct elements are `xs.counts().keys()`
+or `xs.group_by(|x| x).keys()`. *(ADR 1099)*
 
 **type.coll.29** — `xs.fold(init, f)` calls `f(acc, x)` on each element in
 order and returns the last `acc`; `acc` starts as `init`, and `f` has type
