@@ -215,7 +215,10 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     g.a.resolve_labels()
     fn_align := if jcc > 0 then align_knob("AIL_ALIGN_FN").max(32) else align_knob("AIL_ALIGN_FN")
     int3 := 204
-    while fn_align > 1 and img.code.len() % fn_align != 0
+    # `AIL_PHASE=N`: the code's first byte is loaded N bytes past a multiple of 32
+    # (16 in a static Linux executable: the file's headers are 176 bytes).
+    phase := knob_or("AIL_PHASE", 0)
+    while fn_align > 1 and (img.code.len() + phase) % fn_align != 0
         img.code.push(int3.to_u8())
     for sym in g.imports
         codegen.import_slot(mut img, sym)

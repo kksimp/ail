@@ -1191,6 +1191,7 @@ fn knob_key() str
         "AIL_ALIGN_LOOP",
         "AIL_JCC",
         "AIL_SHIFT",
+        "AIL_PHASE",
     ]
     for k in knobs
         out = "{out} {env.get(k) else ""}"
