@@ -94,7 +94,7 @@ fn steps(path str) List[str]
         out.push(cur)
     out
 
-fn select(d Doc, start List[int], step str) List[int]
+fn pick_nodes(d Doc, start List[int], step str) List[int]
     mut out := List[int]()
     for idx in start
         n := d.nodes[idx]
@@ -133,7 +133,7 @@ fn render(d Doc, idx int) str
 fn query(d Doc, root int, path str) List[str]
     mut cur := [root]
     for st in steps(path)
-        cur = select(d, cur, st)
+        cur = pick_nodes(d, cur, st)
     [render(d, i) for i in cur]
 
 fn load(text str) (Doc, int)
