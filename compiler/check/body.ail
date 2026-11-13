@@ -730,6 +730,18 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
             none
         _ => none
 
+## Whether `o` is the `else break` that the parser writes for `while name := e`
+## (expr.loop.8): its `break` sits at the `while`, before the value `at`.
+fn while_bound(at ast.Pos, o ast.Else) bool
+    mut found := false
+    match o
+        Leave(s) =>
+            match s
+                Break(p) => found = p.line < at.line or (p.line == at.line and p.col < at.col)
+                _ => found = false
+        _ => found = false
+    found
+
 ## The `else` part of `x := e else ...`; returns the type bound to `x`
 ## (err.else.1-3).
 @allow("expr.match.3") fn Checker.else_part(mut self, vt Ty, value ast.Expr, o ast.Else) Ty
@@ -746,7 +758,15 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
         Unknown => ok = Ty.Unknown
         _ =>
             text := "`else` handles a value that can be absent (`T?`) or fail (`T ! E`), but this is {show(vt)}"
-            if h := never_absent_help(value)
+            if while_bound(at, o)
+                # `while name := e` is written as `name := e else break` (expr.loop.8).
+                err_help(
+                    "expr.loop.8",
+                    at,
+                    "`while name := e` needs `e` to be `T?` or `T ! E`, but this is {show(vt)}",
+                    "use `while cond` for a `bool` condition, or make `e` return a `T?`",
+                )
+            elif h := never_absent_help(value)
                 err_help("err.else.1", at, text, h)
             else
                 err("err.else.1", at, text)

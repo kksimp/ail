@@ -1,0 +1,4 @@
+fn main()
+    mut n := 3
+    while k := n
+        n -= 1
