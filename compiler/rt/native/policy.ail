@@ -73,12 +73,12 @@ fn pol_canon_posix(path str) str
     if pol_len(path) == 0 or os_has_nul(path)
         return ""
     full := if load8(str_addr(path) + 16) == 47 then path else path_join(env_cwd(), path)
-    mut todo := full.split("/")
+    mut pending := full.split("/")
     mut parts := List[str]()
     mut hops := 0
     mut i := 0
-    while i < todo.len()
-        c := todo[i]
+    while i < pending.len()
+        c := pending[i]
         i += 1
         if c == "" or c == "."
             continue
@@ -97,10 +97,10 @@ fn pol_canon_posix(path str) str
                 parts = List[str]()
             mut next := link.split("/")
             mut j := i
-            while j < todo.len()
-                next.push(todo[j])
+            while j < pending.len()
+                next.push(pending[j])
                 j += 1
-            todo = next
+            pending = next
             i = 0
     out := if parts.len() == 0 then "/" else str_cat("/", parts.join("/"))
     if target() == 2
@@ -335,7 +335,7 @@ fn pol_glob(pattern str)
     mut base := List[str]()
     mut wild := false
     for c in pattern.split("/")
-        if c.contains("*") or c.contains("?") or c.contains("[") or c.contains("{")
+        if c.contains("*") or c.contains("?") or c.contains("[") or c.contains("\{")
             wild = true
         if wild and c == ".."
             os_usage_trap("eff.allow.3", "fs.read by fs.glob of `{pattern}` is not allowed: `..` after a wildcard can leave the allowed scope; this run allows: {spec}")
