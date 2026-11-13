@@ -13,7 +13,7 @@
 ./ail check [--json] [--budget N [--from K]] FILE|DIR   # clean: one `ok FILE: N functions, M warnings` line, exit 0; errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`; --json adds a summary record
 ./ail build FILE.ail [-o OUT]       # native executable
 ./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
-./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
+./ail card [TOPIC]                  # the core card (about 3,000 tokens), or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
 ./ail pkg [COMMAND]                 # a program's packages: fetch, lock, list
 ./ail header FILE.ail [-o OUT.h]    # a C header of the exports
 ./ail effects [--json] FILE.ail
