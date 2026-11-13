@@ -63,12 +63,11 @@ other languages working.
   that could also mean a function is an error the pass leaves alone.
 - The formatter refuses (fmt.safe) when the text with `self.` added doesn't
   parse, or the pass still finds a bare member in it.
-- Landing in two steps: the formatter change ships behind `ail fmt --self`
-  (the constant `WRITE_SELF` in `compiler/fmt/fmt.ail` is `false`), so open
-  lanes' format checks don't change; then, as the last commit before the
-  release candidate, one change makes `self.` the only formatter output,
-  removes `--self` and `WRITE_SELF` in the same commit, runs `ail fmt` over the
-  tree and refreezes the fmt goldens. `--self` is a staging switch only: 0.1.0
+- Landed in two steps: the formatter change shipped behind `ail fmt --self`
+  (the constant `WRITE_SELF` in `compiler/fmt/fmt.ail`), so open lanes' format
+  checks didn't change; then, as the last commit before the release candidate,
+  one change made `self.` the only formatter output, removed `--self` and
+  `WRITE_SELF`, ran `ail fmt` over the tree and refroze the fmt goldens. 0.1.0
   ships one canonical layout and no formatter option.
 - Whether bare names become an error is a later version's question.
 
