@@ -205,7 +205,7 @@ fn spec_key(f syntax.FormatSpec) str
     align := if c := f.align then "{c.code()}" else "-"
     width := if w := f.width then "{w}" else "-"
     precision := if p := f.precision then "{p}" else "-"
-    "{fill}/{align}/{width}/{precision}/{f.hex}"
+    "{fill}/{align}/{width}/{precision}/{f.hex}/{f.flags}"
 
 ## Attributes in a fixed order, on one line (fmt.attr): a run of `@name(...)`
 ## groups at the start of a statement is sorted by name, and a newline between

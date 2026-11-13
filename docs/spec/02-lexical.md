@@ -301,29 +301,34 @@ src := r"""
 
 **lex.str.7** — An interpolation may carry a format specification:
 `{expression:spec}`. The `:` is the first one outside brackets, strings and
-character literals. The specification is `[[fill]align][width][.decimals][x]`
-and nothing else:
+character literals. The specification is
+`[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else:
 
 - `align` is `<` (left), `>` (right) or `^` (centre); `fill` is any one
   character before it. The default fill is a space. Without `align`, numbers
   are right-aligned and everything else is left-aligned.
-- `width` is a decimal number with no leading `0` (write `0>4`); text longer
-  than `width` isn't cut. Width counts characters.
-- `.decimals` and `x` are typed by `type.str.11`.
-- `width` and `decimals` are at most 1000. `x` and `.decimals` don't combine.
+- `width` is a decimal number. A `0` before it (`{n:08}`) pads a number with
+  zeros after its sign and can't combine with `align`; to fill text or to
+  align, write the fill (`0>8`). Text longer than `width` isn't cut. Width
+  counts characters.
+- `+` writes a `+` before a number that isn't negative. `,` puts a `,` between
+  each three digits of a number's integer part.
+- `.decimals`, `x`, `b` and `e` are typed by `type.str.11`.
+- `width` and `decimals` are at most 1000. `x` and `b` don't combine with
+  `.decimals`, and `,` doesn't combine with `x`, `b` or `e`.
 
 Anything else is a compile-time error whose help shows the grammar. There is
-no `{x!r}`, sign, `#`, `,` or `e` form. *(ADR 0173)*
+no `{x!r}` or `#` form. *(ADR 0173, ADR 1087)*
 
 ```ail fragment
 n := 255
 r := 3.14159
-print("[{n:>6}][{r:.2}][{n:0>4x}][{"ab":^6}][{"ab":*<5}]")
+print("[{n:>6}][{r:.2}][{n:0>4x}][{"ab":^6}][{"ab":*<5}][{n:08}][{n:b}][{n:+}]")
 ```
 
 ```ail error=lex.str.7
 n := 1
-print("{n:03}")      # compile-time error: write {n:0>3}
+print("{n:#x}")      # compile-time error: there is no `#` form
 ```
 
 ## Numeric literals

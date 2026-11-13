@@ -1,18 +1,29 @@
-## `assert(cond)` and `assert_eq(a, b)` (test.assert.1, ADR 0858): the program
-## traps at the call when `cond` is false or `a != b`, with the same text as
-## the interpreter, including both values for `assert_eq`. Outside a test the
-## trap ends the program (err.trap.3). The checker has already enforced
-## test.assert.2, so a shape lowered here is a `bool`, or two values of one type.
+## `assert(cond)`, `assert(cond, "message")` and `assert_eq(a, b)` (test.assert.1, ADR 0858,
+## ADR 1087): the program traps at the call when `cond` is false or `a != b`, with the same
+## text as the interpreter, including both values for `assert_eq` and the message for
+## `assert`. Outside a test the trap ends the program (err.trap.3). The checker has
+## already enforced test.assert.2, so a shape lowered here is a `bool` (and a `str`
+## message), or two values of one type. `assert_err` and `assert_near` are in lower_assert.ail.
 use ast
 
+## The assertion functions the prelude has.
+ASSERT_FNS := ["assert", "assert_eq", "assert_err", "assert_near"]
+
 fn Lower.lower_assert(mut self, name str, args List[ast.Arg], pos ast.Pos) Val?
-    if args.len() != (if name == "assert" then 1 else 2)
+    if name == "assert_err" or name == "assert_near"
+        return lower_assert_more(name, args, pos)
+    if args.len() != (if name == "assert" then 1 else 2) and not (name == "assert" and args.len() == 2)
         return unsupported(pos, "this call of `{name}`")
     if name == "assert"
         c := lower_value(args[0].value, Ty.Bool)?
         ok := check_branch(c.id)
         trap_open("test.assert.1", pos)
         say("assertion failed")
+        if args.len() == 2
+            # The message is evaluated only when the assertion fails.
+            m := lower_value(args[1].value, Ty.Str)?
+            say(": ")
+            call("rt.out_str", [m.id], Ty.Unit)
         trap_close(pos)
         cur = ok
         return Val(id: -1, ty: Ty.Unit)

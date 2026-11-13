@@ -351,6 +351,8 @@ pub struct FormatSpec
     pub width int?
     pub precision int?
     pub hex bool
+    ## Marks of the specification: `+`, `0`, `,`, `b`, `e` (lex.str.7).
+    pub flags str
 
 ## A call argument (own.param.2, own.move.2, type.struct.3, expr.key.1).
 pub struct Arg

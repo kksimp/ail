@@ -736,9 +736,16 @@ b := "héllo".byte_len()   # 6
 **type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
 exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
 is `2`); `nan` and `inf` print as `{x}` does. `x` formats an `int` in lowercase
-hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`).
-Using `.N` on a non-float or `x` on a non-int is a compile-time error. Width,
-fill and alignment apply to the text form of any value. *(ADR 0173)*
+hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`);
+`b` does the same in binary and `{n:08b}` pads it. `e` formats a `float` as
+`d.ddde` and a decimal exponent, from the shortest digits that read back as `x`
+(`{1234.5:e}` is `1.2345e3`, `{0.00123:e}` is `1.23e-3`); `{x:.2e}` keeps two
+decimals of the mantissa, rounding those digits half up. `+` forces a sign on
+an `int` or `float`, `,` groups the digits of its integer part
+(`{1234567:,}` is `1,234,567`), and `0` with a width pads with zeros after the
+sign (`{-5:04}` is `-005`). Using `.N` or `e` on a non-float, `x` or `b` on a
+non-int, or `+`, `,` or `0` on a non-number is a compile-time error. Width,
+fill and alignment apply to the text form of any value. *(ADR 0173, ADR 1087)*
 
 ```ail error=type.str.11
 n := 1

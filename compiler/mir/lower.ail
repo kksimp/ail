@@ -1835,7 +1835,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
-            if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
+            if ASSERT_FNS.contains(name) and not is_rt and lookup(name) == none
                 return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(none, args, pos)

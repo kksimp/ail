@@ -1,0 +1,149 @@
+## The extra format-specification forms (lex.str.7, type.str.11, ADR 1087): binary and any
+## radix, thousands separators, a forced sign, zero padding and the exponent form. They work on
+## the text another `fmt_*` function made, so the rounding stays where it was.
+
+## The digits of the unsigned number `u` in `radix` (2 to 36), lowercase, into the text builder.
+fn put_radix(u0 int, radix int)
+    if u0 == 0
+        sb_byte(48)
+        return
+    mut u := u0
+    mut ds := List[int]()
+    while u != 0
+        q := if u > 0 then u / radix else u64_div(u, radix)
+        ds.push(u - q * radix)
+        u = q
+    mut i := ds.len() - 1
+    while i >= 0
+        d := ds[i]
+        sb_byte(if d < 10 then 48 + d else 87 + d)
+        i -= 1
+
+## `n` in `radix`, lowercase, with `-` first for a negative `n` (`n.to_str(radix)`, `{n:b}`).
+fn fmt_radix(n int, radix int) str
+    sb_reset()
+    if n < 0
+        sb_byte(45)
+    put_radix(if n < 0 then 0 - n else n, radix)
+    sb_str()
+
+## The 64 bits of a `u64` in `radix`.
+fn fmt_radix_u(n int, radix int) str
+    sb_reset()
+    put_radix(n, radix)
+    sb_str()
+
+## `s` (the text of a number) with a `,` between each three digits of its integer part.
+fn fmt_group(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    d := p + 16
+    mut a := 0
+    while a < n and not is_dec(load8(d + a))
+        a += 1
+    if a == n
+        return s
+    mut b := a
+    while b < n and is_dec(load8(d + b))
+        b += 1
+    sb_reset()
+    sb_bytes(d, a)
+    for k in a..b
+        if k > a and (b - k) % 3 == 0
+            sb_byte(44)
+        sb_byte(load8(d + k))
+    sb_bytes(d + b, n - b)
+    sb_str()
+
+fn is_dec(c int) bool
+    c >= 48 and c <= 57
+
+## `s` with a `+` in front unless it starts with `-` or isn't a number (`nan`).
+fn fmt_plus(s str) str
+    p := str_addr(s)
+    if load64(p) == 0
+        return s
+    c := load8(p + 16)
+    if c == 45 or c == 43
+        return s
+    # `nan` has no sign.
+    if c == 110
+        return s
+    sb_reset()
+    sb_byte(43)
+    sb_bytes(p + 16, load64(p))
+    sb_str()
+
+## `s` padded with `0` after its sign to `width` characters (`{n:08}`).
+fn fmt_zero(s str, width int) str
+    p := str_addr(s)
+    n := load64(p)
+    pad := width - n
+    if pad <= 0 or n == 0
+        return s
+    c := load8(p + 16)
+    # `inf` and `nan` keep their text; hex digits never start with `n` or `i`.
+    first := if c == 45 or c == 43 then 1 else 0
+    if n > first and (load8(p + 16 + first) == 110 or load8(p + 16 + first) == 105)
+        return s
+    sb_reset()
+    if first == 1
+        sb_byte(c)
+    for _ in 0..pad
+        sb_byte(48)
+    sb_bytes(p + 16 + first, n - first)
+    sb_str()
+
+## `{x:e}` and `{x:.Ne}`: the shortest digits of `x` as `d.ddde` and the exponent, with `-`
+## for a negative exponent and no `+` or padding (`1.2345e3`, `1.23e-3`). `prec` is the number
+## of decimals of the mantissa, or -1 for as many as the shortest digits have; `single` is 1 for an `f32`. A rounding
+## cuts the shortest digits, half up. `nan` and `inf` print as `{x}` does.
+fn fmt_exp(x float, prec int, single int) str
+    if x != x or x > 1.7976931348623157e308 or x < -1.7976931348623157e308
+        return fmt_float(x)
+    sb_reset()
+    neg := x < 0.0 or (x == 0.0 and 1.0 / x < 0.0)
+    if neg
+        sb_byte(45)
+    m := if x < 0.0 then 0.0 - x else x
+    mut ds := List[int]()
+    mut e := 0
+    if m == 0.0
+        ds.push(0)
+    else
+        all := if single != 0 then digits_of_f32(m) else digits_of(m)
+        n := all.len() - 1
+        for i in 0..n
+            ds.push(all[i])
+        e = all[n] - 1
+    if prec >= 0 and ds.len() > prec + 1
+        keep := prec + 1
+        up := ds[keep] >= 5
+        mut cut := List[int]()
+        for i in 0..keep
+            cut.push(ds[i])
+        if up
+            mut k := keep - 1
+            while k >= 0 and cut[k] == 9
+                cut[k] = 0
+                k -= 1
+            if k >= 0
+                cut[k] = cut[k] + 1
+            else
+                # 9.99 rounds to 10.0: a one and zeros, a power of ten higher.
+                cut[0] = 1
+                e += 1
+        ds = cut
+    mut want := ds.len() - 1
+    if prec >= 0
+        want = prec
+    sb_byte(48 + ds[0])
+    if want > 0
+        sb_byte(46)
+        for i in 1..want + 1
+            sb_byte(48 + if i < ds.len() then ds[i] else 0)
+    sb_byte(101)
+    if e < 0
+        sb_byte(45)
+    put_int(e.abs())
+    sb_str()

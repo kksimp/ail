@@ -413,10 +413,10 @@ t := """
 q := """say "hi""""        # on one line, for text with quotes: say "hi"
 r := r"C:\dir\{x}"         # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
-print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, hex
+print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{r:e}|{n:+}|{s:^8}|{s:*<5}")  # width, decimals, zero pad, binary, thousands, exponent, sign, fill, align
 ```
 
-- Format specs: `[[fill]align][width][.decimals][x]` only; `.N` needs a float, `x` an int.
+- Format specs: `[[fill]align][+][0][width][,][.decimals][x|b|e]` only; `.N` and `e` need a float, `x` and `b` an int, `+` `0` `,` a number.
 - `"a,b".split(",")` gives `["a", "b"]`, `"k=v=w".split("=", 2)` gives `["k", "v=w"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
 - `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),

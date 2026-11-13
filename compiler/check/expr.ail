@@ -122,24 +122,34 @@ fn Checker.unary_expr(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos, expec
             return Ty.Num(k)
     unary(op, operand, at)
 
-## `{x:spec}` (lex.str.7, type.str.11): `.N` needs a float, `x` an int.
+## `{x:spec}` (lex.str.7, type.str.11): `.N` and `e` need a float, `x` and `b` an int;
+## `+`, `0` and `,` need a number.
 fn Checker.format_spec(mut self, t Ty, spec ast.FormatSpec, at ast.Pos)
-    if spec.precision != none and t != Ty.Float and t != Ty.Num("f32") and t != Ty.Unknown
+    is_float := t == Ty.Float or t == Ty.Num("f32")
+    if (spec.precision != none or spec.flags.contains("e")) and not is_float and t != Ty.Unknown
         err_help(
             "type.str.11",
             at,
-            "`.N` in a format specification needs a `float`",
+            "`.N` and `e` in a format specification need a `float`",
             "round a float with `\{x:.2}`; to cut an int or text, convert it first",
         )
     mut int_like := t == Ty.Int or t == Ty.Unknown
     if k := num_name(t)
         int_like = k != "f32"
-    if spec.hex and not int_like
+    if (spec.hex or spec.flags.contains("b")) and not int_like
         err_help(
             "type.str.11",
             at,
-            "`x` in a format specification needs an `int`",
-            "drop the `x`, or convert the value to an `int` first",
+            "`x` and `b` in a format specification need an `int`",
+            "drop the `x` or `b`, or convert the value to an `int` first",
+        )
+    plain_number := int_like or is_float
+    if (spec.flags.contains("+") or spec.flags.contains("0") or spec.flags.contains(",")) and not plain_number
+        err_help(
+            "type.str.11",
+            at,
+            "`+`, `0` and `,` in a format specification need a number",
+            "drop the mark, or pad text with a fill and alignment, e.g. `\{s:*>8}`",
         )
 
 ## Every value has a text form (trait.auto.2); "no value" and an unhandled

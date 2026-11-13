@@ -3,8 +3,8 @@
 Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
-> functions, the `ail test` runner and its result format, `assert` and
-> `assert_eq`, property tests, fuzzing, mutation testing, and doc examples as tests. Not yet designed:
+> functions, the `ail test` runner and its result format, `assert`,
+> `assert_eq`, `assert_err` and `assert_near`, property tests, fuzzing, mutation testing, and doc examples as tests. Not yet designed:
 > fixtures, test filtering, parallel runs, and expected-failure tests.
 
 ## Attributes
@@ -114,10 +114,12 @@ fn adds()
 ## Assertions
 
 **test.assert.1** — `assert(cond)` does nothing when `cond` is `true` and traps
-otherwise. `assert_eq(a, b)` does nothing when `a == b` and traps otherwise,
-with a message showing both values' text forms. Both are in the prelude and
-are allowed anywhere, not only in tests: outside a test, the trap ends the
-program (`err.trap.3`). *(ADR 0168)*
+otherwise. `assert(cond, "message")` traps with `assertion failed: message`;
+the message is evaluated only when `cond` is false. `assert_eq(a, b)` does
+nothing when `a == b` and traps otherwise, with a message showing both
+values' text forms. All of them are in the prelude and are allowed anywhere,
+not only in tests: outside a test, the trap ends the program (`err.trap.3`).
+*(ADR 0168, ADR 1087)*
 
 ```ail tool=test,FILE status=1 expect=test.assert.1 rules=test.assert.1
 @test
@@ -126,17 +128,44 @@ fn one()
 
 @test
 fn two()
-    assert(false)
+    assert(false, "two is false")
 ```
 
-**test.assert.2** — `assert` takes one `bool`. `assert_eq` takes two values of
-one type that supports `==` and has a text form. Anything else is a
-compile-time error. *(ADR 0168)*
+**test.assert.2** — `assert` takes one `bool` and, optionally, a `str`
+message. `assert_eq` takes two values of one type that supports `==` and has a
+text form. `assert_near` takes three `float`s. Anything else is a compile-time
+error. *(ADR 0168, ADR 1087)*
 
 ```ail rules=test.assert.2
 fn main()
     assert(1 < 2)
+    assert(1 < 2, "one is less than two")
     assert_eq("a", "a")
+    print("ok")
+```
+
+**test.assert.3** — `assert_err(call)` does nothing when `call` (an expression
+of type `T ! E`) fails, and traps when it returns a value. `assert_err(call,
+E.Variant)` also requires the error to equal the second argument, and traps
+otherwise; that argument must be one of the errors the call declares, else it
+is a compile-time error. `assert_near(a, b, eps)` does nothing when
+`|a - b| <= eps` and traps otherwise (also when a value is NaN), showing the
+three values. The error `assert_err` catches is handled: the test goes on.
+*(ADR 1087)*
+
+```ail rules=test.assert.3
+error enum Fail
+    Bad
+
+fn pick(n int) int ! Fail
+    if n == 0
+        return Bad
+    n
+
+fn main()
+    assert_err(pick(0))
+    assert_err(pick(0), Fail.Bad)
+    assert_near(0.1 + 0.2, 0.3, 0.0001)
     print("ok")
 ```
 

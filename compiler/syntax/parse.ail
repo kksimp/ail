@@ -2380,6 +2380,7 @@ fn ast_spec(f FormatSpec) ast.FormatSpec
         width: f.width,
         precision: f.precision,
         hex: f.hex,
+        flags: f.flags,
     )
 
 ## `if c` block, any `elif c` blocks, optional `else` block (expr.if.1, expr.if.3).
