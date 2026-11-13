@@ -704,7 +704,12 @@ taking its sequence over and reading only as far as its result is read:
 `s.take_while(keep)`, `s.take(n)`, `s.skip(n)`, `s.enumerate()` (pairs
 `(i, x)` from 0), `s.zip(move other)` (pairs, until either ends) and
 `s.chain(move other)`. Reading to the end: `s.collect()` (a `List[T]`) and
-`s.count()`. *(ADR 1073)*
+`s.count(keep)`, how many elements `keep` is true for. *(ADR 1073, ADR 1099)*
+
+**expr.iter.4** — The prelude also gives `Seq[T]` `s.any(keep)`, `s.all(keep)`,
+`s.find(keep)`, `s.fold(init, f)`, `s.flat_map(f)` (a `Seq[U]`) and
+`s.skip_while(keep)`, with the meaning of `type.coll.22-31`. Each uses the
+sequence up. *(ADR 1099)*
 
 **expr.yield.1** — A function whose body contains a `yield` statement is a
 *generator*; its result type MUST be `Seq[T]`. Calling a generator runs none
@@ -727,7 +732,7 @@ generator MUST NOT have a `mut` parameter or `mut self`, `requires` or
 `ensures`, or a `defer`, and `yield` MUST NOT be inside `par for` or `with`.
 *(ADR 1073)*
 
-```ail rules=expr.yield.1,expr.yield.2,expr.yield.3,expr.iter.1,expr.iter.2,expr.iter.3
+```ail rules=expr.yield.1,expr.yield.2,expr.yield.3,expr.iter.1,expr.iter.2,expr.iter.3,expr.iter.4
 fn count(n int) Seq[int]
     for i in 0..n
         yield i                   # the next element
@@ -761,6 +766,9 @@ fn main()
     for k in c
         print(k)                  # 2 1
     print(c.n)                    # 2: the loop read a copy
+    print(count(5).fold(0, |acc, x| acc + x))   # 10
+    print(count(5).count(|x| x > 1))            # 3
+    print(count(5).skip_while(|x| x < 3).collect())   # [3, 4]
 ```
 
 ```ail error=expr.yield.1

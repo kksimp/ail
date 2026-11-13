@@ -1109,6 +1109,63 @@ fn Deque.to_list(self) List[T]
     out.extend(back)
     out
 
+## The elements `keep` is true for, as a deque (type.deque.6, type.coll.24).
+fn Deque.filter(self, keep fn(T) bool) Deque[T]
+    Deque.from(to_list().filter(keep))
+
+## `f` of each element, first to last, as a list (type.deque.6, type.coll.25).
+fn Deque.map[U](self, f fn(T) U) List[U]
+    to_list().map(f)
+
+## The elements of the lists `f` gives for each element (type.deque.6, type.coll.30).
+fn Deque.flat_map[U](self, f fn(T) List[U]) List[U]
+    to_list().flat_map(f)
+
+## Whether `keep` is true for some element (type.deque.6, type.coll.22).
+fn Deque.any(self, keep fn(T) bool) bool
+    to_list().any(keep)
+
+## Whether `keep` is true for every element (type.deque.6, type.coll.22).
+fn Deque.all(self, keep fn(T) bool) bool
+    to_list().all(keep)
+
+## The first element `keep` is true for, or `none` (type.deque.6, type.coll.23).
+fn Deque.find(self, keep fn(T) bool) T?
+    to_list().find(keep)
+
+## How many elements `keep` is true for (type.deque.6, type.coll.28).
+fn Deque.count(self, keep fn(T) bool) int
+    to_list().count(keep)
+
+## `f(acc, x)` over the elements in order from `init` (type.deque.6, type.coll.29).
+fn Deque.fold[A](self, init A, f fn(A, T) A) A
+    to_list().fold(init, f)
+
+## The first `n` elements, as a deque (type.deque.6, type.coll.15).
+fn Deque.take(self, n int) Deque[T]
+    Deque.from(to_list().take(n))
+
+## The elements after the first `n`, as a deque (type.deque.6, type.coll.31).
+fn Deque.skip(self, n int) Deque[T]
+    Deque.from(to_list().skip(n))
+
+## The elements up to the first `keep` is false for (type.deque.6, type.coll.31).
+fn Deque.take_while(self, keep fn(T) bool) Deque[T]
+    Deque.from(to_list().take_while(keep))
+
+## The elements from the first `keep` is false for (type.deque.6, type.coll.31).
+fn Deque.skip_while(self, keep fn(T) bool) Deque[T]
+    Deque.from(to_list().skip_while(keep))
+
+## Each element with its index from 0, as a list (type.deque.6, type.tuple.9).
+fn Deque.enumerate(self) List[(int, T)]
+    to_list().enumerate()
+
+## Pairs of elements of this deque and the list `other`, until either ends
+## (type.deque.6, type.coll.31).
+fn Deque.zip[U](self, other List[U]) List[(T, U)]
+    to_list().zip(other)
+
 ## @module seq
 ## `Seq[T]` (expr.yield.1-5, expr.iter.1-3, ADR 1073): a lazy sequence, what a
 ## generator returns. It is read only when the program names `Seq` and doesn't
@@ -1195,9 +1252,56 @@ fn Seq.collect(move self) List[T]
         out.push(x)
     out
 
-## How many elements there are (expr.iter.3).
-fn Seq.count(move self) int
+## How many elements `keep` is true for (expr.iter.4, type.coll.28).
+fn Seq.count(move self, keep fn(T) bool) int
     mut n := 0
-    for _ in self
-        n += 1
+    for x in self
+        if keep(x)
+            n += 1
     n
+
+## Whether `keep` is true for some element; reads no further than the first
+## that settles it (expr.iter.4, type.coll.22).
+fn Seq.any(move self, keep fn(T) bool) bool
+    for x in self
+        if keep(x)
+            return true
+    false
+
+## Whether `keep` is true for every element (expr.iter.4, type.coll.22).
+fn Seq.all(move self, keep fn(T) bool) bool
+    for x in self
+        if not keep(x)
+            return false
+    true
+
+## The first element `keep` is true for, or `none` (expr.iter.4, type.coll.23).
+fn Seq.find(move self, keep fn(T) bool) T?
+    for x in self
+        if keep(x)
+            return x
+    none
+
+## `f(acc, x)` for each element in order, starting from `init`, and the last
+## `acc` (expr.iter.4, type.coll.29).
+fn Seq.fold[A](move self, init A, f fn(A, T) A) A
+    mut acc := init
+    for x in self
+        acc = f(acc, x)
+    acc
+
+## The elements of the lists `f` gives for each element, in order (expr.iter.4,
+## type.coll.30).
+fn Seq.flat_map[U](move self, f fn(T) List[U]) Seq[U]
+    for x in self
+        for y in f(x)
+            yield y
+
+## The elements from the first one `keep` is false for (expr.iter.4, type.coll.31).
+fn Seq.skip_while(move self, keep fn(T) bool) Seq[T]
+    mut skipping := true
+    for x in self
+        if skipping and not keep(x)
+            skipping = false
+        if not skipping
+            yield x

@@ -1,0 +1,17 @@
+error struct Bad
+    code int
+
+fn check(n int) bool ! Bad
+    if n < 0
+        return Bad(code: n)
+    n > 0
+
+fn main()
+    xs := [1, 2, 3]
+    wide := |x int, y int| x
+    a := xs.fold(|acc, x| acc + x)
+    d := xs.flat_map(|x| x)
+    e := xs.count(check)
+    f := xs.zip(3)
+    g := xs.count(wide)
+    print("{a}{d}{e}{f}{g}")
