@@ -1,0 +1,28 @@
+-- seq.of_collect[struct]
+2
+-- seq.map_filter[struct]
+1
+-- seq.take_skip[struct]
+1
+-- seq.enumerate[struct]
+2
+-- seq.zip_chain[struct]
+2
+-- seq.chain[struct]
+2
+-- seq.next[struct]
+1
+-- seq.for[struct]
+2
+-- seq.count_any[struct]
+1
+-- seq.fold[struct]
+2
+-- seq.find[struct]
+1
+-- seq.flat_map[struct]
+4
+-- seq.while[struct]
+1
+-- seq.skip_while[struct]
+1

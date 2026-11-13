@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bytes
+    items List[bytes]
+
+fn add_bytes(mut xs List[bytes], x bytes)
+    xs.push(x)
+
+fn wrap_bytes(x bytes) bytes?
+    x
+
+fn nothing_bytes() bytes?
+    none
+
+K_bytes := [b"a", b"b"]
+
+## value.eq[bytes]
+fn s0()
+    print(b"a" == b"a")
+    print(b"a" != b"b")
+
+## value.lt[bytes]
+fn s1()
+    print(b"a" < b"b")
+    print(b"b" >= b"a")
+
+## value.print[bytes]
+fn s2()
+    print(b"a")
+
+## value.interp[bytes]
+fn s3()
+    x := b"a"
+    print("<{x}>")
+
+## value.to_str_len[bytes]
+fn s4()
+    x := b"a"
+    print("{x}".len() > 0)
+
+## value.optional_else[bytes]
+fn s5()
+    o := wrap_bytes(b"a")
+    x := o else b"b"
+    print(1)
+
+## value.optional_if[bytes]
+fn s6()
+    o := wrap_bytes(b"a")
+    if x := o
+        print(1)
+
+## value.optional_none[bytes]
+fn s7()
+    o := nothing_bytes()
+    print(o == none)
+
+## value.optional_print[bytes]
+fn s8()
+    o := wrap_bytes(b"a")
+    print(o)
+
+## value.tuple[bytes]
+fn s9()
+    t := (b"a", 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[bytes]
+fn s10()
+    t := (b"a", 1)
+    print(t == (b"a", 1))
+
+## value.tuple_print[bytes]
+fn s11()
+    t := (b"a", 1)
+    print(t)
+
+## value.tuple_list_sorted[bytes]
+fn s12()
+    xs := [(b"b", 1), (b"a", 2)]
+    print(xs.sorted().len())
+
+## value.tuple_key[bytes]
+fn s13()
+    mut m := Map[(bytes, int), int]()
+    m[(b"a", 1)] = 2
+    print(m[(b"a", 1)])
+
+## value.struct_field[bytes]
+fn s14()
+    b := Box_bytes(items: [b"a"])
+    c := b
+    print(c == b)
+
+## value.struct_print[bytes]
+fn s15()
+    b := Box_bytes(items: [b"a"])
+    print(b)
+
+## value.ref[bytes]
+fn s16()
+    r := ref Box_bytes(items: [b"a"])
+    s := r
+    s.items.push(b"b")
+    print(r.items.len())
+
+## value.generic_id[bytes]
+fn s17()
+    x := ident(b"a")
+    print(1)
+
+## value.generic_box[bytes]
+fn s18()
+    g := GBox(v: b"a")
+    print(g.v == b"a")
+
+## value.fn_value[bytes]
+fn s19()
+    f := |x bytes| x
+    y := f(b"a")
+    print(1)
+
+## value.closure_capture[bytes]
+fn s20()
+    a := b"a"
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[bytes]
+fn s21()
+    x := b"a"
+    print(if x == b"a" then 1 else 0)
+
+## value.const_list[bytes]
+fn s22()
+    print(K_bytes.len())
+
+fn main()
+    print("-- value.eq[bytes]")
+    s0()
+    print("-- value.lt[bytes]")
+    s1()
+    print("-- value.print[bytes]")
+    s2()
+    print("-- value.interp[bytes]")
+    s3()
+    print("-- value.to_str_len[bytes]")
+    s4()
+    print("-- value.optional_else[bytes]")
+    s5()
+    print("-- value.optional_if[bytes]")
+    s6()
+    print("-- value.optional_none[bytes]")
+    s7()
+    print("-- value.optional_print[bytes]")
+    s8()
+    print("-- value.tuple[bytes]")
+    s9()
+    print("-- value.tuple_eq[bytes]")
+    s10()
+    print("-- value.tuple_print[bytes]")
+    s11()
+    print("-- value.tuple_list_sorted[bytes]")
+    s12()
+    print("-- value.tuple_key[bytes]")
+    s13()
+    print("-- value.struct_field[bytes]")
+    s14()
+    print("-- value.struct_print[bytes]")
+    s15()
+    print("-- value.ref[bytes]")
+    s16()
+    print("-- value.generic_id[bytes]")
+    s17()
+    print("-- value.generic_box[bytes]")
+    s18()
+    print("-- value.fn_value[bytes]")
+    s19()
+    print("-- value.closure_capture[bytes]")
+    s20()
+    print("-- value.match_eq[bytes]")
+    s21()
+    print("-- value.const_list[bytes]")
+    s22()

@@ -1,0 +1,32 @@
+-- mapv.literal[char]
+2
+-- mapv.empty[char]
+0
+-- mapv.index[char]
+true
+-- mapv.assign[char]
+1
+-- mapv.get[char]
+1
+-- mapv.get_else[char]
+1
+-- mapv.get_or[char]
+1
+-- mapv.remove[char]
+0
+-- mapv.values[char]
+2
+-- mapv.values_sorted[char]
+2
+-- mapv.for[char]
+2
+-- mapv.map_values[char]
+1
+-- mapv.filter[char]
+1
+-- mapv.nested_update[char]
+2
+-- mapv.eq[char]
+true
+-- mapv.print[char]
+{"a": 'a'}

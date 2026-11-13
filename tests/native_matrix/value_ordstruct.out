@@ -1,0 +1,49 @@
+-- value.eq[ordstruct]
+true
+true
+-- value.lt[ordstruct]
+true
+true
+-- value.print[ordstruct]
+Q(n: 1, name: "a")
+-- value.interp[ordstruct]
+<Q(n: 1, name: "a")>
+-- value.to_str_len[ordstruct]
+true
+-- value.optional_else[ordstruct]
+1
+-- value.optional_if[ordstruct]
+1
+-- value.optional_none[ordstruct]
+true
+-- value.optional_print[ordstruct]
+Q(n: 1, name: "a")
+-- value.tuple[ordstruct]
+1
+1
+-- value.tuple_eq[ordstruct]
+true
+-- value.tuple_print[ordstruct]
+(Q(n: 1, name: "a"), 1)
+-- value.tuple_list_sorted[ordstruct]
+2
+-- value.tuple_key[ordstruct]
+2
+-- value.struct_field[ordstruct]
+true
+-- value.struct_print[ordstruct]
+Box_ordstruct(items: [Q(n: 1, name: "a")])
+-- value.ref[ordstruct]
+2
+-- value.generic_id[ordstruct]
+1
+-- value.generic_box[ordstruct]
+true
+-- value.fn_value[ordstruct]
+1
+-- value.closure_capture[ordstruct]
+1
+-- value.match_eq[ordstruct]
+1
+-- value.const_list[ordstruct]
+2

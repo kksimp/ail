@@ -1,0 +1,237 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_tuple
+    items List[(int, str)]
+
+fn add_tuple(mut xs List[(int, str)], x (int, str))
+    xs.push(x)
+
+fn wrap_tuple(x (int, str)) (int, str)?
+    x
+
+fn nothing_tuple() (int, str)?
+    none
+
+K_tuple := [(1, "a"), (2, "b")]
+
+## mapk.literal[tuple]
+fn s0()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.len())
+
+## mapk.empty[tuple]
+fn s1()
+    m := Map[(int, str), int]()
+    print(m.len())
+
+## mapk.typed_by_use[tuple]
+fn s2()
+    mut m := {}
+    m[(1, "a")] += 1
+    print(m.len())
+
+## mapk.index[tuple]
+fn s3()
+    m := {(1, "a"): 1}
+    print(m[(1, "a")])
+
+## mapk.assign[tuple]
+fn s4()
+    mut m := Map[(int, str), int]()
+    m[(1, "a")] = 1
+    m[(2, "b")] = 2
+    print(m.len())
+
+## mapk.op_assign[tuple]
+fn s5()
+    mut m := Map[(int, str), int]()
+    m[(1, "a")] += 3
+    print(m[(1, "a")])
+
+## mapk.get[tuple]
+fn s6()
+    m := {(1, "a"): 1}
+    print(m.get((1, "a")) else 0)
+
+## mapk.get_or[tuple]
+fn s7()
+    m := {(1, "a"): 1}
+    print(m.get_or((2, "b"), 7))
+
+## mapk.contains[tuple]
+fn s8()
+    m := {(1, "a"): 1}
+    print(m.contains((1, "a")))
+
+## mapk.remove[tuple]
+fn s9()
+    mut m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.remove((1, "a")) else 0)
+
+## mapk.keys_values[tuple]
+fn s10()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.keys_sorted[tuple]
+fn s11()
+    m := {(2, "b"): 1, (1, "a"): 2}
+    print(m.keys().sorted().len())
+
+## mapk.top[tuple]
+fn s12()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.top(1).len())
+
+## mapk.for[tuple]
+fn s13()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[tuple]
+fn s14()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[tuple]
+fn s15()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[tuple]
+fn s16()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[tuple]
+fn s17()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[tuple]
+fn s18()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[tuple]
+fn s19()
+    m := {(1, "a"): 1, (2, "b"): 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[tuple]
+fn s20()
+    mut m := Map[(int, str), List[int]]()
+    m.push((1, "a"), 1)
+    m.push((1, "a"), 2)
+    print(m[(1, "a")].len())
+
+## mapk.eq[tuple]
+fn s21()
+    m := {(1, "a"): 1}
+    print(m == {(1, "a"): 1})
+
+## mapk.print[tuple]
+fn s22()
+    m := {(1, "a"): 1}
+    print(m)
+
+## mapk.is_empty[tuple]
+fn s23()
+    m := {(1, "a"): 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[tuple]")
+    s0()
+    print("-- mapk.empty[tuple]")
+    s1()
+    print("-- mapk.typed_by_use[tuple]")
+    s2()
+    print("-- mapk.index[tuple]")
+    s3()
+    print("-- mapk.assign[tuple]")
+    s4()
+    print("-- mapk.op_assign[tuple]")
+    s5()
+    print("-- mapk.get[tuple]")
+    s6()
+    print("-- mapk.get_or[tuple]")
+    s7()
+    print("-- mapk.contains[tuple]")
+    s8()
+    print("-- mapk.remove[tuple]")
+    s9()
+    print("-- mapk.keys_values[tuple]")
+    s10()
+    print("-- mapk.keys_sorted[tuple]")
+    s11()
+    print("-- mapk.top[tuple]")
+    s12()
+    print("-- mapk.for[tuple]")
+    s13()
+    print("-- mapk.any_all_count[tuple]")
+    s14()
+    print("-- mapk.fold[tuple]")
+    s15()
+    print("-- mapk.filter[tuple]")
+    s16()
+    print("-- mapk.map[tuple]")
+    s17()
+    print("-- mapk.flat_map[tuple]")
+    s18()
+    print("-- mapk.map_values[tuple]")
+    s19()
+    print("-- mapk.push[tuple]")
+    s20()
+    print("-- mapk.eq[tuple]")
+    s21()
+    print("-- mapk.print[tuple]")
+    s22()
+    print("-- mapk.is_empty[tuple]")
+    s23()

@@ -1,0 +1,162 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## deque.empty_push[ordstruct]
+fn s0()
+    mut d := Deque[Q]()
+    d.push_back(Q(n: 1, name: "a"))
+    d.push_front(Q(n: 2, name: "b"))
+    print(d.len())
+
+## deque.from[ordstruct]
+fn s1()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(d.len())
+
+## deque.pop[ordstruct]
+fn s2()
+    mut d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[ordstruct]
+fn s3()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[ordstruct]
+fn s4()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    x := d[1]
+    print(x.n == x.n)
+
+## deque.at_set[ordstruct]
+fn s5()
+    mut d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    d.set(0, Q(n: 3, name: "c"))
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[ordstruct]
+fn s6()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(d.to_list().len())
+
+## deque.for[ordstruct]
+fn s7()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[ordstruct]
+fn s8()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(d.filter(|x| x == Q(n: 1, name: "a")).len() + d.map(|x| x.n).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == Q(n: 1, name: "a")))
+    print(d.all(|x| x == Q(n: 1, name: "a")))
+    print(d.count(|x| x == Q(n: 1, name: "a")))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == Q(n: 1, name: "a"))
+        print(1)
+
+## deque.take_skip[ordstruct]
+fn s9()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == Q(n: 1, name: "a")).len() + d.skip_while(|x| x == Q(n: 1, name: "a")).len())
+
+## deque.enumerate_zip[ordstruct]
+fn s10()
+    d := Deque.from([Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[ordstruct]
+fn s11()
+    d := Deque[Q]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[ordstruct]")
+    s0()
+    print("-- deque.from[ordstruct]")
+    s1()
+    print("-- deque.pop[ordstruct]")
+    s2()
+    print("-- deque.first_last[ordstruct]")
+    s3()
+    print("-- deque.index[ordstruct]")
+    s4()
+    print("-- deque.at_set[ordstruct]")
+    s5()
+    print("-- deque.to_list[ordstruct]")
+    s6()
+    print("-- deque.for[ordstruct]")
+    s7()
+    print("-- deque.vocab[ordstruct]")
+    s8()
+    print("-- deque.take_skip[ordstruct]")
+    s9()
+    print("-- deque.enumerate_zip[ordstruct]")
+    s10()
+    print("-- deque.is_empty[ordstruct]")
+    s11()

@@ -1,0 +1,181 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_tuple
+    items List[(int, str)]
+
+fn add_tuple(mut xs List[(int, str)], x (int, str))
+    xs.push(x)
+
+fn wrap_tuple(x (int, str)) (int, str)?
+    x
+
+fn nothing_tuple() (int, str)?
+    none
+
+K_tuple := [(1, "a"), (2, "b")]
+
+## mapv.literal[tuple]
+fn s0()
+    m := {"a": (1, "a"), "b": (2, "b")}
+    print(m.len())
+
+## mapv.empty[tuple]
+fn s1()
+    m := Map[str, (int, str)]()
+    print(m.len())
+
+## mapv.index[tuple]
+fn s2()
+    m := {"a": (1, "a")}
+    x := m["a"]
+    print(x.0 == x.0)
+
+## mapv.assign[tuple]
+fn s3()
+    mut m := Map[str, (int, str)]()
+    m["a"] = (1, "a")
+    print(m.len())
+
+## mapv.get[tuple]
+fn s4()
+    m := {"a": (1, "a")}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[tuple]
+fn s5()
+    m := {"a": (1, "a")}
+    x := m.get("z") else (2, "b")
+    print(1)
+
+## mapv.get_or[tuple]
+fn s6()
+    m := {"a": (1, "a")}
+    x := m.get_or("b", (3, "c"))
+    print(1)
+
+## mapv.remove[tuple]
+fn s7()
+    mut m := {"a": (1, "a")}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[tuple]
+fn s8()
+    m := {"a": (1, "a"), "b": (2, "b")}
+    print(m.values().len())
+
+## mapv.values_sorted[tuple]
+fn s9()
+    m := {"a": (2, "b"), "b": (1, "a")}
+    print(m.values().sorted().len())
+
+## mapv.for[tuple]
+fn s10()
+    m := {"a": (1, "a"), "b": (2, "b")}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[tuple]
+fn s11()
+    m := {"a": (1, "a")}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[tuple]
+fn s12()
+    m := {"a": (1, "a"), "b": (2, "b")}
+    print(m.filter(|k, v| v == (1, "a")).len())
+
+## mapv.nested_update[tuple]
+fn s13()
+    mut m := Map[str, List[(int, str)]]()
+    m["a"] = [(1, "a")]
+    m["a"].push((2, "b"))
+    print(m["a"].len())
+
+## mapv.eq[tuple]
+fn s14()
+    m := {"a": (1, "a")}
+    print(m == {"a": (1, "a")})
+
+## mapv.print[tuple]
+fn s15()
+    m := {"a": (1, "a")}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[tuple]")
+    s0()
+    print("-- mapv.empty[tuple]")
+    s1()
+    print("-- mapv.index[tuple]")
+    s2()
+    print("-- mapv.assign[tuple]")
+    s3()
+    print("-- mapv.get[tuple]")
+    s4()
+    print("-- mapv.get_else[tuple]")
+    s5()
+    print("-- mapv.get_or[tuple]")
+    s6()
+    print("-- mapv.remove[tuple]")
+    s7()
+    print("-- mapv.values[tuple]")
+    s8()
+    print("-- mapv.values_sorted[tuple]")
+    s9()
+    print("-- mapv.for[tuple]")
+    s10()
+    print("-- mapv.map_values[tuple]")
+    s11()
+    print("-- mapv.filter[tuple]")
+    s12()
+    print("-- mapv.nested_update[tuple]")
+    s13()
+    print("-- mapv.eq[tuple]")
+    s14()
+    print("-- mapv.print[tuple]")
+    s15()

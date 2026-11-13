@@ -1,0 +1,49 @@
+-- set.literal[tuple]
+2
+-- set.empty[tuple]
+0
+-- set.from_list[tuple]
+2
+-- set.add_remove[tuple]
+true
+true
+-- set.contains[tuple]
+true
+-- set.is_empty[tuple]
+false
+-- set.sorted[tuple]
+2
+-- set.is_subset[tuple]
+true
+-- set.set_ops[tuple]
+5
+-- set.any_all_find[tuple]
+true
+false
+1
+-- set.filter_map[tuple]
+3
+-- set.group_by[tuple]
+2
+-- set.count_fold[tuple]
+1
+2
+-- set.flat_map[tuple]
+2
+-- set.take_skip[tuple]
+6
+-- set.zip_enumerate[tuple]
+4
+-- set.min_max[tuple]
+1
+2
+-- set.for[tuple]
+2
+-- set.eq[tuple]
+true
+-- set.print[tuple]
+{(1, "a")}
+-- set.in_map[tuple]
+1
+-- set.in_list[tuple]
+1

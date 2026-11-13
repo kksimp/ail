@@ -1,0 +1,162 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_u8
+    items List[u8]
+
+fn add_u8(mut xs List[u8], x u8)
+    xs.push(x)
+
+fn wrap_u8(x u8) u8?
+    x
+
+fn nothing_u8() u8?
+    none
+
+K_u8 := [1.to_u8(), 2.to_u8()]
+
+## deque.empty_push[u8]
+fn s0()
+    mut d := Deque[u8]()
+    d.push_back(1.to_u8())
+    d.push_front(2.to_u8())
+    print(d.len())
+
+## deque.from[u8]
+fn s1()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    print(d.len())
+
+## deque.pop[u8]
+fn s2()
+    mut d := Deque.from([1.to_u8(), 2.to_u8(), 3.to_u8()])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[u8]
+fn s3()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[u8]
+fn s4()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    x := d[1]
+    print(x == x)
+
+## deque.at_set[u8]
+fn s5()
+    mut d := Deque.from([1.to_u8(), 2.to_u8()])
+    d.set(0, 3.to_u8())
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[u8]
+fn s6()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    print(d.to_list().len())
+
+## deque.for[u8]
+fn s7()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[u8]
+fn s8()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    print(d.filter(|x| x == 1.to_u8()).len() + d.map(|x| x).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == 1.to_u8()))
+    print(d.all(|x| x == 1.to_u8()))
+    print(d.count(|x| x == 1.to_u8()))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == 1.to_u8())
+        print(1)
+
+## deque.take_skip[u8]
+fn s9()
+    d := Deque.from([1.to_u8(), 2.to_u8(), 3.to_u8()])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == 1.to_u8()).len() + d.skip_while(|x| x == 1.to_u8()).len())
+
+## deque.enumerate_zip[u8]
+fn s10()
+    d := Deque.from([1.to_u8(), 2.to_u8()])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[u8]
+fn s11()
+    d := Deque[u8]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[u8]")
+    s0()
+    print("-- deque.from[u8]")
+    s1()
+    print("-- deque.pop[u8]")
+    s2()
+    print("-- deque.first_last[u8]")
+    s3()
+    print("-- deque.index[u8]")
+    s4()
+    print("-- deque.at_set[u8]")
+    s5()
+    print("-- deque.to_list[u8]")
+    s6()
+    print("-- deque.for[u8]")
+    s7()
+    print("-- deque.vocab[u8]")
+    s8()
+    print("-- deque.take_skip[u8]")
+    s9()
+    print("-- deque.enumerate_zip[u8]")
+    s10()
+    print("-- deque.is_empty[u8]")
+    s11()

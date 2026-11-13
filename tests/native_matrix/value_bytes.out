@@ -1,0 +1,49 @@
+-- value.eq[bytes]
+true
+true
+-- value.lt[bytes]
+true
+true
+-- value.print[bytes]
+b"a"
+-- value.interp[bytes]
+<b"a">
+-- value.to_str_len[bytes]
+true
+-- value.optional_else[bytes]
+1
+-- value.optional_if[bytes]
+1
+-- value.optional_none[bytes]
+true
+-- value.optional_print[bytes]
+b"a"
+-- value.tuple[bytes]
+1
+1
+-- value.tuple_eq[bytes]
+true
+-- value.tuple_print[bytes]
+(b"a", 1)
+-- value.tuple_list_sorted[bytes]
+2
+-- value.tuple_key[bytes]
+2
+-- value.struct_field[bytes]
+true
+-- value.struct_print[bytes]
+Box_bytes(items: [b"a"])
+-- value.ref[bytes]
+2
+-- value.generic_id[bytes]
+1
+-- value.generic_box[bytes]
+true
+-- value.fn_value[bytes]
+1
+-- value.closure_capture[bytes]
+1
+-- value.match_eq[bytes]
+1
+-- value.const_list[bytes]
+2

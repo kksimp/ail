@@ -1,0 +1,110 @@
+-- list.literal[bool]
+3
+-- list.empty[bool]
+0
+-- list.typed_by_push[bool]
+1
+-- list.len[bool]
+2
+-- list.is_empty[bool]
+false
+-- list.index[bool]
+true
+-- list.index_assign[bool]
+2
+-- list.slice[bool]
+5
+-- list.push[bool]
+2
+-- list.pop[bool]
+1
+-- list.swap[bool]
+2
+-- list.first_last[bool]
+1
+2
+-- list.insert[bool]
+2
+-- list.remove_at[bool]
+1
+-- list.extend[bool]
+3
+-- list.clear[bool]
+0
+-- list.reverse[bool]
+2
+-- list.reversed[bool]
+2
+-- list.contains[bool]
+true
+-- list.index_of[bool]
+1
+-- list.join[bool]
+true
+-- list.take_skip[bool]
+4
+-- list.set_ops[bool]
+4
+-- list.chunks_windows[bool]
+4
+-- list.counts[bool]
+2
+-- list.flatten[bool]
+3
+-- list.enumerate[bool]
+0
+1
+-- list.any_all[bool]
+true
+false
+-- list.find[bool]
+1
+-- list.filter[bool]
+1
+-- list.map[bool]
+2
+-- list.map_to_self[bool]
+2
+-- list.group_by[bool]
+2
+-- list.count[bool]
+2
+-- list.fold[bool]
+2
+-- list.flat_map[bool]
+4
+-- list.take_skip_while[bool]
+2
+-- list.zip[bool]
+1
+2
+-- list.zip_into[bool]
+1
+2
+-- list.for[bool]
+2
+-- list.for_mut[bool]
+2
+-- list.comprehension[bool]
+1
+-- list.set_comprehension[bool]
+2
+-- list.map_comprehension[bool]
+2
+-- list.eq[bool]
+true
+true
+-- list.print[bool]
+[false, true]
+-- list.interp[bool]
+true
+-- list.nested_push[bool]
+2
+-- list.in_struct[bool]
+2
+-- list.pass_mut[bool]
+2
+-- list.generic_first[bool]
+1
+-- list.contains_list[bool]
+true

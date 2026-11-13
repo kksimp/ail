@@ -1,0 +1,31 @@
+-- deque.empty_push[payenum]
+2
+-- deque.from[payenum]
+2
+-- deque.pop[payenum]
+1
+2
+-- deque.first_last[payenum]
+1
+2
+-- deque.index[payenum]
+true
+-- deque.at_set[payenum]
+2
+-- deque.to_list[payenum]
+2
+-- deque.for[payenum]
+2
+-- deque.vocab[payenum]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[payenum]
+6
+-- deque.enumerate_zip[payenum]
+4
+-- deque.is_empty[payenum]
+true

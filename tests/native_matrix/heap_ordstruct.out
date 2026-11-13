@@ -1,0 +1,12 @@
+-- heap.empty_push_pop[ordstruct]
+1
+-- heap.max_first[ordstruct]
+2
+-- heap.from[ordstruct]
+3
+-- heap.from_max[ordstruct]
+3
+-- heap.is_empty[ordstruct]
+true
+-- heap.drain[ordstruct]
+3

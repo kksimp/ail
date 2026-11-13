@@ -1,0 +1,32 @@
+-- mapv.literal[ordstruct]
+2
+-- mapv.empty[ordstruct]
+0
+-- mapv.index[ordstruct]
+true
+-- mapv.assign[ordstruct]
+1
+-- mapv.get[ordstruct]
+1
+-- mapv.get_else[ordstruct]
+1
+-- mapv.get_or[ordstruct]
+1
+-- mapv.remove[ordstruct]
+0
+-- mapv.values[ordstruct]
+2
+-- mapv.values_sorted[ordstruct]
+2
+-- mapv.for[ordstruct]
+2
+-- mapv.map_values[ordstruct]
+1
+-- mapv.filter[ordstruct]
+1
+-- mapv.nested_update[ordstruct]
+2
+-- mapv.eq[ordstruct]
+true
+-- mapv.print[ordstruct]
+{"a": Q(n: 1, name: "a")}

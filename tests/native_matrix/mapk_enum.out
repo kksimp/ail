@@ -1,0 +1,48 @@
+-- mapk.literal[enum]
+2
+-- mapk.empty[enum]
+0
+-- mapk.typed_by_use[enum]
+1
+-- mapk.index[enum]
+1
+-- mapk.assign[enum]
+2
+-- mapk.op_assign[enum]
+3
+-- mapk.get[enum]
+1
+-- mapk.get_or[enum]
+7
+-- mapk.contains[enum]
+true
+-- mapk.remove[enum]
+1
+-- mapk.keys_values[enum]
+4
+-- mapk.top[enum]
+1
+-- mapk.for[enum]
+3
+-- mapk.any_all_count[enum]
+true
+false
+1
+-- mapk.fold[enum]
+3
+-- mapk.filter[enum]
+1
+-- mapk.map[enum]
+2
+-- mapk.flat_map[enum]
+4
+-- mapk.map_values[enum]
+2
+-- mapk.push[enum]
+2
+-- mapk.eq[enum]
+true
+-- mapk.print[enum]
+{Color.Red: 1}
+-- mapk.is_empty[enum]
+false

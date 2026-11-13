@@ -1,0 +1,227 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## mapk.literal[opt]
+fn s0()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.len())
+
+## mapk.empty[opt]
+fn s1()
+    m := Map[int?, int]()
+    print(m.len())
+
+## mapk.typed_by_use[opt]
+fn s2()
+    mut m := {}
+    m[oi(1)] += 1
+    print(m.len())
+
+## mapk.index[opt]
+fn s3()
+    m := {oi(1): 1}
+    print(m[oi(1)])
+
+## mapk.assign[opt]
+fn s4()
+    mut m := Map[int?, int]()
+    m[oi(1)] = 1
+    m[oi(2)] = 2
+    print(m.len())
+
+## mapk.op_assign[opt]
+fn s5()
+    mut m := Map[int?, int]()
+    m[oi(1)] += 3
+    print(m[oi(1)])
+
+## mapk.get[opt]
+fn s6()
+    m := {oi(1): 1}
+    print(m.get(oi(1)) else 0)
+
+## mapk.get_or[opt]
+fn s7()
+    m := {oi(1): 1}
+    print(m.get_or(oi(2), 7))
+
+## mapk.contains[opt]
+fn s8()
+    m := {oi(1): 1}
+    print(m.contains(oi(1)))
+
+## mapk.remove[opt]
+fn s9()
+    mut m := {oi(1): 1, oi(2): 2}
+    print(m.remove(oi(1)) else 0)
+
+## mapk.keys_values[opt]
+fn s10()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.top[opt]
+fn s11()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.top(1).len())
+
+## mapk.for[opt]
+fn s12()
+    m := {oi(1): 1, oi(2): 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[opt]
+fn s13()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[opt]
+fn s14()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[opt]
+fn s15()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[opt]
+fn s16()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[opt]
+fn s17()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[opt]
+fn s18()
+    m := {oi(1): 1, oi(2): 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[opt]
+fn s19()
+    mut m := Map[int?, List[int]]()
+    m.push(oi(1), 1)
+    m.push(oi(1), 2)
+    print(m[oi(1)].len())
+
+## mapk.eq[opt]
+fn s20()
+    m := {oi(1): 1}
+    print(m == {oi(1): 1})
+
+## mapk.print[opt]
+fn s21()
+    m := {oi(1): 1}
+    print(m)
+
+## mapk.is_empty[opt]
+fn s22()
+    m := {oi(1): 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[opt]")
+    s0()
+    print("-- mapk.empty[opt]")
+    s1()
+    print("-- mapk.typed_by_use[opt]")
+    s2()
+    print("-- mapk.index[opt]")
+    s3()
+    print("-- mapk.assign[opt]")
+    s4()
+    print("-- mapk.op_assign[opt]")
+    s5()
+    print("-- mapk.get[opt]")
+    s6()
+    print("-- mapk.get_or[opt]")
+    s7()
+    print("-- mapk.contains[opt]")
+    s8()
+    print("-- mapk.remove[opt]")
+    s9()
+    print("-- mapk.keys_values[opt]")
+    s10()
+    print("-- mapk.top[opt]")
+    s11()
+    print("-- mapk.for[opt]")
+    s12()
+    print("-- mapk.any_all_count[opt]")
+    s13()
+    print("-- mapk.fold[opt]")
+    s14()
+    print("-- mapk.filter[opt]")
+    s15()
+    print("-- mapk.map[opt]")
+    s16()
+    print("-- mapk.flat_map[opt]")
+    s17()
+    print("-- mapk.map_values[opt]")
+    s18()
+    print("-- mapk.push[opt]")
+    s19()
+    print("-- mapk.eq[opt]")
+    s20()
+    print("-- mapk.print[opt]")
+    s21()
+    print("-- mapk.is_empty[opt]")
+    s22()

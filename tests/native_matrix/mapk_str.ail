@@ -1,0 +1,237 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_str
+    items List[str]
+
+fn add_str(mut xs List[str], x str)
+    xs.push(x)
+
+fn wrap_str(x str) str?
+    x
+
+fn nothing_str() str?
+    none
+
+K_str := ["a", "b"]
+
+## mapk.literal[str]
+fn s0()
+    m := {"a": 1, "b": 2}
+    print(m.len())
+
+## mapk.empty[str]
+fn s1()
+    m := Map[str, int]()
+    print(m.len())
+
+## mapk.typed_by_use[str]
+fn s2()
+    mut m := {}
+    m["a"] += 1
+    print(m.len())
+
+## mapk.index[str]
+fn s3()
+    m := {"a": 1}
+    print(m["a"])
+
+## mapk.assign[str]
+fn s4()
+    mut m := Map[str, int]()
+    m["a"] = 1
+    m["b"] = 2
+    print(m.len())
+
+## mapk.op_assign[str]
+fn s5()
+    mut m := Map[str, int]()
+    m["a"] += 3
+    print(m["a"])
+
+## mapk.get[str]
+fn s6()
+    m := {"a": 1}
+    print(m.get("a") else 0)
+
+## mapk.get_or[str]
+fn s7()
+    m := {"a": 1}
+    print(m.get_or("b", 7))
+
+## mapk.contains[str]
+fn s8()
+    m := {"a": 1}
+    print(m.contains("a"))
+
+## mapk.remove[str]
+fn s9()
+    mut m := {"a": 1, "b": 2}
+    print(m.remove("a") else 0)
+
+## mapk.keys_values[str]
+fn s10()
+    m := {"a": 1, "b": 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.keys_sorted[str]
+fn s11()
+    m := {"b": 1, "a": 2}
+    print(m.keys().sorted().len())
+
+## mapk.top[str]
+fn s12()
+    m := {"a": 1, "b": 2}
+    print(m.top(1).len())
+
+## mapk.for[str]
+fn s13()
+    m := {"a": 1, "b": 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[str]
+fn s14()
+    m := {"a": 1, "b": 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[str]
+fn s15()
+    m := {"a": 1, "b": 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[str]
+fn s16()
+    m := {"a": 1, "b": 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[str]
+fn s17()
+    m := {"a": 1, "b": 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[str]
+fn s18()
+    m := {"a": 1, "b": 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[str]
+fn s19()
+    m := {"a": 1, "b": 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[str]
+fn s20()
+    mut m := Map[str, List[int]]()
+    m.push("a", 1)
+    m.push("a", 2)
+    print(m["a"].len())
+
+## mapk.eq[str]
+fn s21()
+    m := {"a": 1}
+    print(m == {"a": 1})
+
+## mapk.print[str]
+fn s22()
+    m := {"a": 1}
+    print(m)
+
+## mapk.is_empty[str]
+fn s23()
+    m := {"a": 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[str]")
+    s0()
+    print("-- mapk.empty[str]")
+    s1()
+    print("-- mapk.typed_by_use[str]")
+    s2()
+    print("-- mapk.index[str]")
+    s3()
+    print("-- mapk.assign[str]")
+    s4()
+    print("-- mapk.op_assign[str]")
+    s5()
+    print("-- mapk.get[str]")
+    s6()
+    print("-- mapk.get_or[str]")
+    s7()
+    print("-- mapk.contains[str]")
+    s8()
+    print("-- mapk.remove[str]")
+    s9()
+    print("-- mapk.keys_values[str]")
+    s10()
+    print("-- mapk.keys_sorted[str]")
+    s11()
+    print("-- mapk.top[str]")
+    s12()
+    print("-- mapk.for[str]")
+    s13()
+    print("-- mapk.any_all_count[str]")
+    s14()
+    print("-- mapk.fold[str]")
+    s15()
+    print("-- mapk.filter[str]")
+    s16()
+    print("-- mapk.map[str]")
+    s17()
+    print("-- mapk.flat_map[str]")
+    s18()
+    print("-- mapk.map_values[str]")
+    s19()
+    print("-- mapk.push[str]")
+    s20()
+    print("-- mapk.eq[str]")
+    s21()
+    print("-- mapk.print[str]")
+    s22()
+    print("-- mapk.is_empty[str]")
+    s23()

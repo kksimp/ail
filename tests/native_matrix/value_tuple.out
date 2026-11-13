@@ -1,0 +1,49 @@
+-- value.eq[tuple]
+true
+true
+-- value.lt[tuple]
+true
+true
+-- value.print[tuple]
+(1, "a")
+-- value.interp[tuple]
+<(1, "a")>
+-- value.to_str_len[tuple]
+true
+-- value.optional_else[tuple]
+1
+-- value.optional_if[tuple]
+1
+-- value.optional_none[tuple]
+true
+-- value.optional_print[tuple]
+(1, "a")
+-- value.tuple[tuple]
+1
+1
+-- value.tuple_eq[tuple]
+true
+-- value.tuple_print[tuple]
+((1, "a"), 1)
+-- value.tuple_list_sorted[tuple]
+2
+-- value.tuple_key[tuple]
+2
+-- value.struct_field[tuple]
+true
+-- value.struct_print[tuple]
+Box_tuple(items: [(1, "a")])
+-- value.ref[tuple]
+2
+-- value.generic_id[tuple]
+1
+-- value.generic_box[tuple]
+true
+-- value.fn_value[tuple]
+1
+-- value.closure_capture[tuple]
+1
+-- value.match_eq[tuple]
+1
+-- value.const_list[tuple]
+2

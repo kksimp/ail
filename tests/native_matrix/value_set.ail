@@ -1,0 +1,206 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_set
+    items List[Set[int]]
+
+fn add_set(mut xs List[Set[int]], x Set[int])
+    xs.push(x)
+
+fn wrap_set(x Set[int]) Set[int]?
+    x
+
+fn nothing_set() Set[int]?
+    none
+
+K_set := [{1}, {2}]
+
+## value.eq[set]
+fn s0()
+    print({1} == {1})
+    print({1} != {2})
+
+## value.print[set]
+fn s1()
+    print({1})
+
+## value.interp[set]
+fn s2()
+    x := {1}
+    print("<{x}>")
+
+## value.to_str_len[set]
+fn s3()
+    x := {1}
+    print("{x}".len() > 0)
+
+## value.optional_else[set]
+fn s4()
+    o := wrap_set({1})
+    x := o else {2}
+    print(1)
+
+## value.optional_if[set]
+fn s5()
+    o := wrap_set({1})
+    if x := o
+        print(1)
+
+## value.optional_none[set]
+fn s6()
+    o := nothing_set()
+    print(o == none)
+
+## value.optional_print[set]
+fn s7()
+    o := wrap_set({1})
+    print(o)
+
+## value.tuple[set]
+fn s8()
+    t := ({1}, 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[set]
+fn s9()
+    t := ({1}, 1)
+    print(t == ({1}, 1))
+
+## value.tuple_print[set]
+fn s10()
+    t := ({1}, 1)
+    print(t)
+
+## value.struct_field[set]
+fn s11()
+    b := Box_set(items: [{1}])
+    c := b
+    print(c == b)
+
+## value.struct_print[set]
+fn s12()
+    b := Box_set(items: [{1}])
+    print(b)
+
+## value.ref[set]
+fn s13()
+    r := ref Box_set(items: [{1}])
+    s := r
+    s.items.push({2})
+    print(r.items.len())
+
+## value.generic_id[set]
+fn s14()
+    x := ident({1})
+    print(1)
+
+## value.generic_box[set]
+fn s15()
+    g := GBox(v: {1})
+    print(g.v == {1})
+
+## value.fn_value[set]
+fn s16()
+    f := |x Set[int]| x
+    y := f({1})
+    print(1)
+
+## value.closure_capture[set]
+fn s17()
+    a := {1}
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[set]
+fn s18()
+    x := {1}
+    print(if x == {1} then 1 else 0)
+
+## value.const_list[set]
+fn s19()
+    print(K_set.len())
+
+fn main()
+    print("-- value.eq[set]")
+    s0()
+    print("-- value.print[set]")
+    s1()
+    print("-- value.interp[set]")
+    s2()
+    print("-- value.to_str_len[set]")
+    s3()
+    print("-- value.optional_else[set]")
+    s4()
+    print("-- value.optional_if[set]")
+    s5()
+    print("-- value.optional_none[set]")
+    s6()
+    print("-- value.optional_print[set]")
+    s7()
+    print("-- value.tuple[set]")
+    s8()
+    print("-- value.tuple_eq[set]")
+    s9()
+    print("-- value.tuple_print[set]")
+    s10()
+    print("-- value.struct_field[set]")
+    s11()
+    print("-- value.struct_print[set]")
+    s12()
+    print("-- value.ref[set]")
+    s13()
+    print("-- value.generic_id[set]")
+    s14()
+    print("-- value.generic_box[set]")
+    s15()
+    print("-- value.fn_value[set]")
+    s16()
+    print("-- value.closure_capture[set]")
+    s17()
+    print("-- value.match_eq[set]")
+    s18()
+    print("-- value.const_list[set]")
+    s19()

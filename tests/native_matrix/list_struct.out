@@ -1,0 +1,117 @@
+-- list.literal[struct]
+3
+-- list.empty[struct]
+0
+-- list.typed_by_push[struct]
+1
+-- list.len[struct]
+2
+-- list.is_empty[struct]
+false
+-- list.index[struct]
+true
+-- list.index_assign[struct]
+2
+-- list.slice[struct]
+5
+-- list.push[struct]
+2
+-- list.pop[struct]
+1
+-- list.swap[struct]
+2
+-- list.first_last[struct]
+1
+2
+-- list.insert[struct]
+2
+-- list.remove_at[struct]
+1
+-- list.extend[struct]
+3
+-- list.clear[struct]
+0
+-- list.reverse[struct]
+2
+-- list.reversed[struct]
+2
+-- list.contains[struct]
+true
+-- list.index_of[struct]
+1
+-- list.join[struct]
+true
+-- list.sorted_by[struct]
+3
+-- list.sort_by[struct]
+3
+-- list.min_by[struct]
+1
+2
+-- list.take_skip[struct]
+4
+-- list.set_ops[struct]
+5
+-- list.chunks_windows[struct]
+4
+-- list.counts[struct]
+2
+-- list.flatten[struct]
+3
+-- list.enumerate[struct]
+0
+1
+-- list.any_all[struct]
+true
+false
+-- list.find[struct]
+1
+-- list.filter[struct]
+1
+-- list.map[struct]
+2
+-- list.map_to_self[struct]
+2
+-- list.group_by[struct]
+2
+-- list.count[struct]
+2
+-- list.fold[struct]
+2
+-- list.flat_map[struct]
+4
+-- list.take_skip_while[struct]
+2
+-- list.zip[struct]
+1
+2
+-- list.zip_into[struct]
+1
+2
+-- list.for[struct]
+2
+-- list.for_mut[struct]
+2
+-- list.comprehension[struct]
+1
+-- list.set_comprehension[struct]
+2
+-- list.map_comprehension[struct]
+2
+-- list.eq[struct]
+true
+true
+-- list.print[struct]
+[P(name: "a", n: 1), P(name: "b", n: 2)]
+-- list.interp[struct]
+true
+-- list.nested_push[struct]
+2
+-- list.in_struct[struct]
+2
+-- list.pass_mut[struct]
+2
+-- list.generic_first[struct]
+1
+-- list.contains_list[struct]
+true

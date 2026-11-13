@@ -1,0 +1,50 @@
+-- mapk.literal[list]
+2
+-- mapk.empty[list]
+0
+-- mapk.typed_by_use[list]
+1
+-- mapk.index[list]
+1
+-- mapk.assign[list]
+2
+-- mapk.op_assign[list]
+3
+-- mapk.get[list]
+1
+-- mapk.get_or[list]
+7
+-- mapk.contains[list]
+true
+-- mapk.remove[list]
+1
+-- mapk.keys_values[list]
+4
+-- mapk.keys_sorted[list]
+2
+-- mapk.top[list]
+1
+-- mapk.for[list]
+3
+-- mapk.any_all_count[list]
+true
+false
+1
+-- mapk.fold[list]
+3
+-- mapk.filter[list]
+1
+-- mapk.map[list]
+2
+-- mapk.flat_map[list]
+4
+-- mapk.map_values[list]
+2
+-- mapk.push[list]
+2
+-- mapk.eq[list]
+true
+-- mapk.print[list]
+{[1]: 1}
+-- mapk.is_empty[list]
+false

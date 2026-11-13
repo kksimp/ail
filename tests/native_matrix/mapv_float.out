@@ -1,0 +1,32 @@
+-- mapv.literal[float]
+2
+-- mapv.empty[float]
+0
+-- mapv.index[float]
+true
+-- mapv.assign[float]
+1
+-- mapv.get[float]
+1
+-- mapv.get_else[float]
+1
+-- mapv.get_or[float]
+1
+-- mapv.remove[float]
+0
+-- mapv.values[float]
+2
+-- mapv.values_sorted[float]
+2
+-- mapv.for[float]
+2
+-- mapv.map_values[float]
+1
+-- mapv.filter[float]
+1
+-- mapv.nested_update[float]
+2
+-- mapv.eq[float]
+true
+-- mapv.print[float]
+{"a": 1.5}

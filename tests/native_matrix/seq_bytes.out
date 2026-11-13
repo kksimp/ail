@@ -1,0 +1,28 @@
+-- seq.of_collect[bytes]
+2
+-- seq.map_filter[bytes]
+1
+-- seq.take_skip[bytes]
+1
+-- seq.enumerate[bytes]
+2
+-- seq.zip_chain[bytes]
+2
+-- seq.chain[bytes]
+2
+-- seq.next[bytes]
+1
+-- seq.for[bytes]
+2
+-- seq.count_any[bytes]
+1
+-- seq.fold[bytes]
+2
+-- seq.find[bytes]
+1
+-- seq.flat_map[bytes]
+4
+-- seq.while[bytes]
+1
+-- seq.skip_while[bytes]
+1

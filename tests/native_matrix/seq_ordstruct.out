@@ -1,0 +1,28 @@
+-- seq.of_collect[ordstruct]
+2
+-- seq.map_filter[ordstruct]
+1
+-- seq.take_skip[ordstruct]
+1
+-- seq.enumerate[ordstruct]
+2
+-- seq.zip_chain[ordstruct]
+2
+-- seq.chain[ordstruct]
+2
+-- seq.next[ordstruct]
+1
+-- seq.for[ordstruct]
+2
+-- seq.count_any[ordstruct]
+1
+-- seq.fold[ordstruct]
+2
+-- seq.find[ordstruct]
+1
+-- seq.flat_map[ordstruct]
+4
+-- seq.while[ordstruct]
+1
+-- seq.skip_while[ordstruct]
+1

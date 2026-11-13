@@ -1,0 +1,208 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## set.literal[opt]
+fn s0()
+    s := {oi(1), oi(2)}
+    print(s.len())
+
+## set.empty[opt]
+fn s1()
+    s := Set[int?]()
+    print(s.len())
+
+## set.from_list[opt]
+fn s2()
+    s := {x for x in [oi(1), oi(2), oi(1)]}
+    print(s.len())
+
+## set.add_remove[opt]
+fn s3()
+    mut s := Set[int?]()
+    print(s.add(oi(1)))
+    print(s.remove(oi(1)))
+
+## set.contains[opt]
+fn s4()
+    s := {oi(1), oi(2)}
+    print(s.contains(oi(1)))
+
+## set.is_empty[opt]
+fn s5()
+    s := {oi(1)}
+    print(s.is_empty())
+
+## set.is_subset[opt]
+fn s6()
+    s := {oi(1)}
+    t := {oi(1), oi(2)}
+    print(s.is_subset(t))
+
+## set.set_ops[opt]
+fn s7()
+    s := {oi(1), oi(2)}
+    t := {oi(2), oi(-1)}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[opt]
+fn s8()
+    s := {oi(1), oi(2)}
+    print(s.any(|x| x == oi(1)))
+    print(s.all(|x| x == oi(1)))
+    if x := s.find(|x| x == oi(2))
+        print(1)
+
+## set.filter_map[opt]
+fn s9()
+    s := {oi(1), oi(2)}
+    print(s.filter(|x| x == oi(1)).len() + s.map(|x| (x else 0)).len())
+
+## set.group_by[opt]
+fn s10()
+    s := {oi(1), oi(2)}
+    print(s.group_by(|x| (x else 0)).len())
+
+## set.count_fold[opt]
+fn s11()
+    s := {oi(1), oi(2)}
+    print(s.count(|x| x == oi(1)))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[opt]
+fn s12()
+    s := {oi(1), oi(2)}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[opt]
+fn s13()
+    s := {oi(1), oi(2), oi(-1)}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == oi(1)).len() + s.skip_while(|x| x == oi(1)).len())
+
+## set.zip_enumerate[opt]
+fn s14()
+    s := {oi(1), oi(2)}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.for[opt]
+fn s15()
+    s := {oi(1), oi(2)}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[opt]
+fn s16()
+    s := {oi(1), oi(2)}
+    print(s == {oi(2), oi(1)})
+
+## set.print[opt]
+fn s17()
+    s := {oi(1)}
+    print(s)
+
+## set.in_map[opt]
+fn s18()
+    mut m := Map[str, Set[int?]]()
+    m["a"] = Set[int?]()
+    m["a"].add(oi(1))
+    print(m["a"].len())
+
+## set.in_list[opt]
+fn s19()
+    mut xs := [Set[int?]()]
+    xs[0].add(oi(1))
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[opt]")
+    s0()
+    print("-- set.empty[opt]")
+    s1()
+    print("-- set.from_list[opt]")
+    s2()
+    print("-- set.add_remove[opt]")
+    s3()
+    print("-- set.contains[opt]")
+    s4()
+    print("-- set.is_empty[opt]")
+    s5()
+    print("-- set.is_subset[opt]")
+    s6()
+    print("-- set.set_ops[opt]")
+    s7()
+    print("-- set.any_all_find[opt]")
+    s8()
+    print("-- set.filter_map[opt]")
+    s9()
+    print("-- set.group_by[opt]")
+    s10()
+    print("-- set.count_fold[opt]")
+    s11()
+    print("-- set.flat_map[opt]")
+    s12()
+    print("-- set.take_skip[opt]")
+    s13()
+    print("-- set.zip_enumerate[opt]")
+    s14()
+    print("-- set.for[opt]")
+    s15()
+    print("-- set.eq[opt]")
+    s16()
+    print("-- set.print[opt]")
+    s17()
+    print("-- set.in_map[opt]")
+    s18()
+    print("-- set.in_list[opt]")
+    s19()

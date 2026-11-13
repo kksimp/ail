@@ -1,0 +1,132 @@
+-- list.literal[u8]
+3
+-- list.empty[u8]
+0
+-- list.typed_by_push[u8]
+1
+-- list.len[u8]
+2
+-- list.is_empty[u8]
+false
+-- list.index[u8]
+true
+-- list.index_assign[u8]
+2
+-- list.slice[u8]
+5
+-- list.push[u8]
+2
+-- list.pop[u8]
+1
+-- list.swap[u8]
+2
+-- list.first_last[u8]
+1
+2
+-- list.insert[u8]
+2
+-- list.remove_at[u8]
+1
+-- list.extend[u8]
+3
+-- list.clear[u8]
+0
+-- list.reverse[u8]
+2
+-- list.reversed[u8]
+2
+-- list.contains[u8]
+true
+-- list.index_of[u8]
+1
+-- list.join[u8]
+true
+-- list.sum[u8]
+1
+-- list.min_max[u8]
+1
+2
+-- list.sorted[u8]
+3
+-- list.sort[u8]
+3
+-- list.sorted_by[u8]
+3
+-- list.sort_by[u8]
+3
+-- list.min_by[u8]
+1
+2
+-- list.take_skip[u8]
+4
+-- list.set_ops[u8]
+5
+-- list.chunks_windows[u8]
+4
+-- list.counts[u8]
+2
+-- list.flatten[u8]
+3
+-- list.enumerate[u8]
+0
+1
+-- list.any_all[u8]
+true
+false
+-- list.find[u8]
+1
+-- list.filter[u8]
+1
+-- list.map[u8]
+2
+-- list.map_to_self[u8]
+2
+-- list.group_by[u8]
+2
+-- list.count[u8]
+2
+-- list.fold[u8]
+2
+-- list.flat_map[u8]
+4
+-- list.take_skip_while[u8]
+2
+-- list.zip[u8]
+1
+2
+-- list.zip_into[u8]
+1
+2
+-- list.for[u8]
+2
+-- list.for_mut[u8]
+2
+-- list.comprehension[u8]
+1
+-- list.set_comprehension[u8]
+2
+-- list.map_comprehension[u8]
+2
+-- list.eq[u8]
+true
+true
+-- list.lt[u8]
+true
+-- list.print[u8]
+[1, 2]
+-- list.interp[u8]
+true
+-- list.nested_push[u8]
+2
+-- list.in_struct[u8]
+2
+-- list.pass_mut[u8]
+2
+-- list.generic_first[u8]
+1
+-- list.generic_ord[u8]
+1
+-- list.contains_list[u8]
+true
+-- list.sorted_nested[u8]
+2

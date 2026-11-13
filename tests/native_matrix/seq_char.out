@@ -1,0 +1,28 @@
+-- seq.of_collect[char]
+2
+-- seq.map_filter[char]
+1
+-- seq.take_skip[char]
+1
+-- seq.enumerate[char]
+2
+-- seq.zip_chain[char]
+2
+-- seq.chain[char]
+2
+-- seq.next[char]
+1
+-- seq.for[char]
+2
+-- seq.count_any[char]
+1
+-- seq.fold[char]
+2
+-- seq.find[char]
+1
+-- seq.flat_map[char]
+4
+-- seq.while[char]
+1
+-- seq.skip_while[char]
+1

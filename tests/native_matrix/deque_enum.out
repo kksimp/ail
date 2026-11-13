@@ -1,0 +1,31 @@
+-- deque.empty_push[enum]
+2
+-- deque.from[enum]
+2
+-- deque.pop[enum]
+1
+2
+-- deque.first_last[enum]
+1
+2
+-- deque.index[enum]
+true
+-- deque.at_set[enum]
+2
+-- deque.to_list[enum]
+2
+-- deque.for[enum]
+2
+-- deque.vocab[enum]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[enum]
+6
+-- deque.enumerate_zip[enum]
+4
+-- deque.is_empty[enum]
+true

@@ -1,0 +1,48 @@
+-- mapk.literal[opt]
+2
+-- mapk.empty[opt]
+0
+-- mapk.typed_by_use[opt]
+1
+-- mapk.index[opt]
+1
+-- mapk.assign[opt]
+2
+-- mapk.op_assign[opt]
+3
+-- mapk.get[opt]
+1
+-- mapk.get_or[opt]
+7
+-- mapk.contains[opt]
+true
+-- mapk.remove[opt]
+1
+-- mapk.keys_values[opt]
+4
+-- mapk.top[opt]
+1
+-- mapk.for[opt]
+3
+-- mapk.any_all_count[opt]
+true
+false
+1
+-- mapk.fold[opt]
+3
+-- mapk.filter[opt]
+1
+-- mapk.map[opt]
+2
+-- mapk.flat_map[opt]
+4
+-- mapk.map_values[opt]
+2
+-- mapk.push[opt]
+2
+-- mapk.eq[opt]
+true
+-- mapk.print[opt]
+{1: 1}
+-- mapk.is_empty[opt]
+false

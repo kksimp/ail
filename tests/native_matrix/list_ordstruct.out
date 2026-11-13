@@ -1,0 +1,130 @@
+-- list.literal[ordstruct]
+3
+-- list.empty[ordstruct]
+0
+-- list.typed_by_push[ordstruct]
+1
+-- list.len[ordstruct]
+2
+-- list.is_empty[ordstruct]
+false
+-- list.index[ordstruct]
+true
+-- list.index_assign[ordstruct]
+2
+-- list.slice[ordstruct]
+5
+-- list.push[ordstruct]
+2
+-- list.pop[ordstruct]
+1
+-- list.swap[ordstruct]
+2
+-- list.first_last[ordstruct]
+1
+2
+-- list.insert[ordstruct]
+2
+-- list.remove_at[ordstruct]
+1
+-- list.extend[ordstruct]
+3
+-- list.clear[ordstruct]
+0
+-- list.reverse[ordstruct]
+2
+-- list.reversed[ordstruct]
+2
+-- list.contains[ordstruct]
+true
+-- list.index_of[ordstruct]
+1
+-- list.join[ordstruct]
+true
+-- list.min_max[ordstruct]
+1
+2
+-- list.sorted[ordstruct]
+3
+-- list.sort[ordstruct]
+3
+-- list.sorted_by[ordstruct]
+3
+-- list.sort_by[ordstruct]
+3
+-- list.min_by[ordstruct]
+1
+2
+-- list.take_skip[ordstruct]
+4
+-- list.set_ops[ordstruct]
+5
+-- list.chunks_windows[ordstruct]
+4
+-- list.counts[ordstruct]
+2
+-- list.flatten[ordstruct]
+3
+-- list.enumerate[ordstruct]
+0
+1
+-- list.any_all[ordstruct]
+true
+false
+-- list.find[ordstruct]
+1
+-- list.filter[ordstruct]
+1
+-- list.map[ordstruct]
+2
+-- list.map_to_self[ordstruct]
+2
+-- list.group_by[ordstruct]
+2
+-- list.count[ordstruct]
+2
+-- list.fold[ordstruct]
+2
+-- list.flat_map[ordstruct]
+4
+-- list.take_skip_while[ordstruct]
+2
+-- list.zip[ordstruct]
+1
+2
+-- list.zip_into[ordstruct]
+1
+2
+-- list.for[ordstruct]
+2
+-- list.for_mut[ordstruct]
+2
+-- list.comprehension[ordstruct]
+1
+-- list.set_comprehension[ordstruct]
+2
+-- list.map_comprehension[ordstruct]
+2
+-- list.eq[ordstruct]
+true
+true
+-- list.lt[ordstruct]
+true
+-- list.print[ordstruct]
+[Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+-- list.interp[ordstruct]
+true
+-- list.nested_push[ordstruct]
+2
+-- list.in_struct[ordstruct]
+2
+-- list.pass_mut[ordstruct]
+2
+-- list.generic_first[ordstruct]
+1
+-- list.generic_ord[ordstruct]
+1
+-- list.contains_list[ordstruct]
+true
+-- list.sorted_nested[ordstruct]
+2

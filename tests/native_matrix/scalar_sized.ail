@@ -1,0 +1,128 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+## sized.0
+fn s0()
+    x := 3.to_u8()
+    print(x.checked_add(1.to_u8()) else 0.to_u8())
+
+## sized.1
+fn s1()
+    x := 3.to_i32()
+    print(x.wrapping_neg())
+
+## sized.2
+fn s2()
+    x := 3.to_i32()
+    print(x.abs())
+
+## sized.3
+fn s3()
+    x := 3.to_u16()
+    print(x.to_int())
+
+## sized.4
+fn s4()
+    x := 3.to_u32()
+    print(x.to_float())
+
+## sized.5
+fn s5()
+    x := 3.to_u64()
+    print(x.to_hex())
+
+## sized.6
+fn s6()
+    x := 3.to_i16()
+    print(x.to_str())
+
+## sized.7
+fn s7()
+    x := 3.to_u8()
+    print(x.saturating_sub(5.to_u8()))
+
+## sized.8
+fn s8()
+    x := 1.5.to_f32()
+    print(x.sqrt())
+
+## sized.9
+fn s9()
+    x := 1.5.to_f32()
+    print(x.to_float())
+
+## sized.10
+fn s10()
+    xs := [3.to_u8(), 1.to_u8()]
+    print(xs.sorted())
+
+## sized.11
+fn s11()
+    xs := [3.to_i32(), 1.to_i32()]
+    print(xs.sum())
+
+fn main()
+    print("-- sized.0")
+    s0()
+    print("-- sized.1")
+    s1()
+    print("-- sized.2")
+    s2()
+    print("-- sized.3")
+    s3()
+    print("-- sized.4")
+    s4()
+    print("-- sized.5")
+    s5()
+    print("-- sized.6")
+    s6()
+    print("-- sized.7")
+    s7()
+    print("-- sized.8")
+    s8()
+    print("-- sized.9")
+    s9()
+    print("-- sized.10")
+    s10()
+    print("-- sized.11")
+    s11()

@@ -1,0 +1,49 @@
+-- value.eq[int]
+true
+true
+-- value.lt[int]
+true
+true
+-- value.print[int]
+1
+-- value.interp[int]
+<1>
+-- value.to_str_len[int]
+true
+-- value.optional_else[int]
+1
+-- value.optional_if[int]
+1
+-- value.optional_none[int]
+true
+-- value.optional_print[int]
+1
+-- value.tuple[int]
+1
+1
+-- value.tuple_eq[int]
+true
+-- value.tuple_print[int]
+(1, 1)
+-- value.tuple_list_sorted[int]
+2
+-- value.tuple_key[int]
+2
+-- value.struct_field[int]
+true
+-- value.struct_print[int]
+Box_int(items: [1])
+-- value.ref[int]
+2
+-- value.generic_id[int]
+1
+-- value.generic_box[int]
+true
+-- value.fn_value[int]
+1
+-- value.closure_capture[int]
+1
+-- value.match_eq[int]
+1
+-- value.const_list[int]
+2

@@ -1,0 +1,31 @@
+-- deque.empty_push[u8]
+2
+-- deque.from[u8]
+2
+-- deque.pop[u8]
+1
+2
+-- deque.first_last[u8]
+1
+2
+-- deque.index[u8]
+true
+-- deque.at_set[u8]
+2
+-- deque.to_list[u8]
+2
+-- deque.for[u8]
+2
+-- deque.vocab[u8]
+5
+true
+false
+1
+2
+1
+-- deque.take_skip[u8]
+6
+-- deque.enumerate_zip[u8]
+4
+-- deque.is_empty[u8]
+true

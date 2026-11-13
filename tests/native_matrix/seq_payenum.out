@@ -1,0 +1,28 @@
+-- seq.of_collect[payenum]
+2
+-- seq.map_filter[payenum]
+1
+-- seq.take_skip[payenum]
+1
+-- seq.enumerate[payenum]
+2
+-- seq.zip_chain[payenum]
+2
+-- seq.chain[payenum]
+2
+-- seq.next[payenum]
+1
+-- seq.for[payenum]
+2
+-- seq.count_any[payenum]
+1
+-- seq.fold[payenum]
+2
+-- seq.find[payenum]
+1
+-- seq.flat_map[payenum]
+4
+-- seq.while[payenum]
+1
+-- seq.skip_while[payenum]
+1

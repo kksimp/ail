@@ -1,0 +1,531 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_uid
+    items List[Uid]
+
+fn add_uid(mut xs List[Uid], x Uid)
+    xs.push(x)
+
+fn wrap_uid(x Uid) Uid?
+    x
+
+fn nothing_uid() Uid?
+    none
+
+K_uid := [Uid(1), Uid(2)]
+
+## list.literal[uid]
+fn s0()
+    xs := [Uid(1), Uid(2), Uid(3)]
+    print(xs.len())
+
+## list.empty[uid]
+fn s1()
+    xs := List[Uid]()
+    print(xs.len())
+
+## list.typed_by_push[uid]
+fn s2()
+    mut xs := []
+    xs.push(Uid(1))
+    print(xs.len())
+
+## list.len[uid]
+fn s3()
+    xs := [Uid(1), Uid(2)]
+    print(xs.len())
+
+## list.is_empty[uid]
+fn s4()
+    xs := [Uid(1)]
+    print(xs.is_empty())
+
+## list.index[uid]
+fn s5()
+    xs := [Uid(1), Uid(2)]
+    x := xs[1]
+    print(x == x)
+
+## list.index_assign[uid]
+fn s6()
+    mut xs := [Uid(1), Uid(2)]
+    xs[0] = Uid(3)
+    print(xs.len())
+
+## list.slice[uid]
+fn s7()
+    xs := [Uid(1), Uid(2), Uid(3)]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[uid]
+fn s8()
+    mut xs := [Uid(1)]
+    xs.push(Uid(2))
+    print(xs.len())
+
+## list.pop[uid]
+fn s9()
+    mut xs := [Uid(1), Uid(2)]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[uid]
+fn s10()
+    mut xs := [Uid(1), Uid(2)]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[uid]
+fn s11()
+    xs := [Uid(1), Uid(2)]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[uid]
+fn s12()
+    mut xs := [Uid(1)]
+    xs.insert(0, Uid(2))
+    print(xs.len())
+
+## list.remove_at[uid]
+fn s13()
+    mut xs := [Uid(1), Uid(2)]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[uid]
+fn s14()
+    mut xs := [Uid(1)]
+    xs.extend([Uid(2), Uid(3)])
+    print(xs.len())
+
+## list.clear[uid]
+fn s15()
+    mut xs := [Uid(1)]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[uid]
+fn s16()
+    mut xs := [Uid(1), Uid(2)]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[uid]
+fn s17()
+    xs := [Uid(1), Uid(2)]
+    print(xs.reversed().len())
+
+## list.contains[uid]
+fn s18()
+    xs := [Uid(1), Uid(2)]
+    print(xs.contains(Uid(2)))
+
+## list.index_of[uid]
+fn s19()
+    xs := [Uid(1), Uid(2)]
+    print(xs.index_of(Uid(2)) else -1)
+
+## list.join[uid]
+fn s20()
+    xs := [Uid(1), Uid(2)]
+    print(xs.join(",").len() > 0)
+
+## list.min_max[uid]
+fn s21()
+    xs := [Uid(2), Uid(1), Uid(3)]
+    if x := xs.min()
+        print(1)
+    if x := xs.max()
+        print(2)
+
+## list.sorted[uid]
+fn s22()
+    xs := [Uid(3), Uid(1), Uid(2)]
+    print(xs.sorted().len())
+
+## list.sort[uid]
+fn s23()
+    mut xs := [Uid(3), Uid(1), Uid(2)]
+    xs.sort()
+    print(xs.len())
+
+## list.sorted_by[uid]
+fn s24()
+    xs := [Uid(3), Uid(1), Uid(2)]
+    print(xs.sorted(by: |x| x).len())
+
+## list.sort_by[uid]
+fn s25()
+    mut xs := [Uid(3), Uid(1), Uid(2)]
+    xs.sort(by: |x| x)
+    print(xs.len())
+
+## list.min_by[uid]
+fn s26()
+    xs := [Uid(3), Uid(1), Uid(2)]
+    if x := xs.min(by: |x| x)
+        print(1)
+    if x := xs.max(by: |x| x)
+        print(2)
+
+## list.take_skip[uid]
+fn s27()
+    xs := [Uid(1), Uid(2), Uid(3)]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[uid]
+fn s28()
+    xs := [Uid(1), Uid(2)]
+    ys := [Uid(2), Uid(3)]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[uid]
+fn s29()
+    xs := [Uid(1), Uid(2), Uid(3)]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[uid]
+fn s30()
+    xs := [Uid(1), Uid(2), Uid(1)]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[uid]
+fn s31()
+    xs := [[Uid(1)], [Uid(2), Uid(3)]]
+    print(xs.flatten().len())
+
+## list.enumerate[uid]
+fn s32()
+    xs := [Uid(1), Uid(2)]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[uid]
+fn s33()
+    xs := [Uid(1), Uid(2)]
+    print(xs.any(|x| x == Uid(1)))
+    print(xs.all(|x| x == Uid(1)))
+
+## list.find[uid]
+fn s34()
+    xs := [Uid(1), Uid(2)]
+    if x := xs.find(|x| x == Uid(2))
+        print(1)
+
+## list.filter[uid]
+fn s35()
+    xs := [Uid(1), Uid(2)]
+    print(xs.filter(|x| x == Uid(1)).len())
+
+## list.map[uid]
+fn s36()
+    xs := [Uid(1), Uid(2)]
+    print(xs.map(|x| x).len())
+
+## list.map_to_self[uid]
+fn s37()
+    xs := [Uid(1), Uid(2)]
+    print(xs.map(|x| x).len())
+
+## list.group_by[uid]
+fn s38()
+    xs := [Uid(1), Uid(2), Uid(1)]
+    g := xs.group_by(|x| x)
+    print(g.len())
+
+## list.count[uid]
+fn s39()
+    xs := [Uid(1), Uid(2), Uid(1)]
+    print(xs.count(|x| x == Uid(1)))
+
+## list.fold[uid]
+fn s40()
+    xs := [Uid(1), Uid(2)]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[uid]
+fn s41()
+    xs := [Uid(1), Uid(2)]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[uid]
+fn s42()
+    xs := [Uid(1), Uid(2)]
+    print(xs.take_while(|x| x == Uid(1)).len() + xs.skip_while(|x| x == Uid(1)).len())
+
+## list.zip[uid]
+fn s43()
+    xs := [Uid(1), Uid(2)]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[uid]
+fn s44()
+    xs := [Uid(1), Uid(2)]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[uid]
+fn s45()
+    xs := [Uid(1), Uid(2)]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[uid]
+fn s46()
+    mut xs := [Uid(1), Uid(2)]
+    for mut x in xs
+        x = Uid(3)
+    print(xs.len())
+
+## list.comprehension[uid]
+fn s47()
+    xs := [Uid(1), Uid(2)]
+    ys := [x for x in xs if x == Uid(1)]
+    print(ys.len())
+
+## list.set_comprehension[uid]
+fn s48()
+    xs := [Uid(1), Uid(2), Uid(1)]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[uid]
+fn s49()
+    xs := [Uid(1), Uid(2)]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[uid]
+fn s50()
+    xs := [Uid(1), Uid(2)]
+    ys := [Uid(1), Uid(2)]
+    print(xs == ys)
+    print(xs != [Uid(3)])
+
+## list.lt[uid]
+fn s51()
+    xs := [Uid(1)]
+    ys := [Uid(2)]
+    print(xs < ys)
+
+## list.print[uid]
+fn s52()
+    xs := [Uid(1), Uid(2)]
+    print(xs)
+
+## list.interp[uid]
+fn s53()
+    xs := [Uid(1), Uid(2)]
+    print("{xs}".len() > 0)
+
+## list.nested_push[uid]
+fn s54()
+    mut xs := [[Uid(1)]]
+    xs[0].push(Uid(2))
+    print(xs[0].len())
+
+## list.in_struct[uid]
+fn s55()
+    mut b := Box_uid(items: [Uid(1)])
+    b.items.push(Uid(2))
+    print(b.items.len())
+
+## list.pass_mut[uid]
+fn s56()
+    mut xs := [Uid(1)]
+    add_uid(mut xs, Uid(2))
+    print(xs.len())
+
+## list.generic_first[uid]
+fn s57()
+    xs := [Uid(1), Uid(2)]
+    if x := first_of(xs)
+        print(1)
+
+## list.generic_ord[uid]
+fn s58()
+    xs := [Uid(1), Uid(2)]
+    if x := biggest(xs)
+        print(1)
+
+## list.contains_list[uid]
+fn s59()
+    xs := [[Uid(1)], [Uid(2)]]
+    print(xs.contains([Uid(2)]))
+
+## list.sorted_nested[uid]
+fn s60()
+    xs := [[Uid(2)], [Uid(1)]]
+    print(xs.sorted().len())
+
+fn main()
+    print("-- list.literal[uid]")
+    s0()
+    print("-- list.empty[uid]")
+    s1()
+    print("-- list.typed_by_push[uid]")
+    s2()
+    print("-- list.len[uid]")
+    s3()
+    print("-- list.is_empty[uid]")
+    s4()
+    print("-- list.index[uid]")
+    s5()
+    print("-- list.index_assign[uid]")
+    s6()
+    print("-- list.slice[uid]")
+    s7()
+    print("-- list.push[uid]")
+    s8()
+    print("-- list.pop[uid]")
+    s9()
+    print("-- list.swap[uid]")
+    s10()
+    print("-- list.first_last[uid]")
+    s11()
+    print("-- list.insert[uid]")
+    s12()
+    print("-- list.remove_at[uid]")
+    s13()
+    print("-- list.extend[uid]")
+    s14()
+    print("-- list.clear[uid]")
+    s15()
+    print("-- list.reverse[uid]")
+    s16()
+    print("-- list.reversed[uid]")
+    s17()
+    print("-- list.contains[uid]")
+    s18()
+    print("-- list.index_of[uid]")
+    s19()
+    print("-- list.join[uid]")
+    s20()
+    print("-- list.min_max[uid]")
+    s21()
+    print("-- list.sorted[uid]")
+    s22()
+    print("-- list.sort[uid]")
+    s23()
+    print("-- list.sorted_by[uid]")
+    s24()
+    print("-- list.sort_by[uid]")
+    s25()
+    print("-- list.min_by[uid]")
+    s26()
+    print("-- list.take_skip[uid]")
+    s27()
+    print("-- list.set_ops[uid]")
+    s28()
+    print("-- list.chunks_windows[uid]")
+    s29()
+    print("-- list.counts[uid]")
+    s30()
+    print("-- list.flatten[uid]")
+    s31()
+    print("-- list.enumerate[uid]")
+    s32()
+    print("-- list.any_all[uid]")
+    s33()
+    print("-- list.find[uid]")
+    s34()
+    print("-- list.filter[uid]")
+    s35()
+    print("-- list.map[uid]")
+    s36()
+    print("-- list.map_to_self[uid]")
+    s37()
+    print("-- list.group_by[uid]")
+    s38()
+    print("-- list.count[uid]")
+    s39()
+    print("-- list.fold[uid]")
+    s40()
+    print("-- list.flat_map[uid]")
+    s41()
+    print("-- list.take_skip_while[uid]")
+    s42()
+    print("-- list.zip[uid]")
+    s43()
+    print("-- list.zip_into[uid]")
+    s44()
+    print("-- list.for[uid]")
+    s45()
+    print("-- list.for_mut[uid]")
+    s46()
+    print("-- list.comprehension[uid]")
+    s47()
+    print("-- list.set_comprehension[uid]")
+    s48()
+    print("-- list.map_comprehension[uid]")
+    s49()
+    print("-- list.eq[uid]")
+    s50()
+    print("-- list.lt[uid]")
+    s51()
+    print("-- list.print[uid]")
+    s52()
+    print("-- list.interp[uid]")
+    s53()
+    print("-- list.nested_push[uid]")
+    s54()
+    print("-- list.in_struct[uid]")
+    s55()
+    print("-- list.pass_mut[uid]")
+    s56()
+    print("-- list.generic_first[uid]")
+    s57()
+    print("-- list.generic_ord[uid]")
+    s58()
+    print("-- list.contains_list[uid]")
+    s59()
+    print("-- list.sorted_nested[uid]")
+    s60()

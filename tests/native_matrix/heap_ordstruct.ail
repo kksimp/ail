@@ -1,0 +1,109 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## heap.empty_push_pop[ordstruct]
+fn s0()
+    mut h := Heap[Q]()
+    h.push(Q(n: 2, name: "b"))
+    h.push(Q(n: 1, name: "a"))
+    if x := h.pop()
+        print(h.len())
+
+## heap.max_first[ordstruct]
+fn s1()
+    mut h := Heap[Q](max_first: true)
+    h.push(Q(n: 1, name: "a"))
+    h.push(Q(n: 2, name: "b"))
+    if x := h.peek()
+        print(h.len())
+
+## heap.from[ordstruct]
+fn s2()
+    h := Heap.from([Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(h.len())
+
+## heap.from_max[ordstruct]
+fn s3()
+    h := Heap.from_max([Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    print(h.to_sorted().len())
+
+## heap.is_empty[ordstruct]
+fn s4()
+    h := Heap[Q]()
+    print(h.is_empty())
+
+## heap.drain[ordstruct]
+fn s5()
+    mut h := Heap.from([Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")])
+    mut n := 0
+    while x := h.pop()
+        n += 1
+    print(n)
+
+fn main()
+    print("-- heap.empty_push_pop[ordstruct]")
+    s0()
+    print("-- heap.max_first[ordstruct]")
+    s1()
+    print("-- heap.from[ordstruct]")
+    s2()
+    print("-- heap.from_max[ordstruct]")
+    s3()
+    print("-- heap.is_empty[ordstruct]")
+    s4()
+    print("-- heap.drain[ordstruct]")
+    s5()

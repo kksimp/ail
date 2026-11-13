@@ -1,0 +1,45 @@
+-- bytes.0
+2
+-- bytes.1
+ab
+-- bytes.2
+ab
+-- bytes.3
+[97, 98]
+-- bytes.4
+2
+-- bytes.5
+1
+-- bytes.6
+true
+-- bytes.7
+true
+-- bytes.8
+true
+-- bytes.9
+6162
+-- bytes.10
+YWI=
+-- bytes.11
+97
+-- bytes.12
+2
+-- bytes.13
+2
+-- bytes.14
+97
+98
+-- bytes.15
+1
+-- bytes.16
+2
+-- bytes.17
+2
+-- bytes.18
+3
+-- bytes.19
+true
+-- bytes.20
+b"a"
+-- bytes.21
+true

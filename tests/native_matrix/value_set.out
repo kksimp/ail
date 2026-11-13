@@ -1,0 +1,42 @@
+-- value.eq[set]
+true
+true
+-- value.print[set]
+{1}
+-- value.interp[set]
+<{1}>
+-- value.to_str_len[set]
+true
+-- value.optional_else[set]
+1
+-- value.optional_if[set]
+1
+-- value.optional_none[set]
+true
+-- value.optional_print[set]
+{1}
+-- value.tuple[set]
+1
+1
+-- value.tuple_eq[set]
+true
+-- value.tuple_print[set]
+({1}, 1)
+-- value.struct_field[set]
+true
+-- value.struct_print[set]
+Box_set(items: [{1}])
+-- value.ref[set]
+2
+-- value.generic_id[set]
+1
+-- value.generic_box[set]
+true
+-- value.fn_value[set]
+1
+-- value.closure_capture[set]
+1
+-- value.match_eq[set]
+1
+-- value.const_list[set]
+2

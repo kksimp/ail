@@ -1,0 +1,130 @@
+-- list.literal[uid]
+3
+-- list.empty[uid]
+0
+-- list.typed_by_push[uid]
+1
+-- list.len[uid]
+2
+-- list.is_empty[uid]
+false
+-- list.index[uid]
+true
+-- list.index_assign[uid]
+2
+-- list.slice[uid]
+5
+-- list.push[uid]
+2
+-- list.pop[uid]
+1
+-- list.swap[uid]
+2
+-- list.first_last[uid]
+1
+2
+-- list.insert[uid]
+2
+-- list.remove_at[uid]
+1
+-- list.extend[uid]
+3
+-- list.clear[uid]
+0
+-- list.reverse[uid]
+2
+-- list.reversed[uid]
+2
+-- list.contains[uid]
+true
+-- list.index_of[uid]
+1
+-- list.join[uid]
+true
+-- list.min_max[uid]
+1
+2
+-- list.sorted[uid]
+3
+-- list.sort[uid]
+3
+-- list.sorted_by[uid]
+3
+-- list.sort_by[uid]
+3
+-- list.min_by[uid]
+1
+2
+-- list.take_skip[uid]
+4
+-- list.set_ops[uid]
+5
+-- list.chunks_windows[uid]
+4
+-- list.counts[uid]
+2
+-- list.flatten[uid]
+3
+-- list.enumerate[uid]
+0
+1
+-- list.any_all[uid]
+true
+false
+-- list.find[uid]
+1
+-- list.filter[uid]
+1
+-- list.map[uid]
+2
+-- list.map_to_self[uid]
+2
+-- list.group_by[uid]
+2
+-- list.count[uid]
+2
+-- list.fold[uid]
+2
+-- list.flat_map[uid]
+4
+-- list.take_skip_while[uid]
+2
+-- list.zip[uid]
+1
+2
+-- list.zip_into[uid]
+1
+2
+-- list.for[uid]
+2
+-- list.for_mut[uid]
+2
+-- list.comprehension[uid]
+1
+-- list.set_comprehension[uid]
+2
+-- list.map_comprehension[uid]
+2
+-- list.eq[uid]
+true
+true
+-- list.lt[uid]
+true
+-- list.print[uid]
+[1, 2]
+-- list.interp[uid]
+true
+-- list.nested_push[uid]
+2
+-- list.in_struct[uid]
+2
+-- list.pass_mut[uid]
+2
+-- list.generic_first[uid]
+1
+-- list.generic_ord[uid]
+1
+-- list.contains_list[uid]
+true
+-- list.sorted_nested[uid]
+2

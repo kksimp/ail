@@ -1,0 +1,163 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_map
+    items List[Map[str, int]]
+
+fn add_map(mut xs List[Map[str, int]], x Map[str, int])
+    xs.push(x)
+
+fn wrap_map(x Map[str, int]) Map[str, int]?
+    x
+
+fn nothing_map() Map[str, int]?
+    none
+
+K_map := [{"a": 1}, {"b": 2}]
+
+## seq.of_collect[map]
+fn s0()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.collect().len())
+
+## seq.map_filter[map]
+fn s1()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.filter(|x| x == {"a": 1}).map(|x| x.len()).collect().len())
+
+## seq.take_skip[map]
+fn s2()
+    s := Seq.of([{"a": 1}, {"b": 2}, {"c": 3}])
+    print(s.skip(1).take(1).collect().len())
+
+## seq.enumerate[map]
+fn s3()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.enumerate().collect().len())
+
+## seq.zip_chain[map]
+fn s4()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    t := Seq.of([1, 2])
+    print(s.zip(move t).collect().len())
+
+## seq.chain[map]
+fn s5()
+    s := Seq.of([{"a": 1}])
+    t := Seq.of([{"b": 2}])
+    print(s.chain(move t).collect().len())
+
+## seq.next[map]
+fn s6()
+    mut s := Seq.of([{"a": 1}, {"b": 2}])
+    if x := s.next()
+        print(1)
+
+## seq.for[map]
+fn s7()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## seq.count_any[map]
+fn s8()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.count(|x| x == {"a": 1}))
+
+## seq.fold[map]
+fn s9()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.fold(0, |acc, x| acc + 1))
+
+## seq.find[map]
+fn s10()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    if x := s.find(|x| x == {"b": 2})
+        print(1)
+
+## seq.flat_map[map]
+fn s11()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.flat_map(|x| [x, x]).collect().len())
+
+## seq.while[map]
+fn s12()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.take_while(|x| x == {"a": 1}).collect().len())
+
+## seq.skip_while[map]
+fn s13()
+    s := Seq.of([{"a": 1}, {"b": 2}])
+    print(s.skip_while(|x| x == {"a": 1}).collect().len())
+
+fn main()
+    print("-- seq.of_collect[map]")
+    s0()
+    print("-- seq.map_filter[map]")
+    s1()
+    print("-- seq.take_skip[map]")
+    s2()
+    print("-- seq.enumerate[map]")
+    s3()
+    print("-- seq.zip_chain[map]")
+    s4()
+    print("-- seq.chain[map]")
+    s5()
+    print("-- seq.next[map]")
+    s6()
+    print("-- seq.for[map]")
+    s7()
+    print("-- seq.count_any[map]")
+    s8()
+    print("-- seq.fold[map]")
+    s9()
+    print("-- seq.find[map]")
+    s10()
+    print("-- seq.flat_map[map]")
+    s11()
+    print("-- seq.while[map]")
+    s12()
+    print("-- seq.skip_while[map]")
+    s13()

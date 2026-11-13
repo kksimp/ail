@@ -1,0 +1,211 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_enum
+    items List[Color]
+
+fn add_enum(mut xs List[Color], x Color)
+    xs.push(x)
+
+fn wrap_enum(x Color) Color?
+    x
+
+fn nothing_enum() Color?
+    none
+
+K_enum := [Color.Red, Color.Green]
+
+## set.literal[enum]
+fn s0()
+    s := {Color.Red, Color.Green}
+    print(s.len())
+
+## set.empty[enum]
+fn s1()
+    s := Set[Color]()
+    print(s.len())
+
+## set.from_list[enum]
+fn s2()
+    s := {x for x in [Color.Red, Color.Green, Color.Red]}
+    print(s.len())
+
+## set.add_remove[enum]
+fn s3()
+    mut s := Set[Color]()
+    print(s.add(Color.Red))
+    print(s.remove(Color.Red))
+
+## set.contains[enum]
+fn s4()
+    s := {Color.Red, Color.Green}
+    print(s.contains(Color.Red))
+
+## set.is_empty[enum]
+fn s5()
+    s := {Color.Red}
+    print(s.is_empty())
+
+## set.is_subset[enum]
+fn s6()
+    s := {Color.Red}
+    t := {Color.Red, Color.Green}
+    print(s.is_subset(t))
+
+## set.set_ops[enum]
+fn s7()
+    s := {Color.Red, Color.Green}
+    t := {Color.Green, Color.Blue}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[enum]
+fn s8()
+    s := {Color.Red, Color.Green}
+    print(s.any(|x| x == Color.Red))
+    print(s.all(|x| x == Color.Red))
+    if x := s.find(|x| x == Color.Green)
+        print(1)
+
+## set.filter_map[enum]
+fn s9()
+    s := {Color.Red, Color.Green}
+    print(s.filter(|x| x == Color.Red).len() + s.map(|x| 1).len())
+
+## set.group_by[enum]
+fn s10()
+    s := {Color.Red, Color.Green}
+    print(s.group_by(|x| 1).len())
+
+## set.count_fold[enum]
+fn s11()
+    s := {Color.Red, Color.Green}
+    print(s.count(|x| x == Color.Red))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[enum]
+fn s12()
+    s := {Color.Red, Color.Green}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[enum]
+fn s13()
+    s := {Color.Red, Color.Green, Color.Blue}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == Color.Red).len() + s.skip_while(|x| x == Color.Red).len())
+
+## set.zip_enumerate[enum]
+fn s14()
+    s := {Color.Red, Color.Green}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.for[enum]
+fn s15()
+    s := {Color.Red, Color.Green}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[enum]
+fn s16()
+    s := {Color.Red, Color.Green}
+    print(s == {Color.Green, Color.Red})
+
+## set.print[enum]
+fn s17()
+    s := {Color.Red}
+    print(s)
+
+## set.in_map[enum]
+fn s18()
+    mut m := Map[str, Set[Color]]()
+    m["a"] = Set[Color]()
+    m["a"].add(Color.Red)
+    print(m["a"].len())
+
+## set.in_list[enum]
+fn s19()
+    mut xs := [Set[Color]()]
+    xs[0].add(Color.Red)
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[enum]")
+    s0()
+    print("-- set.empty[enum]")
+    s1()
+    print("-- set.from_list[enum]")
+    s2()
+    print("-- set.add_remove[enum]")
+    s3()
+    print("-- set.contains[enum]")
+    s4()
+    print("-- set.is_empty[enum]")
+    s5()
+    print("-- set.is_subset[enum]")
+    s6()
+    print("-- set.set_ops[enum]")
+    s7()
+    print("-- set.any_all_find[enum]")
+    s8()
+    print("-- set.filter_map[enum]")
+    s9()
+    print("-- set.group_by[enum]")
+    s10()
+    print("-- set.count_fold[enum]")
+    s11()
+    print("-- set.flat_map[enum]")
+    s12()
+    print("-- set.take_skip[enum]")
+    s13()
+    print("-- set.zip_enumerate[enum]")
+    s14()
+    print("-- set.for[enum]")
+    s15()
+    print("-- set.eq[enum]")
+    s16()
+    print("-- set.print[enum]")
+    s17()
+    print("-- set.in_map[enum]")
+    s18()
+    print("-- set.in_list[enum]")
+    s19()

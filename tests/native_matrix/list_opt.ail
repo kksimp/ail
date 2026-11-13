@@ -1,0 +1,480 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## list.literal[opt]
+fn s0()
+    xs := [oi(1), oi(2), oi(-1)]
+    print(xs.len())
+
+## list.empty[opt]
+fn s1()
+    xs := List[int?]()
+    print(xs.len())
+
+## list.typed_by_push[opt]
+fn s2()
+    mut xs := []
+    xs.push(oi(1))
+    print(xs.len())
+
+## list.len[opt]
+fn s3()
+    xs := [oi(1), oi(2)]
+    print(xs.len())
+
+## list.is_empty[opt]
+fn s4()
+    xs := [oi(1)]
+    print(xs.is_empty())
+
+## list.index[opt]
+fn s5()
+    xs := [oi(1), oi(2)]
+    x := xs[1]
+    print((x else 0) == (x else 0))
+
+## list.index_assign[opt]
+fn s6()
+    mut xs := [oi(1), oi(2)]
+    xs[0] = oi(-1)
+    print(xs.len())
+
+## list.slice[opt]
+fn s7()
+    xs := [oi(1), oi(2), oi(-1)]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[opt]
+fn s8()
+    mut xs := [oi(1)]
+    xs.push(oi(2))
+    print(xs.len())
+
+## list.pop[opt]
+fn s9()
+    mut xs := [oi(1), oi(2)]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[opt]
+fn s10()
+    mut xs := [oi(1), oi(2)]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[opt]
+fn s11()
+    xs := [oi(1), oi(2)]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[opt]
+fn s12()
+    mut xs := [oi(1)]
+    xs.insert(0, oi(2))
+    print(xs.len())
+
+## list.remove_at[opt]
+fn s13()
+    mut xs := [oi(1), oi(2)]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[opt]
+fn s14()
+    mut xs := [oi(1)]
+    xs.extend([oi(2), oi(-1)])
+    print(xs.len())
+
+## list.clear[opt]
+fn s15()
+    mut xs := [oi(1)]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[opt]
+fn s16()
+    mut xs := [oi(1), oi(2)]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[opt]
+fn s17()
+    xs := [oi(1), oi(2)]
+    print(xs.reversed().len())
+
+## list.contains[opt]
+fn s18()
+    xs := [oi(1), oi(2)]
+    print(xs.contains(oi(2)))
+
+## list.index_of[opt]
+fn s19()
+    xs := [oi(1), oi(2)]
+    print(xs.index_of(oi(2)) else -1)
+
+## list.join[opt]
+fn s20()
+    xs := [oi(1), oi(2)]
+    print(xs.join(",").len() > 0)
+
+## list.sorted_by[opt]
+fn s21()
+    xs := [oi(-1), oi(1), oi(2)]
+    print(xs.sorted(by: |x| (x else 0)).len())
+
+## list.sort_by[opt]
+fn s22()
+    mut xs := [oi(-1), oi(1), oi(2)]
+    xs.sort(by: |x| (x else 0))
+    print(xs.len())
+
+## list.min_by[opt]
+fn s23()
+    xs := [oi(-1), oi(1), oi(2)]
+    if x := xs.min(by: |x| (x else 0))
+        print(1)
+    if x := xs.max(by: |x| (x else 0))
+        print(2)
+
+## list.take_skip[opt]
+fn s24()
+    xs := [oi(1), oi(2), oi(-1)]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[opt]
+fn s25()
+    xs := [oi(1), oi(2)]
+    ys := [oi(2), oi(-1)]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[opt]
+fn s26()
+    xs := [oi(1), oi(2), oi(-1)]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[opt]
+fn s27()
+    xs := [oi(1), oi(2), oi(1)]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[opt]
+fn s28()
+    xs := [[oi(1)], [oi(2), oi(-1)]]
+    print(xs.flatten().len())
+
+## list.enumerate[opt]
+fn s29()
+    xs := [oi(1), oi(2)]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[opt]
+fn s30()
+    xs := [oi(1), oi(2)]
+    print(xs.any(|x| x == oi(1)))
+    print(xs.all(|x| x == oi(1)))
+
+## list.find[opt]
+fn s31()
+    xs := [oi(1), oi(2)]
+    if x := xs.find(|x| x == oi(2))
+        print(1)
+
+## list.filter[opt]
+fn s32()
+    xs := [oi(1), oi(2)]
+    print(xs.filter(|x| x == oi(1)).len())
+
+## list.map[opt]
+fn s33()
+    xs := [oi(1), oi(2)]
+    print(xs.map(|x| (x else 0)).len())
+
+## list.map_to_self[opt]
+fn s34()
+    xs := [oi(1), oi(2)]
+    print(xs.map(|x| x).len())
+
+## list.group_by[opt]
+fn s35()
+    xs := [oi(1), oi(2), oi(1)]
+    g := xs.group_by(|x| (x else 0))
+    print(g.len())
+
+## list.count[opt]
+fn s36()
+    xs := [oi(1), oi(2), oi(1)]
+    print(xs.count(|x| x == oi(1)))
+
+## list.fold[opt]
+fn s37()
+    xs := [oi(1), oi(2)]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[opt]
+fn s38()
+    xs := [oi(1), oi(2)]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[opt]
+fn s39()
+    xs := [oi(1), oi(2)]
+    print(xs.take_while(|x| x == oi(1)).len() + xs.skip_while(|x| x == oi(1)).len())
+
+## list.zip[opt]
+fn s40()
+    xs := [oi(1), oi(2)]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[opt]
+fn s41()
+    xs := [oi(1), oi(2)]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[opt]
+fn s42()
+    xs := [oi(1), oi(2)]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[opt]
+fn s43()
+    mut xs := [oi(1), oi(2)]
+    for mut x in xs
+        x = oi(-1)
+    print(xs.len())
+
+## list.comprehension[opt]
+fn s44()
+    xs := [oi(1), oi(2)]
+    ys := [x for x in xs if x == oi(1)]
+    print(ys.len())
+
+## list.set_comprehension[opt]
+fn s45()
+    xs := [oi(1), oi(2), oi(1)]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[opt]
+fn s46()
+    xs := [oi(1), oi(2)]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[opt]
+fn s47()
+    xs := [oi(1), oi(2)]
+    ys := [oi(1), oi(2)]
+    print(xs == ys)
+    print(xs != [oi(-1)])
+
+## list.print[opt]
+fn s48()
+    xs := [oi(1), oi(2)]
+    print(xs)
+
+## list.interp[opt]
+fn s49()
+    xs := [oi(1), oi(2)]
+    print("{xs}".len() > 0)
+
+## list.nested_push[opt]
+fn s50()
+    mut xs := [[oi(1)]]
+    xs[0].push(oi(2))
+    print(xs[0].len())
+
+## list.in_struct[opt]
+fn s51()
+    mut b := Box_opt(items: [oi(1)])
+    b.items.push(oi(2))
+    print(b.items.len())
+
+## list.pass_mut[opt]
+fn s52()
+    mut xs := [oi(1)]
+    add_opt(mut xs, oi(2))
+    print(xs.len())
+
+## list.generic_first[opt]
+fn s53()
+    xs := [oi(1), oi(2)]
+    if x := first_of(xs)
+        print(1)
+
+## list.contains_list[opt]
+fn s54()
+    xs := [[oi(1)], [oi(2)]]
+    print(xs.contains([oi(2)]))
+
+fn main()
+    print("-- list.literal[opt]")
+    s0()
+    print("-- list.empty[opt]")
+    s1()
+    print("-- list.typed_by_push[opt]")
+    s2()
+    print("-- list.len[opt]")
+    s3()
+    print("-- list.is_empty[opt]")
+    s4()
+    print("-- list.index[opt]")
+    s5()
+    print("-- list.index_assign[opt]")
+    s6()
+    print("-- list.slice[opt]")
+    s7()
+    print("-- list.push[opt]")
+    s8()
+    print("-- list.pop[opt]")
+    s9()
+    print("-- list.swap[opt]")
+    s10()
+    print("-- list.first_last[opt]")
+    s11()
+    print("-- list.insert[opt]")
+    s12()
+    print("-- list.remove_at[opt]")
+    s13()
+    print("-- list.extend[opt]")
+    s14()
+    print("-- list.clear[opt]")
+    s15()
+    print("-- list.reverse[opt]")
+    s16()
+    print("-- list.reversed[opt]")
+    s17()
+    print("-- list.contains[opt]")
+    s18()
+    print("-- list.index_of[opt]")
+    s19()
+    print("-- list.join[opt]")
+    s20()
+    print("-- list.sorted_by[opt]")
+    s21()
+    print("-- list.sort_by[opt]")
+    s22()
+    print("-- list.min_by[opt]")
+    s23()
+    print("-- list.take_skip[opt]")
+    s24()
+    print("-- list.set_ops[opt]")
+    s25()
+    print("-- list.chunks_windows[opt]")
+    s26()
+    print("-- list.counts[opt]")
+    s27()
+    print("-- list.flatten[opt]")
+    s28()
+    print("-- list.enumerate[opt]")
+    s29()
+    print("-- list.any_all[opt]")
+    s30()
+    print("-- list.find[opt]")
+    s31()
+    print("-- list.filter[opt]")
+    s32()
+    print("-- list.map[opt]")
+    s33()
+    print("-- list.map_to_self[opt]")
+    s34()
+    print("-- list.group_by[opt]")
+    s35()
+    print("-- list.count[opt]")
+    s36()
+    print("-- list.fold[opt]")
+    s37()
+    print("-- list.flat_map[opt]")
+    s38()
+    print("-- list.take_skip_while[opt]")
+    s39()
+    print("-- list.zip[opt]")
+    s40()
+    print("-- list.zip_into[opt]")
+    s41()
+    print("-- list.for[opt]")
+    s42()
+    print("-- list.for_mut[opt]")
+    s43()
+    print("-- list.comprehension[opt]")
+    s44()
+    print("-- list.set_comprehension[opt]")
+    s45()
+    print("-- list.map_comprehension[opt]")
+    s46()
+    print("-- list.eq[opt]")
+    s47()
+    print("-- list.print[opt]")
+    s48()
+    print("-- list.interp[opt]")
+    s49()
+    print("-- list.nested_push[opt]")
+    s50()
+    print("-- list.in_struct[opt]")
+    s51()
+    print("-- list.pass_mut[opt]")
+    s52()
+    print("-- list.generic_first[opt]")
+    s53()
+    print("-- list.contains_list[opt]")
+    s54()

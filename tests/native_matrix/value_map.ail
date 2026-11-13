@@ -1,0 +1,206 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_map
+    items List[Map[str, int]]
+
+fn add_map(mut xs List[Map[str, int]], x Map[str, int])
+    xs.push(x)
+
+fn wrap_map(x Map[str, int]) Map[str, int]?
+    x
+
+fn nothing_map() Map[str, int]?
+    none
+
+K_map := [{"a": 1}, {"b": 2}]
+
+## value.eq[map]
+fn s0()
+    print({"a": 1} == {"a": 1})
+    print({"a": 1} != {"b": 2})
+
+## value.print[map]
+fn s1()
+    print({"a": 1})
+
+## value.interp[map]
+fn s2()
+    x := {"a": 1}
+    print("<{x}>")
+
+## value.to_str_len[map]
+fn s3()
+    x := {"a": 1}
+    print("{x}".len() > 0)
+
+## value.optional_else[map]
+fn s4()
+    o := wrap_map({"a": 1})
+    x := o else {"b": 2}
+    print(1)
+
+## value.optional_if[map]
+fn s5()
+    o := wrap_map({"a": 1})
+    if x := o
+        print(1)
+
+## value.optional_none[map]
+fn s6()
+    o := nothing_map()
+    print(o == none)
+
+## value.optional_print[map]
+fn s7()
+    o := wrap_map({"a": 1})
+    print(o)
+
+## value.tuple[map]
+fn s8()
+    t := ({"a": 1}, 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[map]
+fn s9()
+    t := ({"a": 1}, 1)
+    print(t == ({"a": 1}, 1))
+
+## value.tuple_print[map]
+fn s10()
+    t := ({"a": 1}, 1)
+    print(t)
+
+## value.struct_field[map]
+fn s11()
+    b := Box_map(items: [{"a": 1}])
+    c := b
+    print(c == b)
+
+## value.struct_print[map]
+fn s12()
+    b := Box_map(items: [{"a": 1}])
+    print(b)
+
+## value.ref[map]
+fn s13()
+    r := ref Box_map(items: [{"a": 1}])
+    s := r
+    s.items.push({"b": 2})
+    print(r.items.len())
+
+## value.generic_id[map]
+fn s14()
+    x := ident({"a": 1})
+    print(1)
+
+## value.generic_box[map]
+fn s15()
+    g := GBox(v: {"a": 1})
+    print(g.v == {"a": 1})
+
+## value.fn_value[map]
+fn s16()
+    f := |x Map[str, int]| x
+    y := f({"a": 1})
+    print(1)
+
+## value.closure_capture[map]
+fn s17()
+    a := {"a": 1}
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[map]
+fn s18()
+    x := {"a": 1}
+    print(if x == {"a": 1} then 1 else 0)
+
+## value.const_list[map]
+fn s19()
+    print(K_map.len())
+
+fn main()
+    print("-- value.eq[map]")
+    s0()
+    print("-- value.print[map]")
+    s1()
+    print("-- value.interp[map]")
+    s2()
+    print("-- value.to_str_len[map]")
+    s3()
+    print("-- value.optional_else[map]")
+    s4()
+    print("-- value.optional_if[map]")
+    s5()
+    print("-- value.optional_none[map]")
+    s6()
+    print("-- value.optional_print[map]")
+    s7()
+    print("-- value.tuple[map]")
+    s8()
+    print("-- value.tuple_eq[map]")
+    s9()
+    print("-- value.tuple_print[map]")
+    s10()
+    print("-- value.struct_field[map]")
+    s11()
+    print("-- value.struct_print[map]")
+    s12()
+    print("-- value.ref[map]")
+    s13()
+    print("-- value.generic_id[map]")
+    s14()
+    print("-- value.generic_box[map]")
+    s15()
+    print("-- value.fn_value[map]")
+    s16()
+    print("-- value.closure_capture[map]")
+    s17()
+    print("-- value.match_eq[map]")
+    s18()
+    print("-- value.const_list[map]")
+    s19()

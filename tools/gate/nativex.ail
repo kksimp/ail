@@ -436,10 +436,9 @@ fn Run.misc_builds(mut self)
     checks += 1
     out := "{tmp}/refused"
     sh("rm -f {out}")
-    # Any program with an expected-problems golden (`.err`) is still outside the subset.
-    names := fs.list_dir("tests/native") else []
-    refused := [n for n in names if n.ends_with(".err")].sorted()
-    src := "tests/native/{(refused.first() else "subset_ext.err").replace(".err", ".ail")}"
+    # subset_ext.ail stays outside the subset on purpose (ADR 1109): other `.err`
+    # programs may be refused by the checker before lowering.
+    src := "tests/native/subset_ext.ail"
     r := ail("", "build {src} -o {out}")
     if r.status == 0 or fs.exists(out) or not r.err.contains("error[native.subset.1]")
         red("build refuses programs outside the subset", r.err)

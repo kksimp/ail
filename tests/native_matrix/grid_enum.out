@@ -1,0 +1,14 @@
+-- grid.fill[enum]
+6
+-- grid.from[enum]
+4
+-- grid.index[enum]
+true
+-- grid.index_assign[enum]
+2
+-- grid.row[enum]
+2
+-- grid.to_list[enum]
+2
+-- grid.cells_for[enum]
+4

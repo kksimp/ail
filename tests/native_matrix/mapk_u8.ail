@@ -1,0 +1,237 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_u8
+    items List[u8]
+
+fn add_u8(mut xs List[u8], x u8)
+    xs.push(x)
+
+fn wrap_u8(x u8) u8?
+    x
+
+fn nothing_u8() u8?
+    none
+
+K_u8 := [1.to_u8(), 2.to_u8()]
+
+## mapk.literal[u8]
+fn s0()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.len())
+
+## mapk.empty[u8]
+fn s1()
+    m := Map[u8, int]()
+    print(m.len())
+
+## mapk.typed_by_use[u8]
+fn s2()
+    mut m := {}
+    m[1.to_u8()] += 1
+    print(m.len())
+
+## mapk.index[u8]
+fn s3()
+    m := {1.to_u8(): 1}
+    print(m[1.to_u8()])
+
+## mapk.assign[u8]
+fn s4()
+    mut m := Map[u8, int]()
+    m[1.to_u8()] = 1
+    m[2.to_u8()] = 2
+    print(m.len())
+
+## mapk.op_assign[u8]
+fn s5()
+    mut m := Map[u8, int]()
+    m[1.to_u8()] += 3
+    print(m[1.to_u8()])
+
+## mapk.get[u8]
+fn s6()
+    m := {1.to_u8(): 1}
+    print(m.get(1.to_u8()) else 0)
+
+## mapk.get_or[u8]
+fn s7()
+    m := {1.to_u8(): 1}
+    print(m.get_or(2.to_u8(), 7))
+
+## mapk.contains[u8]
+fn s8()
+    m := {1.to_u8(): 1}
+    print(m.contains(1.to_u8()))
+
+## mapk.remove[u8]
+fn s9()
+    mut m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.remove(1.to_u8()) else 0)
+
+## mapk.keys_values[u8]
+fn s10()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.keys_sorted[u8]
+fn s11()
+    m := {2.to_u8(): 1, 1.to_u8(): 2}
+    print(m.keys().sorted().len())
+
+## mapk.top[u8]
+fn s12()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.top(1).len())
+
+## mapk.for[u8]
+fn s13()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[u8]
+fn s14()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[u8]
+fn s15()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[u8]
+fn s16()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[u8]
+fn s17()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[u8]
+fn s18()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[u8]
+fn s19()
+    m := {1.to_u8(): 1, 2.to_u8(): 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[u8]
+fn s20()
+    mut m := Map[u8, List[int]]()
+    m.push(1.to_u8(), 1)
+    m.push(1.to_u8(), 2)
+    print(m[1.to_u8()].len())
+
+## mapk.eq[u8]
+fn s21()
+    m := {1.to_u8(): 1}
+    print(m == {1.to_u8(): 1})
+
+## mapk.print[u8]
+fn s22()
+    m := {1.to_u8(): 1}
+    print(m)
+
+## mapk.is_empty[u8]
+fn s23()
+    m := {1.to_u8(): 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[u8]")
+    s0()
+    print("-- mapk.empty[u8]")
+    s1()
+    print("-- mapk.typed_by_use[u8]")
+    s2()
+    print("-- mapk.index[u8]")
+    s3()
+    print("-- mapk.assign[u8]")
+    s4()
+    print("-- mapk.op_assign[u8]")
+    s5()
+    print("-- mapk.get[u8]")
+    s6()
+    print("-- mapk.get_or[u8]")
+    s7()
+    print("-- mapk.contains[u8]")
+    s8()
+    print("-- mapk.remove[u8]")
+    s9()
+    print("-- mapk.keys_values[u8]")
+    s10()
+    print("-- mapk.keys_sorted[u8]")
+    s11()
+    print("-- mapk.top[u8]")
+    s12()
+    print("-- mapk.for[u8]")
+    s13()
+    print("-- mapk.any_all_count[u8]")
+    s14()
+    print("-- mapk.fold[u8]")
+    s15()
+    print("-- mapk.filter[u8]")
+    s16()
+    print("-- mapk.map[u8]")
+    s17()
+    print("-- mapk.flat_map[u8]")
+    s18()
+    print("-- mapk.map_values[u8]")
+    s19()
+    print("-- mapk.push[u8]")
+    s20()
+    print("-- mapk.eq[u8]")
+    s21()
+    print("-- mapk.print[u8]")
+    s22()
+    print("-- mapk.is_empty[u8]")
+    s23()

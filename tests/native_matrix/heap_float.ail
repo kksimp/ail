@@ -1,0 +1,109 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_float
+    items List[float]
+
+fn add_float(mut xs List[float], x float)
+    xs.push(x)
+
+fn wrap_float(x float) float?
+    x
+
+fn nothing_float() float?
+    none
+
+K_float := [1.5, 2.5]
+
+## heap.empty_push_pop[float]
+fn s0()
+    mut h := Heap[float]()
+    h.push(2.5)
+    h.push(1.5)
+    if x := h.pop()
+        print(h.len())
+
+## heap.max_first[float]
+fn s1()
+    mut h := Heap[float](max_first: true)
+    h.push(1.5)
+    h.push(2.5)
+    if x := h.peek()
+        print(h.len())
+
+## heap.from[float]
+fn s2()
+    h := Heap.from([3.5, 1.5, 2.5])
+    print(h.len())
+
+## heap.from_max[float]
+fn s3()
+    h := Heap.from_max([3.5, 1.5, 2.5])
+    print(h.to_sorted().len())
+
+## heap.is_empty[float]
+fn s4()
+    h := Heap[float]()
+    print(h.is_empty())
+
+## heap.drain[float]
+fn s5()
+    mut h := Heap.from([3.5, 1.5, 2.5])
+    mut n := 0
+    while x := h.pop()
+        n += 1
+    print(n)
+
+fn main()
+    print("-- heap.empty_push_pop[float]")
+    s0()
+    print("-- heap.max_first[float]")
+    s1()
+    print("-- heap.from[float]")
+    s2()
+    print("-- heap.from_max[float]")
+    s3()
+    print("-- heap.is_empty[float]")
+    s4()
+    print("-- heap.drain[float]")
+    s5()
