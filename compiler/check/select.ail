@@ -3,6 +3,10 @@
 ## to the channel's element type for its block.
 use ast
 
+## An absent position, for an arm not seen yet.
+fn no_pos() ast.Pos?
+    none
+
 ## A `select` statement. It never finishes without running an arm when it
 ## has a `closed` or an `after` arm, so it leaves when all its arms do.
 fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
@@ -10,8 +14,8 @@ fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
     handle_calls.add(pos_key(at))
     mut waits := 0
     mut recvs := 0
-    mut closed_at := absent[ast.Pos]()
-    mut after_at := absent[ast.Pos]()
+    mut closed_at := no_pos()
+    mut after_at := no_pos()
     mut elems := List[Ty]()
     for a in arms
         mut elem := Ty.Unit
