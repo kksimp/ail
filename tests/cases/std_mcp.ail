@@ -17,9 +17,16 @@ fn main() !
     print(s.to_text())
     _ := c.call("boom", Json.Obj([])) else err
         print("{err.kind}: {err.message}")
+        Json.Null
     _ := c.call("nope", Json.Obj([])) else err
         print("{err.kind}: {err.message}")
+        Json.Null
     c.set_timeout(5000)
     c.close()
-    _ := mcp.connect("/nonexistent/mcp-server", []) else err
-        print(err.kind)
+    print(start_kind())
+
+fn start_kind() str
+    c := mcp.connect("/nonexistent/mcp-server", []) else err
+        return err.kind
+    c.close()
+    "started"
