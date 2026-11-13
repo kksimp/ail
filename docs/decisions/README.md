@@ -875,6 +875,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1090](1090-std-yaml.md) | `std.yaml`: the common subset of YAML read into the `Json` value *(delegated)* | Accepted | 2026-11-13 |
 | [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |
 | [1092](1092-foreign-habit-diagnostics.md) | Rust, Go and TypeScript habits get an AIL message and a fix; `${` in a string is an error *(delegated)* | Accepted | 2026-11-13 |
+| [1093](1093-tojson-maps-optionals.md) | `ToJson` on `Map[K, V]` and `T?` without an `impl` block *(delegated)* | Accepted | 2026-11-13 |
 | [1094](1094-local-functions.md) | Named local functions: `fn name(...)` inside a body copies the locals it names, can recurse and is a value *(delegated)* | Accepted | 2026-11-13 |
 | [1095](1095-else-leave-as-block-tail.md) | `e else return ...`, `else break` or `else continue` as a block's last statement gives `e`'s value (`err.else.7`) *(delegated)* | Accepted | 2026-11-13 |
 | [1097](1097-faster-gates.md) | Faster gates: `NAME@K/N` shards, one process per runnable spec fence, stage 1 in the pool, `--failed` rerun, fast `run` on Windows *(delegated)* | Accepted | 2026-11-13 |
