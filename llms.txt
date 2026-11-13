@@ -6,6 +6,7 @@ Load the card first. It holds the whole language. Run `ail explain RULE` for any
 
 ## Read first
 
+- [For agents](docs/for-agents.md): the loop, `ail check` output and exit codes, canonical patterns, common mistakes and their fixes
 - [Language card](docs/language-card.md): the whole language in one read
 - [Full card and how-tos in one file](llms-full.txt): the language card and the how-tos, for a single load
 - [Quick reference](docs/quick-reference.md): the CLI and std on one page

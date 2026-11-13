@@ -195,8 +195,8 @@ an associated function on a value, `x.name()`, is the same error.
 `T` stands for in the running call. A generic function's type arguments are
 inferred as usual (`gen.infer.1`) or written (`f[int]()`); one that appears
 only in the result needs the expected type or written arguments. Implementations
-MAY pass the concrete types at run time (as the bootstrap does) or
-monomorphise; the result is the same. *(ADR 0349)*
+MAY pass the concrete types at run time (as the compiler does for run-time
+type arguments) or monomorphise; the result is the same. *(ADR 0349)*
 
 **trait.assoc.4** — `Type.name(args)` and `Type[A].name(args)` call the
 associated function `name` of a trait that `Type` implements, when `Type`
@@ -598,7 +598,7 @@ fn main()
 ## Runnable examples for the rules above
 
 Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
-report the named rule; `rules=` blocks check and run. Where the bootstrap
+report the named rule; `rules=` blocks check and run. Where the compiler
 disagrees with the rule, the block is `skip=bootstrap` (ADR 0498).
 
 ```ail rules=trait.method.1,trait.method.2,trait.method.3
@@ -732,7 +732,7 @@ impl Named for P               # a second impl of the same trait
 
 ```ail rules=trait.auto.4
 # A method named `to_str` declared outside an impl of ToStr should be rejected, and the
-# diagnostic should suggest the impl. The bootstrap accepts `fn to_str(p P) str`: a bootstrap bug.
+# diagnostic should suggest the impl. The compiler accepts `fn to_str(p P) str`: a known bug.
 fn main()
     print("auto")
 ```
@@ -956,5 +956,5 @@ fn main()
 
 ```ail skip=context rules=trait.impl.4
 # An impl outside the package that declares the trait or the type is rejected. An example
-# needs two packages; the bootstrap's package tests cover it (tests/cases/packages).
+# needs two packages; the compiler's package tests cover it (tests/cases/packages).
 ```

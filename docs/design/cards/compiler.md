@@ -40,7 +40,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (113 items)
 
-## mir (843 items)
+## mir (842 items)
 
 ## obj (67 items)
 

@@ -2,7 +2,7 @@
 
 Chapter key: `unsafe`
 
-> **Status:** Drafted (partial). Specified and implemented in the bootstrap:
+> **Status:** Drafted (partial). Specified and implemented:
 > unsafe blocks, unsafe functions, package opt-in, `unsafe driver` and
 > `std.hw` (ADR 0820), also built natively (ADR 0835). Specified: the set of
 > unsafe operations, C calls and raw pointers (ADRs 0431–0435).

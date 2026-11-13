@@ -5,8 +5,10 @@ Chapter key: `expr`
 > **Status:** Drafted (partial). Specified: bindings, names, blocks and
 > divergence, `if`, loops, ranges, logical and compound operators, comparisons,
 > `match` (variant, literal and or-patterns), and integer arithmetic. Not yet
-> designed: range patterns, guards, and binding or-patterns (see the note at
-> the end of the match section).
+> designed: binding or-patterns and open-ended ranges (see the note at the end of
+> the match section). Also specified: guards, range patterns, struct and nested
+> patterns, labeled loops, `while name := e`, default parameters, bit operators,
+> comprehensions, generators and `select` (see the rule list below).
 
 ## Bindings
 
@@ -573,8 +575,7 @@ fn main()
     print(kind(Shape.Rect(w: 2, h: 2)))                # square
 ```
 
-> **Note:** not yet designed: or-patterns that bind names, a binding pattern for a whole
-> scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
+> **Note:** not yet designed: or-patterns that bind names and open-ended ranges (`10..`). Warnings are
 > suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
 > ADR 0453)*
 
@@ -789,7 +790,7 @@ The checker warns "uhwhatnow?: expected `int`; best fit: `tax`", with
 `tax`, then `c.total`, then `price(c, tax)` listed below it.
 
 > **Note:** a hole lets a program be written top-down: the checker says what
-> each gap needs, and the program runs until it reaches one. The bootstrap
+> each gap needs, and the program runs until it reaches one. The compiler
 > doesn't infer an unknown hole type from later uses; a later lane may.
 
 ## Generators and iteration

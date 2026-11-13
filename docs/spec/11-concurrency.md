@@ -281,8 +281,8 @@ fn main() !
 program's output MUST NOT depend on it except through `wait`, channels and
 mutexes. *(ADR 0186)*
 
-> **Note:** the bootstrap interpreter runs one task at a time and in a fixed
-> order, so its output is repeatable: a new task runs at once until it
+> **Note:** `--deterministic` and `--schedule` run one task at a time and in a fixed
+> order, so the output is repeatable: a new task runs at once until it
 > blocks or finishes, its spawner resumes next, and other ready tasks run
 > first in, first out. Native code runs tasks in parallel (`conc.task.3`)
 > unless the program is run with `--deterministic` or `--schedule`
@@ -729,7 +729,7 @@ says nothing. *(ADR 0911)*
 unless the environment variable `AIL_THREADS` sets the number. A region
 uses only as many of them as its work repays (`conc.par.17`). With one
 thread, or under `--deterministic`, every loop and task runs as if there
-were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
+were no pool. With `AIL_PAR_LOG` set, the run says on standard error
 how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
 
 **conc.par.15** — A run of two or more adjacent `name := f(args)` statements, where every `f` is
@@ -855,7 +855,7 @@ fn main()
 ## Runnable examples for the rules above
 
 The rules without an example in the sections above are checked here. Each
-block runs on the bootstrap; the `norun` ones show a trap or a command line
+block runs natively; the `norun` ones show a trap or a command line
 the gate can't run.
 
 ```ail rules=conc.atomic.1,conc.atomic.4
