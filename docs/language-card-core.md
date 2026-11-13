@@ -37,6 +37,7 @@ while n > 0
   (gram.foreign.1): `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
+  `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
 - Collections: `xs := [1, 2]`, `xs.push(3)`, `xs.len()`, `m := {"a": 1}`, `m["a"]`.
 
 ## Structs, enums, match

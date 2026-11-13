@@ -1,0 +1,114 @@
+## Distinct types (type.distinct.1, ADR 1103): `type UserId = int` declares a
+## new type over a built-in scalar. It reaches the checker as a struct of one
+## field `value` marked `is_distinct` (compiler/check/distinct.ail), and native
+## code erases it to its base (compiler/mir/lower_distinct.ail).
+use ast
+use fix
+
+## The types a distinct type may wrap: the built-in scalars.
+DISTINCT_BASE_NAMES := [
+    "int",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "float",
+    "f32",
+    "f64",
+    "str",
+    "bool",
+    "char",
+    "bytes",
+]
+
+## `type Name = Base`, at the word `type`.
+fn Parser.distinct_decl(mut self) ast.StructDecl?
+    bump()
+    n := take_name("a type name after `type`", "type.distinct.1") else
+        skip_statement()
+        return none
+    if at_sym("[")
+        error_text(
+            "type.distinct.1",
+            here(),
+            "a distinct type has no type parameters",
+            "wrap one built-in scalar, e.g. `type {n.name} = int`; for a generic wrapper declare a `struct`",
+            "",
+        )
+        skip_statement()
+        return none
+    if not at_sym("=")
+        distinct_without_eq(n.name)
+        skip_statement()
+        return none
+    i += 1
+    base := type_ref("the base type after `=`", "type.distinct.1") else
+        skip_statement()
+        return none
+    if not distinct_base_name(base)
+        error_text(
+            "type.distinct.1",
+            base.pos,
+            "a distinct type wraps a built-in scalar: `int`, a sized number, `float`, `str`, `bool`, `char` or `bytes`",
+            "to wrap anything else, declare a `struct` with one field",
+            "",
+        )
+        skip_statement()
+        return none
+    if not at_newline() and peek() != Tok.Eof
+        unexpected("the end of the line after the base type", "type.distinct.1")
+        skip_statement()
+        return none
+    eat_newline()
+    ast.StructDecl(
+        name: n.name,
+        pos: n.pos,
+        doc: none,
+        is_error: false,
+        is_unique: false,
+        is_distinct: true,
+        generics: [],
+        fields: [ast.Field(
+            name: "value",
+            pos: n.pos,
+            doc: none,
+            ty: base,
+            observe: false,
+            default: none,
+        )],
+        invariants: [],
+    )
+
+## `type Name` not followed by `=`: Go's `type UserId int` gets a fix that
+## writes the `=`; Go's `type Point struct` is told how AIL declares a struct.
+fn Parser.distinct_without_eq(mut self, name str)
+    if at_kw("struct") or at_kw("enum") or tag_at(0) == "id" and tok_text(peek()) == "interface"
+        error_text(
+            "gram.foreign.1",
+            here(),
+            "AIL declares a struct as `struct {name}`, with one field per indented line",
+            "write `struct {name}` (or `enum {name}`, or `trait {name}` for an interface)",
+            "",
+        )
+        return
+    if tag_at(0) == "id"
+        error_fix(
+            "type.distinct.1",
+            here(),
+            "a distinct type is written `type {name} = {tok_text(peek())}`",
+            "put `=` between the name and the base type",
+            "write the `=`",
+            [fix.insert(here(), "= ")],
+        )
+        return
+    unexpected("`=` after the type name", "type.distinct.1")
+
+## Whether `t` names a built-in scalar with no type arguments.
+@allow("expr.match.3") fn distinct_base_name(t ast.TypeRef) bool
+    match t.shape
+        Named(name, args) => args.len() == 0 and DISTINCT_BASE_NAMES.contains(name)
+        _ => false

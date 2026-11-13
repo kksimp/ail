@@ -1,0 +1,19 @@
+## Distinct types (type.distinct.2-6): what doesn't convert and what a distinct type doesn't have.
+type UserId = int
+type OrderId = int
+
+fn UserId.next(self) UserId
+    UserId(int(self) + 1)
+
+fn charge(id UserId) int
+    int(id)
+
+fn main()
+    u := UserId(1)
+    o := OrderId(2)
+    print(charge(o))
+    print(u + 1)
+    print(float(u))
+    print(u.value)
+    print(UserId(value: 3))
+    print(u.abs())

@@ -413,6 +413,7 @@ fn Parser.pub_marker(mut self)
         or k == "unique"
         or k == "trait"
         or tag_at(0) == "id" and sym_at(1) == ":="
+        or tag_at(0) == "id" and tok_text(peek()) == "type" and tag_at(1) == "id"
         public.add(pos.line)
     elif k == "impl"
         error_text(

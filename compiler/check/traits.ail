@@ -116,6 +116,9 @@ fn Checker.implements(self, t Ty, tr int) bool
             Unit => false
             Res => false
             _ => true
+    # type.distinct.5: a distinct type has its base's standard traits.
+    if base := distinct_base(t)
+        return distinct_passes(tr) and implements_in(base, tr, mut seen)
     eq := std_eq
     match t
         Unknown => return true
