@@ -80,7 +80,7 @@ fn Checker.member_arm(
                         else
                             mut ignored := List[Binding]()
                             member_arm(members, a, mut whole, mut parts, mut wildcard, mut ignored)
-                    Literal | Alt | Range | TuplePat | BindName => member_arm(
+                    Literal | Alt | Range | TuplePat | BindName | Nested => member_arm(
                         members,
                         a,
                         mut whole,

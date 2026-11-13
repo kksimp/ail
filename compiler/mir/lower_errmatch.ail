@@ -112,6 +112,7 @@ fn pattern_pos_of(p ast.Pattern) ast.Pos
         Range(_, _, _, at) => at
         TuplePat(_, at) => at
         BindName(_, at) => at
+        Nested(_, _, _, at) => at
 
 ## The member's value as its own type.
 fn Lower.member_value(mut self, n str, key str, pos ast.Pos) Val?

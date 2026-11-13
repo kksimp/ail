@@ -186,7 +186,7 @@ pub fn parse(src str) Parsed
         kw_pos := ws[0].pos
         if kw == "ail"
             # mod.pkg.10-11: `ail MAJOR.MINOR` names the language version; it may come before or after `package`.
-            if version != none
+            if version_pos.line != 0
                 diags.push(diag("mod.pkg.10", kw_pos, "an `ail.pkg` has one `ail` line", ""))
             elif ws.len() != 2
                 diags.push(diag("mod.pkg.10", kw_pos, "`ail` needs one version", "write `ail {lang_version()}`"))

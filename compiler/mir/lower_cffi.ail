@@ -19,7 +19,7 @@ fn Lower.c_code(self, t Ty) str?
         F32 => return "f"
         Bool => return "b"
         Ptr(_) => return "p"
-        Fn(_, _) => return "p"
+        Fn(_, _, _) => return "p"
         Sized(k) => return c_sized_code(k)
         Struct(n) =>
             slots := structs.get(n) else return none
@@ -93,7 +93,7 @@ fn Lower.c_call_site(self, key str) bool
     sig := sigs.get(key) else return false
     for t in sig.params
         match t
-            Fn(_, _) => return true
+            Fn(_, _, _) => return true
             _ => continue
     false
 

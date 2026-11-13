@@ -81,7 +81,7 @@ fn Checker.check_discards(self) List[Diag]
 
 fn discard_diag(d Discard) Diag
     mut what := "this call"
-    if m := method_name(d.value)
+    if m := discard_method(d.value)
         what = "`{m}()`"
     elif n := call_name(d.value)
         what = "`{n}(...)`"
@@ -90,14 +90,14 @@ fn discard_diag(d Discard) Diag
         d.at,
         "the value of {what} is thrown away, and the call does nothing else",
     ).with_help("use the value, or write `_ := ...` to throw it away on purpose")
-    if m := method_name(d.value)
+    if m := discard_method(d.value)
         if t := twin_of(m)
             if at := method_pos(d.value)
                 out = out.with_fix("change the list in place with `{t}()`", [fix.replace(at, m, t)])
     out.with_fix("throw the value away with `_ := `", [fix.insert(d.at, "_ := ")])
 
 ## A method call's name.
-@allow("expr.match.3") fn method_name(e ast.Expr) str?
+@allow("expr.match.3") fn discard_method(e ast.Expr) str?
     match e
         Method(_, n, _, _) => n
         _ => none
