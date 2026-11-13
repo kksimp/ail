@@ -478,6 +478,12 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     ast.scan_block(mut sc, body, 0)
     if sc.bad
         return decline("the body has {sc.why}")
+    # A bare call of a method of `self` (`glyph(x, y)` inside a method) needs `self` itself, which a
+    # chunk doesn't capture (only the fields the body names bare): left sequential.
+    if self_ty != ""
+        for c in sc.callees
+            if sigs.contains("{self_ty}.{c}") and lookup(c) == none
+                return decline("the body calls `{c}`, a method of `self`")
     mut caps := List[Cap]()
     mut accs := List[str]()
     mut atomic := false
