@@ -2100,6 +2100,8 @@ fn Lower.lower_method(
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
+        if is_enum_static(en, name)
+            return lower_enum_static(en, name, args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
         assoc_instance(recv, name)
@@ -2135,6 +2137,8 @@ fn Lower.lower_method(
     if s := struct_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
+    if is_enum_name(r.ty, name, args)
+        return lower_enum_name(r, npos)
     if s := enum_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)

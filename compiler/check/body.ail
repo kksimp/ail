@@ -279,6 +279,8 @@ fn Checker.check_fn(mut self, idx int)
         end_fn(idx)
         return
     body := f.body else []
+    bind_decls = []
+    bind_seen = Set[int]()
     sig := sigs[idx]
     scope = fn_scopes[idx]
     self_ty = fn_self[idx]
@@ -328,6 +330,7 @@ fn Checker.check_fn(mut self, idx int)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
+    report_unused()
     record_locals(0)
     gen.elem = none
     scope = []
@@ -563,6 +566,7 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         return
     if declare(n, at)
         locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+        note_binding(n, at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
         diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(
