@@ -31,6 +31,8 @@ fn Checker.fn_value(mut self, n str, i int, at ast.Pos) Ty
 
 ## type.fn.3: call a value of function type.
 fn Checker.call_value(mut self, what str, t Ty, args List[ast.Arg], at ast.Pos) Ty
+    # eff.use.1: what a function value does isn't known here.
+    effect_marks += 1
     fp := fn_parts(t) else
         args_only(args)
         if t != Ty.Unknown

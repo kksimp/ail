@@ -175,6 +175,10 @@ pub struct Checker
     pub atomic_calls Set[int]
     pub std_any Set[int]
     pub float_literals Set[int]
+    ## eff.use.1: statements that throw a value away, by `pos_key`, and a
+    ## count of mutations and function-value calls typed so far.
+    pub discards Map[int, Discard]
+    pub effect_marks int
 
 ## How a local was declared.
 pub enum LocalKind
@@ -281,6 +285,8 @@ pub fn new_checker(p ast.Program) Checker
         atomic_calls: Set[int](),
         std_any: Set[int](),
         float_literals: Set[int](),
+        discards: Map[int, Discard](),
+        effect_marks: 0,
     )
 
 fn Checker.err(mut self, rule str, at ast.Pos, text str)

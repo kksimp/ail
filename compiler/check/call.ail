@@ -989,6 +989,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         return Ty.Unknown
     match rt
         Conc(k, inner) =>
+            # eff.use.1: these methods wait for or change shared state.
+            effect_marks += 1
             if k == "Atomic"
                 atomic_calls.add(pos_key(at))
             else

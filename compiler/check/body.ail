@@ -72,6 +72,8 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
             c.diags = c.diags[..saved]
             if c.inferred == before
                 break
+    # eff.use.1: only the last pass's discards count.
+    c.discards = Map[int, Discard]()
     c.record = full
     for i in 0..p.fns.len()
         c.check_fn(i)
@@ -110,6 +112,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_discards())
     c.diags.extend(c.check_denied())
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
@@ -391,6 +394,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         mut want := none
         if last
             want = expect
+        marks := effect_marks
         ty = stmt(s, want, last and need)
         if ty == Ty.Never
             leaves = true
@@ -401,6 +405,8 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         # err.use.1: a failure can't be discarded.
         if (not last or not need) and is_stmt_eval(s) and reject_unhandled(ty, stmt_pos(s))
             ty = Ty.Unknown
+        elif not last or not need
+            note_discard(s, ty, marks)
     end_scope(mark)
     if leaves then Ty.Never else ty
 
@@ -1246,6 +1252,7 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
 ## Report if `e` isn't a mutable place (own.place.1). `rule` is the rule for
 ## this context; without one, it is chosen by the kind of root.
 fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
+    effect_marks += 1
     record_write(e)
     # own.ref.4: a `ref` cell's contents are mutable through any copy.
     if writes_through_ref(e, rule == "trait.method.3")
