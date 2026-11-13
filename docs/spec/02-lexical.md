@@ -356,6 +356,17 @@ n := 1
 print("{n:#x}")      # compile-time error: there is no `#` form
 ```
 
+**lex.str.8** — A `{` that directly follows a `$` in a string literal is a
+compile-time error: `"${n}"` is another language's interpolation and AIL
+would print `$` and then the value. The help says to write `{n}`, and the fix
+removes the `$`. The literal text `${` is written `$\{`.
+
+```ail error=lex.str.8
+fn main()
+    n := 1
+    print("n is ${n}")   # compile-time error: write "n is {n}"
+```
+
 ## Numeric literals
 
 **lex.num.1** — Integer literals are decimal, hexadecimal (`0x`), binary (`0b`)
