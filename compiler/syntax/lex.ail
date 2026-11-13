@@ -480,6 +480,26 @@ fn Lexer.unclosed(mut self, lines List[List[char]])
     for o in open
         if o.pos.line != last.pos.line
             one_line = false
+    # `if x \{`: a brace that ends a block header is C's block, which AIL writes by indenting (checkbench, ADR 1111).
+    if one_line and open.len() == 1 and last.c == '\{' and last.pos.line >= 1 and last.pos.line <= lines.len()
+        text := lines[last.pos.line - 1]
+        mut e := text.len()
+        while e > 0 and text[e - 1] == ' '
+            e -= 1
+        if e == last.pos.col
+            mut b := last.pos.col - 1
+            while b > 0 and text[b - 1] == ' '
+                b -= 1
+            diags.push(Diag(
+                rule: "lex.stmt.2",
+                pos: last.pos,
+                msg: "this `\{` is never closed: AIL blocks are indented, not braced",
+                fixed: true,
+                help: "end the header line without `\{`; the block is the lines indented 4 spaces below it, and no `}` closes it",
+                fix: "remove the `\{`",
+                edits: [fix.delete(ast.Pos(line: last.pos.line, col: b + 1), ast.Pos(line: last.pos.line, col: e + 1))],
+            ))
+            return
     # One `[` left open: the `]` goes after the index or type argument when the line goes on (checkbench, ADR 1111).
     if one_line and open.len() == 1 and last.c == '[' and last.pos.line >= 1 and last.pos.line <= lines.len()
         k := bracket_close_at(lines[last.pos.line - 1], last.pos.col - 1)
@@ -900,9 +920,27 @@ fn Lexer.string(mut self, line List[char], start int, line_no int) int
         return close + 1
     while holes.len() > mark
         holes.remove_at(holes.len() - 1)
-    diag_msg("lex.str.1", pos, "unterminated string literal", "close the string with `\"`")
+    diag_fix("lex.str.1", pos, "unterminated string literal", "close the string with `\"`", "close the string")
+    attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
     forget_brackets(line_no)
     line.len()
+
+## Where the `"` of a string left open at `line[start]` most likely goes: before the brackets at the end of the
+## line that close the call around it, `print("total: \{n})` (lex.str.1, checkbench ADR 1111).
+fn string_end(line List[char], start int) int
+    mut depth := 0
+    for k in 0..start
+        if line[k] == '(' or line[k] == '['
+            depth += 1
+        elif (line[k] == ')' or line[k] == ']') and depth > 0
+            depth -= 1
+    mut e := line.len()
+    while e > start + 1 and line[e - 1] == ' '
+        e -= 1
+    while e > start + 1 and depth > 0 and (line[e - 1] == ')' or line[e - 1] == ']')
+        e -= 1
+        depth -= 1
+    e
 
 ## Whether the text of a `\{...}` in a string is plainly not an expression: JSON (`"key": 1`), a statement
 ## (`return 1`, `int x;`), so the `\{` was meant as a literal brace (lex.str.2).
@@ -1085,7 +1123,8 @@ fn Lexer.raw_string(mut self, line List[char], start int, line_no int) int
         if line[k] == '"'
             push(Str(text_of(line, start + 2, k)), pos)
             return k + 1
-    diag_msg("lex.str.1", pos, "unterminated string literal", "close the string with `\"`")
+    diag_fix("lex.str.1", pos, "unterminated string literal", "close the string with `\"`", "close the string")
+    attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
     forget_brackets(line_no)
     line.len()
 

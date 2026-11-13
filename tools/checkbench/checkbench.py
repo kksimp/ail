@@ -46,6 +46,8 @@ GENERIC = [
     r"see docs/status\.md",
     r"lists the (?:methods|declarations)",
     r"^check the spelling\.?$",
+    r"`ail card` shows each form",
+    r"give exactly the arguments the signature lists",
 ]
 GENERIC_RX = re.compile("|".join(GENERIC))
 TIMEOUT = 60

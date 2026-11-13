@@ -572,6 +572,12 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                     "reshape",
                     "reshape([$a])",
                 )])
+            elif sig.names.len() == sig.params.len() and sig.params.len() > 0
+                # Name each parameter with its type, so the call can be written without a lookup (checkbench, ADR 1111).
+                shown := ["{sig.names[k]} {show(sig.params[k].ty)}" for k in 0..sig.params.len()]
+                d = d.with_help("`{what}` is `{what}({shown.join(", ")})`; pass one value for each")
+            elif sig.params.len() == 0
+                d = d.with_help("`{what}` takes no arguments: write `{what}()`")
             diags.push(d)
             return none
         return [i for i in 0..args.len()]
@@ -781,6 +787,10 @@ fn Checker.fields_literal(
                 mut d := new_diag("type.struct.4", l.pos, "`{label}` has no field `{l.name}`")
                 if s := suggest(l.name, names)
                     d = d.did_you_mean(l.name, s)
+                elif names.len() > 0
+                    d = d.with_help("`{label}` has the fields {list_names(names)}; remove `{l.name}:` and its value, or add the field to the struct")
+                else
+                    d = d.with_help("`{label}` has no fields: write `{label}()`")
                 diags.push(d)
             else
                 err(

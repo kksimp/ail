@@ -654,6 +654,9 @@ fn Parser.foreign_stmt(mut self) bool
         repl = "while true"
     elif word == "elseif" or word == "elsif" or word == "else_if"
         repl = "elif"
+    elif word == "switch" and t != "nl"
+        # `switch x` over `pattern =>` arms is a `match` (checkbench, ADR 1111).
+        repl = "match"
     if repl != ""
         attach("write `{repl}`", [fix.span(here(), tok_end(i) else here(), repl)])
     skip_statement()
