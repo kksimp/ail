@@ -1503,6 +1503,8 @@ fn Checker.has_field(self, t Ty, n str) bool
         return rt
     if ge := grid_elem(rt)
         return grid_index(index, ge)
+    if de := deque_elem(rt)
+        return deque_index(index, de)
     # `m[k]` (type.map.3).
     if is_map_ty(rt)
         if is_range(index)

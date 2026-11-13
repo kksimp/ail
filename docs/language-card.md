@@ -429,7 +429,7 @@ Priority queue: `h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
 for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
 `h.is_empty()`, `Heap.from(xs)`. Double-ended queue: `d := Deque[int]()`,
 `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
-`d.at(i)`, `d.to_list()`.
+`d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 ## Maps and sets
 

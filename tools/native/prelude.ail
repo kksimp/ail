@@ -1030,7 +1030,7 @@ fn Heap.to_sorted(self) List[T]
         out.push(x)
     out
 ## @module deque
-## `Deque[T]` (type.deque.1-5, ADR 1086): a double-ended queue with amortised
+## `Deque[T]` (type.deque.1-7, ADR 1086): a double-ended queue with amortised
 ## O(1) pushes and pops at both ends and O(1) access by position. It is read
 ## only when the program names `Deque` and doesn't declare that name itself.
 
@@ -1201,3 +1201,18 @@ fn Seq.count(move self) int
     for _ in self
         n += 1
     n
+
+## Replace the element at position `i` with `v`; an index outside `0..len()`
+## traps (type.deque.6).
+fn Deque.set(mut self, i int, v T)
+    n := front.len()
+    if i < 0 or i >= n + back.len()
+        unreachable("type.deque.6: index {i} is outside 0..{n + back.len()}")
+    if i < n
+        front[n - 1 - i] = v
+    else
+        back[i - n] = v
+
+## The next element for a `for` loop, taken from the front (type.deque.7).
+fn Deque.next(mut self) T?
+    pop_front()
