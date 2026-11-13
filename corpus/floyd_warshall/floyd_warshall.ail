@@ -1,0 +1,108 @@
+## All-pairs shortest paths with Floyd-Warshall on a small directed graph with
+## one negative edge. Prints the distance matrix, a few reconstructed routes,
+## and then shows how a negative cycle is detected on the diagonal.
+
+INF := 1000000000
+
+struct Net
+    n int
+    dist List[int]
+    nxt List[int]
+
+fn build(n int, edges List[List[int]]) Net
+    mut dist := List[int]()
+    mut nxt := List[int]()
+    total := n * n
+    for cell in 0..total
+        dist.push(INF)
+        nxt.push(-1)
+    for v in 0..n
+        dist[v * n + v] = 0
+        nxt[v * n + v] = v
+    for e in edges
+        dist[e[0] * n + e[1]] = e[2]
+        nxt[e[0] * n + e[1]] = e[1]
+    Net(n: n, dist: dist, nxt: nxt)
+
+fn run(net Net) Net
+    n := net.n
+    mut dist := net.dist
+    mut nxt := net.nxt
+    for k in 0..n
+        for i in 0..n
+            if dist[i * n + k] == INF
+                continue
+            for j in 0..n
+                if dist[k * n + j] == INF
+                    continue
+                through := dist[i * n + k] + dist[k * n + j]
+                if through < dist[i * n + j]
+                    dist[i * n + j] = through
+                    nxt[i * n + j] = nxt[i * n + k]
+    Net(n: n, dist: dist, nxt: nxt)
+
+fn negative_nodes(net Net) List[int]
+    [v for v in 0..net.n if net.dist[v * net.n + v] < 0]
+
+fn route(net Net, names List[str], from_node int, to_node int) str
+    if net.dist[from_node * net.n + to_node] == INF
+        return "no route"
+    mut cur := from_node
+    mut hops := [names[cur]]
+    while cur != to_node
+        cur = net.nxt[cur * net.n + to_node]
+        hops.push(names[cur])
+    hops.join(" -> ")
+
+fn print_matrix(net Net, names List[str])
+    header := names.map(|s| s.pad_left(5, ' '))
+    print("     {header.join("")}")
+    for i in 0..net.n
+        mut cells := List[str]()
+        for j in 0..net.n
+            d := net.dist[i * net.n + j]
+            text := if d == INF then "inf" else "{d}"
+            cells.push(text.pad_left(5, ' '))
+        print("{names[i].pad_right(5, ' ')}{cells.join("")}")
+
+fn main()
+    names := ["A", "B", "C", "D", "E"]
+    edges := [
+        [0, 1, 3],
+        [0, 2, 8],
+        [0, 4, -4],
+        [1, 3, 1],
+        [1, 4, 7],
+        [2, 1, 4],
+        [3, 0, 2],
+        [3, 2, -5],
+        [4, 3, 6],
+    ]
+    solved := run(build(5, edges))
+    print_matrix(solved, names)
+    for pair in [[0, 3], [3, 1], [4, 2], [0, 4]]
+        print("{names[pair[0]]} to {names[pair[1]]}: {solved.dist[pair[0] * 5 + pair[1]]} via {route(solved, names, pair[0], pair[1])}")
+    broken := run(build(4, [[0, 1, 1], [1, 2, -3], [2, 1, 1], [2, 3, 2]]))
+    bad := negative_nodes(broken)
+    print("negative cycle through nodes: {bad.join(" ")}")
+    one_way := run(build(3, [[0, 1, 5], [1, 2, 5]]))
+    labels := ["x", "y", "z"]
+    print("2 to 0: {route(one_way, labels, 2, 0)}")
+
+@test fn simple_triangle()
+    net := run(build(3, [[0, 1, 2], [1, 2, 3], [0, 2, 10]]))
+    assert_eq(net.dist[0 * 3 + 2], 5)
+    assert_eq(route(net, ["a", "b", "c"], 0, 2), "a -> b -> c")
+
+@test fn negative_edge_without_cycle()
+    net := run(build(3, [[0, 1, 4], [1, 2, -2], [0, 2, 3]]))
+    assert_eq(net.dist[0 * 3 + 2], 2)
+    assert_eq(negative_nodes(net).len(), 0)
+
+@test fn detects_negative_cycle()
+    net := run(build(2, [[0, 1, 1], [1, 0, -3]]))
+    assert(negative_nodes(net).len() > 0)
+
+@test fn unreachable_pair()
+    net := run(build(2, [[0, 1, 1]]))
+    assert_eq(net.dist[1 * 2 + 0], INF)

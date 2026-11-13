@@ -1,0 +1,128 @@
+## Diff stat summary: reads a unified diff and prints a `git diff --stat`
+## style table: one row per file with its added and removed line counts and a
+## scaled +/- bar, then a totals line.
+
+BAR_MAX := 20
+
+struct FileStat
+    name str
+    adds int
+    dels int
+    hunks int
+
+fn parse_diff(lines List[str]) List[FileStat]
+    mut out := List[FileStat]()
+    mut name := ""
+    mut adds := 0
+    mut dels := 0
+    mut hunks := 0
+    for line in lines
+        if line.starts_with("+++ ")
+            if name != ""
+                out.push(FileStat(name: name, adds: adds, dels: dels, hunks: hunks))
+            rest := line.slice(4, line.len())
+            name = rest.strip_prefix("b/") else rest
+            adds = 0
+            dels = 0
+            hunks = 0
+        elif line.starts_with("@@")
+            hunks += 1
+        elif line.starts_with("---") or line.starts_with("diff ")
+            continue
+        elif line.starts_with("+")
+            adds += 1
+        elif line.starts_with("-")
+            dels += 1
+    if name != ""
+        out.push(FileStat(name: name, adds: adds, dels: dels, hunks: hunks))
+    out
+
+fn scaled(n int, biggest int) int
+    if n == 0
+        return 0
+    if biggest <= BAR_MAX
+        return n
+    (n * BAR_MAX / biggest).max(1)
+
+fn bar(ch char, n int) str
+    mut out := ""
+    mut k := 0
+    while k < n
+        out = "{out}{ch}"
+        k += 1
+    out
+
+fn plural(n int, word str) str
+    if n == 1
+        return "{n} {word}"
+    "{n} {word}s"
+
+fn report(stats List[FileStat]) List[str]
+    mut out := List[str]()
+    mut width := 0
+    mut biggest := 0
+    mut total_add := 0
+    mut total_del := 0
+    for s in stats
+        width = width.max(s.name.len())
+        biggest = biggest.max(s.adds + s.dels)
+        total_add += s.adds
+        total_del += s.dels
+    for t in stats
+        total := t.adds + t.dels
+        marks := "{bar('+', scaled(t.adds, biggest))}{bar('-', scaled(t.dels, biggest))}"
+        out.push(" {t.name.pad_right(width, ' ')} | {total:>3} {marks}")
+    out.push(" {plural(stats.len(), "file")} changed, {plural(total_add, "insertion")}(+), {plural(total_del, "deletion")}(-)")
+    out
+
+fn sample() List[str]
+    mut lines := [
+        "diff --git a/src/main.ail b/src/main.ail",
+        "--- a/src/main.ail",
+        "+++ b/src/main.ail",
+        "@@ -1,4 +1,5 @@",
+        " fn main()",
+        "-    print(1)",
+        "+    print(2)",
+        "+    print(3)",
+        "@@ -20,3 +21,3 @@",
+        "-    old()",
+        "+    new()",
+        "diff --git a/README.md b/README.md",
+        "--- a/README.md",
+        "+++ b/README.md",
+        "@@ -1 +1 @@",
+        "-hello",
+        "+hello, world",
+        "diff --git a/lib/util.ail b/lib/util.ail",
+        "--- /dev/null",
+        "+++ b/lib/util.ail",
+        "@@ -0,0 +1,30 @@",
+    ]
+    for i in 1..=30
+        lines.push("+line {i}")
+    lines
+
+fn main()
+    stats := parse_diff(sample())
+    for s in stats
+        print("{s.name}: {plural(s.hunks, "hunk")}")
+    for row in report(stats)
+        print(row)
+
+@test fn counts_lines()
+    st := parse_diff(["+++ b/a", "@@ -1 +1 @@", "-x", "+y", "+z"])
+    assert_eq(st.len(), 1)
+    assert_eq(st[0].adds, 2)
+    assert_eq(st[0].dels, 1)
+    assert_eq(st[0].hunks, 1)
+
+@test fn bars_scale_down()
+    assert_eq(scaled(5, 10), 5)
+    assert_eq(scaled(30, 40), 15)
+    assert_eq(scaled(1, 100), 1)
+    assert_eq(scaled(0, 100), 0)
+
+@test fn totals_line()
+    rows := report(parse_diff(["+++ b/a", "+x"]))
+    assert_eq(rows[rows.len() - 1], " 1 file changed, 1 insertion(+), 0 deletions(-)")

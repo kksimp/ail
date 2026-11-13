@@ -1,0 +1,70 @@
+## Timeouts and retries on a simulated clock. Each call has a list of response
+## latencies, one per attempt (the last one repeats). An attempt succeeds when
+## its latency fits inside the per-attempt timeout and the overall deadline;
+## otherwise the caller waits out the timeout, backs off a growing pause and
+## tries again. Every event is logged with its time. No real waiting happens.
+
+struct Policy
+    timeout int
+    retries int
+    deadline int
+    pause int
+
+struct Run
+    status str
+    clock int
+    attempts int
+    log List[str]
+
+fn latency_for(lats List[int], attempt int) int
+    lats[(attempt - 1).min(lats.len() - 1)]
+
+fn simulate(lats List[int], p Policy) Run
+    mut clock := 0
+    mut events := List[str]()
+    for attempt in 1..=p.retries + 1
+        room := p.deadline - clock
+        if room <= 0
+            events.push("t={clock:>3} deadline hit before attempt {attempt}")
+            return Run(status: "deadline", clock: clock, attempts: attempt - 1, log: events)
+        lat := latency_for(lats, attempt)
+        limit := p.timeout.min(room)
+        if lat <= limit
+            clock += lat
+            events.push("t={clock:>3} attempt {attempt} ok after {lat} ms")
+            return Run(status: "ok", clock: clock, attempts: attempt, log: events)
+        clock += limit
+        events.push("t={clock:>3} attempt {attempt} timed out ({limit} ms)")
+        if attempt <= p.retries and clock < p.deadline
+            clock += p.pause * attempt
+            events.push("t={clock:>3} backoff {p.pause * attempt} ms")
+    Run(status: "failed", clock: clock, attempts: p.retries + 1, log: events)
+
+fn show(name str, r Run)
+    print("{name}: {r.status} at t={r.clock} after {r.attempts} attempts")
+    for line in r.log
+        print("  {line}")
+
+fn main()
+    p := Policy(timeout: 100, retries: 3, deadline: 400, pause: 20)
+    show("fast", simulate([30], p))
+    show("slow start", simulate([250, 180, 60], p))
+    show("always slow", simulate([500], p))
+    tight := Policy(timeout: 150, retries: 5, deadline: 300, pause: 30)
+    show("deadline", simulate([200], tight))
+
+@test fn fast_call_needs_one_attempt()
+    r := simulate([10], Policy(timeout: 50, retries: 2, deadline: 500, pause: 5))
+    assert_eq(r.status, "ok")
+    assert_eq(r.attempts, 1)
+    assert_eq(r.clock, 10)
+
+@test fn last_latency_repeats()
+    assert_eq(latency_for([5, 9], 1), 5)
+    assert_eq(latency_for([5, 9], 7), 9)
+
+@test fn hopeless_call_fails_after_all_retries()
+    r := simulate([999], Policy(timeout: 10, retries: 2, deadline: 10000, pause: 1))
+    assert_eq(r.status, "failed")
+    assert_eq(r.attempts, 3)
+    assert_eq(r.clock, 10 + 1 + 10 + 2 + 10)

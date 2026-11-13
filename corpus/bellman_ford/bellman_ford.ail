@@ -1,0 +1,116 @@
+## Single-source shortest paths with Bellman-Ford on a directed graph that has
+## negative edge weights. Each round relaxes every edge; the loop stops early
+## when nothing changes, and an extra relaxation after |V|-1 rounds exposes a
+## negative cycle. Prints distances and routes for two graphs.
+
+INF := 1000000000
+
+struct Edge
+    a int
+    b int
+    w int
+
+struct Result
+    dist List[int]
+    prev List[int]
+    rounds int
+    cycle bool
+
+fn bellman_ford(n int, edges List[Edge], src int) Result
+    mut dist := List[int]()
+    mut prev := List[int]()
+    for v in 0..n
+        dist.push(INF)
+        prev.push(-1)
+    dist[src] = 0
+    mut rounds := 0
+    for step in 1..n
+        mut changed := false
+        for e in edges
+            if dist[e.a] != INF and dist[e.a] + e.w < dist[e.b]
+                dist[e.b] = dist[e.a] + e.w
+                prev[e.b] = e.a
+                changed = true
+        rounds = step
+        if not changed
+            break
+    mut cycle := false
+    for f in edges
+        if dist[f.a] != INF and dist[f.a] + f.w < dist[f.b]
+            cycle = true
+    Result(dist: dist, prev: prev, rounds: rounds, cycle: cycle)
+
+fn path_to(res Result, names List[str], target int) str
+    mut hops := [names[target]]
+    mut cur := target
+    while res.prev[cur] != -1
+        cur = res.prev[cur]
+        hops.push(names[cur])
+    hops.reverse()
+    hops.join(" -> ")
+
+fn parse_edges(names List[str], lines List[str]) List[Edge]
+    mut out := List[Edge]()
+    for line in lines
+        p := line.split(" ")
+        ia := names.index_of(p[0]) else 0
+        ib := names.index_of(p[1]) else 0
+        iw := p[2].to_int() else 0
+        out.push(Edge(a: ia, b: ib, w: iw))
+    out
+
+fn report(title str, names List[str], lines List[str])
+    edges := parse_edges(names, lines)
+    res := bellman_ford(names.len(), edges, 0)
+    print("{title}: {edges.len()} edges, {res.rounds} rounds")
+    if res.cycle
+        print("  negative cycle reachable from {names[0]}")
+        return
+    for i in 0..names.len()
+        if res.dist[i] == INF
+            print("  {names[i]}: unreachable")
+        else
+            print("  {names[i]}: {res.dist[i]} via {path_to(res, names, i)}")
+
+fn main()
+    names := ["S", "A", "B", "C", "D", "E", "F"]
+    report("currency-like", names, [
+        "S A 6",
+        "S B 7",
+        "A B 8",
+        "A C 5",
+        "A D -4",
+        "B C -3",
+        "B D 9",
+        "C A -2",
+        "D S 2",
+        "D C 7",
+        "E F 1",
+    ])
+    report("with a cycle", names, [
+        "S A 1",
+        "A B -2",
+        "B C -2",
+        "C A 1",
+        "C D 4",
+    ])
+
+@test fn negative_edge_shortcut()
+    edges := [Edge(a: 0, b: 1, w: 5), Edge(a: 0, b: 2, w: 2), Edge(a: 2, b: 1, w: -4)]
+    res := bellman_ford(3, edges, 0)
+    assert_eq(res.dist, [0, -2, 2])
+    assert(not res.cycle)
+
+@test fn cycle_flag()
+    edges := [Edge(a: 0, b: 1, w: 1), Edge(a: 1, b: 2, w: -1), Edge(a: 2, b: 1, w: -1)]
+    assert(bellman_ford(3, edges, 0).cycle)
+
+@test fn unreachable_stays_infinite()
+    res := bellman_ford(3, [Edge(a: 0, b: 1, w: 3)], 0)
+    assert_eq(res.dist[2], INF)
+
+@test fn route_text()
+    names := ["x", "y", "z"]
+    edges := parse_edges(names, ["x y 1", "y z 1", "x z 5"])
+    res := bellman_ford(3, edges, 0)
+    assert_eq(path_to(res, names, 2), "x -> y -> z")

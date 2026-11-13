@@ -1,0 +1,96 @@
+## File age report on a fixed clock: writes files into a temp directory, stamps
+## each with a modification time set relative to a fixed "now" (so nothing
+## depends on the real clock), reads the times back from the file system, and
+## groups the files into age buckets with counts and byte totals.
+
+NOW := 1700000000000
+DAY := 86400000
+HOUR := 3600000
+
+struct Spec
+    name str
+    size int
+    days int
+    hours int
+
+struct Aged
+    name str
+    size int
+    age_ms int
+
+fn bucket(age_ms int) str
+    if age_ms < DAY
+        return "today"
+    if age_ms < 7 * DAY
+        return "week"
+    if age_ms < 30 * DAY
+        return "month"
+    "stale"
+
+fn age_text(age_ms int) str
+    days := age_ms / DAY
+    hours := age_ms % DAY / HOUR
+    "{days}d{hours:02}h"
+
+fn survey(dir str) !List[Aged]
+    mut out := List[Aged]()
+    for name in fs.list_dir(dir)?.sorted()
+        meta := fs.metadata(path.join(dir, name))?
+        out.push(Aged(name: name, size: meta.size, age_ms: NOW - meta.modified_ms))
+    out
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_file_age_report_fixed")?
+    specs := [
+        Spec(name: "build.log", size: 40, days: 0, hours: 3),
+        Spec(name: "notes.txt", size: 25, days: 2, hours: 12),
+        Spec(name: "old.tar", size: 300, days: 45, hours: 5),
+        Spec(name: "report.pdf", size: 120, days: 9, hours: 0),
+        Spec(name: "cache.db", size: 80, days: 400, hours: 23),
+        Spec(name: "todo.md", size: 10, days: 6, hours: 23),
+        Spec(name: "draft.txt", size: 15, days: 29, hours: 1),
+    ]
+    for s in specs
+        p := path.join(dir, s.name)
+        fs.write_text(p, "x".repeat(s.size))?
+        fs.set_modified(p, NOW - s.days * DAY - s.hours * HOUR)?
+    found := survey(dir)?.sorted(by: |f| -f.age_ms)
+    print("{"file":<12}{"age":>9}  {"bucket":<6}{"bytes":>6}")
+    for a in found
+        print("{a.name:<12}{age_text(a.age_ms):>9}  {bucket(a.age_ms):<6}{a.size:>6}")
+    for b in ["today", "week", "month", "stale"]
+        mut n := 0
+        mut bytes_in := 0
+        for a in found
+            if bucket(a.age_ms) == b
+                n += 1
+                bytes_in += a.size
+        print("{b:<6}{n:>2} files{bytes_in:>5} bytes")
+    oldest := found[0]
+    print("oldest: {oldest.name}, {oldest.age_ms / DAY} days")
+    for s in specs
+        fs.remove(path.join(dir, s.name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn buckets_by_age()
+    assert_eq(bucket(0), "today")
+    assert_eq(bucket(DAY), "week")
+    assert_eq(bucket(7 * DAY - 1), "week")
+    assert_eq(bucket(7 * DAY), "month")
+    assert_eq(bucket(30 * DAY), "stale")
+
+@test fn age_text_splits_days_and_hours()
+    assert_eq(age_text(2 * DAY + 5 * HOUR + 59000), "2d05h")
+    assert_eq(age_text(0), "0d00h")
+
+@test fn stamped_times_are_read_back()
+    dir := fs.make_temp_dir("corpus_file_age_report_fixed_t")?
+    p := path.join(dir, "a.txt")
+    fs.write_text(p, "abc")?
+    fs.set_modified(p, NOW - 3 * DAY)?
+    found := survey(dir)?
+    assert_eq(found[0].age_ms, 3 * DAY)
+    assert_eq(found[0].size, 3)
+    fs.remove(p)?
+    fs.remove(dir)?

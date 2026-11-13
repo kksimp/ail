@@ -1,0 +1,14 @@
+file              age  bucket bytes
+cache.db      400d23h  stale     80
+old.tar        45d05h  stale    300
+draft.txt      29d01h  month     15
+report.pdf      9d00h  month    120
+todo.md         6d23h  week      10
+notes.txt       2d12h  week      25
+build.log       0d03h  today     40
+today  1 files   40 bytes
+week   2 files   35 bytes
+month  2 files  135 bytes
+stale  2 files  380 bytes
+oldest: cache.db, 400 days
+cleaned up: true

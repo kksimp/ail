@@ -1,0 +1,13 @@
+RELEASE NOTES
+=============
+Version 2.1 is out; see the changelog (https://example.org/log) or ail --help.
+
+Highlights
+----------
+  * Faster builds
+  * Better docs (docs/index.md)
+| Note: upgrade before friday
+--------------------
+Install:
+    ail install --all
+Done [unclosed link](oops

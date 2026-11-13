@@ -1,0 +1,11 @@
+jobs 40, last arrival 48
+1 server(s) fifo  avg wait 33.85 worst 75 peak 25 makespan 126 util 100%
+1 server(s) sjf   avg wait 22.82 worst 77 peak 19 makespan 126 util 100%
+1 server(s) lifo  avg wait 33.50 worst 124 peak 24 makespan 126 util 100%
+2 server(s) fifo  avg wait 4.32 worst 16 peak 10 makespan 67 util 94%
+2 server(s) sjf   avg wait 2.90 worst 18 peak 10 makespan 67 util 94%
+2 server(s) lifo  avg wait 3.50 worst 24 peak 10 makespan 67 util 94%
+3 server(s) fifo  avg wait 1.45 worst 8 peak 8 makespan 58 util 72%
+3 server(s) sjf   avg wait 0.90 worst 9 peak 7 makespan 58 util 72%
+3 server(s) lifo  avg wait 1.25 worst 12 peak 8 makespan 58 util 72%
+error: need at least one server

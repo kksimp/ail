@@ -1,0 +1,151 @@
+## A greedy school timetable. Lesson hours are placed into the first slot of a
+## 2 day by 3 period week where no `Rule` objects a clash (same teacher, same room,
+## same class). Hours that fit nowhere fail with a typed error. Pinned placements
+## report which rule clashed. Prints each class's week and the unplaced hours.
+
+DAYS := 2
+PERIODS := 3
+
+error enum TimetableError
+    Clash(slot int, rule str) "slot {slot} clashes on {rule}"
+    NoFreeSlot(class str, subject str) "no free slot for {class} {subject}"
+    BadSlot(slot int) "slot {slot} does not exist"
+
+struct Entry
+    class str
+    subject str
+    teacher str
+    room str
+
+trait Rule
+    fn name(self) str
+    fn clashes(self, a Entry, b Entry) bool
+
+struct SameTeacher
+    tag str
+
+struct SameRoom
+    tag str
+
+struct SameClass
+    tag str
+
+impl Rule for SameTeacher
+    fn name(self) str
+        self.tag
+    fn clashes(self, a Entry, b Entry) bool
+        a.teacher == b.teacher
+
+impl Rule for SameRoom
+    fn name(self) str
+        self.tag
+    fn clashes(self, a Entry, b Entry) bool
+        a.room == b.room
+
+impl Rule for SameClass
+    fn name(self) str
+        self.tag
+    fn clashes(self, a Entry, b Entry) bool
+        a.class == b.class
+
+struct Timetable
+    slots List[List[Entry]]
+    rules List[any Rule]
+
+fn Timetable.new() Timetable
+    mut s := List[List[Entry]]()
+    for i in 0..DAYS * PERIODS
+        s.push([])
+    mut r := List[any Rule]()
+    r.push(SameTeacher(tag: "teacher"))
+    r.push(SameRoom(tag: "room"))
+    r.push(SameClass(tag: "class"))
+    Timetable(slots: s, rules: r)
+
+fn Timetable.conflict(self, e Entry, slot int) str
+    for other in self.slots[slot]
+        for rule in self.rules
+            if rule.clashes(other, e)
+                return rule.name()
+    ""
+
+fn Timetable.place(mut self, e Entry, slot int) ! TimetableError
+    if slot < 0 or slot >= DAYS * PERIODS
+        return BadSlot(slot: slot)
+    why := self.conflict(e, slot)
+    if why != ""
+        return Clash(slot: slot, rule: why)
+    mut cur := self.slots[slot]
+    cur.push(e)
+    self.slots[slot] = cur
+
+fn Timetable.auto(mut self, e Entry) int ! TimetableError
+    for s in 0..DAYS * PERIODS
+        if self.conflict(e, s) == ""
+            mut cur := self.slots[s]
+            cur.push(e)
+            self.slots[s] = cur
+            return s
+    return NoFreeSlot(class: e.class, subject: e.subject)
+
+fn Timetable.week(self, cls str) str
+    mut cells := List[str]()
+    for s in 0..DAYS * PERIODS
+        mut cell := "---"
+        for e in self.slots[s]
+            if e.class == cls
+                cell = if e.subject.len() > 3 then e.subject.slice(0, 3) else e.subject
+        cells.push(cell)
+    mut days := List[str]()
+    for d in 0..DAYS
+        lo := d * PERIODS
+        hi := lo + PERIODS
+        days.push(cells[lo..hi].join(" "))
+    joined := days.join(" | ")
+    "{cls}: {joined}"
+
+fn main()
+    mut t := Timetable.new()
+    plan := [
+        [Entry(class: "9A", subject: "math", teacher: "Kim", room: "R1"), Entry(class: "9B", subject: "math", teacher: "Kim", room: "R1")],
+        [Entry(class: "9A", subject: "art", teacher: "Lee", room: "R2"), Entry(class: "9B", subject: "art", teacher: "Lee", room: "R2")],
+        [Entry(class: "9A", subject: "pe", teacher: "Ray", room: "gym"), Entry(class: "9B", subject: "pe", teacher: "Ray", room: "gym")],
+    ]
+    hours := [3, 2, 2]
+    mut unplaced := 0
+    mut placed := List[int]()
+    for i in 0..plan.len()
+        for e in plan[i]
+            for h in 0..hours[i]
+                slot := t.auto(e) else err
+                    print("{err}")
+                    unplaced += 1
+                    continue
+                placed.push(slot)
+    print(t.week("9A"))
+    print(t.week("9B"))
+    print("placed {placed.len()}, unplaced {unplaced}")
+    pin := Entry(class: "9C", subject: "music", teacher: "Kim", room: "R3")
+    t.place(pin, 0) else err
+        print("pin failed: {err}")
+    t.place(pin, 9) else err
+        print("pin failed: {err}")
+
+@test fn teacher_clash_is_named()
+    mut t := Timetable.new()
+    t.place(Entry(class: "A", subject: "x", teacher: "T", room: "R1"), 0)?
+    assert_eq(t.conflict(Entry(class: "B", subject: "y", teacher: "T", room: "R2"), 0), "teacher")
+    assert_eq(t.conflict(Entry(class: "B", subject: "y", teacher: "U", room: "R1"), 0), "room")
+    assert_eq(t.conflict(Entry(class: "B", subject: "y", teacher: "U", room: "R2"), 1), "")
+
+@test fn bad_pins_fail()
+    mut t := Timetable.new()
+    assert_err(t.place(Entry(class: "A", subject: "x", teacher: "T", room: "R"), 6))
+    t.place(Entry(class: "A", subject: "x", teacher: "T", room: "R"), 2)?
+    assert_err(t.place(Entry(class: "A", subject: "y", teacher: "U", room: "S"), 2))
+
+@test fn auto_skips_busy_slots()
+    mut t := Timetable.new()
+    e := Entry(class: "A", subject: "x", teacher: "T", room: "R")
+    assert_eq(t.auto(e)?, 0)
+    assert_eq(t.auto(e)?, 1)

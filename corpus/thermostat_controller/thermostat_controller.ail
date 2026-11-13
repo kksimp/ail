@@ -1,0 +1,138 @@
+## A thermostat controller with hysteresis. Temperatures are tenths of a degree.
+## A `Schedule` trait gives the target for each hour; the controller switches
+## between Idle, Heating and Cooling around that target and holds its state when
+## the sensor glitches (a typed error for out-of-range readings). Simulates a day
+## under two schedules and prints each mode change and the run hours.
+
+error enum SensorError
+    OutOfRange(value int) "sensor reading {value} out of range"
+
+enum Mode
+    Idle
+    Heating
+    Cooling
+
+trait Schedule
+    fn name(self) str
+    fn target(self, hour int) int
+
+struct Weekday
+    night int
+    day int
+
+struct Weekend
+    flat int
+
+impl Schedule for Weekday
+    fn name(self) str
+        "weekday"
+    fn target(self, hour int) int
+        if hour >= 6 and hour < 22
+            self.day
+        else
+            self.night
+
+impl Schedule for Weekend
+    fn name(self) str
+        "weekend"
+    fn target(self, hour int) int
+        self.flat
+
+struct Controller
+    mode Mode
+    band int
+    switches int
+    heat_hours int
+    cool_hours int
+
+fn mode_name(m Mode) str
+    match m
+        Idle => "idle"
+        Heating => "heating"
+        Cooling => "cooling"
+
+fn tenths(n int) str
+    "{n / 10}.{n % 10}"
+
+fn read_sensor(hour int, actual int) int ! SensorError
+    raw := if hour == 9 then actual + 700 else actual
+    if raw < 0 or raw > 450
+        return OutOfRange(value: raw)
+    raw
+
+fn Controller.update(mut self, temp int, goal int) bool
+    mut nm := self.mode
+    if temp <= goal - self.band
+        nm = Mode.Heating
+    elif temp >= goal + self.band
+        nm = Mode.Cooling
+    elif self.mode == Mode.Heating and temp >= goal
+        nm = Mode.Idle
+    elif self.mode == Mode.Cooling and temp <= goal
+        nm = Mode.Idle
+    changed := nm != self.mode
+    if changed
+        self.switches += 1
+        self.mode = nm
+    if self.mode == Mode.Heating
+        self.heat_hours += 1
+    elif self.mode == Mode.Cooling
+        self.cool_hours += 1
+    changed
+
+fn drift(outside int, temp int) int
+    d := outside - temp
+    if d >= 0
+        d / 10
+    else
+        0 - (0 - d) / 10
+
+fn outdoor(h int) int
+    if h < 12
+        100 + 10 * h
+    else
+        100 + 10 * (24 - h)
+
+fn simulate(sched any Schedule) Controller
+    print("schedule {sched.name()}")
+    mut ctl := Controller(mode: Mode.Idle, band: 5, switches: 0, heat_hours: 0, cool_hours: 0)
+    mut temp := 170
+    for h in 0..24
+        goal := sched.target(h)
+        seen := read_sensor(h, temp) else err
+            print("  h={h:0>2} {err}; holding {mode_name(ctl.mode)}")
+            temp += drift(outdoor(h), temp)
+            continue
+        if ctl.update(seen, goal)
+            print("  h={h:0>2} temp {tenths(seen)} goal {tenths(goal)} -> {mode_name(ctl.mode)}")
+        outside := outdoor(h)
+        temp += drift(outside, temp)
+        if ctl.mode == Mode.Heating
+            temp += 25
+        elif ctl.mode == Mode.Cooling
+            temp -= 25
+    print("  switches {ctl.switches}, heat {ctl.heat_hours}h, cool {ctl.cool_hours}h, final {tenths(temp)}")
+    ctl
+
+fn main()
+    a := simulate(Weekday(night: 180, day: 210))
+    b := simulate(Weekend(flat: 195))
+    print("total switches {a.switches + b.switches}")
+
+@test fn cold_room_starts_heating()
+    mut c := Controller(mode: Mode.Idle, band: 5, switches: 0, heat_hours: 0, cool_hours: 0)
+    assert(c.update(190, 210))
+    assert_eq(c.mode, Mode.Heating)
+    assert(not c.update(207, 210))
+    assert(c.update(210, 210))
+    assert_eq(c.mode, Mode.Idle)
+
+@test fn glitchy_sensor_is_rejected()
+    assert_err(read_sensor(9, 200))
+    assert_err(read_sensor(1, -5))
+    assert_eq(read_sensor(1, 200)?, 200)
+
+@test fn drift_rounds_toward_zero()
+    assert_eq(drift(100, 170), -7)
+    assert_eq(drift(220, 170), 5)
+    assert_eq(tenths(185), "18.5")
