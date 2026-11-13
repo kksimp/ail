@@ -142,7 +142,7 @@ the function sees its inferred set as before. *(ADR 1089)*
 use std.fs
 
 fn save(path str, text str) ! fs.IoError
-    fs.write_text(path, text)
+    fs.write_text(path, text)?
 
 @caps(none) fn render(path str) str ! fs.IoError
     save(path, "x")?              # error: `render` is limited to no capability
@@ -169,7 +169,7 @@ fn main()
 use std.fs
 
 @caps(fs) fn save(path str, text str) ! fs.IoError
-    fs.write_text(path, text)
+    fs.write_text(path, text)?
 
 @caps(none) fn double(x int) int
     x * 2
