@@ -1,0 +1,6 @@
+struct Channel
+    id int
+
+fn main()
+    t := Channel(id: 1)
+    print(t.id)

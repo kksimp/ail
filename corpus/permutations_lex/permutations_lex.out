@@ -1,0 +1,9 @@
+perms of 123: 123 132 213 231 312 321
+arrangements of aab: aab aba baa
+banana: 60 distinct, first aaabnn, last nnbaaa
+unrank(6, 0) = 012345 rank 0
+unrank(6, 1) = 012354 rank 1
+unrank(6, 23) = 015432 rank 23
+unrank(6, 100) = 051423 rank 100
+unrank(6, 719) = 543210 rank 719
+rank of 20413: 52

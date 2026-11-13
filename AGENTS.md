@@ -164,10 +164,13 @@ tools/
   app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
+  check-grammar.py        checks docs/spec/grammar.ebnf accepts every .ail file that compiles (ADR 1108)
   check-doc-snippets.py   runs `ail check` on every `ail` and `ail fragment` block in the docs, outside `docs/spec/`
   card-spec-audit.py      audits the std functions against the spec (ADR 0698)
   card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
   collection-vocab-audit.py  fails when a collection method name is on one collection and not a sibling, with no line in collection-vocab-exceptions.txt (ADR 1099)
+  check-card-coverage.py  fails when a built-in method or language rule family is on no card line, how-to or method-table row, with no reason in card-coverage-exceptions.txt (ADR 1110)
+  gen-llms-full.py        writes llms-full.txt (full card + how-tos); `--check` in the docs gate (ADR 1110)
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens

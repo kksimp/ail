@@ -1,1 +1,1 @@
-tests/native/fn_sorted_subset.ail:3:14: error[native.subset.1]: not in the native subset yet: `.sorted()` on `List[char]`
+tests/native/fn_sorted_subset.ail:3:25: error[native.subset.1]: not in the native subset yet: a key of type `char`

@@ -1,0 +1,3 @@
+fn main()
+    using := 1
+    print(using)

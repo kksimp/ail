@@ -1,0 +1,30 @@
+month 1
+  ok 1 1 subscribe ann basic plain (prorated 870)
+  ok 1 10 subscribe bob pro student (prorated 1933)
+  rejected '1 12 subscribe cy gold plain': no plan gold
+  rejected '1 15 subscribe ann pro plain': ann is already subscribed
+  invoice ann: 900
+  invoice bob: 2175
+month 2
+  ok 2 3 upgrade ann pro (prorated 1800)
+  rejected '2 5 upgrade bob basic': basic is not an upgrade for bob
+  rejected '2 9 upgrade dan team': no customer dan
+  ok 2 20 subscribe dee team loyal (prorated 3300)
+  invoice ann: 2900
+  invoice bob: 2175
+  invoice dee: 9900
+month 3
+  ok 3 7 cancel bob (prorated 0)
+  rejected '3 8 cancel bob': no customer bob
+  rejected '3 9 upgrade dee basic': basic is not an upgrade for dee
+  invoice ann: 2900
+  invoice dee: 9900
+month 4
+  ok 4 2 subscribe bob basic plain (prorated 840)
+  rejected '4 4 bogus': cannot read '4 4 bogus'
+  ok 4 5 subscribe cy basic plain (prorated 750)
+  invoice ann: 2900
+  invoice bob: 900
+  invoice cy: 900
+  invoice dee: 8910
+revenue 53953

@@ -1,0 +1,84 @@
+## Duplicate line remover: streams a text file one line at a time and writes a
+## new file that keeps only the first occurrence of each line. A second mode
+## folds case and ignores surrounding spaces. Blank lines always pass through.
+## Prints how many lines were read, kept and dropped for each mode.
+use std.file
+
+struct Summary
+    lines int
+    kept int
+    dropped int
+
+fn key_of(line str, fold bool) str
+    t := line.trim()
+    if fold
+        return t.to_lower()
+    t
+
+fn dedupe_file(src str, dst str, fold bool) !Summary
+    mut r := file.open(src)?
+    mut w := file.create(dst)?
+    mut seen := Set[str]()
+    mut s := Summary(lines: 0, kept: 0, dropped: 0)
+    while true
+        line := r.read_line()? else break
+        s.lines += 1
+        if line.trim().is_empty() or seen.add(key_of(line, fold))
+            w.write_line(line)?
+            s.kept += 1
+        else
+            s.dropped += 1
+    r.close()
+    w.close()?
+    s
+
+fn repeats(lines List[str], fold bool) int
+    mut best := 0
+    for a in lines
+        if a.trim().is_empty()
+            continue
+        mut n := 0
+        for b in lines
+            if key_of(a, fold) == key_of(b, fold)
+                n += 1
+        best = best.max(n)
+    best
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_duplicate_line_remover")?
+    src := path.join(dir, "in.txt")
+    text := "apple\nBanana\napple\n\ncherry\n  banana \n\nApple\ndate\ncherry\n"
+    fs.write_text(src, text)?
+    labels := ["exact", "folded"]
+    folds := [false, true]
+    for i in 0..labels.len()
+        dst := path.join(dir, "out_{labels[i]}.txt")
+        s := dedupe_file(src, dst, folds[i])?
+        print("{labels[i]}: read {s.lines}, kept {s.kept}, dropped {s.dropped}")
+        print("  {fs.read_text(dst)?.lines().join("|")}")
+        print("  most repeated line appears {repeats(text.lines(), folds[i])} times")
+        fs.remove(dst)?
+    fs.remove(src)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn key_folding()
+    assert_eq(key_of("  Ab ", true), "ab")
+    assert_eq(key_of("  Ab ", false), "Ab")
+
+@test fn counts_repeats()
+    assert_eq(repeats(["a", "b", "a", "", ""], false), 2)
+    assert_eq(repeats(["a", "A"], false), 1)
+    assert_eq(repeats(["a", "A"], true), 2)
+
+@test fn removes_duplicates_in_a_file()
+    dir := fs.make_temp_dir("corpus_duplicate_line_remover_t")?
+    src := path.join(dir, "a.txt")
+    dst := path.join(dir, "b.txt")
+    fs.write_text(src, "x\ny\nx\nz\ny\n")?
+    s := dedupe_file(src, dst, false)?
+    assert_eq(s, Summary(lines: 5, kept: 3, dropped: 2))
+    assert_eq(fs.read_text(dst)?, "x\ny\nz\n")
+    fs.remove(src)?
+    fs.remove(dst)?
+    fs.remove(dir)?

@@ -1,6 +1,6 @@
 # 0276. Raise the language card budget to 8,000 tokens
 
-- **Status:** Accepted (amends [ADR 0174](0174-language-card.md)); amended in part by [ADR 0817](0817-token-budgets-for-agent-pages.md) (the budget is checked on the five-tokenizer mean)
+- **Status:** Accepted (amends [ADR 0174](0174-language-card.md)); amended in part by [ADR 1110](1110-language-card-budget-16000.md) (16,000) and [ADR 0817](0817-token-budgets-for-agent-pages.md) (the budget is checked on the five-tokenizer mean)
 - **Date:** 2026-10-20
 - **Decided by:** the designer
 - **Topic:** AI-first tooling

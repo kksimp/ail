@@ -12,6 +12,14 @@ use fix
 ## COND` and `ensures COND` (contract.decl.1). A trait method may have
 ## contract lines and no body (contract.inh.1).
 fn Parser.fn_body(mut self, after str, bodyless_ok bool) FnBody?
+    # A loop label is visible only inside its own function (expr.loop.10).
+    saved := loops
+    loops = []
+    out := fn_body_inner(after, bodyless_ok)
+    loops = saved
+    out
+
+fn Parser.fn_body_inner(mut self, after str, bodyless_ok bool) FnBody?
     if tag_at(1) != "indent"
         body := block(after, "gram.fn.1")?
         return FnBody(body: body, contracts: [])
@@ -767,19 +775,6 @@ fn Parser.stray_after_statement(mut self, start int) bool
     k0 := i
     pos := tok_pos(k0)
     cur := sym_at(0)
-    # `outer: for ...`
-    if tok_tag(tokens[start].tok) == "id"
-        and cur == ":"
-        and k0 == start + 1
-        and (tokens[k0 + 1].tok == Tok.Kw("for") or tokens[k0 + 1].tok == Tok.Kw("while"))
-        error_text(
-            "gram.foreign.1",
-            tok_pos(start),
-            "AIL has no loop labels",
-            "`break` leaves the innermost loop; to leave nested loops move them into a function and `return`, or keep a `mut done := false` flag and test it in each loop",
-            "",
-        )
-        return true
     # `println!(..)`, `vec![..]`, `format!(..)`
     if cur == "!"
         and k0 >= 1

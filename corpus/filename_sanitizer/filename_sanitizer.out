@@ -1,0 +1,10 @@
+My Report (final).DOCX         -> My_Report_final.docx
+  holiday photo #3.jpg         -> holiday_photo_3.jpg
+a/b\c:d*e?.txt                 -> a_b_c_d_e.txt
+CON.txt                        -> _CON.txt
+..hidden..                     -> hidden
+notes.TXT                      -> notes.txt
+Notes.txt                      -> Notes-2.txt
+this is a very long file name that keeps going and going.markdown -> this_is_a_very_lon.markd
+???.md                         -> unnamed.md
+archive.tar.gz                 -> archive.tar.gz

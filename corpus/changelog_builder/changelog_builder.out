@@ -1,0 +1,28 @@
+## 2.0.0
+
+### BREAKING CHANGES
+- drop the old module syntax
+
+### Features
+- **parser:** accept trailing commas
+- drop the old module syntax
+
+### Bug Fixes
+- **fmt:** keep blank line after imports
+- crash on empty file
+
+### Performance
+- **check:** cache lookups
+
+### Documentation
+- **spec:** clarify shadowing
+
+(7 commits, 2 skipped)
+---
+## 2.0.10
+
+### Bug Fixes
+- one
+- **io:** two
+
+(2 commits, 0 skipped)

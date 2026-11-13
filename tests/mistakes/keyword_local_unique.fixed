@@ -1,0 +1,3 @@
+fn main()
+    distinct := 1
+    print(distinct)

@@ -1,0 +1,110 @@
+## Lexicographic permutations without recursion. `next_perm` steps a list to
+## its next permutation in place (it also handles repeated elements, so each
+## distinct arrangement appears once); `rank_of` and `unrank` convert between
+## a permutation and its index using the factorial number system.
+
+fn factorial(n int) int
+    mut f := 1
+    for k in 2..=n
+        f *= k
+    f
+
+fn next_perm(mut xs List[int]) bool
+    mut i := xs.len() - 2
+    while i >= 0 and xs[i] >= xs[i + 1]
+        i -= 1
+    if i < 0
+        xs.reverse()
+        return false
+    mut j := xs.len() - 1
+    while xs[j] <= xs[i]
+        j -= 1
+    xs.swap(i, j)
+    tail := xs[i + 1..].reversed()
+    for k in 0..tail.len()
+        xs[i + 1 + k] = tail[k]
+    true
+
+fn rank_of(xs List[int]) int
+    n := xs.len()
+    mut rank := 0
+    for i in 0..n
+        mut smaller := 0
+        start := i + 1
+        for j in start..n
+            if xs[j] < xs[i]
+                smaller += 1
+        rank += smaller * factorial(n - 1 - i)
+    rank
+
+fn unrank(n int, index int) List[int]
+    mut pool := List[int]()
+    for v in 0..n
+        pool.push(v)
+    mut left := index
+    mut out := List[int]()
+    for i in 0..n
+        f := factorial(n - 1 - i)
+        pick := left / f
+        left = left % f
+        out.push(pool[pick])
+        pool.remove_at(pick)
+    out
+
+fn spell(xs List[int], letters List[str]) str
+    [letters[x] for x in xs].join("")
+
+fn all_arrangements(word str) List[str]
+    letters := word.chars().sorted()
+    mut names := List[str]()
+    mut codes := List[int]()
+    for c in letters
+        label := "{c}"
+        known := names.index_of(label) else -1
+        if known == -1
+            names.push(label)
+            codes.push(names.len() - 1)
+        else
+            codes.push(known)
+    mut out := [spell(codes, names)]
+    while next_perm(mut codes)
+        out.push(spell(codes, names))
+    out
+
+fn main()
+    base := [1, 2, 3]
+    mut cur := base
+    mut line := [cur.join("")]
+    while next_perm(mut cur)
+        line.push(cur.join(""))
+    print("perms of 123: {line.join(" ")}")
+    small := all_arrangements("aab")
+    print("arrangements of aab: {small.join(" ")}")
+    words := all_arrangements("banana")
+    print("banana: {words.len()} distinct, first {words[0]}, last {words[words.len() - 1]}")
+    for k in [0, 1, 23, 100, 719]
+        p := unrank(6, k)
+        print("unrank(6, {k}) = {p.join("")} rank {rank_of(p)}")
+    print("rank of 20413: {rank_of([2, 0, 4, 1, 3])}")
+
+@test fn steps_through_all_orderings()
+    mut xs := [1, 2, 3]
+    mut count := 1
+    while next_perm(mut xs)
+        count += 1
+    assert_eq(count, 6)
+    assert_eq(xs, [1, 2, 3])
+
+@test fn duplicates_are_not_repeated()
+    assert_eq(all_arrangements("aab"), ["aab", "aba", "baa"])
+    assert_eq(all_arrangements("aabb").len(), 6)
+
+@test fn rank_and_unrank_round_trip()
+    for k in 0..24
+        assert_eq(rank_of(unrank(4, k)), k)
+
+@test fn last_permutation_wraps()
+    mut xs := [3, 2, 1]
+    wrapped := next_perm(mut xs)
+    assert(not wrapped)
+    assert_eq(xs, [1, 2, 3])
