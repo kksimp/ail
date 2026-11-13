@@ -791,7 +791,7 @@ starts on a line. The stubs that report a trap are left as they fall. No
 result changes: processors that decode a jump on a line's edge slowly (Intel,
 2015 to 2019) no longer run a loop slower or faster by where an edit
 elsewhere happened to put it. ARM64 code is not changed.
-`AIL_OPT_OFF=jumpline` turns it off. *(ADR 0940)*
+`AIL_OPT_OFF=jumpline` turns it off. *(ADR 1096)*
 
 ```ail rules=native.jump.1
 fn count(xs List[int], want int) int

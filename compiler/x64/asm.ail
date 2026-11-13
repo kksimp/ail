@@ -67,7 +67,7 @@ pub struct Asm
     pub fixups List[Fixup]
     ## When `JUMP_LINE`, no jump, call or return, and no comparison joined to
     ## its conditional jump, crosses or ends on a line of that many bytes
-    ## (native.jump.1); 0 leaves them as they fall.
+    ## (native.jump.1, ADR 1096); 0 leaves them as they fall.
     pub window int
     ## Where the last flag-setting instruction starts and ends: a processor
     ## runs it and a conditional jump right after it as one operation.

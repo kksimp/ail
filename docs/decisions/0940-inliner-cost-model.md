@@ -130,7 +130,7 @@ machine (Intel, 2017) decodes slowly. Moving the code 0 to 56 bytes by hand
 moved lzr between 3255 and 3584 ms and vm between 430 and 486 ms. Every
 earlier x86-64 table in this ADR carries that much chance.
 
-With jumps kept inside 32-byte lines (native.jump.1, its own ADR) the times
+With jumps kept inside 32-byte lines (native.jump.1, [ADR 1096](1096-x64-jumps-inside-32-byte-lines.md)) the times
 stopped moving with placement, and the limits were measured again (best of
 5, interleaved; `off` is `AIL_OPT_OFF=wide`):
 
