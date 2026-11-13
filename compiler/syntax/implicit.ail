@@ -151,12 +151,12 @@ fn type_members(prog ast.Program, ty str, mut cache Map[str, Members]) Members
 
 ## trait.method.7: a local or parameter can't take a field's name. (A method's
 ## name is fine: a method is only reached by a call.)
-fn SelfCx.declare(mut self, name str, at ast.Pos)
+fn SelfCx.declare(mut self, name str, decl_at ast.Pos)
     if not self.fields.contains(name)
         return
     self.diags.push(Diag(
         rule: "trait.method.7",
-        pos: at,
+        pos: decl_at,
         msg: "`{name}` is a field of `{self.owner}`, so a method's local can't have that name",
         fixed: false,
         help: "rename the local; inside the method, `{name}` already means `self.{name}`",
@@ -276,7 +276,7 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
         Call(callee, args, pos) =>
             new_args := self.args(args)
             match callee
-                Name(n, name_pos) =>
+                Name(n, npos) =>
                     if not self.methods.contains(n)
                         return ast.Expr.Call(callee, new_args, pos)
                     if self.free.contains(n)
@@ -290,8 +290,8 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                             edits: [],
                         ))
                         return ast.Expr.Call(callee, new_args, pos)
-                    self.sites.push(name_pos)
-                    ast.Expr.Method(ast.Expr.Name("self", name_pos), n, name_pos, new_args)
+                    self.sites.push(npos)
+                    ast.Expr.Method(ast.Expr.Name("self", npos), n, npos, new_args)
                 _ => ast.Expr.Call(callee: self.expr(callee), args: new_args, pos: pos)
         Interp(parts, pos) =>
             mut out := List[ast.InterpPart]()
@@ -322,7 +322,7 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                 k := self.expr(en.key)
                 out.push(ast.MapEntry(key: k, value: self.expr(en.value)))
             ast.Expr.MapLit(out, pos)
-        Method(recv, name, name_pos, args) =>
+        Method(recv, name, npos, args) =>
             r := self.expr(recv)
             mut out := List[ast.Arg]()
             for a in args
@@ -330,8 +330,8 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                 mut na := a
                 na.value = self.expr(a.value)
                 out.push(na)
-            ast.Expr.Method(r, name, name_pos, out)
-        Member(recv, name, name_pos) => ast.Expr.Member(self.expr(recv), name, name_pos)
+            ast.Expr.Method(r, name, npos, out)
+        Member(recv, name, npos) => ast.Expr.Member(self.expr(recv), name, npos)
         Index(recv, index, pos) =>
             r := self.expr(recv)
             ast.Expr.Index(recv: r, index: self.expr(index), pos: pos)
