@@ -1,0 +1,52 @@
+## conc.race.1, conc.task.3, std.fs.1: tasks on different workers read
+## different files at the same time, and each sees its own file and its own
+## outcome. The runtime once kept one scratch area for paths, and one status
+## word, for every thread: a task could open another task's file, or take
+## another task's failure (or success) for its own.
+
+fn text_for(i int) str
+    "file {i};".repeat(i + 1)
+
+fn check_file(p str, want str, missing str, rounds int, out Channel[int])
+    mut bad := 0
+    for _ in 0..rounds
+        got := fs.read_text(p) else "failed"
+        if got != want
+            bad += 1
+        gone := fs.read_text(missing) else "gone"
+        if gone != "gone"
+            bad += 1
+        if fs.exists(missing) or not fs.exists(p)
+            bad += 1
+    out.send(bad)
+
+fn run_round(dir str, n int, rounds int) int
+    out := Channel[int](n + 1)
+    g := TaskGroup()
+    for i in 0..n
+        p := path.join(dir, "f{i}.txt")
+        missing := path.join(dir, "none{i}.txt")
+        g.add(spawn check_file(p, text_for(i), missing, rounds, out))
+    g.wait_all() else
+        print("a task trapped")
+    out.close()
+    mut total := 0
+    mut got := 0
+    for b in out
+        total += b
+        got += 1
+    if got != n
+        return -1
+    total
+
+fn main() !
+    n := 16
+    dir := fs.make_temp_dir("ail-conc-fs-")?
+    for i in 0..n
+        fs.write_text(path.join(dir, "f{i}.txt"), text_for(i))?
+    for r in 0..5
+        print("round {r}: {run_round(dir, n, 200)} mismatches")
+    for i in 0..n
+        fs.remove(path.join(dir, "f{i}.txt"))?
+    fs.remove(dir)?
+    print(fs.exists(dir))
