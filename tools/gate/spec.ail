@@ -257,14 +257,14 @@ fn main() !
             io.exit(1)
     spec_ids := spec_rules()
     mut part := 0
-    mut parts := 1
+    mut shards := 1
     for a in env.args()
         kn := a.split("/")
         if kn.len() == 2
             part = kn[0].to_int() else 0
-            parts = kn[1].to_int() else 1
-    if parts < 1 or part < 0 or part >= parts
-        print("SPEC RED: bad shard `{part}/{parts}`")
+            shards = kn[1].to_int() else 1
+    if shards < 1 or part < 0 or part >= shards
+        print("SPEC RED: bad shard `{part}/{shards}`")
         io.exit(2)
     mut seen := 0
     mut owned_n := 0
@@ -279,7 +279,7 @@ fn main() !
             show_fail(fails[shown])
             shown += 1
         seen += 1
-        if parts <= 1 or (seen - 1) % parts == part
+        if shards <= 1 or (seen - 1) % shards == part
             owned_n += 1
         if b.kind == "skip"
             skipped += 1
@@ -287,7 +287,7 @@ fn main() !
                 covered.add(r)
             continue
         # Another shard's fence: counted as covering its rules (that shard reports it if it fails), and not run here.
-        if parts > 1 and (seen - 1) % parts != part
+        if shards > 1 and (seen - 1) % shards != part
             for r in b.rules
                 covered.add(r)
             continue
@@ -388,8 +388,8 @@ fn main() !
     while shown < fails.len()
         show_fail(fails[shown])
         shown += 1
-    if parts > 1
-        print("SHARD spec {part}/{parts} total {seen} ran {owned_n}")
+    if shards > 1
+        print("SHARD spec {part}/{shards} total {seen} ran {owned_n}")
     if fails.is_empty()
         print("SPEC GREEN ({run} checked, {skipped} skipped)")
     else

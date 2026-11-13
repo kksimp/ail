@@ -3943,7 +3943,9 @@ fn main() !
             halves := asked.split("@")
             s = halves[0]
             kn := halves[1].split("/")
-            n := if kn.len() == 2 then kn[1].to_int() else 0
+            mut n := 0
+            if kn.len() == 2
+                n = kn[1].to_int() else 0
             k := kn[0].to_int() else -1
             if n < 1 or k < 0 or k >= n
                 io.eprint("bad shard `{asked}`: write NAME@K/N with 0 <= K < N")
