@@ -1,0 +1,62 @@
+## An MCP server written in AIL (std.mcp.1-8): one JSON message per line on
+## standard input and output, so the test needs no network and no outside program.
+
+fn jm(key str, value Json) JsonMember
+    JsonMember(key: key, value: value)
+
+fn reply(id Json, result Json)
+    print(Json.Obj([jm("jsonrpc", Json.Str("2.0")), jm("id", id), jm("result", result)]).to_text())
+
+fn rpc_error(id Json, code int, message str)
+    e := Json.Obj([jm("code", Json.Num(code.to_float())), jm("message", Json.Str(message))])
+    print(Json.Obj([jm("jsonrpc", Json.Str("2.0")), jm("id", id), jm("error", e)]).to_text())
+
+fn tool(name str, about str) Json
+    schema := Json.Obj([jm("type", Json.Str("object"))])
+    Json.Obj([jm("name", Json.Str(name)), jm("description", Json.Str(about)), jm("inputSchema", schema)])
+
+fn block(text str) Json
+    Json.Arr([Json.Obj([jm("type", Json.Str("text")), jm("text", Json.Str(text))])])
+
+fn serve(id Json, method str, params Json)
+    if method == "initialize"
+        print("noise that is not JSON")
+        info := Json.Obj([jm("name", Json.Str("fake")), jm("version", Json.Str("1"))])
+        reply(id, Json.Obj([
+            jm("protocolVersion", Json.Str(params.text("protocolVersion", ""))),
+            jm("capabilities", Json.Obj([])),
+            jm("serverInfo", info),
+        ]))
+        return
+    if method == "tools/list"
+        if params.text("cursor", "") == ""
+            reply(id, Json.Obj([
+                jm("tools", Json.Arr([tool("echo", "Repeats text.")])),
+                jm("nextCursor", Json.Str("p2")),
+            ]))
+        else
+            reply(id, Json.Obj([jm("tools", Json.Arr([tool("boom", "Always fails.")]))]))
+        return
+    if method == "tools/call"
+        args := params.get("arguments") else Json.Null
+        name := params.text("name", "")
+        if name == "echo"
+            print("\{\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\"}")
+            said := args.text("text", "")
+            reply(id, Json.Obj([jm("content", block("echo: {said}"))]))
+        else if name == "sum"
+            total := (args.num("a") else 0.0) + (args.num("b") else 0.0)
+            reply(id, Json.Obj([jm("structuredContent", Json.Obj([jm("sum", Json.Num(total))]))]))
+        else if name == "boom"
+            reply(id, Json.Obj([jm("isError", Json.Bool(true)), jm("content", block("it broke"))]))
+        else
+            rpc_error(id, -32602, "unknown tool {name}")
+        return
+    rpc_error(id, -32601, "method not found")
+
+fn main()
+    while true
+        line := io.read_line() else break
+        msg := parse_json(line) else continue
+        id := msg.get("id") else continue
+        serve(id, msg.text("method", ""), msg.get("params") else Json.Null)

@@ -861,3 +861,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1086](1086-heap-and-deque.md) | `Heap[T]` and `Deque[T]` in the prelude *(delegated)* | Accepted | 2026-11-12 |
 | [1088](1088-while-binding.md) | `while name := e` loops while a value is present *(delegated)* | Accepted | 2026-11-12 |
 | [1089](1089-caps-attribute-on-functions.md) | `@caps(LIST)` limits a function to the listed capabilities *(delegated)* | Accepted | 2026-11-12 |
+| [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |

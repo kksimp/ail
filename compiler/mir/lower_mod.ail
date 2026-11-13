@@ -41,6 +41,7 @@ pub STD_AIL := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.log",
+    "std.mcp",
     "std.media.webm",
     "std.net.http",
     "std.screen",

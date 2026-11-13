@@ -49,6 +49,7 @@ STD_MODULES := [
     ("std.gfx.host", "gfx/host.ail"),
     ("std.gfx.watch", "gfx/watch.ail"),
     ("std.log", "log/log.ail"),
+    ("std.mcp", "mcp/mcp.ail"),
     ("std.media.webm", "media/webm.ail"),
     ("std.net.http", "net/http.ail"),
     ("std.screen", "screen/screen.ail"),
