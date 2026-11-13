@@ -12,7 +12,10 @@ pub struct BindDecl
 
 ## Remember the binding `n` written at `at`.
 fn Checker.note_binding(mut self, n str, at ast.Pos)
-    if n.starts_with("_") or at.line >= 1073741824 or is_prelude_line(at.line) or module_at(prog, at) != ""
+    if n.starts_with("_") or at.line >= 1073741824 or is_prelude_line(at.line) or module_at(
+        prog,
+        at,
+    ) != ""
         return
     key := pos_key(at)
     if bind_seen.contains(key)
