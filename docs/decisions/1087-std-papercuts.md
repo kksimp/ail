@@ -36,3 +36,14 @@ is an error, `assert_err` doesn't exist (and `ail fix` offered to rename it to `
 - A Python-style `+e03` exponent: more tokens and no gain; AIL's own float text uses a plain exponent.
 - Separate boolean fields per mark in `FormatSpec`: five fields in four files for no readability gain.
 - `assert_err` as a macro-like rewrite to `match`: the lowering already has `else` machinery that keeps the error value typed.
+
+## Follow-up (S7b)
+
+- Field-less enums get `variants()`, `from_str(s)` and `name()` without being written (`type.enum.20`);
+  the checker answers them in `compiler/check/enumref.ail`, the lowering in `compiler/mir/lower_enumref.ail`.
+  Rejected: an implicit derive spliced into every enum (token splicing per enum for three one-line functions),
+  and a trait the user must implement (agents write `Color.variants()` unprompted).
+- An unused `:=` binding is a warning with the fix `_` (`expr.bind.14`, `compiler/check/unused.ail`), for the
+  main program's own functions only, so std and package modules stay quiet. Rejected: an error (an unused
+  value is a likely bug but not wrong), and `@allow` (the `_` fix is the allowance).
+- `ToJson` on `Map` and `T?` moved to its own lane: it needs generic `impl`s for a second builtin owner.
