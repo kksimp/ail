@@ -67,6 +67,9 @@ fn Lower.declare_traits(mut self, prog ast.Program)
         mut s := ""
         if k := type_key(imp.target.name)
             s = k
+        elif k := enum_key(imp.target.name)
+            # An enum converts to `any Trait` too (trait.any.1, ADR 1109).
+            s = k
         elif k := prim_impl(imp.target.name)
             s = k
         else
@@ -81,14 +84,14 @@ fn prim_impl(name str) str?
         return name
     none
 
-## The type an entry of a trait's impl table stands for: a struct, or a primitive.
-fn impl_ty(s str) Ty
+## The type an entry of a trait's impl table stands for: a struct, an enum, or a primitive.
+fn Lower.impl_ty(self, s str) Ty
     match s
         "int" => Ty.Int
         "float" => Ty.Float
         "bool" => Ty.Bool
         "str" => Ty.Str
-        _ => Ty.Struct(s)
+        _ => if enums.contains(s) then Ty.Enum(s) else Ty.Struct(s)
 
 ## The key of a trait named here, as in `type_key`.
 fn Lower.trait_key(self, name str) str
@@ -113,6 +116,8 @@ fn Lower.any_type(self, name str) Ty?
 fn Lower.box_any(mut self, v Val, t str, pos ast.Pos) Val?
     mut s := ""
     if k := struct_name(v.ty)
+        s = k
+    elif k := enum_name(v.ty)
         s = k
     elif k := prim_impl(v.ty.name())
         s = k

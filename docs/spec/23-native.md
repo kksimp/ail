@@ -1042,21 +1042,11 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-trait Named
-    fn name(self) str
-
-enum Color
-    Red
-
-impl Named for Color
-    fn name(self) str
-        "red"
-
-fn show(n any Named) str
-    n.name()
+fn nine(a float, b float, c float, d float, e float, f float, g float, h float, i float) float
+    a + i
 
 fn main()
-    print(show(Color.Red))
+    print(nine(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))
 ```
 
 ```ail norun rules=native.build.2

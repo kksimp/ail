@@ -2932,8 +2932,6 @@ fmt plain tests/native/driver/ptr_trap_write_align.ail	48ad07c5a84b01b2	0	d73389
 fmt long tests/native/driver/ptr_trap_write_align.ail	48ad07c5a84b01b2	0	4cdfea9155c809eb
 fmt plain tests/native/enums_out.ail	7555d84432579ee0	0	4252d6d2c175c425
 fmt long tests/native/enums_out.ail	7555d84432579ee0	0	7f8626277d682b92
-fmt plain tests/native/fn_sorted_subset.ail	968c6214deba22ff	0	593780aa7735eddb
-fmt long tests/native/fn_sorted_subset.ail	968c6214deba22ff	0	38b14bfbb35cf04a
 fmt plain tests/native/heavy/gc_10gb.ail	005b4068aaf46c10	0	6dd738bb2b11b584
 fmt long tests/native/heavy/gc_10gb.ail	005b4068aaf46c10	0	2408a4feeb4ca8c9
 fmt plain tests/native/limits/grow.ail	315a6dd11eceee3a	0	e4505ce8cefc80b4
@@ -4182,10 +4180,6 @@ fmt plain tests/native/subset_help.ail	2d2351f429ae92d1	0	95795403d1d1cade
 fmt long tests/native/subset_help.ail	2d2351f429ae92d1	0	14e38f2de53f9764
 fmt plain tests/native/threads1/server_wait.ail	13977af140d5c99e	0	703bca37776db793
 fmt long tests/native/threads1/server_wait.ail	13977af140d5c99e	0	93a588e3281ef536
-fmt plain tests/native/traits_out.ail	364020ecf6dc98bc	0	720daa2172b0c5d8
-fmt long tests/native/traits_out.ail	364020ecf6dc98bc	0	77fbdcbf07635e84
-fmt plain tests/native/tuples_subset.ail	7877acaf8088aa1c	0	9e572c243c450f8f
-fmt long tests/native/tuples_subset.ail	7877acaf8088aa1c	0	a297f51c47699286
 fmt plain tests/native/unsafe/hw_volatile.ail	461c95665596ac9c	0	1e6e2897381cf389
 fmt long tests/native/unsafe/hw_volatile.ail	461c95665596ac9c	0	a5671639920a91a2
 fmt plain tests/native_test/mixed.ail	97d3707d474c8747	0	d4db54a0c5faae7a

@@ -1,0 +1,2 @@
+tests/native/subset_ext.ail:12:4: error[native.subset.1]: `nine` has more than 8 float parameters
+help: rewrite it with plain functions, structs, enums, lists, maps and loops; the other errors name what else is missing

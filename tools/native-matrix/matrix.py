@@ -389,6 +389,8 @@ EXTRA_DECLS = [
     ("Method", "trait Method\n    fn winner(self, xs List[str]) str ! VoteErr"),
     ("VoteErr", "error struct VoteErr\n    why str"),
     ("Plur", "struct Plur\n    tag str\n\nimpl Method for Plur\n    fn winner(self, xs List[str]) str ! VoteErr\n        if xs.is_empty()\n            return VoteErr(why: \"empty\")\n        xs[0]"),
+    ("Named", "trait Named\n    fn name(self) str"),
+    ("Tone", "enum Tone\n    Low\n    High(n int)\n\nimpl Named for Tone\n    fn name(self) str\n        match self\n            Low => \"low\"\n            High(n) => \"high {n}\""),
     ("bump_shard", "fn bump_shard(shards List[Mutex[Map[str, int]]], w str)\n    s := shards[0]\n    with s as mut m\n        m[w] += 1"),
 ]
 
@@ -398,6 +400,8 @@ EXTRA = {
     "dyn_fallible_else_value": "m := Plur(tag: \"p\")\nw := m.winner([]) else \"none\"\nprint(w)",
     # corpus sharded_counter_tasks: a list of mutexes, passed to a task.
     "list_of_mutex": "mut shards := List[Mutex[Map[str, int]]]()\nshards.push(Mutex(Map[str, int]()))\nbump_shard(shards, \"a\")\nprint([s.get() for s in shards].len())",
+    # An enum converted to `any Trait` (trait.any.1).
+    "enum_to_any": "xs := List[any Named]()\nmut ys := xs\nys.push(Tone.Low)\nys.push(Tone.High(n: 2))\nfor x in ys\n    print(x.name())",
     # corpus channel_broadcast_sim: a list of channels.
     "list_of_channels": "mut chans := List[Channel[int]]()\nfor _ in 0..2\n    chans.push(Channel[int](4))\nfor c in chans\n    c.send(1)\nprint(chans.len())",
     "list_of_atomics": "xs := [Atomic(0), Atomic(0)]\nxs[1].add(2)\nprint(xs[1].load())",

@@ -1,2 +1,0 @@
-tests/native/traits_out.ail:29:22: error[native.subset.1]: not in the native subset yet: converting a `Color` to `any Named`
-help: rewrite it with plain functions, structs, enums, lists, maps and loops; the other errors name what else is missing
