@@ -183,7 +183,8 @@ fn main() !                                 # main can fail; the error is report
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
   `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
-  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
+  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`);
+  a function can end with `m.get(k) else return Missing(key: k)` (`err.else.7`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
 - Which one failed: `match err` with `IoError =>` (there `err` is an
