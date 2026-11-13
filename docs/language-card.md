@@ -336,6 +336,11 @@ for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x > 9
         break
 
+outer: for r in rows       # a label: `break outer` / `continue outer` from a nested loop
+    for c in r
+        if c == 0
+            continue outer
+
 label := match c     # must cover every variant; `_` covers the rest
     Red => "red"
     Green => "green"  # an arm can also be an indented block

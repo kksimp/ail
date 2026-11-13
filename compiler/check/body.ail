@@ -291,6 +291,7 @@ fn Checker.check_fn(mut self, idx int)
     anchors = Map[int, ast.Pos]()
     pending = []
     loop_depth = 0
+    label_breaks = Set[int]()
     unsafe_depth = 0
     check_param_defaults(f, sig)
     if f.unsafe_fn
@@ -459,13 +460,17 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Assign(target, op, value, at) =>
             assign(target, op, value, at)
             Ty.Unit
-        While(cond, body, _) =>
+        While(cond, body, wpos) =>
             condition(cond)
             loop_depth += 1
             block(body, none, false)
             loop_depth -= 1
-            # expr.loop.7: `while true` with no `break` of its own never finishes.
-            if is_true(cond) and not breaks(body) then Ty.Never else Ty.Unit
+            # expr.loop.7: `while true` with no `break` of its own never finishes;
+            # a `break outer` from a nested loop is one of its own (expr.loop.10).
+            if is_true(cond) and not breaks(body) and not label_breaks.contains(pos_key(wpos))
+                Ty.Never
+            else
+                Ty.Unit
         Handle(value, otherwise) =>
             # err.else.7: a block's last `e else return ...` gives its value.
             if need
@@ -502,12 +507,14 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             t := block(body, expect, need)
             unsafe_depth -= 1
             t
-        Break(at) =>
-            if loop_depth == 0 and not leaves_literal("break", at)
+        Break(at, target) =>
+            if t := target
+                label_breaks.add(pos_key(t))
+            elif loop_depth == 0 and not leaves_literal("break", at)
                 err("expr.loop.5", at, "`break` outside a loop")
             Ty.Never
-        Continue(at) =>
-            if loop_depth == 0 and not leaves_literal("continue", at)
+        Continue(at, target) =>
+            if target == none and loop_depth == 0 and not leaves_literal("continue", at)
                 err("expr.loop.5", at, "`continue` outside a loop")
             Ty.Never
         Return(value, at) =>
@@ -740,7 +747,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
     match o
         Leave(s) =>
             match s
-                Break(p) => found = p.line < at.line or (p.line == at.line and p.col < at.col)
+                Break(p, _) => found = p.line < at.line or (p.line == at.line and p.col < at.col)
                 _ => found = false
         _ => found = false
     found

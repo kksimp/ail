@@ -28,10 +28,12 @@ pub error struct Problems "the program is outside the native subset"
     ## The file of each problem.
     pub files List[str]
 
-## Where `continue` and `break` go in the innermost loop.
+## Where `continue` and `break` go in a loop, and the loop's position, which
+## `break outer` names (expr.loop.10).
 struct Loop
     cont int
     exit int
+    at ast.Pos
 
 ## A value and its type, as an expression produces it. `id` is -1 for an
 ## expression without a value (a call of a function returning nothing).
@@ -1219,7 +1221,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 return
             bind_let(name, mutable, value, v)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
-        While(cond, body, _) => lower_while(cond, body)
+        While(cond, body, wpos) => lower_while(cond, body, wpos)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
             # A loop the compiler chose may sit inside a loop run in order; there it
@@ -1231,20 +1233,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 lower_par_for(var, iter, body, pos, auto)
                 return
             lower_for(var, iter, body, mutable, pos)
-        Break(pos) =>
-            if loops.len() == 0
-                problem(pos, "`break` outside a loop")
-                return
-            defer_loop_exit()
-            unwind_loop()
-            jump(loops[loops.len() - 1].exit, [])
-        Continue(pos) =>
-            if loops.len() == 0
-                problem(pos, "`continue` outside a loop")
-                return
-            defer_loop_exit()
-            unwind_loop()
-            jump(loops[loops.len() - 1].cont, [])
+        Break(pos, target) => lower_leave(pos, target, true)
+        Continue(pos, target) => lower_leave(pos, target, false)
         Return(value, pos) =>
             if lower_fail_return(value, pos)
                 return
@@ -1405,7 +1395,7 @@ fn Lower.poll_limits(mut self, pos ast.Pos)
     seal(rest)
     cur = rest
 
-fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
+fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt], wpos ast.Pos)
     head := new_block()
     jump(head, [])
     cur = head
@@ -1422,7 +1412,7 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
         branch(c.id, inner, [], exit, [])
     seal(inner)
     cur = inner
-    loops.push(Loop(cont: head, exit: exit))
+    loops.push(Loop(cont: head, exit: exit, at: wpos))
     lower_block(body, false)
     loops.pop()
     jump(head, [])
@@ -1462,13 +1452,13 @@ fn Lower.lower_for(
         _ =>
             l0 := lower_value(iter, none) else return
             if chan_elem(l0.ty) != none
-                lower_chan_for(var, l0, body, expr_pos(iter))
+                lower_chan_for(var, l0, body, expr_pos(iter), fpos)
                 return
             if lower_iter_for(var, iter, l0, body, fpos)
                 return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
-                for_pairs(var, iter, l0, body)
+                for_pairs(var, iter, l0, body, fpos)
                 return
             l := iter_coll(l0)
             e := l.ty.elem() else
@@ -1507,7 +1497,7 @@ fn Lower.lower_for(
             note_elem(var, elem, list, i, fpos)
     else
         declare(var, Ty.Int, i)
-    loops.push(Loop(cont: latch, exit: exit))
+    loops.push(Loop(cont: latch, exit: exit, at: fpos))
     lower_block(body, false)
     loops.pop()
     jump(latch, [])

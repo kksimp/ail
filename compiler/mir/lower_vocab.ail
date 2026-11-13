@@ -242,7 +242,7 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
         lower_stmt(vlet(res, ast.Expr.Bool(value: name == "all", pos: pos), true, pos))
         cond := if name == "all" then vnot(f.body, pos) else f.body
         hit := ast.Expr.Bool(value: name == "any", pos: pos)
-        inner := [vif(cond, [vassign(res, hit, pos), ast.Stmt.Break(pos: pos)], pos)]
+        inner := [vif(cond, [vassign(res, hit, pos), ast.Stmt.Break(pos: pos, target: none)], pos)]
         lower_stmt(vloop(me, is_map, id, f.names, inner, pos))
         return lower_value(vname(res, pos), none)
     if name == "count"
@@ -264,7 +264,7 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
         push := ast.Stmt.Eval(value: vmethod(vname(res, pos), "push", [item], pos))
         mut inner := List[ast.Stmt]()
         if name == "take_while"
-            inner.push(vif(vnot(f.body, pos), [ast.Stmt.Break(pos: pos)], pos))
+            inner.push(vif(vnot(f.body, pos), [ast.Stmt.Break(pos: pos, target: none)], pos))
         else
             skipping := "#vs{id}"
             lower_stmt(vlet(skipping, ast.Expr.Bool(value: true, pos: pos), true, pos))
@@ -274,7 +274,7 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
                 rhs: f.body,
                 pos: pos,
             )
-            inner.push(vif(both, [ast.Stmt.Continue(pos: pos)], pos))
+            inner.push(vif(both, [ast.Stmt.Continue(pos: pos, target: none)], pos))
             inner.push(vassign(skipping, ast.Expr.Bool(value: false, pos: pos), pos))
         inner.push(push)
         lower_stmt(vloop(me, is_map, id, f.names, inner, pos))

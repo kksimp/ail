@@ -91,7 +91,14 @@ fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[a
     unsupported(npos, "`.{name}()` on `{ch.ty.name()}`")
 
 ## `for v in ch`: receive until the channel is closed and empty (conc.share.7).
-fn Lower.lower_chan_for(mut self, var str, ch Val, body List[ast.Stmt], pos ast.Pos)
+fn Lower.lower_chan_for(
+    mut self,
+    var str,
+    ch Val,
+    body List[ast.Stmt],
+    pos ast.Pos,
+    fpos ast.Pos,
+)
     head := new_block()
     jump(head, [])
     cur = head
@@ -108,7 +115,7 @@ fn Lower.lower_chan_for(mut self, var str, ch Val, body List[ast.Stmt], pos ast.
     seal(inner)
     cur = inner
     declare(var, elem, unwrap(Val(id: v, ty: Ty.Opt(elem))).id)
-    loops.push(Loop(cont: head, exit: exit))
+    loops.push(Loop(cont: head, exit: exit, at: fpos))
     lower_block(body, false)
     loops.pop()
     jump(head, [])
