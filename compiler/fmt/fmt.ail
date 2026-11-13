@@ -100,6 +100,7 @@ struct Formatter
 
 ## `ail fmt` writes `self.` before a bare member of the receiver (fmt.self,
 ## ADR 1081). Off until the tree is reformatted in one commit; `--self` turns it on.
+## Staging only: that commit removes this constant and `--self` (one layout, no option).
 WRITE_SELF := false
 
 ## The canonical form of `src`.

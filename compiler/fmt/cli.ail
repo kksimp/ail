@@ -1,7 +1,7 @@
 ## `ail fmt [--check | --stdout] [--self] PATH...` (ADR 0170). Exit status: 0 done (or
 ## already canonical), 1 `--check` found a file that would change, 2 a file
 ## couldn't be read or formatted. `--self` writes `self.` before bare members
-## (fmt.self, ADR 1081) until that is the default.
+## (fmt.self, ADR 1081) until that is the only layout; then the flag goes.
 use syntax
 
 pub fn command(args List[str]) int

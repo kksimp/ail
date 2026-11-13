@@ -122,7 +122,8 @@ receiver is written with `self.`: `x` becomes `self.x` and `f(a)` becomes
 `self.f(a)`, at exactly the places the implicit-`self` pass rewrites
 (`trait.method.6`). The formatter sees one file, so a member declared in
 another file of the package is left as written. Until the tree is reformatted
-it is on only with `ail fmt --self` (`WRITE_SELF` in `compiler/fmt/fmt.ail`).
+it is on only with `ail fmt --self` (`WRITE_SELF` in `compiler/fmt/fmt.ail`), a
+staging switch that the reformat commit removes: there is one layout and no option.
 
 **fmt.safe**: apart from fmt.self, the formatter changes only whitespace, line
 breaks and trailing commas. It formats only files that lex and parse, and

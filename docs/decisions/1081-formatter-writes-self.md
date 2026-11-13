@@ -66,8 +66,10 @@ other languages working.
 - Landing in two steps: the formatter change ships behind `ail fmt --self`
   (the constant `WRITE_SELF` in `compiler/fmt/fmt.ail` is `false`), so open
   lanes' format checks don't change; then, as the last commit before the
-  release candidate, one change sets `WRITE_SELF` to `true`, runs `ail fmt` over
-  the tree and refreezes the fmt goldens.
+  release candidate, one change makes `self.` the only formatter output,
+  removes `--self` and `WRITE_SELF` in the same commit, runs `ail fmt` over the
+  tree and refreezes the fmt goldens. `--self` is a staging switch only: 0.1.0
+  ships one canonical layout and no formatter option.
 - Whether bare names become an error is a later version's question.
 
 ## Rejected alternatives
