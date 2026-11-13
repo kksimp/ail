@@ -1,0 +1,74 @@
+## Rabin-Karp substring search with an integer rolling hash. Each window's
+## hash is updated in O(1); a hash match is verified against the pattern, and
+## a match that fails verification counts as a spurious hit. A tiny modulus
+## shows many spurious hits, a large one almost none.
+
+BASE := 256
+
+struct Found
+    hits List[int]
+    spurious int
+
+fn power_mod(base int, power int, modulus int) int
+    mut result := 1
+    for k in 0..power
+        result = result * base % modulus
+    result
+
+fn hash_of(codes List[int], start int, size int, modulus int) int
+    mut h := 0
+    for k in 0..size
+        h = (h * BASE + codes[start + k]) % modulus
+    h
+
+fn search(text str, pattern str, modulus int) Found
+    t := text.chars()
+    p := pattern.chars()
+    tcodes := [c.code() for c in t]
+    pcodes := [c.code() for c in p]
+    m := p.len()
+    mut hits := List[int]()
+    mut spurious := 0
+    if m == 0 or m > t.len()
+        return Found(hits: hits, spurious: 0)
+    top := power_mod(BASE, m - 1, modulus)
+    want := hash_of(pcodes, 0, m, modulus)
+    mut h := hash_of(tcodes, 0, m, modulus)
+    for i in 0..=(t.len() - m)
+        if h == want
+            if t[i..i + m] == p
+                hits.push(i)
+            else
+                spurious += 1
+        if i + m < t.len()
+            outgoing := tcodes[i] * top % modulus
+            h = ((h + modulus - outgoing) * BASE + tcodes[i + m]) % modulus
+    Found(hits: hits, spurious: spurious)
+
+fn main()
+    text := "the cat sat on the mat with the other cat near the threshold"
+    print("text: {text}")
+    for pat in ["the", "cat", "at ", "thresh", "dog"]
+        small := search(text, pat, 101)
+        large := search(text, pat, 1000003)
+        print("{pat}: hits [{small.hits.join(" ")}], spurious mod 101: {small.spurious}, mod 1000003: {large.spurious}")
+    dna := "ACGTACGTTAGCACGTACGGACGT"
+    found := search(dna, "ACGT", 1000003)
+    print("dna: {found.hits.len()} matches at [{found.hits.join(" ")}]")
+
+@test fn finds_all_occurrences()
+    assert_eq(search("abcabcabc", "bc", 1000003).hits, [1, 4, 7])
+
+@test fn same_hits_for_any_modulus()
+    text := "mississippi mission"
+    for m in [7, 31, 101, 1000003]
+        assert_eq(search(text, "ss", m).hits, search(text, "ss", 1000003).hits)
+
+@test fn pattern_longer_than_text()
+    assert_eq(search("ab", "abc", 101).hits.len(), 0)
+
+@test fn small_modulus_causes_spurious_hits()
+    text := "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz"
+    found := search(text, "xyz", 2)
+    assert_eq(found.hits, [23, 50])
+    assert(found.spurious > 0)

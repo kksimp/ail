@@ -2537,6 +2537,10 @@ fn Gate.native_misc(mut self)
         red("test --native refusal", "exit {n.status}\n{n.out}{n.err}")
     nt := native_run(["test", mixed]) else return
     want("test mixed", nt.out, ["adds", "fails_on_purpose", "uses_defer"])
+    # test.stub.1-6 (ADR 1101): every stub works in a test run.
+    sb := native_run(["test", "tests/native_test/stubs.ail"]) else return
+    if sb.status != 0 or not sb.out.contains(" 0 failed")
+        red("std.test stubs", "exit {sb.status}\n{sb.out}{sb.err}")
     st := native_run(["selftest", "--test", "x"]) else return
     if st.status != 2 or not st.err.contains("ADR 0900")
         red("selftest --test refusal", "exit {st.status}\n{st.out}{st.err}")

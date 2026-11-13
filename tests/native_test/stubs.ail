@@ -1,0 +1,25 @@
+## Fixture for the `std` suite's std.test stubs (test.stub.1-6, ADR 1101):
+## every stub function, run by `ail test`, so each has a caller the std call
+## gate can see.
+use std.test
+
+@test fn reads_a_stubbed_file_and_variable() !
+    test.files({"config.txt": "mode=fast"})
+    test.env({"APP_MODE": "test"})
+    assert(fs.exists("./config.txt"))
+    assert_eq(fs.read_text("config.txt")?, "mode=fast")
+    assert_eq(env.get("APP_MODE") else "", "test")
+
+@test fn the_clock_moves_only_when_told()
+    test.clock(1000)
+    assert_eq(time.now_ms(), 1000)
+    time.sleep_ms(500)
+    assert_eq(time.now_ms(), 1500)
+    test.advance(250)
+    assert_eq(time.now_ms(), 1750)
+
+@test fn a_stubbed_request_needs_no_network() !
+    test.http("GET https://api.example.com/items", 200, "one,two")
+    r := net.get("https://api.example.com/items")?
+    assert_eq(r.status, 200)
+    assert_eq(r.body, "one,two")

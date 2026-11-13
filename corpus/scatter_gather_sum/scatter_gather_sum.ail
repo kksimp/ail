@@ -1,0 +1,88 @@
+## Scatter-gather over a number range: the range 2..N is cut into uneven
+## slices, one task per slice counts the primes in it by trial division and
+## sums them, and each task sends its partial result over one channel. Main
+## gathers the parts (they arrive in any order), sorts them by slice number,
+## merges them and compares with a single sequential scan.
+
+struct Part
+    idx int
+    lo int
+    hi int
+    count int
+    total int
+    largest int
+
+fn is_prime(n int) bool
+    if n < 2
+        return false
+    mut d := 2
+    while d * d <= n
+        if n % d == 0
+            return false
+        d += 1
+    true
+
+fn scan(idx int, lo int, hi int) Part
+    mut p := Part(idx: idx, lo: lo, hi: hi, count: 0, total: 0, largest: 0)
+    for n in lo..hi
+        if is_prime(n)
+            p.count += 1
+            p.total += n
+            p.largest = n
+    p
+
+fn slice_task(idx int, lo int, hi int, out Channel[Part])
+    out.send(scan(idx, lo, hi))
+
+fn cuts(n int, weights List[int]) List[int]
+    mut edges := [2]
+    mut acc := 0
+    for w in weights
+        acc += w
+        edges.push(2 + (n - 2) * acc / weights.sum())
+    edges
+
+fn scatter_gather(n int, weights List[int]) List[Part]
+    edges := cuts(n, weights)
+    out := Channel[Part](weights.len())
+    g := TaskGroup()
+    for k in 0..weights.len()
+        g.add(spawn slice_task(k, edges[k], edges[k + 1], out))
+    mut got := List[Part]()
+    for _ in 0..weights.len()
+        p := out.recv() else break
+        got.push(p)
+    got.sorted(by: |x| x.idx)
+
+fn main()
+    n := 20000
+    parts := scatter_gather(n, [1, 2, 3, 5])
+    mut count := 0
+    mut total := 0
+    mut largest := 0
+    for p in parts
+        print("slice {p.idx} [{p.lo:>5}, {p.hi:>5}): {p.count:>4} primes, sum {p.total:>9}")
+        count += p.count
+        total += p.total
+        largest = largest.max(p.largest)
+    print("gathered: {count} primes, sum {total}, largest {largest}")
+    whole := scan(0, 2, n)
+    print("sequential: {whole.count} primes, sum {whole.total}, largest {whole.largest}")
+    print("agree: {count == whole.count and total == whole.total and largest == whole.largest}")
+
+@test fn small_primes()
+    p := scan(0, 2, 30)
+    assert_eq(p.count, 10)
+    assert_eq(p.total, 129)
+    assert_eq(p.largest, 29)
+
+@test fn cuts_cover_the_range()
+    e := cuts(100, [1, 1, 2])
+    assert_eq(e[0], 2)
+    assert_eq(e[e.len() - 1], 100)
+    assert_eq(e.len(), 4)
+
+@test fn gather_matches_scan()
+    parts := scatter_gather(1000, [3, 1, 1])
+    assert_eq([p.idx for p in parts], [0, 1, 2])
+    assert_eq([p.count for p in parts].sum(), scan(0, 2, 1000).count)

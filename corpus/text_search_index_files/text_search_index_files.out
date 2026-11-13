@@ -1,0 +1,11 @@
+26 words indexed from 5 files
+hunt   cats.txt,dogs.txt,zoo.txt
+sleep  cats.txt,pets.txt
+mice   cats.txt,farm.txt
+tigers zoo.txt
+all of cats dogs: pets.txt (1)
+any of cats dogs: pets.txt, cats.txt, dogs.txt, farm.txt (4)
+any of hunt mice fish: cats.txt, dogs.txt, farm.txt, pets.txt, zoo.txt (5)
+all of hunt mice: cats.txt (1)
+any of unicorn:  (0)
+cleaned up: true

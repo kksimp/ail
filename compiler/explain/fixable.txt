@@ -38,6 +38,7 @@ lex.bytes.1
 lex.kw.1
 lex.stmt.2
 lex.stmt.3
+lex.str.1
 lex.str.2
 lex.str.4
 lex.str.8

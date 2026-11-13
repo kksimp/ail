@@ -1,0 +1,100 @@
+## Batch rename with a dry run: renames every `.jpg` file in a directory to
+## `trip_001.jpg`, `trip_002.jpg`, ... in name order. The dry run lists each
+## move and flags a conflict when a stale `.tmp` file from an interrupted run
+## is in the way, in which case nothing is changed. A clean plan is applied in
+## two phases (every file to a temporary name, then to its final name) so that
+## overlapping moves, such as trip_001 -> trip_002, never overwrite each other.
+
+struct Move
+    src str
+    dst str
+
+fn plan(names List[str], prefix str, ext str) List[Move]
+    mut picked := List[str]()
+    for n in names.sorted()
+        if n.ends_with(".{ext}")
+            picked.push(n)
+    mut moves := List[Move]()
+    for i in 0..picked.len()
+        num := i + 1
+        moves.push(Move(src: picked[i], dst: "{prefix}_{num:03}.{ext}"))
+    moves
+
+fn conflicts(moves List[Move], names List[str]) List[str]
+    mut bad := List[str]()
+    for m in moves
+        stale := "{m.dst}.tmp"
+        if m.src != m.dst and names.contains(stale)
+            bad.push(stale)
+    bad
+
+fn apply(dir str, moves List[Move]) !int
+    mut changed := 0
+    for m in moves
+        if m.src != m.dst
+            fs.rename(path.join(dir, m.src), path.join(dir, "{m.dst}.tmp"))?
+    for m in moves
+        if m.src != m.dst
+            fs.rename(path.join(dir, "{m.dst}.tmp"), path.join(dir, m.dst))?
+            changed += 1
+    changed
+
+fn run_batch(dir str, prefix str) !
+    names := fs.list_dir(dir)?
+    moves := plan(names, prefix, "jpg")
+    bad := conflicts(moves, names)
+    print("dry run, {moves.len()} files:")
+    for m in moves
+        mark := if m.src == m.dst then "same" else "move"
+        print("  {mark} {m.src:<14}-> {m.dst}")
+    if not bad.is_empty()
+        print("conflict with stale files: {bad.join(", ")}; nothing changed")
+        return
+    n := apply(dir, moves)?
+    print("renamed {n} files")
+
+fn clear_dir(dir str) !
+    for name in fs.list_dir(dir)?
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_batch_rename_dryrun")?
+    for n in ["beach.jpg", "arch.jpg", "notes.txt", "dune.jpg", "cafe.jpg", "map.png"]
+        fs.write_text(path.join(dir, n), "{n}\n")?
+    print("first run:")
+    run_batch(dir, "trip")?
+    print("now: {fs.list_dir(dir)?.sorted().join(" ")}")
+    print("second run:")
+    run_batch(dir, "trip")?
+    fs.write_text(path.join(dir, "snap.jpg"), "snap\n")?
+    fs.write_text(path.join(dir, "trip_001.jpg.tmp"), "stale\n")?
+    print("third run with a stale temp file:")
+    run_batch(dir, "trip")?
+    fs.remove(path.join(dir, "trip_001.jpg.tmp"))?
+    print("fourth run after removing it:")
+    run_batch(dir, "trip")?
+    print("final: {fs.list_dir(dir)?.sorted().join(" ")}")
+    print("trip_001 holds: {fs.read_text(path.join(dir, "trip_001.jpg"))?.trim()}")
+    clear_dir(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn numbering_is_in_name_order()
+    got := plan(["b.jpg", "a.jpg", "c.txt"], "p", "jpg")
+    assert_eq([m.dst for m in got], ["p_001.jpg", "p_002.jpg"])
+    assert_eq(got[0].src, "a.jpg")
+
+@test fn stale_temp_files_are_conflicts()
+    names := ["a.jpg", "p_001.jpg.tmp"]
+    assert_eq(conflicts(plan(names, "p", "jpg"), names), ["p_001.jpg.tmp"])
+    assert_eq(conflicts(plan(["a.jpg"], "p", "jpg"), ["a.jpg"]).len(), 0)
+
+@test fn overlapping_moves_survive_two_phases()
+    dir := fs.make_temp_dir("corpus_batch_rename_dryrun_t")?
+    fs.write_text(path.join(dir, "p_002.jpg"), "C")?
+    fs.write_text(path.join(dir, "p_003.jpg"), "D")?
+    run_batch(dir, "p")?
+    assert_eq(fs.read_text(path.join(dir, "p_001.jpg"))?, "C")
+    assert_eq(fs.read_text(path.join(dir, "p_002.jpg"))?, "D")
+    assert_eq(fs.list_dir(dir)?.len(), 2)
+    clear_dir(dir)?

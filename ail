@@ -476,7 +476,7 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     policy_file=
     if [ -z "$allow_list" ]; then policy_file="$(mktemp)"; check_opts="$check_opts --policy-out $policy_file"; fi
     # shellcheck disable=SC2086
-    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || { [ -z "$policy_file" ] || rm -f "$policy_file"; exit 1; }
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || { st=$?; [ -z "$policy_file" ] || rm -f "$policy_file"; exit $st; }
     if [ -n "$policy_file" ]; then allow_list="$(cat "$policy_file")"; rm -f "$policy_file"; fi
     prep_err="$(mktemp)"
     # shellcheck disable=SC2086

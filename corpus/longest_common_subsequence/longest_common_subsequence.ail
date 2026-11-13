@@ -1,0 +1,73 @@
+## Longest common subsequence by dynamic programming, with the subsequence
+## itself recovered by walking the table backwards. Prints, for pairs of
+## strings, the LCS, its length and an integer similarity percentage.
+
+fn lcs_table(a List[char], b List[char]) List[int]
+    width := b.len() + 1
+    mut table := List[int]()
+    cells := (a.len() + 1) * width
+    for k in 0..cells
+        table.push(0)
+    for i in 1..=a.len()
+        for j in 1..=b.len()
+            if a[i - 1] == b[j - 1]
+                table[i * width + j] = table[(i - 1) * width + j - 1] + 1
+            else
+                table[i * width + j] = table[(i - 1) * width + j].max(table[i * width + j - 1])
+    table
+
+fn lcs(x str, y str) str
+    a := x.chars()
+    b := y.chars()
+    width := b.len() + 1
+    table := lcs_table(a, b)
+    mut out := List[char]()
+    mut i := a.len()
+    mut j := b.len()
+    while i > 0 and j > 0
+        if a[i - 1] == b[j - 1]
+            out.push(a[i - 1])
+            i -= 1
+            j -= 1
+        elif table[(i - 1) * width + j] >= table[i * width + j - 1]
+            i -= 1
+        else
+            j -= 1
+    out.reverse()
+    out.join("")
+
+fn similarity(x str, y str) int
+    total := x.len() + y.len()
+    if total == 0
+        return 100
+    2 * lcs(x, y).len() * 100 / total
+
+fn main()
+    pairs := [
+        ["ABCBDAB", "BDCABA"],
+        ["AGGTAB", "GXTXAYB"],
+        ["kitten", "sitting"],
+        ["dynamic programming", "dramatic programs"],
+        ["same", "same"],
+        ["abc", "xyz"],
+        ["", "abc"],
+    ]
+    for p in pairs
+        common := lcs(p[0], p[1])
+        print("'{p[0]}' vs '{p[1]}': '{common}' length {common.len()} similarity {similarity(p[0], p[1])}%")
+
+@test fn textbook_example()
+    assert_eq(lcs("AGGTAB", "GXTXAYB").len(), 4)
+    assert_eq(lcs("AGGTAB", "GXTXAYB"), "GTAB")
+
+@test fn disjoint_and_empty()
+    assert_eq(lcs("abc", "xyz"), "")
+    assert_eq(lcs("", "abc"), "")
+
+@test fn identical_strings()
+    assert_eq(lcs("hello", "hello"), "hello")
+    assert_eq(similarity("hello", "hello"), 100)
+
+@test fn result_is_a_subsequence_of_both()
+    common := lcs("abcdefgh", "xaybzcdh")
+    assert_eq(common, "abcdh")

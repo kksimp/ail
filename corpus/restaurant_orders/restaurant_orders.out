@@ -1,0 +1,16 @@
+ok t1 steak 2 = 49.00
+ok t2 salad 1 = 8.50
+ok t1 cola 2 = 6.00
+rejected 't3 pizza 1': no dish named pizza
+rejected 't2 steak 2': steak sold out (1 left)
+rejected 't3 cola 0': bad quantity 0 for cola
+ok t3 cola 2 = 6.00
+rejected 't2 cola 3': cola sold out (0 left)
+rejected 'oops': cannot read 'oops'
+rejected 't1 salad x': cannot read 't1 salad x'
+steak: 1 left, grill 14m
+salad: 9 left, garde 4m
+cola: 0 left, bar 1m
+t1: 55.00 + tax 4.40 = 59.40
+t2: 8.50 + tax 0.68 = 9.18
+t3: 6.00 + tax 0.48 = 6.48

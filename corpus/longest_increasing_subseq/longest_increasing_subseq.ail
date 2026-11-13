@@ -1,0 +1,82 @@
+## Longest strictly increasing subsequence in O(n log n): `tails` keeps, for
+## each length, the index of the smallest possible last element, found with
+## a binary search; parent links rebuild one optimal subsequence. A quadratic
+## version is kept as a cross-check.
+
+fn lis(xs List[int]) List[int]
+    mut tails := List[int]()
+    mut parent := List[int]()
+    for k in 0..xs.len()
+        parent.push(-1)
+    for i in 0..xs.len()
+        mut lo := 0
+        mut hi := tails.len()
+        while lo < hi
+            mid := lo + (hi - lo) / 2
+            if xs[tails[mid]] < xs[i]
+                lo = mid + 1
+            else
+                hi = mid
+        if lo > 0
+            parent[i] = tails[lo - 1]
+        if lo == tails.len()
+            tails.push(i)
+        else
+            tails[lo] = i
+    mut cur := tails.last() else -1
+    mut out := List[int]()
+    while cur != -1
+        out.push(xs[cur])
+        cur = parent[cur]
+    out.reverse()
+    out
+
+fn lis_len_quadratic(xs List[int]) int
+    mut best := List[int]()
+    for i in 0..xs.len()
+        mut len_here := 1
+        for j in 0..i
+            if xs[j] < xs[i] and best[j] + 1 > len_here
+                len_here = best[j] + 1
+        best.push(len_here)
+    best.max() else 0
+
+fn make_data(n int, seed int) List[int]
+    mut s := seed
+    mut out := List[int]()
+    for k in 0..n
+        s = (s * 1103515245 + 12345) % 2147483648
+        out.push(s / 65536 % 100)
+    out
+
+fn main()
+    inputs := [
+        [10, 9, 2, 5, 3, 7, 101, 18],
+        [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15],
+        [5, 4, 3, 2, 1],
+        [7, 7, 7, 7],
+        [1, 2, 3, 4, 5],
+        List[int](),
+        make_data(20, 99),
+    ]
+    for xs in inputs
+        seq := lis(xs)
+        print("{xs.join(" ")} => length {seq.len()}: {seq.join(" ")}")
+
+@test fn classic_example()
+    seq := lis([10, 9, 2, 5, 3, 7, 101, 18])
+    assert_eq(seq.len(), 4)
+    for i in 1..seq.len()
+        assert(seq[i - 1] < seq[i])
+
+@test fn strictness_with_duplicates()
+    assert_eq(lis([2, 2, 2]).len(), 1)
+    assert_eq(lis([1, 2, 2, 3]), [1, 2, 3])
+
+@test fn empty_input()
+    assert_eq(lis(List[int]()).len(), 0)
+
+@test fn matches_quadratic_on_generated_data()
+    for seed in [1, 2, 3, 4, 5]
+        xs := make_data(30, seed)
+        assert_eq(lis(xs).len(), lis_len_quadratic(xs))

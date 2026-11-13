@@ -1,0 +1,96 @@
+## Parallel directory checksums: builds four small directories in a temp
+## folder, then one task per directory reads its files in name order, takes the
+## CRC-32 of each file and a SHA-256 over the "name:crc" list, and sends a
+## digest back over a channel. Main gathers the digests, sorts them by
+## directory number, finds directories with identical content, and checks the
+## answers against a sequential run.
+use std.hash
+
+struct Digest
+    idx int
+    files int
+    size int
+    check str
+
+fn crc_hex(text str) str
+    hash.crc32(text).to_hex().pad_left(8, '0')
+
+fn digest_of(idx int, names List[str], texts List[str]) Digest
+    mut parts := List[str]()
+    mut total := 0
+    for i in 0..names.len()
+        parts.push("{names[i]}:{crc_hex(texts[i])}")
+        total += texts[i].byte_len()
+    Digest(idx: idx, files: names.len(), size: total, check: hash.sha256(parts.join("\n")).slice(0, 10))
+
+fn dir_digest(idx int, dir str) !Digest
+    names := fs.list_dir(dir)?.sorted()
+    mut texts := List[str]()
+    for n in names
+        texts.push(fs.read_text(path.join(dir, n))?)
+    digest_of(idx, names, texts)
+
+fn dir_task(idx int, dir str, out Channel[Digest])
+    d := dir_digest(idx, dir) else Digest(idx: idx, files: -1, size: 0, check: "error")
+    out.send(d)
+
+fn parallel_digests(dirs List[str]) List[Digest]
+    out := Channel[Digest](dirs.len())
+    g := TaskGroup()
+    for i in 0..dirs.len()
+        g.add(spawn dir_task(i, dirs[i], out))
+    mut got := List[Digest]()
+    for _ in 0..dirs.len()
+        d := out.recv() else break
+        got.push(d)
+    got.sorted(by: |x| x.idx)
+
+fn main() !
+    root := fs.make_temp_dir("corpus_parallel_checksum_dirs")?
+    layouts := [
+        [("a.txt", "alpha\n"), ("b.txt", "beta\n")],
+        [("b.txt", "beta\n"), ("a.txt", "alpha\n")],
+        [("a.txt", "alpha\n"), ("b.txt", "betta\n")],
+        [("x.log", "one\n"), ("y.log", "two\n"), ("z.log", "")],
+    ]
+    mut dirs := List[str]()
+    for i in 0..layouts.len()
+        sub := path.join(root, "dir{i}")
+        fs.make_dir(sub)?
+        for f in layouts[i]
+            fs.write_text(path.join(sub, f.0), f.1)?
+        dirs.push(sub)
+    got := parallel_digests(dirs)
+    for d in got
+        print("dir{d.idx}: {d.files} files, {d.size:>2} bytes, {d.check}")
+    for i in 0..got.len()
+        for j in i + 1..got.len()
+            if got[i].check == got[j].check
+                print("dir{i} and dir{j} have identical content")
+    mut same := true
+    for i in 0..dirs.len()
+        if dir_digest(i, dirs[i])? != got[i]
+            same = false
+    print("matches sequential run: {same}")
+    for i in 0..dirs.len()
+        for name in fs.list_dir(dirs[i])?
+            fs.remove(path.join(dirs[i], name))?
+        fs.remove(dirs[i])?
+    fs.remove(root)?
+    print("cleaned up: {not fs.exists(root)}")
+
+@test fn crc_is_padded_hex()
+    assert_eq(crc_hex(""), "00000000")
+    assert_eq(crc_hex("abc"), "352441c2")
+
+@test fn digest_ignores_nothing_but_content()
+    a := digest_of(0, ["a", "b"], ["1", "22"])
+    b := digest_of(5, ["a", "b"], ["1", "22"])
+    c := digest_of(0, ["a", "b"], ["1", "23"])
+    assert_eq(a.check, b.check)
+    assert(a.check != c.check, "content change")
+    assert_eq(a.size, 3)
+    assert_eq(a.files, 2)
+
+@test fn names_matter()
+    assert(digest_of(0, ["a"], ["x"]).check != digest_of(0, ["b"], ["x"]).check)

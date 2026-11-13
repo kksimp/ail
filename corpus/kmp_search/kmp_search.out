@@ -1,0 +1,8 @@
+text: abracadabra abracadabra, aaaa banana bandana
+abra: table [0 0 0 1] hits [0 7 12 19] count 4
+aa: table [0 1] hits [25 26 27] count 3
+ana: table [0 0 1] hits [31 33 41] count 3
+bandana: table [0 0 0 0 0 0 0] hits [37] count 1
+xyz: table [0 0 0] hits [] count 0
+abracadabra abracadabra: table [0 0 0 1 0 1 0 1 2 3 4 0 1 2 3 4 5 6 7 8 9 10 11] hits [0] count 1
+naive agrees: true

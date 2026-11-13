@@ -1,0 +1,14 @@
+src/a.go       ok
+tools/run.sh   ok
+tools/old.py   year (2024)
+src/b.c        missing (no SPDX line)
+db/init.sql    license (GPL-3.0-only)
+src/c.c        copyright (malformed line 2)
+src/d.c        copyright (bad year twenty)
+empty.py       missing (no SPDX line)
+summary:
+  ok         2
+  missing    2
+  license    1
+  copyright  2
+  year       1

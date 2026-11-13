@@ -1,0 +1,69 @@
+## Knuth-Morris-Pratt substring search. Builds the failure table for a
+## pattern, then scans the text once and reports every (overlapping) match
+## position. A naive search cross-checks the result in the tests.
+
+fn failure_table(p List[char]) List[int]
+    mut table := [0]
+    mut k := 0
+    for i in 1..p.len()
+        while k > 0 and p[i] != p[k]
+            k = table[k - 1]
+        if p[i] == p[k]
+            k += 1
+        table.push(k)
+    table
+
+fn find_all(text str, pattern str) List[int]
+    t := text.chars()
+    p := pattern.chars()
+    if p.is_empty()
+        return []
+    table := failure_table(p)
+    mut hits := List[int]()
+    mut k := 0
+    for i in 0..t.len()
+        while k > 0 and t[i] != p[k]
+            k = table[k - 1]
+        if t[i] == p[k]
+            k += 1
+        if k == p.len()
+            hits.push(i - k + 1)
+            k = table[k - 1]
+    hits
+
+fn naive_find_all(text str, pattern str) List[int]
+    t := text.chars()
+    p := pattern.chars()
+    mut hits := List[int]()
+    if p.is_empty() or p.len() > t.len()
+        return hits
+    for i in 0..=(t.len() - p.len())
+        if t[i..i + p.len()] == p
+            hits.push(i)
+    hits
+
+fn main()
+    text := "abracadabra abracadabra, aaaa banana bandana"
+    print("text: {text}")
+    for pat in ["abra", "aa", "ana", "bandana", "xyz", "abracadabra abracadabra"]
+        table := failure_table(pat.chars())
+        hits := find_all(text, pat)
+        print("{pat}: table [{table.join(" ")}] hits [{hits.join(" ")}] count {hits.len()}")
+    print("naive agrees: {naive_find_all(text, "ana") == find_all(text, "ana")}")
+
+@test fn classic_failure_table()
+    assert_eq(failure_table("abababca".chars()), [0, 0, 1, 2, 3, 4, 0, 1])
+    assert_eq(failure_table("aaaa".chars()), [0, 1, 2, 3])
+
+@test fn overlapping_matches()
+    assert_eq(find_all("aaaa", "aa"), [0, 1, 2])
+    assert_eq(find_all("abcabcabc", "abcabc"), [0, 3])
+
+@test fn no_match_and_empty_pattern()
+    assert_eq(find_all("hello", "world").len(), 0)
+    assert_eq(find_all("hello", "").len(), 0)
+
+@test fn agrees_with_naive_search()
+    text := "mississippi missing ssi"
+    for pat in ["ss", "issi", "i", "mis", "ppi m"]
+        assert_eq(find_all(text, pat), naive_find_all(text, pat))
