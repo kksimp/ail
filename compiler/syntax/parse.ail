@@ -553,7 +553,21 @@ fn Parser.describe(self, t Tok) str
 ## Report an unexpected token, preferring "not supported yet" for spec
 ## keywords the bootstrap doesn't implement.
 fn Parser.unexpected(mut self, expected str, rule str)
+    prev_tag := if i > 0 then tok_tag(tokens[i - 1].tok) else ""
+    cast := prev_tag == "id" or prev_tag == "int" or prev_tag == "float" or (
+        i > 0 and (tokens[i - 1].tok == Tok.Sym(")") or tokens[i - 1].tok == Tok.Sym("]"))
+    )
+    if tag_at(0) == "kw" and not_yet(kw_at(0)) and not cast
+        error_text(
+            "bootstrap.unsupported",
+            here(),
+            "`{kw_at(0)}` is not supported by the bootstrap yet (spec ffi.decl.1)",
+            "",
+            "",
+        )
+        return
     if tag_at(0) == "kw" and not_yet(kw_at(0))
+        # `x as float` (a Rust or TypeScript cast) after a value.
         error_text(
             "gram.foreign.1",
             here(),
@@ -2231,6 +2245,16 @@ fn Parser.else_block_follows(self) bool
 ## `a..b` and `a..=b` (expr.loop.3): the loosest operators. A bound may be
 ## left out before `]`, for a slice (type.coll.10).
 fn Parser.range(mut self) ast.Expr?
+    # `...xs` (a JavaScript spread) lexes as `..` then `.`, and would read as an open range.
+    if at_sym("..") and sym_at(1) == "." and touches(i + 1)
+        error_text(
+            "gram.foreign.1",
+            here(),
+            "AIL has no spread `...`",
+            "join lists with `xs.extend(ys)` on a `mut` list, or build one with `[x for x in xs]`; copy a struct with `b := a`, then change a field",
+            "",
+        )
+        return none
     mut lo := none
     if not at_sym("..") and not at_sym("..=")
         lo = or_expr()?
@@ -2780,16 +2804,6 @@ fn Parser.primary(mut self) ast.Expr?
                     "`==` and `!=` compare values and never convert types",
                     "remove the extra `=`",
                     [fix.delete(pos, ast.Pos(line: pos.line, col: pos.col + 1))],
-                )
-                return none
-            # `...` lexes as `..` then `.`.
-            if s == ".." and sym_at(1) == "." and touches(i + 1)
-                error_text(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no spread `...`",
-                    "join lists with `xs.extend(ys)` on a `mut` list, or build one with `[x for x in xs]`; copy a struct with `b := a`, then change a field",
-                    "",
                 )
                 return none
         Newline | Indent | Dedent | Eof => i += 0

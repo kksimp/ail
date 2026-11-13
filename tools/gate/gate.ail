@@ -75,7 +75,7 @@ fn first_lines(text str, n int) str
 fn Gate.red(mut self, name str, why str)
     fails += 1
     print("RED {name}")
-    print(first_lines(why, 3))
+    print(first_lines(why, 30))
 
 fn Gate.examples(mut self, tmp str)
     for name in fs.list_dir("examples") else []
