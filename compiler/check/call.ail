@@ -1028,6 +1028,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0
+        if t := enum_name_method(rt, n, at, args)
+            return t
         args_only(args)
         if not hidden_std_module(recv, n, at)
             no_method(rt, n, at)
@@ -1215,6 +1217,9 @@ fn Checker.associated(
     i := method_index(tn, n) else
         if t := impl_assoc_call(d, explicit, n, at, args, expect)
             return t
+        if e := enum_of_def(d)
+            if t := enum_static(e, n, at, args)
+                return t
         args_only(args)
         err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
         return Ty.Unknown
