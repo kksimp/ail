@@ -28,10 +28,13 @@ no end marker. Exit statuses were unwritten.
    stdout, so the diagnostic lines on stderr keep their count. The gate checks
    every record of the mistakes corpus against the schema's required members.
 4. Exit statuses: `check` 0 or 2; `run` of a program that doesn't compile 2,
-   as `check`; `test` non-zero. The gate tests them on all three hosts.
+   as `check`; `test` non-zero, and a file with no tests prints `no tests found in FILE`
+   (JSON `no_tests`) and exits 0: `ail task`, `try` and `edit` run `ail test`
+   on programs without tests and must not read that as a failure. The gate tests
+   them on all three hosts.
    (Amended 2026-11-13 by the integrator, delegated per ADR 0076: the draft
-   said 1, as a trap. `ail run` already exited 2 for a check error on every
-   host, the `--deny`, `--deterministic`, `--seed` and lock-file gate tests
+   said 1 for `run`, as a trap. `ail run` already exited 2 for a check error on
+   every host, the `--deny`, `--deterministic`, `--seed` and lock-file gate tests
    all rely on it, and keeping 1 for traps alone lets an agent tell "didn't
    compile" from "crashed" by the status.)
 5. `expr.match.3` stays a warning (ADR 0056, 0379). Its help now writes the
@@ -46,6 +49,7 @@ no end marker. Exit statuses were unwritten.
   output; opt-in cannot fail that way.
 - **Demote `expr.match.3` now.** Contradicts ADR 0056 and 0379 and needs the
   measured rate first.
+- **Exit non-zero on no tests.** Would turn every `ail task verify` of a test-free program red.
 - **`next:` only for fixable errors.** The unfixable ones need it most.
 - **`run` of a program that doesn't compile exits 1.** It would share the
   status of a trap, so the status alone couldn't tell a compile error from a
