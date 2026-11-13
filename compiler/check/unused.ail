@@ -2,6 +2,7 @@
 ## never reads. Parameters, loop variables and names starting with `_` don't count; the fix
 ## renames it `_`. Only the main program's own functions are checked.
 use ast
+use fix
 
 ## A `:=` binding of the function being checked.
 pub struct BindDecl
