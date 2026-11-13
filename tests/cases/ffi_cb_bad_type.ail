@@ -1,5 +1,0 @@
-# ffi.cb.1: a callback type takes and returns only C types.
-extern c fn each(f fn(str) int)
-
-fn main()
-    print(1)

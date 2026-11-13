@@ -1,9 +1,0 @@
-# ffi.struct.1: a struct passed to C by value has only fields of C types.
-struct Named
-    name str
-    n i32
-
-extern c fn takes(x Named) i32
-
-fn main()
-    print(1)

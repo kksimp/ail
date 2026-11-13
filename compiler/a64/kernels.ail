@@ -25,7 +25,6 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_sum16"
         or name == "rt.vec_sum16_32"
         or is_aes_kernel(name)
-        or is_ffi_kernel(name)
 
 ## Add the kernel `name` to `img`.
 pub fn gen_kernel(mut img codegen.Image, name str)
@@ -46,7 +45,6 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_sum16_32" => kernel_sum16(mut a, true)
         "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         "rt.vec_scal" => kernel_scal(mut a)
-        "rt.ffi_ccall" | "rt.ffi_ccall_win" => kernel_ffi_ccall(mut a)
         _ => unreachable("a64: unknown kernel {name}")
     a.resolve_labels()
     base := img.code.len()
