@@ -1,4 +1,3 @@
 sharded_counter_tasks native.subset.1 on List[Mutex[Map]] parameter plus invalid MIR (v8 used before defined); compiler bug, kept as the repro
 voting_systems native.subset.1 `else` on a str (line 130); compiler bug, kept as the repro
 channel_broadcast_sim native.subset.1 on List[Channel[Msg]] (line 45); compiler gap, kept as the repro
-parallel_word_index wrong partial counts from concurrent tasks on the Mac (c.txt got b.txt's words); runtime bug, kept as the repro
