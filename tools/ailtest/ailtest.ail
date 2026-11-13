@@ -718,16 +718,16 @@ fn rewrite(
     rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
-    for l in ["use std.env", "use std.io"]
-        if not contains_line(lines, l)
-            out.push(l)
-            origin.push(-1)
+    # Hidden aliases: a user's own `env` or `io` (a parameter, say) must never clash with the runner's (expr.bind.5).
+    for l in ["use std.env as ail_env", "use std.io as ail_io"]
+        out.push(l)
+        origin.push(-1)
     lead := out.len()
     for j in 0..rewritten.len()
         for piece in rewritten[j].split("\n")
             out.push(piece)
             origin.push(j)
-    mut tail := "\nfn main() !\n    ail_args := env.args()\n    k := ail_args[0].len()\n"
+    mut tail := "\nfn main() !\n    ail_args := ail_env.args()\n    k := ail_args[0].len()\n"
     mut slot := 1
     mut done := Set[str]()
     mut decs := ""
@@ -744,7 +744,7 @@ fn rewrite(
             tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
             call.push("ail_p{pi}")
         callee := if t.fx.is_empty() then t.name else "ail_fx_{t.name}"
-        tail = "{tail}        {callee}({call.join(", ")})?\n        io.exit(0)\n"
+        tail = "{tail}        {callee}({call.join(", ")})?\n        ail_io.exit(0)\n"
         if not t.fx.is_empty()
             wrap = "{wrap}{fx_wrapper(t, f.fixtures).join("\n")}\n"
         slot += 1
@@ -752,9 +752,9 @@ fn rewrite(
         if mdropped.contains(i)
             continue
         mt := mf.tests[i]
-        tail = "{tail}    if k == {slot}\n        {mt.module}.ail_run_{mt.t.name}()\n        io.exit(0)\n"
+        tail = "{tail}    if k == {slot}\n        {mt.module}.ail_run_{mt.t.name}()\n        ail_io.exit(0)\n"
         slot += 1
-    tail = "{tail}    io.exit(4)\n"
+    tail = "{tail}    ail_io.exit(4)\n"
     if snap_lines > 0
         tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
     tail = "{tail}{wrap}"
