@@ -69,10 +69,9 @@ fn Client.request(mut self, method str, params Json) Json ! McpError
     ])
     child.stdin.send("{msg.to_text()}\n")
     while true
-        line := child.out.recv_for(wait_ms) else return fail(
-            "timeout",
-            "no reply to {method} within {wait_ms} ms, or the server closed",
-        )
+        line := child.out.recv_for(wait_ms) else
+            note := self.stderr_note()
+            return fail("timeout", "no reply to {method} within {wait_ms} ms, or the server closed{note}")
         reply := parse_json(line) else continue
         rid := reply.int("id") else
             continue
@@ -84,6 +83,19 @@ fn Client.request(mut self, method str, params Json) Json ! McpError
             return fail("rpc", "{why} (code {code})")
         return reply.get("result") else Json.Null
     fail("timeout", "no reply")
+
+## The first lines the server wrote to its standard error, as ` (server stderr: ...)`,
+## or nothing when it wrote none (std.mcp.7). A closed stream gives them at once;
+## a silent live server costs at most 200 ms.
+fn Client.stderr_note(mut self) str
+    mut lines := List[str]()
+    while lines.len() < 10
+        line := child.err.recv_for(200) else break
+        lines.push(line)
+    if lines.len() == 0
+        return ""
+    joined := lines.join(" | ")
+    " (server stderr: {joined})"
 
 ## The tools the server offers (std.mcp.3), following `nextCursor` pages.
 pub fn Client.tools(mut self) List[Tool] ! McpError
