@@ -131,10 +131,10 @@ fn Lower.lower_comp_untyped(
     v := value_expr else return none
     nvars += 1
     kname := "#comp{nvars}"
-    vname := "#comp{nvars}v"
+    comp_var := "#comp{nvars}v"
     mname := "#comp{nvars}m"
     ks := ast.Expr.Name(name: kname, pos: pos)
-    vs := ast.Expr.Name(name: vname, pos: pos)
+    vs := ast.Expr.Name(name: comp_var, pos: pos)
     push_k := ast.Stmt.Eval(value: ast.Expr.Method(recv: ks, name: "push", name_pos: pos, args: [
         ast.Arg(label: none, mutable: false, moved: false, value: elem, param: none),
     ]))
@@ -146,14 +146,14 @@ fn Lower.lower_comp_untyped(
         [konst(0, Ty.Int)],
         Ty.List(Ty.Unknown),
     ))
-    declare(vname, Ty.List(Ty.Unknown), call(
+    declare(comp_var, Ty.List(Ty.Unknown), call(
         "rt.list_new",
         [konst(0, Ty.Int)],
         Ty.List(Ty.Unknown),
     ))
     lower_stmt(comp_loops([push_k, push_v], clauses, pos)[0])
     kkey := lookup(kname)?
-    vkey := lookup(vname)?
+    vkey := lookup(comp_var)?
     kt := var_ty[kkey].elem() else Ty.Unknown
     vt := var_ty[vkey].elem() else Ty.Unknown
     if kt == Ty.Bool or not key_ok(kt) or not is_value_ty(vt)
