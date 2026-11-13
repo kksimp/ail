@@ -542,6 +542,8 @@ fn main()
 ## Tests
 
 ```ail
+use std.fs
+
 fn double(x int) int
     x * 2
 
@@ -549,13 +551,13 @@ fn double(x int) int
     assert_eq(double(4), 8)         # traps showing both values
     assert(double(1) == 2, "message")   # optional `str` message
     assert_near(0.1 + 0.2, 0.3, 0.0001) # three floats: |a - b| <= eps
-    assert_err(parse("x"))              # traps unless the call fails; a second argument `E.Variant` checks which error
+    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
-```ail fragment
+```ail
 @fixture("drop")                    # made per test run, `drop` always runs after it
 fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
     "x"
