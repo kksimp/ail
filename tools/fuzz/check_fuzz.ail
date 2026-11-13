@@ -1,0 +1,322 @@
+## The checker fuzz (fuzz.chk.*, ADR 1112): `ail check` alone, over mutated and
+## generated inputs.
+##
+##   ail run tools/fuzz/check_fuzz.ail [N [SEED [OUTDIR]]]     from the repository root
+##
+## fuzz.chk.1  A mutant of a program under corpus/, examples/ or tests/cases/
+##             (truncated at a line, a line deleted or duplicated, two tokens
+##             swapped, a keyword or random bytes inserted, a bracket or quote
+##             left open, a line wrongly indented) never makes `check` hang
+##             (10 s), die by a signal, or trap in the compiler; it exits 0, 1
+##             or 2, and 2 comes with at least one error.
+## fuzz.chk.2  The same for the extremes: a 5 MB line, 10,000 nested brackets,
+##             100,000 lines.
+## fuzz.chk.3  A file of five functions with one independent mistake each, one
+##             or two of them a syntax error (gram.rec.4), reports an error in
+##             every one of the five and none in `main`.
+## A failure is kept in OUTDIR (default tools/fuzz/failures) as chk-K.ail. The last
+## line is `CHECKFUZZ GREEN` or `CHECKFUZZ RED (n failures)`.
+
+use std.random
+
+KEYWORDS := [
+    "fn",
+    "struct",
+    "enum",
+    "trait",
+    "impl",
+    "match",
+    "if",
+    "else",
+    "elif",
+    "while",
+    "for",
+    "return",
+    "use",
+    "pub",
+    "mut",
+    "error",
+    "par",
+    "any",
+    "with",
+    "unique",
+    "@",
+    "(",
+    ")",
+    "[",
+    "]",
+    "\{",
+    "}",
+    "\"",
+    "'",
+    "=>",
+    ":=",
+    "?",
+    "!",
+    "...",
+    "->",
+]
+
+ODD := [
+    "~",
+    "`",
+    "#",
+    "$",
+    "%",
+    "^",
+    "&",
+    "*",
+    "(",
+    ")",
+    "[",
+    "]",
+    "|",
+    "\\",
+    "<",
+    ">",
+    ";",
+    ":",
+    "'",
+    "\"",
+    ",",
+    ".",
+    "\t",
+    " ",
+    "é",
+    "€",
+    "x",
+    "7",
+    "\{",
+    "}",
+]
+
+struct Chk
+    fails int
+    out str
+    work str
+
+fn sh(script str, args List[str]) proc.Output
+    mut argv := ["-c", script, "sh"]
+    argv.extend(args)
+    r := proc.run("sh", argv) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+## What one `check` run says: `status N`, then the output, from `ail check FILE`.
+fn check_run(file str, json bool) proc.Output
+    flag := if json then "--json" else ""
+    # CHECKFUZZ_CMD names another checker (a stage-2 build: `S2 check-program`); the default is `./ail check`.
+    cmd := env.get("CHECKFUZZ_CMD") else "./ail check"
+    sh("perl -e 'alarm 10; exec @ARGV' $3 $2 \"$1\" 2>&1", [file, flag, cmd])
+
+## Why a `check` run is a failure, or "".
+fn verdict(r proc.Output) str
+    text := "{r.out}\n{r.err}"
+    if r.status == 124 or r.status == 142
+        return "hang: no answer in 10 s"
+    if r.status >= 128
+        return "died with status {r.status}"
+    if r.status != 0 and r.status != 1 and r.status != 2
+        return "exit status {r.status}"
+    for l in text.lines()
+        if l.contains("panicked") or l.contains("internal error") or l.contains("bootstrap.")
+            return "internal error: {l}"
+        located := l.contains("compiler/") and not l.starts_with(" ")
+        if located and not l.contains("error[") and not l.contains("warning[")
+            return "trap in the compiler: {l}"
+    if r.status == 2 and not text.contains("error[") and not text.contains("\"severity\":\"error\"")
+        return "exit 2 and no error"
+    ""
+
+fn Chk.red(mut self, rule str, k str, file str, why str)
+    self.fails += 1
+    print("FAIL {rule} {k}: {why}")
+    sh("mkdir -p \"$1\" && cp \"$2\" \"$1/chk-$3.ail\"", [self.out, file, k])
+
+fn pick(xs List[str]) str
+    xs[random.int(0, xs.len() - 1)]
+
+## One mutation of `lines`, as text.
+fn mutate(lines List[str], kind int) str
+    mut out := lines
+    n := out.len()
+    row := random.int(0, n - 1)
+    if kind == 0
+        return out[0..row].join("\n")
+    if kind == 1
+        out.remove_at(row)
+    elif kind == 2
+        out.insert(row, out[row])
+    elif kind == 3
+        mut words := out[row].split(" ")
+        a := random.int(0, words.len() - 1)
+        b := random.int(0, words.len() - 1)
+        keep := words[a]
+        words[a] = words[b]
+        words[b] = keep
+        out[row] = words.join(" ")
+    elif kind == 4
+        words := out[row].split(" ")
+        spot := random.int(0, words.len())
+        mut made := List[str]()
+        for w in words
+            if made.len() == spot
+                made.push(pick(KEYWORDS))
+            made.push(w)
+        if spot >= words.len()
+            made.push(pick(KEYWORDS))
+        out[row] = made.join(" ")
+    elif kind == 5
+        mut junk := ""
+        for _ in 0..random.int(1, 40)
+            junk = "{junk}{pick(ODD)}"
+        out[row] = junk
+    elif kind == 6
+        out[row] = "{out[row]}{pick(["(", "[", "\"", "\{", "'"])}"
+    else
+        out[row] = "{pick([" ", "  ", "   ", "\t", "        "])}{out[row]}"
+    out.join("\n")
+
+fn Chk.mutants(mut self, files List[str], count int, seed int)
+    for k in 0..count
+        random.seed(seed + k)
+        file := pick(files)
+        text := fs.read_text(file) else continue
+        lines := text.split("\n")
+        if lines.len() < 2
+            continue
+        kind := random.int(0, 7)
+        target := "{self.work}/m{k}.ail"
+        fs.write_text(target, mutate(lines, kind)) else continue
+        why := verdict(check_run(target, false))
+        if why != ""
+            self.red("fuzz.chk.1", "{k}", target, "{why} (from {file}, mutation {kind}, seed {seed + k})")
+        sh("rm -f \"$1\"", [target])
+
+## fuzz.chk.2: the extremes, made by awk so the program holds no huge string.
+fn Chk.extremes(mut self)
+    cases := [
+        ("long_line", "BEGIN \{ print \"fn main()\"; printf \"    print(\\\"\"; for (i = 0; i < 5000000; i++) printf \"a\"; print \"\\\")\" }"),
+        ("deep_parens", "BEGIN \{ print \"fn main()\"; printf \"    x := \"; for (i = 0; i < 10000; i++) printf \"(\"; print \"1\" }"),
+        ("deep_closed", "BEGIN \{ print \"fn main()\"; printf \"    x := \"; for (i = 0; i < 10000; i++) printf \"(\"; printf \"1\"; for (i = 0; i < 10000; i++) printf \")\"; print \"\" }"),
+        ("deep_lists", "BEGIN \{ print \"fn main()\"; printf \"    x := \"; for (i = 0; i < 10000; i++) printf \"[\"; print \"\" }"),
+        ("many_lines", "BEGIN \{ print \"fn main()\"; for (i = 0; i < 100000; i++) print \"    x\" i \" := \" i; print \"    print(x1)\" }"),
+        ("many_fns", "BEGIN \{ for (i = 0; i < 20000; i++) print \"fn f\" i \"() int\\n    \" i \"\\n\"; print \"fn main()\\n    print(f1())\" }"),
+        ("deep_blocks", "BEGIN \{ print \"fn main()\"; for (i = 1; i < 2000; i++) \{ s = \"\"; for (j = 0; j < i; j++) s = s \"    \"; print s \"if true\" }; print \"x\" }"),
+    ]
+    for c in cases
+        target := "{self.work}/{c.0}.ail"
+        sh("awk \"$1\" > \"$2\"", [c.1, target])
+        why := verdict(check_run(target, false))
+        if why != ""
+            self.red("fuzz.chk.2", c.0, target, why)
+        sh("rm -f \"$1\"", [target])
+
+## One generated function: its name, its source, and the rule it must report
+## (the empty rule: any error, for a syntax mistake).
+struct Piece
+    src str
+    rule str
+    syntax bool
+
+fn piece(kind int, k int) Piece
+    if kind == 0
+        return Piece(src: "fn unknown_{k}()\n    missing_helper_{k}(1)\n", rule: "expr.name.1", syntax: false)
+    if kind == 1
+        return Piece(src: "fn immutable_{k}()\n    n := 1\n    n = 2\n    print(n)\n", rule: "expr.bind.3", syntax: false)
+    if kind == 2
+        return Piece(src: "fn pattern_{k}(n int)\n    match n\n        \"a\" => print(1)\n        _ => print(0)\n", rule: "expr.match.7", syntax: false)
+    if kind == 3
+        return Piece(src: "fn param_{k}(p P)\n    p.x = 1\n    print(p.x)\n", rule: "own.param.1", syntax: false)
+    if kind == 4
+        return Piece(src: "fn broken_{k}()\n    x := 1 +\n    print(x)\n", rule: "", syntax: true)
+    if kind == 5
+        return Piece(src: "fn broken_{k}()\n    y := (1 + 2\n    print(y)\n", rule: "", syntax: true)
+    Piece(src: "fn broken_{k}()\n    print(1\n    print(2)\n", rule: "", syntax: true)
+
+fn call_of(kind int, k int) str
+    names := ["unknown_{k}()", "immutable_{k}()", "pattern_{k}(1)", "param_{k}(P(x: 1))", "broken_{k}()", "broken_{k}()", "broken_{k}()"]
+    "    {names[kind]}\n"
+
+## The first line number in `json` output with an error, and the rules and lines of every error.
+fn errors_of(r proc.Output) List[(int, str)]
+    mut found := List[(int, str)]()
+    for l in "{r.out}\n{r.err}".lines()
+        if not l.contains("\"severity\":\"error\"")
+            continue
+        rule := l.split("\"rule\":\"")[1].split("\"")[0]
+        row := (l.split("\"line\":")[1].split(",")[0].to_int() else 0)
+        found.push((row, rule))
+    found
+
+## fuzz.chk.3: five functions, five independent mistakes.
+fn Chk.one_pass(mut self, count int, seed int)
+    for k in 0..count
+        random.seed(seed + k)
+        mut text := "struct P\n    x int\n\n"
+        mut spans := List[(int, int, int)]()
+        mut row := 4
+        mut kinds := List[int]()
+        for i in 0..5
+            mut kind := random.int(0, 6)
+            # The first two functions of each file are a syntax mistake and a different mistake, so every file mixes both.
+            if i == 0 and k % 2 == 0
+                kind = random.int(4, 6)
+            kinds.push(kind)
+            p := piece(kind, i)
+            size := p.src.lines().len()
+            spans.push((row, row + size - 1, kind))
+            text = "{text}{p.src}\n"
+            row += size + 1
+        main_row := row
+        mut calls := "fn main()\n"
+        for i in 0..5
+            calls = "{calls}{call_of(kinds[i], i)}"
+        target := "{self.work}/p{k}.ail"
+        fs.write_text(target, "{text}{calls}") else continue
+        r := check_run(target, true)
+        mut why := verdict(r)
+        found := errors_of(r)
+        if why == ""
+            for s in spans
+                p := piece(s.2, 0)
+                mut seen := false
+                for e in found
+                    if e.0 >= s.0 and e.0 <= s.1 and (p.rule == "" or e.1 == p.rule)
+                        seen = true
+                if not seen
+                    wanted := if p.rule == "" then "syntax error" else p.rule
+                    why = "no {wanted} in the function at line {s.0}"
+            for e in found
+                if e.0 >= main_row
+                    why = "an error in main: {e.1} at line {e.0}"
+        if why != ""
+            self.red("fuzz.chk.3", "{k}", target, "{why}; {found.len()} errors reported")
+        sh("rm -f \"$1\"", [target])
+
+fn main() !
+    args := env.args()
+    n := if args.len() > 0 then (args[0].to_int() else 300) else 300
+    seed := if args.len() > 1 then (args[1].to_int() else 1) else 1
+    out := if args.len() > 2 then args[2] else "tools/fuzz/failures"
+    work := "/tmp/ail-checkfuzz-{seed}"
+    sh("rm -rf \"$1\" && mkdir -p \"$1\"", [work])
+    listed := sh("find corpus examples tests/cases -name \"*.ail\" | sort", [])
+    files := listed.out.lines()
+    if files.len() == 0
+        print("CHECKFUZZ RED (no input programs)")
+        io.exit(1)
+    mut f := Chk(fails: 0, out: out, work: work)
+    f.mutants(files, n, seed)
+    f.extremes()
+    f.one_pass(n / 6 + 1, seed)
+    sh("rm -rf \"$1\"", [work])
+    print("checkfuzz: {n} mutants, 7 extremes, {n / 6 + 1} generated files from seed {seed}")
+    if f.fails == 0
+        print("CHECKFUZZ GREEN")
+        return
+    print("CHECKFUZZ RED ({f.fails} failures)")
+    io.exit(1)

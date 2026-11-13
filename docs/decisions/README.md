@@ -892,6 +892,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |
 | [1105](1105-scoped-caps-in-manifests-and-review.md) | Scoped capabilities in `ail.pkg` (`caps fs.read=./data`) give a run its policy; `ail review` reports widened scopes *(delegated)* | Accepted | 2026-11-13 |
 | [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |
+| [1112](1112-check-one-pass-and-fuzz.md) | `ail check` reports everything in one pass, and a checker fuzz guards it *(delegated)* | Accepted | 2026-11-13 |
 | [1107](1107-labeled-break-continue.md) | Labeled loops: `outer: for`, `break outer`, `continue outer` *(delegated)* | Accepted | 2026-11-13 |
 | [1108](1108-grammar-file.md) | `docs/spec/grammar.ebnf`, the whole grammar, checked against the tree by `tools/check-grammar.py` *(delegated)* | Accepted | 2026-11-13 |
 | [1109](1109-check-means-build.md) | What `ail check` accepts the native build builds: a generated method-by-element-type matrix and the `native_matrix` gate suite *(delegated)* | Accepted | 2026-11-13 |

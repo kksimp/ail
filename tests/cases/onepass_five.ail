@@ -1,0 +1,32 @@
+# gram.rec.4: five independent mistakes in five functions, one of them a syntax
+# error, are all reported in one run; the call of the broken function adds none.
+struct P
+    x int
+
+fn unknown_call()
+    missing_helper(1)
+
+fn immutable_local() int
+    n := 1
+    n = 2
+    n
+
+fn broken_syntax() int
+    x := 1 +
+    x
+
+fn wrong_pattern(n int) int
+    match n
+        "a" => 1
+        _ => 0
+
+fn immutable_param(p P) int
+    p.x = 1
+    p.x
+
+fn main()
+    unknown_call()
+    print(immutable_local())
+    print(broken_syntax())
+    print(wrong_pattern(1))
+    print(immutable_param(P(x: 1)))

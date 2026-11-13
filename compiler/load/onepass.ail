@@ -1,0 +1,137 @@
+## Everything in one pass (gram.rec.4, ADR 1112): when a file has syntax errors,
+## `ail check` still reports the checker's errors from the declarations that parsed
+## cleanly, so five mistakes in five functions show up in one run.
+##
+## A declaration (a function, struct, enum, trait or impl) is a segment: the lines
+## from one line that starts in column 1 to the next. A segment holding a syntax
+## error is broken. A checker error is kept only when it is not inside a broken
+## segment and does not mention a name declared by one (that name is missing from
+## the program, so uses of it would only repeat the syntax error). Warnings are
+## dropped: they judge the whole program, and a broken declaration changes it.
+use ast
+
+## The lines [first, end_row] (1-based, in the file's own numbering) of the segment
+## around `at`, in `lines`.
+fn segment_around(lines List[str], at int)(int, int)
+    mut row_in := at
+    if row_in > lines.len()
+        row_in = lines.len()
+    if row_in < 1
+        row_in = 1
+    mut first := row_in
+    while first > 1 and not opens_segment(lines, first)
+        first -= 1
+    mut end_row := row_in
+    while end_row < lines.len() and not opens_segment(lines, end_row + 1)
+        end_row += 1
+    (first, end_row)
+
+## Does line `n` start a declaration: text in column 1 that is not a comment? An
+## attribute line starts one unless the line above it is an attribute, and a
+## declaration right under an attribute continues it.
+fn opens_segment(lines List[str], n int) bool
+    line := lines[n - 1]
+    if line == "" or line.starts_with(" ") or line.starts_with("\t") or line.starts_with("#")
+        return false
+    if n > 1 and lines[n - 2].starts_with("@")
+        return false
+    true
+
+## The words of one line.
+fn words_of(line str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in line.chars()
+        if c.is_alnum() or c == '_'
+            cur = "{cur}{c}"
+        else
+            if cur != ""
+                out.push(cur)
+            cur = ""
+    if cur != ""
+        out.push(cur)
+    out
+
+DECL_WORDS := [
+    "fn",
+    "pub",
+    "struct",
+    "enum",
+    "trait",
+    "impl",
+    "error",
+    "unique",
+    "unsafe",
+    "extern",
+    "type",
+    "for",
+    "export",
+    "mut",
+    "self",
+]
+
+## The names a broken declaration was meant to declare: the words of its header
+## up to the first `(`, `=` or `:`, minus the keywords.
+fn declared_names(header str) List[str]
+    mut upto := header
+    for mark in ["(", "=", ":", "["]
+        if cut := upto.find(mark)
+            upto = upto.slice(0, cut)
+    mut out := List[str]()
+    for w in words_of(upto)
+        if not DECL_WORDS.contains(w) and w.len() >= 3
+            out.push(w)
+    out
+
+fn mentions(text str, names List[str]) bool
+    for w in words_of(text)
+        if names.contains(w)
+            return true
+    false
+
+## The file of `program.files` that holds global line `line`, or -1.
+fn file_of(files List[ast.SourceFile], line int) int
+    if line >= PRELUDE_LINE
+        return -1
+    mut k := files.len()
+    while k > 0
+        k -= 1
+        if files[k].base < line
+            return k
+    -1
+
+## The checker's errors in `semantic` that survive the syntax errors in `broken`
+## (both already shown): see the head of this file. When a syntax error can't be
+## placed in a file, nothing is kept.
+pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Shown]
+    files := loaded.program.files
+    mut ranges := List[(int, int)]()
+    mut names := List[str]()
+    for d in broken
+        k := file_of(files, d.pos.line)
+        if k < 0 or k >= loaded.texts.len()
+            return []
+        lines := loaded.texts[k].split("\n")
+        own := d.pos.line - files[k].base
+        seg := segment_around(lines, own)
+        ranges.push((seg.0 + files[k].base, seg.1 + files[k].base))
+        if seg.0 >= 1 and seg.0 <= lines.len()
+            names.extend(declared_names(lines[seg.0 - 1]))
+    mut kept := List[Shown]()
+    for d in semantic
+        help_text := d.help else ""
+        if d.warning or inside(ranges, d.pos.line) or mentions("{d.message} {help_text}", names)
+            continue
+        mut touches := false
+        for n in d.notes
+            if inside(ranges, n.pos.line) or mentions(n.message, names)
+                touches = true
+        if not touches
+            kept.push(d)
+    kept
+
+fn inside(ranges List[(int, int)], line int) bool
+    for r in ranges
+        if line >= r.0 and line <= r.1
+            return true
+    false
