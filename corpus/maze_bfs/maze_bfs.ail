@@ -1,0 +1,129 @@
+## Breadth-first search through ASCII mazes ('#' wall, 'S' start, 'E' exit).
+## Finds a shortest path, draws it with '*', and reports how many cells the
+## search could reach. A second maze has no way out.
+
+struct Maze
+    width int
+    height int
+    walls List[int]
+    start int
+    goal int
+
+fn parse(rows List[str]) Maze
+    mut walls := List[int]()
+    mut start := 0
+    mut goal := 0
+    for line in rows
+        for ch in line.chars()
+            if ch == 'S'
+                start = walls.len()
+            if ch == 'E'
+                goal = walls.len()
+            walls.push(if ch == '#' then 1 else 0)
+    Maze(width: rows[0].len(), height: rows.len(), walls: walls, start: start, goal: goal)
+
+fn explore(m Maze) List[int]
+    mut prev := List[int]()
+    for k in 0..m.walls.len()
+        prev.push(-2)
+    dxs := [0, 1, 0, -1]
+    dys := [-1, 0, 1, 0]
+    mut queue := [m.start]
+    prev[m.start] = -1
+    mut head := 0
+    while head < queue.len()
+        cur := queue[head]
+        head += 1
+        if cur == m.goal
+            break
+        for d in 0..4
+            nx := cur % m.width + dxs[d]
+            ny := cur / m.width + dys[d]
+            if nx < 0 or nx >= m.width or ny < 0 or ny >= m.height
+                continue
+            spot := ny * m.width + nx
+            if m.walls[spot] == 0 and prev[spot] == -2
+                prev[spot] = cur
+                queue.push(spot)
+    prev
+
+fn path_to_goal(m Maze, prev List[int]) List[int]
+    mut path := List[int]()
+    if prev[m.goal] == -2
+        return path
+    mut here := m.goal
+    while here != -1
+        path.push(here)
+        here = prev[here]
+    path.reverse()
+    path
+
+fn reached(prev List[int]) int
+    mut n := 0
+    for p in prev
+        if p != -2
+            n += 1
+    n
+
+fn draw(m Maze, path List[int]) List[str]
+    mut cells := List[str]()
+    for i in 0..m.walls.len()
+        cells.push(if m.walls[i] == 1 then "#" else ".")
+    for step in path
+        cells[step] = "*"
+    cells[m.start] = "S"
+    cells[m.goal] = "E"
+    mut rows := List[str]()
+    for r in 0..m.height
+        lo := r * m.width
+        hi := lo + m.width
+        rows.push(cells[lo..hi].join(""))
+    rows
+
+fn report(name str, rows List[str])
+    m := parse(rows)
+    prev := explore(m)
+    path := path_to_goal(m, prev)
+    if path.is_empty()
+        print("{name}: no way out, {reached(prev)} cells reachable")
+        return
+    print("{name}: {path.len() - 1} steps, {reached(prev)} cells reached")
+    for line in draw(m, path)
+        print("  {line}")
+
+fn main()
+    report("maze A", [
+        "##########",
+        "#S.#.....#",
+        "#..#.###.#",
+        "#..#...#.#",
+        "#..###.#.#",
+        "#......#E#",
+        "##########",
+    ])
+    report("maze B", [
+        "#########",
+        "#S..#...#",
+        "#.#.#.#.#",
+        "#.#...#E#",
+        "###.###.#",
+        "#.......#",
+        "#########",
+    ])
+    report("maze C", ["#######", "#S..#.#", "###.#E#", "#...###", "#######"])
+
+@test fn open_room_is_manhattan_distance()
+    m := parse(["#####", "#S..#", "#..E#", "#####"])
+    path := path_to_goal(m, explore(m))
+    assert_eq(path.len() - 1, 3)
+
+@test fn sealed_goal_has_no_path()
+    m := parse(["#####", "#S#E#", "#####"])
+    assert(path_to_goal(m, explore(m)).is_empty())
+
+@test fn parse_finds_start_and_goal()
+    m := parse(["####", "#SE#", "####"])
+    assert_eq(m.start, 5)
+    assert_eq(m.goal, 6)
+    assert_eq(m.width, 4)
+    assert_eq(m.height, 3)

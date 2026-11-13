@@ -292,6 +292,60 @@ fn main()
 ```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
 ```
 
+## Check output
+
+**check.out.1** — `ail check FILE|DIR` that finds no error prints one line on
+standard output, `ok PATH: N functions, M warnings` (N counts the program's own
+functions, M its warnings), so a clean run is told from one that did not run.
+The warnings themselves are on standard error. The checks `ail run`, `ail build`
+and `ail test` make first print no such line
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=warnings rules=check.out.1
+fn main()
+    print("hi")
+```
+
+**check.out.2** — Every error ends with a `next:` line, or in `--json` a `next`
+member: `ail fix FILE` when the diagnostic offers a fix, else
+`ail explain RULE`. A warning has none
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=next: status=2 rules=check.out.2
+fn main()
+    prnt("hi")
+```
+
+**check.out.3** — With `--json` every diagnostic is one object per line on
+standard error, as [check-json.schema.json](../design/check-json.schema.json)
+describes (`api`, `severity`, `rule`, `file`, `line`, `col`, `end_line`,
+`end_col`, `message`, and when there are any `help`, `notes`, `fixes`, `next`),
+and one summary object `{"api":1,"summary":true,"errors":N,"warnings":M,"fixable":K}`
+is printed last on standard output. `fixable` counts diagnostics with a fix. The
+gate checks every record of the mistakes corpus against the schema
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,--json,FILE expect="summary":true,"errors":1 status=2 rules=check.out.3
+fn main()
+    prnt("hi")
+```
+
+**check.exit.1** — `ail check` exits 0 when the program has no error (warnings
+allowed) and 2 when it has one or the command line is wrong. `ail run` of a
+program that does not compile prints the diagnostics and exits 2 without
+running it, as `ail check` does; a trap exits 1; otherwise `ail run` exits with
+the program's status.
+`ail test` of a program that does not compile exits non-zero, and 1 when a test
+fails. `ail test` of a file with no tests prints `no tests found in FILE` before
+the `0 passed, 0 failed` line (`--json`: `"no_tests":true` in the summary) and exits 0,
+since nothing failed. The gate checks these on macOS, Linux and Windows
+([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=error status=2 rules=check.exit.1
+fn main()
+    prnt("hi")
+```
+
 ## Explain
 
 **explain.show.1** — `ail explain RULE` prints the rule's text from
@@ -663,7 +717,10 @@ there are lines, 1 when there are none, 2 for an error.
 
 **api.find.2** — The words are matched against the standard library's rules in
 the spec: a rule `**std.M.N**` whose text starts with a backticked signature
-`name(params) ret ! Error` describes one function `M.name`. A function scores 6
+`name(params) ret ! Error` describes one function `M.name`; a run of signatures
+joined by `, ` or `and` describes each of them, and so does the run after
+`use std.M` provides. A line shows the module and the signature, with the module
+left out when the signature starts with it (`net.open(...)`). A function scores 6
 for each word that is its name, 3 for each word its name contains (of three
 letters or more), 2 for each word that is its module, and 1 for each word (or
 its plural or singular) in the rule's text. Filler words (`a`, `the`, `of`,
@@ -677,9 +734,13 @@ name.
 
 **api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
-and `! Error` is ignored. A function scores 6 when its parameter types equal
-the asked ones in order, else 1 for each asked type among its parameters, and 4
-when its result type equals the asked one.
+and `! Error` is ignored. A built-in method's receiver is its first parameter,
+so `str.to_int() int?` has the shape `(str) int?`. A function scores 6 when its
+parameter types equal the asked ones in order, else 1 for each asked type among
+its parameters, and 4 when its result type equals the asked one. It is printed
+only when its parameters equal the asked ones (and its result does, when one was
+asked), or its result equals the asked one and at least one asked parameter type
+is among its parameters.
 
 **api.find.4** — A query that nothing answers exits 1 and prints
 `nothing in std matches WORDS` (`api.find.5`). No words, or an unknown option,
@@ -695,7 +756,7 @@ those of its line. On a miss, the line after `nothing in std matches WORDS` is
 the answer of the first row of `docs/design/not-in-std.txt` (`WORDS|WORDS ->
 ANSWER`) one of whose alternatives has all its words in the query; no row, no
 second line. `tools/check-method-table.py` checks that every rule of the table
-exists and that every built-in method of the checker is in it.
+exists, that every built-in method of the checker and every `x.name(args)` a `type.*` rule names is in it, and that no row of `not-in-std.txt` names a std module or prelude type that exists.
 
 **api.find.6** — `ail ask how WORDS...` searches `docs/how-to.md`, whose `##`
 sections are one task each (`sort descending`, `read a file by lines`): a title,
@@ -711,7 +772,7 @@ for `api.find.6`).
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
-rest. It is at most 2,000 tokens by `tools/tokbench`. `ail card core` prints the
+rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
 same.
 
 **tool.card.2** — `ail card TOPIC` prints the section of the full card
@@ -743,6 +804,26 @@ fn main()
 ```
 
 ```ail tool=ask,std,sort,list,by,key expect=List.sorted(by: rules=api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,yaml expect=parse(text rules=api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,parse,int,hex expect=to_int(radix) rules=api.find.2,api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(str)int? expect=str.to_int rules=api.find.3
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,current,date expect=date.now() rules=api.find.2
 fn main()
     print(1)
 ```
@@ -975,6 +1056,11 @@ is new. `(none)` stands for an absent one.
 **api.rev.10** — `perf` has a line for each loop whose `ail perf --explain` verdict
 (ADR 1021) differs between the versions. It is
 empty until that command exists.
+
+**api.rev.12** — `effects` also has a line for each package whose `caps` entries
+in `ail.pkg` changed (`eff.allow.10-11`): `NEW CAPABILITY grant PACKAGE: +ENTRY` when
+an entry was gained or a scope widened or moved, counted as a new capability,
+else `grant PACKAGE: -ENTRY`. *(ADR 1105)*
 
 **api.rev.11** — `untested` has the id of each changed or new function, other than
 `main` and `@test` functions, that no `@test` function reaches by calls or by

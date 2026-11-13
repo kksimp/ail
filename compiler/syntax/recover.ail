@@ -12,6 +12,14 @@ use fix
 ## COND` and `ensures COND` (contract.decl.1). A trait method may have
 ## contract lines and no body (contract.inh.1).
 fn Parser.fn_body(mut self, after str, bodyless_ok bool) FnBody?
+    # A loop label is visible only inside its own function (expr.loop.10).
+    saved := loops
+    loops = []
+    out := fn_body_inner(after, bodyless_ok)
+    loops = saved
+    out
+
+fn Parser.fn_body_inner(mut self, after str, bodyless_ok bool) FnBody?
     if tag_at(1) != "indent"
         body := block(after, "gram.fn.1")?
         return FnBody(body: body, contracts: [])
@@ -413,6 +421,7 @@ fn Parser.pub_marker(mut self)
         or k == "unique"
         or k == "trait"
         or tag_at(0) == "id" and sym_at(1) == ":="
+        or tag_at(0) == "id" and tok_text(peek()) == "type" and tag_at(1) == "id"
         public.add(pos.line)
     elif k == "impl"
         error_text(
@@ -515,7 +524,7 @@ fn decl_fix(w str) str?
         "async" => "-"
         "public" | "export" => "pub"
         "private" | "protected" | "static" | "final" | "abstract" | "override" | "sealed" | "internal" => "-"
-        "package" | "namespace" | "module" | "type" => ""
+        "package" | "namespace" | "module" => ""
         _ => none
 
 ## The message and help of a foreign declaration word (`foreign::decl_word`).
@@ -530,8 +539,6 @@ fn decl_info(w str)(str, str)
         "async" =>
             ("AIL has no `async`", "tasks are colorless: start any function with `spawn f(x)` and wait with `t.wait()`")
         "public" | "export" => ("AIL exports with `pub`", "write `pub` before the declaration")
-        "type" =>
-            ("AIL has no `type X = Y` alias", "a new type is a `struct` with a field: `struct Celsius` then an indented `value float`; a function type is written `fn(int) int` where it is used")
         "package" | "namespace" | "module" =>
             ("AIL modules are directories, not declared in the file", "put the file in a directory and import it elsewhere with `use dir`")
         _ =>
@@ -768,19 +775,6 @@ fn Parser.stray_after_statement(mut self, start int) bool
     k0 := i
     pos := tok_pos(k0)
     cur := sym_at(0)
-    # `outer: for ...`
-    if tok_tag(tokens[start].tok) == "id"
-        and cur == ":"
-        and k0 == start + 1
-        and (tokens[k0 + 1].tok == Tok.Kw("for") or tokens[k0 + 1].tok == Tok.Kw("while"))
-        error_text(
-            "gram.foreign.1",
-            tok_pos(start),
-            "AIL has no loop labels",
-            "`break` leaves the innermost loop; to leave nested loops move them into a function and `return`, or keep a `mut done := false` flag and test it in each loop",
-            "",
-        )
-        return true
     # `println!(..)`, `vec![..]`, `format!(..)`
     if cur == "!"
         and k0 >= 1

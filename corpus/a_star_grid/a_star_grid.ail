@@ -1,0 +1,115 @@
+## A* path search on a text grid. `S` is the start, `G` the goal, `#` a wall.
+## Moves are four-directional with cost 1 and the heuristic is Manhattan
+## distance. The open list is scanned for the lowest f (ties: lower h, then
+## lower cell index), so the chosen path is deterministic. Prints the path
+## length, the cells expanded, and the grid with the route drawn as `*`.
+
+INF := 1000000
+
+struct Search
+    found bool
+    path List[int]
+    expanded int
+
+fn heuristic(cell int, goal int, width int) int
+    (cell / width - goal / width).abs() + (cell % width - goal % width).abs()
+
+fn search(cells List[char], width int, start int, goal int) Search
+    total := cells.len()
+    height := total / width
+    mut g := List[int]()
+    mut came := List[int]()
+    mut closed := List[bool]()
+    for cell in 0..total
+        g.push(INF)
+        came.push(-1)
+        closed.push(false)
+    g[start] = 0
+    mut frontier := [start]
+    mut expanded := 0
+    dr := [-1, 0, 1, 0]
+    dc := [0, 1, 0, -1]
+    while not frontier.is_empty()
+        mut bi := 0
+        for k in 1..frontier.len()
+            fa := g[frontier[k]] + heuristic(frontier[k], goal, width)
+            fb := g[frontier[bi]] + heuristic(frontier[bi], goal, width)
+            ha := heuristic(frontier[k], goal, width)
+            hb := heuristic(frontier[bi], goal, width)
+            if fa < fb or (fa == fb and (ha < hb or (ha == hb and frontier[k] < frontier[bi])))
+                bi = k
+        cur := frontier[bi]
+        frontier.remove_at(bi)
+        if closed[cur]
+            continue
+        closed[cur] = true
+        expanded += 1
+        if cur == goal
+            mut path := [cur]
+            mut at := cur
+            while came[at] != -1
+                at = came[at]
+                path.push(at)
+            path.reverse()
+            return Search(found: true, path: path, expanded: expanded)
+        row := cur / width
+        col := cur % width
+        for d in 0..4
+            nr := row + dr[d]
+            nc := col + dc[d]
+            if nr < 0 or nr >= height or nc < 0 or nc >= width
+                continue
+            nxt := nr * width + nc
+            if cells[nxt] == '#' or closed[nxt]
+                continue
+            if g[cur] + 1 < g[nxt]
+                g[nxt] = g[cur] + 1
+                came[nxt] = cur
+                frontier.push(nxt)
+    Search(found: false, path: [], expanded: expanded)
+
+fn solve(label str, rows List[str])
+    width := rows[0].len()
+    mut cells := List[char]()
+    mut start := 0
+    mut goal := 0
+    for r in rows
+        for c in r.chars()
+            if c == 'S'
+                start = cells.len()
+            elif c == 'G'
+                goal = cells.len()
+            cells.push(c)
+    res := search(cells, width, start, goal)
+    print("{label}:")
+    if not res.found
+        print("  no path ({res.expanded} cells expanded)")
+    else
+        for p in res.path
+            if p != start and p != goal
+                cells[p] = '*'
+        print("  length {res.path.len() - 1}, {res.expanded} cells expanded")
+    for y in 0..rows.len()
+        print("  {cells[y * width..(y + 1) * width].join("")}")
+
+fn main()
+    solve("open field", ["S.......", "........", "........", ".......G"])
+    solve("with walls", ["S..#......", ".#.#.####.", ".#...#....", ".#####.##.", "......#..G"])
+    solve("sealed off", ["S.#.", "..#.", "###.", "...G"])
+
+@test fn straight_line()
+    cells := "S..G".chars()
+    res := search(cells, 4, 0, 3)
+    assert(res.found)
+    assert_eq(res.path, [0, 1, 2, 3])
+
+@test fn detours_around_wall()
+    cells := "S#.G....".chars()
+    res := search(cells, 4, 0, 3)
+    assert(res.found)
+    assert_eq(res.path.len() - 1, 5)
+
+@test fn blocked_goal()
+    cells := "S#G".chars()
+    res := search(cells, 3, 0, 2)
+    assert(not res.found)

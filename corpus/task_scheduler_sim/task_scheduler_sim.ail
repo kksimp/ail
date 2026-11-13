@@ -1,0 +1,99 @@
+## CPU scheduler simulation: the same job list (sorted by arrival) is run
+## under first-come-first-served and under round robin with a time quantum.
+## Each policy reports finish, turnaround and waiting time per job.
+
+struct Job
+    name str
+    arrival int
+    burst int
+
+struct Finish
+    name str
+    finish int
+    turnaround int
+    waiting int
+
+fn fcfs(jobs List[Job]) List[Finish]
+    mut tick := 0
+    mut out := List[Finish]()
+    for j in jobs
+        tick = tick.max(j.arrival) + j.burst
+        out.push(Finish(
+            name: j.name,
+            finish: tick,
+            turnaround: tick - j.arrival,
+            waiting: tick - j.arrival - j.burst,
+        ))
+    out
+
+fn round_robin(jobs List[Job], quantum int) List[Finish]
+    n := jobs.len()
+    mut remaining := [j.burst for j in jobs]
+    mut queue := List[int]()
+    mut done := List[Finish]()
+    mut tick := 0
+    mut upto := 0
+    while done.len() < n
+        while upto < n and jobs[upto].arrival <= tick
+            queue.push(upto)
+            upto += 1
+        if queue.is_empty()
+            tick = jobs[upto].arrival
+            continue
+        i := queue[0]
+        queue.remove_at(0)
+        chunk := remaining[i].min(quantum)
+        tick += chunk
+        remaining[i] = remaining[i] - chunk
+        while upto < n and jobs[upto].arrival <= tick
+            queue.push(upto)
+            upto += 1
+        if remaining[i] > 0
+            queue.push(i)
+        else
+            j := jobs[i]
+            done.push(Finish(
+                name: j.name,
+                finish: tick,
+                turnaround: tick - j.arrival,
+                waiting: tick - j.arrival - j.burst,
+            ))
+    done
+
+fn report(title str, rows List[Finish])
+    print(title)
+    mut total_wait := 0
+    for f in rows
+        print("  {f.name:<4} finish {f.finish:>3} turnaround {f.turnaround:>3} waiting {f.waiting:>3}")
+        total_wait += f.waiting
+    print("  average waiting: {total_wait / rows.len()} (total {total_wait})")
+
+fn main()
+    jobs := [
+        Job(name: "A", arrival: 0, burst: 8),
+        Job(name: "B", arrival: 1, burst: 4),
+        Job(name: "C", arrival: 2, burst: 9),
+        Job(name: "D", arrival: 3, burst: 5),
+        Job(name: "E", arrival: 30, burst: 2),
+    ]
+    report("fcfs", fcfs(jobs))
+    report("round robin q=3", round_robin(jobs, 3))
+
+@test fn fcfs_finish_times()
+    jobs := [Job(name: "x", arrival: 0, burst: 3), Job(name: "y", arrival: 1, burst: 2)]
+    out := fcfs(jobs)
+    assert_eq(out[0].finish, 3)
+    assert_eq(out[1].finish, 5)
+    assert_eq(out[1].waiting, 2)
+
+@test fn round_robin_shares_the_cpu()
+    jobs := [Job(name: "x", arrival: 0, burst: 4), Job(name: "y", arrival: 0, burst: 2)]
+    out := round_robin(jobs, 2)
+    assert_eq(out[0].name, "y")
+    assert_eq(out[0].finish, 4)
+    assert_eq(out[1].finish, 6)
+
+@test fn idle_gap_is_skipped()
+    out := round_robin([Job(name: "z", arrival: 10, burst: 3)], 2)
+    assert_eq(out[0].finish, 13)
+    assert_eq(out[0].waiting, 0)

@@ -1,0 +1,21 @@
+sample: 20 chars
+  <sp> 11110
+  a    0
+  b    1101
+  c    11111
+  d    1000
+  k    1001
+  l    1010
+  m    1011
+  r    1110
+  z    1100
+  55 bits vs 160, round trip yes
+skewed: 15 chars
+  a    1
+  b    01
+  c    001
+  d    000
+  25 bits vs 120, round trip yes
+single: 4 chars
+  z    0
+  4 bits vs 32, round trip yes

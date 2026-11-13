@@ -1,0 +1,118 @@
+## Roman calculator: reads expressions written with Roman numerals ("XIV + II * III"),
+## checks every numeral is in canonical form, applies * and / before + and -,
+## and prints the answer as a Roman numeral. Bad input is a typed error.
+
+error enum CalcError
+    BadNumeral(text str) "bad numeral {text}"
+    BadSyntax "bad syntax"
+    OutOfRange(value int) "result {value} is outside 1..3999"
+
+fn to_roman(n int) str
+    requires n >= 1 and n <= 3999
+    values := [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    symbols := ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+    mut rest := n
+    mut out := ""
+    for i in 0..values.len()
+        while rest >= values[i]
+            out = "{out}{symbols[i]}"
+            rest -= values[i]
+    out
+
+fn roman_value(c char) int
+    match c
+        'I' => 1
+        'V' => 5
+        'X' => 10
+        'L' => 50
+        'C' => 100
+        'D' => 500
+        'M' => 1000
+        _ => 0
+
+## Parses a numeral; only the canonical spelling is accepted ("IIII" is not).
+fn from_roman(s str) int?
+    cs := s.chars()
+    mut total := 0
+    for i in 0..cs.len()
+        v := roman_value(cs[i])
+        if v == 0
+            return none
+        mut after := 0
+        if i + 1 < cs.len()
+            after = roman_value(cs[i + 1])
+        if after > v
+            total -= v
+        else
+            total += v
+    if total >= 1 and total <= 3999 and to_roman(total) == s
+        return total
+    none
+
+fn calc(src str) str ! CalcError
+    toks := src.words()
+    if toks.len() % 2 == 0
+        return BadSyntax
+    mut nums := List[int]()
+    mut ops := List[str]()
+    for i in 0..toks.len()
+        if i % 2 == 0
+            n := from_roman(toks[i]) else return BadNumeral(text: toks[i])
+            nums.push(n)
+        elif ["+", "-", "*", "/"].contains(toks[i])
+            ops.push(toks[i])
+        else
+            return BadSyntax
+    mut vals := [nums[0]]
+    mut adds := List[str]()
+    for i in 0..ops.len()
+        rhs := nums[i + 1]
+        k := vals.len() - 1
+        if ops[i] == "*"
+            vals[k] = vals[k] * rhs
+        elif ops[i] == "/"
+            vals[k] = vals[k] / rhs
+        else
+            adds.push(ops[i])
+            vals.push(rhs)
+    mut total := vals[0]
+    for i in 0..adds.len()
+        if adds[i] == "+"
+            total += vals[i + 1]
+        else
+            total -= vals[i + 1]
+    if total < 1 or total > 3999
+        return OutOfRange(value: total)
+    to_roman(total)
+
+fn main()
+    for src in [
+        "XIV + II * III",
+        "MM / X - XL",
+        "C - L - X",
+        "XII * XII",
+        "IIII + I",
+        "X +",
+        "V - X",
+        "M * IV",
+        "XL / III + VII",
+        "X % V",
+    ]
+        r := calc(src) else err
+            print("{src} => error: {err}")
+            continue
+        print("{src} => {r}")
+
+@test fn precedence_and_division()
+    assert_eq(calc("XIV + II * III")?, "XX")
+    assert_eq(calc("XL / III + VII")?, "XX")
+
+@test fn only_canonical_numerals()
+    assert(from_roman("IIII") == none)
+    assert(from_roman("IC") == none)
+    assert_eq(from_roman("MCMXCIV")?, 1994)
+
+@test fn errors_are_typed()
+    assert_err(calc("V - X"))
+    assert_err(calc("X +"))
+    assert_err(calc("ABC + I"))

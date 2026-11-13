@@ -1,0 +1,94 @@
+## A reverse Polish notation calculator. Tokens are integers, the operators
+## + - * /, and the stack words dup, drop and swap. Bad programs fail with a
+## typed error: stack underflow, division by zero, an unknown token or values
+## left over. Division truncates toward zero.
+
+error enum RpnError
+    Underflow(op str) "stack underflow at {op}"
+    DivZero "division by zero"
+    BadToken(text str) "unknown token {text}"
+    Leftover(count int) "{count} values left on the stack"
+
+fn run_rpn(expr str) int ! RpnError
+    mut st := List[int]()
+    for tok in expr.words()
+        if n := tok.to_int()
+            st.push(n)
+            continue
+        if tok == "dup"
+            top := st.last() else return Underflow(op: tok)
+            st.push(top)
+            continue
+        if tok == "drop"
+            if st.is_empty()
+                return Underflow(op: tok)
+            st.remove_at(st.len() - 1)
+            continue
+        if tok == "swap"
+            x := st.pop() else return Underflow(op: tok)
+            y := st.pop() else return Underflow(op: tok)
+            st.push(x)
+            st.push(y)
+            continue
+        if ["+", "-", "*", "/"].contains(tok)
+            b := st.pop() else return Underflow(op: tok)
+            a := st.pop() else return Underflow(op: tok)
+            mut r := 0
+            if tok == "+"
+                r = a + b
+            elif tok == "-"
+                r = a - b
+            elif tok == "*"
+                r = a * b
+            else
+                if b == 0
+                    return DivZero
+                r = a / b
+            st.push(r)
+            continue
+        return BadToken(text: tok)
+    if st.is_empty()
+        return Underflow(op: "end")
+    if st.len() > 1
+        return Leftover(count: st.len())
+    st[0]
+
+fn main()
+    programs := [
+        "3 4 +",
+        "5 1 2 + 4 * + 3 -",
+        "2 dup * dup *",
+        "10 3 swap /",
+        "7 -2 *",
+        "1 +",
+        "8 0 /",
+        "4 5 pow",
+        "1 2 3",
+        "",
+        "9 drop",
+    ]
+    mut ok := 0
+    for p in programs
+        if v := run_rpn(p)
+            print("{p} => {v}")
+            ok += 1
+        else err
+            print("{p} => error: {err}")
+    print("{ok} of {programs.len()} programs succeeded")
+
+@test fn arithmetic()
+    assert_eq(run_rpn("5 1 2 + 4 * + 3 -") else -1, 14)
+    assert_eq(run_rpn("2 dup *") else -1, 4)
+
+@test fn swap_changes_the_result()
+    assert_eq(run_rpn("10 3 swap -") else 0, -7)
+    assert_eq(run_rpn("3 10 -") else 0, -7)
+
+@test fn errors_are_typed()
+    assert_err(run_rpn("1 +"))
+    assert_err(run_rpn("1 0 /"), RpnError.DivZero)
+    assert_err(run_rpn("1 2"))
+    assert_err(run_rpn("1 foo"))
+
+@test fn division_truncates_toward_zero()
+    assert_eq(run_rpn("-7 2 /") else 0, -3)

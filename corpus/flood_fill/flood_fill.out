@@ -1,0 +1,23 @@
+original:
+  ............
+  .####...##..
+  .#..#..####.
+  .####...##..
+  ............
+  ..#......#..
+  ............
+outside paper cells: 62
+enclosed paper cells: 2
+labelled:
+  ~~~~~~~~~~~~
+  ~AAAA~~~BB~~
+  ~A..A~~BBBB~
+  ~AAAA~~~BB~~
+  ~~~~~~~~~~~~
+  ~~C~~~~~~D~~
+  ~~~~~~~~~~~~
+island A: 10 cells
+island B: 8 cells
+island C: 1 cells
+island D: 1 cells
+ink total: 20

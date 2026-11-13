@@ -1,0 +1,13 @@
+kitten -> sitting: 3
+flaw -> lawn: 2
+saturday -> sunday: 3
+same -> same: 0
+ -> abc: 3
+abc -> : 3
+aple: did you mean apple? (distance 1)
+bananna: did you mean banana? (distance 1)
+orrange: did you mean orange? (distance 1)
+grap: did you mean grape? (distance 1)
+lemmon: did you mean lemon? (distance 1)
+pech: did you mean peach? (distance 1)
+kiwi: did you mean apple? (distance 5)

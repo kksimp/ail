@@ -228,8 +228,14 @@ fn nx_match(
 ## builds each program on its own, which reports the failure per program.
 fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
     for f in chunk
+        # `ail check` doesn't depend on the target: a program is checked once per run (the aarch64-linux pass and a
+        # split batch find the mark the first one left), not once per target and once per halving.
+        mark := "{tmp}/checked-{stem_of(f)}"
+        if fs.exists(mark)
+            continue
         if ail("", "check {f}").status != 0
             return false
+        fs.write_text(mark, "") else return false
     tgt := if target.is_empty() then host_target() else target
     r := comp("build-many compiler/rt/native {tgt} 0 0 {root}/std {chunk.join(" ")}")
     if r.status != 0
@@ -332,10 +338,12 @@ fn Run.executables(mut self, target str, runner str)
         for c in cases
             if not [
                 "attach_tool_game",
+                "ffi_callback",
                 "ffi_dynamic",
                 "ffi_f32",
                 "ffi_missing_library",
                 "ffi_missing_symbol",
+                "ffi_struct",
             ].contains(stem_of(c))
                 static_only.push(c)
         cases = static_only

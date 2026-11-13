@@ -1,0 +1,6 @@
+solved: valid and complete
+partial: valid so far, 51 cells empty
+broken: invalid
+  row 1 repeats 5
+  column 3 repeats 5
+  box 1 repeats 5

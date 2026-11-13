@@ -1,0 +1,7 @@
+records: 9, skipped: 2
+region    gadget   gizmo  widget   total
+east         480     150     175     805
+north        240       0     375     615
+south        320       0     300     620
+west           0     300       0     300
+total       1040     450     850    2340

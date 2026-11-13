@@ -1,0 +1,5 @@
+queued 6 tasks
+next up: deploy
+deploy(1) migrate(1) lint(2) test(2) backup(3) report(3)
+empty now: true
+top 3 scores: [88, 71, 63]

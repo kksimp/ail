@@ -107,13 +107,12 @@ applies, except optional wrapping (`type.opt.5`) and conversion to `any Trait`
 **expr.call.3** — An argument of a call to a user-declared function or
 method may be named, `name: value`, where `name` is a parameter. Positional
 arguments come first and fill the leading parameters; the named ones follow
-and fill the rest in any order. Every parameter MUST be given exactly once, so
-a missing one is `expr.call.1`, and an unknown name, a repeated name, a name
+and fill the rest in any order. Every parameter without a default (`expr.call.4`) MUST be given exactly once,
+so a missing one is `expr.call.1`, and an unknown name, a repeated name, a name
 for a parameter already given by position, or a positional argument after a
 named one is an error. Arguments are evaluated in parameter order, not source
 order. `mut` and `move` go before the value (`f(mut v: xs)`). Built-in
-functions and methods don't take named arguments. There are no default
-values, so a named argument never leaves a parameter out. *(ADR 0454)*
+functions and methods don't take named arguments. *(ADR 0454, ADR 1104)*
 
 ```ail rules=expr.call.3
 fn show(tag str, n int, scale int) str
@@ -121,6 +120,36 @@ fn show(tag str, n int, scale int) str
 
 fn main()
     print(show("a", scale: 3, n: 4))
+```
+
+**expr.call.4** — A parameter of a function or method may declare a default,
+written `name Type = value`. Parameters with defaults come after those without.
+A call may leave a defaulted parameter out, and gives it only by name:
+`fetch(u, retries: 5)`; passing it by position is an error that says to name
+it. The value follows the rule of a struct field's default (`type.struct.8`):
+a plain constant of the parameter's type with no names or calls, evaluated at
+each call. A `mut` or `move` parameter has no default, nor has a method of a
+`trait` or of an `impl Trait` block; a function value's type has every
+parameter, so `fn(str, int, int) Response` accepts only a full call. Adding a
+defaulted parameter after the others doesn't break callers (`ail diff`).
+*(ADR 1104)*
+
+```ail rules=expr.call.4
+fn fetch(url str, retries int = 3, timeout_ms int = 5000) str
+    "{url} {retries} {timeout_ms}"
+
+fn main()
+    print(fetch("a"))
+    print(fetch("b", timeout_ms: 10))
+    print(fetch("c", timeout_ms: 1, retries: 2))
+```
+
+```ail error=expr.call.4
+fn fetch(url str, retries int = 3) str
+    "{url} {retries}"
+
+fn main()
+    print(fetch("a", 5))     # error: `retries` has a default, so it is passed by name
 ```
 
 ## Blocks
@@ -169,7 +198,8 @@ it has an `else` and every branch produces a value of the same type.
 `while c` runs its block while `c` is true. *(ADR 0091)*
 
 **expr.loop.2** — `break` exits the innermost loop. `continue` starts its
-next iteration. *(ADR 0091)*
+next iteration. `break name` and `continue name` name an enclosing loop
+instead (`expr.loop.10`). *(ADR 0091, ADR 1107)*
 
 **expr.loop.3** — `a..b` is the half-open range from `a` up to but excluding
 `b`. `a..=b` includes `b`. *(ADR 0091)*
@@ -199,8 +229,8 @@ present, or the loop traps (`type.map.3`). *(ADR 0121, ADR 0131)*
 **expr.loop.7** — A `while` whose condition is the literal `true` and whose
 body contains no `break` for that loop never completes normally, so as a
 statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
-to that loop. AIL has no `loop` keyword: the help for it says `while true`.
-*(ADR 0139)*
+to that loop, unless it names an outer loop (`expr.loop.10`). AIL has no
+`loop` keyword: the help for it says `while true`. *(ADR 0139, ADR 1107)*
 
 **expr.loop.8** — `while name := e` runs its block while `e`, of type `T?` or
 `T ! E`, has a value. Each iteration evaluates `e` first. When `e` is present
@@ -211,7 +241,29 @@ value is dropped. `break` and `continue` apply to this loop; `continue` evaluate
 (`err.else.6`), so `name` follows `expr.bind.4` and a `while` of this form
 that has a value is never a diverging statement (`expr.loop.7`). There is no
 `else err` part and no `elif`. The Rust spelling `while let x = e` is a
-compile-time error whose fix writes `while x := e`. *(ADR 1088)*
+compile-time error whose fix writes `while x := e`. If `e` is neither optional
+nor a result, that is a compile-time error that names the `while` binding. *(ADR 1088)*
+
+**expr.loop.9** — A loop may start with a label: `name: for x in e` or
+`name: while c`, on one line, with no space before the `:`. A label is a name
+in a namespace of its own: it never clashes with a binding, a function or a
+type. It is visible in the loop's header and block and nowhere else, so two
+loops one after the other may reuse a label. A label that an enclosing loop of
+the same function already has is a compile-time error. A `par for` can't be
+labeled. A function literal or a local function does not see the labels
+around it. *(ADR 1107)*
+
+**expr.loop.10** — `break name` leaves, and `continue name` continues, the
+enclosing loop labeled `name`; both also leave every loop inside it, run the
+`defer` statements of the blocks they leave (`own.defer.1`) and end the task
+scopes they leave, as `break` does. The statement then diverges
+(`expr.block.3`). `name` MUST label an enclosing loop of the same function,
+and no `par for` may lie between the statement and that loop
+(`conc.par.2`); otherwise it is a compile-time error whose fix writes the
+label of the enclosing loop, or labels the outermost enclosing loop `name`
+when none is labeled. A `break name` inside a nested loop is a `break` of the
+labeled loop for `expr.loop.7`. `break 'name` and `for x in e as name` are not
+labels. *(ADR 1107)*
 
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
@@ -340,9 +392,11 @@ and name those variants, unless the function allows it with
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`, `expr.match.13`), or written bare to
-match any fields (`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183,
-ADR 1069)*
+for each of its fields (`expr.match.6`, `expr.match.13`), by patterns for
+some fields by name (`expr.match.14`), or written bare to match any fields
+(`expr.match.10`). A struct value is matched by a struct pattern
+(`expr.match.14`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183, ADR 1069,
+ADR 1106)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -477,6 +531,46 @@ fn main()
     print(show(simplify(Expr.Add(a: Expr.Num(n: 2), b: Expr.Num(n: 3)))))    # 5
     print(show(simplify(Expr.Neg(e: Expr.Neg(e: Expr.Num(n: 7))))))         # 7
     print(show(simplify(Expr.Add(a: Expr.Neg(e: Expr.Nil), b: Expr.Nil))))  # -nil
+```
+
+**expr.match.14** — A pattern with field names, `Name(f: p, g, ...)`, matches
+the fields it names and takes any value in the others. `f: p` matches field
+`f` with pattern `p`; a bare `g` binds field `g` to a new name `g`. On a
+struct value `Name` is the struct's name, and `Point` or `Point(x, y)` (bare
+field names) match every value. On an enum value `Name` is a variant, as in
+`Circle(r: 0)`. Each name MUST be a field of `Name`, at most once, and a
+struct pattern names its fields: `Point(0, y)` is an error. A `match` on a
+struct value, or on an enum whose arms use field names, is checked as
+nested patterns are (`expr.match.13`): it is exhaustive when every value is
+taken, and the missing cases are named. *(ADR 1106)*
+
+```ail rules=expr.match.14
+struct Point
+    x int
+    y int
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn place(p Point) str
+    match p
+        Point(x: 0, y: 0) => "origin"
+        Point(x: 0, y) => "on the y axis at {y}"
+        Point(x, y: 0) => "on the x axis at {x}"
+        Point(x, y) => "at {x}, {y}"
+
+fn kind(s Shape) str
+    match s
+        Circle(r: 0) | Rect(w: 0) | Rect(h: 0) => "empty"
+        Circle => "round"
+        Rect(w, h) => if w == h then "square" else "oblong"
+
+fn main()
+    print(place(Point(x: 0, y: 4)))                    # on the y axis at 4
+    print(place(Point(x: 2, y: 3)))                    # at 2, 3
+    print(kind(Shape.Rect(w: 0, h: 5)))                # empty
+    print(kind(Shape.Rect(w: 2, h: 2)))                # square
 ```
 
 > **Note:** not yet designed: or-patterns that bind names, a binding pattern for a whole
@@ -718,7 +812,12 @@ taking its sequence over and reading only as far as its result is read:
 `s.take_while(keep)`, `s.take(n)`, `s.skip(n)`, `s.enumerate()` (pairs
 `(i, x)` from 0), `s.zip(move other)` (pairs, until either ends) and
 `s.chain(move other)`. Reading to the end: `s.collect()` (a `List[T]`) and
-`s.count()`. *(ADR 1073)*
+`s.count(keep)`, how many elements `keep` is true for. *(ADR 1073, ADR 1099)*
+
+**expr.iter.4** — The prelude also gives `Seq[T]` `s.any(keep)`, `s.all(keep)`,
+`s.find(keep)`, `s.fold(init, f)`, `s.flat_map(f)` (a `Seq[U]`) and
+`s.skip_while(keep)`, with the meaning of `type.coll.22-31`. Each uses the
+sequence up. *(ADR 1099)*
 
 **expr.yield.1** — A function whose body contains a `yield` statement is a
 *generator*; its result type MUST be `Seq[T]`. Calling a generator runs none
@@ -741,7 +840,7 @@ generator MUST NOT have a `mut` parameter or `mut self`, `requires` or
 `ensures`, or a `defer`, and `yield` MUST NOT be inside `par for` or `with`.
 *(ADR 1073)*
 
-```ail rules=expr.yield.1,expr.yield.2,expr.yield.3,expr.iter.1,expr.iter.2,expr.iter.3
+```ail rules=expr.yield.1,expr.yield.2,expr.yield.3,expr.iter.1,expr.iter.2,expr.iter.3,expr.iter.4
 fn count(n int) Seq[int]
     for i in 0..n
         yield i                   # the next element
@@ -775,6 +874,9 @@ fn main()
     for k in c
         print(k)                  # 2 1
     print(c.n)                    # 2: the loop read a copy
+    print(count(5).fold(0, |acc, x| acc + x))   # 10
+    print(count(5).count(|x| x > 1))            # 3
+    print(count(5).skip_while(|x| x < 3).collect())   # [3, 4]
 ```
 
 ```ail error=expr.yield.1
@@ -1058,6 +1160,47 @@ fn find_first(xs List[int], target int) int
 
 fn main()
     print(find_first([4, 5, 6], 6))   # 2
+```
+
+```ail rules=expr.loop.9,expr.loop.10
+fn first_pair(grid List[List[int]], want int) int
+    rows: for r in 0..grid.len()
+        for c in 0..grid[r].len()
+            if grid[r][c] == want
+                return r * 10 + c
+    -1
+
+fn main()
+    mut found := 0
+    outer: for i in 0..5
+        for j in 0..5
+            if i * j == 6
+                found = i * 10 + j
+                break outer           # leaves both loops
+    print(found)                      # 23
+    mut sum := 0
+    rows: for i in 0..4
+        for j in 0..4
+            if j > i
+                continue rows         # the next iteration of the outer loop
+            sum += 1
+    print(sum)                        # 10
+    print(first_pair([[1, 2], [3, 4]], 4))   # 11
+```
+
+```ail error=expr.loop.10
+fn main()
+    for i in 0..3
+        for j in 0..3
+            if i + j == 2
+                break outer           # error: no loop is labeled `outer`
+```
+
+```ail error=expr.loop.9
+fn main()
+    outer: for i in 0..3
+        outer: for j in 0..3          # error: an enclosing loop is already `outer`
+            print(i + j)
 ```
 
 ```ail rules=expr.prec.1,expr.op.1,expr.op.2,expr.op.3

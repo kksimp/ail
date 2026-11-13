@@ -1,0 +1,29 @@
+all valid: 9 match
+  09:58:01 INFO  boot: starting api
+  09:58:02 DEBUG boot: loading config
+  10:00:15 INFO  http: GET /health 200
+  10:01:40 WARN  db: slow query 1200ms
+  10:02:03 ERROR http: GET /orders 500
+  10:02:04 INFO  http: GET /orders 200
+  10:03:30 ERROR db: connection lost
+  10:03:31 WARN  db: retrying connection
+  10:05:00 INFO  boot: ready
+warn and up: 4 match
+  10:01:40 WARN  db: slow query 1200ms
+  10:02:03 ERROR http: GET /orders 500
+  10:03:30 ERROR db: connection lost
+  10:03:31 WARN  db: retrying connection
+db entries: 3 match
+  10:01:40 WARN  db: slow query 1200ms
+  10:03:30 ERROR db: connection lost
+  10:03:31 WARN  db: retrying connection
+10:02 to 10:04: 4 match
+  10:02:03 ERROR http: GET /orders 500
+  10:02:04 INFO  http: GET /orders 200
+  10:03:30 ERROR db: connection lost
+  10:03:31 WARN  db: retrying connection
+DEBUG 1
+ERROR 2
+INFO  4
+WARN  2
+cleaned up: true

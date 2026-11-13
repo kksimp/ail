@@ -1,0 +1,29 @@
+plain 30:
+[Wrapping text is mostly]
+[bookkeeping: count the]
+[characters on the line, break]
+[before a word that does not]
+[fit, and carry the hanging]
+[indent onto every continuation]
+[line.]
+bullet 36:
+[- Wrapping text is mostly]
+[  bookkeeping: count the characters]
+[  on the line, break before a word]
+[  that does not fit, and carry the]
+[  hanging indent onto every]
+[  continuation line.]
+quote 28:
+[> short words only here and]
+[> a verylongunbreakableword]
+[> too]
+dedent:
+[if ready:]
+[    go()]
+[]
+[stop()]
+reindent:
+[    if ready:]
+[        go()]
+[]
+[    stop()]

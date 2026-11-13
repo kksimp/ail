@@ -1,0 +1,29 @@
+secret has 5 letters, 40 candidates
+  a hit  _a___ (20 left)
+  e hit  _a__e (5 left)
+  l hit  _a_le (3 left)
+  b miss _a_le (1 left)
+  m hit  ma_le (1 left)
+  p hit  maple (1 left)
+  solved with 1 misses
+secret has 5 letters, 40 candidates
+  a hit  _a___ (20 left)
+  e miss _a___ (11 left)
+  c miss _a___ (5 left)
+  o miss _a___ (2 left)
+  d miss _a___ (1 left)
+  l hit  _al__ (1 left)
+  t hit  _alt_ (1 left)
+  w hit  walt_ (1 left)
+  z hit  waltz (1 left)
+  solved with 4 misses
+secret has 5 letters, 40 candidates
+  a miss _____ (11 left)
+  l miss _____ (5 left)
+  t hit  t____ (1 left)
+  e hit  t__e_ (1 left)
+  g hit  t_ge_ (1 left)
+  i hit  tige_ (1 left)
+  r hit  tiger (1 left)
+  solved with 2 misses
+total misses: 7

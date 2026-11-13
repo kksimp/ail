@@ -1,0 +1,106 @@
+## URL parser: splits scheme://host:port/path?query#fragment, fills default
+## ports, decodes percent escapes in the query and prints the parameters sorted.
+
+struct Url
+    scheme str
+    host str
+    port int
+    path str
+    query str
+    fragment str
+
+fn split_once(s str, sep str)(str, str)
+    i := s.find(sep) else return (s, "")
+    (s.slice(0, i), s.slice(i + sep.len(), s.len()))
+
+fn default_port(scheme str) int
+    match scheme
+        "http" => 80
+        "https" => 443
+        "ftp" => 21
+        _ => 0
+
+fn parse_url(text str) Url?
+    scheme, rest := split_once(text, "://")
+    if rest == ""
+        return none
+    before_frag, frag := split_once(rest, "#")
+    before_query, query := split_once(before_frag, "?")
+    slash := before_query.find("/") else -1
+    mut auth := before_query
+    mut path := "/"
+    if slash >= 0
+        auth = before_query.slice(0, slash)
+        path = before_query.slice(slash, before_query.len())
+    host, port_text := split_once(auth, ":")
+    port := port_text.to_int() else default_port(scheme)
+    if host == ""
+        return none
+    Url(scheme: scheme, host: host, port: port, path: path, query: query, fragment: frag)
+
+fn pct_decode(s str) str
+    cs := s.chars()
+    mut out := ""
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == '%' and i + 2 < cs.len()
+            v := "{cs[i + 1]}{cs[i + 2]}".to_int(16) else -1
+            if v >= 0
+                ch := char.from_code(v) else c
+                out = "{out}{ch}"
+                i += 3
+                continue
+        if c == '+'
+            out = "{out} "
+        else
+            out = "{out}{c}"
+        i += 1
+    out
+
+fn parse_query(q str) Map[str, str]
+    mut params := Map[str, str]()
+    if q == ""
+        return params
+    for pair in q.split("&")
+        k, v := split_once(pair, "=")
+        params[pct_decode(k)] = pct_decode(v)
+    params
+
+fn show(text str)
+    print(text)
+    u := parse_url(text) else
+        print("  invalid")
+        return
+    print("  scheme={u.scheme} host={u.host} port={u.port}")
+    print("  path={u.path} fragment={u.fragment}")
+    params := parse_query(u.query)
+    for k in params.keys().sorted()
+        print("  param {k} = {params[k]}")
+
+fn main()
+    show("https://example.org/a/b?q=hello+world&lang=en#top")
+    show("http://localhost:8080/api/v1/items?id=42&tag=a%26b&tag2=%7Ex")
+    show("ftp://files.example.net")
+    show("https://example.org:99/?")
+    show("not a url")
+    show("http:///nohost")
+
+@test fn splits_once()
+    a, b := split_once("k=v=w", "=")
+    assert_eq(a, "k")
+    assert_eq(b, "v=w")
+    c, d := split_once("plain", "=")
+    assert_eq(c, "plain")
+    assert_eq(d, "")
+
+@test fn decodes()
+    assert_eq(pct_decode("a%20b+c%2Fd"), "a b c/d")
+    assert_eq(pct_decode("100%"), "100%")
+
+@test fn parses_parts()
+    u := parse_url("http://h:81/p?x=1#f")?
+    assert_eq(u.port, 81)
+    assert_eq(u.path, "/p")
+    assert_eq(u.fragment, "f")
+    assert(parse_url("nothing") == none)

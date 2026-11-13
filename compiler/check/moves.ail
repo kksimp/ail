@@ -54,6 +54,8 @@ struct LoopFlow
     continues Flow
     ## How many names were in scope when the loop started.
     outer int
+    ## The loop's position, which `break outer` names (expr.loop.10).
+    at ast.Pos
 
 struct Mover
     moves Map[int, str]
@@ -147,27 +149,27 @@ fn Mover.stmt(mut self, s ast.Stmt)
                 flow = forget(flow, n)
             else
                 expr(target)
-        While(c, body, _) =>
+        While(c, body, wpos) =>
             expr(c)
-            loop_body(body, none)
+            loop_body(body, none, wpos)
         Unsafe(body, _) => block(body)
         With(mutex, _, _, body, _) =>
             expr(mutex)
             block(body)
-        For(_, var, _, _, iter, body, _) =>
+        For(_, var, _, _, iter, body, fpos) =>
             expr(iter)
-            loop_body(body, var)
-        Break =>
+            loop_body(body, var, fpos)
+        Break(_, target) =>
             st := flow
             flow = dead()
-            if loops.len() > 0
-                k := loops.len() - 1
+            k := loop_index(target)
+            if k >= 0
                 loops[k].breaks = join(loops[k].breaks, st)
-        Continue =>
+        Continue(_, target) =>
             st := flow
             flow = dead()
-            if loops.len() > 0
-                k := loops.len() - 1
+            k := loop_index(target)
+            if k >= 0
                 loops[k].continues = join(loops[k].continues, st)
         Return(value, _) =>
             if e := value
@@ -179,6 +181,21 @@ fn Mover.stmt(mut self, s ast.Stmt)
             otherwise(o)
         # Checked at the end of the block, with the flow there.
         Defer => return
+        # conc.select.3: the heads run in order, then at most one arm's block.
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                expr(h)
+            start := flow
+            mut out := if ast.select_always_runs(arms) then dead() else start
+            for a in arms
+                flow = start
+                mark := names_in.len()
+                if b := ast.select_var(a.op)
+                    declare(b.name)
+                block(a.body)
+                names_in = names_in[..mark]
+                out = join(out, flow)
+            flow = out
 
 @allow("expr.match.3") fn whole_name(e ast.Expr) str?
     match e
@@ -188,12 +205,24 @@ fn Mover.stmt(mut self, s ast.Stmt)
 ## A loop body runs any number of times: a binding from outside the loop
 ## that is moved on the way back to the top would be used again by the next
 ## iteration (own.uniq.2, own.move.2).
-fn Mover.loop_body(mut self, body List[ast.Stmt], var str?)
+## The loop a `break` or `continue` leaves: the innermost, or the one at
+## `target` (expr.loop.10); -1 when there is none.
+fn Mover.loop_index(self, target ast.Pos?) int
+    if t := target
+        mut k := loops.len() - 1
+        while k >= 0
+            if loops[k].at.line == t.line and loops[k].at.col == t.col
+                return k
+            k -= 1
+        return -1
+    loops.len() - 1
+
+fn Mover.loop_body(mut self, body List[ast.Stmt], var str?, at ast.Pos)
     entry := flow
     mark := names_in.len()
     if v := var
         declare(v)
-    loops.push(LoopFlow(breaks: dead(), continues: dead(), outer: mark))
+    loops.push(LoopFlow(breaks: dead(), continues: dead(), outer: mark, at: at))
     block(body)
     l := loops.pop() else return
     back := join(flow, l.continues)
@@ -430,6 +459,9 @@ fn Mover.pattern(mut self, p ast.Pattern)
         BindName(n, _) => declare(n)
         Nested(_, _, nfields, _) =>
             for a in nfields
+                pattern(a)
+        StructPat(_, _, _, sfields, _) =>
+            for a in sfields
                 pattern(a)
         Wildcard => return
         Literal => return

@@ -1,0 +1,112 @@
+## Four-stage channel pipeline over order records "id,cents,tag": a feeder
+## sends raw lines, a parse stage drops malformed ones, a filter stage keeps
+## paid ("ok") orders with a positive amount, and a map stage adds 8% tax.
+## Each stage is its own task; main collects the final records in order.
+
+struct Rec
+    id int
+    cents int
+    tag str
+
+fn parse_record(line str) Rec?
+    parts := line.split(",")
+    if parts.len() != 3
+        return none
+    id := parts[0].trim().to_int() else -1
+    cents := parts[1].trim().to_int() else -1
+    if id < 0 or cents < 0
+        return none
+    Rec(id: id, cents: cents, tag: parts[2].trim())
+
+fn with_tax(r Rec) Rec
+    Rec(id: r.id, cents: r.cents + r.cents * 8 / 100, tag: r.tag)
+
+fn feed(lines List[str], out Channel[str])
+    for l in lines
+        out.send(l)
+    out.close()
+
+fn parse_stage(inp Channel[str], out Channel[Rec])
+    for line in inp
+        if rec := parse_record(line)
+            out.send(rec)
+    out.close()
+
+fn filter_stage(inp Channel[Rec], out Channel[Rec])
+    for r in inp
+        if r.tag == "ok" and r.cents > 0
+            out.send(r)
+    out.close()
+
+fn tax_stage(inp Channel[Rec], out Channel[Rec])
+    for r in inp
+        out.send(with_tax(r))
+    out.close()
+
+fn run_pipeline(lines List[str]) !List[Rec]
+    raw := Channel[str](2)
+    parsed := Channel[Rec](2)
+    kept := Channel[Rec](2)
+    done := Channel[Rec](2)
+    t1 := spawn feed(lines, raw)
+    t2 := spawn parse_stage(raw, parsed)
+    t3 := spawn filter_stage(parsed, kept)
+    t4 := spawn tax_stage(kept, done)
+    mut out := List[Rec]()
+    for r in done
+        out.push(r)
+    t1.wait()?
+    t2.wait()?
+    t3.wait()?
+    t4.wait()?
+    out
+
+fn dollars(cents int) str
+    rem := cents % 100
+    "{cents / 100}.{rem:02}"
+
+fn is_valid(line str) bool
+    if rec := parse_record(line)
+        return rec.id >= 0
+    false
+
+fn main() !
+    lines := [
+        "101,2500,ok",
+        "102,1999,refunded",
+        "not a record",
+        "103,0,ok",
+        "104,10000,ok",
+        "105,abc,ok",
+        "106,-5,ok",
+        "107,799,ok",
+        "108,450,pending",
+        "109,1250, ok",
+    ]
+    out := run_pipeline(lines)?
+    mut parsed := 0
+    for l in lines
+        if is_valid(l)
+            parsed += 1
+    print("{lines.len()} lines, {parsed} parsed, {out.len()} kept")
+    mut total := 0
+    for r in out
+        print("order {r.id}: {dollars(r.cents):>8}")
+        total += r.cents
+    print("total with tax: {dollars(total)}")
+
+@test fn parse_accepts_and_rejects()
+    miss := Rec(id: -1, cents: 0, tag: "")
+    assert_eq(parse_record("7,150,ok") else miss, Rec(id: 7, cents: 150, tag: "ok"))
+    assert(not is_valid("7,150"), "two fields")
+    assert(not is_valid("x,150,ok"), "bad id")
+    assert(is_valid("0,0,x"), "zero is fine")
+
+@test fn tax_rounds_down()
+    assert_eq(with_tax(Rec(id: 1, cents: 799, tag: "ok")).cents, 862)
+    assert_eq(with_tax(Rec(id: 1, cents: 10, tag: "ok")).cents, 10)
+
+@test fn pipeline_keeps_order_and_filters()
+    out := run_pipeline(["1,100,ok", "2,200,no", "junk", "3,300,ok"])?
+    assert_eq([r.id for r in out], [1, 3])
+    assert_eq(out[1].cents, 324)

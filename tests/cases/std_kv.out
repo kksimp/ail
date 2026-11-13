@@ -1,0 +1,23 @@
+0
+one
+00ff
+false
+uno
+a,b,
+true
+false
+2
+a,
+uno
+88
+2
+88
+a,,c
+3
+a,b,
+75
+52
+23
+333
+error: not a std.kv file (bad header)
+opened 0

@@ -15,8 +15,7 @@
 ## Linux x86-64 numbers and flag values that layer takes.
 
 # Global slots 32-47 are this file's (native-abi.md §2 lists the ranges).
-OS_OK := 32
-OS_ERR := 33
+# Slots 32 and 33 held the status before it moved into the per-thread area.
 OS_AREA := 34
 OUT_FD := 35
 IN_BUF := 36
@@ -31,6 +30,9 @@ OS_TMP := 8192
 OS_DENTS := 12288
 OS_DENTS_SIZE := 32768
 OS_AREA_SIZE := 65536
+# The status words of `os_ok` and `os_kind`, after win.ail's offsets.
+OS_ST_OK := 65024
+OS_ST_ERR := 65032
 OS_PATH_MAX := 4095
 OS_IN_SIZE := 65536
 
@@ -132,11 +134,12 @@ fn os_open_flags(mode int) int
 
 # ---- status ----
 
+## The outcome of this thread's last operation (its scratch area holds it).
 fn os_ok() bool
-    load64(global(OS_OK)) != 0
+    load64(os_scratch(OS_ST_OK)) != 0
 
 fn os_kind() int
-    load64(global(OS_ERR))
+    load64(os_scratch(OS_ST_ERR))
 
 ## `fs.IoError.kind` for an `errno`, the same on every platform.
 fn os_errno_kind(e int) int
@@ -173,12 +176,12 @@ fn kind_name(k int) str
     "other"
 
 fn os_succeed()
-    store64(global(OS_OK), 1)
-    store64(global(OS_ERR), 0)
+    store64(os_scratch(OS_ST_OK), 1)
+    store64(os_scratch(OS_ST_ERR), 0)
 
 fn os_fail_kind(k int)
-    store64(global(OS_OK), 0)
-    store64(global(OS_ERR), k)
+    store64(os_scratch(OS_ST_OK), 0)
+    store64(os_scratch(OS_ST_ERR), k)
 
 ## Record a failed call; `r` is its negative result.
 fn os_fail_errno(r int)
@@ -186,13 +189,24 @@ fn os_fail_errno(r int)
 
 # ---- scratch memory and paths ----
 
-## The address `off` bytes into the scratch area, which is allocated on first
-## use (paths, directory entries and small results; no allocation per call).
+## The address `off` bytes into this thread's scratch area (paths, directory
+## entries, small results and the status words; no allocation per call).
+## Every thread slot has its own area, mapped outside the heap on first use,
+## so tasks on different workers never share a path or a status (conc.race.1:
+## one shared area let a task open another task's file). `OS_AREA` holds the
+## table of areas, one word per slot; a thread that loses the race to install
+## the table leaves its copy unused.
 fn os_scratch(off int) int
-    mut a := load64(global(OS_AREA))
+    mut tab := atomic_load(global(OS_AREA))
+    if tab == 0
+        mine := sys_mmap(8 * (MAXW + 1))
+        prev := atomic_cas(global(OS_AREA), 0, mine)
+        tab = if prev == 0 then mine else prev
+    cell := tab + 8 * thread_slot()
+    mut a := load64(cell)
     if a == 0
-        a = alloc(OS_AREA_SIZE, KIND_BYTES)
-        store64(global(OS_AREA), a)
+        a = sys_mmap(OS_AREA_SIZE)
+        store64(cell, a)
     a + off
 
 ## `s` as a NUL-terminated path in the scratch slot at `off`, or 0 when it
@@ -288,6 +302,8 @@ fn os_str_cmp(a int, b int) int
 
 ## `fs.exists(path)` (std.fs.4).
 fn fs_exists(path str) bool
+    if stub_file_has(path)
+        return true
     pol_fs(path, false, "fs.exists")
     p := os_cstr(OS_PATH_A, path)
     if p == 0
@@ -668,6 +684,9 @@ fn env_cwd() str
 
 ## `time.now_ms()` (std.time.1): milliseconds since 1970-01-01T00:00:00Z.
 fn time_now_ms() int
+    stubbed := stub_clock()
+    if stubbed >= 0
+        return stubbed
     if target() == 3
         return win_now_ms()
     # The thread's own two words: the scratch area is shared by every
@@ -708,6 +727,9 @@ fn time_mono_ms() int
 fn time_sleep_ms(ms int)
     if ms < 0
         os_usage_trap("std.time.2", "a negative sleep")
+    if ms > 0 and stub_clock() >= 0
+        stub_advance(ms)
+        return
     if ms == 0 or task_cancelled()
         return
     # Parked for the collector (native-abi.md §10), as in a network wait
@@ -1048,6 +1070,8 @@ fn os_error(path str, kind int, at str)
     err_tag(err_tag_of("fs.IoError"))
 
 fn fs_read_text(path str, at str) str
+    if stub_file_has(path)
+        return stub_file_text(path)
     pol_fs(path, false, "fs.read_text")
     s := os_fs_read_text(path)
     if not os_ok()
@@ -1055,6 +1079,8 @@ fn fs_read_text(path str, at str) str
     s
 
 fn fs_read_bytes(path str, at str) str
+    if stub_file_has(path)
+        return stub_file_text(path)
     pol_fs(path, false, "fs.read_bytes")
     s := os_fs_read_bytes(path)
     if not os_ok()
@@ -1394,6 +1420,8 @@ fn fs_rename(from str, to str, at str)
 
 ## `env.get(name)`. The runtime itself reads variables through `env_raw`, which asks no policy (eff.allow.6).
 fn env_get(name str) str
+    if stub_env_has(name)
+        return stub_env_value(name)
     pol_env(name)
     env_raw(name)
 

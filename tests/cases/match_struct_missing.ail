@@ -1,0 +1,21 @@
+struct Point
+    x int
+    y int
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn f(p Point) str
+    match p
+        Point(x: 0) => "a"
+        Point(y: 0) => "b"
+
+fn g(s Shape) str
+    match s
+        Circle(r: 0) => "dot"
+        Rect(w: 0) => "flat"
+
+fn main()
+    print(f(Point(x: 0, y: 2)))
+    print(g(Shape.Circle(r: 0)))

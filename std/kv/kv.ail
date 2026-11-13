@@ -1,0 +1,213 @@
+## std.kv (spec std.kv.1-9, ADR 1098): a small key-value store in one file.
+## The keys are strings and the values are bytes. Every change is one record
+## appended to a log, so a program that stops half way through a change loses
+## at most that change: the next `open` drops the unfinished record and keeps
+## everything before it (std.kv.5). The whole store is held in memory, so it
+## suits settings, caches and small databases, not data larger than memory.
+## Written over `std.fs` and `std.hash`, so it behaves the same on macOS, Linux
+## and Windows.
+##
+## File layout: the 7 bytes `AILKV1\n`, then records. A record is `klen`
+## (4 bytes, little endian), `vlen` (4 bytes; 0xFFFFFFFF marks a removal), the
+## key's UTF-8 bytes, the value's bytes, and the CRC-32 (4 bytes) of everything
+## before it in the record.
+use std.fs
+use std.hash
+
+MAGIC := b"AILKV1\n"
+
+## The `vlen` of a record that removes its key.
+REMOVED := 4294967295
+
+## Wasted log bytes that start an automatic compaction, if they also exceed the
+## live ones (std.kv.7).
+SLACK := 1048576
+
+## Why a store could not be opened or changed (std.kv.9).
+pub error struct KvError "{why}"
+    pub why str
+
+## A store open on a file (std.kv.1). `unique`: two handles on one file would
+## each miss the other's changes.
+pub unique struct Store
+    path str
+    items Map[str, bytes]
+    size int
+    live int
+
+## What reading a log found: its entries, the length of its intact prefix, and
+## the log bytes those entries occupy.
+struct Replay
+    items Map[str, bytes]
+    good int
+    live int
+
+fn u32le(n int) bytes
+    bytes.from_list([
+        (n % 256).to_u8(),
+        (n / 256 % 256).to_u8(),
+        (n / 65536 % 256).to_u8(),
+        (n / 16777216 % 256).to_u8(),
+    ])
+
+fn read_u32(b bytes, at int) int
+    b[at].to_int()
+        + b[at + 1].to_int() * 256
+        + b[at + 2].to_int() * 65536
+        + b[at + 3].to_int() * 16777216
+
+## The record that sets `key` to `value`.
+fn set_record(key str, value bytes) bytes
+    kb := key.to_bytes()
+    body := u32le(kb.len()) + u32le(value.len()) + kb + value
+    body + u32le(hash.crc32(body))
+
+## The record that removes `key`.
+fn remove_record(key str) bytes
+    kb := key.to_bytes()
+    body := u32le(kb.len()) + u32le(REMOVED) + kb
+    body + u32le(hash.crc32(body))
+
+## The log bytes of the record that sets `key` to a value of `n` bytes.
+fn record_size(key str, n int) int
+    12 + key.byte_len() + n
+
+## `parts` joined, pairwise so each byte is copied about log2(count) times.
+fn join(parts List[bytes]) bytes
+    mut xs := parts
+    while xs.len() > 1
+        mut next := List[bytes]()
+        mut i := 0
+        while i + 1 < xs.len()
+            next.push(xs[i] + xs[i + 1])
+            i += 2
+        if i < xs.len()
+            next.push(xs[i])
+        xs = next
+    if xs.len() == 0
+        return b""
+    xs[0]
+
+## Reads the log `data`: the entries up to the first record that is cut short or
+## whose checksum fails (std.kv.5). A file that does not start with the header
+## is not a store.
+fn replay(data bytes) Replay ! KvError
+    mut items := Map[str, bytes]()
+    head := MAGIC.len()
+    if data.len() < head
+        if MAGIC.starts_with(data)
+            return Replay(items: items, good: 0, live: 0)
+        return KvError(why: "not a std.kv file (bad header)")
+    if data[0..head] != MAGIC
+        return KvError(why: "not a std.kv file (bad header)")
+    mut at := head
+    mut live := 0
+    while at + 8 <= data.len()
+        klen := read_u32(data, at)
+        vraw := read_u32(data, at + 4)
+        vlen := if vraw == REMOVED then 0 else vraw
+        stop := at + 8 + klen + vlen
+        if stop + 4 > data.len()
+            break
+        if read_u32(data, stop) != hash.crc32(data[at..stop])
+            break
+        key := data[at + 8..at + 8 + klen].to_str() else break
+        if items.contains(key)
+            live -= record_size(key, items[key].len())
+        if vraw == REMOVED
+            items.remove(key)
+        else
+            items[key] = data[at + 8 + klen..stop]
+            live += record_size(key, vlen)
+        at = stop + 4
+    Replay(items: items, good: at, live: live)
+
+## Opens the store in `path`, making it when the file is missing (std.kv.1). A
+## record left unfinished by an earlier stop is cut off the file (std.kv.5).
+## Fails with `fs.IoError` for the file, or `KvError` when it is not a store.
+pub fn open(path str) Store ! fs.IoError | KvError
+    mut raw := b""
+    if fs.exists(path)
+        raw = fs.read_bytes(path)?
+    r := replay(raw)?
+    if r.good == 0
+        fs.write_bytes(path, MAGIC)?
+        return Store(path: path, items: Map[str, bytes](), size: MAGIC.len(), live: 0)
+    if raw.len() > r.good
+        fs.truncate(path, r.good)?
+    Store(path: path, items: r.items, size: r.good, live: r.live)
+
+## The value of `key`, or `none` (std.kv.2).
+pub fn Store.get(self, key str) bytes?
+    items.get(key)
+
+## Whether `key` has a value (std.kv.2).
+pub fn Store.has(self, key str) bool
+    items.contains(key)
+
+## The keys, in the order each was first set since it was last removed (std.kv.2).
+pub fn Store.keys(self) List[str]
+    items.keys()
+
+## How many keys have a value (std.kv.2).
+pub fn Store.len(self) int
+    items.len()
+
+## Adds one record to the end of the log, at the end of the intact part, so a
+## failed earlier write cannot leave junk in front of it.
+fn Store.append(mut self, rec bytes) ! fs.IoError
+    fs.write_at(path, size, rec)?
+    size += rec.len()
+
+## Gives `key` the value `value` (std.kv.3). The change is in the file when
+## `set` returns; on a failure the store is as it was.
+pub fn Store.set(mut self, key str, value bytes) ! fs.IoError | KvError
+    if value.len() >= REMOVED
+        return KvError(why: "a value must be smaller than 4 GiB")
+    append(set_record(key, value))?
+    if items.contains(key)
+        live -= record_size(key, items[key].len())
+    items[key] = value
+    live += record_size(key, value.len())
+    tidy()?
+
+## Removes `key`; true when it had a value, false (and nothing written) when it
+## had none (std.kv.3).
+pub fn Store.remove(mut self, key str) bool ! fs.IoError | KvError
+    if not items.contains(key)
+        return false
+    append(remove_record(key))?
+    live -= record_size(key, items[key].len())
+    items.remove(key)
+    tidy()?
+    true
+
+## Compacts when the log holds more waste than it is worth keeping.
+fn Store.tidy(mut self) ! fs.IoError | KvError
+    waste := size - MAGIC.len() - live
+    if waste > SLACK and waste > live
+        compact()?
+
+## Rewrites the file with one record per key, dropping the waste of replaced
+## and removed values (std.kv.7). The new log is written beside the file and
+## renamed over it, so a stop leaves the old or the new log whole.
+pub fn Store.compact(mut self) ! fs.IoError | KvError
+    mut parts := [MAGIC]
+    for k in items.keys()
+        parts.push(set_record(k, items[k]))
+    data := join(parts)
+    temp := "{path}.compact"
+    fs.write_bytes(temp, data)?
+    fs.sync(temp)?
+    fs.rename(temp, path)?
+    size = data.len()
+
+## Asks the operating system to put the file on the disk, so every change made
+## so far survives a power failure (std.kv.4).
+pub fn Store.sync(self) ! fs.IoError
+    fs.sync(path)?
+
+## Ends the use of the store (std.kv.1). Nothing is buffered, so nothing is lost
+## by dropping it instead.
+pub fn Store.close(move self)
+    return

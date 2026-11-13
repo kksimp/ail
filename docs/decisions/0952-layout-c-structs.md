@@ -1,6 +1,6 @@
 # 0952. `@layout(c)` structs: raw memory behind `*P`, not GC objects
 
-- **Status:** Deferred (past 0.1.0: design only, no spec rules or code yet)
+- **Status:** Deferred (past 0.1.0: design only, no spec rules or code yet); point 3 amended by [ADR 1074](1074-c-structs-by-value-and-callbacks.md)
 - **Date:** 2026-11-08
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 14 — FFI
@@ -50,3 +50,10 @@ C library structs) needs the C one.
   value representation in MIR (SROA over byte offsets); deferred until measured.
 - `#[repr(C)]`-style attribute on every struct: AIL structs stay one representation
   unless the author opts in.
+
+## Amendment (2026-11-12, ADR 1074)
+
+Point 3 no longer waits for this feature: any plain AIL struct of C-typed
+fields passes and returns by value, copied at the call in C's layout
+([ADR 1074](1074-c-structs-by-value-and-callbacks.md), `ffi.struct.1-3`). A
+`@layout(c)` struct, when it lands, follows the same rules by value.

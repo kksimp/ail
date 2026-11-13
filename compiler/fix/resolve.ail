@@ -106,12 +106,49 @@ pub fn settle_fixes(fixes List[Fix], lines List[List[char]]) List[Fix]
         mut edits := List[Edit]()
         mut ok := true
         for e in f.edits
-            if r := resolve(e, lines)
+            if e.anchor == "rename_all"
+                renamed := whole_word_renames(e, lines)
+                if renamed.len() == 0
+                    ok = false
+                edits.extend(renamed)
+            elif r := resolve(e, lines)
                 edits.push(r)
             else
                 ok = false
         if ok
             out.push(Fix(title: f.title, edits: edits))
+    out
+
+## Every whole-word `e.old` outside strings and comments, as edits that write `e.text`.
+fn whole_word_renames(e Edit, lines List[List[char]]) List[Edit]
+    mut out := List[Edit]()
+    word := e.old else return out
+    pat := word.chars()
+    for n in 0..lines.len()
+        line := lines[n]
+        mut i := 0
+        while i < line.len()
+            c := line[i]
+            if c == '#'
+                break
+            if c == '"'
+                i += 1
+                while i < line.len() and line[i] != '"'
+                    i += if line[i] == '\\' then 2 else 1
+                i += 1
+                continue
+            before := i > 0 and is_word(line[i - 1])
+            after := i + pat.len() < line.len() and is_word(line[i + pat.len()])
+            if starts_at(line, i, pat) and not before and not after
+                out.push(exact(
+                    e,
+                    ast.Pos(line: n + 1, col: i + 1),
+                    ast.Pos(line: n + 1, col: i + 1 + pat.len()),
+                    e.text,
+                ))
+                i += pat.len()
+            else
+                i += 1
     out
 
 fn exact(e Edit, pos ast.Pos, end ast.Pos, text str) Edit

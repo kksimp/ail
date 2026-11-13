@@ -1,0 +1,23 @@
+# conc.select.4: `after 0` runs at once when nothing is ready, a longer `after`
+# runs when nothing becomes ready, a value already waiting wins, and a time
+# below 0 counts as 0.
+
+fn main()
+    ch := Channel[int](2)
+    select
+        v := ch.recv() => print("got {v}")
+        after 0 => print("empty")
+        closed => print("closed")
+    select
+        v := ch.recv() => print("got {v}")
+        after 30 => print("timed out")
+        closed => print("closed")
+    ch.send(5)
+    select
+        v := ch.recv() => print("got {v}")
+        after 0 => print("empty")
+        closed => print("closed")
+    select
+        v := ch.recv() => print("got {v}")
+        after -5 => print("negative counts as 0")
+        closed => print("closed")

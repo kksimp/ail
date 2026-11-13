@@ -1,0 +1,20 @@
+  1:   0 steps, peak 1
+  2:   1 steps, peak 2
+  3:   7 steps, peak 16
+  4:   2 steps, peak 4
+  5:   5 steps, peak 16
+  6:   8 steps, peak 16
+  7:  16 steps, peak 52
+  8:   3 steps, peak 8
+  9:  19 steps, peak 52
+ 10:   6 steps, peak 16
+ 11:  14 steps, peak 52
+ 12:   9 steps, peak 16
+longest chain below 1000: 871 with 178 steps
+highest peak below 1000: 250504 (start 703)
+mean steps: 59
+  0- 49: 565 ############################
+ 50- 99: 186 #########
+100-149: 243 ############
+150-199:   5 
+200-249:   0 

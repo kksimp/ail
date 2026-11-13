@@ -36,12 +36,14 @@ pub struct pkg.Dep
     pub dir str?  ## `path DIR`; none for a git dependency or an error.
     pub git pkg.Source?
     pub caps List[str]
+    pub entries List[str]  ## The entries as written (eff.allow.10).
     pub unsafe_ok bool  ## `unsafe allow` on the line (unsafe.block.3).
     pub driver_ok bool  ## `unsafe driver` on the line (unsafe.hw.1).
 pub struct pkg.Manifest
     pub name str?  ## The `package` line's name and where it is; none for an empty file.
     pub name_pos ast.Pos
     pub caps List[str]?
+    pub entries List[str]
     pub unsafe_ok bool
     pub driver_ok bool
     pub deps List[pkg.Dep]
@@ -74,4 +76,4 @@ pub fn pkg.read_with(root str, opts pkg.Options) pkg.Packages [clock env fs io p
 pub fn pkg.update(packages pkg.Packages, names List[str]) (List[str], List[syntax.Diag])  ## The lines `locked NAME COMMIT` of the dependencies resolved, or the
 ```
 
-trimmed to fit 2000 tokens (~1575); dropped: private items
+trimmed to fit 2000 tokens (~1607); dropped: private items

@@ -1,0 +1,14 @@
+rectangle: 4 vertices, counter-clockwise, convex
+  area 12, boundary 14, interior 6
+triangle: 3 vertices, counter-clockwise, convex
+  area 12.5, boundary 15, interior 6
+slanted triangle: 3 vertices, counter-clockwise, convex
+  area 14, boundary 6, interior 12
+L shape: 6 vertices, counter-clockwise, concave
+  area 18, boundary 22, interior 8
+diamond: 4 vertices, counter-clockwise, convex
+  area 18, boundary 12, interior 13
+clockwise square: 4 vertices, clockwise, convex
+  area 16, boundary 16, interior 9
+arrow: 4 vertices, counter-clockwise, concave
+  area 20, boundary 10, interior 16

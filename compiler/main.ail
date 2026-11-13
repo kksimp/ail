@@ -744,7 +744,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     # The prelude's JSON, `Default` and `Seq` modules come from the embedded
     # copy, for the programs that name them (json.prelude.1, ADR 0808, ADR 1073).
     if mentions_prelude(srcs)
-        srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text_for(mir.PRELUDE_EMBED, srcs)))
     # The proof checks the whole program once more, so a program over about
     # 60k lines keeps its loops in order (ADR 0911).
     mut size := 0
@@ -926,7 +926,7 @@ fn run_generators(
     from := all.len()
     for s in srcs
         all.push(user_main_renamed(s))
-    mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
+    mut prelude := mir.prelude_text_for(mir.PRELUDE_EMBED, srcs)
     all.push(parse_text("", "<prelude>", prelude))
     m := mir.lower_package_with(all, rt, from) else err
         if quiet
@@ -1304,13 +1304,15 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--summary] [--fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
     mut repair := false
+    mut summary := false
     mut deny := List[str]()
     mut allow_given := false
     mut allow_text := ""
+    mut policy_out := ""
     mut paths := List[str]()
     mut i := 0
     while i < rest.len()
@@ -1320,11 +1322,17 @@ fn check_cmd(rest List[str])
             json = true
         elif a == "--fix"
             repair = true
+        elif a == "--summary"
+            # check.out.1, check.out.3: the launcher adds it to `ail check`; the checks `ail run` and `ail build` make first stay quiet.
+            summary = true
         elif a == "--unsafe" and has and rest[i + 1] == "driver"
             driver = true
             i += 1
         elif a == "--deterministic"
             deny.extend(check.deterministic_deny())
+        elif a == "--policy-out" and has
+            policy_out = rest[i + 1]
+            i += 1
         elif a == "--allow" and has
             allow_given = true
             allow_text = "{allow_text},{rest[i + 1]}"
@@ -1383,9 +1391,30 @@ fn check_cmd(rest List[str])
             for d in check.analyze_denying(program, false, deny).report.diags
         ]
     if found.len() > 0
-        io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+        io.eprint(load.report_next(loaded.program.files, loaded.texts, found, json))
+    mut n_err := 0
+    mut n_warn := 0
+    mut n_fix := 0
     for d in found
-        if not d.warning
+        if d.warning
+            n_warn += 1
+        else
+            n_err += 1
+        if d.edits.len() > 0
+            n_fix += 1
+    # check.out.1: one summary line on stdout, so "clean" is told from "did not run"; the diagnostics stay on stderr.
+    if summary and json
+        print("\{\"api\":1,\"summary\":true,\"errors\":{n_err},\"warnings\":{n_warn},\"fixable\":{n_fix}}")
+    elif summary and n_err == 0
+        # A prelude function sits past line 1073741824 (PRELUDE_LINE) and is not the program's.
+        count := [f for f in loaded.program.fns if f.pos.line < 1073741824].len()
+        print("ok {paths[0]}: {count} functions, {n_warn} warnings")
+    if n_err > 0
+        io.exit(2)
+    if policy_out != ""
+        # eff.allow.10: the run's policy from the manifests' scoped `caps`, for `ail run` to hand the program.
+        fs.write_text(policy_out, check.grants_policy(loaded.program)) else err
+            io.eprint("error: can't write {policy_out}: {err.kind}")
             io.exit(2)
 
 ## `api [--outline] FILE [--text | --pretty]`: the outline of one file

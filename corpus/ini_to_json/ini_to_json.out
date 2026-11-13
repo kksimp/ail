@@ -1,0 +1,18 @@
+{
+  "name": "shop",
+  "debug": false,
+  "server": {
+    "host": "example.org",
+    "port": 8080,
+    "motto": "say \"hi\""
+  },
+  "limits": {
+    "requests": 600,
+    "burst": 40
+  }
+}
+valid json, 13 lines
+name: shop, debug: false
+port: 8080
+motto: say "hi"
+burst: 40

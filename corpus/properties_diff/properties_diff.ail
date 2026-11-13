@@ -1,0 +1,98 @@
+## Properties diff: parses two Java-style .properties texts (= or : separators,
+## # and ! comments, trailing-backslash continuation lines) and lists added,
+## removed and changed keys in sorted order with a summary line.
+
+fn sep_index(line str) int?
+    for i, c in line.chars().enumerate()
+        if c == '=' or c == ':'
+            return i
+    none
+
+fn logical_lines(text str) List[str]
+    mut out := List[str]()
+    mut pending := ""
+    for raw in text.lines()
+        line := if pending == "" then raw.trim() else raw.trim_start()
+        if line.ends_with("\\")
+            pending = "{pending}{line.slice(0, line.len() - 1)}"
+            continue
+        out.push("{pending}{line}")
+        pending = ""
+    if pending != ""
+        out.push(pending)
+    out
+
+fn parse(text str) Map[str, str]
+    mut props := Map[str, str]()
+    for line in logical_lines(text)
+        if line == "" or line.starts_with("#") or line.starts_with("!")
+            continue
+        i := sep_index(line) else continue
+        props[line.slice(0, i).trim()] = line.slice(i + 1, line.len()).trim()
+    props
+
+fn diff(before Map[str, str], after Map[str, str]) List[str]
+    mut names := Set[str]()
+    for k in before.keys()
+        names.add(k)
+    for k in after.keys()
+        names.add(k)
+    mut out := List[str]()
+    for k in names.sorted()
+        if not after.contains(k)
+            out.push("- {k} = {before[k]}")
+        elif not before.contains(k)
+            out.push("+ {k} = {after[k]}")
+        elif before[k] != after[k]
+            out.push("~ {k}: {before[k]} -> {after[k]}")
+    out
+
+fn old_text() str
+    lines := [
+        "# service config",
+        "name = billing",
+        "port: 8080",
+        "! legacy",
+        "hosts = a.example.org, \\",
+        "        b.example.org",
+        "debug=true",
+        "timeout = 30",
+    ]
+    lines.join("\n")
+
+fn new_text() str
+    lines := [
+        "# service config",
+        "name = billing",
+        "port: 9090",
+        "hosts = a.example.org, \\",
+        "        c.example.org",
+        "timeout = 30",
+        "retries = 5",
+        "region:eu",
+    ]
+    lines.join("\n")
+
+fn main()
+    before := parse(old_text())
+    after := parse(new_text())
+    changes := diff(before, after)
+    for c in changes
+        print(c)
+    mut same := 0
+    for k in before.keys()
+        if after.get(k) == before.get(k)
+            same += 1
+    print("old {before.len()}, new {after.len()}, changed lines {changes.len()}, unchanged {same}")
+
+@test fn joins_continuation_lines()
+    assert_eq(logical_lines("a = 1, \\\n   2\nb = 3"), ["a = 1, 2", "b = 3"])
+
+@test fn parses_both_separators()
+    props := parse("a=1\nb: 2\n# c=3\n!d=4\n\ne = x=y")
+    assert_eq(props.len(), 3)
+    assert_eq(props["e"], "x=y")
+
+@test fn detects_each_kind_of_change()
+    got := diff(parse("a=1\nb=2"), parse("b=3\nc=4"))
+    assert_eq(got, ["- a = 1", "~ b: 2 -> 3", "+ c = 4"])

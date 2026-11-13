@@ -1,0 +1,105 @@
+## Filename sanitizer: turns arbitrary names into safe portable ones. Unsafe
+## characters become `_` (runs collapse), edge punctuation is trimmed, Windows
+## reserved names get a prefix, long stems are cut to 24 characters in total
+## and an extension is lowercased. Clashes get `-2`, `-3`... suffixes.
+
+MAX_LEN := 24
+RESERVED := ["CON", "PRN", "AUX", "NUL", "COM1", "LPT1"]
+
+fn safe_char(c char) bool
+    c.is_alpha() or c.is_digit() or c == '-' or c == '.'
+
+fn clean(s str) str
+    mut out := ""
+    mut last_us := false
+    for c in s.chars()
+        if safe_char(c)
+            out = "{out}{c}"
+            last_us = false
+        elif not last_us
+            out = "{out}_"
+            last_us = true
+    out
+
+fn trim_edges(s str) str
+    mut cs := s.chars()
+    while not cs.is_empty() and (cs[0] == '_' or cs[0] == '.' or cs[0] == '-')
+        cs = cs[1..]
+    while not cs.is_empty() and (cs[cs.len() - 1] == '_' or cs[cs.len() - 1] == '.')
+        cs = cs[..cs.len() - 1]
+    cs.join("")
+
+fn split_ext(name str)(str, str)
+    cs := name.chars()
+    mut dot := -1
+    for i in 0..cs.len()
+        if cs[i] == '.'
+            dot = i
+    if dot <= 0
+        return (name, "")
+    (cs[..dot].join(""), cs[dot + 1..].join(""))
+
+fn sanitize(name str)(str, str)
+    raw_stem, raw_ext := split_ext(name.trim())
+    mut stem := trim_edges(clean(raw_stem))
+    mut ext := clean(raw_ext).replace("-", "").replace(".", "").replace("_", "").to_lower()
+    if ext.len() > 5
+        ext = ext.slice(0, 5)
+    if stem == ""
+        stem = "unnamed"
+    if RESERVED.contains(stem.to_upper())
+        stem = "_{stem}"
+    room := if ext == "" then MAX_LEN else MAX_LEN - ext.len() - 1
+    if stem.len() > room
+        stem = trim_edges(stem.slice(0, room))
+    (stem, ext)
+
+fn join_name(stem str, ext str) str
+    if ext == ""
+        return stem
+    "{stem}.{ext}"
+
+fn sanitize_all(names List[str]) List[str]
+    mut taken := Set[str]()
+    mut out := List[str]()
+    for n in names
+        stem, ext := sanitize(n)
+        mut cand := join_name(stem, ext)
+        mut k := 2
+        while not taken.add(cand.to_lower())
+            cand = join_name("{stem}-{k}", ext)
+            k += 1
+        out.push(cand)
+    out
+
+fn main()
+    names := [
+        "My Report (final).DOCX",
+        "  holiday photo #3.jpg ",
+        "a/b\\c:d*e?.txt",
+        "CON.txt",
+        "..hidden..",
+        "notes.TXT",
+        "Notes.txt",
+        "this is a very long file name that keeps going and going.markdown",
+        "???.md",
+        "archive.tar.gz",
+    ]
+    cleaned := sanitize_all(names)
+    for i in 0..names.len()
+        print("{names[i]:<30} -> {cleaned[i]}")
+
+@test fn replaces_and_collapses()
+    assert_eq(clean("a  b!!c"), "a_b_c")
+    assert_eq(trim_edges("__x.y__"), "x.y")
+
+@test fn limits_length_with_extension()
+    stem, ext := sanitize("abcdefghijklmnopqrstuvwxyz0123456789.JPEG")
+    assert_eq(join_name(stem, ext), "abcdefghijklmnopqrs.jpeg")
+    assert_eq(join_name(stem, ext).len(), MAX_LEN)
+
+@test fn resolves_clashes()
+    assert_eq(
+        sanitize_all(["a b.txt", "a_b.txt", "A_B.TXT"]),
+        ["a_b.txt", "a_b-2.txt", "A_B-3.txt"],
+    )

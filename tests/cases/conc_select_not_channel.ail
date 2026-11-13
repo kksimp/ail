@@ -1,0 +1,7 @@
+# conc.select.3: a receive arm waits on a `Channel`.
+
+fn main()
+    n := 3
+    select
+        v := n.recv() => print("got")
+        closed => print("closed")

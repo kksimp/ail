@@ -1,0 +1,120 @@
+## Huffman coding. Builds the code tree from symbol frequencies (the two
+## lightest nodes merge, ties broken by node id so the result is
+## deterministic), prints each symbol's code, encodes a text, decodes it again
+## and reports the size against plain 8-bit characters.
+
+struct Tree
+    weight List[int]
+    left List[int]
+    right List[int]
+    symbol List[str]
+    root int
+
+fn lightest(tree Tree, active List[int]) int
+    mut pick := 0
+    for k in 1..active.len()
+        a := active[k]
+        b := active[pick]
+        if tree.weight[a] < tree.weight[b] or (tree.weight[a] == tree.weight[b] and a < b)
+            pick = k
+    pick
+
+fn build(text str) Tree
+    mut freq := Map[str, int]()
+    for c in text.chars()
+        freq["{c}"] += 1
+    mut symbols := List[str]()
+    for sym, cnt in freq
+        symbols.push(sym)
+    symbols.sort()
+    mut tree := Tree(weight: [], left: [], right: [], symbol: [], root: -1)
+    mut active := List[int]()
+    for s in symbols
+        active.push(tree.weight.len())
+        tree.weight.push(freq[s])
+        tree.left.push(-1)
+        tree.right.push(-1)
+        tree.symbol.push(s)
+    while active.len() > 1
+        i := lightest(tree, active)
+        a := active[i]
+        active.remove_at(i)
+        j := lightest(tree, active)
+        b := active[j]
+        active.remove_at(j)
+        active.push(tree.weight.len())
+        tree.weight.push(tree.weight[a] + tree.weight[b])
+        tree.left.push(a)
+        tree.right.push(b)
+        tree.symbol.push("")
+    tree.root = active[0]
+    tree
+
+fn assign(tree Tree, node int, prefix str, mut codes Map[str, str])
+    if tree.left[node] == -1
+        codes[tree.symbol[node]] = if prefix == "" then "0" else prefix
+        return
+    assign(tree, tree.left[node], "{prefix}0", mut codes)
+    assign(tree, tree.right[node], "{prefix}1", mut codes)
+
+fn encode(text str, codes Map[str, str]) str
+    mut parts := List[str]()
+    for c in text.chars()
+        parts.push(codes["{c}"])
+    parts.join("")
+
+fn decode(bits str, tree Tree) str
+    mut out := List[str]()
+    mut cur := tree.root
+    for b in bits.chars()
+        if tree.left[cur] != -1
+            cur = if b == '0' then tree.left[cur] else tree.right[cur]
+        if tree.left[cur] == -1
+            out.push(tree.symbol[cur])
+            cur = tree.root
+    out.join("")
+
+fn show(label str, text str)
+    tree := build(text)
+    mut codes := Map[str, str]()
+    assign(tree, tree.root, "", mut codes)
+    mut names := List[str]()
+    for sym, code in codes
+        names.push(sym)
+    names.sort()
+    print("{label}: {text.len()} chars")
+    for s in names
+        shown := if s == " " then "<sp>" else s
+        print("  {shown.pad_right(4, ' ')} {codes[s]}")
+    bits := encode(text, codes)
+    back := decode(bits, tree)
+    ok := if back == text then "yes" else "no"
+    print("  {bits.len()} bits vs {8 * text.len()}, round trip {ok}")
+
+fn main()
+    show("sample", "abracadabra alakazam")
+    show("skewed", "aaaaaaaabbbbccd")
+    show("single", "zzzz")
+
+@test fn codes_are_prefix_free()
+    tree := build("mississippi river")
+    mut codes := Map[str, str]()
+    assign(tree, tree.root, "", mut codes)
+    for a, ca in codes
+        for b, cb in codes
+            if a != b
+                assert(not cb.starts_with(ca))
+
+@test fn round_trip()
+    text := "the quick brown fox jumps over the lazy dog"
+    tree := build(text)
+    mut codes := Map[str, str]()
+    assign(tree, tree.root, "", mut codes)
+    assert_eq(decode(encode(text, codes), tree), text)
+
+@test fn frequent_symbols_get_short_codes()
+    tree := build("aaaaaaaabbbbccd")
+    mut codes := Map[str, str]()
+    assign(tree, tree.root, "", mut codes)
+    assert_eq(codes["a"].len(), 1)
+    assert(codes["d"].len() >= codes["b"].len())

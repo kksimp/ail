@@ -1,0 +1,125 @@
+## Phone number normaliser: turns free-form numbers into E.164 form
+## ("+15551234567"), recognises US/Canada, UK, Germany and France, splits off
+## an extension ("x12", "ext. 4"), rejects numbers that do not fit, and groups
+## a contact list by normalised number to show duplicates.
+
+error enum PhoneError
+    TooShort(digits int) "only {digits} digits"
+    BadLength(digits int) "{digits} digits do not fit the country"
+    BadArea(code str) "area code {code} cannot start with 0 or 1"
+    UnknownCountry(code str) "unknown country code in +{code}"
+
+struct Region
+    code str
+    min_len int
+    max_len int
+
+struct Phone
+    country str
+    national str
+    ext str
+
+fn regions() List[Region]
+    [
+        Region(code: "1", min_len: 10, max_len: 10),
+        Region(code: "44", min_len: 10, max_len: 10),
+        Region(code: "49", min_len: 10, max_len: 11),
+        Region(code: "33", min_len: 9, max_len: 9),
+    ]
+
+fn digits_of(s str) str
+    [c for c in s.chars() if c.is_digit()].join("")
+
+## Splits "555 1234 ext. 7" into the number part and the extension digits.
+fn split_ext(raw str)(str, str)
+    low := raw.to_lower()
+    e := low.find("ext") else -1
+    x := low.find("x") else -1
+    at := if e >= 0 then e else x
+    if at < 0
+        return (low, "")
+    (low.slice(0, at), digits_of(low.slice(at, low.len())))
+
+fn us_phone(national str, ext str) Phone ! PhoneError
+    if national.starts_with("0") or national.starts_with("1")
+        return BadArea(code: national.slice(0, 3))
+    Phone(country: "1", national: national, ext: ext)
+
+fn normalize(raw str) Phone ! PhoneError
+    parts := split_ext(raw)
+    main_part := parts.0
+    ext := parts.1
+    digits := digits_of(main_part)
+    if main_part.trim().starts_with("+")
+        for r in regions()
+            if digits.starts_with(r.code)
+                national := digits.slice(r.code.len(), digits.len())
+                if national.len() < r.min_len or national.len() > r.max_len
+                    return BadLength(digits: national.len())
+                return Phone(country: r.code, national: national, ext: ext)
+        return UnknownCountry(code: digits.slice(0, digits.len().min(2)))
+    if digits.len() == 11 and digits.starts_with("1")
+        p := us_phone(digits.slice(1, 11), ext)?
+        return p
+    if digits.len() == 10
+        q := us_phone(digits, ext)?
+        return q
+    if digits.len() < 10
+        return TooShort(digits: digits.len())
+    return BadLength(digits: digits.len())
+
+fn Phone.e164(self) str
+    "+{country}{national}"
+
+fn Phone.pretty(self) str
+    mut base := "+{country} {national}"
+    if country == "1"
+        base = "+1 ({national.slice(0, 3)}) {national.slice(3, 6)}-{national.slice(6, 10)}"
+    if ext == ""
+        return base
+    "{base} x{ext}"
+
+fn main()
+    contacts := [
+        ("Ann", "(555) 123-4567"),
+        ("Bob", "555.123.4567 ext. 22"),
+        ("Cy", "1-555-123-4567"),
+        ("Dee", "+44 20 7946 0958"),
+        ("Eli", "020 7946 0958"),
+        ("Fay", "+49 30 1234 5678 x5"),
+        ("Gus", "123-4567"),
+        ("Hal", "(055) 123-4567"),
+        ("Ivy", "+81 3 1234 5678"),
+        ("Jo", "+33 1 23 45 67 89"),
+        ("Kit", "+1 555 123 456"),
+    ]
+    mut groups := Map[str, List[str]]()
+    for c in contacts
+        who := c.0
+        num := c.1
+        ph := normalize(num) else err
+            print("{who:<4} {num:<22} error: {err}")
+            continue
+        print("{who:<4} {num:<22} {ph.e164()} | {ph.pretty()}")
+        groups.push(ph.e164(), who)
+    print("duplicates:")
+    for key in groups.keys().sorted()
+        names := groups[key]
+        if names.len() > 1
+            print("  {key}: {names.join(", ")}")
+
+@test fn us_formats_agree()
+    a := normalize("(555) 123-4567")?
+    b := normalize("1.555.123.4567")?
+    assert_eq(a.e164(), "+15551234567")
+    assert_eq(a.e164(), b.e164())
+
+@test fn extension_split()
+    p := normalize("555-123-4567 x89")?
+    assert_eq(p.ext, "89")
+    assert_eq(p.pretty(), "+1 (555) 123-4567 x89")
+
+@test fn rejects_bad_numbers()
+    assert_err(normalize("123-4567"))
+    assert_err(normalize("(155) 123-4567"))
+    assert_err(normalize("+81 3 1234 5678"))

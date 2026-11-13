@@ -1,0 +1,10 @@
+XIV + II * III => XX
+MM / X - XL => CLX
+C - L - X => XL
+XII * XII => CXLIV
+IIII + I => error: bad numeral IIII
+X + => error: bad syntax
+V - X => error: result -5 is outside 1..3999
+M * IV => error: result 4000 is outside 1..3999
+XL / III + VII => XX
+X % V => error: bad syntax

@@ -1,0 +1,350 @@
+## The shared collection vocabulary, native (type.coll.28-33, ADR 1099):
+## `count`, `fold`, `flat_map`, `take_while`, `skip_while`, `skip` and `zip`
+## on lists, and the function methods on sets and maps. Each is rewritten into
+## the loops and comprehensions the language already has, so it gets their
+## code, their `break`, and their copying rules. A set is read as the list of
+## its elements, a map as `for k, v in m` (type.map.5), in insertion order.
+use ast
+
+## The list methods this file lowers.
+VOCAB_LIST := ["count", "fold", "flat_map", "take_while", "skip_while", "skip", "zip"]
+
+## The set methods this file lowers: those that take a function, `take`,
+## `skip`, `zip`, `enumerate`, `sum`, `min` and `max` (which read the set as a list).
+VOCAB_SET := [
+    "any",
+    "all",
+    "find",
+    "filter",
+    "map",
+    "group_by",
+    "count",
+    "fold",
+    "flat_map",
+    "take_while",
+    "skip_while",
+    "take",
+    "skip",
+    "zip",
+    "enumerate",
+    "sum",
+    "min",
+    "max",
+]
+
+## The map methods this file lowers.
+VOCAB_MAP := ["any", "all", "count", "fold", "filter", "map", "flat_map", "map_values"]
+
+## Whether `name` on a value of type `t` is one of them.
+fn is_vocab_call(t Ty, name str) bool
+    match t
+        List(_) => VOCAB_LIST.contains(name)
+        Set(_) => VOCAB_SET.contains(name)
+        Map(_, _) => VOCAB_MAP.contains(name)
+        _ => false
+
+# ---- small builders for the rewritten tree ----
+
+fn vname(n str, pos ast.Pos) ast.Expr
+    ast.Expr.Name(name: n, pos: pos)
+
+fn vint(v int, pos ast.Pos) ast.Expr
+    ast.Expr.Int(value: "{v}", pos: pos)
+
+fn varg(e ast.Expr) ast.Arg
+    ast.Arg(label: none, mutable: false, moved: false, value: e, param: none)
+
+fn vlet(n str, e ast.Expr, mutable bool, pos ast.Pos) ast.Stmt
+    ast.Stmt.Let(name: n, pos: pos, mutable: mutable, value: e, otherwise: none)
+
+fn vassign(n str, e ast.Expr, pos ast.Pos) ast.Stmt
+    ast.Stmt.Assign(target: vname(n, pos), op: none, value: e, pos: pos)
+
+fn vmethod(recv ast.Expr, n str, args List[ast.Expr], pos ast.Pos) ast.Expr
+    ast.Expr.Method(recv: recv, name: n, name_pos: pos, args: [varg(a) for a in args])
+
+## `if cond` and its block, as a statement.
+fn vif(cond ast.Expr, body List[ast.Stmt], pos ast.Pos) ast.Stmt
+    br := ast.Branch(cond: ast.Cond.Test(value: cond), body: body)
+    ast.Stmt.Eval(value: ast.Expr.If(branches: [br], els: none, else_err: none, pos: pos))
+
+fn vnot(e ast.Expr, pos ast.Pos) ast.Expr
+    ast.Expr.Unary(op: ast.UnOp.Not, operand: e, pos: pos)
+
+## The names a function argument binds for each call, and the expression that
+## is its result: a literal `|a, b| e` binds its own names and runs `e`; any
+## other function value is evaluated once and called through.
+struct VFn
+    names List[str]
+    body ast.Expr
+
+fn lit_closure(e ast.Expr, n int) VFn?
+    match e
+        Closure(ps, body, _) =>
+            if ps.len() != n
+                return none
+            VFn(names: [p.name for p in ps], body: body)
+        _ => none
+
+fn Lower.vocab_fn(mut self, a ast.Arg, n int, id int, pos ast.Pos) VFn
+    if f := lit_closure(a.value, n)
+        return f
+    vf := "#vf{id}"
+    lower_stmt(vlet(vf, a.value, false, pos))
+    vargs := ["#va{id}_{i}" for i in 0..n]
+    given := [varg(vname(x, pos)) for x in vargs]
+    applied := ast.Expr.Call(callee: vname(vf, pos), args: given, pos: pos)
+    VFn(names: vargs, body: applied)
+
+## `for items in over`: a list element, or a map's key and value (type.map.5).
+fn vloop(over str, is_map bool, id int, items List[str], inner List[ast.Stmt], pos ast.Pos) ast.Stmt
+    if is_map
+        var := "#vp{id}"
+        binders := [ast.Binder(name: x, pos: pos, mutable: false) for x in items]
+        mut body := [ast.Stmt.LetTuple(names: binders, value: vname(var, pos), pos: pos)]
+        body.extend(inner)
+        return ast.Stmt.For(
+            is_par: false,
+            var: var,
+            var_pos: pos,
+            mutable: false,
+            iter: vname(over, pos),
+            body: body,
+            pos: pos,
+        )
+    ast.Stmt.For(
+        is_par: false,
+        var: items[0],
+        var_pos: pos,
+        mutable: false,
+        iter: vname(over, pos),
+        body: inner,
+        pos: pos,
+    )
+
+## One comprehension clause over `over`, binding `items`.
+fn vclause(over str, is_map bool, id int, items List[str], cond ast.Expr?, pos ast.Pos) ast.CompFor
+    if is_map
+        binders := [ast.Binder(name: x, pos: pos, mutable: false) for x in items]
+        return ast.CompFor(
+            is_par: false,
+            var: "#vp{id}",
+            var_pos: pos,
+            iter: vname(over, pos),
+            cond: cond,
+            unpack: binders,
+        )
+    ast.CompFor(
+        is_par: false,
+        var: items[0],
+        var_pos: pos,
+        iter: vname(over, pos),
+        cond: cond,
+        unpack: [],
+    )
+
+fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
+    if is_pending_table(r.ty)
+        return unsupported(npos, "`.{name}()` on an empty `\{}` whose type isn't known")
+    nvars += 1
+    id := nvars
+    me := "#vr{id}"
+    pos := npos
+    mut is_map := false
+    match r.ty
+        Set(et) =>
+            declare(me, Ty.List(et), table_keys(r.id, et))
+            if name != "filter"
+                # Everything but `filter` reads the set as the list of its elements.
+                return lower_method(vname(me, pos), name, npos, args, none)
+        Map(_, _) =>
+            is_map = true
+            declare(me, r.ty, r.id)
+        _ => declare(me, r.ty, r.id)
+    per := if is_map then 2 else 1
+    res := "#vv{id}"
+    if name == "skip"
+        lower_stmt(vlet("#vn{id}", args[0].value, false, pos))
+        i := "#vi{id}"
+        cl := ast.CompFor(
+            is_par: false,
+            var: i,
+            var_pos: pos,
+            iter: ast.Expr.Range(
+                lo: vname("#vn{id}", pos),
+                hi: vmethod(vname(me, pos), "len", [], pos),
+                inclusive: false,
+                pos: pos,
+            ),
+            cond: none,
+            unpack: [],
+        )
+        elem := ast.Expr.Index(recv: vname(me, pos), index: vname(i, pos), pos: pos)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: elem,
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
+    if name == "zip"
+        lower_stmt(vlet("#vy{id}", args[0].value, false, pos))
+        i := "#vi{id}"
+        ys := vname("#vy{id}", pos)
+        cl := ast.CompFor(
+            is_par: false,
+            var: i,
+            var_pos: pos,
+            iter: ast.Expr.Range(
+                lo: vint(0, pos),
+                hi: vmethod(vname(me, pos), "len", [], pos),
+                inclusive: false,
+                pos: pos,
+            ),
+            cond: ast.Expr.Binary(
+                op: ast.BinOp.Lt,
+                lhs: vname(i, pos),
+                rhs: vmethod(ys, "len", [], pos),
+                pos: pos,
+            ),
+            unpack: [],
+        )
+        pair := ast.Expr.TupleLit(
+            items: [
+                ast.Expr.Index(recv: vname(me, pos), index: vname(i, pos), pos: pos),
+                ast.Expr.Index(recv: ys, index: vname(i, pos), pos: pos),
+            ],
+            pos: pos,
+        )
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: pair,
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
+    if name == "fold"
+        f := vocab_fn(args[1], per + 1, id, pos)
+        acc := "#va{id}"
+        lower_stmt(vlet(acc, args[0].value, true, pos))
+        items := f.names[1..]
+        inner := [vlet(f.names[0], vname(acc, pos), false, pos), vassign(acc, f.body, pos)]
+        lower_stmt(vloop(me, is_map, id, items, inner, pos))
+        return lower_value(vname(acc, pos), none)
+    f := vocab_fn(args[0], per, id, pos)
+    if name == "any" or name == "all"
+        lower_stmt(vlet(res, ast.Expr.Bool(value: name == "all", pos: pos), true, pos))
+        cond := if name == "all" then vnot(f.body, pos) else f.body
+        hit := ast.Expr.Bool(value: name == "any", pos: pos)
+        inner := [vif(cond, [vassign(res, hit, pos), ast.Stmt.Break(pos: pos, target: none)], pos)]
+        lower_stmt(vloop(me, is_map, id, f.names, inner, pos))
+        return lower_value(vname(res, pos), none)
+    if name == "count"
+        lower_stmt(vlet(res, vint(0, pos), true, pos))
+        bump := ast.Expr.Binary(
+            op: ast.BinOp.Add,
+            lhs: vname(res, pos),
+            rhs: vint(1, pos),
+            pos: pos,
+        )
+        inner := [vif(f.body, [vassign(res, bump, pos)], pos)]
+        lower_stmt(vloop(me, is_map, id, f.names, inner, pos))
+        return lower_value(vname(res, pos), none)
+    if name == "take_while" or name == "skip_while"
+        # The result starts as an empty list of the same type: `xs.take(0)`.
+        empty := vmethod(vname(me, pos), "take", [vint(0, pos)], pos)
+        lower_stmt(vlet(res, empty, true, pos))
+        item := vname(f.names[0], pos)
+        push := ast.Stmt.Eval(value: vmethod(vname(res, pos), "push", [item], pos))
+        mut inner := List[ast.Stmt]()
+        if name == "take_while"
+            inner.push(vif(vnot(f.body, pos), [ast.Stmt.Break(pos: pos, target: none)], pos))
+        else
+            skipping := "#vs{id}"
+            lower_stmt(vlet(skipping, ast.Expr.Bool(value: true, pos: pos), true, pos))
+            both := ast.Expr.Binary(
+                op: ast.BinOp.And,
+                lhs: vname(skipping, pos),
+                rhs: f.body,
+                pos: pos,
+            )
+            inner.push(vif(both, [ast.Stmt.Continue(pos: pos, target: none)], pos))
+            inner.push(vassign(skipping, ast.Expr.Bool(value: false, pos: pos), pos))
+        inner.push(push)
+        lower_stmt(vloop(me, is_map, id, f.names, inner, pos))
+        return lower_value(vname(res, pos), none)
+    # The rest build a collection with a comprehension over the same clause.
+    if name == "filter"
+        cl := vclause(me, is_map, id, f.names, f.body, pos)
+        if is_map
+            return lower_value(
+                ast.Expr.Comp(
+                    form: ast.CompKind.MapComp,
+                    elem: vname(f.names[0], pos),
+                    value: vname(f.names[1], pos),
+                    clauses: [cl],
+                    pos: pos,
+                ),
+                none,
+            )
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.SetComp,
+                elem: vname(f.names[0], pos),
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
+    if name == "map_values"
+        cl := vclause(me, true, id, f.names, none, pos)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.MapComp,
+                elem: vname(f.names[0], pos),
+                value: f.body,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
+    if name == "map"
+        cl := vclause(me, is_map, id, f.names, none, pos)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: f.body,
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
+    if name == "flat_map"
+        cl := vclause(me, is_map, id, f.names, none, pos)
+        inner := ast.CompFor(
+            is_par: false,
+            var: "#vy{id}",
+            var_pos: pos,
+            iter: f.body,
+            cond: none,
+            unpack: [],
+        )
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: vname("#vy{id}", pos),
+                value: none,
+                clauses: [cl, inner],
+                pos: pos,
+            ),
+            none,
+        )
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

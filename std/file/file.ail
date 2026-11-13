@@ -203,6 +203,12 @@ pub fn Writer.flush(mut self) ! fs.IoError
     parts = List[bytes]()
     held = 0
 
+## Flushes, then asks the operating system to put the file on the disk, so the
+## data survives a power failure (std.file.10).
+pub fn Writer.sync(mut self) ! fs.IoError
+    flush()?
+    fs.sync(path)?
+
 ## The offset the next written byte will have, counting what is buffered
 ## (std.file.8).
 pub fn Writer.tell(self) int

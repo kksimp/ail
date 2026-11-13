@@ -1,0 +1,165 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The `select` statement (conc.select.2-6, ADR 1102). The lowering builds a
+## table of three words per receive or send arm, in source order: the kind
+## (0 receive, 1 send), the channel, and the value to send (a receive arm's
+## word gets the value taken), then one word for a trap's message. The table
+## is scanned conservatively (heap kind 13), so the values in it stay alive.
+## Waiting uses the channels' shared counter, as `task.select` does (chan.ail).
+
+SEL_RECV := 0
+## What `sel_wait` gives besides a row's index.
+SEL_AFTER := -1
+SEL_CLOSED := -2
+SEL_NONE := -3
+SEL_SENT_CLOSED := -4
+SEL_DEADLOCK := -5
+
+fn sel_row(tab int, k int, kind int, ch int, v int)
+    store64(tab + 24 * k, kind)
+    store64(tab + 24 * k + 8, ch)
+    store64(tab + 24 * k + 16, v)
+
+## The value a receive arm took (row `k`).
+fn sel_got(tab int, k int) int
+    load64(tab + 24 * k + 16)
+
+## Wait until one of the `n` rows of `tab` can go ahead and do it: the
+## lowest row that is ready, in source order (conc.select.3). It gives that
+## row; `SEL_CLOSED` once every receive row's channel is closed and empty
+## (conc.select.5); `SEL_AFTER` when `has_after` and `ms` milliseconds pass
+## first (conc.select.4); and in a cancelled task, which never waits, one of
+## those or `SEL_NONE` (conc.select.6). A send on a closed channel gives
+## `SEL_SENT_CLOSED` with the message in the table's last word, and a
+## deadlock `SEL_DEADLOCK` with the message in `CHAN_FAULT` (conc.task.7).
+fn sel_wait(tab int, n int, ms int, has_after int) int
+    det_yield()
+    wait_ms := if ms < 0 then 0 else ms
+    end := time_mono_ms() + wait_ms
+    while true
+        e := atomic_load(global(CHAN_EPOCH))
+        r := sel_try(tab, n)
+        if r != SEL_NONE
+            return r
+        mut recvs := 0
+        mut open := 0
+        mut feeder := 0
+        for k in 0..n
+            if load64(tab + 24 * k) == SEL_RECV
+                recvs += 1
+                ch := load64(tab + 24 * k + 8)
+                lock(ch + C_LOCK)
+                closed := load64(ch + C_CLOSED) != 0
+                waiting := load64(ch + C_COUNT) > 0
+                src := load64(ch + C_SOURCE)
+                unlock(ch + C_LOCK)
+                # A value queued since the pass is taken by the next one.
+                if not closed or waiting
+                    open += 1
+                    if src != 0 and feeder == 0 and not closed
+                        feeder = ch
+        if recvs > 0 and open == 0
+            return SEL_CLOSED
+        if task_cancelled()
+            if recvs > 0
+                return SEL_CLOSED
+            if has_after != 0
+                return SEL_AFTER
+            return SEL_NONE
+        left := end - time_mono_ms()
+        # A deterministic run has no clock: only a wait of no time is up at once.
+        up := if det_on() then wait_ms == 0 else left <= 0
+        if has_after != 0 and up
+            return SEL_AFTER
+        if feeder != 0
+            # A child's stream is read here, as `task.select` does.
+            if has_after != 0
+                chan_pump_ms(feeder, left)
+            else
+                chan_pump(feeder)
+        elif sel_sleep(tab, n, e, left, has_after != 0)
+            # Nothing else can run: a timed wait's time is up; else a deadlock.
+            if has_after != 0
+                chan_fault()
+                return SEL_AFTER
+            return SEL_DEADLOCK
+    SEL_NONE
+
+## One pass over the rows: the first that goes ahead, else `SEL_NONE`.
+fn sel_try(tab int, n int) int
+    for k in 0..n
+        ch := load64(tab + 24 * k + 8)
+        if load64(tab + 24 * k) == SEL_RECV
+            if load64(ch + C_SOURCE) != 0
+                # A child's output is read first, without waiting.
+                chan_ready(ch)
+            lock(ch + C_LOCK)
+            v := chan_take(ch)
+            unlock(ch + C_LOCK)
+            if v != 0
+                race_acquire(ch)
+                store64(tab + 24 * k + 16, v)
+                return k
+        else
+            v := load64(tab + 24 * k + 16)
+            if load64(ch + C_SOURCE) != 0
+                # A child's input never waits (std.proc.5).
+                chan_source_send(ch, v)
+                return k
+            lock(ch + C_LOCK)
+            if load64(ch + C_CLOSED) != 0
+                unlock(ch + C_LOCK)
+                store64(tab + 24 * n, chan_msg("send on a closed channel `", ch, "`"))
+                return SEL_SENT_CLOSED
+            if load64(ch + C_COUNT) < load64(ch + C_CAP)
+                race_release(ch)
+                chan_put(ch, v)
+                unlock(ch + C_LOCK)
+                return k
+            unlock(ch + C_LOCK)
+    SEL_NONE
+
+## Sleep until any channel changes (the shared counter moves from `e`), at
+## most `left` milliseconds when `timed`. Whether the main task found a
+## deadlock instead. A cancel wakes the sleeper through the first row's
+## channel (`task_cancel`).
+fn sel_sleep(tab int, n int, e int, left int, timed bool) bool
+    atomic_add(global(CHAN_SEL), 1)
+    task_block_on(load64(tab + 8))
+    if task_cancelled()
+        task_block_on(0)
+        atomic_add(global(CHAN_SEL), -1)
+        return false
+    k := worker_index()
+    if k >= 0
+        wait_enter()
+    mut dead := false
+    if timed and not det_on()
+        # A timed wait is never a deadlock (conc.task.7), so it isn't counted
+        # among the blocked threads, as in `recv_for`.
+        futex_wait_timed(global(CHAN_EPOCH), e.bit_and(4294967295), left)
+    else
+        dead = prog_wait(
+            global(CHAN_EPOCH),
+            e.bit_and(4294967295),
+            "a value from one of several channels, or room in one",
+            true,
+        )
+    if k >= 0
+        wait_leave()
+    task_block_on(0)
+    atomic_add(global(CHAN_SEL), -1)
+    dead
+
+## The message of a send arm's trap on a closed channel, or 0 (conc.share.4).
+fn sel_sent_closed(tab int, n int, r int) int
+    if r != SEL_SENT_CLOSED
+        return 0
+    load64(tab + 24 * n)
+
+## The message of a deadlock, or 0 (conc.task.7).
+fn sel_deadlock(r int) int
+    if r != SEL_DEADLOCK
+        return 0
+    chan_fault()

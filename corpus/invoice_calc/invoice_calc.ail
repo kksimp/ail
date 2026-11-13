@@ -1,0 +1,85 @@
+## Invoice calculator. Parses "sku,qty,price_cents,tax_bps" lines, skips bad
+## lines with a typed error, applies a volume discount to the subtotal and adds
+## per-line tax rounded half up. Prints one summary line per invoice.
+
+error enum InvoiceError
+    BadLine(text str) "bad line '{text}'"
+    BadQty(sku str, qty int) "bad quantity {qty} for {sku}"
+
+struct Line
+    sku str
+    qty int
+    price int
+    tax_bps int
+
+struct Totals
+    subtotal int
+    discount int
+    tax int
+    total int
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn parse_line(text str) Line ! InvoiceError
+    parts := text.split(",")
+    if parts.len() != 4
+        return BadLine(text: text)
+    qty := parts[1].to_int() else return BadLine(text: text)
+    price := parts[2].to_int() else return BadLine(text: text)
+    bps := parts[3].to_int() else return BadLine(text: text)
+    if qty <= 0
+        return BadQty(sku: parts[0], qty: qty)
+    Line(sku: parts[0], qty: qty, price: price, tax_bps: bps)
+
+fn discount_pct(subtotal int) int
+    if subtotal >= 50000
+        return 10
+    if subtotal >= 10000
+        return 5
+    0
+
+fn line_tax(l Line) int
+    (l.qty * l.price * l.tax_bps + 5000) / 10000
+
+fn compute(lines List[Line]) Totals
+    mut gross := 0
+    mut tax := 0
+    for l in lines
+        gross += l.qty * l.price
+        tax += line_tax(l)
+    disc := gross * discount_pct(gross) / 100
+    Totals(subtotal: gross, discount: disc, tax: tax, total: gross - disc + tax)
+
+fn main()
+    invoices := [
+        ["A100,2,1999,825", "B200,10,500,0", "C300,1,12000,825"],
+        ["D1,0,100,0", "E2,3,250,500", "bad line"],
+        ["F9,40,1500,825", "G7,x,100,0"],
+    ]
+    mut n := 0
+    for inv in invoices
+        n += 1
+        mut lines := List[Line]()
+        for text in inv
+            ln := parse_line(text) else err
+                print("invoice {n}: skip: {err}")
+                continue
+            lines.push(ln)
+        t := compute(lines)
+        print("invoice {n}: {lines.len()} lines, subtotal {money(t.subtotal)}, discount {money(t.discount)}, tax {money(t.tax)}, total {money(t.total)}")
+
+@test fn rejects_bad_lines()
+    assert_err(parse_line("a,b,c"))
+    assert_err(parse_line("a,0,100,0"))
+    assert_err(parse_line("a,1,100"))
+
+@test fn tax_rounds_half_up()
+    l := Line(sku: "x", qty: 1, price: 1050, tax_bps: 825)
+    assert_eq(line_tax(l), 87)
+
+@test fn discount_tiers()
+    assert_eq(discount_pct(9999), 0)
+    assert_eq(discount_pct(10000), 5)
+    assert_eq(discount_pct(50000), 10)

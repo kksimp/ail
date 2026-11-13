@@ -1,0 +1,13 @@
+by extension:
+  (none)     90
+  ail      1850
+  bin      2048
+  md       2000
+by entry:
+  assets/    2048  34% ##########
+  docs/      1850  30% #########
+  src/       1850  30% #########
+  README.md   150   2% 
+  Makefile     90   1% 
+total 5988 bytes
+cleaned up: true

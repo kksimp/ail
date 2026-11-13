@@ -796,6 +796,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0981](0981-std-app-edge-mode.md) | `std.app` edge mode: the app draws into the title bar, with the window controls' insets and `drag`/`zoom` lines *(delegated)* | Accepted | 2026-11-07 |
 | [0982](0982-std-app-clipboard-line.md) | `std.app` clipboard line: an app puts text on the system clipboard through `lines()` *(delegated)* | Accepted | 2026-11-08 |
 | [1031](1031-variadic-c-calls.md) | Variadic C calls: `extern c fn f(a, ...)` with the platform's convention *(delegated)* | Accepted | 2026-11-09 |
+| [1074](1074-c-structs-by-value-and-callbacks.md) | C structs by value and C callbacks: plain structs copied in the platform layout, callbacks are named functions; amends ADR 0952 *(delegated)* | Accepted | 2026-11-12 |
 | [0983](0983-std-app-mouse-down-up.md) | `std.app` `down` and `up` events with pointer capture, for drag selection *(delegated)* | Accepted | 2026-11-08 |
 | [0985](0985-gfx-gamepad-input.md) | `std.gfx` gamepad input: `Input.pads`, the `pad` event, GameController on the Mac *(delegated)* | Accepted | 2026-11-08 |
 | [0986](0986-app-tools-and-attach-mcp.md) | `@tool` methods: typed actions a running app offers agents (`tools`, `call` behind `--attach-input`), and `ail attach mcp` *(delegated)* | Accepted | 2026-11-08 |
@@ -882,3 +883,16 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1095](1095-else-leave-as-block-tail.md) | `e else return ...`, `else break` or `else continue` as a block's last statement gives `e`'s value (`err.else.7`) *(delegated)* | Accepted | 2026-11-13 |
 | [1096](1096-x64-jumps-inside-32-byte-lines.md) | Native x86-64: keep jumps inside 32-byte lines *(delegated)* | Accepted | 2026-11-13 |
 | [1097](1097-faster-gates.md) | Faster gates: `NAME@K/N` shards, one process per runnable spec fence, stage 1 in the pool, `--failed` rerun, fast `run` on Windows *(delegated)* | Accepted | 2026-11-13 |
+| [1098](1098-std-kv.md) | `std.kv`: a key-value store in one file with a crash-safe log; `fs.sync` *(delegated)* | Accepted | 2026-11-13 |
+| [1099](1099-collection-vocabulary.md) | One collection vocabulary: `fold`, `count(f)`, `flat_map` and the rest on every collection *(delegated)* | Accepted | 2026-11-13 |
+| [1100](1100-sandboxed-tests.md) | `ail test` sandboxes each test; `@needs(net)`, `@needs(proc)`, `@needs(fs)` lift it; `--allow all` *(delegated)* | Accepted | 2026-11-13 |
+| [1101](1101-test-stubs.md) | `std.test` stubs for files, variables, the clock and HTTP in tests *(delegated)* | Accepted | 2026-11-13 |
+| [1102](1102-select-statement.md) | `select` waits on several channel operations; first ready arm in order, `after`, `closed` *(delegated)* | Accepted | 2026-11-13 |
+| [1103](1103-distinct-types.md) | Distinct types `type UserId = int`: nominal, erased to the base in native code *(delegated)* | Accepted | 2026-11-13 |
+| [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |
+| [1105](1105-scoped-caps-in-manifests-and-review.md) | Scoped capabilities in `ail.pkg` (`caps fs.read=./data`) give a run its policy; `ail review` reports widened scopes *(delegated)* | Accepted | 2026-11-13 |
+| [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |
+| [1107](1107-labeled-break-continue.md) | Labeled loops: `outer: for`, `break outer`, `continue outer` *(delegated)* | Accepted | 2026-11-13 |
+| [1108](1108-grammar-file.md) | `docs/spec/grammar.ebnf`, the whole grammar, checked against the tree by `tools/check-grammar.py` *(delegated)* | Accepted | 2026-11-13 |
+| [1110](1110-language-card-budget-16000.md) | The language card budget is 16,000 tokens (core about 3,000); coverage is checked by a docs-gate script, and `llms-full.txt` holds the card and how-tos *(designer)* | Accepted | 2026-11-13 |
+| [1113](1113-check-output-for-agents.md) | `ail check` output for agents: `ok` line, `next:` on each error, JSON schema and summary record, exit statuses *(delegated)* | Accepted | 2026-11-13 |

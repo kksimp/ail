@@ -1,0 +1,12 @@
+size 1300
+  chunk 0 offset    0 size 500 crc 6b269b67
+  chunk 1 offset  500 size 500 crc 96fc3852
+  chunk 2 offset 1000 size 300 crc f401eff6
+  root fe4f53d6cdde6a7f
+after patching byte 620: changed [1]
+after appending: changed [2]
+  chunk 0 offset    0 size 500 crc 6b269b67
+  chunk 1 offset  500 size 500 crc 1f961a0d
+  chunk 2 offset 1000 size 312 crc a71113ff
+  root da65d136f67eb65a
+cleaned up: true

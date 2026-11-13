@@ -1,0 +1,68 @@
+## Finds the connected components of an undirected graph with an explicit
+## depth-first stack. Edges come as text ("0-1 1-2 ..."). Prints each
+## component with its members, the size ranking, and isolated vertices.
+
+struct Graph
+    n int
+    ea List[int]
+    eb List[int]
+
+fn parse(n int, text str) Graph
+    mut g := Graph(n: n, ea: [], eb: [])
+    for tok in text.words()
+        p := tok.split("-")
+        g.ea.push(p[0].to_int() else 0)
+        g.eb.push(p[1].to_int() else 0)
+    g
+
+fn components(g Graph) List[List[int]]
+    mut label := [-1 for k in 0..g.n]
+    mut groups := List[List[int]]()
+    for start in 0..g.n
+        if label[start] != -1
+            continue
+        id := groups.len()
+        mut members := List[int]()
+        mut stack := [start]
+        label[start] = id
+        while stack.len() > 0
+            v := stack.pop() else break
+            members.push(v)
+            for e in 0..g.ea.len()
+                mut other := -1
+                if g.ea[e] == v
+                    other = g.eb[e]
+                elif g.eb[e] == v
+                    other = g.ea[e]
+                if other >= 0 and label[other] == -1
+                    label[other] = id
+                    stack.push(other)
+        members.sort()
+        groups.push(members)
+    groups
+
+fn main()
+    g := parse(12, "0-1 1-2 2-0 3-4 5-6 6-7 7-8 8-5 5-7 10-11")
+    groups := components(g)
+    print("vertices: {g.n}, edges: {g.ea.len()}")
+    print("components: {groups.len()}")
+    for i in 0..groups.len()
+        print("  #{i + 1} size {groups[i].len()}: {groups[i].join(" ")}")
+    ranked := groups.sorted(by: |m| -m.len())
+    print("largest has {ranked[0].len()} vertices")
+    singles := [m[0] for m in groups if m.len() == 1]
+    print("isolated: {singles.join(" ")}")
+    joined := parse(12, "0-1 1-2 2-0 3-4 5-6 6-7 7-8 8-5 5-7 10-11 2-3 4-5 8-9 9-10 11-0")
+    print("after bridging: {components(joined).len()} component")
+
+@test fn no_edges_means_all_isolated()
+    assert_eq(components(parse(4, "")).len(), 4)
+
+@test fn triangle_is_one_component()
+    groups := components(parse(3, "0-1 1-2 2-0"))
+    assert_eq(groups, [[0, 1, 2]])
+
+@test fn two_pairs()
+    groups := components(parse(5, "0-1 3-4"))
+    assert_eq(groups.len(), 3)
+    assert_eq(groups[1], [2])

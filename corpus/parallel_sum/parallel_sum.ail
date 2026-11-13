@@ -1,0 +1,63 @@
+## Parallel sum: splits a list into chunks, sums each chunk in its own task
+## and combines the partial sums sent back over a channel. The result is
+## cross-checked against a sequential sum, a `par` comprehension and an Atomic.
+
+struct Part
+    idx int
+    total int
+
+fn chunk_sum(xs List[int], lo int, hi int, idx int, out Channel[Part])
+    mut t := 0
+    for i in lo..hi
+        t += xs[i]
+    out.send(Part(idx: idx, total: t))
+
+fn partial_sums(xs List[int], parts int) List[Part]
+    out := Channel[Part](parts)
+    g := TaskGroup()
+    size := (xs.len() + parts - 1) / parts
+    mut started := 0
+    for k in 0..parts
+        lo := k * size
+        hi := (lo + size).min(xs.len())
+        if lo < hi
+            g.add(spawn chunk_sum(xs, lo, hi, k, out))
+            started += 1
+    mut got := List[Part]()
+    for _ in 0..started
+        p := out.recv() else break
+        got.push(p)
+    got.sorted(by: |q| q.idx)
+
+fn total_of(ps List[Part]) int
+    mut t := 0
+    for p in ps
+        t += p.total
+    t
+
+fn main()
+    xs := [i * i % 101 for i in 0..2000]
+    ps := partial_sums(xs, 4)
+    for p in ps
+        print("chunk {p.idx}: {p.total}")
+    print("tasks total:      {total_of(ps)}")
+    print("sequential total: {xs.sum()}")
+    squares := [x * x par for x in xs]
+    print("par comprehension: {squares.sum()} vs {[y * y for y in xs].sum()}")
+    n := Atomic(0)
+    par for v in xs
+        n.add(v)
+    print("atomic total:     {n.load()}")
+
+@test fn parts_add_up()
+    xs := [i * 3 % 17 for i in 0..100]
+    assert_eq(total_of(partial_sums(xs, 3)), xs.sum())
+    assert_eq(total_of(partial_sums(xs, 7)), xs.sum())
+
+@test fn more_parts_than_items()
+    ps := partial_sums([5, 6, 7], 10)
+    assert_eq(ps.len(), 3)
+    assert_eq(total_of(ps), 18)
+
+@test fn empty_input_has_no_parts()
+    assert_eq(partial_sums([], 4).len(), 0)

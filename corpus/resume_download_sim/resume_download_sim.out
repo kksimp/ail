@@ -1,0 +1,8 @@
+source: 1290 bytes, crc 629cb928
+attempt 1: resumed at    0, received  512, done false
+attempt 2: resumed at  512, received  384, done false
+attempt 3: resumed at  896, received  394, done true
+bytes on the wire: 1290
+bytes if every retry restarted: 2698
+verified: true
+cleaned up: true

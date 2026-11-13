@@ -1,0 +1,78 @@
+# type.coll.28-32, type.deque.6, expr.iter.4 (ADR 1099): one vocabulary for
+# lists, sets, maps, deques and sequences.
+fn is_even(n int) bool
+    n % 2 == 0
+
+fn pair(n int) List[int]
+    [n, n * 10]
+
+fn big(k str, v int) bool
+    v > 2
+
+fn main()
+    xs := [3, 8, 5, 12]
+    print(xs.count(|x| x > 4))
+    print(xs.count(is_even))
+    print(xs.fold(0, |acc, x| acc + x))
+    print(xs.fold("", |acc, x| "{acc}{x}"))
+    print([1, 2, 3].fold(0, |acc, x| acc + x) + 1)
+    print(xs.flat_map(pair))
+    print(xs.take_while(|x| x < 10))
+    print(xs.skip_while(|x| x < 10))
+    print(xs.skip(1))
+    print(xs.skip(9))
+    print(xs.take(2).skip(1))
+    for n, s in xs.zip(["a", "b"])
+        print("{n}{s}")
+    print(xs.zip([1]).len())
+    print("héllo".chars().count(|c| c == 'l'))
+
+    s := {3, 8, 5}
+    print(s.any(|x| x > 7))
+    print(s.all(|x| x > 4))
+    print(s.count(|x| x % 2 == 1))
+    print(s.fold(0, |acc, x| acc + x))
+    print(s.map(|x| x * 2))
+    print(s.flat_map(pair))
+    print(s.filter(|x| x > 4).len())
+    print(s.take(2))
+    print(s.skip(2))
+    print(s.sum())
+    print(s.max() else 0)
+    print(s.find(|x| x > 4) else 0)
+    print(s.take_while(|x| x < 8))
+
+    m := {"a": 1, "b": 2, "c": 3}
+    print(m.any(|k, v| v > 2))
+    print(m.all(|k, v| k != "z" and v > 0))
+    print(m.count(|k, v| v > 1))
+    print(m.count(big))
+    print(m.fold(0, |acc, k, v| acc + v))
+    print(m.fold("", |acc, k, v| "{acc}{k}{v}"))
+    for k, v in m.filter(|k, v| v != 2)
+        print("{k}={v}")
+    for k, v in m.map_values(|k, v| v * 10)
+        print("{k}:{v}")
+    print(m.map(|k, v| "{k}{v}"))
+    print(m.flat_map(|k, v| [v, v]))
+
+    d := Deque.from([1, 2, 3, 4, 5])
+    print(d.filter(is_even).to_list())
+    print(d.take(2).to_list())
+    print(d.skip(3).to_list())
+    print(d.take_while(|x| x < 3).to_list())
+    print(d.skip_while(|x| x < 3).to_list())
+    print(d.map(|x| x * x))
+    print(d.any(|x| x > 4))
+    print(d.count(|x| x % 2 == 1))
+    print(d.fold(0, |acc, x| acc + x))
+    print(d.zip(["a", "b"]).len())
+    print(d.enumerate().len())
+
+    print(Seq.of([1, 2, 3, 4]).fold(0, |acc, x| acc + x))
+    print(Seq.of([1, 2, 3]).find(|x| x > 1) else 0)
+    print(Seq.of([1, 2, 3]).count(|x| x > 1))
+    print(Seq.of([1, 2, 3]).any(|x| x > 2))
+    print(Seq.of([1, 2, 3]).all(|x| x > 2))
+    print(Seq.of([1, 2]).flat_map(|x| [x, x]).collect())
+    print(Seq.of([1, 2, 3, 4]).skip_while(|x| x < 3).collect())

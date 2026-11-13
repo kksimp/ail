@@ -31,6 +31,8 @@ pub struct Dep
     pub dir str?
     pub git Source?
     pub caps List[str]
+    ## The entries as written (eff.allow.10).
+    pub entries List[str]
     ## `unsafe allow` on the line (unsafe.block.3).
     pub unsafe_ok bool
     ## `unsafe driver` on the line (unsafe.hw.1).
@@ -41,6 +43,7 @@ pub struct Manifest
     pub name str?
     pub name_pos ast.Pos
     pub caps List[str]?
+    pub entries List[str]
     pub unsafe_ok bool
     pub driver_ok bool
     pub deps List[Dep]
@@ -130,26 +133,70 @@ fn is_lower(c char) bool
 fn is_digit(c char) bool
     c >= '0' and c <= '9'
 
-## `fs,env`, `all` or `none` (eff.cap.2): the capabilities, sorted.
+## The names of `caps` entries that take `=SCOPE`, as `--allow` does (eff.allow.2, eff.allow.10).
+SCOPED_CAPS := ["fs", "fs.read", "fs.write", "net", "net.serve", "proc", "env"]
+
+## `fs,env`, `all` or `none` (eff.cap.2), or with scopes `fs.read=./data,net=api.example.com` (eff.allow.10):
+## the capabilities, sorted. `fs.read` and `fs.write` stand for `fs`, and `net.serve` for `net` as well.
 fn caps(list str, at ast.Pos, mut diags List[syntax.Diag]) List[str]
     if list == "none"
         return []
     mut out := List[str]()
-    for name in list.split(",")
-        if name == "all"
+    for entry in list.split(",")
+        mut name := entry
+        mut scoped := false
+        eq := entry.find("=")
+        if eq != none
+            cut := eq else 0
+            name = entry.slice(0, cut)
+            scoped = true
+            if entry.slice(cut + 1, entry.len()) == ""
+                diags.push(diag(
+                    "eff.allow.2",
+                    at,
+                    "`{entry}` has no scope after `=`",
+                    "write `{name}=SCOPE`, or `{name}` for no limit",
+                ))
+                continue
+        if scoped and not SCOPED_CAPS.contains(name)
+            diags.push(diag(
+                "eff.allow.2",
+                at,
+                "`{name}` takes no scope",
+                "scopes go on {SCOPED_CAPS.join(", ")}; write `{name}` alone",
+            ))
+            continue
+        base := if name == "fs.read" or name == "fs.write" then "fs" else name
+        if name == "all" and not scoped
             for c in CAPABILITIES
                 if not out.contains(c)
                     out.push(c)
-        elif CAPABILITIES.contains(name)
-            if not out.contains(name)
-                out.push(name)
+        elif CAPABILITIES.contains(base)
+            if not out.contains(base)
+                out.push(base)
+            if name == "net.serve" and not out.contains("net")
+                out.push("net")
         else
             diags.push(diag(
                 "eff.cap.2",
                 at,
                 "`{name}` is not a capability",
-                "`caps` takes a comma-separated list of {CAPABILITIES.join(", ")}, or `all` or `none`",
+                "`caps` takes a comma-separated list of {CAPABILITIES.join(", ")}, `fs.read` or `fs.write`, each with an optional `=SCOPE`, or `all` or `none`",
             ))
+    out.sorted()
+
+## The entries of a `caps` list as written, sorted without repeats (`all` is every capability).
+fn cap_entries(list str) List[str]
+    mut out := List[str]()
+    if list == "none"
+        return out
+    for entry in list.split(",")
+        if entry == "all"
+            for c in CAPABILITIES
+                if not out.contains(c)
+                    out.push(c)
+        elif entry != "" and not out.contains(entry)
+            out.push(entry)
     out.sorted()
 
 ## The value of key `key` among a line's pairs, with the key's position.
@@ -170,6 +217,7 @@ pub fn parse(src str) Parsed
     mut name := ""
     mut name_pos := ast.Pos(line: 0, col: 0)
     mut m_caps := none
+    mut m_entries := List[str]()
     mut m_unsafe := false
     mut m_driver := false
     mut version := none
@@ -292,8 +340,10 @@ pub fn parse(src str) Parsed
                     "write `unsafe allow` to let this package contain `unsafe` code, or `unsafe driver` to let it reach hardware as well",
                 ))
         mut grant := none
+        mut grant_entries := List[str]()
         if c := find_pair(keys, "caps")
             grant = caps(c.value, c.pos, mut diags)
+            grant_entries = cap_entries(c.value)
         if kw == "package"
             if named and name != ""
                 diags.push(diag("mod.pkg.2", kw_pos, "an `ail.pkg` has one `package` line", ""))
@@ -302,6 +352,7 @@ pub fn parse(src str) Parsed
             name = dep_name
             name_pos = dep_pos
             m_caps = grant
+            m_entries = grant_entries
             m_unsafe = unsafe_ok
             m_driver = driver_ok
             continue
@@ -361,6 +412,7 @@ pub fn parse(src str) Parsed
             dir: dir,
             git: git,
             caps: grant else [],
+            entries: grant_entries,
             unsafe_ok: unsafe_ok,
             driver_ok: driver_ok,
         ))
@@ -376,6 +428,7 @@ pub fn parse(src str) Parsed
             name: if named then name else none,
             name_pos: name_pos,
             caps: m_caps,
+            entries: m_entries,
             unsafe_ok: m_unsafe,
             driver_ok: m_driver,
             deps: deps,

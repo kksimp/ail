@@ -1,0 +1,117 @@
+## `select` (conc.select.2-6, ADR 1102): the heads are checked in source order,
+## then each arm's block in a scope of its own; a receive arm binds its name
+## to the channel's element type for its block.
+use ast
+
+## An absent position, for an arm not seen yet.
+fn no_pos() ast.Pos?
+    none
+
+## A `select` statement. It never finishes without running an arm when it
+## has a `closed` or an `after` arm, so it leaves when all its arms do.
+fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
+    # A `select` waits on channels, so a loop that holds one stays in order (conc.par.2).
+    handle_calls.add(pos_key(at))
+    mut waits := 0
+    mut recvs := 0
+    mut closed_at := no_pos()
+    mut after_at := no_pos()
+    mut elems := List[Ty]()
+    for a in arms
+        mut elem := Ty.Unit
+        match a.op
+            Recv(_, _, ch) =>
+                elem = select_channel(ch, "receive")
+                waits += 1
+                recvs += 1
+            Send(ch, v) =>
+                elem = select_channel(ch, "send")
+                arg := ast.Arg(label: none, mutable: false, moved: false, value: v, param: none)
+                check_call("send", plain_sig(false, [elem], Ty.Unit), [], [arg], none, a.pos, none)
+                waits += 1
+            After(ms) =>
+                t := expr(ms, Ty.Int, true)
+                if not reject_unhandled(t, expr_pos(ms)) and not accepts(Ty.Int, t)
+                    mismatch("conc.select.4", expr_pos(ms), Ty.Int, t)
+                if first := after_at
+                    select_twice("after", a.pos, first)
+                after_at = a.pos
+            Closed =>
+                if first := closed_at
+                    select_twice("closed", a.pos, first)
+                closed_at = a.pos
+        elems.push(elem)
+    if waits == 0
+        err_help(
+            "conc.select.2",
+            at,
+            "a `select` needs at least one arm that receives or sends",
+            "to wait without a channel, call `time.sleep_ms(ms)`",
+        )
+    if recvs > 0 and closed_at == none
+        err_help(
+            "conc.select.5",
+            at,
+            "a `select` that receives needs a `closed =>` arm",
+            "add `closed =>` with what to do once every channel it receives from is closed and empty, such as `break`",
+        )
+    if recvs == 0
+        if c := closed_at
+            err_help(
+                "conc.select.5",
+                c,
+                "a `closed` arm runs when the channels of the receive arms are closed, but this `select` has none",
+                "remove the `closed` arm",
+            )
+    mut leaves := ast.select_always_runs(arms)
+    for k in 0..arms.len()
+        mark := locals.len()
+        # A receive arm's name holds the value it took (conc.select.3).
+        if b := ast.select_var(arms[k].op)
+            if b.name != "_" and declare(b.name, b.pos)
+                locals.push(Local(
+                    name: b.name,
+                    ty: elems[k],
+                    mutable: false,
+                    how: LocalKind.Binding,
+                    decl: b.pos,
+                ))
+        if block(arms[k].body, none, false) != Ty.Never
+            leaves = false
+        end_scope(mark)
+    if leaves then Ty.Never else Ty.Unit
+
+## The element type of the channel of a receive or send arm (conc.select.3).
+fn Checker.select_channel(mut self, ch ast.Expr, what str) Ty
+    t := expr(ch, none, true)
+    if t == Ty.Unknown
+        return Ty.Unknown
+    if x := channel_elem(t)
+        return x
+    err_help(
+        "conc.select.3",
+        expr_pos(ch),
+        "a {what} arm waits on a `Channel`, but this is {show(t)}",
+        "make it with `Channel[T](capacity)`",
+    )
+    Ty.Unknown
+
+## A second `after` or `closed` arm (conc.select.4-5).
+fn Checker.select_twice(mut self, word str, at ast.Pos, first ast.Pos)
+    rule := if word == "after" then "conc.select.4" else "conc.select.5"
+    diags.push(
+        new_diag(
+            rule,
+            at,
+            "a `select` has at most one `{word}` arm",
+        ).with_note(first, "the first `{word}` arm is here"),
+    )
+
+## The element type of a `Channel[T]`, or none.
+@allow("expr.match.3") fn channel_elem(t Ty) Ty?
+    match t
+        Conc(k, x) =>
+            if k == "Channel"
+                return x
+            none
+        _ => none

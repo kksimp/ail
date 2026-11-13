@@ -1,0 +1,11 @@
+retrying 2 busy pages
+0 200   914 http://site.test/index
+1 200   236 http://site.test/busy/report
+2 404     0 http://site.test/missing/page
+3 200   914 http://site.test/about
+4 200   236 http://site.test/busy/search
+5 200   199 http://site.test/docs/intro
+6 404     0 http://site.test/docs/missing
+status 200: 5
+status 404: 2
+7 pages, 2499 bytes fetched

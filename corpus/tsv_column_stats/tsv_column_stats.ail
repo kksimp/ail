@@ -1,0 +1,126 @@
+## TSV column stats: splits tab-separated text into columns by its header row,
+## infers whether each column is numeric, and reports count, empty cells,
+## distinct values, min/max and (for numbers) the sum and integer mean.
+
+struct Stats
+    name str
+    numeric bool
+    filled int
+    empty int
+    distinct int
+    low str
+    high str
+    sum int
+
+fn is_number(s str) bool
+    if s.is_empty()
+        return false
+    for c in s.chars()
+        if not c.is_digit()
+            return false
+    true
+
+fn column(rows List[List[str]], j int) List[str]
+    mut out := List[str]()
+    for r in rows
+        out.push(if j < r.len() then r[j] else "")
+    out
+
+fn stats_for(name str, cells List[str]) Stats
+    mut seen := Set[str]()
+    mut empty := 0
+    mut numeric := true
+    mut filled := List[str]()
+    for c in cells
+        if c == ""
+            empty += 1
+            continue
+        filled.push(c)
+        seen.add(c)
+        if not is_number(c)
+            numeric = false
+    if filled.is_empty()
+        return Stats(
+            name: name,
+            numeric: false,
+            filled: 0,
+            empty: empty,
+            distinct: 0,
+            low: "-",
+            high: "-",
+            sum: 0,
+        )
+    if numeric
+        mut nums := List[int]()
+        for f in filled
+            nums.push(f.to_int() else 0)
+        return Stats(
+            name: name,
+            numeric: true,
+            filled: nums.len(),
+            empty: empty,
+            distinct: seen.len(),
+            low: "{nums.min() else 0}",
+            high: "{nums.max() else 0}",
+            sum: nums.sum(),
+        )
+    sorted_text := filled.sorted()
+    Stats(
+        name: name,
+        numeric: false,
+        filled: filled.len(),
+        empty: empty,
+        distinct: seen.len(),
+        low: sorted_text[0],
+        high: sorted_text[sorted_text.len() - 1],
+        sum: 0,
+    )
+
+fn analyse(text str) List[Stats]
+    lines := text.lines()
+    header := lines[0].split("\t")
+    mut rows := List[List[str]]()
+    for line in lines[1..]
+        if line != ""
+            rows.push(line.split("\t"))
+    mut out := List[Stats]()
+    for j in 0..header.len()
+        out.push(stats_for(header[j], column(rows, j)))
+    out
+
+fn data() str
+    rows := [
+        "city\tpop\tcountry\tarea",
+        "Oslo\t709\tNO\t454",
+        "Bergen\t286\tNO\t465",
+        "Malmo\t350\tSE\t",
+        "Lund\t95\tSE\t30",
+        "Aarhus\t285\tDK\t91",
+        "Tromso\t77\tNO",
+        "Oslo\t709\tNO\t454",
+    ]
+    rows.join("\n")
+
+fn main()
+    for s in analyse(data())
+        kind := if s.numeric then "num" else "text"
+        print("{s.name:<8}{kind:<5}n={s.filled} empty={s.empty} distinct={s.distinct} min={s.low} max={s.high}")
+        if s.numeric
+            print("        sum={s.sum} mean={s.sum / s.filled}")
+
+@test fn detects_numeric_columns()
+    got := analyse("a\tb\n1\tx\n22\ty")
+    assert(got[0].numeric)
+    assert(not got[1].numeric)
+    assert_eq(got[0].sum, 23)
+
+@test fn counts_empty_and_distinct()
+    s := stats_for("c", ["a", "", "a", "b"])
+    assert_eq(s.empty, 1)
+    assert_eq(s.distinct, 2)
+    assert_eq(s.high, "b")
+
+@test fn short_rows_count_as_empty()
+    got := analyse("x\ty\n1\n2\t3")
+    assert_eq(got[1].empty, 1)
+    assert_eq(got[1].filled, 1)

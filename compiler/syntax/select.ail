@@ -1,0 +1,124 @@
+## `select` (conc.select.2, ADR 1102): a statement that waits on several
+## channel operations and runs the block of the one that happens. Its arms are
+## `v := ch.recv() =>`, `ch.send(x) =>`, `after ms =>` and `closed =>`;
+## `after` and `closed` are words only at the start of an arm.
+use ast
+
+## `select` and its indented block of arms.
+fn Parser.select_stmt(mut self, pos ast.Pos) ast.Stmt?
+    bump()
+    if not eat_newline()
+        unexpected("end of line after `select`", "conc.select.2")
+        return none
+    if not eat_indent()
+        error_text(
+            "conc.select.2",
+            here(),
+            "a `select` needs an indented block of arms",
+            SELECT_ARMS,
+            "",
+        )
+        return none
+    mut arms := List[ast.SelectArm]()
+    while peek() != Tok.Dedent and peek() != Tok.Eof
+        if eat_newline()
+            continue
+        if a := select_arm()
+            arms.push(a)
+        else
+            skip_statement()
+    eat_dedent()
+    ast.Stmt.Select(arms: arms, pos: pos)
+
+## The help that lists the four arm forms (conc.select.2).
+SELECT_ARMS := "write one arm per line: `v := ch.recv() =>`, `ch.send(x) =>`, `after ms =>` or `closed =>`"
+
+## One arm: its head, `=>`, and a block or one statement on the same line
+## (as a `match` arm, expr.match.9).
+fn Parser.select_arm(mut self) ast.SelectArm?
+    pos := here()
+    op := select_op()?
+    if not eat_sym("=>")
+        unexpected("`=>` after the arm's head", "conc.select.2")
+        return none
+    if at_newline()
+        body := block("`=>`", "conc.select.2")?
+        return ast.SelectArm(op: op, body: body, pos: pos)
+    s := statement_inner()?
+    if not after_block() and not eat_newline()
+        unexpected("end of line after the arm", "conc.select.2")
+        return none
+    ast.SelectArm(op: op, body: [s], pos: pos)
+
+## The head of an arm, before its `=>`.
+fn Parser.select_op(mut self) ast.SelectOp?
+    pos := here()
+    word := if tag_at(0) == "id" then tok_text(peek()) else ""
+    next := sym_at(1)
+    if word == "closed" and next == "=>"
+        bump()
+        return ast.SelectOp.Closed
+    if word == "after" and next != "." and next != ":=" and next != "[" and next != "=>"
+        bump()
+        ms := expression_plain()?
+        return ast.SelectOp.After(ms: ms)
+    if word == "case" or word == "default"
+        # The Go habit: `case v := <-ch:` and `default:`.
+        mut help := SELECT_ARMS
+        if word == "default"
+            help = "an arm that runs at once when nothing else is ready is `after 0 =>`"
+        error_text(
+            "conc.select.2",
+            pos,
+            "AIL's `select` has no `{word}`: an arm is `v := ch.recv() =>`, `ch.send(x) =>`, `after ms =>` or `closed =>`",
+            help,
+            "",
+        )
+        return none
+    if word != "" and next == ":="
+        var_pos := bump().pos
+        i += 1
+        value := expression_plain()?
+        if ch := channel_call(value, "recv", 0)
+            return ast.SelectOp.Recv(var: word, var_pos: var_pos, chan: ch)
+        error_text(
+            "conc.select.2",
+            pos,
+            "a receive arm is `{word} := ch.recv() =>`",
+            "a `select` arm waits on a channel; compute other values before the `select`",
+            "",
+        )
+        return none
+    value := expression_plain()?
+    if ch := channel_call(value, "send", 1)
+        return ast.SelectOp.Send(chan: ch, value: send_value(value))
+    if channel_call(value, "recv", 0) != none
+        error_text(
+            "conc.select.2",
+            pos,
+            "a receive arm binds the value it takes",
+            "write `v := ch.recv() =>`, or `_ := ch.recv() =>` to drop it",
+            "",
+        )
+        return none
+    error_text("conc.select.2", pos, "this is not a `select` arm", SELECT_ARMS, "")
+    none
+
+## The channel of `ch.recv()` or `ch.send(x)`: a method call named `name`
+## with `n` plain arguments.
+@allow("expr.match.3") fn channel_call(e ast.Expr, name str, n int) ast.Expr?
+    match e
+        Method(recv, m, _, args) =>
+            if m != name or args.len() != n
+                return none
+            for a in args
+                if a.label != none or a.mutable or a.moved
+                    return none
+            recv
+        _ => none
+
+## The value of `ch.send(x)`.
+@allow("expr.match.3") fn send_value(e ast.Expr) ast.Expr
+    match e
+        Method(_, _, _, args) => args[0].value
+        _ => e

@@ -1,0 +1,43 @@
+policy nearest
+  t=0 floor 5 -> car 1
+  t=0 car 1 arrives at 5
+  t=1 floor 9 -> car 2
+  t=2 rejected: floor 14 is not in the building
+  t=2 car 2 arrives at 9
+  t=3 floor 1 -> car 0
+  t=3 car 0 arrives at 1
+  t=4 floor 7 -> car 1
+  t=5 car 1 arrives at 7
+  t=6 floor 11 -> car 2
+  t=7 car 2 arrives at 11
+  t=8 floor 0 -> car 0
+  t=8 car 0 arrives at 0
+  t=9 floor 4 -> car 1
+  t=11 car 1 arrives at 4
+  t=12 floor 6 -> car 1
+  t=13 floor 3 -> car 1
+  t=13 car 1 arrives at 6
+  t=16 car 1 arrives at 3
+  served 9, travelled 17
+policy least-loaded
+  t=0 floor 5 -> car 1
+  t=0 car 1 arrives at 5
+  t=1 floor 9 -> car 2
+  t=2 rejected: floor 14 is not in the building
+  t=2 car 2 arrives at 9
+  t=3 floor 1 -> car 0
+  t=3 car 0 arrives at 1
+  t=4 floor 7 -> car 1
+  t=5 car 1 arrives at 7
+  t=6 floor 11 -> car 2
+  t=7 car 2 arrives at 11
+  t=8 floor 0 -> car 0
+  t=8 car 0 arrives at 0
+  t=9 floor 4 -> car 1
+  t=11 car 1 arrives at 4
+  t=12 floor 6 -> car 1
+  t=13 floor 3 -> car 0
+  t=13 car 1 arrives at 6
+  t=15 car 0 arrives at 3
+  served 9, travelled 17
+difference 0

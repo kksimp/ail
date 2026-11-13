@@ -18,6 +18,7 @@ use ast
 ##   "operands"     rewrite `l op r` around the operator at `pos` by a template
 ##   "c_for"        a C-style `for (i := a; i < b; i += 1)` header as `for i in a..b`
 ##   "empty_decl"   `xs: List[int] = []` as `xs := List[int]()`
+##   "rename_all"   every whole-word `old` outside strings and comments becomes `text`
 
 pub struct Edit
     pub pos ast.Pos
@@ -94,6 +95,10 @@ pub fn c_for(pos ast.Pos) Edit
 ## `xs: List[int] = []` as `xs := List[int]()`, from the statement start.
 pub fn empty_decl(pos ast.Pos) Edit
     at(pos, pos, none, "empty_decl", "")
+
+## Rename every use of the name `old` in the file, from the declaration at `pos`, to `text`.
+pub fn rename_all(pos ast.Pos, old str, text str) Edit
+    at(pos, pos, old, "rename_all", text)
 
 pub fn new_fix(title str, edits List[Edit]) Fix
     Fix(title: title, edits: edits)

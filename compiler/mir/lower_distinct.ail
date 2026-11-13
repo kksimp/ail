@@ -1,0 +1,414 @@
+## Distinct types in native code (type.distinct.7, ADR 1103). `type UserId =
+## int` has its base's representation, so before lowering every distinct type
+## is erased: its declaration goes, each `UserId` written as a type becomes
+## `int`, `UserId(x)` and `int(x)` become `x`, and the associated functions a
+## derive writes become the base's own: `UserId.from_json(j)` is
+## `j.need_int()` and `UserId.default()` is `0`. The checker has already kept
+## the types apart (compiler/check/distinct.ail), so this pass is purely
+## syntactic, and a distinct type costs nothing at run time.
+
+use ast
+
+## The types a distinct type may wrap, as the parser accepts them
+## (`DISTINCT_BASE_NAMES` in compiler/syntax/distinct.ail).
+DISTINCT_BASES := [
+    "int",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "float",
+    "f32",
+    "f64",
+    "str",
+    "bool",
+    "char",
+    "bytes",
+]
+
+## The rewriting of one source.
+struct DistinctErase
+    ## Each distinct type's base, by `module|Name`.
+    bases Map[str, ast.TypeRef]
+    ## The source's module and its imports, alias to module.
+    home str
+    imports Map[str, str]
+    ## Top-level functions named like a base (`fn int`), whose calls stay.
+    own_fns Set[str]
+
+## `input` with its distinct types erased; the same sources when no source
+## declares one.
+fn erase_distinct(input List[Source]) List[Source]
+    mut found := Map[str, ast.TypeRef]()
+    mut named := Set[str]()
+    for src in input
+        for sd in src.prog.structs
+            if sd.is_distinct and sd.fields.len() == 1
+                found["{src.module}|{sd.name}"] = sd.fields[0].ty
+        for fd in src.prog.fns
+            if fd.owner == none and DISTINCT_BASES.contains(fd.name)
+                named.add(fd.name)
+    if found.len() == 0
+        return input
+    mut erased := List[Source]()
+    for src in input
+        de := DistinctErase(
+            bases: found,
+            home: src.module,
+            imports: distinct_imports(src.prog),
+            own_fns: named,
+        )
+        erased.push(Source(
+            module: src.module,
+            path: src.path,
+            text: src.text,
+            prog: de.program(src.prog),
+        ))
+    erased
+
+## The modules a program imports, by the name it writes for each.
+fn distinct_imports(p ast.Program) Map[str, str]
+    mut by_alias := Map[str, str]()
+    for u in p.uses
+        if u.path.len() == 0
+            continue
+        mut short := u.path[u.path.len() - 1].name
+        if a := u.alias
+            short = a.name
+        by_alias[short] = [x.name for x in u.path].join(".")
+    by_alias
+
+## The type name an expression writes: `UserId` or `ids.UserId`.
+@allow("expr.match.3") fn distinct_written(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Member(r, n, _) =>
+            match r
+                Name(a, _) => "{a}.{n}"
+                _ => none
+        _ => none
+
+## The base of the distinct type written `n` here, if it is one.
+fn DistinctErase.base_of(self, n str) ast.TypeRef?
+    if not n.contains(".")
+        return bases.get("{home}|{n}")
+    cut := n.split(".")
+    tail := cut[cut.len() - 1]
+    prefix_part := cut[..cut.len() - 1].join(".")
+    target := imports.get(prefix_part) else prefix_part
+    bases.get("{target}|{tail}")
+
+## The base type's name, `int` for `type UserId = int`.
+@allow("expr.match.3") fn distinct_base_text(t ast.TypeRef) str
+    match t.shape
+        Named(n, _) => n
+        _ => ""
+
+fn DistinctErase.program(self, p ast.Program) ast.Program
+    mut np := p
+    np.structs = [self.struct_decl(sd) for sd in p.structs if not sd.is_distinct]
+    np.enums = [self.enum_decl(ed) for ed in p.enums]
+    np.fns = [self.fn_decl(fd) for fd in p.fns]
+    np.consts = [self.const_decl(cd) for cd in p.consts]
+    np
+
+fn DistinctErase.struct_decl(self, sd ast.StructDecl) ast.StructDecl
+    mut d := sd
+    d.fields = [self.field(fl) for fl in sd.fields]
+    d.invariants = [self.contract(c) for c in sd.invariants]
+    d
+
+fn DistinctErase.enum_decl(self, ed ast.EnumDecl) ast.EnumDecl
+    mut d := ed
+    d.variants = [self.variant(v) for v in ed.variants]
+    d
+
+fn DistinctErase.variant(self, v ast.Variant) ast.Variant
+    mut w := v
+    w.fields = [self.field(fl) for fl in v.fields]
+    w
+
+fn DistinctErase.field(self, fl ast.Field) ast.Field
+    mut g := fl
+    g.ty = self.ty(fl.ty)
+    g.default = self.opt(fl.default)
+    g
+
+fn DistinctErase.const_decl(self, cd ast.ConstDecl) ast.ConstDecl
+    mut d := cd
+    d.value = self.expr(cd.value)
+    d
+
+fn DistinctErase.fn_decl(self, fd ast.FnDecl) ast.FnDecl
+    mut g := fd
+    g.params = [self.param(pa) for pa in fd.params]
+    if rt := fd.ret
+        g.ret = self.ty(rt)
+    if body := fd.body
+        g.body = self.block(body)
+    g.contracts = [self.contract(c) for c in fd.contracts]
+    g
+
+fn DistinctErase.param(self, pa ast.Param) ast.Param
+    mut q := pa
+    q.ty = self.ty(pa.ty)
+    q
+
+fn DistinctErase.contract(self, c ast.Contract) ast.Contract
+    mut d := c
+    d.cond = self.expr(c.cond)
+    d.olds = [self.old(o) for o in c.olds]
+    d
+
+fn DistinctErase.old(self, o ast.Old) ast.Old
+    mut q := o
+    q.value = self.expr(o.value)
+    q
+
+## ---- Types ----
+
+fn DistinctErase.ty(self, t ast.TypeRef) ast.TypeRef
+    if b := self.named_base(t)
+        return ast.TypeRef(shape: b.shape, pos: t.pos)
+    ast.TypeRef(shape: self.shape(t.shape), pos: t.pos)
+
+@allow("expr.match.3") fn DistinctErase.named_base(self, t ast.TypeRef) ast.TypeRef?
+    match t.shape
+        Named(n, args) =>
+            if args.len() > 0
+                return none
+            self.base_of(n)
+        _ => none
+
+fn DistinctErase.tys(self, ts List[ast.TypeRef]) List[ast.TypeRef]
+    [self.ty(t) for t in ts]
+
+fn DistinctErase.shape(self, s ast.TypeShape) ast.TypeShape
+    match s
+        Named(n, args) => ast.TypeShape.Named(n, self.tys(args))
+        Optional(inner) => ast.TypeShape.Optional(self.ty(inner))
+        RefTo(inner) => ast.TypeShape.RefTo(self.ty(inner))
+        PtrTo(inner) => ast.TypeShape.PtrTo(self.ty(inner))
+        TupleType(elems) => ast.TypeShape.TupleType(self.tys(elems))
+        FnType(params, ret) =>
+            mut r := none
+            if x := ret
+                r = self.ty(x)
+            ast.TypeShape.FnType(self.tys(params), r)
+        Fallible(ok, errors) =>
+            mut o := none
+            if x := ok
+                o = self.ty(x)
+            mut es := none
+            if xs := errors
+                es = self.tys(xs)
+            ast.TypeShape.Fallible(o, es)
+        AnyTrait(_) => s
+
+## ---- Statements ----
+
+fn DistinctErase.block(self, b List[ast.Stmt]) List[ast.Stmt]
+    [self.stmt(st) for st in b]
+
+## Statements that hold no expression or type (`break`, `continue`) stay.
+@allow("expr.match.3") fn DistinctErase.stmt(self, st ast.Stmt) ast.Stmt
+    match st
+        Let(name, pos, mutable, value, otherwise) =>
+            mut o := none
+            if x := otherwise
+                o = self.otherwise(x)
+            ast.Stmt.Let(name, pos, mutable, self.expr(value), o)
+        Assign(target, op, value, pos) =>
+            ast.Stmt.Assign(target: self.expr(target), op: op, value: self.expr(value), pos: pos)
+        While(cond, body, pos) => ast.Stmt.While(self.expr(cond), self.block(body), pos)
+        For(is_par, var, var_pos, mutable, iter, body, pos) =>
+            ast.Stmt.For(is_par, var, var_pos, mutable, self.expr(iter), self.block(body), pos)
+        With(mutex, var, var_pos, body, pos) =>
+            ast.Stmt.With(self.expr(mutex), var, var_pos, self.block(body), pos)
+        Unsafe(body, pos) => ast.Stmt.Unsafe(self.block(body), pos)
+        Return(value, pos) =>
+            if v := value
+                return ast.Stmt.Return(self.expr(v), pos)
+            st
+        Eval(value) => ast.Stmt.Eval(self.expr(value))
+        LetTuple(names, value, pos) => ast.Stmt.LetTuple(names, self.expr(value), pos)
+        Handle(value, otherwise) => ast.Stmt.Handle(self.expr(value), self.otherwise(otherwise))
+        Defer(inner, pos) => ast.Stmt.Defer(self.stmt(inner), pos)
+        _ => st
+
+fn DistinctErase.otherwise(self, o ast.Else) ast.Else
+    match o
+        Fallback(value) => ast.Else.Fallback(self.expr(value))
+        Leave(inner) => ast.Else.Leave(self.stmt(inner))
+        Handler(err, body, pos) => ast.Else.Handler(err, self.block(body), pos)
+
+## ---- Expressions ----
+
+fn DistinctErase.exprs(self, xs List[ast.Expr]) List[ast.Expr]
+    [self.expr(x) for x in xs]
+
+fn DistinctErase.args(self, xs List[ast.Arg]) List[ast.Arg]
+    mut out := List[ast.Arg]()
+    for a in xs
+        mut na := a
+        na.value = self.expr(a.value)
+        out.push(na)
+    out
+
+fn DistinctErase.opt(self, x ast.Expr?) ast.Expr?
+    if v := x
+        return self.expr(v)
+    none
+
+## The single plain argument of a call, which `UserId(x)` and `int(x)` give back.
+fn distinct_single(xs List[ast.Arg]) ast.Expr?
+    if xs.len() != 1 or xs[0].label != none
+        return none
+    xs[0].value
+
+## `UserId(x)` or `int(x)`: the value `x`, which has the base's representation.
+@allow("expr.match.3") fn DistinctErase.unwrapped(self, callee ast.Expr, xs List[ast.Arg]) ast.Expr?
+    v := distinct_single(xs)?
+    match callee
+        Name(n, _) =>
+            if self.base_of(n) != none
+                return v
+            if DISTINCT_BASES.contains(n) and not own_fns.contains(n)
+                return v
+            none
+        _ => none
+
+## `ids.UserId(x)`, a distinct type of an imported module: `x`.
+@allow("expr.match.3")
+fn DistinctErase.unwrapped_qualified(self, recv ast.Expr, n str, xs List[ast.Arg]) ast.Expr?
+    v := distinct_single(xs)?
+    match recv
+        Name(a, _) =>
+            if imports.contains(a) and self.base_of("{a}.{n}") != none
+                return v
+            none
+        _ => none
+
+## `UserId.from_json(j)` and `UserId.default()`, which a derive writes for a
+## field of a distinct type: the base's own (type.distinct.5). `none` when
+## `recv` doesn't name a distinct type.
+fn DistinctErase.assoc(self, recv ast.Expr, n str, at ast.Pos, xs List[ast.Arg]) ast.Expr?
+    written := distinct_written(recv)?
+    b := self.base_of(written)?
+    bn := distinct_base_text(b)
+    if n == "from_json" and xs.len() == 1
+        reader := match bn
+            "int" | "i64" => "need_int"
+            "float" | "f64" => "need_num"
+            "str" => "need_str"
+            "bool" => "need_bool"
+            _ => ""
+        if reader != ""
+            return ast.Expr.Method(self.expr(xs[0].value), reader, at, [])
+    if n == "default" and xs.len() == 0
+        if zero := distinct_zero(bn, at)
+            return zero
+    ast.Expr.Method(ast.Expr.Name(bn, at), n, at, self.args(xs))
+
+## The `default()` of a base type (`Default`, trait.assoc.1).
+fn distinct_zero(bn str, at ast.Pos) ast.Expr?
+    match bn
+        "int" | "i64" => ast.Expr.Int("0", at)
+        "float" | "f64" => ast.Expr.Float(0.0, at)
+        "str" => ast.Expr.Str("", at)
+        "bool" => ast.Expr.Bool(false, at)
+        _ => none
+
+@allow("expr.match.3") fn DistinctErase.expr(self, e ast.Expr) ast.Expr
+    match e
+        Call(callee, xs, pos) =>
+            if v := self.unwrapped(callee, xs)
+                return self.expr(v)
+            ast.Expr.Call(callee: self.expr(callee), args: self.args(xs), pos: pos)
+        Method(recv, n, name_pos, xs) =>
+            if v := self.unwrapped_qualified(recv, n, xs)
+                return self.expr(v)
+            if r := self.assoc(recv, n, name_pos, xs)
+                return r
+            ast.Expr.Method(self.expr(recv), n, name_pos, self.args(xs))
+        TypeArgs(n, targs, pos) => ast.Expr.TypeArgs(n, self.tys(targs), pos)
+        Member(recv, n, name_pos) => ast.Expr.Member(self.expr(recv), n, name_pos)
+        Interp(parts, pos) =>
+            mut out := List[ast.InterpPart]()
+            for part in parts
+                match part
+                    Lit(_) => out.push(part)
+                    Hole(x) => out.push(ast.InterpPart.Hole(self.expr(x)))
+                    Fmt(x, spec) => out.push(ast.InterpPart.Fmt(self.expr(x), spec))
+            ast.Expr.Interp(out, pos)
+        ListLit(items, pos) => ast.Expr.ListLit(self.exprs(items), pos)
+        SetLit(items, pos) => ast.Expr.SetLit(self.exprs(items), pos)
+        TupleLit(items, pos) => ast.Expr.TupleLit(self.exprs(items), pos)
+        MapLit(entries, pos) =>
+            mut out := List[ast.MapEntry]()
+            for en in entries
+                out.push(ast.MapEntry(key: self.expr(en.key), value: self.expr(en.value)))
+            ast.Expr.MapLit(out, pos)
+        Comp(form, elem, value, clauses, pos) =>
+            mut cs := List[ast.CompFor]()
+            for c in clauses
+                mut nc := c
+                nc.iter = self.expr(c.iter)
+                nc.cond = self.opt(c.cond)
+                cs.push(nc)
+            ast.Expr.Comp(form, self.expr(elem), self.opt(value), cs, pos)
+        Index(recv, index, pos) => ast.Expr.Index(
+            recv: self.expr(recv),
+            index: self.expr(index),
+            pos: pos,
+        )
+        Unary(op, operand, pos) => ast.Expr.Unary(op, self.expr(operand), pos)
+        NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
+        Closure(params, body, pos) =>
+            mut ps := List[ast.ClosureParam]()
+            for cp in params
+                mut ncp := cp
+                if t := cp.ty
+                    ncp.ty = self.ty(t)
+                ps.push(ncp)
+            ast.Expr.Closure(ps, self.expr(body), pos)
+        Binary(op, lhs, rhs, pos) => ast.Expr.Binary(
+            op: op,
+            lhs: self.expr(lhs),
+            rhs: self.expr(rhs),
+            pos: pos,
+        )
+        Range(lo, hi, inclusive, pos) =>
+            ast.Expr.Range(lo: self.opt(lo), hi: self.opt(hi), inclusive: inclusive, pos: pos)
+        If(branches, els, else_err, pos) =>
+            mut bs := List[ast.Branch]()
+            for br in branches
+                mut cond := br.cond
+                match br.cond
+                    Test(c) => cond = ast.Cond.Test(self.expr(c))
+                    Bind(name, bpos, value) => cond = ast.Cond.Bind(name, bpos, self.expr(value))
+                bs.push(ast.Branch(cond: cond, body: self.block(br.body)))
+            mut ne := none
+            if b := els
+                ne = self.block(b)
+            ast.Expr.If(bs, ne, else_err, pos)
+        Match(scrutinee, arms, pos) =>
+            mut out := List[ast.Arm]()
+            for arm in arms
+                out.push(ast.Arm(
+                    pat: arm.pat,
+                    guard: self.opt(arm.guard),
+                    body: self.block(arm.body),
+                ))
+            ast.Expr.Match(self.expr(scrutinee), out, pos)
+        OrElse(value, otherwise, pos) => ast.Expr.OrElse(
+            self.expr(value),
+            self.otherwise(otherwise),
+            pos,
+        )
+        Try(inner, context, pos) => ast.Expr.Try(self.expr(inner), self.opt(context), pos)
+        _ => e

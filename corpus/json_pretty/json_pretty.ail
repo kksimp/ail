@@ -1,0 +1,117 @@
+## JSON pretty printer: re-indents JSON text by scanning characters (tracking
+## strings and escapes), minifies it again, and reports the nesting depth.
+
+fn pad(depth int) str
+    mut out := ""
+    mut k := 0
+    while k < depth
+        out = "{out}  "
+        k += 1
+    out
+
+fn pretty(src str) str
+    cs := src.chars()
+    mut out := ""
+    mut depth := 0
+    mut in_str := false
+    mut esc := false
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if in_str
+            out = "{out}{c}"
+            if esc
+                esc = false
+            elif c == '\\'
+                esc = true
+            elif c == '"'
+                in_str = false
+        elif c == '"'
+            in_str = true
+            out = "{out}{c}"
+        elif c == '\u{7b}' or c == '['
+            if i < cs.len() and (cs[i] == '\u{7d}' or cs[i] == ']')
+                out = "{out}{c}{cs[i]}"
+                i += 1
+            else
+                depth += 1
+                out = "{out}{c}\n{pad(depth)}"
+        elif c == '\u{7d}' or c == ']'
+            depth -= 1
+            out = "{out}\n{pad(depth)}{c}"
+        elif c == ','
+            out = "{out},\n{pad(depth)}"
+        elif c == ':'
+            out = "{out}: "
+        elif not c.is_space()
+            out = "{out}{c}"
+    out
+
+fn minify(src str) str
+    mut out := ""
+    mut in_str := false
+    mut esc := false
+    for c in src.chars()
+        if in_str
+            out = "{out}{c}"
+            if esc
+                esc = false
+            elif c == '\\'
+                esc = true
+            elif c == '"'
+                in_str = false
+        elif c == '"'
+            in_str = true
+            out = "{out}{c}"
+        elif not c.is_space()
+            out = "{out}{c}"
+    out
+
+fn max_depth(src str) int
+    mut depth := 0
+    mut best := 0
+    mut in_str := false
+    mut esc := false
+    for c in src.chars()
+        if in_str
+            if esc
+                esc = false
+            elif c == '\\'
+                esc = true
+            elif c == '"'
+                in_str = false
+        elif c == '"'
+            in_str = true
+        elif c == '\u{7b}' or c == '['
+            depth += 1
+            best = best.max(depth)
+        elif c == '\u{7d}' or c == ']'
+            depth -= 1
+    best
+
+fn main()
+    parts := [
+        "\{\"name\":\"ail\",\"tags\":[\"fast\",\"safe\"],",
+        "\"nested\":\{\"a\":1,\"b\":[1,2,\{\"c\":null}],\"empty\":\{},\"list\":[]},",
+        "\"quote\":\"say \\\"hi\\\", ok\"}",
+    ]
+    doc := parts.join("")
+    text := pretty(doc)
+    print(text)
+    print("lines: {text.lines().len()}")
+    print("depth: {max_depth(doc)}")
+    print("minified again: {minify(text) == doc}")
+    print(pretty("[]"))
+    print(pretty("[[],\{}]"))
+
+@test fn pretty_array()
+    assert_eq(pretty("[1,2]"), "[\n  1,\n  2\n]")
+
+@test fn minify_strips_space_outside_strings()
+    assert_eq(minify("\{ \"a b\" : [ 1 , 2 ] }"), "\{\"a b\":[1,2]}")
+
+@test fn escapes_do_not_end_strings()
+    src := "[\"a\\\",b\"]"
+    assert_eq(minify(pretty(src)), src)
+    assert_eq(max_depth(src), 1)

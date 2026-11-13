@@ -1,0 +1,96 @@
+## INI section merge: layers an override INI on top of a base INI. Matching
+## keys are replaced, new keys and sections are added, and a value of `~`
+## deletes the key. Prints a change log and the merged file in canonical form
+## (global keys first, then sections in first-seen order).
+
+struct Entry
+    sec str
+    name str
+    val str
+
+fn parse(text str) List[Entry]
+    mut out := List[Entry]()
+    mut current := ""
+    for raw in text.lines()
+        line := raw.trim()
+        if line == "" or line.starts_with("#") or line.starts_with(";")
+            continue
+        if line.starts_with("[") and line.ends_with("]")
+            current = line.slice(1, line.len() - 1).trim()
+            continue
+        pos := line.find("=") else continue
+        out.push(Entry(
+            sec: current,
+            name: line.slice(0, pos).trim(),
+            val: line.slice(pos + 1, line.len()).trim(),
+        ))
+    out
+
+fn index_of_key(entries List[Entry], sec str, name str) int
+    for i in 0..entries.len()
+        if entries[i].sec == sec and entries[i].name == name
+            return i
+    -1
+
+fn label(e Entry) str
+    if e.sec == ""
+        return e.name
+    "{e.sec}.{e.name}"
+
+fn merge(base List[Entry], over List[Entry])(List[Entry], List[str])
+    mut merged := base
+    mut changes := List[str]()
+    for o in over
+        i := index_of_key(merged, o.sec, o.name)
+        if o.val == "~"
+            if i >= 0
+                changes.push("- {label(o)}")
+                merged.remove_at(i)
+        elif i < 0
+            changes.push("+ {label(o)} = {o.val}")
+            merged.push(o)
+        elif merged[i].val != o.val
+            changes.push("~ {label(o)}: {merged[i].val} -> {o.val}")
+            merged[i].val = o.val
+    (merged, changes)
+
+fn render(entries List[Entry]) List[str]
+    mut out := List[str]()
+    for x in entries
+        if x.sec == ""
+            out.push("{x.name} = {x.val}")
+    mut seen := Set[str]()
+    for e in entries
+        if e.sec != "" and seen.add(e.sec)
+            if not out.is_empty()
+                out.push("")
+            out.push("[{e.sec}]")
+            for y in entries
+                if y.sec == e.sec
+                    out.push("{y.name} = {y.val}")
+    out
+
+fn main()
+    base := parse("name = demo\nmode = dev\n[db]\nhost = localhost\nport = 5432\npool = 4\n[cache]\nttl = 60\n")
+    over := parse("mode = prod\n[db]\nhost = db.internal\nport = 5432\npool = ~\n[log]\nlevel = warn\n[cache]\nttl = ~\nsize = 128\n")
+    merged, changes := merge(base, over)
+    for line in changes
+        print(line)
+    print("---")
+    for line in render(merged)
+        print(line)
+
+@test fn replaces_adds_and_deletes()
+    merged, changes := merge(parse("[a]\nx = 1\ny = 2"), parse("[a]\nx = 9\ny = ~\nz = 3"))
+    assert_eq(render(merged), ["[a]", "x = 9", "z = 3"])
+    assert_eq(changes.len(), 3)
+
+@test fn unchanged_values_are_quiet()
+    merged, changes := merge(parse("k = v"), parse("k = v"))
+    assert_eq(changes.len(), 0)
+    assert_eq(merged.len(), 1)
+
+@test fn globals_come_first()
+    merged, changes := merge(parse("[s]\na = 1"), parse("g = 2"))
+    assert_eq(render(merged), ["g = 2", "", "[s]", "a = 1"])
+    assert_eq(changes, ["+ g = 2"])

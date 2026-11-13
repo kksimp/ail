@@ -50,6 +50,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.read_link" => os_fn("rt.fs_read_link", [s], s, true)
         "fs.symlink" => os_fn("rt.fs_symlink", [s, s], Ty.Unit, true)
         "fs.truncate" => os_fn("rt.fs_truncate", [s, Ty.Int], Ty.Unit, true)
+        "fs.sync" => os_fn("rt.fs_sync", [s], Ty.Unit, true)
         "fs.write_at" => os_fn("rt.fs_write_at", [s, Ty.Int, Ty.Bytes], Ty.Unit, true)
         "fs.append_bytes" => os_fn("rt.fs_append_bytes", [s, Ty.Bytes], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)

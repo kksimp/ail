@@ -1,0 +1,150 @@
+## Semantic version comparison: parses MAJOR.MINOR.PATCH[-pre][+build], orders
+## versions by the semver rules (pre-releases sort before releases) and sorts a list.
+
+struct Ver
+    major int
+    minor int
+    patch int
+    pre List[str]
+    build str
+
+fn split_once(s str, sep str)(str, str)
+    i := s.find(sep) else return (s, "")
+    (s.slice(0, i), s.slice(i + sep.len(), s.len()))
+
+fn parse_ver(text str) Ver?
+    core_all, build := split_once(text, "+")
+    core, pre_text := split_once(core_all, "-")
+    parts := core.split(".")
+    if parts.len() != 3
+        return none
+    a := parts[0].to_int() else return none
+    b := parts[1].to_int() else return none
+    c := parts[2].to_int() else return none
+    mut pre := List[str]()
+    if pre_text != ""
+        pre = pre_text.split(".")
+    Ver(major: a, minor: b, patch: c, pre: pre, build: build)
+
+fn sign(a int, b int) int
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+fn is_num(s str) bool
+    if s.is_empty()
+        return false
+    for c in s.chars()
+        if not c.is_digit()
+            return false
+    true
+
+fn cmp_ident(a str, b str) int
+    an := is_num(a)
+    bn := is_num(b)
+    if an and bn
+        ai := a.to_int() else 0
+        bi := b.to_int() else 0
+        return sign(ai, bi)
+    if an
+        return -1
+    if bn
+        return 1
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+fn cmp_ver(x Ver, y Ver) int
+    if x.major != y.major
+        return sign(x.major, y.major)
+    if x.minor != y.minor
+        return sign(x.minor, y.minor)
+    if x.patch != y.patch
+        return sign(x.patch, y.patch)
+    if x.pre.is_empty() and y.pre.is_empty()
+        return 0
+    if x.pre.is_empty()
+        return 1
+    if y.pre.is_empty()
+        return -1
+    n := x.pre.len().min(y.pre.len())
+    for i in 0..n
+        c := cmp_ident(x.pre[i], y.pre[i])
+        if c != 0
+            return c
+    sign(x.pre.len(), y.pre.len())
+
+fn show_ver(v Ver) str
+    mut out := "{v.major}.{v.minor}.{v.patch}"
+    if not v.pre.is_empty()
+        out = "{out}-{v.pre.join(".")}"
+    out
+
+fn sort_versions(items List[Ver]) List[Ver]
+    mut vs := items
+    for i in 1..vs.len()
+        mut j := i
+        while j > 0 and cmp_ver(vs[j - 1], vs[j]) > 0
+            vs.swap(j - 1, j)
+            j -= 1
+    vs
+
+fn symbol(c int) str
+    if c < 0
+        return "<"
+    if c > 0
+        return ">"
+    "="
+
+fn main() !
+    inputs := [
+        "1.0.0",
+        "1.0.0-alpha",
+        "1.0.0-alpha.1",
+        "1.0.0-alpha.beta",
+        "1.0.0-beta",
+        "1.0.0-beta.2",
+        "1.0.0-beta.11",
+        "1.0.0-rc.1",
+        "2.1.0+build.5",
+        "1.10.0",
+        "1.2.0",
+        "1.2",
+        "1.x.0",
+    ]
+    mut vs := List[Ver]()
+    for t in inputs
+        parsed := parse_ver(t) else
+            print("rejected: {t}")
+            continue
+        vs.push(parsed)
+    for item in sort_versions(vs)
+        print(show_ver(item))
+    pairs := [
+        ("1.0.0", "1.0.0-rc.1"),
+        ("1.0.0-beta.2", "1.0.0-beta.11"),
+        ("2.1.0+a", "2.1.0+b"),
+        ("1.9.9", "1.10.0"),
+    ]
+    for p in pairs
+        x := parse_ver(p.0)?
+        y := parse_ver(p.1)?
+        print("{p.0} {symbol(cmp_ver(x, y))} {p.1}")
+
+@test fn numeric_fields_compare_as_numbers()
+    assert_eq(cmp_ver(parse_ver("1.10.0")?, parse_ver("1.9.0")?), 1)
+
+@test fn prerelease_sorts_first()
+    assert_eq(cmp_ver(parse_ver("1.0.0-rc.1")?, parse_ver("1.0.0")?), -1)
+    assert_eq(cmp_ver(parse_ver("1.0.0-alpha")?, parse_ver("1.0.0-alpha.1")?), -1)
+    assert_eq(cmp_ident("2", "11"), -1)
+    assert_eq(cmp_ident("11", "beta"), -1)
+
+@test fn rejects_bad_input()
+    assert(parse_ver("1.2") == none)
+    assert(parse_ver("a.b.c") == none)
+    assert_eq(cmp_ver(parse_ver("1.0.0+x")?, parse_ver("1.0.0+y")?), 0)

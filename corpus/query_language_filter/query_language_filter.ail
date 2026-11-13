@@ -1,0 +1,134 @@
+## Query-language filter: a tiny query language over person records.
+## A query is conditions "field op value" joined by "and" / "or" ("and" binds
+## tighter). Fields: name, age, city. Operators: = != < <= > >= and ~ (contains).
+## Parsing reports typed errors; matching runs the parsed groups per record.
+
+error enum QueryError
+    Empty "empty query"
+    Truncated "query ends early"
+    UnknownField(name str) "unknown field {name}"
+    BadOperator(text str) "operator {text} does not fit the field"
+    BadNumber(text str) "bad number {text}"
+    BadJoiner(text str) "expected and/or, found {text}"
+
+struct Person
+    name str
+    age int
+    city str
+
+struct Cond
+    attr str
+    op str
+    rhs str
+
+fn make_cond(attr str, op str, rhs str) Cond ! QueryError
+    if not ["name", "age", "city"].contains(attr)
+        return UnknownField(name: attr)
+    if not ["=", "!=", "<", "<=", ">", ">=", "~"].contains(op)
+        return BadOperator(text: op)
+    if attr == "age"
+        if op == "~"
+            return BadOperator(text: op)
+        if rhs.to_int() == none
+            return BadNumber(text: rhs)
+    elif op != "=" and op != "!=" and op != "~"
+        return BadOperator(text: op)
+    Cond(attr: attr, op: op, rhs: rhs)
+
+fn parse_query(src str) List[List[Cond]] ! QueryError
+    toks := src.words()
+    if toks.is_empty()
+        return Empty
+    mut groups := List[List[Cond]]()
+    mut cur := List[Cond]()
+    mut i := 0
+    while i < toks.len()
+        if i + 3 > toks.len()
+            return Truncated
+        cur.push(make_cond(toks[i], toks[i + 1], toks[i + 2])?)
+        i += 3
+        if i < toks.len()
+            if toks[i] == "or"
+                groups.push(cur)
+                cur = List[Cond]()
+            elif toks[i] != "and"
+                return BadJoiner(text: toks[i])
+            i += 1
+            if i >= toks.len()
+                return Truncated
+    groups.push(cur)
+    groups
+
+fn compare(op str, l int, r int) bool
+    match op
+        "=" => l == r
+        "!=" => l != r
+        "<" => l < r
+        "<=" => l <= r
+        ">" => l > r
+        _ => l >= r
+
+fn matches_cond(p Person, c Cond) bool
+    if c.attr == "age"
+        want := c.rhs.to_int() else 0
+        return compare(c.op, p.age, want)
+    have := if c.attr == "name" then p.name else p.city
+    match c.op
+        "=" => have == c.rhs
+        "!=" => have != c.rhs
+        _ => have.contains(c.rhs)
+
+fn matches(p Person, groups List[List[Cond]]) bool
+    for g in groups
+        mut all_ok := true
+        for c in g
+            if not matches_cond(p, c)
+                all_ok = false
+        if all_ok
+            return true
+    false
+
+fn run_query(people List[Person], src str) str
+    groups := parse_query(src) else err
+        return "error: {err}"
+    names := [p.name for p in people if matches(p, groups)]
+    "{names.len()} -> {names.join(", ")}"
+
+fn main()
+    people := [
+        Person(name: "ann", age: 34, city: "oslo"),
+        Person(name: "bob", age: 27, city: "bergen"),
+        Person(name: "cy", age: 41, city: "oslo"),
+        Person(name: "dana", age: 19, city: "tromso"),
+        Person(name: "eli", age: 52, city: "bergen"),
+    ]
+    for q in [
+        "city = oslo",
+        "age >= 30 and city = bergen",
+        "age < 25 or age > 50",
+        "name ~ a and age > 30 or city = tromso",
+        "age ~ 3",
+        "colour = red",
+        "age > old",
+        "city = oslo and",
+        "city = oslo xor age = 3",
+        "",
+    ]
+        print("{q} => {run_query(people, q)}")
+
+@test fn parses_groups()
+    g2 := parse_query("name = x and age > 2 or city ~ o")?
+    assert_eq(g2.len(), 2)
+    assert_eq(g2[0].len(), 2)
+
+@test fn typed_errors()
+    assert_err(parse_query(""))
+    assert_err(parse_query("age ~ 3"))
+    assert_err(parse_query("age > x"))
+    assert_err(parse_query("name = a and"))
+
+@test fn matching()
+    ann := Person(name: "ann", age: 34, city: "oslo")
+    groups := parse_query("age < 20 or name ~ nn and city = oslo")?
+    assert(matches(ann, groups))
+    assert(not matches(Person(name: "bob", age: 40, city: "oslo"), groups))

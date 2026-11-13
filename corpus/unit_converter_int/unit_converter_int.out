@@ -1,0 +1,13 @@
+5280 ft to mi -> 5280 ft = 1.00 mi
+1 mi to km -> 1 mi = 1.61 km
+100 cm to in -> 100 cm = 39.37 in
+3 lb to oz -> 3 lb = 48.00 oz
+250 g to oz -> 250 g = 8.82 oz
+1 gal to cup -> 1 gal = 16.00 cup
+2 l to tsp -> 2 l = 405.77 tsp
+12 in to ft -> 12 in = 1.00 ft
+5 kg to mi -> error: cannot convert mass to length
+7 parsec to m -> error: unknown unit parsec
+ten m to cm -> error: bad number ten
+10 m cm -> error: cannot read query '10 m cm'
+0 m to km -> 0 m = 0.00 km

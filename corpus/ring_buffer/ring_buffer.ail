@@ -1,0 +1,78 @@
+## A fixed-capacity ring buffer of ints: pushing into a full buffer
+## overwrites the oldest value. Used here to keep a sliding window over a
+## stream of readings and report a moving average (integer division).
+
+struct Ring
+    cap int
+    buf List[int]
+    head int
+    size int
+    dropped int
+
+fn Ring.make(capacity int) Ring
+    mut slots := List[int]()
+    for _ in 0..capacity
+        slots.push(0)
+    Ring(cap: capacity, buf: slots, head: 0, size: 0, dropped: 0)
+
+fn Ring.push(mut self, v int)
+    if size == cap
+        self.buf[head] = v
+        head = (head + 1) % cap
+        dropped += 1
+    else
+        self.buf[(head + size) % cap] = v
+        size += 1
+
+fn Ring.pop(mut self) int?
+    if size == 0
+        return none
+    v := buf[head]
+    head = (head + 1) % cap
+    size -= 1
+    return v
+
+fn Ring.items(self) List[int]
+    mut out := List[int]()
+    for i in 0..size
+        out.push(buf[(head + i) % cap])
+    out
+
+fn Ring.average(self) int
+    if size == 0
+        return 0
+    items().sum() / size
+
+fn main()
+    mut ring := Ring.make(4)
+    readings := [10, 12, 9, 15, 20, 18, 7, 30, 25, 11]
+    for r in readings
+        ring.push(r)
+        print("push {r:>2} -> {ring.items()} avg {ring.average()}")
+    print("dropped {ring.dropped}")
+    mut drained := List[int]()
+    while v := ring.pop()
+        drained.push(v)
+    print("drained {drained}, empty: {ring.size == 0}")
+
+@test fn keeps_only_the_newest_values()
+    mut r := Ring.make(3)
+    for i in 1..=5
+        r.push(i)
+    assert_eq(r.items(), [3, 4, 5])
+    assert_eq(r.dropped, 2)
+
+@test fn pop_returns_oldest_first()
+    mut r := Ring.make(2)
+    r.push(7)
+    r.push(8)
+    first := r.pop() else -1
+    assert_eq(first, 7)
+    r.push(9)
+    assert_eq(r.items(), [8, 9])
+
+@test fn empty_pop_is_none()
+    mut r := Ring.make(2)
+    v := r.pop() else -1
+    assert_eq(v, -1)
+    assert_eq(r.average(), 0)

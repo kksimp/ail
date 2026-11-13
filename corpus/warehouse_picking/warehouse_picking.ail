@@ -1,0 +1,155 @@
+## Warehouse order picking. Each order is a list of "sku:qty" lines checked
+## against bin stock (all or nothing, so one short line rejects the order with a
+## typed error). A `Strategy` trait orders the stops: a snake walk (even aisles
+## up, odd aisles down) or a plain ascending walk. Prints each route and the walking
+## distance of both strategies over the same orders.
+
+error enum PickError
+    BadLine(text str) "bad pick line '{text}'"
+    NoSuchSku(sku str) "unknown sku {sku}"
+    ShortStock(sku str, have int, want int) "{sku}: have {have}, want {want}"
+
+struct Bin
+    sku str
+    aisle int
+    slot int
+    qty int
+
+struct Pick
+    sku str
+    aisle int
+    slot int
+    qty int
+    key int
+
+trait Strategy
+    fn name(self) str
+    fn key(self, aisle int, slot int) int
+
+struct Snake
+    width int
+
+struct Ascending
+    width int
+
+impl Strategy for Snake
+    fn name(self) str
+        "snake"
+    fn key(self, aisle int, slot int) int
+        if aisle % 2 == 0
+            aisle * 100 + slot
+        else
+            aisle * 100 + (self.width - 1 - slot)
+
+impl Strategy for Ascending
+    fn name(self) str
+        "ascending"
+    fn key(self, aisle int, slot int) int
+        aisle * 100 + slot
+
+struct Warehouse
+    bins List[Bin]
+
+fn Warehouse.find(self, sku str) int?
+    for i in 0..self.bins.len()
+        if self.bins[i].sku == sku
+            return i
+    none
+
+fn Warehouse.plan(mut self, lines List[str], strat any Strategy) List[Pick] ! PickError
+    mut picks := List[Pick]()
+    mut asked := {}
+    for line in lines
+        parts := line.split(":")
+        if parts.len() != 2
+            return BadLine(text: line)
+        want := parts[1].to_int() else return BadLine(text: line)
+        at := self.find(parts[0]) else return NoSuchSku(sku: parts[0])
+        asked[parts[0]] += want
+        have := self.bins[at].qty
+        if asked[parts[0]] > have
+            return ShortStock(sku: parts[0], have: have, want: asked[parts[0]])
+        b := self.bins[at]
+        picks.push(Pick(
+            sku: b.sku,
+            aisle: b.aisle,
+            slot: b.slot,
+            qty: want,
+            key: strat.key(b.aisle, b.slot),
+        ))
+    for p in picks
+        at2 := self.find(p.sku) else continue
+        self.bins[at2].qty -= p.qty
+    picks.sorted(by: |q| q.key)
+
+fn walk(route List[Pick]) int
+    mut total := 0
+    mut a := 0
+    mut s := 0
+    for p in route
+        total += (p.aisle - a).abs() * 10 + (p.slot - s).abs()
+        a = p.aisle
+        s = p.slot
+    total + a * 10 + s
+
+fn stock() Warehouse
+    Warehouse(bins: [
+        Bin(sku: "bolt", aisle: 0, slot: 2, qty: 50),
+        Bin(sku: "nut", aisle: 0, slot: 7, qty: 5),
+        Bin(sku: "gear", aisle: 1, slot: 1, qty: 8),
+        Bin(sku: "belt", aisle: 1, slot: 6, qty: 3),
+        Bin(sku: "motor", aisle: 2, slot: 3, qty: 2),
+        Bin(sku: "fan", aisle: 3, slot: 0, qty: 9),
+        Bin(sku: "lamp", aisle: 3, slot: 8, qty: 4),
+    ])
+
+fn describe(route List[Pick]) str
+    mut parts := List[str]()
+    for p in route
+        parts.push("{p.sku}x{p.qty}@{p.aisle}.{p.slot}")
+    parts.join(" ")
+
+fn run(strat any Strategy) int
+    orders := [
+        ["lamp:1", "bolt:10", "fan:2", "gear:1"],
+        ["motor:1", "nut:2", "belt:1"],
+        ["motor:2", "bolt:1"],
+        ["fan:1", "widget:1"],
+        ["gear:7", "lamp:2", "nut:3"],
+        ["belt:x"],
+    ]
+    mut w := stock()
+    mut total := 0
+    print("strategy {strat.name()}")
+    for i in 0..orders.len()
+        route := w.plan(orders[i], strat) else err
+            print("  order {i + 1} rejected: {err}")
+            continue
+        d := walk(route)
+        total += d
+        print("  order {i + 1}: {describe(route)} (distance {d})")
+    print("  total distance {total}")
+    total
+
+fn main()
+    a := run(Snake(width: 10))
+    b := run(Ascending(width: 10))
+    print("snake saves {b - a}")
+
+@test fn short_stock_rejects_whole_order()
+    mut w := stock()
+    assert_err(w.plan(["nut:3", "nut:3"], Snake(width: 10)))
+    assert_eq(w.bins[1].qty, 5)
+
+@test fn snake_reverses_odd_aisles()
+    mut w := stock()
+    route := w.plan(["gear:1", "belt:1"], Snake(width: 10))?
+    assert_eq(route[0].sku, "belt")
+    assert_eq(route[1].sku, "gear")
+    assert_eq(w.bins[3].qty, 2)
+
+@test fn unknown_sku_and_junk()
+    mut w := stock()
+    assert_err(w.plan(["zzz:1"], Ascending(width: 10)))
+    assert_err(w.plan(["nut"], Ascending(width: 10)))
+    assert_eq(walk([]), 0)

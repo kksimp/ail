@@ -1,0 +1,101 @@
+## Rock paper scissors round-robin tournament between five fixed strategies
+## (moves 0 rock, 1 paper, 2 scissors). The "wild" player uses an integer LCG,
+## so every run is identical. A match is 50 rounds; the winner of a match
+## earns 3 points, a tie earns 1 each. Prints each match and the standings.
+
+struct Player
+    kind int
+    last int
+    turn int
+    seed int
+
+struct Score
+    a int
+    b int
+
+fn kind_name(k int) str
+    names := ["copycat", "counter", "cycler", "rocky", "wild"]
+    names[k]
+
+fn beats(a int, b int) bool
+    (a - b + 3) % 3 == 1
+
+fn Player.make(k int) Player
+    Player(kind: k, last: -1, turn: 0, seed: 7)
+
+fn Player.choose(mut self) int
+    mut m := 0
+    if self.kind == 0
+        if self.last >= 0
+            m = self.last
+    elif self.kind == 1
+        m = 1
+        if self.last >= 0
+            m = (self.last + 1) % 3
+    elif self.kind == 2
+        m = self.turn % 3
+    elif self.kind == 4
+        self.seed = (self.seed * 1103515245 + 12345) % 2147483648
+        m = (self.seed / 65536) % 3
+    self.turn += 1
+    m
+
+fn Player.see(mut self, opp int)
+    self.last = opp
+
+fn play_match(ka int, kb int, rounds int) Score
+    mut pa := Player.make(ka)
+    mut pb := Player.make(kb)
+    mut wins_a := 0
+    mut wins_b := 0
+    for r in 0..rounds
+        ma := pa.choose()
+        mb := pb.choose()
+        if beats(ma, mb)
+            wins_a += 1
+        elif beats(mb, ma)
+            wins_b += 1
+        pa.see(mb)
+        pb.see(ma)
+    Score(a: wins_a, b: wins_b)
+
+struct Row
+    name str
+    points int
+
+fn main()
+    mut points := [0, 0, 0, 0, 0]
+    for i in 0..5
+        for j in (i + 1)..5
+            s := play_match(i, j, 50)
+            print("{kind_name(i)} vs {kind_name(j)}: {s.a}-{s.b}")
+            if s.a > s.b
+                points[i] += 3
+            elif s.b > s.a
+                points[j] += 3
+            else
+                points[i] += 1
+                points[j] += 1
+    mut rows := List[Row]()
+    for k in 0..5
+        rows.push(Row(name: kind_name(k), points: points[k]))
+    ranked := rows.sorted(by: |p| -p.points)
+    print("standings")
+    for p in ranked
+        print("  {p.name:<8}{p.points:>3}")
+
+@test fn beats_is_cyclic()
+    assert(beats(1, 0))
+    assert(beats(2, 1))
+    assert(beats(0, 2))
+    assert(not beats(0, 0))
+
+@test fn rocky_loses_to_counter()
+    s := play_match(3, 1, 10)
+    assert_eq(s.a, 0)
+    assert(s.b >= 9)
+
+@test fn cycler_ties_itself()
+    s := play_match(2, 2, 12)
+    assert_eq(s.a, 0)
+    assert_eq(s.b, 0)

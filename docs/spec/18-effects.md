@@ -230,7 +230,7 @@ the source of `copy`, and `compress.gzip_file`, `gunzip_file`, `zip_dir`
 and `unzip` for their input) needs `fs` or `fs.read` to cover the path. A
 call that writes, removes or changes (`write_*`, `append_*`, `remove`,
 `make_dir`, `make_temp_dir`, both ends of `rename`, the target of `copy`,
-`trash`, `set_mode`, `set_modified`, `symlink`, `truncate`, `write_at` and the
+`trash`, `set_mode`, `set_modified`, `symlink`, `truncate`, `sync`, `write_at` and the
 outputs of the compress functions) needs `fs` or `fs.write`. A path is
 covered when, after the program's path and the scope are both made absolute
 (a relative one against the working directory), have every symbolic link
@@ -345,6 +345,33 @@ fn main()
     # `--allow none` limits the standard library's calls; the program
     # still computes and prints. It is not a sandbox.
     print("{21 * 2}")
+```
+
+**eff.allow.10** — *(ADR 1105)* A manifest's `caps LIST` (`eff.cap.4-5`) takes the entries of
+`--allow` (`eff.allow.2`): `fs.read=./data,net=api.example.com` on a `package`
+or `dep` line, with no spaces. `fs.read` and `fs.write` count as `fs`, and
+`net.serve` as `net`, for the compile-time check of `eff.cap.4-5`. A
+scope on a name that takes none, or an empty scope, is error `eff.allow.2`
+at the line. When the root `package` line has a `caps` list and any list in
+the package graph has a scope, `ail run` with no `--allow` of its own runs the
+program with every entry of every list as its policy (`eff.allow.8`); `--allow`
+replaces that policy. Scopes are one policy for the whole process, so a
+dependency's scope also lets the root package's code reach it, as far as the
+root's own `caps` allow the capability. A root without a `caps` list, or with
+lists that have no scope, adds no run-time limit.
+
+```ail pkg=caps_scoped tool=check,DIR status=2 expect=eff.cap.5 rules=eff.allow.10
+```
+
+```ail pkg=caps_scoped_bad tool=check,DIR status=2 expect=eff.allow.2 rules=eff.allow.2
+```
+
+**eff.allow.11** — *(ADR 1105)* `ail review` (`api.rev.12`) lists a change to a `caps` list
+in the `effects` section: an entry gained, or a scope widened or moved, is a
+`NEW CAPABILITY grant PACKAGE: +ENTRY -ENTRY`, and a change that only removes
+entries is an ordinary line.
+
+```ail pkg=review_grants tool=review,--files,old,new status=0 expect=CAPABILITY rules=eff.allow.11,api.rev.12
 ```
 
 ## Deterministic execution

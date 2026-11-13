@@ -1,0 +1,84 @@
+## Batch rename planner: turns messy file names into lowercase snake_case,
+## resolves collisions with a numeric suffix, prints the plan, then applies it
+## to real files in a temp directory and lists the result.
+
+struct Move
+    src str
+    dst str
+
+fn split_name(name str)(str, str)
+    parts := name.split(".")
+    if parts.len() < 2
+        return (name, "")
+    (parts[..parts.len() - 1].join("."), parts[parts.len() - 1])
+
+fn join_name(stem str, ext str) str
+    if ext == ""
+        return stem
+    "{stem}.{ext}"
+
+fn clean(stem str) str
+    mut out := List[char]()
+    for c in stem.to_lower().chars()
+        if c == ' ' or c == '-' or c == '_'
+            out.push('_')
+        elif c.is_alpha() or c.is_digit()
+            out.push(c)
+    out.join("")
+
+fn plan(names List[str]) List[Move]
+    mut taken := Set[str]()
+    mut moves := List[Move]()
+    for name in names
+        stem, ext := split_name(name)
+        base := clean(stem)
+        mut n := 1
+        mut cand := join_name(base, ext.to_lower())
+        while not taken.add(cand)
+            n += 1
+            cand = join_name("{base}_{n}", ext.to_lower())
+        moves.push(Move(src: name, dst: cand))
+    moves
+
+fn main() !
+    names := [
+        "Report Final.TXT",
+        "report-final.txt",
+        "notes (draft).md",
+        "Notes-Draft.md",
+        "IMG 001.png",
+        "img_002.png",
+        "already_ok.txt",
+        "Build Notes",
+    ]
+    moves := plan(names)
+    for m in moves
+        mark := if m.src == m.dst then "=" else ">"
+        print("{mark} {m.src:<18}-> {m.dst}")
+    dir := fs.make_temp_dir("corpus_file_rename_plan")?
+    for n in names
+        fs.write_text(path.join(dir, n), "{n}\n")?
+    mut renamed := 0
+    for m in moves
+        if m.src != m.dst
+            fs.rename(path.join(dir, m.src), path.join(dir, m.dst))?
+            renamed += 1
+    print("renamed {renamed} of {moves.len()} files")
+    after := fs.list_dir(dir)?.sorted()
+    for n in after
+        print("  {n}")
+        fs.remove(path.join(dir, n))?
+    fs.remove(dir)?
+
+@test fn cleans_names()
+    assert_eq(clean("My File (1)-final"), "my_file_1_final")
+
+@test fn collisions_get_suffixes()
+    got := [m.dst for m in plan(["A b.txt", "a-b.txt", "a_b.TXT"])]
+    assert_eq(got, ["a_b.txt", "a_b_2.txt", "a_b_3.txt"])
+
+@test fn names_without_extension()
+    stem, ext := split_name("Makefile")
+    assert_eq(stem, "Makefile")
+    assert_eq(ext, "")
+    assert_eq(plan(["Big Thing"])[0].dst, "big_thing")

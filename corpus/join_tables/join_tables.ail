@@ -1,0 +1,77 @@
+## Join tables: joins an embedded orders table to a customers table on the
+## customer id, prints the inner join, the customers with no orders (left
+## join gaps), the orphan orders, and the order totals per customer.
+
+struct Order
+    id int
+    cust int
+    amount int
+
+fn customers() List[str]
+    ["1,Ada,Paris", "2,Bob,Oslo", "3,Cy,Rome", "4,Dee,Oslo", "5,Eve,Lima"]
+
+fn orders() List[str]
+    [
+        "100,1,250",
+        "101,3,90",
+        "102,1,40",
+        "103,9,500",
+        "104,4,15",
+        "105,3,x",
+        "106,1,310",
+        "107,7,60",
+    ]
+
+fn load_names() Map[int, str]
+    mut names := Map[int, str]()
+    for line in customers()
+        cells := line.split(",")
+        id := cells[0].to_int() else continue
+        names[id] = "{cells[1]} ({cells[2]})"
+    names
+
+fn load_orders() List[Order]
+    mut out := List[Order]()
+    for line in orders()
+        cells := line.split(",")
+        oid := cells[0].to_int() else continue
+        cid := cells[1].to_int() else continue
+        amt := cells[2].to_int() else continue
+        out.push(Order(id: oid, cust: cid, amount: amt))
+    out
+
+fn main()
+    names := load_names()
+    rows := load_orders()
+    print("inner join:")
+    mut totals := Map[int, int]()
+    mut orphans := List[Order]()
+    for o in rows
+        who := names.get(o.cust) else
+            orphans.push(o)
+            continue
+        totals[o.cust] += o.amount
+        print("  order {o.id}: {who} {o.amount}")
+    print("customers without orders:")
+    for id in names.keys().sorted()
+        if not totals.contains(id)
+            print("  {names[id]}")
+    print("orphan orders:")
+    for o in orphans
+        print("  order {o.id} refers to unknown customer {o.cust}")
+    print("totals:")
+    final := totals
+    for id in final.keys().sorted().sorted(by: |k| -final[k])
+        t := final[id]
+        print("  {names[id]:<14}{t:>5}")
+
+@test fn loads_valid_orders_only()
+    got := load_orders()
+    assert_eq(got.len(), 7)
+    assert_eq(got[0], Order(id: 100, cust: 1, amount: 250))
+
+@test fn loads_names()
+    names := load_names()
+    assert_eq(names.len(), 5)
+    assert_eq(names[2], "Bob (Oslo)")
+    assert(names.get(9) == none)

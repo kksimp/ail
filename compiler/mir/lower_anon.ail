@@ -31,6 +31,7 @@ fn Lower.anon_generic(self, f ast.FnDecl) ast.FnDecl
             mutable: p.mutable,
             moved: p.moved,
             ty: ast.TypeRef(shape: ast.TypeShape.Named(name: name, args: []), pos: p.ty.pos),
+            default: p.default,
         ))
     if not changed
         return f

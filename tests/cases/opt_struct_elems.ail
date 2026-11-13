@@ -1,0 +1,34 @@
+## Lists and maps of optional structs, lists and maps in the native subset:
+## a literal, `push`, indexing and copies stay independent (own.val.1).
+struct Stats
+    count int
+
+impl ToJson for Stats
+
+fn main()
+    m := {"a": Stats(count: 1)}
+    mut xs := [m.get("a"), m.get("b")]
+    xs.push(Stats(count: 7))
+    print(xs.len())
+    last := xs[2] else Stats(count: -1)
+    print(last.count)
+    mut ys := xs
+    ys[0] = none
+    first := xs[0] else Stats(count: -1)
+    print(first.count)
+    cleared := ys[0] else Stats(count: -1)
+    print(cleared.count)
+    mut c := xs[2] else Stats(count: 0)
+    c.count = 99
+    again := xs[2] else Stats(count: 0)
+    print("{c.count} {again.count}")
+    print_json(xs)
+    mut ls := List[List[int]?]()
+    ls.push([1, 2])
+    ls.push(none)
+    print_json(ls)
+    best := {"a": m.get("a"), "z": m.get("z")}
+    print_json(best)
+    for s in xs
+        if v := s
+            print(v.count)

@@ -1,0 +1,8 @@
+[clicks] click at 50,20
+Click(x: 3, y: 4) -> nobody listened
+[keys] key 66
+[beat] tick every 5
+[keys] key 95
+[keys] key 95
+Key(code: 10) -> nobody listened
+delivered 5, dropped 2

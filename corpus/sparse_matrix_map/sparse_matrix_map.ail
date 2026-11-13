@@ -1,0 +1,112 @@
+## A sparse matrix of ints stored as a map from (row, col) to value; zero
+## cells are never stored. Supports set/get, addition, transpose and a
+## matrix product, and prints the dense form of small results.
+
+struct Sparse
+    rows int
+    cols int
+    cells Map[(int, int), int]
+
+fn Sparse.new(nr int, nc int) Sparse
+    Sparse(rows: nr, cols: nc, cells: {})
+
+fn Sparse.put(mut self, r int, c int, v int)
+    if v == 0
+        cells.remove((r, c))
+    else
+        self.cells[(r, c)] = v
+
+fn Sparse.at(self, r int, c int) int
+    cells.get((r, c)) else 0
+
+fn Sparse.nonzero(self) int
+    cells.len()
+
+fn Sparse.plus(self, other Sparse) Sparse
+    mut out := Sparse.new(rows, cols)
+    for i in 0..rows
+        for j in 0..cols
+            v := self.at(i, j) + other.at(i, j)
+            out.put(i, j, v)
+    out
+
+fn Sparse.transpose(self) Sparse
+    mut out := Sparse.new(cols, rows)
+    for i in 0..rows
+        for j in 0..cols
+            out.put(j, i, self.at(i, j))
+    out
+
+fn Sparse.times(self, other Sparse) Sparse
+    mut out := Sparse.new(rows, other.cols)
+    for i in 0..rows
+        for k in 0..cols
+            a := self.at(i, k)
+            if a != 0
+                for j in 0..other.cols
+                    out.put(i, j, out.at(i, j) + a * other.at(k, j))
+    out
+
+fn Sparse.dense(self) List[str]
+    mut lines := List[str]()
+    for i in 0..rows
+        mut parts := List[str]()
+        for j in 0..cols
+            parts.push("{self.at(i, j):>3}")
+        lines.push(parts.join(""))
+    lines
+
+fn main()
+    mut a := Sparse.new(3, 4)
+    a.put(0, 0, 2)
+    a.put(0, 3, -1)
+    a.put(1, 1, 5)
+    a.put(2, 2, 3)
+    a.put(2, 0, 4)
+    mut b := Sparse.new(4, 3)
+    b.put(0, 1, 1)
+    b.put(1, 0, 2)
+    b.put(2, 2, 7)
+    b.put(3, 0, 6)
+    print("A has {a.nonzero()} of 12 cells")
+    for line in a.dense()
+        print(line)
+    print("A transposed:")
+    for line in a.transpose().dense()
+        print(line)
+    print("A x B:")
+    prod := a.times(b)
+    for line in prod.dense()
+        print(line)
+    print("product nonzero: {prod.nonzero()}")
+    mut c := Sparse.new(3, 4)
+    c.put(0, 3, 1)
+    c.put(1, 1, -5)
+    total := a.plus(c)
+    print("A + C has {total.nonzero()} cells, (0,3) = {total.at(0, 3)}")
+
+@test fn zero_values_are_not_stored()
+    mut m := Sparse.new(2, 2)
+    m.put(0, 0, 5)
+    m.put(0, 0, 0)
+    assert_eq(m.nonzero(), 0)
+    assert_eq(m.at(0, 0), 0)
+
+@test fn transpose_swaps_indices()
+    mut m := Sparse.new(2, 3)
+    m.put(0, 2, 9)
+    t := m.transpose()
+    assert_eq(t.rows, 3)
+    assert_eq(t.at(2, 0), 9)
+
+@test fn product_with_identity()
+    mut ident := Sparse.new(2, 2)
+    ident.put(0, 0, 1)
+    ident.put(1, 1, 1)
+    mut m := Sparse.new(2, 2)
+    m.put(0, 1, 4)
+    m.put(1, 0, -2)
+    p := m.times(ident)
+    assert_eq(p.at(0, 1), 4)
+    assert_eq(p.at(1, 0), -2)
+    assert_eq(p.nonzero(), 2)

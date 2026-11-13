@@ -1,0 +1,75 @@
+## Ticket dispenser: customer tasks draw numbers from one atomic counter and
+## send each draw over a channel. Which customer gets which ticket varies, but
+## the tickets must be unique and contiguous and every customer must get its
+## share. Afterwards the counter is served in order to compute waiting times.
+
+struct Draw
+    ticket int
+    worker int
+
+fn customer(id int, count int, next Atomic[int], out Channel[Draw])
+    for _ in 0..count
+        t := next.add(1)
+        out.send(Draw(ticket: t, worker: id))
+
+fn dispense(workers int, count int) !List[Draw]
+    next := Atomic(0)
+    out := Channel[Draw](workers * count + 1)
+    g := TaskGroup()
+    for id in 0..workers
+        g.add(spawn customer(id, count, next, out))
+    g.wait_all()?
+    out.close()
+    draws := [d for d in out]
+    draws.sorted(by: |x| x.ticket)
+
+fn service_minutes(ticket int) int
+    2 + ticket % 5
+
+## Minutes each ticket waits when tickets are served in order.
+fn waits(n int) List[int]
+    mut out := List[int]()
+    mut clock := 0
+    for t in 0..n
+        out.push(clock)
+        clock += service_minutes(t)
+    out
+
+fn is_contiguous(draws List[Draw]) bool
+    for i in 0..draws.len()
+        if draws[i].ticket != i
+            return false
+    true
+
+fn main() !
+    draws := dispense(5, 12)?
+    print("tickets issued: {draws.len()}")
+    print("unique and contiguous: {is_contiguous(draws)}")
+    mut per := Map[int, int]()
+    for d in draws
+        per[d.worker] += 1
+    for w in per.keys().sorted()
+        print("customer {w} drew {per[w]}")
+    ws := waits(draws.len())
+    mut sum := 0
+    for w in ws
+        sum += w
+    print("first waits: {ws.take(6)}")
+    longest := ws.max() else 0
+    print("longest wait: {longest} min")
+    print("average wait: {sum / ws.len()} min")
+    print("closing time: {ws[ws.len() - 1] + service_minutes(ws.len() - 1)} min")
+
+@test fn tickets_are_unique_and_contiguous()
+    draws := dispense(4, 7)?
+    assert_eq(draws.len(), 28)
+    assert(is_contiguous(draws), "tickets 0..27")
+
+@test fn every_customer_gets_its_share()
+    draws := dispense(3, 5)?
+    for w in 0..3
+        assert_eq(draws.filter(|x| x.worker == w).len(), 5)
+
+@test fn waits_accumulate_service_time()
+    assert_eq(waits(4), [0, 2, 5, 9])
+    assert_eq(waits(0).len(), 0)

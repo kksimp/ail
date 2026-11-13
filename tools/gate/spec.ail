@@ -305,12 +305,12 @@ fn main() !
             dir := "{tmp}/tool_{stem}_{b.line}"
             file := "{dir}/main.ail"
             if not b.pkg.is_empty()
-                mk2 := proc.run("sh", [
+                _ := proc.run("sh", [
                     "-c",
                     "mkdir -p {dir} && cp -R {root}/tests/cases/packages/{b.pkg}/. {dir}/",
                 ]) else return
             else
-                mk3 := proc.run("sh", ["-c", "mkdir -p {dir}"]) else return
+                _ := proc.run("sh", ["-c", "mkdir -p {dir}"]) else return
                 code := if has_main(b.code) then b.code else wrap_fragment(b.code)
                 fs.write_text(file, code)? "writing {file}"
             mut args := List[str]()
@@ -384,7 +384,7 @@ fn main() !
     for pair in spec_ids
         if part == 0 and not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
             fails.push("{pair[1]} {pair[0]}: no runnable example")
-    mk4 := proc.run("rm", ["-rf", tmp]) else return
+    _ := proc.run("rm", ["-rf", tmp]) else return
     while shown < fails.len()
         show_fail(fails[shown])
         shown += 1

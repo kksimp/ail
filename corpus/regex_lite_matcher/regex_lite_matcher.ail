@@ -1,0 +1,107 @@
+## A small backtracking regex matcher. Supports literals, . (any char), the
+## quantifiers * + ? on a single atom, and ^ $ anchors. `search` reports the
+## index where the first match starts, or -1.
+
+struct Atom
+    ch char
+    rep char
+
+struct Regex
+    atoms List[Atom]
+    at_start bool
+    at_end bool
+
+struct Case
+    pat str
+    text str
+
+fn compile(pat str) Regex
+    cs := pat.chars()
+    mut re := Regex(atoms: [], at_start: false, at_end: false)
+    for i, c in cs.enumerate()
+        if i == 0 and c == '^'
+            re.at_start = true
+            continue
+        if i == cs.len() - 1 and c == '$'
+            re.at_end = true
+            continue
+        if (c == '*' or c == '+' or c == '?') and not re.atoms.is_empty()
+            last := re.atoms.len() - 1
+            re.atoms[last] = Atom(ch: re.atoms[last].ch, rep: c)
+            continue
+        re.atoms.push(Atom(ch: c, rep: ' '))
+    re
+
+fn hit(a Atom, c char) bool
+    a.ch == '.' or a.ch == c
+
+fn here(re Regex, ai int, text List[char], ti int) bool
+    if ai == re.atoms.len()
+        return not re.at_end or ti == text.len()
+    a := re.atoms[ai]
+    if a.rep == ' '
+        if ti < text.len() and hit(a, text[ti])
+            return here(re, ai + 1, text, ti + 1)
+        return false
+    lo := if a.rep == '+' then 1 else 0
+    hi := if a.rep == '?' then 1 else text.len()
+    mut k := 0
+    while ti + k < text.len() and k < hi and hit(a, text[ti + k])
+        k += 1
+    mut j := k
+    while j >= lo
+        if here(re, ai + 1, text, ti + j)
+            return true
+        j -= 1
+    false
+
+fn search(re Regex, s str) int
+    text := s.chars()
+    if re.at_start
+        if here(re, 0, text, 0)
+            return 0
+        return -1
+    for start in 0..=text.len()
+        if here(re, 0, text, start)
+            return start
+    -1
+
+fn verdict(pat str, s str) str
+    at := search(compile(pat), s)
+    if at < 0
+        return "no match"
+    "match at {at}"
+
+fn main()
+    cases := [
+        Case(pat: "abc", text: "xxabcxx"),
+        Case(pat: "^abc", text: "xxabcxx"),
+        Case(pat: "abc$", text: "xxabc"),
+        Case(pat: "a.c", text: "a-c"),
+        Case(pat: "ab*c", text: "ac"),
+        Case(pat: "ab*c", text: "abbbc"),
+        Case(pat: "ab+c", text: "ac"),
+        Case(pat: "colou?r", text: "my color"),
+        Case(pat: "^a.*z$", text: "abc xyz"),
+        Case(pat: "^a.*z$", text: "abc xyz!"),
+        Case(pat: "x*", text: "aaa"),
+        Case(pat: "^$", text: ""),
+        Case(pat: "a.+b", text: "ab"),
+        Case(pat: "9+7", text: "id 99997"),
+    ]
+    for c in cases
+        print("{c.pat:<10} {c.text:<10} {verdict(c.pat, c.text)}")
+
+@test fn literals_and_anchors()
+    assert_eq(verdict("abc", "xabc"), "match at 1")
+    assert_eq(verdict("^abc", "xabc"), "no match")
+    assert_eq(verdict("abc$", "abcx"), "no match")
+
+@test fn quantifiers()
+    assert_eq(verdict("ab*c", "ac"), "match at 0")
+    assert_eq(verdict("ab+c", "ac"), "no match")
+    assert_eq(verdict("^a?b$", "b"), "match at 0")
+
+@test fn backtracks()
+    assert_eq(verdict("^a.*a$", "abca"), "match at 0")
+    assert_eq(verdict("a.*b.*c", "a1b2c3"), "match at 0")

@@ -1,0 +1,91 @@
+## Base64 codec: encodes ASCII text with the standard alphabet and "=" padding
+## by hand (24-bit groups), decodes it back and rejects invalid input.
+
+fn alphabet() List[char]
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".chars()
+
+fn encode(text str) str
+    table := alphabet()
+    data := [c.code() for c in text.chars()]
+    mut out := ""
+    mut i := 0
+    while i < data.len()
+        left := data.len() - i
+        b0 := data[i]
+        mut b1 := 0
+        mut b2 := 0
+        if left > 1
+            b1 = data[i + 1]
+        if left > 2
+            b2 = data[i + 2]
+        n := b0 * 65536 + b1 * 256 + b2
+        c0 := table[n / 262144]
+        c1 := table[(n / 4096) % 64]
+        c2 := table[(n / 64) % 64]
+        c3 := table[n % 64]
+        out = "{out}{c0}{c1}"
+        if left > 1
+            out = "{out}{c2}"
+        else
+            out = "{out}="
+        if left > 2
+            out = "{out}{c3}"
+        else
+            out = "{out}="
+        i += 3
+    out
+
+fn decode(text str) str?
+    table := alphabet()
+    mut vals := List[int]()
+    for c in text.chars()
+        if c == '='
+            continue
+        v := table.index_of(c) else return none
+        vals.push(v)
+    mut out := ""
+    mut i := 0
+    while i < vals.len()
+        r := (vals.len() - i).min(4)
+        if r < 2
+            return none
+        mut n := 0
+        for k in 0..4
+            mut digit := 0
+            if k < r
+                digit = vals[i + k]
+            n = n * 64 + digit
+        bytes_out := [n / 65536, (n / 256) % 256, n % 256]
+        nbytes := r - 1
+        for k in 0..nbytes
+            ch := char.from_code(bytes_out[k]) else '?'
+            out = "{out}{ch}"
+        i += 4
+    out
+
+fn main()
+    for s in ["Man", "Ma", "M", "", "Hello, World!", "AIL is fun", "foobar", "~~~???"]
+        coded := encode(s)
+        back := decode(coded) else "<invalid>"
+        print("{s:<14} {coded:<22} {back == s}")
+    for bad in ["@@@@", "TWF", "T", "TW Fu"]
+        r := decode(bad)
+        if r == none
+            print("decode {bad}: invalid")
+        else
+            print("decode {bad}: ok")
+
+@test fn known_vectors()
+    assert_eq(encode("Man"), "TWFu")
+    assert_eq(encode("Ma"), "TWE=")
+    assert_eq(encode("M"), "TQ==")
+    assert_eq(encode("Hello, World!"), "SGVsbG8sIFdvcmxkIQ==")
+
+@test fn decodes()
+    assert_eq(decode("TWFu")?, "Man")
+    assert_eq(decode("TQ==")?, "M")
+    assert_eq(decode("")?, "")
+
+@test fn rejects_bad_characters()
+    assert(decode("a*bc") == none)
+    assert(decode("T") == none)

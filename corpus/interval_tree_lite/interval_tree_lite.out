@@ -1,0 +1,7 @@
+sorted: kickoff,plan,dev,release,retro
+point 19: 2 -> dev,release
+point 9: 0 -> 
+range 12..16: 2 -> plan,dev
+range 31..39: 0 -> 
+range 1..100: 5 -> kickoff,plan,dev,release,retro
+covered length: 31

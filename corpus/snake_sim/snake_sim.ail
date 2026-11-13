@@ -1,0 +1,101 @@
+## Snake simulator. Replays a string of moves (U, D, L, R) on a small board
+## with a fixed list of food positions. The snake grows when it eats, and the
+## game ends on a wall or on its own body. Prints each event and the board.
+
+struct Game
+    cols int
+    rows int
+    body List[int]
+    foods List[int]
+    eaten int
+    alive bool
+
+fn Game.start(cols int, rows int, foods List[int]) Game
+    Game(cols: cols, rows: rows, body: [0], foods: foods, eaten: 0, alive: true)
+
+fn Game.step(mut self, dir char) str
+    last := self.body[self.body.len() - 1]
+    mut nx := last % self.cols
+    mut ny := last / self.cols
+    match dir
+        'U' => ny -= 1
+        'D' => ny += 1
+        'L' => nx -= 1
+        _ => nx += 1
+    if nx < 0 or nx >= self.cols or ny < 0 or ny >= self.rows
+        self.alive = false
+        return "hit the wall at {nx},{ny}"
+    spot := ny * self.cols + nx
+    eating := self.eaten < self.foods.len() and self.foods[self.eaten] == spot
+    mut blocked := self.body.contains(spot)
+    if not eating and spot == self.body[0]
+        blocked = false
+    if blocked
+        self.alive = false
+        return "bit itself at {nx},{ny}"
+    self.body.push(spot)
+    if eating
+        self.eaten += 1
+        return "ate food {self.eaten}, length {self.body.len()}"
+    self.body.remove_at(0)
+    ""
+
+fn Game.render(self) List[str]
+    mut out := List[str]()
+    for y in 0..self.rows
+        mut row := List[str]()
+        for x in 0..self.cols
+            spot := y * self.cols + x
+            mut mark := "."
+            if self.eaten < self.foods.len() and self.foods[self.eaten] == spot
+                mark = "*"
+            if self.body.contains(spot)
+                mark = "o"
+            if spot == self.body[self.body.len() - 1]
+                mark = "@"
+            row.push(mark)
+        out.push(row.join(""))
+    out
+
+fn run(moves str, foods List[int]) Game
+    mut g := Game.start(6, 5, foods)
+    mut n := 0
+    for ch in moves.chars()
+        if not g.alive
+            break
+        n += 1
+        note := g.step(ch)
+        if note != ""
+            print("  move {n} ({ch}): {note}")
+    g
+
+fn main()
+    print("run 1")
+    a := run("RRRDDRDDLLLUUR", [3, 15, 22])
+    for line in a.render()
+        print(line)
+    print("alive={a.alive} length={a.body.len()} eaten={a.eaten}")
+    print("run 2")
+    b := run("RRRRRRR", [])
+    print("alive={b.alive} length={b.body.len()}")
+
+@test fn eating_grows_the_snake()
+    mut g := Game.start(4, 4, [1])
+    note := g.step('R')
+    assert_eq(g.body.len(), 2)
+    assert(note.starts_with("ate"))
+
+@test fn wall_ends_the_game()
+    mut g := Game.start(4, 4, [])
+    _ := g.step('U')
+    assert(not g.alive)
+
+@test fn tail_cell_is_free_when_not_eating()
+    mut g := Game.start(4, 4, [1, 5, 4])
+    _ := g.step('R')
+    _ := g.step('D')
+    _ := g.step('L')
+    note := g.step('U')
+    assert(g.alive)
+    assert_eq(g.eaten, 3)
+    assert_eq(note, "")

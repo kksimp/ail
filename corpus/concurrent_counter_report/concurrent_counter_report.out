@@ -1,0 +1,10 @@
+worker 0: 60 events, 1890 bytes
+worker 1: 60 events, 2070 bytes
+worker 2: 60 events, 2150 bytes
+worker 3: 60 events, 2130 bytes
+debug   40
+error   80
+info    80
+warn    40
+total events 240, bytes 8240, longest 59
+matches sequential pass: true

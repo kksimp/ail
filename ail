@@ -52,7 +52,7 @@ if [ -n "$on_windows" ]; then
         esac
         if [ -n "$fast" ]; then
             export AIL_ROOT="$wroot" AIL_COMPILER="$wroot/compiler" AIL="${AIL:-$wroot/ail.cmd}"
-            if [ "$fast" = check ]; then shift; exec "$wroot/.native/ail.exe" check-program "$@"; fi
+            if [ "$fast" = check ]; then shift; exec "$wroot/.native/ail.exe" check-program --summary "$@"; fi
             if [ "$fast" = run ]; then
                 # The program's own run settings are hidden from the compiler and put back before it starts (ail.ps1).
                 export AIL_PKG_WRITE_LOCK=1
@@ -470,9 +470,15 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
         done
         AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget check "${bopts[@]}" -- "$native" check-program "${copts[@]}"
     fi
-    if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
+    if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program --summary "$@"; fi
     # shellcheck disable=SC2086
-    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || exit $?
+    # eff.allow.10: with no `--allow`, the scopes of the package's `caps` lines become the run's policy.
+    policy_file=
+    # Not mktemp: a run with a stripped PATH (no git, no coreutils) must still reach the check's own error.
+    if [ -z "$allow_list" ]; then policy_file="${TMPDIR:-/tmp}/ail-policy.$$"; check_opts="$check_opts --policy-out $policy_file"; fi
+    # shellcheck disable=SC2086
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || { st=$?; [ -z "$policy_file" ] || rm -f "$policy_file"; exit $st; }
+    if [ -n "$policy_file" ]; then allow_list="$(cat "$policy_file")"; rm -f "$policy_file"; fi
     prep_err="$(mktemp)"
     # shellcheck disable=SC2086
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then

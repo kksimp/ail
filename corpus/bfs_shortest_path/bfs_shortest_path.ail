@@ -1,0 +1,98 @@
+## Shortest routes in an unweighted network by breadth-first search. Stations
+## are letters and links are "A-B" strings. For each query it prints the hop
+## count and one shortest route (ties go to the link listed first).
+
+struct Net
+    names List[str]
+    ea List[int]
+    eb List[int]
+
+fn build(letters str, links List[str]) Net
+    names := ["{c}" for c in letters.chars()]
+    mut net := Net(names: names, ea: [], eb: [])
+    for link in links
+        parts := link.split("-")
+        net.ea.push(names.index_of(parts[0]) else 0)
+        net.eb.push(names.index_of(parts[1]) else 0)
+    net
+
+fn neighbors(net Net, v int) List[int]
+    mut out := List[int]()
+    for e in 0..net.ea.len()
+        if net.ea[e] == v
+            out.push(net.eb[e])
+        elif net.eb[e] == v
+            out.push(net.ea[e])
+    out
+
+fn search(net Net, start int) List[int]
+    mut prev := [-2 for k in 0..net.names.len()]
+    prev[start] = -1
+    mut queue := [start]
+    mut head := 0
+    while head < queue.len()
+        cur := queue[head]
+        head += 1
+        for nb in neighbors(net, cur)
+            if prev[nb] == -2
+                prev[nb] = cur
+                queue.push(nb)
+    prev
+
+fn route(prev List[int], goal int) List[int]
+    mut path := List[int]()
+    if prev[goal] == -2
+        return path
+    mut here := goal
+    while here != -1
+        path.push(here)
+        here = prev[here]
+    path.reverse()
+    path
+
+fn show_route(net Net, src str, dst str)
+    a := net.names.index_of(src) else 0
+    b := net.names.index_of(dst) else 0
+    path := route(search(net, a), b)
+    if path.is_empty()
+        print("{src} to {dst}: unreachable")
+        return
+    stops := [net.names[i] for i in path]
+    print("{src} to {dst}: {path.len() - 1} hops via {stops.join(" > ")}")
+
+fn main()
+    net := build("ABCDEFGHIJ", [
+        "A-B",
+        "A-C",
+        "B-D",
+        "C-D",
+        "D-E",
+        "E-F",
+        "C-G",
+        "G-F",
+        "F-H",
+        "I-J",
+    ])
+    prev := search(net, 0)
+    for i in 0..net.names.len()
+        if prev[i] == -2
+            print("{net.names[i]}: not reachable from A")
+        else
+            print("{net.names[i]}: {route(prev, i).len() - 1} hops from A")
+    show_route(net, "A", "H")
+    show_route(net, "B", "G")
+    show_route(net, "H", "A")
+    show_route(net, "A", "J")
+    show_route(net, "I", "J")
+
+@test fn path_graph_counts_hops()
+    net := build("ABCD", ["A-B", "B-C", "C-D"])
+    assert_eq(route(search(net, 0), 3), [0, 1, 2, 3])
+
+@test fn links_work_both_ways()
+    net := build("ABC", ["A-B", "B-C"])
+    assert_eq(route(search(net, 2), 0), [2, 1, 0])
+
+@test fn separate_islands_are_unreachable()
+    net := build("ABCD", ["A-B", "C-D"])
+    assert(route(search(net, 0), 3).is_empty())

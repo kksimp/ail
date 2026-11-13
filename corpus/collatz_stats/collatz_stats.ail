@@ -1,0 +1,68 @@
+## Collatz (3n + 1) statistics. Prints steps and peak value for small
+## starting numbers, then scans 1..999 for the longest chain, the highest peak,
+## the mean chain length and a histogram of chain lengths in buckets of 50.
+
+struct Chain
+    steps int
+    peak int
+
+fn run(start int) Chain
+    mut n := start
+    mut steps := 0
+    mut peak := start
+    while n != 1
+        if n % 2 == 0
+            n = n / 2
+        else
+            n = 3 * n + 1
+        steps += 1
+        if n > peak
+            peak = n
+    Chain(steps: steps, peak: peak)
+
+fn bar(count int) str
+    "".pad_left(count / 20, '#')
+
+fn main()
+    for n in 1..=12
+        c := run(n)
+        print("{n:>3}: {c.steps:>3} steps, peak {c.peak}")
+    mut best_n := 1
+    mut best_steps := 0
+    mut top_n := 1
+    mut top_peak := 1
+    mut total := 0
+    mut buckets := [0, 0, 0, 0, 0]
+    for m in 1..1000
+        r := run(m)
+        total += r.steps
+        if r.steps > best_steps
+            best_steps = r.steps
+            best_n = m
+        if r.peak > top_peak
+            top_peak = r.peak
+            top_n = m
+        slot := r.steps / 50
+        buckets[slot] = buckets[slot] + 1
+    print("longest chain below 1000: {best_n} with {best_steps} steps")
+    print("highest peak below 1000: {top_peak} (start {top_n})")
+    print("mean steps: {total / 999}")
+    for b in 0..buckets.len()
+        lo := b * 50
+        hi := lo + 49
+        count := buckets[b]
+        print("{lo:>3}-{hi:>3}: {count:>3} {bar(count)}")
+
+@test fn known_chains()
+    assert_eq(run(1).steps, 0)
+    assert_eq(run(6).steps, 8)
+    assert_eq(run(27).steps, 111)
+    assert_eq(run(27).peak, 9232)
+
+@test fn powers_of_two_halve_down()
+    assert_eq(run(64).steps, 6)
+    assert_eq(run(64).peak, 64)
+
+@test fn peak_is_never_below_start()
+    for n in 1..200
+        assert(run(n).peak >= n)

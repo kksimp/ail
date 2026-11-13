@@ -312,7 +312,10 @@ fn fn_signature(f ast.FnDecl) str
         parts.push(receiver_text(r))
     for p in f.params
         mode := if p.mutable then "mut " else if p.moved then "move " else ""
-        parts.push("{mode}{p.name} {type_text(p.ty)}")
+        mut shown := "{mode}{p.name} {type_text(p.ty)}"
+        if d := p.default
+            shown = "{shown} = {const_value(d)}"
+        parts.push(shown)
     s = "{s}({parts.join(", ")})"
     if t := f.ret
         s = "{s} {type_text(t)}"
@@ -336,6 +339,8 @@ fn const_value(e ast.Expr) str
         Float(x, _) => float_debug(x)
         Bool(b, _) => if b then "true" else "false"
         Char(c, _) => char_text(c)
+        NoneLit(_) => "none"
+        ListLit(items, _) => if items.len() == 0 then "[]" else "..."
         Str(s, _) =>
             if s.len() <= 60
                 return quote(s)
@@ -416,6 +421,9 @@ fn param_fields(p ast.Param) List[Kv]
         kv("type", J.Str(type_text(p.ty))),
         kv("mut", J.Bool(p.mutable)),
     ]
+    # Only a parameter with a default says so (expr.call.4), to keep the common case short.
+    if d := p.default
+        fields.push(kv("default", J.Str(const_value(d))))
     # Only a `move` parameter says so (own.move.1), to keep the common case short.
     if p.moved
         fields.push(kv("move", J.Bool(true)))

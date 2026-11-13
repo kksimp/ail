@@ -1,0 +1,38 @@
+# C callbacks (ffi.cb.1-4, ADR 1074): the C library's `qsort` calls an AIL
+# function to compare, and `bsearch` takes the same function as a raw pointer.
+use std.mem
+
+extern c fn qsort(base *int, n u64, size u64, cmp fn(*int, *int) i32)
+extern c fn bsearch(key *int, base *int, n u64, size u64, cmp *u8) *int
+
+## C's comparison contract: negative, zero or positive.
+fn compare(a *int, b *int) i32
+    mut x := 0
+    mut y := 0
+    unsafe
+        x = a.read()
+        y = b.read()
+    mut r := 0
+    if x < y
+        r = -1
+    elif x > y
+        r = 1
+    r.to_i32()
+
+fn main()
+    xs := [42, 7, 19, 3, 25]
+    unsafe
+        p := mem.alloc(5, 0)
+        for i in 0..5
+            p.offset(i).write(xs[i])
+        qsort(p, 5, 8, compare)
+        mut sorted := List[int]()
+        for i in 0..5
+            sorted.push(p.offset(i).read())
+        print(sorted)
+        key := mem.alloc(1, 19)
+        hit := bsearch(key, p, 5, 8, mem.c_fn(compare))
+        print(hit.is_null())
+        print(hit.read())
+        mem.free(key)
+        mem.free(p)

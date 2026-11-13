@@ -1,0 +1,179 @@
+## C structs by value and C callbacks (ffi.struct.1-3, ffi.cb.1-4, ADR 1074).
+##
+## A call that passes or returns a struct goes through the runtime: the
+## arguments as words (a struct as its object) and a descriptor of the C
+## types go to `rt.ffi_cs` (compiler/rt/native/ffi_struct.ail), which lays the
+## structs out as C does and places them as the platform's convention says.
+## A C callback is the compiled entry `cb#f` of a declared function `f`: it
+## checks the thread, converts each argument as `ffi.map.1-2` say in reverse,
+## calls `f` and converts the result for C. On Windows the code generator puts
+## a Win64 adapter in front of it (compiler/x64/ffi_kernels.ail).
+use ast
+
+## The descriptor code of a C type (ffi_struct.ail), or none when the type has
+## no C layout.
+fn Lower.c_code(self, t Ty) str?
+    match t
+        Int => return "q"
+        Float => return "d"
+        F32 => return "f"
+        Bool => return "b"
+        Ptr(_) => return "p"
+        Fn(_, _, _) => return "p"
+        Sized(k) => return c_sized_code(k)
+        Struct(n) =>
+            slots := structs.get(n) else return none
+            mut s := "\{"
+            for sl in slots
+                c := c_code(sl.ty) else return none
+                s = "{s}{c}"
+            return [s, "}"].join("")
+        _ => return none
+
+fn c_sized_code(k str) str?
+    codes := {"u64": "Q", "i32": "i", "u32": "I", "i16": "h", "u16": "H", "i8": "c", "u8": "C"}
+    codes.get(k)
+
+fn is_struct_ty(t Ty) bool
+    match t
+        Struct(_) => true
+        _ => false
+
+## Whether a C call with this signature passes or returns a struct by value.
+fn cs_needed(sig Sig) bool
+    is_struct_ty(sig.ret) or [p for p in sig.params if is_struct_ty(p)].len() > 0
+
+## The call of the C function at `addr` with argument values `vs` (as the
+## declared types, `f32`s not yet narrowed) through `rt.ffi_cs`.
+fn Lower.cs_call(mut self, addr int, sig Sig, vs List[int], pos ast.Pos) Val?
+    mut desc := ""
+    for t in sig.params
+        c := c_code(t) else return unsupported(pos, "this C call")
+        desc = "{desc}{c}"
+    desc = "{desc}:"
+    if not sig.ret.is_unit()
+        c := c_code(sig.ret) else return unsupported(pos, "this C call")
+        desc = "{desc}{c}"
+    words := call(
+        "rt.obj_new",
+        [konst(8 * vs.len().max(1), Ty.Int), konst(OBJ_STRUCT, Ty.Int)],
+        Ty.Int,
+    )
+    for k in 0..vs.len()
+        store(words, k, vs[k])
+    r := call("rt.ffi_cs", [addr, str_value(desc), words], Ty.Int)
+    t := sig.ret
+    if t.is_unit()
+        return Val(id: -1, ty: Ty.Unit)
+    if t.is_float()
+        mut i := inst(-1, "prim", [r])
+        i.name = "bits_float"
+        return Val(id: emit(i, t), ty: t)
+    if is_struct_ty(t)
+        return Val(id: op("copy", [r], t), ty: t)
+    Val(id: ffi_result(r, t), ty: t)
+
+## The body of an `extern c fn` that takes or returns a struct by value.
+fn Lower.lower_extern_cs(mut self, f ast.FnDecl, name str, params List[int], sig Sig)
+    lib := if e := f.ext then e.lib else none
+    addr := ffi_bound(lib, f.name, f.pos)
+    r := cs_call(addr, sig, params, f.pos) else return
+    finish(return_of(r.id))
+    end_fn(name, f.pos)
+
+## Whether calls of `key` are lowered at the call site: a variadic `extern c
+## fn` (ffi.var.1), or one with a `fn` parameter, whose argument is a callback
+## (ffi.cb.1).
+fn Lower.c_call_site(self, key str) bool
+    if variadic_decl(key)
+        return true
+    d := fn_decl.get(key) else return false
+    if d.ext == none
+        return false
+    sig := sigs.get(key) else return false
+    for t in sig.params
+        match t
+            Fn(_, _, _) => return true
+            _ => continue
+    false
+
+## The C entry of the function named `name` (ffi.cb.2-3): `cb#key`, made once
+## and lowered with the generic instances. Its address, or none when `name`
+## is not a declared function.
+fn Lower.cb_entry(mut self, name str, pos ast.Pos) int?
+    mut key := "{prefix}{name}"
+    if not sigs.contains(key)
+        key = prelude_key(name) else key
+    sig := sigs.get(key) else return none
+    d := fn_decl.get(key) else return none
+    entry := "cb#{key}"
+    if not sigs.contains(entry)
+        mut c := d
+        c.body = none
+        c.ext = none
+        c.contracts = []
+        c.attrs = [ast.Attr(name: "c callback", pos: pos, arg: key)]
+        sigs[entry] = Sig(params: sig.params, ret: sig.ret, fails: false)
+        gen.queue.push(Instance(
+            key: entry,
+            decl: c,
+            binds: {},
+            owner: "",
+            file: fn_file.get(key) else file,
+        ))
+    mut i := inst(-1, "fnaddr", [])
+    i.name = entry
+    emit(i, Ty.Int)
+
+## The argument of a `fn` parameter of a C function: the name of a declared
+## function (ffi.cb.2), whose C entry is passed.
+fn Lower.cb_arg(mut self, e ast.Expr) Val?
+    match e
+        Name(n, p) =>
+            a := cb_entry(n, p) else return unsupported(
+                p,
+                "a C callback that isn't a declared function",
+            )
+            Val(id: a, ty: Ty.Int)
+        _ => unsupported(expr_pos(e), "a C callback that isn't the name of a declared function")
+
+## Whether `f` is the synthesized C entry of a callback.
+fn is_cb_decl(f ast.FnDecl) bool
+    [a for a in f.attrs if a.name == "c callback"].len() > 0
+
+## The body of the C entry `cb#key` (ffi.cb.4): on a thread AIL started, the
+## arguments as AIL values, the call, and the result as C wants it.
+fn Lower.lower_cb_body(mut self, f ast.FnDecl, name str, params List[int])
+    sig := sigs.get(name) else return
+    mut key := ""
+    for a in f.attrs
+        if a.name == "c callback"
+            key = a.arg else ""
+    ok := call("rt.ffi_cb_ok", [], Ty.Bool)
+    fail := new_block()
+    check(ok, fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    ffi_trap("ffi.cb.4", call("rt.ffi_cb_msg", [], Ty.Int), f.pos)
+    cur = good
+    mut args := List[int]()
+    for k in 0..params.len()
+        p := params[k]
+        match sig.params[k]
+            Sized(sk) => args.push(sized_wrap(sk, p))
+            Bool => args.push(op(
+                "ne",
+                [op("band", [p, konst(255, Ty.Int)], Ty.Int), konst(0, Ty.Int)],
+                Ty.Bool,
+            ))
+            F32 => args.push(call("rt.ffi_f32_res", [p], Ty.F32))
+            _ => args.push(p)
+    r := user_call(contract_key(key), args, sig.ret, f.pos, f.name)
+    if sig.ret.is_unit()
+        finish(return_of(-1))
+    elif sig.ret == Ty.F32
+        finish(return_of(call("rt.ffi_f32_arg", [r], Ty.Float)))
+    else
+        finish(return_of(r))
+    end_fn(name, f.pos)

@@ -50,6 +50,8 @@ pub struct SourceFile
 pub struct Grant
     pub package str
     pub caps List[str]
+    ## The entries as written, sorted, scopes included (`fs.read=./data`, `net`); `ail run` and `ail review` read them (eff.allow.10-11).
+    pub entries List[str]
     pub pos Pos
     pub own bool
 
@@ -107,6 +109,9 @@ pub struct StructDecl
     pub doc str?
     pub is_error bool
     pub is_unique bool
+    ## `type Name = Base` (type.distinct.1, ADR 1103): one field `value` of the
+    ## base, which no program can name; native code erases the type to its base.
+    pub is_distinct bool
     pub generics List[GenericParam]
     pub fields List[Field]
     pub invariants List[Contract]
@@ -204,6 +209,9 @@ pub struct Param
     pub mutable bool
     pub moved bool
     pub ty TypeRef
+    ## `name Type = value`: the value a call that leaves the parameter out passes
+    ## (expr.call.4). A plain constant, as a struct field's default.
+    pub default Expr?
 
 ## A type as written.
 pub struct TypeRef
@@ -235,8 +243,10 @@ pub enum Stmt
     Assign(target Expr, op BinOp?, value Expr, pos Pos)
     While(cond Expr, body List[Stmt], pos Pos)
     For(is_par bool, var str, var_pos Pos, mutable bool, iter Expr, body List[Stmt], pos Pos)
-    Break(pos Pos)
-    Continue(pos Pos)
+    ## `break` / `continue`; `target` is the position of the labeled loop it
+    ## names (`break outer`, expr.loop.10), none for the innermost loop.
+    Break(pos Pos, target Pos?)
+    Continue(pos Pos, target Pos?)
     Return(value Expr?, pos Pos)
     Eval(value Expr)
     Handle(value Expr, otherwise Else)
@@ -250,6 +260,25 @@ pub enum Stmt
     ## `fn name(params) R` and its block inside a function body: a named
     ## local function (type.fn.9-10, ADR 1094).
     LocalFn(decl FnDecl)
+    ## `select` and its arms in source order (conc.select.2, ADR 1102).
+    Select(arms List[SelectArm], pos Pos)
+
+## One arm of a `select` (conc.select.2): what it waits for and its block.
+pub struct SelectArm
+    pub op SelectOp
+    pub body List[Stmt]
+    pub pos Pos
+
+## What a `select` arm waits for (conc.select.2).
+pub enum SelectOp
+    ## `v := ch.recv() =>`: a value from `ch`, bound to `v` in the arm.
+    Recv(var str, var_pos Pos, chan Expr)
+    ## `ch.send(x) =>`: room in `ch` for `x`.
+    Send(chan Expr, value Expr)
+    ## `after ms =>`: `ms` milliseconds with no other arm ready.
+    After(ms Expr)
+    ## `closed =>`: every channel of a receive arm is closed and empty.
+    Closed
 
 ## One name of a destructuring binding (type.tuple.4).
 pub struct Binder
@@ -394,6 +423,9 @@ pub enum Pattern
     ## `Variant(p, ...)` whose fields hold patterns of their own
     ## (expr.match.13): a plain name binds its field, `_` ignores it.
     Nested(qualifier str?, name str, fields List[Pattern], pos Pos)
+    ## `Point(x: 0, y)` or `Circle(r: 1..=9)`: fields matched by name, a bare
+    ## name binding the field of that name (expr.match.14).
+    StructPat(qualifier str?, name str, labels List[str], fields List[Pattern], pos Pos)
 
 pub enum Literal
     IntLit(value str)
@@ -457,6 +489,10 @@ impl ToJson for Stmt
 impl FromJson for Stmt
 impl ToJson for Binder
 impl FromJson for Binder
+impl ToJson for SelectArm
+impl FromJson for SelectArm
+impl ToJson for SelectOp
+impl FromJson for SelectOp
 impl ToJson for Else
 impl FromJson for Else
 impl ToJson for BinOp

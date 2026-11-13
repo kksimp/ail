@@ -1,0 +1,18 @@
+ 1: disk 1 A -> C
+ 2: disk 2 A -> B
+ 3: disk 1 C -> B
+ 4: disk 3 A -> C
+ 5: disk 1 B -> A
+ 6: disk 2 B -> C
+ 7: disk 1 A -> C
+disks  moves  valid
+    1      1  true
+    2      3  true
+    3      7  true
+    4     15  true
+    5     31  true
+    6     63  true
+    7    127  true
+    8    255  true
+    9    511  true
+   10   1023  true

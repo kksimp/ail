@@ -10,7 +10,7 @@
 ./ail help [CMD] [--json]            # every command, or one command's usage and rule (also `ail --help`, `ail CMD --help`)
 ./ail doctor [--json] [--path]      # check the toolchain; --path prints the profile line that puts `ail` on PATH
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
-./ail check [--json] [--budget N [--from K]] FILE|DIR
+./ail check [--json] [--budget N [--from K]] FILE|DIR   # clean: one `ok FILE: N functions, M warnings` line, exit 0; errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`; --json adds a summary record
 ./ail build FILE.ail [-o OUT]       # native executable
 ./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
 ./ail card [TOPIC]                  # the 970-token core card, or one topic (`std.fs`, `errors`); `ail ask std WORDS` finds a std function
@@ -146,6 +146,9 @@ fn Point.shift(mut self, dx int)  # may change self
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
 
+fn Point.scaled(self, k int = 2) Point   # a default: p.scaled() or p.scaled(k: 3), by name only
+    Point(x: x * k, y: y * k)
+
 fn is_red(c Color) bool
     match c
         Red => true
@@ -182,7 +185,25 @@ fn area(s Shape) int
 A bare variant pattern matches any fields and binds none (`Circle => true`).
 Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Neg(Num(0..=9))`,
 `Word("fn", (1, _))`. A bare name in a field binds it, so a variant without
-fields is written qualified there (`Cons(_, Items.Nil)`).
+fields is written qualified there (`Cons(_, Items.Nil)`). A struct is matched by
+field name, `Point(x: 0, y) =>`: a bare field name binds that field and
+unnamed fields match anything; `Rect(w: 0)` names a variant's fields.
+
+A distinct type wraps a built-in scalar so that IDs and units can't be swapped
+(type.distinct.1-7). It has its base's operators, `==`, `<`, text, hashing and
+JSON, no fields or methods, and costs nothing at run time:
+
+```ail
+type UserId = int                 # never an int, never another id type
+
+fn greet(id UserId) str
+    "user {id}"                   # prints as its int
+
+fn main()
+    id := UserId(42)              # in: Type(value)
+    print(greet(id))
+    print(int(id) + 1)            # out: int(id); `id + 1` is an error
+```
 
 ## Absence and errors
 
@@ -360,6 +381,11 @@ for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
     if x > 9
         break
 
+outer: for r in rows       # a label: `break outer` / `continue outer` from a nested loop
+    for c in r
+        if c == 0
+            continue outer
+
 label := match c     # must cover every variant; `_` covers the rest
     Red => "red"
     Green =>
@@ -518,7 +544,7 @@ Inside a `for mut` loop the body can't use the list itself.
 `Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
 for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
 `Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
-`last()`, `d.at(i)`, `d.to_list()`.
+`last()`, `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 A comprehension builds a list, set or map in one expression:
 
@@ -637,7 +663,8 @@ fn main()
     lo := 4
     print(xs.filter(|x| x > lo))      # [8, 5, 12]
     print(xs.map(adder(1)))           # [4, 9, 6, 13]
-    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by
+    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by, count, flat_map, skip_while
+    print(xs.fold(0, |acc, x| acc + x))   # 28; Set, Map (|k, v|), Deque, Seq take the same names
 ```
 
 ## Shared cells, resources and `move`
@@ -738,16 +765,18 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind CompressKind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
 | `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `hmac_sha384(key, data)`, `hmac_sha512(key, data)`, `sha3_256(data)`, `sha3_512(data)`, `sha1_legacy(data)`, `md5_legacy(data)` (broken: for old formats only, never for security), `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
 | `std.crypto` | `ct_eq(a, b) bool` (constant time; use it, never `==`, for MACs and tags), `random_bytes(n) bytes` (system generator, effect `random`), `hkdf_sha256(ikm, salt, info, len) bytes`, `pbkdf2_sha256(password, salt, iterations, len) bytes` (all `bytes`) |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `temp_dir() str` (`TMPDIR`, else `TEMP`, else `/tmp`), `make_temp_dir(prefix) str` (a new empty directory there, owner only; you remove it), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob`, `scan_count` and `temp_dir` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `temp_dir() str` (`TMPDIR`, else `TEMP`, else `/tmp`), `make_temp_dir(prefix) str` (a new empty directory there, owner only; you remove it), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `sync(p)` (to the disk; survives power loss), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob`, `scan_count` and `temp_dir` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
-| `std.file` | `use std.file`; handles read or written a piece at a time, `unique` (never copied); `mut r := file.open(p)?` then `r.read(n)`, `r.read_exact(n)` (`bytes?`, none and no move when fewer remain), `r.read_line()` (`str?`), `r.read_complete_line()` (only a line whose `\n` is written: follow a log), `r.tell()`, `r.seek(pos)`, `r.size()`, `r.close()`; `mut w := file.create(p)?` (or `file.append(p)?`, `file.update(p)?` to patch in place), `w.write(text)?`, `w.write_line(text)?`, `w.write_bytes(b)?` (buffered to 64 KiB), `w.flush()?`, `w.tell()`, `w.seek(pos)?`, `w.close()?` (a writer leaving scope is flushed, but cannot report a failure); loop `line := r.read_line()? else break`; all `! fs.IoError` |
+| `std.file` | `use std.file`; handles read or written a piece at a time, `unique` (never copied); `mut r := file.open(p)?` then `r.read(n)`, `r.read_exact(n)` (`bytes?`, none and no move when fewer remain), `r.read_line()` (`str?`), `r.read_complete_line()` (only a line whose `\n` is written: follow a log), `r.tell()`, `r.seek(pos)`, `r.size()`, `r.close()`; `mut w := file.create(p)?` (or `file.append(p)?`, `file.update(p)?` to patch in place), `w.write(text)?`, `w.write_line(text)?`, `w.write_bytes(b)?` (buffered to 64 KiB), `w.flush()?`, `w.sync()?` (flush, then to the disk), `w.tell()`, `w.seek(pos)?`, `w.close()?` (a writer leaving scope is flushed, but cannot report a failure); loop `line := r.read_line()? else break`; all `! fs.IoError` |
+| `std.kv` | `use std.kv`; `mut s := kv.open(path)?` (file made when missing; `unique`); `s.get(k) bytes?`, `s.has(k)`, `s.keys()`, `s.len()`, `s.set(k, v)?`, `s.remove(k)? bool`, `s.compact()?`, `s.sync()?` (to the disk: survives power loss), `s.close()`; keys `str`, values `bytes`; every change is one appended record, a stop mid-change loses only that change; `! fs.IoError | kv.KvError { why }` |
 | `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `read_exact(n) bytes?` (none if input ends first), `write_bytes(b)` (raw bytes to stdout), `eprint(value)`, `exit(code)` |
 | `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
 | `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
 | `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
 | `std.mcp` | `use std.mcp`; `connect(cmd, args) Client ! mcp.McpError { kind, message }`; `c.tools() List[Tool]`, `c.call(name, Json) Json` (`structuredContent` or the result; `mcp.text(r)` joins text blocks), `c.close()` |
+| `std.test` | `use std.test`; stubs for one test run by `ail test`, active until it ends: `files(Map[str, str])` (`fs.read_text`, `read_bytes`, `exists`), `env(Map[str, str])` (`env.get`), `clock(ms)` and `advance(ms)` (`time.now_ms`; `time.sleep_ms` moves it on), `http("GET https://host/x", status, body)` (`std.net`, no `@needs(net)`); tests are sandboxed (no net, proc or files outside the package and the test's `fs.temp_dir()`) unless `@needs(net)`, `@needs(proc)`, `@needs(fs)` (test.sandbox.1-4, test.stub.1-6) |
 | `std.toml` | `use std.toml`; `parse(text) Json ! toml.TomlError { why, line }`; tables are `Obj`, arrays `Arr`, numbers `Num`, dates `Str` (read with `get`, `str`, `num`) |
 | `std.yaml` | `use std.yaml`; `parse(text) Json ! yaml.YamlError { why, line }`; maps `Obj` (string keys), lists `Arr`, `yes`/`no` stay strings; anchors, aliases, tags, several documents and multi-line plain scalars are refused with a message |
 | `std.term` | `use std.term`; `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)` with `term.KeyCode` as `ui.KeyCode`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
@@ -821,6 +850,12 @@ task.set_threads(4)           # cap the pool from the next loop; task.threads() 
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions
+select                        # waits; runs the first arm in order that can go
+    n := nums.recv() =>       # a value from nums, as an int (not int?)
+        total += n
+    out.send(job) => sent += 1  # room in out: job is queued
+    after 50 => print("idle") # no arm ready for 50 ms; `after 0` never waits
+    closed => break           # every recv channel closed and empty (required with recv)
 ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
 with m as mut x               # read-modify-write: holds m, stores x back
@@ -881,7 +916,10 @@ fn safe_twice(x int) int
 
 C functions are declared, not imported. Types: `int`, `float`, `bool`,
 `i8`...`u64`, `f32`, and `*T` pointers; at most 6 integer-like and 8 float
-arguments; no `mut`. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
+arguments; no `mut`. A struct of those types passes and returns by value in the
+platform's C layout. A `fn(...)` parameter is a C callback: pass a declared
+function's name (`qsort(p, n, 8, compare)`), or `mem.c_fn(compare)` where C
+wants a `*u8`; state goes through a `*u8` user-data argument. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
 A narrow C `int` result is declared `i32`.
 Pointers: `p.read()`, `p.write(v)`, `p.offset(n)`, `p.is_null()`;
 `mem.alloc(n, 0)` allocates `n` ints set to the example (`0.0` gives `*float`),

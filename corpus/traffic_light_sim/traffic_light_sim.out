@@ -1,0 +1,15 @@
+t= 6 -> green
+t=10 button pressed (green, 2 left)
+t=11 -> yellow
+t=14 -> red
+t=20 -> green
+t=28 -> yellow
+t=30 button pressed (yellow, 2 left)
+t=31 button pressed (yellow, 1 left)
+t=31 -> red
+t=37 -> green
+t=45 -> yellow
+changes: 8
+shortened greens: 1
+ticks red/green/yellow: [18, 21, 6]
+final: yellow with 3 left

@@ -1,0 +1,124 @@
+## Shopping cart with a rule engine. Adding items checks the catalog and the
+## stock with typed errors; pricing applies category percent-offs, bulk unit
+## prices and a flat discount over a threshold, then adds shipping.
+
+error enum CartError
+    UnknownSku(sku str) "unknown sku {sku}"
+    OutOfStock(sku str, want int, have int) "only {have} of {sku} in stock, wanted {want}"
+
+struct Product
+    sku str
+    cat str
+    price int
+    stock int
+
+struct Item
+    sku str
+    cat str
+    price int
+    qty int
+
+enum Rule
+    PercentOff(cat str, pct int)
+    BulkPrice(sku str, need int, unit int)
+    FlatOff(threshold int, off int)
+
+struct Cart
+    rows List[Item]
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn find_product(catalog List[Product], sku str) Product?
+    for p in catalog
+        if p.sku == sku
+            return p
+    none
+
+fn Cart.add(mut self, catalog List[Product], sku str, qty int) ! CartError
+    p := find_product(catalog, sku) else return UnknownSku(sku: sku)
+    mut have := 0
+    for r in self.rows
+        if r.sku == sku
+            have += r.qty
+    if have + qty > p.stock
+        return OutOfStock(sku: sku, want: have + qty, have: p.stock)
+    mut merged := false
+    for i in 0..self.rows.len()
+        if self.rows[i].sku == sku
+            self.rows[i].qty = self.rows[i].qty + qty
+            merged = true
+    if not merged
+        self.rows.push(Item(sku: sku, cat: p.cat, price: p.price, qty: qty))
+
+fn line_cost(item Item, rules List[Rule]) int
+    mut cost := item.price * item.qty
+    for rule in rules
+        match rule
+            PercentOff(c, pct) =>
+                if item.cat == c
+                    cost -= cost * pct / 100
+            BulkPrice(code, need, unit) =>
+                if item.sku == code and item.qty >= need
+                    cost = unit * item.qty
+            _ => continue
+    cost
+
+fn cart_total(cart Cart, rules List[Rule]) int
+    mut total := 0
+    for item in cart.rows
+        total += line_cost(item, rules)
+    for rule in rules
+        match rule
+            FlatOff(limit, off) =>
+                if total >= limit
+                    total -= off
+            _ => continue
+    total
+
+fn shipping(total int) int
+    if total >= 5000
+        return 0
+    499
+
+fn main()
+    catalog := [
+        Product(sku: "tee", cat: "apparel", price: 1500, stock: 10),
+        Product(sku: "cap", cat: "apparel", price: 1200, stock: 3),
+        Product(sku: "mug", cat: "kitchen", price: 800, stock: 20),
+        Product(sku: "pan", cat: "kitchen", price: 3500, stock: 2),
+    ]
+    rules := [
+        Rule.PercentOff(cat: "apparel", pct: 10),
+        Rule.BulkPrice(sku: "mug", need: 4, unit: 650),
+        Rule.FlatOff(threshold: 8000, off: 500),
+    ]
+    orders := [("tee", 2), ("mug", 5), ("cap", 4), ("pan", 1), ("hat", 1), ("cap", 3), ("pan", 2)]
+    mut cart := Cart(rows: [])
+    for o in orders
+        cart.add(catalog, o.0, o.1) else err
+            print("rejected {o.0} x{o.1}: {err}")
+            continue
+    for item in cart.rows
+        print("{item.sku} x{item.qty} -> {money(line_cost(item, rules))}")
+    total := cart_total(cart, rules)
+    ship := shipping(total)
+    print("total {money(total)} shipping {money(ship)} due {money(total + ship)}")
+
+@test fn stock_is_enforced()
+    catalog := [Product(sku: "a", cat: "x", price: 100, stock: 2)]
+    mut cart := Cart(rows: [])
+    cart.add(catalog, "a", 2)?
+    assert_err(cart.add(catalog, "a", 1))
+    assert_err(cart.add(catalog, "zzz", 1))
+
+@test fn bulk_price_replaces_unit_price()
+    item := Item(sku: "mug", cat: "kitchen", price: 800, qty: 4)
+    rules := [Rule.BulkPrice(sku: "mug", need: 4, unit: 650)]
+    assert_eq(line_cost(item, rules), 2600)
+
+@test fn flat_off_needs_threshold()
+    cart := Cart(rows: [Item(sku: "a", cat: "x", price: 1000, qty: 5)])
+    rules := [Rule.FlatOff(threshold: 5000, off: 300)]
+    assert_eq(cart_total(cart, rules), 4700)

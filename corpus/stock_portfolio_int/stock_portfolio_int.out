@@ -1,0 +1,14 @@
+ok buy ACME 100 1500, fee 4.99
+ok buy ACME 50 1800, fee 1.00
+ok buy BOLT 10 20000, fee 4.99
+ok sell ACME 60 2000, fee 1.20
+rejected: BOLT: have 10, want to sell 11
+rejected: non-positive amount in 'buy ZED 0 100'
+rejected: cannot read 'hold ACME 1 1'
+ok sell BOLT 4 19000, fee 0.08
+rejected: cannot read 'buy CORN 7'
+ACME: 90 shares, basis 1440.00, value 1710.00
+BOLT: 6 shares, basis 1200.00, value 1230.00
+realized 200.00
+unrealized 300.00
+fees 12.26

@@ -1,0 +1,7 @@
+text: the cat sat on the mat with the other cat near the threshold
+the: hits [0 15 28 33 47], spurious mod 101: 0, mod 1000003: 0
+cat: hits [4 38], spurious mod 101: 2, mod 1000003: 0
+at : hits [5 9 20 39], spurious mod 101: 0, mod 1000003: 0
+thresh: hits [51], spurious mod 101: 0, mod 1000003: 0
+dog: hits [], spurious mod 101: 0, mod 1000003: 0
+dna: 4 matches at [0 4 12 20]

@@ -122,3 +122,8 @@ pub fn stmt_names(s Stmt, mut out Set[str])
         LocalFn(d) =>
             if body := d.body
                 block_names(body, mut out)
+        Select(arms, _) =>
+            for h in select_heads(arms)
+                expr_names(h, mut out)
+            for body in select_bodies(arms)
+                block_names(body, mut out)

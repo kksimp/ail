@@ -1,0 +1,12 @@
+file{1,2,3}.txt => file1.txt file2.txt file3.txt
+{a,b}{x,y} => ax ay bx by
+img{08..11}.png => img08.png img09.png img10.png img11.png
+n{3..1} => n3 n2 n1
+src/{lib,bin/{cli,srv}}.ail => src/lib.ail src/bin/cli.ail src/bin/srv.ail
+{solo} => {solo}
+a{b,c => a{b,c
+pre{,s} => pre pres
+*.{c,h}: main.c util.c main.h util.h
+a?.txt: a1.txt a2.txt
+{util,main}.*: util.c util.h util.o main.c main.h
+*.{py,rs}: 

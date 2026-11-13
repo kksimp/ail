@@ -1,0 +1,142 @@
+## Single-elimination tournament bracket. Teams ("NAME RATING") are seeded by
+## rating, the bracket is padded to a power of two with byes for the top seeds,
+## and each round is decided by a pluggable Rule trait: favourites always win
+## (Chalk) or the underdog gets a rating bonus (Underdog). Prints every round
+## and the champion for each rule.
+
+error enum BracketError
+    TooFewTeams(count int) "need at least 2 teams, got {count}"
+    DuplicateName(name str) "team {name} listed twice"
+    BadRating(text str) "bad team line '{text}'"
+
+struct Team
+    name str
+    seed int
+    rating int
+
+trait Rule
+    fn label(self) str
+    fn pick(self, fav Team, other Team) bool
+
+struct Chalk
+    tag str
+
+struct Underdog
+    bonus int
+
+impl Rule for Chalk
+    fn label(self) str
+        "chalk {self.tag}"
+    fn pick(self, fav Team, other Team) bool
+        true
+
+impl Rule for Underdog
+    fn label(self) str
+        "underdog +{self.bonus}"
+    fn pick(self, fav Team, other Team) bool
+        other.rating + self.bonus <= fav.rating
+
+fn parse_teams(lines List[str]) List[Team] ! BracketError
+    mut raw := List[Team]()
+    mut names := Set[str]()
+    for line in lines
+        p := line.words()
+        if p.len() != 2
+            return BadRating(text: line)
+        r := p[1].to_int() else return BadRating(text: line)
+        if not names.add(p[0])
+            return DuplicateName(name: p[0])
+        raw.push(Team(name: p[0], seed: 0, rating: r))
+    if raw.len() < 2
+        return TooFewTeams(count: raw.len())
+    ranked := raw.sorted(by: |t| -t.rating)
+    mut out := List[Team]()
+    for i, t in ranked.enumerate()
+        out.push(Team(name: t.name, seed: i + 1, rating: t.rating))
+    out
+
+fn seed_order(size int) List[int]
+    mut order := [1]
+    while order.len() < size
+        total := order.len() * 2
+        mut grown := List[int]()
+        for s in order
+            grown.push(s)
+            grown.push(total + 1 - s)
+        order = grown
+    order
+
+fn play(teams List[Team], rule any Rule) List[str]
+    mut size := 1
+    while size < teams.len()
+        size *= 2
+    mut slots := List[int]()
+    for s in seed_order(size)
+        slots.push(if s <= teams.len() then s - 1 else -1)
+    mut trace := List[str]()
+    mut round := 1
+    while slots.len() > 1
+        mut winners := List[int]()
+        pairs := slots.len() / 2
+        for k in 0..pairs
+            a := slots[2 * k]
+            b := slots[2 * k + 1]
+            if b < 0 or a < 0
+                w := if a < 0 then b else a
+                trace.push("R{round}: {teams[w].name} has a bye")
+                winners.push(w)
+                continue
+            lo := a.min(b)
+            hi := a.max(b)
+            champ := if rule.pick(teams[lo], teams[hi]) then lo else hi
+            loser := lo + hi - champ
+            trace.push("R{round}: {teams[champ].name} beats {teams[loser].name}")
+            winners.push(champ)
+        slots = winners
+        round += 1
+    trace.push("champion: {teams[slots[0]].name}")
+    trace
+
+fn main()
+    lines := [
+        "Lions 88",
+        "Tigers 84",
+        "Bears 91",
+        "Wolves 77",
+        "Hawks 84",
+        "Eagles 70",
+        "Sharks 65",
+    ]
+    teams := parse_teams(lines) else err
+        print("error: {err}")
+        return
+    for t in teams
+        print("seed {t.seed}: {t.name} ({t.rating})")
+    mut rules := List[any Rule]()
+    rules.push(Chalk(tag: "bracket"))
+    rules.push(Underdog(bonus: 0))
+    rules.push(Underdog(bonus: 8))
+    for rule in rules
+        print("-- {rule.label()}")
+        for row in play(teams, rule)
+            print(row)
+    for bad in [["Solo 5"], ["A 1", "A 2"], ["A 1", "B x"]]
+        if got := parse_teams(bad)
+            print("parsed {got.len()}")
+        else err
+            print("error: {err}")
+
+@test fn seeding_order()
+    assert_eq(seed_order(2), [1, 2])
+    assert_eq(seed_order(8), [1, 8, 4, 5, 2, 7, 3, 6])
+
+@test fn top_seed_gets_bye()
+    teams := parse_teams(["a 9", "b 8", "c 7"])?
+    trace := play(teams, Chalk(tag: "t"))
+    assert_eq(trace[0], "R1: a has a bye")
+    assert_eq(trace[trace.len() - 1], "champion: a")
+
+@test fn bad_input()
+    assert_err(parse_teams(["a 1"]))
+    assert_err(parse_teams(["a 1", "a 2"]))
+    assert_err(parse_teams(["a 1", "b q"]))

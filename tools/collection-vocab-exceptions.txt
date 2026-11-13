@@ -1,0 +1,32 @@
+# Gaps in the shared collection vocabulary (type.coll.32, ADR 1099): one line
+# `Collection.name reason`. tools/collection-vocab-audit.py fails on a gap with
+# no line here, and on a line whose gap has been closed.
+
+Map.find        a match is a (key, value) pair; loop with `for k, v in m` and `return`
+Map.take        a map is not a sequence; take `m.keys()` or `m.values()` first
+Map.skip        a map is not a sequence; skip `m.keys()` or `m.values()` first
+Map.take_while  a map is not a sequence; loop with `for k, v in m` and `break`
+Map.skip_while  a map is not a sequence; loop with `for k, v in m` and `continue`
+Map.zip         pairing two maps has no useful meaning; zip their `keys()` or `values()`
+Map.enumerate   a map's entries are already pairs; use `for k, v in m`
+Map.sum         a map has keys and values; use `m.values().sum()`
+Map.min         a map has keys and values; use `m.keys().min()` or `m.values().min()`
+Map.max         a map has keys and values; use `m.keys().max()` or `m.values().max()`
+Map.sorted      a map has keys and values; use `m.keys().sorted()`
+Map.group_by    the entries are not one element; group `m.keys()`
+
+Deque.sum       needs a numeric element; use `d.to_list().sum()`
+Deque.min       needs an ordered element; use `d.to_list().min()`
+Deque.max       needs an ordered element; use `d.to_list().max()`
+Deque.sorted    needs an ordered element; use `d.to_list().sorted()`
+Deque.group_by  needs a hashable key; use `d.to_list().group_by(f)`
+Deque.contains  needs an equatable element; use `d.to_list().contains(x)`
+
+Seq.sum         a sequence is used up; use `s.collect().sum()`
+Seq.min         a sequence is used up; use `s.collect().min()`
+Seq.max         a sequence is used up; use `s.collect().max()`
+Seq.sorted      sorting needs every element; use `s.collect().sorted()`
+Seq.group_by    grouping needs every element; use `s.collect().group_by(f)`
+Seq.contains    a sequence is used up; use `s.any(|x| x == y)`
+Seq.is_empty    a sequence can't be asked without reading it; use `s.next()`
+Seq.len         a sequence can't be counted without using it up; use `s.count(|x| true)`

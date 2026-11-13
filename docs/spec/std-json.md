@@ -323,8 +323,7 @@ fn main()
     m := {"get": Stats(count: 3)}
     print_json(m)                     # {"get":{"count":3}}
     print_json(m.get("put"))          # null
-    hits := {"get": 3}
-    print_json([hits.get("get"), hits.get("put")])  # [3,null]
+    print_json([m.get("get"), m.get("put")])  # [{"count":3},null]
 ```
 
 ## Availability
@@ -332,7 +331,9 @@ fn main()
 **json.prelude.1** — The items above are read only when the program mentions
 `Json`, `JsonMember`, `JsonError`, `parse_json`, `ToJson` or `FromJson`. A
 program that declares one of those names itself gets its own and none of the
-module's. *(ADR 0162, ADR 0308)*
+module's. The other prelude modules work the same way, one at a time: a
+program with its own `struct Heap` gets no prelude `Heap` but still gets
+`Grid`, `Deque` and the JSON items. *(ADR 0162, ADR 0308)*
 
 ```ail rules=json.prelude.1
 fn main()

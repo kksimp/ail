@@ -1,0 +1,116 @@
+## Glob matcher for paths. `*` and `?` stay inside one path segment, `**` may
+## cross slashes (and `**/` may match zero directories), `[abc]`, `[a-z]` and
+## `[!x]` match one character from a set. An unclosed `[` is a literal.
+
+struct Case
+    pat str
+    path str
+
+fn find_close(p List[char], start int) int
+    mut j := start + 1
+    if j < p.len() and p[j] == '!'
+        j += 1
+    j += 1
+    while j < p.len()
+        if p[j] == ']'
+            return j
+        j += 1
+    -1
+
+fn class_has(p List[char], lo int, hi int, x char) bool
+    neg := p[lo] == '!'
+    mut i := if neg then lo + 1 else lo
+    mut found := false
+    while i < hi
+        if i + 2 < hi and p[i + 1] == '-'
+            if p[i].code() <= x.code() and x.code() <= p[i + 2].code()
+                found = true
+            i += 3
+        else
+            if p[i] == x
+                found = true
+            i += 1
+    found != neg
+
+fn glob_at(p List[char], pi int, t List[char], ti int) bool
+    if pi == p.len()
+        return ti == t.len()
+    c := p[pi]
+    if c == '*'
+        deep := pi + 1 < p.len() and p[pi + 1] == '*'
+        nxt := if deep then pi + 2 else pi + 1
+        if deep and nxt < p.len() and p[nxt] == '/'
+            if glob_at(p, nxt + 1, t, ti)
+                return true
+        mut k := ti
+        while true
+            if glob_at(p, nxt, t, k)
+                return true
+            if k >= t.len()
+                break
+            if t[k] == '/' and not deep
+                break
+            k += 1
+        return false
+    if ti >= t.len()
+        return false
+    x := t[ti]
+    if c == '?'
+        return x != '/' and glob_at(p, pi + 1, t, ti + 1)
+    if c == '['
+        shut := find_close(p, pi)
+        if shut >= 0
+            return class_has(p, pi + 1, shut, x) and glob_at(p, shut + 1, t, ti + 1)
+    c == x and glob_at(p, pi + 1, t, ti + 1)
+
+fn glob(pat str, path str) bool
+    glob_at(pat.chars(), 0, path.chars(), 0)
+
+fn filter_paths(pat str, paths List[str]) List[str]
+    mut out := List[str]()
+    for s in paths
+        if glob(pat, s)
+            out.push(s)
+    out
+
+fn main()
+    cases := [
+        Case(pat: "*.ail", path: "main.ail"),
+        Case(pat: "*.ail", path: "src/main.ail"),
+        Case(pat: "**/*.ail", path: "src/lib/main.ail"),
+        Case(pat: "**/*.ail", path: "main.ail"),
+        Case(pat: "file?.txt", path: "file7.txt"),
+        Case(pat: "file?.txt", path: "file10.txt"),
+        Case(pat: "[a-c]*.py", path: "beta.py"),
+        Case(pat: "[!a-c]*.py", path: "beta.py"),
+        Case(pat: "data[0-9][0-9].csv", path: "data42.csv"),
+        Case(pat: "log.[!0-9]", path: "log.x"),
+        Case(pat: "src/*/test_*.ail", path: "src/std/test_fs.ail"),
+        Case(pat: "src/*/test_*.ail", path: "src/std/io/test_fs.ail"),
+        Case(pat: "a[bc", path: "a[bc"),
+        Case(pat: "*", path: "a/b"),
+        Case(pat: "**", path: "a/b"),
+        Case(pat: "", path: ""),
+    ]
+    for c in cases
+        verdict := if glob(c.pat, c.path) then "yes" else "no"
+        print("{c.pat:<20} {c.path:<24} {verdict}")
+    files := ["a.ail", "b.txt", "src/c.ail", "src/d/e.ail", "src/d/f.txt"]
+    print("src/**.ail: {filter_paths("src/**.ail", files).join(" ")}")
+    print("*.*: {filter_paths("*.*", files).join(" ")}")
+
+@test fn stars_respect_slashes()
+    assert(glob("*.ail", "x.ail"))
+    assert(not glob("*.ail", "d/x.ail"))
+    assert(glob("**/x.ail", "x.ail"))
+    assert(glob("**/x.ail", "a/b/x.ail"))
+
+@test fn character_classes()
+    assert(glob("[a-c]1", "b1"))
+    assert(not glob("[a-c]1", "d1"))
+    assert(glob("[!a-c]1", "d1"))
+
+@test fn question_mark_matches_one_char()
+    assert(glob("a?c", "abc"))
+    assert(not glob("a?c", "ac"))
+    assert(not glob("a?c", "a/c"))

@@ -1,0 +1,7 @@
+factorial  720
+sum10      55
+countdown  5 4 3 2 1
+stray_add  error: stack underflow at 1
+bad_label  error: unknown label nowhere
+bad_op     error: cannot assemble 'push x'
+spin       error: step limit reached

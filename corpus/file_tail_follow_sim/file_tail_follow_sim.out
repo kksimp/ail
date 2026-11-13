@@ -1,0 +1,12 @@
+poll 1: boot start
+poll 1: boot done
+poll 2: GET /a 200
+poll 3: nothing new
+poll 4: GET /b 404
+poll 4: GET /c 200
+poll 4: POST /d 201
+poll 5: file was rotated
+poll 5: rotated: new log
+poll 6: GET /e 200
+8 lines seen, final offset 28
+cleaned up: true

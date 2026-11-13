@@ -1,0 +1,73 @@
+## Hex dump: prints text as offset, sixteen hex bytes and an ASCII gutter
+## (like `hexdump -C`), and parses a spaced hex string back into text.
+
+fn hex_digits(n int, width int) str
+    table := "0123456789abcdef".chars()
+    mut out := ""
+    mut v := n
+    mut k := 0
+    while k < width
+        d := table[v % 16]
+        out = "{d}{out}"
+        v = v / 16
+        k += 1
+    out
+
+fn gutter(chunk List[int]) str
+    mut out := ""
+    for c in chunk
+        p := char.from_code(c) else '.'
+        if c >= 32 and c < 127
+            out = "{out}{p}"
+        else
+            out = "{out}."
+    out
+
+fn dump_line(offset int, chunk List[int]) str
+    mut cells := ""
+    for i in 0..16
+        cell := if i < chunk.len() then hex_digits(chunk[i], 2) else "  "
+        sep := if i == 8 then "  " else " "
+        cells = "{cells}{sep}{cell}"
+    "{hex_digits(offset, 8)}{cells}  |{gutter(chunk)}|"
+
+fn dump(text str) List[str]
+    codes := [c.code() for c in text.chars()]
+    mut lines := List[str]()
+    mut i := 0
+    while i < codes.len()
+        stop := (i + 16).min(codes.len())
+        lines.push(dump_line(i, codes[i..stop]))
+        i += 16
+    lines.push(hex_digits(codes.len(), 8))
+    lines
+
+fn from_hex(spaced str) str
+    mut out := ""
+    for w in spaced.words()
+        n := w.to_int(16) else 63
+        ch := char.from_code(n) else '?'
+        out = "{out}{ch}"
+    out
+
+fn main()
+    sample := "Hello, AIL!\tTabs and\nnewlines show as dots.\nThe end."
+    for line in dump(sample)
+        print(line)
+    print("---")
+    for line in dump("short")
+        print(line)
+    print(from_hex("48 65 6c 6c 6f 20 41 49 4c"))
+
+@test fn pads_hex()
+    assert_eq(hex_digits(255, 2), "ff")
+    assert_eq(hex_digits(4096, 8), "00001000")
+    assert_eq(hex_digits(0, 2), "00")
+
+@test fn gutter_masks_control_chars()
+    assert_eq(gutter([72, 105, 10, 200]), "Hi..")
+
+@test fn hex_round_trip()
+    assert_eq(from_hex("41 42 43"), "ABC")
+    assert_eq(dump("").len(), 1)
+    assert_eq(dump("0123456789abcdefg").len(), 3)

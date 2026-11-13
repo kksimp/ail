@@ -1,0 +1,89 @@
+## CSV to Markdown: splits CSV lines (honouring double quotes), detects numeric
+## columns, pads every cell to its column width and writes a GitHub-style
+## table with right-aligned numbers.
+
+fn split_csv(line str) List[str]
+    mut cells := List[str]()
+    mut cur := ""
+    mut quoted := false
+    for c in line.chars()
+        if c == '"'
+            quoted = not quoted
+        elif c == ',' and not quoted
+            cells.push(cur)
+            cur = ""
+        else
+            cur = "{cur}{c}"
+    cells.push(cur)
+    cells
+
+fn is_number(s str) bool
+    if s.is_empty()
+        return false
+    for c in s.chars()
+        if not c.is_digit()
+            return false
+    true
+
+fn cell_at(row List[str], j int) str
+    if j < row.len()
+        return row[j].trim().replace("|", "/")
+    ""
+
+fn to_markdown(text str) str
+    mut rows := List[List[str]]()
+    for line in text.lines()
+        if line.trim() != ""
+            rows.push(split_csv(line))
+    if rows.is_empty()
+        return ""
+    ncols := rows[0].len()
+    mut widths := List[int]()
+    mut numeric := List[bool]()
+    for j in 0..ncols
+        mut w := 3
+        mut num := rows.len() > 1
+        for i in 0..rows.len()
+            cell := cell_at(rows[i], j)
+            w = w.max(cell.len())
+            if i > 0 and not is_number(cell)
+                num = false
+        widths.push(w)
+        numeric.push(num)
+    mut out := List[str]()
+    for i in 0..rows.len()
+        mut cells := List[str]()
+        for j in 0..ncols
+            cell := cell_at(rows[i], j)
+            if numeric[j]
+                cells.push(cell.pad_left(widths[j], ' '))
+            else
+                cells.push(cell.pad_right(widths[j], ' '))
+        out.push("| {cells.join(" | ")} |")
+        if i == 0
+            mut marks := List[str]()
+            for j in 0..ncols
+                if numeric[j]
+                    marks.push(":".pad_left(widths[j], '-'))
+                else
+                    marks.push("".pad_left(widths[j], '-'))
+            out.push("| {marks.join(" | ")} |")
+    out.join("\n")
+
+fn main()
+    data := ["name,qty,note", "apple,12,\"red, sweet\"", "pear,7,green", "fig,150,a|b", "kiwi,3"]
+    print(to_markdown(data.join("\n")))
+    print("")
+    print(to_markdown("id,score\n1,90\n22,8\n333,100"))
+    print(to_markdown("only,header"))
+
+@test fn splits_quoted_commas()
+    assert_eq(split_csv("a,\"b,c\",d"), ["a", "b,c", "d"])
+    assert_eq(split_csv("x,,y"), ["x", "", "y"])
+
+@test fn numbers_align_right()
+    assert_eq(to_markdown("n\n5\n42"), "|   n |\n| --: |\n|   5 |\n|  42 |")
+
+@test fn header_only_is_text()
+    assert(not is_number(""))
+    assert(is_number("007"))

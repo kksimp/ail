@@ -1,0 +1,22 @@
+== admin=true
+Report for kim
+  (admin view)
+Team 1: core
+  - ann (core)
+  - bo (core)
+Team 2: tools
+  - ann (tools)
+  - bo (tools)
+No extras.
+Missing: <>
+== admin=
+Report for kim
+  (read-only view)
+Team 1: core
+  - ann (core)
+  - bo (core)
+Team 2: tools
+  - ann (tools)
+  - bo (tools)
+No extras.
+Missing: <>

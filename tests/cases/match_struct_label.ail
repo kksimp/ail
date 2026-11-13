@@ -1,0 +1,11 @@
+struct Point
+    x int
+    y int
+
+fn f(p Point) int
+    match p
+        Point(x: 1, _) => 1
+        _ => 0
+
+fn main()
+    print(f(Point(x: 1, y: 2)))

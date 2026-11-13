@@ -1,0 +1,68 @@
+## Merges overlapping or touching integer intervals. Intervals come from text
+## such as "5-8", are sorted by start and folded together. The program prints
+## the merged ranges, the total covered length and the gaps between them.
+
+struct Interval
+    lo int
+    hi int
+
+fn parse(text str) Interval
+    parts := text.split("-")
+    a := parts[0].to_int() else 0
+    b := parts[1].to_int() else 0
+    Interval(lo: a.min(b), hi: a.max(b))
+
+fn merge(items List[Interval]) List[Interval]
+    ordered := items.sorted(by: |p| p.lo)
+    mut out := List[Interval]()
+    for cur in ordered
+        if out.is_empty()
+            out.push(cur)
+        else
+            n := out.len() - 1
+            if cur.lo <= out[n].hi + 1
+                out[n].hi = out[n].hi.max(cur.hi)
+            else
+                out.push(cur)
+    out
+
+fn covered(items List[Interval]) int
+    mut total := 0
+    for p in items
+        total += p.hi - p.lo + 1
+    total
+
+fn gaps(items List[Interval]) List[Interval]
+    mut out := List[Interval]()
+    for i in 1..items.len()
+        out.push(Interval(lo: items[i - 1].hi + 1, hi: items[i].lo - 1))
+    out
+
+fn show(items List[Interval]) str
+    parts := ["[{p.lo}, {p.hi}]" for p in items]
+    parts.join(" ")
+
+fn main()
+    raw := ["1-3", "2-6", "8-10", "15-18", "17-20", "11-12", "30-30", "25-22"]
+    items := [parse(t) for t in raw]
+    print("input:  {show(items)}")
+    merged := merge(items)
+    print("merged: {show(merged)}")
+    print("ranges: {merged.len()}")
+    print("covered: {covered(merged)}")
+    print("gaps:   {show(gaps(merged))}")
+    touching := merge([parse("1-2"), parse("3-4")])
+    print("touching: {show(touching)}")
+
+@test fn overlapping_ranges_fold()
+    m := merge([Interval(lo: 1, hi: 5), Interval(lo: 3, hi: 9), Interval(lo: 20, hi: 21)])
+    assert_eq(m.len(), 2)
+    assert_eq(m[0].hi, 9)
+    assert_eq(covered(m), 11)
+
+@test fn nested_range_is_absorbed()
+    m := merge([Interval(lo: 0, hi: 10), Interval(lo: 2, hi: 3)])
+    assert_eq(m, [Interval(lo: 0, hi: 10)])
+
+@test fn parse_orders_reversed_bounds()
+    assert_eq(parse("9-4"), Interval(lo: 4, hi: 9))

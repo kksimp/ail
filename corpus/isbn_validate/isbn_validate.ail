@@ -1,0 +1,104 @@
+## ISBN validator: checks ISBN-10 (mod 11, trailing X) and ISBN-13 (mod 10)
+## numbers with or without hyphens, and converts between the two forms.
+
+fn clean(s str) str
+    mut out := ""
+    for c in s.chars()
+        if c != '-' and c != ' '
+            out = "{out}{c}"
+    out
+
+fn values(s str) List[int]?
+    cs := s.chars()
+    mut out := List[int]()
+    for i in 0..cs.len()
+        c := cs[i]
+        if c == 'X' and i == 9 and cs.len() == 10
+            out.push(10)
+        else
+            d := c.to_digit(10) else return none
+            out.push(d)
+    out
+
+fn sum10(vs List[int]) int
+    mut total := 0
+    for i in 0..vs.len()
+        total += vs[i] * (10 - i)
+    total
+
+fn sum13(vs List[int]) int
+    mut total := 0
+    for i in 0..vs.len()
+        if i % 2 == 0
+            total += vs[i]
+        else
+            total += vs[i] * 3
+    total
+
+fn is_valid_10(s str) bool
+    vs := values(clean(s)) else return false
+    vs.len() == 10 and sum10(vs) % 11 == 0
+
+fn is_valid_13(s str) bool
+    vs := values(clean(s)) else return false
+    vs.len() == 13 and sum13(vs) % 10 == 0
+
+fn to_13(s str) str
+    vs := values(clean(s)) else return ""
+    if vs.len() != 10
+        return ""
+    mut body := [9, 7, 8]
+    body.extend(vs[0..9])
+    chk := (10 - sum13(body) % 10) % 10
+    "{body.join("")}{chk}"
+
+fn to_10(s str) str
+    vs := values(clean(s)) else return ""
+    if vs.len() != 13 or vs[0] != 9 or vs[1] != 7 or vs[2] != 8
+        return ""
+    core := vs[3..12]
+    chk := (11 - sum10(core) % 11) % 11
+    mark := if chk == 10 then "X" else "{chk}"
+    "{core.join("")}{mark}"
+
+fn kind(s str) str
+    if is_valid_10(s)
+        return "ISBN-10"
+    if is_valid_13(s)
+        return "ISBN-13"
+    "invalid"
+
+fn main()
+    for s in [
+        "0-306-40615-2",
+        "978-0-306-40615-7",
+        "0-8044-2957-X",
+        "0-306-40615-3",
+        "9780306406158",
+        "080442957X",
+        "12345",
+        "0-306-4O615-2",
+    ]
+        print("{s:<20} {kind(s)}")
+    for s in ["0-306-40615-2", "0-8044-2957-X", "123"]
+        print("{s} -> {to_13(s)}")
+    for s in ["978-0-306-40615-7", "9780804429573", "9791234567896"]
+        print("{s} -> {to_10(s)}")
+
+@test fn validates_both_forms()
+    assert(is_valid_10("0-306-40615-2"))
+    assert(is_valid_10("080442957X"))
+    assert(is_valid_13("978-0-306-40615-7"))
+    assert(not is_valid_10("0-306-40615-3"))
+    assert(not is_valid_13("9780306406158"))
+
+@test fn converts()
+    assert_eq(to_13("0306406152"), "9780306406157")
+    assert_eq(to_10("9780306406157"), "0306406152")
+    assert_eq(to_10("9780804429573"), "080442957X")
+
+@test fn rejects_bad_shapes()
+    assert_eq(kind("12345"), "invalid")
+    assert_eq(to_13("123"), "")
+    assert_eq(to_10("9791234567896"), "")
+    assert(not is_valid_10("03064X6152"))

@@ -1,0 +1,10 @@
+name      gross   pension       tax       net
+ann     1068.75     53.43    103.06    912.26
+bob     2000.00    100.00    280.00   1620.00
+cy       684.00     34.20     64.98    584.82
+skipped: dee: hours out of range (95)
+skipped: eli: unknown pay kind contract
+skipped: bad record 'fay,hourly,abc,10'
+skipped: bad record 'gus,hourly,4000,40,1'
+hal     2170.00    108.50    312.30   1749.20
+gross 5922.75 net 4866.28
