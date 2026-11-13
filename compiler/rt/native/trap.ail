@@ -31,10 +31,12 @@ fn trace_find(ents int, n int, off int) int
 
 ## The caller's frame pointer, or 0 at the end of the chain. A frame's saved
 ## pointer lies above it (the stack grows down), so a smaller one is not a
-## frame.
+## frame. Nor is one more than 1 MiB above it: C code that called a C
+## callback (ffi.cb.4) may keep anything in its frame pointer register, so
+## the walk ends at the C frames instead of reading beyond the stack.
 fn trace_next(p int) int
     q := load64(p)
-    if q <= p
+    if q <= p or q - p > 1048576
         return 0
     q
 
