@@ -55,9 +55,15 @@ fn expand(term str) List[Cmp]?
     if nums.len() == 3
         return [Cmp(op: "=", ver: parse_ver(term)?)]
     if nums.len() == 2
-        return pair(Ver(major: nums[0], minor: nums[1], patch: 0), Ver(major: nums[0], minor: nums[1] + 1, patch: 0))
+        return pair(
+            Ver(major: nums[0], minor: nums[1], patch: 0),
+            Ver(major: nums[0], minor: nums[1] + 1, patch: 0),
+        )
     if nums.len() == 1
-        return pair(Ver(major: nums[0], minor: 0, patch: 0), Ver(major: nums[0] + 1, minor: 0, patch: 0))
+        return pair(
+            Ver(major: nums[0], minor: 0, patch: 0),
+            Ver(major: nums[0] + 1, minor: 0, patch: 0),
+        )
     []
 
 fn compile_range(text str) List[List[Cmp]]?
@@ -93,7 +99,19 @@ fn main()
     for t in inputs
         parsed := parse_ver(t) else continue
         versions.push(parsed)
-    ranges := [">=1.2.0 <2.0.0", "^1.2.3", "^0.2.3", "^0.0.3", "~1.2.3", "1.x", "2", "=1.4.0", "<1.0.0 || >=2.3.0", "^1.x", "*"]
+    ranges := [
+        ">=1.2.0 <2.0.0",
+        "^1.2.3",
+        "^0.2.3",
+        "^0.0.3",
+        "~1.2.3",
+        "1.x",
+        "2",
+        "=1.4.0",
+        "<1.0.0 || >=2.3.0",
+        "^1.x",
+        "*",
+    ]
     for r in ranges
         alts := compile_range(r) else
             print("{r:<20} invalid")

@@ -71,13 +71,7 @@ fn to_markdown(text str) str
     out.join("\n")
 
 fn main()
-    data := [
-        "name,qty,note",
-        "apple,12,\"red, sweet\"",
-        "pear,7,green",
-        "fig,150,a|b",
-        "kiwi,3",
-    ]
+    data := ["name,qty,note", "apple,12,\"red, sweet\"", "pear,7,green", "fig,150,a|b", "kiwi,3"]
     print(to_markdown(data.join("\n")))
     print("")
     print(to_markdown("id,score\n1,90\n22,8\n333,100"))

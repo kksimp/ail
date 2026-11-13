@@ -48,7 +48,10 @@ fn show(label str, r Replay)
 fn main() !
     dir := fs.make_temp_dir("corpus_event_log_replay")?
     log_path := path.join(dir, "events.log")
-    fs.write_text(log_path, "set a 5\nset b 10\ninc a 3\nbogus line\ndel b\nset c x\ninc c 4\nset b 1\ninc a -2\n")?
+    fs.write_text(
+        log_path,
+        "set a 5\nset b 10\ninc a 3\nbogus line\ndel b\nset c x\ninc c 4\nset b 1\ninc a -2\n",
+    )?
     lines := fs.read_text(log_path)?.lines()
     print("log has {lines.len()} lines")
     show("after 3", replay(lines, 3))

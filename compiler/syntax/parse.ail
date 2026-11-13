@@ -3170,12 +3170,13 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 StrLit(_) | BoolLit(_) =>
                     range_start_error(pos)
                     return none
-        Wildcard(_) | Alt(_, _) | Variant(
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(
             _,
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(_, _, _, _, _) =>
+            _,
+        ) =>
             range_start_error(pos)
             return none
     i += 1
@@ -3203,12 +3204,13 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 IntLit(_) | CharLit(_) =>
                     return ast.Pattern.Range(lo: lo_lit, hi: value, inclusive: inclusive, pos: pos)
                 StrLit(_) | BoolLit(_) => i += 0
-        Wildcard(_) | Alt(_, _) | Variant(
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(
             _,
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(_, _, _, _, _) => i += 0
+            _,
+        ) => i += 0
     error_text(
         "expr.match.12",
         hpos,

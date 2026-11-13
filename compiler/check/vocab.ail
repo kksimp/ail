@@ -7,6 +7,7 @@ use ast
 
 ## The methods of this file that take a function, by receiver kind.
 pub LIST_VOCAB := ["count", "fold", "flat_map", "take_while", "skip_while"]
+
 pub SET_VOCAB := [
     "any",
     "all",
@@ -20,6 +21,7 @@ pub SET_VOCAB := [
     "take_while",
     "skip_while",
 ]
+
 pub MAP_VOCAB := ["any", "all", "count", "fold", "filter", "map", "flat_map", "map_values"]
 
 ## Whether `x.n(...)` on a value of type `t` is checked by `vocab_call`.

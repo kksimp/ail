@@ -66,8 +66,19 @@ fn main()
     names := "NUL SOH STX ETX EOT ENQ ACK BEL BS HT LF VT FF CR SO SI DLE DC1 DC2 DC3 DC4 NAK SYN ETB CAN EM SUB ESC FS GS RS US".split(" ")
     mut rows := List[List[str]]()
     for n in [0, 7, 9, 10, 13, 27, 32, 33, 48, 57, 65, 90, 97, 122, 126, 127]
-        rows.push(["{n}", "0x{to_base(n, 16, 2)}", to_base(n, 8, 3), to_base(n, 2, 8), glyph(n, names), classify(n)])
-    for line in render(["Dec", "Hex", "Oct", "Bin", "Char", "Class"], rows, [true, true, true, true, false, false])
+        rows.push([
+            "{n}",
+            "0x{to_base(n, 16, 2)}",
+            to_base(n, 8, 3),
+            to_base(n, 2, 8),
+            glyph(n, names),
+            classify(n),
+        ])
+    for line in render(
+        ["Dec", "Hex", "Oct", "Bin", "Char", "Class"],
+        rows,
+        [true, true, true, true, false, false],
+    )
         print(line)
     print("")
     for line in render(["Item", "Qty"], [["apple", "3"], ["watermelon", "12"]], [false, true])

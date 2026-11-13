@@ -64,7 +64,20 @@ fn parse_cron(expr str) Schedule ! CronError
     parts := expr.words()
     if parts.len() != 5
         return WrongFields(count: parts.len())
-    month_names := ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+    month_names := [
+        "JAN",
+        "FEB",
+        "MAR",
+        "APR",
+        "MAY",
+        "JUN",
+        "JUL",
+        "AUG",
+        "SEP",
+        "OCT",
+        "NOV",
+        "DEC",
+    ]
     day_names := ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
     no_names := List[str]()
     f_min := parse_field(parts[0], 0, 59, no_names)?
@@ -75,7 +88,11 @@ fn parse_cron(expr str) Schedule ! CronError
     Schedule(minutes: f_min, hours: f_hour, days: f_day, months: f_month, weekdays: f_week)
 
 fn Schedule.fires(self, month int, dom int, dow int, hour int, minute int) bool
-    months.contains(month) and days.contains(dom) and weekdays.contains(dow) and hours.contains(hour) and minutes.contains(minute)
+    months.contains(month)
+        and days.contains(dom)
+        and weekdays.contains(dow)
+        and hours.contains(hour)
+        and minutes.contains(minute)
 
 fn brief(xs List[int]) str
     if xs.len() <= 8
@@ -116,8 +133,27 @@ fn main()
     assert_eq(parse_field("30/15", 0, 59, List[str]())?, [30, 45])
 
 @test fn names_map_to_numbers()
-    assert_eq(parse_field("MON-WED", 0, 6, ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"])?, [1, 2, 3])
-    assert_eq(parse_field("dec", 1, 12, ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])?, [12])
+    assert_eq(
+        parse_field("MON-WED", 0, 6, ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"])?,
+        [1, 2, 3],
+    )
+    assert_eq(
+        parse_field("dec", 1, 12, [
+            "JAN",
+            "FEB",
+            "MAR",
+            "APR",
+            "MAY",
+            "JUN",
+            "JUL",
+            "AUG",
+            "SEP",
+            "OCT",
+            "NOV",
+            "DEC",
+        ])?,
+        [12],
+    )
 
 @test fn errors_are_typed()
     assert_err(parse_cron("1 2 3"))

@@ -180,13 +180,16 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
             unpack: [],
         )
         elem := ast.Expr.Index(recv: vname(me, pos), index: vname(i, pos), pos: pos)
-        return lower_value(ast.Expr.Comp(
-            form: ast.CompKind.ListComp,
-            elem: elem,
-            value: none,
-            clauses: [cl],
-            pos: pos,
-        ), none)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: elem,
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
     if name == "zip"
         lower_stmt(vlet("#vy{id}", args[0].value, false, pos))
         i := "#vi{id}"
@@ -209,17 +212,23 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
             ),
             unpack: [],
         )
-        pair := ast.Expr.TupleLit(items: [
-            ast.Expr.Index(recv: vname(me, pos), index: vname(i, pos), pos: pos),
-            ast.Expr.Index(recv: ys, index: vname(i, pos), pos: pos),
-        ], pos: pos)
-        return lower_value(ast.Expr.Comp(
-            form: ast.CompKind.ListComp,
-            elem: pair,
-            value: none,
-            clauses: [cl],
+        pair := ast.Expr.TupleLit(
+            items: [
+                ast.Expr.Index(recv: vname(me, pos), index: vname(i, pos), pos: pos),
+                ast.Expr.Index(recv: ys, index: vname(i, pos), pos: pos),
+            ],
             pos: pos,
-        ), none)
+        )
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: pair,
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
     if name == "fold"
         f := vocab_fn(args[1], per + 1, id, pos)
         acc := "#va{id}"
@@ -274,38 +283,50 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
     if name == "filter"
         cl := vclause(me, is_map, id, f.names, f.body, pos)
         if is_map
-            return lower_value(ast.Expr.Comp(
-                form: ast.CompKind.MapComp,
+            return lower_value(
+                ast.Expr.Comp(
+                    form: ast.CompKind.MapComp,
+                    elem: vname(f.names[0], pos),
+                    value: vname(f.names[1], pos),
+                    clauses: [cl],
+                    pos: pos,
+                ),
+                none,
+            )
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.SetComp,
                 elem: vname(f.names[0], pos),
-                value: vname(f.names[1], pos),
+                value: none,
                 clauses: [cl],
                 pos: pos,
-            ), none)
-        return lower_value(ast.Expr.Comp(
-            form: ast.CompKind.SetComp,
-            elem: vname(f.names[0], pos),
-            value: none,
-            clauses: [cl],
-            pos: pos,
-        ), none)
+            ),
+            none,
+        )
     if name == "map_values"
         cl := vclause(me, true, id, f.names, none, pos)
-        return lower_value(ast.Expr.Comp(
-            form: ast.CompKind.MapComp,
-            elem: vname(f.names[0], pos),
-            value: f.body,
-            clauses: [cl],
-            pos: pos,
-        ), none)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.MapComp,
+                elem: vname(f.names[0], pos),
+                value: f.body,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
     if name == "map"
         cl := vclause(me, is_map, id, f.names, none, pos)
-        return lower_value(ast.Expr.Comp(
-            form: ast.CompKind.ListComp,
-            elem: f.body,
-            value: none,
-            clauses: [cl],
-            pos: pos,
-        ), none)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: f.body,
+                value: none,
+                clauses: [cl],
+                pos: pos,
+            ),
+            none,
+        )
     if name == "flat_map"
         cl := vclause(me, is_map, id, f.names, none, pos)
         inner := ast.CompFor(
@@ -316,11 +337,14 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
             cond: none,
             unpack: [],
         )
-        return lower_value(ast.Expr.Comp(
-            form: ast.CompKind.ListComp,
-            elem: vname("#vy{id}", pos),
-            value: none,
-            clauses: [cl, inner],
-            pos: pos,
-        ), none)
+        return lower_value(
+            ast.Expr.Comp(
+                form: ast.CompKind.ListComp,
+                elem: vname("#vy{id}", pos),
+                value: none,
+                clauses: [cl, inner],
+                pos: pos,
+            ),
+            none,
+        )
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

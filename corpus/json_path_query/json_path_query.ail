@@ -136,7 +136,7 @@ fn query(d Doc, root int, path str) List[str]
         cur = select(d, cur, st)
     [render(d, i) for i in cur]
 
-fn load(text str) (Doc, int)
+fn load(text str)(Doc, int)
     mut d := Doc(cs: text.chars(), pos: 0, nodes: [])
     root := parse_value(mut d)
     (d, root)
@@ -155,9 +155,16 @@ fn main()
     d, root := load(sample())
     print("nodes: {d.nodes.len()}")
     paths := [
-        "store.name", "store.open", "store.books[1].title", "store.books[*].price",
-        "store.books[*].tags[0]", "store.books[2]", "store.owner", "store.*",
-        "store.books[9]", "store.nope.x",
+        "store.name",
+        "store.open",
+        "store.books[1].title",
+        "store.books[*].price",
+        "store.books[*].tags[0]",
+        "store.books[2]",
+        "store.owner",
+        "store.*",
+        "store.books[9]",
+        "store.nope.x",
     ]
     for p in paths
         found := query(d, root, p)

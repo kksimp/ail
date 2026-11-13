@@ -1750,10 +1750,27 @@ struct FuzzRun
     ids Set[int]
 
 ## One run of the instrumented binary: the failure line, if any, and the ids of the statements it ran.
-fn fuzz_case(w World, lead int, exe str, slot int, caps str, tys List[Ty], args List[Node], hits str) !FuzzRun
+fn fuzz_case(
+    w World,
+    lead int,
+    exe str,
+    slot int,
+    caps str,
+    tys List[Ty],
+    args List[Node],
+    hits str,
+) !FuzzRun
     fs.write_text(hits, "")?
     box := box_open(w, exe, caps)
-    fail := try_case_in(w, lead, exe, slot, tys, args, with_envs(["AIL_INSTRUMENT_OUT={hits}"], box.envs))
+    fail := try_case_in(
+        w,
+        lead,
+        exe,
+        slot,
+        tys,
+        args,
+        with_envs(["AIL_INSTRUMENT_OUT={hits}"], box.envs),
+    )
     box_close(box)
     FuzzRun(fail: fail, ids: hit_ids(hits))
 

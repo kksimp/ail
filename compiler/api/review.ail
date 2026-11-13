@@ -100,7 +100,11 @@ fn rv_grant_items(old List[ast.Grant], now List[ast.Grant]) List[RvItem]
             if g.package == o.package and g.own == o.own
                 kept = true
         if not kept and o.entries.len() > 0
-            cold.push(rv_item("effects", "grant {o.package}: {rv_delta(o.entries, []).join(" ")}", false))
+            cold.push(rv_item(
+                "effects",
+                "grant {o.package}: {rv_delta(o.entries, []).join(" ")}",
+                false,
+            ))
     for x in cold
         hot.push(x)
     hot

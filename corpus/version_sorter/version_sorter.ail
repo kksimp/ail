@@ -67,8 +67,18 @@ fn product(name str) str
 
 fn main()
     names := [
-        "app-1.10.2", "app-1.2.10", "app-1.2.9", "lib-0.9", "app-1.2", "lib-0.10",
-        "app-10.0", "app-2.0", "lib-0.9.1", "tool-v3", "tool-v12", "tool-v4",
+        "app-1.10.2",
+        "app-1.2.10",
+        "app-1.2.9",
+        "lib-0.9",
+        "app-1.2",
+        "lib-0.10",
+        "app-10.0",
+        "app-2.0",
+        "lib-0.9.1",
+        "tool-v3",
+        "tool-v12",
+        "tool-v4",
     ]
     ordered := natural_sort(names)
     print("natural: {ordered.join(" ")}")

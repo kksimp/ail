@@ -41,7 +41,15 @@ fn build(root str) !
     fs.make_dir(path.join(root, "src/ui"))?
     fs.make_dir(path.join(root, "tests"))?
     fs.make_dir(path.join(root, "docs"))?
-    for rel in ["README", "src/main.ail", "src/net/http.ail", "src/net/tls.ail", "src/ui/window.ail", "tests/basic.ail", "docs/intro.md"]
+    for rel in [
+        "README",
+        "src/main.ail",
+        "src/net/http.ail",
+        "src/net/tls.ail",
+        "src/ui/window.ail",
+        "tests/basic.ail",
+        "docs/intro.md",
+    ]
         fs.write_text(path.join(root, rel), "x\n")?
 
 fn remove_tree(dir str) !

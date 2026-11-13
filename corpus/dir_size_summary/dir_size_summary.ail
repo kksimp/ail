@@ -13,7 +13,13 @@ fn extension(name str) str
         return "(none)"
     parts[parts.len() - 1]
 
-fn measure(dir str, depth int, mut by_ext Map[str, int], mut files List[Found], mut lines List[str]) !int
+fn measure(
+    dir str,
+    depth int,
+    mut by_ext Map[str, int],
+    mut files List[Found],
+    mut lines List[str],
+) !int
     mut total := 0
     for name in fs.list_dir(dir)?.sorted()
         child := path.join(dir, name)

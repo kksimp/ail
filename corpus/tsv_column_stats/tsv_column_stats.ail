@@ -40,16 +40,41 @@ fn stats_for(name str, cells List[str]) Stats
         if not is_number(c)
             numeric = false
     if filled.is_empty()
-        return Stats(name: name, numeric: false, filled: 0, empty: empty, distinct: 0, low: "-", high: "-", sum: 0)
+        return Stats(
+            name: name,
+            numeric: false,
+            filled: 0,
+            empty: empty,
+            distinct: 0,
+            low: "-",
+            high: "-",
+            sum: 0,
+        )
     if numeric
         mut nums := List[int]()
         for f in filled
             nums.push(f.to_int() else 0)
-        return Stats(name: name, numeric: true, filled: nums.len(), empty: empty, distinct: seen.len(),
-            low: "{nums.min() else 0}", high: "{nums.max() else 0}", sum: nums.sum())
+        return Stats(
+            name: name,
+            numeric: true,
+            filled: nums.len(),
+            empty: empty,
+            distinct: seen.len(),
+            low: "{nums.min() else 0}",
+            high: "{nums.max() else 0}",
+            sum: nums.sum(),
+        )
     sorted_text := filled.sorted()
-    Stats(name: name, numeric: false, filled: filled.len(), empty: empty, distinct: seen.len(),
-        low: sorted_text[0], high: sorted_text[sorted_text.len() - 1], sum: 0)
+    Stats(
+        name: name,
+        numeric: false,
+        filled: filled.len(),
+        empty: empty,
+        distinct: seen.len(),
+        low: sorted_text[0],
+        high: sorted_text[sorted_text.len() - 1],
+        sum: 0,
+    )
 
 fn analyse(text str) List[Stats]
     lines := text.lines()

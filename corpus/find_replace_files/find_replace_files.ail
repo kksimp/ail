@@ -77,7 +77,11 @@ fn main() !
     fs.remove(dir)?
 
 @test fn report_totals_only_changed_files()
-    total := report([Change(name: "a", count: 2), Change(name: "b", count: 0), Change(name: "c", count: 5)])
+    total := report([
+        Change(name: "a", count: 2),
+        Change(name: "b", count: 0),
+        Change(name: "c", count: 5),
+    ])
     assert_eq(total, 7)
 
 @test fn missing_file_fails()

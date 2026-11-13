@@ -87,7 +87,14 @@ fn main()
     bus.subscribe(KeyFilter(min_code: 65))
     bus.subscribe(Heartbeat(every: 5))
     bus.subscribe(KeyFilter(min_code: 90))
-    events := [Event.Click(x: 50, y: 20), Event.Click(x: 3, y: 4), Event.Key(code: 66), Event.Tick, Event.Key(code: 95), Event.Key(code: 10)]
+    events := [
+        Event.Click(x: 50, y: 20),
+        Event.Click(x: 3, y: 4),
+        Event.Key(code: 66),
+        Event.Tick,
+        Event.Key(code: 95),
+        Event.Key(code: 10),
+    ]
     for ev in events
         lines := bus.publish(ev)
         if lines.is_empty()

@@ -36,7 +36,27 @@ fn suggest(word str, dict Map[str, int]) List[str]
     found.sorted(by: |w| -dict[w])
 
 fn main()
-    dict := load_dict(["the 500", "tea 40", "ten 35", "then 90", "spelling 12", "spoiling 3", "spewing 2", "correct 60", "corrects 4", "collect 30", "word 80", "ward 20", "world 70", "would 85", "cat 25", "cart 15", "act 18", "hello 55", "help 45"])
+    dict := load_dict([
+        "the 500",
+        "tea 40",
+        "ten 35",
+        "then 90",
+        "spelling 12",
+        "spoiling 3",
+        "spewing 2",
+        "correct 60",
+        "corrects 4",
+        "collect 30",
+        "word 80",
+        "ward 20",
+        "world 70",
+        "would 85",
+        "cat 25",
+        "cart 15",
+        "act 18",
+        "hello 55",
+        "help 45",
+    ])
     for w in ["teh", "speling", "korrect", "wrld", "wuold", "cta", "hello", "zzzz", "hel"]
         got := suggest(w, dict)
         if got.is_empty()

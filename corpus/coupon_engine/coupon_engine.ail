@@ -63,9 +63,24 @@ fn Engine.price(mut self, id int, total int, day int, codes str)
 
 fn main()
     mut engine := Engine(coupons: {}, used: {})
-    engine.coupons["TENOFF"] = Coupon(kind: Kind.Percent(pct: 10), min_total: 0, expires: 30, max_uses: 3)
-    engine.coupons["BIG20"] = Coupon(kind: Kind.Capped(pct: 20, limit: 2500), min_total: 10000, expires: 30, max_uses: 2)
-    engine.coupons["FIVER"] = Coupon(kind: Kind.Fixed(cents: 500), min_total: 2000, expires: 10, max_uses: 1)
+    engine.coupons["TENOFF"] = Coupon(
+        kind: Kind.Percent(pct: 10),
+        min_total: 0,
+        expires: 30,
+        max_uses: 3,
+    )
+    engine.coupons["BIG20"] = Coupon(
+        kind: Kind.Capped(pct: 20, limit: 2500),
+        min_total: 10000,
+        expires: 30,
+        max_uses: 2,
+    )
+    engine.coupons["FIVER"] = Coupon(
+        kind: Kind.Fixed(cents: 500),
+        min_total: 2000,
+        expires: 10,
+        max_uses: 1,
+    )
     engine.price(1, 4000, 5, "TENOFF,FIVER")
     engine.price(2, 20000, 6, "BIG20,TENOFF,FIVER")
     engine.price(3, 3000, 7, "FIVER,NOPE,BIG20")

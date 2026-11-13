@@ -3,9 +3,26 @@
 
 fn small_names() List[str]
     [
-        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-        "seventeen", "eighteen", "nineteen",
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
     ]
 
 fn tens_names() List[str]
@@ -92,7 +109,25 @@ fn from_words(text str) int?
     total
 
 fn main()
-    for n in [0, 7, 13, 20, 42, 100, 101, 999, 1000, 1234, 20000, 100001, 1000000, 7654321, 2000000000, 1234567891, -45]
+    for n in [
+        0,
+        7,
+        13,
+        20,
+        42,
+        100,
+        101,
+        999,
+        1000,
+        1234,
+        20000,
+        100001,
+        1000000,
+        7654321,
+        2000000000,
+        1234567891,
+        -45,
+    ]
         print("{n:>11}  {to_words(n)}")
     for p in ["forty-two", "one thousand two hundred thirty-four", "minus nine", "seven bazillion"]
         v := from_words(p) else

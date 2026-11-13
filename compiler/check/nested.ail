@@ -534,7 +534,10 @@ fn Checker.complete(self, t Ty, hs List[str]) bool
         # expr.match.14: the fields that matter, by name; `_` for none.
         Struct(si, _) =>
             fs := prog.structs[si].fields
-            parts := ["{fs[j].name}: {args[j]}" for j in 0..args.len() if j < fs.len() and args[j] != "_"]
+            parts := [
+                "{fs[j].name}: {args[j]}"
+                for j in 0..args.len() if j < fs.len() and args[j] != "_"
+            ]
             if parts.len() == 0
                 return "_"
             return "{prog.structs[si].name}({parts.join(", ")})"

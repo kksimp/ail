@@ -18,7 +18,12 @@ fn fcfs(jobs List[Job]) List[Finish]
     mut out := List[Finish]()
     for j in jobs
         tick = tick.max(j.arrival) + j.burst
-        out.push(Finish(name: j.name, finish: tick, turnaround: tick - j.arrival, waiting: tick - j.arrival - j.burst))
+        out.push(Finish(
+            name: j.name,
+            finish: tick,
+            turnaround: tick - j.arrival,
+            waiting: tick - j.arrival - j.burst,
+        ))
     out
 
 fn round_robin(jobs List[Job], quantum int) List[Finish]
@@ -47,7 +52,12 @@ fn round_robin(jobs List[Job], quantum int) List[Finish]
             queue.push(i)
         else
             j := jobs[i]
-            done.push(Finish(name: j.name, finish: tick, turnaround: tick - j.arrival, waiting: tick - j.arrival - j.burst))
+            done.push(Finish(
+                name: j.name,
+                finish: tick,
+                turnaround: tick - j.arrival,
+                waiting: tick - j.arrival - j.burst,
+            ))
     done
 
 fn report(title str, rows List[Finish])

@@ -102,8 +102,19 @@ fn symbol(c int) str
 
 fn main() !
     inputs := [
-        "1.0.0", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta",
-        "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "2.1.0+build.5", "1.10.0", "1.2.0", "1.2", "1.x.0",
+        "1.0.0",
+        "1.0.0-alpha",
+        "1.0.0-alpha.1",
+        "1.0.0-alpha.beta",
+        "1.0.0-beta",
+        "1.0.0-beta.2",
+        "1.0.0-beta.11",
+        "1.0.0-rc.1",
+        "2.1.0+build.5",
+        "1.10.0",
+        "1.2.0",
+        "1.2",
+        "1.x.0",
     ]
     mut vs := List[Ver]()
     for t in inputs
@@ -113,7 +124,12 @@ fn main() !
         vs.push(parsed)
     for item in sort_versions(vs)
         print(show_ver(item))
-    pairs := [("1.0.0", "1.0.0-rc.1"), ("1.0.0-beta.2", "1.0.0-beta.11"), ("2.1.0+a", "2.1.0+b"), ("1.9.9", "1.10.0")]
+    pairs := [
+        ("1.0.0", "1.0.0-rc.1"),
+        ("1.0.0-beta.2", "1.0.0-beta.11"),
+        ("2.1.0+a", "2.1.0+b"),
+        ("1.9.9", "1.10.0"),
+    ]
     for p in pairs
         x := parse_ver(p.0)?
         y := parse_ver(p.1)?

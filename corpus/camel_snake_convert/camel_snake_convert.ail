@@ -73,7 +73,16 @@ fn detect(ident str) str
     "lower"
 
 fn main()
-    names := ["parseHttpResponse", "HTTPServerConfig", "user_id_map", "MAX_RETRY_COUNT", "background-color", "getHTTP2Client", "x", "XMLParser"]
+    names := [
+        "parseHttpResponse",
+        "HTTPServerConfig",
+        "user_id_map",
+        "MAX_RETRY_COUNT",
+        "background-color",
+        "getHTTP2Client",
+        "x",
+        "XMLParser",
+    ]
     for n in names
         print("{n:<18} {detect(n):<9} {to_snake(n)} | {to_camel(n)} | {to_pascal(n)} | {to_kebab(n)}")
     print(to_screaming("retryLimitMs"))

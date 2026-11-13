@@ -74,14 +74,7 @@ fn Field.show_open(self, seen List[int]) List[str]
     out
 
 fn main()
-    f := Field.parse([
-        "..*.....",
-        "........",
-        ".*..*...",
-        "........",
-        "......*.",
-        "..*.....",
-    ])
+    f := Field.parse(["..*.....", "........", ".*..*...", "........", "......*.", "..*....."])
     print("mines: {f.cells.sum()} on {f.cols}x{f.rows}")
     for line in f.hints()
         print(line)

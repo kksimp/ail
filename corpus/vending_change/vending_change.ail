@@ -56,7 +56,17 @@ fn describe(denoms List[int], plan List[int]) str
 
 fn main()
     mut till := Till(denoms: [100, 25, 20, 5], counts: [2, 3, 3, 8])
-    sales := [(60, 100), (75, 100), (35, 200), (100, 100), (120, 100), (45, 100), (45, 100), (10, 100), (85, 100)]
+    sales := [
+        (60, 100),
+        (75, 100),
+        (35, 200),
+        (100, 100),
+        (120, 100),
+        (45, 100),
+        (45, 100),
+        (10, 100),
+        (85, 100),
+    ]
     for sale in sales
         plan := till.change(sale.0, sale.1) else err
             print("sale {sale.0} paid {sale.1}: {err}")

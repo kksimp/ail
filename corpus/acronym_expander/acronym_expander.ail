@@ -51,7 +51,13 @@ fn unknown(text str, table Map[str, str]) List[str]
     found.sorted()
 
 fn main()
-    table := load_table(["API = Application Programming Interface", "CPU = Central Processing Unit", "GC = Garbage Collector", "ABI = Application Binary Interface", "IR = Intermediate Representation"])
+    table := load_table([
+        "API = Application Programming Interface",
+        "CPU = Central Processing Unit",
+        "GC = Garbage Collector",
+        "ABI = Application Binary Interface",
+        "IR = Intermediate Representation",
+    ])
     text := "The GC pauses the CPU rarely. Each API call uses the ABI, and the IR (lowered by the compiler) feeds the CPU backend; the API stays stable, but the XYZ and QQ parts are new. Does GC, again, matter?"
     print(expand(text, table))
     print("unknown: {unknown(text, table).join(", ")}")

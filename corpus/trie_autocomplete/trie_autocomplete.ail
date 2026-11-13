@@ -68,7 +68,19 @@ fn show(hits List[Hit]) str
 
 fn main()
     mut t := Trie.new()
-    words := ["car", "card", "care", "careful", "cart", "cat", "catalog", "dog", "dot", "door", "do"]
+    words := [
+        "car",
+        "card",
+        "care",
+        "careful",
+        "cart",
+        "cat",
+        "catalog",
+        "dog",
+        "dot",
+        "door",
+        "do",
+    ]
     weights := [50, 20, 35, 5, 12, 40, 8, 30, 10, 15, 3]
     for i in 0..words.len()
         t.insert(words[i], weights[i])

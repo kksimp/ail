@@ -49,15 +49,27 @@ fn diff(before Map[str, str], after Map[str, str]) List[str]
 
 fn old_text() str
     lines := [
-        "# service config", "name = billing", "port: 8080", "! legacy",
-        "hosts = a.example.org, \\", "        b.example.org", "debug=true", "timeout = 30",
+        "# service config",
+        "name = billing",
+        "port: 8080",
+        "! legacy",
+        "hosts = a.example.org, \\",
+        "        b.example.org",
+        "debug=true",
+        "timeout = 30",
     ]
     lines.join("\n")
 
 fn new_text() str
     lines := [
-        "# service config", "name = billing", "port: 9090", "hosts = a.example.org, \\",
-        "        c.example.org", "timeout = 30", "retries = 5", "region:eu",
+        "# service config",
+        "name = billing",
+        "port: 9090",
+        "hosts = a.example.org, \\",
+        "        c.example.org",
+        "timeout = 30",
+        "retries = 5",
+        "region:eu",
     ]
     lines.join("\n")
 

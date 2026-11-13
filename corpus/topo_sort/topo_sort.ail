@@ -71,13 +71,7 @@ fn main()
         "core:",
         "docs: app",
     ])
-    report("cyclic", [
-        "a: b",
-        "b: c",
-        "c: a",
-        "d: a",
-        "e:",
-    ])
+    report("cyclic", ["a: b", "b: c", "c: a", "d: a", "e:"])
 
 @test fn dependencies_come_first()
     g := build(["b: a", "c: b", "a:"])

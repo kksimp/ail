@@ -51,7 +51,15 @@ fn main() !
     dir := fs.make_temp_dir("corpus_kv_store_file")?
     p := path.join(dir, "store.db")
     print("-- session 1")
-    session(p, ["set name ada", "set url http://x.org/?a=b", "incr visits", "incr visits", "get name", "get missing", "frobnicate"])?
+    session(p, [
+        "set name ada",
+        "set url http://x.org/?a=b",
+        "incr visits",
+        "incr visits",
+        "get name",
+        "get missing",
+        "frobnicate",
+    ])?
     print("-- file after session 1")
     for l in fs.read_text(p)?.lines()
         print(l)

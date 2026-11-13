@@ -73,9 +73,18 @@ fn main() !
     write_log(p)?
     everything := Query(min_rank: 0, needle: "", after: "00:00:00", before: "99:99:99")
     show("all valid", filter_file(p, everything)?)
-    show("warn and up", filter_file(p, Query(min_rank: 2, needle: "", after: "00:00:00", before: "99:99:99"))?)
-    show("db entries", filter_file(p, Query(min_rank: 0, needle: "db:", after: "00:00:00", before: "99:99:99"))?)
-    show("10:02 to 10:04", filter_file(p, Query(min_rank: 0, needle: "", after: "10:02:00", before: "10:04:00"))?)
+    show(
+        "warn and up",
+        filter_file(p, Query(min_rank: 2, needle: "", after: "00:00:00", before: "99:99:99"))?,
+    )
+    show(
+        "db entries",
+        filter_file(p, Query(min_rank: 0, needle: "db:", after: "00:00:00", before: "99:99:99"))?,
+    )
+    show(
+        "10:02 to 10:04",
+        filter_file(p, Query(min_rank: 0, needle: "", after: "10:02:00", before: "10:04:00"))?,
+    )
     mut counts := Map[str, int]()
     for e in filter_file(p, everything)?
         counts[e.level] += 1

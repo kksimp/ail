@@ -62,8 +62,16 @@ fn show_route(net Net, src str, dst str)
 
 fn main()
     net := build("ABCDEFGHIJ", [
-        "A-B", "A-C", "B-D", "C-D", "D-E", "E-F",
-        "C-G", "G-F", "F-H", "I-J",
+        "A-B",
+        "A-C",
+        "B-D",
+        "C-D",
+        "D-E",
+        "E-F",
+        "C-G",
+        "G-F",
+        "F-H",
+        "I-J",
     ])
     prev := search(net, 0)
     for i in 0..net.names.len()

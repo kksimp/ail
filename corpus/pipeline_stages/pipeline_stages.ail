@@ -76,11 +76,17 @@ fn main()
     assert_eq(got[0].qty, 1)
 
 @test fn validate_drops_zero_quantity()
-    os := [Order(customer: "a", item: "i", qty: 0, price: 1), Order(customer: "b", item: "i", qty: 2, price: 1)]
+    os := [
+        Order(customer: "a", item: "i", qty: 0, price: 1),
+        Order(customer: "b", item: "i", qty: 2, price: 1),
+    ]
     assert_eq(validate_stage(os).len(), 1)
 
 @test fn aggregate_sums_per_customer()
-    os := [Order(customer: "a", item: "i", qty: 1, price: 4), Order(customer: "a", item: "j", qty: 2, price: 3)]
+    os := [
+        Order(customer: "a", item: "i", qty: 1, price: 4),
+        Order(customer: "a", item: "j", qty: 2, price: 3),
+    ]
     by := aggregate_stage(os, price_stage(os))
     assert_eq(by["a"].orders, 2)
     assert_eq(by["a"].amount, 10)

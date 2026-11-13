@@ -63,7 +63,11 @@ fn main()
     print("with 4 permits: peak {wide.peak}, total wait {wide.total_wait}")
 
 @test fn permits_bound_the_holders()
-    jobs := [Job(name: "a", arrival: 0, hold: 3), Job(name: "b", arrival: 0, hold: 3), Job(name: "c", arrival: 0, hold: 3)]
+    jobs := [
+        Job(name: "a", arrival: 0, hold: 3),
+        Job(name: "b", arrival: 0, hold: 3),
+        Job(name: "c", arrival: 0, hold: 3),
+    ]
     r := simulate(jobs, 2)
     assert_eq(r.peak, 2)
     assert_eq(r.total_wait, 3)

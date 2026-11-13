@@ -29,7 +29,11 @@ fn report_lines(rows List[Row]) List[str]
     for r in rows
         grand += r.total()
     rule := "-".repeat(45)
-    mut out := ["SALES REPORT", "{"region":<8}{"Q1":>6}{"Q2":>6}{"Q3":>6}{"Q4":>6}{"total":>7}{"share":>6}", rule]
+    mut out := [
+        "SALES REPORT",
+        "{"region":<8}{"Q1":>6}{"Q2":>6}{"Q3":>6}{"Q4":>6}{"total":>7}{"share":>6}",
+        rule,
+    ]
     for r in rows
         out.push(format_row(r, grand))
     out.push(rule)

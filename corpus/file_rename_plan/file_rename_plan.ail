@@ -6,7 +6,7 @@ struct Move
     src str
     dst str
 
-fn split_name(name str) (str, str)
+fn split_name(name str)(str, str)
     parts := name.split(".")
     if parts.len() < 2
         return (name, "")

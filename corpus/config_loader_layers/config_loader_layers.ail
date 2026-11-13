@@ -43,8 +43,14 @@ fn get_int(m Merged, key str, fallback int) int
 
 fn main() !
     dir := fs.make_temp_dir("corpus_config_loader_layers")?
-    fs.write_text(path.join(dir, "defaults.conf"), "host = localhost\nport = 8080\nworkers = 2\ndebug = false\n")?
-    fs.write_text(path.join(dir, "user.conf"), "# user prefs\nworkers = 4\n\ntheme = dark\nport = 9090\n")?
+    fs.write_text(
+        path.join(dir, "defaults.conf"),
+        "host = localhost\nport = 8080\nworkers = 2\ndebug = false\n",
+    )?
+    fs.write_text(
+        path.join(dir, "user.conf"),
+        "# user prefs\nworkers = 4\n\ntheme = dark\nport = 9090\n",
+    )?
     layers := [
         Layer(name: "defaults", file: "defaults.conf"),
         Layer(name: "user", file: "user.conf"),

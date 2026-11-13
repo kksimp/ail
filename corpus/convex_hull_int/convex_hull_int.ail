@@ -57,14 +57,31 @@ fn report(name str, pts List[Pt])
 fn main()
     scattered := [Pt(x: i * 7 % 11, y: i * 5 % 13) for i in 0..20]
     report("scattered", scattered)
-    square := [Pt(x: 0, y: 0), Pt(x: 4, y: 0), Pt(x: 4, y: 4), Pt(x: 0, y: 4),
-        Pt(x: 2, y: 2), Pt(x: 2, y: 0), Pt(x: 4, y: 2), Pt(x: 1, y: 3), Pt(x: 0, y: 0)]
+    square := [
+        Pt(x: 0, y: 0),
+        Pt(x: 4, y: 0),
+        Pt(x: 4, y: 4),
+        Pt(x: 0, y: 4),
+        Pt(x: 2, y: 2),
+        Pt(x: 2, y: 0),
+        Pt(x: 4, y: 2),
+        Pt(x: 1, y: 3),
+        Pt(x: 0, y: 0),
+    ]
     report("square with extras", square)
     line := [Pt(x: 3, y: 3), Pt(x: 1, y: 1), Pt(x: 2, y: 2), Pt(x: 5, y: 5)]
     report("collinear", line)
     report("pair", [Pt(x: 1, y: 2), Pt(x: 1, y: 2), Pt(x: 3, y: 4)])
-    ring := [Pt(x: 5, y: 0), Pt(x: 3, y: 4), Pt(x: -3, y: 4), Pt(x: -5, y: 0),
-        Pt(x: -3, y: -4), Pt(x: 3, y: -4), Pt(x: 0, y: 0), Pt(x: 1, y: 1)]
+    ring := [
+        Pt(x: 5, y: 0),
+        Pt(x: 3, y: 4),
+        Pt(x: -3, y: 4),
+        Pt(x: -5, y: 0),
+        Pt(x: -3, y: -4),
+        Pt(x: 3, y: -4),
+        Pt(x: 0, y: 0),
+        Pt(x: 1, y: 1),
+    ]
     report("ring", ring)
 
 @test fn triangle_with_inner_point()

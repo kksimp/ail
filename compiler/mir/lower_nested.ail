@@ -101,7 +101,13 @@ fn Lower.labeled_test(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
             if struct_name(s.ty) == none
                 n := enum_name(s.ty) else return false
                 mid := new_block()
-                branch(op("eq", [tag, konst(case_index(n, name), Ty.Int)], Ty.Bool), mid, [], no, [])
+                branch(
+                    op("eq", [tag, konst(case_index(n, name), Ty.Int)], Ty.Bool),
+                    mid,
+                    [],
+                    no,
+                    [],
+                )
                 seal(mid)
                 cur = mid
             if subs.len() == 0

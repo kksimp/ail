@@ -21,7 +21,15 @@ fn record_max(best Atomic[int], v int)
         if best.cas(cur, v)
             break
 
-fn worker(id int, rounds int, total Atomic[int], hits Atomic[int], best Atomic[int], first Atomic[bool], claims Atomic[int])
+fn worker(
+    id int,
+    rounds int,
+    total Atomic[int],
+    hits Atomic[int],
+    best Atomic[int],
+    first Atomic[bool],
+    claims Atomic[int],
+)
     for i in 0..rounds
         v := sample(id, i)
         total.add(v)

@@ -48,7 +48,12 @@ fn main() !
     show("by age desc", sort_rows(body, column(header, "age"), true, true))
     show("by salary", sort_rows(body, column(header, "salary"), true, false))
     by_name := sort_rows(body, column(header, "name"), false, false)
-    two_key := sort_rows(sort_rows(by_name, column(header, "salary"), true, true), column(header, "dept"), false, false)
+    two_key := sort_rows(
+        sort_rows(by_name, column(header, "salary"), true, true),
+        column(header, "dept"),
+        false,
+        false,
+    )
     show("dept, then salary desc", two_key)
     dir := fs.make_temp_dir("corpus_csv_sort_tool")?
     out := path.join(dir, "sorted.csv")

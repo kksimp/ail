@@ -41,8 +41,24 @@ fn count_prefix(edits List[str], prefix str) int
     n
 
 fn main()
-    before := ["fn main()", "    x := 1", "    y := 2", "    print(x + y)", "", "fn helper()", "    todo"]
-    after := ["fn main()", "    x := 1", "    z := 5", "    y := 2", "    print(x + y + z)", "", "fn helper()"]
+    before := [
+        "fn main()",
+        "    x := 1",
+        "    y := 2",
+        "    print(x + y)",
+        "",
+        "fn helper()",
+        "    todo",
+    ]
+    after := [
+        "fn main()",
+        "    x := 1",
+        "    z := 5",
+        "    y := 2",
+        "    print(x + y + z)",
+        "",
+        "fn helper()",
+    ]
     edits := diff(before, after)
     for e in edits
         print(e)

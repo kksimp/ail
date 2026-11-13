@@ -49,10 +49,34 @@ fn main() !
     lines := fs.read_text(p)?.lines()
     plain := Opts(ignore_case: false, invert: false, numbers: false)
     show("grep the story.txt", lines, "the", plain, false)
-    show("grep -i the story.txt", lines, "the", Opts(ignore_case: true, invert: false, numbers: false), false)
-    show("grep -n fox story.txt", lines, "fox", Opts(ignore_case: false, invert: false, numbers: true), false)
-    show("grep -v -n o story.txt", lines, "o", Opts(ignore_case: false, invert: true, numbers: true), false)
-    show("grep -ic dog story.txt", lines, "dog", Opts(ignore_case: true, invert: false, numbers: false), true)
+    show(
+        "grep -i the story.txt",
+        lines,
+        "the",
+        Opts(ignore_case: true, invert: false, numbers: false),
+        false,
+    )
+    show(
+        "grep -n fox story.txt",
+        lines,
+        "fox",
+        Opts(ignore_case: false, invert: false, numbers: true),
+        false,
+    )
+    show(
+        "grep -v -n o story.txt",
+        lines,
+        "o",
+        Opts(ignore_case: false, invert: true, numbers: true),
+        false,
+    )
+    show(
+        "grep -ic dog story.txt",
+        lines,
+        "dog",
+        Opts(ignore_case: true, invert: false, numbers: false),
+        true,
+    )
     fs.remove(p)?
     fs.remove(dir)?
 

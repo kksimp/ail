@@ -123,4 +123,12 @@ fn main() !
 
 @test fn renders_a_small_document()
     got := render(parse("a=1\n[s]\nb=x\nc=true"))
-    assert_eq(got, ["\{", "  \"a\": 1,", "  \"s\": \{", "    \"b\": \"x\",", "    \"c\": true", "  }", "}"])
+    assert_eq(got, [
+        "\{",
+        "  \"a\": 1,",
+        "  \"s\": \{",
+        "    \"b\": \"x\",",
+        "    \"c\": true",
+        "  }",
+        "}",
+    ])

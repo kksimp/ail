@@ -1065,7 +1065,10 @@ fn attr_named(f ast.FnDecl, name str) ast.Attr?
 
 ## The fixtures a test lists with `@needs("NAME")` (test.fixture.3).
 fn with_names(f ast.FnDecl) List[str]
-    [a.arg else "" for a in f.attrs if a.name == "needs" and not (a.arg else "").starts_with("cap:")]
+    [
+        a.arg else ""
+        for a in f.attrs if a.name == "needs" and not (a.arg else "").starts_with("cap:")
+    ]
 
 ## The capabilities a test lists with `@needs(net, proc)` and so may use (test.sandbox.1-2).
 SANDBOX_NEEDS := ["fs", "net", "net.serve", "proc"]
