@@ -1,0 +1,38 @@
+# C structs by value (ffi.struct.1-3, ADR 1074): `div` and `lldiv` return
+# structs of integers, and the complex functions of the C math library take
+# and return pairs of `float` and of `f32` (float-only aggregates).
+struct Div
+    quot i32
+    rem i32
+
+struct LongDiv
+    quot int
+    rem int
+
+struct Complex
+    re float
+    im float
+
+struct Complex32
+    re f32
+    im f32
+
+extern c fn div(n i32, d i32) Div
+extern c fn lldiv(n int, d int) LongDiv
+extern c "m" fn cabs(z Complex) float
+extern c "m" fn csqrt(z Complex) Complex
+extern c "m" fn cabsf(z Complex32) f32
+extern c "m" fn csqrtf(z Complex32) Complex32
+
+fn main()
+    unsafe
+        d := div(17, 5)
+        print("{d.quot} {d.rem}")
+        l := lldiv(-17, 5)
+        print("{l.quot} {l.rem}")
+        print(cabs(Complex(re: 3.0, im: 4.0)))
+        s := csqrt(Complex(re: -4.0, im: 0.0))
+        print("{s.re} {s.im}")
+        print(cabsf(Complex32(re: 3.0.to_f32(), im: 4.0.to_f32())).to_float())
+        h := csqrtf(Complex32(re: 0.0.to_f32(), im: 2.0.to_f32()))
+        print("{h.re.to_float()} {h.im.to_float()}")

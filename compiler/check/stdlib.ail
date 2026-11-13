@@ -69,7 +69,7 @@ STD_FUNCTIONS := [
     ],
     ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
-    ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
+    ["mem", "alloc", "c_fn", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_exact", "read_line", "write_bytes"],
     [
         "net",

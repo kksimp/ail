@@ -4,8 +4,9 @@ Chapter key: `ffi`
 
 > **Status:** Drafted (partial). Specified and implemented: `extern c fn`
 > declarations, `use c "header.h"` (`ffi.decl.1`, a subset reader, ADR 0926; constants, enums and function-pointer types `ffi.decl.4-5`, ADR 1010), the
-> type mapping, loading, and calls on Linux, macOS and Windows. Exports are specified (`ffi.export.1-3`); the library output is not built yet. Variadic `extern c fn` calls are specified (`ffi.var.1-4`). Not yet specified: callbacks,
-> structs by value, and header search configuration.
+> type mapping, loading, and calls on Linux, macOS and Windows. Exports are specified (`ffi.export.1-3`); the library output is not built yet. Variadic `extern c fn` calls are specified (`ffi.var.1-4`), and so are
+> structs by value (`ffi.struct.1-3`) and callbacks from C into AIL (`ffi.cb.1-4`, ADR 1074). Not yet specified: structs by value in
+> callbacks, exports and variadic calls, and header search configuration.
 
 ## Declarations
 
@@ -32,9 +33,12 @@ parameters. The AIL name is the C symbol. *(ADR 0103, ADR 0431)*
 
 **ffi.decl.3** — Types used in C declarations MUST have C-compatible fixed
 layouts: `int`, `float`, `bool`, the sized numbers, and raw pointers `*T`
-(`unsafe.ptr.1`); the result may also be omitted. A parameter is not `mut`.
-At most six parameters are integer-like (everything but `float` and `f32`) and
-at most eight are `float` or `f32`. *(ADR 0103, ADR 0013, ADR 0432)*
+(`unsafe.ptr.1`); the result may also be omitted. A parameter may also be a
+struct by value (`ffi.struct.1`) or a callback `fn(...)` (`ffi.cb.1`), and the
+result a struct by value. A parameter is not `mut`. At most six parameters are
+integer-like (everything but `float`, `f32` and structs; a callback counts) and
+at most eight are `float` or `f32`; structs count toward neither.
+*(ADR 0103, ADR 0013, ADR 0432, ADR 1074)*
 
 ```ail fragment
 extern c "libm" fn hypot(a float, b float) float
@@ -91,8 +95,8 @@ after one that could not be read are left out, like a prototype the FFI cannot
 carry. *(ADR 1010)*
 **ffi.decl.5** — A function-pointer parameter (`int (*cb)(int)`) and a
 `typedef` of a function-pointer type are `*u8`. Calling a function that takes
-one is as unsafe as any C call (`ffi.call.1`); AIL does not yet make a C
-callback, so the value is a pointer the program got from C or `0`. A union
+one is as unsafe as any C call (`ffi.call.1`); the value is `mem.c_fn(f)`
+(`ffi.cb.3`), a pointer the program got from C, or `mem.null()`. A union
 behind a pointer is `*u8` like a struct. A union or struct by value, a bit-field
 struct's fields and a function that returns a function pointer are left out
 until `@layout(c)` (ADR 0952) maps struct fields. *(ADR 1010)*
@@ -174,6 +178,156 @@ extern c fn bad(...) i32
 
 fn main()
     print(1)
+```
+
+## Structs by value
+
+**ffi.struct.1** — A struct can be a parameter or the result of an `extern c fn`
+when every field is `int`, `float`, `f32`, `bool`, a sized number, a raw
+pointer or such a struct, and the struct has no type parameters, no
+invariants, at least one field, and is neither unique nor an error type.
+Anything else is error `ffi.struct.1`, which names the field. *(ADR 1074)*
+
+```ail error=ffi.struct.1
+struct Named
+    name str
+    n i32
+
+extern c fn takes(x Named) i32
+
+fn main()
+    print(1)
+```
+
+**ffi.struct.2** — Across the call the struct has its C layout: the fields in
+declaration order, each aligned to its size (`int`, `float`, `u64` and pointers
+8 bytes, `i32`, `u32` and `f32` 4, `i16` and `u16` 2, `i8`, `u8` and `bool` 1),
+the size rounded up to the largest alignment. It is passed and returned as the
+platform's C convention says: System V x86-64 classifies each eightbyte as
+integer or SSE and passes a struct over 16 bytes on the stack; AAPCS64 passes a
+homogeneous aggregate of one to four `float`s or `f32`s in float registers, any
+other struct up to 16 bytes in integer registers and a larger one by reference,
+with `x8` for a large result; Win64 passes a struct of 1, 2, 4 or 8 bytes in a
+register of its position and any other by reference to a copy, with a hidden
+first argument for such a result. A struct that no longer fits the registers
+goes on the stack. *(ADR 1074)*
+
+**ffi.struct.3** — C receives a copy of the argument, and the result is a new
+struct value, so the call shares nothing with AIL: a struct is a value
+(`own.val.1`). A struct by value is not allowed as a variadic argument
+(`ffi.var.3`), in a callback's type (`ffi.cb.1`) or in an exported function
+(`ffi.export.2`). *(ADR 1074)*
+
+```c
+/* <stdlib.h> */
+typedef struct { int quot; int rem; } div_t;
+div_t div(int n, int d);
+```
+
+```ail tool=run,FILE expect=3 rules=ffi.struct.1,ffi.struct.2,ffi.struct.3
+struct Div
+    quot i32
+    rem i32
+
+extern c fn div(n i32, d i32) Div
+
+fn main()
+    unsafe
+        r := div(17, 5)
+        print(r.quot)
+        print(r.rem)
+```
+
+## Callbacks
+
+**ffi.cb.1** — A parameter of an `extern c fn` may have a function type
+`fn(A, ...) R` (`type.fn.1`): a C function pointer. Its parameters and result
+have C layouts (`ffi.decl.3`, no structs or callbacks), with at most six
+integer-like and eight float parameters, or there is no result. Anything else,
+or a callback as the result, is error `ffi.cb.1`. *(ADR 1074)*
+
+```ail error=ffi.cb.1
+extern c fn each(f fn(str) int)
+
+fn main()
+    print(1)
+```
+
+**ffi.cb.2** — The argument for such a parameter is the name of a declared
+function of exactly that type (`type.fn.2`); a local, a field, a call or any
+other expression is error `ffi.cb.2`, because C keeps only a code address and
+no state. State a callback needs goes through a `*u8` user-data parameter, as
+C libraries provide. *(ADR 1074)*
+
+```ail error=ffi.cb.2
+use std.mem
+
+extern c fn qsort(base *int, n u64, size u64, cmp fn(*int, *int) i32)
+
+fn compare(a *int, b *int) i32
+    0
+
+fn main()
+    f := compare
+    unsafe
+        p := mem.alloc(2, 0)
+        qsort(p, 2, 8, f)
+```
+
+**ffi.cb.3** — `mem.c_fn(f)` is the same C entry of the declared function `f`
+as a `*u8`, for a function-pointer parameter read from a header
+(`ffi.decl.5`), a variadic argument or a pointer stored in C memory. `f` names
+a declared function whose type `ffi.cb.1` allows; anything else is error
+`ffi.cb.3`. Like every `std.mem` function it is unsafe (`unsafe.op.1`).
+*(ADR 1074)*
+
+```ail error=ffi.cb.3
+use std.mem
+
+fn greet(name str) int
+    name.len()
+
+fn main()
+    unsafe
+        p := mem.c_fn(greet)
+        print(p.is_null())
+```
+
+**ffi.cb.4** — When C calls the entry, each argument becomes an AIL value as
+`ffi.map.1-2` say for a result (a narrow integer extended again, a `bool` its
+low byte, an `f32` widened), the function runs, and its result goes back as
+`ffi.map.1` says for an argument. The entry MAY run only on a thread AIL
+started (the main thread or a task's), since the collector finds values only
+on those stacks; on any other thread it traps with `ffi.cb.4`. A value that
+only C memory holds is not seen by the collector, so a callback reaches AIL
+data through what the program keeps alive itself. A trap inside a callback
+ends the program as anywhere else; nothing unwinds through the C frames.
+*(ADR 1074)*
+
+```ail tool=run,FILE expect=3 rules=ffi.cb.1,ffi.cb.2,ffi.cb.3,ffi.cb.4
+use std.mem
+
+extern c fn qsort(base *int, n u64, size u64, cmp fn(*int, *int) i32)
+
+fn compare(a *int, b *int) i32
+    mut d := 0
+    unsafe
+        d = a.read() - b.read()
+    if d < 0
+        return (-1).to_i32()
+    (if d > 0 then 1 else 0).to_i32()
+
+fn main()
+    unsafe
+        p := mem.alloc(3, 0)
+        p.write(19)
+        p.offset(1).write(3)
+        p.offset(2).write(7)
+        qsort(p, 3, 8, compare)
+        print(p.read())
+        print(p.offset(2).read())
+        print(mem.c_fn(compare).is_null())
+        mem.free(p)
 ```
 
 ## Type mapping

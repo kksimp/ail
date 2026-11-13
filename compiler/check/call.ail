@@ -148,6 +148,8 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             binds = explicit_args(n, s.generics[s.owner..s.owner + s.declared], targs, npos)
         if has_attr(prog.fns[i], "variadic c")
             return check_variadic(n, s, args, npos, expect)
+        if prog.fns[i].ext != none
+            return check_c_call(n, s, binds, args, npos, expect)
         return check_call(n, s, binds, args, none, npos, expect)
     if v := bare_variant(n, npos, expect)
         return variant_literal(v.enum_index, v.variant, none, args, npos, expect)

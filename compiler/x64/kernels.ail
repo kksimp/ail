@@ -26,6 +26,7 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_exp"
         or name == "rt.fill"
         or is_aes_kernel(name)
+        or is_ffi_kernel(name)
 
 ## Add the kernel `name` to `img`.
 pub fn gen_kernel(mut img codegen.Image, name str)
@@ -46,6 +47,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_exp" => kernel_exp(mut a)
         "rt.fill" => kernel_fill(mut a)
         "rt.aes_hw_ok" | "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
+        "rt.ffi_ccall" | "rt.ffi_ccall_win" => kernel_ffi_ccall(mut a, name == "rt.ffi_ccall_win")
         _ => kernel_scal(mut a)
     a.resolve_labels()
     base := img.code.len()

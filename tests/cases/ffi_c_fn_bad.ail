@@ -1,0 +1,10 @@
+# ffi.cb.3: `mem.c_fn` takes a declared function of C types.
+use std.mem
+
+fn greet(name str) int
+    name.len()
+
+fn main()
+    unsafe
+        p := mem.c_fn(greet)
+        print(p.is_null())
