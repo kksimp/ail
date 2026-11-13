@@ -6,7 +6,7 @@ tests: 12 (`ail test` lists them)
 
 ## a64 (90 items)
 
-## api (296 items)
+## api (300 items)
 
 ## ast (175 items)
 

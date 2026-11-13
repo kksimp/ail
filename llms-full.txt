@@ -12,7 +12,7 @@ The full language card, then the how-tos (`ail ask how WORDS` finds one). Genera
 
 ```sh
 ./ail run FILE.ail           # check, then run
-./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail check --json FILE.ail  # `ok` line when clean, else exit 2; each error cites a rule and ends `next:`
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail api --text FILE.ail    # declarations and `##` docs without bodies
@@ -342,6 +342,11 @@ for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
         continue
     if x > 9
         break
+
+outer: for r in rows       # a label: `break outer` / `continue outer` from a nested loop
+    for c in r
+        if c == 0
+            continue outer
 
 label := match c     # must cover every variant; `_` covers the rest
     Red => "red"

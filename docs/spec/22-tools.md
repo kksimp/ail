@@ -332,10 +332,13 @@ fn main()
 
 **check.exit.1** — `ail check` exits 0 when the program has no error (warnings
 allowed) and 2 when it has one or the command line is wrong. `ail run` of a
-program that does not compile prints the diagnostics and exits 1 without
-running it; a trap exits 1; otherwise `ail run` exits with the program's status.
+program that does not compile prints the diagnostics and exits 2 without
+running it, as `ail check` does; a trap exits 1; otherwise `ail run` exits with
+the program's status.
 `ail test` of a program that does not compile exits non-zero, and 1 when a test
-fails. The gate checks these on macOS, Linux and Windows
+fails. `ail test` of a file with no tests prints `no tests found in FILE` before
+the `0 passed, 0 failed` line (`--json`: `"no_tests":true` in the summary) and exits 0,
+since nothing failed. The gate checks these on macOS, Linux and Windows
 ([ADR 1113](../decisions/1113-check-output-for-agents.md)).
 
 ```ail tool=check,FILE expect=error status=2 rules=check.exit.1
@@ -714,7 +717,10 @@ there are lines, 1 when there are none, 2 for an error.
 
 **api.find.2** — The words are matched against the standard library's rules in
 the spec: a rule `**std.M.N**` whose text starts with a backticked signature
-`name(params) ret ! Error` describes one function `M.name`. A function scores 6
+`name(params) ret ! Error` describes one function `M.name`; a run of signatures
+joined by `, ` or `and` describes each of them, and so does the run after
+`use std.M` provides. A line shows the module and the signature, with the module
+left out when the signature starts with it (`net.open(...)`). A function scores 6
 for each word that is its name, 3 for each word its name contains (of three
 letters or more), 2 for each word that is its module, and 1 for each word (or
 its plural or singular) in the rule's text. Filler words (`a`, `the`, `of`,
@@ -728,9 +734,13 @@ name.
 
 **api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
-and `! Error` is ignored. A function scores 6 when its parameter types equal
-the asked ones in order, else 1 for each asked type among its parameters, and 4
-when its result type equals the asked one.
+and `! Error` is ignored. A built-in method's receiver is its first parameter,
+so `str.to_int() int?` has the shape `(str) int?`. A function scores 6 when its
+parameter types equal the asked ones in order, else 1 for each asked type among
+its parameters, and 4 when its result type equals the asked one. It is printed
+only when its parameters equal the asked ones (and its result does, when one was
+asked), or its result equals the asked one and at least one asked parameter type
+is among its parameters.
 
 **api.find.4** — A query that nothing answers exits 1 and prints
 `nothing in std matches WORDS` (`api.find.5`). No words, or an unknown option,
@@ -794,6 +804,26 @@ fn main()
 ```
 
 ```ail tool=ask,std,sort,list,by,key expect=List.sorted(by: rules=api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,yaml expect=parse(text rules=api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,parse,int,hex expect=to_int(radix) rules=api.find.2,api.find.5
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(str)int? expect=str.to_int rules=api.find.3
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,current,date expect=date.now() rules=api.find.2
 fn main()
     print(1)
 ```

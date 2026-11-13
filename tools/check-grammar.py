@@ -636,7 +636,13 @@ def main():
     verbose = "--verbose" in args
     args = [a for a in args if a != "--verbose"]
     sys.setrecursionlimit(1000000)
-    threading.stack_size(512 * 1024 * 1024)
+    # Windows refuses a 512 MB thread stack (ValueError): take the largest size the host allows.
+    for mb in (512, 256, 64):
+        try:
+            threading.stack_size(mb * 1024 * 1024)
+            break
+        except (ValueError, RuntimeError):
+            continue
     result = []
 
     def go():

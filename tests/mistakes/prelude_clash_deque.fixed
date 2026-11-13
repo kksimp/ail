@@ -1,6 +1,0 @@
-struct DoubleQueue
-    id int
-
-fn main()
-    t := DoubleQueue(id: 1)
-    print(t.id)

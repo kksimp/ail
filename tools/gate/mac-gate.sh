@@ -27,7 +27,7 @@ native_suites=$(grep -v '^#' tools/gate/suites.txt | tr '\n' ' ')
 # gate.ail is built once and the rest start from the build cache. nativex starts one process per core itself, so it runs
 # alone after the others. Nothing in the gate edits the compiler's sources, so the `ail` calls the suites make skip the
 # scan for sources newer than .native/ail (AIL_NATIVE_FRESH). times.log has the seconds each suite took, slowest first;
-# gate_native.log is every suite's log in order. No `wait -n`: the Mac's bash is 3.2.
+# suites.log is every suite's log in order. No `wait -n`: the Mac's bash is 3.2.
 # A first build, before AIL_NATIVE_FRESH is set, so `ail` brings .native/ail up to date with the sources (it does that scan
 # on the first call): the build of arith.ail is also the "native binaries start" check at the end.
 arith_ok=1
@@ -109,11 +109,11 @@ rest="$*"
 export NATIVE_COMPILER="$out/native-compiler"
 # shellcheck disable=SC2086
 pool "$jobs" $first $sel $rest
-: >"$out/gate_native.log"
+: >"$out/suites.log"
 shown=${GATE_SHOW:-60} # RED lines printed per red suite: all of a suite's failures in one pass, not the first 8
 for s in $sel $native_suites; do
   t=$(tag "$s")
-  cat "$out/gate_$t.log" >>"$out/gate_native.log" 2>/dev/null
+  cat "$out/gate_$t.log" >>"$out/suites.log" 2>/dev/null
   [ "$(cat "$out/gate_$t.rc" 2>/dev/null)" = 0 ] && continue
   fails=$((fails+1))
   if [ "$s" = selfhost1 ]; then echo "RED selfhost stage 1: ./ail build compiler/main.ail"; head -8 "$out/gate_$t.log" | cut -c1-200; continue; fi
@@ -122,8 +122,12 @@ for s in $sel $native_suites; do
 done
 # The shards of a suite must have run every item exactly once: all N shards reported, one shared total, and the ran counts add up.
 if [ "$fullrun" = 1 ] && [ "$fails" = 0 ]; then
-  bad=$(grep -h '^SHARD ' "$out"/gate_*.log | awk '{ split($3, a, "/"); k = $2; n[k] = a[2]; seen[k, a[1]]++; cnt[k]++; sum[k] += $7; if ($7 == 0) zero[k] = zero[k] " " a[1]; if (!(k in tot)) tot[k] = $5; else if (tot[k] != $5) mism[k] = 1 }
-    END { for (k in n) { if (zero[k] != "") print k ": shard" zero[k] " ran 0 items"; if (cnt[k] != n[k] || sum[k] != tot[k] || mism[k]) print k ": " cnt[k] " of " n[k] " shards, ran " sum[k] " of " tot[k]; for (j = 0; j < n[k]; j++) if (seen[k, j] != 1) print k ": shard " j " ran " seen[k, j] + 0 " times" } }')
+  # Only this run's suite logs (each has a .name): suites.log repeats their lines, and a stray older log must not count.
+  logs=""
+  for nf in "$out"/gate_*.name; do [ -f "$nf" ] || continue; t=${nf##*/gate_}; logs="$logs $out/gate_${t%.name}.log"; done
+  # shellcheck disable=SC2086 # $logs is a list of paths without spaces ($TMPDIR has none on the gate hosts)
+  bad=$(cat $logs 2>/dev/null | grep -h '^SHARD ' | awk '{ split($3, a, "/"); k = $2; n[k] = a[2]; seen[k, a[1]]++; cnt[k]++; sum[k] += $7; tots[k] = tots[k] " " a[1] ":" $5; if ($7 == 0) zero[k] = zero[k] " " a[1]; if (!(k in tot)) tot[k] = $5; else if (tot[k] != $5) mism[k] = 1 }
+    END { for (k in n) { if (zero[k] != "") print k ": shard" zero[k] " ran 0 items"; if (cnt[k] != n[k] || sum[k] != tot[k] || mism[k]) print k ": " cnt[k] " of " n[k] " shards, ran " sum[k] " of " tot[k] " (totals, shard:total:" tots[k] ")"; for (j = 0; j < n[k]; j++) if (seen[k, j] != 1) print k ": shard " j " ran " seen[k, j] + 0 " times" } }')
   if [ -n "$bad" ]; then fails=$((fails+1)); echo "RED shards do not cover their suite exactly once"; echo "$bad"; fi
 fi
 sort -rn "$out/times.unsorted" >"$out/times.log" 2>/dev/null; rm -f "$out/times.unsorted"

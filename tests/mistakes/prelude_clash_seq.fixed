@@ -1,6 +1,0 @@
-struct Sequence
-    id int
-
-fn main()
-    t := Sequence(id: 1)
-    print(t.id)

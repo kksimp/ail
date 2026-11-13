@@ -1,6 +1,0 @@
-struct Deque
-    id int
-
-fn main()
-    t := Deque(id: 1)
-    print(t.id)

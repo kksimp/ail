@@ -19,6 +19,7 @@ expr.hole.3
 expr.if.1
 expr.if.2
 expr.loop.1
+expr.loop.10
 expr.loop.4
 expr.loop.6
 expr.loop.8
@@ -44,6 +45,7 @@ lex.str.4
 lex.str.8
 mod.const.1
 mod.main.3
+mod.unit.1
 own.move.2
 own.param.2
 std.use.2
