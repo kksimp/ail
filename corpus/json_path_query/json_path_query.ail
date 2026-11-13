@@ -1,0 +1,173 @@
+## JSON path query: parses a JSON document (objects, arrays, strings, integers,
+## literals) into a flat node list, then answers paths such as
+## store.books[1].title or store.books[*].price, with * as a wildcard.
+
+struct Node
+    kind str
+    text str
+    keys List[str]
+    kids List[int]
+
+struct Doc
+    cs List[char]
+    pos int
+    nodes List[Node]
+
+fn skip_ws(mut d Doc)
+    while d.pos < d.cs.len() and d.cs[d.pos].is_space()
+        d.pos += 1
+
+fn add(mut d Doc, n Node) int
+    d.nodes.push(n)
+    d.nodes.len() - 1
+
+fn read_string(mut d Doc) str
+    d.pos += 1
+    mut out := ""
+    while d.pos < d.cs.len() and d.cs[d.pos] != '"'
+        out = "{out}{d.cs[d.pos]}"
+        d.pos += 1
+    d.pos += 1
+    out
+
+fn is_end(c char) bool
+    c == ',' or c == ']' or c == '\u{7d}' or c.is_space()
+
+fn parse_value(mut d Doc) int
+    skip_ws(mut d)
+    c := d.cs[d.pos]
+    if c == '"'
+        s := read_string(mut d)
+        return add(mut d, Node(kind: "str", text: s, keys: [], kids: []))
+    if c == '\u{7b}'
+        d.pos += 1
+        mut keys := List[str]()
+        mut kids := List[int]()
+        skip_ws(mut d)
+        while d.cs[d.pos] != '\u{7d}'
+            k := read_string(mut d)
+            skip_ws(mut d)
+            d.pos += 1
+            kid := parse_value(mut d)
+            keys.push(k)
+            kids.push(kid)
+            skip_ws(mut d)
+            if d.cs[d.pos] == ','
+                d.pos += 1
+                skip_ws(mut d)
+        d.pos += 1
+        return add(mut d, Node(kind: "obj", text: "", keys: keys, kids: kids))
+    if c == '['
+        d.pos += 1
+        mut items := List[int]()
+        skip_ws(mut d)
+        while d.cs[d.pos] != ']'
+            kid := parse_value(mut d)
+            items.push(kid)
+            skip_ws(mut d)
+            if d.cs[d.pos] == ','
+                d.pos += 1
+                skip_ws(mut d)
+        d.pos += 1
+        return add(mut d, Node(kind: "arr", text: "", keys: [], kids: items))
+    mut tok := ""
+    while d.pos < d.cs.len() and not is_end(d.cs[d.pos])
+        tok = "{tok}{d.cs[d.pos]}"
+        d.pos += 1
+    kind := if tok == "true" or tok == "false" or tok == "null" then "lit" else "num"
+    add(mut d, Node(kind: kind, text: tok, keys: [], kids: []))
+
+fn steps(path str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    for c in path.chars()
+        if c == '.' or c == '['
+            if cur != ""
+                out.push(cur)
+            cur = if c == '[' then "[" else ""
+        elif c == ']'
+            out.push("{cur}]")
+            cur = ""
+        else
+            cur = "{cur}{c}"
+    if cur != ""
+        out.push(cur)
+    out
+
+fn select(d Doc, start List[int], step str) List[int]
+    mut out := List[int]()
+    for idx in start
+        n := d.nodes[idx]
+        if step.starts_with("[")
+            if n.kind != "arr"
+                continue
+            inner := step.slice(1, step.len() - 1)
+            if inner == "*"
+                out.extend(n.kids)
+            else
+                i := inner.to_int() else continue
+                if i >= 0 and i < n.kids.len()
+                    out.push(n.kids[i])
+        elif n.kind == "obj"
+            for j in 0..n.keys.len()
+                if step == "*" or n.keys[j] == step
+                    out.push(n.kids[j])
+    out
+
+fn render(d Doc, idx int) str
+    n := d.nodes[idx]
+    if n.kind == "str"
+        return "\"{n.text}\""
+    if n.kind == "arr"
+        mut items := List[str]()
+        for k in n.kids
+            items.push(render(d, k))
+        return "[{items.join(",")}]"
+    if n.kind == "obj"
+        mut parts := List[str]()
+        for j in 0..n.keys.len()
+            parts.push("\"{n.keys[j]}\":{render(d, n.kids[j])}")
+        return "\{{parts.join(",")}}"
+    n.text
+
+fn query(d Doc, root int, path str) List[str]
+    mut cur := [root]
+    for st in steps(path)
+        cur = select(d, cur, st)
+    [render(d, i) for i in cur]
+
+fn load(text str) (Doc, int)
+    mut d := Doc(cs: text.chars(), pos: 0, nodes: [])
+    root := parse_value(mut d)
+    (d, root)
+
+fn sample() str
+    parts := [
+        "\{ \"store\": \{ \"name\": \"Corner Books\", \"open\": true,",
+        "  \"books\": [ \{ \"title\": \"Dune\", \"price\": 12, \"tags\": [\"scifi\", \"classic\"] },",
+        "    \{ \"title\": \"Emma\", \"price\": 9, \"tags\": [] },",
+        "    \{ \"title\": \"Ulysses\", \"price\": 21, \"tags\": [\"modern\"] } ],",
+        "  \"owner\": null } }",
+    ]
+    parts.join("\n")
+
+fn main()
+    d, root := load(sample())
+    print("nodes: {d.nodes.len()}")
+    paths := [
+        "store.name", "store.open", "store.books[1].title", "store.books[*].price",
+        "store.books[*].tags[0]", "store.books[2]", "store.owner", "store.*",
+        "store.books[9]", "store.nope.x",
+    ]
+    for p in paths
+        found := query(d, root, p)
+        print("{p} -> {found.len()}: {found.join(" ")}")
+
+@test fn splits_paths()
+    assert_eq(steps("a.b[2].c"), ["a", "b", "[2]", "c"])
+    assert_eq(steps("x[*][0]"), ["x", "[*]", "[0]"])
+
+@test fn misses_are_empty()
+    d, root := load("\{\"a\": 1}")
+    assert_eq(query(d, root, "b").len(), 0)
+    assert_eq(query(d, root, "a[0]").len(), 0)

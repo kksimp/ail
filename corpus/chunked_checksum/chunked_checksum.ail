@@ -1,0 +1,93 @@
+## Chunked checksum: writes a file of numbered records, reads it back in
+## fixed-size chunks with range reads, and records a CRC-32 per chunk plus a
+## root digest. After a byte is patched and more text is appended, comparing
+## the chunk tables shows exactly which chunks changed.
+use std.hash
+use std.file
+
+struct Chunk
+    index int
+    offset int
+    size int
+    crc str
+
+fn chunk_digests(p str, chunk_size int) !List[Chunk]
+    total := fs.metadata(p)?.size
+    mut out := List[Chunk]()
+    mut off := 0
+    mut idx := 0
+    while off < total
+        n := chunk_size.min(total - off)
+        data := fs.read_range(p, off, n)?
+        crc := hash.crc32(data).to_hex().pad_left(8, '0')
+        out.push(Chunk(index: idx, offset: off, size: n, crc: crc))
+        off += n
+        idx += 1
+    out
+
+fn changed_chunks(before List[Chunk], after List[Chunk]) List[int]
+    mut out := List[int]()
+    for i in 0..before.len().max(after.len())
+        if i >= before.len() or i >= after.len() or before[i].crc != after[i].crc
+            out.push(i)
+    out
+
+fn root_digest(chunks List[Chunk]) str
+    crcs := [c.crc for c in chunks]
+    hash.sha256(crcs.join(",")).slice(0, 16)
+
+fn show(chunks List[Chunk])
+    for c in chunks
+        print("  chunk {c.index} offset {c.offset:>4} size {c.size:>3} crc {c.crc}")
+    print("  root {root_digest(chunks)}")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_chunked_checksum")?
+    p := path.join(dir, "records.dat")
+    mut w := file.create(p)?
+    for i in 1..=100
+        w.write_line("rec {i:04} {i * i % 997:03}")?
+    w.close()?
+    print("size {fs.metadata(p)?.size}")
+    first := chunk_digests(p, 500)?
+    show(first)
+    fs.write_at(p, 620, "#".to_bytes())?
+    second := chunk_digests(p, 500)?
+    print("after patching byte 620: changed {changed_chunks(first, second)}")
+    fs.append_text(p, "end of file\n")?
+    third := chunk_digests(p, 500)?
+    print("after appending: changed {changed_chunks(second, third)}")
+    show(third)
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn chunks_cover_the_file()
+    dir := fs.make_temp_dir("corpus_chunked_checksum_t")?
+    p := path.join(dir, "t.bin")
+    fs.write_text(p, "0123456789")?
+    cs := chunk_digests(p, 4)?
+    assert_eq([c.size for c in cs], [4, 4, 2])
+    assert_eq(cs[2].offset, 8)
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn a_patch_changes_one_chunk()
+    dir := fs.make_temp_dir("corpus_chunked_checksum_p")?
+    p := path.join(dir, "t.bin")
+    fs.write_text(p, "aaaabbbbcccc")?
+    a := chunk_digests(p, 4)?
+    fs.write_at(p, 5, "X".to_bytes())?
+    b := chunk_digests(p, 4)?
+    assert_eq(changed_chunks(a, b), [1])
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn known_crc()
+    dir := fs.make_temp_dir("corpus_chunked_checksum_k")?
+    p := path.join(dir, "t.bin")
+    fs.write_text(p, "abc")?
+    cs := chunk_digests(p, 8)?
+    assert_eq(cs[0].crc, "352441c2")
+    fs.remove(p)?
+    fs.remove(dir)?

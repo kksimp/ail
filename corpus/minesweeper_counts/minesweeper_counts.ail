@@ -1,0 +1,108 @@
+## Minesweeper helper. Turns a mine map ('*' mine, '.' empty) into the hint
+## board with neighbour counts, then simulates a click on an empty cell and
+## prints the area that the flood-fill opening reveals ('#' stays hidden).
+
+struct Field
+    cols int
+    rows int
+    cells List[int]
+
+fn Field.parse(lines List[str]) Field
+    mut flat := List[int]()
+    for line in lines
+        for ch in line.chars()
+            flat.push(if ch == '*' then 1 else 0)
+    Field(cols: lines[0].len(), rows: lines.len(), cells: flat)
+
+fn Field.inside(self, x int, y int) bool
+    x >= 0 and x < cols and y >= 0 and y < rows
+
+fn Field.near(self, x int, y int) int
+    mut n := 0
+    for dy in -1..=1
+        for dx in -1..=1
+            if (dx != 0 or dy != 0) and inside(x + dx, y + dy)
+                n += cells[(y + dy) * cols + x + dx]
+    n
+
+fn Field.glyph(self, x int, y int) str
+    if cells[y * cols + x] == 1
+        return "*"
+    n := near(x, y)
+    if n == 0
+        return "."
+    "{n}"
+
+fn Field.hints(self) List[str]
+    mut out := List[str]()
+    for y in 0..rows
+        mut row := List[str]()
+        for x in 0..cols
+            row.push(glyph(x, y))
+        out.push(row.join(""))
+    out
+
+fn Field.reveal(self, sx int, sy int) List[int]
+    mut seen := List[int]()
+    for i in 0..cells.len()
+        seen.push(0)
+    mut queue := [sy * cols + sx]
+    seen[sy * cols + sx] = 1
+    mut head := 0
+    while head < queue.len()
+        cur := queue[head]
+        head += 1
+        x := cur % cols
+        y := cur / cols
+        if cells[cur] == 1 or near(x, y) > 0
+            continue
+        for dy in -1..=1
+            for dx in -1..=1
+                spot := (y + dy) * cols + x + dx
+                if inside(x + dx, y + dy) and seen[spot] == 0
+                    seen[spot] = 1
+                    queue.push(spot)
+    seen
+
+fn Field.show_open(self, seen List[int]) List[str]
+    mut out := List[str]()
+    for y in 0..rows
+        mut row := List[str]()
+        for x in 0..cols
+            row.push(if seen[y * cols + x] == 1 then glyph(x, y) else "#")
+        out.push(row.join(""))
+    out
+
+fn main()
+    f := Field.parse([
+        "..*.....",
+        "........",
+        ".*..*...",
+        "........",
+        "......*.",
+        "..*.....",
+    ])
+    print("mines: {f.cells.sum()} on {f.cols}x{f.rows}")
+    for line in f.hints()
+        print(line)
+    seen := f.reveal(7, 0)
+    print("click at 7,0 opens {seen.sum()} cells")
+    for line in f.show_open(seen)
+        print(line)
+    boom := f.reveal(2, 0)
+    print("click at 2,0 opens {boom.sum()} cell(s)")
+
+@test fn counts_neighbours()
+    f := Field.parse(["*.", ".."])
+    assert_eq(f.near(1, 1), 1)
+    assert_eq(f.near(0, 0), 0)
+    assert_eq(f.glyph(0, 0), "*")
+
+@test fn hint_board()
+    f := Field.parse(["*..", "...", "..*"])
+    assert_eq(f.hints(), ["*1.", "121", ".1*"])
+
+@test fn opening_stops_at_numbers()
+    f := Field.parse(["....", "....", "...*"])
+    seen := f.reveal(0, 0)
+    assert_eq(seen.sum(), 11)

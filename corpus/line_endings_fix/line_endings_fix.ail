@@ -1,0 +1,112 @@
+## Line-ending fixer: counts the CRLF, LF and lone CR endings of each file in
+## a temp directory, rewrites the files with LF endings, then converts two of
+## them to CRLF. Files that already have the wanted ending are left alone.
+
+struct Endings
+    crlf int
+    lf int
+    cr int
+
+fn count_endings(text str) Endings
+    cs := text.chars()
+    mut e := Endings(crlf: 0, lf: 0, cr: 0)
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == '\r'
+            if i + 1 < cs.len() and cs[i + 1] == '\n'
+                e.crlf += 1
+                i += 1
+            else
+                e.cr += 1
+        elif c == '\n'
+            e.lf += 1
+        i += 1
+    e
+
+fn convert(text str, eol str) str
+    cs := text.chars()
+    mut out := List[str]()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == '\r'
+            if i + 1 < cs.len() and cs[i + 1] == '\n'
+                i += 1
+            out.push(eol)
+        elif c == '\n'
+            out.push(eol)
+        else
+            out.push("{c}")
+        i += 1
+    out.join("")
+
+fn style(e Endings) str
+    total := e.crlf + e.lf + e.cr
+    if total == 0
+        return "none"
+    if e.lf == total
+        return "lf"
+    if e.crlf == total
+        return "crlf"
+    if e.cr == total
+        return "cr"
+    "mixed"
+
+fn report(dir str, names List[str]) !
+    print("{"file":<11}{"style":<7}{"crlf":>5}{"lf":>4}{"cr":>4}{"bytes":>6}")
+    for name in names
+        text := fs.read_text(path.join(dir, name))?
+        e := count_endings(text)
+        print("{name:<11}{style(e):<7}{e.crlf:>5}{e.lf:>4}{e.cr:>4}{text.byte_len():>6}")
+
+fn fix_dir(dir str, names List[str], eol str) !int
+    mut rewritten := 0
+    for name in names
+        p := path.join(dir, name)
+        text := fs.read_text(p)?
+        fixed := convert(text, eol)
+        if fixed != text
+            fs.write_text(p, fixed)?
+            rewritten += 1
+    rewritten
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_line_endings_fix")?
+    names := ["unix.txt", "dos.txt", "mixed.txt", "oldmac.txt", "empty.txt"]
+    texts := [
+        "alpha\nbeta\ngamma\n",
+        "one\r\ntwo\r\nthree\r\n",
+        "first\r\nsecond\nthird\rfourth",
+        "x\ry\rz\r",
+        "",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    report(dir, names)?
+    n := fix_dir(dir, names, "\n")?
+    print("-- to LF: rewrote {n} of {names.len()} files")
+    report(dir, names)?
+    pair := ["unix.txt", "dos.txt"]
+    m := fix_dir(dir, pair, "\r\n")?
+    print("-- to CRLF: rewrote {m} of {pair.len()} files")
+    report(dir, pair)?
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn counts_each_kind_of_ending()
+    e := count_endings("a\r\nb\nc\rd")
+    assert_eq(e, Endings(crlf: 1, lf: 1, cr: 1))
+    assert_eq(style(e), "mixed")
+    assert_eq(style(count_endings("")), "none")
+
+@test fn converts_all_endings_to_one()
+    assert_eq(convert("a\r\nb\nc\rd", "\n"), "a\nb\nc\nd")
+    assert_eq(convert("a\nb\n", "\r\n"), "a\r\nb\r\n")
+
+@test fn conversion_is_idempotent()
+    once := convert("x\r\ny\rz\n", "\n")
+    assert_eq(convert(once, "\n"), once)
+    assert_eq(style(count_endings(once)), "lf")

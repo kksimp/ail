@@ -1,0 +1,80 @@
+## A small interval index: closed integer intervals kept sorted by start,
+## with stabbing queries (which intervals contain a point), overlap queries
+## and the total length covered. Queries are an enum run through one match.
+
+struct Interval
+    lo int
+    hi int
+    label str
+
+enum Query
+    Point(x int)
+    Range(a int, b int)
+
+struct Index
+    spans List[Interval]
+
+fn Index.add(mut self, lo int, hi int, label str)
+    mut at := spans.len()
+    for i in 0..spans.len()
+        if spans[i].lo > lo
+            at = i
+            break
+    spans.insert(at, Interval(lo: lo, hi: hi, label: label))
+
+fn Index.find(self, q Query) List[str]
+    mut out := List[str]()
+    for iv in spans
+        hit := match q
+            Point(x) => iv.lo <= x and x <= iv.hi
+            Range(a, b) => iv.lo <= b and a <= iv.hi
+        if hit
+            out.push(iv.label)
+    out
+
+fn Index.covered(self) int
+    mut total := 0
+    mut reach := -1
+    for iv in spans
+        if iv.hi > reach
+            start := iv.lo.max(reach + 1)
+            total += iv.hi - start + 1
+            reach = iv.hi
+    total
+
+fn main()
+    mut idx := Index(spans: [])
+    idx.add(15, 20, "dev")
+    idx.add(10, 14, "plan")
+    idx.add(5, 8, "kickoff")
+    idx.add(18, 30, "release")
+    idx.add(40, 45, "retro")
+    print("sorted: {[iv.label for iv in idx.spans].join(",")}")
+    queries := [Query.Point(19), Query.Point(9), Query.Range(12, 16), Query.Range(31, 39), Query.Range(1, 100)]
+    for q in queries
+        found := idx.find(q)
+        desc := match q
+            Point(x) => "point {x}"
+            Range(a, b) => "range {a}..{b}"
+        print("{desc}: {found.len()} -> {found.join(",")}")
+    print("covered length: {idx.covered()}")
+
+@test fn stabbing_query_finds_containing_intervals()
+    mut idx := Index(spans: [])
+    idx.add(1, 5, "a")
+    idx.add(4, 9, "b")
+    assert_eq(idx.find(Query.Point(4)), ["a", "b"])
+    assert_eq(idx.find(Query.Point(6)), ["b"])
+
+@test fn insert_keeps_start_order()
+    mut idx := Index(spans: [])
+    idx.add(7, 8, "late")
+    idx.add(1, 2, "early")
+    assert_eq(idx.spans[0].label, "early")
+
+@test fn covered_merges_overlaps()
+    mut idx := Index(spans: [])
+    idx.add(1, 5, "a")
+    idx.add(3, 8, "b")
+    idx.add(20, 20, "c")
+    assert_eq(idx.covered(), 9)

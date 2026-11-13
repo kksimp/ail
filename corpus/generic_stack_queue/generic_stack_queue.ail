@@ -1,0 +1,92 @@
+## Generic Stack[T] and Queue[T] containers, used with ints and strings.
+## The stack reverses the digits of a number and holds words; the queue
+## runs a round-robin print rota. Each container is written once for any T.
+
+struct Stack[T]
+    items List[T]
+
+fn Stack[T].push(mut self, x T)
+    items.push(x)
+
+fn Stack[T].pop(mut self) T?
+    items.pop()
+
+fn Stack[T].top(self) T?
+    items.last()
+
+fn Stack[T].size(self) int
+    items.len()
+
+struct Queue[T]
+    items List[T]
+    head int
+
+fn Queue[T].enqueue(mut self, x T)
+    items.push(x)
+
+fn Queue[T].dequeue(mut self) T?
+    if head >= items.len()
+        return none
+    v := items[head]
+    head += 1
+    v
+
+fn Queue[T].size(self) int
+    items.len() - head
+
+fn reverse_digits(n int) int
+    mut st := Stack[int](items: [])
+    mut rest := n
+    while rest > 0
+        st.push(rest % 10)
+        rest = rest / 10
+    mut out := 0
+    mut place := 1
+    while d := st.pop()
+        out += d * place
+        place *= 10
+    out
+
+fn main()
+    for n in [12345, 907, 1000]
+        print("reverse {n} -> {reverse_digits(n)}")
+    mut words := Stack[str](items: [])
+    for w in "to be or not".split(" ")
+        words.push(w)
+    top_word := words.top() else "?"
+    print("stack size {words.size()}, top {top_word}")
+    mut rota := Queue[str](items: [], head: 0)
+    for name in ["ann", "bo", "cy"]
+        rota.enqueue(name)
+    mut turn := 1
+    while turn <= 7
+        who := rota.dequeue() else break
+        print("round {turn}: {who}")
+        if turn <= 4
+            rota.enqueue("{who}'")
+        turn += 1
+    print("left in queue: {rota.size()}")
+
+@test fn stack_is_last_in_first_out()
+    mut s := Stack[int](items: [])
+    s.push(1)
+    s.push(2)
+    assert_eq(s.pop() else 0, 2)
+    assert_eq(s.top() else 0, 1)
+    assert_eq(s.size(), 1)
+
+@test fn queue_is_first_in_first_out()
+    mut q := Queue[str](items: [], head: 0)
+    q.enqueue("a")
+    q.enqueue("b")
+    assert_eq(q.dequeue() else "", "a")
+    assert_eq(q.size(), 1)
+
+@test fn empty_containers_give_none()
+    mut s := Stack[int](items: [])
+    mut q := Queue[int](items: [], head: 0)
+    assert_eq(s.pop() else -1, -1)
+    assert_eq(q.dequeue() else -1, -1)
+
+@test fn digits_reverse()
+    assert_eq(reverse_digits(120), 21)

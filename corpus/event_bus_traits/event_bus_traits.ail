@@ -1,0 +1,117 @@
+## An in-process event bus. Handlers implement one trait; the bus keeps a
+## list of them as `any Handler`, offers each event to every handler that
+## wants it, and counts deliveries. Events are an enum with payloads.
+
+enum Event
+    Click(x int, y int)
+    Key(code int)
+    Tick
+
+trait Handler
+    fn label(self) str
+    fn wants(self, ev Event) bool
+    fn handle(self, ev Event) str
+
+struct ClickLogger
+    margin int
+
+struct KeyFilter
+    min_code int
+
+struct Heartbeat
+    every int
+
+impl Handler for ClickLogger
+    fn label(self) str
+        "clicks"
+    fn wants(self, ev Event) bool
+        match ev
+            Click(x, y) => x >= self.margin and y >= self.margin
+            _ => false
+    fn handle(self, ev Event) str
+        match ev
+            Click(x, y) => "click at {x},{y}"
+            _ => "?"
+
+impl Handler for KeyFilter
+    fn label(self) str
+        "keys"
+    fn wants(self, ev Event) bool
+        match ev
+            Key(code) => code >= self.min_code
+            _ => false
+    fn handle(self, ev Event) str
+        match ev
+            Key(code) => "key {code}"
+            _ => "?"
+
+impl Handler for Heartbeat
+    fn label(self) str
+        "beat"
+    fn wants(self, ev Event) bool
+        match ev
+            Tick => true
+            _ => false
+    fn handle(self, ev Event) str
+        "tick every {self.every}"
+
+fn show(ev Event) str
+    match ev
+        Click(x, y) => "Click(x: {x}, y: {y})"
+        Key(code) => "Key(code: {code})"
+        Tick => "Tick"
+
+struct Bus
+    handlers List[any Handler]
+    delivered int
+    dropped int
+
+fn Bus.subscribe(mut self, h any Handler)
+    handlers.push(h)
+
+fn Bus.publish(mut self, ev Event) List[str]
+    mut lines := List[str]()
+    mut hits := 0
+    for h in handlers
+        if h.wants(ev)
+            lines.push("[{h.label()}] {h.handle(ev)}")
+            hits += 1
+    if hits == 0
+        dropped += 1
+    delivered += hits
+    lines
+
+fn main()
+    mut bus := Bus(handlers: [], delivered: 0, dropped: 0)
+    bus.subscribe(ClickLogger(margin: 10))
+    bus.subscribe(KeyFilter(min_code: 65))
+    bus.subscribe(Heartbeat(every: 5))
+    bus.subscribe(KeyFilter(min_code: 90))
+    events := [Event.Click(x: 50, y: 20), Event.Click(x: 3, y: 4), Event.Key(code: 66), Event.Tick, Event.Key(code: 95), Event.Key(code: 10)]
+    for ev in events
+        lines := bus.publish(ev)
+        if lines.is_empty()
+            print("{show(ev)} -> nobody listened")
+        for line in lines
+            print(line)
+    print("delivered {bus.delivered}, dropped {bus.dropped}")
+
+@test fn handlers_only_see_events_they_want()
+    mut bus := Bus(handlers: [], delivered: 0, dropped: 0)
+    bus.subscribe(Heartbeat(every: 1))
+    assert_eq(bus.publish(Event.Tick), ["[beat] tick every 1"])
+    assert_eq(bus.publish(Event.Key(code: 1)).len(), 0)
+
+@test fn dropped_counts_unhandled_events()
+    mut bus := Bus(handlers: [], delivered: 0, dropped: 0)
+    bus.subscribe(KeyFilter(min_code: 5))
+    _ := bus.publish(Event.Key(code: 1))
+    _ := bus.publish(Event.Key(code: 9))
+    assert_eq(bus.dropped, 1)
+    assert_eq(bus.delivered, 1)
+
+@test fn one_event_reaches_every_matching_handler()
+    mut bus := Bus(handlers: [], delivered: 0, dropped: 0)
+    bus.subscribe(KeyFilter(min_code: 1))
+    bus.subscribe(KeyFilter(min_code: 2))
+    assert_eq(bus.publish(Event.Key(code: 7)).len(), 2)

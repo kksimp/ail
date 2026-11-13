@@ -1,0 +1,6 @@
+ring [8, 7, 0, 1, 2, 3, 5, 6] grows 1
+std  [8, 7, 0, 1, 2, 3, 5, 6]
+agree true
+ring [9] grows 0
+std  [9]
+agree true

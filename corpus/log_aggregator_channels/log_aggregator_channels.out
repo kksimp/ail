@@ -1,0 +1,14 @@
+ERROR   4
+WARN    2
+INFO    4
+DEBUG   1
+auth    4 lines
+db      3 lines
+web     4 lines
+errors:
+  auth: locked account
+  db: deadlock detected
+  db: disk almost full
+  web: upstream timeout
+malformed: 2
+total lines: 13

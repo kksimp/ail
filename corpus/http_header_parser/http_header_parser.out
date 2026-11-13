@@ -1,0 +1,16 @@
+POST /submit?x=1 HTTP/1.1
+accept: text/html, application/json;q=0.9, */*;q=0.1, text/plain;q=0.9
+content-length: 11
+cookie: sid=abc123; theme=dark; lang=en
+host: example.org
+x-long: first part second part
+x-trace: a, b
+bad lines: 1
+body: 11 chars, declared 11
+cookie lang = en
+cookie sid = abc123
+cookie theme = dark
+accept text/html q=1000
+accept application/json q=900
+accept text/plain q=900
+accept */* q=100

@@ -1,0 +1,98 @@
+## Merge of sorted files: writes three sorted runs of numbers (one per line)
+## into a temp directory, reads them back and merges them with a k-way merge
+## that always takes the smallest head, writes the merged file, then reads it
+## back to check order and count. A second pass drops repeated values.
+use std.file
+
+fn write_run(p str, xs List[int]) !
+    mut w := file.create(p)?
+    for x in xs
+        w.write_line("{x}")?
+    w.close()?
+
+fn read_run(p str) !List[int]
+    text := fs.read_text(p)?
+    mut out := List[int]()
+    for l in text.split("\n")
+        if l != ""
+            out.push(l.to_int() else 0)
+    out
+
+fn merge_k(runs List[List[int]]) List[int]
+    mut pos := List[int]()
+    for _ in 0..runs.len()
+        pos.push(0)
+    mut out := List[int]()
+    while true
+        mut best := -1
+        for k in 0..runs.len()
+            if pos[k] < runs[k].len()
+                if best < 0 or runs[k][pos[k]] < runs[best][pos[best]]
+                    best = k
+        if best < 0
+            break
+        out.push(runs[best][pos[best]])
+        pos[best] += 1
+    out
+
+fn dedupe(xs List[int]) List[int]
+    mut out := List[int]()
+    for x in xs
+        if out.is_empty() or out[out.len() - 1] != x
+            out.push(x)
+    out
+
+fn is_sorted(xs List[int]) bool
+    for i in 1..xs.len()
+        if xs[i - 1] > xs[i]
+            return false
+    true
+
+fn make_run(step int, offset int, n int) List[int]
+    [i * step + offset for i in 0..n]
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_merge_sorted_files")?
+    names := ["run0.txt", "run1.txt", "run2.txt"]
+    runs := [make_run(3, 0, 8), make_run(5, 2, 6), make_run(7, 1, 5)]
+    mut loaded := List[List[int]]()
+    for i in 0..names.len()
+        p := path.join(dir, names[i])
+        write_run(p, runs[i])?
+        loaded.push(read_run(p)?)
+        print("{names[i]}: {loaded[i].len()} numbers, first {loaded[i][0]}, last {loaded[i][loaded[i].len() - 1]}")
+    merged := merge_k(loaded)
+    out_path := path.join(dir, "merged.txt")
+    write_run(out_path, merged)?
+    back := read_run(out_path)?
+    print("merged: {back.len()} numbers, sorted {is_sorted(back)}")
+    print("first 10: {back.take(10)}")
+    print("last 3: {back[back.len() - 3..]}")
+    unique := dedupe(back)
+    print("unique: {unique.len()}, dropped {back.len() - unique.len()}")
+    print("round trip intact: {back == merged}")
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(out_path)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn merges_three_runs()
+    assert_eq(merge_k([[1, 4, 9], [2, 3], [0, 10]]), [0, 1, 2, 3, 4, 9, 10])
+
+@test fn empty_runs_are_skipped()
+    assert_eq(merge_k([List[int](), [5], List[int]()]), [5])
+    assert_eq(merge_k([List[int](), List[int]()]).len(), 0)
+
+@test fn dedupe_and_sorted()
+    assert_eq(dedupe([1, 1, 2, 2, 2, 3]), [1, 2, 3])
+    assert(is_sorted([1, 2, 2, 5]), "ties are fine")
+    assert(not is_sorted([2, 1]), "descending")
+
+@test fn runs_survive_a_file_round_trip()
+    dir := fs.make_temp_dir("corpus_merge_sorted_files_t")?
+    p := path.join(dir, "r.txt")
+    write_run(p, [3, 5, 8])?
+    assert_eq(read_run(p)?, [3, 5, 8])
+    fs.remove(p)?
+    fs.remove(dir)?

@@ -1,0 +1,118 @@
+## Semver range check: compiles npm-style ranges (>=1.2.0 <2.0.0, ^1.2.3,
+## ~1.2.3, 1.x, || alternatives) into comparators and reports which of a list
+## of versions satisfy each range.
+
+struct Ver
+    major int
+    minor int
+    patch int
+
+impl Ord for Ver
+
+struct Cmp
+    op str
+    ver Ver
+
+fn partial(s str) List[int]?
+    mut nums := List[int]()
+    for p in s.split(".")
+        if p == "x" or p == "*"
+            break
+        n := p.to_int() else return none
+        nums.push(n)
+    if nums.len() > 3
+        return none
+    nums
+
+fn parse_ver(s str) Ver?
+    nums := partial(s)?
+    if nums.len() != 3
+        return none
+    Ver(major: nums[0], minor: nums[1], patch: nums[2])
+
+fn show(v Ver) str
+    "{v.major}.{v.minor}.{v.patch}"
+
+fn pair(lo Ver, hi Ver) List[Cmp]
+    [Cmp(op: ">=", ver: lo), Cmp(op: "<", ver: hi)]
+
+fn expand(term str) List[Cmp]?
+    if term.starts_with("^")
+        vc := parse_ver(term.slice(1, term.len()))?
+        if vc.major > 0
+            return pair(vc, Ver(major: vc.major + 1, minor: 0, patch: 0))
+        if vc.minor > 0
+            return pair(vc, Ver(major: 0, minor: vc.minor + 1, patch: 0))
+        return pair(vc, Ver(major: 0, minor: 0, patch: vc.patch + 1))
+    if term.starts_with("~")
+        vt := parse_ver(term.slice(1, term.len()))?
+        return pair(vt, Ver(major: vt.major, minor: vt.minor + 1, patch: 0))
+    for op in [">=", "<=", ">", "<", "="]
+        if term.starts_with(op)
+            vo := parse_ver(term.slice(op.len(), term.len()))?
+            return [Cmp(op: op, ver: vo)]
+    nums := partial(term)?
+    if nums.len() == 3
+        return [Cmp(op: "=", ver: parse_ver(term)?)]
+    if nums.len() == 2
+        return pair(Ver(major: nums[0], minor: nums[1], patch: 0), Ver(major: nums[0], minor: nums[1] + 1, patch: 0))
+    if nums.len() == 1
+        return pair(Ver(major: nums[0], minor: 0, patch: 0), Ver(major: nums[0] + 1, minor: 0, patch: 0))
+    []
+
+fn compile_range(text str) List[List[Cmp]]?
+    mut alts := List[List[Cmp]]()
+    for alt in text.split("||")
+        mut all_cmps := List[Cmp]()
+        for t in alt.words()
+            all_cmps.extend(expand(t)?)
+        alts.push(all_cmps)
+    alts
+
+fn holds(c Cmp, v Ver) bool
+    match c.op
+        ">=" => v >= c.ver
+        "<=" => v <= c.ver
+        ">" => v > c.ver
+        "<" => v < c.ver
+        _ => v == c.ver
+
+fn satisfies(alts List[List[Cmp]], v Ver) bool
+    for cmps in alts
+        mut ok := true
+        for c in cmps
+            if not holds(c, v)
+                ok = false
+        if ok
+            return true
+    false
+
+fn main()
+    inputs := ["0.9.9", "1.0.0", "1.2.3", "1.4.0", "1.9.9", "2.0.0", "2.3.1", "0.2.5", "0.0.3"]
+    mut versions := List[Ver]()
+    for t in inputs
+        parsed := parse_ver(t) else continue
+        versions.push(parsed)
+    ranges := [">=1.2.0 <2.0.0", "^1.2.3", "^0.2.3", "^0.0.3", "~1.2.3", "1.x", "2", "=1.4.0", "<1.0.0 || >=2.3.0", "^1.x", "*"]
+    for r in ranges
+        alts := compile_range(r) else
+            print("{r:<20} invalid")
+            continue
+        hits := [show(x) for x in versions if satisfies(alts, x)]
+        print("{r:<20} {hits.join(" ")}")
+
+@test fn caret_stops_at_next_major()
+    alts := compile_range("^1.2.3")?
+    assert(satisfies(alts, parse_ver("1.9.0")?))
+    assert(not satisfies(alts, parse_ver("2.0.0")?))
+    assert(not satisfies(alts, parse_ver("1.2.2")?))
+
+@test fn zero_major_caret_is_narrow()
+    alts := compile_range("^0.2.3")?
+    assert(satisfies(alts, parse_ver("0.2.9")?))
+    assert(not satisfies(alts, parse_ver("0.3.0")?))
+
+@test fn bad_ranges_are_rejected()
+    assert(compile_range("^1.x") == none)
+    assert(compile_range(">=a.b.c") == none)
+    assert(parse_ver("1.2") == none)

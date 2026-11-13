@@ -1,0 +1,105 @@
+## Life pattern classifier. Runs classic Conway patterns on a bounded 16 by 16
+## board (cells outside are dead) and reports each pattern's period, how far it
+## travels per period, and its population. A pattern's shape is compared by
+## its live cells relative to the top-left live cell, so gliders are found too.
+
+SIZE := 16
+MAX_GENS := 12
+
+struct Board
+    cells List[int]
+
+fn Board.empty() Board
+    mut flat := List[int]()
+    for i in 0..SIZE * SIZE
+        flat.push(0)
+    Board(cells: flat)
+
+fn Board.place(lines List[str], ox int, oy int) Board
+    mut b := Board.empty()
+    for y in 0..lines.len()
+        letters := lines[y].chars()
+        for x in 0..letters.len()
+            if letters[x] == '#'
+                b.cells[(oy + y) * SIZE + ox + x] = 1
+    b
+
+fn Board.at(self, x int, y int) int
+    if x < 0 or x >= SIZE or y < 0 or y >= SIZE
+        return 0
+    cells[y * SIZE + x]
+
+fn Board.step(self) Board
+    mut next := Board.empty()
+    for y in 0..SIZE
+        for x in 0..SIZE
+            mut n := 0
+            for dy in -1..=1
+                for dx in -1..=1
+                    if dx != 0 or dy != 0
+                        n += at(x + dx, y + dy)
+            if n == 3 or (n == 2 and at(x, y) == 1)
+                next.cells[y * SIZE + x] = 1
+    next
+
+fn Board.population(self) int
+    cells.sum()
+
+fn Board.corner(self) List[int]
+    mut lo_x := SIZE
+    mut lo_y := SIZE
+    for i in 0..cells.len()
+        if cells[i] == 1
+            lo_x = lo_x.min(i % SIZE)
+            lo_y = lo_y.min(i / SIZE)
+    [lo_x, lo_y]
+
+fn Board.shape(self) str
+    c := corner()
+    mut parts := List[str]()
+    for i in 0..cells.len()
+        if cells[i] == 1
+            parts.push("{i % SIZE - c[0]},{i / SIZE - c[1]}")
+    parts.join(";")
+
+fn classify(name str, lines List[str])
+    start := Board.place(lines, 2, 2)
+    mut b := start
+    for gen in 1..=MAX_GENS
+        b = b.step()
+        if b.population() == 0
+            print("{name}: dies out at generation {gen}")
+            return
+        if b.shape() == start.shape()
+            c0 := start.corner()
+            c1 := b.corner()
+            print("{name}: period {gen}, shift ({c1[0] - c0[0]},{c1[1] - c0[1]}), population {b.population()}")
+            return
+    print("{name}: no period within {MAX_GENS} generations, population {b.population()}")
+
+fn main()
+    classify("block", ["##", "##"])
+    classify("beehive", [".##.", "#..#", ".##."])
+    classify("blinker", ["###"])
+    classify("toad", [".###", "###."])
+    classify("beacon", ["##..", "##..", "..##", "..##"])
+    classify("glider", [".#.", "..#", "###"])
+    classify("r-pentomino", [".##", "##.", ".#."])
+    classify("lonely pair", ["##"])
+
+@test fn blinker_has_period_two()
+    start := Board.place(["###"], 2, 2)
+    assert(start.step().shape() != start.shape())
+    assert_eq(start.step().step().shape(), start.shape())
+
+@test fn block_is_still()
+    start := Board.place(["##", "##"], 5, 5)
+    assert_eq(start.step().cells, start.cells)
+
+@test fn glider_moves_diagonally()
+    start := Board.place([".#.", "..#", "###"], 2, 2)
+    mut b := start
+    for i in 0..4
+        b = b.step()
+    assert_eq(b.shape(), start.shape())
+    assert_eq(b.corner(), [3, 3])

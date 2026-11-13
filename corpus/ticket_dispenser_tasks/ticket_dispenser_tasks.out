@@ -1,0 +1,11 @@
+tickets issued: 60
+unique and contiguous: true
+customer 0 drew 12
+customer 1 drew 12
+customer 2 drew 12
+customer 3 drew 12
+customer 4 drew 12
+first waits: [0, 2, 5, 9, 14, 20]
+longest wait: 234 min
+average wait: 116 min
+closing time: 240 min

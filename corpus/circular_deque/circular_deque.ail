@@ -1,0 +1,105 @@
+## A growable circular deque of ints on a ring buffer: both ends push and
+## pop in constant time, and the buffer doubles when full. A scripted list
+## of commands is replayed on it and on the std Deque; both must agree.
+
+struct Ring
+    buf List[int]
+    head int
+    size int
+    grows int
+
+fn Ring.new() Ring
+    Ring(buf: [0, 0, 0, 0], head: 0, size: 0, grows: 0)
+
+fn Ring.grow(mut self)
+    mut bigger := List[int]()
+    for i in 0..size
+        bigger.push(buf[(head + i) % buf.len()])
+    while bigger.len() < buf.len() * 2
+        bigger.push(0)
+    buf = bigger
+    head = 0
+    grows += 1
+
+fn Ring.push_back(mut self, x int)
+    if size == buf.len()
+        self.grow()
+    self.buf[(head + size) % buf.len()] = x
+    size += 1
+
+fn Ring.push_front(mut self, x int)
+    if size == buf.len()
+        self.grow()
+    head = (head + buf.len() - 1) % buf.len()
+    self.buf[head] = x
+    size += 1
+
+fn Ring.pop_front(mut self) int?
+    if size == 0
+        return none
+    v := buf[head]
+    head = (head + 1) % buf.len()
+    size -= 1
+    return v
+
+fn Ring.pop_back(mut self) int?
+    if size == 0
+        return none
+    size -= 1
+    return buf[(head + size) % buf.len()]
+
+fn Ring.items(self) List[int]
+    [buf[(head + i) % buf.len()] for i in 0..size]
+
+fn run(script str) List[str]
+    mut ring := Ring.new()
+    mut ref_deque := Deque[int]()
+    mut lines := List[str]()
+    for cmd in script.split(";")
+        parts := cmd.split(" ")
+        op := parts[0]
+        n := if parts.len() > 1 then (parts[1].to_int() else 0) else 0
+        match op
+            "pf" =>
+                ring.push_front(n)
+                ref_deque.push_front(n)
+            "pb" =>
+                ring.push_back(n)
+                ref_deque.push_back(n)
+            "xf" =>
+                ring.pop_front()
+                ref_deque.pop_front()
+            _ =>
+                ring.pop_back()
+                ref_deque.pop_back()
+    lines.push("ring {ring.items()} grows {ring.grows}")
+    lines.push("std  {ref_deque.to_list()}")
+    lines.push("agree {ring.items() == ref_deque.to_list()}")
+    lines
+
+fn main()
+    for line in run("pb 1;pb 2;pf 0;pb 3;pb 4;pf -1;xf;xb;pb 5;pb 6;pf 7;pf 8")
+        print(line)
+    for line in run("pf 1;pf 2;xb;xb;xb;pb 9")
+        print(line)
+
+@test fn grows_when_full()
+    mut r := Ring.new()
+    for i in 0..5
+        r.push_back(i)
+    assert_eq(r.items(), [0, 1, 2, 3, 4])
+    assert_eq(r.grows, 1)
+
+@test fn wraps_around_both_ends()
+    mut r := Ring.new()
+    r.push_front(1)
+    r.push_front(2)
+    r.push_back(3)
+    assert_eq(r.items(), [2, 1, 3])
+    assert_eq(r.pop_back() else -1, 3)
+    assert_eq(r.pop_front() else -1, 2)
+
+@test fn empty_pops_give_none()
+    mut r := Ring.new()
+    assert_eq(r.pop_front() else -1, -1)
+    assert_eq(r.pop_back() else -1, -1)
