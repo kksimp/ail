@@ -254,6 +254,8 @@ struct Lexer
     logical List[Lead]
     ## The part of `logical` indented with a tab.
     tabs List[Lead]
+    ## Empty `\{}` placeholders of the string being lexed (lex.str.2), reported once per string by `placeholders`.
+    holes List[ast.Pos]
 
 ## The result of one run at one indentation unit, and the unit to run
 ## again with (0 for none).
@@ -348,6 +350,7 @@ fn lex_scaled(src str, scale int) Scaled
         scale: scale,
         logical: [],
         tabs: [],
+        holes: [],
     )
     mut indents := [0]
     # The previous line ended in a way that continues the statement.
@@ -369,6 +372,8 @@ fn lex_scaled(src str, scale int) Scaled
             lead += 1
         if lead == line.len() or line[lead] == '#'
             # Blank and comment-only lines don't affect blocks (lex.block note).
+            if lead < line.len() and at(line, lead + 1) == '[' and at(line, lead + 2).is_alpha()
+                lx.rust_attribute(line, lead, line_no)
             lx.comment(line, lead, line_no)
             li += 1
             continue
@@ -439,7 +444,7 @@ fn lex_scaled(src str, scale int) Scaled
         li += 1
     end := ast.Pos(line: last_line, col: 1)
     if lx.open.len() > 0
-        lx.unclosed()
+        lx.unclosed(lines)
         # Close them for the parser too, so one report isn't followed by another.
         mut k := lx.open.len() - 1
         while k >= 0
@@ -469,12 +474,46 @@ fn Lexer.diag_msg(mut self, rule str, pos ast.Pos, msg str, help str)
 
 ## lex.stmt.2: the innermost bracket left open at the end of the file. The fix
 ## closes them at the end of the line, when they all opened on it.
-fn Lexer.unclosed(mut self)
+fn Lexer.unclosed(mut self, lines List[List[char]])
     last := open[open.len() - 1]
     mut one_line := true
     for o in open
         if o.pos.line != last.pos.line
             one_line = false
+    # `if x \{`: a brace that ends a block header is C's block, which AIL writes by indenting (checkbench, ADR 1111).
+    if one_line and open.len() == 1 and last.c == '\{' and last.pos.line >= 1 and last.pos.line <= lines.len()
+        text := lines[last.pos.line - 1]
+        mut e := text.len()
+        while e > 0 and text[e - 1] == ' '
+            e -= 1
+        if e == last.pos.col
+            mut b := last.pos.col - 1
+            while b > 0 and text[b - 1] == ' '
+                b -= 1
+            diags.push(Diag(
+                rule: "lex.stmt.2",
+                pos: last.pos,
+                msg: "this `\{` is never closed: AIL blocks are indented, not braced",
+                fixed: true,
+                help: "end the header line without `\{`; the block is the lines indented 4 spaces below it, and no `}` closes it",
+                fix: "remove the `\{`",
+                edits: [fix.delete(ast.Pos(line: last.pos.line, col: b + 1), ast.Pos(line: last.pos.line, col: e + 1))],
+            ))
+            return
+    # One `[` left open: the `]` goes after the index or type argument when the line goes on (checkbench, ADR 1111).
+    if one_line and open.len() == 1 and last.c == '[' and last.pos.line >= 1 and last.pos.line <= lines.len()
+        k := bracket_close_at(lines[last.pos.line - 1], last.pos.col - 1)
+        if k >= 0
+            diags.push(Diag(
+                rule: "lex.stmt.2",
+                pos: last.pos,
+                msg: "this `[` is never closed",
+                fixed: true,
+                help: "",
+                fix: "close it after the index",
+                edits: [fix.insert(ast.Pos(line: last.pos.line, col: k + 1), "]")],
+            ))
+            return
     diags.push(Diag(
         rule: "lex.stmt.2",
         pos: last.pos,
@@ -484,6 +523,34 @@ fn Lexer.unclosed(mut self)
         fix: "close the brackets at the end of the line",
         edits: if one_line then [fix.at_line_end(last.pos, closers())] else [],
     ))
+
+## Where a `]` most likely belongs when the only bracket left open on a line is the `[` at `k`: after the name
+## that follows it, when the line goes on with `(` after a type argument (`List[str()`) or with `else`, `=`, `)`,
+## `,`, `and`, `or`, `then` after an index (`counts[w else 0`). -1 for the end of the line.
+fn bracket_close_at(line List[char], k int) int
+    mut j := k + 1
+    while j < line.len() and (name_char(line[j]) or line[j] == '.')
+        j += 1
+    if j == k + 1 or j >= line.len()
+        return -1
+    mut w := k - 1
+    while w >= 0 and name_char(line[w])
+        w -= 1
+    typed := w + 1 < k and line[w + 1].is_upper()
+    if line[j] == '('
+        return if typed then j else -1
+    mut r := j
+    while r < line.len() and line[r] == ' '
+        r += 1
+    if r >= line.len()
+        return -1
+    c := line[r]
+    if c == '=' or c == ')' or c == ',' or c == ':'
+        return j
+    for word in ["else", "then", "and", "or", "if"]
+        if word_at(line, r, word)
+            return j
+    -1
 
 ## The brackets still open, innermost first, as the characters that close them.
 fn Lexer.closers(self) str
@@ -528,6 +595,23 @@ fn Lexer.comment(mut self, line List[char], start int, line_no int)
             pos: ast.Pos(line: line_no, col: start + 1),
             text: text_of(line, start, end),
         ))
+
+## gram.foreign.1: `#[derive(Debug)]`, `#[test]`: a Rust attribute is a comment in AIL and would do nothing, so it
+## is reported, not silently ignored (checkbench, ADR 1111). The fix deletes it.
+fn Lexer.rust_attribute(mut self, line List[char], lead int, line_no int)
+    pos := ast.Pos(line: line_no, col: lead + 1)
+    mut end := line.len()
+    while end > lead and line[end - 1] == ' '
+        end -= 1
+    shown := text_of(line, lead, end)
+    diag_fix(
+        "gram.foreign.1",
+        pos,
+        "`{shown}` is a Rust attribute; in AIL `#` starts a comment, so it would do nothing",
+        "delete it: `==`, `print`, copying and map keys work on every value with no derive, a test is `@test fn name()`, and a warning is allowed with `@allow(\"rule\")` before the `fn`",
+        "delete the attribute",
+    )
+    attach([fix.delete(pos, ast.Pos(line: line_no, col: end + 1))])
 
 ## Stand-in for a literal that was reported as an error, so the parser
 ## doesn't report the same mistake again.
@@ -654,7 +738,8 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             # lex.bytes.1: `b"..."` is a `bytes` literal.
             i = bytes_literal(line, i, line_no)
         elif c == '\''
-            i = char_literal(line, i, line_no)
+            after := lifetime(line, i, line_no)
+            i = if after >= 0 then after else char_literal(line, i, line_no)
         elif c == ';'
             diag_fix(
                 "lex.stmt.3",
@@ -824,12 +909,138 @@ fn Lexer.string(mut self, line List[char], start int, line_no int) int
     pos := ast.Pos(line: line_no, col: start + 1)
     mut value := List[char]()
     mut parts := List[Part]()
+    mark := holes.len()
     if close := content(line, start + 1, line.len(), line_no, true, mut value, mut parts)
+        if holes.len() > mark
+            found := holes[mark..holes.len()]
+            while holes.len() > mark
+                holes.remove_at(holes.len() - 1)
+            placeholders(line, start, close, line_no, found)
         push(string_token(value, parts), pos)
         return close + 1
-    diag_msg("lex.str.1", pos, "unterminated string literal", "close the string with `\"`")
+    while holes.len() > mark
+        holes.remove_at(holes.len() - 1)
+    diag_fix("lex.str.1", pos, "unterminated string literal", "close the string with `\"`", "close the string")
+    attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
     forget_brackets(line_no)
     line.len()
+
+## Where the `"` of a string left open at `line[start]` most likely goes: before the brackets at the end of the
+## line that close the call around it, `print("total: \{n})` (lex.str.1, checkbench ADR 1111).
+fn string_end(line List[char], start int) int
+    mut depth := 0
+    for k in 0..start
+        if line[k] == '(' or line[k] == '['
+            depth += 1
+        elif (line[k] == ')' or line[k] == ']') and depth > 0
+            depth -= 1
+    mut e := line.len()
+    while e > start + 1 and line[e - 1] == ' '
+        e -= 1
+    while e > start + 1 and depth > 0 and (line[e - 1] == ')' or line[e - 1] == ']')
+        e -= 1
+        depth -= 1
+    e
+
+## Whether the text of a `\{...}` in a string is plainly not an expression: JSON (`"key": 1`), a statement
+## (`return 1`, `int x;`), so the `\{` was meant as a literal brace (lex.str.2).
+fn literal_brace(line List[char], from int, to int) bool
+    inner := text_of(line, from, to).trim()
+    if inner.is_empty()
+        return false
+    if inner.starts_with("\"") or inner.contains("\":") or inner.contains(";")
+        return true
+    for w in ["return ", "fn ", "let ", "var ", "const ", "int ", "void ", "func ", "def "]
+        if inner.starts_with(w)
+            return true
+    false
+
+## The arguments after a string that is a call's first argument: `, a, b)`. `close` is the index of the
+## call's `)`, or -1 when the rest isn't plain arguments (a string, a brace or a char in it).
+struct TrailingArgs
+    texts List[str]
+    close int
+
+fn trailing_args(line List[char], from int) TrailingArgs
+    nothing := TrailingArgs(texts: [], close: -1)
+    mut k := from
+    while at(line, k) == ' '
+        k += 1
+    if at(line, k) != ','
+        return nothing
+    mut texts := List[str]()
+    mut depth := 0
+    mut begin := k + 1
+    k += 1
+    while k < line.len()
+        c := line[k]
+        if c == '"' or c == '\'' or c == '{' or c == '}' or c == '#'
+            return nothing
+        if c == '(' or c == '['
+            depth += 1
+        elif (c == ')' or c == ']') and depth > 0
+            depth -= 1
+        elif c == ')' or (c == ',' and depth == 0)
+            t := text_of(line, begin, k).trim()
+            if t.is_empty()
+                return nothing
+            texts.push(t)
+            if c == ')'
+                return TrailingArgs(texts: texts, close: k)
+            begin = k + 1
+        k += 1
+    nothing
+
+## lex.str.2: `\{}` placeholders (Rust's `format!`, Python's `.format`, printf habits), reported once per string,
+## not once per `\{}`. When the string is a call's first argument followed by one plain argument per `\{}`, the fix
+## moves each argument into its braces: `print("\{} and \{}", a, b)` becomes `print("\{a} and \{b}")`, and
+## `format!("\{}-\{}", x, y)` becomes `"\{x}-\{y}"` (checkbench, ADR 1111). `q` and `close` index the quotes.
+fn Lexer.placeholders(mut self, line List[char], q int, close int, line_no int, found List[ast.Pos])
+    args := trailing_args(line, close + 1)
+    hole := found[0]
+    if args.texts.len() != found.len()
+        diag_fix(
+            "lex.str.2",
+            hole,
+            "empty `\{}` in a string: AIL puts the value inside the braces",
+            "write the expression inside, `\"total: \{n}\"`, or `\\\{` for a literal brace",
+            "write `\\\{` for a literal brace",
+        )
+        attach([fix.insert(h, "\\") for h in found])
+        return
+    mut out := List[str]()
+    mut n := 0
+    for k in q..close + 1
+        if n < found.len() and k + 1 == found[n].col
+            out.push("\{")
+            out.push(args.texts[n])
+            n += 1
+        else
+            out.push("{line[k]}")
+    filled := out.join("")
+    end := ast.Pos(line: line_no, col: args.close + 1)
+    # `format!(` just before the string: the string replaces the whole macro call.
+    t := tokens.len()
+    if t >= 3 and tokens[t - 1].tok == Tok.Sym("(") and tokens[t - 2].tok == Tok.Sym("!")
+        and tokens[t - 3].tok == Tok.Ident("format") and tokens[t - 1].pos.col == q
+        at_macro := tokens[t - 3].pos
+        diag_fix(
+            "gram.foreign.1",
+            at_macro,
+            "AIL has no `format!`: a string interpolates, with each value inside its braces",
+            "write `{filled}`; a width or precision goes after a colon: `\{x:>6}`, `\{x:.2}`",
+            "move the values into the braces",
+        )
+        attach([fix.span(at_macro, ast.Pos(line: line_no, col: args.close + 2), filled)])
+        return
+    diag_fix(
+        "lex.str.2",
+        hole,
+        "empty `\{}` in a string: AIL puts the value inside the braces",
+        "write `{filled}`; a width or precision goes after a colon: `\{x:>6}`, `\{x:.2}`",
+        "move the values into the braces",
+    )
+    attach([fix.span(ast.Pos(line: line_no, col: q + 1), end, filled)])
 
 ## `b"..."`: ASCII text with the escapes `\n \t \r \0 \\ \" \xHH` and no
 ## interpolation (lex.bytes.1). `line[start]` is the `b`. The token keeps the
@@ -912,7 +1123,8 @@ fn Lexer.raw_string(mut self, line List[char], start int, line_no int) int
         if line[k] == '"'
             push(Str(text_of(line, start + 2, k)), pos)
             return k + 1
-    diag_msg("lex.str.1", pos, "unterminated string literal", "close the string with `\"`")
+    diag_fix("lex.str.1", pos, "unterminated string literal", "close the string with `\"`", "close the string")
+    attach([fix.insert(ast.Pos(line: line_no, col: string_end(line, start) + 1), "\"")])
     forget_brackets(line_no)
     line.len()
 
@@ -930,6 +1142,8 @@ fn Lexer.content(
     mut parts List[Part],
 ) int?
     mut i := from
+    # One `empty \{}` report per multi-line string part.
+    mut said := false
     while i < to
         here := ast.Pos(line: line_no, col: i + 1)
         c := line[i]
@@ -956,6 +1170,22 @@ fn Lexer.content(
                 if quoted
                     return to
                 return none
+            if literal_brace(line, i + 1, close)
+                # JSON or C code in a string: the brace was meant as text. One report and one fix for the whole
+                # `\{...}`, kept as text, so its inner braces and code aren't reported again (checkbench, ADR 1111).
+                inner := text_of(line, i + 1, close).trim()
+                diag_fix(
+                    "lex.str.2",
+                    here,
+                    "this `\{` starts an interpolation, but `{inner}` is not an expression",
+                    "write `\\\{` for a literal brace: text such as JSON or C code in a string escapes each `\{`",
+                    "escape the braces",
+                )
+                attach([fix.insert(ast.Pos(line: line_no, col: b + 1), "\\") for b in i..close if line[b] == '{'])
+                for ci in i..close + 1
+                    value.push(line[ci])
+                i = close + 1
+                continue
             if value.len() > 0 and value[value.len() - 1] == '$'
                 # lex.str.8: `${n}` is not interpolation in AIL.
                 diag_fix(
@@ -977,15 +1207,20 @@ fn Lexer.content(
                     "invalid format specification `{shown}`: {spec_why(line[colon + 1..close])}",
                     "a specification is `[[fill]align][+][0][width][,][.decimals][x|b|e]`, e.g. `\{n:>8}`, `\{n:08}`, `\{r:.2}`, `\{n:,}`, `\{n:b}`",
                 )
-            if code.len() == 1
-                diag_fix(
-                    "lex.str.2",
-                    here,
-                    "empty `\{}` in a string",
-                    "put an expression inside, or write `\\\{` for a literal brace",
-                    "write `\\\{` for a literal brace",
-                )
-                attach([fix.insert(here, "\\")])
+            if code.len() == 1 and quoted
+                # Reported once for the whole string, after it closes (`placeholders`).
+                holes.push(here)
+            elif code.len() == 1
+                if not said
+                    diag_fix(
+                        "lex.str.2",
+                        here,
+                        "empty `\{}` in a string",
+                        "put an expression inside, or write `\\\{` for a literal brace",
+                        "write `\\\{` for a literal brace",
+                    )
+                    attach([fix.insert(here, "\\")])
+                said = true
             else
                 if value.len() > 0
                     parts.push(Lit(value.join("")))
@@ -1106,6 +1341,59 @@ fn has_tab(line List[char], to int) bool
         if line[k] == '\t'
             return true
     false
+
+## gram.foreign.1: `'a` after `<`, `&` or `<..., ` with no closing `'` is a Rust lifetime. AIL has none, so it is
+## reported once per line, with one fix deleting every lifetime on the line (and `<'a>` whole), and lexed as if it
+## was never written: `fn f<'a>(s &'a str)` gives one diagnostic, not three (checkbench, ADR 1111). Gives the index
+## after it, or -1 when `line[start]` starts a character literal.
+fn Lexer.lifetime(mut self, line List[char], start int, line_no int) int
+    first := at(line, start + 1)
+    if not first.is_alpha() and first != '_'
+        return -1
+    mut j := start + 1
+    while j < line.len() and name_char(line[j])
+        j += 1
+    if at(line, j) == '\''
+        return -1
+    mut b := start - 1
+    while b >= 0 and line[b] == ' '
+        b -= 1
+    before := if b >= 0 then line[b] else '\0'
+    if before != '<' and before != '&' and not (before == ',' and text_of(line, 0, start).contains("<"))
+        return -1
+    mut from := start
+    mut to := j
+    while at(line, to) == ' '
+        to += 1
+    if at(line, to) == ','
+        to += 1
+        while at(line, to) == ' '
+            to += 1
+    elif at(line, to) == '>' and before == '<' and b == start - 1 and tokens.len() > 0
+        opened := match tokens[tokens.len() - 1].tok
+            Sym(s) => s == "<"
+            _ => false
+        if opened
+            tokens.remove_at(tokens.len() - 1)
+            from = start - 1
+            to += 1
+    name := text_of(line, start, j)
+    edit := fix.delete(ast.Pos(line: line_no, col: from + 1), ast.Pos(line: line_no, col: to + 1))
+    n := diags.len()
+    if n > 0 and diags[n - 1].rule == "gram.foreign.1" and diags[n - 1].pos.line == line_no and diags[n - 1].msg.starts_with("AIL has no lifetimes")
+        mut edits := diags[n - 1].edits
+        edits.push(edit)
+        diags[n - 1].edits = edits
+    else
+        diag_fix(
+            "gram.foreign.1",
+            ast.Pos(line: line_no, col: start + 1),
+            "AIL has no lifetimes: `{name}` and `<{name}>` are Rust's",
+            "delete them: values are passed by value and a borrow never outlives its call (own.val.2), so there is nothing to name; a type parameter is `fn f[T](x T)`",
+            "delete the lifetimes",
+        )
+        attach([edit])
+    to
 
 ## `'a'` or `'\n'` (lex.str.4); gives the index after it.
 fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int

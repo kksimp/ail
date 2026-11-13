@@ -572,6 +572,12 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                     "reshape",
                     "reshape([$a])",
                 )])
+            elif sig.names.len() == sig.params.len() and sig.params.len() > 0
+                # Name each parameter with its type, so the call can be written without a lookup (checkbench, ADR 1111).
+                shown := ["{sig.names[k]} {show(sig.params[k].ty)}" for k in 0..sig.params.len()]
+                d = d.with_help("`{what}` is `{what}({shown.join(", ")})`; pass one value for each")
+            elif sig.params.len() == 0
+                d = d.with_help("`{what}` takes no arguments: write `{what}()`")
             diags.push(d)
             return none
         return [i for i in 0..args.len()]
@@ -781,6 +787,10 @@ fn Checker.fields_literal(
                 mut d := new_diag("type.struct.4", l.pos, "`{label}` has no field `{l.name}`")
                 if s := suggest(l.name, names)
                     d = d.did_you_mean(l.name, s)
+                elif names.len() > 0
+                    d = d.with_help("`{label}` has the fields {list_names(names)}; remove `{l.name}:` and its value, or add the field to the struct")
+                else
+                    d = d.with_help("`{label}` has no fields: write `{label}()`")
                 diags.push(d)
             else
                 err(
@@ -1075,6 +1085,10 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         args_only(args)
         if not hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
             no_method(rt, n, at)
+        # `xs.iter().map(...)`: reported once, then the chain goes on with the list itself, so `|x| ...` and
+        # `.collect()` after it are not reported again (checkbench, ADR 1111).
+        if args.len() == 0 and iterator_word(rt, n)
+            return rt
         return Ty.Unknown
     if cands.len() > 1
         args_only(args)
@@ -1266,7 +1280,22 @@ fn Checker.associated(
         if dt := distinct_assoc(d, n, at, args, expect)
             return dt
         args_only(args)
-        err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        # The type's associated functions and variants are the names to suggest (checkbench, ADR 1111).
+        mut known := List[str]()
+        for key in methods.keys()
+            if rest := key.strip_prefix("{tn}.")
+                known.push(rest)
+        if e := enum_of_def(d)
+            for v in prog.enums[e].variants
+                known.push(v.name)
+        mut nd := new_diag("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        if s := suggest(n, known)
+            nd = nd.did_you_mean(n, s)
+        elif known.len() > 0
+            nd = nd.with_help("`{tn}` has {list_names(known.sorted())}; `ail api FILE` lists each signature")
+        else
+            nd = nd.with_help("`{tn}` has no associated functions; declare one with `fn {tn}.{n}(...)`")
+        diags.push(nd)
         return Ty.Unknown
     private_fn(i, at)
     sig := sigs[i]
@@ -1365,6 +1394,9 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         # An error's text is `to_str()` (the same text as interpolating it).
         d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
         d = d.with_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+    elif iterator_word(rt, n)
+        d = d.with_help(method_help(rt, n) else "a list is iterable as it is")
+        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif new := method_rename(rt, n)
         d = d.with_help("write `.{new}()`").with_fix("write `{new}`", [fix.replace(at, n, new)])
     elif h := method_help(rt, n)
@@ -1375,8 +1407,31 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         match rt
             Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
             Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
-            _ => d = d.with_help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types")
+            _ =>
+                # Name what there is, so the next try needs no lookup (checkbench, ADR 1111).
+                if names.len() > 0
+                    shown := names.sorted()
+                    more := if shown.len() > 24 then ", ..." else ""
+                    d = d.with_help("{show(rt)} has {list_names(shown.take(24))}{more}; `ail ask std \"WORDS\"` finds a method by what it does")
+                else
+                    d = d.with_help("{show(rt)} has no methods; `ail ask std \"WORDS\"` finds a std function by what it does")
     diags.push(d)
+
+## `iter`, `collect` and their kin on a list or a set: Rust's and Java's iterator words. A list is iterable and
+## `map`/`filter` give lists, so the word is dropped (expr.name.1, checkbench, ADR 1111).
+fn iterator_word(rt Ty, n str) bool
+    kind := kind_of(rt)
+    (kind == "list" or kind == "set") and [
+        "iter",
+        "into_iter",
+        "iter_mut",
+        "stream",
+        "collect",
+        "to_vec",
+        "cloned",
+        "copied",
+        "to_owned",
+    ].contains(n)
 
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
 ## which has a function `f`. Reports it and returns true.

@@ -685,8 +685,14 @@ fn Parser.keyword_as_name(mut self, k int)
         error_text("lex.kw.1", pos, msg, "choose a different name", "")
         return
     help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
+    if not rename_is_safe(word) and used_later(k, word)
+        # A word the language itself uses in bodies, written again later in the function: which of those are the
+        # name is the author's call, so there is no fix; renaming the declaration alone would leave the uses broken
+        # (fix.apply.1, checkbench ADR 1111).
+        error_text("lex.kw.1", pos, msg, help, "")
+        return
     if not rename_is_safe(word)
-        # A word the language itself uses in bodies: rename this declaration only.
+        # A word the language itself uses in bodies, declared and never written again: rename the declaration.
         error_fix(
             "lex.kw.1",
             pos,
@@ -705,6 +711,20 @@ fn Parser.keyword_as_name(mut self, k int)
         "rename `{word}` to `{better}`",
         rename_edits(k, word, better),
     )
+
+## Whether the keyword `word` is written again after token `k`, before the end of the function (the next
+## line that starts at column 1).
+fn Parser.used_later(self, k int, word str) bool
+    mut j := k + 1
+    while j < tokens.len()
+        t := tokens[j]
+        tag := tok_tag(t.tok)
+        if tag == "eof" or (t.pos.col == 1 and (tag == "id" or tag == "kw" or tag == "sym"))
+            return false
+        if tag == "kw" and tok_text(t.tok) == word
+            return true
+        j += 1
+    false
 
 ## The edits that rename the keyword `word` at token `k` and each later use
 ## of it as a name, through the end of the function: the next line that

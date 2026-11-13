@@ -195,6 +195,8 @@ fn report_in(
         lines := [chop_cr(l) for l in text.split("\n")]
         for d in sorted
             mut shown := d
+            if shown.help == none and not shown.warning and shown.rule == "gram.syntax.1"
+                shown.help = syntax_help(shown.message)
             if shown.help == none and not shown.warning
                 shown.help = default_help(shown.rule)
             end := token_end(lines, shown.pos)

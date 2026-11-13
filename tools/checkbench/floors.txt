@@ -1,0 +1,10 @@
+# Floors for `checkbench.py --fast` (the gate suite `checkbench`, ADR 1111). A total below its floor is RED;
+# a `max_` line is a ceiling. Raise a floor in the change that earns it; never lower one to pass.
+# First set (2026-11-13): run 1 on the Mac (full form, 923 mutants) less a margin for the fast form's smaller sample.
+le2_pct 93
+on_line_pct 93
+fixable_pct 60
+fix_ok_pct 80
+max_generic_pct 12
+max_silent 3
+max_crash 0

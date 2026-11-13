@@ -8,7 +8,7 @@
         "lex.str.1" => "escapes are `\\n \\t \\r \\0 \\\\ \\\" \\' \\\{ \\u\{...}`; `\{expression}` interpolates"
         "lex.num.3" => "write a number that fits, or compute it from smaller parts"
         "lex.block.1" | "lex.block.3" => "indent a block by exactly 4 spaces below the line that opens it"
-        "gram.syntax.1" => "docs/language-card.md lists the declarations and statements AIL has"
+        "gram.syntax.1" => "write the code on its own line, one statement per line; `ail card` shows each form"
         "gram.fn.1" | "gram.fn.2" => "a function is `fn name(a int, b int) int`, then an indented body"
         "expr.if.1" | "expr.loop.1" => "a header ends its line, and the block is the lines indented 4 spaces below it"
         "expr.call.1" => "give exactly the arguments the signature lists; `ail api FILE` shows each signature"
@@ -36,3 +36,17 @@
         "gen.infer.2" => "give as many type arguments as the type declares, in `[]`"
         "bootstrap.unsupported" => "this construct has no AIL form in 0.1; docs/language-card.md lists what AIL has, and docs/status.md what is planned"
         _ => none
+
+## gram.syntax.1 says what it expected: the help repeats that as what to write (checkbench, ADR 1111).
+fn syntax_help(message str) str?
+    rest := message.strip_prefix("expected ") else return none
+    halves := rest.split(", found ")
+    if halves.len() != 2
+        return none
+    wanted := halves[0]
+    found := halves[1]
+    if found.starts_with("the keyword `")
+        word := found.split("`")[1]
+        if ["return", "if", "for", "while", "match", "break", "continue", "fn", "let"].contains(word)
+            return "write {wanted} here; `{word}` starts a statement, so it goes at the start of its own line"
+    "write {wanted} here, in place of {found}"
