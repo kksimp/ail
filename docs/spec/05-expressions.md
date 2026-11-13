@@ -370,9 +370,11 @@ and name those variants, unless the function allows it with
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`, `expr.match.13`), or written bare to
-match any fields (`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183,
-ADR 1069)*
+for each of its fields (`expr.match.6`, `expr.match.13`), by patterns for
+some fields by name (`expr.match.14`), or written bare to match any fields
+(`expr.match.10`). A struct value is matched by a struct pattern
+(`expr.match.14`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183, ADR 1069,
+ADR 1106)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -507,6 +509,46 @@ fn main()
     print(show(simplify(Expr.Add(a: Expr.Num(n: 2), b: Expr.Num(n: 3)))))    # 5
     print(show(simplify(Expr.Neg(e: Expr.Neg(e: Expr.Num(n: 7))))))         # 7
     print(show(simplify(Expr.Add(a: Expr.Neg(e: Expr.Nil), b: Expr.Nil))))  # -nil
+```
+
+**expr.match.14** — A pattern with field names, `Name(f: p, g, ...)`, matches
+the fields it names and takes any value in the others. `f: p` matches field
+`f` with pattern `p`; a bare `g` binds field `g` to a new name `g`. On a
+struct value `Name` is the struct's name, and `Point` or `Point(x, y)` (bare
+field names) match every value. On an enum value `Name` is a variant, as in
+`Circle(r: 0)`. Each name MUST be a field of `Name`, at most once, and a
+struct pattern names its fields: `Point(0, y)` is an error. A `match` on a
+struct value, or on an enum whose arms use field names, is checked as
+nested patterns are (`expr.match.13`): it is exhaustive when every value is
+taken, and the missing cases are named. *(ADR 1106)*
+
+```ail rules=expr.match.14
+struct Point
+    x int
+    y int
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn place(p Point) str
+    match p
+        Point(x: 0, y: 0) => "origin"
+        Point(x: 0, y) => "on the y axis at {y}"
+        Point(x, y: 0) => "on the x axis at {x}"
+        Point(x, y) => "at {x}, {y}"
+
+fn kind(s Shape) str
+    match s
+        Circle(r: 0) | Rect(w: 0) | Rect(h: 0) => "empty"
+        Circle => "round"
+        Rect(w, h) => if w == h then "square" else "oblong"
+
+fn main()
+    print(place(Point(x: 0, y: 4)))                    # on the y axis at 4
+    print(place(Point(x: 2, y: 3)))                    # at 2, 3
+    print(kind(Shape.Rect(w: 0, h: 5)))                # empty
+    print(kind(Shape.Rect(w: 2, h: 2)))                # square
 ```
 
 > **Note:** not yet designed: or-patterns that bind names, a binding pattern for a whole

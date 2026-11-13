@@ -3171,7 +3171,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) =>
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(_, _, _, _, _) =>
             range_start_error(pos)
             return none
     i += 1
@@ -3204,7 +3204,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) => i += 0
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) | StructPat(_, _, _, _, _) => i += 0
     error_text(
         "expr.match.12",
         hpos,
@@ -3237,22 +3237,53 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
                 mut names := List[ast.Ident]()
                 mut subs := List[ast.Pattern]()
                 mut nested := false
+                # expr.match.14: `name: pattern` matches a field by name.
+                mut labels := List[str]()
+                mut item_pos := List[ast.Pos]()
+                mut labeled := false
                 while not at_sym(")")
                     s := sym_at(1)
                     f := ident() else ""
-                    if f != "" and (s == "," or s == ")")
+                    lab := if f != "" then f else kw_at(0)
+                    item_pos.push(here())
+                    if lab != "" and s == ":"
+                        i += 2
+                        labels.push(lab)
+                        subs.push(pattern()?)
+                        labeled = true
+                    elif f != "" and (s == "," or s == ")")
                         nm := take_name("a name or `_` for the field", "expr.match.6")?
                         names.push(nm)
+                        labels.push(nm.name)
                         if nm.name == "_"
                             subs.push(ast.Pattern.Wildcard(nm.pos))
                         else
                             subs.push(ast.Pattern.BindName(name: nm.name, pos: nm.pos))
                     else
+                        labels.push("")
                         subs.push(pattern()?)
                         nested = true
                     if not eat_sym(",")
                         break
                 expect_sym(")", "`)` or `,` in the pattern", "expr.match.6")?
+                if labeled
+                    for k in 0..labels.len()
+                        if labels[k] == "" or labels[k] == "_"
+                            error_text(
+                                "expr.match.14",
+                                item_pos[k],
+                                "a pattern with field names gives each field as `name: pattern` or a bare field name",
+                                "write `field: pattern` here, or leave the field out to match any value",
+                                "",
+                            )
+                            return none
+                    return ast.Pattern.StructPat(
+                        qualifier: qualifier,
+                        name: name,
+                        labels: labels,
+                        fields: subs,
+                        pos: pos,
+                    )
                 if nested
                     return ast.Pattern.Nested(
                         qualifier: qualifier,

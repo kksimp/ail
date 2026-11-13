@@ -15,7 +15,7 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
     s := lower_value(scrutinee, none)?
     mut en := ""
     match s.ty
-        Int | Sized(_) | Bool | Str | Char | Tuple => en = ""
+        Int | Sized(_) | Bool | Str | Char | Tuple | Struct => en = ""
         Enum(n) => en = n
         _ => return unsupported(pos, "`match` on `{s.ty.name()}`")
     tag := if en == "" then s.id else tag_of(en, s.id)
@@ -127,6 +127,10 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
                 seal(other)
                 cur = other
         Variant(_, name, _, vpos) =>
+            # expr.match.14: `Point` or `Point(x, y)` takes any struct value.
+            if struct_name(s.ty) != none
+                jump(yes, [])
+                return true
             n := enum_name(s.ty) else
                 problem(vpos, "variant pattern `{name}` on `{s.ty.name()}`")
                 return false
@@ -137,6 +141,7 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
             branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
         TuplePat => return tuple_test(p, s, yes, no)
         Nested => return nested_test(p, s, tag, yes, no)
+        StructPat => return labeled_test(p, s, tag, yes, no)
         BindName(_, bpos) =>
             problem(bpos, "a name pattern outside a tuple isn't in the native subset yet")
             return false
@@ -187,6 +192,9 @@ fn Lower.bind_fields(mut self, p ast.Pattern, s Val)
     match p
         Variant(_, name, bindings, _) =>
             binds := bindings else return
+            if struct_name(s.ty) != none
+                record_bind(binds, s)
+                return
             n := enum_name(s.ty) else return
             k := case_index(n, name)
             if k < 0
@@ -200,4 +208,5 @@ fn Lower.bind_fields(mut self, p ast.Pattern, s Val)
                 borrowed.add(lookup(binds[j].name) else "")
         TuplePat => tuple_bind(p, s)
         Nested => nested_bind(p, s)
+        StructPat => labeled_bind(p, s)
         _ => return

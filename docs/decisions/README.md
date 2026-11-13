@@ -886,3 +886,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1098](1098-std-kv.md) | `std.kv`: a key-value store in one file with a crash-safe log; `fs.sync` *(delegated)* | Accepted | 2026-11-13 |
 | [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |
 | [1105](1105-scoped-caps-in-manifests-and-review.md) | Scoped capabilities in `ail.pkg` (`caps fs.read=./data`) give a run its policy; `ail review` reports widened scopes *(delegated)* | Accepted | 2026-11-13 |
+| [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |

@@ -638,6 +638,11 @@ fn pv_param(f PvFacts, p ast.Param) PvFacts
             for q in nfields
                 g4 = pv_pattern(g4, q)
             g4
+        StructPat(_, _, _, sfields, _) =>
+            mut g5 := f
+            for q in sfields
+                g5 = pv_pattern(g5, q)
+            g5
         _ => f
 
 ## Whether a block always leaves: it ends in `return`, `break` or `continue`, or in an

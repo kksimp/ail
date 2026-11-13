@@ -1065,6 +1065,7 @@ fn pattern_pos(p ast.Pattern) ast.Pos
         TuplePat(_, at) => at
         BindName(_, at) => at
         Nested(_, _, _, at) => at
+        StructPat(_, _, _, _, at) => at
 
 @allow("expr.match.3")
 fn Checker.match_expr(
@@ -1092,6 +1093,8 @@ fn Checker.match_expr(
         Unknown => literal = false
         Res => reject_unhandled(st, expr_pos(scrutinee))
         Tuple => literal = false
+        # expr.match.14: a struct is matched by its fields, as a matrix.
+        Struct => literal = false
         Union(members) => return union_match(scrutinee, members, arms, at, expect, need)
         _ =>
             err_help(
@@ -1110,7 +1113,7 @@ fn Checker.match_expr(
     nvariants := if enum_index >= 0 then prog.enums[enum_index].variants.len() else 0
     mut cov := Coverage(variants: [false for _ in 0..nvariants], literals: [], wildcard: false)
     # expr.match.13: an enum `match` whose arms nest is checked as a matrix.
-    nested := enum_index >= 0 and [a for a in arms if nests(a.pat)].len() > 0
+    nested := is_record(st) or (enum_index >= 0 and [a for a in arms if nests(a.pat)].len() > 0)
     mut nrows := NestRows(rows: [], named: [false for _ in 0..nvariants], broken: false)
     mut agree := new_agree(expect, need, "arm", "`match`")
     for arm in arms
@@ -1129,7 +1132,7 @@ fn Checker.match_expr(
             literal_pattern(st, arm.pat, mut cov)
             # type.tuple.6: a misplaced tuple pattern still binds its names.
             match arm.pat
-                TuplePat | Nested => bindings = tuple_pattern_names(arm.pat)
+                TuplePat | Nested | StructPat => bindings = tuple_pattern_names(arm.pat)
                 Wildcard | Literal | Alt | Variant | Range | BindName => bindings = []
         else
             # The scrutinee was already reported: bind names quietly.
@@ -1137,7 +1140,7 @@ fn Checker.match_expr(
                 Variant(_, _, names, _) =>
                     for nm in names else []
                         bindings.push(Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown))
-                TuplePat | Nested => bindings = tuple_pattern_names(arm.pat)
+                TuplePat | Nested | StructPat => bindings = tuple_pattern_names(arm.pat)
                 Wildcard | Literal | Alt | Range | BindName => bindings = []
         if arm.guard != none
             cov = kept
@@ -1248,7 +1251,7 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Variant | Range | TuplePat | BindName | Nested => literal_pattern(
+                    Literal | Alt | Variant | Range | TuplePat | BindName | Nested | StructPat => literal_pattern(
                         t,
                         a,
                         mut cov,
@@ -1299,6 +1302,12 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
             "`{n}` is a variant pattern, but the value matched is {show(t)}",
             "match it with a pattern of its type, or `_`",
         )
+        StructPat(_, n, _, _, at) => err_help(
+            "expr.match.14",
+            at,
+            "`{n}(...)` matches fields by name, but the value matched is {show(t)}",
+            "match it with a pattern of its type, or `_`",
+        )
         # expr.match.12: a range covers some values, never all, so it marks
         # nothing as seen.
         Range(lo, hi, inclusive, at) => range_pattern(t, lo, hi, inclusive, at, cov.wildcard)
@@ -1343,7 +1352,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Range | TuplePat | BindName | Nested => pattern(
+                    Literal | Alt | Range | TuplePat | BindName | Nested | StructPat => pattern(
                         e,
                         args,
                         a,
@@ -1368,8 +1377,8 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
             if not enum_text_pattern(e, lit, at, mut cov)
                 err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
             []
-        # expr.match.13: inside a tuple element; it covers no whole variant.
-        Nested =>
+        # expr.match.13-14: inside a tuple element; it covers no whole variant.
+        Nested | StructPat =>
             mut names := List[Binding]()
             npat(Ty.Enum(e, args), pat, mut names)
             names
