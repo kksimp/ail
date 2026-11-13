@@ -1383,6 +1383,60 @@ fn Gate.fmt(mut self, tmp str)
     td := ail_run(["fmt", "--check", tree]) else return
     if td.status != 1 or not td.out.contains("off.ail") or td.out.contains("ok.ail")
         red("fmt --check directory", "exit {td.status}\n{td.out}")
+    # fmt.self (ADR 1081): `--self` writes `self.` before bare members; plain `fmt` keeps them.
+    bare := [
+        "struct Pt",
+        "    x int",
+        "    y int",
+        "",
+        "trait Named",
+        "    fn name(self) str",
+        "    fn hello(self) str",
+        "        \"hi \{name()}\"",
+        "",
+        "impl Named for Pt",
+        "    fn name(self) str",
+        "        \"pt\"",
+        "",
+        "fn Pt.sum(self) int",
+        "    x + y",
+        "",
+        "fn Pt.shift(mut self, d int)",
+        "    x += d",
+        "    print(\"now \{x} \{sum()}\")",
+        "",
+        "fn Pt.scaled(self, k int) Pt",
+        "    Pt(x: x * k, y: self.y * k)",
+        "",
+        "fn main()",
+        "    mut p := Pt(x: 1, y: 2)",
+        "    p.shift(3)",
+        "    print(p.scaled(2).sum())",
+        "    print(p.hello())",
+        "",
+    ].join("\n")
+    explicit := bare
+        .replace("\{name()}", "\{self.name()}")
+        .replace("    x + y", "    self.x + self.y")
+        .replace("    x += d", "    self.x += d")
+        .replace("\{x} \{sum()}", "\{self.x} \{self.sum()}")
+        .replace("x: x * k", "x: self.x * k")
+    members := "{dir}/members.ail"
+    fs.write_text(members, bare) else return
+    kept := ail_run(["fmt", "--stdout", members]) else return
+    if kept.status != 0 or kept.out != bare
+        red("fmt keeps bare members", "exit {kept.status}\n{kept.out}{kept.err}")
+    sf := ail_run(["fmt", "--self", "--stdout", members]) else return
+    if sf.status != 0 or sf.out != explicit
+        red("fmt --self", "exit {sf.status}\n{sf.out}{sf.err}")
+    run_bare := ail_run(["run", members]) else return
+    fs.write_text(members, explicit) else return
+    again := ail_run(["fmt", "--self", "--check", members]) else return
+    if again.status != 0
+        red("fmt --self --check", "exit {again.status}\n{again.out}{again.err}")
+    run_explicit := ail_run(["run", members]) else return
+    if run_bare.out != "now 4 6\n12\nhi pt\n" or run_explicit.out != run_bare.out
+        red("fmt --self meaning", "{run_bare.out}{run_bare.err}---\n{run_explicit.out}")
     # Every source file of the compiler and the gate is canonical (ready-check checks the files a
     # branch changes; DK missed a layout diff in compiler/main.ail because this suite looked only at examples).
     for root in ["compiler", "tools/gate"]

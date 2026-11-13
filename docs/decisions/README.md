@@ -148,7 +148,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0138](0138-literal-and-or-patterns.md) | Literal patterns, or-patterns, and one-line statement arms *(delegated)* | Accepted | 2026-10-05 |
 | [0139](0139-unit-results-statement-else-and-divergence.md) | `! E` results; statement `else`; divergence is a rule, not a type (amends 0125) *(delegated)* | Accepted | 2026-10-05 |
 | [0140](0140-diagnostics-for-other-languages.md) | Names other languages spell differently get a fixed help *(delegated)* | Accepted | 2026-10-05 |
-| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted | 2026-10-05 |
+| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted (formatter clause superseded by 1081) | 2026-10-05 |
 | [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
 | [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
@@ -866,6 +866,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1078](1078-error-union-member-matching.md) | `match err` on an error union takes member types and their variants, narrows the name, and must cover every member *(designer; details delegated)* | Accepted | 2026-11-12 |
 | [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |
 | [1080](1080-one-guard-per-list-for-bounded-indexes.md) | Native: one guard test per list for indexes bounded by the counted loops around *(delegated)* | Accepted | 2026-11-12 |
+| [1081](1081-formatter-writes-self.md) | The formatter writes `self.` before a bare member | Accepted | 2026-11-12 |
 | [1082](1082-discarded-result-is-an-error.md) | A call whose value is thrown away and that does nothing else is an error (`eff.use.1`) | Accepted | 2026-11-12 |
 | [1083](1083-ail-ask-answers-honestly.md) | `ail ask` answers honestly: built-in methods, a minimum score, misses with a hint, `ail ask how` *(delegated)* | Accepted | 2026-11-12 |
 | [1086](1086-heap-and-deque.md) | `Heap[T]` and `Deque[T]` in the prelude *(delegated)* | Accepted | 2026-11-12 |
