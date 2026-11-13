@@ -118,6 +118,9 @@ pub struct Field
     pub ty TypeRef
     ## Marked `@observe`: an attached agent may read it (attach.observe.1).
     pub observe bool
+    ## `name Type = value`: the value a struct literal that leaves the field out gets
+    ## (type.struct.8). Only struct fields have one.
+    pub default Expr?
 
 pub struct EnumDecl
     pub name str

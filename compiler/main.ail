@@ -820,6 +820,8 @@ fn mentions_prelude(srcs List[mir.Source]) bool
             or s.text.contains("Json")
             or s.text.contains("Default")
             or s.text.contains("Grid")
+            or s.text.contains("Heap")
+            or s.text.contains("Deque")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
         if s.text.contains("@derive")

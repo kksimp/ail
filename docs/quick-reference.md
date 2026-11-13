@@ -131,7 +131,7 @@ fn squares(n int) List[int]
 ```ail
 struct Point
     x int
-    y int
+    y int = 0                     # a default: Point(x: 1) is Point(x: 1, y: 0)
 
 enum Color
     Red
@@ -475,6 +475,11 @@ Inside a `for mut` loop the body can't use the list itself.
 
 `Grid[T]`, a flat 2-D list: `mut g := Grid.fill(rows, cols, v)` (or
 `Grid.from(xs)`), `g[i, j] += 1`, `g.rows`, `g.cols`, `g.cells`, `g.row(i)`.
+
+`Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
+for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
+`Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
+`last()`, `d.at(i)`, `d.to_list()`.
 
 A comprehension builds a list, set or map in one expression:
 
