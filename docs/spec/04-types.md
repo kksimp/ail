@@ -616,9 +616,10 @@ when `s` is an optional `-` followed by one or more decimal digits and the
 value fits in `int`; otherwise it is `none`. *(ADR 0124)*
 
 **type.str.6** — The `str` methods that search for text (`contains`,
-`starts_with`, `ends_with` and `split`) accept a `char` as well as a `str`;
-a `char` means the one-character string. `strip_prefix` and `strip_suffix`
-take a `str` only. *(ADR 0135)*
+`starts_with`, `ends_with`, `split`, `find`, `rfind` and `count`) accept a
+`char` as well as a `str`, and `replace` accepts one for each of its two
+arguments; a `char` means the one-character string. `strip_prefix` and
+`strip_suffix` take a `str` only. *(ADR 0135, ADR 1087)*
 
 **type.str.7** — A `str` has these methods. *(ADR 0135)*
 - `s.chars()` returns a new `List[char]`. Strings stay unindexable
@@ -685,6 +686,21 @@ fn main()
 ```
 
 **type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
+
+**type.str.20** — `s.to_int(radix)` returns an `int?` like `to_int()` (`type.str.5`),
+reading an optional `-` and then digits `0-9`, `a-z` or `A-Z` whose values are below
+`radix`; anything else, or a value that doesn't fit, is `none`. `n.to_str(radix)` on an
+integer is its digits in `radix`, lowercase, with a `-` before the magnitude of a negative
+value (as `n.to_hex()` for 16); `n.to_str()` is the decimal text. A `radix` outside 2 to 36
+is a compile-time error for a literal and otherwise traps with this rule. *(ADR 1087)*
+
+```ail rules=type.str.20
+fn main()
+    print("ff".to_int(16))        # 255
+    print("102".to_int(2))        # none
+    print(255.to_str(2))          # 11111111
+    print((0 - 255).to_str(16))      # -ff
+```
 
 **type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
 *(ADR 0630)*
