@@ -350,7 +350,7 @@ calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A li
 `|x| x + n` is one too: one expression on its line, types from context or written
 (`|x int| ...`). It copies the locals it names when made; they are read-only inside
 (share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
-Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x| x > lo)`.
+Collections share one vocabulary (List, Set, Map, Deque, Seq): `map filter any all find count fold flat_map take skip take_while skip_while zip enumerate group_by`; a function takes the element, on a map `|k, v|`: `xs.filter(|x| x > lo)`, `xs.fold(0, |acc, x| acc + x)`.
 A `fn name(params) R` with a block inside a body is a local function: it copies the
 same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
@@ -555,7 +555,7 @@ fn double(x int) int
     assert_eq(double(4), 8)         # traps showing both values
     assert(double(1) == 2, "message")   # optional `str` message
     assert_near(0.1 + 0.2, 0.3, 0.0001) # three floats: |a - b| <= eps
-    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error
+    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error (kind alone for a variant with data; `E.V(f: x)` the payload too)
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink

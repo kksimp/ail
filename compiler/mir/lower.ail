@@ -2130,6 +2130,8 @@ fn Lower.lower_method(
         return lower_chan_method(r, name, npos, args)
     if is_sync(r.ty) or is_task_cancel(recv, name)
         return lower_sync_method(r, name, npos, args)
+    if is_vocab_call(r.ty, name)
+        return lower_vocab(r, name, args, npos)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none

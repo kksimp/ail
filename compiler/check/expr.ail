@@ -583,6 +583,15 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
                     sig_fix_last(errors)
             ok
         Unknown => Ty.Unknown
+        Unit =>
+            err_help(
+                "err.prop.1",
+                at,
+                "`?` needs a value that can be absent or fail, but this call has no value",
+                "remove the `?`: a call with no result can't fail here",
+            )
+            fix_last("remove the `?`", [fix.delete(at, ast.Pos(line: at.line, col: at.col + 1))])
+            t
         _ =>
             err(
                 "err.prop.1",

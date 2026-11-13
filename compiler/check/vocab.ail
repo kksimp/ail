@@ -1,0 +1,212 @@
+## The shared collection vocabulary beyond `listfn.ail` (type.coll.28-33,
+## ADR 1099): `count`, `fold`, `flat_map`, `take_while`, `skip_while` and
+## `zip` on lists, and the function methods on sets (over an element) and maps
+## (over a key and a value). A function given to them can't fail
+## (type.coll.21), is called in order, and at most once per element.
+use ast
+
+## The methods of this file that take a function, by receiver kind.
+pub LIST_VOCAB := ["count", "fold", "flat_map", "take_while", "skip_while"]
+pub SET_VOCAB := [
+    "any",
+    "all",
+    "find",
+    "filter",
+    "map",
+    "group_by",
+    "count",
+    "fold",
+    "flat_map",
+    "take_while",
+    "skip_while",
+]
+pub MAP_VOCAB := ["any", "all", "count", "fold", "filter", "map", "flat_map", "map_values"]
+
+## Whether `x.n(...)` on a value of type `t` is checked by `vocab_call`.
+@allow("expr.match.3") fn is_vocab(t Ty, n str) bool
+    match t
+        ListOf => LIST_VOCAB.contains(n) or n == "zip"
+        SetOf => SET_VOCAB.contains(n) or n == "zip"
+        MapOf => MAP_VOCAB.contains(n)
+        _ => false
+
+## The signature `builtin` reports for them; the call is checked by `vocab_call`.
+fn vocab_builtin() Builtin?
+    read([], Ty.Unknown)
+
+## The parameter types of the function a method of `t` takes: the element, or
+## a map's key and value.
+@allow("expr.match.3") fn vocab_params(t Ty) List[Ty]
+    match t
+        MapOf(k, v) => [k, v]
+        ListOf(e) => [e]
+        SetOf(e) => [e]
+        _ => []
+
+## The element type of a list or set, `Unknown` for a map.
+@allow("expr.match.3") fn vocab_elem(t Ty) Ty
+    match t
+        ListOf(e) => e
+        SetOf(e) => e
+        _ => Ty.Unknown
+
+## Whether `e` is a function literal `|x| e`.
+@allow("expr.match.3") fn is_closure_lit(e ast.Expr) bool
+    match e
+        Closure => true
+        _ => false
+
+## The `U` of a `List[U]`, else `Unknown`.
+@allow("expr.match.3") fn vocab_list_of(t Ty) Ty
+    match t
+        ListOf(u) => u
+        _ => Ty.Unknown
+
+## `xs.count(f)` and the others (type.coll.28-32).
+@allow("expr.match.3")
+fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
+    ps := vocab_params(rt)
+    e := vocab_elem(rt)
+    want_args := if n == "fold" then 2 else 1
+    for a in args
+        if a.label != none or a.mutable or a.moved
+            args_only(args)
+            return Ty.Unknown
+    if args.len() != want_args
+        args_only(args)
+        if n == "fold"
+            err_help(
+                "expr.call.1",
+                at,
+                "`fold` takes a starting value and a function, `xs.fold(0, |acc, x| acc + x)`",
+                "pass the starting value, then the function, with no label, `mut` or `move`",
+            )
+        elif n == "count"
+            err_help(
+                "expr.call.1",
+                at,
+                "`count` takes a function and counts the elements it accepts",
+                "write `xs.count(|x| x == v)` for a value, or `xs.len()` for the number of elements",
+            )
+        else
+            err_help(
+                "expr.call.1",
+                at,
+                "`{n}` takes one argument",
+                "pass one argument, with no label, `mut` or `move`",
+            )
+        return Ty.Unknown
+    if n == "zip"
+        ot := expr(args[0].value, none, true)
+        if ot == Ty.Unknown or ot == Ty.Never
+            return Ty.Unknown
+        u := vocab_list_of(ot)
+        if u == Ty.Unknown
+            err_help(
+                "expr.call.2",
+                expr_pos(args[0].value),
+                "`zip` takes a list, not {show(ot)}",
+                "write `xs.zip(ys)` with a `List`",
+            )
+            return Ty.Unknown
+        return Ty.ListOf(Ty.Tuple([e, u]))
+    mut init := Ty.Unknown
+    mut fargs := ps
+    if n == "fold"
+        init = expr(args[0].value, none, true)
+        if init == Ty.Unknown or init == Ty.Never
+            return Ty.Unknown
+        fargs = [init]
+        for p in ps
+            fargs.push(p)
+    a := args[args.len() - 1]
+    tests := ["any", "all", "find", "filter", "count", "take_while", "skip_while"].contains(n)
+    want := Ty.FnTy(fargs, if tests then Ty.Bool else if n == "fold" then init else Ty.Unknown)
+    ft := expr(a.value, if is_closure_lit(a.value) then want else none, true)
+    if ft == Ty.Unknown or ft == Ty.Never
+        return Ty.Unknown
+    fp := fn_parts(ft) else
+        if n == "count"
+            err_help(
+                "expr.call.2",
+                expr_pos(a.value),
+                "`count` takes a function, not {show(ft)}",
+                "to count a value write `xs.count(|x| x == v)`; for the number of elements, `xs.len()`",
+            )
+            return Ty.Unknown
+        err_help(
+            "expr.call.2",
+            expr_pos(a.value),
+            "`{n}` takes a function, not {show(ft)}",
+            "write a literal, e.g. `xs.{n}(|x| x > 0)`",
+        )
+        return Ty.Unknown
+    if fp.params.len() != fargs.len()
+        mismatch("expr.call.2", expr_pos(a.value), want, ft)
+        return Ty.Unknown
+    for i in 0..fargs.len()
+        if not accepts(fp.params[i], fargs[i])
+            mismatch("expr.call.2", expr_pos(a.value), want, ft)
+            return Ty.Unknown
+    r := fp.ret
+    if is_res(r)
+        err_help(
+            "type.coll.21",
+            expr_pos(a.value),
+            "the function given to `{n}` can't fail",
+            "handle the error inside it with `else`, or use a `for` loop and `?`",
+        )
+        return Ty.Unknown
+    if tests
+        if not accepts(Ty.Bool, r)
+            mismatch("expr.call.2", expr_pos(a.value), want, ft)
+        if n == "any" or n == "all"
+            return Ty.Bool
+        if n == "count"
+            return Ty.Int
+        if n == "find"
+            return Ty.Opt(e)
+        if n == "filter"
+            return rt
+        return Ty.ListOf(e)
+    if n == "fold"
+        if not accepts(init, r)
+            mismatch("expr.call.2", expr_pos(a.value), want, ft)
+            return Ty.Unknown
+        return init
+    if r == Ty.Unit
+        err_help(
+            "expr.call.2",
+            expr_pos(a.value),
+            "the function given to `{n}` must return a value",
+            "for an action on each element, use a `for` loop",
+        )
+        return Ty.Unknown
+    if n == "map"
+        return Ty.ListOf(r)
+    if n == "flat_map"
+        u := vocab_list_of(r)
+        if r != Ty.Unknown and u == Ty.Unknown
+            err_help(
+                "expr.call.2",
+                expr_pos(a.value),
+                "the function given to `flat_map` must return a list, not {show(r)}",
+                "return a `List`, or use `map` for one value per element",
+            )
+            return Ty.Unknown
+        return Ty.ListOf(u)
+    if n == "map_values"
+        match rt
+            MapOf(k, _) => return Ty.MapOf(key: k, value: r)
+            _ => return Ty.Unknown
+    # group_by on a set
+    if r != Ty.Unknown and not implements(r, std_hash)
+        mut d := new_diag(
+            "gen.bound.3",
+            expr_pos(a.value),
+            "`group_by` needs a key that can be hashed (`Hash`), and this is {show(r)}",
+        )
+        if h := how_to_implement(r, std_hash)
+            d = d.with_help(h)
+        diags.push(d)
+    Ty.MapOf(key: r, value: Ty.ListOf(e))

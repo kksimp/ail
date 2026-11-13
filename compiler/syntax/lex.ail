@@ -1197,6 +1197,16 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
                     )
                 return Escaped(ch: ch, next: next)
     shown := if i + 1 < line.len() then text_of(line, i + 1, i + 2) else ""
+    if shown == "}"
+        diag_fix(
+            "lex.str.1",
+            pos,
+            "unknown escape sequence `\\}`",
+            "`}` needs no escape: write `}`; only `\\\{` is an escape, to keep `{` from starting an interpolation",
+            "remove the backslash",
+        )
+        attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
+        return Escaped(ch: '}', next: i + 2)
     diag_msg(
         "lex.str.1",
         pos,

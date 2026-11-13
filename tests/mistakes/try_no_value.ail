@@ -1,0 +1,5 @@
+fn flush()
+    print("flushed")
+
+fn main()
+    flush()?

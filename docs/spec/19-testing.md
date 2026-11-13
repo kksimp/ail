@@ -307,7 +307,9 @@ fn main()
 of type `T ! E`) fails, and traps when it returns a value. `assert_err(call,
 E.Variant)` also requires the error to equal the second argument, and traps
 otherwise; that argument must be one of the errors the call declares, else it
-is a compile-time error. `assert_near(a, b, eps)` does nothing when
+is a compile-time error. For a variant that carries data, `E.Variant` alone
+checks the kind of the error and ignores its fields; to check them too, pass
+the whole value, `E.Variant(field: x)`. `assert_near(a, b, eps)` does nothing when
 `|a - b| <= eps` and traps otherwise (also when a value is NaN), showing the
 three values. The error `assert_err` catches is handled: the test goes on.
 *(ADR 1087)*
@@ -315,15 +317,20 @@ three values. The error `assert_err` catches is handled: the test goes on.
 ```ail rules=test.assert.3
 error enum Fail
     Bad
+    Missing(name str)
 
 fn pick(n int) int ! Fail
     if n == 0
         return Bad
+    if n < 0
+        return Missing(name: "n")
     n
 
 fn main()
     assert_err(pick(0))
     assert_err(pick(0), Fail.Bad)
+    assert_err(pick(-1), Fail.Missing)
+    assert_err(pick(-1), Fail.Missing(name: "n"))
     assert_near(0.1 + 0.2, 0.3, 0.0001)
     print("ok")
 ```

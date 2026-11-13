@@ -642,7 +642,8 @@ fn main()
     lo := 4
     print(xs.filter(|x| x > lo))      # [8, 5, 12]
     print(xs.map(adder(1)))           # [4, 9, 6, 13]
-    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by
+    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by, count, flat_map, skip_while
+    print(xs.fold(0, |acc, x| acc + x))   # 28; Set, Map (|k, v|), Deque, Seq take the same names
 ```
 
 ## Shared cells, resources and `move`

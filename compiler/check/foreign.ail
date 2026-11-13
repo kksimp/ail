@@ -19,7 +19,8 @@ use ast
 ## carry over unchanged.
 pub fn method_rename(t Ty, name str) str?
     k := kind_of(t)
-    if name == "length" or name == "size" or name == "count"
+    # `count` on a list, map or set takes a function (type.coll.28): it is not `len`.
+    if name == "length" or name == "size" or (name == "count" and k == "str")
         if k == "str" or k == "list" or k == "map" or k == "set"
             return "len"
     if name == "to_string" or name == "toString" or name == "to_owned"
@@ -72,7 +73,8 @@ pub fn method_help(t Ty, name str) str?
         "char.to_lowercase" => "write `c.to_lower()`"
         "map.push" => "`m.push(k, x)` needs a map whose values are lists, `Map[K, List[T]]`; for other values write `m[k] = v`"
         "list.append" | "list.add" => "write `xs.push(x)`"
-        "list.length" | "list.size" | "list.count" => "write `xs.len()`"
+        "list.length" | "list.size" => "write `xs.len()`"
+        "list.dedup" | "list.unique" | "list.uniq" | "list.distinct" | "list.drop_duplicates" => "there is no `{name}`: write `xs.counts().keys()` for the distinct `int`, `str` or `char` elements in order of first appearance, `xs.group_by(|x| x).keys()` for any hashable element, or keep a `Set[T]`"
         "list.index" | "list.find" | "list.indexOf" => "write `xs.index_of(x)`, which gives `int?` (`none` if absent)"
         "map.has" | "map.has_key" | "map.contains_key" => "write `m.contains(k)`"
         "map.put" | "map.set" | "map.insert" => "write `m[k] = v`"
