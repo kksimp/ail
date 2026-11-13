@@ -554,9 +554,10 @@ fn Parser.describe(self, t Tok) str
 ## keywords the bootstrap doesn't implement.
 fn Parser.unexpected(mut self, expected str, rule str)
     prev_tag := if i > 0 then tok_tag(tokens[i - 1].tok) else ""
-    cast := prev_tag == "id" or prev_tag == "int" or prev_tag == "float" or (
-        i > 0 and (tokens[i - 1].tok == Tok.Sym(")") or tokens[i - 1].tok == Tok.Sym("]"))
-    )
+    cast := prev_tag == "id"
+        or prev_tag == "int"
+        or prev_tag == "float"
+        or (i > 0 and (tokens[i - 1].tok == Tok.Sym(")") or tokens[i - 1].tok == Tok.Sym("]")))
     if tag_at(0) == "kw" and not_yet(kw_at(0)) and not cast
         error_text(
             "bootstrap.unsupported",
