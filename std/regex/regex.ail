@@ -2123,7 +2123,10 @@ fn m_find_all(re Regex, text str) List[Match]
 
 fn m_group_all(re Regex, text str, group int) List[str]
     if group < 0 or group >= re.groups
-        _ := no_group("std.regex.24", "the pattern has groups 0 to {re.groups - 1}, not group {group}")
+        _ := no_group(
+            "std.regex.24",
+            "the pattern has groups 0 to {re.groups - 1}, not group {group}",
+        )
     cs := text.chars()
     mut vm := new_vm(re, 2 * re.groups)
     sp := spans(re, cs, 1073741824, mut vm)

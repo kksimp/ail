@@ -7,10 +7,10 @@ contract 24 2
 ct 18 0
 diff 9 0
 edit 21 0
-eff 27 0
+eff 27 1
 err 43 6
 explain 6 0
-expr 77 19
+expr 77 20
 ffi 28 0
 fix 11 0
 gen 17 0
@@ -45,4 +45,4 @@ try 10 0
 type 149 11
 unsafe 21 0
 verify 9 0
-all 1503 58
+all 1503 60
