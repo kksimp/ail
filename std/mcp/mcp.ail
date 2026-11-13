@@ -8,10 +8,17 @@ use std.proc
 ## The protocol revision the client asks for (std.mcp.1).
 MCP_PROTOCOL := "2025-03-26"
 
-## Why a request failed (std.mcp.7). `kind` is `start`, `rpc`,
-## `tool` or `timeout`.
+## What failed (std.mcp.7, ADR 1068): the server did not start, it answered
+## with a JSON-RPC error, a tool reported an error, or no reply came in time.
+pub enum McpKind
+    Start
+    Rpc
+    Tool
+    Timeout
+
+## Why a request failed (std.mcp.7).
 pub error struct McpError "{kind}: {message}"
-    pub kind str
+    pub kind McpKind
     pub message str
 
 ## One tool a server offers (std.mcp.3): its name, what it says it does and
@@ -30,13 +37,13 @@ pub unique struct Client
 fn jm(key str, value Json) JsonMember
     JsonMember(key: key, value: value)
 
-fn fail(kind str, message str) McpError
+fn fail(kind McpKind, message str) McpError
     McpError(kind: kind, message: message)
 
 ## The server `cmd args` started and initialised (std.mcp.1, std.mcp.2).
 pub fn connect(cmd str, args List[str]) Client ! McpError
     mut ch := proc.start(cmd, args) else e
-        return fail("start", "{e}")
+        return fail(McpKind.Start, "{e}")
     mut c := Client(child: move ch, seq: 1, wait_ms: 30000)
     info := Json.Obj([jm("name", Json.Str("ail")), jm("version", Json.Str("0.1"))])
     params := Json.Obj([
@@ -72,7 +79,7 @@ fn Client.request(mut self, method str, params Json) Json ! McpError
         line := child.out.recv_for(wait_ms) else
             note := self.stderr_note()
             return fail(
-                "timeout",
+                McpKind.Timeout,
                 "no reply to {method} within {wait_ms} ms, or the server closed{note}",
             )
         reply := parse_json(line) else continue
@@ -83,9 +90,9 @@ fn Client.request(mut self, method str, params Json) Json ! McpError
         if er := reply.get("error")
             code := er.int("code") else 0
             why := er.text("message", "error")
-            return fail("rpc", "{why} (code {code})")
+            return fail(McpKind.Rpc, "{why} (code {code})")
         return reply.get("result") else Json.Null
-    fail("timeout", "no reply")
+    fail(McpKind.Timeout, "no reply")
 
 ## The first lines the server wrote to its standard error, as ` (server stderr: ...)`,
 ## or nothing when it wrote none (std.mcp.7). A closed stream gives them at once;
@@ -123,12 +130,12 @@ pub fn Client.tools(mut self) List[Tool] ! McpError
 
 ## Runs tool `name` with `args`, a JSON object (std.mcp.4, std.mcp.5). The result
 ## is the reply's `structuredContent` when it has one, else the whole result.
-## A tool that reports `isError` fails with kind `tool` and its text.
+## A tool that reports `isError` fails with kind `Tool` and its text.
 pub fn Client.call(mut self, name str, args Json) Json ! McpError
     params := Json.Obj([jm("name", Json.Str(name)), jm("arguments", args)])
     r := self.request("tools/call", params)?
     if r.flag("isError", false)
-        return fail("tool", text(r))
+        return fail(McpKind.Tool, text(r))
     if s := r.get("structuredContent")
         return s
     r

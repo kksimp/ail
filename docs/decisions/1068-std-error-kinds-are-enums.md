@@ -24,7 +24,7 @@ named this first among its recommendations.
 
 ### Option A — one fieldless enum per error type, uniform display (chosen)
 `fs.IoKind`, `proc.ProcKind`, `net.NetKind`, `compress.CompressKind`,
-`ui.UiKind`, `app.AppKind`, `device.DeviceKind`, `regex.RegexKind`. A kind is
+`ui.UiKind`, `app.AppKind`, `device.DeviceKind`, `regex.RegexKind`, `mcp.McpKind` (added 2026-11-13 for 0.1). A kind is
 compared with `err.kind == NotFound` (the expected type makes the bare variant
 legal, type.enum.3) or matched exhaustively. It prints like any enum:
 `fs.IoKind.NotFound`.

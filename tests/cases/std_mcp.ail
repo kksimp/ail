@@ -29,6 +29,6 @@ fn main() !
 
 fn start_kind() str
     c := mcp.connect("/nonexistent/mcp-server", []) else err
-        return err.kind
+        return "{err.kind}"
     c.close()
     "started"
