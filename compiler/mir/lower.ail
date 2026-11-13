@@ -1118,6 +1118,7 @@ fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
         Eval(e) => e
+        Handle(value, other) => ast.tail_else(value, other)
         _ => none
 
 # ---- statements ----

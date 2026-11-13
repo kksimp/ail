@@ -487,6 +487,36 @@ impl FromJson for Pattern
 impl ToJson for Literal
 impl FromJson for Literal
 
+## err.else.7 (ADR 1095): `e else return ...`, `else break` or `else continue`
+## as the last statement of a block whose value is used is the expression
+## `OrElse` (err.else.6), so a function can end with
+## `m.get(k) else return Missing(key: k)`; none for any other `else`.
+pub fn tail_else(value Expr, otherwise Else) Expr?
+    match otherwise
+        Leave => Expr.OrElse(value: value, otherwise: otherwise, pos: expr_start(value))
+        _ => none
+
+## Where an expression starts, for the position of a tail `else` (err.else.7).
+fn expr_start(e Expr) Pos
+    match e
+        Str(_, p) => p
+        Bytes(_, p) => p
+        Interp(_, p) => p
+        Int(_, p) => p
+        Float(_, p) => p
+        Char(_, p) => p
+        Bool(_, p) => p
+        NoneLit(p) => p
+        Hole(p) => p
+        Name(_, p) => p
+        TypeArgs(_, _, p) => p
+        Call(callee, _, _) => expr_start(callee)
+        Method(recv, _, _, _) => expr_start(recv)
+        Member(recv, _, _) => expr_start(recv)
+        Index(recv, _, _) => expr_start(recv)
+        Try(inner, _, _) => expr_start(inner)
+        _ => Pos(line: 0, col: 0)
+
 ## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
 ## the argument's value is the function literal, and `Arg.param` names `x`.
 pub fn key_body(a Arg) Expr

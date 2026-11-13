@@ -458,6 +458,10 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             # expr.loop.7: `while true` with no `break` of its own never finishes.
             if is_true(cond) and not breaks(body) then Ty.Never else Ty.Unit
         Handle(value, otherwise) =>
+            # err.else.7: a block's last `e else return ...` gives its value.
+            if need
+                if e := ast.tail_else(value, otherwise)
+                    return expr(e, expect, true)
             handle(value, otherwise)
             Ty.Unit
         For(_, var, var_pos, mutable, iter, body, _) =>

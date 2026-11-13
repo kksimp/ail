@@ -1,0 +1,8 @@
+## err.else.4, err.else.7: `e else return ...` that isn't a block's value
+## still has to bind the value it gives.
+fn first(xs List[int]) int
+    xs.first() else return -1
+    0
+
+fn main()
+    print(first([1]))

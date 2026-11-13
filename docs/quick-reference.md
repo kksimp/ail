@@ -222,6 +222,7 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
+- A function may end with `s.to_int() else return BadNumber(text: s)`: as a block's last line, `else return` gives the value (`err.else.7`).
 - A failing result must be handled: `?`, `else`, or returned. `parse(s)` alone
   on a line is an error.
 - `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
