@@ -85,8 +85,9 @@ passed `mut` or used as a `mut` receiver, and it moves no value (a `move`
 argument or a `move self` receiver). A call through a function value,
 a method of a channel, task, mutex or atomic, a function without a body,
 a call inside an `unsafe` block, and the last statement of a block in a
-function that can fail (its error value, `err.ret.*`) are never reported. `_ := expr` throws a
-value away on purpose. The fix offers the in-place twin of a copying
+function that can fail (its error value, `err.ret.*`) are never reported. `_ := expr` (also with
+`else` or `?`) throws a value away on purpose; `_` binds nothing, so it may be
+written any number of times in a function. The fix offers the in-place twin of a copying
 built-in (`xs.sorted()` → `xs.sort()`) when there is one, and `_ := ` always.
 *(ADR 1082)*
 
@@ -141,7 +142,7 @@ the function sees its inferred set as before. *(ADR 1089)*
 use std.fs
 
 fn save(path str, text str) ! fs.IoError
-    fs.write_text(path, text)
+    fs.write_text(path, text)?
 
 @caps(none) fn render(path str) str ! fs.IoError
     save(path, "x")?              # error: `render` is limited to no capability
@@ -168,7 +169,7 @@ fn main()
 use std.fs
 
 @caps(fs) fn save(path str, text str) ! fs.IoError
-    fs.write_text(path, text)
+    fs.write_text(path, text)?
 
 @caps(none) fn double(x int) int
     x * 2
@@ -338,6 +339,13 @@ working directory and program path, which `env` shows; resource use (time,
 memory, disk and network volume; see `--timeout` and `--max-memory`); and the
 capabilities `ui`, `app`, `clock` and `random`, which are allowed or denied but
 not scoped. For untrusted code add an operating-system sandbox as well.
+
+```ail flags=--allow,none rules=eff.allow.9
+fn main()
+    # `--allow none` limits the standard library's calls; the program
+    # still computes and prints. It is not a sandbox.
+    print("{21 * 2}")
+```
 
 ## Deterministic execution
 

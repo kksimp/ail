@@ -542,6 +542,8 @@ fn main()
 ## Tests
 
 ```ail
+use std.fs
+
 fn double(x int) int
     x * 2
 
@@ -549,18 +551,19 @@ fn double(x int) int
     assert_eq(double(4), 8)         # traps showing both values
     assert(double(1) == 2, "message")   # optional `str` message
     assert_near(0.1 + 0.2, 0.3, 0.0001) # three floats: |a - b| <= eps
-    assert_err(parse("x"))              # traps unless the call fails; a second argument `E.Variant` checks which error
+    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
-```ail fragment
+```ail
 @fixture("drop")                    # made per test run, `drop` always runs after it
 fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
     "x"
 
 fn drop(v str)                      # takes the value, returns nothing
+    print("dropped {v}")
 
 @test @needs("tmp")
 fn uses(tmp str)                    # parameter named like the fixture
@@ -579,7 +582,7 @@ one; `@caps(fs)` limits a function to the listed capabilities and everything it 
 means `xs.sort()`; write `_ := f()` to drop a value on purpose (`eff.use.1`).
 `ail run --deterministic` denies `clock`, `random`, `proc` and `net`. `ail run --allow fs.read=./data,net=host:443` allows only what it names, and a use outside the scope ends with `trap[eff.allow.N]`.
 
-`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`. Structs of C-typed fields pass to C by value; a `fn(...)` parameter of an `extern c fn` takes a declared function's name as a callback (`mem.c_fn(f)` gives a `*u8`).
+`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`.
 
 A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
 

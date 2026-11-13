@@ -325,12 +325,10 @@ fn Run.executables(mut self, target str, runner str)
         for c in cases
             if not [
                 "attach_tool_game",
-                "ffi_callback",
                 "ffi_dynamic",
                 "ffi_f32",
                 "ffi_missing_library",
                 "ffi_missing_symbol",
-                "ffi_struct",
             ].contains(stem_of(c))
                 static_only.push(c)
         cases = static_only

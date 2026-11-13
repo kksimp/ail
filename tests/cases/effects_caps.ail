@@ -3,7 +3,7 @@ use std.fs
 use std.env
 
 fn save(path str, text str) ! fs.IoError
-    fs.write_text(path, text)
+    fs.write_text(path, text)?
 
 fn home() str
     env.get("HOME") else ""

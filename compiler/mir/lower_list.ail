@@ -363,6 +363,19 @@ fn is_pop_call(e ast.Expr) bool
         Method(_, n, _, a) => n == "pop" and a.len() == 0
         _ => false
 
+## `xs.pop()` where `xs` may be a list: not a method of a user struct such as
+## the prelude's `Heap`, which is an ordinary call (type.heap.3).
+@allow("expr.match.3") fn Lower.is_list_pop(self, e ast.Expr) bool
+    if not is_pop_call(e)
+        return false
+    match e
+        Method(r, _, _, _) =>
+            t := recv_ty(r) else return true
+            match t
+                Struct(_) => false
+                _ => true
+        _ => false
+
 ## `xs == ys` and `xs != ys` on lists of `int`, `float`, `bool` or `str`
 ## (type.coll.*, trait.auto.1): the same length and equal elements.
 fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
