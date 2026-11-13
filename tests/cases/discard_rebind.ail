@@ -5,7 +5,8 @@ error struct BadNum
     text str
 
 fn num(text str) int ! BadNum
-    text.to_int() else return BadNum(text: text)
+    n := text.to_int() else return BadNum(text: text)
+    n
 
 fn twice(n int) int
     n * 2
