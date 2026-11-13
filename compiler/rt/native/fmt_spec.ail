@@ -141,7 +141,7 @@ fn fmt_exp(x float, prec int, single int) str
     if want > 0
         sb_byte(46)
         for i in 1..want + 1
-            sb_byte(48 + if i < ds.len() then ds[i] else 0)
+            sb_byte(48 + (if i < ds.len() then ds[i] else 0))
     sb_byte(101)
     if e < 0
         sb_byte(45)
