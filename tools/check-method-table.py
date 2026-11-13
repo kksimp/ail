@@ -79,6 +79,43 @@ for sec in re.split(r"^## ", text, flags=re.M)[1:]:
     if "```ail" not in sec:
         bad(f"how-to.md: `{title}` has no ail block")
 
+# Every method call a `type.*` rule names in backticks as `x.name(args)` has a row with that name
+# and number of arguments (a `by:` argument counts as any). This is what forces the rows of a new
+# overload or a new type (Heap, Deque) in the same change as its rule.
+arity = set()
+for line in open("docs/design/builtin-methods.txt", encoding="utf-8"):
+    if line.startswith("#") or not line.strip():
+        continue
+    m = re.match(r"[A-Za-z]*\.?([a-z_0-9]+)\((.*?)\)( |$)", line.split(" ; ")[0])
+    if m:
+        a = m.group(2).strip()
+        arity.add((m.group(1), -1 if "by:" in a else (0 if not a else a.count(",") + 1)))
+types = open("docs/spec/04-types.md", encoding="utf-8").read()
+CALL = re.compile(r"`(?:[a-z]{1,2}|bytes|char|Heap|Deque|Grid)\.([a-z_0-9]+)\(([^`()]*)\)`")
+for para in re.split(r"\n\n", types):
+    m = re.match(r"\*\*(type\.[a-z]+\.\d+)\*\*", para)
+    if not m:
+        continue
+    para = re.sub(r"```.*?```", "", para, flags=re.S)
+    for name, args in CALL.findall(para):
+        n = -1 if "by:" in args else (0 if not args.strip() else args.count(",") + 1)
+        if (name, n) not in arity and (name, -1) not in arity:
+            bad(f"builtin-methods.txt: no row for `{name}` with {n} argument(s), which {m.group(1)} names")
+            arity.add((name, n))
+
+# A row of not-in-std.txt must not name something std now has: a std module (a directory or
+# file under std/, or a `std.NAME.N` rule) or a prelude type (a `type.NAME.N` rule). Such a
+# query is answered by the search itself, so the row is stale; delete it.
+import os
+for n, line in enumerate(open("docs/design/not-in-std.txt", encoding="utf-8"), 1):
+    if line.startswith("#") or " -> " not in line:
+        continue
+    for alt in line.split(" -> ")[0].split("|"):
+        for w in re.findall(r"[a-z0-9_]+", alt.lower()):
+            if (os.path.exists(f"std/{w}") or os.path.exists(f"std/{w}.ail")
+                    or re.search(r"\*\*(std|type)\.%s\.\d+\*\*" % re.escape(w), spec + types)):
+                bad(f"not-in-std.txt:{n}: `{w}` is in std now (delete or narrow the row)")
+
 for f in findings:
     print(f)
 sys.exit(1 if findings else 0)
