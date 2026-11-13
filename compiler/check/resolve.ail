@@ -64,7 +64,8 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
                 ps.push(resolve_type(p))
             mut r := Ty.Unit
             if rt := ret
-                r = resolve_type(rt)
+                # type.fn.6: `fn(A) R ! E` can fail; the parser gives it its error types.
+                r = resolve_ret(rt, -1)
             return Ty.FnTy(ps, r)
         TupleType(elems) =>
             ts := [resolve_type(e) for e in elems]

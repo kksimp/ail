@@ -16,6 +16,8 @@ fn Lower.settle_inferred(mut self, srcs List[Source], upto int)
         before := fn_errs
         nf := funcs.len()
         np := problems.len()
+        # The thunks and literals the dry run makes are dropped with it (ADR 1067).
+        saved_fl := fl
         for k in 0..upto.min(srcs.len())
             enter_file(k)
             path = srcs[k].path
@@ -26,6 +28,7 @@ fn Lower.settle_inferred(mut self, srcs List[Source], upto int)
             funcs.pop()
         while problems.len() > np
             problems.pop()
+        fl = saved_fl
         if same_sets(before, fn_errs)
             break
     restart_sets(true)

@@ -444,6 +444,25 @@ pub fn Asm.ldr_q(mut self, t int, n int, off int)
 pub fn Asm.str_q(mut self, t int, n int, off int)
     word(1031798784 + off / 16 * 1024 + n * 32 + t)
 
+## `ldur qt, [xn, #off]` and `stur qt, [xn, #off]`: any `off` from -256 to 255.
+pub fn Asm.ldur_q(mut self, t int, n int, off int)
+    word(1019215872 + off.bit_and(511) * 4096 + n * 32 + t)
+
+pub fn Asm.stur_q(mut self, t int, n int, off int)
+    word(1015021568 + off.bit_and(511) * 4096 + n * 32 + t)
+
+## `mov vd.d[1], vn.d[0]`: the low lane of `vn` into the high lane of `vd`.
+pub fn Asm.vins_hi(mut self, d int, n int)
+    word(1847067648 + n * 32 + d)
+
+## `mov dd, vn.d[1]`: the high lane as a scalar.
+pub fn Asm.vlane_hi(mut self, d int, n int)
+    word(1578632192 + n * 32 + d)
+
+## `faddp dd, vn.2d`: lane 0 + lane 1.
+pub fn Asm.vfaddp_d(mut self, d int, n int)
+    word(2121324544 + n * 32 + d)
+
 ## `movi vd.2d, #0`.
 pub fn Asm.vzero(mut self, d int)
     word(1862329344 + d)

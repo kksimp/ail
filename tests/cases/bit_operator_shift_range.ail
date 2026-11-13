@@ -1,0 +1,3 @@
+fn main()
+    k := 64
+    print(1 << k)

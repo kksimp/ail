@@ -1,10 +1,10 @@
 # slp-expect: pairs
 # The nbody shape the pairing pass (native.vec.3) takes: x and y of a body as one
 # two-lane vector, z alone. Every printed number must match `AIL_OPT_OFF=slp`.
-fn advance(mut s List[float], n int, dt float)
-    for i in 0..n
+fn advance(mut s List[float], dt float)
+    for i in 0..6
         bi := i * 7
-        for j in i + 1..n
+        for j in i + 1..6
             bj := j * 7
             dx := s[bi] - s[bj]
             dy := s[bi + 1] - s[bj + 1]
@@ -19,20 +19,20 @@ fn advance(mut s List[float], n int, dt float)
             s[bj + 3] += dx * mi
             s[bj + 4] += dy * mi
             s[bj + 5] += dz * mi
-    for b in 0..n
+    for b in 0..6
         bb := b * 7
         s[bb] += dt * s[bb + 3]
         s[bb + 1] += dt * s[bb + 4]
         s[bb + 2] += dt * s[bb + 5]
 
-fn energy(s List[float], n int) float
+fn energy(s List[float]) float
     mut e := 0.0
-    for i in 0..n
+    for i in 0..6
         bi := i * 7
         vx := s[bi + 3]
         vy := s[bi + 4]
         e += 0.5 * s[bi + 6] * (vx * vx + vy * vy + s[bi + 5] * s[bi + 5])
-        for j in i + 1..n
+        for j in i + 1..6
             bj := j * 7
             dx := s[bi] - s[bj]
             dy := s[bi + 1] - s[bj + 1]
@@ -41,9 +41,8 @@ fn energy(s List[float], n int) float
     e
 
 fn main()
-    n := 6
     mut s := List[float]()
-    for b in 0..n
+    for b in 0..6
         f := b.to_float()
         s.push(1.5 * f - 2.0)
         s.push(0.25 * f * f + 0.1)
@@ -52,8 +51,8 @@ fn main()
         s.push(-0.02 * f + 0.005)
         s.push(0.003 * f * f)
         s.push(1.0 + f * 0.5)
-    print(energy(s, n))
+    print(energy(s))
     for _ in 0..1000
-        advance(mut s, n, 0.001)
-    print(energy(s, n))
+        advance(mut s, 0.001)
+    print(energy(s))
     print(s)

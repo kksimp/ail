@@ -57,8 +57,11 @@ pub enum Ty
     Mutex(elem Ty)
     ## A `TaskGroup`: a pointer to the group record (conc.task.8).
     Group
-    ## A function value: the address of a declared function (ADR 0573).
-    Fn(params List[Ty], ret Ty)
+    ## A function value (ADR 0573): in user code a pointer to a closure object
+    ## whose word 0 is the code address (ADR 1067); in the runtime a code address.
+    ## `err` is `Unit` when calling it can't fail, else its error type (`Unknown`
+    ## when that isn't one struct, type.fn.6).
+    Fn(params List[Ty], ret Ty, err Ty)
     ## A sized integer `i8 i16 i32 u8 u16 u32` (ADR 0834): in a register like
     ## an `int`, sign- or zero-extended from its width, so its value is
     ## always inside the type's range. `kind` is the type's name.
@@ -169,14 +172,16 @@ pub fn Ty.name(self) str
         Chan(e) => "Channel[{e.name()}]"
         Mutex(e) => "Mutex[{e.name()}]"
         Group => "TaskGroup"
-        Fn(ps, r) =>
+        Fn(ps, r, e) =>
             mut names := List[str]()
             for p in ps
                 names.push(p.name())
-            if r.is_unit()
-                "fn({names.join(", ")})"
-            else
-                "fn({names.join(", ")}) {r.name()}"
+            mut text := "fn({names.join(", ")})"
+            if not r.is_unit()
+                text = "{text} {r.name()}"
+            if not e.is_unit()
+                text = "{text} ! {e.name()}"
+            text
 
 ## One instruction: `dst` is the value it defines (-1 for none), `args`
 ## the values it reads. The operations (`op`):

@@ -77,8 +77,9 @@ fn add(a i32, b i32) i32
     a + b
 ```
 
-> **Note:** parameter grouping (`a, b i32`), function types, multiple return
-> values, and named arguments are not yet decided.
+> **Note:** there is no parameter grouping (`a, b i32`): every parameter
+> names its type. Function types are `fn(A) R` (`type.fn.1`), several results
+> are a tuple (`type.tuple.1`), and arguments may be named (`expr.call.3`).
 
 ## Lists of items
 
@@ -211,7 +212,7 @@ fn main()
 
 ```ail error=gram.foreign.1 rules=gram.rec.1
 fn main()
-    print(1 & 2 ^ 3)    # two foreign operators on one line: one diagnostic, for the first
+    print(&1, &2)       # two foreign operators on one line: one diagnostic, for the first
 ```
 
 ```ail error=expr.name.1 rules=gram.rec.2
@@ -227,12 +228,14 @@ fn main()
 
 ```ail error=gram.foreign.1 rules=gram.help.1
 fn main()
-    print(1 & 2)        # the help says what to write: `a.bit_and(b)`
+    x := 1
+    print(&x)           # the help says there are no references
 ```
 
 ```ail error=gram.foreign.1 rules=gram.help.2
 fn main()
-    print(~a)           # `ail fix` resolves this, and the result checks clean
+    n := 1
+    n++                 # `ail fix` resolves this, and the result checks clean
 ```
 
 ```ail error=gram.fn.2 rules=gram.fn.2

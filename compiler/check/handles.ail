@@ -123,6 +123,7 @@ enum Node
             out.push(Node.NExpr(a))
             out.push(Node.NExpr(b))
         Unary(_, operand, _) => out.push(Node.NExpr(operand))
+        Closure(_, body, _) => out.push(Node.NExpr(body))
         Range(lo, hi, _, _) =>
             if x := lo
                 out.push(Node.NExpr(x))

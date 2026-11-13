@@ -33,7 +33,7 @@ choice changes what the program does.
 | First rule | Programs | Why no single rewrite |
 |---|---:|---|
 | `expr.name.1` | 13 | The name is unknown in each case: `input`, `int`, `null`, `thread`, `undefined_name`, `unwrap`, `popcount`, `append`, `json`, `message`, `group`, `push` on a map. The help offers `io.read_line()` (returns `str?`), `s.to_int()` (returns `int?`), `e.to_str()` or interpolation, and `v := x else default`. Each one needs a type, a default or a choice of meaning. `null_literal` has a second error once the name is fixed. |
-| `gram.foreign.1` | 9 | Foreign syntax: ternary, `switch`, `throw`, `try`, lambdas, tuple patterns, tuple shapes, a `numpy` import, and `a & 1 + 2`. `bit_and_precedence` is ambiguous on its face: Python's precedence and AIL's differ, and the program's meaning depends on which the author wanted. |
+| `gram.foreign.1` | 9 | Foreign syntax: ternary, `switch`, `throw`, `try`, lambdas, tuple patterns, tuple shapes, a `numpy` import. |
 | `expr.call.1` | 6 | Five are arity errors: the arguments to add or drop are the author's choice. `date_timedelta_python` gets `name: value` from the rewrite, but `timedelta` is not in scope, so it stays unresolved (`expr.name.1`). |
 | `conc.task.5` | 5 | Task handles: where to put `wait`, whether to add to a group, and whether a dropped handle should be waited. Each changes when the work finishes. |
 | `trait.op.3` | 4 | Bytes and text: `b[i]` as a character, a comparison of a byte with a character, `bytes + text`, and a CRC plus text. Each needs a conversion, and the choice changes the result type. |

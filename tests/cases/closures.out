@@ -1,0 +1,21 @@
+11 100
+6 7
+["n1", "n2", "n3"]
+[1, 2]
+even true false
+big true false
+2
+81
+failed: x
+-1
+3 -1
+1
+true true false
+8 0
+[8, 12, 7]
+[8, 12]
+[6, 16, 10, 24, 14]
+["<3>", "<8>", "<5>", "<12>", "<7>"]
+{false: [3, 5, 7], true: [8, 12]}
+{"a": ["apple", "avocado"], "b": ["banana", "blueberry"], "c": ["cherry"]}
+[7, 6, 6, 9]

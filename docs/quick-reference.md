@@ -65,10 +65,10 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 ./native_fib                          # same output as ./ail run
 ```
 
-- A native build covers free functions over numbers, strings, bools and lists
-  of them: loops, calls, `print`, `join`, `chars`, `env.args()` (native.subset.1).
-  Structs, enums, methods, traits, maps and generics are not built yet, and
-  `ail build` names the first one it meets (`error[native.subset.1]`).
+- Native is the only backend: `ail run` builds the program natively and runs it, so
+  both commands accept the same language (structs, enums, methods, traits, maps,
+  generics, errors, tasks). A rare construct the lowering cannot build yet is reported
+  as `error[native.subset.1]` with its position and a `help:` line (native.subset.1).
 - A trap prints the same first line as `ail run` and exits 1.
 - Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
 - An unchanged program rebuilds from `~/.cache/ail/build`; `--no-cache` skips it (native.build.5).
@@ -399,8 +399,11 @@ no `break` can end a function too.
   annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
-- Bits on `int` (64-bit two's complement): `a.bit_and(b)`, `bit_or`, `bit_xor`,
-  `n.bit_not()`, `n.shl(k)`, `n.shr(k)` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`).
+- Bits on `int` (64-bit two's complement): `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`,
+  `a >> k` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`); the methods `bit_and`,
+  `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` mean the same. `x &= e` (also `|= ^= <<= >>=`)
+  works on a plain name. A bit operator never mixes with another operator without
+  parentheses (`expr.bit.4`): write `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 
@@ -419,7 +422,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - Format specs: `[[fill]align][width][.decimals][x]` only; `.N` needs a float, `x` an int.
 - `"a,b".split(",")` gives `["a", "b"]`, `"k=v=w".split("=", 2)` gives `["k", "v=w"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
-- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
+- `s.chars()` (a `List[char]`; strings have no indexing or `for`), `s.len()` (characters; `s.byte_len()` is UTF-8 bytes),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.center(width, ' ')`, `s.words()` (split on whitespace), `s.trim_start()`, `s.trim_end()`, `s.count(sub)`, `s.rfind(sub)`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
@@ -568,7 +571,25 @@ Your functions' arguments can be named (`show(tag, scale: 3, n: 4)`): positional
 first, then named in any order. Built-ins take no names.
 
 A declared function is a value of type `fn(A, B) R` (`f := double`, `f(21)`).
-Not generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+Not generic functions, methods, or ones with `mut` parameters.
+
+A function literal `|a, b| e` is a value too (`|| e` takes nothing). The body
+is one expression on the same line. Parameter types come from the expected
+`fn(...)` type, or are written: `|x int| x * 2`. It copies the locals its body
+names when it is made, and can't change them; to share state, capture a `ref`.
+`fn(A) R ! E` is a function that can fail; `?` in a literal leaves the literal.
+
+```ail
+fn adder(n int) fn(int) int
+    |x| x + n                         # copies n
+
+fn main()
+    xs := [3, 8, 5, 12]
+    lo := 4
+    print(xs.filter(|x| x > lo))      # [8, 5, 12]
+    print(xs.map(adder(1)))           # [4, 9, 6, 13]
+    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by
+```
 
 ## Shared cells, resources and `move`
 

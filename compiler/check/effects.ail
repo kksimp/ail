@@ -700,6 +700,8 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
                 add("spawn", "spawn")
             expr(prog, fx, operand)
         NewRef(value, _) => expr(prog, fx, value)
+        # type.fn.7: a function literal's body counts where the literal is written.
+        Closure(_, body, _) => expr(prog, fx, body)
         Binary(op, lhs, rhs, _) =>
             if not is_arithmetic(op) and op != ast.BinOp.And and op != ast.BinOp.Or
                 std_traits(fx)

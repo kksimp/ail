@@ -65,13 +65,13 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   questions itself, by the designer's priority order, and escalates serious
   ones ([ADR 0076](docs/decisions/0076-delegated-decisions.md)).
 
-### Deciding (ADR 0076)
+### Deciding (ADR 0076, order by ADR 1077)
 
 Choose between options using, in order:
-1. **Token usage**, measured with `tools/tokbench`.
-2. **AI understanding**: local reasoning, no ambiguity, good diagnostics.
-3. **Human readability.**
-4. **Speed**: runtime, then compile time.
+1. **AI understanding**: local reasoning, no ambiguity, good diagnostics. Never compromise it.
+2. **Human readability.**
+3. **Speed**: runtime, then compile time (target: equal to optimised C, ADR 1065).
+4. **Token usage**, measured with `tools/tokbench`.
 
 A criterion only decides when the difference is meaningful. Under ~2% of
 tokens on representative code, or confined to rare constructs, counts as a

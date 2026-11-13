@@ -23,7 +23,8 @@ from 948 ms to 865 ms (C: 771 ms), about 45% of the gap to C (f13 lane, 2026-11-
 A pass after address folding finds, in a counted innermost loop of a header
 and one body, the elements stored at an index the loop doesn't change, and
 carries them in header parameters, loading them before the loop and storing
-them on the exit edge.
+them on the exit edge. It runs after pairing (native.vec.3, ADR 1066) and
+leaves paired loops alone.
 
 - **Pros:** one small file (`compiler/mir/promote.ail`) and one dispatch line;
   works on both targets; no runtime check.
