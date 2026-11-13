@@ -1564,10 +1564,14 @@ fn Gate.fmt(mut self, tmp str)
         "fn Pt.scaled(self, k int) Pt",
         "    Pt(x: x * k, y: self.y * k)",
         "",
+        "fn Pt.copy(self) Pt",
+        "    Pt(x, y)",
+        "",
         "fn main()",
         "    mut p := Pt(x: 1, y: 2)",
         "    p.shift(3)",
         "    print(p.scaled(2).sum())",
+        "    print(p.copy().sum())",
         "    print(p.hello())",
         "",
     ].join("\n")
@@ -1577,6 +1581,8 @@ fn Gate.fmt(mut self, tmp str)
         .replace("    x += d", "    self.x += d")
         .replace("\{x} \{sum()}", "\{self.x} \{self.sum()}")
         .replace("x: x * k", "x: self.x * k")
+        # Shorthand fields of one type: named, so they are never positional (type.struct.7).
+        .replace("    Pt(x, y)", "    Pt(x: self.x, y: self.y)")
     members := "{dir}/members.ail"
     fs.write_text(members, bare) else return
     sf := ail_run(["fmt", "--stdout", members]) else return
@@ -1588,7 +1594,7 @@ fn Gate.fmt(mut self, tmp str)
     if again.status != 0
         self.red("fmt.self --check", "exit {again.status}\n{again.out}{again.err}")
     run_explicit := ail_run(["run", members]) else return
-    if run_bare.out != "now 4 6\n12\nhi pt\n" or run_explicit.out != run_bare.out
+    if run_bare.out != "now 4 6\n12\n6\nhi pt\n" or run_explicit.out != run_bare.out
         self.red("fmt.self meaning", "{run_bare.out}{run_bare.err}---\n{run_explicit.out}")
     # The staging switch `--self` is gone (ADR 1081): one layout, no option.
     gone := ail_run(["fmt", "--self", "--stdout", members]) else return

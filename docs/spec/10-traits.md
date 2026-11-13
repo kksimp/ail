@@ -45,6 +45,9 @@ field and method of the receiver is in scope by its bare name: `x` means
 and those of the traits it implements; in a trait's default method, they are
 the trait's methods. `self.x` stays valid and is the canonical form: `ail fmt`
 writes `self.x` and `self.f(args)` for a bare member it can see (fmt.self).
+A bare member that is a shorthand argument of a constructor (`Pt(x, y)`) is
+written `Pt(x: self.x, y: self.y)`, so it stays named (type.struct.7); one whose
+constructor is declared in another file is left bare.
 Associated functions see no members by bare name. *(ADR 0141, ADR 1081)*
 
 **trait.method.7** — A parameter or local of a method MUST NOT have the name

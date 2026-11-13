@@ -15,17 +15,19 @@ use syntax
 ## `src` with `self.` before each bare member, as a `Formatted`: status 0 with
 ## the text, or 2 when the result wouldn't be the same program (fmt.safe).
 fn explicit_self(src str, tokens List[syntax.Token]) Formatted
-    sites := syntax.rewrite_self(syntax.parse(tokens).program).sites
+    program := syntax.parse(tokens).program
+    sites := syntax.rewrite_self(program).sites
     if sites.len() == 0
         return Formatted(status: 0, text: src, diags: [], why: "")
-    out := insert_self(src, sites)
+    written := insert_self(src, sites, program.structs)
+    out := written.text
     lexed := syntax.lex(out)
     mut diags := lexed.diags
     if diags.len() == 0
         again := syntax.parse(lexed.tokens)
         diags = again.diags
-        # Every bare member now has its `self.`, so the pass finds none left.
-        if diags.len() == 0 and syntax.rewrite_self(again.program).sites.len() > 0
+        # Every bare member now has its `self.`, but the ones left on purpose (`left`).
+        if diags.len() == 0 and syntax.rewrite_self(again.program).sites.len() > written.left
             return self_failed("a bare member is still bare after writing `self.`")
     if diags.len() > 0
         return self_failed("writing `self.` broke the file: {diags[0].rule}")
@@ -34,8 +36,18 @@ fn explicit_self(src str, tokens List[syntax.Token]) Formatted
 fn self_failed(why str) Formatted
     Formatted(status: 2, text: "", diags: [], why: why)
 
-## `src` with `self.` written at each of `sites` (1-based line and column).
-fn insert_self(src str, sites List[ast.Pos]) str
+## The text with `self.` written, and how many sites were left bare.
+struct SelfWritten
+    text str
+    left int
+
+## `src` with `self.` written at each of `sites` (1-based line and column), as `site_prefix` says.
+fn insert_self(src str, sites List[ast.Pos], structs List[ast.StructDecl]) SelfWritten
+    text := src.chars()
+    mut starts := [0]
+    for k in 0..text.len()
+        if text[k] == '\n'
+            starts.push(k + 1)
     mut cols := Map[int, List[int]]()
     for p in sites
         mut row := cols.get(p.line) else List[int]()
@@ -44,6 +56,7 @@ fn insert_self(src str, sites List[ast.Pos]) str
         cols[p.line] = row
     mut lines := List[str]()
     mut n := 0
+    mut left := 0
     for raw in src.split("\n")
         n += 1
         row := cols.get(n) else
@@ -56,8 +69,59 @@ fn insert_self(src str, sites List[ast.Pos]) str
         mut from := 0
         for c in cuts
             out.push(chars[from..c - 1].join(""))
-            out.push("self.")
+            if prefix := site_prefix(text, starts[n - 1] + c - 1, structs)
+                out.push(prefix)
+            else
+                left += 1
             from = c - 1
         out.push(chars[from..chars.len()].join(""))
         lines.push(out.join(""))
-    lines.join("\n")
+    SelfWritten(text: lines.join("\n"), left: left)
+
+## What goes before the bare member at `at` (an index into `text`): `self.`, or `NAME: self.` when it
+## is a whole argument of a constructor of a struct declared in this file with a field `NAME`, where the
+## bare name was shorthand for `NAME: NAME` (type.struct.7: `Pos(line, col)` is `Pos(line: self.line,
+## col: self.col)`, never the positional `Pos(self.line, self.col)`). None for a whole argument of a
+## constructor declared in another file: whether it was shorthand can't be seen here, so it stays bare.
+fn site_prefix(text List[char], at int, structs List[ast.StructDecl]) str?
+    mut e := at
+    while e < text.len() and (text[e].is_alnum() or text[e] == '_')
+        e += 1
+    member := text[at..e].join("")
+    mut b := at - 1
+    while b >= 0 and (text[b] == ' ' or text[b] == '\n')
+        b -= 1
+    mut a := e
+    while a < text.len() and (text[a] == ' ' or text[a] == '\n')
+        a += 1
+    if b < 0 or a >= text.len() or not (text[b] == '(' or text[b] == ',') or not (text[a] == ')' or text[a] == ',')
+        return "self."
+    # The `(` of the call the argument is in.
+    mut paren := b
+    mut depth := 0
+    while paren >= 0
+        ch := text[paren]
+        if ch == ')' or ch == ']'
+            depth += 1
+        elif (ch == '(' or ch == '[') and depth > 0
+            depth -= 1
+        elif ch == '(' and depth == 0
+            break
+        elif ch == '[' and depth == 0
+            return "self."
+        paren -= 1
+    if paren < 0
+        return "self."
+    mut s := paren
+    while s > 0 and (text[s - 1].is_alnum() or text[s - 1] == '_')
+        s -= 1
+    callee := text[s..paren].join("")
+    if callee.is_empty() or not text[s].is_upper()
+        return "self."
+    for decl in structs
+        if decl.name == callee
+            for f in decl.fields
+                if f.name == member
+                    return "{member}: self."
+            return "self."
+    none
