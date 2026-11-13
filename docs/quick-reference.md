@@ -521,7 +521,7 @@ Inside a `for mut` loop the body can't use the list itself.
 `Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
 for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
 `Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
-`last()`, `d.at(i)`, `d.to_list()`.
+`last()`, `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 A comprehension builds a list, set or map in one expression:
 

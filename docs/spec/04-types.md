@@ -1556,6 +1556,35 @@ that end as a `T?`, `none` when empty. Each is O(1) amortised. *(ADR 1086)*
 front, in O(1); a position outside `0..d.len()` traps. `d.to_list()` is the
 elements, first to last, as a list. *(ADR 1086)*
 
+**type.deque.6** — `d[i]` is the element at position `i` from the front, as
+`d.at(i)`; a position outside `0..d.len()` traps (`type.coll.4`). `d.set(i, v)`
+replaces it, with the same trap. `d[i] = v` is a compile-time error whose help
+says `d.set(i, v)`. A range index is an error: `d.to_list()[a..b]`. *(ADR 1086)*
+
+**type.deque.7** — `for x in d` visits the elements first to last. It is the
+iteration protocol of `expr.iter.1`: `d.next()` is `d.pop_front()`, and the loop
+works on a copy, so `d` itself is unchanged. A `Heap` has no `next`: `for x in
+h.to_sorted()` reads it in order. *(ADR 1086, ADR 1073)*
+
+```ail rules=type.deque.6,type.deque.7
+fn main()
+    mut d := Deque.from([10, 20, 30])
+    d.push_front(5)
+    print(d[0] + d[3])           # 35
+    d.set(1, 11)
+    mut total := 0
+    for x in d
+        total += x
+    print(total)                 # 5 + 11 + 20 + 30 = 66
+    print(d.len())               # 4: the loop worked on a copy
+```
+
+```ail error=type.deque.6
+fn main()
+    mut d := Deque.from([1, 2])
+    d[0] = 9                     # error: write `d.set(0, 9)`
+```
+
 **type.deque.5** — A deque is a value (own.val.1): `e := d` copies it. Its
 `front` and `back` fields are the representation and aren't read. *(ADR 1086)*
 

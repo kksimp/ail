@@ -396,6 +396,8 @@ fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
 fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
     if g := grid_place(recv, index, pos)
         return lower_value(g, none)
+    if d := deque_index(recv, index, pos)
+        return d
     l := lower_value(recv, none)?
     if l.ty == Ty.Bytes
         return bytes_index(l, index, pos)

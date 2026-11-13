@@ -1,0 +1,5 @@
+## type.deque.6: a deque's elements are read with `d[i]` and set with `d.set`.
+fn main()
+    mut d := Deque.from([1, 2])
+    d[0] = 9
+    print(d["a"])

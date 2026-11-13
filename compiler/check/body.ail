@@ -1207,6 +1207,16 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             )
         expr(value, none, true)
         return
+    # type.deque.6: a deque's elements are read with `d[i]`, set with `d.set`.
+    if deque_element_target(target)
+        err_help(
+            "type.deque.6",
+            expr_pos(target),
+            "a deque element can't be assigned with `d[i] = v`",
+            "write `d.set(i, v)`",
+        )
+        expr(value, none, true)
+        return
     # type.bytes.2: `bytes` never changes in place.
     if bytes_element_target(target)
         err_help(
