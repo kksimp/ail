@@ -60,7 +60,7 @@ fn Lexer.peek(self) char
     self.peek_at(0)
 
 fn Lexer.pos(self) Pos
-    Pos(self.line, self.col)
+    Pos(line: self.line, col: self.col)
 
 fn Lexer.advance(mut self) char
     c := self.chars[self.i]

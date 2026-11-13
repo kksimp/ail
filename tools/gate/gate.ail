@@ -2273,7 +2273,7 @@ fn Gate.edit(mut self, tmp str)
     fs.write_text(f, src) else return
     ops := "[\n\{\"op\":\"rename\",\"id\":\"fn:add\",\"to\":\"plus\"},\n\{\"op\":\"replace_body\",\"id\":\"fn:plus\",\"body\":\"a+b+0\"},\n\{\"op\":\"insert\",\"after\":\"fn:plus\",\"text\":\"## Twice.\\nfn twice(n int) int\\n    plus(n, n)\"},\n\{\"op\":\"delete\",\"id\":\"fn:old\"},\n\{\"op\":\"import\",\"module\":\"std.fs\"},\n\{\"op\":\"rename\",\"id\":\"type:Point\",\"to\":\"Pt\"},\n\{\"op\":\"rename\",\"id\":\"field:Pt.x\",\"to\":\"xx\"},\n\{\"op\":\"replace\",\"id\":\"fn:main\",\"text\":\"fn main()\\n    mut p := Pt(xx: twice(2))\\n    p.shift(plus(3, 4))\\n    print(p)\"}\n]"
     o := edit_run(f, [], ops)
-    want_text := "use std.fs\n\nstruct Pt\n    xx int\n\nfn Pt.shift(mut self, d int)\n    xx += d\n\n## Adds.\nfn plus(a int, b int) int\n    requires a >= 0\n    a + b + 0\n\n## Twice.\nfn twice(n int) int\n    plus(n, n)\n\nfn main()\n    mut p := Pt(xx: twice(2))\n    p.shift(plus(3, 4))\n    print(p)\n"
+    want_text := "use std.fs\n\nstruct Pt\n    xx int\n\nfn Pt.shift(mut self, d int)\n    self.xx += d\n\n## Adds.\nfn plus(a int, b int) int\n    requires a >= 0\n    a + b + 0\n\n## Twice.\nfn twice(n int) int\n    plus(n, n)\n\nfn main()\n    mut p := Pt(xx: twice(2))\n    p.shift(plus(3, 4))\n    print(p)\n"
     if o.status != 0 or o.out != "edited 1 file; 0 errors\n" or slurp(f) != want_text
         self.red("edit every op", "exit {o.status}\n{o.out}{o.err}\n{slurp(f)}")
     # edit.in.2: a failing edit stops the run and nothing is written.
