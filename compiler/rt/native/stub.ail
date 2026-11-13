@@ -17,30 +17,36 @@
 fn stub_un(s str) str
     s.replace("%0A", "\n").replace("%09", "\t").replace("%25", "%")
 
-## The path of the table, "" when the run has none. The operating-system status is left as found.
+## The path of the table, "" when the run has none. It reads the environment without touching the
+## operating-system status, which tasks share: a status written back from here could undo the result
+## another task is about to read.
 fn stub_path() str
-    ok := load64(global(OS_OK))
-    er := load64(global(OS_ERR))
-    p := os_env_get("AIL_STUBS")
-    got := os_ok()
-    store64(global(OS_OK), ok)
-    store64(global(OS_ERR), er)
-    if got
-        return p
+    key := "AIL_STUBS="
+    q := str_addr(key) + 16
+    n := 10
+    mut e := os_envp()
+    while load64(e) != 0
+        c := load64(e)
+        mut same := true
+        mut i := 0
+        while same and i < n
+            if load8(c + i) != load8(q + i)
+                same = false
+            i += 1
+        if same
+            return os_str_from(c + n, os_c_len(c + n))
+        e += 8
     ""
 
-## The text of the table, "" when there is none.
+## The text of the table, "" when there is none. It is read only when the run has a table, and
+## nothing is restored afterwards: each call that reads it is the first thing its caller does,
+## before the call's own read of the system status.
 fn stub_table() str
     p := stub_path()
     if pol_len(p) == 0
         return ""
-    ok := load64(global(OS_OK))
-    er := load64(global(OS_ERR))
     t := os_fs_read_text(p)
-    got := os_ok()
-    store64(global(OS_OK), ok)
-    store64(global(OS_ERR), er)
-    if got
+    if os_ok()
         return t
     ""
 
@@ -109,11 +115,7 @@ fn stub_advance(ms int)
     p := stub_path()
     if pol_len(p) == 0
         return
-    ok := load64(global(OS_OK))
-    er := load64(global(OS_ERR))
     os_fs_append_text(p, "A\t{ms}\t\t\n")
-    store64(global(OS_OK), ok)
-    store64(global(OS_ERR), er)
 
 ## The response object (`status`, headers, text, all headers, bytes) of the stubbed request
 ## `METHOD URL`, 0 when there is none.

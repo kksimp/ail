@@ -1,0 +1,6 @@
+fn main()
+    rows: for i in 0..3
+        for j in 0..3
+            if i + j == 2
+                continue row
+            print(j)

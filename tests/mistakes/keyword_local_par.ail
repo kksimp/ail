@@ -1,0 +1,3 @@
+fn main()
+    par := 1
+    print(par)

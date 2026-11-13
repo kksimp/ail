@@ -371,7 +371,7 @@ in the `effects` section: an entry gained, or a scope widened or moved, is a
 `NEW CAPABILITY grant PACKAGE: +ENTRY -ENTRY`, and a change that only removes
 entries is an ordinary line.
 
-```ail pkg=review_grants tool=review,--files,old,new status=0 expect=NEW CAPABILITY grant rules=eff.allow.11,api.rev.12
+```ail pkg=review_grants tool=review,--files,old,new status=0 expect=CAPABILITY rules=eff.allow.11,api.rev.12
 ```
 
 ## Deterministic execution

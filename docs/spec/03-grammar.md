@@ -2,9 +2,26 @@
 
 Chapter key: `gram`
 
-> **Status:** Drafted (partial). Function-declaration shape, generic brackets,
-> and attributes (`@inline`, `@deprecated`, and those of other chapters) are specified. The full grammar (in a machine-checkable form, per
-> ADR 0002) will be written as the syntax decisions are completed.
+> **Status:** Specified. [`grammar.ebnf`](grammar.ebnf) is the whole surface syntax in a
+> machine-checkable form (ADR 1108); the function, generic and attribute rules below say why
+> parts of it look as they do.
+
+## The grammar file
+
+**gram.ebnf.1** — [`grammar.ebnf`](grammar.ebnf) lists every construct of the language in EBNF
+over the lexer's tokens, including `NEWLINE`, `INDENT` and `DEDENT` (`lex.block.1`,
+`lex.stmt.1`). A source file is a program of the language only if the grammar accepts it, and
+the checker's `gram.*` rules report the places where it doesn't. The grammar leaves to the
+checker a few restrictions that need more than one token of context (`expr.bit.4`,
+`expr.prec.2`, `expr.call.4`). `tools/check-grammar.py` lexes every `.ail` file of the tree that
+compiles and recognises it with the grammar; the docs gate runs it, so the grammar and the
+parser can't drift apart. *(ADR 1108)*
+
+```ail rules=gram.ebnf.1
+fn main()
+    xs := [x * 2 for x in 0..4 if x != 1]    # each construct here is a rule of grammar.ebnf
+    print(xs)                                # [0, 4, 6]
+```
 
 ## Syntax errors
 
@@ -46,7 +63,6 @@ marked *fix*):
 | `for cond` (*fix*), `for i, x := range xs` (*fix*) | `while cond`, `for i, x in xs.enumerate()` |
 | `a, b = b, a`, `v, err := f()` | a temporary, `v := f()?` |
 | `fn (p P) name()`, `append(xs, x)`, `make(..)` (*fix*) | `fn P.name(self)`, `xs.push(x)`, `Map[K, V]()` |
-| `outer: for` | no labels: a function or a flag |
 | `===` (*fix*), `??` (*fix*), `[...xs, 3]`, `(x) => e` | `==`, `else`, `xs.extend(ys)`, `\|x\| e` |
 | `for (const x of xs)` (*fix*), `console.log` | `for x in xs`, `print` |
 

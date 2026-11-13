@@ -1,0 +1,11 @@
+after people.csv: 3 ids, columns id/name/city
+after scores.csv: 4 ids, columns id/name/city/score
+after fixes.csv: 4 ids, columns id/name/city/score
+skipped 2 bad rows
+  id,name,city,score
+  1,Ann,Rome,88
+  2,Robert,Lima,75
+  3,Cy,Oslo,
+  4,Dee,Kyiv,91
+rows 4, empty cells 1
+cleaned up: true

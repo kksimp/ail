@@ -1,0 +1,2 @@
+sharded_counter_tasks native.subset.1 on List[Mutex[Map]] parameter plus invalid MIR (v8 used before defined); compiler bug, kept as the repro
+voting_systems native.subset.1 `else` on a str (line 130); compiler bug, kept as the repro

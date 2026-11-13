@@ -1,0 +1,6 @@
+dims 10x30x5x60: 4500 multiplications, order ((A1 A2) A3), left-to-right 4500
+dims 40x20x30x10x30: 26000 multiplications, order ((A1 (A2 A3)) A4), left-to-right 48000
+dims 10x20x30x40x30: 30000 multiplications, order (((A1 A2) A3) A4), left-to-right 30000
+dims 5x10x3x12x5x50x6: 2010 multiplications, order ((A1 A2) ((A3 A4) (A5 A6))), left-to-right 3380
+dims 30x35x15x5x10x20x25: 15125 multiplications, order ((A1 (A2 A3)) ((A4 A5) A6)), left-to-right 40500
+dims 7x7x7x7x7: 1029 multiplications, order (A1 (A2 (A3 A4))), left-to-right 1029

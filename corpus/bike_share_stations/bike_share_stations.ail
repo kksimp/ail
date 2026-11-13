@@ -1,0 +1,162 @@
+## A bike share network. Rides take a bike from one station and dock it at
+## another; an unknown station, an empty source or a full destination fails with
+## a typed error. A `Rebalancer` trait then plans truck moves, with two
+## policies (aim for a share of capacity, or rescue empty stations), applied to
+## copies of the same network. Prints rejected rides, moves and occupancy.
+
+error enum RideError
+    Unknown(name str) "unknown station {name}"
+    NoBikes(name str) "no bikes at {name}"
+    NoDock(name str) "{name} is full"
+
+struct Station
+    name str
+    cap int
+    bikes int
+
+struct Shift
+    src int
+    dst int
+    count int
+
+trait Rebalancer
+    fn label(self) str
+    fn moves(self, stations List[Station]) List[Shift]
+
+struct Target
+    pct int
+
+struct Rescue
+    floor int
+    lift int
+
+impl Rebalancer for Target
+    fn label(self) str
+        "target {self.pct}%"
+    fn moves(self, stations List[Station]) List[Shift]
+        mut give := List[int]()
+        mut take := List[int]()
+        for s in stations
+            goal := s.cap * self.pct / 100
+            give.push((s.bikes - goal).max(0))
+            take.push((goal - s.bikes).max(0))
+        mut out := List[Shift]()
+        for d in 0..stations.len()
+            for o in 0..stations.len()
+                n := give[o].min(take[d])
+                if n > 0
+                    give[o] -= n
+                    take[d] -= n
+                    out.push(Shift(src: o, dst: d, count: n))
+        out
+
+impl Rebalancer for Rescue
+    fn label(self) str
+        "rescue below {self.floor}"
+    fn moves(self, stations List[Station]) List[Shift]
+        mut counts := List[int]()
+        for s in stations
+            counts.push(s.bikes)
+        mut out := List[Shift]()
+        for d in 0..counts.len()
+            if counts[d] < self.floor
+                mut donor := 0
+                for o in 0..counts.len()
+                    if counts[o] > counts[donor]
+                        donor = o
+                n := self.lift.min(counts[donor] - self.floor)
+                if n > 0 and donor != d
+                    counts[donor] -= n
+                    counts[d] += n
+                    out.push(Shift(src: donor, dst: d, count: n))
+        out
+
+struct Network
+    stations List[Station]
+    completed int
+
+fn Network.index(self, name str) int ! RideError
+    for i in 0..self.stations.len()
+        if self.stations[i].name == name
+            return i
+    return Unknown(name: name)
+
+fn Network.ride(mut self, src str, dst str) int ! RideError
+    a := self.index(src)?
+    b := self.index(dst)?
+    if self.stations[a].bikes == 0
+        return NoBikes(name: src)
+    if a != b and self.stations[b].bikes >= self.stations[b].cap
+        return NoDock(name: dst)
+    self.stations[a].bikes -= 1
+    self.stations[b].bikes += 1
+    self.completed += 1
+    self.completed
+
+fn Network.apply(mut self, plan List[Shift])
+    for m in plan
+        self.stations[m.src].bikes -= m.count
+        self.stations[m.dst].bikes += m.count
+
+fn Network.line(self) str
+    mut parts := List[str]()
+    for s in self.stations
+        parts.push("{s.name}:{s.bikes}/{s.cap}")
+    parts.join(" ")
+
+fn demo() Network
+    Network(completed: 0, stations: [
+        Station(name: "Park", cap: 10, bikes: 9),
+        Station(name: "Depot", cap: 8, bikes: 0),
+        Station(name: "Library", cap: 6, bikes: 6),
+        Station(name: "Mall", cap: 10, bikes: 1),
+        Station(name: "Pier", cap: 8, bikes: 4),
+    ])
+
+fn main()
+    rides := [
+        ["Park", "Mall"], ["Depot", "Park"], ["Pier", "Library"], ["Mall", "Zoo"],
+        ["Park", "Pier"], ["Mall", "Mall"], ["Mall", "Depot"], ["Mall", "Depot"],
+        ["Library", "Park"],
+    ]
+    mut net := demo()
+    for r in rides
+        n := net.ride(r[0], r[1]) else err
+            print("ride {r[0]}->{r[1]} rejected: {err}")
+            continue
+        print("ride {n}: {r[0]}->{r[1]}")
+    print("after rides: {net.line()}")
+    mut policies := List[any Rebalancer]()
+    policies.push(Target(pct: 50))
+    policies.push(Rescue(floor: 2, lift: 3))
+    for p in policies
+        mut trial := net
+        plan := p.moves(trial.stations)
+        trial.apply(plan)
+        print("{p.label()}: {plan.len()} moves")
+        for m in plan
+            print("  move {m.count} from {net.stations[m.src].name} to {net.stations[m.dst].name}")
+        print("  result: {trial.line()}")
+
+@test fn ride_moves_one_bike()
+    mut n := demo()
+    assert_eq(n.ride("Park", "Depot")?, 1)
+    assert_eq(n.stations[0].bikes, 8)
+    assert_eq(n.stations[1].bikes, 1)
+
+@test fn rides_can_fail()
+    mut n := demo()
+    assert_err(n.ride("Depot", "Park"))
+    assert_err(n.ride("Park", "Library"))
+    assert_err(n.ride("Park", "Nowhere"))
+    assert_eq(n.completed, 0)
+
+@test fn rebalancing_conserves_bikes()
+    mut n := demo()
+    plan := Target(pct: 50).moves(n.stations)
+    n.apply(plan)
+    mut total := 0
+    for s in n.stations
+        total += s.bikes
+    assert_eq(total, 20)
+    assert_eq(n.stations[1].bikes, 4)

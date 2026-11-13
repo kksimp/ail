@@ -1,0 +1,93 @@
+## CSV merge of several files: writes three small CSV files with different
+## column sets and orders into a temp directory, merges them by their `id`
+## column (later files override earlier values, empty cells never override),
+## builds the union of the columns, and writes the merged file. Rows whose
+## cell count does not match their header are skipped and counted.
+
+struct Merged
+    cols List[str]
+    ids List[int]
+    cells Map[str, str]
+
+fn merge_text(mut m Merged, text str) int
+    lines := text.lines()
+    header := lines[0].split(",")
+    id_pos := header.index_of("id") else return 0
+    for h in header
+        if not m.cols.contains(h)
+            m.cols.push(h)
+    mut skipped := 0
+    for line in lines[1..]
+        parts := line.split(",")
+        if parts.len() != header.len()
+            skipped += 1
+            continue
+        id := parts[id_pos].to_int() else
+            skipped += 1
+            continue
+        if not m.ids.contains(id)
+            m.ids.push(id)
+        for i in 0..header.len()
+            if parts[i] != ""
+                m.cells["{id}:{header[i]}"] = parts[i]
+    skipped
+
+fn render(m Merged) List[str]
+    mut out := [m.cols.join(",")]
+    for id in m.ids.sorted()
+        mut row := List[str]()
+        for c in m.cols
+            row.push(m.cells.get("{id}:{c}") else "")
+        out.push(row.join(","))
+    out
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_csv_merge_files")?
+    names := ["people.csv", "scores.csv", "fixes.csv"]
+    texts := [
+        "id,name,city\n3,Cy,Oslo\n1,Ann,Rome\n2,Bob,\n",
+        "score,id\n88,1\n75,2\n91,4\nbad row\n60,x\n",
+        "id,city,name\n2,Lima,Robert\n4,Kyiv,Dee\n",
+    ]
+    mut m := Merged(cols: [], ids: [], cells: {})
+    mut skipped := 0
+    for i in 0..names.len()
+        p := path.join(dir, names[i])
+        fs.write_text(p, texts[i])?
+        skipped += merge_text(mut m, fs.read_text(p)?)
+        print("after {names[i]}: {m.ids.len()} ids, columns {m.cols.join("/")}")
+    out_path := path.join(dir, "merged.csv")
+    rows := render(m)
+    fs.write_text(out_path, "{rows.join("\n")}\n")?
+    print("skipped {skipped} bad rows")
+    for line in fs.read_text(out_path)?.lines()
+        print("  {line}")
+    mut empty := 0
+    for r in rows[1..]
+        for cell in r.split(",")
+            if cell == ""
+                empty += 1
+    print("rows {rows.len() - 1}, empty cells {empty}")
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(out_path)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn later_files_override()
+    mut m := Merged(cols: [], ids: [], cells: {})
+    _ := merge_text(mut m, "id,v\n1,a\n2,b\n")
+    _ := merge_text(mut m, "id,v\n1,z\n")
+    assert_eq(render(m), ["id,v", "1,z", "2,b"])
+
+@test fn empty_cells_do_not_override()
+    mut m := Merged(cols: [], ids: [], cells: {})
+    _ := merge_text(mut m, "id,v\n1,keep\n")
+    _ := merge_text(mut m, "id,v\n1,\n")
+    assert_eq(render(m)[1], "1,keep")
+
+@test fn bad_rows_are_counted()
+    mut m := Merged(cols: [], ids: [], cells: {})
+    n := merge_text(mut m, "id,v\n1,a,extra\nq,b\n2,c\n")
+    assert_eq(n, 2)
+    assert_eq(m.ids, [2])

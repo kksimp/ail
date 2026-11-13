@@ -1,0 +1,144 @@
+## A queueing simulation. Jobs arrive and need service times drawn from a small
+## fixed linear congruential generator, so runs repeat. A `Discipline` trait picks the next
+## waiting job (first come, shortest job, last come). Each discipline runs with 1,
+## 2 and 3 servers; the table shows average and worst wait, makespan and
+## utilisation. A run with no servers or no jobs fails with a typed error.
+
+error enum SimError
+    ZeroServers "need at least one server"
+    NoJobs "no jobs to run"
+
+struct Job
+    id int
+    arrive int
+    need int
+
+trait Discipline
+    fn label(self) str
+    fn pick(self, waiting List[Job]) int
+
+struct Fifo
+    tag str
+
+struct Shortest
+    tag str
+
+struct Lifo
+    tag str
+
+impl Discipline for Fifo
+    fn label(self) str
+        self.tag
+    fn pick(self, waiting List[Job]) int
+        0
+
+impl Discipline for Shortest
+    fn label(self) str
+        self.tag
+    fn pick(self, waiting List[Job]) int
+        mut best := 0
+        for i in 1..waiting.len()
+            if waiting[i].need < waiting[best].need
+                best = i
+        best
+
+impl Discipline for Lifo
+    fn label(self) str
+        self.tag
+    fn pick(self, waiting List[Job]) int
+        waiting.len() - 1
+
+struct Stats
+    served int
+    total_wait int
+    worst int
+    makespan int
+    busy int
+    peak int
+
+fn lcg(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn make_jobs(n int, seed int) List[Job]
+    mut jobs := List[Job]()
+    mut s := seed
+    mut t := 0
+    for i in 0..n
+        s = lcg(s)
+        t += s / 65536 % 4
+        s = lcg(s)
+        jobs.push(Job(id: i, arrive: t, need: s / 65536 % 5 + 1))
+    jobs
+
+fn simulate(jobs List[Job], servers int, disc any Discipline) Stats ! SimError
+    if servers < 1
+        return ZeroServers
+    if jobs.is_empty()
+        return NoJobs
+    mut free_at := List[int]()
+    for i in 0..servers
+        free_at.push(0)
+    mut waiting := List[Job]()
+    mut st := Stats(served: 0, total_wait: 0, worst: 0, makespan: 0, busy: 0, peak: 0)
+    mut nxt := 0
+    mut t := 0
+    while st.served < jobs.len()
+        while nxt < jobs.len() and jobs[nxt].arrive <= t
+            waiting.push(jobs[nxt])
+            nxt += 1
+        st.peak = st.peak.max(waiting.len())
+        for s in 0..servers
+            if free_at[s] <= t and not waiting.is_empty()
+                idx := disc.pick(waiting)
+                job := waiting[idx]
+                waiting.remove_at(idx)
+                waited := t - job.arrive
+                st.total_wait += waited
+                st.worst = st.worst.max(waited)
+                st.busy += job.need
+                free_at[s] = t + job.need
+                st.served += 1
+        t += 1
+    for f in free_at
+        st.makespan = st.makespan.max(f)
+    st
+
+fn fixed2(x100 int) str
+    "{x100 / 100}.{x100 % 100:0>2}"
+
+fn main()
+    jobs := make_jobs(40, 7)
+    mut discs := List[any Discipline]()
+    discs.push(Fifo(tag: "fifo"))
+    discs.push(Shortest(tag: "sjf"))
+    discs.push(Lifo(tag: "lifo"))
+    print("jobs {jobs.len()}, last arrival {jobs[jobs.len() - 1].arrive}")
+    for servers in 1..=3
+        for d in discs
+            st := simulate(jobs, servers, d) else err
+                print("error: {err}")
+                continue
+            avg := st.total_wait * 100 / st.served
+            util := st.busy * 100 / (servers * st.makespan)
+            print("{servers} server(s) {d.label():<5} avg wait {fixed2(avg)} worst {st.worst} peak {st.peak} makespan {st.makespan} util {util}%")
+    bad := simulate(jobs, 0, discs[0]) else err
+        print("error: {err}")
+        return
+    print("unexpected {bad.served}")
+
+@test fn lcg_is_repeatable()
+    assert_eq(make_jobs(5, 1), make_jobs(5, 1))
+    assert_eq(make_jobs(3, 1).len(), 3)
+    assert_eq(lcg(0), 12345)
+
+@test fn work_conserving_makespan_matches()
+    jobs := make_jobs(30, 3)
+    f := simulate(jobs, 1, Fifo(tag: "f"))?
+    s := simulate(jobs, 1, Shortest(tag: "s"))?
+    assert_eq(s.makespan, f.makespan)
+    assert_eq(s.busy, f.busy)
+    assert_eq(f.served, 30)
+
+@test fn invalid_runs_fail()
+    assert_err(simulate(make_jobs(3, 1), 0, Fifo(tag: "f")))
+    assert_err(simulate([], 1, Fifo(tag: "f")))

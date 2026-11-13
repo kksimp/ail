@@ -1304,10 +1304,11 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--summary] [--fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
     mut repair := false
+    mut summary := false
     mut deny := List[str]()
     mut allow_given := false
     mut allow_text := ""
@@ -1321,6 +1322,9 @@ fn check_cmd(rest List[str])
             json = true
         elif a == "--fix"
             repair = true
+        elif a == "--summary"
+            # check.out.1, check.out.3: the launcher adds it to `ail check`; the checks `ail run` and `ail build` make first stay quiet.
+            summary = true
         elif a == "--unsafe" and has and rest[i + 1] == "driver"
             driver = true
             i += 1
@@ -1391,10 +1395,26 @@ fn check_cmd(rest List[str])
         more := [load.shown_check(d) for d in check.analyze_denying(loaded.program, false, deny).report.diags]
         found.extend(load.one_pass(loaded, more, found))
     if found.len() > 0
-        io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+        io.eprint(load.report_next(loaded.program.files, loaded.texts, found, json))
+    mut n_err := 0
+    mut n_warn := 0
+    mut n_fix := 0
     for d in found
-        if not d.warning
-            io.exit(2)
+        if d.warning
+            n_warn += 1
+        else
+            n_err += 1
+        if d.edits.len() > 0
+            n_fix += 1
+    # check.out.1: one summary line on stdout, so "clean" is told from "did not run"; the diagnostics stay on stderr.
+    if summary and json
+        print("\{\"api\":1,\"summary\":true,\"errors\":{n_err},\"warnings\":{n_warn},\"fixable\":{n_fix}}")
+    elif summary and n_err == 0
+        # A prelude function sits past line 1073741824 (PRELUDE_LINE) and is not the program's.
+        count := [f for f in loaded.program.fns if f.pos.line < 1073741824].len()
+        print("ok {paths[0]}: {count} functions, {n_warn} warnings")
+    if n_err > 0
+        io.exit(2)
     if policy_out != ""
         # eff.allow.10: the run's policy from the manifests' scoped `caps`, for `ail run` to hand the program.
         fs.write_text(policy_out, check.grants_policy(loaded.program)) else err

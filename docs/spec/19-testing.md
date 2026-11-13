@@ -288,6 +288,24 @@ input. *(ADR 1100)*
     assert_eq(fs.read_text(name)?, "kept for this test only")
 ```
 
+A task started by the test has the same limits and the same directory, so a file the test wrote can be read by it:
+
+```ail tool=test,FILE expect=passed rules=test.sandbox.1
+fn read_into(p str, out Channel[str])
+    out.send(fs.read_text(p) else "EMPTY")
+
+@test fn tasks_share_the_directory() !
+    p := "{fs.temp_dir()}/shared.txt"
+    fs.write_text(p, "hello")?
+    out := Channel[str](4)
+    g := TaskGroup()
+    g.add(spawn read_into(p, out))
+    g.add(spawn read_into(p, out))
+    g.wait_all()?
+    out.close()
+    assert_eq([x for x in out].join(","), "hello,hello")
+```
+
 **test.sandbox.2** — `@needs(CAP)` after `@test` lifts the limit for one test: `@needs(fs)` allows every file
 (read and write), `@needs(net)` the network, `@needs(net.serve)` listening, and `@needs(proc)` running programs.
 Several are written `@needs(net, proc)`. A capability name in bare words is a capability; a name in quotes is a

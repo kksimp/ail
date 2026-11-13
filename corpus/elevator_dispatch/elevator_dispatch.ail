@@ -1,0 +1,126 @@
+## Multi-car elevator dispatch. Hall calls arrive at fixed ticks and a `Policy`
+## trait scores each car for each call (lowest wins, ties go to the lowest car
+## id). The same call list is run under two policies and compared by distance
+## travelled. Calls for floors outside the building fail with a typed error.
+
+FLOORS := 12
+
+error enum DispatchError
+    BadFloor(floor int) "floor {floor} is not in the building"
+
+trait Policy
+    fn name(self) str
+    fn score(self, car Car, call int) int
+
+struct Nearest
+    unused int
+
+struct LeastLoaded
+    weight int
+
+impl Policy for Nearest
+    fn name(self) str
+        "nearest"
+    fn score(self, car Car, call int) int
+        (car.floor - call).abs()
+
+impl Policy for LeastLoaded
+    fn name(self) str
+        "least-loaded"
+    fn score(self, car Car, call int) int
+        car.stops.len() * self.weight + (car.floor - call).abs()
+
+struct Car
+    id int
+    floor int
+    stops List[int]
+    travelled int
+    served int
+
+fn Car.step(mut self) bool
+    if self.stops.is_empty()
+        return false
+    goal := self.stops[0]
+    if self.floor < goal
+        self.floor += 1
+        self.travelled += 1
+    elif self.floor > goal
+        self.floor -= 1
+        self.travelled += 1
+    if self.floor == goal
+        self.stops.remove_at(0)
+        self.served += 1
+        return true
+    false
+
+struct Building
+    cars List[Car]
+
+fn Building.dispatch(mut self, call int, pol any Policy) int ! DispatchError
+    if call < 0 or call >= FLOORS
+        return BadFloor(floor: call)
+    mut best := 0
+    mut best_score := pol.score(self.cars[0], call)
+    for i in 1..self.cars.len()
+        s := pol.score(self.cars[i], call)
+        if s < best_score
+            best = i
+            best_score = s
+    if not self.cars[best].stops.contains(call)
+        mut c := self.cars[best]
+        c.stops.push(call)
+        self.cars[best] = c
+    self.cars[best].id
+
+fn simulate(pol any Policy, calls List[List[int]]) int
+    print("policy {pol.name()}")
+    mut b := Building(cars: [
+        Car(id: 0, floor: 0, stops: [], travelled: 0, served: 0),
+        Car(id: 1, floor: 6, stops: [], travelled: 0, served: 0),
+        Car(id: 2, floor: 11, stops: [], travelled: 0, served: 0),
+    ])
+    for t in 0..24
+        for call in calls
+            if call[0] == t
+                who := b.dispatch(call[1], pol) else err
+                    print("  t={t} rejected: {err}")
+                    continue
+                print("  t={t} floor {call[1]} -> car {who}")
+        for i in 0..b.cars.len()
+            mut car := b.cars[i]
+            if car.step()
+                print("  t={t} car {car.id} arrives at {car.floor}")
+            b.cars[i] = car
+    mut total := 0
+    mut served := 0
+    for cr in b.cars
+        total += cr.travelled
+        served += cr.served
+    print("  served {served}, travelled {total}")
+    total
+
+fn main()
+    calls := [[0, 5], [1, 9], [2, 14], [3, 1], [4, 7], [6, 11], [8, 0], [9, 4], [12, 6], [13, 3]]
+    a := simulate(Nearest(unused: 0), calls)
+    b := simulate(LeastLoaded(weight: 4), calls)
+    print("difference {a - b}")
+
+@test fn nearest_car_wins()
+    mut b := Building(cars: [
+        Car(id: 0, floor: 0, stops: [], travelled: 0, served: 0),
+        Car(id: 1, floor: 8, stops: [], travelled: 0, served: 0),
+    ])
+    assert_eq(b.dispatch(7, Nearest(unused: 0))?, 1)
+    assert_eq(b.cars[1].stops, [7])
+
+@test fn bad_floor_fails()
+    mut b := Building(cars: [Car(id: 0, floor: 0, stops: [], travelled: 0, served: 0)])
+    assert_err(b.dispatch(12, Nearest(unused: 0)))
+    assert_err(b.dispatch(-1, LeastLoaded(weight: 1)))
+
+@test fn car_steps_to_its_stop()
+    mut c := Car(id: 0, floor: 0, stops: [2], travelled: 0, served: 0)
+    assert(not c.step())
+    assert(c.step())
+    assert_eq(c.travelled, 2)
+    assert_eq(c.served, 1)
