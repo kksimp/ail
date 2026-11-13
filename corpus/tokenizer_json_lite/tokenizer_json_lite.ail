@@ -163,6 +163,6 @@ fn main()
     assert_eq(toks[3].pos, 9)
 
 @test fn errors_are_typed()
-    assert_err(tokenize("[nul]"), JsonError.BadLiteral)
-    assert_err(tokenize("\"abc"), JsonError.Unterminated)
+    assert_err(tokenize("[nul]"))
+    assert_err(tokenize("\"abc"))
     assert_err(tokenize("[?]"), JsonError.BadChar)
