@@ -715,10 +715,15 @@ fn is_const_expr(e ast.Expr) bool
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
 
-## An optional of a type that is immutable and shared when copied (a boxed
-## number, a string, an enum): it can be a list element or field.
+## An optional shared when copied: it can be a list element, map value or
+## field. A boxed number, string or enum is immutable; a struct, tuple, list
+## or map inside an optional is never written in place either, since only a
+## variable or a field or element of one is a place (expr.bind.6) and
+## unwrapping it into a `mut` binding copies it (own.val.1).
 fn is_shared_opt(t Ty) bool
     inner := t.opt_inner() else return false
+    if needs_copy(inner)
+        return true
     is_number(inner) or inner == Ty.Str or is_enum(inner) or is_shared_opt(inner)
 
 fn is_number(t Ty) bool

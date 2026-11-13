@@ -323,8 +323,7 @@ fn main()
     m := {"get": Stats(count: 3)}
     print_json(m)                     # {"get":{"count":3}}
     print_json(m.get("put"))          # null
-    hits := {"get": 3}
-    print_json([hits.get("get"), hits.get("put")])  # [3,null]
+    print_json([m.get("get"), m.get("put")])  # [{"count":3},null]
 ```
 
 ## Availability
