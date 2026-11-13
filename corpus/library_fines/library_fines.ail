@@ -96,9 +96,16 @@ fn assess(line str, ps List[any Policy]) int ! FineError
 
 fn main()
     records := [
-        "alice B101 1 20", "alice D7 3 15", "bob B102 1 40", "bob M9 2 30",
-        "carol D8 10 80", "carol X1 5 9", "dave B103 30 25", "erin B104 5",
-        "erin M3 1 15", "alice M4 2 24",
+        "alice B101 1 20",
+        "alice D7 3 15",
+        "bob B102 1 40",
+        "bob M9 2 30",
+        "carol D8 10 80",
+        "carol X1 5 9",
+        "dave B103 30 25",
+        "erin B104 5",
+        "erin M3 1 15",
+        "alice M4 2 24",
     ]
     ps := policies()
     mut totals := Map[str, int]()

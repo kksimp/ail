@@ -16,7 +16,15 @@ fn level_of(i int) str
 fn size_of(i int) int
     10 + (i * 13) % 50
 
-fn worker(id int, workers int, total int, hist Mutex[Map[str, int]], total_bytes Atomic[int], longest Atomic[int], out Channel[Summary])
+fn worker(
+    id int,
+    workers int,
+    total int,
+    hist Mutex[Map[str, int]],
+    total_bytes Atomic[int],
+    longest Atomic[int],
+    out Channel[Summary],
+)
     mut events := 0
     mut mine := 0
     for i in 0..total

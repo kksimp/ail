@@ -35,7 +35,14 @@ fn Trip.take(self, f Flight) Trip
     ids2.push(f.id)
     mut seen2 := self.visited
     seen2.push(f.dst)
-    Trip(here: f.dst, arrive: f.arr, ids: ids2, price: price + f.cost, visited: seen2, legs: legs + 1)
+    Trip(
+        here: f.dst,
+        arrive: f.arr,
+        ids: ids2,
+        price: price + f.cost,
+        visited: seen2,
+        legs: legs + 1,
+    )
 
 fn parse_time(s str) int ! RouteError
     if s.len() != 4
@@ -94,11 +101,20 @@ fn describe(t Trip) str
 
 fn main()
     lines := [
-        "UA1 SFO DEN 0800 1100 150", "UA2 DEN JFK 1200 1600 200", "UA3 SFO ORD 0700 1300 300",
-        "UA4 ORD JFK 1400 1700 120", "UA5 SFO JFK 0900 1700 520", "UA6 DEN ORD 1130 1400 90",
-        "UA7 DEN MIA 1245 1630 180", "UA8 MIA JFK 1800 2100 100", "UA9 SEA SFO 0600 0800 80",
-        "UA10 SEA DEN 0900 1200 140", "UA11 ORD MIA 1445 1900 150", "UA99 SFO LAX 25xx 1000 50",
-        "UA98 SFO LAX 0900", "UA97 SFO LAX 0900 1000 abc",
+        "UA1 SFO DEN 0800 1100 150",
+        "UA2 DEN JFK 1200 1600 200",
+        "UA3 SFO ORD 0700 1300 300",
+        "UA4 ORD JFK 1400 1700 120",
+        "UA5 SFO JFK 0900 1700 520",
+        "UA6 DEN ORD 1130 1400 90",
+        "UA7 DEN MIA 1245 1630 180",
+        "UA8 MIA JFK 1800 2100 100",
+        "UA9 SEA SFO 0600 0800 80",
+        "UA10 SEA DEN 0900 1200 140",
+        "UA11 ORD MIA 1445 1900 150",
+        "UA99 SFO LAX 25xx 1000 50",
+        "UA98 SFO LAX 0900",
+        "UA97 SFO LAX 0900 1000 abc",
     ]
     mut flights := List[Flight]()
     for line in lines

@@ -687,7 +687,14 @@ fn Parser.keyword_as_name(mut self, k int)
     help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
     if not rename_is_safe(word)
         # A word the language itself uses in bodies: rename this declaration only.
-        error_fix("lex.kw.1", pos, msg, help, "rename `{word}` to `{better}` here", [rename_edit(pos, word, better)])
+        error_fix(
+            "lex.kw.1",
+            pos,
+            msg,
+            help,
+            "rename `{word}` to `{better}` here",
+            [rename_edit(pos, word, better)],
+        )
         return
     misnamed.add(word)
     error_fix(
@@ -738,9 +745,12 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
             if j > 0 and toks[j - 1].tok == Tok.Sym(".")
                 return
             # The keyword itself, not a name: `for x in xs`, `match -x`.
-            if word == "in" and j > 0 and (tok_tag(toks[j - 1].tok) == "id" or toks[j - 1].tok == Tok.Sym(")") or toks[j - 1].tok == Tok.Sym("]"))
+            if word == "in"
+                and j > 0
+                and (tok_tag(toks[j - 1].tok) == "id" or toks[j - 1].tok == Tok.Sym(")") or toks[j - 1].tok == Tok.Sym("]"))
                 return
-            if word == "match" and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
+            if word == "match"
+                and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
                 return
             if name_use_follows(toks[j + 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))

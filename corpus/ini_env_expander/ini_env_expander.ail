@@ -20,7 +20,11 @@ fn parse_ini(text str) List[Entry]
             section = line.slice(1, line.len() - 1)
             continue
         at := line.find("=") else continue
-        out.push(Entry(section: section, name: line.slice(0, at).trim(), raw: line.slice(at + 1, line.len()).trim()))
+        out.push(Entry(
+            section: section,
+            name: line.slice(0, at).trim(),
+            raw: line.slice(at + 1, line.len()).trim(),
+        ))
     out
 
 fn expand(text str, env Map[str, str], conf Map[str, str], depth int) str

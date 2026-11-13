@@ -41,13 +41,31 @@ fn check(f SrcFile) Verdict
 
 fn sample() List[SrcFile]
     [
-        SrcFile(name: "src/a.go", text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) 2026 Acme\npackage a"),
-        SrcFile(name: "tools/run.sh", text: "#!/bin/sh\n# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2026 Acme\necho hi"),
-        SrcFile(name: "tools/old.py", text: "# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2024 Acme\nx = 1"),
+        SrcFile(
+            name: "src/a.go",
+            text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) 2026 Acme\npackage a",
+        ),
+        SrcFile(
+            name: "tools/run.sh",
+            text: "#!/bin/sh\n# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2026 Acme\necho hi",
+        ),
+        SrcFile(
+            name: "tools/old.py",
+            text: "# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2024 Acme\nx = 1",
+        ),
         SrcFile(name: "src/b.c", text: "int main(void) \{ return 0; }"),
-        SrcFile(name: "db/init.sql", text: "-- SPDX-License-Identifier: GPL-3.0-only\n-- Copyright (c) 2026 Acme\nselect 1;"),
-        SrcFile(name: "src/c.c", text: "// SPDX-License-Identifier: Apache-2.0\n// copyright 2026 Acme\nint x;"),
-        SrcFile(name: "src/d.c", text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) twenty Acme"),
+        SrcFile(
+            name: "db/init.sql",
+            text: "-- SPDX-License-Identifier: GPL-3.0-only\n-- Copyright (c) 2026 Acme\nselect 1;",
+        ),
+        SrcFile(
+            name: "src/c.c",
+            text: "// SPDX-License-Identifier: Apache-2.0\n// copyright 2026 Acme\nint x;",
+        ),
+        SrcFile(
+            name: "src/d.c",
+            text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) twenty Acme",
+        ),
         SrcFile(name: "empty.py", text: ""),
     ]
 
@@ -66,12 +84,18 @@ fn main()
         print("  {kind:<10} {n}")
 
 @test fn accepts_good_header()
-    f := SrcFile(name: "a.py", text: "#!/usr/bin/python\n# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2026 Acme\n")
+    f := SrcFile(
+        name: "a.py",
+        text: "#!/usr/bin/python\n# SPDX-License-Identifier: Apache-2.0\n# Copyright (c) 2026 Acme\n",
+    )
     assert_eq(check(f).kind, "ok")
 
 @test fn flags_wrong_license_and_year()
     a := SrcFile(name: "a.c", text: "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Acme")
-    b := SrcFile(name: "b.c", text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) 2019 Acme")
+    b := SrcFile(
+        name: "b.c",
+        text: "// SPDX-License-Identifier: Apache-2.0\n// Copyright (c) 2019 Acme",
+    )
     assert_eq(check(a).detail, "MIT")
     assert_eq(check(b).kind, "year")
 

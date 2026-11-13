@@ -53,7 +53,11 @@ fn main() !
     src := path.join(dir, "in.txt")
     fs.write_text(src, "alpha\n> beta\n\n> gamma\ndelta\n")?
     out := path.join(dir, "out.txt")
-    n := transform(src, out, [Edit.Strip(text: "> "), Edit.Indent(spaces: 2), Edit.Numbered(width: 3)])?
+    n := transform(src, out, [
+        Edit.Strip(text: "> "),
+        Edit.Indent(spaces: 2),
+        Edit.Numbered(width: 3),
+    ])?
     print("pass 1: {n} lines")
     show("numbered and indented:", out)?
     n2 := transform(src, out, [Edit.Comment, Edit.Prefix(text: "//")])?

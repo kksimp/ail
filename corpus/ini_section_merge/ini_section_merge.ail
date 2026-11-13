@@ -37,7 +37,7 @@ fn label(e Entry) str
         return e.name
     "{e.sec}.{e.name}"
 
-fn merge(base List[Entry], over List[Entry]) (List[Entry], List[str])
+fn merge(base List[Entry], over List[Entry])(List[Entry], List[str])
     mut merged := base
     mut changes := List[str]()
     for o in over

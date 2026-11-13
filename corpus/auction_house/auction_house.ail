@@ -65,7 +65,8 @@ fn House.run(mut self, line str) str ! AuctionError
         return Closed(name: parts[1])
     if self.lots[at2].leader == parts[2]
         return SelfOutbid(who: parts[2])
-    need := if self.lots[at2].bids == 0 then self.lots[at2].start else self.rules[at2].next_min(self.lots[at2].high)
+    need := if self.lots[at2].bids
+        == 0 then self.lots[at2].start else self.rules[at2].next_min(self.lots[at2].high)
     if amt < need
         return TooLow(name: parts[1], need: need, got: amt)
     self.lots[at2].high = amt
@@ -85,10 +86,22 @@ fn House.demo() House
 
 fn main()
     commands := [
-        "bid vase ann 100", "bid vase bob 110", "bid vase bob 125", "bid vase bob 200",
-        "bid vase ann 200", "bid vase ann 350", "bid clock cy 50", "bid clock dee 54",
-        "bid clock dee 55", "bid rug ann 10", "bid vase ann", "close vase",
-        "bid vase eve 999", "close clock", "close rug", "sell vase",
+        "bid vase ann 100",
+        "bid vase bob 110",
+        "bid vase bob 125",
+        "bid vase bob 200",
+        "bid vase ann 200",
+        "bid vase ann 350",
+        "bid clock cy 50",
+        "bid clock dee 54",
+        "bid clock dee 55",
+        "bid rug ann 10",
+        "bid vase ann",
+        "close vase",
+        "bid vase eve 999",
+        "close clock",
+        "close rug",
+        "sell vase",
     ]
     mut h := House.demo()
     for c in commands

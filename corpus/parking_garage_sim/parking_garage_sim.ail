@@ -62,9 +62,19 @@ fn Garage.apply(mut self, line str) str ! GarageError
 
 fn main()
     events := [
-        "in CAR1 0", "in CAR2 5", "in M77 10", "in CAR1 12", "in CAR3 15",
-        "out CAR2 20", "in CAR3 21", "out CAR1 100", "out M77 250", "out XYZ 260",
-        "park CAR4 270", "in CAR4 abc", "out CAR3 1000",
+        "in CAR1 0",
+        "in CAR2 5",
+        "in M77 10",
+        "in CAR1 12",
+        "in CAR3 15",
+        "out CAR2 20",
+        "in CAR3 21",
+        "out CAR1 100",
+        "out M77 250",
+        "out XYZ 260",
+        "park CAR4 270",
+        "in CAR4 abc",
+        "out CAR3 1000",
     ]
     mut g := Garage(capacity: 3, inside: {}, revenue: 0, served: 0)
     for ev in events

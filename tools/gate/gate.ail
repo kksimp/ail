@@ -424,13 +424,19 @@ fn Gate.cli_checks(mut self)
             ["\"edits\":[\{\"line\":5,\"col\":5,\"end_line\":5,\"end_col\":9,\"text\":\"print\"}]"],
         )
     t := ail_run(["check", path]) else return
-    want("text diagnostics fix line", t.err, ["\nfix: replace `prnt` with `print`", "\nnext: ail fix {path}"])
+    want("text diagnostics fix line", t.err, [
+        "\nfix: replace `prnt` with `print`",
+        "\nnext: ail fix {path}",
+    ])
     # check.out.1-3, check.exit.1: the ok line, the summary record, the next line of an unfixable error, exit statuses.
     ok := ail_run(["check", "examples/hello.ail"]) else return
-    if ok.status != 0 or not ok.out.starts_with("ok examples/hello.ail: ") or not ok.out.contains(" functions, 0 warnings")
+    if ok.status != 0
+        or not ok.out.starts_with("ok examples/hello.ail: ")
+        or not ok.out.contains(" functions, 0 warnings")
         red("check ok line", "exit {ok.status}\n{ok.out}{ok.err}")
     oj := ail_run(["check", "--json", "examples/hello.ail"]) else return
-    if oj.status != 0 or oj.out.trim() != "\{\"api\":1,\"summary\":true,\"errors\":0,\"warnings\":0,\"fixable\":0}"
+    if oj.status != 0
+        or oj.out.trim() != "\{\"api\":1,\"summary\":true,\"errors\":0,\"warnings\":0,\"fixable\":0}"
         red("check --json summary", "exit {oj.status}\n{oj.out}{oj.err}")
     sj := ail_run(["check", "--json", path]) else return
     if sj.status != 2 or not sj.out.contains("\"summary\":true,\"errors\":2,")

@@ -66,9 +66,15 @@ fn money(cents int) str
 
 fn main()
     trades := [
-        "buy ACME 100 1500", "buy ACME 50 1800", "buy BOLT 10 20000",
-        "sell ACME 60 2000", "sell BOLT 11 21000", "buy ZED 0 100",
-        "hold ACME 1 1", "sell BOLT 4 19000", "buy CORN 7",
+        "buy ACME 100 1500",
+        "buy ACME 50 1800",
+        "buy BOLT 10 20000",
+        "sell ACME 60 2000",
+        "sell BOLT 11 21000",
+        "buy ZED 0 100",
+        "hold ACME 1 1",
+        "sell BOLT 4 19000",
+        "buy CORN 7",
     ]
     marks := {"ACME": 1900, "BOLT": 20500, "CORN": 100}
     mut book := Portfolio(held: {}, realized: 0, fees: 0)
