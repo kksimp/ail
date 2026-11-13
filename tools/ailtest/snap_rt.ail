@@ -35,7 +35,7 @@ fn ail_snap_quote_char(c char) str
         "'{c}'"
 
 fn ail_snap_say(l int, c int, text str)
-    io.eprint("ail-snapshot {l} {c} {text}")
+    ail_io.eprint("ail-snapshot {l} {c} {text}")
 
 fn ail_snap_str(a str, e str, l int, c int)
     if a != e
