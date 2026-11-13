@@ -755,6 +755,11 @@ fn main()
     print(1)
 ```
 
+```ail tool=mcp rules=api.find.7
+fn main()
+    print(1)
+```
+
 ```ail tool=card expect=Ten rules=tool.card.1
 fn main()
     print(1)
