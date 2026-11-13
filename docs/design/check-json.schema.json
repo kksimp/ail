@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "check-json.schema.json",
+  "title": "ail check --json record",
+  "description": "One JSON object per line. Diagnostics are on standard error; the summary record is on standard output (check.out.3). Positions are 1-based; lines count from the top of `file`.",
+  "oneOf": [
+    { "$ref": "#/definitions/diagnostic" },
+    { "$ref": "#/definitions/summary" }
+  ],
+  "definitions": {
+    "diagnostic": {
+      "type": "object",
+      "required": ["api", "severity", "rule", "file", "line", "col", "message", "end_line", "end_col"],
+      "properties": {
+        "api": { "const": 1 },
+        "severity": { "enum": ["error", "warning"] },
+        "rule": { "type": "string", "minLength": 1, "description": "A spec rule ID, e.g. expr.name.1; `ail explain RULE` prints it." },
+        "file": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "col": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "end_col": { "type": "integer", "minimum": 1, "description": "Exclusive." },
+        "message": { "type": "string", "minLength": 1 },
+        "help": { "type": "string", "description": "What to write instead." },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["line", "col", "message"],
+            "properties": {
+              "line": { "type": "integer", "minimum": 1 },
+              "col": { "type": "integer", "minimum": 1 },
+              "message": { "type": "string" }
+            }
+          }
+        },
+        "fixes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "edits"],
+            "properties": {
+              "title": { "type": "string" },
+              "edits": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["line", "col", "end_line", "end_col", "text"],
+                  "properties": {
+                    "line": { "type": "integer", "minimum": 1 },
+                    "col": { "type": "integer", "minimum": 1 },
+                    "end_line": { "type": "integer", "minimum": 1 },
+                    "end_col": { "type": "integer", "minimum": 1 },
+                    "text": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "next": { "type": "string", "description": "The command to run next: `ail fix FILE` when a fix exists, else `ail explain RULE`. Present on every error, never on a warning." }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["api", "summary", "errors", "warnings", "fixable"],
+      "properties": {
+        "api": { "const": 1 },
+        "summary": { "const": true },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "fixable": { "type": "integer", "minimum": 0, "description": "Diagnostics that carry at least one fix." }
+      }
+    }
+  }
+}

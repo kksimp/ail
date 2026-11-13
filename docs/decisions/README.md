@@ -895,3 +895,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |
 | [1107](1107-labeled-break-continue.md) | Labeled loops: `outer: for`, `break outer`, `continue outer` *(delegated)* | Accepted | 2026-11-13 |
 | [1108](1108-grammar-file.md) | `docs/spec/grammar.ebnf`, the whole grammar, checked against the tree by `tools/check-grammar.py` *(delegated)* | Accepted | 2026-11-13 |
+| [1113](1113-check-output-for-agents.md) | `ail check` output for agents: `ok` line, `next:` on each error, JSON schema and summary record, exit statuses *(delegated)* | Accepted | 2026-11-13 |

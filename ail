@@ -52,7 +52,7 @@ if [ -n "$on_windows" ]; then
         esac
         if [ -n "$fast" ]; then
             export AIL_ROOT="$wroot" AIL_COMPILER="$wroot/compiler" AIL="${AIL:-$wroot/ail.cmd}"
-            if [ "$fast" = check ]; then shift; exec "$wroot/.native/ail.exe" check-program "$@"; fi
+            if [ "$fast" = check ]; then shift; exec "$wroot/.native/ail.exe" check-program --summary "$@"; fi
             if [ "$fast" = run ]; then
                 # The program's own run settings are hidden from the compiler and put back before it starts (ail.ps1).
                 export AIL_PKG_WRITE_LOCK=1
@@ -470,7 +470,7 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
         done
         AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget check "${bopts[@]}" -- "$native" check-program "${copts[@]}"
     fi
-    if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
+    if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program --summary "$@"; fi
     # shellcheck disable=SC2086
     # eff.allow.10: with no `--allow`, the scopes of the package's `caps` lines become the run's policy.
     policy_file=

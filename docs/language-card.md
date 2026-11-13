@@ -8,7 +8,7 @@
 
 ```sh
 ./ail run FILE.ail           # check, then run
-./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail check --json FILE.ail  # `ok` line when clean, else exit 2; each error cites a rule and ends `next:`
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail api --text FILE.ail    # declarations and `##` docs without bodies
