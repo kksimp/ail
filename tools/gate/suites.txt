@@ -2,8 +2,9 @@
 # so the three hosts run the same list (ADR 0925). `docs` is first: the first suite runs alone and builds gate.ail.
 # `NAME@K/N` is shard K (from 0) of N of a suite: the slowest suites are split so no one of them is the longest pole
 # of a run (the four shards of each together check exactly what the whole suite checked). Slowest first, so the
-# pool starts the long ones early. `ail selftest cases` (no shard) still runs the whole suite.
+# pool starts the long ones early (api_card, one serial suite, goes first; the nativex shards go last, after `selfhost1`). `ail selftest cases` (no shard) still runs the whole suite.
 docs
+api_card
 cases@0/4
 spec@0/4
 cases@1/4
@@ -12,7 +13,6 @@ cases@2/4
 spec@2/4
 cases@3/4
 spec@3/4
-api_card
 examples
 agent_tools
 explain
@@ -33,7 +33,6 @@ api_queries
 misc
 limits
 native_misc
-nativex
 globals
 snapshot
 budget
@@ -44,3 +43,7 @@ crypto
 try
 parity
 corpus
+nativex@0/4
+nativex@1/4
+nativex@2/4
+nativex@3/4

@@ -2479,12 +2479,17 @@ fn owner_ok(owner str) bool
 ## failures and ends with `NATIVEX GREEN` or `NATIVEX RED`.
 ## Native-only features (ADR 0865) build here, so nativex runs on `./ail` with no AIL_BINARY.
 fn Gate.nativex(mut self)
+    # `nativex@K/N`: one shard, one process (the gate's pool supplies the parallelism); see nativex.ail.
+    shard := if shard_count > 1 then " --shard {part}/{shard_count}" else ""
     r := proc.run("sh", [
         "-c",
-        "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail",
+        "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail{shard}",
     ]) else
         red("nativex", "could not start tools/gate/nativex.ail")
         return
+    for l in r.out.lines()
+        if l.starts_with("SHARD ")
+            print(l)
     if r.status != 0 or not r.out.contains("NATIVEX GREEN")
         red("nativex", "{r.out}{r.err}")
 

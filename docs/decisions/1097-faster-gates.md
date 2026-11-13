@@ -32,6 +32,14 @@ a second failure cost a second round.
   `build_cache` and `docs`, so ail.ps1's `run` stays gated; `GATE_FAST_RUN=0` turns it off. The gate stays a full gate:
   the same suites, the same checks.
 
+## Amendment 2026-11-13: nativex in the pool
+
+The first Linux run (4 vCPUs, 1645 s) showed `nativex` (613 s) running alone after the pool, with its own phases
+mostly serial, and `api_card` (490 s, one process) starting after the shards. `nativex` is now sharded the same way
+(`nativex@K/N`: every n-th program of `executables`, every n-th of the other tests; one process each), the four
+shards are the last jobs of the pool and wait for `selfhost1`, and `api_card` starts first. The cover check counts
+nativex items too.
+
 ## Rejected alternatives
 
 - **More jobs by default.** The Mac was overloaded into a reboot by too many concurrent processes; the default

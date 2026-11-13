@@ -2,7 +2,10 @@
 ## through the native compiler (`NATIVE_COMPILER=PATH`, else built first, and a failed build is red; `NATIVEX_INTERP=1`
 ## keeps `ail run compiler`) and `ail build`. `NX_JOBS=N` sets the processes (default: one per
 ## core). Run from the repository root:
-##   ail run tools/gate/nativex.ail [TEST...]
+##   ail run tools/gate/nativex.ail [--shard K/N] [TEST...]
+## `--shard K/N` (the gate's `nativex@K/N`) runs every n-th program of `executables` and every n-th of the other tests
+## (K from 0), one process unless NX_JOBS says more, so the shards fill the gate's job pool; it prints
+## `SHARD nativex K/N total T ran R` for the gate's cover check.
 ## Prints only failures; the last line is `NATIVEX GREEN (N checks)` or
 ## `NATIVEX RED (N failures)`. With no argument every test runs. qemu cases run when
 ## `qemu-aarch64-static` or `qemu-aarch64` is installed.
@@ -15,6 +18,10 @@ struct Run
     checks int
     root str
     tmp str
+    shard_k int
+    shard_n int
+    total int
+    ran int
 
 fn slurp(p str) str
     fs.read_text(p) else ""
@@ -340,10 +347,21 @@ fn Run.executables(mut self, target str, runner str)
             sampled.push(cases[n])
             n += stride
         cases = sampled
+    if shard_n > 1
+        mut mine := List[str]()
+        for i in 0..cases.len()
+            if i % shard_n == shard_k
+                mine.push(cases[i])
+        total += cases.len()
+        ran += mine.len()
+        cases = mine
+    else
+        total += cases.len()
+        ran += cases.len()
     checks += cases.len()
-    # One process per core, each with every n-th program so the chunks cost about the same.
+    # One process per core (a shard: one), each with every n-th program so the chunks cost about the same.
     n := (env.get("NX_JOBS") else "0").to_int() else 0
-    jobs := if n > 0 then n else cores()
+    jobs := if n > 0 then n else (if shard_n > 1 then 1 else cores())
     mut chunks := List[List[str]]()
     for _ in 0..jobs
         chunks.push(List[str]())
@@ -688,10 +706,20 @@ fn tmp_base() str
     if base.len() > 1 and base.ends_with("/") then base.slice(0, base.len() - 1) else base
 
 fn main() !
-    args := env.args()
+    mut args := env.args()
     if args.len() > 0 and args[0] == "--chunk"
         chunk_main(args)
         return
+    mut shard_k := 0
+    mut shard_n := 1
+    if args.len() > 1 and args[0] == "--shard"
+        kn := args[1].split("/")
+        shard_k = kn[0].to_int() else 0
+        shard_n = if kn.len() == 2 then kn[1].to_int() else 1
+        if shard_n < 1 or shard_k < 0 or shard_k >= shard_n
+            io.eprint("bad shard `{args[1]}`: write K/N with 0 <= K < N")
+            io.exit(2)
+        args = args[2..]
     # The suites build with a native compiler binary, not the interpreter: the one named by
     # `NATIVE_COMPILER`, else a fresh `ail build compiler/main.ail` (run again with it set).
     if (env.get("NATIVE_COMPILER") else "").is_empty()
@@ -701,7 +729,7 @@ fn main() !
         if b.status == 0
             again := proc.run("sh", [
                 "-c",
-                "NATIVE_COMPILER={built} {BIN} run tools/gate/nativex.ail {args.join(" ")}",
+                "NATIVE_COMPILER={built} {BIN} run tools/gate/nativex.ail {if shard_n > 1 then "--shard {shard_k}/{shard_n} " else ""}{args.join(" ")}",
             ]) else
                 io.eprint("could not start the gate suite")
                 io.exit(2)
@@ -731,10 +759,19 @@ fn main() !
     root := sh("pwd").out.trim()
     tmp := "{tmp_base()}/ail-nativex"
     sh("rm -rf {tmp}; mkdir -p {tmp}")
-    mut r := Run(fails: 0, checks: 0, root: root, tmp: tmp)
+    mut r := Run(fails: 0, checks: 0, root: root, tmp: tmp, shard_k: shard_k, shard_n: shard_n, total: 0, ran: 0)
     q := qemu()
     native := is_host_native()
+    mut unit := 0
     for s in suites
+        # Apart from `executables` (split by program), each test belongs to one shard: the n-th of the others.
+        if s != "executables" and shard_n > 1
+            mine := unit % shard_n == shard_k
+            unit += 1
+            r.total += 1
+            if not mine
+                continue
+            r.ran += 1
         match s
             "mir" => r.mir()
             "batch" => if native
@@ -769,6 +806,8 @@ fn main() !
                 io.eprint("unknown test {s}; tests: {all.join(" ")}")
                 io.exit(2)
     sh("rm -rf {tmp}")
+    if shard_n > 1
+        print("SHARD nativex {shard_k}/{shard_n} total {r.total} ran {r.ran}")
     if r.fails == 0
         print("NATIVEX GREEN ({r.checks} checks)")
     else
