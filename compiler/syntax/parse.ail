@@ -46,6 +46,9 @@ struct LoopLabel
     at ast.Pos
     in_par bool
 
+## The deepest expression nesting the parser follows (gram.rec.5).
+NEST_LIMIT := 200
+
 struct Parser
     tokens List[Token]
     i int
@@ -79,6 +82,8 @@ struct Parser
     ## Keywords already reported as a binding's name: later uses read as that
     ## name, so the one `lex.kw.1` with its rename fix is the only error (ADR 1085).
     misnamed Set[str]
+    ## How deep the expression being parsed nests (`NEST_LIMIT`).
+    nest int
 
 ## The kind of a token, in one word.
 fn tok_tag(t Tok) str
@@ -175,6 +180,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         member_owner: "",
         misnamed: Set[str](),
         loops: [],
+        nest: 0,
     )
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
@@ -2292,6 +2298,29 @@ fn Parser.expression(mut self) ast.Expr?
 
 ## An expression without a trailing `else`.
 fn Parser.expression_plain(mut self) ast.Expr?
+    if self.too_deep()
+        return none
+    self.nest += 1
+    found := self.expression_plain_inner()
+    self.nest -= 1
+    found
+
+## One report, at the first expression nested past `NEST_LIMIT`, so a file of ten thousand `(` is an error and not a
+## stack overflow (gram.rec.5); the callers above drop their statement as for any other expression error.
+fn Parser.too_deep(mut self) bool
+    if self.nest < NEST_LIMIT
+        return false
+    if self.nest == NEST_LIMIT
+        self.error_text(
+            "gram.syntax.1",
+            self.here(),
+            "this expression is nested more than {NEST_LIMIT} levels deep",
+            "name the inner part with `x := ...` on its own line",
+            "",
+        )
+    true
+
+fn Parser.expression_plain_inner(mut self) ast.Expr?
     if self.at_kw("if")
         return self.if_expr()
     if self.at_kw("match")
@@ -2552,6 +2581,14 @@ fn Parser.and_expr(mut self) ast.Expr?
 
 ## `not` binds more loosely than comparisons (ADR 0112).
 fn Parser.not_expr(mut self) ast.Expr?
+    if self.too_deep()
+        return none
+    self.nest += 1
+    found := self.not_expr_inner()
+    self.nest -= 1
+    found
+
+fn Parser.not_expr_inner(mut self) ast.Expr?
     if self.at_kw("not") or self.logical_typo("!", "not")
         pos := self.bump().pos
         inner := self.not_expr()?
@@ -2712,6 +2749,14 @@ fn Parser.bit_mix(mut self, a str, b str) ast.Expr?
     none
 
 fn Parser.unary(mut self) ast.Expr?
+    if self.too_deep()
+        return none
+    self.nest += 1
+    found := self.unary_inner()
+    self.nest -= 1
+    found
+
+fn Parser.unary_inner(mut self) ast.Expr?
     # lex.num.3: `-9223372036854775808` is the minimum `int`, unless a
     # postfix operator binds the literal first.
     if self.at_sym("-") and self.tag_at(1) == "intmin"

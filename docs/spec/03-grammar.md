@@ -93,6 +93,14 @@ declaration declares. An error in an import (`use`, or a foreign `import`) is
 not a broken declaration: after one, no checker error is added. The test is
 `tests/cases/onepass_five.ail`. *(ADR 1112)*
 
+**gram.rec.5** — A line in column 1 that starts a declaration (`fn`, `struct`,
+`enum`, `trait`, `impl`, `pub`, `use`) ends the declaration above it: an open
+bracket there is reported once and closed, and a line above that ends in an
+operator ends too. A single unfinished declaration doesn't swallow the rest of
+the file, so the declarations after it are parsed and checked. An expression
+nested more than 200 levels deep is a `gram.syntax.1` error, not a stack
+overflow. The test is `tests/cases/recover_open_bracket.ail`. *(ADR 1112)*
+
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*
 

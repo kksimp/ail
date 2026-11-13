@@ -339,6 +339,13 @@ fn is_newline(t Tok) bool
 fn is_layout(t Tok) bool
     t == Tok.Indent or t == Tok.Dedent
 
+## Does a column-1 line start a declaration (gram.rec.5)?
+fn starts_declaration(line List[char]) bool
+    for word in ["fn ", "struct ", "enum ", "trait ", "impl ", "pub fn ", "pub struct ", "pub enum ", "pub trait ", "use "]
+        if fix.starts_at(line, 0, word.chars())
+            return true
+    false
+
 ## Lex with one indentation unit of `scale` spaces.
 fn lex_scaled(src str, scale int) Scaled
     mut lx := Lexer(
@@ -377,6 +384,26 @@ fn lex_scaled(src str, scale int) Scaled
             lx.comment(line, lead, line_no)
             li += 1
             continue
+        # gram.rec.5: a declaration keyword in column 1 ends the declaration above it, even with a bracket still open or a
+        # line above that ends in an operator, so one unfinished declaration doesn't swallow the file.
+        if lead == 0 and (lx.open.len() > 0 or continuing) and li > 0 and starts_declaration(line)
+            mut above := li - 1
+            while above > 0 and lines[above].len() == 0
+                above -= 1
+            stop := ast.Pos(line: above + 1, col: lines[above].len() + 1)
+            if lx.open.len() > 0
+                lx.unclosed(lines)
+                mut k := lx.open.len() - 1
+                while k >= 0
+                    sym := match lx.open[k].c
+                        '(' => ")"
+                        '[' => "]"
+                        _ => "}"
+                    lx.push(Sym(sym), stop)
+                    k -= 1
+                lx.open = []
+            lx.push(Newline, stop)
+            continuing = false
         # lex.stmt.2 (4): a line starting with `.name` continues the previous
         # statement (a chained call); the statement's newline is taken back.
         dot_name := line[lead] == '.'
