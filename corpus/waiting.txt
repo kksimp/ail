@@ -1,3 +1,5 @@
 connected_components .sorted() on List[List[int]] is not native yet (compiler lane, batch 9)
 csv_sort_tool .sorted() on List[List[str]] is not native yet (compiler lane, batch 9)
 minesweeper_counts compiler trap in compiler/mir/simplify.ail:69 (mir.remove_trivial_params, index -1); kept as the repro, routed to the integrator
+sharded_counter_tasks native.subset.1 on List[Mutex[Map]] parameter plus invalid MIR (v8 used before defined); compiler bug, kept as the repro
+voting_systems native.subset.1 `else` on a str (line 130); compiler bug, kept as the repro

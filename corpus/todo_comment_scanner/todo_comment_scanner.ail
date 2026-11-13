@@ -58,7 +58,7 @@ fn main()
     go_src := [
         "package main",
         "// TODO(kim): handle EOF",
-        "func f() {",
+        "func f() \{",
         "    s := \"TODO later\"   // FIXME: leaks the buffer",
         "    // TODOS are plain words",
         "}",

@@ -78,7 +78,7 @@ fn House.demo() House
         Lot(name: "vase", start: 100, reserve: 300, high: 0, leader: "", bids: 0, closed: false),
         Lot(name: "clock", start: 50, reserve: 500, high: 0, leader: "", bids: 0, closed: false),
     ]
-    rs := List[any Increment]()
+    mut rs := List[any Increment]()
     rs.push(Fixed(step: 25))
     rs.push(Percent(pct: 10))
     House(lots: ls, rules: rs)

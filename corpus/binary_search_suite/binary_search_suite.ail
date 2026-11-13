@@ -35,7 +35,7 @@ fn count_of(xs List[int], target int) int
 
 fn isqrt(n int) int
     mut lo := 0
-    mut hi := n + 1
+    mut hi := (n + 1).min(3037000500)
     while hi - lo > 1
         mid := lo + (hi - lo) / 2
         if mid * mid <= n

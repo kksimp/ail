@@ -94,7 +94,7 @@ fn Timetable.week(self, cls str) str
         mut cell := "---"
         for e in self.slots[s]
             if e.class == cls
-                cell = e.subject.slice(0, 3)
+                cell = if e.subject.len() > 3 then e.subject.slice(0, 3) else e.subject
         cells.push(cell)
     mut days := List[str]()
     for d in 0..DAYS
