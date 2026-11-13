@@ -1703,7 +1703,6 @@ fn build_with(bin str, backend str, cache str, prog str, out str, extra str) pro
 
 ## `ail api --locals/--type/--refs` (api_queries.rs, ported; api.loc, api.type, api.refs, api.pkg).
 fn Gate.api_queries(mut self, tmp str)
-    root := repo_root()
     d := "{tmp}/api_queries"
     sh_run("rm -rf {d}; mkdir -p {d}/geo")
     fs.write_text(

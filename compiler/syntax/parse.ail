@@ -555,7 +555,7 @@ fn Parser.describe(self, t Tok) str
 fn Parser.unexpected(mut self, expected str, rule str)
     if tag_at(0) == "kw" and not_yet(kw_at(0))
         error_text(
-            "bootstrap.unsupported",
+            "gram.foreign.1",
             here(),
             "`as` is not an expression keyword in AIL",
             "convert with a method: `n.to_float()`, `x.to_int()` (a `float` truncates toward zero), `n.to_str()`",
@@ -2782,7 +2782,8 @@ fn Parser.primary(mut self) ast.Expr?
                     [fix.delete(pos, ast.Pos(line: pos.line, col: pos.col + 1))],
                 )
                 return none
-            if s == "." and sym_at(1) == "." and sym_at(2) == "."
+            # `...` lexes as `..` then `.`.
+            if s == ".." and sym_at(1) == "." and touches(i + 1)
                 error_text(
                     "gram.foreign.1",
                     pos,

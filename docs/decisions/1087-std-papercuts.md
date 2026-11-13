@@ -46,4 +46,6 @@ is an error, `assert_err` doesn't exist (and `ail fix` offered to rename it to `
 - An unused `:=` binding is a warning with the fix `_` (`expr.bind.14`, `compiler/check/unused.ail`), for the
   main program's own functions only, so std and package modules stay quiet. Rejected: an error (an unused
   value is a likely bug but not wrong), and `@allow` (the `_` fix is the allowance).
+  A program with an error gets none of these warnings (batch 8, 2026-11-13): they buried the error under
+  noise and made a first draft noisier. Rejected: warning anyway (24 error cases gained an extra line).
 - `ToJson` on `Map` and `T?` moved to its own lane: it needs generic `impl`s for a second builtin owner.
