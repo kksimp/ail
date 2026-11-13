@@ -341,7 +341,18 @@ fn is_layout(t Tok) bool
 
 ## Does a column-1 line start a declaration (gram.rec.5)?
 fn starts_declaration(line List[char]) bool
-    for word in ["fn ", "struct ", "enum ", "trait ", "impl ", "pub fn ", "pub struct ", "pub enum ", "pub trait ", "use "]
+    for word in [
+        "fn ",
+        "struct ",
+        "enum ",
+        "trait ",
+        "impl ",
+        "pub fn ",
+        "pub struct ",
+        "pub enum ",
+        "pub trait ",
+        "use ",
+    ]
         if fix.starts_at(line, 0, word.chars())
             return true
     false
