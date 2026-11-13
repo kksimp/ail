@@ -143,6 +143,7 @@ fn continues(body str) bool
         or body.starts_with("help: ")
         or body.starts_with("note: ")
         or body.starts_with("fix: ")
+        or body.starts_with("next: ")
 
 ## Split one stream into records (budget.out.2).
 fn records(text str, stderr bool, mut out List[Record])

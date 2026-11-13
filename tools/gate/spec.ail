@@ -384,7 +384,7 @@ fn main() !
     for pair in spec_ids
         if part == 0 and not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
             fails.push("{pair[1]} {pair[0]}: no runnable example")
-    mk4 := proc.run("rm", ["-rf", tmp]) else return
+    _ := proc.run("rm", ["-rf", tmp]) else return
     while shown < fails.len()
         show_fail(fails[shown])
         shown += 1

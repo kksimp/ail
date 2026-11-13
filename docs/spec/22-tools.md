@@ -332,8 +332,9 @@ fn main()
 
 **check.exit.1** — `ail check` exits 0 when the program has no error (warnings
 allowed) and 2 when it has one or the command line is wrong. `ail run` of a
-program that does not compile prints the diagnostics and exits 1 without
-running it; a trap exits 1; otherwise `ail run` exits with the program's status.
+program that does not compile prints the diagnostics and exits 2 without
+running it, as `ail check` does; a trap exits 1; otherwise `ail run` exits with
+the program's status.
 `ail test` of a program that does not compile exits non-zero, and 1 when a test
 fails. The gate checks these on macOS, Linux and Windows
 ([ADR 1113](../decisions/1113-check-output-for-agents.md)).

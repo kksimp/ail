@@ -71,8 +71,11 @@ fn drop_clash_cascade(ds List[Diag]) List[Diag]
     for d in ds
         mut hit := false
         if d.rule != "mod.unit.1"
+            # Case-blind: conc.task.1 on `Task(...)` says "a task is started with `spawn`".
+            help := d.help else ""
+            said := "{d.message} {help}".to_lower()
             for n in names
-                if d.message.contains(n) or (d.help != none and (d.help else "").contains(n))
+                if said.contains(n.to_lower())
                     hit = true
         if not hit
             out.push(d)

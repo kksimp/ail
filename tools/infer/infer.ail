@@ -488,7 +488,8 @@ fn run(args List[str]) int
             body.extend(stand_in(sig, lines[sig.line].starts_with("pub "), rows_path))
     fs.write_text(copy, "{body.join("\n")}\n") else err
         return die("can't write {copy}: {err.kind}")
-    mut test_args := ["test", copy]
+    # The stand-in writes its rows outside the test's directory, so the tests run without the sandbox (test.sandbox.4).
+    mut test_args := ["test", "--allow", "all", copy]
     if not cases.is_empty()
         test_args.extend(["--cases", cases])
     _ := proc.run(ail_path(), test_args) else err

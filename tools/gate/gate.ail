@@ -446,9 +446,9 @@ fn Gate.cli_checks(mut self)
     un := ail_run(["check", "tests/mistakes/abs_function.ail"]) else return
     if un.status != 2 or not un.err.contains("\nnext: ail ")
         red("check next line", "exit {un.status}\n{un.err}")
-    # check.exit.1: a program that doesn't compile stops `ail run` (1) and `ail test` (not 0) before anything runs.
+    # check.exit.1: a program that doesn't compile stops `ail run` (2, as `check`) and `ail test` (not 0) before anything runs.
     rb := ail_run(["run", "tests/mistakes/abs_function.ail"]) else return
-    if rb.status != 1 or not rb.out.is_empty()
+    if rb.status != 2 or not rb.out.is_empty()
         red("run of a program with errors", "exit {rb.status}\n{rb.out}{rb.err}")
     tb := ail_run(["test", "tests/mistakes/abs_function.ail"]) else return
     if tb.status == 0

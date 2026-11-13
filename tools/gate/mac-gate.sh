@@ -27,7 +27,7 @@ native_suites=$(grep -v '^#' tools/gate/suites.txt | tr '\n' ' ')
 # gate.ail is built once and the rest start from the build cache. nativex starts one process per core itself, so it runs
 # alone after the others. Nothing in the gate edits the compiler's sources, so the `ail` calls the suites make skip the
 # scan for sources newer than .native/ail (AIL_NATIVE_FRESH). times.log has the seconds each suite took, slowest first;
-# gate_native.log is every suite's log in order. No `wait -n`: the Mac's bash is 3.2.
+# suites.log is every suite's log in order. No `wait -n`: the Mac's bash is 3.2.
 # A first build, before AIL_NATIVE_FRESH is set, so `ail` brings .native/ail up to date with the sources (it does that scan
 # on the first call): the build of arith.ail is also the "native binaries start" check at the end.
 arith_ok=1
@@ -109,11 +109,11 @@ rest="$*"
 export NATIVE_COMPILER="$out/native-compiler"
 # shellcheck disable=SC2086
 pool "$jobs" $first $sel $rest
-: >"$out/gate_native.log"
+: >"$out/suites.log"
 shown=${GATE_SHOW:-60} # RED lines printed per red suite: all of a suite's failures in one pass, not the first 8
 for s in $sel $native_suites; do
   t=$(tag "$s")
-  cat "$out/gate_$t.log" >>"$out/gate_native.log" 2>/dev/null
+  cat "$out/gate_$t.log" >>"$out/suites.log" 2>/dev/null
   [ "$(cat "$out/gate_$t.rc" 2>/dev/null)" = 0 ] && continue
   fails=$((fails+1))
   if [ "$s" = selfhost1 ]; then echo "RED selfhost stage 1: ./ail build compiler/main.ail"; head -8 "$out/gate_$t.log" | cut -c1-200; continue; fi

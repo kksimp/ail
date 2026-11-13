@@ -27,8 +27,13 @@ no end marker. Exit statuses were unwritten.
    record `{"api":1,"summary":true,"errors":N,"warnings":M,"fixable":K}` on
    stdout, so the diagnostic lines on stderr keep their count. The gate checks
    every record of the mistakes corpus against the schema's required members.
-4. Exit statuses: `check` 0 or 2; `run` of a program that doesn't compile 1,
-   as a trap; `test` non-zero. The gate tests them on all three hosts.
+4. Exit statuses: `check` 0 or 2; `run` of a program that doesn't compile 2,
+   as `check`; `test` non-zero. The gate tests them on all three hosts.
+   (Amended 2026-11-13 by the integrator, delegated per ADR 0076: the draft
+   said 1, as a trap. `ail run` already exited 2 for a check error on every
+   host, the `--deny`, `--deterministic`, `--seed` and lock-file gate tests
+   all rely on it, and keeping 1 for traps alone lets an agent tell "didn't
+   compile" from "crashed" by the status.)
 5. `expr.match.3` stays a warning (ADR 0056, 0379). Its help now writes the
    variants to put in place of `_`. Quieting it needs the corpus rate; see
    Follow-up.
@@ -42,6 +47,9 @@ no end marker. Exit statuses were unwritten.
 - **Demote `expr.match.3` now.** Contradicts ADR 0056 and 0379 and needs the
   measured rate first.
 - **`next:` only for fixable errors.** The unfixable ones need it most.
+- **`run` of a program that doesn't compile exits 1.** It would share the
+  status of a trap, so the status alone couldn't tell a compile error from a
+  crash, and it breaks the gate's tests that rely on 2.
 
 ## Follow-up
 

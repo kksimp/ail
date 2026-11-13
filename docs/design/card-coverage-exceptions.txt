@@ -69,6 +69,7 @@ family gen.impl ; not on a card line yet; `ail ask` finds it
 family gen.infer ; not on a card line yet; `ail ask` finds it
 family gen.method ; not on a card line yet; `ail ask` finds it
 family gram.attr ; not on a card line yet; `ail ask` finds it
+family gram.ebnf ; the grammar file (docs/spec/grammar.ebnf) is a reference for tools, not a construct to write
 family gram.generic ; not on a card line yet; `ail ask` finds it
 family gram.help ; not on a card line yet; `ail ask` finds it
 family gram.list ; not on a card line yet; `ail ask` finds it
