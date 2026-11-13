@@ -892,10 +892,10 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1104](1104-default-parameters.md) | Default parameter values `name Type = value`, passed by name *(delegated)* | Accepted | 2026-11-13 |
 | [1105](1105-scoped-caps-in-manifests-and-review.md) | Scoped capabilities in `ail.pkg` (`caps fs.read=./data`) give a run its policy; `ail review` reports widened scopes *(delegated)* | Accepted | 2026-11-13 |
 | [1106](1106-struct-patterns.md) | Struct patterns and fields matched by name *(delegated)* | Accepted | 2026-11-13 |
-| [1112](1112-check-one-pass-and-fuzz.md) | `ail check` reports everything in one pass, and a checker fuzz guards it *(delegated)* | Accepted | 2026-11-13 |
 | [1107](1107-labeled-break-continue.md) | Labeled loops: `outer: for`, `break outer`, `continue outer` *(delegated)* | Accepted | 2026-11-13 |
 | [1108](1108-grammar-file.md) | `docs/spec/grammar.ebnf`, the whole grammar, checked against the tree by `tools/check-grammar.py` *(delegated)* | Accepted | 2026-11-13 |
 | [1109](1109-check-means-build.md) | What `ail check` accepts the native build builds: a generated method-by-element-type matrix and the `native_matrix` gate suite *(delegated)* | Accepted | 2026-11-13 |
 | [1110](1110-language-card-budget-16000.md) | The language card budget is 16,000 tokens (core about 3,000); coverage is checked by a docs-gate script, and `llms-full.txt` holds the card and how-tos *(designer)* | Accepted | 2026-11-13 |
 | [1111](1111-checkbench.md) | checkbench: `ail check` measured against one injected mistake per copy of the corpus and examples, floors in the gate suite `checkbench` *(delegated)* | Accepted | 2026-11-13 |
+| [1112](1112-check-one-pass-and-fuzz.md) | `ail check` reports everything in one pass, and a checker fuzz guards it *(delegated)* | Accepted | 2026-11-13 |
 | [1113](1113-check-output-for-agents.md) | `ail check` output for agents: `ok` line, `next:` on each error, JSON schema and summary record, exit statuses *(delegated)* | Accepted | 2026-11-13 |
