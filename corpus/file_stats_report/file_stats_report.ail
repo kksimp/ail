@@ -19,11 +19,11 @@ fn scan_file(p str) !Stats
         text := line.trim_end()
         s.lines += 1
         s.words += text.words().len()
-        s.bytes += line.byte_len()
         s.longest = s.longest.max(text.byte_len())
         if text.is_empty()
             s.blank += 1
     r.close()
+    s.bytes = fs.metadata(p)?.size
     s
 
 fn combine(a Stats, b Stats) Stats

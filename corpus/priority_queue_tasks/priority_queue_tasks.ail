@@ -2,25 +2,25 @@
 ## runs first) and then by arrival number, so equal priorities stay in FIFO
 ## order. A second, largest-first heap picks the top scores.
 
-struct Task
+struct Job
     priority int
     seq int
     name str
 
-impl Ord for Task
+impl Ord for Job
 
-fn submit(mut queue Heap[Task], mut counter int, priority int, name str)
+fn submit(mut queue Heap[Job], mut counter int, priority int, name str)
     counter += 1
-    queue.push(Task(priority: priority, seq: counter, name: name))
+    queue.push(Job(priority: priority, seq: counter, name: name))
 
-fn run_all(mut queue Heap[Task]) List[str]
+fn run_all(mut queue Heap[Job]) List[str]
     mut order := List[str]()
     while t := queue.pop()
         order.push("{t.name}({t.priority})")
     order
 
 fn main()
-    mut queue := Heap[Task]()
+    mut queue := Heap[Job]()
     mut counter := 0
     submit(mut queue, mut counter, 3, "backup")
     submit(mut queue, mut counter, 1, "deploy")
@@ -42,18 +42,18 @@ fn main()
     print("top 3 scores: {top3}")
 
 @test fn equal_priorities_keep_arrival_order()
-    mut q := Heap[Task]()
+    mut q := Heap[Job]()
     mut c := 0
     submit(mut q, mut c, 1, "first")
     submit(mut q, mut c, 1, "second")
     assert_eq(run_all(mut q), ["first(1)", "second(1)"])
 
 @test fn lower_priority_number_runs_first()
-    mut q := Heap[Task]()
+    mut q := Heap[Job]()
     mut c := 0
     submit(mut q, mut c, 5, "late")
     submit(mut q, mut c, 0, "urgent")
-    t := q.pop() else Task(priority: 0, seq: 0, name: "")
+    t := q.pop() else Job(priority: 0, seq: 0, name: "")
     assert_eq(t.name, "urgent")
 
 @test fn max_heap_pops_largest()

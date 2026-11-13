@@ -75,11 +75,11 @@ fn main()
         print("  [{p.key}] = [{p.val}]")
 
 @test fn escapes_separators()
-    assert_eq(escape("a=b;c\\d"), "a\\=b\;c\\\\d")
+    assert_eq(escape("a=b;c\\d"), "a\\=b\\;c\\\\d")
     assert_eq(escape("plain"), "plain")
 
 @test fn decodes_escapes()
-    got := decode("k=a\;b;z=\\=")
+    got := decode("k=a\\;b;z=\\=")
     assert_eq(got.len(), 2)
     assert_eq(got[0].val, "a;b")
     assert_eq(got[1].val, "=")

@@ -68,8 +68,8 @@ fn main() !
     print("merged: {back.len()} numbers, sorted {is_sorted(back)}")
     print("first 10: {back.take(10)}")
     print("last 3: {back[back.len() - 3..]}")
-    unique := dedupe(back)
-    print("unique: {unique.len()}, dropped {back.len() - unique.len()}")
+    distinct := dedupe(back)
+    print("unique: {distinct.len()}, dropped {back.len() - distinct.len()}")
     print("round trip intact: {back == merged}")
     for name in names
         fs.remove(path.join(dir, name))?

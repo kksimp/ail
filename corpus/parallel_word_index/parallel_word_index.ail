@@ -33,7 +33,9 @@ fn build_index(dir str, names List[str]) !Map[str, List[str]]
         g.add(spawn index_file(path.join(dir, name), out))
     g.wait_all()?
     out.close()
-    parts := [x for x in out]
+    merge_partials([x for x in out])
+
+fn merge_partials(parts List[Partial]) Map[str, List[str]]
     mut idx := Map[str, List[str]]()
     for part in parts.sorted(by: |q| q.doc)
         for w, n in part.counts
@@ -76,13 +78,9 @@ fn main() !
     assert_eq(c.len(), 1)
 
 @test fn index_lists_postings_in_document_order()
-    dir := fs.make_temp_dir("corpus_parallel_word_index_t")?
-    fs.write_text(path.join(dir, "x.txt"), "cat dog cat")?
-    fs.write_text(path.join(dir, "y.txt"), "dog")?
-    idx := build_index(dir, ["x.txt", "y.txt"])?
+    y_doc := Partial(doc: "y.txt", counts: count_words("dog"))
+    x_doc := Partial(doc: "x.txt", counts: count_words("cat dog cat"))
+    idx := merge_partials([y_doc, x_doc])
     assert_eq(lookup(idx, "cat"), "x.txt:2")
     assert_eq(lookup(idx, "dog"), "x.txt:1 y.txt:1")
     assert_eq(lookup(idx, "emu"), "-")
-    fs.remove(path.join(dir, "x.txt"))?
-    fs.remove(path.join(dir, "y.txt"))?
-    fs.remove(dir)?
