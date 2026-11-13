@@ -58,6 +58,7 @@ start() { # start SUITE: in the background, under the 4800 second alarm
     if [ "$s" = selfhost1 ]; then
       TMPDIR="$d" perl -e 'alarm 4800; exec @ARGV' ./ail build compiler/main.ail -o "$out/native-compiler" >"$out/gate_$t.log" 2>&1
     else
+      case "$s" in nativex*) [ "$(cat "$out/gate_selfhost1.rc" 2>/dev/null)" = 0 ] || unset NATIVE_COMPILER ;; esac # no stage 1: nativex builds its own
       TMPDIR="$d" perl -e 'alarm 4800; exec @ARGV' ./ail run tools/gate/gate.ail "$s" >"$out/gate_$t.log" 2>&1
     fi
     echo $? >"$out/gate_$t.rc"
@@ -74,7 +75,11 @@ pool() { # pool WIDTH SUITE...
       if kill -0 "$p" 2>/dev/null; then live="$live $p"; n=$((n+1)); else limit=$width; fi
     done
     pids=$live
-    while [ $# -gt 0 ] && [ "$n" -lt "$limit" ]; do start "$1"; shift; n=$((n+1)); done
+    while [ $# -gt 0 ] && [ "$n" -lt "$limit" ]; do
+      # A nativex shard waits for stage 1 (selfhost1) to finish, pass or fail; the other suites go on filling the pool.
+      case "$1" in nativex*) if [ -n "$sel" ] && [ -f "$out/gate_selfhost1.name" ] && [ ! -f "$out/gate_selfhost1.rc" ]; then break; fi ;; esac
+      start "$1"; shift; n=$((n+1))
+    done
     [ -z "$pids" ] || sleep 1
   done
   wait
@@ -83,22 +88,17 @@ fullrun=1; [ $# -gt 0 ] && fullrun=0
 [ $# -gt 0 ] && native_suites="$*"
 [ -n "$rerun" ] && fullrun=0
 [ -n "$rerun" ] && native_suites="$rerun"
-pooled=""; alone=""
-for s in $native_suites; do if [ "$s" = nativex ]; then alone=nativex; else pooled="$pooled $s"; fi; done
-# selfhost1 goes in right after the first (lone) suite, so it overlaps the long suites; nativex needs it only when it starts.
-# A full run, and a `--failed` rerun of nativex, build it; a named suite list that includes nativex does too.
-set -- $pooled
+# selfhost1 goes in right after the first (lone) suite, so it overlaps the long suites; the nativex shards need it, and wait for it.
+# nativex is sharded into the pool (`nativex@K/N`, one process each): its parts ran serially while three cores idled.
+sel=""
+for s in $native_suites; do case "$s" in nativex*) sel=selfhost1 ;; esac; done
+case " $native_suites " in *" selfhost1 "*) sel="" ;; esac
+set -- $native_suites
 first=${1:-}; [ $# -gt 0 ] && shift
 rest="$*"
-sel=""; [ -n "$alone" ] && sel=selfhost1
-case " $native_suites " in *" selfhost1 "*) sel="" ;; esac
 export NATIVE_COMPILER="$out/native-compiler"
 # shellcheck disable=SC2086
 pool "$jobs" $first $sel $rest
-if [ -n "$alone" ]; then
-  if [ "$(cat "$out/gate_selfhost1.rc" 2>/dev/null)" != 0 ]; then unset NATIVE_COMPILER; fi
-  pool 1 $alone
-fi
 : >"$out/gate_native.log"
 shown=${GATE_SHOW:-60} # RED lines printed per red suite: all of a suite's failures in one pass, not the first 8
 for s in $sel $native_suites; do

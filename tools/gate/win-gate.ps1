@@ -121,6 +121,8 @@ function Run-Pool([string[]]$names, [int]$width) {
     }
 }
 
+# nativex is sharded (`nativex@K/N`, one process each, suites.txt), so its shards share the pool with the other suites
+# instead of one process per core running alone at the end. A bare `nativex` argument is still the whole suite, alone.
 $alone = @($suites | Where-Object { $_ -eq 'nativex' })
 Run-Pool @($suites | Where-Object { $_ -ne 'nativex' }) $jobs
 if ($alone.Count -gt 0) { Run-Pool $alone 1 }
