@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_tuple
+    items List[(int, str)]
+
+fn add_tuple(mut xs List[(int, str)], x (int, str))
+    xs.push(x)
+
+fn wrap_tuple(x (int, str)) (int, str)?
+    x
+
+fn nothing_tuple() (int, str)?
+    none
+
+K_tuple := [(1, "a"), (2, "b")]
+
+## set.literal[tuple]
+fn s0()
+    s := {(1, "a"), (2, "b")}
+    print(s.len())
+
+## set.empty[tuple]
+fn s1()
+    s := Set[(int, str)]()
+    print(s.len())
+
+## set.from_list[tuple]
+fn s2()
+    s := {x for x in [(1, "a"), (2, "b"), (1, "a")]}
+    print(s.len())
+
+## set.add_remove[tuple]
+fn s3()
+    mut s := Set[(int, str)]()
+    print(s.add((1, "a")))
+    print(s.remove((1, "a")))
+
+## set.contains[tuple]
+fn s4()
+    s := {(1, "a"), (2, "b")}
+    print(s.contains((1, "a")))
+
+## set.is_empty[tuple]
+fn s5()
+    s := {(1, "a")}
+    print(s.is_empty())
+
+## set.sorted[tuple]
+fn s6()
+    s := {(2, "b"), (1, "a")}
+    print(s.sorted().len())
+
+## set.is_subset[tuple]
+fn s7()
+    s := {(1, "a")}
+    t := {(1, "a"), (2, "b")}
+    print(s.is_subset(t))
+
+## set.set_ops[tuple]
+fn s8()
+    s := {(1, "a"), (2, "b")}
+    t := {(2, "b"), (3, "c")}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[tuple]
+fn s9()
+    s := {(1, "a"), (2, "b")}
+    print(s.any(|x| x == (1, "a")))
+    print(s.all(|x| x == (1, "a")))
+    if x := s.find(|x| x == (2, "b"))
+        print(1)
+
+## set.filter_map[tuple]
+fn s10()
+    s := {(1, "a"), (2, "b")}
+    print(s.filter(|x| x == (1, "a")).len() + s.map(|x| x.0).len())
+
+## set.group_by[tuple]
+fn s11()
+    s := {(1, "a"), (2, "b")}
+    print(s.group_by(|x| x.0).len())
+
+## set.count_fold[tuple]
+fn s12()
+    s := {(1, "a"), (2, "b")}
+    print(s.count(|x| x == (1, "a")))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[tuple]
+fn s13()
+    s := {(1, "a"), (2, "b")}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[tuple]
+fn s14()
+    s := {(1, "a"), (2, "b"), (3, "c")}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == (1, "a")).len() + s.skip_while(|x| x == (1, "a")).len())
+
+## set.zip_enumerate[tuple]
+fn s15()
+    s := {(1, "a"), (2, "b")}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.min_max[tuple]
+fn s16()
+    s := {(1, "a"), (2, "b")}
+    if x := s.min()
+        print(1)
+    if x := s.max()
+        print(2)
+
+## set.for[tuple]
+fn s17()
+    s := {(1, "a"), (2, "b")}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[tuple]
+fn s18()
+    s := {(1, "a"), (2, "b")}
+    print(s == {(2, "b"), (1, "a")})
+
+## set.print[tuple]
+fn s19()
+    s := {(1, "a")}
+    print(s)
+
+## set.in_map[tuple]
+fn s20()
+    mut m := Map[str, Set[(int, str)]]()
+    m["a"] = Set[(int, str)]()
+    m["a"].add((1, "a"))
+    print(m["a"].len())
+
+## set.in_list[tuple]
+fn s21()
+    mut xs := [Set[(int, str)]()]
+    xs[0].add((1, "a"))
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[tuple]")
+    s0()
+    print("-- set.empty[tuple]")
+    s1()
+    print("-- set.from_list[tuple]")
+    s2()
+    print("-- set.add_remove[tuple]")
+    s3()
+    print("-- set.contains[tuple]")
+    s4()
+    print("-- set.is_empty[tuple]")
+    s5()
+    print("-- set.sorted[tuple]")
+    s6()
+    print("-- set.is_subset[tuple]")
+    s7()
+    print("-- set.set_ops[tuple]")
+    s8()
+    print("-- set.any_all_find[tuple]")
+    s9()
+    print("-- set.filter_map[tuple]")
+    s10()
+    print("-- set.group_by[tuple]")
+    s11()
+    print("-- set.count_fold[tuple]")
+    s12()
+    print("-- set.flat_map[tuple]")
+    s13()
+    print("-- set.take_skip[tuple]")
+    s14()
+    print("-- set.zip_enumerate[tuple]")
+    s15()
+    print("-- set.min_max[tuple]")
+    s16()
+    print("-- set.for[tuple]")
+    s17()
+    print("-- set.eq[tuple]")
+    s18()
+    print("-- set.print[tuple]")
+    s19()
+    print("-- set.in_map[tuple]")
+    s20()
+    print("-- set.in_list[tuple]")
+    s21()

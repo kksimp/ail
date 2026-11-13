@@ -1,0 +1,49 @@
+-- set.literal[char]
+2
+-- set.empty[char]
+0
+-- set.from_list[char]
+2
+-- set.add_remove[char]
+true
+true
+-- set.contains[char]
+true
+-- set.is_empty[char]
+false
+-- set.sorted[char]
+2
+-- set.is_subset[char]
+true
+-- set.set_ops[char]
+5
+-- set.any_all_find[char]
+true
+false
+1
+-- set.filter_map[char]
+3
+-- set.group_by[char]
+2
+-- set.count_fold[char]
+1
+2
+-- set.flat_map[char]
+2
+-- set.take_skip[char]
+6
+-- set.zip_enumerate[char]
+4
+-- set.min_max[char]
+1
+2
+-- set.for[char]
+2
+-- set.eq[char]
+true
+-- set.print[char]
+{'a'}
+-- set.in_map[char]
+1
+-- set.in_list[char]
+1

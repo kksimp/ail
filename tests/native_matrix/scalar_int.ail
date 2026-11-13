@@ -1,0 +1,242 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+## int.0
+fn s0()
+    print(6.bit_and(3))
+
+## int.1
+fn s1()
+    print(6.bit_or(3))
+
+## int.2
+fn s2()
+    print(6.bit_xor(3))
+
+## int.3
+fn s3()
+    print(6.bit_not())
+
+## int.4
+fn s4()
+    print(1.shl(3))
+
+## int.5
+fn s5()
+    print(8.shr(2))
+
+## int.6
+fn s6()
+    print(1.checked_add(2) else 0)
+
+## int.7
+fn s7()
+    print(1.checked_sub(2) else 0)
+
+## int.8
+fn s8()
+    print(2.checked_mul(3) else 0)
+
+## int.9
+fn s9()
+    print(6.checked_div(0) else -1)
+
+## int.10
+fn s10()
+    print(5.checked_neg() else 0)
+
+## int.11
+fn s11()
+    print(7.checked_rem(3) else 0)
+
+## int.12
+fn s12()
+    print(5.wrapping_neg())
+
+## int.13
+fn s13()
+    print(1.wrapping_add(2))
+
+## int.14
+fn s14()
+    print(1.wrapping_sub(2))
+
+## int.15
+fn s15()
+    print(2.wrapping_mul(3))
+
+## int.16
+fn s16()
+    print(1.saturating_add(2))
+
+## int.17
+fn s17()
+    print(1.saturating_sub(2))
+
+## int.18
+fn s18()
+    print(2.saturating_mul(3))
+
+## int.19
+fn s19()
+    print((-3).abs())
+
+## int.20
+fn s20()
+    print(3.to_float())
+
+## int.21
+fn s21()
+    print(255.to_hex())
+
+## int.22
+fn s22()
+    print(3.to_str())
+
+## int.23
+fn s23()
+    print(3.to_i8())
+
+## int.24
+fn s24()
+    print(3.to_i16())
+
+## int.25
+fn s25()
+    print(3.to_i32())
+
+## int.26
+fn s26()
+    print(3.to_u8())
+
+## int.27
+fn s27()
+    print(3.to_u16())
+
+## int.28
+fn s28()
+    print(3.to_u32())
+
+## int.29
+fn s29()
+    print(3.to_u64())
+
+## int.30
+fn s30()
+    print(3.to_f32())
+
+## int.31
+fn s31()
+    print(7 / 2)
+
+## int.32
+fn s32()
+    print(7 % 3)
+
+fn main()
+    print("-- int.0")
+    s0()
+    print("-- int.1")
+    s1()
+    print("-- int.2")
+    s2()
+    print("-- int.3")
+    s3()
+    print("-- int.4")
+    s4()
+    print("-- int.5")
+    s5()
+    print("-- int.6")
+    s6()
+    print("-- int.7")
+    s7()
+    print("-- int.8")
+    s8()
+    print("-- int.9")
+    s9()
+    print("-- int.10")
+    s10()
+    print("-- int.11")
+    s11()
+    print("-- int.12")
+    s12()
+    print("-- int.13")
+    s13()
+    print("-- int.14")
+    s14()
+    print("-- int.15")
+    s15()
+    print("-- int.16")
+    s16()
+    print("-- int.17")
+    s17()
+    print("-- int.18")
+    s18()
+    print("-- int.19")
+    s19()
+    print("-- int.20")
+    s20()
+    print("-- int.21")
+    s21()
+    print("-- int.22")
+    s22()
+    print("-- int.23")
+    s23()
+    print("-- int.24")
+    s24()
+    print("-- int.25")
+    s25()
+    print("-- int.26")
+    s26()
+    print("-- int.27")
+    s27()
+    print("-- int.28")
+    s28()
+    print("-- int.29")
+    s29()
+    print("-- int.30")
+    s30()
+    print("-- int.31")
+    s31()
+    print("-- int.32")
+    s32()

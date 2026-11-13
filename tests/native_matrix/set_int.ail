@@ -1,0 +1,236 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_int
+    items List[int]
+
+fn add_int(mut xs List[int], x int)
+    xs.push(x)
+
+fn wrap_int(x int) int?
+    x
+
+fn nothing_int() int?
+    none
+
+K_int := [1, 2]
+
+## set.literal[int]
+fn s0()
+    s := {1, 2}
+    print(s.len())
+
+## set.empty[int]
+fn s1()
+    s := Set[int]()
+    print(s.len())
+
+## set.from_list[int]
+fn s2()
+    s := {x for x in [1, 2, 1]}
+    print(s.len())
+
+## set.add_remove[int]
+fn s3()
+    mut s := Set[int]()
+    print(s.add(1))
+    print(s.remove(1))
+
+## set.contains[int]
+fn s4()
+    s := {1, 2}
+    print(s.contains(1))
+
+## set.is_empty[int]
+fn s5()
+    s := {1}
+    print(s.is_empty())
+
+## set.sorted[int]
+fn s6()
+    s := {2, 1}
+    print(s.sorted().len())
+
+## set.is_subset[int]
+fn s7()
+    s := {1}
+    t := {1, 2}
+    print(s.is_subset(t))
+
+## set.set_ops[int]
+fn s8()
+    s := {1, 2}
+    t := {2, 3}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[int]
+fn s9()
+    s := {1, 2}
+    print(s.any(|x| x == 1))
+    print(s.all(|x| x == 1))
+    if x := s.find(|x| x == 2)
+        print(1)
+
+## set.filter_map[int]
+fn s10()
+    s := {1, 2}
+    print(s.filter(|x| x == 1).len() + s.map(|x| x).len())
+
+## set.group_by[int]
+fn s11()
+    s := {1, 2}
+    print(s.group_by(|x| x).len())
+
+## set.count_fold[int]
+fn s12()
+    s := {1, 2}
+    print(s.count(|x| x == 1))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[int]
+fn s13()
+    s := {1, 2}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[int]
+fn s14()
+    s := {1, 2, 3}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == 1).len() + s.skip_while(|x| x == 1).len())
+
+## set.zip_enumerate[int]
+fn s15()
+    s := {1, 2}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.sum[int]
+fn s16()
+    s := {1, 2}
+    x := s.sum()
+    print(1)
+
+## set.min_max[int]
+fn s17()
+    s := {1, 2}
+    if x := s.min()
+        print(1)
+    if x := s.max()
+        print(2)
+
+## set.for[int]
+fn s18()
+    s := {1, 2}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[int]
+fn s19()
+    s := {1, 2}
+    print(s == {2, 1})
+
+## set.print[int]
+fn s20()
+    s := {1}
+    print(s)
+
+## set.in_map[int]
+fn s21()
+    mut m := Map[str, Set[int]]()
+    m["a"] = Set[int]()
+    m["a"].add(1)
+    print(m["a"].len())
+
+## set.in_list[int]
+fn s22()
+    mut xs := [Set[int]()]
+    xs[0].add(1)
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[int]")
+    s0()
+    print("-- set.empty[int]")
+    s1()
+    print("-- set.from_list[int]")
+    s2()
+    print("-- set.add_remove[int]")
+    s3()
+    print("-- set.contains[int]")
+    s4()
+    print("-- set.is_empty[int]")
+    s5()
+    print("-- set.sorted[int]")
+    s6()
+    print("-- set.is_subset[int]")
+    s7()
+    print("-- set.set_ops[int]")
+    s8()
+    print("-- set.any_all_find[int]")
+    s9()
+    print("-- set.filter_map[int]")
+    s10()
+    print("-- set.group_by[int]")
+    s11()
+    print("-- set.count_fold[int]")
+    s12()
+    print("-- set.flat_map[int]")
+    s13()
+    print("-- set.take_skip[int]")
+    s14()
+    print("-- set.zip_enumerate[int]")
+    s15()
+    print("-- set.sum[int]")
+    s16()
+    print("-- set.min_max[int]")
+    s17()
+    print("-- set.for[int]")
+    s18()
+    print("-- set.eq[int]")
+    s19()
+    print("-- set.print[int]")
+    s20()
+    print("-- set.in_map[int]")
+    s21()
+    print("-- set.in_list[int]")
+    s22()

@@ -1,0 +1,51 @@
+-- set.literal[int]
+2
+-- set.empty[int]
+0
+-- set.from_list[int]
+2
+-- set.add_remove[int]
+true
+true
+-- set.contains[int]
+true
+-- set.is_empty[int]
+false
+-- set.sorted[int]
+2
+-- set.is_subset[int]
+true
+-- set.set_ops[int]
+5
+-- set.any_all_find[int]
+true
+false
+1
+-- set.filter_map[int]
+3
+-- set.group_by[int]
+2
+-- set.count_fold[int]
+1
+2
+-- set.flat_map[int]
+2
+-- set.take_skip[int]
+6
+-- set.zip_enumerate[int]
+4
+-- set.sum[int]
+1
+-- set.min_max[int]
+1
+2
+-- set.for[int]
+2
+-- set.eq[int]
+true
+-- set.print[int]
+{1}
+-- set.in_map[int]
+1
+-- set.in_list[int]
+1

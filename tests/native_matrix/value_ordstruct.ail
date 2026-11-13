@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## value.eq[ordstruct]
+fn s0()
+    print(Q(n: 1, name: "a") == Q(n: 1, name: "a"))
+    print(Q(n: 1, name: "a") != Q(n: 2, name: "b"))
+
+## value.lt[ordstruct]
+fn s1()
+    print(Q(n: 1, name: "a") < Q(n: 2, name: "b"))
+    print(Q(n: 2, name: "b") >= Q(n: 1, name: "a"))
+
+## value.print[ordstruct]
+fn s2()
+    print(Q(n: 1, name: "a"))
+
+## value.interp[ordstruct]
+fn s3()
+    x := Q(n: 1, name: "a")
+    print("<{x}>")
+
+## value.to_str_len[ordstruct]
+fn s4()
+    x := Q(n: 1, name: "a")
+    print("{x}".len() > 0)
+
+## value.optional_else[ordstruct]
+fn s5()
+    o := wrap_ordstruct(Q(n: 1, name: "a"))
+    x := o else Q(n: 2, name: "b")
+    print(1)
+
+## value.optional_if[ordstruct]
+fn s6()
+    o := wrap_ordstruct(Q(n: 1, name: "a"))
+    if x := o
+        print(1)
+
+## value.optional_none[ordstruct]
+fn s7()
+    o := nothing_ordstruct()
+    print(o == none)
+
+## value.optional_print[ordstruct]
+fn s8()
+    o := wrap_ordstruct(Q(n: 1, name: "a"))
+    print(o)
+
+## value.tuple[ordstruct]
+fn s9()
+    t := (Q(n: 1, name: "a"), 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[ordstruct]
+fn s10()
+    t := (Q(n: 1, name: "a"), 1)
+    print(t == (Q(n: 1, name: "a"), 1))
+
+## value.tuple_print[ordstruct]
+fn s11()
+    t := (Q(n: 1, name: "a"), 1)
+    print(t)
+
+## value.tuple_list_sorted[ordstruct]
+fn s12()
+    xs := [(Q(n: 2, name: "b"), 1), (Q(n: 1, name: "a"), 2)]
+    print(xs.sorted().len())
+
+## value.tuple_key[ordstruct]
+fn s13()
+    mut m := Map[(Q, int), int]()
+    m[(Q(n: 1, name: "a"), 1)] = 2
+    print(m[(Q(n: 1, name: "a"), 1)])
+
+## value.struct_field[ordstruct]
+fn s14()
+    b := Box_ordstruct(items: [Q(n: 1, name: "a")])
+    c := b
+    print(c == b)
+
+## value.struct_print[ordstruct]
+fn s15()
+    b := Box_ordstruct(items: [Q(n: 1, name: "a")])
+    print(b)
+
+## value.ref[ordstruct]
+fn s16()
+    r := ref Box_ordstruct(items: [Q(n: 1, name: "a")])
+    s := r
+    s.items.push(Q(n: 2, name: "b"))
+    print(r.items.len())
+
+## value.generic_id[ordstruct]
+fn s17()
+    x := ident(Q(n: 1, name: "a"))
+    print(1)
+
+## value.generic_box[ordstruct]
+fn s18()
+    g := GBox(v: Q(n: 1, name: "a"))
+    print(g.v == Q(n: 1, name: "a"))
+
+## value.fn_value[ordstruct]
+fn s19()
+    f := |x Q| x
+    y := f(Q(n: 1, name: "a"))
+    print(1)
+
+## value.closure_capture[ordstruct]
+fn s20()
+    a := Q(n: 1, name: "a")
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[ordstruct]
+fn s21()
+    x := Q(n: 1, name: "a")
+    print(if x == Q(n: 1, name: "a") then 1 else 0)
+
+## value.const_list[ordstruct]
+fn s22()
+    print(K_ordstruct.len())
+
+fn main()
+    print("-- value.eq[ordstruct]")
+    s0()
+    print("-- value.lt[ordstruct]")
+    s1()
+    print("-- value.print[ordstruct]")
+    s2()
+    print("-- value.interp[ordstruct]")
+    s3()
+    print("-- value.to_str_len[ordstruct]")
+    s4()
+    print("-- value.optional_else[ordstruct]")
+    s5()
+    print("-- value.optional_if[ordstruct]")
+    s6()
+    print("-- value.optional_none[ordstruct]")
+    s7()
+    print("-- value.optional_print[ordstruct]")
+    s8()
+    print("-- value.tuple[ordstruct]")
+    s9()
+    print("-- value.tuple_eq[ordstruct]")
+    s10()
+    print("-- value.tuple_print[ordstruct]")
+    s11()
+    print("-- value.tuple_list_sorted[ordstruct]")
+    s12()
+    print("-- value.tuple_key[ordstruct]")
+    s13()
+    print("-- value.struct_field[ordstruct]")
+    s14()
+    print("-- value.struct_print[ordstruct]")
+    s15()
+    print("-- value.ref[ordstruct]")
+    s16()
+    print("-- value.generic_id[ordstruct]")
+    s17()
+    print("-- value.generic_box[ordstruct]")
+    s18()
+    print("-- value.fn_value[ordstruct]")
+    s19()
+    print("-- value.closure_capture[ordstruct]")
+    s20()
+    print("-- value.match_eq[ordstruct]")
+    s21()
+    print("-- value.const_list[ordstruct]")
+    s22()

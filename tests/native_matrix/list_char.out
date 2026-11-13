@@ -1,0 +1,130 @@
+-- list.literal[char]
+3
+-- list.empty[char]
+0
+-- list.typed_by_push[char]
+1
+-- list.len[char]
+2
+-- list.is_empty[char]
+false
+-- list.index[char]
+true
+-- list.index_assign[char]
+2
+-- list.slice[char]
+5
+-- list.push[char]
+2
+-- list.pop[char]
+1
+-- list.swap[char]
+2
+-- list.first_last[char]
+1
+2
+-- list.insert[char]
+2
+-- list.remove_at[char]
+1
+-- list.extend[char]
+3
+-- list.clear[char]
+0
+-- list.reverse[char]
+2
+-- list.reversed[char]
+2
+-- list.contains[char]
+true
+-- list.index_of[char]
+1
+-- list.join[char]
+true
+-- list.min_max[char]
+1
+2
+-- list.sorted[char]
+3
+-- list.sort[char]
+3
+-- list.sorted_by[char]
+3
+-- list.sort_by[char]
+3
+-- list.min_by[char]
+1
+2
+-- list.take_skip[char]
+4
+-- list.set_ops[char]
+5
+-- list.chunks_windows[char]
+4
+-- list.counts[char]
+2
+-- list.flatten[char]
+3
+-- list.enumerate[char]
+0
+1
+-- list.any_all[char]
+true
+false
+-- list.find[char]
+1
+-- list.filter[char]
+1
+-- list.map[char]
+2
+-- list.map_to_self[char]
+2
+-- list.group_by[char]
+2
+-- list.count[char]
+2
+-- list.fold[char]
+2
+-- list.flat_map[char]
+4
+-- list.take_skip_while[char]
+2
+-- list.zip[char]
+1
+2
+-- list.zip_into[char]
+1
+2
+-- list.for[char]
+2
+-- list.for_mut[char]
+2
+-- list.comprehension[char]
+1
+-- list.set_comprehension[char]
+2
+-- list.map_comprehension[char]
+2
+-- list.eq[char]
+true
+true
+-- list.lt[char]
+true
+-- list.print[char]
+['a', 'b']
+-- list.interp[char]
+true
+-- list.nested_push[char]
+2
+-- list.in_struct[char]
+2
+-- list.pass_mut[char]
+2
+-- list.generic_first[char]
+1
+-- list.generic_ord[char]
+1
+-- list.contains_list[char]
+true
+-- list.sorted_nested[char]
+2

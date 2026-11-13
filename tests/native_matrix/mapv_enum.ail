@@ -1,0 +1,174 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_enum
+    items List[Color]
+
+fn add_enum(mut xs List[Color], x Color)
+    xs.push(x)
+
+fn wrap_enum(x Color) Color?
+    x
+
+fn nothing_enum() Color?
+    none
+
+K_enum := [Color.Red, Color.Green]
+
+## mapv.literal[enum]
+fn s0()
+    m := {"a": Color.Red, "b": Color.Green}
+    print(m.len())
+
+## mapv.empty[enum]
+fn s1()
+    m := Map[str, Color]()
+    print(m.len())
+
+## mapv.index[enum]
+fn s2()
+    m := {"a": Color.Red}
+    x := m["a"]
+    print(1 == 1)
+
+## mapv.assign[enum]
+fn s3()
+    mut m := Map[str, Color]()
+    m["a"] = Color.Red
+    print(m.len())
+
+## mapv.get[enum]
+fn s4()
+    m := {"a": Color.Red}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[enum]
+fn s5()
+    m := {"a": Color.Red}
+    x := m.get("z") else Color.Green
+    print(1)
+
+## mapv.get_or[enum]
+fn s6()
+    m := {"a": Color.Red}
+    x := m.get_or("b", Color.Blue)
+    print(1)
+
+## mapv.remove[enum]
+fn s7()
+    mut m := {"a": Color.Red}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[enum]
+fn s8()
+    m := {"a": Color.Red, "b": Color.Green}
+    print(m.values().len())
+
+## mapv.for[enum]
+fn s9()
+    m := {"a": Color.Red, "b": Color.Green}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[enum]
+fn s10()
+    m := {"a": Color.Red}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[enum]
+fn s11()
+    m := {"a": Color.Red, "b": Color.Green}
+    print(m.filter(|k, v| v == Color.Red).len())
+
+## mapv.nested_update[enum]
+fn s12()
+    mut m := Map[str, List[Color]]()
+    m["a"] = [Color.Red]
+    m["a"].push(Color.Green)
+    print(m["a"].len())
+
+## mapv.eq[enum]
+fn s13()
+    m := {"a": Color.Red}
+    print(m == {"a": Color.Red})
+
+## mapv.print[enum]
+fn s14()
+    m := {"a": Color.Red}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[enum]")
+    s0()
+    print("-- mapv.empty[enum]")
+    s1()
+    print("-- mapv.index[enum]")
+    s2()
+    print("-- mapv.assign[enum]")
+    s3()
+    print("-- mapv.get[enum]")
+    s4()
+    print("-- mapv.get_else[enum]")
+    s5()
+    print("-- mapv.get_or[enum]")
+    s6()
+    print("-- mapv.remove[enum]")
+    s7()
+    print("-- mapv.values[enum]")
+    s8()
+    print("-- mapv.for[enum]")
+    s9()
+    print("-- mapv.map_values[enum]")
+    s10()
+    print("-- mapv.filter[enum]")
+    s11()
+    print("-- mapv.nested_update[enum]")
+    s12()
+    print("-- mapv.eq[enum]")
+    s13()
+    print("-- mapv.print[enum]")
+    s14()

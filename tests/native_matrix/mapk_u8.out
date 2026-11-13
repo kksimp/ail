@@ -1,0 +1,50 @@
+-- mapk.literal[u8]
+2
+-- mapk.empty[u8]
+0
+-- mapk.typed_by_use[u8]
+1
+-- mapk.index[u8]
+1
+-- mapk.assign[u8]
+2
+-- mapk.op_assign[u8]
+3
+-- mapk.get[u8]
+1
+-- mapk.get_or[u8]
+7
+-- mapk.contains[u8]
+true
+-- mapk.remove[u8]
+1
+-- mapk.keys_values[u8]
+4
+-- mapk.keys_sorted[u8]
+2
+-- mapk.top[u8]
+1
+-- mapk.for[u8]
+3
+-- mapk.any_all_count[u8]
+true
+false
+1
+-- mapk.fold[u8]
+3
+-- mapk.filter[u8]
+1
+-- mapk.map[u8]
+2
+-- mapk.flat_map[u8]
+4
+-- mapk.map_values[u8]
+2
+-- mapk.push[u8]
+2
+-- mapk.eq[u8]
+true
+-- mapk.print[u8]
+{1: 1}
+-- mapk.is_empty[u8]
+false

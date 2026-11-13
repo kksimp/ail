@@ -1,0 +1,109 @@
+-- list.literal[map]
+3
+-- list.empty[map]
+0
+-- list.typed_by_push[map]
+1
+-- list.len[map]
+2
+-- list.is_empty[map]
+false
+-- list.index[map]
+true
+-- list.index_assign[map]
+2
+-- list.slice[map]
+5
+-- list.push[map]
+2
+-- list.pop[map]
+1
+-- list.swap[map]
+2
+-- list.first_last[map]
+1
+2
+-- list.insert[map]
+2
+-- list.remove_at[map]
+1
+-- list.extend[map]
+3
+-- list.clear[map]
+0
+-- list.reverse[map]
+2
+-- list.reversed[map]
+2
+-- list.contains[map]
+true
+-- list.index_of[map]
+1
+-- list.join[map]
+true
+-- list.sorted_by[map]
+3
+-- list.sort_by[map]
+3
+-- list.min_by[map]
+1
+2
+-- list.take_skip[map]
+4
+-- list.chunks_windows[map]
+4
+-- list.flatten[map]
+3
+-- list.enumerate[map]
+0
+1
+-- list.any_all[map]
+true
+false
+-- list.find[map]
+1
+-- list.filter[map]
+1
+-- list.map[map]
+2
+-- list.map_to_self[map]
+2
+-- list.group_by[map]
+1
+-- list.count[map]
+2
+-- list.fold[map]
+2
+-- list.flat_map[map]
+4
+-- list.take_skip_while[map]
+2
+-- list.zip[map]
+1
+2
+-- list.zip_into[map]
+1
+2
+-- list.for[map]
+2
+-- list.for_mut[map]
+2
+-- list.comprehension[map]
+1
+-- list.eq[map]
+true
+true
+-- list.print[map]
+[{"a": 1}, {"b": 2}]
+-- list.interp[map]
+true
+-- list.nested_push[map]
+2
+-- list.in_struct[map]
+2
+-- list.pass_mut[map]
+2
+-- list.generic_first[map]
+1
+-- list.contains_list[map]
+true

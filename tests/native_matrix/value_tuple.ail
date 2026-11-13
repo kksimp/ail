@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_tuple
+    items List[(int, str)]
+
+fn add_tuple(mut xs List[(int, str)], x (int, str))
+    xs.push(x)
+
+fn wrap_tuple(x (int, str)) (int, str)?
+    x
+
+fn nothing_tuple() (int, str)?
+    none
+
+K_tuple := [(1, "a"), (2, "b")]
+
+## value.eq[tuple]
+fn s0()
+    print((1, "a") == (1, "a"))
+    print((1, "a") != (2, "b"))
+
+## value.lt[tuple]
+fn s1()
+    print((1, "a") < (2, "b"))
+    print((2, "b") >= (1, "a"))
+
+## value.print[tuple]
+fn s2()
+    print((1, "a"))
+
+## value.interp[tuple]
+fn s3()
+    x := (1, "a")
+    print("<{x}>")
+
+## value.to_str_len[tuple]
+fn s4()
+    x := (1, "a")
+    print("{x}".len() > 0)
+
+## value.optional_else[tuple]
+fn s5()
+    o := wrap_tuple((1, "a"))
+    x := o else (2, "b")
+    print(1)
+
+## value.optional_if[tuple]
+fn s6()
+    o := wrap_tuple((1, "a"))
+    if x := o
+        print(1)
+
+## value.optional_none[tuple]
+fn s7()
+    o := nothing_tuple()
+    print(o == none)
+
+## value.optional_print[tuple]
+fn s8()
+    o := wrap_tuple((1, "a"))
+    print(o)
+
+## value.tuple[tuple]
+fn s9()
+    t := ((1, "a"), 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[tuple]
+fn s10()
+    t := ((1, "a"), 1)
+    print(t == ((1, "a"), 1))
+
+## value.tuple_print[tuple]
+fn s11()
+    t := ((1, "a"), 1)
+    print(t)
+
+## value.tuple_list_sorted[tuple]
+fn s12()
+    xs := [((2, "b"), 1), ((1, "a"), 2)]
+    print(xs.sorted().len())
+
+## value.tuple_key[tuple]
+fn s13()
+    mut m := Map[((int, str), int), int]()
+    m[((1, "a"), 1)] = 2
+    print(m[((1, "a"), 1)])
+
+## value.struct_field[tuple]
+fn s14()
+    b := Box_tuple(items: [(1, "a")])
+    c := b
+    print(c == b)
+
+## value.struct_print[tuple]
+fn s15()
+    b := Box_tuple(items: [(1, "a")])
+    print(b)
+
+## value.ref[tuple]
+fn s16()
+    r := ref Box_tuple(items: [(1, "a")])
+    s := r
+    s.items.push((2, "b"))
+    print(r.items.len())
+
+## value.generic_id[tuple]
+fn s17()
+    x := ident((1, "a"))
+    print(1)
+
+## value.generic_box[tuple]
+fn s18()
+    g := GBox(v: (1, "a"))
+    print(g.v == (1, "a"))
+
+## value.fn_value[tuple]
+fn s19()
+    f := |x (int, str)| x
+    y := f((1, "a"))
+    print(1)
+
+## value.closure_capture[tuple]
+fn s20()
+    a := (1, "a")
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[tuple]
+fn s21()
+    x := (1, "a")
+    print(if x == (1, "a") then 1 else 0)
+
+## value.const_list[tuple]
+fn s22()
+    print(K_tuple.len())
+
+fn main()
+    print("-- value.eq[tuple]")
+    s0()
+    print("-- value.lt[tuple]")
+    s1()
+    print("-- value.print[tuple]")
+    s2()
+    print("-- value.interp[tuple]")
+    s3()
+    print("-- value.to_str_len[tuple]")
+    s4()
+    print("-- value.optional_else[tuple]")
+    s5()
+    print("-- value.optional_if[tuple]")
+    s6()
+    print("-- value.optional_none[tuple]")
+    s7()
+    print("-- value.optional_print[tuple]")
+    s8()
+    print("-- value.tuple[tuple]")
+    s9()
+    print("-- value.tuple_eq[tuple]")
+    s10()
+    print("-- value.tuple_print[tuple]")
+    s11()
+    print("-- value.tuple_list_sorted[tuple]")
+    s12()
+    print("-- value.tuple_key[tuple]")
+    s13()
+    print("-- value.struct_field[tuple]")
+    s14()
+    print("-- value.struct_print[tuple]")
+    s15()
+    print("-- value.ref[tuple]")
+    s16()
+    print("-- value.generic_id[tuple]")
+    s17()
+    print("-- value.generic_box[tuple]")
+    s18()
+    print("-- value.fn_value[tuple]")
+    s19()
+    print("-- value.closure_capture[tuple]")
+    s20()
+    print("-- value.match_eq[tuple]")
+    s21()
+    print("-- value.const_list[tuple]")
+    s22()

@@ -1,0 +1,32 @@
+-- mapv.literal[u8]
+2
+-- mapv.empty[u8]
+0
+-- mapv.index[u8]
+true
+-- mapv.assign[u8]
+1
+-- mapv.get[u8]
+1
+-- mapv.get_else[u8]
+1
+-- mapv.get_or[u8]
+1
+-- mapv.remove[u8]
+0
+-- mapv.values[u8]
+2
+-- mapv.values_sorted[u8]
+2
+-- mapv.for[u8]
+2
+-- mapv.map_values[u8]
+1
+-- mapv.filter[u8]
+1
+-- mapv.nested_update[u8]
+2
+-- mapv.eq[u8]
+true
+-- mapv.print[u8]
+{"a": 1}

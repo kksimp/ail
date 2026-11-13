@@ -1,0 +1,44 @@
+-- value.eq[bool]
+true
+true
+-- value.print[bool]
+false
+-- value.interp[bool]
+<false>
+-- value.to_str_len[bool]
+true
+-- value.optional_else[bool]
+1
+-- value.optional_if[bool]
+1
+-- value.optional_none[bool]
+true
+-- value.optional_print[bool]
+false
+-- value.tuple[bool]
+1
+1
+-- value.tuple_eq[bool]
+true
+-- value.tuple_print[bool]
+(false, 1)
+-- value.tuple_key[bool]
+2
+-- value.struct_field[bool]
+true
+-- value.struct_print[bool]
+Box_bool(items: [false])
+-- value.ref[bool]
+2
+-- value.generic_id[bool]
+1
+-- value.generic_box[bool]
+true
+-- value.fn_value[bool]
+1
+-- value.closure_capture[bool]
+1
+-- value.match_eq[bool]
+1
+-- value.const_list[bool]
+2

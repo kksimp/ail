@@ -1,0 +1,30 @@
+-- mapv.literal[struct]
+2
+-- mapv.empty[struct]
+0
+-- mapv.index[struct]
+true
+-- mapv.assign[struct]
+1
+-- mapv.get[struct]
+1
+-- mapv.get_else[struct]
+1
+-- mapv.get_or[struct]
+1
+-- mapv.remove[struct]
+0
+-- mapv.values[struct]
+2
+-- mapv.for[struct]
+2
+-- mapv.map_values[struct]
+1
+-- mapv.filter[struct]
+1
+-- mapv.nested_update[struct]
+2
+-- mapv.eq[struct]
+true
+-- mapv.print[struct]
+{"a": P(name: "a", n: 1)}

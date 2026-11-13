@@ -1,0 +1,163 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bytes
+    items List[bytes]
+
+fn add_bytes(mut xs List[bytes], x bytes)
+    xs.push(x)
+
+fn wrap_bytes(x bytes) bytes?
+    x
+
+fn nothing_bytes() bytes?
+    none
+
+K_bytes := [b"a", b"b"]
+
+## seq.of_collect[bytes]
+fn s0()
+    s := Seq.of([b"a", b"b"])
+    print(s.collect().len())
+
+## seq.map_filter[bytes]
+fn s1()
+    s := Seq.of([b"a", b"b"])
+    print(s.filter(|x| x == b"a").map(|x| x.len()).collect().len())
+
+## seq.take_skip[bytes]
+fn s2()
+    s := Seq.of([b"a", b"b", b"c"])
+    print(s.skip(1).take(1).collect().len())
+
+## seq.enumerate[bytes]
+fn s3()
+    s := Seq.of([b"a", b"b"])
+    print(s.enumerate().collect().len())
+
+## seq.zip_chain[bytes]
+fn s4()
+    s := Seq.of([b"a", b"b"])
+    t := Seq.of([1, 2])
+    print(s.zip(move t).collect().len())
+
+## seq.chain[bytes]
+fn s5()
+    s := Seq.of([b"a"])
+    t := Seq.of([b"b"])
+    print(s.chain(move t).collect().len())
+
+## seq.next[bytes]
+fn s6()
+    mut s := Seq.of([b"a", b"b"])
+    if x := s.next()
+        print(1)
+
+## seq.for[bytes]
+fn s7()
+    s := Seq.of([b"a", b"b"])
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## seq.count_any[bytes]
+fn s8()
+    s := Seq.of([b"a", b"b"])
+    print(s.count(|x| x == b"a"))
+
+## seq.fold[bytes]
+fn s9()
+    s := Seq.of([b"a", b"b"])
+    print(s.fold(0, |acc, x| acc + 1))
+
+## seq.find[bytes]
+fn s10()
+    s := Seq.of([b"a", b"b"])
+    if x := s.find(|x| x == b"b")
+        print(1)
+
+## seq.flat_map[bytes]
+fn s11()
+    s := Seq.of([b"a", b"b"])
+    print(s.flat_map(|x| [x, x]).collect().len())
+
+## seq.while[bytes]
+fn s12()
+    s := Seq.of([b"a", b"b"])
+    print(s.take_while(|x| x == b"a").collect().len())
+
+## seq.skip_while[bytes]
+fn s13()
+    s := Seq.of([b"a", b"b"])
+    print(s.skip_while(|x| x == b"a").collect().len())
+
+fn main()
+    print("-- seq.of_collect[bytes]")
+    s0()
+    print("-- seq.map_filter[bytes]")
+    s1()
+    print("-- seq.take_skip[bytes]")
+    s2()
+    print("-- seq.enumerate[bytes]")
+    s3()
+    print("-- seq.zip_chain[bytes]")
+    s4()
+    print("-- seq.chain[bytes]")
+    s5()
+    print("-- seq.next[bytes]")
+    s6()
+    print("-- seq.for[bytes]")
+    s7()
+    print("-- seq.count_any[bytes]")
+    s8()
+    print("-- seq.fold[bytes]")
+    s9()
+    print("-- seq.find[bytes]")
+    s10()
+    print("-- seq.flat_map[bytes]")
+    s11()
+    print("-- seq.while[bytes]")
+    s12()
+    print("-- seq.skip_while[bytes]")
+    s13()

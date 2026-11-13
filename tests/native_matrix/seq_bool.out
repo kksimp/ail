@@ -1,0 +1,28 @@
+-- seq.of_collect[bool]
+2
+-- seq.map_filter[bool]
+1
+-- seq.take_skip[bool]
+1
+-- seq.enumerate[bool]
+2
+-- seq.zip_chain[bool]
+2
+-- seq.chain[bool]
+2
+-- seq.next[bool]
+1
+-- seq.for[bool]
+2
+-- seq.count_any[bool]
+1
+-- seq.fold[bool]
+2
+-- seq.find[bool]
+1
+-- seq.flat_map[bool]
+4
+-- seq.while[bool]
+1
+-- seq.skip_while[bool]
+1

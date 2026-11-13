@@ -1,0 +1,237 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_ordstruct
+    items List[Q]
+
+fn add_ordstruct(mut xs List[Q], x Q)
+    xs.push(x)
+
+fn wrap_ordstruct(x Q) Q?
+    x
+
+fn nothing_ordstruct() Q?
+    none
+
+K_ordstruct := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
+
+## mapk.literal[ordstruct]
+fn s0()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.len())
+
+## mapk.empty[ordstruct]
+fn s1()
+    m := Map[Q, int]()
+    print(m.len())
+
+## mapk.typed_by_use[ordstruct]
+fn s2()
+    mut m := {}
+    m[Q(n: 1, name: "a")] += 1
+    print(m.len())
+
+## mapk.index[ordstruct]
+fn s3()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m[Q(n: 1, name: "a")])
+
+## mapk.assign[ordstruct]
+fn s4()
+    mut m := Map[Q, int]()
+    m[Q(n: 1, name: "a")] = 1
+    m[Q(n: 2, name: "b")] = 2
+    print(m.len())
+
+## mapk.op_assign[ordstruct]
+fn s5()
+    mut m := Map[Q, int]()
+    m[Q(n: 1, name: "a")] += 3
+    print(m[Q(n: 1, name: "a")])
+
+## mapk.get[ordstruct]
+fn s6()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m.get(Q(n: 1, name: "a")) else 0)
+
+## mapk.get_or[ordstruct]
+fn s7()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m.get_or(Q(n: 2, name: "b"), 7))
+
+## mapk.contains[ordstruct]
+fn s8()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m.contains(Q(n: 1, name: "a")))
+
+## mapk.remove[ordstruct]
+fn s9()
+    mut m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.remove(Q(n: 1, name: "a")) else 0)
+
+## mapk.keys_values[ordstruct]
+fn s10()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.keys_sorted[ordstruct]
+fn s11()
+    m := {Q(n: 2, name: "b"): 1, Q(n: 1, name: "a"): 2}
+    print(m.keys().sorted().len())
+
+## mapk.top[ordstruct]
+fn s12()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.top(1).len())
+
+## mapk.for[ordstruct]
+fn s13()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[ordstruct]
+fn s14()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[ordstruct]
+fn s15()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[ordstruct]
+fn s16()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[ordstruct]
+fn s17()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[ordstruct]
+fn s18()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[ordstruct]
+fn s19()
+    m := {Q(n: 1, name: "a"): 1, Q(n: 2, name: "b"): 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[ordstruct]
+fn s20()
+    mut m := Map[Q, List[int]]()
+    m.push(Q(n: 1, name: "a"), 1)
+    m.push(Q(n: 1, name: "a"), 2)
+    print(m[Q(n: 1, name: "a")].len())
+
+## mapk.eq[ordstruct]
+fn s21()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m == {Q(n: 1, name: "a"): 1})
+
+## mapk.print[ordstruct]
+fn s22()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m)
+
+## mapk.is_empty[ordstruct]
+fn s23()
+    m := {Q(n: 1, name: "a"): 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[ordstruct]")
+    s0()
+    print("-- mapk.empty[ordstruct]")
+    s1()
+    print("-- mapk.typed_by_use[ordstruct]")
+    s2()
+    print("-- mapk.index[ordstruct]")
+    s3()
+    print("-- mapk.assign[ordstruct]")
+    s4()
+    print("-- mapk.op_assign[ordstruct]")
+    s5()
+    print("-- mapk.get[ordstruct]")
+    s6()
+    print("-- mapk.get_or[ordstruct]")
+    s7()
+    print("-- mapk.contains[ordstruct]")
+    s8()
+    print("-- mapk.remove[ordstruct]")
+    s9()
+    print("-- mapk.keys_values[ordstruct]")
+    s10()
+    print("-- mapk.keys_sorted[ordstruct]")
+    s11()
+    print("-- mapk.top[ordstruct]")
+    s12()
+    print("-- mapk.for[ordstruct]")
+    s13()
+    print("-- mapk.any_all_count[ordstruct]")
+    s14()
+    print("-- mapk.fold[ordstruct]")
+    s15()
+    print("-- mapk.filter[ordstruct]")
+    s16()
+    print("-- mapk.map[ordstruct]")
+    s17()
+    print("-- mapk.flat_map[ordstruct]")
+    s18()
+    print("-- mapk.map_values[ordstruct]")
+    s19()
+    print("-- mapk.push[ordstruct]")
+    s20()
+    print("-- mapk.eq[ordstruct]")
+    s21()
+    print("-- mapk.print[ordstruct]")
+    s22()
+    print("-- mapk.is_empty[ordstruct]")
+    s23()

@@ -1,0 +1,32 @@
+-- mapv.literal[bytes]
+2
+-- mapv.empty[bytes]
+0
+-- mapv.index[bytes]
+true
+-- mapv.assign[bytes]
+1
+-- mapv.get[bytes]
+1
+-- mapv.get_else[bytes]
+1
+-- mapv.get_or[bytes]
+1
+-- mapv.remove[bytes]
+0
+-- mapv.values[bytes]
+2
+-- mapv.values_sorted[bytes]
+2
+-- mapv.for[bytes]
+2
+-- mapv.map_values[bytes]
+1
+-- mapv.filter[bytes]
+1
+-- mapv.nested_update[bytes]
+2
+-- mapv.eq[bytes]
+true
+-- mapv.print[bytes]
+{"a": b"a"}

@@ -1,0 +1,12 @@
+-- heap.empty_push_pop[uid]
+1
+-- heap.max_first[uid]
+2
+-- heap.from[uid]
+3
+-- heap.from_max[uid]
+3
+-- heap.is_empty[uid]
+true
+-- heap.drain[uid]
+3

@@ -1,0 +1,14 @@
+-- grid.fill[struct]
+6
+-- grid.from[struct]
+4
+-- grid.index[struct]
+true
+-- grid.index_assign[struct]
+2
+-- grid.row[struct]
+2
+-- grid.to_list[struct]
+2
+-- grid.cells_for[struct]
+4

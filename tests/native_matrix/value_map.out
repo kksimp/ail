@@ -1,0 +1,42 @@
+-- value.eq[map]
+true
+true
+-- value.print[map]
+{"a": 1}
+-- value.interp[map]
+<{"a": 1}>
+-- value.to_str_len[map]
+true
+-- value.optional_else[map]
+1
+-- value.optional_if[map]
+1
+-- value.optional_none[map]
+true
+-- value.optional_print[map]
+{"a": 1}
+-- value.tuple[map]
+1
+1
+-- value.tuple_eq[map]
+true
+-- value.tuple_print[map]
+({"a": 1}, 1)
+-- value.struct_field[map]
+true
+-- value.struct_print[map]
+Box_map(items: [{"a": 1}])
+-- value.ref[map]
+2
+-- value.generic_id[map]
+1
+-- value.generic_box[map]
+true
+-- value.fn_value[map]
+1
+-- value.closure_capture[map]
+1
+-- value.match_eq[map]
+1
+-- value.const_list[map]
+2

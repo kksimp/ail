@@ -1,0 +1,12 @@
+-- heap.empty_push_pop[list]
+1
+-- heap.max_first[list]
+2
+-- heap.from[list]
+3
+-- heap.from_max[list]
+3
+-- heap.is_empty[list]
+true
+-- heap.drain[list]
+3

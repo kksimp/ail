@@ -1,0 +1,163 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_u8
+    items List[u8]
+
+fn add_u8(mut xs List[u8], x u8)
+    xs.push(x)
+
+fn wrap_u8(x u8) u8?
+    x
+
+fn nothing_u8() u8?
+    none
+
+K_u8 := [1.to_u8(), 2.to_u8()]
+
+## seq.of_collect[u8]
+fn s0()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.collect().len())
+
+## seq.map_filter[u8]
+fn s1()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.filter(|x| x == 1.to_u8()).map(|x| x).collect().len())
+
+## seq.take_skip[u8]
+fn s2()
+    s := Seq.of([1.to_u8(), 2.to_u8(), 3.to_u8()])
+    print(s.skip(1).take(1).collect().len())
+
+## seq.enumerate[u8]
+fn s3()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.enumerate().collect().len())
+
+## seq.zip_chain[u8]
+fn s4()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    t := Seq.of([1, 2])
+    print(s.zip(move t).collect().len())
+
+## seq.chain[u8]
+fn s5()
+    s := Seq.of([1.to_u8()])
+    t := Seq.of([2.to_u8()])
+    print(s.chain(move t).collect().len())
+
+## seq.next[u8]
+fn s6()
+    mut s := Seq.of([1.to_u8(), 2.to_u8()])
+    if x := s.next()
+        print(1)
+
+## seq.for[u8]
+fn s7()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## seq.count_any[u8]
+fn s8()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.count(|x| x == 1.to_u8()))
+
+## seq.fold[u8]
+fn s9()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.fold(0, |acc, x| acc + 1))
+
+## seq.find[u8]
+fn s10()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    if x := s.find(|x| x == 2.to_u8())
+        print(1)
+
+## seq.flat_map[u8]
+fn s11()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.flat_map(|x| [x, x]).collect().len())
+
+## seq.while[u8]
+fn s12()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.take_while(|x| x == 1.to_u8()).collect().len())
+
+## seq.skip_while[u8]
+fn s13()
+    s := Seq.of([1.to_u8(), 2.to_u8()])
+    print(s.skip_while(|x| x == 1.to_u8()).collect().len())
+
+fn main()
+    print("-- seq.of_collect[u8]")
+    s0()
+    print("-- seq.map_filter[u8]")
+    s1()
+    print("-- seq.take_skip[u8]")
+    s2()
+    print("-- seq.enumerate[u8]")
+    s3()
+    print("-- seq.zip_chain[u8]")
+    s4()
+    print("-- seq.chain[u8]")
+    s5()
+    print("-- seq.next[u8]")
+    s6()
+    print("-- seq.for[u8]")
+    s7()
+    print("-- seq.count_any[u8]")
+    s8()
+    print("-- seq.fold[u8]")
+    s9()
+    print("-- seq.find[u8]")
+    s10()
+    print("-- seq.flat_map[u8]")
+    s11()
+    print("-- seq.while[u8]")
+    s12()
+    print("-- seq.skip_while[u8]")
+    s13()

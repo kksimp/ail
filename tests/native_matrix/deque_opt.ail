@@ -1,0 +1,159 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## deque.empty_push[opt]
+fn s0()
+    mut d := Deque[int?]()
+    d.push_back(oi(1))
+    d.push_front(oi(2))
+    print(d.len())
+
+## deque.from[opt]
+fn s1()
+    d := Deque.from([oi(1), oi(2)])
+    print(d.len())
+
+## deque.pop[opt]
+fn s2()
+    mut d := Deque.from([oi(1), oi(2), oi(-1)])
+    if x := d.pop_front()
+        print(1)
+    if x := d.pop_back()
+        print(2)
+
+## deque.first_last[opt]
+fn s3()
+    d := Deque.from([oi(1), oi(2)])
+    if x := d.first()
+        print(1)
+    if x := d.last()
+        print(2)
+
+## deque.index[opt]
+fn s4()
+    d := Deque.from([oi(1), oi(2)])
+    x := d[1]
+    print((x else 0) == (x else 0))
+
+## deque.at_set[opt]
+fn s5()
+    mut d := Deque.from([oi(1), oi(2)])
+    d.set(0, oi(-1))
+    x := d.at(0)
+    print(d.len())
+
+## deque.to_list[opt]
+fn s6()
+    d := Deque.from([oi(1), oi(2)])
+    print(d.to_list().len())
+
+## deque.for[opt]
+fn s7()
+    d := Deque.from([oi(1), oi(2)])
+    mut n := 0
+    for x in d
+        n += 1
+    print(n)
+
+## deque.vocab[opt]
+fn s8()
+    d := Deque.from([oi(1), oi(2)])
+    print(d.filter(|x| x == oi(1)).len() + d.map(|x| (x else 0)).len() + d.flat_map(|x| [x]).len())
+    print(d.any(|x| x == oi(1)))
+    print(d.all(|x| x == oi(1)))
+    print(d.count(|x| x == oi(1)))
+    print(d.fold(0, |acc, x| acc + 1))
+    if x := d.find(|x| x == oi(1))
+        print(1)
+
+## deque.take_skip[opt]
+fn s9()
+    d := Deque.from([oi(1), oi(2), oi(-1)])
+    print(d.take(1).len() + d.skip(1).len() + d.take_while(|x| x == oi(1)).len() + d.skip_while(|x| x == oi(1)).len())
+
+## deque.enumerate_zip[opt]
+fn s10()
+    d := Deque.from([oi(1), oi(2)])
+    print(d.enumerate().len() + d.zip([1, 2]).len())
+
+## deque.is_empty[opt]
+fn s11()
+    d := Deque[int?]()
+    print(d.is_empty())
+
+fn main()
+    print("-- deque.empty_push[opt]")
+    s0()
+    print("-- deque.from[opt]")
+    s1()
+    print("-- deque.pop[opt]")
+    s2()
+    print("-- deque.first_last[opt]")
+    s3()
+    print("-- deque.index[opt]")
+    s4()
+    print("-- deque.at_set[opt]")
+    s5()
+    print("-- deque.to_list[opt]")
+    s6()
+    print("-- deque.for[opt]")
+    s7()
+    print("-- deque.vocab[opt]")
+    s8()
+    print("-- deque.take_skip[opt]")
+    s9()
+    print("-- deque.enumerate_zip[opt]")
+    s10()
+    print("-- deque.is_empty[opt]")
+    s11()

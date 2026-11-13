@@ -1,0 +1,14 @@
+-- grid.fill[ordstruct]
+6
+-- grid.from[ordstruct]
+4
+-- grid.index[ordstruct]
+true
+-- grid.index_assign[ordstruct]
+2
+-- grid.row[ordstruct]
+2
+-- grid.to_list[ordstruct]
+2
+-- grid.cells_for[ordstruct]
+4

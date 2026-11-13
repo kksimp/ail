@@ -1,0 +1,483 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_struct
+    items List[P]
+
+fn add_struct(mut xs List[P], x P)
+    xs.push(x)
+
+fn wrap_struct(x P) P?
+    x
+
+fn nothing_struct() P?
+    none
+
+K_struct := [P(name: "a", n: 1), P(name: "b", n: 2)]
+
+## list.literal[struct]
+fn s0()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "c", n: 3)]
+    print(xs.len())
+
+## list.empty[struct]
+fn s1()
+    xs := List[P]()
+    print(xs.len())
+
+## list.typed_by_push[struct]
+fn s2()
+    mut xs := []
+    xs.push(P(name: "a", n: 1))
+    print(xs.len())
+
+## list.len[struct]
+fn s3()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.len())
+
+## list.is_empty[struct]
+fn s4()
+    xs := [P(name: "a", n: 1)]
+    print(xs.is_empty())
+
+## list.index[struct]
+fn s5()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    x := xs[1]
+    print(x.n == x.n)
+
+## list.index_assign[struct]
+fn s6()
+    mut xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    xs[0] = P(name: "c", n: 3)
+    print(xs.len())
+
+## list.slice[struct]
+fn s7()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "c", n: 3)]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[struct]
+fn s8()
+    mut xs := [P(name: "a", n: 1)]
+    xs.push(P(name: "b", n: 2))
+    print(xs.len())
+
+## list.pop[struct]
+fn s9()
+    mut xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[struct]
+fn s10()
+    mut xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[struct]
+fn s11()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[struct]
+fn s12()
+    mut xs := [P(name: "a", n: 1)]
+    xs.insert(0, P(name: "b", n: 2))
+    print(xs.len())
+
+## list.remove_at[struct]
+fn s13()
+    mut xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[struct]
+fn s14()
+    mut xs := [P(name: "a", n: 1)]
+    xs.extend([P(name: "b", n: 2), P(name: "c", n: 3)])
+    print(xs.len())
+
+## list.clear[struct]
+fn s15()
+    mut xs := [P(name: "a", n: 1)]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[struct]
+fn s16()
+    mut xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[struct]
+fn s17()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.reversed().len())
+
+## list.contains[struct]
+fn s18()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.contains(P(name: "b", n: 2)))
+
+## list.index_of[struct]
+fn s19()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.index_of(P(name: "b", n: 2)) else -1)
+
+## list.join[struct]
+fn s20()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.join(",").len() > 0)
+
+## list.sorted_by[struct]
+fn s21()
+    xs := [P(name: "c", n: 3), P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.sorted(by: |x| x.n).len())
+
+## list.sort_by[struct]
+fn s22()
+    mut xs := [P(name: "c", n: 3), P(name: "a", n: 1), P(name: "b", n: 2)]
+    xs.sort(by: |x| x.n)
+    print(xs.len())
+
+## list.min_by[struct]
+fn s23()
+    xs := [P(name: "c", n: 3), P(name: "a", n: 1), P(name: "b", n: 2)]
+    if x := xs.min(by: |x| x.n)
+        print(1)
+    if x := xs.max(by: |x| x.n)
+        print(2)
+
+## list.take_skip[struct]
+fn s24()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "c", n: 3)]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[struct]
+fn s25()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    ys := [P(name: "b", n: 2), P(name: "c", n: 3)]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[struct]
+fn s26()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "c", n: 3)]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[struct]
+fn s27()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "a", n: 1)]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[struct]
+fn s28()
+    xs := [[P(name: "a", n: 1)], [P(name: "b", n: 2), P(name: "c", n: 3)]]
+    print(xs.flatten().len())
+
+## list.enumerate[struct]
+fn s29()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[struct]
+fn s30()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.any(|x| x == P(name: "a", n: 1)))
+    print(xs.all(|x| x == P(name: "a", n: 1)))
+
+## list.find[struct]
+fn s31()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    if x := xs.find(|x| x == P(name: "b", n: 2))
+        print(1)
+
+## list.filter[struct]
+fn s32()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.filter(|x| x == P(name: "a", n: 1)).len())
+
+## list.map[struct]
+fn s33()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.map(|x| x.n).len())
+
+## list.map_to_self[struct]
+fn s34()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.map(|x| x).len())
+
+## list.group_by[struct]
+fn s35()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "a", n: 1)]
+    g := xs.group_by(|x| x.n)
+    print(g.len())
+
+## list.count[struct]
+fn s36()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "a", n: 1)]
+    print(xs.count(|x| x == P(name: "a", n: 1)))
+
+## list.fold[struct]
+fn s37()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[struct]
+fn s38()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[struct]
+fn s39()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs.take_while(|x| x == P(name: "a", n: 1)).len() + xs.skip_while(|x| x == P(name: "a", n: 1)).len())
+
+## list.zip[struct]
+fn s40()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[struct]
+fn s41()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[struct]
+fn s42()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[struct]
+fn s43()
+    mut xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    for mut x in xs
+        x = P(name: "c", n: 3)
+    print(xs.len())
+
+## list.comprehension[struct]
+fn s44()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    ys := [x for x in xs if x == P(name: "a", n: 1)]
+    print(ys.len())
+
+## list.set_comprehension[struct]
+fn s45()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2), P(name: "a", n: 1)]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[struct]
+fn s46()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[struct]
+fn s47()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    ys := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs == ys)
+    print(xs != [P(name: "c", n: 3)])
+
+## list.print[struct]
+fn s48()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print(xs)
+
+## list.interp[struct]
+fn s49()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    print("{xs}".len() > 0)
+
+## list.nested_push[struct]
+fn s50()
+    mut xs := [[P(name: "a", n: 1)]]
+    xs[0].push(P(name: "b", n: 2))
+    print(xs[0].len())
+
+## list.in_struct[struct]
+fn s51()
+    mut b := Box_struct(items: [P(name: "a", n: 1)])
+    b.items.push(P(name: "b", n: 2))
+    print(b.items.len())
+
+## list.pass_mut[struct]
+fn s52()
+    mut xs := [P(name: "a", n: 1)]
+    add_struct(mut xs, P(name: "b", n: 2))
+    print(xs.len())
+
+## list.generic_first[struct]
+fn s53()
+    xs := [P(name: "a", n: 1), P(name: "b", n: 2)]
+    if x := first_of(xs)
+        print(1)
+
+## list.contains_list[struct]
+fn s54()
+    xs := [[P(name: "a", n: 1)], [P(name: "b", n: 2)]]
+    print(xs.contains([P(name: "b", n: 2)]))
+
+fn main()
+    print("-- list.literal[struct]")
+    s0()
+    print("-- list.empty[struct]")
+    s1()
+    print("-- list.typed_by_push[struct]")
+    s2()
+    print("-- list.len[struct]")
+    s3()
+    print("-- list.is_empty[struct]")
+    s4()
+    print("-- list.index[struct]")
+    s5()
+    print("-- list.index_assign[struct]")
+    s6()
+    print("-- list.slice[struct]")
+    s7()
+    print("-- list.push[struct]")
+    s8()
+    print("-- list.pop[struct]")
+    s9()
+    print("-- list.swap[struct]")
+    s10()
+    print("-- list.first_last[struct]")
+    s11()
+    print("-- list.insert[struct]")
+    s12()
+    print("-- list.remove_at[struct]")
+    s13()
+    print("-- list.extend[struct]")
+    s14()
+    print("-- list.clear[struct]")
+    s15()
+    print("-- list.reverse[struct]")
+    s16()
+    print("-- list.reversed[struct]")
+    s17()
+    print("-- list.contains[struct]")
+    s18()
+    print("-- list.index_of[struct]")
+    s19()
+    print("-- list.join[struct]")
+    s20()
+    print("-- list.sorted_by[struct]")
+    s21()
+    print("-- list.sort_by[struct]")
+    s22()
+    print("-- list.min_by[struct]")
+    s23()
+    print("-- list.take_skip[struct]")
+    s24()
+    print("-- list.set_ops[struct]")
+    s25()
+    print("-- list.chunks_windows[struct]")
+    s26()
+    print("-- list.counts[struct]")
+    s27()
+    print("-- list.flatten[struct]")
+    s28()
+    print("-- list.enumerate[struct]")
+    s29()
+    print("-- list.any_all[struct]")
+    s30()
+    print("-- list.find[struct]")
+    s31()
+    print("-- list.filter[struct]")
+    s32()
+    print("-- list.map[struct]")
+    s33()
+    print("-- list.map_to_self[struct]")
+    s34()
+    print("-- list.group_by[struct]")
+    s35()
+    print("-- list.count[struct]")
+    s36()
+    print("-- list.fold[struct]")
+    s37()
+    print("-- list.flat_map[struct]")
+    s38()
+    print("-- list.take_skip_while[struct]")
+    s39()
+    print("-- list.zip[struct]")
+    s40()
+    print("-- list.zip_into[struct]")
+    s41()
+    print("-- list.for[struct]")
+    s42()
+    print("-- list.for_mut[struct]")
+    s43()
+    print("-- list.comprehension[struct]")
+    s44()
+    print("-- list.set_comprehension[struct]")
+    s45()
+    print("-- list.map_comprehension[struct]")
+    s46()
+    print("-- list.eq[struct]")
+    s47()
+    print("-- list.print[struct]")
+    s48()
+    print("-- list.interp[struct]")
+    s49()
+    print("-- list.nested_push[struct]")
+    s50()
+    print("-- list.in_struct[struct]")
+    s51()
+    print("-- list.pass_mut[struct]")
+    s52()
+    print("-- list.generic_first[struct]")
+    s53()
+    print("-- list.contains_list[struct]")
+    s54()

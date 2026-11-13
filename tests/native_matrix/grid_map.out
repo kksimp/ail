@@ -1,0 +1,14 @@
+-- grid.fill[map]
+6
+-- grid.from[map]
+4
+-- grid.index[map]
+true
+-- grid.index_assign[map]
+2
+-- grid.row[map]
+2
+-- grid.to_list[map]
+2
+-- grid.cells_for[map]
+4

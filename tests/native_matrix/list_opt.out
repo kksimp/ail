@@ -1,0 +1,117 @@
+-- list.literal[opt]
+3
+-- list.empty[opt]
+0
+-- list.typed_by_push[opt]
+1
+-- list.len[opt]
+2
+-- list.is_empty[opt]
+false
+-- list.index[opt]
+true
+-- list.index_assign[opt]
+2
+-- list.slice[opt]
+5
+-- list.push[opt]
+2
+-- list.pop[opt]
+1
+-- list.swap[opt]
+2
+-- list.first_last[opt]
+1
+2
+-- list.insert[opt]
+2
+-- list.remove_at[opt]
+1
+-- list.extend[opt]
+3
+-- list.clear[opt]
+0
+-- list.reverse[opt]
+2
+-- list.reversed[opt]
+2
+-- list.contains[opt]
+true
+-- list.index_of[opt]
+1
+-- list.join[opt]
+true
+-- list.sorted_by[opt]
+3
+-- list.sort_by[opt]
+3
+-- list.min_by[opt]
+1
+2
+-- list.take_skip[opt]
+4
+-- list.set_ops[opt]
+5
+-- list.chunks_windows[opt]
+4
+-- list.counts[opt]
+2
+-- list.flatten[opt]
+3
+-- list.enumerate[opt]
+0
+1
+-- list.any_all[opt]
+true
+false
+-- list.find[opt]
+1
+-- list.filter[opt]
+1
+-- list.map[opt]
+2
+-- list.map_to_self[opt]
+2
+-- list.group_by[opt]
+2
+-- list.count[opt]
+2
+-- list.fold[opt]
+2
+-- list.flat_map[opt]
+4
+-- list.take_skip_while[opt]
+2
+-- list.zip[opt]
+1
+2
+-- list.zip_into[opt]
+1
+2
+-- list.for[opt]
+2
+-- list.for_mut[opt]
+2
+-- list.comprehension[opt]
+1
+-- list.set_comprehension[opt]
+2
+-- list.map_comprehension[opt]
+2
+-- list.eq[opt]
+true
+true
+-- list.print[opt]
+[1, 2]
+-- list.interp[opt]
+true
+-- list.nested_push[opt]
+2
+-- list.in_struct[opt]
+2
+-- list.pass_mut[opt]
+2
+-- list.generic_first[opt]
+1
+-- list.contains_list[opt]
+true

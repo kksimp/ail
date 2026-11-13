@@ -1,0 +1,12 @@
+-- heap.empty_push_pop[u8]
+1
+-- heap.max_first[u8]
+2
+-- heap.from[u8]
+3
+-- heap.from_max[u8]
+3
+-- heap.is_empty[u8]
+true
+-- heap.drain[u8]
+3

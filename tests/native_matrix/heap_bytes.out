@@ -1,0 +1,12 @@
+-- heap.empty_push_pop[bytes]
+1
+-- heap.max_first[bytes]
+2
+-- heap.from[bytes]
+3
+-- heap.from_max[bytes]
+3
+-- heap.is_empty[bytes]
+true
+-- heap.drain[bytes]
+3

@@ -1,0 +1,28 @@
+-- seq.of_collect[map]
+2
+-- seq.map_filter[map]
+1
+-- seq.take_skip[map]
+1
+-- seq.enumerate[map]
+2
+-- seq.zip_chain[map]
+2
+-- seq.chain[map]
+2
+-- seq.next[map]
+1
+-- seq.for[map]
+2
+-- seq.count_any[map]
+1
+-- seq.fold[map]
+2
+-- seq.find[map]
+1
+-- seq.flat_map[map]
+4
+-- seq.while[map]
+1
+-- seq.skip_while[map]
+1

@@ -1,0 +1,211 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_payenum
+    items List[Shape]
+
+fn add_payenum(mut xs List[Shape], x Shape)
+    xs.push(x)
+
+fn wrap_payenum(x Shape) Shape?
+    x
+
+fn nothing_payenum() Shape?
+    none
+
+K_payenum := [Shape.Circle(r: 1), Shape.Square(s: 2)]
+
+## set.literal[payenum]
+fn s0()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.len())
+
+## set.empty[payenum]
+fn s1()
+    s := Set[Shape]()
+    print(s.len())
+
+## set.from_list[payenum]
+fn s2()
+    s := {x for x in [Shape.Circle(r: 1), Shape.Square(s: 2), Shape.Circle(r: 1)]}
+    print(s.len())
+
+## set.add_remove[payenum]
+fn s3()
+    mut s := Set[Shape]()
+    print(s.add(Shape.Circle(r: 1)))
+    print(s.remove(Shape.Circle(r: 1)))
+
+## set.contains[payenum]
+fn s4()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.contains(Shape.Circle(r: 1)))
+
+## set.is_empty[payenum]
+fn s5()
+    s := {Shape.Circle(r: 1)}
+    print(s.is_empty())
+
+## set.is_subset[payenum]
+fn s6()
+    s := {Shape.Circle(r: 1)}
+    t := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.is_subset(t))
+
+## set.set_ops[payenum]
+fn s7()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    t := {Shape.Square(s: 2), Shape.Circle(r: 3)}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[payenum]
+fn s8()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.any(|x| x == Shape.Circle(r: 1)))
+    print(s.all(|x| x == Shape.Circle(r: 1)))
+    if x := s.find(|x| x == Shape.Square(s: 2))
+        print(1)
+
+## set.filter_map[payenum]
+fn s9()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.filter(|x| x == Shape.Circle(r: 1)).len() + s.map(|x| 1).len())
+
+## set.group_by[payenum]
+fn s10()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.group_by(|x| 1).len())
+
+## set.count_fold[payenum]
+fn s11()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.count(|x| x == Shape.Circle(r: 1)))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[payenum]
+fn s12()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[payenum]
+fn s13()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2), Shape.Circle(r: 3)}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == Shape.Circle(r: 1)).len() + s.skip_while(|x| x == Shape.Circle(r: 1)).len())
+
+## set.zip_enumerate[payenum]
+fn s14()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.for[payenum]
+fn s15()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[payenum]
+fn s16()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s == {Shape.Square(s: 2), Shape.Circle(r: 1)})
+
+## set.print[payenum]
+fn s17()
+    s := {Shape.Circle(r: 1)}
+    print(s)
+
+## set.in_map[payenum]
+fn s18()
+    mut m := Map[str, Set[Shape]]()
+    m["a"] = Set[Shape]()
+    m["a"].add(Shape.Circle(r: 1))
+    print(m["a"].len())
+
+## set.in_list[payenum]
+fn s19()
+    mut xs := [Set[Shape]()]
+    xs[0].add(Shape.Circle(r: 1))
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[payenum]")
+    s0()
+    print("-- set.empty[payenum]")
+    s1()
+    print("-- set.from_list[payenum]")
+    s2()
+    print("-- set.add_remove[payenum]")
+    s3()
+    print("-- set.contains[payenum]")
+    s4()
+    print("-- set.is_empty[payenum]")
+    s5()
+    print("-- set.is_subset[payenum]")
+    s6()
+    print("-- set.set_ops[payenum]")
+    s7()
+    print("-- set.any_all_find[payenum]")
+    s8()
+    print("-- set.filter_map[payenum]")
+    s9()
+    print("-- set.group_by[payenum]")
+    s10()
+    print("-- set.count_fold[payenum]")
+    s11()
+    print("-- set.flat_map[payenum]")
+    s12()
+    print("-- set.take_skip[payenum]")
+    s13()
+    print("-- set.zip_enumerate[payenum]")
+    s14()
+    print("-- set.for[payenum]")
+    s15()
+    print("-- set.eq[payenum]")
+    s16()
+    print("-- set.print[payenum]")
+    s17()
+    print("-- set.in_map[payenum]")
+    s18()
+    print("-- set.in_list[payenum]")
+    s19()

@@ -1,0 +1,237 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_bytes
+    items List[bytes]
+
+fn add_bytes(mut xs List[bytes], x bytes)
+    xs.push(x)
+
+fn wrap_bytes(x bytes) bytes?
+    x
+
+fn nothing_bytes() bytes?
+    none
+
+K_bytes := [b"a", b"b"]
+
+## mapk.literal[bytes]
+fn s0()
+    m := {b"a": 1, b"b": 2}
+    print(m.len())
+
+## mapk.empty[bytes]
+fn s1()
+    m := Map[bytes, int]()
+    print(m.len())
+
+## mapk.typed_by_use[bytes]
+fn s2()
+    mut m := {}
+    m[b"a"] += 1
+    print(m.len())
+
+## mapk.index[bytes]
+fn s3()
+    m := {b"a": 1}
+    print(m[b"a"])
+
+## mapk.assign[bytes]
+fn s4()
+    mut m := Map[bytes, int]()
+    m[b"a"] = 1
+    m[b"b"] = 2
+    print(m.len())
+
+## mapk.op_assign[bytes]
+fn s5()
+    mut m := Map[bytes, int]()
+    m[b"a"] += 3
+    print(m[b"a"])
+
+## mapk.get[bytes]
+fn s6()
+    m := {b"a": 1}
+    print(m.get(b"a") else 0)
+
+## mapk.get_or[bytes]
+fn s7()
+    m := {b"a": 1}
+    print(m.get_or(b"b", 7))
+
+## mapk.contains[bytes]
+fn s8()
+    m := {b"a": 1}
+    print(m.contains(b"a"))
+
+## mapk.remove[bytes]
+fn s9()
+    mut m := {b"a": 1, b"b": 2}
+    print(m.remove(b"a") else 0)
+
+## mapk.keys_values[bytes]
+fn s10()
+    m := {b"a": 1, b"b": 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.keys_sorted[bytes]
+fn s11()
+    m := {b"b": 1, b"a": 2}
+    print(m.keys().sorted().len())
+
+## mapk.top[bytes]
+fn s12()
+    m := {b"a": 1, b"b": 2}
+    print(m.top(1).len())
+
+## mapk.for[bytes]
+fn s13()
+    m := {b"a": 1, b"b": 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[bytes]
+fn s14()
+    m := {b"a": 1, b"b": 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[bytes]
+fn s15()
+    m := {b"a": 1, b"b": 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[bytes]
+fn s16()
+    m := {b"a": 1, b"b": 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[bytes]
+fn s17()
+    m := {b"a": 1, b"b": 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[bytes]
+fn s18()
+    m := {b"a": 1, b"b": 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[bytes]
+fn s19()
+    m := {b"a": 1, b"b": 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[bytes]
+fn s20()
+    mut m := Map[bytes, List[int]]()
+    m.push(b"a", 1)
+    m.push(b"a", 2)
+    print(m[b"a"].len())
+
+## mapk.eq[bytes]
+fn s21()
+    m := {b"a": 1}
+    print(m == {b"a": 1})
+
+## mapk.print[bytes]
+fn s22()
+    m := {b"a": 1}
+    print(m)
+
+## mapk.is_empty[bytes]
+fn s23()
+    m := {b"a": 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[bytes]")
+    s0()
+    print("-- mapk.empty[bytes]")
+    s1()
+    print("-- mapk.typed_by_use[bytes]")
+    s2()
+    print("-- mapk.index[bytes]")
+    s3()
+    print("-- mapk.assign[bytes]")
+    s4()
+    print("-- mapk.op_assign[bytes]")
+    s5()
+    print("-- mapk.get[bytes]")
+    s6()
+    print("-- mapk.get_or[bytes]")
+    s7()
+    print("-- mapk.contains[bytes]")
+    s8()
+    print("-- mapk.remove[bytes]")
+    s9()
+    print("-- mapk.keys_values[bytes]")
+    s10()
+    print("-- mapk.keys_sorted[bytes]")
+    s11()
+    print("-- mapk.top[bytes]")
+    s12()
+    print("-- mapk.for[bytes]")
+    s13()
+    print("-- mapk.any_all_count[bytes]")
+    s14()
+    print("-- mapk.fold[bytes]")
+    s15()
+    print("-- mapk.filter[bytes]")
+    s16()
+    print("-- mapk.map[bytes]")
+    s17()
+    print("-- mapk.flat_map[bytes]")
+    s18()
+    print("-- mapk.map_values[bytes]")
+    s19()
+    print("-- mapk.push[bytes]")
+    s20()
+    print("-- mapk.eq[bytes]")
+    s21()
+    print("-- mapk.print[bytes]")
+    s22()
+    print("-- mapk.is_empty[bytes]")
+    s23()

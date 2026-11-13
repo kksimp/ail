@@ -1,0 +1,230 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_enum
+    items List[Color]
+
+fn add_enum(mut xs List[Color], x Color)
+    xs.push(x)
+
+fn wrap_enum(x Color) Color?
+    x
+
+fn nothing_enum() Color?
+    none
+
+K_enum := [Color.Red, Color.Green]
+
+## mapk.literal[enum]
+fn s0()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.len())
+
+## mapk.empty[enum]
+fn s1()
+    m := Map[Color, int]()
+    print(m.len())
+
+## mapk.typed_by_use[enum]
+fn s2()
+    mut m := {}
+    m[Color.Red] += 1
+    print(m.len())
+
+## mapk.index[enum]
+fn s3()
+    m := {Color.Red: 1}
+    print(m[Color.Red])
+
+## mapk.assign[enum]
+fn s4()
+    mut m := Map[Color, int]()
+    m[Color.Red] = 1
+    m[Color.Green] = 2
+    print(m.len())
+
+## mapk.op_assign[enum]
+fn s5()
+    mut m := Map[Color, int]()
+    m[Color.Red] += 3
+    print(m[Color.Red])
+
+## mapk.get[enum]
+fn s6()
+    m := {Color.Red: 1}
+    print(m.get(Color.Red) else 0)
+
+## mapk.get_or[enum]
+fn s7()
+    m := {Color.Red: 1}
+    print(m.get_or(Color.Green, 7))
+
+## mapk.contains[enum]
+fn s8()
+    m := {Color.Red: 1}
+    print(m.contains(Color.Red))
+
+## mapk.remove[enum]
+fn s9()
+    mut m := {Color.Red: 1, Color.Green: 2}
+    print(m.remove(Color.Red) else 0)
+
+## mapk.keys_values[enum]
+fn s10()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.keys().len() + m.values().len())
+
+## mapk.top[enum]
+fn s11()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.top(1).len())
+
+## mapk.for[enum]
+fn s12()
+    m := {Color.Red: 1, Color.Green: 2}
+    mut n := 0
+    for k, v in m
+        n += v
+    print(n)
+
+## mapk.any_all_count[enum]
+fn s13()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.any(|k, v| v > 1))
+    print(m.all(|k, v| v > 1))
+    print(m.count(|k, v| v > 1))
+
+## mapk.fold[enum]
+fn s14()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.fold(0, |acc, k, v| acc + v))
+
+## mapk.filter[enum]
+fn s15()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.filter(|k, v| v > 1).len())
+
+## mapk.map[enum]
+fn s16()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.map(|k, v| v).len())
+
+## mapk.flat_map[enum]
+fn s17()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.flat_map(|k, v| [v, v]).len())
+
+## mapk.map_values[enum]
+fn s18()
+    m := {Color.Red: 1, Color.Green: 2}
+    print(m.map_values(|k, v| v * 2).len())
+
+## mapk.push[enum]
+fn s19()
+    mut m := Map[Color, List[int]]()
+    m.push(Color.Red, 1)
+    m.push(Color.Red, 2)
+    print(m[Color.Red].len())
+
+## mapk.eq[enum]
+fn s20()
+    m := {Color.Red: 1}
+    print(m == {Color.Red: 1})
+
+## mapk.print[enum]
+fn s21()
+    m := {Color.Red: 1}
+    print(m)
+
+## mapk.is_empty[enum]
+fn s22()
+    m := {Color.Red: 1}
+    print(m.is_empty())
+
+fn main()
+    print("-- mapk.literal[enum]")
+    s0()
+    print("-- mapk.empty[enum]")
+    s1()
+    print("-- mapk.typed_by_use[enum]")
+    s2()
+    print("-- mapk.index[enum]")
+    s3()
+    print("-- mapk.assign[enum]")
+    s4()
+    print("-- mapk.op_assign[enum]")
+    s5()
+    print("-- mapk.get[enum]")
+    s6()
+    print("-- mapk.get_or[enum]")
+    s7()
+    print("-- mapk.contains[enum]")
+    s8()
+    print("-- mapk.remove[enum]")
+    s9()
+    print("-- mapk.keys_values[enum]")
+    s10()
+    print("-- mapk.top[enum]")
+    s11()
+    print("-- mapk.for[enum]")
+    s12()
+    print("-- mapk.any_all_count[enum]")
+    s13()
+    print("-- mapk.fold[enum]")
+    s14()
+    print("-- mapk.filter[enum]")
+    s15()
+    print("-- mapk.map[enum]")
+    s16()
+    print("-- mapk.flat_map[enum]")
+    s17()
+    print("-- mapk.map_values[enum]")
+    s18()
+    print("-- mapk.push[enum]")
+    s19()
+    print("-- mapk.eq[enum]")
+    s20()
+    print("-- mapk.print[enum]")
+    s21()
+    print("-- mapk.is_empty[enum]")
+    s22()

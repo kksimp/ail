@@ -1,0 +1,112 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_struct
+    items List[P]
+
+fn add_struct(mut xs List[P], x P)
+    xs.push(x)
+
+fn wrap_struct(x P) P?
+    x
+
+fn nothing_struct() P?
+    none
+
+K_struct := [P(name: "a", n: 1), P(name: "b", n: 2)]
+
+## grid.fill[struct]
+fn s0()
+    g := Grid.fill(2, 3, P(name: "a", n: 1))
+    print(g.rows * g.cols)
+
+## grid.from[struct]
+fn s1()
+    g := Grid.from([[P(name: "a", n: 1), P(name: "b", n: 2)], [P(name: "c", n: 3), P(name: "a", n: 1)]])
+    print(g.cells.len())
+
+## grid.index[struct]
+fn s2()
+    g := Grid.fill(2, 2, P(name: "a", n: 1))
+    x := g[1, 1]
+    print(x.n == x.n)
+
+## grid.index_assign[struct]
+fn s3()
+    mut g := Grid.fill(2, 2, P(name: "a", n: 1))
+    g[0, 1] = P(name: "b", n: 2)
+    print(g.rows)
+
+## grid.row[struct]
+fn s4()
+    g := Grid.from([[P(name: "a", n: 1), P(name: "b", n: 2)], [P(name: "c", n: 3), P(name: "a", n: 1)]])
+    print(g.row(1).len())
+
+## grid.to_list[struct]
+fn s5()
+    g := Grid.fill(2, 2, P(name: "a", n: 1))
+    print(g.to_list().len())
+
+## grid.cells_for[struct]
+fn s6()
+    g := Grid.fill(2, 2, P(name: "a", n: 1))
+    mut n := 0
+    for x in g.cells
+        n += 1
+    print(n)
+
+fn main()
+    print("-- grid.fill[struct]")
+    s0()
+    print("-- grid.from[struct]")
+    s1()
+    print("-- grid.index[struct]")
+    s2()
+    print("-- grid.index_assign[struct]")
+    s3()
+    print("-- grid.row[struct]")
+    s4()
+    print("-- grid.to_list[struct]")
+    s5()
+    print("-- grid.cells_for[struct]")
+    s6()

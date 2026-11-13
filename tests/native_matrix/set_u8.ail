@@ -1,0 +1,236 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_u8
+    items List[u8]
+
+fn add_u8(mut xs List[u8], x u8)
+    xs.push(x)
+
+fn wrap_u8(x u8) u8?
+    x
+
+fn nothing_u8() u8?
+    none
+
+K_u8 := [1.to_u8(), 2.to_u8()]
+
+## set.literal[u8]
+fn s0()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.len())
+
+## set.empty[u8]
+fn s1()
+    s := Set[u8]()
+    print(s.len())
+
+## set.from_list[u8]
+fn s2()
+    s := {x for x in [1.to_u8(), 2.to_u8(), 1.to_u8()]}
+    print(s.len())
+
+## set.add_remove[u8]
+fn s3()
+    mut s := Set[u8]()
+    print(s.add(1.to_u8()))
+    print(s.remove(1.to_u8()))
+
+## set.contains[u8]
+fn s4()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.contains(1.to_u8()))
+
+## set.is_empty[u8]
+fn s5()
+    s := {1.to_u8()}
+    print(s.is_empty())
+
+## set.sorted[u8]
+fn s6()
+    s := {2.to_u8(), 1.to_u8()}
+    print(s.sorted().len())
+
+## set.is_subset[u8]
+fn s7()
+    s := {1.to_u8()}
+    t := {1.to_u8(), 2.to_u8()}
+    print(s.is_subset(t))
+
+## set.set_ops[u8]
+fn s8()
+    s := {1.to_u8(), 2.to_u8()}
+    t := {2.to_u8(), 3.to_u8()}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[u8]
+fn s9()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.any(|x| x == 1.to_u8()))
+    print(s.all(|x| x == 1.to_u8()))
+    if x := s.find(|x| x == 2.to_u8())
+        print(1)
+
+## set.filter_map[u8]
+fn s10()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.filter(|x| x == 1.to_u8()).len() + s.map(|x| x).len())
+
+## set.group_by[u8]
+fn s11()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.group_by(|x| x).len())
+
+## set.count_fold[u8]
+fn s12()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.count(|x| x == 1.to_u8()))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[u8]
+fn s13()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[u8]
+fn s14()
+    s := {1.to_u8(), 2.to_u8(), 3.to_u8()}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == 1.to_u8()).len() + s.skip_while(|x| x == 1.to_u8()).len())
+
+## set.zip_enumerate[u8]
+fn s15()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.sum[u8]
+fn s16()
+    s := {1.to_u8(), 2.to_u8()}
+    x := s.sum()
+    print(1)
+
+## set.min_max[u8]
+fn s17()
+    s := {1.to_u8(), 2.to_u8()}
+    if x := s.min()
+        print(1)
+    if x := s.max()
+        print(2)
+
+## set.for[u8]
+fn s18()
+    s := {1.to_u8(), 2.to_u8()}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[u8]
+fn s19()
+    s := {1.to_u8(), 2.to_u8()}
+    print(s == {2.to_u8(), 1.to_u8()})
+
+## set.print[u8]
+fn s20()
+    s := {1.to_u8()}
+    print(s)
+
+## set.in_map[u8]
+fn s21()
+    mut m := Map[str, Set[u8]]()
+    m["a"] = Set[u8]()
+    m["a"].add(1.to_u8())
+    print(m["a"].len())
+
+## set.in_list[u8]
+fn s22()
+    mut xs := [Set[u8]()]
+    xs[0].add(1.to_u8())
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[u8]")
+    s0()
+    print("-- set.empty[u8]")
+    s1()
+    print("-- set.from_list[u8]")
+    s2()
+    print("-- set.add_remove[u8]")
+    s3()
+    print("-- set.contains[u8]")
+    s4()
+    print("-- set.is_empty[u8]")
+    s5()
+    print("-- set.sorted[u8]")
+    s6()
+    print("-- set.is_subset[u8]")
+    s7()
+    print("-- set.set_ops[u8]")
+    s8()
+    print("-- set.any_all_find[u8]")
+    s9()
+    print("-- set.filter_map[u8]")
+    s10()
+    print("-- set.group_by[u8]")
+    s11()
+    print("-- set.count_fold[u8]")
+    s12()
+    print("-- set.flat_map[u8]")
+    s13()
+    print("-- set.take_skip[u8]")
+    s14()
+    print("-- set.zip_enumerate[u8]")
+    s15()
+    print("-- set.sum[u8]")
+    s16()
+    print("-- set.min_max[u8]")
+    s17()
+    print("-- set.for[u8]")
+    s18()
+    print("-- set.eq[u8]")
+    s19()
+    print("-- set.print[u8]")
+    s20()
+    print("-- set.in_map[u8]")
+    s21()
+    print("-- set.in_list[u8]")
+    s22()

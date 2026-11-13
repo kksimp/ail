@@ -1,0 +1,122 @@
+-- list.literal[float]
+3
+-- list.empty[float]
+0
+-- list.typed_by_push[float]
+1
+-- list.len[float]
+2
+-- list.is_empty[float]
+false
+-- list.index[float]
+true
+-- list.index_assign[float]
+2
+-- list.slice[float]
+5
+-- list.push[float]
+2
+-- list.pop[float]
+1
+-- list.swap[float]
+2
+-- list.first_last[float]
+1
+2
+-- list.insert[float]
+2
+-- list.remove_at[float]
+1
+-- list.extend[float]
+3
+-- list.clear[float]
+0
+-- list.reverse[float]
+2
+-- list.reversed[float]
+2
+-- list.contains[float]
+true
+-- list.index_of[float]
+1
+-- list.join[float]
+true
+-- list.sum[float]
+1
+-- list.min_max[float]
+1
+2
+-- list.sorted[float]
+3
+-- list.sort[float]
+3
+-- list.sorted_by[float]
+3
+-- list.sort_by[float]
+3
+-- list.min_by[float]
+1
+2
+-- list.take_skip[float]
+4
+-- list.chunks_windows[float]
+4
+-- list.flatten[float]
+3
+-- list.enumerate[float]
+0
+1
+-- list.any_all[float]
+true
+false
+-- list.find[float]
+1
+-- list.filter[float]
+1
+-- list.map[float]
+2
+-- list.map_to_self[float]
+2
+-- list.count[float]
+2
+-- list.fold[float]
+2
+-- list.flat_map[float]
+4
+-- list.take_skip_while[float]
+2
+-- list.zip[float]
+1
+2
+-- list.zip_into[float]
+1
+2
+-- list.for[float]
+2
+-- list.for_mut[float]
+2
+-- list.comprehension[float]
+1
+-- list.eq[float]
+true
+true
+-- list.lt[float]
+true
+-- list.print[float]
+[1.5, 2.5]
+-- list.interp[float]
+true
+-- list.nested_push[float]
+2
+-- list.in_struct[float]
+2
+-- list.pass_mut[float]
+2
+-- list.generic_first[float]
+1
+-- list.generic_ord[float]
+1
+-- list.contains_list[float]
+true
+-- list.sorted_nested[float]
+2

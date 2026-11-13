@@ -1,0 +1,49 @@
+-- set.literal[ordstruct]
+2
+-- set.empty[ordstruct]
+0
+-- set.from_list[ordstruct]
+2
+-- set.add_remove[ordstruct]
+true
+true
+-- set.contains[ordstruct]
+true
+-- set.is_empty[ordstruct]
+false
+-- set.sorted[ordstruct]
+2
+-- set.is_subset[ordstruct]
+true
+-- set.set_ops[ordstruct]
+5
+-- set.any_all_find[ordstruct]
+true
+false
+1
+-- set.filter_map[ordstruct]
+3
+-- set.group_by[ordstruct]
+2
+-- set.count_fold[ordstruct]
+1
+2
+-- set.flat_map[ordstruct]
+2
+-- set.take_skip[ordstruct]
+6
+-- set.zip_enumerate[ordstruct]
+4
+-- set.min_max[ordstruct]
+1
+2
+-- set.for[ordstruct]
+2
+-- set.eq[ordstruct]
+true
+-- set.print[ordstruct]
+{Q(n: 1, name: "a")}
+-- set.in_map[ordstruct]
+1
+-- set.in_list[ordstruct]
+1

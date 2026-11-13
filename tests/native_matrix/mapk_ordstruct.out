@@ -1,0 +1,50 @@
+-- mapk.literal[ordstruct]
+2
+-- mapk.empty[ordstruct]
+0
+-- mapk.typed_by_use[ordstruct]
+1
+-- mapk.index[ordstruct]
+1
+-- mapk.assign[ordstruct]
+2
+-- mapk.op_assign[ordstruct]
+3
+-- mapk.get[ordstruct]
+1
+-- mapk.get_or[ordstruct]
+7
+-- mapk.contains[ordstruct]
+true
+-- mapk.remove[ordstruct]
+1
+-- mapk.keys_values[ordstruct]
+4
+-- mapk.keys_sorted[ordstruct]
+2
+-- mapk.top[ordstruct]
+1
+-- mapk.for[ordstruct]
+3
+-- mapk.any_all_count[ordstruct]
+true
+false
+1
+-- mapk.fold[ordstruct]
+3
+-- mapk.filter[ordstruct]
+1
+-- mapk.map[ordstruct]
+2
+-- mapk.flat_map[ordstruct]
+4
+-- mapk.map_values[ordstruct]
+2
+-- mapk.push[ordstruct]
+2
+-- mapk.eq[ordstruct]
+true
+-- mapk.print[ordstruct]
+{Q(n: 1, name: "a"): 1}
+-- mapk.is_empty[ordstruct]
+false

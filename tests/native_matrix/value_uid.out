@@ -1,0 +1,49 @@
+-- value.eq[uid]
+true
+true
+-- value.lt[uid]
+true
+true
+-- value.print[uid]
+1
+-- value.interp[uid]
+<1>
+-- value.to_str_len[uid]
+true
+-- value.optional_else[uid]
+1
+-- value.optional_if[uid]
+1
+-- value.optional_none[uid]
+true
+-- value.optional_print[uid]
+1
+-- value.tuple[uid]
+1
+1
+-- value.tuple_eq[uid]
+true
+-- value.tuple_print[uid]
+(1, 1)
+-- value.tuple_list_sorted[uid]
+2
+-- value.tuple_key[uid]
+2
+-- value.struct_field[uid]
+true
+-- value.struct_print[uid]
+Box_uid(items: [1])
+-- value.ref[uid]
+2
+-- value.generic_id[uid]
+1
+-- value.generic_box[uid]
+true
+-- value.fn_value[uid]
+1
+-- value.closure_capture[uid]
+1
+-- value.match_eq[uid]
+1
+-- value.const_list[uid]
+2

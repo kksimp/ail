@@ -1,0 +1,109 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_u8
+    items List[u8]
+
+fn add_u8(mut xs List[u8], x u8)
+    xs.push(x)
+
+fn wrap_u8(x u8) u8?
+    x
+
+fn nothing_u8() u8?
+    none
+
+K_u8 := [1.to_u8(), 2.to_u8()]
+
+## heap.empty_push_pop[u8]
+fn s0()
+    mut h := Heap[u8]()
+    h.push(2.to_u8())
+    h.push(1.to_u8())
+    if x := h.pop()
+        print(h.len())
+
+## heap.max_first[u8]
+fn s1()
+    mut h := Heap[u8](max_first: true)
+    h.push(1.to_u8())
+    h.push(2.to_u8())
+    if x := h.peek()
+        print(h.len())
+
+## heap.from[u8]
+fn s2()
+    h := Heap.from([3.to_u8(), 1.to_u8(), 2.to_u8()])
+    print(h.len())
+
+## heap.from_max[u8]
+fn s3()
+    h := Heap.from_max([3.to_u8(), 1.to_u8(), 2.to_u8()])
+    print(h.to_sorted().len())
+
+## heap.is_empty[u8]
+fn s4()
+    h := Heap[u8]()
+    print(h.is_empty())
+
+## heap.drain[u8]
+fn s5()
+    mut h := Heap.from([3.to_u8(), 1.to_u8(), 2.to_u8()])
+    mut n := 0
+    while x := h.pop()
+        n += 1
+    print(n)
+
+fn main()
+    print("-- heap.empty_push_pop[u8]")
+    s0()
+    print("-- heap.max_first[u8]")
+    s1()
+    print("-- heap.from[u8]")
+    s2()
+    print("-- heap.from_max[u8]")
+    s3()
+    print("-- heap.is_empty[u8]")
+    s4()
+    print("-- heap.drain[u8]")
+    s5()

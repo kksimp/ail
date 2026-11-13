@@ -1,0 +1,109 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_opt
+    items List[int?]
+
+fn add_opt(mut xs List[int?], x int?)
+    xs.push(x)
+
+fn nothing_opt() int??
+    none
+
+K_opt := [oi(1), oi(2)]
+
+## grid.fill[opt]
+fn s0()
+    g := Grid.fill(2, 3, oi(1))
+    print(g.rows * g.cols)
+
+## grid.from[opt]
+fn s1()
+    g := Grid.from([[oi(1), oi(2)], [oi(-1), oi(1)]])
+    print(g.cells.len())
+
+## grid.index[opt]
+fn s2()
+    g := Grid.fill(2, 2, oi(1))
+    x := g[1, 1]
+    print((x else 0) == (x else 0))
+
+## grid.index_assign[opt]
+fn s3()
+    mut g := Grid.fill(2, 2, oi(1))
+    g[0, 1] = oi(2)
+    print(g.rows)
+
+## grid.row[opt]
+fn s4()
+    g := Grid.from([[oi(1), oi(2)], [oi(-1), oi(1)]])
+    print(g.row(1).len())
+
+## grid.to_list[opt]
+fn s5()
+    g := Grid.fill(2, 2, oi(1))
+    print(g.to_list().len())
+
+## grid.cells_for[opt]
+fn s6()
+    g := Grid.fill(2, 2, oi(1))
+    mut n := 0
+    for x in g.cells
+        n += 1
+    print(n)
+
+fn main()
+    print("-- grid.fill[opt]")
+    s0()
+    print("-- grid.from[opt]")
+    s1()
+    print("-- grid.index[opt]")
+    s2()
+    print("-- grid.index_assign[opt]")
+    s3()
+    print("-- grid.row[opt]")
+    s4()
+    print("-- grid.to_list[opt]")
+    s5()
+    print("-- grid.cells_for[opt]")
+    s6()

@@ -1,0 +1,181 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_float
+    items List[float]
+
+fn add_float(mut xs List[float], x float)
+    xs.push(x)
+
+fn wrap_float(x float) float?
+    x
+
+fn nothing_float() float?
+    none
+
+K_float := [1.5, 2.5]
+
+## mapv.literal[float]
+fn s0()
+    m := {"a": 1.5, "b": 2.5}
+    print(m.len())
+
+## mapv.empty[float]
+fn s1()
+    m := Map[str, float]()
+    print(m.len())
+
+## mapv.index[float]
+fn s2()
+    m := {"a": 1.5}
+    x := m["a"]
+    print(x == x)
+
+## mapv.assign[float]
+fn s3()
+    mut m := Map[str, float]()
+    m["a"] = 1.5
+    print(m.len())
+
+## mapv.get[float]
+fn s4()
+    m := {"a": 1.5}
+    if x := m.get("a")
+        print(1)
+
+## mapv.get_else[float]
+fn s5()
+    m := {"a": 1.5}
+    x := m.get("z") else 2.5
+    print(1)
+
+## mapv.get_or[float]
+fn s6()
+    m := {"a": 1.5}
+    x := m.get_or("b", 3.5)
+    print(1)
+
+## mapv.remove[float]
+fn s7()
+    mut m := {"a": 1.5}
+    if x := m.remove("a")
+        print(m.len())
+
+## mapv.values[float]
+fn s8()
+    m := {"a": 1.5, "b": 2.5}
+    print(m.values().len())
+
+## mapv.values_sorted[float]
+fn s9()
+    m := {"a": 2.5, "b": 1.5}
+    print(m.values().sorted().len())
+
+## mapv.for[float]
+fn s10()
+    m := {"a": 1.5, "b": 2.5}
+    mut n := 0
+    for k, v in m
+        n += 1
+    print(n)
+
+## mapv.map_values[float]
+fn s11()
+    m := {"a": 1.5}
+    print(m.map_values(|k, v| v).len())
+
+## mapv.filter[float]
+fn s12()
+    m := {"a": 1.5, "b": 2.5}
+    print(m.filter(|k, v| v == 1.5).len())
+
+## mapv.nested_update[float]
+fn s13()
+    mut m := Map[str, List[float]]()
+    m["a"] = [1.5]
+    m["a"].push(2.5)
+    print(m["a"].len())
+
+## mapv.eq[float]
+fn s14()
+    m := {"a": 1.5}
+    print(m == {"a": 1.5})
+
+## mapv.print[float]
+fn s15()
+    m := {"a": 1.5}
+    print(m)
+
+fn main()
+    print("-- mapv.literal[float]")
+    s0()
+    print("-- mapv.empty[float]")
+    s1()
+    print("-- mapv.index[float]")
+    s2()
+    print("-- mapv.assign[float]")
+    s3()
+    print("-- mapv.get[float]")
+    s4()
+    print("-- mapv.get_else[float]")
+    s5()
+    print("-- mapv.get_or[float]")
+    s6()
+    print("-- mapv.remove[float]")
+    s7()
+    print("-- mapv.values[float]")
+    s8()
+    print("-- mapv.values_sorted[float]")
+    s9()
+    print("-- mapv.for[float]")
+    s10()
+    print("-- mapv.map_values[float]")
+    s11()
+    print("-- mapv.filter[float]")
+    s12()
+    print("-- mapv.nested_update[float]")
+    s13()
+    print("-- mapv.eq[float]")
+    s14()
+    print("-- mapv.print[float]")
+    s15()

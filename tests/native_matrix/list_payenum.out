@@ -1,0 +1,117 @@
+-- list.literal[payenum]
+3
+-- list.empty[payenum]
+0
+-- list.typed_by_push[payenum]
+1
+-- list.len[payenum]
+2
+-- list.is_empty[payenum]
+false
+-- list.index[payenum]
+true
+-- list.index_assign[payenum]
+2
+-- list.slice[payenum]
+5
+-- list.push[payenum]
+2
+-- list.pop[payenum]
+1
+-- list.swap[payenum]
+2
+-- list.first_last[payenum]
+1
+2
+-- list.insert[payenum]
+2
+-- list.remove_at[payenum]
+1
+-- list.extend[payenum]
+3
+-- list.clear[payenum]
+0
+-- list.reverse[payenum]
+2
+-- list.reversed[payenum]
+2
+-- list.contains[payenum]
+true
+-- list.index_of[payenum]
+1
+-- list.join[payenum]
+true
+-- list.sorted_by[payenum]
+3
+-- list.sort_by[payenum]
+3
+-- list.min_by[payenum]
+1
+2
+-- list.take_skip[payenum]
+4
+-- list.set_ops[payenum]
+5
+-- list.chunks_windows[payenum]
+4
+-- list.counts[payenum]
+2
+-- list.flatten[payenum]
+3
+-- list.enumerate[payenum]
+0
+1
+-- list.any_all[payenum]
+true
+false
+-- list.find[payenum]
+1
+-- list.filter[payenum]
+1
+-- list.map[payenum]
+2
+-- list.map_to_self[payenum]
+2
+-- list.group_by[payenum]
+1
+-- list.count[payenum]
+2
+-- list.fold[payenum]
+2
+-- list.flat_map[payenum]
+4
+-- list.take_skip_while[payenum]
+2
+-- list.zip[payenum]
+1
+2
+-- list.zip_into[payenum]
+1
+2
+-- list.for[payenum]
+2
+-- list.for_mut[payenum]
+2
+-- list.comprehension[payenum]
+1
+-- list.set_comprehension[payenum]
+2
+-- list.map_comprehension[payenum]
+2
+-- list.eq[payenum]
+true
+true
+-- list.print[payenum]
+[Shape.Circle(r: 1), Shape.Square(s: 2)]
+-- list.interp[payenum]
+true
+-- list.nested_push[payenum]
+2
+-- list.in_struct[payenum]
+2
+-- list.pass_mut[payenum]
+2
+-- list.generic_first[payenum]
+1
+-- list.contains_list[payenum]
+true

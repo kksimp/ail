@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_uid
+    items List[Uid]
+
+fn add_uid(mut xs List[Uid], x Uid)
+    xs.push(x)
+
+fn wrap_uid(x Uid) Uid?
+    x
+
+fn nothing_uid() Uid?
+    none
+
+K_uid := [Uid(1), Uid(2)]
+
+## value.eq[uid]
+fn s0()
+    print(Uid(1) == Uid(1))
+    print(Uid(1) != Uid(2))
+
+## value.lt[uid]
+fn s1()
+    print(Uid(1) < Uid(2))
+    print(Uid(2) >= Uid(1))
+
+## value.print[uid]
+fn s2()
+    print(Uid(1))
+
+## value.interp[uid]
+fn s3()
+    x := Uid(1)
+    print("<{x}>")
+
+## value.to_str_len[uid]
+fn s4()
+    x := Uid(1)
+    print("{x}".len() > 0)
+
+## value.optional_else[uid]
+fn s5()
+    o := wrap_uid(Uid(1))
+    x := o else Uid(2)
+    print(1)
+
+## value.optional_if[uid]
+fn s6()
+    o := wrap_uid(Uid(1))
+    if x := o
+        print(1)
+
+## value.optional_none[uid]
+fn s7()
+    o := nothing_uid()
+    print(o == none)
+
+## value.optional_print[uid]
+fn s8()
+    o := wrap_uid(Uid(1))
+    print(o)
+
+## value.tuple[uid]
+fn s9()
+    t := (Uid(1), 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[uid]
+fn s10()
+    t := (Uid(1), 1)
+    print(t == (Uid(1), 1))
+
+## value.tuple_print[uid]
+fn s11()
+    t := (Uid(1), 1)
+    print(t)
+
+## value.tuple_list_sorted[uid]
+fn s12()
+    xs := [(Uid(2), 1), (Uid(1), 2)]
+    print(xs.sorted().len())
+
+## value.tuple_key[uid]
+fn s13()
+    mut m := Map[(Uid, int), int]()
+    m[(Uid(1), 1)] = 2
+    print(m[(Uid(1), 1)])
+
+## value.struct_field[uid]
+fn s14()
+    b := Box_uid(items: [Uid(1)])
+    c := b
+    print(c == b)
+
+## value.struct_print[uid]
+fn s15()
+    b := Box_uid(items: [Uid(1)])
+    print(b)
+
+## value.ref[uid]
+fn s16()
+    r := ref Box_uid(items: [Uid(1)])
+    s := r
+    s.items.push(Uid(2))
+    print(r.items.len())
+
+## value.generic_id[uid]
+fn s17()
+    x := ident(Uid(1))
+    print(1)
+
+## value.generic_box[uid]
+fn s18()
+    g := GBox(v: Uid(1))
+    print(g.v == Uid(1))
+
+## value.fn_value[uid]
+fn s19()
+    f := |x Uid| x
+    y := f(Uid(1))
+    print(1)
+
+## value.closure_capture[uid]
+fn s20()
+    a := Uid(1)
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[uid]
+fn s21()
+    x := Uid(1)
+    print(if x == Uid(1) then 1 else 0)
+
+## value.const_list[uid]
+fn s22()
+    print(K_uid.len())
+
+fn main()
+    print("-- value.eq[uid]")
+    s0()
+    print("-- value.lt[uid]")
+    s1()
+    print("-- value.print[uid]")
+    s2()
+    print("-- value.interp[uid]")
+    s3()
+    print("-- value.to_str_len[uid]")
+    s4()
+    print("-- value.optional_else[uid]")
+    s5()
+    print("-- value.optional_if[uid]")
+    s6()
+    print("-- value.optional_none[uid]")
+    s7()
+    print("-- value.optional_print[uid]")
+    s8()
+    print("-- value.tuple[uid]")
+    s9()
+    print("-- value.tuple_eq[uid]")
+    s10()
+    print("-- value.tuple_print[uid]")
+    s11()
+    print("-- value.tuple_list_sorted[uid]")
+    s12()
+    print("-- value.tuple_key[uid]")
+    s13()
+    print("-- value.struct_field[uid]")
+    s14()
+    print("-- value.struct_print[uid]")
+    s15()
+    print("-- value.ref[uid]")
+    s16()
+    print("-- value.generic_id[uid]")
+    s17()
+    print("-- value.generic_box[uid]")
+    s18()
+    print("-- value.fn_value[uid]")
+    s19()
+    print("-- value.closure_capture[uid]")
+    s20()
+    print("-- value.match_eq[uid]")
+    s21()
+    print("-- value.const_list[uid]")
+    s22()

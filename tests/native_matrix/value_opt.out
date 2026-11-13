@@ -1,0 +1,38 @@
+-- value.eq[opt]
+true
+true
+-- value.print[opt]
+1
+-- value.interp[opt]
+<1>
+-- value.to_str_len[opt]
+true
+-- value.optional_none[opt]
+true
+-- value.tuple[opt]
+1
+1
+-- value.tuple_eq[opt]
+true
+-- value.tuple_print[opt]
+(1, 1)
+-- value.tuple_key[opt]
+2
+-- value.struct_field[opt]
+true
+-- value.struct_print[opt]
+Box_opt(items: [1])
+-- value.ref[opt]
+2
+-- value.generic_id[opt]
+1
+-- value.generic_box[opt]
+true
+-- value.fn_value[opt]
+1
+-- value.closure_capture[opt]
+1
+-- value.match_eq[opt]
+1
+-- value.const_list[opt]
+2

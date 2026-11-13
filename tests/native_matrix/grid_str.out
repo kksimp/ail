@@ -1,0 +1,14 @@
+-- grid.fill[str]
+6
+-- grid.from[str]
+4
+-- grid.index[str]
+true
+-- grid.index_assign[str]
+2
+-- grid.row[str]
+2
+-- grid.to_list[str]
+2
+-- grid.cells_for[str]
+4

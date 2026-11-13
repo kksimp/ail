@@ -1,0 +1,228 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_uid
+    items List[Uid]
+
+fn add_uid(mut xs List[Uid], x Uid)
+    xs.push(x)
+
+fn wrap_uid(x Uid) Uid?
+    x
+
+fn nothing_uid() Uid?
+    none
+
+K_uid := [Uid(1), Uid(2)]
+
+## set.literal[uid]
+fn s0()
+    s := {Uid(1), Uid(2)}
+    print(s.len())
+
+## set.empty[uid]
+fn s1()
+    s := Set[Uid]()
+    print(s.len())
+
+## set.from_list[uid]
+fn s2()
+    s := {x for x in [Uid(1), Uid(2), Uid(1)]}
+    print(s.len())
+
+## set.add_remove[uid]
+fn s3()
+    mut s := Set[Uid]()
+    print(s.add(Uid(1)))
+    print(s.remove(Uid(1)))
+
+## set.contains[uid]
+fn s4()
+    s := {Uid(1), Uid(2)}
+    print(s.contains(Uid(1)))
+
+## set.is_empty[uid]
+fn s5()
+    s := {Uid(1)}
+    print(s.is_empty())
+
+## set.sorted[uid]
+fn s6()
+    s := {Uid(2), Uid(1)}
+    print(s.sorted().len())
+
+## set.is_subset[uid]
+fn s7()
+    s := {Uid(1)}
+    t := {Uid(1), Uid(2)}
+    print(s.is_subset(t))
+
+## set.set_ops[uid]
+fn s8()
+    s := {Uid(1), Uid(2)}
+    t := {Uid(2), Uid(3)}
+    print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
+
+## set.any_all_find[uid]
+fn s9()
+    s := {Uid(1), Uid(2)}
+    print(s.any(|x| x == Uid(1)))
+    print(s.all(|x| x == Uid(1)))
+    if x := s.find(|x| x == Uid(2))
+        print(1)
+
+## set.filter_map[uid]
+fn s10()
+    s := {Uid(1), Uid(2)}
+    print(s.filter(|x| x == Uid(1)).len() + s.map(|x| x).len())
+
+## set.group_by[uid]
+fn s11()
+    s := {Uid(1), Uid(2)}
+    print(s.group_by(|x| x).len())
+
+## set.count_fold[uid]
+fn s12()
+    s := {Uid(1), Uid(2)}
+    print(s.count(|x| x == Uid(1)))
+    print(s.fold(0, |acc, x| acc + 1))
+
+## set.flat_map[uid]
+fn s13()
+    s := {Uid(1), Uid(2)}
+    print(s.flat_map(|x| [x]).len())
+
+## set.take_skip[uid]
+fn s14()
+    s := {Uid(1), Uid(2), Uid(3)}
+    print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == Uid(1)).len() + s.skip_while(|x| x == Uid(1)).len())
+
+## set.zip_enumerate[uid]
+fn s15()
+    s := {Uid(1), Uid(2)}
+    print(s.zip([1, 2]).len() + s.enumerate().len())
+
+## set.min_max[uid]
+fn s16()
+    s := {Uid(1), Uid(2)}
+    if x := s.min()
+        print(1)
+    if x := s.max()
+        print(2)
+
+## set.for[uid]
+fn s17()
+    s := {Uid(1), Uid(2)}
+    mut n := 0
+    for x in s
+        n += 1
+    print(n)
+
+## set.eq[uid]
+fn s18()
+    s := {Uid(1), Uid(2)}
+    print(s == {Uid(2), Uid(1)})
+
+## set.print[uid]
+fn s19()
+    s := {Uid(1)}
+    print(s)
+
+## set.in_map[uid]
+fn s20()
+    mut m := Map[str, Set[Uid]]()
+    m["a"] = Set[Uid]()
+    m["a"].add(Uid(1))
+    print(m["a"].len())
+
+## set.in_list[uid]
+fn s21()
+    mut xs := [Set[Uid]()]
+    xs[0].add(Uid(1))
+    print(xs[0].len())
+
+fn main()
+    print("-- set.literal[uid]")
+    s0()
+    print("-- set.empty[uid]")
+    s1()
+    print("-- set.from_list[uid]")
+    s2()
+    print("-- set.add_remove[uid]")
+    s3()
+    print("-- set.contains[uid]")
+    s4()
+    print("-- set.is_empty[uid]")
+    s5()
+    print("-- set.sorted[uid]")
+    s6()
+    print("-- set.is_subset[uid]")
+    s7()
+    print("-- set.set_ops[uid]")
+    s8()
+    print("-- set.any_all_find[uid]")
+    s9()
+    print("-- set.filter_map[uid]")
+    s10()
+    print("-- set.group_by[uid]")
+    s11()
+    print("-- set.count_fold[uid]")
+    s12()
+    print("-- set.flat_map[uid]")
+    s13()
+    print("-- set.take_skip[uid]")
+    s14()
+    print("-- set.zip_enumerate[uid]")
+    s15()
+    print("-- set.min_max[uid]")
+    s16()
+    print("-- set.for[uid]")
+    s17()
+    print("-- set.eq[uid]")
+    s18()
+    print("-- set.print[uid]")
+    s19()
+    print("-- set.in_map[uid]")
+    s20()
+    print("-- set.in_list[uid]")
+    s21()

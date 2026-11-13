@@ -1,0 +1,451 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_map
+    items List[Map[str, int]]
+
+fn add_map(mut xs List[Map[str, int]], x Map[str, int])
+    xs.push(x)
+
+fn wrap_map(x Map[str, int]) Map[str, int]?
+    x
+
+fn nothing_map() Map[str, int]?
+    none
+
+K_map := [{"a": 1}, {"b": 2}]
+
+## list.literal[map]
+fn s0()
+    xs := [{"a": 1}, {"b": 2}, {"c": 3}]
+    print(xs.len())
+
+## list.empty[map]
+fn s1()
+    xs := List[Map[str, int]]()
+    print(xs.len())
+
+## list.typed_by_push[map]
+fn s2()
+    mut xs := []
+    xs.push({"a": 1})
+    print(xs.len())
+
+## list.len[map]
+fn s3()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.len())
+
+## list.is_empty[map]
+fn s4()
+    xs := [{"a": 1}]
+    print(xs.is_empty())
+
+## list.index[map]
+fn s5()
+    xs := [{"a": 1}, {"b": 2}]
+    x := xs[1]
+    print(x.len() == x.len())
+
+## list.index_assign[map]
+fn s6()
+    mut xs := [{"a": 1}, {"b": 2}]
+    xs[0] = {"c": 3}
+    print(xs.len())
+
+## list.slice[map]
+fn s7()
+    xs := [{"a": 1}, {"b": 2}, {"c": 3}]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[map]
+fn s8()
+    mut xs := [{"a": 1}]
+    xs.push({"b": 2})
+    print(xs.len())
+
+## list.pop[map]
+fn s9()
+    mut xs := [{"a": 1}, {"b": 2}]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[map]
+fn s10()
+    mut xs := [{"a": 1}, {"b": 2}]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[map]
+fn s11()
+    xs := [{"a": 1}, {"b": 2}]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[map]
+fn s12()
+    mut xs := [{"a": 1}]
+    xs.insert(0, {"b": 2})
+    print(xs.len())
+
+## list.remove_at[map]
+fn s13()
+    mut xs := [{"a": 1}, {"b": 2}]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[map]
+fn s14()
+    mut xs := [{"a": 1}]
+    xs.extend([{"b": 2}, {"c": 3}])
+    print(xs.len())
+
+## list.clear[map]
+fn s15()
+    mut xs := [{"a": 1}]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[map]
+fn s16()
+    mut xs := [{"a": 1}, {"b": 2}]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[map]
+fn s17()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.reversed().len())
+
+## list.contains[map]
+fn s18()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.contains({"b": 2}))
+
+## list.index_of[map]
+fn s19()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.index_of({"b": 2}) else -1)
+
+## list.join[map]
+fn s20()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.join(",").len() > 0)
+
+## list.sorted_by[map]
+fn s21()
+    xs := [{"c": 3}, {"a": 1}, {"b": 2}]
+    print(xs.sorted(by: |x| x.len()).len())
+
+## list.sort_by[map]
+fn s22()
+    mut xs := [{"c": 3}, {"a": 1}, {"b": 2}]
+    xs.sort(by: |x| x.len())
+    print(xs.len())
+
+## list.min_by[map]
+fn s23()
+    xs := [{"c": 3}, {"a": 1}, {"b": 2}]
+    if x := xs.min(by: |x| x.len())
+        print(1)
+    if x := xs.max(by: |x| x.len())
+        print(2)
+
+## list.take_skip[map]
+fn s24()
+    xs := [{"a": 1}, {"b": 2}, {"c": 3}]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.chunks_windows[map]
+fn s25()
+    xs := [{"a": 1}, {"b": 2}, {"c": 3}]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.flatten[map]
+fn s26()
+    xs := [[{"a": 1}], [{"b": 2}, {"c": 3}]]
+    print(xs.flatten().len())
+
+## list.enumerate[map]
+fn s27()
+    xs := [{"a": 1}, {"b": 2}]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[map]
+fn s28()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.any(|x| x == {"a": 1}))
+    print(xs.all(|x| x == {"a": 1}))
+
+## list.find[map]
+fn s29()
+    xs := [{"a": 1}, {"b": 2}]
+    if x := xs.find(|x| x == {"b": 2})
+        print(1)
+
+## list.filter[map]
+fn s30()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.filter(|x| x == {"a": 1}).len())
+
+## list.map[map]
+fn s31()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.map(|x| x.len()).len())
+
+## list.map_to_self[map]
+fn s32()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.map(|x| x).len())
+
+## list.group_by[map]
+fn s33()
+    xs := [{"a": 1}, {"b": 2}, {"a": 1}]
+    g := xs.group_by(|x| x.len())
+    print(g.len())
+
+## list.count[map]
+fn s34()
+    xs := [{"a": 1}, {"b": 2}, {"a": 1}]
+    print(xs.count(|x| x == {"a": 1}))
+
+## list.fold[map]
+fn s35()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[map]
+fn s36()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[map]
+fn s37()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs.take_while(|x| x == {"a": 1}).len() + xs.skip_while(|x| x == {"a": 1}).len())
+
+## list.zip[map]
+fn s38()
+    xs := [{"a": 1}, {"b": 2}]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[map]
+fn s39()
+    xs := [{"a": 1}, {"b": 2}]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[map]
+fn s40()
+    xs := [{"a": 1}, {"b": 2}]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[map]
+fn s41()
+    mut xs := [{"a": 1}, {"b": 2}]
+    for mut x in xs
+        x = {"c": 3}
+    print(xs.len())
+
+## list.comprehension[map]
+fn s42()
+    xs := [{"a": 1}, {"b": 2}]
+    ys := [x for x in xs if x == {"a": 1}]
+    print(ys.len())
+
+## list.eq[map]
+fn s43()
+    xs := [{"a": 1}, {"b": 2}]
+    ys := [{"a": 1}, {"b": 2}]
+    print(xs == ys)
+    print(xs != [{"c": 3}])
+
+## list.print[map]
+fn s44()
+    xs := [{"a": 1}, {"b": 2}]
+    print(xs)
+
+## list.interp[map]
+fn s45()
+    xs := [{"a": 1}, {"b": 2}]
+    print("{xs}".len() > 0)
+
+## list.nested_push[map]
+fn s46()
+    mut xs := [[{"a": 1}]]
+    xs[0].push({"b": 2})
+    print(xs[0].len())
+
+## list.in_struct[map]
+fn s47()
+    mut b := Box_map(items: [{"a": 1}])
+    b.items.push({"b": 2})
+    print(b.items.len())
+
+## list.pass_mut[map]
+fn s48()
+    mut xs := [{"a": 1}]
+    add_map(mut xs, {"b": 2})
+    print(xs.len())
+
+## list.generic_first[map]
+fn s49()
+    xs := [{"a": 1}, {"b": 2}]
+    if x := first_of(xs)
+        print(1)
+
+## list.contains_list[map]
+fn s50()
+    xs := [[{"a": 1}], [{"b": 2}]]
+    print(xs.contains([{"b": 2}]))
+
+fn main()
+    print("-- list.literal[map]")
+    s0()
+    print("-- list.empty[map]")
+    s1()
+    print("-- list.typed_by_push[map]")
+    s2()
+    print("-- list.len[map]")
+    s3()
+    print("-- list.is_empty[map]")
+    s4()
+    print("-- list.index[map]")
+    s5()
+    print("-- list.index_assign[map]")
+    s6()
+    print("-- list.slice[map]")
+    s7()
+    print("-- list.push[map]")
+    s8()
+    print("-- list.pop[map]")
+    s9()
+    print("-- list.swap[map]")
+    s10()
+    print("-- list.first_last[map]")
+    s11()
+    print("-- list.insert[map]")
+    s12()
+    print("-- list.remove_at[map]")
+    s13()
+    print("-- list.extend[map]")
+    s14()
+    print("-- list.clear[map]")
+    s15()
+    print("-- list.reverse[map]")
+    s16()
+    print("-- list.reversed[map]")
+    s17()
+    print("-- list.contains[map]")
+    s18()
+    print("-- list.index_of[map]")
+    s19()
+    print("-- list.join[map]")
+    s20()
+    print("-- list.sorted_by[map]")
+    s21()
+    print("-- list.sort_by[map]")
+    s22()
+    print("-- list.min_by[map]")
+    s23()
+    print("-- list.take_skip[map]")
+    s24()
+    print("-- list.chunks_windows[map]")
+    s25()
+    print("-- list.flatten[map]")
+    s26()
+    print("-- list.enumerate[map]")
+    s27()
+    print("-- list.any_all[map]")
+    s28()
+    print("-- list.find[map]")
+    s29()
+    print("-- list.filter[map]")
+    s30()
+    print("-- list.map[map]")
+    s31()
+    print("-- list.map_to_self[map]")
+    s32()
+    print("-- list.group_by[map]")
+    s33()
+    print("-- list.count[map]")
+    s34()
+    print("-- list.fold[map]")
+    s35()
+    print("-- list.flat_map[map]")
+    s36()
+    print("-- list.take_skip_while[map]")
+    s37()
+    print("-- list.zip[map]")
+    s38()
+    print("-- list.zip_into[map]")
+    s39()
+    print("-- list.for[map]")
+    s40()
+    print("-- list.for_mut[map]")
+    s41()
+    print("-- list.comprehension[map]")
+    s42()
+    print("-- list.eq[map]")
+    s43()
+    print("-- list.print[map]")
+    s44()
+    print("-- list.interp[map]")
+    s45()
+    print("-- list.nested_push[map]")
+    s46()
+    print("-- list.in_struct[map]")
+    s47()
+    print("-- list.pass_mut[map]")
+    s48()
+    print("-- list.generic_first[map]")
+    s49()
+    print("-- list.contains_list[map]")
+    s50()

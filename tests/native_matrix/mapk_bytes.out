@@ -1,0 +1,50 @@
+-- mapk.literal[bytes]
+2
+-- mapk.empty[bytes]
+0
+-- mapk.typed_by_use[bytes]
+1
+-- mapk.index[bytes]
+1
+-- mapk.assign[bytes]
+2
+-- mapk.op_assign[bytes]
+3
+-- mapk.get[bytes]
+1
+-- mapk.get_or[bytes]
+7
+-- mapk.contains[bytes]
+true
+-- mapk.remove[bytes]
+1
+-- mapk.keys_values[bytes]
+4
+-- mapk.keys_sorted[bytes]
+2
+-- mapk.top[bytes]
+1
+-- mapk.for[bytes]
+3
+-- mapk.any_all_count[bytes]
+true
+false
+1
+-- mapk.fold[bytes]
+3
+-- mapk.filter[bytes]
+1
+-- mapk.map[bytes]
+2
+-- mapk.flat_map[bytes]
+4
+-- mapk.map_values[bytes]
+2
+-- mapk.push[bytes]
+2
+-- mapk.eq[bytes]
+true
+-- mapk.print[bytes]
+{b"a": 1}
+-- mapk.is_empty[bytes]
+false

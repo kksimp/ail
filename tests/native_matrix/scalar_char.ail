@@ -1,0 +1,122 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+## char.0
+fn s0()
+    print('1'.is_digit())
+
+## char.1
+fn s1()
+    print('a'.is_alpha())
+
+## char.2
+fn s2()
+    print('a'.is_alnum())
+
+## char.3
+fn s3()
+    print(' '.is_space())
+
+## char.4
+fn s4()
+    print('A'.is_upper())
+
+## char.5
+fn s5()
+    print('a'.is_lower())
+
+## char.6
+fn s6()
+    print('a'.to_upper())
+
+## char.7
+fn s7()
+    print('A'.to_lower())
+
+## char.8
+fn s8()
+    print('a'.code())
+
+## char.9
+fn s9()
+    print('f'.to_digit(16) else -1)
+
+## char.10
+fn s10()
+    print(char.from_code(97) else 'z')
+
+## char.11
+fn s11()
+    print('a' < 'b')
+
+## char.12
+fn s12()
+    print("{'a'}")
+
+fn main()
+    print("-- char.0")
+    s0()
+    print("-- char.1")
+    s1()
+    print("-- char.2")
+    s2()
+    print("-- char.3")
+    s3()
+    print("-- char.4")
+    s4()
+    print("-- char.5")
+    s5()
+    print("-- char.6")
+    s6()
+    print("-- char.7")
+    s7()
+    print("-- char.8")
+    s8()
+    print("-- char.9")
+    s9()
+    print("-- char.10")
+    s10()
+    print("-- char.11")
+    s11()
+    print("-- char.12")
+    s12()

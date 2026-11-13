@@ -1,0 +1,214 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_enum
+    items List[Color]
+
+fn add_enum(mut xs List[Color], x Color)
+    xs.push(x)
+
+fn wrap_enum(x Color) Color?
+    x
+
+fn nothing_enum() Color?
+    none
+
+K_enum := [Color.Red, Color.Green]
+
+## value.eq[enum]
+fn s0()
+    print(Color.Red == Color.Red)
+    print(Color.Red != Color.Green)
+
+## value.print[enum]
+fn s1()
+    print(Color.Red)
+
+## value.interp[enum]
+fn s2()
+    x := Color.Red
+    print("<{x}>")
+
+## value.to_str_len[enum]
+fn s3()
+    x := Color.Red
+    print("{x}".len() > 0)
+
+## value.optional_else[enum]
+fn s4()
+    o := wrap_enum(Color.Red)
+    x := o else Color.Green
+    print(1)
+
+## value.optional_if[enum]
+fn s5()
+    o := wrap_enum(Color.Red)
+    if x := o
+        print(1)
+
+## value.optional_none[enum]
+fn s6()
+    o := nothing_enum()
+    print(o == none)
+
+## value.optional_print[enum]
+fn s7()
+    o := wrap_enum(Color.Red)
+    print(o)
+
+## value.tuple[enum]
+fn s8()
+    t := (Color.Red, 1)
+    print(t.1)
+    a, b := t
+    print(b)
+
+## value.tuple_eq[enum]
+fn s9()
+    t := (Color.Red, 1)
+    print(t == (Color.Red, 1))
+
+## value.tuple_print[enum]
+fn s10()
+    t := (Color.Red, 1)
+    print(t)
+
+## value.tuple_key[enum]
+fn s11()
+    mut m := Map[(Color, int), int]()
+    m[(Color.Red, 1)] = 2
+    print(m[(Color.Red, 1)])
+
+## value.struct_field[enum]
+fn s12()
+    b := Box_enum(items: [Color.Red])
+    c := b
+    print(c == b)
+
+## value.struct_print[enum]
+fn s13()
+    b := Box_enum(items: [Color.Red])
+    print(b)
+
+## value.ref[enum]
+fn s14()
+    r := ref Box_enum(items: [Color.Red])
+    s := r
+    s.items.push(Color.Green)
+    print(r.items.len())
+
+## value.generic_id[enum]
+fn s15()
+    x := ident(Color.Red)
+    print(1)
+
+## value.generic_box[enum]
+fn s16()
+    g := GBox(v: Color.Red)
+    print(g.v == Color.Red)
+
+## value.fn_value[enum]
+fn s17()
+    f := |x Color| x
+    y := f(Color.Red)
+    print(1)
+
+## value.closure_capture[enum]
+fn s18()
+    a := Color.Red
+    f := || a
+    y := f()
+    print(1)
+
+## value.match_eq[enum]
+fn s19()
+    x := Color.Red
+    print(if x == Color.Red then 1 else 0)
+
+## value.const_list[enum]
+fn s20()
+    print(K_enum.len())
+
+fn main()
+    print("-- value.eq[enum]")
+    s0()
+    print("-- value.print[enum]")
+    s1()
+    print("-- value.interp[enum]")
+    s2()
+    print("-- value.to_str_len[enum]")
+    s3()
+    print("-- value.optional_else[enum]")
+    s4()
+    print("-- value.optional_if[enum]")
+    s5()
+    print("-- value.optional_none[enum]")
+    s6()
+    print("-- value.optional_print[enum]")
+    s7()
+    print("-- value.tuple[enum]")
+    s8()
+    print("-- value.tuple_eq[enum]")
+    s9()
+    print("-- value.tuple_print[enum]")
+    s10()
+    print("-- value.tuple_key[enum]")
+    s11()
+    print("-- value.struct_field[enum]")
+    s12()
+    print("-- value.struct_print[enum]")
+    s13()
+    print("-- value.ref[enum]")
+    s14()
+    print("-- value.generic_id[enum]")
+    s15()
+    print("-- value.generic_box[enum]")
+    s16()
+    print("-- value.fn_value[enum]")
+    s17()
+    print("-- value.closure_capture[enum]")
+    s18()
+    print("-- value.match_eq[enum]")
+    s19()
+    print("-- value.const_list[enum]")
+    s20()

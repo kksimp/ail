@@ -1,0 +1,50 @@
+-- mapk.literal[uid]
+2
+-- mapk.empty[uid]
+0
+-- mapk.typed_by_use[uid]
+1
+-- mapk.index[uid]
+1
+-- mapk.assign[uid]
+2
+-- mapk.op_assign[uid]
+3
+-- mapk.get[uid]
+1
+-- mapk.get_or[uid]
+7
+-- mapk.contains[uid]
+true
+-- mapk.remove[uid]
+1
+-- mapk.keys_values[uid]
+4
+-- mapk.keys_sorted[uid]
+2
+-- mapk.top[uid]
+1
+-- mapk.for[uid]
+3
+-- mapk.any_all_count[uid]
+true
+false
+1
+-- mapk.fold[uid]
+3
+-- mapk.filter[uid]
+1
+-- mapk.map[uid]
+2
+-- mapk.flat_map[uid]
+4
+-- mapk.map_values[uid]
+2
+-- mapk.push[uid]
+2
+-- mapk.eq[uid]
+true
+-- mapk.print[uid]
+{1: 1}
+-- mapk.is_empty[uid]
+false

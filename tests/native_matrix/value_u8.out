@@ -1,0 +1,49 @@
+-- value.eq[u8]
+true
+true
+-- value.lt[u8]
+true
+true
+-- value.print[u8]
+1
+-- value.interp[u8]
+<1>
+-- value.to_str_len[u8]
+true
+-- value.optional_else[u8]
+1
+-- value.optional_if[u8]
+1
+-- value.optional_none[u8]
+true
+-- value.optional_print[u8]
+1
+-- value.tuple[u8]
+1
+1
+-- value.tuple_eq[u8]
+true
+-- value.tuple_print[u8]
+(1, 1)
+-- value.tuple_list_sorted[u8]
+2
+-- value.tuple_key[u8]
+2
+-- value.struct_field[u8]
+true
+-- value.struct_print[u8]
+Box_u8(items: [1])
+-- value.ref[u8]
+2
+-- value.generic_id[u8]
+1
+-- value.generic_box[u8]
+true
+-- value.fn_value[u8]
+1
+-- value.closure_capture[u8]
+1
+-- value.match_eq[u8]
+1
+-- value.const_list[u8]
+2

@@ -1,0 +1,130 @@
+-- list.literal[bytes]
+3
+-- list.empty[bytes]
+0
+-- list.typed_by_push[bytes]
+1
+-- list.len[bytes]
+2
+-- list.is_empty[bytes]
+false
+-- list.index[bytes]
+true
+-- list.index_assign[bytes]
+2
+-- list.slice[bytes]
+5
+-- list.push[bytes]
+2
+-- list.pop[bytes]
+1
+-- list.swap[bytes]
+2
+-- list.first_last[bytes]
+1
+2
+-- list.insert[bytes]
+2
+-- list.remove_at[bytes]
+1
+-- list.extend[bytes]
+3
+-- list.clear[bytes]
+0
+-- list.reverse[bytes]
+2
+-- list.reversed[bytes]
+2
+-- list.contains[bytes]
+true
+-- list.index_of[bytes]
+1
+-- list.join[bytes]
+true
+-- list.min_max[bytes]
+1
+2
+-- list.sorted[bytes]
+3
+-- list.sort[bytes]
+3
+-- list.sorted_by[bytes]
+3
+-- list.sort_by[bytes]
+3
+-- list.min_by[bytes]
+1
+2
+-- list.take_skip[bytes]
+4
+-- list.set_ops[bytes]
+5
+-- list.chunks_windows[bytes]
+4
+-- list.counts[bytes]
+2
+-- list.flatten[bytes]
+3
+-- list.enumerate[bytes]
+0
+1
+-- list.any_all[bytes]
+true
+false
+-- list.find[bytes]
+1
+-- list.filter[bytes]
+1
+-- list.map[bytes]
+2
+-- list.map_to_self[bytes]
+2
+-- list.group_by[bytes]
+1
+-- list.count[bytes]
+2
+-- list.fold[bytes]
+2
+-- list.flat_map[bytes]
+4
+-- list.take_skip_while[bytes]
+2
+-- list.zip[bytes]
+1
+2
+-- list.zip_into[bytes]
+1
+2
+-- list.for[bytes]
+2
+-- list.for_mut[bytes]
+2
+-- list.comprehension[bytes]
+1
+-- list.set_comprehension[bytes]
+2
+-- list.map_comprehension[bytes]
+2
+-- list.eq[bytes]
+true
+true
+-- list.lt[bytes]
+true
+-- list.print[bytes]
+[b"a", b"b"]
+-- list.interp[bytes]
+true
+-- list.nested_push[bytes]
+2
+-- list.in_struct[bytes]
+2
+-- list.pass_mut[bytes]
+2
+-- list.generic_first[bytes]
+1
+-- list.generic_ord[bytes]
+1
+-- list.contains_list[bytes]
+true
+-- list.sorted_nested[bytes]
+2

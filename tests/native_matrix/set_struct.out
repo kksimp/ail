@@ -1,0 +1,44 @@
+-- set.literal[struct]
+2
+-- set.empty[struct]
+0
+-- set.from_list[struct]
+2
+-- set.add_remove[struct]
+true
+true
+-- set.contains[struct]
+true
+-- set.is_empty[struct]
+false
+-- set.is_subset[struct]
+true
+-- set.set_ops[struct]
+5
+-- set.any_all_find[struct]
+true
+false
+1
+-- set.filter_map[struct]
+3
+-- set.group_by[struct]
+2
+-- set.count_fold[struct]
+1
+2
+-- set.flat_map[struct]
+2
+-- set.take_skip[struct]
+6
+-- set.zip_enumerate[struct]
+4
+-- set.for[struct]
+2
+-- set.eq[struct]
+true
+-- set.print[struct]
+{P(name: "a", n: 1)}
+-- set.in_map[struct]
+1
+-- set.in_list[struct]
+1

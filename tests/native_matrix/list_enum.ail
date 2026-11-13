@@ -1,0 +1,483 @@
+struct P
+    name str
+    n int
+
+struct Q
+    n int
+    name str
+
+impl Ord for Q
+
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+type Uid = int
+
+fn oi(n int) int?
+    if n < 0
+        return none
+    n
+
+fn first_of[T](xs List[T]) T?
+    xs.first()
+
+fn biggest[T Ord](xs List[T]) T?
+    mut best := xs.first() else return none
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn ident[T](x T) T
+    x
+
+struct GBox[T]
+    v T
+
+
+struct Box_enum
+    items List[Color]
+
+fn add_enum(mut xs List[Color], x Color)
+    xs.push(x)
+
+fn wrap_enum(x Color) Color?
+    x
+
+fn nothing_enum() Color?
+    none
+
+K_enum := [Color.Red, Color.Green]
+
+## list.literal[enum]
+fn s0()
+    xs := [Color.Red, Color.Green, Color.Blue]
+    print(xs.len())
+
+## list.empty[enum]
+fn s1()
+    xs := List[Color]()
+    print(xs.len())
+
+## list.typed_by_push[enum]
+fn s2()
+    mut xs := []
+    xs.push(Color.Red)
+    print(xs.len())
+
+## list.len[enum]
+fn s3()
+    xs := [Color.Red, Color.Green]
+    print(xs.len())
+
+## list.is_empty[enum]
+fn s4()
+    xs := [Color.Red]
+    print(xs.is_empty())
+
+## list.index[enum]
+fn s5()
+    xs := [Color.Red, Color.Green]
+    x := xs[1]
+    print(1 == 1)
+
+## list.index_assign[enum]
+fn s6()
+    mut xs := [Color.Red, Color.Green]
+    xs[0] = Color.Blue
+    print(xs.len())
+
+## list.slice[enum]
+fn s7()
+    xs := [Color.Red, Color.Green, Color.Blue]
+    print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
+
+## list.push[enum]
+fn s8()
+    mut xs := [Color.Red]
+    xs.push(Color.Green)
+    print(xs.len())
+
+## list.pop[enum]
+fn s9()
+    mut xs := [Color.Red, Color.Green]
+    if x := xs.pop()
+        print(xs.len())
+
+## list.swap[enum]
+fn s10()
+    mut xs := [Color.Red, Color.Green]
+    xs.swap(0, 1)
+    print(xs.len())
+
+## list.first_last[enum]
+fn s11()
+    xs := [Color.Red, Color.Green]
+    if x := xs.first()
+        print(1)
+    if x := xs.last()
+        print(2)
+
+## list.insert[enum]
+fn s12()
+    mut xs := [Color.Red]
+    xs.insert(0, Color.Green)
+    print(xs.len())
+
+## list.remove_at[enum]
+fn s13()
+    mut xs := [Color.Red, Color.Green]
+    x := xs.remove_at(0)
+    print(xs.len())
+
+## list.extend[enum]
+fn s14()
+    mut xs := [Color.Red]
+    xs.extend([Color.Green, Color.Blue])
+    print(xs.len())
+
+## list.clear[enum]
+fn s15()
+    mut xs := [Color.Red]
+    xs.clear()
+    print(xs.len())
+
+## list.reverse[enum]
+fn s16()
+    mut xs := [Color.Red, Color.Green]
+    xs.reverse()
+    print(xs.len())
+
+## list.reversed[enum]
+fn s17()
+    xs := [Color.Red, Color.Green]
+    print(xs.reversed().len())
+
+## list.contains[enum]
+fn s18()
+    xs := [Color.Red, Color.Green]
+    print(xs.contains(Color.Green))
+
+## list.index_of[enum]
+fn s19()
+    xs := [Color.Red, Color.Green]
+    print(xs.index_of(Color.Green) else -1)
+
+## list.join[enum]
+fn s20()
+    xs := [Color.Red, Color.Green]
+    print(xs.join(",").len() > 0)
+
+## list.sorted_by[enum]
+fn s21()
+    xs := [Color.Blue, Color.Red, Color.Green]
+    print(xs.sorted(by: |x| 1).len())
+
+## list.sort_by[enum]
+fn s22()
+    mut xs := [Color.Blue, Color.Red, Color.Green]
+    xs.sort(by: |x| 1)
+    print(xs.len())
+
+## list.min_by[enum]
+fn s23()
+    xs := [Color.Blue, Color.Red, Color.Green]
+    if x := xs.min(by: |x| 1)
+        print(1)
+    if x := xs.max(by: |x| 1)
+        print(2)
+
+## list.take_skip[enum]
+fn s24()
+    xs := [Color.Red, Color.Green, Color.Blue]
+    print(xs.take(2).len() + xs.skip(1).len())
+
+## list.set_ops[enum]
+fn s25()
+    xs := [Color.Red, Color.Green]
+    ys := [Color.Green, Color.Blue]
+    print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
+
+## list.chunks_windows[enum]
+fn s26()
+    xs := [Color.Red, Color.Green, Color.Blue]
+    print(xs.chunks(2).len() + xs.windows(2).len())
+
+## list.counts[enum]
+fn s27()
+    xs := [Color.Red, Color.Green, Color.Red]
+    c := xs.counts()
+    print(c.len())
+
+## list.flatten[enum]
+fn s28()
+    xs := [[Color.Red], [Color.Green, Color.Blue]]
+    print(xs.flatten().len())
+
+## list.enumerate[enum]
+fn s29()
+    xs := [Color.Red, Color.Green]
+    for i, x in xs.enumerate()
+        print(i)
+
+## list.any_all[enum]
+fn s30()
+    xs := [Color.Red, Color.Green]
+    print(xs.any(|x| x == Color.Red))
+    print(xs.all(|x| x == Color.Red))
+
+## list.find[enum]
+fn s31()
+    xs := [Color.Red, Color.Green]
+    if x := xs.find(|x| x == Color.Green)
+        print(1)
+
+## list.filter[enum]
+fn s32()
+    xs := [Color.Red, Color.Green]
+    print(xs.filter(|x| x == Color.Red).len())
+
+## list.map[enum]
+fn s33()
+    xs := [Color.Red, Color.Green]
+    print(xs.map(|x| 1).len())
+
+## list.map_to_self[enum]
+fn s34()
+    xs := [Color.Red, Color.Green]
+    print(xs.map(|x| x).len())
+
+## list.group_by[enum]
+fn s35()
+    xs := [Color.Red, Color.Green, Color.Red]
+    g := xs.group_by(|x| 1)
+    print(g.len())
+
+## list.count[enum]
+fn s36()
+    xs := [Color.Red, Color.Green, Color.Red]
+    print(xs.count(|x| x == Color.Red))
+
+## list.fold[enum]
+fn s37()
+    xs := [Color.Red, Color.Green]
+    print(xs.fold(0, |acc, x| acc + 1))
+
+## list.flat_map[enum]
+fn s38()
+    xs := [Color.Red, Color.Green]
+    print(xs.flat_map(|x| [x, x]).len())
+
+## list.take_skip_while[enum]
+fn s39()
+    xs := [Color.Red, Color.Green]
+    print(xs.take_while(|x| x == Color.Red).len() + xs.skip_while(|x| x == Color.Red).len())
+
+## list.zip[enum]
+fn s40()
+    xs := [Color.Red, Color.Green]
+    for x, y in xs.zip([1, 2])
+        print(y)
+
+## list.zip_into[enum]
+fn s41()
+    xs := [Color.Red, Color.Green]
+    for y, x in [1, 2].zip(xs)
+        print(y)
+
+## list.for[enum]
+fn s42()
+    xs := [Color.Red, Color.Green]
+    mut n := 0
+    for x in xs
+        n += 1
+    print(n)
+
+## list.for_mut[enum]
+fn s43()
+    mut xs := [Color.Red, Color.Green]
+    for mut x in xs
+        x = Color.Blue
+    print(xs.len())
+
+## list.comprehension[enum]
+fn s44()
+    xs := [Color.Red, Color.Green]
+    ys := [x for x in xs if x == Color.Red]
+    print(ys.len())
+
+## list.set_comprehension[enum]
+fn s45()
+    xs := [Color.Red, Color.Green, Color.Red]
+    s := {x for x in xs}
+    print(s.len())
+
+## list.map_comprehension[enum]
+fn s46()
+    xs := [Color.Red, Color.Green]
+    m := {x: 1 for x in xs}
+    print(m.len())
+
+## list.eq[enum]
+fn s47()
+    xs := [Color.Red, Color.Green]
+    ys := [Color.Red, Color.Green]
+    print(xs == ys)
+    print(xs != [Color.Blue])
+
+## list.print[enum]
+fn s48()
+    xs := [Color.Red, Color.Green]
+    print(xs)
+
+## list.interp[enum]
+fn s49()
+    xs := [Color.Red, Color.Green]
+    print("{xs}".len() > 0)
+
+## list.nested_push[enum]
+fn s50()
+    mut xs := [[Color.Red]]
+    xs[0].push(Color.Green)
+    print(xs[0].len())
+
+## list.in_struct[enum]
+fn s51()
+    mut b := Box_enum(items: [Color.Red])
+    b.items.push(Color.Green)
+    print(b.items.len())
+
+## list.pass_mut[enum]
+fn s52()
+    mut xs := [Color.Red]
+    add_enum(mut xs, Color.Green)
+    print(xs.len())
+
+## list.generic_first[enum]
+fn s53()
+    xs := [Color.Red, Color.Green]
+    if x := first_of(xs)
+        print(1)
+
+## list.contains_list[enum]
+fn s54()
+    xs := [[Color.Red], [Color.Green]]
+    print(xs.contains([Color.Green]))
+
+fn main()
+    print("-- list.literal[enum]")
+    s0()
+    print("-- list.empty[enum]")
+    s1()
+    print("-- list.typed_by_push[enum]")
+    s2()
+    print("-- list.len[enum]")
+    s3()
+    print("-- list.is_empty[enum]")
+    s4()
+    print("-- list.index[enum]")
+    s5()
+    print("-- list.index_assign[enum]")
+    s6()
+    print("-- list.slice[enum]")
+    s7()
+    print("-- list.push[enum]")
+    s8()
+    print("-- list.pop[enum]")
+    s9()
+    print("-- list.swap[enum]")
+    s10()
+    print("-- list.first_last[enum]")
+    s11()
+    print("-- list.insert[enum]")
+    s12()
+    print("-- list.remove_at[enum]")
+    s13()
+    print("-- list.extend[enum]")
+    s14()
+    print("-- list.clear[enum]")
+    s15()
+    print("-- list.reverse[enum]")
+    s16()
+    print("-- list.reversed[enum]")
+    s17()
+    print("-- list.contains[enum]")
+    s18()
+    print("-- list.index_of[enum]")
+    s19()
+    print("-- list.join[enum]")
+    s20()
+    print("-- list.sorted_by[enum]")
+    s21()
+    print("-- list.sort_by[enum]")
+    s22()
+    print("-- list.min_by[enum]")
+    s23()
+    print("-- list.take_skip[enum]")
+    s24()
+    print("-- list.set_ops[enum]")
+    s25()
+    print("-- list.chunks_windows[enum]")
+    s26()
+    print("-- list.counts[enum]")
+    s27()
+    print("-- list.flatten[enum]")
+    s28()
+    print("-- list.enumerate[enum]")
+    s29()
+    print("-- list.any_all[enum]")
+    s30()
+    print("-- list.find[enum]")
+    s31()
+    print("-- list.filter[enum]")
+    s32()
+    print("-- list.map[enum]")
+    s33()
+    print("-- list.map_to_self[enum]")
+    s34()
+    print("-- list.group_by[enum]")
+    s35()
+    print("-- list.count[enum]")
+    s36()
+    print("-- list.fold[enum]")
+    s37()
+    print("-- list.flat_map[enum]")
+    s38()
+    print("-- list.take_skip_while[enum]")
+    s39()
+    print("-- list.zip[enum]")
+    s40()
+    print("-- list.zip_into[enum]")
+    s41()
+    print("-- list.for[enum]")
+    s42()
+    print("-- list.for_mut[enum]")
+    s43()
+    print("-- list.comprehension[enum]")
+    s44()
+    print("-- list.set_comprehension[enum]")
+    s45()
+    print("-- list.map_comprehension[enum]")
+    s46()
+    print("-- list.eq[enum]")
+    s47()
+    print("-- list.print[enum]")
+    s48()
+    print("-- list.interp[enum]")
+    s49()
+    print("-- list.nested_push[enum]")
+    s50()
+    print("-- list.in_struct[enum]")
+    s51()
+    print("-- list.pass_mut[enum]")
+    s52()
+    print("-- list.generic_first[enum]")
+    s53()
+    print("-- list.contains_list[enum]")
+    s54()
