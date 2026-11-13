@@ -491,7 +491,7 @@ fn run(args List[str]) int
     mut test_args := ["test", copy]
     if not cases.is_empty()
         test_args.extend(["--cases", cases])
-    ran := proc.run(ail_path(), test_args) else err
+    _ := proc.run(ail_path(), test_args) else err
         remove_scrap(scratch)
         rm_file(copy)
         return die("can't run the tests: {err}")
