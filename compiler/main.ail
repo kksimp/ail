@@ -744,7 +744,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     # The prelude's JSON, `Default` and `Seq` modules come from the embedded
     # copy, for the programs that name them (json.prelude.1, ADR 0808, ADR 1073).
     if mentions_prelude(srcs)
-        srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text_for(mir.PRELUDE_EMBED, srcs)))
     # The proof checks the whole program once more, so a program over about
     # 60k lines keeps its loops in order (ADR 0911).
     mut size := 0
@@ -926,7 +926,7 @@ fn run_generators(
     from := all.len()
     for s in srcs
         all.push(user_main_renamed(s))
-    mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
+    mut prelude := mir.prelude_text_for(mir.PRELUDE_EMBED, srcs)
     all.push(parse_text("", "<prelude>", prelude))
     m := mir.lower_package_with(all, rt, from) else err
         if quiet

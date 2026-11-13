@@ -331,7 +331,9 @@ fn main()
 **json.prelude.1** — The items above are read only when the program mentions
 `Json`, `JsonMember`, `JsonError`, `parse_json`, `ToJson` or `FromJson`. A
 program that declares one of those names itself gets its own and none of the
-module's. *(ADR 0162, ADR 0308)*
+module's. The other prelude modules work the same way, one at a time: a
+program with its own `struct Heap` gets no prelude `Heap` but still gets
+`Grid`, `Deque` and the JSON items. *(ADR 0162, ADR 0308)*
 
 ```ail rules=json.prelude.1
 fn main()
