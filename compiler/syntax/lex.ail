@@ -948,12 +948,38 @@ fn literal_brace(line List[char], from int, to int) bool
     inner := text_of(line, from, to).trim()
     if inner.is_empty()
         return false
-    if inner.starts_with("\"") or inner.contains("\":") or inner.contains(";")
+    # String literals inside an interpolation are ordinary (`\{" ".repeat(n)}`, `\{xs.join("; ")}`): judge the rest.
+    rest := outside_strings(inner)
+    # JSON: a quoted key, then `:` and something that is not a format specification (`\{"name":<10}` is one).
+    if inner.starts_with("\"")
+        if after_key := rest.trim_start().strip_prefix(":")
+            if parse_spec(after_key.chars()) == none
+                return true
+    if rest.contains(";")
         return true
     for w in ["return ", "fn ", "let ", "var ", "const ", "int ", "void ", "func ", "def "]
         if inner.starts_with(w)
             return true
     false
+
+## `s` with every string literal in it (quotes and contents, `\\"` escapes kept inside) left out.
+fn outside_strings(s str) str
+    mut kept := List[char]()
+    mut inq := false
+    mut escaped := false
+    for c in s.chars()
+        if inq
+            if escaped
+                escaped = false
+            elif c == '\\'
+                escaped = true
+            elif c == '"'
+                inq = false
+        elif c == '"'
+            inq = true
+        else
+            kept.push(c)
+    kept.join("")
 
 ## The arguments after a string that is a call's first argument: `, a, b)`. `close` is the index of the
 ## call's `)`, or -1 when the rest isn't plain arguments (a string, a brace or a char in it).

@@ -43,10 +43,10 @@ fn syntax_help(message str) str?
     halves := rest.split(", found ")
     if halves.len() != 2
         return none
-    wanted := halves[0]
+    expected := halves[0]
     found := halves[1]
     if found.starts_with("the keyword `")
         word := found.split("`")[1]
         if ["return", "if", "for", "while", "match", "break", "continue", "fn", "let"].contains(word)
-            return "write {wanted} here; `{word}` starts a statement, so it goes at the start of its own line"
-    "write {wanted} here, in place of {found}"
+            return "write {expected} here; `{word}` starts a statement, so it goes at the start of its own line"
+    "write {expected} here, in place of {found}"
