@@ -138,15 +138,15 @@ the function sees its inferred set as before. *(ADR 1089)*
 ```ail error=eff.cap.6 rules=eff.cap.6
 use std.fs
 
-fn save(path str, text str)
+fn save(path str, text str) ! fs.IoError
     fs.write_text(path, text)
 
-@caps(none) fn render(path str) str
-    save(path, "x")               # error: `render` is limited to no capability
+@caps(none) fn render(path str) str ! fs.IoError
+    save(path, "x")?              # error: `render` is limited to no capability
     "done"
 
-fn main()
-    print(render("out.txt"))
+fn main() !
+    print(render("out.txt")?)
 ```
 
 **eff.cap.7** — `LIST` is `none`, or a comma-separated list of the names
@@ -165,14 +165,14 @@ fn main()
 ```ail rules=eff.cap.6
 use std.fs
 
-@caps(fs) fn save(path str, text str)
+@caps(fs) fn save(path str, text str) ! fs.IoError
     fs.write_text(path, text)
 
 @caps(none) fn double(x int) int
     x * 2
 
-fn main()
-    save("out.txt", "{double(21)}")
+fn main() !
+    save("out.txt", "{double(21)}")?
 ```
 
 ## Scoped allow-lists
