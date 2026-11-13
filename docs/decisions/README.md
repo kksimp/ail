@@ -847,6 +847,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1077](1077-decision-order-ai-understanding-first.md) | Delegated decisions: AI understanding first, human readability second, then speed, then tokens *(designer)* | Accepted | 2026-11-12 |
 | [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
 | [1067](1067-closures.md) | Function literals that copy their locals, failing function values, and `any`/`all`/`find`/`filter`/`map`/`group_by` *(delegated)* | Accepted | 2026-11-12 |
+| [1084](1084-language-version-line-in-ail-pkg.md) | A language version line in `ail.pkg` and a `fix --migrate` hook *(delegated)* | Accepted | 2026-11-12 |
 | [1061](1061-known-list-lengths.md) | Native: lists built to a known count check against that count *(delegated)* | Accepted | 2026-11-11 |
 | [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |
 | [1057](1057-ail-help.md) | `ail help`, `--help` and a real no-argument usage; JSON for agents *(delegated)* | Accepted | 2026-11-11 |
