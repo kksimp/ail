@@ -1315,6 +1315,8 @@ fn Gate.docs(mut self)
         ["tools/check-doc-dupes.py", "--self-test"],
         ["tools/check-method-table.py"],
         ["tools/collection-vocab-audit.py"],
+        ["tools/check-card-coverage.py"],
+        ["tools/gen-llms-full.py", "--check"],
     ]
         r := proc.run("python3", cat(["-I"], args)) else return
         if r.status != 0
