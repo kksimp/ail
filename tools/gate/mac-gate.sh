@@ -34,7 +34,7 @@ arith_ok=1
 ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1 || arith_ok=0
 export AIL_NATIVE_FRESH=1
 jobs=${GATE_JOBS:-}
-case "$jobs" in '' | *[!0-9]* | 0) jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2); [ "$jobs" -gt 4 ] && jobs=4 ;; esac
+case "$jobs" in '' | *[!0-9]* | 0) jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2); [ "$jobs" -gt "${GATE_JOBS_MAX:-4}" ] && jobs=${GATE_JOBS_MAX:-4} ;; esac
 base=${TMPDIR:-/tmp}; base=${base%/}
 # `--failed`: the suites whose last run was red (a missing or non-zero .rc), before the old logs are cleared.
 rerun=""
@@ -79,7 +79,9 @@ pool() { # pool WIDTH SUITE...
   done
   wait
 }
+fullrun=1; [ $# -gt 0 ] && fullrun=0
 [ $# -gt 0 ] && native_suites="$*"
+[ -n "$rerun" ] && fullrun=0
 [ -n "$rerun" ] && native_suites="$rerun"
 pooled=""; alone=""
 for s in $native_suites; do if [ "$s" = nativex ]; then alone=nativex; else pooled="$pooled $s"; fi; done
@@ -108,6 +110,12 @@ for s in $sel $native_suites; do
   echo "RED $s"
   grep -E "^RED |^test .* FAILED|panicked at|differs from|^error|disagreement|Symbol not found" "$out/gate_$t.log" | head -"$shown" | cut -c1-200
 done
+# The shards of a suite must have run every item exactly once: all N shards reported, one shared total, and the ran counts add up.
+if [ "$fullrun" = 1 ] && [ "$fails" = 0 ]; then
+  bad=$(grep -h '^SHARD ' "$out"/gate_*.log | awk '{ split($3, a, "/"); k = $2; n[k] = a[2]; seen[k, a[1]]++; cnt[k]++; sum[k] += $7; if ($7 == 0) zero[k] = zero[k] " " a[1]; if (!(k in tot)) tot[k] = $5; else if (tot[k] != $5) mism[k] = 1 }
+    END { for (k in n) { if (zero[k] != "") print k ": shard" zero[k] " ran 0 items"; if (cnt[k] != n[k] || sum[k] != tot[k] || mism[k]) print k ": " cnt[k] " of " n[k] " shards, ran " sum[k] " of " tot[k]; for (j = 0; j < n[k]; j++) if (seen[k, j] != 1) print k ": shard " j " ran " seen[k, j] + 0 " times" } }')
+  if [ -n "$bad" ]; then fails=$((fails+1)); echo "RED shards do not cover their suite exactly once"; echo "$bad"; fi
+fi
 sort -rn "$out/times.unsorted" >"$out/times.log" 2>/dev/null; rm -f "$out/times.unsorted"
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if [ "$arith_ok" = 1 ]; then

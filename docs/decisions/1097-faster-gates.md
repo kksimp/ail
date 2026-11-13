@@ -1,4 +1,4 @@
-# ADR 1096: Faster gates: shards, one process per fence, a fast `run` on Windows
+# ADR 1097: Faster gates: shards, one process per fence, a fast `run` on Windows
 
 - Status: Accepted (amends [ADR 0842](0842-mac-first-gate.md) and [ADR 0925](0925-windows-release-gate.md))
 - Decided by: AI (delegated, ADR 0076)
@@ -22,6 +22,9 @@ a second failure cost a second round.
 - **Stage 1 in the pool (Mac, Linux).** `selfhost1` is a job of the pool next to the long suites instead of a serial
   step before them; nativex, which needs it, starts after the pool. The refresh of `.native/ail` is the first build
   of `arith.ail`, which is also the "binaries start" check.
+- **A cover check.** Each shard prints `SHARD name K/N total T ran R`; a full run is RED unless all N shards of a suite
+  reported, agree on T, ran more than 0, and their R add up to T.
+- **Pool size** is the core count, at most `GATE_JOBS_MAX` (default 4), so a VM with more cores gets a wider pool.
 - **`mac-gate.sh --failed`** reruns the suites the last run left red. A release gate is still a full run.
 - **All failures at once.** A red suite prints up to `GATE_SHOW` (default 60) of its `RED` and error lines.
 - **Fast `run` on Windows.** With `AIL_FAST_RUN=1`, `./ail run FILE [ARGS]` under Git's sh does ail.ps1's check,

@@ -267,6 +267,7 @@ fn main() !
         print("SPEC RED: bad shard `{part}/{parts}`")
         io.exit(2)
     mut seen := 0
+    mut owned_n := 0
     mut run := 0
     mut skipped := 0
     mut fails := List[str]()
@@ -278,6 +279,8 @@ fn main() !
             show_fail(fails[shown])
             shown += 1
         seen += 1
+        if parts <= 1 or (seen - 1) % parts == part
+            owned_n += 1
         if b.kind == "skip"
             skipped += 1
             for r in b.rules
@@ -376,6 +379,8 @@ fn main() !
     while shown < fails.len()
         show_fail(fails[shown])
         shown += 1
+    if parts > 1
+        print("SHARD spec {part}/{parts} total {seen} ran {owned_n}")
     if fails.is_empty()
         print("SPEC GREEN ({run} checked, {skipped} skipped)")
     else

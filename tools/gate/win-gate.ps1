@@ -62,7 +62,7 @@ if (Test-Path $native) {
 # itself, so it runs alone after the others. times.log has the seconds each suite took, slowest first.
 $suites = @(Get-Content (Join-Path $PSScriptRoot 'suites.txt') | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
 if ($args.Count -gt 0) { $suites = $args }
-$jobs = if ("$env:GATE_JOBS" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS } else { [Math]::Min(4, [Math]::Max(1, [int]$env:NUMBER_OF_PROCESSORS)) }
+$jobs = if ("$env:GATE_JOBS" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS } else { [Math]::Min($(if ("$env:GATE_JOBS_MAX" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS_MAX } else { 4 }), [Math]::Max(1, [int]$env:NUMBER_OF_PROCESSORS)) }
 $tmpBase = $env:TMPDIR.TrimEnd('/')
 $times = @()
 
@@ -125,6 +125,18 @@ $alone = @($suites | Where-Object { $_ -eq 'nativex' })
 Run-Pool @($suites | Where-Object { $_ -ne 'nativex' }) $jobs
 if ($alone.Count -gt 0) { Run-Pool $alone 1 }
 $times | Sort-Object Seconds -Descending | ForEach-Object { "$($_.Seconds)`t$($_.Suite)" } | Set-Content (Join-Path $out 'times.log')
+# The shards of a suite must have run every item exactly once (all N shards, one total, ran counts add up, none empty).
+if ($args.Count -eq 0 -and $fails -eq 0) {
+    $sh = @(Get-ChildItem $out -Filter 'gate_*.log' | ForEach-Object { Select-String -Path $_.FullName -Pattern '^SHARD ' } | ForEach-Object { $f = $_.Line -split ' '; [pscustomobject]@{ Name = $f[1]; K = [int](($f[2] -split '/')[0]); N = [int](($f[2] -split '/')[1]); Total = [int]$f[4]; Ran = [int]$f[6] } })
+    foreach ($g in ($sh | Group-Object Name)) {
+        $n = $g.Group[0].N; $ks = @($g.Group | ForEach-Object { $_.K } | Sort-Object -Unique)
+        $sum = ($g.Group | Measure-Object Ran -Sum).Sum
+        $totals = @($g.Group | ForEach-Object { $_.Total } | Sort-Object -Unique)
+        if ($g.Count -ne $n -or $ks.Count -ne $n -or $totals.Count -ne 1 -or $sum -ne $totals[0] -or @($g.Group | Where-Object { $_.Ran -eq 0 }).Count -gt 0) {
+            $fails++; "RED shards of $($g.Name) do not cover it exactly once ($($g.Count) of $n shards, ran $sum of $($totals -join '/'))"
+        }
+    }
+}
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'ps1-args-test.ps1') *> (Join-Path $out 'ps1_args.log')
 if ($LASTEXITCODE -ne 0) { $fails++; 'RED ps1_args'; Get-Content (Join-Path $out 'ps1_args.log') | Select-Object -First 8 }
 # The shipped commands with only git on PATH (ADR 1059).
