@@ -188,16 +188,26 @@ fn pol_canon_win(path str) str
     # The longest prefix that exists is named by the system; the rest is appended.
     mut n := parts.len()
     while n >= 0
-        pre := if n == 0 then str_cat(drive, "/") else str_cat3(drive, "/", parts[..n].join("/"))
+        pre := if n == 0 then str_cat(drive, "/") else str_cat3(drive, "/", pol_join(parts, 0, n))
         fin := pol_win_final(pre)
         if pol_len(fin) > 0
             mut out := fin
             if n < parts.len()
-                tail := parts[n..].join("/")
+                tail := pol_join(parts, n, parts.len())
                 out = if fin.ends_with("/") then str_cat(fin, tail) else str_cat3(fin, "/", tail)
             return out
         n -= 1
     ""
+
+## `parts[lo..hi]` joined with `/`, without a slice: runtime code has no trap
+## sites, so a slice's bounds trap can't be built here (native.subset.1).
+fn pol_join(parts List[str], lo int, hi int) str
+    mut out := List[str]()
+    mut i := lo
+    while i < hi
+        out.push(parts[i])
+        i += 1
+    out.join("/")
 
 ## The canonical form of `path` for matching against a scope (`pol_canon_posix`, `pol_canon_win`).
 fn pol_canon(path str) str

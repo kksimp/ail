@@ -356,12 +356,12 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
 ## alignment says so.
 fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     n := spec.precision else -1
-    fl := spec.flags
+    sflags := spec.flags
     mut text := -1
     match v.ty
         Int | Sized(_) =>
             u := if v.ty == Ty.Sized("u64") then "u" else ""
-            if fl.contains("b")
+            if sflags.contains("b")
                 text = call(
                     "rt.fmt_radix{if u == "" then "" else "_u"}",
                     [v.id, konst(2, Ty.Int)],
@@ -374,7 +374,7 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
                     Ty.Str,
                 )
         Float | F32 =>
-            if fl.contains("e")
+            if sflags.contains("e")
                 text = call(
                     "rt.fmt_exp",
                     [v.id, konst(n, Ty.Int), konst(if v.ty == Ty.F32 then 1 else 0, Ty.Int)],
@@ -393,12 +393,12 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
             # A list, tuple, struct or enum is padded as its text form (lex.str.7).
             text = text_of(v, pos)?
     # The marks of a number (lex.str.7): `,` groups, `+` signs, `0` pads after the sign.
-    if fl.contains(",")
+    if sflags.contains(",")
         text = call("rt.fmt_group", [text], Ty.Str)
-    if fl.contains("+")
+    if sflags.contains("+")
         text = call("rt.fmt_plus", [text], Ty.Str)
     w := spec.width else return Val(id: text, ty: Ty.Str)
-    if fl.contains("0")
+    if sflags.contains("0")
         text = call("rt.fmt_zero", [text, konst(w, Ty.Int)], Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_sized() or v.ty.is_float()
     mut align := if numeric then 1 else 0
