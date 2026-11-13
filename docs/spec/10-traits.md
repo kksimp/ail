@@ -177,7 +177,8 @@ fn same_name[T Named](a T, b T) bool
 function of the trait, such as `fn zero() Self`. An `impl` defines it with
 `Self` replaced (`trait.impl.5`), or inherits its default body. The prelude
 trait `Default` has `fn default() Self`; an empty `impl Default for T`
-derives it for a struct from each field's default (`0`, `0.0`, `""`,
+derives it for a struct from each field's declared default
+(`type.struct.8`), else its type's (`0`, `0.0`, `""`,
 `false`, an empty list, map or set, `none`, or the field type's own
 `default()`); it is a `ct.derive.4` error for an enum. `int`, `float`,
 `str`, `bool` and `List[T]` implement `Default`. *(ADR 0349, ADR 0350)*
