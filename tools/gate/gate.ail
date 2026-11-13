@@ -112,15 +112,18 @@ fn Gate.corpus(mut self, tmp str)
     waiting := (fs.read_text("corpus/waiting.txt") else "").lines()
     for name in (fs.list_dir("corpus") else []).sorted()
         dir := "corpus/{name}"
+        meta := fs.metadata(dir) else continue
+        if not meta.is_dir
+            continue
+        # Sharded (`corpus@K/N`): every program is counted, only this shard's are run (see Gate.mine).
+        if not self.mine()
+            continue
         mut held := false
         for w in waiting
             if w.starts_with("{name} ")
                 held = true
         if held
             print("corpus {name} waits on a compiler fix (corpus/waiting.txt)")
-            continue
-        meta := fs.metadata(dir) else continue
-        if not meta.is_dir
             continue
         src := "{dir}/{name}.ail"
         if not fs.exists(src)
