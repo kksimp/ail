@@ -1071,6 +1071,10 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         args_only(args)
         if not hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
             no_method(rt, n, at)
+        # `xs.iter().map(...)`: reported once, then the chain goes on with the list itself, so `|x| ...` and
+        # `.collect()` after it are not reported again (checkbench, ADR 1111).
+        if args.len() == 0 and iterator_word(rt, n)
+            return rt
         return Ty.Unknown
     if cands.len() > 1
         args_only(args)
@@ -1361,6 +1365,9 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         # An error's text is `to_str()` (the same text as interpolating it).
         d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
         d = d.with_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+    elif iterator_word(rt, n)
+        d = d.with_help(method_help(rt, n) else "a list is iterable as it is")
+        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif new := method_rename(rt, n)
         d = d.with_help("write `.{new}()`").with_fix("write `{new}`", [fix.replace(at, n, new)])
     elif h := method_help(rt, n)
@@ -1373,6 +1380,22 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
             Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
             _ => d = d.with_help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types")
     diags.push(d)
+
+## `iter`, `collect` and their kin on a list or a set: Rust's and Java's iterator words. A list is iterable and
+## `map`/`filter` give lists, so the word is dropped (expr.name.1, checkbench, ADR 1111).
+fn iterator_word(rt Ty, n str) bool
+    kind := kind_of(rt)
+    (kind == "list" or kind == "set") and [
+        "iter",
+        "into_iter",
+        "iter_mut",
+        "stream",
+        "collect",
+        "to_vec",
+        "cloned",
+        "copied",
+        "to_owned",
+    ].contains(n)
 
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
 ## which has a function `f`. Reports it and returns true.
