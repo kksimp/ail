@@ -399,6 +399,21 @@ EXTRA = {
     "list_of_mutex_tasks": "mut shards := List[Mutex[Map[str, int]]]()\nfor _ in 0..2\n    shards.push(Mutex(Map[str, int]()))\ng := TaskGroup()\nfor k in 0..2\n    g.add(spawn bump_shard(shards, \"a\"))\ng.wait_all() else return\nprint(shards[0].get().len())",
 }
 
+# Whole packages (path -> text), for what crosses files: checked as `main.ail`, then built.
+PKGS = {
+    # Two files of one module with the same function name (mod.unit.1): one public, one private.
+    "dup_fn_in_module": {
+        "main.ail": "use util\n\nfn main()\n    print(util.rename_all(1, \"a\", \"b\"))\n",
+        "util/edit.ail": "pub fn rename_all(pos int, old str, text str) str\n    \"{pos}{old}{text}\"\n",
+        "util/resolve.ail": "fn rename_all(e int, lines List[str]) int\n    e + lines.len()\n\npub fn use_it() int\n    rename_all(1, [])\n",
+    },
+    # The same in the root module, across two files.
+    "dup_fn_in_root": {
+        "main.ail": "fn twice(x int) int\n    x * 2\n\nfn main()\n    print(twice(2))\n",
+        "other.ail": "fn twice(s str) str\n    s\n",
+    },
+}
+
 GROUPS = [
     ("list", LIST),
     ("mapk", MAPK),
@@ -559,6 +574,34 @@ def drive(binary, keep):
             at = last[-1][3:] if last else stem
             runs.append(at)
             print("RUN-RED {} (exit {}): {}".format(at, code, " | ".join(rout.strip().splitlines()[-3:])[:300]))
+    for pname, files in PKGS.items():
+        d = os.path.join(work, "pkg_" + pname)
+        for rel, text in files.items():
+            os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
+            with open(os.path.join(d, rel), "w") as f:
+                f.write(text)
+        code, log = run(binary, "check-program", d if "other.ail" in files else os.path.join(d, "main.ail"))
+        if code != 0:
+            first = next(errors(log), None)
+            print("refused pkg.{}: {}".format(pname, "{} {}".format(first[1], first[2]) if first else log.strip()[-160:]))
+            refused += 1
+            continue
+        code, log = run(binary, "build", os.path.join(d, "main.ail"), os.path.join(d, "x"), 900)
+        if code != 0:
+            first = next(errors(log), None)
+            holes.append(("pkg." + pname, "build", log))
+            print("HOLE pkg.{}: {}".format(pname, "error[{}] {}".format(first[1], first[2]) if first else log.strip()[-300:]))
+            continue
+        try:
+            r = subprocess.run([os.path.join(d, "x")], capture_output=True, text=True, timeout=60, cwd=d)
+            if r.returncode != 0:
+                runs.append("pkg." + pname)
+                print("RUN-RED pkg.{} (exit {}): {}".format(pname, r.returncode, (r.stdout + r.stderr).strip()[-300:]))
+            else:
+                built += 1
+        except subprocess.TimeoutExpired:
+            runs.append("pkg." + pname)
+            print("RUN-RED pkg.{} timeout".format(pname))
     print("SUMMARY built-and-ran {} snippets, {} refused by check, {} holes, {} run failures".format(built, refused, len(holes), len(runs)))
     return 1 if holes or runs else 0
 
