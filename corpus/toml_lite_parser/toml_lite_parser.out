@@ -1,0 +1,14 @@
+title          string   AIL demo
+debug          bool     true
+server.host    string   localhost
+server.port    int      8080
+server.tags    array    3
+limits.rate.max int      100
+limits.rate.ratio invalid  1.5
+limits.rate.empty array    0
+limits.rate.note string   has # inside
+array: 2
+bool: 1
+int: 2
+invalid: 1
+string: 3

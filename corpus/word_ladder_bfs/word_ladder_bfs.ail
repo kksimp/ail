@@ -1,0 +1,110 @@
+## Word ladder. Finds the shortest chain from one word to another where each
+## step changes exactly one letter and every word comes from a small embedded
+## dictionary. Breadth-first search over word indexes, with parent links to
+## rebuild the chain. Reports how many words the search visited.
+
+struct Ladder
+    steps List[str]
+    visited int
+
+fn one_apart(a str, b str) bool
+    ca := a.chars()
+    cb := b.chars()
+    if ca.len() != cb.len()
+        return false
+    mut diff := 0
+    for i in 0..ca.len()
+        if ca[i] != cb[i]
+            diff += 1
+    diff == 1
+
+fn climb(words List[str], start str, goal str) Ladder
+    src := words.index_of(start) else -1
+    dst := words.index_of(goal) else -1
+    if src < 0 or dst < 0
+        return Ladder(steps: [], visited: 0)
+    mut prev := List[int]()
+    for w in words
+        prev.push(-2)
+    prev[src] = -1
+    mut queue := [src]
+    mut head := 0
+    while head < queue.len() and prev[dst] == -2
+        cur := queue[head]
+        head += 1
+        for i in 0..words.len()
+            if prev[i] == -2 and one_apart(words[cur], words[i])
+                prev[i] = cur
+                queue.push(i)
+    mut chain := List[str]()
+    if prev[dst] != -2
+        mut at := dst
+        while at != -1
+            chain.push(words[at])
+            at = prev[at]
+        chain.reverse()
+    Ladder(steps: chain, visited: queue.len())
+
+fn report(words List[str], start str, goal str)
+    r := climb(words, start, goal)
+    if r.steps.is_empty()
+        print("{start} -> {goal}: no ladder ({r.visited} words visited)")
+    else
+        print("{start} -> {goal}: {r.steps.len() - 1} steps ({r.visited} words visited)")
+        print("  {r.steps.join(" > ")}")
+
+fn main()
+    words := [
+        "cold",
+        "cord",
+        "card",
+        "ward",
+        "warm",
+        "core",
+        "care",
+        "cure",
+        "pure",
+        "pore",
+        "pole",
+        "pale",
+        "male",
+        "mole",
+        "hole",
+        "hold",
+        "bold",
+        "bolt",
+        "boat",
+        "coat",
+        "cost",
+        "most",
+        "mist",
+        "list",
+        "lost",
+        "lose",
+        "love",
+        "dove",
+        "wolf",
+        "gold",
+    ]
+    report(words, "cold", "warm")
+    report(words, "care", "love")
+    report(words, "boat", "mist")
+    report(words, "cold", "wolf")
+    report(words, "cold", "zzzz")
+
+@test fn one_letter_apart()
+    assert(one_apart("cold", "cord"))
+    assert(not one_apart("cold", "cold"))
+    assert(not one_apart("cold", "card"))
+    assert(not one_apart("cold", "colds"))
+
+@test fn finds_shortest_chain()
+    words := ["cat", "cot", "cog", "dog", "dot"]
+    r := climb(words, "cat", "dog")
+    assert_eq(r.steps.len(), 4)
+    assert_eq(r.steps[0], "cat")
+    assert_eq(r.steps[3], "dog")
+
+@test fn unreachable_gives_empty_path()
+    r := climb(["aaa", "bbb"], "aaa", "bbb")
+    assert(r.steps.is_empty())

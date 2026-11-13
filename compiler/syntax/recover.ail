@@ -413,6 +413,7 @@ fn Parser.pub_marker(mut self)
         or k == "unique"
         or k == "trait"
         or tag_at(0) == "id" and sym_at(1) == ":="
+        or tag_at(0) == "id" and tok_text(peek()) == "type" and tag_at(1) == "id"
         public.add(pos.line)
     elif k == "impl"
         error_text(
@@ -641,6 +642,8 @@ fn Parser.foreign_stmt(mut self) bool
     mut repl := ""
     if word == "pass"
         repl = "todo"
+    elif word == "loop" and tag_at(1) == "nl"
+        repl = "while true"
     elif word == "elseif" or word == "elsif" or word == "else_if"
         repl = "elif"
     if repl != ""
@@ -655,6 +658,45 @@ fn Parser.header_tail(mut self, after str) Header
     pos := tok_pos(k0)
     cond := after.contains("condition")
     s := sym_at(0)
+    # `if let Some(x) = e` (Rust)
+    if cond
+        and k0 >= 1
+        and tokens[k0 - 1].tok == Tok.Ident("let")
+        and tag_at(0) == "id"
+        and sym_at(1) == "("
+        and tag_at(2) == "id"
+        and sym_at(3) == ")"
+        and sym_at(4) == "="
+        wrapper := tok_text(peek())
+        is_while := after.contains("`while`")
+        if is_while
+            error_text(
+                "gram.foreign.1",
+                tok_pos(k0 - 1),
+                "AIL has no `while let`",
+                "loop with `while true` and take the value inside: `x := e else break`",
+                "",
+            )
+            return Header.Reported
+        if wrapper == "Some" or wrapper == "Ok"
+            name := tok_text(tokens[k0 + 2].tok)
+            error_fix(
+                "gram.foreign.1",
+                tok_pos(k0 - 1),
+                "AIL has no `if let`",
+                "bind the value in the condition: `if {name} := e` runs the block when `e` has a value (`T?`) or succeeds (`T ! E`), and binds `{name}`; an `else` block runs otherwise",
+                "write `if {name} := e`",
+                [fix.span(tok_pos(k0 - 1), tok_end(k0 + 4) else pos, "{name} :=")],
+            )
+        else
+            error_text(
+                "gram.foreign.1",
+                tok_pos(k0 - 1),
+                "AIL has no `if let`",
+                "handle a failure with `v := f() else err` and a block, or `v := f() else return`; test an optional with `if x := e`",
+                "",
+            )
+        return Header.Reported
     if s == ":" and (not cond or tag_at(1) == "nl")
         # `if c:` ends the line; `fn f() : int` goes on to the type.
         colon_only := tag_at(1) == "nl"
@@ -725,6 +767,46 @@ fn Parser.stray_after_statement(mut self, start int) bool
     k0 := i
     pos := tok_pos(k0)
     cur := sym_at(0)
+    # `outer: for ...`
+    if tok_tag(tokens[start].tok) == "id"
+        and cur == ":"
+        and k0 == start + 1
+        and (tokens[k0 + 1].tok == Tok.Kw("for") or tokens[k0 + 1].tok == Tok.Kw("while"))
+        error_text(
+            "gram.foreign.1",
+            tok_pos(start),
+            "AIL has no loop labels",
+            "`break` leaves the innermost loop; to leave nested loops move them into a function and `return`, or keep a `mut done := false` flag and test it in each loop",
+            "",
+        )
+        return true
+    # `println!(..)`, `vec![..]`, `format!(..)`
+    if cur == "!"
+        and k0 >= 1
+        and tok_tag(tokens[k0 - 1].tok) == "id"
+        and touches(k0)
+        and (sym_at(1) == "(" or sym_at(1) == "[")
+        return macro_call(k0)
+    # `go work(1)`
+    if tokens[start].tok == Tok.Ident("go") and k0 == start + 1 and tag_at(0) == "id"
+        error_text(
+            "gram.foreign.1",
+            tok_pos(start),
+            "AIL has no `go`",
+            "start a task with `t := spawn work(1)` and wait for it with `t.wait()`; a task handle must be waited or added to a `TaskGroup` (conc.task.2)",
+            "",
+        )
+        return true
+    # `a, b = b, a`
+    if tok_tag(tokens[start].tok) == "id" and cur == "," and k0 == start + 1 and assign_ahead(k0)
+        error_text(
+            "gram.foreign.1",
+            tok_pos(start),
+            "AIL has no multiple assignment",
+            "swap through a temporary (`t := a`, `a = b`, `b = t`), or swap list elements with `xs.swap(i, j)`; `a, b := f()` takes a tuple apart",
+            "",
+        )
+        return true
     # `x: int = 5`
     if tok_tag(tokens[start].tok) == "id" and cur == ":" and k0 == start + 1
         name := tok_text(tokens[start].tok)
@@ -863,3 +945,201 @@ fn bytes_source(hex str) str
             out.push("\\x{cs[k]}{cs[k + 1]}")
         k += 2
     out.join("")
+
+## Whether token `k` starts exactly where the one before it ends.
+fn Parser.touches(self, k int) bool
+    e := tok_end(k - 1) else return false
+    e == tokens[k].pos
+
+## Whether a plain `=` follows on this line, outside brackets, from token `k`.
+fn Parser.assign_ahead(self, k int) bool
+    mut depth := 0
+    mut j := k
+    while j < tokens.len() and tokens[j].tok != Tok.Newline and tokens[j].tok != Tok.Eof
+        t := tokens[j].tok
+        if t == Tok.Sym("(") or t == Tok.Sym("[")
+            depth += 1
+        elif t == Tok.Sym(")") or t == Tok.Sym("]")
+            depth -= 1
+        elif t == Tok.Sym("=") and depth == 0
+            return true
+        j += 1
+    false
+
+## `name!(..)` or `name![..]` (a Rust macro call), with the `!` at token `k0`.
+fn Parser.macro_call(mut self, k0 int) bool
+    name := tok_text(tokens[k0 - 1].tok)
+    npos := tok_pos(k0 - 1)
+    bang := tok_pos(k0)
+    bend := tok_end(k0) else bang
+    paren := sym_at(1) == "("
+    if name == "vec" and not paren
+        error_fix(
+            "gram.foreign.1",
+            npos,
+            "AIL has no `vec!`",
+            "a list is a literal: `[1, 2]`; an empty one names its type: `List[int]()`",
+            "write the list literal",
+            [fix.delete(npos, bend)],
+        )
+    elif paren
+        and (name == "println" or name == "print" or name == "eprintln" or name == "eprint" or name == "dbg")
+        error_fix(
+            "gram.foreign.1",
+            npos,
+            "AIL has no `{name}!`",
+            "`print(value)` writes a value and a newline; text with values is interpolated: `print(\"n is \{n}\")`, with no `\{}` placeholders",
+            "write `print`",
+            [fix.span(npos, bend, "print")],
+        )
+    elif paren
+        and (name == "assert" or name == "assert_eq" or name == "assert_ne" or name == "debug_assert")
+        error_fix(
+            "gram.foreign.1",
+            npos,
+            "AIL has no `{name}!`",
+            "`assert(cond)` and `assert_eq(a, b)` are plain calls, in an `@test` function (spec chapter 19)",
+            "remove the `!`",
+            [fix.delete(bang, bend)],
+        )
+    elif paren and (name == "panic" or name == "unimplemented")
+        error_fix(
+            "gram.foreign.1",
+            npos,
+            "AIL has no `{name}!`",
+            "stop the program with `unreachable(\"message\")`; a failure the caller can handle is an `error enum` returned with `T ! E`",
+            "write `unreachable`",
+            [fix.span(npos, bend, "unreachable")],
+        )
+    elif name == "format" or name == "write" or name == "writeln"
+        error_text(
+            "gram.foreign.1",
+            npos,
+            "AIL has no `{name}!`",
+            "build text with interpolation: `s := \"\{a}-\{b}\"`, with the value inside the braces and no `\{}` placeholders; a width or precision goes after a colon: `\{x:>6}`, `\{x:.2}`",
+            "",
+        )
+    elif name == "matches"
+        error_text(
+            "gram.foreign.1",
+            npos,
+            "AIL has no `matches!`",
+            "test with `match v` and a `pattern => true` arm, `_ => false`; or compare with `==`",
+            "",
+        )
+    else
+        error_text(
+            "gram.foreign.1",
+            npos,
+            "AIL has no macros: `{name}!` is not a call",
+            "call a function without the `!`: `{name}(...)`; there is no compile-time code generation",
+            "",
+        )
+    true
+
+## `for (const x of xs)`: the edits that write `for x in xs`, at `(`.
+fn Parser.js_for_edits(self) List[fix.Edit]?
+    mut k := i + 1
+    if tokens[k].tok == Tok.Ident("const")
+        or tokens[k].tok == Tok.Ident("let")
+        or tokens[k].tok == Tok.Ident("var")
+        k += 1
+    if tok_tag(tokens[k].tok) != "id"
+        return none
+    if tokens[k + 1].tok != Tok.Ident("of") and tokens[k + 1].tok != Tok.Kw("in")
+        return none
+    close := matching(i) else return none
+    if tokens[close + 1].tok != Tok.Newline
+        return none
+    mut edits := [fix.delete(tok_pos(i), tok_pos(k))]
+    if tokens[k + 1].tok == Tok.Ident("of")
+        edits.push(fix.span(tok_pos(k + 1), tok_end(k + 1) else tok_pos(k + 1), "in"))
+    edits.push(fix.delete(tok_pos(close), tok_end(close) else tok_pos(close)))
+    edits
+
+## `for i < 3` or `for i, x := range xs` (Go): the loop variable and
+## perhaps one more name are read, and the parser is at the next token.
+fn Parser.for_foreign(mut self, for_i int, names List[ast.Binder]) bool
+    s := sym_at(0)
+    if s == ":=" and tokens[i + 1].tok == Tok.Ident("range")
+        error_text(
+            "gram.foreign.1",
+            tok_pos(for_i),
+            "AIL has no `range` clause",
+            "loop over the collection: `for x in xs`; with the index `for i, x in xs.enumerate()`; a count is `for i in 0..n`",
+            "",
+        )
+        mut last := i + 1
+        while tokens[last + 1].tok != Tok.Newline and tokens[last + 1].tok != Tok.Eof
+            last += 1
+        if last > i + 1 and names.len() == 2 and names[1].name != "_"
+            tail := tok_end(last) else tok_pos(last)
+            if names[0].name == "_"
+                attach("write `for {names[1].name} in`", [fix.span(
+                    tok_pos(for_i + 1),
+                    tok_end(i + 1) else tok_pos(i + 1),
+                    "{names[1].name} in",
+                )])
+            else
+                attach("write `in` and `.enumerate()`", [
+                    fix.span(tok_pos(i), tok_end(i + 1) else tok_pos(i + 1), "in"),
+                    fix.insert(tail, ".enumerate()"),
+                ])
+        return true
+    if s == "<" or s == "<=" or s == ">" or s == ">=" or s == "==" or s == "!="
+        error_fix(
+            "gram.foreign.1",
+            tok_pos(for_i),
+            "a `for` always has `in`: a loop on a condition is `while`",
+            "write `while cond`; `for x in xs` is for each element of a collection or range",
+            "write `while`",
+            [fix.span(tok_pos(for_i), tok_end(for_i) else tok_pos(for_i), "while")],
+        )
+        return true
+    false
+
+## `fn (p P) name()`: Go's method receiver, at `(` after `fn`.
+fn Parser.go_receiver(mut self) bool
+    if not at_sym("(") or tag_at(1) != "id"
+        return false
+    mut t := i + 2
+    if tokens[t].tok == Tok.Sym("*")
+        t += 1
+    if tok_tag(tokens[t].tok) != "id"
+        or tokens[t + 1].tok != Tok.Sym(")")
+        or tok_tag(tokens[t + 2].tok) != "id"
+        return false
+    tname := tok_text(tokens[t].tok)
+    mname := tok_text(tokens[t + 2].tok)
+    error_text(
+        "gram.foreign.1",
+        here(),
+        "AIL declares a method as `fn {tname}.{mname}(self)`",
+        "the type name goes before the method name and the receiver is the parameter `self`; inside, a field is `self.x` or just `x`: `fn {tname}.{mname}(self) T`",
+        "",
+    )
+    skip_statement()
+    true
+
+## `Result[T, E]` at `Result`: the edits that write `T ! E`.
+fn Parser.result_type_edits(self) List[fix.Edit]?
+    close := matching(i + 1) else return none
+    mut depth := 0
+    mut comma := -1
+    for k in i + 2..close
+        t := tokens[k].tok
+        if t == Tok.Sym("[") or t == Tok.Sym("(")
+            depth += 1
+        elif t == Tok.Sym("]") or t == Tok.Sym(")")
+            depth -= 1
+        elif t == Tok.Sym(",") and depth == 0
+            if comma >= 0
+                return none
+            comma = k
+    if comma < 0
+        return none
+    [
+        fix.delete(tok_pos(i), tok_pos(i + 2)),
+        fix.span(tok_pos(comma), tok_end(comma) else tok_pos(comma), " !"),
+        fix.delete(tok_pos(close), tok_end(close) else tok_pos(close)),
+    ]

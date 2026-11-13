@@ -667,6 +667,8 @@ fn instr_line(s ast.Stmt) int
         With(_, _, _, _, pos) => pos.line
         Unsafe(_, pos) => pos.line
         LetTuple(_, _, pos) => pos.line
+        LocalFn(d) => d.pos.line
+        Select(_, pos) => pos.line
 
 fn instr_col(s ast.Stmt) int
     match s
@@ -683,3 +685,5 @@ fn instr_col(s ast.Stmt) int
         With(_, _, _, _, pos) => pos.col
         Unsafe(_, pos) => pos.col
         LetTuple(_, _, pos) => pos.col
+        LocalFn(d) => d.pos.col
+        Select(_, pos) => pos.col

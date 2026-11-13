@@ -43,8 +43,9 @@ declared in the package that declares the type. *(ADR 0082)*
 field and method of the receiver is in scope by its bare name: `x` means
 `self.x` and `f(args)` means `self.f(args)`. The methods are the type's own
 and those of the traits it implements; in a trait's default method, they are
-the trait's methods. `self.x` stays valid, and the formatter writes `x`.
-Associated functions see no members by bare name. *(ADR 0141)*
+the trait's methods. `self.x` stays valid and is the canonical form: `ail fmt`
+writes `self.x` and `self.f(args)` for a bare member it can see (fmt.self).
+Associated functions see no members by bare name. *(ADR 0141, ADR 1081)*
 
 **trait.method.7** — A parameter or local of a method MUST NOT have the name
 of a field of its receiver; it may share a method's name, since a method is
@@ -177,7 +178,8 @@ fn same_name[T Named](a T, b T) bool
 function of the trait, such as `fn zero() Self`. An `impl` defines it with
 `Self` replaced (`trait.impl.5`), or inherits its default body. The prelude
 trait `Default` has `fn default() Self`; an empty `impl Default for T`
-derives it for a struct from each field's default (`0`, `0.0`, `""`,
+derives it for a struct from each field's declared default
+(`type.struct.8`), else its type's (`0`, `0.0`, `""`,
 `false`, an empty list, map or set, `none`, or the field type's own
 `default()`); it is a `ct.derive.4` error for an enum. `int`, `float`,
 `str`, `bool` and `List[T]` implement `Default`. *(ADR 0349, ADR 0350)*
@@ -637,7 +639,7 @@ struct Pt
     x int
 
 fn Pt.double(self) int
-    x * 2                       # fields are in scope by their bare name
+    x * 2                       # bare `x` is `self.x`; ail fmt writes `self.x * 2`
 
 fn main()
     print(Pt(x: 4).double())    # 8

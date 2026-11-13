@@ -744,7 +744,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     # The prelude's JSON, `Default` and `Seq` modules come from the embedded
     # copy, for the programs that name them (json.prelude.1, ADR 0808, ADR 1073).
     if mentions_prelude(srcs)
-        srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text_for(mir.PRELUDE_EMBED, srcs)))
     # The proof checks the whole program once more, so a program over about
     # 60k lines keeps its loops in order (ADR 0911).
     mut size := 0
@@ -926,7 +926,7 @@ fn run_generators(
     from := all.len()
     for s in srcs
         all.push(user_main_renamed(s))
-    mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
+    mut prelude := mir.prelude_text_for(mir.PRELUDE_EMBED, srcs)
     all.push(parse_text("", "<prelude>", prelude))
     m := mir.lower_package_with(all, rt, from) else err
         if quiet
@@ -1311,6 +1311,7 @@ fn check_cmd(rest List[str])
     mut deny := List[str]()
     mut allow_given := false
     mut allow_text := ""
+    mut policy_out := ""
     mut paths := List[str]()
     mut i := 0
     while i < rest.len()
@@ -1325,6 +1326,9 @@ fn check_cmd(rest List[str])
             i += 1
         elif a == "--deterministic"
             deny.extend(check.deterministic_deny())
+        elif a == "--policy-out" and has
+            policy_out = rest[i + 1]
+            i += 1
         elif a == "--allow" and has
             allow_given = true
             allow_text = "{allow_text},{rest[i + 1]}"
@@ -1386,6 +1390,11 @@ fn check_cmd(rest List[str])
         io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
     for d in found
         if not d.warning
+            io.exit(2)
+    if policy_out != ""
+        # eff.allow.10: the run's policy from the manifests' scoped `caps`, for `ail run` to hand the program.
+        fs.write_text(policy_out, check.grants_policy(loaded.program)) else err
+            io.eprint("error: can't write {policy_out}: {err.kind}")
             io.exit(2)
 
 ## `api [--outline] FILE [--text | --pretty]`: the outline of one file

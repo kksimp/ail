@@ -332,7 +332,11 @@ change in the loop, `k` is a constant from 0 to 64, and `xs` is a list that
 the loop does not resize or whose elements it does not replace through
 another name: the loop is versioned on `0 <= y` and `y < len - k`, and the
 original loop, which traps at the same access with the same message, runs
-when they do not hold. *(ADR 0816)*
+when they do not hold. When the counted loops around the loop keep `y` within
+`lo..=hi` with `lo >= 0` (their counters run between constants, and a counter
+is below its bound everywhere in its loop but the header), the test may
+instead be `hi + k < len`, one test per list with the largest such index.
+*(ADR 0816, ADR 1080)*
 
 ```ail rules=native.bce.10
 fn main()
@@ -759,6 +763,51 @@ fn main()
     for op in [0, 0, 1, 2, 9]
         acc = step(op, acc)
     print(acc)
+```
+
+**native.inline.1** — A call may be replaced by a copy of the callee's body
+when the callee is not on a cycle of the call graph, is not `main` or part of
+the runtime, has no loop, and makes no indirect call, and the call is inside
+a loop of the caller: the one call of a function called from one place, up
+to 200 instructions, and any other call up to 48, with each caller grown by
+at most 400 instructions this way;
+besides the leaf functions of ADR 0391. A function that nothing calls or
+names after this is left out of the executable. A trap in, or below, a copied
+body reports the callee's frame and every frame it was copied into
+(trace.frame.2). `AIL_OPT_OFF=wide` turns it off. *(ADR 0940)*
+
+```ail rules=native.inline.1
+fn area(w int, h int) int
+    print("area of {w} by {h}")
+    w * h
+
+fn main()
+    for k in 1..3
+        print(area(k, 4))
+```
+
+**native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte
+line of the code or ends on one, nor does a comparison together with the
+conditional jump right after it: such an instruction starts on the next
+line, after instructions that do nothing. Lines are counted from the first
+byte of the code, which is loaded at a multiple of 64, and each function
+starts on a line. The stubs that report a trap are left as they fall. No
+result changes: processors that decode a jump on a line's edge slowly (Intel,
+2015 to 2019) no longer run a loop slower or faster by where an edit
+elsewhere happened to put it. ARM64 code is not changed.
+`AIL_OPT_OFF=jumpline` turns it off. *(ADR 1096)*
+
+```ail rules=native.jump.1
+fn count(xs List[int], want int) int
+    mut n := 0
+    for x in xs
+        if x == want
+            n += 1
+    n
+
+fn main()
+    xs := [k % 7 for k in 0..1000]
+    print(count(xs, 3))
 ```
 
 **native.reuse.1** — A list made empty inside a loop may be one object that

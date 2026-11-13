@@ -169,7 +169,13 @@ fn Checker.let_tuple(mut self, names List[ast.Binder], value ast.Expr, at ast.Po
                     "type.tuple.4",
                     at,
                     "several names take a tuple apart, but the value is {show(vt)}",
-                    "bind it to one name",
+                    if names.len() == 2
+                        and [
+                            "err",
+                            "e",
+                            "error",
+                            "ok",
+                        ].contains(names[1].name) then "AIL has no `(value, err)` pairs: a call that can fail is `v := f()?` to pass the error on, or `v := f() else d`; `T ! E` is the result type (err.type.1)" else "bind it to one name",
                 )
     for k in 0..names.len()
         b := names[k]
@@ -250,7 +256,7 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
                     )
                 cov.wildcard = true
             names
-        Literal | Variant | Range | BindName | Nested =>
+        Literal | Variant | Range | BindName | Nested | StructPat =>
             err_help(
                 "type.tuple.6",
                 pattern_pos(pat),
@@ -306,6 +312,12 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List
                     names.extend(elem_pattern(xs[k], ps[k], mut covers))
                 return names
         _ => covers.all = covers.all
+    # expr.match.14: a struct element is matched by its fields.
+    if is_record(t)
+        mut names := List[Binding]()
+        if not irrefutable(npat(t, pat, mut names))
+            covers.all = false
+        return names
     covers.all = false
     match t
         Unknown => return []
@@ -350,6 +362,11 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List
         Nested(_, _, nfields, _) =>
             mut out := List[Binding]()
             for q in nfields
+                out.extend(tuple_pattern_names(q))
+            out
+        StructPat(_, _, _, sfields, _) =>
+            mut out := List[Binding]()
+            for q in sfields
                 out.extend(tuple_pattern_names(q))
             out
         _ => []

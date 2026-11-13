@@ -44,10 +44,10 @@ fn serve(id Json, method str, params Json)
             print("\{\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\"}")
             said := args.text("text", "")
             reply(id, Json.Obj([jm("content", block("echo: {said}"))]))
-        else if name == "sum"
+        elif name == "sum"
             total := (args.num("a") else 0.0) + (args.num("b") else 0.0)
             reply(id, Json.Obj([jm("structuredContent", Json.Obj([jm("sum", Json.Num(total))]))]))
-        else if name == "boom"
+        elif name == "boom"
             reply(id, Json.Obj([jm("isError", Json.Bool(true)), jm("content", block("it broke"))]))
         else
             rpc_error(id, -32602, "unknown tool {name}")
@@ -59,4 +59,5 @@ fn main()
         line := io.read_line() else break
         msg := parse_json(line) else continue
         id := msg.get("id") else continue
-        serve(id, msg.text("method", ""), msg.get("params") else Json.Null)
+        params := msg.get("params") else Json.Null
+        serve(id, msg.text("method", ""), params)

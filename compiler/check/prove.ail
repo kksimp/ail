@@ -638,6 +638,11 @@ fn pv_param(f PvFacts, p ast.Param) PvFacts
             for q in nfields
                 g4 = pv_pattern(g4, q)
             g4
+        StructPat(_, _, _, sfields, _) =>
+            mut g5 := f
+            for q in sfields
+                g5 = pv_pattern(g5, q)
+            g5
         _ => f
 
 ## Whether a block always leaves: it ends in `return`, `break` or `continue`, or in an
@@ -805,6 +810,22 @@ fn PvProver.walk_block(mut self, stmts List[ast.Stmt], start PvFacts, tail bool)
             for b in names
                 g = pv_forget(g, b.name)
             g
+        # type.fn.9: the body runs later, on copies; it assumes nothing about its parameters.
+        LocalFn(d) =>
+            mut g := pv_forget(f, d.name)
+            for p in d.params
+                g = pv_forget(g, p.name)
+            walk_block(d.body else [], g, false)
+            pv_forget(f, d.name)
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                walk_expr(h, f)
+            for a in arms
+                mut g := f
+                if b := ast.select_var(a.op)
+                    g = pv_forget(f, b.name)
+                walk_block(a.body, g, false)
+            f
         _ => f
 
 ## `name := value`: an immutable `int` gets its value's facts, and those of the `ensures`

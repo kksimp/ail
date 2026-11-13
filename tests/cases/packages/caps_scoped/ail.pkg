@@ -1,0 +1,2 @@
+# The app may read under ./data and nothing else of the file system; it does not list `net` (eff.allow.10).
+package app caps fs.read=./data

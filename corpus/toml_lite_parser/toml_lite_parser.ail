@@ -1,0 +1,90 @@
+## TOML-lite parser: reads [table] headers and key = value lines, strips
+## trailing comments, classifies each value (string, bool, int, array or
+## invalid) and prints the flattened table.key names with a count per kind.
+
+struct Item
+    key str
+    kind str
+    text str
+
+fn classify(raw str)(str, str)
+    if raw.len() >= 2 and raw.starts_with('"') and raw.ends_with('"')
+        return ("string", raw.slice(1, raw.len() - 1))
+    if raw == "true" or raw == "false"
+        return ("bool", raw)
+    if raw.starts_with("[") and raw.ends_with("]")
+        inner := raw.slice(1, raw.len() - 1).trim()
+        if inner == ""
+            return ("array", "0")
+        return ("array", "{inner.split(",").len()}")
+    n := raw.to_int() else return ("invalid", raw)
+    ("int", "{n}")
+
+fn strip_comment(v str) str
+    if v.starts_with('"')
+        qi := v.slice(1, v.len()).find("\"") else return v
+        return v.slice(0, qi + 2)
+    i := v.find("#") else return v
+    v.slice(0, i).trim()
+
+fn parse(text str) List[Item]
+    mut out := List[Item]()
+    mut table := ""
+    for raw in text.lines()
+        line := raw.trim()
+        if line == "" or line.starts_with("#")
+            continue
+        if line.starts_with("[") and line.ends_with("]")
+            table = line.slice(1, line.len() - 1).trim()
+            continue
+        idx := line.find("=") else continue
+        name := line.slice(0, idx).trim()
+        value := strip_comment(line.slice(idx + 1, line.len()).trim())
+        k, shown := classify(value)
+        full := if table == "" then name else "{table}.{name}"
+        out.push(Item(key: full, kind: k, text: shown))
+    out
+
+fn sample() str
+    lines := [
+        "title = \"AIL demo\"",
+        "debug = true",
+        "",
+        "[server]",
+        "host = \"localhost\"   # primary",
+        "port = 8080",
+        "tags = [\"a\", \"b\", \"c\"]",
+        "",
+        "[limits.rate]",
+        "max = 100  # per minute",
+        "ratio = 1.5",
+        "empty = []",
+        "note = \"has # inside\"",
+        "no equals here",
+    ]
+    lines.join("\n")
+
+fn main()
+    items := parse(sample())
+    for it in items
+        print("{it.key:<14} {it.kind:<8} {it.text}")
+    mut counts := Map[str, int]()
+    for it in items
+        counts[it.kind] += 1
+    for k in counts.keys().sorted()
+        print("{k}: {counts[k]}")
+
+@test fn classifies_values()
+    assert_eq(classify("\"hi\""), ("string", "hi"))
+    assert_eq(classify("42"), ("int", "42"))
+    assert_eq(classify("[1, 2]"), ("array", "2"))
+    assert_eq(classify("1.5"), ("invalid", "1.5"))
+
+@test fn tables_prefix_keys()
+    items := parse("[a]\nb = 1\n[c.d]\ne = true")
+    assert_eq(items[0].key, "a.b")
+    assert_eq(items[1].key, "c.d.e")
+
+@test fn comments_are_stripped_outside_strings()
+    assert_eq(strip_comment("5 # five"), "5")
+    assert_eq(strip_comment("\"a # b\" # c"), "\"a # b\"")

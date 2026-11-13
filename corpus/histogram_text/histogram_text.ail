@@ -1,0 +1,65 @@
+## Histogram: builds 60 pseudo-random scores with a fixed linear congruential
+## generator, buckets them in tens and prints a text histogram plus summary
+## numbers (min, max, mean and nearest-rank percentiles).
+
+fn generate(n int) List[int]
+    mut state := 12345
+    mut out := List[int]()
+    for _ in 0..n
+        state = (state * 1103515245 + 12345) % 2147483648
+        hi := state >> 16
+        out.push(hi % 101)
+    out
+
+fn buckets(xs List[int], width int) List[int]
+    mut counts := List[int]()
+    for _ in 0..(100 / width + 1)
+        counts.push(0)
+    for x in xs
+        counts[x / width] += 1
+    counts
+
+fn bar(n int) str
+    mut out := ""
+    for _ in 0..n
+        out = "{out}#"
+    out
+
+fn percentile(sorted_xs List[int], p int) int
+    n := sorted_xs.len()
+    idx := (p * n + 99) / 100 - 1
+    sorted_xs[idx.max(0)]
+
+fn main()
+    xs := generate(60)
+    counts := buckets(xs, 10)
+    peak := counts.max() else 1
+    print("n = {xs.len()}")
+    for i in 0..counts.len()
+        lo := i * 10
+        hi := (lo + 9).min(100)
+        b := bar(counts[i])
+        print("{lo:>3}-{hi:>3} |{b:<12}| {counts[i]}")
+    ordered := xs.sorted()
+    print("peak bucket count: {peak}")
+    print("min {ordered[0]}, max {ordered[ordered.len() - 1]}, mean {xs.sum() / xs.len()}")
+    for p in [25, 50, 75, 90]
+        print("p{p}: {percentile(ordered, p)}")
+
+@test fn generator_is_deterministic()
+    assert_eq(generate(5), generate(5))
+    assert_eq(generate(10).len(), 10)
+    for x in generate(50)
+        assert(x >= 0 and x <= 100)
+
+@test fn buckets_count_everything()
+    counts := buckets([0, 5, 10, 99, 100], 10)
+    assert_eq(counts.sum(), 5)
+    assert_eq(counts[0], 2)
+    assert_eq(counts[10], 1)
+
+@test fn nearest_rank_percentiles()
+    xs := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert_eq(percentile(xs, 50), 5)
+    assert_eq(percentile(xs, 90), 9)
+    assert_eq(percentile(xs, 1), 1)

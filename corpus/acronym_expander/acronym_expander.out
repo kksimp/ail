@@ -1,0 +1,3 @@
+The GC (Garbage Collector) pauses the CPU (Central Processing Unit) rarely. Each API (Application Programming Interface) call uses the ABI (Application Binary Interface), and the IR (Intermediate Representation) (lowered by the compiler) feeds the CPU backend; the API stays stable, but the XYZ and QQ parts are new. Does GC, again, matter?
+unknown: QQ, XYZ
+known: 5

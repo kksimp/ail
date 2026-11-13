@@ -1,0 +1,8 @@
+# conc.select.3: a send arm on a closed channel traps as `send` does (conc.share.4).
+
+fn main()
+    ch := Channel[int](1)
+    ch.close()
+    print("sending")
+    select
+        ch.send(1) => print("sent")

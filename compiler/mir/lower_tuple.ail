@@ -191,7 +191,7 @@ fn Lower.bind_elem(mut self, p ast.Pattern, e Val)
             declare(n, e.ty, e.id)
             borrowed.add(lookup(n) else "")
         TuplePat => tuple_bind(p, e)
-        Variant | Nested => bind_fields(p, e)
+        Variant | Nested | StructPat => bind_fields(p, e)
         _ => return
 
 ## `a OP b` on tuples: `==` and `!=` through `eq.T`, the orderings through

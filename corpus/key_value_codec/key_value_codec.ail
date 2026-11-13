@@ -1,0 +1,89 @@
+## Key-value codec: encodes pairs as k=v;k=v with backslash escapes for the
+## separators (\\, \; and \=), decodes them back in one pass, and checks that
+## a round trip returns the original pairs.
+
+struct Pair
+    key str
+    val str
+
+fn escape(s str) str
+    mut out := ""
+    bs := "\\"
+    for c in s.chars()
+        if c == '\\' or c == ';' or c == '='
+            out = "{out}{bs}{c}"
+        else
+            out = "{out}{c}"
+    out
+
+fn encode(pairs List[Pair]) str
+    mut parts := List[str]()
+    for p in pairs
+        parts.push("{escape(p.key)}={escape(p.val)}")
+    parts.join(";")
+
+fn decode(text str) List[Pair]
+    mut out := List[Pair]()
+    mut key := ""
+    mut val := ""
+    mut in_key := true
+    mut esc := false
+    for c in text.chars()
+        if esc
+            if in_key
+                key = "{key}{c}"
+            else
+                val = "{val}{c}"
+            esc = false
+        elif c == '\\'
+            esc = true
+        elif c == '=' and in_key
+            in_key = false
+        elif c == ';'
+            if not (in_key and key == "")
+                out.push(Pair(key: key, val: val))
+            key = ""
+            val = ""
+            in_key = true
+        elif in_key
+            key = "{key}{c}"
+        else
+            val = "{val}{c}"
+    if not (in_key and key == "")
+        out.push(Pair(key: key, val: val))
+    out
+
+fn samples() List[List[Pair]]
+    [
+        [Pair(key: "name", val: "Ann Lee"), Pair(key: "role", val: "admin")],
+        [Pair(key: "expr", val: "a=b;c"), Pair(key: "path", val: "C:\\temp\\x")],
+        [Pair(key: "empty", val: ""), Pair(key: "k;ey", val: "v=1")],
+        [],
+    ]
+
+fn main()
+    for pairs in samples()
+        text := encode(pairs)
+        back := decode(text)
+        print("{pairs.len()} pairs -> '{text}' ({text.len()} chars)")
+        for p in back
+            print("  [{p.key}] = [{p.val}]")
+        print("  round trip: {back == pairs}")
+    loose := decode("a=1;;b;c=x=y;")
+    print("loose: {loose.len()} pairs")
+    for p in loose
+        print("  [{p.key}] = [{p.val}]")
+
+@test fn escapes_separators()
+    assert_eq(escape("a=b;c\\d"), "a\\=b\\;c\\\\d")
+    assert_eq(escape("plain"), "plain")
+
+@test fn decodes_escapes()
+    got := decode("k=a\\;b;z=\\=")
+    assert_eq(got.len(), 2)
+    assert_eq(got[0].val, "a;b")
+    assert_eq(got[1].val, "=")
+
+@test fn round_trips()
+    pairs := [Pair(key: "a\\", val: ";;"), Pair(key: "", val: "x")]
+    assert_eq(decode(encode(pairs)), pairs)

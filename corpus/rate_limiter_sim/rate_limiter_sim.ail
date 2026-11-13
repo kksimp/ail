@@ -1,0 +1,100 @@
+## Rate limiter simulation on a fake clock (integer milliseconds): a token
+## bucket (burst of 3, refilled 2 tokens per second) and a fixed window
+## (3 requests per second) judge the same request timeline side by side.
+
+struct Bucket
+    cap int
+    rate int
+    level int
+    last int
+
+fn Bucket.make(burst int, per_sec int) Bucket
+    Bucket(cap: burst, rate: per_sec, level: burst * 1000, last: 0)
+
+## Level is kept in thousandths of a token so refills stay exact.
+fn Bucket.allow(mut self, now int) bool
+    elapsed := now - last
+    last = now
+    level = (level + elapsed * rate).min(cap * 1000)
+    if level >= 1000
+        level -= 1000
+        return true
+    false
+
+struct Window
+    limit int
+    size int
+    start int
+    count int
+
+fn Window.make(max_requests int, window_ms int) Window
+    Window(limit: max_requests, size: window_ms, start: 0, count: 0)
+
+fn Window.allow(mut self, now int) bool
+    slot := now - now % size
+    if slot != start
+        start = slot
+        count = 0
+    if count < limit
+        count += 1
+        return true
+    false
+
+fn verdict(ok bool) str
+    if ok then "ok" else "deny"
+
+fn main()
+    times := [
+        0,
+        50,
+        120,
+        300,
+        450,
+        900,
+        1000,
+        1010,
+        1020,
+        1500,
+        1900,
+        2000,
+        2400,
+        2500,
+        2600,
+        3000,
+        3500,
+    ]
+    mut bucket := Bucket.make(3, 2)
+    mut window := Window.make(3, 1000)
+    mut b_ok := 0
+    mut w_ok := 0
+    print("{"t_ms":>6}  {"bucket":<7}{"window":<7}")
+    for t in times
+        b := bucket.allow(t)
+        w := window.allow(t)
+        if b
+            b_ok += 1
+        if w
+            w_ok += 1
+        print("{t:>6}  {verdict(b):<7}{verdict(w):<7}")
+    print("bucket allowed {b_ok} of {times.len()}, window allowed {w_ok} of {times.len()}")
+
+@test fn bucket_allows_a_burst_then_refills()
+    mut b := Bucket.make(2, 1)
+    assert(b.allow(0))
+    assert(b.allow(0))
+    assert(not b.allow(0))
+    assert(b.allow(1000))
+    assert(not b.allow(1100))
+
+@test fn bucket_never_exceeds_capacity()
+    mut b := Bucket.make(2, 10)
+    assert(b.allow(100000))
+    assert(b.allow(100000))
+    assert(not b.allow(100000))
+
+@test fn window_resets_each_period()
+    mut w := Window.make(2, 1000)
+    assert(w.allow(0))
+    assert(w.allow(999))
+    assert(not w.allow(999))
+    assert(w.allow(1000))

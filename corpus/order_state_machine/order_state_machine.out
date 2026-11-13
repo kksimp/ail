@@ -1,0 +1,12 @@
+order 1: delivered [created>paid>shipped>delivered]
+order 2: cannot ship an order that is created
+order 2: cannot pay an order that is cancelled
+order 2: cannot refund an order that is cancelled
+order 2: cancelled [created>paid>cancelled]
+order 3: cannot cancel an order that is shipped
+order 3: cannot refund an order that is refunded
+order 3: refunded [created>paid>shipped>delivered>refunded]
+order 4: unknown event 'teleport'
+order 4: refunded [created>paid>refunded]
+order 5: cannot deliver an order that is created
+order 5: created [created]

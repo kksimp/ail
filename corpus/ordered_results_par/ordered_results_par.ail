@@ -1,0 +1,82 @@
+## Ordered results from parallel work: the number of divisors of each input is
+## computed three ways: by one task per item (answers arrive in any order and
+## are put back by index), by a `par` comprehension, and by a `par for` that
+## writes each result into its own slot. All three must agree and keep input
+## order.
+
+struct Scored
+    index int
+    value int
+
+fn divisors(n int) int
+    mut c := 0
+    for d in 1..=n
+        if n % d == 0
+            c += 1
+    c
+
+fn score_task(index int, n int, out Channel[Scored])
+    out.send(Scored(index: index, value: divisors(n)))
+
+fn by_tasks(ns List[int]) !List[int]
+    out := Channel[Scored](ns.len() + 1)
+    g := TaskGroup()
+    for i in 0..ns.len()
+        g.add(spawn score_task(i, ns[i], out))
+    g.wait_all()?
+    out.close()
+    got := [x for x in out]
+    [r.value for r in got.sorted(by: |y| y.index)]
+
+fn by_comprehension(ns List[int]) List[int]
+    [divisors(n) par for n in ns]
+
+fn by_par_for(ns List[int]) List[int]
+    mut out := List[int]()
+    for _ in 0..ns.len()
+        out.push(0)
+    par for i in 0..ns.len()
+        out[i] = divisors(ns[i])
+    out
+
+fn label(d int) str
+    if d == 2
+        return "prime"
+    if d >= 24
+        return "highly composite"
+    if d == 3
+        return "prime square"
+    "composite"
+
+fn main() !
+    ns := [12, 97, 360, 1001, 5040, 7, 840, 2310, 999, 64, 1]
+    a := by_tasks(ns)?
+    b := by_comprehension(ns)
+    c := by_par_for(ns)
+    print("{"n":>6}{"divisors":>9}  kind")
+    for i in 0..ns.len()
+        print("{ns[i]:>6}{a[i]:>9}  {label(a[i])}")
+    print("tasks == comprehension: {a == b}")
+    print("tasks == par for: {a == c}")
+    mut best := 0
+    for i in 0..ns.len()
+        if a[i] > a[best]
+            best = i
+    print("most divisors: {ns[best]} with {a[best]}")
+    print("total divisors: {a.sum()}")
+
+@test fn divisor_counts()
+    assert_eq(divisors(1), 1)
+    assert_eq(divisors(12), 6)
+    assert_eq(divisors(97), 2)
+
+@test fn all_three_ways_agree_in_order()
+    ns := [6, 28, 30, 5, 16]
+    assert_eq(by_tasks(ns)?, [4, 6, 8, 2, 5])
+    assert_eq(by_comprehension(ns), [4, 6, 8, 2, 5])
+    assert_eq(by_par_for(ns), [4, 6, 8, 2, 5])
+
+@test fn labels()
+    assert_eq(label(2), "prime")
+    assert_eq(label(6), "composite")
+    assert_eq(label(48), "highly composite")

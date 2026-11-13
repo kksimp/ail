@@ -608,13 +608,33 @@ is evaluated only when needed. `e else return x`, `else break` and
 loosely than every other operator and associates to the right
 (`expr.prec.1`). An `else` followed by an indented block is the binding or
 statement form (`err.else.1–5`); at the start of a statement,
-`e else return ...` is the statement form. A `for` header's iterable may be
+`e else return ...` is the statement form, except as a block's value
+(`err.else.7`). A `for` header's iterable may be
 `e else d`: `for x in j.arr("items") else []`. *(ADR 0144, ADR 0252)*
 
 ```ail skip=context
 fn smallest(nums List[int]) int
     nums.min() else 0
 count := (m.get(k) else 0) + 1
+```
+
+**err.else.7** — When `e else return ...`, `e else break` or `e else
+continue` is the last statement of a block whose value is used (a function
+body, an `if` branch or a `match` arm that gives a value), it is the
+expression of `err.else.6`: its value is `e`'s success value. So a
+function may end with `m.get(key) else return Missing(key: key)`. Anywhere
+else the statement form stays, and a value it would give must be bound
+(`err.else.4`). *(ADR 1095)*
+
+```ail rules=err.else.7
+error enum CfgError
+    Missing(key str) "missing key {key}"
+
+fn need(m Map[str, str], key str) str ! CfgError
+    m.get(key) else return Missing(key: key)
+
+fn main()
+    print(need({"port": "80"}, "port") else "none")    # 80
 ```
 **err.ctx.1** — Each propagation by `?` MUST record its source location in
 the propagated error's return trace. *(ADR 0050)*

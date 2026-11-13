@@ -1,0 +1,115 @@
+## Follow-mode tail simulation: a writer task appends batches of lines to a
+## log file (once it truncates the file, like a log rotation) and a reader,
+## the main task, polls after each batch, reading only what is new from its
+## saved offset. Two channels hand the turn back and forth, so the run is the
+## same every time. A shrunken file makes the reader start again from 0.
+use std.file
+
+struct Batch
+    rotate bool
+    lines List[str]
+
+struct Polled
+    lines List[str]
+    at int
+
+fn batches() List[Batch]
+    [
+        Batch(rotate: true, lines: ["boot start", "boot done"]),
+        Batch(rotate: false, lines: ["GET /a 200"]),
+        Batch(rotate: false, lines: []),
+        Batch(rotate: false, lines: ["GET /b 404", "GET /c 200", "POST /d 201"]),
+        Batch(rotate: true, lines: ["rotated: new log"]),
+        Batch(rotate: false, lines: ["GET /e 200"]),
+    ]
+
+fn text_of(lines List[str]) str
+    mut out := ""
+    for l in lines
+        out = "{out}{l}\n"
+    out
+
+fn apply(p str, b Batch) !
+    if b.rotate
+        fs.write_text(p, text_of(b.lines))?
+    elif not b.lines.is_empty()
+        fs.append_text(p, text_of(b.lines))?
+
+fn writer(p str, ticks Channel[int], acks Channel[int])
+    plan := batches()
+    for i in 0..plan.len()
+        apply(p, plan[i]) else return
+        ticks.send(i + 1)
+        ack := acks.recv() else return
+        if ack != i + 1
+            return
+    ticks.close()
+
+## Reads the lines after `offset`; returns them and the new offset. A file
+## shorter than the offset was rotated, so reading restarts at 0.
+fn poll(p str, offset int) !Polled
+    mut start := offset
+    if fs.metadata(p)?.size < offset
+        start = 0
+    mut r := file.open(p)?
+    r.seek(start)
+    mut fresh := List[str]()
+    while true
+        line := r.read_line()? else break
+        fresh.push(line.trim_end())
+    pos := r.tell()
+    r.close()
+    Polled(lines: fresh, at: pos)
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_file_tail_follow_sim")?
+    p := path.join(dir, "follow.log")
+    ticks := Channel[int](1)
+    acks := Channel[int](1)
+    w := spawn writer(p, ticks, acks)
+    mut offset := 0
+    mut seen := 0
+    for tick in ticks
+        got := poll(p, offset)?
+        if got.at < offset
+            print("poll {tick}: file was rotated")
+        elif got.lines.is_empty()
+            print("poll {tick}: nothing new")
+        for l in got.lines
+            print("poll {tick}: {l}")
+            seen += 1
+        offset = got.at
+        acks.send(tick)
+    w.wait()?
+    print("{seen} lines seen, final offset {offset}")
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn text_of_ends_each_line()
+    assert_eq(text_of(["a", "b"]), "a\nb\n")
+    assert_eq(text_of([]), "")
+
+@test fn poll_reads_only_new_lines()
+    dir := fs.make_temp_dir("corpus_file_tail_follow_sim_t")?
+    p := path.join(dir, "t.log")
+    fs.write_text(p, "one\ntwo\n")?
+    first := poll(p, 0)?
+    assert_eq(first.lines, ["one", "two"])
+    fs.append_text(p, "three\n")?
+    second := poll(p, first.at)?
+    assert_eq(second.lines, ["three"])
+    assert_eq(poll(p, second.at)?.lines.len(), 0)
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn shrunken_file_restarts_from_zero()
+    dir := fs.make_temp_dir("corpus_file_tail_follow_sim_r")?
+    p := path.join(dir, "r.log")
+    fs.write_text(p, "a long first line\n")?
+    cut := poll(p, 0)?
+    fs.write_text(p, "new\n")?
+    again := poll(p, cut.at)?
+    assert_eq(again.lines, ["new"])
+    fs.remove(p)?
+    fs.remove(dir)?

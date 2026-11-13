@@ -1,0 +1,18 @@
+file       style   crlf  lf  cr bytes
+unix.txt   lf         0   3   0    17
+dos.txt    crlf       3   0   0    17
+mixed.txt  mixed      1   1   1    26
+oldmac.txt cr         0   0   3     6
+empty.txt  none       0   0   0     0
+-- to LF: rewrote 3 of 5 files
+file       style   crlf  lf  cr bytes
+unix.txt   lf         0   3   0    17
+dos.txt    lf         0   3   0    14
+mixed.txt  lf         0   3   0    25
+oldmac.txt lf         0   3   0     6
+empty.txt  none       0   0   0     0
+-- to CRLF: rewrote 2 of 2 files
+file       style   crlf  lf  cr bytes
+unix.txt   crlf       3   0   0    20
+dos.txt    crlf       3   0   0    17
+cleaned up: true

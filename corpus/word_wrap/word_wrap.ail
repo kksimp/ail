@@ -1,0 +1,83 @@
+## Word wrap: greedy line breaking at a column width, with left-aligned and
+## fully justified output (extra spaces go to the leftmost gaps).
+
+fn spaces(n int) str
+    mut out := ""
+    mut k := 0
+    while k < n
+        out = "{out} "
+        k += 1
+    out
+
+fn wrap(text str, width int) List[str]
+    mut lines := List[str]()
+    mut cur := ""
+    for w in text.words()
+        if cur == ""
+            cur = w
+        elif cur.len() + 1 + w.len() <= width
+            cur = "{cur} {w}"
+        else
+            lines.push(cur)
+            cur = w
+    if cur != ""
+        lines.push(cur)
+    lines
+
+fn justify_line(line str, width int) str
+    ws := line.words()
+    if ws.len() < 2
+        return line
+    mut letters := 0
+    for w in ws
+        letters += w.len()
+    gaps := ws.len() - 1
+    total := width - letters
+    base := total / gaps
+    extra := total % gaps
+    mut out := ws[0]
+    for i in 1..ws.len()
+        mut n := base
+        if i <= extra
+            n += 1
+        out = "{out}{spaces(n)}{ws[i]}"
+    out
+
+fn justify(lines List[str], width int) List[str]
+    mut out := List[str]()
+    for i in 0..lines.len()
+        if i + 1 < lines.len()
+            out.push(justify_line(lines[i], width))
+        else
+            out.push(lines[i])
+    out
+
+fn boxed(lines List[str], width int)
+    for line in lines
+        body := line.pad_right(width, ' ')
+        print("|{body}|")
+
+fn main()
+    text := "AIL is a garbage collected, memory safe systems language designed so that humans and AI agents can both read, write and check programs with the same confidence."
+    print("width 30, left aligned:")
+    boxed(wrap(text, 30), 30)
+    print("width 30, justified:")
+    boxed(justify(wrap(text, 30), 30), 30)
+    print("width 12:")
+    boxed(wrap(text, 12), 12)
+    print("a long word does not break:")
+    boxed(wrap("tiny supercalifragilistic word", 10), 20)
+
+@test fn wraps_greedily()
+    assert_eq(wrap("aaa bbb ccc", 7), ["aaa bbb", "ccc"])
+    assert_eq(wrap("aaa bbb ccc", 11), ["aaa bbb ccc"])
+    assert_eq(wrap("", 5).len(), 0)
+
+@test fn justifies_to_width()
+    assert_eq(justify_line("a b c", 9), "a   b   c")
+    assert_eq(justify_line("a b c", 8), "a   b  c")
+    assert_eq(justify_line("solo", 9), "solo")
+
+@test fn every_wrapped_line_fits()
+    for line in wrap("the quick brown fox jumps over the lazy dog", 12)
+        assert(line.len() <= 12)

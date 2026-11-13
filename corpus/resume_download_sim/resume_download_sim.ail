@@ -1,0 +1,89 @@
+## Resumable download simulation: a "server" serves byte ranges of a source
+## text. A client downloads it in chunks into a local file, but the link drops
+## after a few chunks. Each retry resumes from the size of the partial file
+## instead of starting over, and the finished file is verified against the
+## source with CRC-32 and SHA-256.
+use std.file
+use std.hash
+
+struct Attempt
+    start int
+    got int
+    done bool
+
+fn make_source(blocks int) str
+    mut parts := List[str]()
+    for i in 0..blocks
+        parts.push("block {i:03}: {"abcdefghij".slice(i % 10, 10)}-{i * 7919 % 1000:03}\n")
+    parts.join("")
+
+fn fetch(source str, off int, count int) str
+    source.slice(off, (off + count).min(source.len()))
+
+fn download(source str, p str, chunk int, budget int) !Attempt
+    if not fs.exists(p)
+        fs.write_text(p, "")?
+    start := fs.metadata(p)?.size
+    mut w := file.append(p)?
+    mut off := start
+    mut used := 0
+    while off < source.len() and used < budget
+        piece := fetch(source, off, chunk)
+        w.write(piece)?
+        off += piece.byte_len()
+        used += 1
+    w.close()?
+    Attempt(start: start, got: off - start, done: off >= source.len())
+
+fn verify(source str, p str) !bool
+    got := fs.read_text(p)?
+    hash.crc32(got) == hash.crc32(source) and hash.sha256(got) == hash.sha256(source)
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_resume_download_sim")?
+    p := path.join(dir, "payload.part")
+    source := make_source(60)
+    print("source: {source.len()} bytes, crc {hash.crc32(source).to_hex()}")
+    budgets := [4, 3, 5, 100]
+    mut sent := 0
+    mut restart_cost := 0
+    for i in 0..budgets.len()
+        a := download(source, p, 128, budgets[i])?
+        sent += a.got
+        restart_cost += a.start + a.got
+        print("attempt {i + 1}: resumed at {a.start:>4}, received {a.got:>4}, done {a.done}")
+        if a.done
+            break
+    print("bytes on the wire: {sent}")
+    print("bytes if every retry restarted: {restart_cost}")
+    print("verified: {verify(source, p)?}")
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn resumes_where_the_file_ends()
+    dir := fs.make_temp_dir("corpus_resume_download_sim_t")?
+    p := path.join(dir, "t.part")
+    src := make_source(20)
+    a := download(src, p, 50, 2)?
+    assert_eq(a, Attempt(start: 0, got: 100, done: false))
+    b := download(src, p, 50, 2)?
+    assert_eq(b.start, 100)
+    assert(verify(src, p)? == false, "half a file does not verify")
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn a_big_budget_finishes_in_one_go()
+    dir := fs.make_temp_dir("corpus_resume_download_sim_f")?
+    p := path.join(dir, "f.part")
+    src := make_source(10)
+    a := download(src, p, 64, 1000)?
+    assert(a.done, "finished")
+    assert_eq(a.got, src.len())
+    assert(verify(src, p)?, "matches the source")
+    fs.remove(p)?
+    fs.remove(dir)?
+
+@test fn fetch_clamps_at_the_end()
+    assert_eq(fetch("abcdef", 4, 10), "ef")
+    assert_eq(fetch("abcdef", 0, 3), "abc")

@@ -85,6 +85,9 @@ fn Checker.gen_start(mut self, f ast.FnDecl, ret Ty) Ty?
             With(_, _, _, inner, _) => gen_rules(inner, "`with`")
             While(_, inner, _) => gen_rules(inner, within)
             Unsafe(inner, _) => gen_rules(inner, within)
+            Select(arms, _) =>
+                for inner in ast.select_bodies(arms)
+                    gen_rules(inner, within)
             Eval(e) => gen_rules_expr(e, within)
             Let(_, _, _, value, _) => gen_rules_expr(value, within)
             _ => continue

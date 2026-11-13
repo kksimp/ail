@@ -32,6 +32,16 @@ if [ -n "$on_windows" ]; then
                 for a in "${@:2}"; do
                     case "$a" in --trace | --trace=* | --trace-limit | --watch | --watch=* | --verbose | --at | --show | --record | --replay | --deterministic | --deny | --allow) fast= ;; esac
                 done ;;
+            run)
+                # `run FILE [ARGS...]` with no option of ail's (AIL_FAST_RUN=1, which win-gate.ps1 sets for most suites):
+                # a PowerShell start costs about a second and the spec and cases suites make thousands of runs. This is
+                # ail.ps1's own sequence for a plain run (check, prepare, start the program) without it.
+                if [ "${AIL_FAST_RUN:-}" = 1 ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ] && [ -f "$2" ]; then
+                    fast=run
+                    for a in "${@:3}"; do
+                        case "$a" in -*) fast= ;; esac
+                    done
+                fi ;;
             check)
                 # `check FILE...` and `check --json FILE...` only: every other option is ail.ps1's.
                 if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then fast=check; fi
@@ -43,6 +53,19 @@ if [ -n "$on_windows" ]; then
         if [ -n "$fast" ]; then
             export AIL_ROOT="$wroot" AIL_COMPILER="$wroot/compiler" AIL="${AIL:-$wroot/ail.cmd}"
             if [ "$fast" = check ]; then shift; exec "$wroot/.native/ail.exe" check-program "$@"; fi
+            if [ "$fast" = run ]; then
+                # The program's own run settings are hidden from the compiler and put back before it starts (ail.ps1).
+                export AIL_PKG_WRITE_LOCK=1
+                ( unset AIL_GC_STATS AIL_GC_VERIFY AIL_MAX_MEMORY_MB AIL_TIMEOUT_MS AIL_LEAK; exec "$wroot/.native/ail.exe" check-program "$2" ) || exit $?
+                prep_err="${TMPDIR:-/tmp}/ail-run-$$.err"
+                prep_rc=0
+                prep=$( unset AIL_GC_STATS AIL_GC_VERIFY AIL_MAX_MEMORY_MB AIL_TIMEOUT_MS AIL_LEAK; "$wroot/.native/ail.exe" prepare "$2" 2>"$prep_err" ) || prep_rc=$?
+                if [ "$prep_rc" != 0 ]; then cat "$prep_err" >&2; exit 1; fi
+                prog="${prep##*$'\n'}"; prog="${prog%$'\r'}"
+                export AIL_RUN_FILE="$2"
+                shift 2
+                exec "$prog" "$@"
+            fi
             exec "$wroot/.native/ail.exe" "$@"
         fi
     fi
@@ -449,7 +472,12 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
     # shellcheck disable=SC2086
-    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || exit $?
+    # eff.allow.10: with no `--allow`, the scopes of the package's `caps` lines become the run's policy.
+    policy_file=
+    if [ -z "$allow_list" ]; then policy_file="$(mktemp)"; check_opts="$check_opts --policy-out $policy_file"; fi
+    # shellcheck disable=SC2086
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || { [ -z "$policy_file" ] || rm -f "$policy_file"; exit 1; }
+    if [ -n "$policy_file" ]; then allow_list="$(cat "$policy_file")"; rm -f "$policy_file"; fi
     prep_err="$(mktemp)"
     # shellcheck disable=SC2086
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then

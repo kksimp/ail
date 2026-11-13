@@ -1,0 +1,133 @@
+## Validates sudoku boards. A board is nine strings of nine characters, with
+## '.' for an empty cell. Every row, column and 3x3 box is scanned for a
+## repeated digit; the program lists the problems and says whether the board is
+## complete.
+
+fn parse_board(rows List[str]) List[int]
+    mut cells := List[int]()
+    for line in rows
+        for ch in line.chars()
+            digit := ch.to_digit(10) else 0
+            cells.push(digit)
+    cells
+
+fn row_cells(r int) List[int]
+    [r * 9 + k for k in 0..9]
+
+fn col_cells(c int) List[int]
+    [k * 9 + c for k in 0..9]
+
+fn box_cells(b int) List[int]
+    [(b / 3 * 3 + k / 3) * 9 + (b % 3 * 3 + k % 3) for k in 0..9]
+
+fn first_repeat(cells List[int], idxs List[int]) int
+    mut seen := Set[int]()
+    for i in idxs
+        d := cells[i]
+        if d != 0 and not seen.add(d)
+            return d
+    0
+
+fn empties(cells List[int]) int
+    mut n := 0
+    for v in cells
+        if v == 0
+            n += 1
+    n
+
+fn problems(cells List[int]) List[str]
+    mut out := List[str]()
+    for r in 0..9
+        a := first_repeat(cells, row_cells(r))
+        if a != 0
+            out.push("row {r + 1} repeats {a}")
+    for c in 0..9
+        b := first_repeat(cells, col_cells(c))
+        if b != 0
+            out.push("column {c + 1} repeats {b}")
+    for x in 0..9
+        e := first_repeat(cells, box_cells(x))
+        if e != 0
+            out.push("box {x + 1} repeats {e}")
+    out
+
+fn verdict(cells List[int]) str
+    found := problems(cells)
+    if not found.is_empty()
+        return "invalid"
+    if empties(cells) > 0
+        return "valid so far, {empties(cells)} cells empty"
+    "valid and complete"
+
+fn report(title str, rows List[str])
+    cells := parse_board(rows)
+    print("{title}: {verdict(cells)}")
+    for p in problems(cells)
+        print("  {p}")
+
+fn main()
+    solved := [
+        "534678912",
+        "672195348",
+        "198342567",
+        "859761423",
+        "426853791",
+        "713924856",
+        "961537284",
+        "287419635",
+        "345286179",
+    ]
+    partial := [
+        "53..7....",
+        "6..195...",
+        ".98....6.",
+        "8...6...3",
+        "4..8.3..1",
+        "7...2...6",
+        ".6....28.",
+        "...419..5",
+        "....8..79",
+    ]
+    broken := [
+        "535678912",
+        "672195348",
+        "198342567",
+        "859761423",
+        "426853791",
+        "713924856",
+        "961537284",
+        "287419635",
+        "345286179",
+    ]
+    report("solved", solved)
+    report("partial", partial)
+    report("broken", broken)
+
+@test fn solved_board_is_valid()
+    cells := parse_board([
+        "534678912",
+        "672195348",
+        "198342567",
+        "859761423",
+        "426853791",
+        "713924856",
+        "961537284",
+        "287419635",
+        "345286179",
+    ])
+    assert_eq(cells.len(), 81)
+    assert(problems(cells).is_empty())
+    assert_eq(empties(cells), 0)
+
+@test fn duplicate_in_a_row_is_found()
+    mut cells := List[int]()
+    for k in 0..81
+        cells.push(0)
+    cells[0] = 7
+    cells[8] = 7
+    found := problems(cells)
+    assert_eq(found, ["row 1 repeats 7"])
+
+@test fn box_cells_cover_the_box()
+    assert_eq(box_cells(0), [0, 1, 2, 9, 10, 11, 18, 19, 20])
+    assert_eq(box_cells(8), [60, 61, 62, 69, 70, 71, 78, 79, 80])

@@ -1,0 +1,114 @@
+## INI writer: turns a list of section/key/value items into INI text. Sections
+## are sorted (global keys first); values with edge spaces or ; # " are quoted
+## and escaped. A small reader parses the text back to check the round trip.
+
+struct Item
+    sec str
+    key str
+    val str
+
+fn needs_quote(v str) bool
+    v != v.trim() or v.contains(";") or v.contains("#") or v.contains("\"")
+
+fn quote(v str) str
+    bs := '\u{5c}'
+    dq := '\u{22}'
+    mut body := ""
+    for c in v.chars()
+        if c == dq or c == bs
+            body = "{body}{bs}{c}"
+        else
+            body = "{body}{c}"
+    "\"{body}\""
+
+fn unquote(raw str) str
+    if raw.len() >= 2 and raw.starts_with("\"") and raw.ends_with("\"")
+        bs := '\u{5c}'
+        mut out := ""
+        mut esc := false
+        for c in raw.slice(1, raw.len() - 1).chars()
+            if esc
+                out = "{out}{c}"
+                esc = false
+            elif c == bs
+                esc = true
+            else
+                out = "{out}{c}"
+        return out
+    raw
+
+fn write_ini(items List[Item]) str
+    mut secs := List[str]()
+    for entry in items
+        if not secs.contains(entry.sec)
+            secs.push(entry.sec)
+    mut lines := List[str]()
+    for sec in secs.sorted()
+        if sec != ""
+            if not lines.is_empty()
+                lines.push("")
+            lines.push("[{sec}]")
+        for item in items
+            if item.sec == sec
+                v := if needs_quote(item.val) then quote(item.val) else item.val
+                line := if v == "" then "{item.key} =" else "{item.key} = {v}"
+                lines.push(line)
+    lines.join("\n")
+
+fn read_ini(text str) List[Item]
+    mut out := List[Item]()
+    mut current := ""
+    for raw in text.lines()
+        line := raw.trim()
+        if line == "" or line.starts_with(";") or line.starts_with("#")
+            continue
+        if line.starts_with("[") and line.ends_with("]")
+            current = line.slice(1, line.len() - 1)
+            continue
+        idx := line.find("=") else continue
+        out.push(Item(
+            sec: current,
+            key: line.slice(0, idx).trim(),
+            val: unquote(line.slice(idx + 1, line.len()).trim()),
+        ))
+    out
+
+fn main()
+    items := [
+        Item(sec: "", key: "name", val: "demo app"),
+        Item(sec: "server", key: "host", val: "localhost"),
+        Item(sec: "server", key: "port", val: "8080"),
+        Item(sec: "", key: "debug", val: "true"),
+        Item(sec: "paths", key: "root", val: " /srv/app "),
+        Item(sec: "paths", key: "note", val: "a;b # c"),
+        Item(sec: "server", key: "motto", val: "say \"hi\" now"),
+        Item(sec: "paths", key: "empty", val: ""),
+        Item(sec: "db", key: "dsn", val: "user=ail;pass=x"),
+        Item(sec: "db", key: "dir", val: r"C:\data"),
+    ]
+    text := write_ini(items)
+    print(text)
+    print("---")
+    back := read_ini(text)
+    expected := items.sorted(by: |e| e.sec)
+    print("items: {items.len()}, read back: {back.len()}")
+    verdict := if back == expected then "ok" else "MISMATCH"
+    print("round trip: {verdict}")
+
+@test fn quotes_only_when_needed()
+    assert(not needs_quote("plain"))
+    assert(needs_quote(" lead"))
+    assert(needs_quote("a;b"))
+    assert_eq(quote("a\"").len(), 5)
+
+@test fn unquote_reverses_quote()
+    assert_eq(unquote(quote("a \"b\" ; c")), "a \"b\" ; c")
+    assert_eq(unquote("bare"), "bare")
+
+@test fn round_trips_sections()
+    items := [
+        Item(sec: "b", key: "k", val: " v "),
+        Item(sec: "", key: "g", val: "1"),
+        Item(sec: "b", key: "j", val: ""),
+    ]
+    assert_eq(read_ini(write_ini(items)), items.sorted(by: |e| e.sec))

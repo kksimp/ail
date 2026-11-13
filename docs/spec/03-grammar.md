@@ -17,7 +17,7 @@ applies. *(ADR 0108)*
 `<>`, `Color::Red`, `Point{...}`, `new`, braces around blocks, `:` after a
 block header, a line-ending `\`, `f"..."`) is reported once, at its first token. The message says what AIL
 has instead, and the diagnostic carries a fix when the AIL spelling can be
-written without knowing more than the source shows. *(ADR 0262)*
+written without knowing more than the source shows. *(ADR 0262, ADR 1092)*
 
 ```ail error=gram.foreign.1
 fn main()
@@ -25,6 +25,30 @@ fn main()
     n++
     print(n)
 ```
+
+The habits of Rust, Go and TypeScript that are reported under this rule, with
+the AIL spelling the help names (a fix is attached where the repair is certain,
+marked *fix*):
+
+| Habit | AIL |
+|---|---|
+| `Some(x)`, `Ok(x)` (*fix*), `Err(e)` | `x`; `return Variant` |
+| `Result[T, E]` (*fix*) | `T ! E` |
+| `let x = e`, `let mut x = e` (*fix*) | `x := e`, `mut x := e` |
+| `if let Some(x) = e` (*fix*), `while let` | `if x := e`; `x := e else break` |
+| `n as float` (*fix*) | `n.to_float()` |
+| `vec![..]` (*fix*), `println!(..)` (*fix*), `format!(..)` | `[..]`, `print(..)`, interpolation |
+| `&T`, `&mut T` (*fix*) | `T` |
+| `.iter()`, `.collect()`, `.unwrap_or(d)`, `.push_str(s)`, `.to_string()` (*fix*) | iterate directly, `x else d`, interpolation, `to_str()` |
+| `match x {` | `match x` and an indented arm per line |
+| `struct T(float)`, `type X = Y`, `interface` | a struct with a named field, `trait` |
+| `go f()`, `ch <- x`, `<-ch` | `spawn`, `ch.send(x)`, `ch.recv()` |
+| `for cond` (*fix*), `for i, x := range xs` (*fix*) | `while cond`, `for i, x in xs.enumerate()` |
+| `a, b = b, a`, `v, err := f()` | a temporary, `v := f()?` |
+| `fn (p P) name()`, `append(xs, x)`, `make(..)` (*fix*) | `fn P.name(self)`, `xs.push(x)`, `Map[K, V]()` |
+| `outer: for` | no labels: a function or a flag |
+| `===` (*fix*), `??` (*fix*), `[...xs, 3]`, `(x) => e` | `==`, `else`, `xs.extend(ys)`, `\|x\| e` |
+| `for (const x of xs)` (*fix*), `console.log` | `for x in xs`, `print` |
 
 ## Recovery and help
 
@@ -43,7 +67,7 @@ one edit away, and applying the fix would change the program's meaning.
 *(ADR 0263)*
 
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
-write. A rule without a specific help has a default one. *(ADR 0262)*
+write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*
 
 ```ail tool=check,FILE status=2 expect=help: rules=gram.help.1
 fn main()

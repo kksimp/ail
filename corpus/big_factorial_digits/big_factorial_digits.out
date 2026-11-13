@@ -1,0 +1,17 @@
+5! has 3 digits, digit sum 3, 1 trailing zeros
+  = 120
+10! has 7 digits, digit sum 27, 2 trailing zeros
+  = 3628800
+20! has 19 digits, digit sum 54, 4 trailing zeros
+  = 2432902008176640000
+25! has 26 digits, digit sum 72, 6 trailing zeros
+  = 15511210043330985984000000
+50! has 65 digits, digit sum 216, 12 trailing zeros
+  starts 304140932017...
+100! has 158 digits, digit sum 648, 24 trailing zeros
+  starts 933262154439...
+250! has 493 digits, digit sum 1953, 62 trailing zeros
+  starts 323285626090...
+2^100 = 1267650600228229401496703205376
+digit sum of 2^100: 115
+0! = 1

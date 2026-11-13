@@ -1,0 +1,8 @@
+block: period 1, shift (0,0), population 4
+beehive: period 1, shift (0,0), population 6
+blinker: period 2, shift (0,0), population 3
+toad: period 2, shift (0,0), population 6
+beacon: period 2, shift (0,0), population 8
+glider: period 4, shift (1,1), population 5
+r-pentomino: no period within 12 generations, population 12
+lonely pair: dies out at generation 1

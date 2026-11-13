@@ -82,6 +82,7 @@ pub fn check.call_help(str) str?
 pub fn check.function_help(str) str?
 pub struct check.GenCheck
 pub fn check.new_gen_check() check.GenCheck
+pub fn check.grants_policy(ast.Program) str
 pub fn check.check_handles(ast.Program) List[check.Diag]
 pub check.LIST_FN_METHODS := ...
 pub fn check.check_moves(ast.Program, List[check.Moved]) List[check.Diag]
@@ -122,6 +123,10 @@ pub enum check.Def
 pub struct check.Bind
 pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
+pub struct check.BindDecl
+pub check.LIST_VOCAB := ...
+pub check.SET_VOCAB := ...
+pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1595); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1651); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

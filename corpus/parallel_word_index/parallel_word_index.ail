@@ -1,0 +1,86 @@
+## Parallel word index: one task per document reads its file, counts the
+## words and sends a partial table over a channel. Main merges the partials,
+## in document order, into an inverted index (word -> "doc:count" postings)
+## and answers a few queries.
+
+struct Partial
+    doc str
+    counts Map[str, int]
+
+fn clean(text str) str
+    mut out := ""
+    for ch in text.chars()
+        if ch.is_alpha()
+            out = "{out}{ch}"
+        else
+            out = "{out} "
+    out.to_lower()
+
+fn count_words(text str) Map[str, int]
+    mut counts := Map[str, int]()
+    for w in clean(text).words()
+        counts[w] += 1
+    counts
+
+fn index_file(p str, out Channel[Partial])
+    text := fs.read_text(p) else ""
+    out.send(Partial(doc: path.base(p), counts: count_words(text)))
+
+fn build_index(dir str, names List[str]) !Map[str, List[str]]
+    out := Channel[Partial](names.len() + 1)
+    g := TaskGroup()
+    for name in names
+        g.add(spawn index_file(path.join(dir, name), out))
+    g.wait_all()?
+    out.close()
+    merge_partials([x for x in out])
+
+fn merge_partials(parts List[Partial]) Map[str, List[str]]
+    mut idx := Map[str, List[str]]()
+    for part in parts.sorted(by: |q| q.doc)
+        for w, n in part.counts
+            idx.push(w, "{part.doc}:{n}")
+    idx
+
+fn lookup(idx Map[str, List[str]], w str) str
+    if not idx.contains(w)
+        return "-"
+    idx[w].join(" ")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_parallel_word_index")?
+    names := ["a.txt", "b.txt", "c.txt", "d.txt"]
+    texts := [
+        "The quick brown fox jumps over the lazy dog.",
+        "A river runs past the old mill; the river is cold.",
+        "The fox met the dog by the river.",
+        "Quick quick: the mill is closed.",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    idx := build_index(dir, names)?
+    mut postings := 0
+    for w in idx.keys()
+        postings += idx[w].len()
+    print("{idx.len()} words, {postings} postings")
+    shared := [w for w in idx.keys().sorted() if idx[w].len() >= 3]
+    print("in 3+ docs: {shared.join(" ")}")
+    for q in ["fox", "river", "the", "quick", "zebra"]
+        print("{q:<6}{lookup(idx, q)}")
+    for name in names
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn counts_ignore_case_and_punctuation()
+    c := count_words("Hi, hi! HI?")
+    assert_eq(c["hi"], 3)
+    assert_eq(c.len(), 1)
+
+@test fn index_lists_postings_in_document_order()
+    y_doc := Partial(doc: "y.txt", counts: count_words("dog"))
+    x_doc := Partial(doc: "x.txt", counts: count_words("cat dog cat"))
+    idx := merge_partials([y_doc, x_doc])
+    assert_eq(lookup(idx, "cat"), "x.txt:2")
+    assert_eq(lookup(idx, "dog"), "x.txt:1 y.txt:1")
+    assert_eq(lookup(idx, "emu"), "-")

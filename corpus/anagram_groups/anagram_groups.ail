@@ -1,0 +1,52 @@
+## Anagram groups: files words under their sorted-letter signature and prints
+## the groups with more than one member, biggest first.
+
+fn signature(word str) str
+    word.to_lower().chars().sorted().join("")
+
+fn group_words(words List[str]) Map[str, List[str]]
+    mut groups := Map[str, List[str]]()
+    mut seen := Set[str]()
+    for w in words
+        lower := w.to_lower()
+        if seen.add(lower)
+            groups.push(signature(lower), lower)
+    groups
+
+fn is_anagram(a str, b str) bool
+    sa := signature(a.replace(" ", ""))
+    sb := signature(b.replace(" ", ""))
+    sa == sb
+
+fn ranked(groups Map[str, List[str]]) List[str]
+    mut keys := List[str]()
+    for k in groups.keys().sorted()
+        if groups[k].len() > 1
+            keys.push(k)
+    keys.sorted(by: |key| -groups[key].len())
+
+fn main()
+    text := "listen silent enlist google gogole inlets stone notes onset tones steno apple pleap banana nabana cat act tac dog god odg bird Listen"
+    words := text.words()
+    groups := group_words(words)
+    print("words: {words.len()}, signatures: {groups.len()}")
+    for k in ranked(groups)
+        members := groups[k].sorted()
+        print("{k:<8} {members.len()}  {members.join(", ")}")
+    singles := groups.len() - ranked(groups).len()
+    print("without anagrams: {singles}")
+    print(is_anagram("Dormitory", "dirty room"))
+    print(is_anagram("hello", "world"))
+
+@test fn signature_ignores_order_and_case()
+    assert_eq(signature("Stone"), "enost")
+    assert_eq(signature("notes"), signature("ONSET"))
+
+@test fn groups_and_dedupes()
+    g := group_words(["tea", "eat", "ate", "tea", "bat"])
+    assert_eq(g.len(), 2)
+    assert_eq(g[signature("tea")], ["tea", "eat", "ate"])
+
+@test fn phrase_anagrams()
+    assert(is_anagram("a gentleman", "elegant man"))
+    assert(not is_anagram("abc", "abd"))

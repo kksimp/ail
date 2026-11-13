@@ -1,0 +1,2 @@
+# One scope before the change (eff.allow.11).
+package app caps fs.read=./data

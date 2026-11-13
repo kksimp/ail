@@ -1,0 +1,106 @@
+## Turnstile state machine with a transition table. States: locked, unlocked,
+## warned (pushed while locked) and alarm (pushed again). Inputs are coin (C),
+## push (P) and reset (R). `step` is pure; scripts are replayed to show the
+## trace, passes through the gate and alarms raised.
+
+enum State
+    Locked
+    Unlocked
+    Warned
+    Alarm
+
+enum Input
+    Coin
+    Push
+    Reset
+
+fn State.label(self) str
+    match self
+        Locked => "locked"
+        Unlocked => "unlocked"
+        Warned => "warned"
+        Alarm => "alarm"
+
+fn State.letter(self) str
+    match self
+        Locked => "L"
+        Unlocked => "U"
+        Warned => "W"
+        Alarm => "A"
+
+fn step(s State, i Input) State
+    match s
+        Locked =>
+            match i
+                Coin => State.Unlocked
+                Push => State.Warned
+                Reset => State.Locked
+        Unlocked =>
+            match i
+                Coin => State.Unlocked
+                Push => State.Locked
+                Reset => State.Locked
+        Warned =>
+            match i
+                Coin => State.Unlocked
+                Push => State.Alarm
+                Reset => State.Locked
+        Alarm =>
+            match i
+                Coin => State.Alarm
+                Push => State.Alarm
+                Reset => State.Locked
+
+fn parse_input(c char) Input?
+    if c == 'C'
+        return Input.Coin
+    if c == 'P'
+        return Input.Push
+    if c == 'R'
+        return Input.Reset
+    none
+
+fn table_row(s State) str
+    a := step(s, Input.Coin).label()
+    b := step(s, Input.Push).label()
+    c := step(s, Input.Reset).label()
+    "{s.label():<9} {a:<9} {b:<9} {c}"
+
+fn run(script str) str
+    mut cur := State.Locked
+    mut trace := "L"
+    mut alarms := 0
+    mut passes := 0
+    mut skipped := 0
+    for ch in script.chars()
+        inp := parse_input(ch) else
+            skipped += 1
+            continue
+        nxt := step(cur, inp)
+        if nxt == State.Alarm and cur != State.Alarm
+            alarms += 1
+        if cur == State.Unlocked and inp == Input.Push
+            passes += 1
+        trace = "{trace}{nxt.letter()}"
+        cur = nxt
+    "{trace} final={cur.label()} passes={passes} alarms={alarms} skipped={skipped}"
+
+fn main()
+    print("state     coin      push      reset")
+    for s in [State.Locked, State.Unlocked, State.Warned, State.Alarm]
+        print(table_row(s))
+    for script in ["CP", "PPCP", "PPPCR", "PPPCCRCP", "CPCPCP", "XCPX", ""]
+        print("{script:<9} {run(script)}")
+
+@test fn coin_then_push_passes()
+    assert(step(State.Locked, Input.Coin) == State.Unlocked)
+    assert(step(State.Unlocked, Input.Push) == State.Locked)
+
+@test fn second_push_raises_alarm()
+    assert(step(State.Warned, Input.Push) == State.Alarm)
+    assert(step(State.Alarm, Input.Coin) == State.Alarm)
+    assert(step(State.Alarm, Input.Reset) == State.Locked)
+
+@test fn replay_counts()
+    assert_eq(run("CPCP"), "LULUL final=locked passes=2 alarms=0 skipped=0")
+    assert_eq(run("PPR"), "LWAL final=locked passes=0 alarms=1 skipped=0")

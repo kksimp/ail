@@ -62,20 +62,27 @@ if (Test-Path $native) {
 # itself, so it runs alone after the others. times.log has the seconds each suite took, slowest first.
 $suites = @(Get-Content (Join-Path $PSScriptRoot 'suites.txt') | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
 if ($args.Count -gt 0) { $suites = $args }
-$jobs = if ("$env:GATE_JOBS" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS } else { [Math]::Min(4, [Math]::Max(1, [int]$env:NUMBER_OF_PROCESSORS)) }
+$jobs = if ("$env:GATE_JOBS" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS } else { [Math]::Min($(if ("$env:GATE_JOBS_MAX" -match '^[1-9]\d*$') { [int]$env:GATE_JOBS_MAX } else { 4 }), [Math]::Max(1, [int]$env:NUMBER_OF_PROCESSORS)) }
 $tmpBase = $env:TMPDIR.TrimEnd('/')
 $times = @()
 
 function Start-Suite([string]$name) {
-    $tmp = "$tmpBase/gate-$name"
+    # `cases@1/4` is shard 1 of 4 of a suite (tools\gate\suites.txt): its files are named cases_1_4.
+    $tag = $name -replace '[@/]', '_'
+    $tmp = "$tmpBase/gate-$tag"
     if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-    $log = Join-Path $out "gate_$name.log"
+    $log = Join-Path $out "gate_$tag.log"
     # The child takes the environment as it is now: its own TMPDIR, then ours back.
     $env:TMPDIR = $tmp
+    # AIL_FAST_RUN=1 (`./ail`, under Git's sh): a plain `ail run FILE` skips the PowerShell start (about a second each, and the
+    # cases and spec suites make thousands). `examples`, `cli`, `build_cache` and `docs` keep the full ail.ps1 path, so it
+    # stays gated here; GATE_FAST_RUN=0 turns the fast path off for every suite.
+    if ($env:GATE_FAST_RUN -ne '0' -and $name -notin 'examples', 'cli', 'build_cache', 'docs') { $env:AIL_FAST_RUN = '1' } else { Remove-Item Env:AIL_FAST_RUN -ErrorAction SilentlyContinue }
     $p = Start-Process -FilePath powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$ail`" run tools/gate/gate.ail $name" -WorkingDirectory $root -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
     $null = $p.Handle   # without this, ExitCode can read empty after the process ends
     $env:TMPDIR = $tmpBase
+    Remove-Item Env:AIL_FAST_RUN -ErrorAction SilentlyContinue
     @{ Name = $name; Proc = $p; Log = $log; Tmp = $tmp; Start = Get-Date }
 }
 
@@ -93,7 +100,9 @@ function Finish-Suite($r) {
     if ($rc -eq 0 -and $redLines.Count -eq 0) { return }
     $script:fails++
     "RED $($r.Name)"
-    Select-String -Path $r.Log -Pattern $pattern | Select-Object -First 8 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
+    # Every failing case of the suite in one pass (GATE_SHOW lines, default 60), so one round fixes them all.
+    $show = if ("$env:GATE_SHOW" -match '^[1-9]\d*$') { [int]$env:GATE_SHOW } else { 60 }
+    Select-String -Path $r.Log -Pattern $pattern | Select-Object -First $show | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
 }
 
 function Run-Pool([string[]]$names, [int]$width) {
@@ -112,10 +121,24 @@ function Run-Pool([string[]]$names, [int]$width) {
     }
 }
 
+# nativex is sharded (`nativex@K/N`, one process each, suites.txt), so its shards share the pool with the other suites
+# instead of one process per core running alone at the end. A bare `nativex` argument is still the whole suite, alone.
 $alone = @($suites | Where-Object { $_ -eq 'nativex' })
 Run-Pool @($suites | Where-Object { $_ -ne 'nativex' }) $jobs
 if ($alone.Count -gt 0) { Run-Pool $alone 1 }
 $times | Sort-Object Seconds -Descending | ForEach-Object { "$($_.Seconds)`t$($_.Suite)" } | Set-Content (Join-Path $out 'times.log')
+# The shards of a suite must have run every item exactly once (all N shards, one total, ran counts add up, none empty).
+if ($args.Count -eq 0 -and $fails -eq 0) {
+    $sh = @(Get-ChildItem $out -Filter 'gate_*.log' | ForEach-Object { Select-String -Path $_.FullName -Pattern '^SHARD ' } | ForEach-Object { $f = $_.Line -split ' '; [pscustomobject]@{ Name = $f[1]; K = [int](($f[2] -split '/')[0]); N = [int](($f[2] -split '/')[1]); Total = [int]$f[4]; Ran = [int]$f[6] } })
+    foreach ($g in ($sh | Group-Object Name)) {
+        $n = $g.Group[0].N; $ks = @($g.Group | ForEach-Object { $_.K } | Sort-Object -Unique)
+        $sum = ($g.Group | Measure-Object Ran -Sum).Sum
+        $totals = @($g.Group | ForEach-Object { $_.Total } | Sort-Object -Unique)
+        if ($g.Count -ne $n -or $ks.Count -ne $n -or $totals.Count -ne 1 -or $sum -ne $totals[0] -or @($g.Group | Where-Object { $_.Ran -eq 0 }).Count -gt 0) {
+            $fails++; "RED shards of $($g.Name) do not cover it exactly once ($($g.Count) of $n shards, ran $sum of $($totals -join '/'))"
+        }
+    }
+}
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'ps1-args-test.ps1') *> (Join-Path $out 'ps1_args.log')
 if ($LASTEXITCODE -ne 0) { $fails++; 'RED ps1_args'; Get-Content (Join-Path $out 'ps1_args.log') | Select-Object -First 8 }
 # The shipped commands with only git on PATH (ADR 1059).

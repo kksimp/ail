@@ -1,0 +1,13 @@
+# A list one element shorter than the highest fixed index the guard tests
+# (native.bce.10): the checked loop runs and traps at the same access, with the same
+# message, as without the guard.
+fn rows(s List[int], n int) int
+    mut t := 0
+    for r in 1..4
+        b := r * 3 - 1
+        for c in 0..n
+            t += s[b] * c + s[b + 2]
+    t
+
+fn main()
+    print(rows([i - 3 for i in 0..10], 2))

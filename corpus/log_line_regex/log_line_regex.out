@@ -1,0 +1,14 @@
+2024-03-05 user bob from 10.0.0.7
+skip: this line is garbage
+2024-03-05 user ann from 10.0.0.9
+skip: 2024-03-05 25:99 [INFO] web: truncated
+level ERROR: 1
+level INFO: 4
+level WARN: 1
+component auth: 2
+component db: 1
+component web: 3
+hour 00: 1
+hour 12: 3
+hour 13: 2
+skipped 2, timed 4, total 5162ms, mean 1290ms

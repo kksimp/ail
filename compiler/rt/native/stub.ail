@@ -1,0 +1,139 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Test stubs (ADR 1101, test.stub.1-6). `ail test` gives each test the table file
+## `$AIL_STUBS`; `std.test` (`test.files`, `test.env`, `test.clock`, `test.advance`,
+## `test.http`) appends one line to it per stub, and the standard-library calls below
+## answer from it before they touch the real file system, variable, clock or network.
+## With no `$AIL_STUBS` a call costs one scan of the environment. No global slots: the
+## table is read at each call, so a stub lasts exactly as long as the test's directory.
+##
+## A line is `KIND TAB A TAB B TAB C`, each field with `%` as `%25`, newline as `%0A`
+## and tab as `%09`. `F` file (A path, B text), `E` variable (A name, B value),
+## `C` clock set (A ms), `A` clock advance (A ms), `H` response (A `METHOD URL`, B body,
+## C status). A later line for the same file, variable or request replaces an earlier one.
+
+## A field of a table line, as the program wrote it.
+fn stub_un(s str) str
+    s.replace("%0A", "\n").replace("%09", "\t").replace("%25", "%")
+
+## The path of the table, "" when the run has none. The operating-system status is left as found.
+fn stub_path() str
+    ok := load64(global(OS_OK))
+    er := load64(global(OS_ERR))
+    p := os_env_get("AIL_STUBS")
+    got := os_ok()
+    store64(global(OS_OK), ok)
+    store64(global(OS_ERR), er)
+    if got
+        return p
+    ""
+
+## The text of the table, "" when there is none.
+fn stub_table() str
+    p := stub_path()
+    if pol_len(p) == 0
+        return ""
+    ok := load64(global(OS_OK))
+    er := load64(global(OS_ERR))
+    t := os_fs_read_text(p)
+    got := os_ok()
+    store64(global(OS_OK), ok)
+    store64(global(OS_ERR), er)
+    if got
+        return t
+    ""
+
+## The last line of `kind` whose first field is `key` (a path when `how` is 1, compared as
+## `eff.allow.3` compares paths; else the exact text), "" when there is none.
+fn stub_line(kind str, key str, how int) str
+    t := stub_table()
+    if pol_len(t) == 0
+        return ""
+    want := if how == 1 then pol_canon(key) else key
+    if how == 1 and pol_len(want) == 0
+        return ""
+    head := str_cat(kind, "\t")
+    mut found := ""
+    for line in t.split("\n")
+        if not line.starts_with(head)
+            continue
+        f := line.split("\t")
+        if f.len() < 3
+            continue
+        k := stub_un(f[1])
+        if how == 1
+            if pol_canon(k) == want
+                found = line
+        elif k == key
+            found = line
+    found
+
+## The text of the stubbed file `path`, with whether there is one.
+fn stub_file_has(path str) bool
+    pol_len(stub_line("F", path, 1)) > 0
+
+fn stub_file_text(path str) str
+    stub_un(stub_line("F", path, 1).split("\t")[2])
+
+## The stubbed value of the variable `name`, with whether there is one.
+fn stub_env_has(name str) bool
+    pol_len(stub_line("E", name, 0)) > 0
+
+fn stub_env_value(name str) str
+    stub_un(stub_line("E", name, 0).split("\t")[2])
+
+## The stubbed clock, in milliseconds, -1 when `test.clock` has not been called.
+fn stub_clock() int
+    t := stub_table()
+    if pol_len(t) == 0
+        return -1
+    mut base := -1
+    mut add := 0
+    for line in t.split("\n")
+        f := line.split("\t")
+        if f.len() < 2
+            continue
+        n := f[1].to_int() else 0
+        if f[0] == "C"
+            base = n
+            add = 0
+        elif f[0] == "A" and base >= 0
+            add += n
+    if base < 0
+        return -1
+    base + add
+
+## A sleep on the stubbed clock advances it and returns at once.
+fn stub_advance(ms int)
+    p := stub_path()
+    if pol_len(p) == 0
+        return
+    ok := load64(global(OS_OK))
+    er := load64(global(OS_ERR))
+    os_fs_append_text(p, "A\t{ms}\t\t\n")
+    store64(global(OS_OK), ok)
+    store64(global(OS_ERR), er)
+
+## The response object (`status`, headers, text, all headers, bytes) of the stubbed request
+## `METHOD URL`, 0 when there is none.
+fn stub_http(method str, url str) int
+    sl := stub_line("H", "{method} {url}", 0)
+    if pol_len(sl) == 0
+        return 0
+    f := sl.split("\t")
+    body := stub_un(f[2])
+    mut status := 200
+    if f.len() > 3
+        status = f[3].to_int() else 200
+    n := pol_len(body)
+    text := net_text(str_addr(body) + 16, n)
+    raw := str_new(n, n)
+    copy_bytes(raw + 16, str_addr(body) + 16, n)
+    resp := obj_new(40, 4)
+    store64(resp, status)
+    store64(resp + 8, map_new(1, 0, 0))
+    store64(resp + 16, str_addr(text))
+    store64(resp + 24, map_new(1, 1, 8))
+    store64(resp + 32, raw)
+    resp

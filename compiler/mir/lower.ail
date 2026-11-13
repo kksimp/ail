@@ -257,7 +257,8 @@ pub fn lower_package_par(
     lazy int,
     pooled Set[str],
 ) Module ! Problems
-    srcs := with_error_owners(shadow_free(input, lazy))
+    # type.distinct.7: distinct types are their bases in native code (lower_distinct.ail).
+    srcs := with_error_owners(shadow_free(erase_distinct(input), lazy))
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
@@ -715,10 +716,15 @@ fn is_const_expr(e ast.Expr) bool
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
 
-## An optional of a type that is immutable and shared when copied (a boxed
-## number, a string, an enum): it can be a list element or field.
+## An optional shared when copied: it can be a list element, map value or
+## field. A boxed number, string or enum is immutable; a struct, tuple, list
+## or map inside an optional is never written in place either, since only a
+## variable or a field or element of one is a place (expr.bind.6) and
+## unwrapping it into a `mut` binding copies it (own.val.1).
 fn is_shared_opt(t Ty) bool
     inner := t.opt_inner() else return false
+    if needs_copy(inner)
+        return true
     is_number(inner) or inner == Ty.Str or is_enum(inner) or is_shared_opt(inner)
 
 fn is_number(t Ty) bool
@@ -1118,6 +1124,7 @@ fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
         Eval(e) => e
+        Handle(value, other) => ast.tail_else(value, other)
         _ => none
 
 # ---- statements ----
@@ -1125,7 +1132,7 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
-    if is_pop_call(value)
+    if is_list_pop(value)
         got := lower_pop_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
             return
@@ -1258,7 +1265,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             note_statement(e)
-            if is_pop_call(e) and lower_pop_stmt(e) != none
+            if is_list_pop(e) and lower_pop_stmt(e) != none
                 return
             uniq_discard(e, lower_expr(e, Ty.Unit))
         Handle(value, other) => lower_handle(value, other)
@@ -1266,6 +1273,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
+        LocalFn(d) => lower_local_fn(d)
+        Select(arms, pos) => lower_select(arms, pos)
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
@@ -2099,6 +2108,8 @@ fn Lower.lower_method(
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
+        if is_enum_static(en, name)
+            return lower_enum_static(en, name, args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
         assoc_instance(recv, name)
@@ -2121,6 +2132,8 @@ fn Lower.lower_method(
         return lower_chan_method(r, name, npos, args)
     if is_sync(r.ty) or is_task_cancel(recv, name)
         return lower_sync_method(r, name, npos, args)
+    if is_vocab_call(r.ty, name)
+        return lower_vocab(r, name, args, npos)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
@@ -2134,6 +2147,8 @@ fn Lower.lower_method(
     if s := struct_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
+    if is_enum_name(r.ty, name, args)
+        return lower_enum_name(r, npos)
     if s := enum_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)

@@ -314,3 +314,34 @@ fn fs_truncate(path str, len int, at str)
         fsattr_fail(path, r, at)
         return
     os_succeed()
+
+## `fs.sync(path)` (std.fs.38): asks the operating system to put the file's
+## data on the disk. Opens the file for writing without changing it, then
+## `fsync` (Linux), `F_FULLFSYNC` falling back to `fsync` (macOS, whose plain
+## `fsync` stops at the drive's cache), `FlushFileBuffers` (Windows).
+fn fs_sync(path str, at str)
+    pol_fs(path, true, "fs.sync")
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, K_NOT_FOUND, at)
+        return
+    fd := os_open(p, 1, 0)
+    if fd < 0
+        fsattr_fail(path, fd, at)
+        return
+    mut r := 0
+    if target() == 3
+        if import_call("FlushFileBuffers", win_h(fd), 0, 0, 0) == 0
+            r = win_err()
+    elif target() == 2
+        r = syscall(92, fd, 51, 0, 0, 0, 0)
+        if r < 0
+            r = syscall(95, fd, 0, 0, 0, 0, 0)
+    else
+        r = syscall(os_pick(74, 82, 95), fd, 0, 0, 0, 0, 0)
+    os_close(fd)
+    if r < 0
+        fsattr_fail(path, r, at)
+        return
+    os_succeed()

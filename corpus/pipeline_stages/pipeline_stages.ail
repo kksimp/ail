@@ -1,0 +1,92 @@
+## A staged batch pipeline over order records: parse CSV-like lines, drop
+## invalid orders, price each one, then aggregate per customer. Every stage
+## is its own function and the program reports how many records each stage
+## received and passed on.
+
+struct Order
+    customer str
+    item str
+    qty int
+    price int
+
+struct Totals
+    orders int
+    amount int
+
+## Stage 1: lines that do not have four fields with numeric qty and price are dropped.
+fn parse_stage(lines List[str]) List[Order]
+    mut out := List[Order]()
+    for line in lines
+        f := line.split(",")
+        if f.len() != 4
+            continue
+        qty := f[2].to_int() else continue
+        price := f[3].to_int() else continue
+        out.push(Order(customer: f[0], item: f[1], qty: qty, price: price))
+    out
+
+## Stage 2: only orders with a positive quantity survive.
+fn validate_stage(orders List[Order]) List[Order]
+    orders.filter(|o| o.qty > 0)
+
+## Stage 3: the amount of each order.
+fn price_stage(orders List[Order]) List[int]
+    orders.map(|o| o.qty * o.price)
+
+## Stage 4: orders and money per customer.
+fn aggregate_stage(orders List[Order], amounts List[int]) Map[str, Totals]
+    mut by := Map[str, Totals]()
+    for i in 0..orders.len()
+        c := orders[i].customer
+        cur := by.get(c) else Totals(orders: 0, amount: 0)
+        by[c] = Totals(orders: cur.orders + 1, amount: cur.amount + amounts[i])
+    by
+
+fn stage_line(name str, got int, passed int)
+    print("{name:<10} in {got:>2} out {passed:>2}")
+
+fn main()
+    lines := [
+        "ann,pen,3,2",
+        "bob,ink,x,5",
+        "ann,pad,2,7",
+        "cy,pen,0,2",
+        "bob,pen,10,2",
+        "dan,cap,1",
+        "cy,ink,4,5",
+        "",
+        "ann,ink,1,5",
+        "bob,pad,5,7",
+    ]
+    parsed := parse_stage(lines)
+    stage_line("parse", lines.len(), parsed.len())
+    valid := validate_stage(parsed)
+    stage_line("validate", parsed.len(), valid.len())
+    amounts := price_stage(valid)
+    stage_line("price", valid.len(), amounts.len())
+    by := aggregate_stage(valid, amounts)
+    stage_line("aggregate", amounts.len(), by.len())
+    for c in by.keys().sorted()
+        print("{c:<4}{by[c].orders:>2} orders {by[c].amount:>4}")
+    print("grand total {amounts.sum()}")
+
+@test fn parse_drops_malformed_lines()
+    got := parse_stage(["a,b,1,2", "a,b,x,2", "short", ""])
+    assert_eq(got.len(), 1)
+    assert_eq(got[0].qty, 1)
+
+@test fn validate_drops_zero_quantity()
+    os := [
+        Order(customer: "a", item: "i", qty: 0, price: 1),
+        Order(customer: "b", item: "i", qty: 2, price: 1),
+    ]
+    assert_eq(validate_stage(os).len(), 1)
+
+@test fn aggregate_sums_per_customer()
+    os := [
+        Order(customer: "a", item: "i", qty: 1, price: 4),
+        Order(customer: "a", item: "j", qty: 2, price: 3),
+    ]
+    by := aggregate_stage(os, price_stage(os))
+    assert_eq(by["a"].orders, 2)
+    assert_eq(by["a"].amount, 10)

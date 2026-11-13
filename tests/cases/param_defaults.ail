@@ -1,0 +1,28 @@
+# expr.call.4: a parameter with a default may be left out and is passed by name.
+struct Client
+    base str
+
+fn Client.get(self, path str, retries int = 3, tags List[str] = []) str
+    "{base}{path} {retries} {tags.len()}"
+
+fn Client.make(base str, secure bool = true) Client
+    if secure
+        return Client(base: "https://{base}")
+    Client(base: base)
+
+fn fetch(url str, retries int = 3, timeout_ms int = 5000) str
+    "{url} {retries} {timeout_ms}"
+
+fn pick[T](items List[T], skip int = 0) int
+    items.len() - skip
+
+fn main()
+    print(fetch("a"))
+    print(fetch("b", timeout_ms: 10))
+    print(fetch("c", timeout_ms: 1, retries: 2))
+    c := Client.make("x.org")
+    print(c.get("/p"))
+    print(c.get("/q", retries: 9, tags: ["t"]))
+    print(Client.make("y", secure: false).base)
+    print(pick([1, 2, 3]))
+    print(pick([1, 2, 3], skip: 2))

@@ -55,6 +55,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     c.check_main()
     c.check_attrs()
     c.check_impls()
+    c.check_distinct_decls()
     for i in 0..p.structs.len()
         c.gap_now = false
         c.check_invariants(i)
@@ -125,6 +126,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     c.diags.extend(c.check_par())
     c.diags.extend(c.check_par_comps())
     c.remap_generated()
+    c.diags = quiet_unused(c.diags)
     report := Report(
         diags: c.diags,
         gapped: c.gapped.sorted(),
@@ -279,6 +281,8 @@ fn Checker.check_fn(mut self, idx int)
         end_fn(idx)
         return
     body := f.body else []
+    bind_decls = []
+    bind_seen = Set[int]()
     sig := sigs[idx]
     scope = fn_scopes[idx]
     self_ty = fn_self[idx]
@@ -288,6 +292,7 @@ fn Checker.check_fn(mut self, idx int)
     pending = []
     loop_depth = 0
     unsafe_depth = 0
+    check_param_defaults(f, sig)
     if f.unsafe_fn
         unsafe_opt_in(f.pos)
     catching = 0
@@ -328,6 +333,7 @@ fn Checker.check_fn(mut self, idx int)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
+    report_unused()
     record_locals(0)
     gen.elem = none
     scope = []
@@ -447,6 +453,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         LetTuple(names, value, at) =>
             let_tuple(names, value, at)
             Ty.Unit
+        LocalFn(d) =>
+            local_fn(d)
+            Ty.Unit
         Assign(target, op, value, at) =>
             assign(target, op, value, at)
             Ty.Unit
@@ -458,6 +467,10 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             # expr.loop.7: `while true` with no `break` of its own never finishes.
             if is_true(cond) and not breaks(body) then Ty.Never else Ty.Unit
         Handle(value, otherwise) =>
+            # err.else.7: a block's last `e else return ...` gives its value.
+            if need
+                if e := ast.tail_else(value, otherwise)
+                    return expr(e, expect, true)
             handle(value, otherwise)
             Ty.Unit
         For(_, var, var_pos, mutable, iter, body, _) =>
@@ -504,6 +517,7 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Defer(inner, at) =>
             defer_stmt(inner, at)
             Ty.Unit
+        Select(arms, at) => select_stmt(arms, at)
 
 @allow("expr.match.3") fn is_true(e ast.Expr) bool
     match e
@@ -515,7 +529,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     # so is a `mut` local that starts as `none`.
     opt := mutable and is_none_literal(value)
     if (is_empty_literal(value) or opt) and otherwise == none
-        if declare(n, at)
+        # eff.use.1: `_ := e` throws the value away; `_` is never a binding.
+        if n != "_" and declare(n, at)
             index := locals.len()
             locals.push(Local(
                 name: n,
@@ -554,8 +569,11 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
             )
         else
             err("expr.bind.1", expr_pos(value), text)
+    if n == "_"
+        return
     if declare(n, at)
         locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+        note_binding(n, at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
         diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(
@@ -702,7 +720,7 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
         "err.else.4",
         expr_pos(value),
         "this {what}, and has a value ({show(vt)}); `else` on its own handles only results with no value",
-        "bind the value: `x := ... else ...`",
+        "bind the value: `x := ... else ...`; as the last line of a block, `... else return ...` gives the value (err.else.7)",
     )
 
 ## Help for `else` on a value that is never absent (expr.name.2).
@@ -714,6 +732,18 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                 return "`x.to_int()` on a float traps on NaN or out of range; it never returns `none`"
             none
         _ => none
+
+## Whether `o` is the `else break` that the parser writes for `while name := e`
+## (expr.loop.8): its `break` sits at the `while`, before the value `at`.
+fn while_bound(at ast.Pos, o ast.Else) bool
+    mut found := false
+    match o
+        Leave(s) =>
+            match s
+                Break(p) => found = p.line < at.line or (p.line == at.line and p.col < at.col)
+                _ => found = false
+        _ => found = false
+    found
 
 ## The `else` part of `x := e else ...`; returns the type bound to `x`
 ## (err.else.1-3).
@@ -731,7 +761,15 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
         Unknown => ok = Ty.Unknown
         _ =>
             text := "`else` handles a value that can be absent (`T?`) or fail (`T ! E`), but this is {show(vt)}"
-            if h := never_absent_help(value)
+            if while_bound(at, o)
+                # `while name := e` is written as `name := e else break` (expr.loop.8).
+                err_help(
+                    "expr.loop.8",
+                    at,
+                    "`while name := e` needs `e` to be `T?` or `T ! E`, but this is {show(vt)}",
+                    "use `while cond` for a `bool` condition, or make `e` return a `T?`",
+                )
+            elif h := never_absent_help(value)
                 err_help("err.else.1", at, text, h)
             else
                 err("err.else.1", at, text)
@@ -1171,6 +1209,16 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             )
         expr(value, none, true)
         return
+    # type.deque.6: a deque's elements are read with `d[i]`, set with `d.set`.
+    if deque_element_target(target)
+        err_help(
+            "type.deque.6",
+            expr_pos(target),
+            "a deque element can't be assigned with `d[i] = v`",
+            "write `d.set(i, v)`",
+        )
+        expr(value, none, true)
+        return
     # type.bytes.2: `bytes` never changes in place.
     if bytes_element_target(target)
         err_help(
@@ -1406,6 +1454,15 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
         )
         Defer(st, _) => overlap_in_stmt(target, st)
         LetTuple(_, value, _) => overlap_in_expr(target, value)
+        # A local function's body works on copies (type.fn.5).
+        LocalFn => none
+        Select(arms, _) =>
+            if at := overlap_in_list(target, ast.select_heads(arms))
+                return at
+            for body in ast.select_bodies(arms)
+                if at := overlapping_use(target, body)
+                    return at
+            none
         Break => none
         Continue => none
 
@@ -1545,6 +1602,13 @@ fn stmt_breaks(s ast.Stmt) bool
         While(cond, _, _) => breaks_in_expr(cond)
         For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
         LetTuple(_, value, _) => breaks_in_expr(value)
+        # A local function's body can't leave the enclosing loop (type.fn.9).
+        LocalFn => false
+        Select(arms, _) =>
+            for body in ast.select_bodies(arms)
+                if breaks(body)
+                    return true
+            any_breaks(ast.select_heads(arms))
         Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool
@@ -1673,6 +1737,24 @@ fn Checker.check_field_defaults(mut self, struct_index int)
         if not accepts(want, got)
             mismatch("type.struct.5", expr_pos(d), want, got)
     locals = []
+
+## expr.call.4: a parameter's default is a plain constant of the parameter's
+## type, under the same rule as a struct field's (type.struct.8).
+fn Checker.check_param_defaults(mut self, f ast.FnDecl, sig Sig)
+    for k in 0..f.params.len()
+        d := f.params[k].default else continue
+        if bad := plain_default(d)
+            err_help(
+                "expr.call.4",
+                expr_pos(bad),
+                "`{f.params[k].name}`'s default isn't a plain constant",
+                "write literals, `none`, `[]`, `\{}`, or lists, sets, maps and tuples of them; a default has no names or calls, so build anything else where you call",
+            )
+            continue
+        want := sig.params[k].ty
+        got := expr(d, want, true)
+        if not accepts(want, got)
+            mismatch("expr.call.2", expr_pos(d), want, got)
 
 ## The first part of a field default that isn't a plain constant (type.struct.8).
 @allow("expr.match.3") fn plain_default(e ast.Expr) ast.Expr?

@@ -1,0 +1,82 @@
+## Coin change. Dynamic programming finds the fewest coins for an amount (and
+## which ones) and counts the ways to make it; a greedy cashier is shown beside
+## it, because greedy is optimal for some coin systems and wrong for others.
+
+INF := 1000000000
+
+struct Change
+    count int
+    used List[int]
+
+fn make_change(coins List[int], amount int) Change
+    mut best := [0]
+    mut pick := [0]
+    for a in 1..=amount
+        mut cheapest := INF
+        mut chosen := 0
+        for c in coins
+            if c <= a and best[a - c] + 1 < cheapest
+                cheapest = best[a - c] + 1
+                chosen = c
+        best.push(cheapest)
+        pick.push(chosen)
+    if best[amount] >= INF
+        return Change(count: -1, used: [])
+    mut used := List[int]()
+    mut left := amount
+    while left > 0
+        used.push(pick[left])
+        left -= pick[left]
+    Change(count: best[amount], used: used.sorted().reversed())
+
+fn greedy(coins List[int], amount int) int
+    mut left := amount
+    mut count := 0
+    for c in coins.sorted().reversed()
+        while left >= c
+            left -= c
+            count += 1
+    if left == 0 then count else -1
+
+fn count_ways(coins List[int], amount int) int
+    mut ways := [1]
+    for a in 1..=amount
+        ways.push(0)
+    for c in coins
+        for t in c..=amount
+            ways[t] = ways[t] + ways[t - c]
+    ways[amount]
+
+fn text_of(n int) str
+    if n < 0 then "none" else "{n}"
+
+fn report(name str, coins List[int], amounts List[int])
+    print("{name}: coins {coins.join(" ")}")
+    for amount in amounts
+        best := make_change(coins, amount)
+        mix := if best.count < 0 then "-" else best.used.join("+")
+        print("  {amount:>3}: optimal {text_of(best.count)} [{mix}], greedy {text_of(greedy(coins, amount))}, ways {count_ways(coins, amount)}")
+
+fn main()
+    report("us", [1, 5, 10, 25], [0, 30, 41, 99, 100])
+    report("odd", [1, 3, 4], [6, 7, 11, 15])
+    report("sparse", [5, 10], [7, 15, 35])
+    report("euro", [1, 2, 5, 10, 20, 50], [48, 93])
+
+@test fn greedy_can_be_wrong()
+    assert_eq(greedy([1, 3, 4], 6), 3)
+    assert_eq(make_change([1, 3, 4], 6).count, 2)
+
+@test fn impossible_amounts()
+    assert_eq(make_change([5, 10], 7).count, -1)
+    assert_eq(greedy([5, 10], 7), -1)
+    assert_eq(count_ways([5, 10], 7), 0)
+
+@test fn ways_to_change_a_dollar()
+    assert_eq(count_ways([1, 5, 10, 25], 100), 242)
+    assert_eq(count_ways([1, 2, 5], 5), 4)
+
+@test fn optimal_uses_the_amount_exactly()
+    best := make_change([1, 5, 10, 25], 63)
+    assert_eq(best.used.sum(), 63)
+    assert_eq(best.count, 6)

@@ -256,6 +256,7 @@ fn Lower.unwind_loop(mut self)
     match s
         Let(_, p, _, _, _) => p
         LetTuple(_, _, p) => p
+        LocalFn(d) => d.pos
         Eval(e) => group_end_expr(e)
         Assign(target, _, _, _) => group_end_expr(target)
         Handle(e, _) => group_end_expr(e)
@@ -263,6 +264,7 @@ fn Lower.unwind_loop(mut self)
         For(_, _, _, _, _, _, p) => p
         With(_, _, _, _, p) => p
         Unsafe(_, p) => p
+        Select(_, p) => p
         Return(_, p) => p
         _ => none
 

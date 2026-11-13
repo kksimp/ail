@@ -1,0 +1,96 @@
+## Lock-free counters: worker tasks share only atomics. A running total and a
+## hit counter use `add`, the maximum is tracked with a compare-and-swap loop,
+## and a bool flag lets exactly one worker claim the first big sample. The
+## totals are checked against a single-threaded run, and a `par for` bumps an
+## atomic too.
+
+struct Result
+    total int
+    hits int
+    best int
+    claims int
+
+fn sample(id int, i int) int
+    (id * 37 + i * 11) % 101
+
+fn record_max(best Atomic[int], v int)
+    while true
+        cur := best.load()
+        if v <= cur
+            break
+        if best.cas(cur, v)
+            break
+
+fn worker(
+    id int,
+    rounds int,
+    total Atomic[int],
+    hits Atomic[int],
+    best Atomic[int],
+    first Atomic[bool],
+    claims Atomic[int],
+)
+    for i in 0..rounds
+        v := sample(id, i)
+        total.add(v)
+        if v >= 90
+            hits.add(1)
+            if first.cas(false, true)
+                claims.add(1)
+        record_max(best, v)
+
+fn run(workers int, rounds int) !Result
+    total := Atomic(0)
+    hits := Atomic(0)
+    best := Atomic(0)
+    first := Atomic(false)
+    claims := Atomic(0)
+    g := TaskGroup()
+    for id in 0..workers
+        g.add(spawn worker(id, rounds, total, hits, best, first, claims))
+    g.wait_all()?
+    Result(total: total.load(), hits: hits.load(), best: best.load(), claims: claims.load())
+
+fn expected(workers int, rounds int) Result
+    mut r := Result(total: 0, hits: 0, best: 0, claims: 0)
+    for id in 0..workers
+        for i in 0..rounds
+            v := sample(id, i)
+            r.total += v
+            if v >= 90
+                r.hits += 1
+                r.claims = 1
+            r.best = r.best.max(v)
+    r
+
+fn square_sum(xs List[int]) int
+    n := Atomic(0)
+    par for x in xs
+        n.add(x * x)
+    n.load()
+
+fn main() !
+    for cfg in [[4, 500], [8, 200]]
+        got := run(cfg[0], cfg[1])?
+        want := expected(cfg[0], cfg[1])
+        print("{cfg[0]} workers x {cfg[1]} rounds")
+        print("  total {got.total}, hits {got.hits}, best {got.best}, claims {got.claims}")
+        print("  matches sequential run: {got == want}")
+    xs := [3, 1, 4, 1, 5, 9, 2, 6]
+    print("par for square sum: {square_sum(xs)}")
+
+@test fn atomics_match_the_sequential_run()
+    assert_eq(run(3, 60)?, expected(3, 60))
+
+@test fn no_rounds_leaves_zeros()
+    r := run(4, 0)?
+    assert_eq(r, Result(total: 0, hits: 0, best: 0, claims: 0))
+
+@test fn one_worker_claims_the_flag_once()
+    r := run(6, 100)?
+    assert_eq(r.claims, 1)
+    assert(r.best <= 100, "samples stay below 101")
+
+@test fn square_sum_is_exact()
+    assert_eq(square_sum([1, 2, 3]), 14)
+    assert_eq(square_sum([]), 0)

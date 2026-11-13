@@ -11,6 +11,7 @@ pub struct fmt.Formatted  ## The result of `format`: `status` 0 is done and `tex
     pub diags List[syntax.Diag]
     pub why str
 pub fn fmt.format(src str) fmt.Formatted  ## The canonical form of `src`.
+pub fn fmt.format_with(original str, write_self bool) fmt.Formatted  ## `format`, with `write_self` choosing whether bare members get `self.` (fmt.self).
 ```
 
-trimmed to fit 2000 tokens (~180); dropped: private items
+trimmed to fit 2000 tokens (~231); dropped: private items

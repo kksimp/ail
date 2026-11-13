@@ -1,0 +1,72 @@
+## Pascal's triangle built row by row. Prints the first rows as a centred
+## triangle, the row sums (powers of two), a binomial coefficient read from a
+## deep row, and the odd entries drawn as a Sierpinski pattern.
+
+fn next_row(row List[int]) List[int]
+    mut out := [1]
+    for i in 1..row.len()
+        out.push(row[i - 1] + row[i])
+    out.push(1)
+    out
+
+fn triangle(count int) List[List[int]]
+    mut rows := [[1]]
+    for k in 1..count
+        rows.push(next_row(rows[k - 1]))
+    rows
+
+fn choose(n int, k int) int
+    row := triangle(n + 1)[n]
+    row[k]
+
+fn show_row(row List[int], indent int) str
+    pad := "".pad_left(indent, ' ')
+    mut text := pad
+    for v in row
+        text = "{text}{v:>4}"
+    text
+
+fn sierpinski(row List[int], indent int) str
+    pad := "".pad_left(indent, ' ')
+    mut marks := List[str]()
+    for v in row
+        marks.push(if v % 2 == 1 then "*" else ".")
+    "{pad}{marks.join(" ")}"
+
+fn odd_count(row List[int]) int
+    mut n := 0
+    for v in row
+        if v % 2 == 1
+            n += 1
+    n
+
+fn main()
+    rows := triangle(10)
+    for r in 0..rows.len()
+        print(show_row(rows[r], 2 * (rows.len() - 1 - r)))
+    sums := [part.sum() for part in rows]
+    print("row sums: {sums.join(" ")}")
+    print("C(20, 10) = {choose(20, 10)}")
+    print("C(30, 3) = {choose(30, 3)}")
+    big := triangle(16)
+    for q in 0..big.len()
+        print(sierpinski(big[q], big.len() - 1 - q))
+    odd_counts := [odd_count(line) for line in big]
+    print("odd entries per row: {odd_counts.join(" ")}")
+
+@test fn rows_are_symmetric()
+    for row in triangle(12)
+        assert_eq(row.reversed(), row)
+
+@test fn sums_are_powers_of_two()
+    rows := triangle(15)
+    mut expect := 1
+    for row in rows
+        assert_eq(row.sum(), expect)
+        expect *= 2
+
+@test fn choose_matches_known_values()
+    assert_eq(choose(5, 2), 10)
+    assert_eq(choose(10, 0), 1)
+    assert_eq(choose(10, 10), 1)
+    assert_eq(choose(6, 3), 20)

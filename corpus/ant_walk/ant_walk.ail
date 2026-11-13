@@ -1,0 +1,98 @@
+## Langton's ant and its generalisations on a wrapping 24 by 24 grid. A rule
+## string like "RL" gives one turn per cell colour (R right, L left); the ant
+## turns, advances the cell colour, and steps forward. Prints coloured-cell
+## counts at checkpoints for three rules and draws the classic ant at step 120.
+
+SIZE := 24
+
+struct Ant
+    cells List[int]
+    rules List[char]
+    x int
+    y int
+    heading int
+
+fn Ant.with_rules(rules str) Ant
+    mut flat := List[int]()
+    for i in 0..SIZE * SIZE
+        flat.push(0)
+    Ant(cells: flat, rules: rules.chars(), x: 12, y: 12, heading: 0)
+
+fn Ant.step(mut self)
+    spot := self.y * SIZE + self.x
+    colour := self.cells[spot]
+    if self.rules[colour] == 'R'
+        self.heading = (self.heading + 1) % 4
+    else
+        self.heading = (self.heading + 3) % 4
+    self.cells[spot] = (colour + 1) % self.rules.len()
+    dxs := [0, 1, 0, -1]
+    dys := [-1, 0, 1, 0]
+    self.x = (self.x + dxs[self.heading] + SIZE) % SIZE
+    self.y = (self.y + dys[self.heading] + SIZE) % SIZE
+
+fn Ant.coloured(self) int
+    mut n := 0
+    for c in cells
+        if c != 0
+            n += 1
+    n
+
+fn Ant.render(self) List[str]
+    arrows := ["^", ">", "v", "<"]
+    mut out := List[str]()
+    for r in 0..SIZE
+        mut row := List[str]()
+        for c in 0..SIZE
+            if r == y and c == x
+                row.push(arrows[heading])
+            elif cells[r * SIZE + c] != 0
+                row.push("#")
+            else
+                row.push(".")
+        out.push(row.join(""))
+    out
+
+fn run(rules str, checkpoints List[int])
+    mut a := Ant.with_rules(rules)
+    mut steps := 0
+    for upto in checkpoints
+        while steps < upto
+            a.step()
+            steps += 1
+        print("  {rules}: step {steps:>4} coloured {a.coloured():>3} at {a.x},{a.y}")
+
+fn main()
+    for rules in ["RL", "LLRR", "RLR"]
+        print("rule {rules}")
+        run(rules, [10, 100, 400, 1000])
+    mut a := Ant.with_rules("RL")
+    for i in 0..120
+        a.step()
+    print("classic ant after 120 steps")
+    for line in a.render()
+        print(line)
+
+@test fn first_steps_of_the_classic_ant()
+    mut a := Ant.with_rules("RL")
+    a.step()
+    assert_eq(a.coloured(), 1)
+    assert_eq(a.x, 13)
+    assert_eq(a.y, 12)
+    a.step()
+    assert_eq(a.x, 13)
+    assert_eq(a.y, 13)
+
+@test fn walking_in_a_loop_returns_home()
+    mut a := Ant.with_rules("RRRR")
+    for i in 0..4
+        a.step()
+    assert_eq(a.x, 12)
+    assert_eq(a.y, 12)
+
+@test fn grid_wraps()
+    mut a := Ant.with_rules("RL")
+    a.x = 23
+    a.heading = 0
+    a.step()
+    assert_eq(a.x, 0)

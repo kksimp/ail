@@ -7,8 +7,10 @@ err.else.3
 err.match.3
 err.prop.1
 err.ret.1
+err.type.1
 err.use.1
 expr.bind.1
+expr.bind.14
 expr.bind.3
 expr.bind.4
 expr.call.1
@@ -38,6 +40,7 @@ lex.stmt.2
 lex.stmt.3
 lex.str.2
 lex.str.4
+lex.str.8
 mod.const.1
 mod.main.3
 own.move.2
@@ -50,6 +53,7 @@ trait.op.3
 type.bool.1
 type.bytes.13
 type.coll.4
+type.distinct.1
 type.enum.7
 type.map.5
 type.opt.3

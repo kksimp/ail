@@ -1,0 +1,7 @@
+## The prelude's `ToJson` on built-in types that have no `impl` block
+## (json.derive.4, ADR 1093): `T?` and `Map[K, V]` implement it
+## structurally, as `T?` is `Eq` when `T` is (trait.auto.1).
+
+## Whether trait `tr` is the prelude's `ToJson` (json.derive.1).
+fn Checker.is_to_json(self, tr int) bool
+    prog.traits[tr].name == "ToJson" and is_prelude_line(prog.traits[tr].pos.line)

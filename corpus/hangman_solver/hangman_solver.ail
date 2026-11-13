@@ -1,0 +1,122 @@
+## Hangman solver. Given a word list, the solver keeps the words that still fit
+## the pattern and the guesses so far, and always guesses the letter found in
+## the most remaining words (ties go to the earliest letter). Plays a few
+## secret words and shows each guess, the pattern and how many words remain.
+
+ALPHABET := "abcdefghijklmnopqrstuvwxyz"
+
+fn fits(word str, pattern List[char], guessed List[char]) bool
+    letters := word.chars()
+    if letters.len() != pattern.len()
+        return false
+    for i in 0..letters.len()
+        if pattern[i] != '_'
+            if letters[i] != pattern[i]
+                return false
+        elif guessed.contains(letters[i])
+            return false
+    true
+
+fn best_letter(words List[str], guessed List[char]) char
+    mut best := '?'
+    mut best_count := 0
+    for letter in ALPHABET.chars()
+        if guessed.contains(letter)
+            continue
+        mut n := 0
+        for word in words
+            if word.contains(letter)
+                n += 1
+        if n > best_count
+            best_count = n
+            best = letter
+    best
+
+fn play(secret str, dictionary List[str]) int
+    mut pattern := List[char]()
+    for ch in secret.chars()
+        pattern.push('_')
+    mut guessed := List[char]()
+    mut words := [w for w in dictionary if w.len() == secret.len()]
+    mut wrong := 0
+    print("secret has {secret.len()} letters, {words.len()} candidates")
+    while pattern.contains('_') and wrong < 6
+        g := best_letter(words, guessed)
+        guessed.push(g)
+        if secret.contains(g)
+            letters := secret.chars()
+            for i in 0..letters.len()
+                if letters[i] == g
+                    pattern[i] = g
+        else
+            wrong += 1
+        words = [w for w in words if fits(w, pattern, guessed)]
+        hit := if secret.contains(g) then "hit " else "miss"
+        print("  {g} {hit} {pattern.join("")} ({words.len()} left)")
+    if pattern.contains('_')
+        print("  lost with {wrong} misses")
+    else
+        print("  solved with {wrong} misses")
+    wrong
+
+fn main()
+    dictionary := [
+        "apple",
+        "angle",
+        "ankle",
+        "baker",
+        "bacon",
+        "beach",
+        "candy",
+        "cabin",
+        "dance",
+        "dairy",
+        "eagle",
+        "early",
+        "fable",
+        "fancy",
+        "grape",
+        "gravy",
+        "haste",
+        "hazel",
+        "ivory",
+        "jolly",
+        "kneel",
+        "lemon",
+        "lunar",
+        "magic",
+        "maple",
+        "noble",
+        "ocean",
+        "piano",
+        "pilot",
+        "quilt",
+        "robot",
+        "ratio",
+        "sable",
+        "tango",
+        "tiger",
+        "unity",
+        "vapor",
+        "waltz",
+        "yacht",
+        "zesty",
+    ]
+    mut total := 0
+    for secret in ["maple", "waltz", "tiger"]
+        total += play(secret, dictionary)
+    print("total misses: {total}")
+
+@test fn fits_checks_pattern_and_guesses()
+    pattern := "_a__e".chars()
+    guessed := "ae".chars()
+    assert(fits("maple", pattern, guessed))
+    assert(not fits("eagle", pattern, guessed))
+    assert(not fits("pale", pattern, guessed))
+
+@test fn picks_most_common_letter()
+    assert_eq(best_letter(["abc", "abd", "xyz"], []), 'a')
+    assert_eq(best_letter(["abc", "abd", "xyz"], ['a']), 'b')
+
+@test fn solver_wins_on_a_tiny_list()
+    assert(play("cat", ["cat", "cot", "bat"]) <= 6)

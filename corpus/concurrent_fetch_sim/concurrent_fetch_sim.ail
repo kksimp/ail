@@ -1,0 +1,94 @@
+## Concurrent fetch simulation (no network): a pool of worker tasks takes
+## requests from a channel and answers each with a status and a size computed
+## from the URL. Overloaded pages (503) are retried once in a second round.
+## Responses are sorted by request id before reporting.
+
+struct Req
+    id int
+    url str
+    attempt int
+
+struct Resp
+    id int
+    url str
+    status int
+    size int
+
+fn status_for(r Req) int
+    if r.url.contains("missing")
+        return 404
+    if r.url.contains("busy") and r.attempt < 2
+        return 503
+    200
+
+fn fake_fetch(r Req) Resp
+    status := status_for(r)
+    size := if status == 200 then r.url.byte_len() * 37 % 900 + 100 else 0
+    Resp(id: r.id, url: r.url, status: status, size: size)
+
+fn worker(jobs Channel[Req], results Channel[Resp])
+    for r in jobs
+        results.send(fake_fetch(r))
+
+fn run_pool(reqs List[Req], workers int) List[Resp]
+    jobs := Channel[Req](4)
+    results := Channel[Resp](32)
+    g := TaskGroup()
+    for _ in 0..workers
+        g.add(spawn worker(jobs, results))
+    for r in reqs
+        jobs.send(r)
+    jobs.close()
+    mut got := List[Resp]()
+    for _ in 0..reqs.len()
+        resp := results.recv() else break
+        got.push(resp)
+    got.sorted(by: |x| x.id)
+
+fn fetch_all(urls List[str], workers int) List[Resp]
+    first := run_pool([Req(id: i, url: urls[i], attempt: 1) for i in 0..urls.len()], workers)
+    mut retry := List[Req]()
+    for resp in first
+        if resp.status == 503
+            retry.push(Req(id: resp.id, url: resp.url, attempt: 2))
+    mut done := first
+    if not retry.is_empty()
+        print("retrying {retry.len()} busy pages")
+        for again in run_pool(retry, workers)
+            done[again.id] = again
+    done
+
+fn main()
+    urls := [
+        "http://site.test/index",
+        "http://site.test/busy/report",
+        "http://site.test/missing/page",
+        "http://site.test/about",
+        "http://site.test/busy/search",
+        "http://site.test/docs/intro",
+        "http://site.test/docs/missing",
+    ]
+    done := fetch_all(urls, 3)
+    mut by_status := Map[int, int]()
+    mut fetched := 0
+    for resp in done
+        print("{resp.id} {resp.status} {resp.size:>5} {resp.url}")
+        by_status[resp.status] += 1
+        fetched += resp.size
+    for code in by_status.keys().sorted()
+        print("status {code}: {by_status[code]}")
+    print("{done.len()} pages, {fetched} bytes fetched")
+
+@test fn statuses_follow_the_url()
+    assert_eq(fake_fetch(Req(id: 0, url: "a/missing", attempt: 1)).status, 404)
+    assert_eq(fake_fetch(Req(id: 0, url: "a/busy", attempt: 1)).status, 503)
+    assert_eq(fake_fetch(Req(id: 0, url: "a/busy", attempt: 2)).status, 200)
+
+@test fn pool_answers_every_request_in_order()
+    reqs := [Req(id: i, url: "u{i}", attempt: 1) for i in 0..6]
+    got := run_pool(reqs, 2)
+    assert_eq([g.id for g in got], [0, 1, 2, 3, 4, 5])
+
+@test fn retries_turn_busy_into_ok()
+    got := fetch_all(["x/busy", "x/ok"], 2)
+    assert_eq([g.status for g in got], [200, 200])

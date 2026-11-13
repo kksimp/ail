@@ -57,6 +57,7 @@ STD_EFFECTS := [
             "read_link",
             "symlink",
             "truncate",
+            "sync",
             "write_at",
         ],
         effects: ["fs", "io"],
@@ -686,6 +687,8 @@ fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
                 expr(prog, fx, e)
         Eval(e) => expr(prog, fx, e)
         LetTuple(_, value, _) => expr(prog, fx, value)
+        # type.fn.10: a local function's effects are the enclosing function's.
+        LocalFn(d) => block(prog, fx, d.body else [])
         Handle(value, o) =>
             expr(prog, fx, value)
             otherwise(prog, fx, o)
@@ -694,6 +697,11 @@ fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
         Unsafe(body, _) =>
             add("unsafe", "an `unsafe` block")
             block(prog, fx, body)
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                expr(prog, fx, h)
+            for body in ast.select_bodies(arms)
+                block(prog, fx, body)
 
 ## eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`.
 fn Walked.ref_write(mut self, fx Facts, place ast.Expr)

@@ -1,0 +1,81 @@
+## Bank transfers under a mutex: teller tasks move money between five
+## accounts held in one mutex-protected list. Each transfer checks the funds
+## and moves the money inside a single lock, so no balance goes negative and
+## the grand total never changes. Every teller also tries one impossible
+## transfer, which is rejected. Final balances are checked against a
+## sequential run of the same transfers.
+
+struct Transfer
+    src int
+    dst int
+    amount int
+
+fn plan(teller int, n int) List[Transfer]
+    mut out := List[Transfer]()
+    for i in 0..n
+        src := (teller + i) % 5
+        mut dst := (teller * 2 + i * 3 + 1) % 5
+        if dst == src
+            dst = (dst + 1) % 5
+        out.push(Transfer(src: src, dst: dst, amount: 10 + (teller * 13 + i * 7) % 40))
+    out.push(Transfer(src: 0, dst: 1, amount: 1000000))
+    out
+
+fn teller_task(bank Mutex[List[int]], ts List[Transfer], rejected Atomic[int])
+    for t in ts
+        with bank as mut b
+            if b[t.src] >= t.amount
+                b[t.src] -= t.amount
+                b[t.dst] += t.amount
+            else
+                rejected.add(1)
+
+fn opening() List[int]
+    mut out := List[int]()
+    for _ in 0..5
+        out.push(100000)
+    out
+
+fn run_tellers(tellers int, n int) !List[int]
+    bank := Mutex(opening())
+    rejected := Atomic(0)
+    g := TaskGroup()
+    for w in 0..tellers
+        g.add(spawn teller_task(bank, plan(w, n), rejected))
+    g.wait_all()?
+    final := bank.get()
+    print("{tellers} tellers x {n} transfers, rejected {rejected.load()}")
+    final
+
+fn sequential(tellers int, n int) List[int]
+    mut b := opening()
+    for w in 0..tellers
+        for t in plan(w, n)
+            if b[t.src] >= t.amount
+                b[t.src] -= t.amount
+                b[t.dst] += t.amount
+    b
+
+fn main() !
+    got := run_tellers(4, 25)?
+    for i in 0..got.len()
+        print("  account {i}: {got[i]:>7}")
+    print("  total: {got.sum()}")
+    print("  matches sequential run: {got == sequential(4, 25)}")
+    more := run_tellers(7, 40)?
+    print("  total: {more.sum()}")
+    print("  matches sequential run: {more == sequential(7, 40)}")
+    print("  lowest balance: {more.min() else 0}")
+
+@test fn total_is_conserved()
+    got := run_tellers(3, 10)?
+    assert_eq(got.sum(), 500000)
+
+@test fn matches_the_sequential_run()
+    assert_eq(run_tellers(5, 12)?, sequential(5, 12))
+
+@test fn plan_ends_with_an_impossible_transfer()
+    ts := plan(2, 3)
+    assert_eq(ts.len(), 4)
+    assert_eq(ts[3].amount, 1000000)
+    assert(ts[0].src != ts[0].dst, "no self transfer")

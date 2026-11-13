@@ -167,6 +167,7 @@ tools/
   check-doc-snippets.py   runs `ail check` on every `ail` and `ail fragment` block in the docs, outside `docs/spec/`
   card-spec-audit.py      audits the std functions against the spec (ADR 0698)
   card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
+  collection-vocab-audit.py  fails when a collection method name is on one collection and not a sibling, with no line in collection-vocab-exceptions.txt (ADR 1099)
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens

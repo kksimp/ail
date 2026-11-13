@@ -1,0 +1,110 @@
+## Library checkout desk. Commands "out MEMBER TITLE DAY" and "back MEMBER
+## TITLE DAY" update copy counts and loans. Each member may hold two books for
+## 14 days; late returns cost 25 cents per day. Failures are typed errors.
+
+LOAN_DAYS := 14
+MAX_LOANS := 2
+FEE_PER_DAY := 25
+
+error enum LibraryError
+    NoSuchBook(title str) "no such book {title}"
+    NoCopies(title str) "no copies of {title} left"
+    LimitReached(member str, limit int) "{member} already holds {limit} books"
+    NotBorrowed(member str, title str) "{member} does not hold {title}"
+    BadCommand(text str) "bad command '{text}'"
+
+struct Library
+    stock Map[str, int]
+    loans Map[str, int]
+    fees int
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn Library.held_by(self, member str) int
+    prefix := "{member}/"
+    mut n := 0
+    for key in self.loans.keys()
+        if key.starts_with(prefix)
+            n += 1
+    n
+
+fn Library.apply(mut self, line str) str ! LibraryError
+    parts := line.split(" ")
+    if parts.len() != 4
+        return BadCommand(text: line)
+    member := parts[1]
+    title := parts[2]
+    day := parts[3].to_int() else return BadCommand(text: line)
+    key := "{member}/{title}"
+    if parts[0] == "out"
+        copies := self.stock.get(title) else return NoSuchBook(title: title)
+        if copies == 0
+            return NoCopies(title: title)
+        if self.held_by(member) >= MAX_LOANS
+            return LimitReached(member: member, limit: MAX_LOANS)
+        self.stock[title] = copies - 1
+        self.loans[key] = day + LOAN_DAYS
+        return "{member} borrowed {title}, due day {day + LOAN_DAYS}"
+    if parts[0] != "back"
+        return BadCommand(text: line)
+    due := self.loans.get(key) else return NotBorrowed(member: member, title: title)
+    _ := self.loans.remove(key)
+    self.stock[title] += 1
+    late := if day > due then day - due else 0
+    self.fees += late * FEE_PER_DAY
+    "{member} returned {title}, {late} days late, fee {money(late * FEE_PER_DAY)}"
+
+fn main()
+    mut lib := Library(stock: {"dune": 1, "emma": 2, "ulysses": 1}, loans: {}, fees: 0)
+    script := [
+        "out ann dune 1",
+        "out bob dune 2",
+        "out ann emma 3",
+        "out ann ulysses 4",
+        "out bob hamlet 5",
+        "back bob emma 10",
+        "back ann dune 20",
+        "out bob dune 21",
+        "back ann emma 17",
+        "borrow cy emma 1",
+        "out cy emma x",
+    ]
+    for line in script
+        msg := lib.apply(line) else err
+            print("{line}: ERROR {err}")
+            continue
+        print("{line}: {msg}")
+    mut titles := []
+    for t in lib.stock.keys()
+        titles.push(t)
+    titles.sort()
+    for t in titles
+        print("stock {t}: {lib.stock[t]}")
+    mut held := []
+    for k in lib.loans.keys()
+        held.push(k)
+    held.sort()
+    print("open loans: {held.join(", ")}")
+    print("fees collected: {money(lib.fees)}")
+
+@test fn lending_limit()
+    mut lib := Library(stock: {"a": 5, "b": 5, "c": 5}, loans: {}, fees: 0)
+    lib.apply("out x a 1")?
+    lib.apply("out x b 1")?
+    assert_err(lib.apply("out x c 1"))
+    assert_eq(lib.held_by("x"), 2)
+
+@test fn late_fee()
+    mut lib := Library(stock: {"a": 1}, loans: {}, fees: 0)
+    lib.apply("out x a 1")?
+    lib.apply("back x a 20")?
+    assert_eq(lib.fees, 125)
+    assert_eq(lib.stock["a"], 1)
+
+@test fn unknown_things_fail()
+    mut lib := Library(stock: {"a": 1}, loans: {}, fees: 0)
+    assert_err(lib.apply("out x zzz 1"))
+    assert_err(lib.apply("back x a 1"))
+    assert_err(lib.apply("hello"))

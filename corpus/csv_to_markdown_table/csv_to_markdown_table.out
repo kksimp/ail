@@ -1,0 +1,14 @@
+| name  | qty | note       |
+| ----- | --: | ---------- |
+| apple |  12 | red, sweet |
+| pear  |   7 | green      |
+| fig   | 150 | a/b        |
+| kiwi  |   3 |            |
+
+|  id | score |
+| --: | ----: |
+|   1 |    90 |
+|  22 |     8 |
+| 333 |   100 |
+| only | header |
+| ---- | ------ |

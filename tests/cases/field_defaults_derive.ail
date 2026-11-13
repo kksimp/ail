@@ -1,0 +1,11 @@
+# type.struct.8, trait.assoc.1: a derived Default keeps declared field defaults.
+struct Config
+    name str
+    retries int = 3
+    tags List[str] = []
+
+impl Default for Config
+
+fn main()
+    c := Config.default()
+    print("[{c.name}] {c.retries} {c.tags.len()}")

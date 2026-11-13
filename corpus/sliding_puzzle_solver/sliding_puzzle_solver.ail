@@ -1,0 +1,109 @@
+## Eight-puzzle solver. A state is nine digits (0 is the blank) read row by
+## row; the goal is 123456780. Checks solvability with the inversion parity
+## rule, then runs breadth-first search for a shortest move sequence (U D L R
+## say where the blank goes) and replays it to confirm it reaches the goal.
+
+GOAL := "123456780"
+
+fn slide(state str, d int) str?
+    deltas := [-3, 3, -1, 1]
+    mut cs := state.chars()
+    b := cs.index_of('0') else -1
+    row := b / 3
+    col := b % 3
+    if d == 0 and row == 0
+        return none
+    if d == 1 and row == 2
+        return none
+    if d == 2 and col == 0
+        return none
+    if d == 3 and col == 2
+        return none
+    cs.swap(b, b + deltas[d])
+    cs.join("")
+
+fn solvable(state str) bool
+    mut ds := List[int]()
+    for c in state.chars()
+        if c != '0'
+            ds.push(c.to_digit(10) else 0)
+    mut inv := 0
+    for i in 0..ds.len()
+        for j in (i + 1)..ds.len()
+            if ds[i] > ds[j]
+                inv += 1
+    inv % 2 == 0
+
+fn solve(start str) str?
+    if not solvable(start)
+        return none
+    letters := ["U", "D", "L", "R"]
+    mut seen := Set[str]()
+    seen.add(start)
+    mut states := [start]
+    mut parent := [-1]
+    mut how := [""]
+    mut head := 0
+    while head < states.len()
+        cur := states[head]
+        if cur == GOAL
+            break
+        for d in 0..4
+            nxt := slide(cur, d) else continue
+            if seen.add(nxt)
+                states.push(nxt)
+                parent.push(head)
+                how.push(letters[d])
+        head += 1
+    if head >= states.len()
+        return none
+    mut moves := List[str]()
+    mut at := head
+    while parent[at] != -1
+        moves.push(how[at])
+        at = parent[at]
+    moves.reverse()
+    moves.join("")
+
+fn replay(start str, moves str) str
+    letters := "UDLR"
+    mut cur := start
+    for ch in moves.chars()
+        d := letters.find(ch) else 0
+        cur = slide(cur, d) else cur
+    cur
+
+fn board(state str) List[str]
+    cs := state.chars()
+    [cs[0..3].join(" "), cs[3..6].join(" "), cs[6..9].join(" ")]
+
+fn report(start str)
+    print("start {start}")
+    for line in board(start)
+        print("  {line}")
+    if not solvable(start)
+        print("  unsolvable (odd inversion count)")
+        return
+    answer := solve(start) else ""
+    print("  {answer.len()} moves: {answer}")
+    print("  replay reaches goal: {replay(start, answer) == GOAL}")
+
+fn main()
+    report("724506831")
+    report("123405786")
+    report("102453786")
+    report("213456780")
+    report("120453786")
+
+@test fn slide_moves_the_blank()
+    assert_eq(slide("123456780", 0) else "", "123450786")
+    assert_eq(slide("123456780", 2) else "", "123456708")
+    assert_eq(slide("123456780", 1) else "none", "none")
+
+@test fn parity_rule()
+    assert(solvable(GOAL))
+    assert(not solvable("213456780"))
+
+@test fn solution_is_shortest()
+    assert_eq(solve("123456708") else "", "R")
+    assert_eq((solve("123450786") else "").len(), 1)

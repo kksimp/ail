@@ -1,0 +1,12 @@
+H-I 2
+A-D 5
+C-E 5
+D-F 6
+A-B 7
+B-E 7
+E-G 9
+tree edges: 7
+total weight: 41
+components: 2
+A and G connected: true
+A and I connected: false

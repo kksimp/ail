@@ -251,7 +251,9 @@ the last arm, each `=> todo`, so each arm is a typed hole
 **fix.apply.1** — `ail fix FILE` checks the file and takes the first fix of
 every diagnostic that has one. It skips a fix whose edits touch the range of an
 earlier-chosen fix, and applies the rest from last to first
-([ADR 0203](../decisions/0203-ail-fix-command.md)).
+([ADR 0203](../decisions/0203-ail-fix-command.md)). It leaves the fix of an
+unused local (`expr.bind.14`) to the author: an unused local is often a bug
+([ADR 1087](../decisions/1087-std-papercuts.md)).
 
 **fix.apply.2** — `ail fix` checks the result again and repeats, up to 5
 rounds, until no fixable diagnostic remains ([ADR 0203](../decisions/0203-ail-fix-command.md)).
@@ -693,7 +695,7 @@ those of its line. On a miss, the line after `nothing in std matches WORDS` is
 the answer of the first row of `docs/design/not-in-std.txt` (`WORDS|WORDS ->
 ANSWER`) one of whose alternatives has all its words in the query; no row, no
 second line. `tools/check-method-table.py` checks that every rule of the table
-exists and that every built-in method of the checker is in it.
+exists, that every built-in method of the checker and every `x.name(args)` a `type.*` rule names is in it, and that no row of `not-in-std.txt` names a std module or prelude type that exists.
 
 **api.find.6** — `ail ask how WORDS...` searches `docs/how-to.md`, whose `##`
 sections are one task each (`sort descending`, `read a file by lines`): a title,
@@ -751,6 +753,11 @@ fn main()
 ```
 
 ```ail tool=ask,how,sort,descending expect=sorted(by: rules=api.find.6
+fn main()
+    print(1)
+```
+
+```ail tool=mcp rules=api.find.7
 fn main()
     print(1)
 ```
@@ -968,6 +975,11 @@ is new. `(none)` stands for an absent one.
 **api.rev.10** — `perf` has a line for each loop whose `ail perf --explain` verdict
 (ADR 1021) differs between the versions. It is
 empty until that command exists.
+
+**api.rev.12** — `effects` also has a line for each package whose `caps` entries
+in `ail.pkg` changed (`eff.allow.10-11`): `NEW CAPABILITY grant PACKAGE: +ENTRY` when
+an entry was gained or a scope widened or moved, counted as a new capability,
+else `grant PACKAGE: -ENTRY`. *(ADR 1105)*
 
 **api.rev.11** — `untested` has the id of each changed or new function, other than
 `main` and `@test` functions, that no `@test` function reaches by calls or by

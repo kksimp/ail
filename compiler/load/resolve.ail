@@ -265,7 +265,7 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
                 out.fns[i].owner = no
             else
                 out.fns[i].name = qualified(r.module, f.name)
-    renamed := rewrite_self(out)
+    renamed := syntax.rewrite_self(out)
     out = renamed.program
     r.diags.extend(renamed.diags)
     # Rewrite every reference to an item to its qualified name.
@@ -598,7 +598,42 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
             v := self.expr(value)
             ast.Stmt.Handle(v, self.otherwise(otherwise))
         Defer(inner, pos) => ast.Stmt.Defer(self.stmt(inner), pos)
+        # type.fn.9: a local function's name and parameters are new locals.
+        LocalFn(d) =>
+            self.local(d.name, d.pos)
+            mut nd := d
+            mut params := List[ast.Param]()
+            for p in d.params
+                self.local(p.name, p.pos)
+                mut np := p
+                np.ty = self.type_ref(p.ty)
+                params.push(np)
+            nd.params = params
+            if ret := d.ret
+                nd.ret = self.type_ref(ret)
+            if body := d.body
+                nd.body = self.block(body)
+            ast.Stmt.LocalFn(nd)
         Break(_) | Continue(_) => s
+        Select(arms, pos) => ast.Stmt.Select(self.select_arms(arms), pos)
+
+## A `select`'s arms (conc.select.2): the heads, the name a receive arm
+## binds, and each block.
+fn Resolver.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
+    mut out := List[ast.SelectArm]()
+    for a in arms
+        op := match a.op
+            Recv(var, var_pos, ch) =>
+                c := self.expr(ch)
+                self.local(var, var_pos)
+                ast.SelectOp.Recv(var, var_pos, c)
+            Send(ch, v) =>
+                c := self.expr(ch)
+                ast.SelectOp.Send(c, self.expr(v))
+            After(ms) => ast.SelectOp.After(self.expr(ms))
+            Closed => a.op
+        out.push(ast.SelectArm(op: op, body: self.block(a.body), pos: a.pos))
+    out
 
 fn Resolver.otherwise(mut self, o ast.Else) ast.Else
     match o
@@ -640,6 +675,14 @@ fn Resolver.pattern(mut self, p ast.Pattern) ast.Pattern
             for a in fields
                 out.push(self.pattern(a))
             ast.Pattern.Nested(q, name, out, pos)
+        StructPat(qualifier, name, labels, sfields, pos) =>
+            mut q := qualifier
+            if x := qualifier
+                q = self.type_name(x, pos)
+            mut out := List[ast.Pattern]()
+            for a in sfields
+                out.push(self.pattern(a))
+            ast.Pattern.StructPat(q, name, labels, out, pos)
         Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => p
 
 fn Resolver.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]

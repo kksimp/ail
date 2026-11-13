@@ -1,0 +1,18 @@
+us: coins 1 5 10 25
+    0: optimal 0 [], greedy 0, ways 1
+   30: optimal 2 [25+5], greedy 2, ways 18
+   41: optimal 4 [25+10+5+1], greedy 4, ways 31
+   99: optimal 9 [25+25+25+10+10+1+1+1+1], greedy 9, ways 213
+  100: optimal 4 [25+25+25+25], greedy 4, ways 242
+odd: coins 1 3 4
+    6: optimal 2 [3+3], greedy 3, ways 4
+    7: optimal 2 [4+3], greedy 2, ways 5
+   11: optimal 3 [4+4+3], greedy 3, ways 9
+   15: optimal 4 [4+4+4+3], greedy 4, ways 15
+sparse: coins 5 10
+    7: optimal none [-], greedy none, ways 0
+   15: optimal 2 [10+5], greedy 2, ways 2
+   35: optimal 4 [10+10+10+5], greedy 4, ways 4
+euro: coins 1 2 5 10 20 50
+   48: optimal 5 [20+20+5+2+1], greedy 5, ways 394
+   93: optimal 5 [50+20+20+2+1], greedy 5, ways 3484

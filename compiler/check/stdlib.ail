@@ -48,6 +48,7 @@ STD_FUNCTIONS := [
         "read_link",
         "symlink",
         "truncate",
+        "sync",
         "write_at",
         "write_bytes",
         "write_text",
@@ -259,6 +260,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Int))
     if key == "fs.set_mode" or key == "fs.set_modified" or key == "fs.truncate"
         return StdSig(params: [text, Ty.Int], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.sync"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.write_at"
         return StdSig(params: [text, Ty.Int, Ty.Bytes], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.read_link"
@@ -514,7 +517,11 @@ fn Checker.shuffle_call(mut self, args List[ast.Arg], at ast.Pos) Ty
 fn Checker.eprint_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(
+                l.pos,
+                "this call takes no named arguments (expr.call.3: only functions and methods you declare do)",
+                "pass the arguments positionally: `f(a, b)`",
+            )
         if a.mutable
             err_help(
                 "own.param.2",

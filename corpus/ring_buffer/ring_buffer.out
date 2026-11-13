@@ -1,0 +1,12 @@
+push 10 -> [10] avg 10
+push 12 -> [10, 12] avg 11
+push  9 -> [10, 12, 9] avg 10
+push 15 -> [10, 12, 9, 15] avg 11
+push 20 -> [12, 9, 15, 20] avg 14
+push 18 -> [9, 15, 20, 18] avg 15
+push  7 -> [15, 20, 18, 7] avg 15
+push 30 -> [20, 18, 7, 30] avg 18
+push 25 -> [18, 7, 30, 25] avg 20
+push 11 -> [7, 30, 25, 11] avg 18
+dropped 6
+drained [7, 30, 25, 11], empty: true

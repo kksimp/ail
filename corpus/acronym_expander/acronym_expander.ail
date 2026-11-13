@@ -1,0 +1,78 @@
+## Acronym expander: replaces known acronyms in a text with their long form
+## (first use only, "ABC (Always Be Checking)" style), and lists unknown ones.
+
+fn load_table(rows List[str]) Map[str, str]
+    mut table := Map[str, str]()
+    for r in rows
+        parts := r.split("=", 2)
+        table[parts[0].trim()] = parts[1].trim()
+    table
+
+fn is_acronym(word str) bool
+    if word.len() < 2
+        return false
+    for c in word.chars()
+        if not (c >= 'A' and c <= 'Z')
+            return false
+    true
+
+fn split_punct(token str) List[str]
+    # Splits "(API)," into leading punctuation, the core word and trailing punctuation.
+    cs := token.chars()
+    mut start := 0
+    while start < cs.len() and not cs[start].is_alpha()
+        start += 1
+    mut stop := cs.len()
+    while stop > start and not cs[stop - 1].is_alpha()
+        stop -= 1
+    [token.slice(0, start), token.slice(start, stop), token.slice(stop, cs.len())]
+
+fn expand(text str, table Map[str, str]) str
+    mut seen := Set[str]()
+    mut out := List[str]()
+    for token in text.words()
+        parts := split_punct(token)
+        core := parts[1]
+        if is_acronym(core) and table.contains(core)
+            if seen.add(core)
+                out.push("{parts[0]}{core} ({table[core]}){parts[2]}")
+            else
+                out.push(token)
+        else
+            out.push(token)
+    out.join(" ")
+
+fn unknown(text str, table Map[str, str]) List[str]
+    mut found := Set[str]()
+    for token in text.words()
+        core := split_punct(token)[1]
+        if is_acronym(core) and not table.contains(core)
+            found.add(core)
+    found.sorted()
+
+fn main()
+    table := load_table([
+        "API = Application Programming Interface",
+        "CPU = Central Processing Unit",
+        "GC = Garbage Collector",
+        "ABI = Application Binary Interface",
+        "IR = Intermediate Representation",
+    ])
+    text := "The GC pauses the CPU rarely. Each API call uses the ABI, and the IR (lowered by the compiler) feeds the CPU backend; the API stays stable, but the XYZ and QQ parts are new. Does GC, again, matter?"
+    print(expand(text, table))
+    print("unknown: {unknown(text, table).join(", ")}")
+    print("known: {table.len()}")
+
+@test fn expands_once()
+    table := load_table(["GC = Garbage Collector"])
+    assert_eq(expand("GC and GC.", table), "GC (Garbage Collector) and GC.")
+
+@test fn keeps_punctuation()
+    table := load_table(["IR = Intermediate Representation"])
+    assert_eq(expand("see (IR), ok", table), "see (IR (Intermediate Representation)), ok")
+    assert_eq(split_punct("(API),"), ["(", "API", "),"])
+
+@test fn finds_unknown()
+    table := load_table(["IR = Intermediate Representation"])
+    assert_eq(unknown("IR QQ A zz XYZ QQ", table), ["QQ", "XYZ"])
+    assert(not is_acronym("Api"))

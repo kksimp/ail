@@ -1,0 +1,80 @@
+## Morse codec: encodes text to International Morse ("/" between words),
+## decodes it back, and computes the transmission time in dot units.
+
+TABLE := "A:.- B:-... C:-.-. D:-.. E:. F:..-. G:--. H:.... I:.. J:.--- K:-.- L:.-.. M:-- N:-. O:--- P:.--. Q:--.- R:.-. S:... T:- U:..- V:...- W:.-- X:-..- Y:-.-- Z:--.. 0:----- 1:.---- 2:..--- 3:...-- 4:....- 5:..... 6:-.... 7:--... 8:---.. 9:----."
+
+fn forward() Map[str, str]
+    mut m := Map[str, str]()
+    for entry in TABLE.split(" ")
+        parts := entry.split(":")
+        m[parts[0]] = parts[1]
+    m
+
+fn backward() Map[str, str]
+    mut m := Map[str, str]()
+    for entry in TABLE.split(" ")
+        parts := entry.split(":")
+        m[parts[1]] = parts[0]
+    m
+
+fn encode(text str) str
+    table := forward()
+    mut words := List[str]()
+    for w in text.to_upper().words()
+        mut letters := List[str]()
+        for c in w.chars()
+            letters.push(table.get("{c}") else "?")
+        words.push(letters.join(" "))
+    words.join(" / ")
+
+fn decode(morse str) str
+    table := backward()
+    mut words := List[str]()
+    for w in morse.split(" / ")
+        mut out := ""
+        for code in w.words()
+            out = "{out}{table.get(code) else "?"}"
+        words.push(out)
+    words.join(" ")
+
+fn letter_units(code str) int
+    mut n := 0
+    for c in code.chars()
+        if c == '.'
+            n += 1
+        else
+            n += 3
+    n + code.len() - 1
+
+fn units(morse str) int
+    mut total := 0
+    words := morse.split(" / ")
+    for wi in 0..words.len()
+        letters := words[wi].words()
+        for li in 0..letters.len()
+            total += letter_units(letters[li])
+            if li + 1 < letters.len()
+                total += 3
+        if wi + 1 < words.len()
+            total += 7
+    total
+
+fn main()
+    for phrase in ["SOS", "hello world", "AIL 2026", "Meet at 9", "a-b"]
+        m := encode(phrase)
+        print("{phrase:<12} {m}")
+        print("             back: {decode(m)} ({units(m)} units)")
+
+@test fn encodes_known()
+    assert_eq(encode("SOS"), "... --- ...")
+    assert_eq(encode("a b"), ".- / -...")
+    assert_eq(encode("e?"), ". ?")
+
+@test fn decodes_round_trip()
+    assert_eq(decode("... --- ..."), "SOS")
+    assert_eq(decode(encode("Hello World 42")), "HELLO WORLD 42")
+
+@test fn timing()
+    assert_eq(units("."), 1)
+    assert_eq(units("... --- ..."), 27)
+    assert_eq(units(". / ."), 9)

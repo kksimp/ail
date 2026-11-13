@@ -1,0 +1,11 @@
+nodes: 21
+store.name -> 1: "Corner Books"
+store.open -> 1: true
+store.books[1].title -> 1: "Emma"
+store.books[*].price -> 3: 12 9 21
+store.books[*].tags[0] -> 2: "scifi" "modern"
+store.books[2] -> 1: {"title":"Ulysses","price":21,"tags":["modern"]}
+store.owner -> 1: null
+store.* -> 4: "Corner Books" true [{"title":"Dune","price":12,"tags":["scifi","classic"]},{"title":"Emma","price":9,"tags":[]},{"title":"Ulysses","price":21,"tags":["modern"]}] null
+store.books[9] -> 0: 
+store.nope.x -> 0: 

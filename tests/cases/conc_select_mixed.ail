@@ -1,0 +1,29 @@
+# conc.select.2-3, conc.select.5: arms over channels of two element types run as
+# values arrive, and `closed` ends the loop once both are closed and empty.
+
+fn numbers(out Channel[int], n int)
+    for i in 1..=n
+        out.send(i)
+    out.close()
+
+fn words(out Channel[str])
+    for w in ["a", "b", "c"]
+        out.send(w)
+    out.close()
+
+fn main() !
+    nums := Channel[int](2)
+    msgs := Channel[str](2)
+    a := spawn numbers(nums, 100)
+    b := spawn words(msgs)
+    mut total := 0
+    mut text := List[str]()
+    while true
+        select
+            n := nums.recv() => total += n
+            w := msgs.recv() => text.push(w)
+            closed => break
+    a.wait()?
+    b.wait()?
+    joined := text.join("")
+    print("{total} {joined}")

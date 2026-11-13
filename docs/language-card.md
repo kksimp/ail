@@ -79,6 +79,11 @@ update a `mut` variable in a loop, use `=`.
 Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
 `(0, s) =>`; `==`, `<` and map keys work elementwise.
 
+Distinct types: `type UserId = int` (any built-in scalar base) is a new type
+that never mixes with `int` or another id type. `UserId(3)` makes one,
+`int(id)` gives the value back; same-type operators, `==`, `<`, text, map keys
+and JSON work as the base's; no fields, methods or `impl`; free at run time.
+
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
@@ -103,10 +108,10 @@ enum Color
     Green
 
 fn Point.sum(self) int            # method; `self` is read-only
-    x + y                         # fields and methods by bare name (self.x)
+    self.x + self.y               # canonical; bare `x + y` works too
 
 fn Point.shift(mut self, dx int)  # may change self
-    x += dx
+    self.x += dx
 
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
@@ -139,7 +144,7 @@ fn area(s Shape) int
         Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
 ```
 
-Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`.
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
 
 ## Absence and errors
 
@@ -183,7 +188,8 @@ fn main() !                                 # main can fail; the error is report
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
   `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
-  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
+  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`);
+  a function can end with `m.get(k) else return Missing(key: k)` (`err.else.7`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
 - Which one failed: `match err` with `IoError =>` (there `err` is an
@@ -269,7 +275,8 @@ fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
   `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
 - `impl ToJson for T` and `impl FromJson for T` with no body derive
   `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name; lists,
-  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
+  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`); maps and
+  optionals of `ToJson` values are `ToJson` themselves (`print_json(m)`). A trait
   `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
   that writes an empty `impl`'s methods; `ail api --expanded` shows them.
   Generic types derive through bounds: `impl FromJson for Pair[A FromJson,
@@ -348,7 +355,9 @@ calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A li
 `|x| x + n` is one too: one expression on its line, types from context or written
 (`|x int| ...`). It copies the locals it names when made; they are read-only inside
 (share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
-Lists: `any`, `all`, `find`, `filter`, `map`, `group_by` take one: `xs.filter(|x| x > lo)`.
+Collections share one vocabulary (List, Set, Map, Deque, Seq): `map filter any all find count fold flat_map take skip take_while skip_while zip enumerate group_by`; a function takes the element, on a map `|k, v|`: `xs.filter(|x| x > lo)`, `xs.fold(0, |acc, x| acc + x)`.
+A `fn name(params) R` with a block inside a body is a local function: it copies the
+same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
 ## Operators and strings
 
@@ -429,7 +438,7 @@ Priority queue: `h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
 for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
 `h.is_empty()`, `Heap.from(xs)`. Double-ended queue: `d := Deque[int]()`,
 `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
-`d.at(i)`, `d.to_list()`.
+`d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 ## Maps and sets
 
@@ -509,6 +518,11 @@ v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
 for v in ch                 # receives until closed and empty
     print(v)
+select                      # first ready arm in order; channels of any types
+    n := nums.recv() => total += n
+    out.send(job) => sent += 1
+    after 50 => print("idle")   # optional; `after 0` never waits
+    closed => break         # required with a recv arm: all recv channels closed
 m := Mutex(0)               # get, set, swap
 with m as mut x             # holds m; stores x back on any exit
     x += 1
@@ -542,6 +556,8 @@ fn main()
 ## Tests
 
 ```ail
+use std.fs
+
 fn double(x int) int
     x * 2
 
@@ -549,18 +565,19 @@ fn double(x int) int
     assert_eq(double(4), 8)         # traps showing both values
     assert(double(1) == 2, "message")   # optional `str` message
     assert_near(0.1 + 0.2, 0.3, 0.0001) # three floats: |a - b| <= eps
-    assert_err(parse("x"))              # traps unless the call fails; a second argument `E.Variant` checks which error
+    assert_err(fs.read_text("no.txt"))  # traps unless the call fails; a second argument `E.Variant` checks which error (kind alone for a variant with data; `E.V(f: x)` the payload too)
 
 @test fn add_commutes(a int, b int) # parameters: a property on generated inputs
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
-```ail fragment
+```ail
 @fixture("drop")                    # made per test run, `drop` always runs after it
 fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
     "x"
 
 fn drop(v str)                      # takes the value, returns nothing
+    print("dropped {v}")
 
 @test @needs("tmp")
 fn uses(tmp str)                    # parameter named like the fixture

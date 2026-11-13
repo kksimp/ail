@@ -1,0 +1,18 @@
+perfect game: X X X X X X X X X X X X
+  frames: 30 60 90 120 150 180 210 240 270 300
+  strikes 12, spares 0, score 300
+gutter game: -- -- -- -- -- -- -- -- -- --
+  frames: 0 0 0 0 0 0 0 0 0 0
+  strikes 0, spares 0, score 0
+nines: 9- 9- 9- 9- 9- 9- 9- 9- 9- 9-
+  frames: 9 18 27 36 45 54 63 72 81 90
+  strikes 0, spares 0, score 90
+all spares: 5/ 5/ 5/ 5/ 5/ 5/ 5/ 5/ 5/ 5/5
+  frames: 15 30 45 60 75 90 105 120 135 150
+  strikes 0, spares 10, score 150
+mixed game: X 7/ 9- X -8 8/ -6 X X X81
+  frames: 20 39 48 66 74 84 90 120 148 167
+  strikes 5, spares 2, score 167
+open frames: 72 35 8- 44 61 17 53 90 26 81
+  frames: 9 17 25 33 40 48 56 65 73 82
+  strikes 0, spares 0, score 82

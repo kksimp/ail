@@ -35,13 +35,6 @@ fn labelled(v0:xs List[int]) int
   b2:
     return v1
 
-fn nested(v0:n int) Map[List[int], int]
-  b0(v0:n int):
-    v1 str = str #3
-    v2 int = const 0
-    v4 Map[List[int], int] = call rt.map_new(v1, v2, v2)
-    return v4
-
 fn main() unit
   b0:
     v0 int = const 1
@@ -65,10 +58,3 @@ fn Empty.to_str(v0:self Empty) str
   b0(v0:self Empty):
     v1 str = str #4
     return v1
-
-fn Missing.to_str(v0:self Missing) str
-  b0(v0:self Missing):
-    v1 str = str #5
-    v2 str = load v0:self +0
-    v3 str = call rt.str_cat(v1, v2)
-    return v3

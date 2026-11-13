@@ -116,6 +116,8 @@ fn stmt_start(s ast.Stmt) ast.Pos
         With(_, _, _, _, p) => p
         Unsafe(_, p) => p
         LetTuple(_, _, p) => p
+        LocalFn(d) => d.pos
+        Select(_, p) => p
 
 ## Where a function falling off its end returns: its last statement.
 fn tail_pos(f ast.FnDecl, body List[ast.Stmt]) ast.Pos

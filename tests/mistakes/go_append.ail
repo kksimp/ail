@@ -1,0 +1,4 @@
+fn main()
+    mut xs := [1]
+    xs = append(xs, 2)
+    print(xs)

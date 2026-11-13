@@ -1,0 +1,19 @@
+## Ordering lists of lists and sorting by any key `<` orders (type.coll.11,
+## expr.key.4): what the runtime's flat sorts (`ord_kind`) don't cover goes
+## through the generated `lt.T`, which compares lists element by element.
+
+## Whether `xs.NAME()` on a list of `e` sorts or picks through `lt.T`: a list
+## element the runtime's kinds don't cover (`List[List[(int, str)]]`,
+## `List[List[List[int]]]`, lists of `u8`).
+fn Lower.deep_list_order(self, e Ty, name str) bool
+    if e.elem() == none or ord_kind(e) >= 0 or not can_order(e)
+        return false
+    name == "sort" or name == "sorted" or name == "min" or name == "max"
+
+## Whether a key of type `t` can order a `sorted(by:)`, `min(by:)` or
+## `max(by:)`: a number, a string, or a tuple, struct, enum or list that `<`
+## orders.
+fn Lower.orderable_key(self, t Ty) bool
+    if t == Ty.Int or t == Ty.Float or t == Ty.Str
+        return true
+    orderable_record(t) or (t.elem() != none and can_order(t))

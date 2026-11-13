@@ -1,0 +1,10 @@
+APP      = demo
+EDITOR   = vi
+GREETING = hello grace from !
+HOME     = /home/ada
+LOG_DIR  = /home/ada/logs
+LOG_FILE = /home/ada/logs/.log
+PATH     = /home/ada/bin:/usr/bin
+USER     = grace
+8 variables, 1 malformed lines
+4 values mention the home directory

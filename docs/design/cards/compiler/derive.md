@@ -43,6 +43,7 @@ pub struct derive.Expansion  ## The text a generator wrote for one `impl`.
     pub text str
     pub problem str  ## Why the generator refused the type; empty when `text` is the methods.
 pub fn derive.expand(modules List[str], progs List[ast.Program]) List[derive.Expansion]  ## Every deriving `impl` of the program: `modules[k]` is the module of
+pub fn derive.derive_default_skipping(t derive.TypeInfo, defaulted List[str]) str ! derive.DeriveError [fail]  ## `derive_default` for a struct whose fields may declare defaults
 pub fn derive.show_type(t ast.TypeRef) str  ## A type as written, as `ail api` prints it.
 pub struct derive.Job  ## One deriving `impl` of a trait the program declares with `@derive(f)`
     pub module str  ## The `impl`'s module, empty for the root.
@@ -69,4 +70,4 @@ pub fn derive.observe_facts(progs List[ast.Program], name str) derive.ObserveFac
 pub fn derive.derive_observe(t derive.TypeInfo, facts derive.ObserveFacts) str ! derive.DeriveError [fail]
 ```
 
-trimmed to fit 2000 tokens (~1479); dropped: private items
+trimmed to fit 2000 tokens (~1535); dropped: private items

@@ -1,0 +1,9 @@
+# conc.select.6: a `select` with no `after` arm that waits when no other task can
+# run is a deadlock (conc.task.7).
+
+fn main()
+    ch := Channel[int](1)
+    print("waiting")
+    select
+        v := ch.recv() => print(v)
+        closed => print("closed")

@@ -1,0 +1,9 @@
+run0.txt: 8 numbers, first 0, last 21
+run1.txt: 6 numbers, first 2, last 27
+run2.txt: 5 numbers, first 1, last 29
+merged: 19 numbers, sorted true
+first 10: [0, 1, 2, 3, 6, 7, 8, 9, 12, 12]
+last 3: [22, 27, 29]
+unique: 16, dropped 3
+round trip intact: true
+cleaned up: true

@@ -1,9 +1,9 @@
 ## Implicit `self` (trait.method.6-7, ADR 0141), as `77592931:bootstrap/src/implicit_self.rs`.
 ## Inside a method, the receiver's fields and methods are in scope by bare
 ## name. This pass rewrites `x` to `self.x` and `f(...)` to `self.f(...)`, and
-## reports locals and parameters that would hide a member.
+## reports locals and parameters that would hide a member. It is in `syntax`
+## so that `ail fmt` can write the `self.` the loader would add (ADR 1081).
 use ast
-use syntax
 
 ## The prelude's functions, which a bare call could also mean.
 PRELUDE_FNS := ["print", "unreachable", "assert", "assert_eq", "assert_err", "assert_near"]
@@ -14,17 +14,20 @@ struct Members
     fields Set[str]
     methods Set[str]
 
-## What the pass changed: the program with the rewritten functions, and its diagnostics.
+## What the pass changed: the program with the rewritten functions, its
+## diagnostics, and where each bare member it made `self.n` starts (ADR 1081).
 pub struct SelfDone
     pub program ast.Program
-    pub diags List[syntax.Diag]
+    pub diags List[Diag]
+    pub sites List[ast.Pos]
 
 struct SelfCx
     owner str
     fields Set[str]
     methods Set[str]
     free Set[str]
-    diags List[syntax.Diag]
+    diags List[Diag]
+    sites List[ast.Pos]
 
 pub fn rewrite_self(prog ast.Program) SelfDone
     mut out := prog
@@ -34,7 +37,8 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             free.add(f.name)
     for n in PRELUDE_FNS
         free.add(n)
-    mut diags := List[syntax.Diag]()
+    mut diags := List[Diag]()
+    mut sites := List[ast.Pos]()
     mut cache := Map[str, Members]()
     for i in 0..prog.fns.len()
         f := prog.fns[i]
@@ -49,6 +53,7 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             methods: m.methods,
             free: free,
             diags: diags,
+            sites: sites,
         )
         for p in f.params
             cx.declare(p.name, p.pos)
@@ -67,6 +72,7 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             fixed.body = cx.block(body)
         out.fns[i] = fixed
         diags = cx.diags
+        sites = cx.sites
     # contract.inv.1: an invariant sees the struct's fields and methods.
     for k in 0..prog.structs.len()
         s := prog.structs[k]
@@ -79,6 +85,7 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             methods: m.methods,
             free: free,
             diags: diags,
+            sites: sites,
         )
         mut invariants := List[ast.Contract]()
         for c in s.invariants
@@ -87,7 +94,8 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             invariants.push(nc)
         out.structs[k].invariants = invariants
         diags = cx.diags
-    SelfDone(program: out, diags: diags)
+        sites = cx.sites
+    SelfDone(program: out, diags: diags, sites: sites)
 
 ## The names of the methods (functions with a receiver) among `idx`.
 fn method_names(prog ast.Program, idx List[int]) List[str]
@@ -143,12 +151,12 @@ fn type_members(prog ast.Program, ty str, mut cache Map[str, Members]) Members
 
 ## trait.method.7: a local or parameter can't take a field's name. (A method's
 ## name is fine: a method is only reached by a call.)
-fn SelfCx.declare(mut self, name str, at ast.Pos)
+fn SelfCx.declare(mut self, name str, decl_at ast.Pos)
     if not self.fields.contains(name)
         return
-    self.diags.push(syntax.Diag(
+    self.diags.push(Diag(
         rule: "trait.method.7",
-        pos: at,
+        pos: decl_at,
         msg: "`{name}` is a field of `{self.owner}`, so a method's local can't have that name",
         fixed: false,
         help: "rename the local; inside the method, `{name}` already means `self.{name}`",
@@ -201,6 +209,35 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
             ast.Stmt.Handle(v, self.otherwise(otherwise))
         Defer(inner, pos) => ast.Stmt.Defer(self.stmt(inner), pos)
         Break(_) | Continue(_) => s
+        # type.fn.9: a local function's name and parameters are locals; its body
+        # reads the fields as the method does (it copies `self`, type.fn.5).
+        LocalFn(d) =>
+            self.declare(d.name, d.pos)
+            for p in d.params
+                self.declare(p.name, p.pos)
+            mut nd := d
+            if body := d.body
+                nd.body = self.block(body)
+            ast.Stmt.LocalFn(nd)
+        Select(arms, pos) => ast.Stmt.Select(self.select_arms(arms), pos)
+
+## A `select`'s arms (conc.select.2): the heads, the name a receive arm
+## binds, and each block.
+fn SelfCx.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
+    mut out := List[ast.SelectArm]()
+    for a in arms
+        op := match a.op
+            Recv(var, var_pos, ch) =>
+                c := self.expr(ch)
+                self.declare(var, var_pos)
+                ast.SelectOp.Recv(var, var_pos, c)
+            Send(ch, v) =>
+                c := self.expr(ch)
+                ast.SelectOp.Send(c, self.expr(v))
+            After(ms) => ast.SelectOp.After(self.expr(ms))
+            Closed => a.op
+        out.push(ast.SelectArm(op: op, body: self.block(a.body), pos: a.pos))
+    out
 
 fn SelfCx.otherwise(mut self, o ast.Else) ast.Else
     match o
@@ -227,6 +264,9 @@ fn SelfCx.pattern(mut self, p ast.Pattern)
         Nested(_, _, nfields, _) =>
             for a in nfields
                 self.pattern(a)
+        StructPat(_, _, _, sfields, _) =>
+            for a in sfields
+                self.pattern(a)
         Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => 0
 
 fn SelfCx.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]
@@ -252,16 +292,17 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
     match e
         Name(n, pos) =>
             if self.fields.contains(n)
+                self.sites.push(pos)
                 return ast.Expr.Member(ast.Expr.Name("self", pos), n, pos)
             e
         Call(callee, args, pos) =>
             new_args := self.args(args)
             match callee
-                Name(n, name_pos) =>
+                Name(n, npos) =>
                     if not self.methods.contains(n)
                         return ast.Expr.Call(callee, new_args, pos)
                     if self.free.contains(n)
-                        self.diags.push(syntax.Diag(
+                        self.diags.push(Diag(
                             rule: "trait.method.7",
                             pos: pos,
                             msg: "`{n}` is both a method of `{self.owner}` and a function",
@@ -271,7 +312,8 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                             edits: [],
                         ))
                         return ast.Expr.Call(callee, new_args, pos)
-                    ast.Expr.Method(ast.Expr.Name("self", name_pos), n, name_pos, new_args)
+                    self.sites.push(npos)
+                    ast.Expr.Method(ast.Expr.Name("self", npos), n, npos, new_args)
                 _ => ast.Expr.Call(callee: self.expr(callee), args: new_args, pos: pos)
         Interp(parts, pos) =>
             mut out := List[ast.InterpPart]()
@@ -302,7 +344,7 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                 k := self.expr(en.key)
                 out.push(ast.MapEntry(key: k, value: self.expr(en.value)))
             ast.Expr.MapLit(out, pos)
-        Method(recv, name, name_pos, args) =>
+        Method(recv, name, npos, args) =>
             r := self.expr(recv)
             mut out := List[ast.Arg]()
             for a in args
@@ -310,8 +352,8 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                 mut na := a
                 na.value = self.expr(a.value)
                 out.push(na)
-            ast.Expr.Method(r, name, name_pos, out)
-        Member(recv, name, name_pos) => ast.Expr.Member(self.expr(recv), name, name_pos)
+            ast.Expr.Method(r, name, npos, out)
+        Member(recv, name, npos) => ast.Expr.Member(self.expr(recv), name, npos)
         Index(recv, index, pos) =>
             r := self.expr(recv)
             ast.Expr.Index(recv: r, index: self.expr(index), pos: pos)

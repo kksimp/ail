@@ -3,7 +3,7 @@
 Chapter key: `type`
 
 > **Status:** Drafted (partial). Specified: numeric types (integers and
-> floats), structs, enums, optional types, strings, characters, the standard
+> floats), structs, distinct types, enums, optional types, strings, characters, the standard
 > collections, maps and sets, and grids. Not yet designed: fixed-size arrays, SIMD
 > vector types, and const generics.
 
@@ -130,8 +130,8 @@ imply `a == b`. *(ADR 0130)*
 
 ```ail fragment
 n := 0.0 / 0.0
-[2.0, n, 1.0].sorted()  # [1.0, 2.0, nan]
-n < 1.0                 # false: the operator is IEEE
+print([2.0, n, 1.0].sorted())  # [1.0, 2.0, nan]
+print(n < 1.0)                 # false: the operator is IEEE
 ```
 
 > **Note:** float literal patterns are an error (`expr.match.7`). The same
@@ -155,9 +155,9 @@ values are the default methods of `Ord` (ADR 0137).
 
 ```ail fragment
 x := 9223372036854775807
-x.checked_add(1)        # none
-x.wrapping_add(1)       # -9223372036854775808
-x.saturating_add(1)     # 9223372036854775807
+print(x.checked_add(1))        # none
+print(x.wrapping_add(1))       # -9223372036854775808
+print(x.saturating_add(1))     # 9223372036854775807
 ```
 
 **type.num.13** — A sized number is a value of one of the types of
@@ -259,8 +259,8 @@ written and has no effect; anything else is a compile-time error. Each
 literal gets its own fresh value. A generic struct's default is typed with
 its type parameters, so `items List[T] = []` is fine and `x T = 0` is not. A
 variant's field has no default. A missing field's error says which fields
-may be left out. `impl Default` derivation (`trait.assoc.1`) does not read
-field defaults: it uses each field type's default. *(ADR 1076)*
+may be left out. An empty `impl Default` (`trait.assoc.1`) keeps a field's declared
+default and uses the field type's default for the others. *(ADR 1076)*
 
 ```ail skip=context
 struct Config
@@ -275,6 +275,151 @@ d := Config(name: "b", retries: 9)
 ```ail error=type.struct.8
 struct Bad
     a int = len("abc")          # error: a default has no calls or names
+```
+
+## Distinct types
+
+**type.distinct.1** — `type Name = Base` at the top level declares a
+distinct type: a new type with the values of `Base`, which MUST be a
+built-in scalar: `int`, a sized number (`type.num.1`), `float`, `str`,
+`bool`, `char` or `bytes`. It takes no type parameters, and `pub type`
+exports it (`mod.vis.1`). A distinct type is never the same type as its
+base, nor as another distinct type over the same base. *(ADR 1103)*
+
+```ail rules=type.distinct.1,type.distinct.2,type.distinct.3
+type UserId = int
+type OrderId = int
+
+fn owner(order OrderId) UserId
+    UserId(int(order) / 100)
+
+fn main()
+    o := OrderId(4207)
+    u := owner(o)
+    print(int(u))           # 42
+```
+
+```ail error=type.distinct.1
+type Ids = List[int]        # error: a distinct type wraps a built-in scalar; declare a struct
+
+fn main()
+    print(1)
+```
+
+**type.distinct.2** — `Name(x)` makes a value of the distinct type from one
+positional argument of its base type; a literal is written there
+(`UserId(3)`). It is the only conversion into a distinct type: a value of
+the base or of another type where the distinct type is expected is a type
+error, as is a distinct value where its base is expected. *(ADR 1103)*
+
+```ail error=type.distinct.2
+type UserId = int
+
+fn main()
+    id := UserId("42")      # error: `UserId(...)` takes `int`
+    print(int(id))
+```
+
+**type.distinct.3** — `Base(x)`, the name of a distinct type's base called on
+one of its values, gives the value as the base: `int(id)`, `str(name)`. The
+name MUST be the base (`i64` is `int` and `f64` is `float`); another is an
+error. A distinct type has no fields and no methods of its own (except the
+standard traits of `type.distinct.5`): convert it first, `str(name).len()`.
+*(ADR 1103)*
+
+```ail error=type.distinct.3
+type Name = str
+
+fn main()
+    n := Name("Ada")
+    print(n.len())          # error: no method `len`; write `str(n).len()`
+```
+
+**type.distinct.4** — The base's operators work on two operands of the same
+distinct type: `+ - * / %` give the distinct type, unary `-` and `not` keep
+it, and `== != < <= > >=` give `bool`. Mixing a distinct type with its base
+or with another type in an operator is an error whose help shows both
+conversions. *(ADR 1103)*
+
+```ail rules=type.distinct.4
+type Meters = float
+
+fn main()
+    a := Meters(1.5)
+    b := Meters(2.0)
+    total := a + b
+    print(float(total))     # 3.5
+    print(a < b)            # true
+    print(float(-a))        # -1.5
+```
+
+```ail error=type.distinct.4
+type Meters = float
+
+fn main()
+    a := Meters(1.5)
+    print(float(a + 2.0))   # error: write `a + Meters(2.0)` or `float(a) + 2.0`
+```
+
+**type.distinct.5** — A distinct type has the standard traits of its base, with
+the base's behaviour: `Eq`, `Ord`, `Hash`, `ToStr`, `ToJson`, `FromJson` and
+`Default` (`trait.std.1`). It prints and interpolates as its base, is a map
+key, a set element and sortable when the base is, and a derived `ToJson` or
+`FromJson` writes and reads it as the bare base value. A program's own traits
+don't pass through. *(ADR 1103)*
+
+```ail rules=type.distinct.5
+type UserId = int
+
+struct User
+    id UserId
+    name str
+
+impl ToJson for User
+impl FromJson for User
+
+fn main()
+    mut names := Map[UserId, str]()
+    names[UserId(7)] = "Ada"
+    print(names[UserId(7)])               # Ada
+    ids := [UserId(3), UserId(1), UserId(2)].sorted()
+    print("{ids[0]} {ids.len()}")         # 1 3
+    u := User(id: UserId(7), name: "Ada")
+    text := u.to_json().to_text()
+    print(text)                           # {"id":7,"name":"Ada"}
+    doc := parse_json(text) else return
+    back := User.from_json(doc) else return
+    print(back == u)                      # true
+```
+
+**type.distinct.6** — A distinct type declares no methods and no `impl`;
+behaviour goes in functions that take it. *(ADR 1103)*
+
+```ail error=type.distinct.6
+type UserId = int
+
+fn UserId.next(self) UserId     # error: write `fn next_id(id UserId) UserId`
+    UserId(int(self) + 1)
+
+fn main()
+    print(int(UserId(1).next()))
+```
+
+**type.distinct.7** — In native code a distinct type has its base's
+representation: a `Cents` is an `int` in a register, a `List[Cents]` is a
+list of ints, and `Cents(x)` and `int(x)` cost nothing. *(ADR 1103)*
+
+```ail rules=type.distinct.7
+type Cents = int
+
+fn total(prices List[Cents]) Cents
+    mut acc := Cents(0)
+    for p in prices
+        acc = acc + p
+    acc
+
+fn main()
+    print(int(total([Cents(250), Cents(199)])))    # 449
 ```
 
 ## Enums
@@ -378,6 +523,26 @@ fn main()
             print("missing")
         ""
     print(text)
+```
+
+**type.enum.20** — An enum whose variants have no fields, and that declares no
+function of the same name, has three functions without being written.
+`Color.variants()` returns a `List[Color]` of every variant in declaration
+order. `Color.from_str(s)` returns the `Color?` whose variant name is exactly
+`s`, and `none` for any other text. `c.name()` returns the variant's name as a
+`str`, without the enum's name (`Red`, where `print(c)` shows `Color.Red`). A call with the wrong number of arguments, or
+a `from_str` argument that isn't a `str`, is a compile-time error. *(ADR 1087)*
+
+```ail rules=type.enum.20
+enum Color
+    Red
+    Green
+
+fn main()
+    for c in Color.variants()
+        print(c.name())              # Red, then Green
+    print(Color.from_str("Green"))   # Color.Green
+    print(Color.from_str("green"))   # none
 ```
 
 ```ail rules=type.enum.7
@@ -592,6 +757,40 @@ fn main()
     print(map_all([1, 2], |x| "n{x}"))    # ["n1", "n2"]
 ```
 
+**type.fn.9** — A statement `fn name(params) R` followed by a block, inside a
+function body, declares a local function: a local `name` of the function type
+`fn(A, B) R`, visible from its declaration to the end of the enclosing block,
+including inside its own body, so it can call itself. Its body is a function
+body: `return` leaves it, its result is its last expression, and `R` may fail
+(`T ! E`, `!T`). It MUST NOT be generic, a method, or have contracts, and its
+parameters MUST NOT be `mut` or `move`: it is called as a function value
+(`type.fn.3`), by position. `break` and `continue` can't leave it. The name
+follows `expr.bind.4`. *(ADR 1094)*
+
+```ail rules=type.fn.9
+fn main()
+    fn fact(n int) int
+        if n <= 1
+            return 1
+        n * fact(n - 1)
+    print("{fact(5)}")                    # 120
+    print([1, 2, 3].map(fact))            # [1, 2, 6]
+```
+
+**type.fn.10** — A local function copies each outer local its body names
+when the declaration is reached, under `type.fn.5`: the copies are read-only,
+a `unique` value can't be copied, and a captured `ref` cell is shared. Its
+body's effects count for the enclosing function (`type.fn.7`). In traces and
+trap stacks it is named `outer.name`. *(ADR 1094)*
+
+```ail rules=type.fn.10
+fn main()
+    base := 10
+    fn add(x int) int
+        x + base                          # copies `base`
+    print("{add(5)}")                     # 15
+```
+
 ## Tuples
 
 **type.tuple.1** — `(A, B, ...)` is the type of a tuple: an anonymous value
@@ -798,11 +997,11 @@ arguments; a `char` means the one-character string. `strip_prefix` and
   `str?`, or `none` when `s` doesn't start (end) with `p`.
 
 ```ail fragment
-"a\r\nb\n".lines()             # ["a", "b"]
-"a\n\n".lines()                # ["a", ""]
-"  hi ".trim()                # hi
-"key=v".strip_prefix("key=")  # v
-"h\u{e9}".chars()              # ['h', 'é']
+print("a\r\nb\n".lines())      # ["a", "b"]
+print("a\n\n".lines())         # ["a", ""]
+print("  hi ".trim())         # hi
+print("key=v".strip_prefix("key=")) # v
+print("h\u{e9}".chars())       # ['h', 'é']
 ```
 
 **type.str.8** — `s.to_float()` returns a `float?` (`type.num.8`).
@@ -817,8 +1016,8 @@ characters (scalar values). A string already that wide, or any string when
 arguments. *(ADR 0135)*
 
 ```ail fragment
-"7".pad_left(3, '0')        # 007
-"ab".pad_right(4, ' ')      # "ab  "
+print("7".pad_left(3, '0')) # 007
+print("ab".pad_right(4, ' ')) # "ab  "
 ```
 
 **type.str.16** — `s.center(width, fill)` pads with copies of the `char` `fill`
@@ -1111,11 +1310,11 @@ outside the scalar range. The diagnostics for `ord(c)`, `chr(n)` and
 
 ```ail fragment
 c := 'f'
-c.is_alpha()            # true
-c.to_digit(16)          # 15
-c.to_digit(10)          # none
-c.code()                # 102
-char.from_code(0x41)    # 'A'
+print(c.is_alpha())     # true
+print(c.to_digit(16))   # 15
+print(c.to_digit(10))   # none
+print(c.code())         # 102
+print(char.from_code(0x41)) # 'A'
 ```
 
 ## Collections
@@ -1178,9 +1377,9 @@ names := List[str]()
 
 ```ail fragment
 xs := ["a", "b"]
-xs.join(", ")           # a, b
-[1, 2, 3].join("")      # 123
-xs.index_of("b")        # 1
+print(xs.join(", "))    # a, b
+print([1, 2, 3].join("")) # 123
+print(xs.index_of("b")) # 1
 ```
 
 **type.coll.14** — A list has these further methods. *(ADR 0214)*
@@ -1365,7 +1564,9 @@ as `m.get(k) else d`. *(ADR 1087)*
 
 **type.coll.27** — `xs.reversed()` returns a new list with the elements of `xs`
 in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
-in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
+in place. A list in descending order is `xs.sorted().reversed()`; `sorted` and
+`sort` take no `desc:` argument, and the diagnostic says so (`expr.key.1`).
+*(ADR 1087)*
 
 ```ail rules=type.map.12,type.coll.27
 fn main()
@@ -1377,6 +1578,75 @@ fn main()
     print(xs.sorted().reversed())           # [3, 2, 1]
 ```
 
+**type.coll.28** — One vocabulary serves every collection: a method has the
+same name, argument order and meaning on a `List`, a `Set`, a `Map`, a `Deque`
+and a `Seq` wherever it has a meaning there (`type.coll.32`; `tools/collection-vocab-audit.py`
+checks it, ADR 1099). A function argument is as in `type.coll.21`; on a map it
+takes the key and the value, `|k, v| e`. `xs.count(f)` is the number of
+elements for which `f` returns `true`; it takes only a function, so counting a
+value is `xs.count(|x| x == v)` and the number of elements is `xs.len()`. A
+list has no `dedup` or `unique`: the distinct elements are `xs.counts().keys()`
+or `xs.group_by(|x| x).keys()`. *(ADR 1099)*
+
+**type.coll.29** — `xs.fold(init, f)` calls `f(acc, x)` on each element in
+order and returns the last `acc`; `acc` starts as `init`, and `f` has type
+`fn(A, T) A` for the type `A` of `init`. On a map `f` is `|acc, k, v| e`. An
+empty collection gives `init`. *(ADR 1099)*
+
+**type.coll.30** — `xs.flat_map(f)` takes `f` of type `fn(T) List[U]` and
+returns the elements of the lists it gives, in order, as a `List[U]` (a
+`Seq[U]` for a `Seq`). *(ADR 1099)*
+
+**type.coll.31** — `xs.take_while(f)` returns the elements before the first one
+`f` returns `false` for, and `xs.skip_while(f)` the elements from that one on.
+`xs.skip(n)` returns the elements after the first `n`, none when `n` is at
+least `xs.len()`; a negative `n` traps, as `take` does (`type.coll.15`).
+`xs.zip(ys)` takes a `List[U]` and returns a `List[(T, U)]` of pairs, as long
+as the shorter. *(ADR 1099)*
+
+**type.coll.32** — A set and a map take the vocabulary in insertion order
+(`type.map.5`). On `Set[T]`: `any`, `all`, `find`, `count`, `fold`, `map` (a
+`List`), `flat_map` (a `List`), `group_by`, `take_while`, `skip_while`, `take`,
+`skip`, `zip`, `enumerate`, `sum`, `min` and `max` read the elements as a list
+and give what the list method gives; `s.filter(f)` returns a `Set[T]`. On
+`Map[K, V]`: `any`, `all`, `count`, `fold`, `map` (a `List`) and `flat_map`
+(a `List`) take a function of the key and value; `m.filter(f)` returns a
+`Map[K, V]` of the entries `f` keeps, and `m.map_values(f)` a `Map[K, U]`
+with each value replaced by `f(k, v)`'s `U`. A `Deque[T]` takes `filter`,
+`take`, `skip`, `take_while` and `skip_while` (each a `Deque[T]`), and `map`,
+`flat_map`, `enumerate` and `zip` (each a `List`), `any`, `all`, `find`, `count`
+and `fold`. A `Seq[T]` takes `map`, `filter`, `flat_map`, `take_while`,
+`skip_while`, `take`, `skip`, `enumerate`, `zip`, `any`, `all`, `find`, `count`
+and `fold`, using it up. What a collection lacks is listed, with the reason, in
+`tools/collection-vocab-exceptions.txt`. *(ADR 1099)*
+
+```ail rules=type.coll.28,type.coll.29,type.coll.30,type.coll.31,type.coll.32
+fn main()
+    xs := [3, 8, 5, 12]
+    print(xs.count(|x| x > 4))                    # 3
+    print(xs.fold(0, |acc, x| acc + x))           # 28
+    print(xs.flat_map(|x| [x, x]))                # [3, 3, 8, 8, 5, 5, 12, 12]
+    print(xs.take_while(|x| x < 10))              # [3, 8, 5]
+    print(xs.skip_while(|x| x < 10))              # [12]
+    print(xs.skip(2))                             # [5, 12]
+    print(xs.zip([10, 20]).len())                 # 2
+    s := {3, 8, 5}
+    print(s.count(|x| x > 4))                     # 2
+    print(s.filter(|x| x > 4).len())              # 2
+    print(s.fold(0, |acc, x| acc + x))            # 16
+    m := {"a": 1, "b": 2, "c": 3}
+    print(m.any(|k, v| v > 2))                    # true
+    print(m.count(|k, v| v > 1))                  # 2
+    print(m.fold(0, |acc, k, v| acc + v))         # 6
+    print(m.filter(|k, v| v != 2).len())          # 2
+    print(m.map_values(|k, v| v * 10).get("c") else 0)   # 30
+    print(m.map(|k, v| v * 2))                    # [2, 4, 6]
+    d := Deque.from([1, 2, 3, 4])
+    print(d.filter(|x| x % 2 == 0).to_list())     # [2, 4]
+    print(d.fold(0, |acc, x| acc + x))            # 10
+    print(Seq.of([1, 2, 3]).fold(0, |acc, x| acc + x))   # 6
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 
@@ -1385,7 +1655,7 @@ mut seen := Set[str]()
 first := seen.add("a")  # true
 again := seen.add("a")  # false: already there
 mut ages := {"ann": 31, "bob": 27}
-ages.get("cy")          # none
+print(ages.get("cy"))   # none
 for k in ages.keys()
     print("{k}: {ages[k]}")
 ```
@@ -1502,10 +1772,44 @@ that end as a `T?`, `none` when empty. Each is O(1) amortised. *(ADR 1086)*
 front, in O(1); a position outside `0..d.len()` traps. `d.to_list()` is the
 elements, first to last, as a list. *(ADR 1086)*
 
+**type.deque.6** — `d[i]` is the element at position `i` from the front, as
+`d.at(i)`; a position outside `0..d.len()` traps (`type.coll.4`). `d.set(i, v)`
+replaces it, with the same trap. `d[i] = v` is a compile-time error whose help
+says `d.set(i, v)`. A range index is an error: `d.to_list()[a..b]`. *(ADR 1086)*
+
+**type.deque.7** — `for x in d` visits the elements first to last. It is the
+iteration protocol of `expr.iter.1`: `d.next()` is `d.pop_front()`, and the loop
+works on a copy, so `d` itself is unchanged. A `Heap` has no `next`: `for x in
+h.to_sorted()` reads it in order. *(ADR 1086, ADR 1073)*
+
+```ail rules=type.deque.6,type.deque.7
+fn main()
+    mut d := Deque.from([10, 20, 30])
+    d.push_front(5)
+    print(d[0] + d[3])           # 35
+    d.set(1, 11)
+    mut total := 0
+    for x in d
+        total += x
+    print(total)                 # 5 + 11 + 20 + 30 = 66
+    print(d.len())               # 4: the loop worked on a copy
+```
+
+```ail error=type.deque.6
+fn main()
+    mut d := Deque.from([1, 2])
+    d[0] = 9                     # error: write `d.set(0, 9)`
+```
+
 **type.deque.5** — A deque is a value (own.val.1): `e := d` copies it. Its
 `front` and `back` fields are the representation and aren't read. *(ADR 1086)*
 
-```ail rules=type.deque.1,type.deque.2,type.deque.3,type.deque.4,type.deque.5
+**type.deque.6** — A deque takes the shared vocabulary (`type.coll.32`) by way
+of `d.to_list()`: `filter`, `take`, `skip`, `take_while` and `skip_while` give a
+`Deque[T]`; `map`, `flat_map`, `enumerate` and `zip` a `List`; `any`, `all`,
+`find`, `count` and `fold` as for a list. *(ADR 1099)*
+
+```ail rules=type.deque.1,type.deque.2,type.deque.3,type.deque.4,type.deque.5,type.deque.6
 fn main()
     mut d := Deque[int]()
     d.push_back(2)
@@ -1521,6 +1825,7 @@ fn main()
     d.push_back(9)
     print(e.len())               # 1: `e := d` copied the deque
     print(Deque.from([7, 8]).len())  # 2
+    print(Deque.from([1, 2, 3]).map(|x| x * 2))  # [2, 4, 6]
 ```
 
 ```ail norun rules=type.deque.4

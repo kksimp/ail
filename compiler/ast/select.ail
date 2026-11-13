@@ -1,0 +1,37 @@
+## `select` (conc.select.2-6, ADR 1102): helpers for the passes that walk a
+## statement's parts. A `select` evaluates its heads in source order (every
+## arm's channel, a send arm's value and the `after` time), then waits, then
+## runs at most one arm's block.
+
+## The expressions a `select` evaluates before it waits, in source order.
+pub fn select_heads(arms List[SelectArm]) List[Expr]
+    mut out := List[Expr]()
+    for a in arms
+        match a.op
+            Recv(_, _, ch) => out.push(ch)
+            Send(ch, v) =>
+                out.push(ch)
+                out.push(v)
+            After(ms) => out.push(ms)
+            Closed => continue
+    out
+
+## The blocks of a `select`'s arms, in source order; at most one runs.
+pub fn select_bodies(arms List[SelectArm]) List[List[Stmt]]
+    [a.body for a in arms]
+
+## The name a receive arm binds, or none.
+pub fn select_var(op SelectOp) Binder?
+    match op
+        Recv(v, at, _) => Binder(name: v, pos: at, mutable: false)
+        Send | After | Closed => none
+
+## Whether a `select` always runs an arm: it has a `closed` or an `after`
+## arm. Without one, a cancelled task's `select` that finds nothing ready
+## runs no arm (conc.select.6).
+pub fn select_always_runs(arms List[SelectArm]) bool
+    for a in arms
+        match a.op
+            After | Closed => return true
+            Recv | Send => continue
+    false

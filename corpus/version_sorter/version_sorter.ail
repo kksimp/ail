@@ -1,0 +1,103 @@
+## Natural version sorter: splits names such as app-1.10.2.tar into digit and
+## text chunks, compares digit chunks as numbers, sorts a list of releases and
+## shows how that differs from plain text order. Also reports the newest per
+## product.
+
+fn chunks(s str) List[str]
+    mut out := List[str]()
+    mut cur := ""
+    mut digits := false
+    for c in s.chars()
+        d := c.is_digit()
+        if cur != "" and d != digits
+            out.push(cur)
+            cur = ""
+        digits = d
+        cur = "{cur}{c}"
+    if cur != ""
+        out.push(cur)
+    out
+
+fn is_num(s str) bool
+    s != "" and s.chars()[0].is_digit()
+
+fn cmp_chunk(a str, b str) int
+    if is_num(a) and is_num(b)
+        x := a.to_int() else 0
+        y := b.to_int() else 0
+        if x != y
+            return if x < y then -1 else 1
+        return 0
+    if is_num(a)
+        return -1
+    if is_num(b)
+        return 1
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+fn natural_cmp(a str, b str) int
+    xs := chunks(a)
+    ys := chunks(b)
+    n := xs.len().min(ys.len())
+    for i in 0..n
+        c := cmp_chunk(xs[i], ys[i])
+        if c != 0
+            return c
+    if xs.len() == ys.len()
+        return 0
+    if xs.len() < ys.len()
+        return -1
+    1
+
+fn natural_sort(items List[str]) List[str]
+    mut vs := items
+    for i in 1..vs.len()
+        mut j := i
+        while j > 0 and natural_cmp(vs[j - 1], vs[j]) > 0
+            vs.swap(j - 1, j)
+            j -= 1
+    vs
+
+fn product(name str) str
+    cs := chunks(name)
+    cs[0]
+
+fn main()
+    names := [
+        "app-1.10.2",
+        "app-1.2.10",
+        "app-1.2.9",
+        "lib-0.9",
+        "app-1.2",
+        "lib-0.10",
+        "app-10.0",
+        "app-2.0",
+        "lib-0.9.1",
+        "tool-v3",
+        "tool-v12",
+        "tool-v4",
+    ]
+    ordered := natural_sort(names)
+    print("natural: {ordered.join(" ")}")
+    print("plain:   {names.sorted().join(" ")}")
+    mut newest := Map[str, str]()
+    for n in ordered
+        newest[product(n)] = n
+    for p in newest.keys().sorted()
+        print("newest {p}: {newest[p]}")
+    print("1.9 vs 1.10: {natural_cmp("1.9", "1.10")}")
+
+@test fn splits_into_chunks()
+    assert_eq(chunks("app-1.10b"), ["app-", "1", ".", "10", "b"])
+    assert_eq(chunks("").len(), 0)
+
+@test fn digits_compare_numerically()
+    assert_eq(natural_cmp("v2", "v10"), -1)
+    assert_eq(natural_cmp("v10", "v10"), 0)
+    assert_eq(natural_cmp("a1", "a1.1"), -1)
+
+@test fn sort_is_stable_and_natural()
+    assert_eq(natural_sort(["x10", "x9", "x1"]), ["x1", "x9", "x10"])

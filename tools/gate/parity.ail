@@ -27,6 +27,7 @@ CASES := [
     ["std.json", "json_roundtrip"],
     ["std.csv", "std_csv"],
     ["std.file", "std_file"],
+    ["std.kv", "std_kv"],
     ["std.toml", "std_toml"],
     ["std.yaml", "std_yaml"],
     ["std.regex", "std_regex"],

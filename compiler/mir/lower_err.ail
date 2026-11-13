@@ -938,6 +938,7 @@ SHOWN_STD_AIL := [
     "std.csv.",
     "std.file.",
     "std.gfx.",
+    "std.kv.",
     "std.log.",
     "std.mcp.",
     "std.media.webm.",
@@ -946,6 +947,7 @@ SHOWN_STD_AIL := [
     "std.term.",
     "std.net.jar.",
     "std.time.date.",
+    "std.test.",
     "std.toml.",
     "std.ui.widgets.",
     "std.video.",
@@ -1029,7 +1031,7 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
 
 ## `e else ...` (err.else.1-6).
 fn Lower.lower_or_else(mut self, x ast.Expr, other ast.Else, pos ast.Pos) Val?
-    if is_pop_call(x)
+    if is_list_pop(x)
         return lower_pop_else(x, other, pos)
     if self.is_get_call(x)
         return lower_get_else(x, other, pos)

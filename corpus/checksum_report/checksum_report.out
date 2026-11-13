@@ -1,0 +1,8 @@
+file        size  crc32    sha256      
+config.ini    20  162953bc c57649038149
+data.csv      12  ced6e9e5 b94851485464
+empty.txt      0  00000000 e3b0c44298fc
+notes.txt     18  11caf1cf 86bb148f5efa
+verify (untouched): none
+verify (after edits): data.csv, empty.txt (missing)
+cleaned up: true

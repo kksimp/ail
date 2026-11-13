@@ -1,0 +1,6 @@
+- debug = true
+~ hosts: a.example.org, b.example.org -> a.example.org, c.example.org
+~ port: 8080 -> 9090
++ region = eu
++ retries = 5
+old 5, new 6, changed lines 5, unchanged 2

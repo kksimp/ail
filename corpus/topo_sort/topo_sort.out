@@ -1,0 +1,3 @@
+build: core lib widgets ui app docs
+cyclic: e
+  cycle among: a b c d

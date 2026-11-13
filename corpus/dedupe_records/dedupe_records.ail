@@ -1,0 +1,83 @@
+## Dedupe records: collapses contact records that share a normalized email
+## (lowercased, trimmed, "+tag" removed). The record with the latest update
+## date wins; ties keep the first one seen.
+
+struct Contact
+    id int
+    name str
+    email str
+    updated int
+
+fn data() List[str]
+    [
+        "1, Ann Lee ,Ann.Lee@Example.com,20260101",
+        "2,Bob Ray,bob@example.com,20260115",
+        "3,Ann L.,ann.lee+news@example.com,20260220",
+        "4,Cy Dunn,cy@example.org,20260301",
+        "5,Bobby Ray,BOB@example.com ,20260110",
+        "6,Dee,dee@example.org",
+        "7,Cy D.,cy@example.org,20260301",
+        "8,Eve Fox,eve@example.net,20260105",
+    ]
+
+fn normalize(email str) str
+    lower := email.trim().to_lower()
+    parts := lower.split("@")
+    if parts.len() != 2
+        return lower
+    mut local := parts[0]
+    if p := local.find("+")
+        local = local.slice(0, p)
+    "{local}@{parts[1]}"
+
+fn parse(line str) Contact?
+    cells := line.split(",")
+    if cells.len() != 4
+        return none
+    Contact(
+        id: cells[0].trim().to_int()?,
+        name: cells[1].trim(),
+        email: cells[2],
+        updated: cells[3].to_int()?,
+    )
+
+fn dedupe(rows List[Contact]) List[Contact]
+    mut kept := List[Contact]()
+    mut pos := Map[str, int]()
+    for c in rows
+        key := normalize(c.email)
+        if slot := pos.get(key)
+            if c.updated > kept[slot].updated
+                kept[slot] = c
+        else
+            pos[key] = kept.len()
+            kept.push(c)
+    kept
+
+fn main()
+    mut rows := List[Contact]()
+    for line in data()
+        c := parse(line) else
+            print("unparsed: {line}")
+            continue
+        rows.push(c)
+    kept := dedupe(rows).sorted(by: |x| x.id)
+    print("{rows.len()} records, {kept.len()} unique, {rows.len() - kept.len()} dropped")
+    for k in kept
+        print("{k.id:>2} {k.name:<9} {normalize(k.email):<22} {k.updated}")
+
+@test fn normalizes_emails()
+    assert_eq(normalize(" A.B+x@Mail.COM "), "a.b@mail.com")
+    assert_eq(normalize("plain"), "plain")
+
+@test fn latest_update_wins()
+    a := Contact(id: 1, name: "a", email: "x@y.z", updated: 5)
+    b := Contact(id: 2, name: "b", email: "X@y.z", updated: 9)
+    got := dedupe([a, b])
+    assert_eq(got.len(), 1)
+    assert_eq(got[0].id, 2)
+
+@test fn ties_keep_first()
+    a := Contact(id: 1, name: "a", email: "x@y.z", updated: 5)
+    b := Contact(id: 2, name: "b", email: "x@y.z", updated: 5)
+    assert_eq(dedupe([a, b])[0].id, 1)

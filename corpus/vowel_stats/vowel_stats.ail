@@ -1,0 +1,83 @@
+## Vowel statistics: per-word vowel and consonant counts, longest vowel run
+## and vowel percentage, ranked, plus a bar chart of each vowel's total.
+
+struct Stats
+    word str
+    vowels int
+    consonants int
+    longest int
+    pct int
+
+fn is_vowel(c char) bool
+    "aeiou".contains(c)
+
+fn analyze(word str) Stats
+    mut vowels := 0
+    mut consonants := 0
+    mut streak := 0
+    mut longest := 0
+    for c in word.to_lower().chars()
+        if is_vowel(c)
+            vowels += 1
+            streak += 1
+            longest = longest.max(streak)
+        else
+            streak = 0
+            if c.is_alpha()
+                consonants += 1
+    letters := vowels + consonants
+    pct := if letters == 0 then 0 else vowels * 100 / letters
+    Stats(word: word, vowels: vowels, consonants: consonants, longest: longest, pct: pct)
+
+fn clean_words(text str) List[str]
+    mut out := List[str]()
+    for w in text.words()
+        mut word := ""
+        for c in w.chars()
+            if c.is_alpha()
+                word = "{word}{c}"
+        if word != ""
+            out.push(word)
+    out
+
+fn bar(n int) str
+    mut out := ""
+    mut k := 0
+    while k < n
+        out = "{out}#"
+        k += 1
+    out
+
+fn main()
+    text := "Rhythm and beautiful queue: the sky, a quiet idea, strengths of AIL."
+    rows := [analyze(w) for w in clean_words(text)]
+    print("word        v  c run  pct")
+    for s in rows.sorted(by: |x| -x.pct)
+        print("{s.word:<10} {s.vowels:>2} {s.consonants:>2} {s.longest:>3} {s.pct:>3}%")
+    mut total := 0
+    mut letters := 0
+    for s in rows
+        total += s.vowels
+        letters += s.vowels + s.consonants
+    print("total vowels {total} of {letters} letters, {total * 100 / letters}%")
+    lower := text.to_lower().chars()
+    for v in "aeiou".chars()
+        n := [x for x in lower if x == v].len()
+        print("{v} {n:>2} {bar(n)}")
+
+@test fn counts_a_word()
+    s := analyze("Queue")
+    assert_eq(s.vowels, 4)
+    assert_eq(s.consonants, 1)
+    assert_eq(s.longest, 4)
+    assert_eq(s.pct, 80)
+
+@test fn no_vowels()
+    s := analyze("rhythm")
+    assert_eq(s.vowels, 0)
+    assert_eq(s.longest, 0)
+    assert_eq(s.pct, 0)
+
+@test fn cleans_punctuation()
+    assert_eq(clean_words("Hi, there -- 42 ok!"), ["Hi", "there", "ok"])
+    assert_eq(analyze("").pct, 0)

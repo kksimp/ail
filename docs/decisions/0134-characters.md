@@ -69,13 +69,13 @@ value (and when `s.to_int()` accepts that digit, ADR 0124), so there is no
    `char.from_code(n)`", and `c.to_int()` says "`c.code()` or `c.to_digit(10)`".
 
 ```ail fragment
-'é'.is_alpha()           # true
-'٣'.is_digit()           # false: ASCII only, so is_digit implies to_digit(10)
-'F'.to_digit(16)         # 15
-'g'.to_digit(16)         # none
-'ß'.to_upper()           # 'ß'
-'A'.code()               # 65
-char.from_code(0xD800)   # none: a surrogate
+print('é'.is_alpha())           # true
+print('٣'.is_digit())           # false: ASCII only, so is_digit implies to_digit(10)
+print('F'.to_digit(16))         # 15
+print('g'.to_digit(16))         # none
+print('ß'.to_upper())           # 'ß'
+print('A'.code())               # 65
+print(char.from_code(0xD800))   # none: a surrogate
 print(['a', '\''])       # ['a', '\'']
 ```
 

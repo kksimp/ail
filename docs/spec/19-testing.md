@@ -3,7 +3,7 @@
 Chapter key: `test`
 
 > **Status:** Drafted (partial). Specified: attributes on functions, `@test`
-> functions, the `ail test` runner and its result format, test filtering and listing, fixtures,
+> functions, the `ail test` runner and its result format, test filtering and listing, fixtures, the test sandbox, stubs,
 > `assert`, `assert_eq`, `assert_err` and `assert_near`, property tests, fuzzing, mutation testing,
 > and doc examples as tests. Not yet designed: parallel runs and expected-failure tests.
 
@@ -195,7 +195,7 @@ function in every other way and is not a test. *(ADR 1075)*
 **test.fixture.2** — A teardown is a top-level function `fn END(value T)` that takes the fixture's value
 and returns nothing, so it can't fail. *(ADR 1075)*
 
-**test.fixture.3** — A `@test` function lists the fixtures it uses with `@needs("NAME")` after `@test`, one
+**test.fixture.3** — A `@test` function lists the fixtures it uses with `@needs("NAME")` (the name in quotes) after `@test`, one
 attribute per fixture, and declares a parameter `NAME` of the fixture's type for each. These parameters
 get the fixtures' values and are not generated, so a property test can take both. A fixture named
 twice, a name that is not a `@fixture`, a missing or differently typed parameter, and `@needs` on a function
@@ -212,8 +212,9 @@ down. A fixture and its teardown must be in the same file as the test. *(ADR 107
 ```ail tool=test,FILE expect=passed rules=test.fixture.1,test.fixture.2,test.fixture.3,test.fixture.4
 @fixture("drop_file")
 fn scratch_file() !str
-    fs.write_text(".ail-fixture-demo.txt", "hi")?
-    ".ail-fixture-demo.txt"
+    name := "{fs.temp_dir()}/fixture-demo.txt"
+    fs.write_text(name, "hi")?
+    name
 
 fn drop_file(name str)
     fs.remove(name) else return
@@ -270,6 +271,137 @@ fn main()
     print("x")
 ```
 
+## Sandbox
+
+**test.sandbox.1** — `ail test` runs each test in a sandbox, a use of `eff.allow.1-9` that needs no flag. The
+test may not use `net`, `net.serve` or `proc`. It may read files under the current directory, the directory
+of the test file and the package root (the nearest directory above the test file with an `ail.pkg`). It may
+write only in its own temporary directory, which is also where it may read what it wrote. That directory is
+new for each run, is the test's `fs.temp_dir()` (the runner sets `TMPDIR` and `TEMP`), and is removed when the
+run ends. `env`, `clock` and `random` are not limited. A property test gets a new directory for each generated
+input. *(ADR 1100)*
+
+```ail tool=test,FILE expect=passed rules=test.sandbox.1
+@test fn writes_in_its_own_directory() !
+    name := "{fs.temp_dir()}/note.txt"
+    fs.write_text(name, "kept for this test only")?
+    assert_eq(fs.read_text(name)?, "kept for this test only")
+```
+
+**test.sandbox.2** — `@needs(CAP)` after `@test` lifts the limit for one test: `@needs(fs)` allows every file
+(read and write), `@needs(net)` the network, `@needs(net.serve)` listening, and `@needs(proc)` running programs.
+Several are written `@needs(net, proc)`. A capability name in bare words is a capability; a name in quotes is a
+fixture (`test.fixture.3`) and can sit beside it. A word that is not one of the four, a capability listed twice,
+and a quoted capability name that is not a fixture are compile-time errors. *(ADR 1100)*
+
+```ail tool=test,FILE expect=passed rules=test.sandbox.2
+@test @needs(fs)
+fn may_write_beside_the_program() !
+    fs.write_text(".ail-sandbox-demo.txt", "x")?
+    fs.remove(".ail-sandbox-demo.txt")?
+```
+
+```ail error=test.sandbox.2 rules=test.sandbox.2
+@test @needs(gpu)
+fn t()
+    assert(true)
+
+fn main()
+    print("x")
+```
+
+**test.sandbox.3** — A call the sandbox refuses fails that test only, with `trap[eff.allow.N]`, the call chain,
+and the line to write: `add @needs(CAP) to the test, or run ail test --allow all`. Other tests are not
+affected. *(ADR 1100)*
+
+```ail tool=test,FILE status=1 expect=test.sandbox.3 rules=test.sandbox.3
+@test fn writes_beside_the_program() !
+    fs.write_text(".ail-sandbox-denied.txt", "x")?
+```
+
+**test.sandbox.4** — `ail test --allow all` runs every test with no sandbox, as before `test.sandbox.1` (the test
+still gets its temporary directory as `fs.temp_dir()`, for stubs). It takes
+no other list (`@needs` is the way to widen one test), and `ail task verify` runs without it. *(ADR 1100)*
+
+```ail tool=test,--allow,all,FILE expect=passed rules=test.sandbox.4
+@test fn writes_beside_the_program() !
+    fs.write_text(".ail-sandbox-all.txt", "x")?
+    fs.remove(".ail-sandbox-all.txt")?
+```
+
+## Stubs
+
+**test.stub.1** — `use std.test` provides stubs for one test: `files`, `env`, `clock`, `advance` and `http`. A stub is
+active from the call until the test ends, and each test starts with none. They are for tests run by `ail test`
+(`test.run.1`); anywhere else a call fails with a message that says so. A stub answers without the sandbox
+(`test.sandbox.1`) asking: a stubbed request needs no `@needs(net)`. *(ADR 1101)*
+
+**test.stub.2** — `test.files(content Map[str, str])` makes `fs.read_text`, `fs.read_bytes` and `fs.exists` of each
+path answer with the text, and writes nothing to disk. Paths are compared as `eff.allow.3` compares them, so `a.txt`
+and `./a.txt` are one file. A path that is not stubbed reads the real file system as before; `fs.list_dir`,
+`fs.walk` and the other calls do not see stubbed files. A later call for a path replaces its text. *(ADR 1101)*
+
+**test.stub.3** — `test.env(vars Map[str, str])` makes `env.get(name)` return the value for each name. Other
+variables, `env.vars()` and `env.home()` are unchanged. *(ADR 1101)*
+
+**test.stub.4** — `test.clock(ms int)` fixes the clock: `time.now_ms()` and everything built on it return `ms`, which
+stands still. `time.sleep_ms(n)` then returns at once and moves the clock on by `n`, and `test.advance(ms)` moves it
+on by `ms`. `test.advance` before `test.clock`, and a negative time, are failures of the test. The monotonic clock
+that deadlines use is not stubbed. *(ADR 1101)*
+
+**test.stub.5** — `test.http(call str, status int, body str)` makes a request `call`, written `METHOD URL` with the
+method in capitals and the URL as the program writes it (`"GET https://api.example.com/items"`), answer with `status`,
+`body` and no headers, with no connection. Any call of `std.net` that sends that method to that URL gets it; a request
+with no stub goes on as without stubs (and is refused by the sandbox unless the test has `@needs(net)`). A `call`
+that is not `METHOD URL` is a failure of the test. *(ADR 1101)*
+
+**test.stub.6** — Stubs are made by `ail test` and kept in a file in the test's temporary directory, which is
+`fs.temp_dir()` for that test (`test.sandbox.1`). Nothing outlives the test, and a stub can't leak into another. *(ADR 1101)*
+
+```ail tool=test,FILE expect=passed rules=test.stub.1,test.stub.2,test.stub.3,test.stub.6
+use std.test
+
+@test fn reads_a_stubbed_file_and_variable() !
+    test.files({"config.txt": "mode=fast"})
+    test.env({"APP_MODE": "test"})
+    assert(fs.exists("./config.txt"))
+    assert_eq(fs.read_text("config.txt")?, "mode=fast")
+    assert_eq(env.get("APP_MODE") else "", "test")
+
+@test fn the_next_test_starts_clean()
+    assert(not fs.exists("config.txt"))
+    assert_eq(env.get("APP_MODE") else "none", "none")
+```
+
+```ail tool=test,FILE expect=passed rules=test.stub.4
+use std.test
+
+@test fn the_clock_moves_only_when_told()
+    test.clock(1000)
+    assert_eq(time.now_ms(), 1000)
+    time.sleep_ms(500)
+    assert_eq(time.now_ms(), 1500)
+    test.advance(250)
+    assert_eq(time.now_ms(), 1750)
+```
+
+```ail tool=test,FILE expect=passed rules=test.stub.5
+use std.test
+
+@test fn a_stubbed_request_needs_no_network() !
+    test.http("GET https://api.example.com/items", 200, "one,two")
+    r := net.get("https://api.example.com/items")?
+    assert_eq(r.status, 200)
+    assert_eq(r.body, "one,two")
+```
+
+```ail tool=test,FILE status=1 expect=test.stub.5 rules=test.stub.5
+use std.test
+
+@test fn the_call_needs_a_method()
+    test.http("https://api.example.com/items", 200, "x")
+```
+
 ## Assertions
 
 **test.assert.1** — `assert(cond)` does nothing when `cond` is `true` and traps
@@ -307,7 +439,9 @@ fn main()
 of type `T ! E`) fails, and traps when it returns a value. `assert_err(call,
 E.Variant)` also requires the error to equal the second argument, and traps
 otherwise; that argument must be one of the errors the call declares, else it
-is a compile-time error. `assert_near(a, b, eps)` does nothing when
+is a compile-time error. For a variant that carries data, `E.Variant` alone
+checks the kind of the error and ignores its fields; to check them too, pass
+the whole value, `E.Variant(field: x)`. `assert_near(a, b, eps)` does nothing when
 `|a - b| <= eps` and traps otherwise (also when a value is NaN), showing the
 three values. The error `assert_err` catches is handled: the test goes on.
 *(ADR 1087)*
@@ -315,15 +449,20 @@ three values. The error `assert_err` catches is handled: the test goes on.
 ```ail rules=test.assert.3
 error enum Fail
     Bad
+    Missing(name str)
 
 fn pick(n int) int ! Fail
     if n == 0
         return Bad
+    if n < 0
+        return Missing(name: "n")
     n
 
 fn main()
     assert_err(pick(0))
     assert_err(pick(0), Fail.Bad)
+    assert_err(pick(-1), Fail.Missing)
+    assert_err(pick(-1), Fail.Missing(name: "n"))
     assert_near(0.1 + 0.2, 0.3, 0.0001)
     print("ok")
 ```

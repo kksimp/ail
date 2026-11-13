@@ -1,0 +1,25 @@
+possible codes: 5040
+secret 4271:
+  1. guess 0123 -> 0B 2C, 1260 left
+  2. guess 1045 -> 0B 2C, 288 left
+  3. guess 2354 -> 0B 2C, 128 left
+  4. guess 3406 -> 0B 1C, 21 left
+  5. guess 4217 -> 2B 2C, 2 left
+  6. guess 4271 -> 4B 0C, 1 left
+secret 9035:
+  1. guess 0123 -> 0B 2C, 1260 left
+  2. guess 1045 -> 2B 0C, 62 left
+  3. guess 1067 -> 1B 0C, 24 left
+  4. guess 1248 -> 0B 0C, 2 left
+  5. guess 3095 -> 2B 2C, 1 left
+  6. guess 9035 -> 4B 0C, 1 left
+secret 0123:
+  1. guess 0123 -> 4B 0C, 1 left
+secret 9876:
+  1. guess 0123 -> 0B 0C, 360 left
+  2. guess 4567 -> 0B 2C, 84 left
+  3. guess 5489 -> 0B 2C, 8 left
+  4. guess 6798 -> 0B 4C, 2 left
+  5. guess 8976 -> 2B 2C, 1 left
+  6. guess 9876 -> 4B 0C, 1 left
+total guesses: 19

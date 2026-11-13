@@ -105,6 +105,7 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
             scan_expr(mut sc, value)
             sc.decls.add(name)
         LetTuple(_, _, _) => refuse(mut sc, "a tuple binding")
+        LocalFn(_) => refuse(mut sc, "a local function")
         Assign(target, op, value, _) =>
             scan_expr(mut sc, value)
             match target
@@ -144,6 +145,7 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
             mut sc,
             "`handle`, `defer`, `with` or `unsafe`",
         )
+        Select(_, _) => refuse(mut sc, "`select`")
 
 ## The place an element is stored into: the indexes are read, the list is
 ## only named.

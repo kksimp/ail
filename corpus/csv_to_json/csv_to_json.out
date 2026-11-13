@@ -1,0 +1,9 @@
+[
+  {"name": "ada", "age": 36, "city": "London", "active": true},
+  {"name": "bob", "age": 41, "city": "New York", "active": false},
+  {"name": "Dee \"D\" Lee", "age": 25, "city": "Rome", "active": false},
+  {"name": "linus", "age": null, "city": "Helsinki", "active": true},
+  {"name": "grace", "age": -3, "city": "Paris", "active": true}
+]
+5 objects, 1 skipped
+skipped line 4: expected 4 cells, got 2
