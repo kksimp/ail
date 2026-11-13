@@ -1,0 +1,72 @@
+## Distinct types (type.distinct.1-7, ADR 1103): construction, conversion back,
+## operators, the standard traits, JSON and Default derives, generic code.
+type UserId = int
+type Cents = int
+type Meters = float
+type Name = str
+type Flag = bool
+
+struct Order
+    id UserId
+    price Cents
+    note Name
+
+impl ToJson for Order
+impl FromJson for Order
+impl Default for Order
+
+fn largest[T Ord](xs List[T]) T
+    mut best := xs[0]
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn total(prices List[Cents]) Cents
+    mut acc := Cents(0)
+    for p in prices
+        acc += p
+    acc
+
+fn main()
+    a := UserId(7)
+    b := UserId(9)
+    print(int(a) + int(b))
+    print(a == b)
+    print(a < b)
+    print("{a} and {b}")
+    print("[{a:>4}]")
+    c := total([Cents(250), Cents(199), Cents(1)])
+    print(int(c))
+    print(int(c / Cents(2)))
+    print(int(c % Cents(7)))
+    print(int(-c))
+    m := Meters(1.5) * Meters(3.0)
+    print(float(m))
+    print(str(Name("Ada")).len())
+    print(bool(not Flag(false)))
+    print(int(largest([UserId(4), UserId(11), UserId(2)])))
+    mut seen := Set[UserId]()
+    seen.add(a)
+    seen.add(UserId(7))
+    print(seen.len())
+    mut owners := Map[UserId, Name]()
+    owners[b] = Name("Bo")
+    print(str(owners[b]))
+    ids := [UserId(3), UserId(1), UserId(2)].sorted()
+    print("{ids[0]}{ids[1]}{ids[2]}")
+    o := Order(id: a, price: c, note: Name("rush"))
+    text := o.to_json().to_text()
+    print(text)
+    doc := parse_json(text) else return
+    back := Order.from_json(doc) else err
+        print("failed: {err.message}")
+        return
+    print(back == o)
+    d := Order.default()
+    print("{d.id} {d.price} [{d.note}]")
+    bad := parse_json("\{\"id\": \"x\", \"price\": 1, \"note\": \"n\"}") else return
+    wrong := Order.from_json(bad) else err
+        print(err.message)
+        return
+    print(int(wrong.id))

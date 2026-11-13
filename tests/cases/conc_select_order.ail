@@ -1,0 +1,46 @@
+# conc.select.3: when several arms can go ahead the first in source order runs;
+# a send arm queues its value only when it runs; a `select` whose arms all
+# return leaves the function (conc.select.6).
+
+fn first(a Channel[int], b Channel[int]) int
+    select
+        x := a.recv() => return x
+        y := b.recv() => return y * 10
+        closed => return -1
+
+fn main()
+    a := Channel[int](4)
+    b := Channel[str](4)
+    a.send(1)
+    b.send("x")
+    select
+        s := b.recv() => print("b {s}")
+        n := a.recv() => print("a {n}")
+        closed => print("closed")
+    select
+        n := a.recv() => print("a {n}")
+        s := b.recv() => print("b {s}")
+        closed => print("closed")
+    full := Channel[int](1)
+    full.send(0)
+    for i in 1..=2
+        select
+            full.send(i) => print("full took {i}")
+            a.send(i) => print("a took {i}")
+    p := a.try_recv() else -1
+    q := a.try_recv() else -1
+    r := full.try_recv() else -1
+    print("{p} {q} {r}")
+    a.close()
+    b.close()
+    select
+        n := a.recv() => print("a {n}")
+        s := b.recv() => print("b {s}")
+        closed => print("both closed")
+    c := Channel[int](1)
+    d := Channel[int](1)
+    d.send(4)
+    print(first(c, d))
+    c.close()
+    d.close()
+    print(first(c, d))

@@ -153,6 +153,10 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         if prog.fns[i].ext != none
             return check_c_call(n, s, binds, args, npos, expect)
         return check_call(n, s, binds, args, none, npos, expect)
+    # type.distinct.3: `int(id)` gives a distinct type's value as its base.
+    if not has_targs
+        if back := distinct_unwrap(n, args, npos)
+            return back
     if v := bare_variant(n, npos, expect)
         return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
     # A habit call such as `make(Map[str, int])` (a call hint of expr.name.1) is one mistake: its fix rewrites the
@@ -732,6 +736,8 @@ fn Checker.struct_literal(
     expect Ty?,
 ) Ty
     decl := prog.structs[s]
+    if decl.is_distinct
+        return distinct_literal(s, args, at)
     params := struct_params[s]
     mut binds := explicit else expected_binds(Def.DStruct(s), expect)
     before := diags.len()
@@ -1063,7 +1069,7 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         if t := enum_name_method(rt, n, at, args)
             return t
         args_only(args)
-        if not hidden_std_module(recv, n, at)
+        if not hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
             no_method(rt, n, at)
         return Ty.Unknown
     if cands.len() > 1
@@ -1252,6 +1258,9 @@ fn Checker.associated(
         if e := enum_of_def(d)
             if t := enum_static(e, n, at, args)
                 return t
+        # type.distinct.5: `UserId.from_json(j)` through the base's standard trait.
+        if dt := distinct_assoc(d, n, at, args, expect)
+            return dt
         args_only(args)
         err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
         return Ty.Unknown
@@ -1457,6 +1466,8 @@ fn Checker.has_field(self, t Ty, n str) bool
                 .with_help("write `.{n}()`")
                 .with_fix("add the parentheses", [fix.replace(at, n, "{n}()")]),
         )
+        return Ty.Unknown
+    if distinct_field(rt, n, at)
         return Ty.Unknown
     if is_tensor(rt)
         err_help(

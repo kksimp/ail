@@ -179,6 +179,21 @@ fn Mover.stmt(mut self, s ast.Stmt)
             otherwise(o)
         # Checked at the end of the block, with the flow there.
         Defer => return
+        # conc.select.3: the heads run in order, then at most one arm's block.
+        Select(arms, _) =>
+            for h in ast.select_heads(arms)
+                expr(h)
+            start := flow
+            mut out := if ast.select_always_runs(arms) then dead() else start
+            for a in arms
+                flow = start
+                mark := names_in.len()
+                if b := ast.select_var(a.op)
+                    declare(b.name)
+                block(a.body)
+                names_in = names_in[..mark]
+                out = join(out, flow)
+            flow = out
 
 @allow("expr.match.3") fn whole_name(e ast.Expr) str?
     match e

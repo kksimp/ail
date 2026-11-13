@@ -79,6 +79,11 @@ update a `mut` variable in a loop, use `=`.
 Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
 `(0, s) =>`; `==`, `<` and map keys work elementwise.
 
+Distinct types: `type UserId = int` (any built-in scalar base) is a new type
+that never mixes with `int` or another id type. `UserId(3)` makes one,
+`int(id)` gives the value back; same-type operators, `==`, `<`, text, map keys
+and JSON work as the base's; no fields, methods or `impl`; free at run time.
+
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
@@ -513,6 +518,11 @@ v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
 for v in ch                 # receives until closed and empty
     print(v)
+select                      # first ready arm in order; channels of any types
+    n := nums.recv() => total += n
+    out.send(job) => sent += 1
+    after 50 => print("idle")   # optional; `after 0` never waits
+    closed => break         # required with a recv arm: all recv channels closed
 m := Mutex(0)               # get, set, swap
 with m as mut x             # holds m; stores x back on any exit
     x += 1

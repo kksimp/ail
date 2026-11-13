@@ -1,0 +1,7 @@
+# conc.select.5: a `closed` arm needs a receive arm.
+
+fn main()
+    ch := Channel[int](1)
+    select
+        ch.send(1) => print("sent")
+        closed => print("closed")

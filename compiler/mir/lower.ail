@@ -257,7 +257,8 @@ pub fn lower_package_par(
     lazy int,
     pooled Set[str],
 ) Module ! Problems
-    srcs := with_error_owners(shadow_free(input, lazy))
+    # type.distinct.7: distinct types are their bases in native code (lower_distinct.ail).
+    srcs := with_error_owners(shadow_free(erase_distinct(input), lazy))
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
@@ -1273,6 +1274,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
         LocalFn(d) => lower_local_fn(d)
+        Select(arms, pos) => lower_select(arms, pos)
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).

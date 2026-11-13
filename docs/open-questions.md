@@ -550,3 +550,21 @@ refreezes it.
 needed before v0.1.0, because the per-batch refreeze plus a `golden.py compare` against
 main covers the gap.
 **Decision needed from:** AI (delegated, ADR 0076).
+
+## OQ-144 — Methods on distinct types (ADR 1103)
+
+`type UserId = int` (type.distinct.1-7) has no methods or `impl`s of its own in 0.1.0
+(type.distinct.6): native code erases it to its base before lowering, so two distinct
+types over `int` would both put methods on `int`.
+
+- **A. Methods, keyed by the declared type.** `fn UserId.next(self)` is lowered as a
+  function named for `UserId`; the checker records which declared type each call's
+  receiver has, and the erasure rewrites the call to that function. Pro: the Go and Rust
+  habit works. Con: the erasure needs the checker's per-call facts.
+- **B. Keep free functions only.** Pro: no new machinery; a function that takes `UserId`
+  is just as local. Con: no `impl` of a program's own trait.
+- **C. Lower distinct types as their own `Ty` in the native backend.** Pro: methods and
+  `impl`s work like a struct's. Con: every lowering that switches on a type learns a new case.
+
+**Recommendation:** A after 0.1.0, when an app needs it; B until then.
+**Decision needed from:** AI (delegated, ADR 0076).

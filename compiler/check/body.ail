@@ -55,6 +55,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     c.check_main()
     c.check_attrs()
     c.check_impls()
+    c.check_distinct_decls()
     for i in 0..p.structs.len()
         c.gap_now = false
         c.check_invariants(i)
@@ -516,6 +517,7 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Defer(inner, at) =>
             defer_stmt(inner, at)
             Ty.Unit
+        Select(arms, at) => select_stmt(arms, at)
 
 @allow("expr.match.3") fn is_true(e ast.Expr) bool
     match e
@@ -1454,6 +1456,13 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
         LetTuple(_, value, _) => overlap_in_expr(target, value)
         # A local function's body works on copies (type.fn.5).
         LocalFn => none
+        Select(arms, _) =>
+            if at := overlap_in_list(target, ast.select_heads(arms))
+                return at
+            for body in ast.select_bodies(arms)
+                if at := overlapping_use(target, body)
+                    return at
+            none
         Break => none
         Continue => none
 
@@ -1595,6 +1604,11 @@ fn stmt_breaks(s ast.Stmt) bool
         LetTuple(_, value, _) => breaks_in_expr(value)
         # A local function's body can't leave the enclosing loop (type.fn.9).
         LocalFn => false
+        Select(arms, _) =>
+            for body in ast.select_bodies(arms)
+                if breaks(body)
+                    return true
+            any_breaks(ast.select_heads(arms))
         Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool

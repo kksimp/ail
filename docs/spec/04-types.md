@@ -3,7 +3,7 @@
 Chapter key: `type`
 
 > **Status:** Drafted (partial). Specified: numeric types (integers and
-> floats), structs, enums, optional types, strings, characters, the standard
+> floats), structs, distinct types, enums, optional types, strings, characters, the standard
 > collections, maps and sets, and grids. Not yet designed: fixed-size arrays, SIMD
 > vector types, and const generics.
 
@@ -275,6 +275,151 @@ d := Config(name: "b", retries: 9)
 ```ail error=type.struct.8
 struct Bad
     a int = len("abc")          # error: a default has no calls or names
+```
+
+## Distinct types
+
+**type.distinct.1** — `type Name = Base` at the top level declares a
+distinct type: a new type with the values of `Base`, which MUST be a
+built-in scalar: `int`, a sized number (`type.num.1`), `float`, `str`,
+`bool`, `char` or `bytes`. It takes no type parameters, and `pub type`
+exports it (`mod.vis.1`). A distinct type is never the same type as its
+base, nor as another distinct type over the same base. *(ADR 1103)*
+
+```ail rules=type.distinct.1,type.distinct.2,type.distinct.3
+type UserId = int
+type OrderId = int
+
+fn owner(order OrderId) UserId
+    UserId(int(order) / 100)
+
+fn main()
+    o := OrderId(4207)
+    u := owner(o)
+    print(int(u))           # 42
+```
+
+```ail error=type.distinct.1
+type Ids = List[int]        # error: a distinct type wraps a built-in scalar; declare a struct
+
+fn main()
+    print(1)
+```
+
+**type.distinct.2** — `Name(x)` makes a value of the distinct type from one
+positional argument of its base type; a literal is written there
+(`UserId(3)`). It is the only conversion into a distinct type: a value of
+the base or of another type where the distinct type is expected is a type
+error, as is a distinct value where its base is expected. *(ADR 1103)*
+
+```ail error=type.distinct.2
+type UserId = int
+
+fn main()
+    id := UserId("42")      # error: `UserId(...)` takes `int`
+    print(int(id))
+```
+
+**type.distinct.3** — `Base(x)`, the name of a distinct type's base called on
+one of its values, gives the value as the base: `int(id)`, `str(name)`. The
+name MUST be the base (`i64` is `int` and `f64` is `float`); another is an
+error. A distinct type has no fields and no methods of its own (except the
+standard traits of `type.distinct.5`): convert it first, `str(name).len()`.
+*(ADR 1103)*
+
+```ail error=type.distinct.3
+type Name = str
+
+fn main()
+    n := Name("Ada")
+    print(n.len())          # error: no method `len`; write `str(n).len()`
+```
+
+**type.distinct.4** — The base's operators work on two operands of the same
+distinct type: `+ - * / %` give the distinct type, unary `-` and `not` keep
+it, and `== != < <= > >=` give `bool`. Mixing a distinct type with its base
+or with another type in an operator is an error whose help shows both
+conversions. *(ADR 1103)*
+
+```ail rules=type.distinct.4
+type Meters = float
+
+fn main()
+    a := Meters(1.5)
+    b := Meters(2.0)
+    total := a + b
+    print(float(total))     # 3.5
+    print(a < b)            # true
+    print(float(-a))        # -1.5
+```
+
+```ail error=type.distinct.4
+type Meters = float
+
+fn main()
+    a := Meters(1.5)
+    print(float(a + 2.0))   # error: write `a + Meters(2.0)` or `float(a) + 2.0`
+```
+
+**type.distinct.5** — A distinct type has the standard traits of its base, with
+the base's behaviour: `Eq`, `Ord`, `Hash`, `ToStr`, `ToJson`, `FromJson` and
+`Default` (`trait.std.1`). It prints and interpolates as its base, is a map
+key, a set element and sortable when the base is, and a derived `ToJson` or
+`FromJson` writes and reads it as the bare base value. A program's own traits
+don't pass through. *(ADR 1103)*
+
+```ail rules=type.distinct.5
+type UserId = int
+
+struct User
+    id UserId
+    name str
+
+impl ToJson for User
+impl FromJson for User
+
+fn main()
+    mut names := Map[UserId, str]()
+    names[UserId(7)] = "Ada"
+    print(names[UserId(7)])               # Ada
+    ids := [UserId(3), UserId(1), UserId(2)].sorted()
+    print("{ids[0]} {ids.len()}")         # 1 3
+    u := User(id: UserId(7), name: "Ada")
+    text := u.to_json().to_text()
+    print(text)                           # {"id":7,"name":"Ada"}
+    doc := parse_json(text) else return
+    back := User.from_json(doc) else return
+    print(back == u)                      # true
+```
+
+**type.distinct.6** — A distinct type declares no methods and no `impl`;
+behaviour goes in functions that take it. *(ADR 1103)*
+
+```ail error=type.distinct.6
+type UserId = int
+
+fn UserId.next(self) UserId     # error: write `fn next_id(id UserId) UserId`
+    UserId(int(self) + 1)
+
+fn main()
+    print(int(UserId(1).next()))
+```
+
+**type.distinct.7** — In native code a distinct type has its base's
+representation: a `Cents` is an `int` in a register, a `List[Cents]` is a
+list of ints, and `Cents(x)` and `int(x)` cost nothing. *(ADR 1103)*
+
+```ail rules=type.distinct.7
+type Cents = int
+
+fn total(prices List[Cents]) Cents
+    mut acc := Cents(0)
+    for p in prices
+        acc = acc + p
+    acc
+
+fn main()
+    print(int(total([Cents(250), Cents(199)])))    # 449
 ```
 
 ## Enums

@@ -189,6 +189,22 @@ fields is written qualified there (`Cons(_, Items.Nil)`). A struct is matched by
 field name, `Point(x: 0, y) =>`: a bare field name binds that field and
 unnamed fields match anything; `Rect(w: 0)` names a variant's fields.
 
+A distinct type wraps a built-in scalar so that IDs and units can't be swapped
+(type.distinct.1-7). It has its base's operators, `==`, `<`, text, hashing and
+JSON, no fields or methods, and costs nothing at run time:
+
+```ail
+type UserId = int                 # never an int, never another id type
+
+fn greet(id UserId) str
+    "user {id}"                   # prints as its int
+
+fn main()
+    id := UserId(42)              # in: Type(value)
+    print(greet(id))
+    print(int(id) + 1)            # out: int(id); `id + 1` is an error
+```
+
 ## Absence and errors
 
 ```ail
@@ -829,6 +845,12 @@ task.set_threads(4)           # cap the pool from the next loop; task.threads() 
 for v in ch                   # receives until closed and empty
     print(v)
 all := [v for v in ch]        # also in comprehensions
+select                        # waits; runs the first arm in order that can go
+    n := nums.recv() =>       # a value from nums, as an int (not int?)
+        total += n
+    out.send(job) => sent += 1  # room in out: job is queued
+    after 50 => print("idle") # no arm ready for 50 ms; `after 0` never waits
+    closed => break           # every recv channel closed and empty (required with recv)
 ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
 with m as mut x               # read-modify-write: holds m, stores x back

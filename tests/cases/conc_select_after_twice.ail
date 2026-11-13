@@ -1,0 +1,8 @@
+# conc.select.4: a `select` has at most one `after` arm.
+
+fn main()
+    ch := Channel[int](1)
+    select
+        ch.send(1) => print("sent")
+        after 10 => print("ten")
+        after 20 => print("twenty")
