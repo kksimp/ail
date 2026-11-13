@@ -11,10 +11,27 @@ fn Lower.is_enum_name(self, t Ty, name str, args List[ast.Arg]) bool
     s := enum_name(t) else return false
     name == "name" and args.len() == 0 and is_flat(s) and not sigs.contains("{s}.name")
 
-## `c.name()`: the variant's name, which is the enum value's text form.
+## `c.name()`: the variant's name alone (`Red`); the text form is qualified (`Color.Red`).
 fn Lower.lower_enum_name(mut self, r Val, pos ast.Pos) Val?
-    text := text_of(r, pos)?
-    Val(id: text, ty: Ty.Str)
+    en := enum_name(r.ty) else return unsupported(pos, "`name` of this value")
+    cases := enums[en]
+    join := new_block()
+    out := new_value(Ty.Str, "")
+    blocks[join].params.push(out)
+    for k in 0..cases.len()
+        same := op("eq", [r.id, konst(k, r.ty)], Ty.Bool)
+        hit := new_block()
+        next := new_block()
+        branch(same, hit, [], next, [])
+        seal(hit)
+        seal(next)
+        cur = hit
+        jump(join, [str_value(cases[k].name)])
+        cur = next
+    jump(join, [str_value("")])
+    seal(join)
+    cur = join
+    Val(id: out, ty: Ty.Str)
 
 fn Lower.lower_enum_static(mut self, en str, name str, args List[ast.Arg], pos ast.Pos) Val?
     t := Ty.Enum(en)

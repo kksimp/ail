@@ -385,7 +385,7 @@ function of the same name, has three functions without being written.
 `Color.variants()` returns a `List[Color]` of every variant in declaration
 order. `Color.from_str(s)` returns the `Color?` whose variant name is exactly
 `s`, and `none` for any other text. `c.name()` returns the variant's name as a
-`str`, the text `print(c)` shows. A call with the wrong number of arguments, or
+`str`, without the enum's name (`Red`, where `print(c)` shows `Color.Red`). A call with the wrong number of arguments, or
 a `from_str` argument that isn't a `str`, is a compile-time error. *(ADR 1087)*
 
 ```ail rules=type.enum.20
@@ -396,7 +396,7 @@ enum Color
 fn main()
     for c in Color.variants()
         print(c.name())              # Red, then Green
-    print(Color.from_str("Green"))   # Green
+    print(Color.from_str("Green"))   # Color.Green
     print(Color.from_str("green"))   # none
 ```
 

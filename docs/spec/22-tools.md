@@ -251,12 +251,12 @@ the last arm, each `=> todo`, so each arm is a typed hole
 **fix.apply.1** — `ail fix FILE` checks the file and takes the first fix of
 every diagnostic that has one. It skips a fix whose edits touch the range of an
 earlier-chosen fix, and applies the rest from last to first
-([ADR 0203](../decisions/0203-ail-fix-command.md)).
+([ADR 0203](../decisions/0203-ail-fix-command.md)). It leaves the fix of an
+unused local (`expr.bind.14`) to the author: an unused local is often a bug
+([ADR 1087](../decisions/1087-std-papercuts.md)).
 
 **fix.apply.2** — `ail fix` checks the result again and repeats, up to 5
 rounds, until no fixable diagnostic remains ([ADR 0203](../decisions/0203-ail-fix-command.md)).
-After the first round it applies only the fixes of errors: a warning that an
-earlier fix exposed is left to the author ([ADR 1087](../decisions/1087-std-papercuts.md)).
 
 **fix.apply.3** — If the file was already in canonical layout
 ([ADR 0169](../decisions/0169-canonical-formatting-style.md)) before `ail fix`
