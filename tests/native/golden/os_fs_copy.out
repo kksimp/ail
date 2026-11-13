@@ -9,9 +9,9 @@ R/copy/deep/er/tree/sub/b.txt
 bravo
 line
 copied R/copy/src to R/copy/deep/er/tree
-copy R/copy/nope failed: not_found R/copy/nope
-copy R/copy/src/a.txt failed: is_dir R/copy/src
-copy R/copy/src failed: other R/copy/src/inside
-copy R/copy/src failed: other R/copy/src
-copy R/copy/src failed: exists R/copy/dest.txt
+copy R/copy/nope failed: fs.IoKind.NotFound R/copy/nope
+copy R/copy/src/a.txt failed: fs.IoKind.IsDir R/copy/src
+copy R/copy/src failed: fs.IoKind.Other R/copy/src/inside
+copy R/copy/src failed: fs.IoKind.Other R/copy/src
+copy R/copy/src failed: fs.IoKind.Exists R/copy/dest.txt
 false

@@ -363,6 +363,32 @@ fn main()
     print(area(Rect(w: 2, h: 3)))
 ```
 
+**type.enum.7** — A string literal compared with `==` or `!=` to an enum value,
+or written as a pattern of a `match` on one, is a compile-time error: an enum
+is never equal to a string. When the string is a variant's name in snake case
+(`"not_found"` for `NotFound`), the diagnostic carries a machine-applicable
+fix that writes the variant (`fix.edit.1`). The kinds of the standard
+library's errors are enums (`std.err.1`), so a misspelt kind is a
+compile-time error, not a test that is never true. *(ADR 1068)*
+
+```ail error=type.enum.7
+fn main()
+    text := fs.read_text("notes.txt") else err
+        if err.kind == "not_found"
+            print("missing")
+        ""
+    print(text)
+```
+
+```ail rules=type.enum.7
+fn main()
+    text := fs.read_text("notes.txt") else err
+        if err.kind == NotFound
+            print("missing")
+        ""
+    print(text)
+```
+
 ## Optional types
 
 **type.opt.1** — [definitional] AIL has no null value. *(ADR 0048)*

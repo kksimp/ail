@@ -20,7 +20,7 @@ fn hang_up(l net.Listener) !
 
 fn tls_kind(port int) str
     c := net.connect_tls("127.0.0.1", port) else err
-        return err.kind
+        return "{err.kind}"
     c.close()
     "connected"
 

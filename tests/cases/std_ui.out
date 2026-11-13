@@ -9,4 +9,9 @@ false false false
 20
 close
 close
-ui.UiError(kind: "no_display", message: "none")
+ui.UiError(kind: ui.UiKind.NoDisplay, message: "none")
+f5
+true
+x
+none
+true

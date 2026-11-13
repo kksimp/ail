@@ -758,6 +758,8 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
     if lt != Ty.Unknown and lt != Ty.Never and rt != Ty.Unknown and rt != Ty.Never
         if reject_unhandled(lt, expr_pos(lhs)) or reject_unhandled(rt, expr_pos(rhs))
             return Ty.Unknown
+    if rt == Ty.Str and enum_text_compare(op, lt, rhs)
+        return Ty.Bool
     operator(op, lt, rt, at)
 
 ## A `std.tensor` value.
@@ -1085,10 +1087,7 @@ fn Checker.match_expr(
         Unknown => literal = false
         Res => reject_unhandled(st, expr_pos(scrutinee))
         Tuple => literal = false
-        Union => unsupported(
-            expr_pos(scrutinee),
-            "matching on a set of error types is not designed yet (OQ-029); match on one error type",
-        )
+        Union(members) => return union_match(scrutinee, members, arms, at, expect, need)
         _ =>
             err_help(
                 "expr.match.4",
@@ -1360,8 +1359,9 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                 "a tuple pattern, but `{decl.name}` is an enum; match it with its variants",
             )
             tuple_pattern_names(pat)
-        Literal(_, at) =>
-            err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
+        Literal(lit, at) =>
+            if not enum_text_pattern(e, lit, at, mut cov)
+                err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
             []
         # expr.match.13: inside a tuple element; it covers no whole variant.
         Nested =>

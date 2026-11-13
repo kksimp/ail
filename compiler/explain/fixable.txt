@@ -3,6 +3,7 @@ contract.ens.2
 contract.ens.3
 err.else.1
 err.else.3
+err.match.3
 err.prop.1
 err.ret.1
 err.use.1
@@ -47,6 +48,7 @@ trait.op.3
 type.bool.1
 type.bytes.13
 type.coll.4
+type.enum.7
 type.map.5
 type.opt.3
 type.str.2

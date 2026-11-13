@@ -943,7 +943,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     body := f.body else
         lower_extern(f, name, params)
         return
-    if lower_ui_intrinsic(f, key, name, params)
+    if lower_ui_intrinsic(f, key, name, params) or lower_rt_flag(key, name, f.pos)
         return
     if not unchecked
         enter_contracts(f, key)

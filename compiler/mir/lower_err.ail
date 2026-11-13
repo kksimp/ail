@@ -453,6 +453,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
         return true
     call("rt.err_set", [msg, trace_line(pos)], Ty.Unit)
     call("rt.err_value", [v.id], Ty.Unit)
+    tag_error(v.ty)
     defer_all()
     finish(return_of(zero_of(ret)))
     true
@@ -527,6 +528,7 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
         finish(return_of(konst(0, ret)))
     elif fails
         call("rt.err_set", [str_value("a value is absent"), trace_line(pos)], Ty.Unit)
+        tag_absent()
         add_context(context)
         defer_all()
         finish(return_of(zero_of(ret)))
@@ -573,7 +575,7 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
 ## one, else its display text.
 fn Lower.bind_taken_error(mut self, name str, ty Ty)
     if ty == Ty.Unknown
-        declare(name, Ty.Str, call("rt.err_take", [], Ty.Str))
+        bind_text_error(name)
     else
         raw := call("rt.err_take_value", [], Ty.Int)
         declare(name, ty, op("copy", [raw], ty))
@@ -644,7 +646,7 @@ fn Lower.else_part(
                 if opt
                     problem(n.pos, "an absent value has no error to bind")
                 elif err == Ty.Unknown
-                    declare(n.name, Ty.Str, call("rt.err_take", [], Ty.Str))
+                    bind_text_error(n.name)
                 else
                     raw := call("rt.err_take_value", [], Ty.Int)
                     declare(n.name, err, op("copy", [raw], err))
@@ -743,6 +745,7 @@ fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[TRAPPED] = ""
     err_msgs[NET_ERROR] = ""
     err_msgs[COMPRESS_ERROR] = ""
+    declare_std_kinds()
     # What `Task.wait()` fails with (conc.task.6), named in `! Trapped`.
     err_msgs["Trapped"] = ""
     for s in prog.structs

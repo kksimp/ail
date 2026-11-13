@@ -334,16 +334,17 @@ fn net_fail(url str, kind str, message str, at str) int
     sb_text("net.NetError(url: ")
     os_put_quoted(url)
     sb_text(", kind: ")
-    os_put_quoted(kind)
+    kind_put("net.NetKind", kind)
     sb_text(", message: ")
     os_put_quoted(message)
     sb_byte(41)
     err_set(sb_str(), at)
     e := obj_new(24, 4)
     store64(e, str_addr(url))
-    store64(e + 8, str_addr(kind))
+    store64(e + 8, kind_word(net_kinds(), kind))
     store64(e + 16, str_addr(message))
     err_value(e)
+    err_tag(err_tag_of("net.NetError"))
     0
 
 fn net_closed(what str, at str) int

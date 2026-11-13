@@ -16,13 +16,14 @@ of draw commands (`Cmd`: `Clear`, `Rect`, `Line`, `Text`), built with
 `released` (keys that changed since the previous frame), `text` typed, the
 pointer (`x`, `y`, `buttons`) and `wheel`. `down(i, key)`, `pressed(i, key)`
 and `released(i, key)` ask about one key; `idle()` is an input with nothing
-held. A key is named as `std.ui.7` names it. Pure data, so tests build it by
-hand. *(ADR 0956)*
+held. A key is a `ui.KeyCode` (`std.ui.7`): `gfx.down(i, Right)`,
+`gfx.pressed(i, Text("a"))`. Pure data, so tests build it by hand.
+*(ADR 0956, ADR 1068)*
 
 **std.gfx.3** — `next_input(prev, events)` makes the next frame's `Input`
 from the previous one and the `std.app` events since: `key` presses a key
-(its auto-repeats do not press again), `keyup` releases it (`key_up(name)`
-makes that event), `click` and `move` set the pointer, `scroll` adds to the
+(its auto-repeats do not press again), `keyup` releases it (`key_up(key)`
+makes that event for a `ui.KeyCode`), `click` and `move` set the pointer, `scroll` adds to the
 wheel. *(ADR 0956)*
 
 **std.gfx.4** — `script(mut g T, w, h, dt, steps)` runs `update` and `draw`
@@ -77,9 +78,9 @@ observe` gives the game's observed values and `gfx.cmds`, `gfx.fills`,
 
 **std.gfx.11** — `Input.pads` holds the connected gamepads (`pad(i, n)` is
 gamepad `n`, or `no_pad()`). A `Pad` has `buttons`, `pressed` and `released`
-(bit sets of `pad_bit(name)`: `a` 1, `b` 2, `x` 4, `y` 8, `lb` 16, `rb` 32,
-`back` 64, `start` 128, `l3` 256, `r3` 512, `up` 1024, `down` 2048, `left`
-4096, `right` 8192), sticks `lx`, `ly`, `rx`, `ry` from -1.0 to 1.0 (right and
+(bit sets of `pad_bit(button)` for a `PadButton`: `A` 1, `B` 2, `X` 4, `Y` 8,
+`Lb` 16, `Rb` 32, `Back` 64, `Start` 128, `L3` 256, `R3` 512, `Up` 1024,
+`Down` 2048, `Left` 4096, `Right` 8192; ADR 1068), sticks `lx`, `ly`, `rx`, `ry` from -1.0 to 1.0 (right and
 up are positive) and triggers `lt`, `rt` from 0.0 to 1.0. `pad_down`,
 `pad_pressed` and `pad_released` ask about one button. The host sends the
 event `pad` (`id` the gamepad's number, `text` the state `buttons,lx,ly,rx,ry,
@@ -97,7 +98,7 @@ use std.gfx
 
 fn main()
     i := gfx.next_input(gfx.idle(), [gfx.pad_event(0, "1,0.5,-0.5,0,0,0,1.0")])
-    print(gfx.pad_down(i, 0, "a"))
+    print(gfx.pad_down(i, 0, A))
     print(gfx.pad(i, 0).lx)
     print(gfx.pad(i, 3).buttons == gfx.no_pad().buttons)
 ```
@@ -111,7 +112,7 @@ struct Dot
 
 impl gfx.Game for Dot
     fn update(mut self, input gfx.Input, dt float)
-        if gfx.down(input, "right")
+        if gfx.down(input, Right)
             x += 10.0 * dt
 
     fn draw(self, mut f gfx.Frame)
@@ -120,11 +121,11 @@ impl gfx.Game for Dot
 
 fn main()
     mut d := Dot(x: 0.0)
-    steps := [[app.key("right")], [gfx.key_up("right")]]
+    steps := [[app.key("right")], [gfx.key_up(Right)]]
     frames := gfx.script(mut d, 16, 8, 1.0, steps)
     print(frames[1])
     i := gfx.next_input(gfx.idle(), [app.key("a")])
-    print(gfx.pressed(i, "a"))
+    print(gfx.pressed(i, Text("a")))
     f := gfx.new_frame(4, 4)
     print(gfx.stats(f).cmds)
 ```

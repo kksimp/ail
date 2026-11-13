@@ -6,9 +6,9 @@ struct Pad
 
 impl app.App for Pad
     fn update(mut self, ev app.Event)
-        if ev.kind == "click" and ev.text == "right"
+        if ev.kind == Click and ev.text == "right"
             menu = app.Popup(id: "pad", x: ev.x, y: ev.y, items: ["Reveal", "Trash"])
-        if ev.kind == "popup"
+        if ev.kind == Popup
             menu = none
 
     fn view(self) app.Node

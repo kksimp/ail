@@ -186,6 +186,12 @@ fn main() !                                 # main can fail; the error is report
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
+- Which one failed: `match err` with `IoError =>` (there `err` is an
+  `IoError`) and `ParseError.Empty =>`; every member must be covered.
+- Standard errors carry a `kind` enum: `if err.kind == NotFound` or
+  `match err.kind` (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`); never a string.
+  So are `app.Event.kind` (`ev.kind == Press`) and keys (`key == Escape`,
+  `Text("q")`).
 
 ## Traits and generics
 
@@ -564,8 +570,8 @@ fn main()
     w.present()
     while true
         match w.next_event()
-            Key(key, _, _, _) =>                   # "a", "enter"; (key, ctrl, alt, shift)
-                if key == "escape"
+            Key(key, _, _, _) =>                   # Text("a"), Enter; (key, ctrl, alt, shift)
+                if key == Escape
                     break
             Close => break
             Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()

@@ -1,5 +1,5 @@
 hello hello hello hello
 x
 true
-missing not_found
-bad corrupt not a zip archive
+missing compress.CompressKind.NotFound
+bad compress.CompressKind.Corrupt not a zip archive

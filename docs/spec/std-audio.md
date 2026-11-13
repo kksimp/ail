@@ -45,10 +45,11 @@ host (`AIL_AUDIO_HOST`, else the one built under `AIL_ROOT` by
 `tools/audio-host/macos/run.sh`, `tools/audio-host/linux/run.sh` or
 `tools/audio-host/windows/run.ps1`) and waits for its `ready` line;
 `play(mut d, clip)` blocks until the clip has played; `close(move d)` stops the
-host. `DeviceError` has `kind` (`no_host`, `start`, `version`, `host_exited`,
-`device`, `protocol`) and `message`. The host speaks one text line per message:
+host. `DeviceError` has `kind` (`enum DeviceKind`: `NoHost`, `Start`, `Version`,
+`HostExited`, `Device`, `Protocol`, ADR 1068) and `message`, which is also its
+display text. The host speaks one text line per message:
 `play RATE CH BASE64`, `rec MS RATE CH`, then `done`, `data RATE CH BASE64` or
-`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio), Linux (ALSA, `tools/audio-host/linux/host.c`; `AIL_ALSA_DEVICE` picks the device) and Windows (WASAPI in shared mode, with the engine's sample-rate and channel conversion, so any clip format plays). Where no host is built `open` fails with kind `no_host`
+`error TEXT`. Built: macOS (AVAudioEngine on CoreAudio), Linux (ALSA, `tools/audio-host/linux/host.c`; `AIL_ALSA_DEVICE` picks the device) and Windows (WASAPI in shared mode, with the engine's sample-rate and channel conversion, so any clip format plays). Where no host is built `open` fails with kind `NoHost`
 and a message naming this rule; it never crashes.
 
 **std.audio.10** — `record(mut d, ms, rate, channels) Clip ! DeviceError` records

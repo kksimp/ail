@@ -124,14 +124,15 @@ fn proc_fail(cmd str, kind str, at str) int
     sb_text("proc.ProcError(cmd: ")
     os_put_quoted(cmd)
     sb_text(", kind: ")
-    os_put_quoted(kind)
+    kind_put("proc.ProcKind", kind)
     sb_byte(41)
     err_set(sb_str(), at)
-    # The value, a `proc.ProcError(cmd, kind)` struct (ADR 0804).
+    # The value, a `proc.ProcError(cmd, kind)` struct (ADR 0804, ADR 1068).
     e := obj_new(16, PROC_STRUCT)
     store64(e, str_addr(cmd))
-    store64(e + 8, str_addr(kind))
+    store64(e + 8, kind_word(proc_kinds(), kind))
     err_value(e)
+    err_tag(err_tag_of("proc.ProcError"))
     0
 
 fn proc_pipe(at int) int

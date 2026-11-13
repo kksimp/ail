@@ -20,9 +20,9 @@ fn status_of(c net.Conn) str
 
 fn send(port int, raw str) str
     c := net.connect("127.0.0.1", port) else err
-        return err.kind
+        return "{err.kind}"
     c.write(raw) else err
-        return err.kind
+        return "{err.kind}"
     status_of(c)
 
 fn main() !

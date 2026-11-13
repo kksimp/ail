@@ -1,10 +1,42 @@
 ## std.term.1-4, 8: styles and cursor moves, the input decoder, and `open` without a terminal.
 use std.term
 
+## The std.ui.7 name of `k` (ADR 1068: keys are `term.KeyCode`).
+fn key_name(k term.KeyCode) str
+    match k
+        Text(t) => t
+        Enter => "enter"
+        Tab => "tab"
+        Backspace => "backspace"
+        Delete => "delete"
+        Insert => "insert"
+        Escape => "escape"
+        Up => "up"
+        Down => "down"
+        Left => "left"
+        Right => "right"
+        Home => "home"
+        End => "end"
+        PageUp => "pageup"
+        PageDown => "pagedown"
+        F(n) => "f{n}"
+
+fn button_name(b term.MouseButton) str
+    match b
+        Left => "left"
+        Middle => "middle"
+        Right => "right"
+
+fn mouse_kind(k term.MouseKind) str
+    match k
+        Down => "down"
+        Up => "up"
+        Drag => "drag"
+
 fn show(e term.Event) str
     match e
-        Key(k, c, a, s) => "key {k} ctrl={c} alt={a} shift={s}"
-        Mouse(col, row, b, kind) => "mouse {col},{row} {b} {kind}"
+        Key(k, c, a, s) => "key {key_name(k)} ctrl={c} alt={a} shift={s}"
+        Mouse(col, row, b, kind) => "mouse {col},{row} {button_name(b)} {mouse_kind(kind)}"
         Scroll(n) => "scroll {n}"
         Resize(c, r) => "resize {c}x{r}"
 
@@ -40,6 +72,7 @@ fn main()
     dump(b"\x1b[<64;1;1M\x1b[<65;1;1M\x1b[<35;1;1M")
     dump(b"\x1b[24;80R")
     dump(b"a\x1b[")
+    print("{term.key_code("pageup").name()} {term.key_code("f5").name()} {term.key_code("q").name()}")
     print(term.is_tty())
     mut t := term.open(false) else err
         print(err.why.starts_with("std.term."))

@@ -1,4 +1,4 @@
-# `compress.gunzip` fails with: compress.CompressError(kind: "corrupt", message: "truncated gzip trailer")
+# `compress.gunzip` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "truncated gzip trailer")
 use std.compress
 
 fn main() !

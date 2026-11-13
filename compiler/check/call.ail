@@ -1018,6 +1018,9 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             if sn == "proc.Output"
                 return output_method(n, at, args)
         PtrOf(target) => return ptr_method(rt, target, n, at, args, expect)
+        Enum(e, _) =>
+            if prog.enums[e].name == "ui.KeyCode"
+                return key_method(recv, n, at, args, expect)
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0

@@ -3,7 +3,7 @@ fig
 pear
 
 done
-proc.ProcError(cmd: "sleep", kind: "timed_out")
+proc.ProcError(cmd: "sleep", kind: proc.ProcKind.TimedOut)
 -1
 true
 none

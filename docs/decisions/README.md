@@ -856,9 +856,11 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
 | [1063](1063-function-wide-value-ranges.md) | Native: function-wide value ranges drop checks and fold comparisons they decide *(delegated)* | Accepted | 2026-11-12 |
+| [1068](1068-std-error-kinds-are-enums.md) | The kinds of the standard library's errors are enums; a string compared with an enum gets a fix *(designer; details delegated)* | Accepted | 2026-11-12 |
 | [1069](1069-nested-match-patterns.md) | Nested patterns in variant fields, checked as a pattern matrix *(delegated)* | Accepted | 2026-11-12 |
 | [1070](1070-bit-operators.md) | Bit operators `& \| ^ ~ << >>` as sugar for the `int` methods; mixing needs parentheses; supersedes ADR 0465 *(delegated)* | Accepted | 2026-11-12 |
 | [1076](1076-struct-field-defaults.md) | Struct field defaults `name Type = value`, plain constants only *(delegated)* | Accepted | 2026-11-12 |
+| [1078](1078-error-union-member-matching.md) | `match err` on an error union takes member types and their variants, narrows the name, and must cover every member *(designer; details delegated)* | Accepted | 2026-11-12 |
 | [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |
 | [1082](1082-discarded-result-is-an-error.md) | A call whose value is thrown away and that does nothing else is an error (`eff.use.1`) | Accepted | 2026-11-12 |
 | [1083](1083-ail-ask-answers-honestly.md) | `ail ask` answers honestly: built-in methods, a minimum score, misses with a hint, `ail ask how` *(delegated)* | Accepted | 2026-11-12 |

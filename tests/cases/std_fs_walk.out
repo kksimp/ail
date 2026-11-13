@@ -16,9 +16,9 @@ hello
 false
 hello
 ["std_fs_walk_case.tmp/x/deep/util.ail", "std_fs_walk_case.tmp/x/main.ail", "std_fs_walk_case.tmp/x/notes.txt"]
-fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
-fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
+fs.IoError(path: "std_fs_walk_case.tmp/none", kind: fs.IoKind.NotFound)
+fs.IoError(path: "std_fs_walk_case.tmp/none", kind: fs.IoKind.NotFound)
 5
-fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
+fs.IoError(path: "std_fs_walk_case.tmp/none", kind: fs.IoKind.NotFound)
 []
 false

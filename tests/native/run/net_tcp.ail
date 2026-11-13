@@ -9,13 +9,13 @@ fn port_of(addr str) int
 
 fn connect_kind(host str, port int) str
     c := net.connect(host, port) else err
-        return err.kind
+        return "{err.kind}"
     c.close()
     "ok"
 
 fn listen_kind(addr str) str
     l := net.listen(addr) else err
-        return err.kind
+        return "{err.kind}"
     l.close()
     "ok"
 

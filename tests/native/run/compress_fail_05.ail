@@ -1,4 +1,4 @@
-# `compress.inflate` fails with: compress.CompressError(kind: "corrupt", message: "extra bytes after the end of the compressed data")
+# `compress.inflate` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "extra bytes after the end of the compressed data")
 use std.compress
 
 fn main() !

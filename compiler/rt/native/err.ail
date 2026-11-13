@@ -11,6 +11,11 @@ ERR := 8
 TRACE := 9
 ## The error value of a failure whose type is a struct or an enum (ADR 0804).
 ERRV := 12
+## The pending error's type tag (ADR 1078): `err_tag_of` its type's name, 0
+## when unknown. A worker keeps its own at `P_ERRT` in the pool block, one
+## word per thread slot.
+ERR_TAG := 67
+P_ERRT := 13312
 
 ## Where the pending failure's words are: 0 the display text, 1 the error
 ## value, 2 the trace. The main thread keeps them in the global slots; a
@@ -26,6 +31,37 @@ fn err_addr(k int) int
     if k == 1
         return global(ERRV)
     global(TRACE)
+
+## The address of this thread's pending error tag.
+fn err_tag_addr() int
+    if load64(global(MULTI)) != 0
+        w := worker_index()
+        if w >= 0
+            return load64(global(TASKS)) + P_ERRT + 8 * (w + 1)
+    global(ERR_TAG)
+
+## The tag of the error type named `name` (its key: `fs.IoError`, `ParseError`,
+## `mod.E`); `compiler/mir/lower_errmatch.ail` computes the same number.
+fn err_tag_of(name str) int
+    p := str_addr(name)
+    n := load64(p)
+    mut h := 0
+    mut i := 0
+    while i < n
+        h = (h * 31 + load8(p + 16 + i)) % 2147483647
+        i += 1
+    if h == 0 then 1 else h
+
+## Record the pending error's type (ADR 1078).
+fn err_tag(t int)
+    store64(err_tag_addr(), t)
+
+fn err_tag_get() int
+    load64(err_tag_addr())
+
+## The pending error's value, left in place for `err_take`.
+fn err_peek_value() int
+    load64(err_addr(1))
 
 # ---- optionals ----
 
@@ -63,6 +99,7 @@ fn unboxf(p int) float
 ## Fail with `msg` (the error's display text); `at` is the first trace line.
 fn err_set(msg str, at str)
     store64(err_addr(0), str_addr(msg))
+    store64(err_tag_addr(), 0)
     xs := list_new(8)
     list_push(xs, list_addr(list_new(8)))
     list_push(xs, str_addr(at))
@@ -100,10 +137,11 @@ fn err_take() str
 
 ## A task that failed keeps its error in a box until `wait` takes it.
 fn err_box() int
-    b := obj_new(24, 4)
+    b := obj_new(32, 4)
     store64(b, load64(err_addr(0)))
     store64(b + 8, load64(err_addr(1)))
     store64(b + 16, load64(err_addr(2)))
+    store64(b + 24, load64(err_tag_addr()))
     store64(err_addr(0), 0)
     store64(err_addr(1), 0)
     b
@@ -112,6 +150,7 @@ fn err_restore(b int)
     store64(err_addr(0), load64(b))
     store64(err_addr(1), load64(b + 8))
     store64(err_addr(2), load64(b + 16))
+    store64(err_tag_addr(), load64(b + 24))
 
 fn err_clear()
     store64(err_addr(0), 0)

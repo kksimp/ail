@@ -234,7 +234,8 @@ fn http_status(line str) int
 
 ## Whether the failure pending is a connection that closed or reset (kind `closed`).
 fn http_conn_lost() bool
-    net_has(str_at(load64(err_addr(0))), "kind: \"closed\"")
+    t := str_at(load64(err_addr(0)))
+    net_has(t, "kind: net.NetKind.Closed") or net_has(t, "kind: \"closed\"")
 
 ## Add the header `name: value` to the maps of a response.
 fn http_header(headers int, all int, name str, value str)

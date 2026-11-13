@@ -5,7 +5,7 @@ churn true
 after 20000 true true
 same true
 empty 0
-missing not_found
+missing fs.IoKind.NotFound
 0
-dir is_dir
+dir fs.IoKind.IsDir
 0
