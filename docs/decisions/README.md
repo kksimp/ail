@@ -148,7 +148,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0138](0138-literal-and-or-patterns.md) | Literal patterns, or-patterns, and one-line statement arms *(delegated)* | Accepted | 2026-10-05 |
 | [0139](0139-unit-results-statement-else-and-divergence.md) | `! E` results; statement `else`; divergence is a rule, not a type (amends 0125) *(delegated)* | Accepted | 2026-10-05 |
 | [0140](0140-diagnostics-for-other-languages.md) | Names other languages spell differently get a fixed help *(delegated)* | Accepted | 2026-10-05 |
-| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted | 2026-10-05 |
+| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted (formatter clause superseded by 1081) | 2026-10-05 |
 | [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
 | [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
@@ -849,3 +849,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1058](1058-ail-on-path-and-doctor.md) | `ail` works from PATH through symlinks; `ail doctor` and `ail doctor --path` *(delegated)* | Accepted | 2026-11-11 |
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
+| [1081](1081-formatter-writes-self.md) | The formatter writes `self.` before a bare member | Accepted | 2026-11-12 |

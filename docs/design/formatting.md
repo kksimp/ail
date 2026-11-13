@@ -117,10 +117,18 @@ comment between them leaves the layout as written.
 statement containing a multi-line string (`lex.str.3`) is written exactly as
 in the source, because its lines are the string's content.
 
-**fmt.safe**: the formatter changes only whitespace, line breaks and trailing
-commas. It formats only files that lex and parse, and refuses to write output
-whose token stream (ignoring trailing commas) or comments differ from the
-input's.
+**fmt.self** (ADR 1081): inside a method or an invariant, a bare member of the
+receiver is written with `self.`: `x` becomes `self.x` and `f(a)` becomes
+`self.f(a)`, at exactly the places the implicit-`self` pass rewrites
+(`trait.method.6`). The formatter sees one file, so a member declared in
+another file of the package is left as written. Until the tree is reformatted
+it is on only with `ail fmt --self` (`WRITE_SELF` in `compiler/fmt/fmt.ail`).
+
+**fmt.safe**: apart from fmt.self, the formatter changes only whitespace, line
+breaks and trailing commas. It formats only files that lex and parse, and
+refuses to write output whose token stream (ignoring trailing commas) or
+comments differ from the input's; with fmt.self, the input is the text with
+`self.` written, which must parse and leave no bare member for the pass.
 
 **fmt.off**: a file whose first line before any code is a comment starting
 `# ail fmt: off` is left as written. It exists for lexer tests whose layout is

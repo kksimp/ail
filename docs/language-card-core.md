@@ -51,7 +51,7 @@ enum Shape
     Rect(w int, h int)
 
 fn Point.sum(self) int           # method; `mut self` may change self
-    x + y                        # fields by bare name
+    self.x + self.y              # canonical; bare `x + y` works too
 
 fn area(s Shape) int
     match s                      # must cover every variant; `_` covers the rest

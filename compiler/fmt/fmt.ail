@@ -4,7 +4,8 @@
 ## `docs/design/formatting.md`; the `fmt.*` IDs cited here are that file's.
 ##
 ## The formatter works on the lexer's token stream with the comment side
-## table. It only changes whitespace, line breaks and trailing commas, and
+## table. It only changes whitespace, line breaks and trailing commas (and,
+## with `write_self`, writes `self.` before bare members: explicit.ail), and
 ## refuses to write output whose token stream differs from the input's
 ## (fmt.safe). The spelling of a type is kept as written (type.num.4).
 use ast
@@ -97,9 +98,18 @@ struct Formatter
     comments List[syntax.Comment]
     out List[str]
 
+## `ail fmt` writes `self.` before a bare member of the receiver (fmt.self,
+## ADR 1081). Off until the tree is reformatted in one commit; `--self` turns it on.
+WRITE_SELF := false
+
 ## The canonical form of `src`.
 pub fn format(src str) Formatted
-    lexed := syntax.lex(src)
+    format_with(src, WRITE_SELF)
+
+## `format`, with `write_self` choosing whether bare members get `self.` (fmt.self).
+pub fn format_with(original str, write_self bool) Formatted
+    mut src := original
+    mut lexed := syntax.lex(src)
     mut diags := lexed.diags
     if diags.len() == 0
         diags = syntax.parse(lexed.tokens).diags
@@ -114,6 +124,13 @@ pub fn format(src str) Formatted
     for c in lexed.comments
         if c.pos.line < first_code and c.text.starts_with(OFF)
             return Formatted(status: 0, text: src, diags: [], why: "")
+    if write_self
+        ex := explicit_self(src, lexed.tokens)
+        if ex.status != 0
+            return ex
+        if ex.text != src
+            src = ex.text
+            lexed = syntax.lex(src)
     out := run(new_formatter(src, lexed.tokens, lexed.comments))
     # fmt.safe: the same tokens, apart from trailing commas, and the same comments.
     again := syntax.lex(out)

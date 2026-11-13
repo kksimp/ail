@@ -104,10 +104,10 @@ enum Color
     Green
 
 fn Point.sum(self) int            # method; `self` is read-only
-    x + y                         # fields and methods by bare name (self.x)
+    self.x + self.y               # canonical; bare `x + y` works too
 
 fn Point.shift(mut self, dx int)  # may change self
-    x += dx
+    self.x += dx
 
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)

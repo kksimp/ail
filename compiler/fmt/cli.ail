@@ -1,21 +1,23 @@
-## `ail fmt [--check | --stdout] PATH...` (ADR 0170). Exit status: 0 done (or
+## `ail fmt [--check | --stdout] [--self] PATH...` (ADR 0170). Exit status: 0 done (or
 ## already canonical), 1 `--check` found a file that would change, 2 a file
-## couldn't be read or formatted.
+## couldn't be read or formatted. `--self` writes `self.` before bare members
+## (fmt.self, ADR 1081) until that is the default.
 use syntax
 
 pub fn command(args List[str]) int
     check := args.contains("--check")
     to_stdout := args.contains("--stdout")
+    write_self := WRITE_SELF or args.contains("--self")
     mut paths := List[str]()
     for a in args
         if a.starts_with("--")
-            if a != "--check" and a != "--stdout"
+            if a != "--check" and a != "--stdout" and a != "--self"
                 io.eprint("error: unknown option {a} for `ail fmt`")
                 return 2
         else
             paths.push(a)
     if paths.len() == 0 or (check and to_stdout)
-        io.eprint("usage: ail fmt [--check | --stdout] PATH...")
+        io.eprint("usage: ail fmt [--check | --stdout] [--self] PATH...")
         return 2
     mut files := List[Target]()
     for p in paths
@@ -33,7 +35,7 @@ pub fn command(args List[str]) int
             io.eprint("error: can't read {file}: {err.kind}")
             failed = true
             continue
-        done := format(src)
+        done := format_with(src, write_self)
         if done.status == 1
             # A file found in a directory that doesn't parse is skipped when it is a
             # negative test (it has an expectation file). In check mode any other one

@@ -265,7 +265,7 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
                 out.fns[i].owner = no
             else
                 out.fns[i].name = qualified(r.module, f.name)
-    renamed := rewrite_self(out)
+    renamed := syntax.rewrite_self(out)
     out = renamed.program
     r.diags.extend(renamed.diags)
     # Rewrite every reference to an item to its qualified name.

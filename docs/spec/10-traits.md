@@ -43,8 +43,9 @@ declared in the package that declares the type. *(ADR 0082)*
 field and method of the receiver is in scope by its bare name: `x` means
 `self.x` and `f(args)` means `self.f(args)`. The methods are the type's own
 and those of the traits it implements; in a trait's default method, they are
-the trait's methods. `self.x` stays valid, and the formatter writes `x`.
-Associated functions see no members by bare name. *(ADR 0141)*
+the trait's methods. `self.x` stays valid and is the canonical form: `ail fmt`
+writes `self.x` and `self.f(args)` for a bare member it can see (fmt.self).
+Associated functions see no members by bare name. *(ADR 0141, ADR 1081)*
 
 **trait.method.7** — A parameter or local of a method MUST NOT have the name
 of a field of its receiver; it may share a method's name, since a method is
@@ -637,7 +638,7 @@ struct Pt
     x int
 
 fn Pt.double(self) int
-    x * 2                       # fields are in scope by their bare name
+    x * 2                       # bare `x` is `self.x`; ail fmt writes `self.x * 2`
 
 fn main()
     print(Pt(x: 4).double())    # 8
