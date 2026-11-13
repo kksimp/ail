@@ -52,6 +52,7 @@ pub COVERED_RULES := [
     "err.use.2",
     "expr.bind.1",
     "expr.bind.3",
+    "expr.bind.14",
     "expr.bind.4",
     "expr.bind.5",
     "expr.bind.6",
