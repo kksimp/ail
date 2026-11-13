@@ -48,6 +48,7 @@ int.min(b) int ; type.num.12 ; smaller least minimum of two
 int.max(b) int ; type.num.12 ; larger greatest maximum of two
 int.to_float() float ; type.num.12 ; convert float real number
 int.to_hex() str ; type.str.8 ; hexadecimal hex digits string convert format
+int.to_str(radix) str ; type.str.20 ; digits in a base radix binary octal convert to string text
 int.checked_add(b) int? ; type.num.12 ; overflow safe add plus none
 int.checked_sub(b) int? ; type.num.12 ; overflow safe subtract minus none
 int.checked_mul(b) int? ; type.num.12 ; overflow safe multiply times none
@@ -117,6 +118,8 @@ List.remove_at(i) T [mut self] ; type.coll.14 ; remove delete element at index
 List.extend(ys) [mut self] ; type.coll.14 ; append all concatenate add many lists
 List.clear() [mut self] ; type.coll.14 ; remove all empty
 List.reverse() [mut self] ; type.coll.14 ; reverse in place flip order
+List.reversed() List[T] ; type.coll.27 ; reversed copy reverse order descending new list
+List.any(f) bool ; type.coll.22 ; any some exists predicate test true for one element
 List.swap(i, j) [mut self] ; type.coll.7 ; swap exchange two elements
 List.contains(x) bool ; type.coll.9 ; contains includes has member
 List.index_of(x) int? ; type.coll.9 ; index position search find element

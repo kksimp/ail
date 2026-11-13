@@ -76,11 +76,11 @@ are correctly rounded too; a literal that overflows is a `lex.num.3` error.
 *(ADR 0130)*
 
 ```ail fragment
-"2.5E-3".to_float()     # 0.0025
-"1e999".to_float()      # inf
-"-0".to_float()         # -0.0
-"+1".to_float()         # none
-".5".to_float()         # none
+print("2.5E-3".to_float())    # 0.0025
+print("1e999".to_float())     # inf
+print("-0".to_float())        # -0.0
+print("+1".to_float())        # none
+print(".5".to_float())        # none
 ```
 
 **type.num.9** — `x.abs()`, `x.floor()`, `x.ceil()`, `x.round()` and

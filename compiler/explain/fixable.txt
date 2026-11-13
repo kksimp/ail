@@ -1,6 +1,7 @@
 conc.share.6
 contract.ens.2
 contract.ens.3
+eff.use.1
 err.else.1
 err.else.3
 err.match.3
@@ -18,6 +19,7 @@ expr.if.2
 expr.loop.1
 expr.loop.4
 expr.loop.6
+expr.loop.8
 expr.match.1
 expr.match.12
 expr.match.13

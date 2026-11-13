@@ -886,8 +886,8 @@ fn popup_line(p Popup) str
 
 fn gone(move c proc.Child) ! AppError
     status := proc.kill(move c)
-    AppError(kind: HostExited, message: "the app host exited with status {status}")
+    return AppError(kind: HostExited, message: "the app host exited with status {status}")
 
 fn mismatch(move c proc.Child, line str) ! AppError
     proc.kill(move c)
-    AppError(kind: Version, message: "the app host spoke another protocol: {line}")
+    return AppError(kind: Version, message: "the app host spoke another protocol: {line}")

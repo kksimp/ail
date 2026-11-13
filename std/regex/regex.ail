@@ -2123,7 +2123,7 @@ fn m_find_all(re Regex, text str) List[Match]
 
 fn m_group_all(re Regex, text str, group int) List[str]
     if group < 0 or group >= re.groups
-        no_group("std.regex.24", "the pattern has groups 0 to {re.groups - 1}, not group {group}")
+        _ := no_group("std.regex.24", "the pattern has groups 0 to {re.groups - 1}, not group {group}")
     cs := text.chars()
     mut vm := new_vm(re, 2 * re.groups)
     sp := spans(re, cs, 1073741824, mut vm)
@@ -2228,7 +2228,7 @@ fn template(re Regex, rep str) Template
 fn replace_n(re Regex, text str, rep str, limit int) str
     t := template(re, rep)
     if t.bad != ""
-        no_group("std.regex.7", "the replacement refers to {t.bad}")
+        _ := no_group("std.regex.7", "the replacement refers to {t.bad}")
     cs := text.chars()
     stride := if t.refs.len() == 0 then 2 else 2 * re.groups
     mut vm := new_vm(re, stride)
