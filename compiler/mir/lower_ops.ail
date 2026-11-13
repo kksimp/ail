@@ -251,6 +251,15 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         return c
     if name == "to_float" and vs.len() == 0 and r.ty.is_sized()
         return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
+    # type.str.20: `n.to_str()` and `n.to_str(radix)`.
+    if name == "to_str" and vs.len() <= 1 and (r.ty == Ty.Int or r.ty.is_sized())
+        if vs.len() == 0
+            f := if r.ty == Ty.Sized("u64") then "rt.fmt_u64" else "rt.fmt_int"
+            return Val(id: call(f, [r.id], Ty.Str), ty: Ty.Str)
+        k := int_arg(vs[0], name, npos)?
+        check_radix(k, npos)
+        f := if r.ty == Ty.Sized("u64") then "rt.fmt_radix_u" else "rt.fmt_radix"
+        return Val(id: call(f, [r.id, k], Ty.Str), ty: Ty.Str)
     # type.num.14: the digits of an unsigned value are the `int` ones.
     if name == "to_hex" and vs.len() == 0 and r.ty.is_sized() and sized_lo(sized_kind(r.ty)) == 0
         return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)

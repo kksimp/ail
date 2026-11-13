@@ -140,6 +140,7 @@ pub COVERED_RULES := [
     "std.use.3",
     "std.use.4",
     "test.assert.2",
+    "test.assert.3",
     "test.attr.1",
     "test.attr.2",
     "test.attr.3",

@@ -754,9 +754,10 @@ when `s` is an optional `-` followed by one or more decimal digits and the
 value fits in `int`; otherwise it is `none`. *(ADR 0124)*
 
 **type.str.6** — The `str` methods that search for text (`contains`,
-`starts_with`, `ends_with` and `split`) accept a `char` as well as a `str`;
-a `char` means the one-character string. `strip_prefix` and `strip_suffix`
-take a `str` only. *(ADR 0135)*
+`starts_with`, `ends_with`, `split`, `find`, `rfind` and `count`) accept a
+`char` as well as a `str`, and `replace` accepts one for each of its two
+arguments; a `char` means the one-character string. `strip_prefix` and
+`strip_suffix` take a `str` only. *(ADR 0135, ADR 1087)*
 
 **type.str.7** — A `str` has these methods. *(ADR 0135)*
 - `s.chars()` returns a new `List[char]`. Strings stay unindexable
@@ -823,6 +824,21 @@ fn main()
 ```
 
 **type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
+
+**type.str.20** — `s.to_int(radix)` returns an `int?` like `to_int()` (`type.str.5`),
+reading an optional `-` and then digits `0-9`, `a-z` or `A-Z` whose values are below
+`radix`; anything else, or a value that doesn't fit, is `none`. `n.to_str(radix)` on an
+integer is its digits in `radix`, lowercase, with a `-` before the magnitude of a negative
+value (as `n.to_hex()` for 16); `n.to_str()` is the decimal text. A `radix` outside 2 to 36
+is a compile-time error for a literal and otherwise traps with this rule. *(ADR 1087)*
+
+```ail rules=type.str.20
+fn main()
+    print("ff".to_int(16))        # 255
+    print("102".to_int(2))        # none
+    print(255.to_str(2))          # 11111111
+    print((0 - 255).to_str(16))      # -ff
+```
 
 **type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
 *(ADR 0630)*
@@ -916,9 +932,16 @@ b := "héllo".byte_len()   # 6
 **type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
 exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
 is `2`); `nan` and `inf` print as `{x}` does. `x` formats an `int` in lowercase
-hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`).
-Using `.N` on a non-float or `x` on a non-int is a compile-time error. Width,
-fill and alignment apply to the text form of any value. *(ADR 0173)*
+hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`);
+`b` does the same in binary and `{n:08b}` pads it. `e` formats a `float` as
+`d.ddde` and a decimal exponent, from the shortest digits that read back as `x`
+(`{1234.5:e}` is `1.2345e3`, `{0.00123:e}` is `1.23e-3`); `{x:.2e}` keeps two
+decimals of the mantissa, rounding those digits half up. `+` forces a sign on
+an `int` or `float`, `,` groups the digits of its integer part
+(`{1234567:,}` is `1,234,567`), and `0` with a width pads with zeros after the
+sign (`{-5:04}` is `-005`). Using `.N` or `e` on a non-float, `x` or `b` on a
+non-int, or `+`, `,` or `0` on a non-number is a compile-time error. Width,
+fill and alignment apply to the text form of any value. *(ADR 0173, ADR 1087)*
 
 ```ail error=type.str.11
 n := 1
@@ -1310,8 +1333,26 @@ set. *(ADR 0340)*
 `x` to the list at `k`, and starts an empty list first when `k` is missing. On
 a map with any other value type it is a compile-time error. *(ADR 0341)*
 
+**type.map.12** — `m.get_or(k, d)` returns the value stored under `k`, or `d` when
+`k` is missing; `d` has the value type and is always evaluated. It is the same
+as `m.get(k) else d`. *(ADR 1087)*
+
+**type.coll.21** — `xs.reversed()` returns a new list with the elements of `xs`
+in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
+in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
+
+```ail rules=type.map.12,type.coll.21
+fn main()
+    m := {"a": 1}
+    print(m.get_or("a", 0))                 # 1
+    print(m.get_or("b", 0))                 # 0
+    xs := [3, 1, 2]
+    print(xs.reversed())                    # [2, 1, 3]
+    print(xs.sorted().reversed())           # [3, 2, 1]
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
-`v := m.get(k) else d`, `contains`, and iterating `keys()` and indexing.
+`m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 
 ```ail fragment
 mut seen := Set[str]()

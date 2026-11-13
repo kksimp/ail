@@ -362,7 +362,7 @@ m := """
     """                     # multi-line: "line one\n  indented"; the common indent is removed, the closing line adds no newline
 r := r"C:\dir\{x}"          # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
-print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
+print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad, binary, thousands, fill and align
 ```
 
 - Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
