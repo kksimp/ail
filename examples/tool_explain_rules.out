@@ -1,5 +1,5 @@
-expr.call.2 0 expr.call.2 (05-expressions.md:101)
-expr.name.1 0 expr.name.1 (05-expressions.md:60)
+expr.call.2 0 expr.call.2 (05-expressions.md:102)
+expr.name.1 0 expr.name.1 (05-expressions.md:61)
 test.assert.1 0 test.assert.1 (19-testing.md:275)
 eff.infer.6 0 eff.infer.6 (18-effects.md:46)
 diff.out.1 0 diff.out.1 (22-tools.md:413)

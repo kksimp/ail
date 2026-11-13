@@ -760,7 +760,16 @@ fn main() !
     root := sh("pwd").out.trim()
     tmp := "{tmp_base()}/ail-nativex"
     sh("rm -rf {tmp}; mkdir -p {tmp}")
-    mut r := Run(fails: 0, checks: 0, root: root, tmp: tmp, shard_k: shard_k, shard_n: shard_n, total: 0, ran: 0)
+    mut r := Run(
+        fails: 0,
+        checks: 0,
+        root: root,
+        tmp: tmp,
+        shard_k: shard_k,
+        shard_n: shard_n,
+        total: 0,
+        ran: 0,
+    )
     q := qemu()
     native := is_host_native()
     mut unit := 0
