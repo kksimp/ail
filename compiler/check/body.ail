@@ -716,7 +716,7 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
         "err.else.4",
         expr_pos(value),
         "this {what}, and has a value ({show(vt)}); `else` on its own handles only results with no value",
-        "bind the value: `x := ... else ...`; to end a function with it, bind it: `v := ... else return ...`, then end with `v`",
+        "bind the value: `x := ... else ...`; as the last line of a block, `... else return ...` gives the value (err.else.7)",
     )
 
 ## Help for `else` on a value that is never absent (expr.name.2).
