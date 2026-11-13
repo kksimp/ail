@@ -236,5 +236,10 @@ Deque.first() T? ; type.deque.3 ; double ended queue front element peek
 Deque.last() T? ; type.deque.3 ; double ended queue end element peek
 Deque.len() int ; type.deque.3 ; double ended queue length size count
 Deque.is_empty() bool ; type.deque.3 ; double ended queue empty length zero
+Deque.set(i, v) [mut self] ; type.deque.6 ; double ended queue replace element at position index assign
+Deque.next() T? [mut self] ; type.deque.7 ; double ended queue iterate for loop take front element
 Deque.at(i) T ; type.deque.4 ; double ended queue element at index position
 Deque.to_list() List[T] ; type.deque.4 ; double ended queue elements list convert
+Enum.variants() List[Enum] ; type.enum.20 ; enum every variant all values list iterate cases
+Enum.from_str(s) Enum? ; type.enum.20 ; enum parse string to variant by name lookup
+Enum.name() str ; type.enum.20 ; enum variant name text string without the type
