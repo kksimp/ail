@@ -142,15 +142,15 @@ fn show(src str)
     print("  words: {shown.join(" ")}")
 
 fn main()
-    show("\{\"name\": \"ail\", \"tags\": [\"a\", \"b\"], \"n\": -12\}")
-    show("[1, 2.5e3, true, false, null, \{\"k\": []\}]")
+    show("\{\"name\": \"ail\", \"tags\": [\"a\", \"b\"], \"n\": -12}")
+    show("[1, 2.5e3, true, false, null, \{\"k\": []}]")
     show("[\"x\\\"y\"]")
-    show("\{\"a\": tru\}")
+    show("\{\"a\": tru}")
     show("[1, \"open]")
-    show("\{\"a\": @\}")
+    show("\{\"a\": @}")
 
 @test fn tokenizes_structure()
-    toks := tokenize("\{\"a\": [1, null]\}")?
+    toks := tokenize("\{\"a\": [1, null]}")?
     assert_eq(toks.len(), 9)
     assert(toks[0].kind == Kind.LBrace)
     assert_eq(toks[1].text, "a")

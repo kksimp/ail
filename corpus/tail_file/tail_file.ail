@@ -17,7 +17,7 @@ fn tail(p str, n int) !List[str]
         window.push(line.trim_end())
         if window.len() > n
             window.remove_at(0)
-    r.close()?
+    r.close()
     window
 
 fn longest_line(p str) !int
@@ -26,7 +26,7 @@ fn longest_line(p str) !int
     while true
         line := r.read_line()? else break
         best = best.max(line.trim_end().byte_len())
-    r.close()?
+    r.close()
     best
 
 fn main() !

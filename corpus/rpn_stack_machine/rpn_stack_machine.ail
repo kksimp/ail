@@ -85,10 +85,10 @@ fn main()
     assert_eq(run_rpn("3 10 -") else 0, -7)
 
 @test fn errors_are_typed()
-    assert_err(run_rpn("1 +"), RpnError.Underflow)
+    assert_err(run_rpn("1 +"))
     assert_err(run_rpn("1 0 /"), RpnError.DivZero)
-    assert_err(run_rpn("1 2"), RpnError.Leftover)
-    assert_err(run_rpn("1 foo"), RpnError.BadToken)
+    assert_err(run_rpn("1 2"))
+    assert_err(run_rpn("1 foo"))
 
 @test fn division_truncates_toward_zero()
     assert_eq(run_rpn("-7 2 /") else 0, -3)

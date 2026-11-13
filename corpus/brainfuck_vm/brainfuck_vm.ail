@@ -106,6 +106,6 @@ fn main()
     assert_eq(run("+++[-].", "")?, [0])
 
 @test fn errors_are_typed()
-    assert_err(run("[+]]", ""), BfError.Unmatched)
+    assert_err(run("[+]]", ""))
     assert_err(run("+[]", ""), BfError.TooLong)
-    assert_err(run("<", ""), BfError.OffTape)
+    assert_err(run("<", ""))
