@@ -6,6 +6,7 @@
 use check
 use fixrun
 use fix
+use pkg
 
 MAX_ROUNDS := 5
 
@@ -48,6 +49,13 @@ fn diagnose(file str, src str, json bool, std str) fixrun.Diagnosis
     fixrun.Diagnosis(found: sorted, report: text)
 
 pub fn fix_command(rest List[str], std str) int
+    if rest.contains("--migrate")
+        # mod.pkg.12: `ail fix --migrate [DIR]` reads the tree's language version and runs the migration steps.
+        dirs := [a for a in rest if not a.starts_with("--")]
+        if dirs.len() > 1 or rest.len() > dirs.len() + 1
+            io.eprint("usage: ail fix --migrate [DIR]")
+            return 2
+        return pkg.migrate_command(if dirs.len() == 1 then dirs[0] else ".")
     mut r := fixrun.begin(rest)
     if r.code >= 0
         return r.code

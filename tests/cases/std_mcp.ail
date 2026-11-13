@@ -1,0 +1,34 @@
+## std.mcp.1-8: connect, tools (two pages), call, structured results, errors and close,
+## against a server written in AIL.
+use std.mcp
+
+fn main() !
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
+    mut c := mcp.connect(ail, ["run", "tests/mcp/fake_server.ail"])?
+    for t in c.tools()?
+        kind := t.schema.text("type", "")
+        print("{t.name}: {t.description} {kind}")
+    r := c.call("echo", Json.Obj([JsonMember(key: "text", value: Json.Str("hi"))]))?
+    print(mcp.text(r))
+    s := c.call("sum", Json.Obj([
+        JsonMember(key: "a", value: Json.Num(2.0)),
+        JsonMember(key: "b", value: Json.Num(3.5)),
+    ]))?
+    print(s.to_text())
+    failed := c.call("boom", Json.Obj([])) else err
+        print("{err.kind}: {err.message}")
+        Json.Null
+    print(failed.kind())
+    missing := c.call("nope", Json.Obj([])) else err
+        print("{err.kind}: {err.message}")
+        Json.Null
+    print(missing.kind())
+    c.set_timeout(5000)
+    c.close()
+    print(start_kind())
+
+fn start_kind() str
+    c := mcp.connect("/nonexistent/mcp-server", []) else err
+        return err.kind
+    c.close()
+    "started"

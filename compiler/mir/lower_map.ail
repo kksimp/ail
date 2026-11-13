@@ -123,6 +123,26 @@ fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     cur = join
     Val(id: r, ty: t)
 
+## `m.get_or(k, d)` (type.map.12): the value stored under `k`, else `d`, which is always evaluated.
+fn Lower.map_get_or(mut self, m Val, k int, d int, vt Ty) Val?
+    e := call("rt.map_find", [m.id, k], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(vt, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    jump(join, [entry_value(e, vt)])
+    seal(missing)
+    cur = missing
+    jump(join, [d])
+    seal(join)
+    cur = join
+    Val(id: r, ty: vt)
+
 ## `m.remove(k)` as a value: the removed value, or `none` (type.map.5).
 fn Lower.map_remove_value(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     t := opt_of(vt) else return unsupported(pos, "`.remove(k)` on a map of `{vt.name()}`")
@@ -462,9 +482,11 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 return map_push(r, kt, vt, args, npos)
             want := if name == "contains"
                 or name == "remove"
+                or name == "get_or"
                 or name == "get" then kt else if name == "top" then Ty.Int else Ty.Unknown
-            for a in args
-                vs.push(lower_value(a.value, if want.is_unknown() then none else want)?)
+            for ai in 0..args.len()
+                w := if name == "get_or" and ai == 1 then vt else want
+                vs.push(lower_value(args[ai].value, if w.is_unknown() then none else w)?)
             if name == "len" and vs.len() == 0
                 return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
             if name == "is_empty" and vs.len() == 0
@@ -500,6 +522,8 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 return Val(id: call("rt.map_values", [r.id], Ty.List(vt)), ty: Ty.List(vt))
             if name == "get" and vs.len() == 1
                 return map_get(r, convert(vs[0], kt, npos), vt, npos)
+            if name == "get_or" and vs.len() == 2
+                return map_get_or(r, convert(vs[0], kt, npos), convert(vs[1], vt, npos), vt)
         Set(et) =>
             if name == "is_subset" and args.len() == 1
                 b := lower_value(args[0].value, none)?

@@ -1,0 +1,8 @@
+A: 0 via A
+B: 3 via A -> C -> B
+C: 2 via A -> C
+D: 8 via A -> C -> B -> D
+E: 10 via A -> C -> B -> D -> E
+F: 13 via A -> C -> B -> D -> E -> F
+X: unreachable
+Y: unreachable

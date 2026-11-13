@@ -1,0 +1,10 @@
+## std.io.7: read_exact returns exactly n bytes or none. Standard input is
+## empty in the test harness, so only a count of 0 succeeds.
+use std.io
+
+fn main()
+    zero := io.read_exact(0) else b"x"
+    print(zero.len())
+    short := io.read_exact(3) else b"eof"
+    print(short.text())
+    print(io.read_line() else "none")

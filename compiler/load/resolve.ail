@@ -632,6 +632,14 @@ fn Resolver.pattern(mut self, p ast.Pattern) ast.Pattern
         BindName(name, pos) =>
             self.local(name, pos)
             p
+        Nested(qualifier, name, fields, pos) =>
+            mut q := qualifier
+            if x := qualifier
+                q = self.type_name(x, pos)
+            mut out := List[ast.Pattern]()
+            for a in fields
+                out.push(self.pattern(a))
+            ast.Pattern.Nested(q, name, out, pos)
         Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => p
 
 fn Resolver.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]

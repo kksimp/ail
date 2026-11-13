@@ -51,6 +51,11 @@ pub fn ast.expr_names(ast.Expr, mut Set[str]) [mutates]  ## Add each name `e` re
 pub struct ast.ParScan  ## What a loop body does, for deciding whether its chunks can run apart.
 pub fn ast.new_scan() ast.ParScan
 pub fn ast.scan_block(mut ast.ParScan, List[ast.Stmt], int) [mutates]
+pub ast.YIELD := "yield"  ## The reserved callee of a `yield` statement.
+pub fn ast.yield_stmt(ast.Expr, ast.Pos) ast.Stmt  ## The statement `yield value` at `pos`.
+pub fn ast.is_yield_callee(ast.Expr) bool  ## Whether `callee` is the reserved name of a `yield`.
+pub fn ast.yield_value(ast.Stmt) ast.Expr?  ## The operand of `s` when it is `yield e`.
+pub fn ast.has_yield(List[ast.Stmt]) bool  ## Whether a function body contains a `yield`, at any depth of its blocks:
 ```
 
-trimmed to fit 2000 tokens (~1001); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1165); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

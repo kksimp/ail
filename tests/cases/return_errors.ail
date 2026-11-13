@@ -5,5 +5,5 @@ fn g()
     return 1
 
 fn main()
-    f()
+    _ := f()
     g()

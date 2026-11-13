@@ -1,0 +1,13 @@
+t=2 stop at floor 2 (waited 1)
+t=4 stop at floor 3 (waited 0)
+t=7 stop at floor 5 (waited 7)
+t=11 stop at floor 8 (waited 8)
+t=16 stop at floor 4 (waited 1)
+t=21 stop at floor 0 (waited 9)
+t=28 stop at floor 6 (waited 6)
+t=32 stop at floor 9 (waited 18)
+served: 8
+floors travelled: 25
+total wait: 50
+average wait x10: 62
+ended at floor 9

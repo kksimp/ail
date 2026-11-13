@@ -4,5 +4,5 @@
 404 no /missing
 followed: 200 hello world [] token=none
 max 0: 302 /hello
-worker stops: closed
-worker stops: closed
+worker stops: net.NetKind.Closed
+worker stops: net.NetKind.Closed

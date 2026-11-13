@@ -1,0 +1,7 @@
+(a + b) * [c - d]    -> ok
+f(x[1], {k: v})      -> ok
+((]                  -> mismatch at 2: found ']', expected ')' for opener at 1
+no brackets at all   -> ok
+)(                   -> unexpected ')' at 0
+[({})                -> unclosed, expected ']' for opener at 0
+                     -> ok

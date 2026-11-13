@@ -8,5 +8,5 @@
 /scan/z.txt 11 false false 1 true
 skipped 0
 same count true
-failed: not_found /scan/nope
-failed: not_dir /scan/z.txt
+failed: fs.IoKind.NotFound /scan/nope
+failed: fs.IoKind.NotDir /scan/z.txt

@@ -4,7 +4,16 @@
 ```
 error struct IoError  ## std.fs
     path str
-    kind str
+    kind fs.IoKind
+enum IoKind  ## std.err.1 (ADR 1068): why a file call failed.
+    NotFound
+    Permission
+    Exists
+    IsDir
+    NotDir
+    NotEmpty
+    InvalidUtf8
+    Other
 struct Metadata  ## std.fs.10 (ADR 0281)
     size int
     modified_ms int
@@ -13,8 +22,22 @@ struct Volume  ## std.fs.24 (ADR 0928)
     total int
     free int
 error struct CompressError  ## std.compress (ADR 0443)
-    kind str
+    kind compress.CompressKind
     message str
+enum CompressKind  ## std.compress.2 (ADR 1068): why a call failed; the file functions add the I/O kinds of std.err.1.
+    Corrupt
+    Checksum
+    TooBig
+    UnsafePath
+    Unsupported
+    NotFound
+    Permission
+    Exists
+    IsDir
+    NotDir
+    NotEmpty
+    InvalidUtf8
+    Other
 struct Entry  ## std.fs.23 (ADR 0927): one entry of `fs.scan`, and the scan.
     path str
     size int
@@ -41,7 +64,18 @@ struct RawOutput  ## std.proc.8 (ADR 0417): the output of `run_bytes`.
     err bytes
 error struct ProcError
     cmd str
-    kind str
+    kind proc.ProcKind
+enum ProcKind  ## std.err.1 (ADR 1068): why a process couldn't run.
+    NotFound
+    Permission
+    Exists
+    IsDir
+    NotDir
+    NotEmpty
+    InvalidUtf8
+    Other
+    TimedOut
+    Cancelled
 unique struct Child  ## std.proc.4 (ADR 0424): a child; `stdin` takes `send` and `close`, `out` and `err` give lines.
     pid int
     stdin Channel[str]
@@ -59,8 +93,19 @@ struct RawResponse  ## std.net.16 (ADR 0416): a response with its body undecoded
     all_headers Map[str, List[str]]
 error struct NetError
     url str
-    kind str
+    kind net.NetKind
     message str
+enum NetKind  ## std.net.4 (ADR 1068): why a network call failed.
+    BadUrl
+    BadRequest
+    Tls
+    NotFound
+    Refused
+    TimedOut
+    Closed
+    Bind
+    Protocol
+    Other
 struct Options  ## std.net.6: what a request can set beyond its method and URL.
     headers Map[str, str]
     query Map[str, str]
@@ -103,11 +148,36 @@ struct Modifiers
     alt bool
     shift bool
 enum Event
-    Key(key str, ctrl bool, alt bool, shift bool)
+    Key(key ui.KeyCode, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
-    Mouse(col int, row int, button str, kind str)
+    Mouse(col int, row int, button ui.MouseButton, kind ui.MouseKind)
     Scroll(lines int)
+enum KeyCode  ## std.ui.7 (ADR 1068): a key, as typed text or a named key.
+    Text(text str)
+    Enter
+    Tab
+    Backspace
+    Delete
+    Insert
+    Escape
+    Up
+    Down
+    Left
+    Right
+    Home
+    End
+    PageUp
+    PageDown
+    F(n int)
+enum MouseButton
+    Left
+    Middle
+    Right
+enum MouseKind
+    Down
+    Up
+    Drag
 struct Style  ## std.ui.16: how `put_styled` draws text.
     bold bool
     italic bool
@@ -117,8 +187,12 @@ enum Cursor  ## std.ui.18: the caret's shape.
     Block
     Underline
 error struct UiError
-    kind str
+    kind ui.UiKind
     message str
+enum UiKind  ## std.ui.1 (ADR 1068): why a window couldn't open.
+    NoDisplay
+    Closed
+    Other
 struct Tensor[T]  ## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
     elements Map[int, T]
 struct Regex  ## std.regex (ADR 0438). A regex is its pattern; compiled programs are cached
@@ -126,9 +200,22 @@ struct Regex  ## std.regex (ADR 0438). A regex is its pattern; compiled programs
 error struct RegexError
     pattern str
     at int
-    kind str
+    kind regex.RegexKind
     rule str
     message str
+enum RegexKind  ## std.regex.23 (ADR 1068): what is wrong with a pattern (std.regex.11-22).
+    UnclosedGroup
+    UnopenedGroup
+    UnclosedClass
+    BadEscape
+    BadRepeat
+    NothingToRepeat
+    BadRange
+    BadClass
+    BadGroupName
+    BadFlag
+    Unsupported
+    TooLarge
 struct Match
     start int
     end int

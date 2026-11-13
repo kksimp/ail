@@ -1,0 +1,61 @@
+## Counts lines in a set of source files, like a tiny `cloc`: total, blank,
+## comment (starting with `#`) and code lines per file, then a total row.
+
+struct Counts
+    total int
+    blank int
+    comment int
+    code int
+
+fn count_lines(text str) Counts
+    mut c := Counts(total: 0, blank: 0, comment: 0, code: 0)
+    for line in text.lines()
+        t := line.trim()
+        c.total += 1
+        if t.is_empty()
+            c.blank += 1
+        elif t.starts_with("#")
+            c.comment += 1
+        else
+            c.code += 1
+    c
+
+fn row(name str, c Counts) str
+    "{name:<10}{c.total:>6}{c.blank:>6}{c.comment:>6}{c.code:>6}"
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_line_counter")?
+    names := ["main.py", "util.py", "notes.txt", "empty.py"]
+    texts := [
+        "# entry point\nimport util\n\ndef main():\n    # run it\n    util.go()\n\nmain()\n",
+        "def go():\n    print('go')\n\n\n# end\n",
+        "todo:\n  - write docs\n\n  - ship\n",
+        "",
+    ]
+    for i in 0..names.len()
+        fs.write_text(path.join(dir, names[i]), texts[i])?
+    print("{"file":<10}{"lines":>6}{"blank":>6}{"cmt":>6}{"code":>6}")
+    mut grand := Counts(total: 0, blank: 0, comment: 0, code: 0)
+    for n in names.sorted()
+        c := count_lines(fs.read_text(path.join(dir, n))?)
+        print(row(n, c))
+        grand.total += c.total
+        grand.blank += c.blank
+        grand.comment += c.comment
+        grand.code += c.code
+    print(row("total", grand))
+    pct := grand.code * 100 / grand.total
+    print("code share: {pct}%")
+    for n in names
+        fs.remove(path.join(dir, n))?
+    fs.remove(dir)?
+
+@test fn counts_each_kind()
+    c := count_lines("# hi\n\nx = 1\ny = 2\n")
+    assert_eq(c, Counts(total: 4, blank: 1, comment: 1, code: 2))
+
+@test fn empty_text_has_no_lines()
+    assert_eq(count_lines("").total, 0)
+
+@test fn indented_comment_is_a_comment()
+    assert_eq(count_lines("    # note\n").comment, 1)

@@ -11,16 +11,15 @@ struct Todo
 
 impl app.App for Todo
     fn update(mut self, ev app.Event)
-        match ev.kind
-            "edit" => draft = ev.text
-            "submit" | "press" if ev.id == "add" or ev.kind == "submit" =>
-                if draft.trim() != ""
-                    items.push(draft.trim())
-                draft = ""
-            "toggle" =>
-                if not done.add(ev.id)
-                    done.remove(ev.id)
-            _ => return
+        if ev.kind == Edit
+            draft = ev.text
+        elif ev.kind == Submit or (ev.kind == Press and ev.id == "add")
+            if draft.trim() != ""
+                items.push(draft.trim())
+            draft = ""
+        elif ev.kind == Toggle
+            if not done.add(ev.id)
+                done.remove(ev.id)
 
     fn view(self) app.Node
         mut kids := [app.row([
@@ -46,10 +45,10 @@ fn main()
         app.edit("draft", "milk"),
         app.press("add"),
         app.edit("draft", "eggs"),
-        app.event("submit"),
+        app.event(Submit),
     ])
     assert(screens[3].contains("[ ] milk #milk"))
-    mut tick := app.event("toggle")
+    mut tick := app.event(Toggle)
     tick.id = "milk"
     app.script(mut t, [tick])
     assert_eq(app.outline(t.view()).lines().last(), "  \"1 left\"")

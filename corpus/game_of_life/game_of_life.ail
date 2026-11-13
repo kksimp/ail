@@ -1,0 +1,92 @@
+## Conway's Game of Life on a small torus. Seeds a glider and a blinker, steps
+## the board and prints the generations at 0 and 4 plus the population count
+## of every step.
+
+struct Life
+    cols int
+    rows int
+    cells List[int]
+
+fn Life.empty(c int, r int) Life
+    mut cs := List[int]()
+    for i in 0..c * r
+        cs.push(0)
+    Life(cols: c, rows: r, cells: cs)
+
+fn Life.set(mut self, x int, y int)
+    self.cells[y * self.cols + x] = 1
+
+fn Life.alive(self, x int, y int) int
+    self.cells[y * self.cols + x]
+
+fn Life.neighbors(self, x int, y int) int
+    mut n := 0
+    for dy in -1..=1
+        for dx in -1..=1
+            if dx != 0 or dy != 0
+                n += self.alive((x + dx + self.cols) % self.cols, (y + dy + self.rows) % self.rows)
+    n
+
+fn Life.step(self) Life
+    mut next := Life.empty(self.cols, self.rows)
+    for y in 0..self.rows
+        for x in 0..self.cols
+            n := self.neighbors(x, y)
+            if n == 3 or (n == 2 and self.alive(x, y) == 1)
+                next.set(x, y)
+    next
+
+fn Life.population(self) int
+    self.cells.sum()
+
+fn Life.show(self)
+    for y in 0..self.rows
+        mut row := List[str]()
+        for x in 0..self.cols
+            row.push(if self.alive(x, y) == 1 then "#" else ".")
+        print(row.join(""))
+
+fn main()
+    mut g := Life.empty(8, 8)
+    g.set(1, 0)
+    g.set(2, 1)
+    g.set(0, 2)
+    g.set(1, 2)
+    g.set(2, 2)
+    g.set(5, 5)
+    g.set(6, 5)
+    g.set(7, 5)
+    print("generation 0")
+    g.show()
+    mut pops := [g.population()]
+    for i in 1..=8
+        g = g.step()
+        pops.push(g.population())
+        if i == 4
+            print("generation 4")
+            g.show()
+    print("population by generation: {pops}")
+
+@test fn blinker_oscillates()
+    mut g := Life.empty(5, 5)
+    g.set(1, 2)
+    g.set(2, 2)
+    g.set(3, 2)
+    h := g.step()
+    assert_eq(h.alive(2, 1), 1)
+    assert_eq(h.alive(2, 3), 1)
+    assert_eq(h.alive(1, 2), 0)
+    assert_eq(h.step().cells, g.cells)
+
+@test fn block_is_stable()
+    mut g := Life.empty(4, 4)
+    g.set(1, 1)
+    g.set(2, 1)
+    g.set(1, 2)
+    g.set(2, 2)
+    assert_eq(g.step().cells, g.cells)
+
+@test fn neighbors_wrap_around()
+    mut g := Life.empty(4, 4)
+    g.set(3, 3)
+    assert_eq(g.neighbors(0, 0), 1)

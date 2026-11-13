@@ -410,6 +410,7 @@ fn Parser.pub_marker(mut self)
         or k == "struct"
         or k == "enum"
         or k == "error"
+        or k == "unique"
         or k == "trait"
         or tag_at(0) == "id" and sym_at(1) == ":="
         public.add(pos.line)
@@ -555,7 +556,7 @@ fn stmt_foreign(w str) bool
     match w
         "try" | "catch" | "except" | "finally" | "throw" | "raise" | "switch" | "case" | "default" => true
         "pass" | "await" | "loop" | "elseif" | "elsif" | "else_if" => true
-        "unless" | "until" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => true
+        "unless" | "until" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => true
         _ => false
 
 ## A top-level word from another language's declarations (`def`, `class`,

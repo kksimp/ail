@@ -8,7 +8,7 @@ fn load(url str) !str
         print("offline ({err.kind}), using the local copy")
         return fs.read_text("{path.dir(env.program())}/data/{path.base(url)}")?
     if r.status != 200
-        return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
+        return net.NetError(url: url, kind: Other, message: "HTTP {r.status}")
     r.body
 
 fn totals(csv str) Map[str, int]

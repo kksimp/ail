@@ -1,0 +1,18 @@
+== convert ==
+1: in=in.txt out=a.txt level=5 verbose=false
+2: in=in.txt out=a.txt level=5 verbose=true
+3: in=in.txt out=b.bin level=5 verbose=false
+4: in=in.txt out=c.bin level=9 verbose=false
+5: in=in.txt out=a.txt level=2 verbose=true
+6: in=-weird out=a.txt level=5 verbose=false
+7: error
+8: error
+9: error
+10: error
+11: error
+== bundle ==
+1: name=site dry=false files=0 []
+2: name=site dry=false files=2 [a.html,b.css]
+3: name=site dry=true files=1 [a.html]
+4: name=site dry=false files=2 [-x,-y]
+5: error

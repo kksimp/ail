@@ -4,12 +4,12 @@
 ## The error kind of a failing read_link or mode call ("none" when it works).
 fn link_kind(p str) str
     t := fs.read_link(p) else err
-        return err.kind
+        return "{err.kind}"
     if t == "" then "empty" else "none"
 
 fn mode_kind(p str) str
     m := fs.mode(p) else err
-        return err.kind
+        return "{err.kind}"
     if m < 0 then "negative" else "none"
 
 fn main() !
@@ -36,7 +36,7 @@ fn main() !
     l := "{base}/link"
     mut link_ok := false
     fs.symlink("a.txt", l) else err
-        link_ok = err.kind == "permission" or err.kind == "other"
+        link_ok = err.kind == Permission or err.kind == Other
     if not link_ok
         link_ok = fs.read_link(l)? == "a.txt" and fs.read_bytes(l)?.len() == 9
         fs.remove(l)?

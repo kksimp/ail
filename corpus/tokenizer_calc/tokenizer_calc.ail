@@ -1,0 +1,108 @@
+## Calculator: a tokenizer plus a recursive-descent parser for integer
+## expressions with + - * /, parentheses and unary minus.
+
+struct Parser
+    toks List[str]
+    pos int
+    bad bool
+
+fn tokenize(src str) List[str]
+    mut out := List[str]()
+    mut num := ""
+    for c in src.chars()
+        if c.is_digit()
+            num = "{num}{c}"
+            continue
+        if num != ""
+            out.push(num)
+            num = ""
+        if not c.is_space()
+            out.push("{c}")
+    if num != ""
+        out.push(num)
+    out
+
+fn Parser.peek(self) str
+    if pos < toks.len()
+        return toks[pos]
+    ""
+
+fn Parser.take(mut self) str
+    t := peek()
+    pos += 1
+    t
+
+fn Parser.expr(mut self) int
+    mut v := term()
+    while peek() == "+" or peek() == "-"
+        op := take()
+        r := term()
+        if op == "+"
+            v += r
+        else
+            v -= r
+    v
+
+fn Parser.term(mut self) int
+    mut v := factor()
+    while peek() == "*" or peek() == "/"
+        op := take()
+        r := factor()
+        if op == "*"
+            v *= r
+        elif r == 0
+            bad = true
+        else
+            v = v / r
+    v
+
+fn Parser.factor(mut self) int
+    t := take()
+    if t == "("
+        v := expr()
+        if take() != ")"
+            bad = true
+        return v
+    if t == "-"
+        return 0 - factor()
+    n := t.to_int() else
+        bad = true
+        return 0
+    n
+
+fn eval(src str) int?
+    mut p := Parser(toks: tokenize(src), pos: 0, bad: false)
+    v := p.expr()
+    if p.bad or p.pos != p.toks.len()
+        return none
+    v
+
+fn show(src str) str
+    v := eval(src) else return "{src} => error"
+    "{src} => {v}"
+
+fn main()
+    for src in [
+        "1 + 2 * 3",
+        "(1 + 2) * 3",
+        "-7 / 2",
+        "2 * (3 + 4) - 5",
+        "10 / (5 - 5)",
+        "2 +",
+        "8 / 2 / 2",
+        "3 $ 4",
+    ]
+        print(show(src))
+
+@test fn tokenizes()
+    assert_eq(tokenize("12+(3 * 4)"), ["12", "+", "(", "3", "*", "4", ")"])
+
+@test fn precedence()
+    assert_eq(eval("1 + 2 * 3")?, 7)
+    assert_eq(eval("(1 + 2) * 3")?, 9)
+    assert_eq(eval("-(2 + 3)")?, -5)
+
+@test fn errors()
+    assert(eval("1 / 0") == none)
+    assert(eval("(1 + 2") == none)
+    assert(eval("") == none)

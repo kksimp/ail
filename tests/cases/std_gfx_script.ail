@@ -8,9 +8,9 @@ struct Player
 
 impl gfx.Game for Player
     fn update(mut self, input gfx.Input, dt float)
-        if gfx.down(input, "right")
+        if gfx.down(input, Right)
             x += 10.0 * dt
-        self.moving = gfx.down(input, "right")
+        self.moving = gfx.down(input, Right)
 
     fn draw(self, mut f gfx.Frame)
         gfx.clear(mut f, 0)
@@ -18,16 +18,16 @@ impl gfx.Game for Player
 
 fn main()
     mut p := Player(x: 0.0, moving: false)
-    steps := [[app.key("right")], [], [gfx.key_up("right")]]
+    steps := [[app.key("right")], [], [gfx.key_up(Right)]]
     lines := gfx.script(mut p, 32, 16, 0.5, steps)
     for l in lines
         print(l)
     i := gfx.next_input(gfx.idle(), [app.key("a")])
-    print(gfx.pressed(i, "a"))
+    print(gfx.pressed(i, Text("a")))
     j := gfx.next_input(i, [])
-    print("{gfx.pressed(j, "a")} {gfx.down(j, "a")}")
-    k := gfx.next_input(j, [gfx.key_up("a")])
-    print(gfx.released(k, "a"))
+    print("{gfx.pressed(j, Text("a"))} {gfx.down(j, Text("a"))}")
+    k := gfx.next_input(j, [gfx.key_up(Text("a"))])
+    print(gfx.released(k, Text("a")))
     mut f := gfx.new_frame(8, 4)
     gfx.line(mut f, 0.0, 0.0, 7.0, 3.0, 255)
     gfx.text(mut f, 1.0, 1.0, "hi", 12.0, 65280)

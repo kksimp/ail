@@ -205,7 +205,7 @@ fn spec_key(f syntax.FormatSpec) str
     align := if c := f.align then "{c.code()}" else "-"
     width := if w := f.width then "{w}" else "-"
     precision := if p := f.precision then "{p}" else "-"
-    "{fill}/{align}/{width}/{precision}/{f.hex}"
+    "{fill}/{align}/{width}/{precision}/{f.hex}/{f.flags}"
 
 ## Attributes in a fixed order, on one line (fmt.attr): a run of `@name(...)`
 ## groups at the start of a statement is sorted by name, and a newline between
@@ -316,6 +316,7 @@ fn new_formatter(src str, tokens List[syntax.Token], comments List[syntax.Commen
                     tuple_ty: false,
                 ))
     for k in 0..logicals.len()
+        keyword_names(mut logicals[k].toks)
         mark_param_tuples(mut logicals[k].toks)
     # fmt.attr: an attributes-only line joins the item below it, unless a comment sits between.
     mut merged := List[Logical]()
@@ -626,14 +627,23 @@ fn spaced(before FTok?, a FTok, b FTok) bool
         return false
     if b.tuple_ty
         return true
-    # `xs.any(f)` (type.coll.22): a keyword after `.` names a method.
-    if b.sym("(") and a.kind == KW
-        if bt := before
-            if bt.sym(".")
-                return false
     if b.sym("(") or b.sym("[")
         return not a.ends_operand()
     true
+
+## A keyword standing as a name is spaced as a name: after `.` (`o.error - 1`),
+## before a label's `:` (`error: ""`) and as a method after `fn` (`fn any(self)`)
+## (lex.kw.3, ADR 1085).
+fn keyword_names(mut toks List[FTok])
+    for k in 0..toks.len()
+        if toks[k].kind != KW or toks[k].text == "uhwhatnow?"
+            continue
+        after_dot := k > 0 and toks[k - 1].sym(".")
+        label := k + 1 < toks.len() and toks[k + 1].sym(":")
+        after_fn := k > 0 and toks[k - 1].kind == KW and toks[k - 1].text == "fn"
+        method := after_fn and k + 1 < toks.len() and (toks[k + 1].sym("(") or toks[k + 1].sym("["))
+        if after_dot or label or method
+            toks[k].kind = WORD
 
 ## `a` is a prefix operator: `-x`, `!T`.
 fn prefix(before FTok?, a FTok) bool

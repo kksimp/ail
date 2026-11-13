@@ -1,0 +1,18 @@
+error enum Fail
+    Bad
+    Worse
+
+fn pick(n int) int ! Fail
+    if n == 0
+        return Bad
+    if n == 1
+        return Worse
+    n
+
+fn main()
+    assert(1 + 1 == 2, "arithmetic holds")
+    assert_err(pick(0))
+    assert_err(pick(1), Fail.Worse)
+    assert_err(pick(0), Fail.Bad)
+    assert_near(0.1 + 0.2, 0.3, 0.0001)
+    print("ok")

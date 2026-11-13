@@ -9,16 +9,16 @@ struct Jumper
 
 impl gfx.Game for Jumper
     fn update(mut self, input gfx.Input, dt float)
-        if gfx.pad_pressed(input, 0, "a")
+        if gfx.pad_pressed(input, 0, A)
             jumps += 1
-        held = gfx.pad_down(input, 0, "a")
+        held = gfx.pad_down(input, 0, A)
 
     fn draw(self, mut f gfx.Frame)
         gfx.clear(mut f, 0)
 
 fn show(i gfx.Input)
     p := gfx.pad(i, 0)
-    print("{gfx.pad_down(i, 0, "a")} {gfx.pad_pressed(i, 0, "a")} {gfx.pad_released(i, 0, "a")} {p.lx} {p.ly} {p.rt}")
+    print("{gfx.pad_down(i, 0, A)} {gfx.pad_pressed(i, 0, A)} {gfx.pad_released(i, 0, A)} {p.lx} {p.ly} {p.rt}")
 
 fn main()
     assert(gfx.no_pad().buttons == 0)
@@ -30,8 +30,8 @@ fn main()
     show(i2)
     i3 := gfx.next_input(i2, [gfx.pad_event(0, "0,0,0,0,0,0,0")])
     show(i3)
-    print(gfx.pad_bit("start"))
-    print(gfx.pad_down(i3, 3, "a"))
+    print(gfx.pad_bit(Start))
+    print(gfx.pad_down(i3, 3, A))
     i4 := gfx.next_input(i3, [gfx.pad_event(0, "")])
     print(gfx.pad(i4, 0).buttons)
 

@@ -1,0 +1,170 @@
+## Generators and user iteration (expr.yield.1-5, expr.iter.1-2, ADR 1073).
+## A function whose body contains `yield` and whose result is the prelude's
+## `Seq[T]` is a generator: calling it runs none of its body, and each
+## `next()` of the `Seq` runs the body to its next `yield`. `for x in e` also
+## takes any value whose type has `fn next(mut self) T?`.
+use ast
+
+## The generator being checked and the `for` loops over a `next` method.
+pub struct GenCheck
+    ## The element type `T` of the generator being checked; `none` outside one.
+    pub elem Ty?
+    ## `for` loops (and comprehension clauses) over a type's `next`, by
+    ## `pos_key` of the iterable, to the method's index (eff.infer.3).
+    pub nexts Map[int, int]
+
+pub fn new_gen_check() GenCheck
+    GenCheck(elem: none, nexts: Map[int, int]())
+
+## The element type of the prelude's `Seq[T]` (expr.yield.1), else `none`.
+@allow("expr.match.3") fn Checker.seq_elem(self, t Ty) Ty?
+    match t
+        Struct(i, args) =>
+            d := prog.structs[i]
+            if d.name == "Seq" and is_prelude_line(d.pos.line) and args.len() == 1
+                return args[0]
+            none
+        _ => none
+
+## A generator's element type, after checking the rules of its declaration
+## (expr.yield.4); `none` for a function that isn't a generator.
+fn Checker.gen_start(mut self, f ast.FnDecl, ret Ty) Ty?
+    body := f.body else return none
+    if not ast.has_yield(body)
+        return none
+    # Without a `Seq[T]` result each `yield` reports expr.yield.1.
+    elem := seq_elem(ret) else return none
+    if recv := f.receiver
+        if recv.mutable
+            err_help(
+                "expr.yield.4",
+                f.pos,
+                "a generator can't take `mut self`: it runs after the call has returned",
+                "take `self` (the generator keeps a copy) or `move self`",
+            )
+    for p in f.params
+        if p.mutable
+            err_help(
+                "expr.yield.4",
+                p.pos,
+                "a generator can't take a `mut` parameter: it runs after the call has returned",
+                "take the value (the generator keeps a copy), or `move` it in",
+            )
+    if f.contracts.len() > 0
+        err_help(
+            "expr.yield.4",
+            f.contracts[0].pos,
+            "a generator can't have `requires` or `ensures` yet",
+            "check the condition in the body, before the first `yield`",
+        )
+    gen_rules(body, "")
+    elem
+
+## expr.yield.4: no `defer` in a generator, and no `yield` inside `par for`
+## or `with` (`within` names the construct being walked, or is "").
+@allow("expr.match.3") fn Checker.gen_rules(mut self, body List[ast.Stmt], within str)
+    for s in body
+        if within != ""
+            if ast.yield_value(s) != none
+                err_help(
+                    "expr.yield.4",
+                    stmt_pos(s),
+                    "`yield` can't be inside {within}",
+                    "collect the values in a list inside it, and `yield` them after it",
+                )
+        match s
+            Defer(_, at) =>
+                err_help(
+                    "expr.yield.4",
+                    at,
+                    "a generator can't `defer`: a `Seq` that is dropped before its end never runs it",
+                    "do the cleanup at the end of the body, before the generator returns",
+                )
+            For(is_par, _, _, _, _, inner, _) =>
+                gen_rules(inner, if is_par then "`par for`" else within)
+            With(_, _, _, inner, _) => gen_rules(inner, "`with`")
+            While(_, inner, _) => gen_rules(inner, within)
+            Unsafe(inner, _) => gen_rules(inner, within)
+            Eval(e) => gen_rules_expr(e, within)
+            Let(_, _, _, value, _) => gen_rules_expr(value, within)
+            _ => continue
+
+@allow("expr.match.3") fn Checker.gen_rules_expr(mut self, e ast.Expr, within str)
+    match e
+        If(branches, els, _, _) =>
+            for b in branches
+                gen_rules(b.body, within)
+            if body := els
+                gen_rules(body, within)
+        Match(_, arms, _) =>
+            for a in arms
+                gen_rules(a.body, within)
+        _ => return
+
+## `yield e` (expr.yield.2): `e` is the generator's next element.
+fn Checker.yield_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    if leaves_literal("yield", at)
+        args_only(args)
+        return Ty.Unit
+    elem := gen.elem else
+        args_only(args)
+        err_help(
+            "expr.yield.1",
+            at,
+            "`yield` is only allowed in a generator, a function whose result is `Seq[T]`",
+            "declare the result type, e.g. `fn count(n int) Seq[int]`",
+        )
+        return Ty.Unit
+    v := args[0].value
+    t := expr(v, elem, true)
+    if reject_unhandled(t, expr_pos(v))
+        return Ty.Unit
+    if not accepts(elem, t)
+        mismatch("expr.yield.2", expr_pos(v), elem, t)
+    # own.uniq.2: a unique value yielded leaves the generator.
+    consume(v, t)
+    Ty.Unit
+
+## `return` in a generator (expr.yield.3): it ends the sequence and has no
+## value. True when the statement was a generator's.
+fn Checker.gen_return(mut self, value ast.Expr?, at ast.Pos) bool
+    if gen.elem == none
+        return false
+    if v := value
+        expr(v, none, true)
+        err_help(
+            "expr.yield.3",
+            expr_pos(v),
+            "a generator's `return` ends the sequence and has no value",
+            "`yield` the value, then write a bare `return`",
+        )
+    true
+
+## expr.iter.1: `for x in e` where `e`'s type has `fn next(mut self) T?`
+## gives `x` type `T`. The loop works on a copy of `e`, or takes a unique
+## value over (own.uniq.2).
+fn Checker.iter_next(mut self, t Ty, at ast.Pos, iter ast.Expr) Ty
+    tn := type_name_of(t) else return iterate_error(t, at, iter)
+    i := method_index(tn, "next") else return iterate_error(t, at, iter)
+    sig := sigs[i]
+    elem := opt_inner_of(sig.ret) else
+        return bad_next(tn, at)
+    if sig.receiver != true or sig.params.len() > 0
+        return bad_next(tn, at)
+    gen.nexts[pos_key(at)] = i
+    consume(iter, t)
+    subst(elem, zip_binds(sig.generics[..sig.owner], args_of(t)))
+
+@allow("expr.match.3") fn opt_inner_of(t Ty) Ty?
+    match t
+        Opt(x) => x
+        _ => none
+
+fn Checker.bad_next(mut self, tn str, at ast.Pos) Ty
+    err_help(
+        "expr.iter.1",
+        at,
+        "`for` calls `{tn}.next()` for each element, so it must be declared `fn {tn}.next(mut self) T?`",
+        "give `next` a `mut self` receiver, no other parameters and an optional result: `none` ends the loop",
+    )
+    Ty.Unknown

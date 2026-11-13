@@ -124,6 +124,7 @@ fn glob_in(prefix str, parts List[str], i int, out int)
 
 ## `fs.glob(pattern)` (std.fs.9).
 fn fs_glob(pattern str) List[int]
+    pol_glob(pattern)
     p := str_addr(pattern) + 16
     n := load64(str_addr(pattern))
     mut parts := List[str]()

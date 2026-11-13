@@ -16,6 +16,7 @@ fn is_list_edit(name str) bool
         or name == "insert"
         or name == "clear"
         or name == "reverse"
+        or name == "reversed"
         or name == "pop"
         or name == "contains"
         or name == "sort"
@@ -114,6 +115,10 @@ fn Lower.lower_list_edit(
         call("rt.list_clear", [r.id], Ty.Unit)
         watch_plain(npos, r, "clear")
         return unit
+    if name == "reversed" and vs.len() == 0
+        copy := call("rt.list_copy", [r.id, size], r.ty)
+        call("rt.list_reverse", [copy, size], Ty.Unit)
+        return Val(id: copy, ty: r.ty)
     if name == "reverse" and vs.len() == 0
         call("rt.list_reverse", [r.id, size], Ty.Unit)
         watch_plain(npos, r, "reverse")
@@ -356,6 +361,19 @@ fn Lower.lower_pop_stmt(mut self, e ast.Expr) Val?
 fn is_pop_call(e ast.Expr) bool
     match e
         Method(_, n, _, a) => n == "pop" and a.len() == 0
+        _ => false
+
+## `xs.pop()` where `xs` may be a list: not a method of a user struct such as
+## the prelude's `Heap`, which is an ordinary call (type.heap.3).
+@allow("expr.match.3") fn Lower.is_list_pop(self, e ast.Expr) bool
+    if not is_pop_call(e)
+        return false
+    match e
+        Method(r, _, _, _) =>
+            t := recv_ty(r) else return true
+            match t
+                Struct(_) => false
+                _ => true
         _ => false
 
 ## `xs == ys` and `xs != ys` on lists of `int`, `float`, `bool` or `str`

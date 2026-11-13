@@ -1,7 +1,7 @@
-refused: https://127.0.0.1:1/
-bad_url: ftp://example.com/
-bad_url: example.com
-bad_url: http://:80/
-bad_url: https://:443/
-refused: http://127.0.0.1:1/
+net.NetKind.Refused: https://127.0.0.1:1/
+net.NetKind.BadUrl: ftp://example.com/
+net.NetKind.BadUrl: example.com
+net.NetKind.BadUrl: http://:80/
+net.NetKind.BadUrl: https://:443/
+net.NetKind.Refused: http://127.0.0.1:1/
 `44x` is not a port

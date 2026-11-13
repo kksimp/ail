@@ -1,4 +1,4 @@
-# `compress.gunzip` fails with: compress.CompressError(kind: "corrupt", message: "not gzip data")
+# `compress.gunzip` fails with: compress.CompressError(kind: compress.CompressKind.Corrupt, message: "not gzip data")
 use std.compress
 
 fn main() !

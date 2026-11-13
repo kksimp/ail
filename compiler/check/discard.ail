@@ -1,0 +1,118 @@
+## eff.use.1 (ADR 1082): a call whose value is thrown away must do something.
+## Typing notes each statement that throws a value away (`note_discard`);
+## after typing, `check_discards` reports the ones whose inferred effects
+## are empty, with the mutating twin or `_ := ` as the fix.
+use ast
+use fix
+
+## A statement whose value is thrown away, noted while typing.
+pub struct Discard
+    pub at ast.Pos
+    pub value ast.Expr
+
+## The twin of a built-in method that returns a changed copy: the method
+## that changes the receiver in place.
+fn twin_of(n str) str?
+    if n == "sorted"
+        return "sort"
+    if n == "reversed"
+        return "reverse"
+    none
+
+## Called by `block` after typing a statement whose value isn't the block's.
+## `marks` is `effect_marks` before the statement: if typing it mutated a
+## place, moved a value or called a function value, it does something and
+## stays legal. The last statement of a function that can fail may be its
+## error value (`err.ret.*`), so it isn't noted.
+fn Checker.note_discard(mut self, s ast.Stmt, ty Ty, marks int, last bool)
+    if marks != effect_marks or unsafe_depth > 0 or not is_value_ty(ty)
+        return
+    if last and is_res(fn_ret)
+        return
+    e := eval_of(s) else return
+    if not is_call(e) or is_prelude_line(stmt_pos(s).line)
+        return
+    at := stmt_pos(s)
+    discards[pos_key(at)] = Discard(at: at, value: e)
+
+## A value worth keeping: not unit, `Never`, unknown, or a failure (err.use.1).
+@allow("expr.match.3") fn is_value_ty(t Ty) bool
+    match t
+        Unit | Never | Unknown | Res => false
+        _ => true
+
+@allow("expr.match.3") fn is_call(e ast.Expr) bool
+    match e
+        Call => true
+        Method => true
+        _ => false
+
+## eff.use.1: one error per discarded call with no effect.
+fn Checker.check_discards(self) List[Diag]
+    if discards.len() == 0
+        return []
+    f := facts()
+    fx := infer_effects(prog, f)
+    mut out := List[Diag]()
+    for k in discards.keys().sorted()
+        d := discards[k]
+        if opaque_call(f, d.value)
+            continue
+        mut w := Walked(direct: Map[str, str](), calls: [])
+        w.expr(prog, f, d.value)
+        effs := fx.of_walk(prog, w)
+        if [e for e in effs.keys() if impure(e) or e == "mutates"].len() > 0
+            continue
+        out.push(discard_diag(d))
+    out
+
+## Calls whose effects the inference doesn't see, so they stay legal: a
+## function without a body (`extern`), a standard function not in the
+## effects table, and `task.*`, which waits on other tasks.
+@allow("expr.match.3") fn Checker.opaque_call(self, fx Facts, e ast.Expr) bool
+    match e
+        Call(callee, _, _) =>
+            if n := callee_name(callee)
+                if i := fx.free.get(n)
+                    return prog.fns[i].body == none
+            false
+        Method(_, n, name_pos, _) =>
+            key := pos_key(name_pos)
+            if m := fx.std_fns.get(key)
+                return m == "task" or std_effects(m, n) == none
+            false
+        _ => false
+
+fn discard_diag(d Discard) Diag
+    mut what := "this call"
+    if m := discard_method(d.value)
+        what = "`{m}()`"
+    elif n := call_name(d.value)
+        what = "`{n}(...)`"
+    mut out := new_diag(
+        "eff.use.1",
+        d.at,
+        "the value of {what} is thrown away, and the call does nothing else",
+    ).with_help("use the value, or write `_ := ...` to throw it away on purpose")
+    if m := discard_method(d.value)
+        if t := twin_of(m)
+            if at := method_pos(d.value)
+                out = out.with_fix("change the list in place with `{t}()`", [fix.replace(at, m, t)])
+    out.with_fix("throw the value away with `_ := `", [fix.insert(d.at, "_ := ")])
+
+## A method call's name.
+@allow("expr.match.3") fn discard_method(e ast.Expr) str?
+    match e
+        Method(_, n, _, _) => n
+        _ => none
+
+## Where a method call's name is written.
+@allow("expr.match.3") fn method_pos(e ast.Expr) ast.Pos?
+    match e
+        Method(_, _, at, _) => at
+        _ => none
+
+@allow("expr.match.3") fn call_name(e ast.Expr) str?
+    match e
+        Call(callee, _, _) => callee_name(callee)
+        _ => none

@@ -14,3 +14,10 @@ trap_snapshot
 tool_explain_chapters
 tool_explain_rules
 attach_tool_bad
+gen_yield_outside
+gen_yield_type
+gen_return_value
+gen_mut_param
+gen_defer
+gen_bad_next
+gen_seq_reuse

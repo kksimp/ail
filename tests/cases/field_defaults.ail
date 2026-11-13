@@ -1,0 +1,33 @@
+# type.struct.8: a struct literal may leave out a field that has a default.
+struct Config
+    name str
+    retries int = 3
+    ratio float = 0.5
+    tags List[str] = []
+    label str? = none
+    limits Map[str, int] = {"max": 10}
+    pair (int, int) = (1, 2)
+
+struct Box[T]
+    value T
+    items List[T] = []
+    count int = -1
+
+struct Outer
+    inner Config
+    depth int = 2
+
+fn main()
+    a := Config(name: "a")
+    print("{a.name} {a.retries} {a.ratio} {a.tags.len()} {a.limits.len()}")
+    b := Config(name: "b", retries: 9, tags: ["x"])
+    print("{b.retries} {b.tags.len()}")
+    print(a.label == none)
+    x := Box(value: 5)
+    print("{x.value} {x.items.len()} {x.count}")
+    y := Box(value: "s", count: 4)
+    print("{y.value} {y.count}")
+    o := Outer(inner: Config(name: "n"))
+    print("{o.inner.retries} {o.depth}")
+    name := "c"
+    print(Config(name).retries)

@@ -177,6 +177,12 @@ pub struct Checker
     pub atomic_calls Set[int]
     pub std_any Set[int]
     pub float_literals Set[int]
+    ## eff.use.1: statements that throw a value away, by `pos_key`, and a
+    ## count of mutations and function-value calls typed so far.
+    pub discards Map[int, Discard]
+    pub effect_marks int
+    ## The generator being checked and the loops over a `next` method (gen.ail).
+    pub gen GenCheck
 
 ## How a local was declared.
 pub enum LocalKind
@@ -284,6 +290,9 @@ pub fn new_checker(p ast.Program) Checker
         atomic_calls: Set[int](),
         std_any: Set[int](),
         float_literals: Set[int](),
+        discards: Map[int, Discard](),
+        effect_marks: 0,
+        gen: new_gen_check(),
     )
 
 fn Checker.err(mut self, rule str, at ast.Pos, text str)
@@ -416,6 +425,16 @@ fn Checker.provides(self, b int, tr int) bool
 
 ## Traits other languages use to define operators AIL has none of (trait.op.2).
 OTHER_OPERATOR_TRAITS := [
+    "Add",
+    "Sub",
+    "Mul",
+    "Div",
+    "Rem",
+    "Neg",
+    "Index",
+    "IndexMut",
+    "PartialEq",
+    "PartialOrd",
     "Pow",
     "Not",
     "BitAnd",
@@ -452,7 +471,7 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
             "trait.op.2",
             at,
             "`{n}` would define an operator, and no operator beyond those of `trait.op.1` can be defined",
-            "write a named method instead, e.g. `fn pow(self, other Self) Self`, and call it as `a.pow(b)`",
+            "the operator traits are `Eq` (`==` and `!=`) and `Ord` (`<`, `<=`, `>` and `>=`); for anything else write a named method, e.g. `fn add(self, other Self) Self`, and call it as `a.add(b)`",
         )
         return none
     mut d := new_diag("expr.name.1", at, "unknown trait `{n}`")
@@ -977,6 +996,15 @@ fn Checker.check_main(mut self)
                     "`@deprecated` needs a reason",
                     "write `@deprecated(\"use new_name instead\")`",
                 )
+        if not is_test and not with_names(f).is_empty()
+            err_help(
+                "test.fixture.3",
+                f.pos,
+                "`@needs` applies to a `@test` function",
+                "remove `@needs`, or make the function a `@test`",
+            )
+        if fx := attr_named(f, "fixture")
+            check_fixture(f, fx)
         if not is_test
             continue
         mut bad_shape := true
@@ -997,6 +1025,7 @@ fn Checker.check_main(mut self)
         else
             bad_shape = false
         if not bad_shape
+            check_with(f)
             check_prop_params(f)
         if r := f.ret
             mut fails := false
@@ -1011,9 +1040,162 @@ fn Checker.check_main(mut self)
                     "write `@test fn name()`, or `@test fn name() !` if it can fail",
                 )
 
+## The attribute `name` of `f`, if it has one.
+fn attr_named(f ast.FnDecl, name str) ast.Attr?
+    for a in f.attrs
+        if a.name == name
+            return a
+    none
+
+## The fixtures a test lists with `@needs("NAME")` (test.fixture.3).
+fn with_names(f ast.FnDecl) List[str]
+    [a.arg else "" for a in f.attrs if a.name == "needs"]
+
+## What a fixture's setup gives the test: its return type, or the value of a fallible one.
+@allow("expr.match.3") fn fixture_value(f ast.FnDecl) ast.TypeRef?
+    r := f.ret else return none
+    match r.shape
+        Fallible(ok, _) =>
+            return ok
+        _ =>
+            return r
+    none
+
+## A written type as text, for comparing two written types; empty when the shape isn't compared.
+@allow("expr.match.3") fn written_type(t ast.TypeRef) str
+    match t.shape
+        Named(name, args) =>
+            if args.len() == 0
+                return name
+            parts := [written_type(a) for a in args]
+            if parts.contains("")
+                return ""
+            "{name}[{parts.join(", ")}]"
+        Optional(inner) =>
+            s := written_type(inner)
+            if s == ""
+                return ""
+            "{s}?"
+        _ => ""
+
+## A top-level function of the program, by name.
+fn Checker.top_fn(self, name str) ast.FnDecl?
+    for g in prog.fns
+        if g.name == name and g.owner == none and g.within == ast.Within.TopLevel
+            return g
+    none
+
+## test.fixture.1-2: the shape of a `@fixture` function and of its teardown.
+fn Checker.check_fixture(mut self, f ast.FnDecl, a ast.Attr)
+    mut bad := ""
+    if f.owner != none or f.within != ast.Within.TopLevel
+        bad = "a fixture is a plain top-level function, not a method"
+    elif f.generics.len() > 0
+        bad = "a fixture has no type parameters"
+    elif f.params.len() > 0
+        bad = "a fixture takes no parameters"
+    elif attr_named(f, "test") != none
+        bad = "a function is a fixture or a test, not both"
+    elif fixture_value(f) == none
+        bad = "a fixture returns the value its tests get"
+    if bad != ""
+        err_help(
+            "test.fixture.1",
+            f.pos,
+            bad,
+            "write `@fixture fn name() Type`, or `@fixture fn name() !Type` if setup can fail",
+        )
+        return
+    end := a.arg else return
+    v := fixture_value(f) else return
+    g := top_fn(end) else
+        err_help(
+            "test.fixture.2",
+            a.pos,
+            "the teardown `{end}` is not a top-level function of the program",
+            "declare `fn {end}(value Type)` that takes the fixture's value",
+        )
+        return
+    if g.params.len() != 1 or g.ret != none or g.generics.len() > 0
+        err_help(
+            "test.fixture.2",
+            g.pos,
+            "a teardown takes the fixture's value and returns nothing",
+            "write `fn {end}(value Type)`",
+        )
+    elif written_type(v) != "" and written_type(g.params[0].ty) != written_type(v)
+        err_help(
+            "test.fixture.2",
+            g.params[0].pos,
+            "the teardown's parameter must have the type the fixture returns, `{written_type(v)}`",
+            "write `fn {end}(value {written_type(v)})`",
+        )
+
+## test.fixture.3: each `@needs("NAME")` names a fixture and a parameter of the test with its type.
+fn Checker.check_with(mut self, f ast.FnDecl)
+    mut seen := List[str]()
+    for a in f.attrs
+        if a.name != "needs"
+            continue
+        name := a.arg else ""
+        if seen.contains(name)
+            err_help(
+                "test.fixture.3",
+                a.pos,
+                "the fixture `{name}` is listed twice",
+                "list each fixture once",
+            )
+            continue
+        seen.push(name)
+        fx := top_fn(name) else
+            err_help(
+                "test.fixture.3",
+                a.pos,
+                "`{name}` is not a function of the program",
+                "declare `@fixture fn {name}() Type`",
+            )
+            continue
+        if attr_named(fx, "fixture") == none
+            err_help(
+                "test.fixture.3",
+                a.pos,
+                "`{name}` is not a fixture",
+                "put `@fixture` on `{name}`",
+            )
+            continue
+        v := fixture_value(fx) else continue
+        mut at := -1
+        for i in 0..f.params.len()
+            if f.params[i].name == name
+                at = i
+        if at < 0
+            err_help(
+                "test.fixture.3",
+                a.pos,
+                "the test has no parameter `{name}` to receive the fixture",
+                "add `{name} {written_type(v)}` to the parameters",
+            )
+        elif f.params[at].mutable
+            err_help(
+                "test.fixture.3",
+                f.params[at].pos,
+                "a fixture's parameter is not `mut`",
+                "write `{name} {written_type(v)}`",
+            )
+        elif written_type(v) != "" and written_type(f.params[at].ty) != written_type(v)
+            err_help(
+                "test.fixture.3",
+                f.params[at].pos,
+                "the parameter `{name}` must have the type the fixture returns, `{written_type(v)}`",
+                "write `{name} {written_type(v)}`",
+            )
+
 ## test.prop.1-2: each parameter of a property must be generatable.
 fn Checker.check_prop_params(mut self, f ast.FnDecl)
+    listed := with_names(f)
     for p in f.params
+        if listed.contains(p.name)
+            continue
         mut why := ""
         if p.mutable
             why = "a property's parameters aren't `mut`"

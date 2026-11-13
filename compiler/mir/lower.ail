@@ -101,6 +101,8 @@ struct Lower
     nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
+    ## Each struct's field defaults, in field order (type.struct.8, lower_fielddef.ail).
+    field_defaults Map[str, List[ast.Expr?]]
     ## The fields an `impl Hash ... uses` names, by struct (lower_keys.ail).
     hash_uses_of Map[str, List[str]]
     ## The struct whose method is being lowered, else "".
@@ -180,6 +182,8 @@ struct Lower
     else_targets List[int]
     ## Instrumentation sites, when asked for (lower_instr.ail).
     instr Instr
+    ## The generator being lowered (lower_gen.ail, ADR 1073, expr.yield.1).
+    gen_lower GenLower
     ## Function literals (type.fn.4, lower_fnlit.ail).
     fl FnLitState
 
@@ -295,6 +299,7 @@ pub fn lower_package_par(
         tk: new_task_state(),
         nofuse: false,
         structs: {},
+        field_defaults: {},
         hash_uses_of: {},
         self_ty: "",
         borrowed: Set[str](),
@@ -339,6 +344,7 @@ pub fn lower_package_par(
         ffi_k: 0,
         else_targets: [],
         instr: new_instr(),
+        gen_lower: new_gen_lower(),
         fl: new_fn_lit_state(),
     )
     l.note_lazy_names(srcs)
@@ -552,11 +558,14 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5); `@tool` only feeds the attach derive (attach.tool.1).
         if a.name != "inline"
             and a.name != "pure"
+            and a.name != "caps"
             and a.name != "allow"
             and a.name != "deprecated"
             and a.name != "test"
             and a.name != "export c"
             and a.name != "tool"
+            and a.name != "fixture"
+            and a.name != "needs"
             and a.name != "variadic c"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
@@ -918,6 +927,8 @@ fn Lower.fn_owner(self, f ast.FnDecl) str
 ## method has its own key and owner).
 fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     sig := sigs.get(key) else return
+    if lower_gen_fn(f, name, key, owner)
+        return
     params := begin_fn(name, sig.ret, sig.params)
     fails = sig.fails
     self_ty = ""
@@ -939,7 +950,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     body := f.body else
         lower_extern(f, name, params)
         return
-    if lower_ui_intrinsic(f, key, name, params)
+    if lower_ui_intrinsic(f, key, name, params) or lower_rt_flag(key, name, f.pos)
         return
     if not unchecked
         enter_contracts(f, key)
@@ -1114,7 +1125,7 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
-    if is_pop_call(value)
+    if is_list_pop(value)
         got := lower_pop_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
             return
@@ -1247,7 +1258,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             note_statement(e)
-            if is_pop_call(e) and lower_pop_stmt(e) != none
+            if is_list_pop(e) and lower_pop_stmt(e) != none
                 return
             uniq_discard(e, lower_expr(e, Ty.Unit))
         Handle(value, other) => lower_handle(value, other)
@@ -1443,6 +1454,8 @@ fn Lower.lower_for(
             l0 := lower_value(iter, none) else return
             if chan_elem(l0.ty) != none
                 lower_chan_for(var, l0, body, expr_pos(iter))
+                return
+            if lower_iter_for(var, iter, l0, body, fpos)
                 return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
@@ -1844,7 +1857,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
-            if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
+            if name == ast.YIELD and not is_rt
+                return lower_yield(args, pos)
+            if ASSERT_FNS.contains(name) and not is_rt and lookup(name) == none
                 return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(none, args, pos)

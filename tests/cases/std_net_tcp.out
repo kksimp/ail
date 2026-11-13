@@ -1,10 +1,10 @@
 welcome
 echo: one
 echo: two
-quiet: timed_out
+quiet: net.NetKind.TimedOut
 0
 true
 echo: héllo wörld
-after close: closed
-refused
-bad_url
+after close: net.NetKind.Closed
+net.NetKind.Refused
+net.NetKind.BadUrl

@@ -1,0 +1,60 @@
+## Roman numerals: converts integers 1..3999 to Roman numerals and back, and
+## checks that every value round-trips.
+
+fn to_roman(n int) str
+    requires n >= 1 and n <= 3999
+    values := [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    symbols := ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+    mut rest := n
+    mut out := ""
+    for i in 0..values.len()
+        while rest >= values[i]
+            out = "{out}{symbols[i]}"
+            rest -= values[i]
+    out
+
+fn roman_value(c char) int
+    match c
+        'I' => 1
+        'V' => 5
+        'X' => 10
+        'L' => 50
+        'C' => 100
+        'D' => 500
+        'M' => 1000
+        _ => 0
+
+fn from_roman(s str) int
+    cs := s.chars()
+    mut total := 0
+    for i in 0..cs.len()
+        v := roman_value(cs[i])
+        mut after := 0
+        if i + 1 < cs.len()
+            after = roman_value(cs[i + 1])
+        if after > v
+            total -= v
+        else
+            total += v
+    total
+
+fn main()
+    for n in [1, 4, 9, 14, 40, 90, 400, 1994, 2024, 3888, 3999]
+        r := to_roman(n)
+        print("{n:>4} {r:<14}{from_roman(r)}")
+    mut ok := 0
+    for n in 1..=3999
+        if from_roman(to_roman(n)) == n
+            ok += 1
+    print("round trips ok: {ok}")
+    print("MCMXCIV = {from_roman("MCMXCIV")}")
+
+@test fn known_values()
+    assert_eq(to_roman(4), "IV")
+    assert_eq(to_roman(1994), "MCMXCIV")
+    assert_eq(to_roman(3999), "MMMCMXCIX")
+
+@test fn parses_back()
+    assert_eq(from_roman("XLII"), 42)
+    assert_eq(from_roman("MMXXIV"), 2024)
+    assert_eq(from_roman(""), 0)

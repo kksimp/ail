@@ -1,0 +1,20 @@
+error struct Missing
+    path str
+
+error struct Denied
+    user str
+
+fn load(n int) int ! Missing | Denied
+    if n == 0
+        return Missing(path: "a.txt")
+    if n < 0
+        return Denied(user: "bo")
+    n
+
+fn main()
+    n := load(0) else err
+        match err
+            Missing => print("missing {err.path}")
+            Denied => todo
+        0
+    print(n)

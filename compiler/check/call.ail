@@ -87,12 +87,14 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             return call_value(n, l.ty, args, npos)
     if n == "print"
         return print_call(args, npos)
+    if n == ast.YIELD
+        return yield_call(args, npos)
     # err.model.2: `unreachable(message)` traps; it never returns.
     if n == "unreachable"
         s := plain_sig(none, [Ty.Str], Ty.Unit)
         check_call(n, s, [], args, none, npos, none)
         return Ty.Never
-    if n == "assert" or n == "assert_eq"
+    if ASSERT_FNS.contains(n)
         return assert_call(n, args, npos)
     if n == "zip" and not has_targs and not fns.contains("zip")
         return zip_call(args, npos)
@@ -777,6 +779,7 @@ fn Checker.fields_literal(
     missing := [
         fields[k].name
         for k in 0..fields.len() if not given[k]
+            and fields[k].default == none
             and not (label == "net.Response" and fields[k].name == "all_headers")
     ]
     if missing.len() > 0 and not lost
@@ -785,12 +788,20 @@ fn Checker.fields_literal(
             "type.struct.4",
             at,
             "`{label}(...)` is missing {word} {list_names(missing)}",
-        ).with_help("every field must be given; there are no defaults yet; `todo` stands in for a value you haven't written")
+        ).with_help(missing_help(fields))
         holes := ["{m}: todo" for m in missing].join(", ")
         template := if args.len() == 0 then "{label}({holes})" else "{label}($a, {holes})"
         if [a for a in args if a.mutable].len() == 0
             d = d.with_fix("give the missing fields a `todo` each", [fix.call(at, label, template)])
         diags.push(d)
+
+## The help of a missing field (type.struct.4): which fields may be left out
+## (type.struct.8), and that these may not.
+fn missing_help(fields List[ast.Field]) str
+    left := [f.name for f in fields if f.default != none]
+    if left.len() == 0
+        return "every field must be given (they have no defaults); `todo` stands in for a value you haven't written"
+    "the fields without a default must be given; only {list_names(left)} may be left out; `todo` stands in for a value you haven't written"
 
 ## type.struct.7: positional arguments may only fill fields whose types all
 ## differ, so that swapping two of them is a type error.
@@ -988,6 +999,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         return Ty.Unknown
     match rt
         Conc(k, inner) =>
+            # eff.use.1: these methods wait for or change shared state.
+            effect_marks += 1
             if k == "Atomic"
                 atomic_calls.add(pos_key(at))
             else
@@ -1007,6 +1020,9 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             if sn == "proc.Output"
                 return output_method(n, at, args)
         PtrOf(target) => return ptr_method(rt, target, n, at, args, expect)
+        Enum(e, _) =>
+            if prog.enums[e].name == "ui.KeyCode"
+                return key_method(recv, n, at, args, expect)
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0
@@ -1579,9 +1595,9 @@ fn Checker.reject_test_call(mut self, i int, at ast.Pos)
             "move shared code into an ordinary function that the test calls",
         )
 
-## `assert(cond)` and `assert_eq(a, b)` (test.assert.1-2).
+## `assert(cond)`, `assert(cond, "message")`, `assert_eq(a, b)`, `assert_err(call)`,
+## `assert_err(call, Variant)` and `assert_near(a, b, eps)` (test.assert.1-3).
 fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
-    want := if n == "assert" then 1 else 2
     for a in args
         if l := a.label
             unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
@@ -1592,13 +1608,12 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
                 "`{n}`'s parameters aren't `mut`",
                 "remove the `mut`",
             )
-    if args.len() != want
+    lo := assert_arity(n)
+    hi := if n == "assert" or n == "assert_err" then 2 else lo
+    if args.len() < lo or args.len() > hi
         args_only(args)
-        err(
-            "test.assert.2",
-            at,
-            "`{n}` takes exactly {want} argument(s), but {was_were(args.len())} given",
-        )
+        want := if hi == lo then "{lo}" else "{lo} or {hi}"
+        err("test.assert.2", at, "`{n}` takes {want} argument(s), but {was_were(args.len())} given")
         return Ty.Unit
     if n == "assert"
         v := args[0].value
@@ -1608,12 +1623,66 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
             expr_pos(v),
         ) and not accepts(Ty.Bool, t)
             err("test.assert.2", expr_pos(v), "`assert` needs a `bool`, found {show(t)}")
+        if args.len() == 2
+            mv := args[1].value
+            mt := expr(mv, Ty.Str, true)
+            if mt != Ty.Unknown and mt != Ty.Never and not accepts(Ty.Str, mt)
+                err_help(
+                    "test.assert.2",
+                    expr_pos(mv),
+                    "the message of `assert` is a `str`, found {show(mt)}",
+                    "write the message as text, e.g. `assert(ok, \"why it should hold\")`",
+                )
+    elif n == "assert_err"
+        v := args[0].value
+        t := expr(v, none, true)
+        mut errs := List[Ty]()
+        match t
+            Res(_, es) => errs = errs_of(es)
+            _ => errs = []
+        if not is_res(t) and t != Ty.Unknown and t != Ty.Never
+            err_help(
+                "test.assert.3",
+                expr_pos(v),
+                "`assert_err` needs a call that can fail, found `{show(t)}`",
+                "pass a call whose return type is `T ! E`; to compare plain values use `assert_eq`",
+            )
+        if args.len() == 2
+            hint := if errs.len() == 1 then errs[0] else Ty.Unknown
+            st := expr(args[1].value, if hint == Ty.Unknown then none else hint, true)
+            if is_res(t)
+                and st != Ty.Unknown
+                and st != Ty.Never
+                and errs.len() > 0
+                and not errs.contains(st)
+                err_help(
+                    "test.assert.3",
+                    expr_pos(args[1].value),
+                    "this call can't fail with `{show(st)}`",
+                    "name one of the errors the call declares",
+                )
+    elif n == "assert_near"
+        for a in args
+            t := expr(a.value, Ty.Float, true)
+            if t != Ty.Unknown and t != Ty.Never and not accepts(Ty.Float, t)
+                err_help(
+                    "test.assert.2",
+                    expr_pos(a.value),
+                    "`assert_near` compares `float` values, found {show(t)}",
+                    "convert with `.to_float()`",
+                )
     else
         lt := expr(args[0].value, none, true)
         rt := expr(args[1].value, lt, true)
         operator(ast.BinOp.Eq, lt, rt, at)
         text_form(lt, expr_pos(args[0].value), "test.assert.2")
     Ty.Unit
+
+fn assert_arity(n str) int
+    match n
+        "assert_eq" => 2
+        "assert_near" => 3
+        _ => 1
 
 ## gram.attr.4: using a function marked `@deprecated("why")` warns.
 fn Checker.note_deprecated(mut self, i int, at ast.Pos)

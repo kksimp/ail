@@ -1,0 +1,10 @@
+entries: 5
+(global).debug = true
+server.host = example.org
+server.port = 8080
+client.retries = 3
+client.timeout = 2500
+port: 8080
+retries: 3
+missing: -1
+host: example.org

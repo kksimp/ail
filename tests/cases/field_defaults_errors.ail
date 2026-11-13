@@ -1,0 +1,11 @@
+# type.struct.8: a default is a plain constant of the field's type; type.struct.4: a field without one must be given.
+LIMIT := 5
+
+struct Bad
+    a int = LIMIT
+    b int = "x"
+    d int
+    e int = 1
+
+fn main()
+    print(Bad(e: 2))

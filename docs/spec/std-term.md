@@ -23,21 +23,23 @@ pure and need no capability. *(ADR 1012)*
 **std.term.2** — `parse(data bytes) List[Event]` decodes bytes read from a
 terminal into events, in order. `Event` has the variants `Key(key, ctrl, alt,
 shift)`, `Mouse(col, row, button, kind)`, `Scroll(lines)` and `Resize(cols,
-rows)`. `Key` names its `key` as `std.ui.7` does: the typed character
-(UTF-8 is decoded), or `enter`, `tab`, `backspace`, `delete`, `insert`,
-`escape`, `up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown`
-and `f1` to `f12`. A control byte is its letter with `ctrl` (byte 3 is `c`
-with Ctrl); Shift-Tab is `tab` with `shift`; a modifier parameter in a
+rows)`. `key` is a `term.KeyCode`, with the variants, methods and
+`key_code(name)` of `ui.KeyCode` (`std.ui.7`): `Text` of the typed character
+(UTF-8 is decoded), or `Enter`, `Tab`, `Backspace`, `Delete`, `Insert`,
+`Escape`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`
+and `F(1)` to `F(12)`. A control byte is its letter with `ctrl` (byte 3 is `Text("c")`
+with Ctrl); Shift-Tab is `Tab` with `shift`; a modifier parameter in a
 sequence (`ESC [ 1 ; 5 C`) sets `ctrl`, `alt` and `shift`; ESC before a key
-sets `alt`; a lone ESC is `escape`. A sequence cut off at the end of the
-data, or one `parse` doesn't know, gives no event. *(ADR 1012)*
+sets `alt`; a lone ESC is `Escape`. A sequence cut off at the end of the
+data, or one `parse` doesn't know, gives no event. *(ADR 1012, ADR 1068)*
 
 **std.term.3** — A mouse report in the SGR form (`ESC [ < b ; x ; y M` or
 `m`, which `open(true)` asks for) is `Mouse(col, row, button, kind)` with
-`col` and `row` counted from 0, `button` one of `left`, `middle` and `right`,
-and `kind` one of `down`, `up` and `drag` (movement with a button held).
-Movement with no button gives no event. The wheel is `Scroll(-3)` upwards and
-`Scroll(3)` downwards, as `std.ui.11`. *(ADR 1012)*
+`col` and `row` counted from 0, `button` a `term.MouseButton` (`Left`,
+`Middle`, `Right`) and `kind` a `term.MouseKind` (`Down`, `Up`, or `Drag` for
+movement with a button held). Movement with no button gives no event. The
+wheel is `Scroll(-3)` upwards and `Scroll(3)` downwards, as `std.ui.11`.
+*(ADR 1012, ADR 1068)*
 
 **std.term.4** — `is_tty() bool` is true when standard input and standard
 output are both a terminal (a console, on Windows). *(ADR 1012)*
@@ -94,7 +96,7 @@ fn main() !
         ev := t.poll(1000) else continue
         match ev
             Key(k, _, _, _) =>
-                if k == "q"
+                if k == Text("q")
                     break
             Resize(c, r) => t.write("{term.goto(0, 0)}{c}x{r}")
             _ => continue

@@ -773,9 +773,9 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0955](0955-custom-hash-names-fields.md) | Custom hashing: `impl Hash` names the fields that take part (amends 0133, resolves OQ-042) | Accepted | 2026-11-05 |
 | [0956](0956-std-gfx-frame-loop.md) | `std.gfx`: the frame loop for real-time programs (key-up, vsync, `Input` snapshots) *(delegated)* | Accepted | 2026-11-05 |
 | [0957](0957-shared-surface-transport.md) | Shared-surface transport for `std.gfx` (no JSON on the hot path) *(delegated)* | Accepted | 2026-11-05 |
-| [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Deferred past 0.1.0 | 2026-11-05 |
+| [0958](0958-gpu-compute-first.md) | SPIR-V and MSL compute first, then rendering *(delegated)* | Superseded by 1073 | 2026-11-05 |
 | [0959](0959-std-crypto.md) | std.hash and std.crypto: in-house, constant-time, vector-checked primitives; HMAC-SHA-384/512 first *(delegated)* | Accepted | 2026-11-05 |
-| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Deferred past 0.1.0 | 2026-11-05 |
+| [0965](0965-generators.md) | Generators: `yield` in a function returning `Seq[T]`, lowered to a state machine *(delegated)* | Superseded by 1073 | 2026-11-05 |
 | [0966](0966-ail-lsp-language-server.md) | `ail lsp`: the semantic API as a language server on stdio *(delegated)* | Accepted | 2026-11-05 |
 | [0967](0967-sanitizers.md) | Sanitizers: `ail sanitize` finds schedule-dependent results; leak and unsafe-race checks staged *(delegated)* | Accepted | 2026-11-05 |
 | [0968](0968-aarch64-windows-target.md) | Native: the aarch64-windows target *(delegated)* | Deferred past 0.1.0 (experimental: compile-only, unverified) | 2026-11-05 |
@@ -843,9 +843,12 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1056](1056-warm-ail-mcp.md) | Keep `ail mcp` warm: direct native calls and a memo of unchanged read-only calls; amends ADR 0918 *(delegated)* | Accepted | 2026-11-10 |
 | [1064](1064-reserve-256-mib-ahead-of-push-loops.md) | Native: reserve up to 256 MiB of list elements ahead of a push loop *(delegated)* | Accepted | 2026-11-11 |
 | [1066](1066-pair-adjacent-float-operations.md) | Native: pair adjacent float element operations into two-lane vector operations (`Vec2`, native.vec.3) *(delegated)* | Accepted | 2026-11-12 |
+| [1071](1071-streaming-file-handles.md) | `std.file` Reader and Writer (unique, flush on drop) over `std.fs`; `io.read_exact`; resolves OQ-141 *(delegated)* | Accepted | 2026-11-12 |
 | [1077](1077-decision-order-ai-understanding-first.md) | Delegated decisions: AI understanding first, human readability second, then speed, then tokens *(designer)* | Accepted | 2026-11-12 |
 | [1065](1065-goals-c-parity-ai-first.md) | Aim for speed equal to C and AI-first features ahead of the market; accept more tokens *(designer)* | Accepted | 2026-11-11 |
 | [1067](1067-closures.md) | Function literals that copy their locals, failing function values, and `any`/`all`/`find`/`filter`/`map`/`group_by` *(delegated)* | Accepted | 2026-11-12 |
+| [1084](1084-language-version-line-in-ail-pkg.md) | A language version line in `ail.pkg` and a `fix --migrate` hook *(delegated)* | Accepted | 2026-11-12 |
+| [1085](1085-keywords-as-member-names.md) | Keywords as field, member, label and method names *(delegated)* | Accepted | 2026-11-13 |
 | [1061](1061-known-list-lengths.md) | Native: lists built to a known count check against that count *(delegated)* | Accepted | 2026-11-11 |
 | [1044](1044-windows-gfx-surface-mapping.md) | `std.gfx` on Windows: the shared surface is a named file mapping, `vsync` after `DwmFlush`, XInput gamepads; amends ADR 0957 *(delegated)* | Accepted | 2026-11-10 |
 | [1057](1057-ail-help.md) | `ail help`, `--help` and a real no-argument usage; JSON for agents *(delegated)* | Accepted | 2026-11-11 |
@@ -853,5 +856,20 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1059](1059-no-unix-tools-in-shipped-commands.md) | Shipped commands run no Unix program; `fs.temp_dir` and `fs.make_temp_dir` *(delegated)* | Accepted | 2026-11-11 |
 | [1062](1062-version-multi-exit-loops.md) | Native: version counted loops that leave in more than one place, and drop the checks on `xs[a + i]` *(delegated)* | Accepted | 2026-11-11 |
 | [1063](1063-function-wide-value-ranges.md) | Native: function-wide value ranges drop checks and fold comparisons they decide *(delegated)* | Accepted | 2026-11-12 |
+| [1068](1068-std-error-kinds-are-enums.md) | The kinds of the standard library's errors are enums; a string compared with an enum gets a fix *(designer; details delegated)* | Accepted | 2026-11-12 |
+| [1069](1069-nested-match-patterns.md) | Nested patterns in variant fields, checked as a pattern matrix *(delegated)* | Accepted | 2026-11-12 |
 | [1070](1070-bit-operators.md) | Bit operators `& \| ^ ~ << >>` as sugar for the `int` methods; mixing needs parentheses; supersedes ADR 0465 *(delegated)* | Accepted | 2026-11-12 |
+| [1072](1072-scoped-runtime-capabilities.md) | `--allow`: scoped capabilities (paths, hosts, programs, variables) checked at run time; amends ADR 0165 *(delegated)* | Accepted | 2026-11-12 |
+| [1073](1073-generators-and-user-iteration.md) | Generators, `Seq[T]` and `for` over any type with `next(mut self) T?` *(delegated)* | Accepted | 2026-11-12 |
+| [1075](1075-test-filter-and-fixtures.md) | `ail test --filter` and `--list`, and `@fixture` / `@needs` test fixtures *(delegated)* | Accepted | 2026-11-12 |
+| [1076](1076-struct-field-defaults.md) | Struct field defaults `name Type = value`, plain constants only *(delegated)* | Accepted | 2026-11-12 |
+| [1078](1078-error-union-member-matching.md) | `match err` on an error union takes member types and their variants, narrows the name, and must cover every member *(designer; details delegated)* | Accepted | 2026-11-12 |
 | [1079](1079-keep-loop-elements-in-registers.md) | Native: keep elements a loop assigns at an unchanging index in registers *(delegated)* | Accepted | 2026-11-12 |
+| [1082](1082-discarded-result-is-an-error.md) | A call whose value is thrown away and that does nothing else is an error (`eff.use.1`) | Accepted | 2026-11-12 |
+| [1083](1083-ail-ask-answers-honestly.md) | `ail ask` answers honestly: built-in methods, a minimum score, misses with a hint, `ail ask how` *(delegated)* | Accepted | 2026-11-12 |
+| [1086](1086-heap-and-deque.md) | `Heap[T]` and `Deque[T]` in the prelude *(delegated)* | Accepted | 2026-11-12 |
+| [1087](1087-std-papercuts.md) | Std papercuts: `assert(c, msg)`, `assert_err`, `assert_near`, format specs `08` `b` `,` `+` `e` *(delegated)* | Accepted | 2026-11-13 |
+| [1088](1088-while-binding.md) | `while name := e` loops while a value is present *(delegated)* | Accepted | 2026-11-12 |
+| [1089](1089-caps-attribute-on-functions.md) | `@caps(LIST)` limits a function to the listed capabilities *(delegated)* | Accepted | 2026-11-12 |
+| [1090](1090-std-yaml.md) | `std.yaml`: the common subset of YAML read into the `Json` value *(delegated)* | Accepted | 2026-11-13 |
+| [1091](1091-std-mcp-client.md) | `std.mcp`: a client for MCP servers over stdio *(delegated)* | Accepted | 2026-11-12 |

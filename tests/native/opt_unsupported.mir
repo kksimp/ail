@@ -9,14 +9,16 @@ fn first(v0:xs List[int]) int
   b1:
     v5 int = const 4
     v6 Empty = call rt.obj_new(v2, v5)
-    v13 str = str #4
+    v14 str = str #4
     v8 str = str #0
-    call rt.err_set(v13, v8)
+    call rt.err_set(v14, v8)
     call rt.err_value(v6)
+    v9 int = const 67081517
+    call rt.err_tag(v9)
     return v2
   b2:
-    v11 int = get v0:xs, v2 !s0
-    return v11
+    v12 int = get v0:xs, v2 !s0
+    return v12
 
 fn labelled(v0:xs List[int]) int
   b0(v0:xs List[int]):

@@ -168,7 +168,8 @@ when the loop started. `e` MUST NOT be a `Map`: `for k in m` is a
 compile-time error, and its help says to iterate `m.keys()` (the habit is
 ambiguous between keys and pairs). `e` may also be a `Channel[T]`, giving `x`
 type `T`: the loop receives until the channel is closed and empty
-(`conc.share.7`). *(ADR 0117, ADR 0131, ADR 0300)*
+(`conc.share.7`), or a value whose type has a `next` method (`expr.iter.1`),
+a `Seq[T]` among them. *(ADR 0117, ADR 0131, ADR 0300, ADR 1073)*
 
 **expr.loop.5** — `break` and `continue` outside a loop are compile-time
 errors. *(ADR 0117)*
@@ -186,6 +187,17 @@ body contains no `break` for that loop never completes normally, so as a
 statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
 to that loop. AIL has no `loop` keyword: the help for it says `while true`.
 *(ADR 0139)*
+
+**expr.loop.8** — `while name := e` runs its block while `e`, of type `T?` or
+`T ! E`, has a value. Each iteration evaluates `e` first. When `e` is present
+or succeeded, `name` is bound to its value, immutably and only within that
+iteration's block, and the block runs. Otherwise the loop ends, and an error
+value is dropped. `break` and `continue` apply to this loop; `continue` evaluates
+`e` again. It is `while true` whose block starts with `name := e else break`
+(`err.else.6`), so `name` follows `expr.bind.4` and a `while` of this form
+that has a value is never a diverging statement (`expr.loop.7`). There is no
+`else err` part and no `elif`. The Rust spelling `while let x = e` is a
+compile-time error whose fix writes `while x := e`. *(ADR 1088)*
 
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
@@ -314,8 +326,9 @@ and name those variants, unless the function allows it with
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`), or written bare to match any fields
-(`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183)*
+for each of its fields (`expr.match.6`, `expr.match.13`), or written bare to
+match any fields (`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183,
+ADR 1069)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -324,7 +337,8 @@ redundant), and the rule applies to each alternative of an or-pattern.
 
 **expr.match.6** — In a pattern `Variant(p1, ..., pn)`, there MUST be one
 `pi` per field, in declaration order. Each `pi` is a new immutable binding
-name or `_`, which ignores the field. *(ADR 0123)*
+name, `_`, which ignores the field, or a pattern of the field's type
+(`expr.match.13`). *(ADR 0123, ADR 1069)*
 
 **expr.match.7** — A literal pattern is an `int` literal (with an optional
 `-`), a `char` literal, a `str` literal without interpolation (a raw string is
@@ -412,8 +426,46 @@ fn main()
     print(grade(30))
 ```
 
-> **Note:** not yet designed: or-patterns that bind names, patterns nested
-> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+**expr.match.13** — A field of a variant pattern may hold a pattern of the
+field's type: a variant pattern, nested to any depth, a literal, a range, a
+tuple pattern, or an or-pattern. A plain name binds the field and `_` ignores
+it; a name that is a variant of the field's enum is an error, so a variant
+without fields is written qualified, `Expr.Nil`. A `match` on an enum whose
+arms nest is exhaustive (`expr.match.2`) only when every value is taken by an
+unguarded arm, and the diagnostic names each missing case as a pattern, such
+as `Add(Num(_), Neg(_))`. An arm, or an alternative of an or-pattern, that
+matches no value the earlier arms leave is redundant (`expr.match.5`).
+*(ADR 1069)*
+
+```ail rules=expr.match.13
+enum Expr
+    Num(n int)
+    Neg(e Expr)
+    Add(a Expr, b Expr)
+    Nil
+
+fn simplify(e Expr) Expr
+    match e
+        Add(Num(a), Num(b)) => Expr.Num(n: a + b)
+        Add(x, Expr.Nil) => x
+        Neg(Neg(x)) => x
+        Neg(Num(0)) => Expr.Num(n: 0)
+        Num | Neg | Add | Nil => e
+
+fn show(e Expr) str
+    match e
+        Num(n) => "{n}"
+        Neg(x) => "-{show(x)}"
+        Add(a, b) => "({show(a)} + {show(b)})"
+        Nil => "nil"
+
+fn main()
+    print(show(simplify(Expr.Add(a: Expr.Num(n: 2), b: Expr.Num(n: 3)))))    # 5
+    print(show(simplify(Expr.Neg(e: Expr.Neg(e: Expr.Num(n: 7))))))         # 7
+    print(show(simplify(Expr.Add(a: Expr.Neg(e: Expr.Nil), b: Expr.Nil))))  # -nil
+```
+
+> **Note:** not yet designed: or-patterns that bind names, a binding pattern for a whole
 > scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
 > suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
 > ADR 0453)*
@@ -632,6 +684,113 @@ The checker warns "uhwhatnow?: expected `int`; best fit: `tax`", with
 > each gap needs, and the program runs until it reaches one. The bootstrap
 > doesn't infer an unknown hole type from later uses; a later lane may.
 
+## Generators and iteration
+
+**expr.iter.1** — In `for x in e` and in a comprehension clause, `e` MAY be a
+value whose type has a method `fn next(mut self) T?`; `x` then has type `T`,
+and the loop calls `next()` until it gives `none`. The loop works on a copy of
+`e` (`expr.loop.4`), or, when `e` is unique, takes it over (`own.uniq.2`), so
+a later use of it is an error. A `next` with another receiver, any parameter,
+or a result that isn't optional is a compile-time error. *(ADR 1073)*
+
+**expr.iter.2** — `Seq[T]` is the prelude's `unique struct Seq[T]` with one
+field, `step fn() T?`; `s.next()` calls `step`, and `Seq(step: f)` makes a
+sequence from any function value (`type.fn.1`). Reading a `Seq` uses it up:
+it is never copied (`own.uniq.1`). *(ADR 1073)*
+
+**expr.iter.3** — The prelude gives `Seq[T]` these functions. Lazy, each
+taking its sequence over and reading only as far as its result is read:
+`Seq.of(xs)` (the elements of a list), `s.map(f)`, `s.filter(keep)`,
+`s.take_while(keep)`, `s.take(n)`, `s.skip(n)`, `s.enumerate()` (pairs
+`(i, x)` from 0), `s.zip(move other)` (pairs, until either ends) and
+`s.chain(move other)`. Reading to the end: `s.collect()` (a `List[T]`) and
+`s.count()`. *(ADR 1073)*
+
+**expr.yield.1** — A function whose body contains a `yield` statement is a
+*generator*; its result type MUST be `Seq[T]`. Calling a generator runs none
+of its body: it returns a `Seq[T]`, and each `next()` of it runs the body from
+where it last stopped to its next `yield`. `yield` outside a generator,
+is a compile-time error, and so is `yield` inside a function literal
+(`type.fn.4`). *(ADR 1073)*
+
+**expr.yield.2** — `yield e` is a statement; `e` MUST have type `T`, and the
+element is a copy (`own.val.1`): changes the generator makes later to the
+variable are not seen in it. A unique `e` moves out. *(ADR 1073)*
+
+**expr.yield.3** — The sequence ends when the body ends or runs a bare
+`return`; every `next()` from then on gives `none`. `return e` in a generator
+is a compile-time error. *(ADR 1073)*
+
+**expr.yield.4** — A generator keeps its own copy of each argument, or takes
+a `move` argument over, so the caller's later changes are not seen. A
+generator MUST NOT have a `mut` parameter or `mut self`, `requires` or
+`ensures`, or a `defer`, and `yield` MUST NOT be inside `par for` or `with`.
+*(ADR 1073)*
+
+```ail rules=expr.yield.1,expr.yield.2,expr.yield.3,expr.iter.1,expr.iter.2,expr.iter.3
+fn count(n int) Seq[int]
+    for i in 0..n
+        yield i                   # the next element
+
+fn evens(limit int) Seq[int]
+    mut k := 0
+    while true
+        if k > limit
+            return                # ends the sequence
+        yield k
+        k += 2
+
+struct Countdown
+    n int
+
+fn Countdown.next(mut self) int?
+    if n == 0
+        return none
+    n -= 1
+    n + 1
+
+fn main()
+    for i in count(3)
+        print(i)                  # 0 1 2
+    print(evens(6).collect())     # [0, 2, 4, 6]
+    print(count(10).filter(|x| x % 3 == 0).take(3).collect())   # [0, 3, 6]
+    mut s := count(1)
+    print(s.next() else -1)       # 0
+    print(s.next() else -1)       # -1: ended
+    c := Countdown(n: 2)
+    for k in c
+        print(k)                  # 2 1
+    print(c.n)                    # 2: the loop read a copy
+```
+
+```ail error=expr.yield.1
+fn main()
+    yield 1                       # error: `main` doesn't return `Seq[T]`
+```
+
+```ail error=expr.yield.4
+fn grow(mut xs List[int]) Seq[int]   # error: a generator can't take `mut`
+    for x in xs
+        yield x
+
+fn main()
+    mut a := [1]
+    for x in grow(mut a)
+        print(x)
+```
+
+```ail error=expr.iter.1
+struct Bad
+    n int
+
+fn Bad.next(self) int?            # error at the loop: `next` needs `mut self`
+    none
+
+fn main()
+    for x in Bad(n: 1)
+        print(x)
+```
+
 ## Examples
 
 Conformance examples (ADR 0002) for the rules above. Each `rules=` list names
@@ -825,6 +984,21 @@ fn main()
     print(n)                  # 3
     for s in {"a", "b"}
         print(s)              # a b: insertion order
+```
+
+```ail rules=expr.loop.8
+fn main()
+    mut stack := [1, 2, 3]
+    while top := stack.pop()
+        print(top)            # 3 2 1
+    print(stack.len())        # 0
+```
+
+```ail error=expr.loop.8
+fn main()
+    mut stack := [1, 2]
+    while let top = stack.pop()   # error: write `while top := stack.pop()`
+        print(top)
 ```
 
 ```ail error=type.map.5

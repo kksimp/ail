@@ -1,6 +1,6 @@
 good ok
-dotdot unsafe_path unsafe name in archive: ../evil.txt
-abs unsafe_path unsafe name in archive: /evil.txt
-dot unsafe_path unsafe name in archive: a/./b.txt
-crc checksum zip CRC-32 or size mismatch in ok.txt
+dotdot compress.CompressKind.UnsafePath unsafe name in archive: ../evil.txt
+abs compress.CompressKind.UnsafePath unsafe name in archive: /evil.txt
+dot compress.CompressKind.UnsafePath unsafe name in archive: a/./b.txt
+crc compress.CompressKind.Checksum zip CRC-32 or size mismatch in ok.txt
 false

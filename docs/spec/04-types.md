@@ -76,11 +76,11 @@ are correctly rounded too; a literal that overflows is a `lex.num.3` error.
 *(ADR 0130)*
 
 ```ail fragment
-"2.5E-3".to_float()     # 0.0025
-"1e999".to_float()      # inf
-"-0".to_float()         # -0.0
-"+1".to_float()         # none
-".5".to_float()         # none
+print("2.5E-3".to_float())    # 0.0025
+print("1e999".to_float())     # inf
+print("-0".to_float())        # -0.0
+print("+1".to_float())        # none
+print(".5".to_float())        # none
 ```
 
 **type.num.9** — `x.abs()`, `x.floor()`, `x.ceil()`, `x.round()` and
@@ -130,8 +130,8 @@ imply `a == b`. *(ADR 0130)*
 
 ```ail fragment
 n := 0.0 / 0.0
-[2.0, n, 1.0].sorted()  # [1.0, 2.0, nan]
-n < 1.0                 # false: the operator is IEEE
+print([2.0, n, 1.0].sorted())  # [1.0, 2.0, nan]
+print(n < 1.0)                 # false: the operator is IEEE
 ```
 
 > **Note:** float literal patterns are an error (`expr.match.7`). The same
@@ -155,9 +155,9 @@ values are the default methods of `Ord` (ADR 0137).
 
 ```ail fragment
 x := 9223372036854775807
-x.checked_add(1)        # none
-x.wrapping_add(1)       # -9223372036854775808
-x.saturating_add(1)     # 9223372036854775807
+print(x.checked_add(1))        # none
+print(x.wrapping_add(1))       # -9223372036854775808
+print(x.saturating_add(1))     # 9223372036854775807
 ```
 
 **type.num.13** — A sized number is a value of one of the types of
@@ -223,7 +223,7 @@ u := User(id: 7, name: "Ada", email: none)
 ```
 
 **type.struct.4** — A struct literal MUST set every field of the struct
-exactly once. Named and shorthand arguments may come in any order. Missing,
+that has no default (`type.struct.8`) exactly once, and no field twice. Named and shorthand arguments may come in any order. Missing,
 unknown and repeated fields are compile-time errors. *(ADR 0113, ADR 0142)*
 
 **type.struct.5** — A struct's field names MUST be distinct. Each value in a
@@ -249,7 +249,33 @@ Pos(row: r, col: c)    # named
 Pos(r, c)              # error: row and col are both int
 ```
 
-> **Note:** field defaults are not yet decided.
+**type.struct.8** — A struct field may declare a default, written
+`name Type = value`. A struct literal that leaves the field out gets that
+value; naming the field sets it as usual. The value MUST be a plain constant
+of the field's type: literals, `none`, `[]`, `{}`, `List[T]()`, `Map[K, V]()`,
+`Set[T]()`, and lists, sets, maps, tuples and a leading `-` of them. It names
+no constant, function or type, so it reads the same wherever the literal is
+written and has no effect; anything else is a compile-time error. Each
+literal gets its own fresh value. A generic struct's default is typed with
+its type parameters, so `items List[T] = []` is fine and `x T = 0` is not. A
+variant's field has no default. A missing field's error says which fields
+may be left out. `impl Default` derivation (`trait.assoc.1`) does not read
+field defaults: it uses each field type's default. *(ADR 1076)*
+
+```ail skip=context
+struct Config
+    name str
+    retries int = 3
+    tags List[str] = []
+
+c := Config(name: "a")          # retries 3, no tags
+d := Config(name: "b", retries: 9)
+```
+
+```ail error=type.struct.8
+struct Bad
+    a int = len("abc")          # error: a default has no calls or names
+```
 
 ## Enums
 
@@ -335,6 +361,32 @@ fn area(s Shape) int
 
 fn main()
     print(area(Rect(w: 2, h: 3)))
+```
+
+**type.enum.7** — A string literal compared with `==` or `!=` to an enum value,
+or written as a pattern of a `match` on one, is a compile-time error: an enum
+is never equal to a string. When the string is a variant's name in snake case
+(`"not_found"` for `NotFound`), the diagnostic carries a machine-applicable
+fix that writes the variant (`fix.edit.1`). The kinds of the standard
+library's errors are enums (`std.err.1`), so a misspelt kind is a
+compile-time error, not a test that is never true. *(ADR 1068)*
+
+```ail error=type.enum.7
+fn main()
+    text := fs.read_text("notes.txt") else err
+        if err.kind == "not_found"
+            print("missing")
+        ""
+    print(text)
+```
+
+```ail rules=type.enum.7
+fn main()
+    text := fs.read_text("notes.txt") else err
+        if err.kind == NotFound
+            print("missing")
+        ""
+    print(text)
 ```
 
 ## Optional types
@@ -728,9 +780,10 @@ when `s` is an optional `-` followed by one or more decimal digits and the
 value fits in `int`; otherwise it is `none`. *(ADR 0124)*
 
 **type.str.6** — The `str` methods that search for text (`contains`,
-`starts_with`, `ends_with` and `split`) accept a `char` as well as a `str`;
-a `char` means the one-character string. `strip_prefix` and `strip_suffix`
-take a `str` only. *(ADR 0135)*
+`starts_with`, `ends_with`, `split`, `find`, `rfind` and `count`) accept a
+`char` as well as a `str`, and `replace` accepts one for each of its two
+arguments; a `char` means the one-character string. `strip_prefix` and
+`strip_suffix` take a `str` only. *(ADR 0135, ADR 1087)*
 
 **type.str.7** — A `str` has these methods. *(ADR 0135)*
 - `s.chars()` returns a new `List[char]`. Strings stay unindexable
@@ -745,11 +798,11 @@ take a `str` only. *(ADR 0135)*
   `str?`, or `none` when `s` doesn't start (end) with `p`.
 
 ```ail fragment
-"a\r\nb\n".lines()             # ["a", "b"]
-"a\n\n".lines()                # ["a", ""]
-"  hi ".trim()                # hi
-"key=v".strip_prefix("key=")  # v
-"h\u{e9}".chars()              # ['h', 'é']
+print("a\r\nb\n".lines())      # ["a", "b"]
+print("a\n\n".lines())         # ["a", ""]
+print("  hi ".trim())         # hi
+print("key=v".strip_prefix("key=")) # v
+print("h\u{e9}".chars())       # ['h', 'é']
 ```
 
 **type.str.8** — `s.to_float()` returns a `float?` (`type.num.8`).
@@ -764,8 +817,8 @@ characters (scalar values). A string already that wide, or any string when
 arguments. *(ADR 0135)*
 
 ```ail fragment
-"7".pad_left(3, '0')        # 007
-"ab".pad_right(4, ' ')      # "ab  "
+print("7".pad_left(3, '0')) # 007
+print("ab".pad_right(4, ' ')) # "ab  "
 ```
 
 **type.str.16** — `s.center(width, fill)` pads with copies of the `char` `fill`
@@ -798,6 +851,21 @@ fn main()
 
 **type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
 
+**type.str.20** — `s.to_int(radix)` returns an `int?` like `to_int()` (`type.str.5`),
+reading an optional `-` and then digits `0-9`, `a-z` or `A-Z` whose values are below
+`radix`; anything else, or a value that doesn't fit, is `none`. `n.to_str(radix)` on an
+integer is its digits in `radix`, lowercase, with a `-` before the magnitude of a negative
+value (as `n.to_hex()` for 16); `n.to_str()` is the decimal text. A `radix` outside 2 to 36
+is a compile-time error for a literal and otherwise traps with this rule. *(ADR 1087)*
+
+```ail rules=type.str.20
+fn main()
+    print("ff".to_int(16))        # 255
+    print("102".to_int(2))        # none
+    print(255.to_str(2))          # 11111111
+    print((0 - 255).to_str(16))      # -ff
+```
+
 **type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
 *(ADR 0630)*
 
@@ -819,8 +887,8 @@ The function is called on the elements in order, at most once each.
 **type.coll.22** — `xs.any(f)` is `true` when `f` returns `true` for some
 element, and `xs.all(f)` when it does for every element (`true` for an empty
 list). Both stop at the first element that settles the answer. `f` returns
-`bool`. `any` is a keyword (`lex.kw.1`); after `.` and before `(` it names this
-method. *(ADR 1067)*
+`bool`. `any` is a keyword (`lex.kw.1`); after `.` it names this method
+(`lex.kw.3`). *(ADR 1067, ADR 1085)*
 
 **type.coll.23** — `xs.find(f)` returns the first element for which `f`
 returns `true`, or `none` (`T?`). *(ADR 1067)*
@@ -890,9 +958,16 @@ b := "héllo".byte_len()   # 6
 **type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
 exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
 is `2`); `nan` and `inf` print as `{x}` does. `x` formats an `int` in lowercase
-hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`).
-Using `.N` on a non-float or `x` on a non-int is a compile-time error. Width,
-fill and alignment apply to the text form of any value. *(ADR 0173)*
+hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`);
+`b` does the same in binary and `{n:08b}` pads it. `e` formats a `float` as
+`d.ddde` and a decimal exponent, from the shortest digits that read back as `x`
+(`{1234.5:e}` is `1.2345e3`, `{0.00123:e}` is `1.23e-3`); `{x:.2e}` keeps two
+decimals of the mantissa, rounding those digits half up. `+` forces a sign on
+an `int` or `float`, `,` groups the digits of its integer part
+(`{1234567:,}` is `1,234,567`), and `0` with a width pads with zeros after the
+sign (`{-5:04}` is `-005`). Using `.N` or `e` on a non-float, `x` or `b` on a
+non-int, or `+`, `,` or `0` on a non-number is a compile-time error. Width,
+fill and alignment apply to the text form of any value. *(ADR 0173, ADR 1087)*
 
 ```ail error=type.str.11
 n := 1
@@ -1036,11 +1111,11 @@ outside the scalar range. The diagnostics for `ord(c)`, `chr(n)` and
 
 ```ail fragment
 c := 'f'
-c.is_alpha()            # true
-c.to_digit(16)          # 15
-c.to_digit(10)          # none
-c.code()                # 102
-char.from_code(0x41)    # 'A'
+print(c.is_alpha())     # true
+print(c.to_digit(16))   # 15
+print(c.to_digit(10))   # none
+print(c.code())         # 102
+print(char.from_code(0x41)) # 'A'
 ```
 
 ## Collections
@@ -1103,9 +1178,9 @@ names := List[str]()
 
 ```ail fragment
 xs := ["a", "b"]
-xs.join(", ")           # a, b
-[1, 2, 3].join("")      # 123
-xs.index_of("b")        # 1
+print(xs.join(", "))    # a, b
+print([1, 2, 3].join("")) # 123
+print(xs.index_of("b")) # 1
 ```
 
 **type.coll.14** — A list has these further methods. *(ADR 0214)*
@@ -1284,15 +1359,33 @@ set. *(ADR 0340)*
 `x` to the list at `k`, and starts an empty list first when `k` is missing. On
 a map with any other value type it is a compile-time error. *(ADR 0341)*
 
+**type.map.12** — `m.get_or(k, d)` returns the value stored under `k`, or `d` when
+`k` is missing; `d` has the value type and is always evaluated. It is the same
+as `m.get(k) else d`. *(ADR 1087)*
+
+**type.coll.27** — `xs.reversed()` returns a new list with the elements of `xs`
+in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
+in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
+
+```ail rules=type.map.12,type.coll.27
+fn main()
+    m := {"a": 1}
+    print(m.get_or("a", 0))                 # 1
+    print(m.get_or("b", 0))                 # 0
+    xs := [3, 1, 2]
+    print(xs.reversed())                    # [2, 1, 3]
+    print(xs.sorted().reversed())           # [3, 2, 1]
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
-`v := m.get(k) else d`, `contains`, and iterating `keys()` and indexing.
+`m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 
 ```ail fragment
 mut seen := Set[str]()
 first := seen.add("a")  # true
 again := seen.add("a")  # false: already there
 mut ages := {"ann": 31, "bob": 27}
-ages.get("cy")          # none
+print(ages.get("cy"))   # none
 for k in ages.keys()
     print("{k}: {ages[k]}")
 ```
@@ -1349,6 +1442,91 @@ fn main()
     mut m := Map[(int, int), str]()
     m[1, 2] = "x"
     print(m[1, 2])          # x: the same as m[(1, 2)]
+```
+
+**type.heap.1** — `Heap[T]` is a priority queue of elements of an `Ord` type
+`T`. `Heap[int]()` is empty and gives the smallest element first;
+`Heap[int](max_first: true)` gives the largest first. The type is the
+prelude's, read when a program names `Heap` and doesn't declare it. *(ADR 1086)*
+
+**type.heap.2** — `Heap.from(xs)` is the min-first heap of the list `xs`, and
+`Heap.from_max(xs)` the max-first one, built in linear time. *(ADR 1086)*
+
+**type.heap.3** — `h.push(x)` adds `x`. `h.pop()` removes and returns the
+element that comes first, and `h.peek()` returns it without removing; both
+are `T?` and `none` when the heap is empty. Both ends of an unordered pair of
+equal elements may come out in either order. *(ADR 1086)*
+
+**type.heap.4** — `h.len()` and `h.is_empty()` count the elements.
+`h.to_sorted()` is the list of all elements in the order `pop` returns them,
+and leaves `h` unchanged. *(ADR 1086)*
+
+**type.heap.5** — A heap is a value (own.val.1): `g := h` copies it. Its
+`items` field holds the elements in heap order, which is no particular
+order; use `to_sorted()` to read them in order. *(ADR 1086)*
+
+```ail rules=type.heap.1,type.heap.2,type.heap.3,type.heap.4,type.heap.5
+fn main()
+    mut h := Heap[int]()
+    h.push(5)
+    h.push(1)
+    h.push(3)
+    print(h.peek())              # 1
+    print(h.pop())               # 1
+    print(h.to_sorted())         # [3, 5]
+    mut m := Heap[int](max_first: true)
+    m.push(2)
+    m.push(9)
+    print(m.pop())               # 9
+    print(Heap.from([4, 2, 8]).to_sorted())      # [2, 4, 8]
+    print(Heap.from_max([4, 2, 8]).to_sorted())  # [8, 4, 2]
+    g := h
+    h.push(0)
+    print(g.len())               # 2: `g := h` copied the heap
+```
+
+**type.deque.1** — `Deque[T]` is a double-ended queue. `Deque[int]()` is
+empty and `Deque.from(xs)` holds the elements of `xs` in order. The type is
+the prelude's, read when a program names `Deque` and doesn't declare it.
+*(ADR 1086)*
+
+**type.deque.2** — `d.push_back(x)` and `d.push_front(x)` add an element at
+an end. `d.pop_back()` and `d.pop_front()` remove and return the element at
+that end as a `T?`, `none` when empty. Each is O(1) amortised. *(ADR 1086)*
+
+**type.deque.3** — `d.first()` and `d.last()` return the end elements as a
+`T?` without removing them. `d.len()` and `d.is_empty()` count the elements.
+*(ADR 1086)*
+
+**type.deque.4** — `d.at(i)` is the element at position `i` counted from the
+front, in O(1); a position outside `0..d.len()` traps. `d.to_list()` is the
+elements, first to last, as a list. *(ADR 1086)*
+
+**type.deque.5** — A deque is a value (own.val.1): `e := d` copies it. Its
+`front` and `back` fields are the representation and aren't read. *(ADR 1086)*
+
+```ail rules=type.deque.1,type.deque.2,type.deque.3,type.deque.4,type.deque.5
+fn main()
+    mut d := Deque[int]()
+    d.push_back(2)
+    d.push_back(3)
+    d.push_front(1)
+    print(d.to_list())           # [1, 2, 3]
+    print(d.first())             # 1
+    print(d.last())              # 3
+    print(d.at(1))               # 2
+    print(d.pop_front())         # 1
+    print(d.pop_back())          # 3
+    e := d
+    d.push_back(9)
+    print(e.len())               # 1: `e := d` copied the deque
+    print(Deque.from([7, 8]).len())  # 2
+```
+
+```ail norun rules=type.deque.4
+fn main()
+    d := Deque.from([1])
+    print(d.at(5))               # traps: position 5 is outside 0..1
 ```
 
 ## Examples

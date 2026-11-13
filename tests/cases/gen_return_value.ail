@@ -1,0 +1,8 @@
+# expr.yield.3: a generator's `return` ends the sequence and has no value.
+fn f() Seq[int]
+    yield 1
+    return 2
+
+fn main()
+    for x in f()
+        print(x)

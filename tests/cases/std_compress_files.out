@@ -4,6 +4,6 @@ alpha alpha alpha alpha
 true
 beta
 
-not_found
-corrupt
+compress.CompressKind.NotFound
+compress.CompressKind.Corrupt
 false

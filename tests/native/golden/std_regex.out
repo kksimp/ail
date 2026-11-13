@@ -10,8 +10,8 @@ a+b: true
   2..5 fox
 é+: true
   3..5 éé
-(a: unclosed_group at 0 (std.regex.11)
-a**: bad_repeat at 2 (std.regex.15)
+(a: regex.RegexKind.UnclosedGroup at 0 (std.regex.11)
+a**: regex.RegexKind.BadRepeat at 2 (std.regex.15)
 \p{Lu}\p{Ll}+: true
   3..6 Cde
 a|ab: true

@@ -421,4 +421,12 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
                     if tid := type_id(q)
                         add(pos, tid)
                 add(pos, id)
+        Nested(qualifier, _, fields, pos) =>
+            if id := symbols.get(pk(pos))
+                if q := qualifier
+                    if tid := type_id(q)
+                        add(pos, tid)
+                add(pos, id)
+            for x in fields
+                pattern(x)
         _ => return

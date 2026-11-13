@@ -2,5 +2,5 @@ hello hello hello hello [gzip, deflate]
 none none
 hello hello hello hello [gzip, deflate]
 gzip hello hello hello hello [gzip]
-bad body: protocol
+bad body: net.NetKind.Protocol
 0

@@ -18,7 +18,7 @@ fold: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-L
 
 POST /up [abcde] {"host": "h", "x-a": "1, 2", "transfer-encoding": "chunked", "connection": "close"}
 chunked: HTTP/1.1 200 OK|Set-Cookie: a=1|Content-Type: text/plain; charset=utf-8|Content-Length: 2|Connection: close||ok
-bad status bad_request 99 is not an HTTP status; use 100 to 599
+bad status net.NetKind.BadRequest 99 is not an HTTP status; use 100 to 599
 bad name `a b` is not a header name
-twice other
+twice net.NetKind.Other
 second: HTTP/1.1 204 No Content|x: c|Connection: close||

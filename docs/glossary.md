@@ -7,6 +7,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 |---|---|
 | **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
 | **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
+| **Field default** | `name Type = value` in a struct: the plain constant a literal that omits the field gets (`type.struct.8`, ADR 1076). |
 | **Task ledger** | `.ail/task-log.jsonl`: one line per `ail task verify` (stage, result, tokens printed, fixes, rules hit, wall ms); nothing leaves the machine ([ADR 1048](decisions/1048-task-ledger.md)). |
 | **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
 | **`ail merge`** | A three-way merge that cuts `.ail` files into declarations, so branches that change different declarations never conflict; it works as a git merge driver ([ADR 1019](decisions/1019-ail-merge-driver.md)). |
@@ -43,6 +44,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early (a `send` on a full channel drops its value); a cancel reaches every task the task started; the scope still waits for it (`conc.cancel.1–4`, ADRs 0321, 0351). |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
+| **Allow-list (`--allow`)** | `ail run --allow LIST`: names what a program may reach and how far (`fs.read=./data`, `net=api.example.com:443`, `proc=git`, `env=HOME`). What it leaves out is denied at compile time; scoped uses are checked at run time and end the program with `trap[eff.allow.N]` (`eff.allow.1-9`, ADR 1072). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
 | **Budget (token budget)** | `--budget N` on any command: about N estimated tokens of its output, most severe records first, then a note counting the rest with a `--from K` handle to continue (ADR 0394). |
 | **Build cache** | `ail build` keeps each finished executable under a SHA-256 of its inputs and copies it when the same inputs come again; `--no-cache` skips it (native.build.5, ADR 0655). |
@@ -59,7 +61,9 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
-| **Generator** | A function with `yield` that returns `Seq[T]`, a lazy single-use sequence compiled to a state machine. Proposed in [ADR 0965](decisions/0965-generators.md). |
+| **Generator** | A function with `yield` in its body that returns `Seq[T]`: calling it runs nothing, and each `next()` runs the body to its next `yield` ([ADR 1073](decisions/1073-generators-and-user-iteration.md), expr.yield.1). |
+| **Seq** | `Seq[T]`, the prelude's unique lazy sequence: a `step fn() T?` read by `next()`; what a generator returns (expr.iter.2). |
+| **Iteration protocol** | `for x in e` over any type with `fn next(mut self) T?`, calling `next()` until `none` (expr.iter.1). |
 | **Const generic** | A generic parameter that is an `int` value, not a type: `struct Vec[T, const N int]`. Proposed in [ADR 0954](decisions/0954-const-generics.md). |
 | **Constant time (cryptography)** | Code whose branches and memory indexes never depend on secret data, so its timing reveals nothing about keys or plaintext. Required of the TLS primitives (ADRs 0360, 0366). |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
@@ -93,6 +97,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Error message** | A string written after an error struct's name or an error variant (`BadName(text str) "bad name {text}"`); it is the type's display text and defines its `impl ToStr` (ADR 0278, `err.msg.1`). |
 | **Error return trace** | The list of source locations an error passed through via `?`, recorded automatically and shown in error reports (ADR 0050). |
 | **Error set** | The closed union of error types a function can fail with. Inferred from the body for non-public functions (`!T`), explicit at package APIs (`T ! E`). See ADR 0046. |
+| **Member pattern** | A pattern naming one type of an error union (`IoError =>`) in a `match` on the name `else err` bound; in its arm the name has that type. See ADR 1078. |
 | **Error type** | A struct or enum declared with `error` (`error enum ParseError`). Only error types can be errors (ADR 0120). |
 | **Escape analysis** | Compiler analysis that determines whether a value can outlive or leave its creating scope. A value that does not escape can be stack-allocated. |
 | **Cookie jar** | `std.net.jar`: stores the `Set-Cookie` lines of responses and gives the `Cookie` header for a URL by RFC 6265 domain, path, expiry and `Secure` rules; `Jar.request` carries cookies through redirects (`std.net.20`, `std.net.21`, ADR 0638). |
@@ -100,6 +105,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Exchange** | A request the `std.net` server has received, with the handle to answer it: `ex.request` and `ex.respond(response)` (`std.net.9`, `std.net.11`, ADR 0419). |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
 | **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |
+| **Fixture** | A `@fixture` function that makes a value for tests, with an optional teardown; a test takes it with `@needs("NAME")` and a parameter of that name. Made fresh for each run and always torn down (`test.fixture.1-4`, ADR 1075). |
 | **Fix** | A machine-applicable edit a diagnostic carries (ADR 0145). `ail fix` applies the first fix of each diagnostic and re-checks (ADR 0203). |
 | **Fix anchor** | How a fix names a position the checker doesn't know by coordinates: a word on the line, the end of the line, after a block, the call `f(...)` or bracket form `T[...]` that starts there, a chained comparison, or a character with its blanks (ADRs 0145, 0264). |
 | **Fix (diagnostic)** | A machine-applicable edit attached to a diagnostic: a title and text replacements by line and column, applied all or nothing (ADR 0145). |
@@ -115,6 +121,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Garlic** | The web browser written in AIL (own repository kksimp/garlic): text mode first, with a page model for agents. See garlic-browser.md in that repository. |
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Grid** | `Grid[T]`, the prelude's 2-D list in one flat block, row by row: `Grid.fill(rows, cols, v)`, `g[i, j]` (`type.grid.*`, [ADR 0937](decisions/0937-grid-flat-2d-list.md)). |
+| **Heap** | `Heap[T]`, the prelude's priority queue: `Heap[int]()` pops smallest first, `Heap[int](max_first: true)` largest first (`type.heap.*`, [ADR 1086](decisions/1086-heap-and-deque.md)). |
+| **Deque** | `Deque[T]`, the prelude's double-ended queue: `push_front`, `push_back`, `pop_front`, `pop_back`, `at(i)` (`type.deque.*`, [ADR 1086](decisions/1086-heap-and-deque.md)). |
 | **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Linux host `tools/app-host/linux`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
@@ -140,7 +148,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **JSON path** | The place of a failure in a document a derived `from_json` reads, from the root: `items[2].kind`. Messages read `missing PATH` or `PATH: problem` (`json.derive.3`, ADR 0343). |
 | **JSON value (`Json`)** | The standard `enum Json` (`Null`, `Bool`, `Num`, `Str`, `Arr`, `Obj`) that `parse_json` returns and `Json.to_text` prints. Numbers are `float`; objects keep document order (`json.type.1`, ADR 0161). |
 | **Key function** | The `by: \|x\| key` argument of `sorted`, `sort`, `min` and `max`: an expression evaluated once per element to order by. It is an argument form, not a value (ADR 0250). |
-| **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. Keywords can never be used as names (`lex.kw.1`, ADR 0114). |
+| **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. A keyword is not a name (`lex.kw.1`, ADR 0114), except as a field, after `.`, as a label before `:` and as a method name (`lex.kw.3`, ADR 1085). |
 | **Lazy binary splitting** | Splitting a parallel loop's range in half only when another worker is idle, so small or nested loops cost almost nothing (ADR 0238). |
 | **Literal pattern** | A `match` pattern that is an integer, character, string or `bool` literal (ADR 0138). |
 | **Lockfile** | `ail.lock`: the exact commit of every git dependency of the program, written by `ail run`/`ail test` when stale, refreshed by `ail pkg update` (`mod.pkg.8–9`, ADRs 0233, 0356). |
@@ -167,6 +175,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
 | **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
 | **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
+| **Nested pattern** | A pattern inside a variant pattern's field, `Add(Num(a), Num(b))`; a `match` that nests names each missing case (ADR 1069). |
 | **Or-pattern** | `p1 | p2` in a `match` arm: matches when any alternative does; binds no names (ADR 0138). |
 | **Outline** | A program's declarations with signatures, doc comments, positions and ids but no bodies, printed by `ail api` (ADR 0150). |
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
@@ -191,6 +200,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Screen model** | What is on a screen as items (role, text, colour name, box, state) that an agent queries in text within a token budget, without a vision model (`std.screen`, ADR 0878). |
 | **Spill** | Storing a value in memory because no register is free for it; the allocator spills the value cheapest to keep in memory ([ADR 0624](decisions/0624-loop-weighted-spill-choice.md)). |
 | **`std.args`** | The standard module for flags, options and positional arguments, with generated help ([ADR 0627](decisions/0627-std-args.md)). |
+| **`std.file`** | The standard module of streaming file handles: a `unique` `Reader` and a buffered `Writer` that flushes when closed or dropped ([ADR 1071](decisions/1071-streaming-file-handles.md)). |
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
 | **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
 | **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |

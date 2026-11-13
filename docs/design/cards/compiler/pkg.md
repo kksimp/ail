@@ -22,6 +22,9 @@ pub struct pkg.Lock  ## The lock as read, and the entries this load used.
     pub used List[pkg.Entry]
     pub failed bool  ## A fetch failed, so the lock isn't rewritten.
 pub fn pkg.read_lock(root str) pkg.Lock [fs io]  ## Read `ail.lock` in `root`. A malformed line is ignored: the lock is
+pub pkg.LANG_MAJOR := 0  ## The language version this compiler implements: `ail MAJOR.MINOR` in a manifest names one (mod.pkg.10).
+pub pkg.LANG_MINOR := 1
+pub fn pkg.lang_version() str  ## `0.1`, the version text of this compiler's language.
 pub pkg.CAPABILITIES := ...  ## The capabilities `caps` can grant (eff.cap.1).
 pub struct pkg.Source  ## A `git` dependency's source: `git URL` and its `rev` or `tag` pin (mod.pkg.6).
     pub url str
@@ -42,10 +45,15 @@ pub struct pkg.Manifest
     pub unsafe_ok bool
     pub driver_ok bool
     pub deps List[pkg.Dep]
+    pub version str?  ## The `ail MAJOR.MINOR` line's version and where it is; none without the line (mod.pkg.10).
+    pub version_pos ast.Pos
 pub struct pkg.Parsed
     pub manifest pkg.Manifest
     pub diags List[syntax.Diag]
+pub fn pkg.newer_than_compiler(parts (int, int)) bool  ## Is version `parts` newer than this compiler's language (mod.pkg.11)?
 pub fn pkg.parse(src str) pkg.Parsed  ## Parse a manifest (mod.pkg.2-3, mod.pkg.6). Positions are local.
+pub fn pkg.tree_version(dir str) str [fs io]  ## The language version a tree declares: its `ail.pkg`'s `ail` line, or this compiler's own when there
+pub fn pkg.migrate_command(dir str) int [fs io]  ## The exit status of `ail fix --migrate [DIR]`: 2 for a version newer than this compiler, else 0 with
 pub pkg.MANIFEST := "ail.pkg"  ## The manifest's file name (mod.pkg.1).
 pub struct pkg.Packages  ## Every package of a program: the root package (named `""`) and its
     roots Map[str, str]  ## Package name to root directory.
@@ -66,4 +74,4 @@ pub fn pkg.read_with(root str, opts pkg.Options) pkg.Packages [clock env fs io p
 pub fn pkg.update(packages pkg.Packages, names List[str]) (List[str], List[syntax.Diag])  ## The lines `locked NAME COMMIT` of the dependencies resolved, or the
 ```
 
-trimmed to fit 2000 tokens (~1302); dropped: private items
+trimmed to fit 2000 tokens (~1575); dropped: private items

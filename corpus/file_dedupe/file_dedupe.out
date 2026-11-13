@@ -1,0 +1,4 @@
+scanned 7 files
+group 1: a.txt, d.txt (17 bytes each)
+group 2: c.log, e.cfg, f.log (19 bytes each)
+2 duplicate groups, 55 bytes wasted

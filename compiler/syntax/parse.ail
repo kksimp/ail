@@ -5,7 +5,7 @@
 ## every `.ail` file in the repository.
 ##
 ## Grammar rules: gram.fn.1-2, gram.list.1, gram.generic.1, gram.syntax.1,
-## gram.attr.1-3, gram.foreign.1, gram.rec.1, lex.stmt.1, lex.kw.1,
+## gram.attr.1-3, gram.foreign.1, gram.rec.1, lex.stmt.1, lex.kw.1, lex.kw.3,
 ## type.struct.1-3, type.enum.1-2, expr.bind.1-3, expr.if.1-6, expr.if.8,
 ## expr.loop.1-6, expr.match.1-9, expr.prec.1-2, expr.op.1, expr.comp.1-2,
 ## expr.key.1, gen.decl.1, gen.bound.1, gen.method.1-3, gen.infer.2,
@@ -66,6 +66,9 @@ struct Parser
     ## The struct whose members are being parsed ("" outside one), for the
     ## fix that moves its methods out (type.struct.2).
     member_owner str
+    ## Keywords already reported as a binding's name: later uses read as that
+    ## name, so the one `lex.kw.1` with its rename fix is the only error (ADR 1085).
+    misnamed Set[str]
 
 ## The kind of a token, in one word.
 fn tok_tag(t Tok) str
@@ -160,6 +163,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         consts: [],
         uses: [],
         member_owner: "",
+        misnamed: Set[str](),
     )
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
@@ -601,16 +605,130 @@ fn Parser.take_name(mut self, expected str, rule str) ast.Ident?
         pos := bump().pos
         return ast.Ident(name: n, pos: pos)
     if tag_at(0) == "kw" and not not_yet(kw_at(0))
-        error_text(
-            "lex.kw.1",
-            here(),
-            "`{kw_at(0)}` is a keyword and can't be used as a name",
-            "choose a different name",
-            "",
-        )
+        keyword_as_name(i)
         return none
     unexpected(expected, rule)
     none
+
+## The name after `fn`; `method` allows a keyword (lex.kw.3, ADR 1085).
+fn Parser.fn_name(mut self, method bool) ast.Ident?
+    if method
+        return member_name("a function name after `fn`", "gram.fn.1")
+    take_name("a function name after `fn`", "gram.fn.1")
+
+## The keyword `n` tokens ahead when it can stand as a name, or none: every
+## keyword but the hole `uhwhatnow?` (lex.kw.3, ADR 1085).
+fn Parser.kw_name_at(self, n int) str?
+    w := kw_at(n)
+    if w == "" or w == "uhwhatnow?"
+        return none
+    w
+
+## A name where a keyword can mean nothing else, so any keyword is a plain
+## name: a field, a name after `.`, a label before `:`, a method (lex.kw.3, ADR 1085).
+fn Parser.member_name(mut self, expected str, rule str) ast.Ident?
+    if w := kw_name_at(0)
+        pos := bump().pos
+        return ast.Ident(name: w, pos: pos)
+    take_name(expected, rule)
+
+## A keyword where a name is declared (lex.kw.1). Its help names a better
+## word; a word with no other use in a function body also gets a fix that
+## renames it through the rest of the function (ADR 1085).
+fn Parser.keyword_as_name(mut self, k int)
+    word := tok_text(tokens[k].tok)
+    pos := tokens[k].pos
+    msg := "`{word}` is a keyword and can't be used as a name"
+    better := keyword_rename(word)
+    if better == ""
+        error_text("lex.kw.1", pos, msg, "choose a different name", "")
+        return
+    help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
+    if not rename_is_safe(word)
+        error_text("lex.kw.1", pos, msg, help, "")
+        return
+    misnamed.add(word)
+    error_fix(
+        "lex.kw.1",
+        pos,
+        msg,
+        help,
+        "rename `{word}` to `{better}`",
+        rename_edits(k, word, better),
+    )
+
+## The edits that rename the keyword `word` at token `k` and each later use
+## of it as a name, through the end of the function: the next line that
+## starts at column 1 (lex.kw.1, ADR 1085).
+fn Parser.rename_edits(self, k int, word str, better str) List[fix.Edit]
+    mut edits := [rename_edit(tokens[k].pos, word, better)]
+    mut j := k + 1
+    while j < tokens.len()
+        t := tokens[j]
+        tag := tok_tag(t.tok)
+        if tag == "eof" or (t.pos.col == 1 and (tag == "id" or tag == "kw" or tag == "sym"))
+            break
+        rename_uses(tokens, j, word, better, mut edits)
+        j += 1
+    edits
+
+fn rename_edit(pos ast.Pos, word str, better str) fix.Edit
+    fix.span(pos, ast.Pos(line: pos.line, col: pos.col + word.len()), better)
+
+## Token `j` of `toks` as a use of the renamed keyword `word`: the word
+## followed by a symbol, a line end or an operator word, and not after `.`;
+## or such a use inside an interpolated string (lex.kw.1, ADR 1085).
+fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix.Edit])
+    match toks[j].tok
+        Interp(parts) =>
+            for part in parts
+                match part
+                    Lit(_) => continue
+                    Code(code) =>
+                        for c in 0..code.len()
+                            rename_uses(code, c, word, better, mut edits)
+                    Fmt(code, _) =>
+                        for c in 0..code.len()
+                            rename_uses(code, c, word, better, mut edits)
+        Kw(w) =>
+            if w != word or j + 1 >= toks.len()
+                return
+            if j > 0 and toks[j - 1].tok == Tok.Sym(".")
+                return
+            if name_use_follows(toks[j + 1].tok)
+                edits.push(rename_edit(toks[j].pos, word, better))
+        Ident(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return
+
+fn name_use_follows(t Tok) bool
+    match t
+        Sym(s) => s != "("
+        Kw(w) => w == "and" or w == "or" or w == "else" or w == "in"
+        Newline | Dedent | Eof => true
+        Ident(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Indent => false
+
+## A name to write instead of the keyword `word`, or "" (lex.kw.1, ADR 1085).
+fn keyword_rename(word str) str
+    match word
+        "error" => "err"
+        "todo" => "pending"
+        "any" => "found"
+        "ref" => "reference"
+        "enum" => "kind"
+        "struct" => "record"
+        "use" => "usage"
+        "pub" => "public"
+        "in" => "input"
+        "match" => "matched"
+        "fn" => "func"
+        "move" => "step"
+        _ => ""
+
+## Whether the keyword `word` has no use inside a function body that a
+## rename could hit, so the rename can be applied (lex.kw.1, ADR 1085).
+fn rename_is_safe(word str) bool
+    match word
+        "error" | "todo" | "any" | "ref" | "enum" | "struct" | "use" | "pub" => true
+        _ => false
 
 ## `Name`, or a qualified `m.Name` of an imported module (mod.use.2).
 fn Parser.dotted_name(mut self, expected str, rule str) ast.Ident?
@@ -674,6 +792,7 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
             skip_statement()
             return none
         mut arg := absent[str]()
+        mut listed := ""
         if at_sym("(")
             mut depth := 0
             while true
@@ -685,15 +804,26 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                     Str(text) =>
                         if depth == 1 and arg == none
                             arg = text
+                    Ident(word) =>
+                        if depth == 1
+                            listed = "{listed}{word}"
+                    Kw(word) =>
+                        if depth == 1
+                            listed = "{listed}{word}"
                     Sym(s) =>
                         if s == "("
                             depth += 1
                         elif s == ")"
                             depth -= 1
-                    Ident(_) | Kw(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+                        elif depth == 1 and (s == "." or s == ",")
+                            listed = "{listed}{s}"
+                    Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
                 i += 1
                 if depth == 0
                     break
+        # `@caps(fs, net.serve)` (eff.cap.6): the list is kept as `fs,net.serve`.
+        if a.name == "caps" and listed != ""
+            arg = listed
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
         while at_newline()
@@ -803,7 +933,10 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
             return none
         ext = ast.Extern(lib: lib)
     bump()
-    first := take_name("a function name after `fn`", "gram.fn.1")?
+    # `fn error(self)` inside a trait or impl block names a method (lex.kw.3, ADR 1085).
+    in_block := within != ast.Within.TopLevel and kw_name_at(0) != none
+    method_kw := in_block and (sym_at(1) == "(" or sym_at(1) == "[")
+    first := fn_name(method_kw)?
     # `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
     mut generics := List[ast.GenericParam]()
     if at_sym("[")
@@ -816,7 +949,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         if generics.len() > 0
             params = generics
         generics = []
-        m := take_name("a method name after `.`", "trait.method.1")?
+        m := member_name("a method name after `.`", "trait.method.1")?
         if at_sym("[")
             generics = generic_params()?
         if at_sym(".")
@@ -1122,7 +1255,7 @@ fn Parser.hash_uses(mut self) List[ast.Ident]
     eat_indent()
     bump()
     while true
-        n := take_name("a field name after `uses`", "trait.hash.1") else break
+        n := member_name("a field name after `uses`", "trait.hash.1") else break
         out.push(n)
         if not eat_sym(",")
             break
@@ -1315,7 +1448,7 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
                 return none
         error_text(rule, here(), msg, help, "")
         return none
-    f := take_name("a field name", rule)?
+    f := member_name("a field name", rule)?
     if at_sym(":")
         error_fix(
             rule,
@@ -1327,7 +1460,20 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
         )
         i += 1
     ty := type_ref("the field's type (written `name Type`)", rule)?
-    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty, observe: observe)
+    mut default := absent[ast.Expr]()
+    if at_sym("=")
+        if rule != "type.struct.2"
+            error_text(
+                "type.struct.8",
+                here(),
+                "a variant's field has no default",
+                "only a struct field may declare one, as `name Type = value`; give the variant's fields when you construct it",
+                "",
+            )
+            return none
+        bump()
+        default = expression()?
+    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty, observe: observe, default: default)
 
 ## `struct Name` and one `name Type` field per line (type.struct.1-2).
 fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
@@ -1537,16 +1683,47 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             attach(title, [first, fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")])
         return none
     if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
-        error_text(
-            "lex.kw.1",
-            pos,
-            "`{text}` is a keyword and can't be used as a name",
-            "choose a different name",
-            "",
-        )
+        keyword_as_name(i)
         return none
     if tag == "kw" and text == "while"
         bump()
+        if n := ident()
+            if n == "let" and tag_at(1) == "id" and sym_at(2) == "="
+                # `while let x = e`: the Rust habit (expr.loop.8).
+                eq := tokens[i + 2].pos
+                error_fix(
+                    "expr.loop.8",
+                    here(),
+                    "AIL has no `while let`; write `while name := e`",
+                    "`while name := e` loops while `e` has a value, binding `name` each time",
+                    "write `while name := e`",
+                    [
+                        fix.delete(here(), tokens[i + 1].pos),
+                        fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":="),
+                    ],
+                )
+                return none
+            if sym_at(1) == ":="
+                # `while name := e` (expr.loop.8): `while true` whose body starts
+                # with `name := e else break`.
+                bind_pos := bump().pos
+                i += 1
+                value := range()?
+                body := block("the `while` condition", "expr.loop.8")?
+                mut stmts := [ast.Stmt.Let(
+                    name: n,
+                    pos: bind_pos,
+                    mutable: false,
+                    value: value,
+                    otherwise: ast.Else.Leave(ast.Stmt.Break(pos)),
+                )]
+                for st in body
+                    stmts.push(st)
+                return ast.Stmt.While(
+                    cond: ast.Expr.Bool(value: true, pos: pos),
+                    body: stmts,
+                    pos: pos,
+                )
         cond := range()?
         body := block("the `while` condition", "expr.loop.1")?
         return ast.Stmt.While(cond: cond, body: body, pos: pos)
@@ -1579,6 +1756,11 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             return ast.Stmt.Return(value: none, pos: pos)
         value := expression()?
         return ast.Stmt.Return(value: value, pos: pos)
+    if tag == "kw" and text == "yield"
+        # expr.yield.2: `yield e` gives a generator's next element.
+        bump()
+        value := expression()?
+        return ast.yield_stmt(value, pos)
     if tag == "kw" and (text == "elif" or text == "else")
         error_text(
             "expr.if.1",
@@ -2250,12 +2432,8 @@ fn Parser.postfix(mut self) ast.Expr?
                 kpos := bump().pos
                 e = ast.Expr.Member(recv: e, name: k, name_pos: kpos)
                 continue
-            # `xs.any(f)` (type.coll.22): the keyword `any` names the list method after `.`.
-            mut m := ast.Ident(name: "any", pos: here())
-            if kw_at(0) == "any" and sym_at(1) == "("
-                i += 1
-            else
-                m = take_name("a field or method name after `.`", "gram.syntax.1")?
+            # `o.error`, `xs.any(f)`: any keyword after `.` is a name (lex.kw.3, ADR 1085).
+            m := member_name("a field or method name after `.`", "gram.syntax.1")?
             recv_name := name_of(e) else ""
             # `m.Stack[int]` after an import `m` (gen.infer.2, mod.use.2).
             if recv_name != ""
@@ -2307,8 +2485,9 @@ fn Parser.call_args(mut self) List[ast.Arg]?
     mut args := List[ast.Arg]()
     while not at_sym(")")
         mut label := none
-        if tag_at(0) == "id" and sym_at(1) == ":"
-            label = take_name("a field name", "type.struct.3")?
+        # `Outcome(error: "")`: a keyword before `:` is a label (lex.kw.3, ADR 1085).
+        if (tag_at(0) == "id" or kw_name_at(0) != none) and sym_at(1) == ":"
+            label = member_name("a field name", "type.struct.3")?
             i += 1
         mutable := eat_kw("mut")
         moved := not mutable and eat_kw("move")
@@ -2381,6 +2560,10 @@ fn Parser.primary(mut self) ast.Expr?
             i += 1
             return ast.Expr.Name(name: n, pos: pos)
         Kw(k) =>
+            # `if error != ""` after `error := ...` was reported (lex.kw.1, ADR 1085).
+            if misnamed.contains(k)
+                i += 1
+                return ast.Expr.Name(name: k, pos: pos)
             if k == "true" or k == "false"
                 i += 1
                 return ast.Expr.Bool(value: k == "true", pos: pos)
@@ -2551,6 +2734,7 @@ fn Parser.sub_expression(mut self, code List[Token]) ast.Expr?
     sub.in_interp = true
     sub.generic_names = generic_names
     sub.aliases = aliases
+    sub.misnamed = misnamed
     e := sub.expression()
     if e != none and sub.peek() != Tok.Eof
         sub.unexpected("`}` after the interpolated expression", "lex.str.2")
@@ -2571,6 +2755,7 @@ fn ast_spec(f FormatSpec) ast.FormatSpec
         width: f.width,
         precision: f.precision,
         hex: f.hex,
+        flags: f.flags,
     )
 
 ## `if c` block, any `elif c` blocks, optional `else` block (expr.if.1, expr.if.3).
@@ -2749,7 +2934,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) =>
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) =>
             range_start_error(pos)
             return none
     i += 1
@@ -2782,7 +2967,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
             _,
-        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) => i += 0
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) | Nested(_, _, _, _) => i += 0
     error_text(
         "expr.match.12",
         hpos,
@@ -2808,15 +2993,36 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
             mut qualifier := none
             if path.len() > 1
                 qualifier = path[0..path.len() - 1].join(".")
-            # `Variant(a, _)`: one binding per field (expr.match.6).
+            # `Variant(a, _)`: one binding per field (expr.match.6), or a
+            # pattern of its own in a field (expr.match.13).
             mut bindings := none
             if eat_sym("(")
                 mut names := List[ast.Ident]()
+                mut subs := List[ast.Pattern]()
+                mut nested := false
                 while not at_sym(")")
-                    names.push(take_name("a name or `_` for the field", "expr.match.6")?)
+                    s := sym_at(1)
+                    f := ident() else ""
+                    if f != "" and (s == "," or s == ")")
+                        nm := take_name("a name or `_` for the field", "expr.match.6")?
+                        names.push(nm)
+                        if nm.name == "_"
+                            subs.push(ast.Pattern.Wildcard(nm.pos))
+                        else
+                            subs.push(ast.Pattern.BindName(name: nm.name, pos: nm.pos))
+                    else
+                        subs.push(pattern()?)
+                        nested = true
                     if not eat_sym(",")
                         break
                 expect_sym(")", "`)` or `,` in the pattern", "expr.match.6")?
+                if nested
+                    return ast.Pattern.Nested(
+                        qualifier: qualifier,
+                        name: name,
+                        fields: subs,
+                        pos: pos,
+                    )
                 bindings = names
             return ast.Pattern.Variant(
                 qualifier: qualifier,
