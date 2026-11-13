@@ -259,8 +259,8 @@ written and has no effect; anything else is a compile-time error. Each
 literal gets its own fresh value. A generic struct's default is typed with
 its type parameters, so `items List[T] = []` is fine and `x T = 0` is not. A
 variant's field has no default. A missing field's error says which fields
-may be left out. `impl Default` derivation (`trait.assoc.1`) does not read
-field defaults: it uses each field type's default. *(ADR 1076)*
+may be left out. An empty `impl Default` (`trait.assoc.1`) keeps a field's declared
+default and uses the field type's default for the others. *(ADR 1076)*
 
 ```ail skip=context
 struct Config
@@ -378,6 +378,26 @@ fn main()
             print("missing")
         ""
     print(text)
+```
+
+**type.enum.20** — An enum whose variants have no fields, and that declares no
+function of the same name, has three functions without being written.
+`Color.variants()` returns a `List[Color]` of every variant in declaration
+order. `Color.from_str(s)` returns the `Color?` whose variant name is exactly
+`s`, and `none` for any other text. `c.name()` returns the variant's name as a
+`str`, without the enum's name (`Red`, where `print(c)` shows `Color.Red`). A call with the wrong number of arguments, or
+a `from_str` argument that isn't a `str`, is a compile-time error. *(ADR 1087)*
+
+```ail rules=type.enum.20
+enum Color
+    Red
+    Green
+
+fn main()
+    for c in Color.variants()
+        print(c.name())              # Red, then Green
+    print(Color.from_str("Green"))   # Color.Green
+    print(Color.from_str("green"))   # none
 ```
 
 ```ail rules=type.enum.7
@@ -590,6 +610,40 @@ fn map_all[T, U](xs List[T], f fn(T) U) List[U]
 
 fn main()
     print(map_all([1, 2], |x| "n{x}"))    # ["n1", "n2"]
+```
+
+**type.fn.9** — A statement `fn name(params) R` followed by a block, inside a
+function body, declares a local function: a local `name` of the function type
+`fn(A, B) R`, visible from its declaration to the end of the enclosing block,
+including inside its own body, so it can call itself. Its body is a function
+body: `return` leaves it, its result is its last expression, and `R` may fail
+(`T ! E`, `!T`). It MUST NOT be generic, a method, or have contracts, and its
+parameters MUST NOT be `mut` or `move`: it is called as a function value
+(`type.fn.3`), by position. `break` and `continue` can't leave it. The name
+follows `expr.bind.4`. *(ADR 1094)*
+
+```ail rules=type.fn.9
+fn main()
+    fn fact(n int) int
+        if n <= 1
+            return 1
+        n * fact(n - 1)
+    print("{fact(5)}")                    # 120
+    print([1, 2, 3].map(fact))            # [1, 2, 6]
+```
+
+**type.fn.10** — A local function copies each outer local its body names
+when the declaration is reached, under `type.fn.5`: the copies are read-only,
+a `unique` value can't be copied, and a captured `ref` cell is shared. Its
+body's effects count for the enclosing function (`type.fn.7`). In traces and
+trap stacks it is named `outer.name`. *(ADR 1094)*
+
+```ail rules=type.fn.10
+fn main()
+    base := 10
+    fn add(x int) int
+        x + base                          # copies `base`
+    print("{add(5)}")                     # 15
 ```
 
 ## Tuples
@@ -1365,7 +1419,9 @@ as `m.get(k) else d`. *(ADR 1087)*
 
 **type.coll.27** — `xs.reversed()` returns a new list with the elements of `xs`
 in reverse order and leaves `xs` as it is; `xs.reverse()` (`mut self`) reverses
-in place. A list in descending order is `xs.sorted().reversed()`. *(ADR 1087)*
+in place. A list in descending order is `xs.sorted().reversed()`; `sorted` and
+`sort` take no `desc:` argument, and the diagnostic says so (`expr.key.1`).
+*(ADR 1087)*
 
 ```ail rules=type.map.12,type.coll.27
 fn main()
@@ -1375,6 +1431,75 @@ fn main()
     xs := [3, 1, 2]
     print(xs.reversed())                    # [2, 1, 3]
     print(xs.sorted().reversed())           # [3, 2, 1]
+```
+
+**type.coll.28** — One vocabulary serves every collection: a method has the
+same name, argument order and meaning on a `List`, a `Set`, a `Map`, a `Deque`
+and a `Seq` wherever it has a meaning there (`type.coll.32`; `tools/collection-vocab-audit.py`
+checks it, ADR 1099). A function argument is as in `type.coll.21`; on a map it
+takes the key and the value, `|k, v| e`. `xs.count(f)` is the number of
+elements for which `f` returns `true`; it takes only a function, so counting a
+value is `xs.count(|x| x == v)` and the number of elements is `xs.len()`. A
+list has no `dedup` or `unique`: the distinct elements are `xs.counts().keys()`
+or `xs.group_by(|x| x).keys()`. *(ADR 1099)*
+
+**type.coll.29** — `xs.fold(init, f)` calls `f(acc, x)` on each element in
+order and returns the last `acc`; `acc` starts as `init`, and `f` has type
+`fn(A, T) A` for the type `A` of `init`. On a map `f` is `|acc, k, v| e`. An
+empty collection gives `init`. *(ADR 1099)*
+
+**type.coll.30** — `xs.flat_map(f)` takes `f` of type `fn(T) List[U]` and
+returns the elements of the lists it gives, in order, as a `List[U]` (a
+`Seq[U]` for a `Seq`). *(ADR 1099)*
+
+**type.coll.31** — `xs.take_while(f)` returns the elements before the first one
+`f` returns `false` for, and `xs.skip_while(f)` the elements from that one on.
+`xs.skip(n)` returns the elements after the first `n`, none when `n` is at
+least `xs.len()`; a negative `n` traps, as `take` does (`type.coll.15`).
+`xs.zip(ys)` takes a `List[U]` and returns a `List[(T, U)]` of pairs, as long
+as the shorter. *(ADR 1099)*
+
+**type.coll.32** — A set and a map take the vocabulary in insertion order
+(`type.map.5`). On `Set[T]`: `any`, `all`, `find`, `count`, `fold`, `map` (a
+`List`), `flat_map` (a `List`), `group_by`, `take_while`, `skip_while`, `take`,
+`skip`, `zip`, `enumerate`, `sum`, `min` and `max` read the elements as a list
+and give what the list method gives; `s.filter(f)` returns a `Set[T]`. On
+`Map[K, V]`: `any`, `all`, `count`, `fold`, `map` (a `List`) and `flat_map`
+(a `List`) take a function of the key and value; `m.filter(f)` returns a
+`Map[K, V]` of the entries `f` keeps, and `m.map_values(f)` a `Map[K, U]`
+with each value replaced by `f(k, v)`'s `U`. A `Deque[T]` takes `filter`,
+`take`, `skip`, `take_while` and `skip_while` (each a `Deque[T]`), and `map`,
+`flat_map`, `enumerate` and `zip` (each a `List`), `any`, `all`, `find`, `count`
+and `fold`. A `Seq[T]` takes `map`, `filter`, `flat_map`, `take_while`,
+`skip_while`, `take`, `skip`, `enumerate`, `zip`, `any`, `all`, `find`, `count`
+and `fold`, using it up. What a collection lacks is listed, with the reason, in
+`tools/collection-vocab-exceptions.txt`. *(ADR 1099)*
+
+```ail rules=type.coll.28,type.coll.29,type.coll.30,type.coll.31,type.coll.32
+fn main()
+    xs := [3, 8, 5, 12]
+    print(xs.count(|x| x > 4))                    # 3
+    print(xs.fold(0, |acc, x| acc + x))           # 28
+    print(xs.flat_map(|x| [x, x]))                # [3, 3, 8, 8, 5, 5, 12, 12]
+    print(xs.take_while(|x| x < 10))              # [3, 8, 5]
+    print(xs.skip_while(|x| x < 10))              # [12]
+    print(xs.skip(2))                             # [5, 12]
+    print(xs.zip([10, 20]).len())                 # 2
+    s := {3, 8, 5}
+    print(s.count(|x| x > 4))                     # 2
+    print(s.filter(|x| x > 4).len())              # 2
+    print(s.fold(0, |acc, x| acc + x))            # 16
+    m := {"a": 1, "b": 2, "c": 3}
+    print(m.any(|k, v| v > 2))                    # true
+    print(m.count(|k, v| v > 1))                  # 2
+    print(m.fold(0, |acc, k, v| acc + v))         # 6
+    print(m.filter(|k, v| v != 2).len())          # 2
+    print(m.map_values(|k, v| v * 10).get("c") else 0)   # 30
+    print(m.map(|k, v| v * 2))                    # [2, 4, 6]
+    d := Deque.from([1, 2, 3, 4])
+    print(d.filter(|x| x % 2 == 0).to_list())     # [2, 4]
+    print(d.fold(0, |acc, x| acc + x))            # 10
+    print(Seq.of([1, 2, 3]).fold(0, |acc, x| acc + x))   # 6
 ```
 
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
@@ -1502,10 +1627,44 @@ that end as a `T?`, `none` when empty. Each is O(1) amortised. *(ADR 1086)*
 front, in O(1); a position outside `0..d.len()` traps. `d.to_list()` is the
 elements, first to last, as a list. *(ADR 1086)*
 
+**type.deque.6** — `d[i]` is the element at position `i` from the front, as
+`d.at(i)`; a position outside `0..d.len()` traps (`type.coll.4`). `d.set(i, v)`
+replaces it, with the same trap. `d[i] = v` is a compile-time error whose help
+says `d.set(i, v)`. A range index is an error: `d.to_list()[a..b]`. *(ADR 1086)*
+
+**type.deque.7** — `for x in d` visits the elements first to last. It is the
+iteration protocol of `expr.iter.1`: `d.next()` is `d.pop_front()`, and the loop
+works on a copy, so `d` itself is unchanged. A `Heap` has no `next`: `for x in
+h.to_sorted()` reads it in order. *(ADR 1086, ADR 1073)*
+
+```ail rules=type.deque.6,type.deque.7
+fn main()
+    mut d := Deque.from([10, 20, 30])
+    d.push_front(5)
+    print(d[0] + d[3])           # 35
+    d.set(1, 11)
+    mut total := 0
+    for x in d
+        total += x
+    print(total)                 # 5 + 11 + 20 + 30 = 66
+    print(d.len())               # 4: the loop worked on a copy
+```
+
+```ail error=type.deque.6
+fn main()
+    mut d := Deque.from([1, 2])
+    d[0] = 9                     # error: write `d.set(0, 9)`
+```
+
 **type.deque.5** — A deque is a value (own.val.1): `e := d` copies it. Its
 `front` and `back` fields are the representation and aren't read. *(ADR 1086)*
 
-```ail rules=type.deque.1,type.deque.2,type.deque.3,type.deque.4,type.deque.5
+**type.deque.6** — A deque takes the shared vocabulary (`type.coll.32`) by way
+of `d.to_list()`: `filter`, `take`, `skip`, `take_while` and `skip_while` give a
+`Deque[T]`; `map`, `flat_map`, `enumerate` and `zip` a `List`; `any`, `all`,
+`find`, `count` and `fold` as for a list. *(ADR 1099)*
+
+```ail rules=type.deque.1,type.deque.2,type.deque.3,type.deque.4,type.deque.5,type.deque.6
 fn main()
     mut d := Deque[int]()
     d.push_back(2)
@@ -1521,6 +1680,7 @@ fn main()
     d.push_back(9)
     print(e.len())               # 1: `e := d` copied the deque
     print(Deque.from([7, 8]).len())  # 2
+    print(Deque.from([1, 2, 3]).map(|x| x * 2))  # [2, 4, 6]
 ```
 
 ```ail norun rules=type.deque.4

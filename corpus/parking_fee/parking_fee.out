@@ -1,0 +1,10 @@
+AB123,car,08:00,08:10: 0.00
+CD456,car,08:00,09:16: 6.00
+EF789,bike,10:30,13:30: 3.00
+GH012,truck,06:00,18:45: 45.00
+IJ345,car,07:00,22:59: 20.00
+KL678,boat,09:00,10:00: unknown vehicle 'boat'
+MN901,car,25:00,10:00: bad time '25:00'
+OP234,car,12:00,11:00: OP234 left before arriving
+QR567,car,12:00: malformed ticket 'QR567,car,12:00'
+5 tickets, takings 74.00

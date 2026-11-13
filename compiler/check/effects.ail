@@ -687,6 +687,8 @@ fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
                 expr(prog, fx, e)
         Eval(e) => expr(prog, fx, e)
         LetTuple(_, value, _) => expr(prog, fx, value)
+        # type.fn.10: a local function's effects are the enclosing function's.
+        LocalFn(d) => block(prog, fx, d.body else [])
         Handle(value, o) =>
             expr(prog, fx, value)
             otherwise(prog, fx, o)

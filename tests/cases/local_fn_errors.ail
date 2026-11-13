@@ -1,0 +1,17 @@
+unique struct Handle
+    fd int
+
+fn main()
+    mut total := 0
+    fn add(x int)
+        total += x
+    h := Handle(fd: 1)
+    fn peek() int
+        h.fd
+    fn show(mut n int)
+        print("{n}")
+    for i in 0..3
+        fn stop()
+            break
+        stop()
+    print("{total}")

@@ -1,0 +1,62 @@
+## Levenshtein edit distance with a two-row dynamic program, used for a small
+## spelling suggester: each misspelt word is matched to the closest entry of a
+## dictionary (the first one wins ties). Prints distances and suggestions.
+
+fn distance(a str, b str) int
+    xs := a.chars()
+    ys := b.chars()
+    mut prev := List[int]()
+    for j in 0..=ys.len()
+        prev.push(j)
+    for i in 1..=xs.len()
+        mut cur := [i]
+        for k in 1..=ys.len()
+            cost := if xs[i - 1] == ys[k - 1] then 0 else 1
+            cur.push((prev[k] + 1).min(cur[k - 1] + 1).min(prev[k - 1] + cost))
+        prev = cur
+    prev[ys.len()]
+
+struct Suggestion
+    word str
+    dist int
+
+fn closest(word str, dict List[str]) Suggestion
+    mut best := Suggestion(word: dict[0], dist: distance(word, dict[0]))
+    for cand in dict
+        d := distance(word, cand)
+        if d < best.dist
+            best = Suggestion(word: cand, dist: d)
+    best
+
+fn main()
+    pairs := [
+        ["kitten", "sitting"],
+        ["flaw", "lawn"],
+        ["saturday", "sunday"],
+        ["same", "same"],
+        ["", "abc"],
+        ["abc", ""],
+    ]
+    for p in pairs
+        print("{p[0]} -> {p[1]}: {distance(p[0], p[1])}")
+    dict := ["apple", "banana", "orange", "grape", "melon", "lemon", "peach"]
+    for typo in ["aple", "bananna", "orrange", "grap", "lemmon", "pech", "kiwi"]
+        s := closest(typo, dict)
+        print("{typo}: did you mean {s.word}? (distance {s.dist})")
+
+@test fn known_distances()
+    assert_eq(distance("kitten", "sitting"), 3)
+    assert_eq(distance("flaw", "lawn"), 2)
+    assert_eq(distance("abc", "abc"), 0)
+
+@test fn empty_string_costs_its_length()
+    assert_eq(distance("", "abcd"), 4)
+    assert_eq(distance("xyz", ""), 3)
+
+@test fn distance_is_symmetric()
+    assert_eq(distance("saturday", "sunday"), distance("sunday", "saturday"))
+
+@test fn closest_prefers_first_on_tie()
+    s := closest("ab", ["ax", "ay"])
+    assert_eq(s.word, "ax")
+    assert_eq(s.dist, 1)

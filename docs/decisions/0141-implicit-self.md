@@ -1,6 +1,6 @@
 # 0141. Inside a method, the receiver's fields and methods are in scope by bare name
 
-- **Status:** Accepted
+- **Status:** Accepted; rule 2's formatter clause superseded by [1081](1081-formatter-writes-self.md)
 - **Date:** 2026-10-05
 - **Decided by:** Designer
 - **Topic:** 10 — Traits; 2 — Core syntax
@@ -34,7 +34,8 @@ tokens today):
    the traits it implements. In a trait's default method, the trait's methods
    are in scope the same way.
 2. `self.x` and `self.f()` stay valid; the formatter writes the bare form.
-   `self` alone still names the whole receiver.
+   `self` alone still names the whole receiver. *(Superseded in part by
+   [ADR 1081](1081-formatter-writes-self.md): the formatter writes `self.`.)*
 3. To keep a bare name unambiguous, a parameter or local of a method can't
    have the name of a field of its receiver (an extension of ADR 0044). A
    local may share a method's name (`pos := pos()`), since a method is only

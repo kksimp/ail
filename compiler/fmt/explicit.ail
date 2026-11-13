@@ -1,0 +1,63 @@
+## Explicit `self.` (fmt.self, ADR 1081): inside a method, `ail fmt` writes
+## `self.x` and `self.f()` where the source has the bare member. The places are
+## the ones the loader's implicit-`self` pass rewrites (trait.method.6), so the
+## meaning is unchanged; bare names stay legal (ADR 0141, rule 1).
+##
+## The formatter sees one file. A member declared in another file of the
+## package (a field of a struct declared elsewhere, or a method of a trait from
+## another module) is left as written; a name the file can see is never
+## mistaken, since a method's local can't take a field's name
+## (trait.method.7) and a bare call that could also mean a function is an
+## error the pass doesn't rewrite.
+use ast
+use syntax
+
+## `src` with `self.` before each bare member, as a `Formatted`: status 0 with
+## the text, or 2 when the result wouldn't be the same program (fmt.safe).
+fn explicit_self(src str, tokens List[syntax.Token]) Formatted
+    sites := syntax.rewrite_self(syntax.parse(tokens).program).sites
+    if sites.len() == 0
+        return Formatted(status: 0, text: src, diags: [], why: "")
+    out := insert_self(src, sites)
+    lexed := syntax.lex(out)
+    mut diags := lexed.diags
+    if diags.len() == 0
+        again := syntax.parse(lexed.tokens)
+        diags = again.diags
+        # Every bare member now has its `self.`, so the pass finds none left.
+        if diags.len() == 0 and syntax.rewrite_self(again.program).sites.len() > 0
+            return self_failed("a bare member is still bare after writing `self.`")
+    if diags.len() > 0
+        return self_failed("writing `self.` broke the file: {diags[0].rule}")
+    Formatted(status: 0, text: out, diags: [], why: "")
+
+fn self_failed(why str) Formatted
+    Formatted(status: 2, text: "", diags: [], why: why)
+
+## `src` with `self.` written at each of `sites` (1-based line and column).
+fn insert_self(src str, sites List[ast.Pos]) str
+    mut cols := Map[int, List[int]]()
+    for p in sites
+        mut row := cols.get(p.line) else List[int]()
+        if not row.contains(p.col)
+            row.push(p.col)
+        cols[p.line] = row
+    mut lines := List[str]()
+    mut n := 0
+    for raw in src.split("\n")
+        n += 1
+        row := cols.get(n) else
+            lines.push(raw)
+            continue
+        mut cuts := row
+        cuts.sort()
+        chars := raw.chars()
+        mut out := List[str]()
+        mut from := 0
+        for c in cuts
+            out.push(chars[from..c - 1].join(""))
+            out.push("self.")
+            from = c - 1
+        out.push(chars[from..chars.len()].join(""))
+        lines.push(out.join(""))
+    lines.join("\n")

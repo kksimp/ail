@@ -1,0 +1,174 @@
+## Vending machine as a state machine. Modes: idle, credit, locked. Events:
+## coin, select, refund, service. Three rejected coins lock the machine until it
+## is serviced. Money is in cents; change is made greedily from 100/25/10/5.
+
+enum Mode
+    Idle
+    Credit
+    Locked
+
+enum Event
+    Coin(cents int)
+    Select(slot int)
+    Refund
+    Service(units int)
+
+struct Machine
+    mode Mode
+    credit int
+    strikes int
+    stock List[int]
+    prices List[int]
+    sales int
+    takings int
+
+fn Mode.label(self) str
+    match self
+        Idle => "idle"
+        Credit => "credit"
+        Locked => "locked"
+
+fn change_text(amount int) str
+    mut left := amount
+    mut parts := List[str]()
+    for unit in [100, 25, 10, 5]
+        k := left / unit
+        if k > 0
+            parts.push("{k}x{unit}")
+            left -= k * unit
+    if parts.is_empty()
+        return "none"
+    parts.join(" ")
+
+fn valid_coin(cents int) bool
+    [5, 10, 25, 100].contains(cents)
+
+fn Machine.new() Machine
+    Machine(
+        mode: Mode.Idle,
+        credit: 0,
+        strikes: 0,
+        stock: [2, 1, 0, 3],
+        prices: [75, 100, 125, 150],
+        sales: 0,
+        takings: 0,
+    )
+
+fn Machine.coin(mut self, cents int) str
+    if self.mode == Mode.Locked
+        return "ignored, machine locked"
+    if not valid_coin(cents)
+        self.strikes += 1
+        if self.strikes >= 3
+            self.mode = Mode.Locked
+            return "coin {cents} rejected, machine locked"
+        return "coin {cents} rejected (strike {self.strikes})"
+    self.credit += cents
+    self.mode = Mode.Credit
+    "credit {self.credit}"
+
+fn Machine.choose(mut self, slot int) str
+    if self.mode == Mode.Locked
+        return "ignored, machine locked"
+    if slot < 0 or slot >= self.stock.len()
+        return "no such slot {slot}"
+    if self.stock[slot] == 0
+        return "slot {slot} sold out"
+    price := self.prices[slot]
+    if self.credit < price
+        return "slot {slot} costs {price}, need {price - self.credit} more"
+    due := self.credit - price
+    self.stock[slot] = self.stock[slot] - 1
+    self.sales += 1
+    self.takings += price
+    self.credit = 0
+    self.mode = Mode.Idle
+    "vend slot {slot}, change {change_text(due)}"
+
+fn Machine.refund(mut self) str
+    if self.mode == Mode.Locked
+        return "ignored, machine locked"
+    if self.credit == 0
+        return "nothing to refund"
+    back := self.credit
+    self.credit = 0
+    self.mode = Mode.Idle
+    "refund {change_text(back)}"
+
+fn Machine.service(mut self, units int) str
+    for i in 0..self.stock.len()
+        self.stock[i] = self.stock[i] + units
+    self.strikes = 0
+    self.mode = if self.credit > 0 then Mode.Credit else Mode.Idle
+    "serviced, +{units} per slot"
+
+fn Machine.handle(mut self, ev Event) str
+    match ev
+        Coin(cents) => coin(cents)
+        Select(slot) => choose(slot)
+        Refund => refund()
+        Service(units) => service(units)
+
+fn describe(ev Event) str
+    match ev
+        Coin(cents) => "coin {cents}"
+        Select(slot) => "select {slot}"
+        Refund => "refund"
+        Service(units) => "service {units}"
+
+fn main()
+    events := [
+        Event.Select(slot: 0),
+        Event.Coin(cents: 25),
+        Event.Coin(cents: 25),
+        Event.Coin(cents: 25),
+        Event.Select(slot: 0),
+        Event.Coin(cents: 100),
+        Event.Select(slot: 1),
+        Event.Coin(cents: 100),
+        Event.Select(slot: 1),
+        Event.Select(slot: 2),
+        Event.Select(slot: 7),
+        Event.Refund,
+        Event.Coin(cents: 3),
+        Event.Coin(cents: 7),
+        Event.Coin(cents: 50),
+        Event.Coin(cents: 25),
+        Event.Service(units: 2),
+        Event.Coin(cents: 100),
+        Event.Coin(cents: 25),
+        Event.Select(slot: 2),
+        Event.Coin(cents: 100),
+        Event.Coin(cents: 100),
+        Event.Select(slot: 3),
+        Event.Refund,
+    ]
+    mut m := Machine.new()
+    for ev in events
+        msg := m.handle(ev)
+        print("{describe(ev):<10} -> {msg} [{m.mode.label()}]")
+    print("sales: {m.sales}, takings: {m.takings}, credit: {m.credit}")
+    print("stock: {m.stock.join(" ")}")
+
+@test fn exact_coins_vend_without_change()
+    mut m := Machine.new()
+    m.handle(Event.Coin(cents: 25))
+    m.handle(Event.Coin(cents: 25))
+    m.handle(Event.Coin(cents: 25))
+    msg := m.handle(Event.Select(slot: 0))
+    assert_eq(msg, "vend slot 0, change none")
+    assert_eq(m.sales, 1)
+    assert(m.mode == Mode.Idle)
+
+@test fn change_is_greedy()
+    assert_eq(change_text(185), "1x100 3x25 1x10")
+    assert_eq(change_text(0), "none")
+
+@test fn three_bad_coins_lock_until_service()
+    mut m := Machine.new()
+    for c in [1, 2, 3]
+        m.handle(Event.Coin(cents: c))
+    assert(m.mode == Mode.Locked)
+    assert_eq(m.handle(Event.Coin(cents: 25)), "ignored, machine locked")
+    m.handle(Event.Service(units: 1))
+    assert(m.mode == Mode.Idle)

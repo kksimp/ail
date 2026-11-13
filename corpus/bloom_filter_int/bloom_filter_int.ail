@@ -1,0 +1,79 @@
+## A Bloom filter over integers: a 64-bit array and three integer hash
+## functions. Keys are added, then every number below 200 is probed. A key
+## that was added is always reported Maybe; some others are false positives.
+
+SLOTS := 64
+HASHES := 3
+
+enum Verdict
+    Absent
+    Maybe
+
+struct Bloom
+    bits List[int]
+    added int
+
+fn Bloom.new() Bloom
+    mut cells := List[int]()
+    for _ in 0..SLOTS
+        cells.push(0)
+    Bloom(bits: cells, added: 0)
+
+fn slot(x int, i int) int
+    (x * (2 * i + 3) + i * i * 11 + 5) % SLOTS
+
+fn Bloom.add(mut self, x int)
+    for i in 0..HASHES
+        self.bits[slot(x, i)] = 1
+    added += 1
+
+fn Bloom.check(self, x int) Verdict
+    for i in 0..HASHES
+        if bits[slot(x, i)] == 0
+            return Absent
+    Maybe
+
+fn Bloom.fill(self) int
+    bits.sum()
+
+fn main()
+    mut bloom := Bloom.new()
+    keys := [k * 9 + 4 for k in 0..16]
+    for k in keys
+        bloom.add(k)
+    print("added {bloom.added} keys, {bloom.fill()} of {SLOTS} bits set")
+    mut missed := 0
+    for k in keys
+        match bloom.check(k)
+            Absent => missed += 1
+            Maybe => continue
+    print("false negatives: {missed}")
+    mut positives := List[int]()
+    mut maybe_count := 0
+    for x in 0..200
+        if not keys.contains(x)
+            v := bloom.check(x)
+            if v == Verdict.Maybe
+                maybe_count += 1
+                if positives.len() < 8
+                    positives.push(x)
+    print("false positives: {maybe_count} of {200 - keys.len()}")
+    print("first false positives: {positives}")
+
+@test fn added_keys_are_never_absent()
+    mut b := Bloom.new()
+    for x in [3, 77, 150]
+        b.add(x)
+    for x in [3, 77, 150]
+        assert(b.check(x) == Verdict.Maybe)
+
+@test fn empty_filter_reports_absent()
+    b := Bloom.new()
+    assert(b.check(42) == Verdict.Absent)
+    assert_eq(b.fill(), 0)
+
+@test fn add_sets_at_most_hash_count_bits()
+    mut b := Bloom.new()
+    b.add(10)
+    assert(b.fill() <= HASHES)
+    assert(b.fill() >= 1)

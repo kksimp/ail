@@ -1,0 +1,10 @@
+GET    /                            -> home []
+GET    /users/42                    -> show_user [id=42]
+GET    /users/me                    -> show_user [id=me]
+DELETE /users/7/                    -> delete_user [id=7]
+POST   /users/7                     -> 405 allowed: GET,DELETE
+GET    /users/7/posts/99            -> show_post [id=7, post=99]
+GET    /static/css/site/main.css    -> static_file [path=css/site/main.css]
+GET    /static                      -> static_file [path=]
+GET    /users/7/posts               -> 404 not found
+PUT    /nothing/here                -> 404 not found

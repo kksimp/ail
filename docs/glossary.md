@@ -7,6 +7,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 |---|---|
 | **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
 | **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
+| **Parameter default** | `name Type = value` in a function's parameters: the plain constant a call that leaves the parameter out passes; given only by name (`expr.call.4`, ADR 1104). |
 | **Field default** | `name Type = value` in a struct: the plain constant a literal that omits the field gets (`type.struct.8`, ADR 1076). |
 | **Task ledger** | `.ail/task-log.jsonl`: one line per `ail task verify` (stage, result, tokens printed, fixes, rules hit, wall ms); nothing leaves the machine ([ADR 1048](decisions/1048-task-ledger.md)). |
 | **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
@@ -16,6 +17,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`ail mcp`** | The compiler's own tools served over MCP on stdio ([ADR 0918](decisions/0918-ail-mcp-compiler-tools.md)); not `ail serve --mcp`, which serves a program's `@tool` functions. |
 | **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
 | **ALPN** | Application-Layer Protocol Negotiation (RFC 7301): a TLS extension in which the client lists protocols (`h2`, `http/1.1`) and the server names the one it will speak. The native `std.net` offers it on `https://` ([ADR 0913](decisions/0913-http2-client-over-alpn.md)). |
+| **C entry** | The function `cb#f` the compiler makes for a declared function `f` passed to C as a callback: it checks the thread, converts C's arguments to AIL values, calls `f` and converts the result ([ADR 1074](decisions/1074-c-structs-by-value-and-callbacks.md), `ffi.cb.4`). |
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
 | **Ad hoc signature** | A code signature with no certificate: SHA-256 hashes of the file's pages in a code directory. Apple Silicon runs only signed executables; `ail build` signs Mach-O files this way itself (ADR 0389). |
@@ -45,7 +47,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Allow-list (`--allow`)** | `ail run --allow LIST`: names what a program may reach and how far (`fs.read=./data`, `net=api.example.com:443`, `proc=git`, `env=HOME`). What it leaves out is denied at compile time; scoped uses are checked at run time and end the program with `trap[eff.allow.N]` (`eff.allow.1-9`, ADR 1072). |
-| **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
+| **Capability grant** | `caps LIST` on a manifest line (entries may carry scopes, `fs.read=./data`, ADR 1105): the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
 | **Budget (token budget)** | `--budget N` on any command: about N estimated tokens of its output, most severe records first, then a note counting the rest with a `--from K` handle to continue (ADR 0394). |
 | **Build cache** | `ail build` keeps each finished executable under a SHA-256 of its inputs and copies it when the same inputs come again; `--no-cache` skips it (native.build.5, ADR 0655). |
 | **Card (program card)** | `ail api --card`: one Markdown page of a program or package (entry, tests, manifest, examples, each module's signatures), trimmed to a token budget. The language card is the same idea for the language. See ADRs 0310 and 0311. |
@@ -105,6 +107,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Exchange** | A request the `std.net` server has received, with the handle to answer it: `ex.request` and `ex.respond(response)` (`std.net.9`, `std.net.11`, ADR 0419). |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
 | **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |
+| **Test sandbox** | What `ail test` gives each test: no `net`, `net.serve` or `proc`, reads under the package, writes only in its own temporary directory; `@needs(net)`, `@needs(proc)` or `@needs(fs)` lifts one limit (`test.sandbox.1-4`, ADR 1100). |
+| **Stub** | A value `std.test` makes the standard library return for one test: a file's text, a variable, the clock, an HTTP response (`test.stub.1-6`, ADR 1101). |
 | **Fixture** | A `@fixture` function that makes a value for tests, with an optional teardown; a test takes it with `@needs("NAME")` and a parameter of that name. Made fresh for each run and always torn down (`test.fixture.1-4`, ADR 1075). |
 | **Fix** | A machine-applicable edit a diagnostic carries (ADR 0145). `ail fix` applies the first fix of each diagnostic and re-checks (ADR 0203). |
 | **Fix anchor** | How a fix names a position the checker doesn't know by coordinates: a word on the line, the end of the line, after a block, the call `f(...)` or bracket form `T[...]` that starts there, a chained comparison, or a character with its blanks (ADRs 0145, 0264). |
@@ -151,6 +155,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. A keyword is not a name (`lex.kw.1`, ADR 0114), except as a field, after `.`, as a label before `:` and as a method name (`lex.kw.3`, ADR 1085). |
 | **Lazy binary splitting** | Splitting a parallel loop's range in half only when another worker is idle, so small or nested loops cost almost nothing (ADR 0238). |
 | **Literal pattern** | A `match` pattern that is an integer, character, string or `bool` literal (ADR 0138). |
+| **Local function** | A `fn name(params) R` declared with a block inside a function body: a local function value that copies the outer locals it names and can call itself (`type.fn.9`-`10`, [ADR 1094](decisions/1094-local-functions.md)). |
 | **Lockfile** | `ail.lock`: the exact commit of every git dependency of the program, written by `ail run`/`ail test` when stale, refreshed by `ail pkg update` (`mod.pkg.8–9`, ADRs 0233, 0356). |
 | **Dependency cache** | `$AIL_HOME/deps` (default `~/.ail/deps`): one read-only tree per fetched git dependency and commit, `NAME-COMMIT` (`mod.pkg.7`, ADR 0355). |
 | **LSE** | Large System Extensions (ARMv8.1+): single-instruction atomic operations (CAS, LDADD, SWP…). Guaranteed by AIL's ARMv8.2-A baseline. |
@@ -176,6 +181,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
 | **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
 | **Nested pattern** | A pattern inside a variant pattern's field, `Add(Num(a), Num(b))`; a `match` that nests names each missing case (ADR 1069). |
+| **Struct pattern** | `Point(x: 0, y)` in a `match`: the named fields are matched, a bare field name binds that field, the rest match anything (ADR 1106). |
 | **Or-pattern** | `p1 | p2` in a `match` arm: matches when any alternative does; binds no names (ADR 0138). |
 | **Outline** | A program's declarations with signatures, doc comments, positions and ids but no bodies, printed by `ail api` (ADR 0150). |
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |

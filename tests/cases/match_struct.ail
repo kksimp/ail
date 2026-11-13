@@ -1,0 +1,83 @@
+struct Point
+    x int
+    y int
+
+struct Line
+    from Point
+    to Point
+    label str
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Poly(points List[Point])
+
+enum Tok
+    Op(c char)
+    Num(n int)
+    Word(text str, at Point)
+
+fn place(p Point) str
+    match p
+        Point(x: 0, y: 0) => "origin"
+        Point(x: 0, y) => "y axis {y}"
+        Point(x, y: 0) => "x axis {x}"
+        Point(x: 1..=9, y: 1..=9) => "small"
+        Point(x, y) => "at {x},{y}"
+
+fn line(l Line) str
+    match l
+        Line(from: Point(x: 0, y: 0), label: "") => "from origin"
+        Line(from: Point(x: 0, y: 0), label) => "from origin: {label}"
+        Line(to: Point(x, y), label: "up" | "down") => "vertical to {x},{y}"
+        Line => "line"
+
+fn shape(s Shape) str
+    match s
+        Circle(r: 0) | Rect(w: 0) | Rect(h: 0) => "empty"
+        Circle(r) => "circle {r}"
+        Rect(h: 1, w) => "strip {w}"
+        Rect => "rect"
+        Poly => "poly"
+
+fn tok(t Tok) str
+    match t
+        Op('-') => "minus"
+        Op(c: '+' | '*') => "plus or times"
+        Op => "op"
+        Num(n: 0) => "zero"
+        Num => "num"
+        Word(at: Point(x: 1), text) => "{text} at column 1"
+        Word(text: "fn") => "keyword"
+        Word(text, _) => text
+
+fn pair(p (Point, bool)) str
+    match p
+        (Point(x: 0), true) => "x0 on"
+        (Point(x, y), _) => "{x} {y}"
+
+fn main()
+    print(place(Point(x: 0, y: 0)))
+    print(place(Point(x: 0, y: 5)))
+    print(place(Point(x: 6, y: 0)))
+    print(place(Point(x: 3, y: 4)))
+    print(place(Point(x: 30, y: 4)))
+    print(line(Line(from: Point(x: 0, y: 0), to: Point(x: 1, y: 1), label: "")))
+    print(line(Line(from: Point(x: 0, y: 0), to: Point(x: 1, y: 1), label: "a")))
+    print(line(Line(from: Point(x: 2, y: 0), to: Point(x: 2, y: 9), label: "up")))
+    print(line(Line(from: Point(x: 2, y: 0), to: Point(x: 2, y: 9), label: "left")))
+    print(shape(Shape.Rect(w: 3, h: 0)))
+    print(shape(Shape.Circle(r: 2)))
+    print(shape(Shape.Rect(w: 7, h: 1)))
+    print(shape(Shape.Rect(w: 7, h: 2)))
+    print(shape(Shape.Poly(points: [])))
+    print(tok(Tok.Op(c: '-')))
+    print(tok(Tok.Op(c: '*')))
+    print(tok(Tok.Op(c: '/')))
+    print(tok(Tok.Num(n: 0)))
+    print(tok(Tok.Num(n: 4)))
+    print(tok(Tok.Word(text: "let", at: Point(x: 1, y: 2))))
+    print(tok(Tok.Word(text: "fn", at: Point(x: 5, y: 2))))
+    print(tok(Tok.Word(text: "go", at: Point(x: 5, y: 2))))
+    print(pair((Point(x: 0, y: 1), true)))
+    print(pair((Point(x: 0, y: 1), false)))

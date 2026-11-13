@@ -715,10 +715,15 @@ fn is_const_expr(e ast.Expr) bool
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
 
-## An optional of a type that is immutable and shared when copied (a boxed
-## number, a string, an enum): it can be a list element or field.
+## An optional shared when copied: it can be a list element, map value or
+## field. A boxed number, string or enum is immutable; a struct, tuple, list
+## or map inside an optional is never written in place either, since only a
+## variable or a field or element of one is a place (expr.bind.6) and
+## unwrapping it into a `mut` binding copies it (own.val.1).
 fn is_shared_opt(t Ty) bool
     inner := t.opt_inner() else return false
+    if needs_copy(inner)
+        return true
     is_number(inner) or inner == Ty.Str or is_enum(inner) or is_shared_opt(inner)
 
 fn is_number(t Ty) bool
@@ -1118,6 +1123,7 @@ fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
         Eval(e) => e
+        Handle(value, other) => ast.tail_else(value, other)
         _ => none
 
 # ---- statements ----
@@ -1266,6 +1272,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
+        LocalFn(d) => lower_local_fn(d)
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
@@ -1902,7 +1909,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if name == "zip" and not sigs.contains(key)
                 return lower_zip(args, pos)
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
-            if variadic_decl(key)
+            if c_call_site(key)
                 return lower_variadic(key, sig, args, pos, npos)
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")
@@ -2099,6 +2106,8 @@ fn Lower.lower_method(
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
+        if is_enum_static(en, name)
+            return lower_enum_static(en, name, args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
         assoc_instance(recv, name)
@@ -2121,6 +2130,8 @@ fn Lower.lower_method(
         return lower_chan_method(r, name, npos, args)
     if is_sync(r.ty) or is_task_cancel(recv, name)
         return lower_sync_method(r, name, npos, args)
+    if is_vocab_call(r.ty, name)
+        return lower_vocab(r, name, args, npos)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
@@ -2134,6 +2145,8 @@ fn Lower.lower_method(
     if s := struct_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
+    if is_enum_name(r.ty, name, args)
+        return lower_enum_name(r, npos)
     if s := enum_name(r.ty)
         set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)

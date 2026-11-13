@@ -1,0 +1,12 @@
+4 tellers x 25 transfers, rejected 4
+  account 0:   99760
+  account 1:  100035
+  account 2:  100100
+  account 3:   99980
+  account 4:  100125
+  total: 500000
+  matches sequential run: true
+7 tellers x 40 transfers, rejected 7
+  total: 500000
+  matches sequential run: true
+  lowest balance: 99748

@@ -1,0 +1,74 @@
+## Prim's minimum spanning tree on a weighted graph kept as a dense matrix.
+## Starting at vertex 0 the cheapest edge leaving the tree is added each round
+## (lowest vertex number wins ties). A disconnected graph yields a forest
+## covering only the start's component, which is reported.
+
+INF := 1000000
+
+struct Tree
+    edges List[str]
+    total int
+    covered int
+
+fn matrix(n int, text str) List[int]
+    mut w := [INF for k in 0..n * n]
+    for tok in text.words()
+        p := tok.split(":")
+        ends := p[0].split("-")
+        a := ends[0].to_int() else 0
+        b := ends[1].to_int() else 0
+        cost := p[1].to_int() else 0
+        w[a * n + b] = cost
+        w[b * n + a] = cost
+    w
+
+fn prim(n int, w List[int]) Tree
+    mut best := [INF for k in 0..n]
+    mut from_v := [-1 for k in 0..n]
+    mut inside := [false for k in 0..n]
+    mut tree := Tree(edges: [], total: 0, covered: 0)
+    best[0] = 0
+    for turn in 0..n
+        mut pick := -1
+        for v in 0..n
+            if not inside[v] and best[v] < INF
+                if pick == -1 or best[v] < best[pick]
+                    pick = v
+        if pick == -1
+            break
+        inside[pick] = true
+        tree.covered += 1
+        if from_v[pick] != -1
+            tree.edges.push("{from_v[pick]}-{pick} ({best[pick]})")
+            tree.total += best[pick]
+        for v2 in 0..n
+            cost := w[pick * n + v2]
+            if not inside[v2] and cost < best[v2]
+                best[v2] = cost
+                from_v[v2] = pick
+    tree
+
+fn report(title str, n int, text str)
+    t := prim(n, matrix(n, text))
+    print("{title}: {t.covered} of {n} vertices, weight {t.total}")
+    for e in t.edges
+        print("  {e}")
+
+fn main()
+    report("campus", 6, "0-1:4 0-2:3 1-2:1 1-3:2 2-3:4 3-4:2 4-5:6 3-5:7")
+    report("ring", 5, "0-1:10 1-2:10 2-3:10 3-4:10 4-0:5")
+    report("split", 5, "0-1:2 1-2:3 3-4:1")
+
+@test fn triangle_drops_heaviest_edge()
+    t := prim(3, matrix(3, "0-1:1 1-2:2 0-2:9"))
+    assert_eq(t.total, 3)
+    assert_eq(t.edges.len(), 2)
+
+@test fn single_vertex_has_empty_tree()
+    t := prim(1, matrix(1, ""))
+    assert_eq(t.covered, 1)
+    assert(t.edges.is_empty())
+
+@test fn disconnected_graph_covers_one_side()
+    t := prim(4, matrix(4, "0-1:5 2-3:1"))
+    assert_eq(t.covered, 2)

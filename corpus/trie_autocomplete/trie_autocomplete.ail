@@ -1,0 +1,112 @@
+## A trie for autocomplete. Nodes are numbered; an edge is stored in a map
+## under "node:letter". Each word carries a popularity weight. Suggestions for
+## a prefix are the heaviest completions, alphabetical among equal weights.
+
+ALPHABET := "abcdefghijklmnopqrstuvwxyz"
+
+struct Hit
+    word str
+    weight int
+
+struct Trie
+    edges Map[str, int]
+    ends List[bool]
+    weights List[int]
+
+fn Trie.new() Trie
+    Trie(edges: {}, ends: [false], weights: [0])
+
+fn Trie.insert(mut self, word str, w int)
+    mut cur := 0
+    for ch in word.chars()
+        key := "{cur}:{ch}"
+        if nxt := self.edges.get(key)
+            cur = nxt
+        else
+            nid := self.ends.len()
+            self.ends.push(false)
+            self.weights.push(0)
+            self.edges[key] = nid
+            cur = nid
+    self.ends[cur] = true
+    self.weights[cur] = w
+
+fn Trie.find_node(self, prefix str) int
+    mut cur := 0
+    for ch in prefix.chars()
+        key := "{cur}:{ch}"
+        nxt := self.edges.get(key) else return -1
+        cur = nxt
+    cur
+
+fn Trie.has(self, word str) bool
+    node := self.find_node(word)
+    node >= 0 and self.ends[node]
+
+fn Trie.collect(self, node int, text str) List[Hit]
+    mut out := List[Hit]()
+    if self.ends[node]
+        out.push(Hit(word: text, weight: self.weights[node]))
+    for letter in ALPHABET.chars()
+        key := "{node}:{letter}"
+        if nxt := self.edges.get(key)
+            out.extend(self.collect(nxt, "{text}{letter}"))
+    out
+
+fn Trie.suggest(self, prefix str, limit int) List[Hit]
+    node := self.find_node(prefix)
+    if node < 0
+        return List[Hit]()
+    hits := self.collect(node, prefix).sorted(by: |h| -h.weight)
+    hits.take(limit)
+
+fn show(hits List[Hit]) str
+    if hits.is_empty()
+        return "(none)"
+    parts := ["{h.word}({h.weight})" for h in hits]
+    parts.join(" ")
+
+fn main()
+    mut t := Trie.new()
+    words := [
+        "car",
+        "card",
+        "care",
+        "careful",
+        "cart",
+        "cat",
+        "catalog",
+        "dog",
+        "dot",
+        "door",
+        "do",
+    ]
+    weights := [50, 20, 35, 5, 12, 40, 8, 30, 10, 15, 3]
+    for i in 0..words.len()
+        t.insert(words[i], weights[i])
+    print("nodes: {t.ends.len()}")
+    for prefix in ["car", "ca", "do", "d", "z", ""]
+        print("'{prefix}' -> {show(t.suggest(prefix, 3))}")
+    for probe in ["car", "ca", "dot", "dots"]
+        print("has {probe}: {t.has(probe)}")
+
+@test fn has_requires_a_complete_word()
+    mut t := Trie.new()
+    t.insert("tree", 1)
+    assert(t.has("tree"))
+    assert(not t.has("tre"))
+    assert(not t.has("trees"))
+
+@test fn suggestions_rank_by_weight_then_alphabet()
+    mut t := Trie.new()
+    t.insert("bat", 5)
+    t.insert("bar", 5)
+    t.insert("bake", 9)
+    got := t.suggest("ba", 2)
+    assert_eq(got[0].word, "bake")
+    assert_eq(got[1].word, "bar")
+
+@test fn unknown_prefix_gives_nothing()
+    mut t := Trie.new()
+    t.insert("a", 1)
+    assert(t.suggest("b", 5).is_empty())

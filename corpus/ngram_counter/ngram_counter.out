@@ -1,0 +1,6 @@
+the cat sat on the mat the cat saw the other cat and the other cat ran the mat stayed
+char trigrams: the=8 cat=4 her=2 mat=2 oth=2 and=1
+char bigrams:  he=8 th=8 at=7 ca=4 an=2 er=2
+word bigrams:  other cat=2 | the cat=2 | the mat=2 | the other=2 | and the=1
+word unigrams: the=6 cat=4 mat=2 other=2 and=1
+distinct word trigrams: 17

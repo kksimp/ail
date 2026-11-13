@@ -14,7 +14,9 @@ fn has_label(args List[ast.Arg]) bool
 ## `args` in the order of `params`, unlabelled; none when nothing is named or a name doesn't
 ## fit (the checker already rejected those programs).
 fn order_by_params(args List[ast.Arg], params List[ast.Param]) List[ast.Arg]?
-    if not has_label(args) or args.len() != params.len()
+    if not has_label(args) and args.len() >= params.len()
+        return none
+    if args.len() > params.len()
         return none
     mut out := List[ast.Arg]()
     mut given := Set[int]()
@@ -37,7 +39,9 @@ fn order_by_params(args List[ast.Arg], params List[ast.Param]) List[ast.Arg]?
                 found = true
                 break
         if not found
-            return none
+            # expr.call.4: a parameter left out takes its default.
+            d := p.default else return none
+            out.push(ast.Arg(label: none, mutable: false, moved: false, value: d, param: none))
     out
 
 ## The parameters of the user function a call by name goes to, if it is one.
@@ -56,15 +60,11 @@ fn Lower.label_params(self, callee ast.Expr) List[ast.Param]?
 
 ## A call by name with named arguments, with its arguments in parameter order.
 fn Lower.label_ordered(self, callee ast.Expr, args List[ast.Arg]) List[ast.Arg]?
-    if not has_label(args)
-        return none
     ps := label_params(callee)?
     order_by_params(args, ps)
 
 ## The same for a method `key`, whose parameters leave out the receiver.
 fn Lower.label_ordered_method(self, key str, args List[ast.Arg]) List[ast.Arg]?
-    if not has_label(args)
-        return none
     if f := fn_decl.get(key)
         return order_by_params(args, f.params)
     g := gen.fns.get(key)?

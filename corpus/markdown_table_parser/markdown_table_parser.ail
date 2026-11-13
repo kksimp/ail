@@ -1,0 +1,150 @@
+## Markdown table parser: finds pipe tables in a document, reads the header,
+## the alignment row (:--, :-:, --:) and the data rows, pads ragged rows, and
+## prints each table re-aligned together with the sums of its numeric columns.
+
+struct Table
+    header List[str]
+    aligns List[str]
+    rows List[List[str]]
+
+fn split_row(line str) List[str]
+    t := line.trim()
+    mut inner := t
+    if inner.starts_with("|")
+        inner = inner.slice(1, inner.len())
+    if inner.ends_with("|")
+        inner = inner.slice(0, inner.len() - 1)
+    [c.trim() for c in inner.split("|")]
+
+fn is_separator(cells List[str]) bool
+    if cells.is_empty()
+        return false
+    for c in cells
+        if not c.contains("-")
+            return false
+        for ch in c.chars()
+            if ch != '-' and ch != ':'
+                return false
+    true
+
+fn alignment(cell str) str
+    if cell.starts_with(":") and cell.ends_with(":")
+        return "center"
+    if cell.ends_with(":")
+        return "right"
+    "left"
+
+fn parse_table(block List[str]) Table?
+    if block.len() < 2
+        return none
+    sep := split_row(block[1])
+    if not is_separator(sep)
+        return none
+    header := split_row(block[0])
+    mut rows := List[List[str]]()
+    for i in 2..block.len()
+        mut cells := split_row(block[i])
+        while cells.len() < header.len()
+            cells.push("")
+        rows.push(cells.take(header.len()))
+    mut aligns := List[str]()
+    for i in 0..header.len()
+        if i < sep.len()
+            aligns.push(alignment(sep[i]))
+        else
+            aligns.push("left")
+    Table(header: header, aligns: aligns, rows: rows)
+
+fn pad_cell(text str, width int, how str) str
+    match how
+        "right" => text.pad_left(width, ' ')
+        "center" =>
+            left := (width - text.len()) / 2
+            text.pad_left(text.len() + left, ' ').pad_right(width, ' ')
+        _ => text.pad_right(width, ' ')
+
+fn bar(n int) str
+    mut out := ""
+    for i in 0..n
+        out = "{out}-"
+    out
+
+fn render(t Table) List[str]
+    mut widths := [h.len().max(3) for h in t.header]
+    for r in t.rows
+        for i in 0..r.len()
+            widths[i] = widths[i].max(r[i].len())
+    mut out := List[str]()
+    mut head := List[str]()
+    mut rule := List[str]()
+    for i in 0..t.header.len()
+        head.push(pad_cell(t.header[i], widths[i], t.aligns[i]))
+        rule.push(bar(widths[i]))
+    out.push("| {head.join(" | ")} |")
+    out.push("| {rule.join(" | ")} |")
+    for r in t.rows
+        mut cells := List[str]()
+        for i in 0..r.len()
+            cells.push(pad_cell(r[i], widths[i], t.aligns[i]))
+        out.push("| {cells.join(" | ")} |")
+    out
+
+fn column_sum(t Table, col int) int?
+    mut total := 0
+    for r in t.rows
+        n := r[col].to_int() else return none
+        total += n
+    total
+
+fn main()
+    doc := [
+        "# Report",
+        "Some prose before the first table.",
+        "| item | qty | note |",
+        "|:--|--:|:-:|",
+        "| apple | 12 | fresh |",
+        "| pear | 7 |",
+        "| fig | 130 | dried, sweet | extra |",
+        "",
+        "Text between tables.",
+        "|name|score|",
+        "|---|---|",
+        "|ann|90|",
+        "|bob|x|",
+        "",
+        "| not | a table |",
+        "just a line",
+    ]
+    mut block := List[str]()
+    mut count := 0
+    for line in doc
+        if line.trim().starts_with("|")
+            block.push(line)
+            continue
+        if block.is_empty()
+            continue
+        count += 1
+        t := parse_table(block) else
+            print("block {count}: not a table ({block.len()} lines)")
+            block = List[str]()
+            continue
+        print("table {count}: {t.header.len()} columns, {t.rows.len()} rows")
+        for l in render(t)
+            print("  {l}")
+        for i in 0..t.header.len()
+            s := column_sum(t, i) else continue
+            print("  sum of {t.header[i]}: {s}")
+        block = List[str]()
+
+@test fn splits_rows()
+    assert_eq(split_row("| a | b c |"), ["a", "b c"])
+
+@test fn alignments()
+    assert_eq(alignment(":--"), "left")
+    assert_eq(alignment("--:"), "right")
+    assert_eq(alignment(":-:"), "center")
+
+@test fn parses_and_sums()
+    t := parse_table(["| a | b |", "|--|--|", "| 1 | 2 |", "| 3 | 4 |"])?
+    assert_eq(column_sum(t, 1)?, 6)
+    assert(parse_table(["| a |", "| b |"]) == none)

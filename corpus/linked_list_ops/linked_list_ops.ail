@@ -1,0 +1,139 @@
+## A generic singly linked list stored in arrays (node values, next indices,
+## -1 for the end). Supports push at either end, insert and remove by
+## position, in-place reversal, the middle node by slow/fast walk, and a
+## merge of two sorted int lists. Used with ints and with strings.
+
+struct LinkedList[T]
+    vals List[T]
+    nexts List[int]
+    head int
+    size int
+
+fn LinkedList[T].push_front(mut self, x T)
+    vals.push(x)
+    nexts.push(head)
+    head = vals.len() - 1
+    size += 1
+
+fn LinkedList[T].node_at(self, i int) int
+    mut cur := head
+    for _ in 0..i
+        cur = nexts[cur]
+    cur
+
+fn LinkedList[T].push_back(mut self, x T)
+    if size == 0
+        self.push_front(x)
+        return
+    last := self.node_at(size - 1)
+    vals.push(x)
+    nexts.push(-1)
+    self.nexts[last] = vals.len() - 1
+    size += 1
+
+fn LinkedList[T].insert_at(mut self, i int, x T)
+    if i == 0
+        self.push_front(x)
+        return
+    prev := self.node_at(i - 1)
+    vals.push(x)
+    nexts.push(nexts[prev])
+    self.nexts[prev] = vals.len() - 1
+    size += 1
+
+fn LinkedList[T].remove_at(mut self, i int)
+    if i == 0
+        head = nexts[head]
+    else
+        prev := self.node_at(i - 1)
+        self.nexts[prev] = nexts[nexts[prev]]
+    size -= 1
+
+fn LinkedList[T].reverse(mut self)
+    mut prev := -1
+    mut cur := head
+    while cur != -1
+        nx := nexts[cur]
+        self.nexts[cur] = prev
+        prev = cur
+        cur = nx
+    head = prev
+
+fn LinkedList[T].to_list(self) List[T]
+    mut out := List[T]()
+    mut cur := head
+    while cur != -1
+        out.push(vals[cur])
+        cur = nexts[cur]
+    out
+
+fn LinkedList[T].middle(self) int
+    mut slow := head
+    mut fast := head
+    while fast != -1 and nexts[fast] != -1
+        slow = nexts[slow]
+        fast = nexts[nexts[fast]]
+    slow
+
+fn int_list(xs List[int]) LinkedList[int]
+    mut l := LinkedList[int](vals: [], nexts: [], head: -1, size: 0)
+    for x in xs
+        l.push_back(x)
+    l
+
+fn merge_sorted(a LinkedList[int], b LinkedList[int]) LinkedList[int]
+    xs := a.to_list()
+    ys := b.to_list()
+    mut out := LinkedList[int](vals: [], nexts: [], head: -1, size: 0)
+    mut i := 0
+    mut j := 0
+    while i < xs.len() or j < ys.len()
+        take_left := j >= ys.len() or (i < xs.len() and xs[i] <= ys[j])
+        if take_left
+            out.push_back(xs[i])
+            i += 1
+        else
+            out.push_back(ys[j])
+            j += 1
+    out
+
+fn main()
+    mut nums := int_list([4, 8, 15, 16, 23])
+    nums.push_front(1)
+    nums.insert_at(3, 99)
+    print("list: {nums.to_list()} size {nums.size}")
+    nums.remove_at(3)
+    nums.remove_at(0)
+    print("after removes: {nums.to_list()}")
+    mid := nums.vals[nums.middle()]
+    print("middle value: {mid}")
+    nums.reverse()
+    print("reversed: {nums.to_list()}")
+    merged := merge_sorted(int_list([1, 4, 9, 12]), int_list([2, 3, 10, 15, 20]))
+    print("merged: {merged.to_list()}")
+    mut names := LinkedList[str](vals: [], nexts: [], head: -1, size: 0)
+    for n in ["ada", "grace", "edsger"]
+        names.push_back(n)
+    names.push_front("alan")
+    names.reverse()
+    print("names reversed: {names.to_list().join(",")}")
+
+@test fn push_back_then_to_list()
+    l := int_list([1, 2, 3])
+    assert_eq(l.to_list(), [1, 2, 3])
+    assert_eq(l.size, 3)
+
+@test fn reverse_flips_order()
+    mut l := int_list([1, 2, 3, 4])
+    l.reverse()
+    assert_eq(l.to_list(), [4, 3, 2, 1])
+
+@test fn remove_and_insert_by_position()
+    mut l := int_list([10, 20, 30])
+    l.remove_at(1)
+    l.insert_at(1, 25)
+    assert_eq(l.to_list(), [10, 25, 30])
+
+@test fn merge_keeps_sorted_order()
+    m := merge_sorted(int_list([1, 5]), int_list([2, 3, 6]))
+    assert_eq(m.to_list(), [1, 2, 3, 5, 6])

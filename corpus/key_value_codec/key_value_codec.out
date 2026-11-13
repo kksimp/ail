@@ -1,0 +1,18 @@
+2 pairs -> 'name=Ann Lee;role=admin' (23 chars)
+  [name] = [Ann Lee]
+  [role] = [admin]
+  round trip: true
+2 pairs -> 'expr=a\=b\;c;path=C:\\temp\\x' (29 chars)
+  [expr] = [a=b;c]
+  [path] = [C:\temp\x]
+  round trip: true
+2 pairs -> 'empty=;k\;ey=v\=1' (17 chars)
+  [empty] = []
+  [k;ey] = [v=1]
+  round trip: true
+0 pairs -> '' (0 chars)
+  round trip: true
+loose: 3 pairs
+  [a] = [1]
+  [b] = []
+  [c] = [x=y]

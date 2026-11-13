@@ -138,7 +138,9 @@ is the program's claim that C allocated it with `malloc`. *(ADR 0434)*
 of the example's type, each set to the example's value; a negative `n`, or a
 size that overflows, is a run-time trap. `mem.cast(p, example)` is the same
 address as a pointer to the example's type (reinterpretation, `unsafe.op.1`),
-`mem.null()` is the null `*u8`, and `mem.free(p)` accepts any pointer. *(ADR 0435)*
+`mem.null()` is the null `*u8`, and `mem.free(p)` accepts any pointer.
+`mem.c_fn(f)` is the C entry of the declared function `f` as a `*u8`
+(`ffi.cb.3`). *(ADR 0435, ADR 1074)*
 
 ```ail rules=unsafe.mem.1,unsafe.mem.3,unsafe.ptr.1,unsafe.ptr.2
 use std.mem

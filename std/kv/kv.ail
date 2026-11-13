@@ -51,7 +51,10 @@ fn u32le(n int) bytes
     ])
 
 fn read_u32(b bytes, at int) int
-    b[at].to_int() + b[at + 1].to_int() * 256 + b[at + 2].to_int() * 65536 + b[at + 3].to_int() * 16777216
+    b[at].to_int()
+        + b[at + 1].to_int() * 256
+        + b[at + 2].to_int() * 65536
+        + b[at + 3].to_int() * 16777216
 
 ## The record that sets `key` to `value`.
 fn set_record(key str, value bytes) bytes

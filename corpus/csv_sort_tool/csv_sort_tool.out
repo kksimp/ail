@@ -1,0 +1,7 @@
+by name: ann bob cy dee eve fay
+by age desc: eve bob fay dee ann cy
+by salary: eve bob dee ann fay cy
+dept, then salary desc: cy ann fay eve bob dee
+wrote 7 lines, 105 bytes
+first row: cy,eng,150,29
+cleaned up: true

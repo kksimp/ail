@@ -1,0 +1,101 @@
+## Integer unit converter: converts whole-number quantities between units of
+## length, mass and volume with no floating point. Every unit is an integer
+## multiple of its family's base unit; results are rounded half up to two
+## decimals. Queries look like "5280 ft to mi".
+
+error enum ConvError
+    BadQuery(text str) "cannot read query '{text}'"
+    BadNumber(text str) "bad number {text}"
+    UnknownUnit(name str) "unknown unit {name}"
+    Mismatch(left str, right str) "cannot convert {left} to {right}"
+
+struct Unit
+    name str
+    family str
+    scale int
+
+fn units() List[Unit]
+    [
+        Unit(name: "mm", family: "length", scale: 1000),
+        Unit(name: "cm", family: "length", scale: 10000),
+        Unit(name: "m", family: "length", scale: 1000000),
+        Unit(name: "km", family: "length", scale: 1000000000),
+        Unit(name: "in", family: "length", scale: 25400),
+        Unit(name: "ft", family: "length", scale: 304800),
+        Unit(name: "yd", family: "length", scale: 914400),
+        Unit(name: "mi", family: "length", scale: 1609344000),
+        Unit(name: "mg", family: "mass", scale: 1000),
+        Unit(name: "g", family: "mass", scale: 1000000),
+        Unit(name: "kg", family: "mass", scale: 1000000000),
+        Unit(name: "oz", family: "mass", scale: 28349523),
+        Unit(name: "lb", family: "mass", scale: 453592370),
+        Unit(name: "ml", family: "volume", scale: 1000000),
+        Unit(name: "l", family: "volume", scale: 1000000000),
+        Unit(name: "tsp", family: "volume", scale: 4928922),
+        Unit(name: "cup", family: "volume", scale: 236588236),
+        Unit(name: "gal", family: "volume", scale: 3785411784),
+    ]
+
+fn find_unit(name str) Unit ! ConvError
+    for u in units()
+        if u.name == name
+            return u
+    return UnknownUnit(name: name)
+
+## Value in hundredths of the target unit, rounded half up.
+fn convert_hundredths(value int, src Unit, dst Unit) int
+    requires value >= 0 and value <= 1000000
+    (value * src.scale * 200 + dst.scale) / (2 * dst.scale)
+
+fn format_hundredths(q int) str
+    "{q / 100}.{q % 100:02}"
+
+fn convert(query str) str ! ConvError
+    parts := query.words()
+    if parts.len() != 4 or parts[2] != "to"
+        return BadQuery(text: query)
+    value := parts[0].to_int() else return BadNumber(text: parts[0])
+    if value < 0 or value > 1000000
+        return BadNumber(text: parts[0])
+    a := find_unit(parts[1])?
+    b := find_unit(parts[3])?
+    if a.family != b.family
+        return Mismatch(left: a.family, right: b.family)
+    "{value} {a.name} = {format_hundredths(convert_hundredths(value, a, b))} {b.name}"
+
+fn main()
+    for q in [
+        "5280 ft to mi",
+        "1 mi to km",
+        "100 cm to in",
+        "3 lb to oz",
+        "250 g to oz",
+        "1 gal to cup",
+        "2 l to tsp",
+        "12 in to ft",
+        "5 kg to mi",
+        "7 parsec to m",
+        "ten m to cm",
+        "10 m cm",
+        "0 m to km",
+    ]
+        r := convert(q) else err
+            print("{q} -> error: {err}")
+            continue
+        print("{q} -> {r}")
+
+@test fn length_conversions()
+    assert_eq(convert("12 in to ft")?, "12 in = 1.00 ft")
+    assert_eq(convert("1 mi to km")?, "1 mi = 1.61 km")
+    assert_eq(convert("100 cm to m")?, "100 cm = 1.00 m")
+
+@test fn rounds_half_up()
+    assert_eq(format_hundredths(5), "0.05")
+    assert_eq(convert("1 m to km")?, "1 m = 0.00 km")
+    assert_eq(convert("5 m to km")?, "5 m = 0.01 km")
+
+@test fn errors()
+    assert_err(convert("5 kg to mi"))
+    assert_err(convert("5 xx to m"))
+    assert_err(convert("x m to cm"))
+    assert_err(convert("5 m"))

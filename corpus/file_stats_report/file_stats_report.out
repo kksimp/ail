@@ -1,0 +1,15 @@
+file        lines words blank longest  bytes
+README.md       4    10     1      21     50
+main.ail        6    10     2      20     59
+notes.txt       5    12     1      35     74
+util.ail        2     9     0      24     35
+data.csv        4     4     0       7     24
+Makefile        2     3     0      10     16
+total          23    48     4      35    258
+most lines: main.ail (6)
+(none)  1 files    2 lines
+ail     2 files    8 lines
+csv     1 files    4 lines
+md      1 files    4 lines
+txt     1 files    5 lines
+cleaned up: true

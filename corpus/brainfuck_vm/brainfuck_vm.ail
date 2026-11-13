@@ -1,0 +1,111 @@
+## Brainfuck interpreter: precomputes matching brackets, then runs the program
+## on a 30-cell tape of wrapping bytes with a step limit. Output bytes show as
+## text when printable and as <n> otherwise.
+
+error enum BfError
+    Unmatched(pos int) "unmatched bracket at {pos}"
+    OffTape(pos int) "pointer left the tape at {pos}"
+    TooLong "step limit reached"
+
+struct Case
+    name str
+    src str
+    data str
+
+fn build_jumps(code List[char]) List[int] ! BfError
+    mut jumps := List[int]()
+    mut stack := List[int]()
+    for i in 0..code.len()
+        jumps.push(0)
+        if code[i] == '['
+            stack.push(i)
+        elif code[i] == ']'
+            j := stack.pop() else return Unmatched(pos: i)
+            jumps[j] = i
+            jumps[i] = j
+    if not stack.is_empty()
+        return Unmatched(pos: stack[stack.len() - 1])
+    jumps
+
+fn run(src str, data str) List[int] ! BfError
+    code := src.chars()
+    jumps := build_jumps(code)?
+    feed := data.chars()
+    mut tape := List[int]()
+    for k in 0..30
+        tape.push(0)
+    mut out := List[int]()
+    mut ip := 0
+    mut ptr := 0
+    mut fed := 0
+    mut steps := 0
+    while ip < code.len()
+        steps += 1
+        if steps > 20000
+            return TooLong
+        c := code[ip]
+        if c == '>'
+            ptr += 1
+        elif c == '<'
+            ptr -= 1
+        elif c == '+'
+            tape[ptr] = (tape[ptr] + 1) % 256
+        elif c == '-'
+            tape[ptr] = (tape[ptr] + 255) % 256
+        elif c == '.'
+            out.push(tape[ptr])
+        elif c == ','
+            if fed < feed.len()
+                tape[ptr] = feed[fed].code()
+                fed += 1
+            else
+                tape[ptr] = 0
+        elif c == '[' and tape[ptr] == 0
+            ip = jumps[ip]
+        elif c == ']' and tape[ptr] != 0
+            ip = jumps[ip]
+        if ptr < 0 or ptr >= tape.len()
+            return OffTape(pos: ip)
+        ip += 1
+    out
+
+fn render(codes List[int]) str
+    mut s := ""
+    for n in codes
+        if n >= 32 and n < 127
+            ch := char.from_code(n) else '?'
+            s = "{s}{ch}"
+        else
+            s = "{s}<{n}>"
+    s
+
+fn main()
+    hi := "++++++++[>+++++++++<-]>.+++++++++++++++++++++++++++++++++.>++++++++++."
+    digits := "++++++++[>>++++++<<-]>++++++++++[>.+<-]"
+    cases := [
+        Case(name: "hi", src: hi, data: ""),
+        Case(name: "digits", src: digits, data: ""),
+        Case(name: "cat", src: ",[.,]", data: "ail vm"),
+        Case(name: "reverse", src: ">,[>,]<[.<]", data: "stressed"),
+        Case(name: "wrap", src: "-.", data: ""),
+        Case(name: "unmatched", src: "[+]]", data: ""),
+        Case(name: "runaway", src: "+[]", data: ""),
+        Case(name: "falloff", src: "<", data: ""),
+    ]
+    for c in cases
+        if out := run(c.src, c.data)
+            print("{c.name:<9} {render(out)}")
+        else err
+            print("{c.name:<9} error: {err}")
+
+@test fn reverses_input()
+    assert_eq(render(run(">,[>,]<[.<]", "abc")?), "cba")
+
+@test fn cells_wrap_around()
+    assert_eq(run("-.", "")?, [255])
+    assert_eq(run("+++[-].", "")?, [0])
+
+@test fn errors_are_typed()
+    assert_err(run("[+]]", ""))
+    assert_err(run("+[]", ""), BfError.TooLong)
+    assert_err(run("<", ""))

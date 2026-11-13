@@ -1,0 +1,102 @@
+## Prime factorisation by trial division. Prints each number as a product of
+## prime powers and derives the divisor count, the divisor sum and Euler's
+## totient straight from the factors. Also lists the smallest primes that
+## divide a range of numbers.
+
+struct Factor
+    prime int
+    times int
+
+fn factorize(n int) List[Factor]
+    mut out := List[Factor]()
+    mut rest := n
+    mut p := 2
+    while p * p <= rest
+        if rest % p == 0
+            mut times := 0
+            while rest % p == 0
+                rest = rest / p
+                times += 1
+            out.push(Factor(prime: p, times: times))
+        p += if p == 2 then 1 else 2
+    if rest > 1
+        out.push(Factor(prime: rest, times: 1))
+    out
+
+fn power_text(f Factor) str
+    if f.times == 1
+        return "{f.prime}"
+    "{f.prime}^{f.times}"
+
+fn product_text(fs List[Factor]) str
+    if fs.is_empty()
+        return "1"
+    parts := [power_text(f) for f in fs]
+    parts.join(" * ")
+
+fn divisor_count(fs List[Factor]) int
+    mut total := 1
+    for f in fs
+        total *= f.times + 1
+    total
+
+fn divisor_sum(fs List[Factor]) int
+    mut total := 1
+    for f in fs
+        mut term := 1
+        mut power := 1
+        for k in 0..f.times
+            power *= f.prime
+            term += power
+        total *= term
+    total
+
+fn totient(fs List[Factor]) int
+    mut total := 1
+    for f in fs
+        mut block := f.prime - 1
+        for k in 1..f.times
+            block *= f.prime
+        total *= block
+    total
+
+fn is_prime(n int) bool
+    fs := factorize(n)
+    fs.len() == 1 and fs[0].times == 1
+
+fn report(n int)
+    fs := factorize(n)
+    print("{n} = {product_text(fs)}")
+    print("  divisors {divisor_count(fs)}, sigma {divisor_sum(fs)}, phi {totient(fs)}")
+
+fn main()
+    for n in [1, 2, 12, 97, 360, 1001, 4096, 65536, 999999, 600851475143]
+        report(n)
+    mut line := List[str]()
+    for m in 2..=30
+        fs := factorize(m)
+        line.push("{m}:{fs[0].prime}")
+    print("smallest prime factor, 2..30")
+    print(line.join(" "))
+    primes := [q for q in 2..=60 if is_prime(q)]
+    print("primes up to 60: {primes.join(" ")}")
+
+@test fn factorize_360()
+    assert_eq(product_text(factorize(360)), "2^3 * 3^2 * 5")
+
+@test fn large_prime_stays_whole()
+    fs := factorize(1000003)
+    assert_eq(fs.len(), 1)
+    assert_eq(fs[0].prime, 1000003)
+
+@test fn totient_of_prime_power()
+    assert_eq(totient(factorize(81)), 54)
+    assert_eq(divisor_sum(factorize(28)), 56)
+
+@test fn product_rebuilds_the_number()
+    for n in [2, 30, 97, 1024, 5040]
+        mut back := 1
+        for f in factorize(n)
+            for k in 0..f.times
+                back *= f.prime
+        assert_eq(back, n)

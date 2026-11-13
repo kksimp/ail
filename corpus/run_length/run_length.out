@@ -1,0 +1,10 @@
+aaaabbbcca             4a3b2c1a             80%  round trip: true
+WWWWWWWWWWWWBWWWWWWWWWWWWBBBWWWWWWWWWWWWWWWWWWWWWWWWBWWWWWWWWWWWWWW 12W1B12W3B24W1B14W   26%  round trip: true
+abcdef                 1a1b1c1d1e1f        200%  round trip: true
+zzzzzzzzzzzzzzzzzzzz   20z                  15%  round trip: true
+x                      1x                  200%  round trip: true
+                                           100%  round trip: true
+decode 3a2: invalid
+decode ab: invalid
+decode a3: invalid
+decode 12: invalid

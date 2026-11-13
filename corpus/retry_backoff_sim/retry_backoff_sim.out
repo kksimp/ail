@@ -1,0 +1,10 @@
+first try: ok after 1 attempts, waited 0 ms
+  delays []
+third try: ok after 3 attempts, waited 326 ms
+  delays [112, 214]
+last try: ok after 6 attempts, waited 2901 ms
+  delays [112, 214, 461, 962, 1152]
+hopeless: gave up after 6 attempts, waited 2901 ms
+  delays [112, 214, 461, 962, 1152]
+capped: gave up after 5 attempts, waited 469 ms
+  delays [59, 124, 145, 141]

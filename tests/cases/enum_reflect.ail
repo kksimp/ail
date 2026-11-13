@@ -1,0 +1,19 @@
+enum Color
+    Red
+    Green
+    Blue
+
+fn parse(s str) Color?
+    Color.from_str(s)
+
+fn main()
+    for c in Color.variants()
+        print("{c.name()} {c}")
+    print(Color.variants().len())
+    print(parse("Blue"))
+    print(parse("blue"))
+    print(parse(""))
+    if c := parse("Red")
+        print(c == Color.Red)
+    n := Color.Green.name()
+    print(n.len())

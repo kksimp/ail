@@ -1,0 +1,104 @@
+## Three quicksorts side by side: Lomuto partition (last element as pivot),
+## three-way partition (first element as pivot, good with duplicates) and a
+## functional version that builds new lists. The in-place sorts count the
+## elements they examine, so the program shows how input shape changes the work.
+
+fn lomuto(mut xs List[int], lo int, hi int) int
+    if lo >= hi
+        return 0
+    pivot := xs[hi]
+    mut store := lo
+    mut seen := 0
+    for j in lo..hi
+        seen += 1
+        if xs[j] < pivot
+            xs.swap(store, j)
+            store += 1
+    xs.swap(store, hi)
+    seen += lomuto(mut xs, lo, store - 1)
+    seen += lomuto(mut xs, store + 1, hi)
+    seen
+
+fn three_way(mut xs List[int], lo int, hi int) int
+    if lo >= hi
+        return 0
+    pivot := xs[lo]
+    mut lt := lo
+    mut gt := hi
+    mut i := lo + 1
+    mut seen := 0
+    while i <= gt
+        seen += 1
+        if xs[i] < pivot
+            xs.swap(lt, i)
+            lt += 1
+            i += 1
+        elif xs[i] > pivot
+            xs.swap(i, gt)
+            gt -= 1
+        else
+            i += 1
+    seen += three_way(mut xs, lo, lt - 1)
+    seen += three_way(mut xs, gt + 1, hi)
+    seen
+
+fn functional(xs List[int]) List[int]
+    if xs.len() <= 1
+        return xs
+    pivot := xs[xs.len() / 2]
+    lows := [x for x in xs if x < pivot]
+    same := [x for x in xs if x == pivot]
+    highs := [x for x in xs if x > pivot]
+    mut out := functional(lows)
+    out.extend(same)
+    out.extend(functional(highs))
+    out
+
+fn make_data(n int, seed int, modulus int) List[int]
+    mut s := seed
+    mut out := List[int]()
+    for k in 0..n
+        s = (s * 1103515245 + 12345) % 2147483648
+        out.push(s / 65536 % modulus)
+    out
+
+fn main()
+    mut ascending := List[int]()
+    mut descending := List[int]()
+    mut equal := List[int]()
+    for v in 0..24
+        ascending.push(v)
+        descending.push(24 - v)
+    for k in 0..16
+        equal.push(5)
+    names := ["random", "ascending", "descending", "all equal", "three values"]
+    sets := [make_data(24, 7, 50), ascending, descending, equal, make_data(24, 3, 3)]
+    for i in 0..names.len()
+        data := sets[i]
+        want := data.sorted()
+        mut a := data
+        mut b := data
+        ca := lomuto(mut a, 0, a.len() - 1)
+        cb := three_way(mut b, 0, b.len() - 1)
+        c := functional(data)
+        ok := if a == want and b == want and c == want then "yes" else "no"
+        print("{names[i]} (n={data.len()}): lomuto={ca} three-way={cb} agree={ok}")
+    print("first set sorted: {sets[0].sorted().join(" ")}")
+
+@test fn lomuto_sorts()
+    mut xs := [5, 2, 9, 1, 5, 6, 0]
+    lomuto(mut xs, 0, 6)
+    assert_eq(xs, [0, 1, 2, 5, 5, 6, 9])
+
+@test fn three_way_handles_duplicates()
+    mut xs := [2, 2, 2, 1, 1, 3, 3, 2]
+    three_way(mut xs, 0, 7)
+    assert_eq(xs, [1, 1, 2, 2, 2, 2, 3, 3])
+
+@test fn functional_matches_builtin()
+    xs := make_data(30, 11, 20)
+    assert_eq(functional(xs), xs.sorted())
+
+@test fn all_equal_is_linear_for_three_way()
+    mut xs := [4, 4, 4, 4, 4, 4]
+    assert_eq(three_way(mut xs, 0, 5), 5)

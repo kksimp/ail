@@ -1,0 +1,23 @@
+## Sorting and picking among lists of lists, by `<` (lexicographic) or by a
+## key of any orderable type (type.coll.11, expr.key.4).
+fn main()
+    groups := [[5, 6, 7, 8], [0, 1, 2], [3, 4], [9]]
+    ranked := groups.sorted(by: |m| -m.len())
+    print(ranked)
+    print(groups.sorted())
+    rows := [["bo", "9"], ["al", "30"], ["cy", "4"]]
+    print(rows.sorted(by: |r| r[0]))
+    print(rows.sorted(by: |r| r[1].to_int() else 0))
+    print(rows.sorted(by: |r| [r[1].len(), r[0].len()]))
+    mut sorted_rows := rows
+    sorted_rows.sort()
+    print(sorted_rows)
+    print(groups.min() else [])
+    print(groups.max(by: |m| m.len()) else [])
+    deep := [[[2], [1]], [[1, 5]], [[1]]]
+    print(deep.sorted())
+    print(deep.max() else [])
+    pairs := [[(2, "b")], [(1, "z")], [(1, "a"), (0, "x")]]
+    print(pairs.sorted())
+    print([1, 2] < [1, 3])
+    print((1, [2]) < (1, [1]))

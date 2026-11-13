@@ -1,0 +1,82 @@
+## Event-log replay: a small key/value store is rebuilt from an append-only
+## log. The log is written to a temp file, read back, and replayed up to a
+## chosen sequence number; malformed lines are counted and skipped.
+
+## Applies one `set K N`, `inc K N` or `del K` line. False if it is malformed.
+fn apply(mut state Map[str, int], line str) bool
+    parts := line.split(" ")
+    if parts.len() < 2
+        return false
+    cmd := parts[0]
+    key := parts[1]
+    if cmd == "del"
+        if state.contains(key)
+            state.remove(key)
+        return true
+    if parts.len() != 3
+        return false
+    n := parts[2].to_int() else return false
+    if cmd == "set"
+        state[key] = n
+        return true
+    if cmd == "inc"
+        state[key] += n
+        return true
+    false
+
+struct Replay
+    state Map[str, int]
+    applied int
+    bad int
+
+fn replay(lines List[str], upto int) Replay
+    mut state := Map[str, int]()
+    mut applied := 0
+    mut bad := 0
+    for i in 0..lines.len().min(upto)
+        if apply(mut state, lines[i])
+            applied += 1
+        else
+            bad += 1
+    Replay(state: state, applied: applied, bad: bad)
+
+fn show(label str, r Replay)
+    print("{label}: {r.applied} applied, {r.bad} bad")
+    for k in r.state.keys().sorted()
+        print("  {k} = {r.state[k]}")
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_event_log_replay")?
+    log_path := path.join(dir, "events.log")
+    fs.write_text(
+        log_path,
+        "set a 5\nset b 10\ninc a 3\nbogus line\ndel b\nset c x\ninc c 4\nset b 1\ninc a -2\n",
+    )?
+    lines := fs.read_text(log_path)?.lines()
+    print("log has {lines.len()} lines")
+    show("after 3", replay(lines, 3))
+    show("after 6", replay(lines, 6))
+    show("full", replay(lines, 100))
+    fs.remove(log_path)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn set_inc_del()
+    mut s := Map[str, int]()
+    assert(apply(mut s, "set x 4"))
+    assert(apply(mut s, "inc x 6"))
+    assert_eq(s["x"], 10)
+    assert(apply(mut s, "del x"))
+    assert_eq(s.len(), 0)
+
+@test fn malformed_lines_are_rejected()
+    mut s := Map[str, int]()
+    assert(not apply(mut s, "set x"))
+    assert(not apply(mut s, "set x y"))
+    assert(not apply(mut s, "nope"))
+    assert(not apply(mut s, "move a 1"))
+
+@test fn replay_stops_at_the_requested_line()
+    r := replay(["set a 1", "inc a 1", "inc a 1"], 2)
+    assert_eq(r.state["a"], 2)
+    assert_eq(r.applied, 2)

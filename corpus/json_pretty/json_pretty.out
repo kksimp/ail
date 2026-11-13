@@ -1,0 +1,28 @@
+{
+  "name": "ail",
+  "tags": [
+    "fast",
+    "safe"
+  ],
+  "nested": {
+    "a": 1,
+    "b": [
+      1,
+      2,
+      {
+        "c": null
+      }
+    ],
+    "empty": {},
+    "list": []
+  },
+  "quote": "say \"hi\", ok"
+}
+lines: 20
+depth: 4
+minified again: true
+[]
+[
+  [],
+  {}
+]

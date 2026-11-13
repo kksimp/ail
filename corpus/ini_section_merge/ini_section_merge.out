@@ -1,0 +1,19 @@
+~ mode: dev -> prod
+~ db.host: localhost -> db.internal
+- db.pool
++ log.level = warn
+- cache.ttl
++ cache.size = 128
+---
+name = demo
+mode = prod
+
+[db]
+host = db.internal
+port = 5432
+
+[log]
+level = warn
+
+[cache]
+size = 128

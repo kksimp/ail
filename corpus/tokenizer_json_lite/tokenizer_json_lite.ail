@@ -1,0 +1,168 @@
+## JSON tokenizer: splits JSON text into braces, brackets, colons, commas,
+## strings (with escapes), numbers and the literals true/false/null, with
+## character positions. Reports token counts and the deepest nesting, and fails
+## with a typed error on stray characters, open strings and bad literals.
+
+error enum JsonError
+    BadChar(text str, pos int) "bad character {text} at {pos}"
+    Unterminated(pos int) "unterminated string at {pos}"
+    BadLiteral(text str, pos int) "bad literal {text} at {pos}"
+
+enum Kind
+    LBrace
+    RBrace
+    LBracket
+    RBracket
+    Colon
+    Comma
+    Str
+    Num
+    Lit
+
+struct Token
+    kind Kind
+    text str
+    pos int
+
+fn Kind.label(self) str
+    match self
+        LBrace => "lbrace"
+        RBrace => "rbrace"
+        LBracket => "lbracket"
+        RBracket => "rbracket"
+        Colon => "colon"
+        Comma => "comma"
+        Str => "str"
+        Num => "num"
+        Lit => "lit"
+
+fn punct(c char) Kind?
+    if c == '\u{7b}'
+        return Kind.LBrace
+    if c == '\u{7d}'
+        return Kind.RBrace
+    if c == '['
+        return Kind.LBracket
+    if c == ']'
+        return Kind.RBracket
+    if c == ':'
+        return Kind.Colon
+    if c == ','
+        return Kind.Comma
+    none
+
+fn lex_string(cs List[char], start int) Token ! JsonError
+    mut i := start + 1
+    mut body := ""
+    mut closed := false
+    while i < cs.len() and not closed
+        d := cs[i]
+        if d == '\u{22}'
+            closed = true
+            i += 1
+        elif d == '\u{5c}' and i + 1 < cs.len()
+            body = "{body}{d}{cs[i + 1]}"
+            i += 2
+        else
+            body = "{body}{d}"
+            i += 1
+    if not closed
+        return Unterminated(pos: start)
+    Token(kind: Kind.Str, text: body, pos: start)
+
+fn lex_number(cs List[char], start int) Token
+    mut i := start
+    mut body := ""
+    while i < cs.len() and (cs[i].is_digit() or "-+.eE".contains(cs[i]))
+        body = "{body}{cs[i]}"
+        i += 1
+    Token(kind: Kind.Num, text: body, pos: start)
+
+fn lex_word(cs List[char], start int) Token ! JsonError
+    mut i := start
+    mut body := ""
+    while i < cs.len() and cs[i].is_alpha()
+        body = "{body}{cs[i]}"
+        i += 1
+    if not ["true", "false", "null"].contains(body)
+        return BadLiteral(text: body, pos: start)
+    Token(kind: Kind.Lit, text: body, pos: start)
+
+fn tokenize(src str) List[Token] ! JsonError
+    cs := src.chars()
+    mut out := List[Token]()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c.is_space()
+            i += 1
+            continue
+        if k := punct(c)
+            out.push(Token(kind: k, text: "{c}", pos: i))
+            i += 1
+            continue
+        mut tok := Token(kind: Kind.Lit, text: "", pos: i)
+        if c == '\u{22}'
+            tok = lex_string(cs, i)?
+        elif c == '-' or c.is_digit()
+            tok = lex_number(cs, i)
+        elif c.is_alpha()
+            tok = lex_word(cs, i)?
+        else
+            return BadChar(text: "{c}", pos: i)
+        out.push(tok)
+        i += tok.text.len()
+        if tok.kind == Kind.Str
+            i += 2
+    out
+
+fn max_depth(toks List[Token]) int
+    mut depth := 0
+    mut deepest := 0
+    for t in toks
+        if t.kind == Kind.LBrace or t.kind == Kind.LBracket
+            depth += 1
+            deepest = deepest.max(depth)
+        elif t.kind == Kind.RBrace or t.kind == Kind.RBracket
+            depth -= 1
+    deepest
+
+fn show(src str)
+    print(src)
+    toks := tokenize(src) else err
+        print("  error: {err}")
+        return
+    mut counts := Map[str, int]()
+    for t in toks
+        counts[t.kind.label()] += 1
+    print("  {toks.len()} tokens, depth {max_depth(toks)}")
+    for name in counts.keys().sorted()
+        print("  {name:<9} {counts[name]}")
+    shown := [w.text for w in toks if w.kind == Kind.Str or w.kind == Kind.Lit]
+    print("  words: {shown.join(" ")}")
+
+fn main()
+    show("\{\"name\": \"ail\", \"tags\": [\"a\", \"b\"], \"n\": -12}")
+    show("[1, 2.5e3, true, false, null, \{\"k\": []}]")
+    show("[\"x\\\"y\"]")
+    show("\{\"a\": tru}")
+    show("[1, \"open]")
+    show("\{\"a\": @}")
+
+@test fn tokenizes_structure()
+    toks := tokenize("\{\"a\": [1, null]}")?
+    assert_eq(toks.len(), 9)
+    assert(toks[0].kind == Kind.LBrace)
+    assert_eq(toks[1].text, "a")
+    assert_eq(toks[4].text, "1")
+    assert_eq(max_depth(toks), 2)
+
+@test fn string_escapes_stay_inside_the_token()
+    toks := tokenize("[\"x\\\"y\", 2]")?
+    assert_eq(toks.len(), 5)
+    assert_eq(toks[3].pos, 9)
+
+@test fn errors_are_typed()
+    assert_err(tokenize("[nul]"))
+    assert_err(tokenize("\"abc"))
+    assert_err(tokenize("[?]"))

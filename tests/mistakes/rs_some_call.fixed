@@ -1,0 +1,7 @@
+fn first(xs List[int]) int?
+    if xs.len() > 0
+        return xs[0]
+    none
+
+fn main()
+    print(first([1]))

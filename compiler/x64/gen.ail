@@ -181,6 +181,10 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         else
             g.saved_ints.push(r)
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
+    # Jumps stay inside 32-byte lines (native.jump.1); the trap stubs, which
+    # run once, are left as they fall.
+    lined := jump_lines()
+    g.a.window = if lined then JUMP_LINE else 0
     g.prologue(al.slots)
     # The entry block's parameters arrive in the argument registers.
     g.entry_moves()
@@ -189,8 +193,14 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         g.next_block = if k + 1 < al.order.len() then al.order[k + 1] else -1
         g.a.bind(g.blabels[b])
         g.gen_block(b)
+    g.a.window = 0
     g.gen_stubs()
     g.a.resolve_labels()
+    # The function starts on a line, so an offset in it is a place in the
+    # line (the executable loads the code at a multiple of the line too).
+    int3 := 204
+    while lined and img.code.len() % JUMP_LINE != 0
+        img.code.push(int3.to_u8())
     for sym in g.imports
         codegen.import_slot(mut img, sym)
     for x in g.f64s
@@ -204,6 +214,11 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     img.code.extend(g.a.code)
     for fx in g.a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: "rel32", sym: fx.sym, tail: fx.tail))
+
+## Whether jumps are kept inside 32-byte lines (native.jump.1);
+## `AIL_OPT_OFF=jumpline` turns it off.
+fn jump_lines() bool
+    not mir.opt_off("jumpline")
 
 # ---- frame ----
 
@@ -1252,7 +1267,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         if self.win or not codegen.linux_import(sym)
             a.ud2()
             return
-    if i.site >= 0
+    if i.site >= 0 and sites.list[i.site].kind != "frame"
         # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
         a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
         a.jcc(CC_B, stub(11, -1, -1, i.site, sites.list[i.site].op))
@@ -1326,7 +1341,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.call_sym(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
-        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
+        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: call_func(i)))
         # A call copied in by inlining (trace.frame.2) also stands for the
         # frames it was inlined into: a row for each, innermost first.
         if i.site >= 0
@@ -1349,6 +1364,13 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_xmm(i.dst, 0)
         else
             put_gpr(i.dst, RAX)
+
+## The function a call is written in, for its row of a trap's stack: a call
+## copied in by inlining another function (trace.frame.2) names that function.
+fn Gen.call_func(self, i mir.Inst) str
+    if i.site >= 0 and sites.list[i.site].from >= 0
+        return sites.list[i.site].func
+    f.name
 
 ## The memory a load or store prim addresses.
 fn Gen.address(mut self, i mir.Inst) Mem

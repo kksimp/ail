@@ -1,0 +1,34 @@
+start [3, 4, 5], nim-sum 2
+  optimal takes 2 from pile 0 -> [1, 4, 5]
+  naive   takes 1 from pile 2 -> [1, 4, 4]
+  optimal takes 1 from pile 0 -> [0, 4, 4]
+  naive   takes 1 from pile 1 -> [0, 3, 4]
+  optimal takes 1 from pile 2 -> [0, 3, 3]
+  naive   takes 1 from pile 1 -> [0, 2, 3]
+  optimal takes 1 from pile 2 -> [0, 2, 2]
+  naive   takes 1 from pile 1 -> [0, 1, 2]
+  optimal takes 1 from pile 2 -> [0, 1, 1]
+  naive   takes 1 from pile 1 -> [0, 0, 1]
+  optimal takes 1 from pile 2 -> [0, 0, 0]
+  last object taken by the optimal player
+start [3, 4, 5], nim-sum 2
+  naive   takes 1 from pile 2 -> [3, 4, 4]
+  optimal takes 3 from pile 0 -> [0, 4, 4]
+  naive   takes 1 from pile 1 -> [0, 3, 4]
+  optimal takes 1 from pile 2 -> [0, 3, 3]
+  naive   takes 1 from pile 1 -> [0, 2, 3]
+  optimal takes 1 from pile 2 -> [0, 2, 2]
+  naive   takes 1 from pile 1 -> [0, 1, 2]
+  optimal takes 1 from pile 2 -> [0, 1, 1]
+  naive   takes 1 from pile 1 -> [0, 0, 1]
+  optimal takes 1 from pile 2 -> [0, 0, 0]
+  last object taken by the optimal player
+start [1, 2, 3], nim-sum 0
+  optimal takes 1 from pile 0 -> [0, 2, 3]
+  naive   takes 1 from pile 2 -> [0, 2, 2]
+  optimal takes 1 from pile 1 -> [0, 1, 2]
+  naive   takes 1 from pile 2 -> [0, 1, 1]
+  optimal takes 1 from pile 1 -> [0, 0, 1]
+  naive   takes 1 from pile 2 -> [0, 0, 0]
+  last object taken by the naive player
+positions checked: 125, rule agrees on 125, lost for the mover: 19

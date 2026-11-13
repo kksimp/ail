@@ -1,0 +1,4 @@
+fn main()
+    fn pick[T](x T) T
+        x
+    print("{pick(1)}")

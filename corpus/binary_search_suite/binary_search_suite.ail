@@ -1,0 +1,100 @@
+## A small suite of binary searches over sorted data: lower and upper bound,
+## exact lookup, occurrence counting, and two "search on the answer" problems
+## (integer square root, and the smallest ship capacity that meets a deadline).
+
+fn lower_bound(xs List[int], target int) int
+    mut lo := 0
+    mut hi := xs.len()
+    while lo < hi
+        mid := lo + (hi - lo) / 2
+        if xs[mid] < target
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+fn upper_bound(xs List[int], target int) int
+    mut lo := 0
+    mut hi := xs.len()
+    while lo < hi
+        mid := lo + (hi - lo) / 2
+        if xs[mid] <= target
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+fn find_first(xs List[int], target int) int?
+    i := lower_bound(xs, target)
+    if i < xs.len() and xs[i] == target
+        return i
+    none
+
+fn count_of(xs List[int], target int) int
+    upper_bound(xs, target) - lower_bound(xs, target)
+
+fn isqrt(n int) int
+    mut lo := 0
+    mut hi := (n + 1).min(3037000500)
+    while hi - lo > 1
+        mid := lo + (hi - lo) / 2
+        if mid * mid <= n
+            lo = mid
+        else
+            hi = mid
+    lo
+
+fn days_needed(weights List[int], cap int) int
+    mut days := 1
+    mut load := 0
+    for w in weights
+        if load + w > cap
+            days += 1
+            load = 0
+        load += w
+    days
+
+fn min_capacity(weights List[int], deadline int) int
+    mut lo := weights.max() else 0
+    mut hi := weights.sum()
+    while lo < hi
+        mid := lo + (hi - lo) / 2
+        if days_needed(weights, mid) <= deadline
+            hi = mid
+        else
+            lo = mid + 1
+    lo
+
+fn main()
+    xs := [1, 3, 3, 3, 5, 8, 8, 13, 21, 21, 21, 21, 34]
+    print("data: {xs.join(" ")}")
+    for t in [0, 1, 3, 4, 8, 21, 34, 50]
+        first := find_first(xs, t) else -1
+        note := if first < 0 then "missing" else "first at {first}"
+        print("{t}: lower={lower_bound(xs, t)} upper={upper_bound(xs, t)} count={count_of(xs, t)} {note}")
+    for n in [0, 1, 15, 16, 99, 100, 1000000, 999999999999]
+        print("isqrt({n}) = {isqrt(n)}")
+    weights := [3, 2, 2, 4, 1, 4, 5, 6, 2, 3]
+    for d in [1, 2, 3, 5, 10]
+        print("{d} days: capacity {min_capacity(weights, d)}")
+
+@test fn bounds_on_duplicates()
+    xs := [1, 2, 2, 2, 3]
+    assert_eq(lower_bound(xs, 2), 1)
+    assert_eq(upper_bound(xs, 2), 4)
+    assert_eq(count_of(xs, 2), 3)
+    assert_eq(count_of(xs, 7), 0)
+
+@test fn exact_lookup()
+    xs := [10, 20, 30]
+    assert_eq(find_first(xs, 20) else -1, 1)
+    assert_eq(find_first(xs, 25) else -1, -1)
+
+@test fn integer_square_roots()
+    assert_eq(isqrt(0), 0)
+    assert_eq(isqrt(24), 4)
+    assert_eq(isqrt(25), 5)
+
+@test fn capacity_search()
+    assert_eq(min_capacity([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 5), 15)
+    assert_eq(min_capacity([7], 1), 7)

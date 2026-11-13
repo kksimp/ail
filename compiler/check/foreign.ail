@@ -19,9 +19,12 @@ use ast
 ## carry over unchanged.
 pub fn method_rename(t Ty, name str) str?
     k := kind_of(t)
-    if name == "length" or name == "size" or name == "count"
+    # `count` on a list, map or set takes a function (type.coll.28): it is not `len`.
+    if name == "length" or name == "size" or (name == "count" and k == "str")
         if k == "str" or k == "list" or k == "map" or k == "set"
             return "len"
+    if name == "to_string" or name == "toString" or name == "to_owned"
+        return "to_str"
     match "{k}.{name}"
         "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "trim"
         "str.encode" => "to_bytes"
@@ -70,7 +73,8 @@ pub fn method_help(t Ty, name str) str?
         "char.to_lowercase" => "write `c.to_lower()`"
         "map.push" => "`m.push(k, x)` needs a map whose values are lists, `Map[K, List[T]]`; for other values write `m[k] = v`"
         "list.append" | "list.add" => "write `xs.push(x)`"
-        "list.length" | "list.size" | "list.count" => "write `xs.len()`"
+        "list.length" | "list.size" => "write `xs.len()`"
+        "list.dedup" | "list.unique" | "list.uniq" | "list.distinct" | "list.drop_duplicates" => "there is no `{name}`: write `xs.counts().keys()` for the distinct `int`, `str` or `char` elements in order of first appearance, `xs.group_by(|x| x).keys()` for any hashable element, or keep a `Set[T]`"
         "list.index" | "list.find" | "list.indexOf" => "write `xs.index_of(x)`, which gives `int?` (`none` if absent)"
         "map.has" | "map.has_key" | "map.contains_key" => "write `m.contains(k)`"
         "map.put" | "map.set" | "map.insert" => "write `m[k] = v`"
@@ -78,10 +82,21 @@ pub fn method_help(t Ty, name str) str?
         "set.insert" | "set.push" => "write `s.add(x)`"
         "set.has" => "write `s.contains(x)`"
         "set.discard" | "set.delete" => "write `s.remove(x)`"
+        "list.iter" | "list.into_iter" | "list.iter_mut" | "list.stream" | "set.iter" | "set.into_iter" | "map.iter" | "map.into_iter" =>
+            "a collection is iterable as it is: `for x in xs`, and `xs.map(|x| ...)`, `xs.filter(|x| ...)` give a new list; there is no iterator to take or collect"
+        "list.collect" | "list.to_vec" | "list.cloned" | "list.copied" | "list.to_owned" | "list.to_list" =>
+            "`map` and `filter` already give a list, so nothing is collected; `xs.sorted()` is a sorted copy"
+        "str.push_str" | "str.push" | "str.append" | "str.concat" =>
+            "a `str` is a value and can't grow in place: build text with interpolation, `s = \"\{s}b\"`, or push parts to a `List[str]` and `parts.join(\"\")`"
+        "str.chars_rev" | "str.char_indices" => "`s.chars()` is a list of `char`; `s.chars().enumerate()` pairs them with their index"
         _ => ""
     if msg != ""
         return msg
     match name
+        "unwrap_or" | "unwrap_or_default" | "unwrap_or_else" | "or_else" | "orElse" | "getOrElse" =>
+            "a value that can be `none` takes its fallback with `else`: `xs.first() else 0`, or `else return` to leave"
+        "map_or" | "and_then" | "ok_or" | "ok_or_else" | "flatten" =>
+            "an optional has no methods: take the value with `v := x else return`, or use `x?.field else d`"
         "message" | "msg" | "description" | "getMessage" | "get_message" => "an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`"
         "to_string" | "toString" | "__str__" => "write `x.to_str()`, or interpolate: `\"\{x}\"`"
         _ => none
@@ -129,6 +144,27 @@ pub fn call_hint(name str, nargs int) CallHint?
                     template: "$r1.len()",
                     example: "xs.len()",
                     help: "`len` is a method: write `xs.len()`",
+                )
+        "Some" | "Just" =>
+            if nargs == 1
+                return CallHint(
+                    template: "$1",
+                    example: "x",
+                    help: "an optional value is the value itself: write `x`, and `none` for the absent case; the type says it can be absent: `int?` (type.opt.1)",
+                )
+        "Ok" =>
+            if nargs == 1
+                return CallHint(
+                    template: "$1",
+                    example: "x",
+                    help: "a function declared `T ! E` returns its success value as it is: write `x`; a failure is `return Variant` (err.type.1)",
+                )
+        "make" =>
+            if nargs == 1
+                return CallHint(
+                    template: "$1()",
+                    example: "Map[str, int]()",
+                    help: "a collection is built by its typed constructor: `Map[str, int]()`, `List[int]()`, `Set[int]()`",
                 )
         "bytes" =>
             if nargs == 1
@@ -215,6 +251,12 @@ pub fn call_help(name str) str?
         "list" | "dict" | "set" | "array" | "vec" | "Vec" => "build collections with literals or typed constructors: `[1, 2]`, `\{\"a\": 1}`, `Set[int]()`, `List[int]()`"
         "isinstance" | "typeof" | "type" => "AIL is statically typed; use `match` on an enum or a trait method instead of a type test"
         "assert" => "`assert` works inside an `@test` function (spec chapter 19)"
+        "Err" => "a failure is not wrapped: declare `fn f() T ! MyError` and write `return MyError.Variant` (err.type.1)"
+        "append" => "a list grows in place: write `xs.push(x)` on a `mut` list; `xs.extend(ys)` adds a whole list (type.coll.6)"
+        "make" => "a collection is built by its typed constructor: `Map[str, int]()`, `List[int]()`, `Set[int]()`"
+        "delete" => "a map entry is removed with `m.remove(k)`, a list element with `xs.remove_at(i)`"
+        "copy" => "values are independent copies already: `b := a` copies"
+        "cap" => "a list has `xs.len()`; there is no separate capacity"
         _ => none
 
 ## Help for a function name that other languages have (expr.name.2).
@@ -235,6 +277,6 @@ pub fn function_help(name str) str?
         "float" | "parseFloat" => "write `s.to_float()`, or `n.to_float()` for an int"
         "loop" => "write `while true`"
         "range" => "write a range: `0..n`, or `1..=n` to include `n`"
-        "println" | "printf" | "puts" | "console" => "write `print(value)`"
+        "println" | "printf" | "puts" | "console" | "fmt" | "Println" | "log" => "write `print(value)`; text with values is interpolated: `print(\"n is \{n}\")`"
         "assert" | "panic" => "write `unreachable(\"message\")` to stop the program"
         _ => none

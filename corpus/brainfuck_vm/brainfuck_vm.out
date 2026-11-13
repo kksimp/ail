@@ -1,0 +1,8 @@
+hi        Hi<10>
+digits    0123456789
+cat       ail vm
+reverse   desserts
+wrap      <255>
+unmatched error: unmatched bracket at 3
+runaway   error: step limit reached
+falloff   error: pointer left the tape at 0

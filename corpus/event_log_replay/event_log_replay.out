@@ -1,0 +1,11 @@
+log has 9 lines
+after 3: 3 applied, 0 bad
+  a = 8
+  b = 10
+after 6: 4 applied, 2 bad
+  a = 8
+full: 7 applied, 2 bad
+  a = 6
+  b = 1
+  c = 4
+cleaned up: true

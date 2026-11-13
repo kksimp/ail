@@ -1,0 +1,112 @@
+## Vending machine inventory manager. Text commands stock slots, sell items for
+## cash (returning change greedily), restock, and re-price. Each slot holds at
+## most 10 items. Mistakes (unknown slot, sold out, short payment, overfilling,
+## malformed commands) are typed errors. A final report lists slots with low
+## stock flagged.
+
+error enum VendError
+    UnknownSlot(code str) "no slot {code}"
+    SoldOut(code str) "slot {code} is sold out"
+    Insufficient(need int, have int) "need {need}, got {have}"
+    SlotFull(code str) "slot {code} would overflow"
+    BadCommand(text str) "bad command '{text}'"
+
+struct Slot
+    name str
+    price int
+    qty int
+    sold int
+
+struct Machine
+    slots Map[str, Slot]
+    revenue int
+    cap int
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn change_for(amount int) str
+    mut left := amount
+    mut parts := List[str]()
+    for coin in [100, 25, 10, 5, 1]
+        n := left / coin
+        if n > 0
+            parts.push("{n}x{coin}")
+            left -= n * coin
+    if parts.is_empty()
+        return "no change"
+    parts.join(" ")
+
+fn Machine.slot(self, code str) Slot ! VendError
+    s := self.slots.get(code) else return UnknownSlot(code: code)
+    s
+
+fn Machine.exec(mut self, line str) str ! VendError
+    p := line.words()
+    if p.len() == 5 and p[0] == "stock"
+        price := p[3].to_int() else return BadCommand(text: line)
+        count := p[4].to_int() else return BadCommand(text: line)
+        if count > self.cap
+            return SlotFull(code: p[1])
+        self.slots[p[1]] = Slot(name: p[2], price: price, qty: count, sold: 0)
+        return "stocked {p[1]} with {count} {p[2]}"
+    if p.len() != 3
+        return BadCommand(text: line)
+    s := self.slot(p[1])?
+    n := p[2].to_int() else return BadCommand(text: line)
+    if p[0] == "buy"
+        if s.qty == 0
+            return SoldOut(code: p[1])
+        if n < s.price
+            return Insufficient(need: s.price, have: n)
+        self.slots[p[1]] = Slot(name: s.name, price: s.price, qty: s.qty - 1, sold: s.sold + 1)
+        self.revenue += s.price
+        return "sold {s.name}, change: {change_for(n - s.price)}"
+    if p[0] == "restock"
+        if s.qty + n > self.cap
+            return SlotFull(code: p[1])
+        self.slots[p[1]] = Slot(name: s.name, price: s.price, qty: s.qty + n, sold: s.sold)
+        return "{p[1]} now holds {s.qty + n}"
+    if p[0] == "price" and n > 0
+        self.slots[p[1]] = Slot(name: s.name, price: n, qty: s.qty, sold: s.sold)
+        return "{s.name} now costs {money(n)}"
+    return BadCommand(text: line)
+
+fn main()
+    cmds := [
+        "stock A1 cola 150 5", "stock A2 chips 100 3", "stock B1 water 125 2", "stock B2 gum 50 99",
+        "buy A1 200", "buy A1 100", "buy A2 500", "buy B1 125", "buy B1 125", "buy B1 125",
+        "buy C9 100", "restock B1 4", "restock A1 9", "price A2 110", "buy A2 100", "buy A2 110",
+        "refund A2", "price A1 0", "stock A3 mints x 5",
+    ]
+    mut m := Machine(slots: {}, revenue: 0, cap: 10)
+    for c in cmds
+        msg := m.exec(c) else err
+            print("! {c}: {err}")
+            continue
+        print(msg)
+    for code in m.slots.keys().sorted()
+        s := m.slots[code]
+        flag := if s.qty <= 1 then " LOW" else ""
+        print("{code} {s.name:<6} price {money(s.price)} qty {s.qty} sold {s.sold}{flag}")
+    print("revenue {money(m.revenue)}")
+
+@test fn buying_updates_stock()
+    mut m := Machine(slots: {}, revenue: 0, cap: 10)
+    _ := m.exec("stock A1 tea 75 2")?
+    assert_eq(m.exec("buy A1 100")?, "sold tea, change: 1x25")
+    assert_eq(m.slots["A1"].qty, 1)
+    assert_eq(m.revenue, 75)
+
+@test fn limits_are_enforced()
+    mut m := Machine(slots: {}, revenue: 0, cap: 3)
+    _ := m.exec("stock A1 tea 75 3")?
+    assert_err(m.exec("restock A1 1"))
+    assert_err(m.exec("stock A2 x 5 4"))
+    assert_err(m.exec("buy A1 10"))
+    assert_err(m.exec("buy Z9 10"))
+
+@test fn change_text()
+    assert_eq(change_for(0), "no change")
+    assert_eq(change_for(141), "1x100 1x25 1x10 1x5 1x1")

@@ -1,0 +1,8 @@
+cold -> warm: 4 steps (17 words visited)
+  cold > cord > card > ward > warm
+care -> love: 11 steps (28 words visited)
+  care > card > cord > cold > bold > bolt > boat > coat > cost > lost > lose > love
+boat -> mist: 4 steps (13 words visited)
+  boat > coat > cost > most > mist
+cold -> wolf: no ladder (29 words visited)
+cold -> zzzz: no ladder (0 words visited)

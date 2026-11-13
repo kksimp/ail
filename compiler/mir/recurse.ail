@@ -36,7 +36,7 @@ fn Tarjan.visit(mut self, v int)
         comps += 1
 
 ## Clear the trap site of every call that can't recurse, so it gets no
-## stack check.
+## stack check; one copied in by inlining keeps it as a `frame` site.
 pub fn mark_recursion(mut m Module)
     n := m.funcs.len()
     mut by_name := Map[str, int]()
@@ -71,4 +71,52 @@ pub fn mark_recursion(mut m Module)
                 if i.op == "call" and i.site >= 0
                     callee := by_name.get(i.name) else -1
                     if callee < 0 or t.comp[callee] != t.comp[k]
-                        m.funcs[k].blocks[b].insts[j].site = -1
+                        if m.sites[i.site].from >= 0
+                            # A call copied in by inlining keeps its site for the
+                            # frames it stands for (trace.frame.2), as a `frame`
+                            # site, which has no stack check.
+                            m.sites[i.site].kind = "frame"
+                        else
+                            m.funcs[k].blocks[b].insts[j].site = -1
+
+## The names of the functions that can call themselves, directly or through
+## others: those on a cycle of the call graph (the inliner leaves them alone,
+## ADR 0940).
+pub fn recursive_names(m Module) Set[str]
+    n := m.funcs.len()
+    mut by_name := Map[str, int]()
+    for k in 0..n
+        by_name[m.funcs[k].name] = k
+    mut edges := List[List[int]]()
+    mut selfs := Set[str]()
+    for f in m.funcs
+        mut out := List[int]()
+        for b in f.blocks
+            for i in b.insts
+                if i.op == "call"
+                    if k := by_name.get(i.name)
+                        out.push(k)
+                    if i.name == f.name
+                        selfs.add(f.name)
+        edges.push(out)
+    mut t := Tarjan(
+        edges: edges,
+        index: [-1 for _ in 0..n],
+        low: [0 for _ in 0..n],
+        on: [false for _ in 0..n],
+        stack: [],
+        comp: [0 for _ in 0..n],
+        next: 0,
+        comps: 0,
+    )
+    for v in 0..n
+        if t.index[v] < 0
+            t.visit(v)
+    mut size := [0 for _ in 0..t.comps]
+    for k in 0..n
+        size[t.comp[k]] += 1
+    mut rec := selfs
+    for k in 0..n
+        if size[t.comp[k]] > 1
+            rec.add(m.funcs[k].name)
+    rec

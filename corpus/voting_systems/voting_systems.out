@@ -1,0 +1,14 @@
+box one
+  plurality: tie between Ada/Ben/Cyd
+  borda: Cyd
+  runoff: Cyd
+box two
+  plurality: tie between Ada/Ben/Cyd/Dee
+  borda: tie between Ada/Ben/Cyd/Dee
+  runoff: Dee
+box three
+  bad ballot 'Ada>Zed'
+box four
+  plurality: no ballots
+  borda: no ballots
+  runoff: no ballots

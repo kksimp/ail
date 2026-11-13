@@ -1,0 +1,15 @@
+dry run:
+  a.txt       2 matches
+  b.md        2 matches
+  c.cfg       0 matches
+  d.txt       5 matches
+apply:
+  a.txt       2 replaced
+  b.md        2 replaced
+  d.txt       5 replaced
+  3 files changed, 9 replacements
+expected 9, replaced 9
+verify:
+  matches left: 0
+b.md now: # color guide | Pick a color.
+cleaned up: true

@@ -1,0 +1,79 @@
+## 0/1 knapsack by dynamic programming. The table holds the best value for
+## each prefix of the items and each capacity; walking it backwards recovers
+## which items were taken. Prints the plan for several capacities.
+
+struct Item
+    name str
+    weight int
+    value int
+
+fn solve(items List[Item], cap int) List[int]
+    width := cap + 1
+    mut table := List[int]()
+    cells := (items.len() + 1) * width
+    for k in 0..cells
+        table.push(0)
+    for row in 1..=items.len()
+        item := items[row - 1]
+        for w in 0..=cap
+            mut best := table[(row - 1) * width + w]
+            if item.weight <= w
+                cand := table[(row - 1) * width + w - item.weight] + item.value
+                if cand > best
+                    best = cand
+            table[row * width + w] = best
+    mut chosen := List[int]()
+    mut left := cap
+    mut idx := items.len()
+    while idx > 0
+        if table[idx * width + left] != table[(idx - 1) * width + left]
+            chosen.push(idx - 1)
+            left -= items[idx - 1].weight
+        idx -= 1
+    chosen.reverse()
+    chosen
+
+fn total_value(items List[Item], picks List[int]) int
+    mut sum := 0
+    for i in picks
+        sum += items[i].value
+    sum
+
+fn total_weight(items List[Item], picks List[int]) int
+    mut sum := 0
+    for j in picks
+        sum += items[j].weight
+    sum
+
+fn main()
+    items := [
+        Item(name: "tent", weight: 7, value: 12),
+        Item(name: "stove", weight: 3, value: 7),
+        Item(name: "water", weight: 4, value: 9),
+        Item(name: "food", weight: 5, value: 10),
+        Item(name: "camera", weight: 2, value: 6),
+        Item(name: "books", weight: 6, value: 5),
+        Item(name: "jacket", weight: 3, value: 4),
+    ]
+    for cap in [0, 5, 10, 15, 30]
+        picks := solve(items, cap)
+        names := [items[i].name for i in picks]
+        label := if names.is_empty() then "nothing" else names.join(", ")
+        print("capacity {cap}: value {total_value(items, picks)}, weight {total_weight(items, picks)}: {label}")
+
+@test fn zero_capacity_takes_nothing()
+    assert_eq(solve([Item(name: "a", weight: 1, value: 5)], 0).len(), 0)
+
+@test fn prefers_two_small_over_one_big()
+    items := [
+        Item(name: "big", weight: 10, value: 10),
+        Item(name: "s1", weight: 5, value: 7),
+        Item(name: "s2", weight: 5, value: 7),
+    ]
+    picks := solve(items, 10)
+    assert_eq(total_value(items, picks), 14)
+    assert_eq(picks, [1, 2])
+
+@test fn takes_everything_when_it_fits()
+    items := [Item(name: "a", weight: 2, value: 3), Item(name: "b", weight: 3, value: 4)]
+    assert_eq(solve(items, 5), [0, 1])

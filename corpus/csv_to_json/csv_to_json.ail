@@ -1,0 +1,73 @@
+## CSV to JSON: converts an embedded CSV table into a JSON array of objects.
+## Integers and booleans stay bare, empty cells become null, everything else
+## is quoted and escaped; rows with the wrong number of cells are reported.
+
+fn data() List[str]
+    [
+        "name,age,city,active",
+        "ada,36,London,true",
+        "bob,41,New York,false",
+        "bad,row",
+        "Dee \"D\" Lee,25,Rome,false",
+        "linus,,Helsinki,true",
+        "grace,-3,Paris,true",
+    ]
+
+fn quote(s str) str
+    esc := s.replace("\\", "\\\\").replace("\"", "\\\"")
+    "\"{esc}\""
+
+fn value(cell str) str
+    if cell == ""
+        return "null"
+    if cell == "true" or cell == "false"
+        return cell
+    n := cell.to_int() else return quote(cell)
+    "{n}"
+
+fn object(headers List[str], cells List[str]) str
+    mut parts := List[str]()
+    for i in 0..headers.len()
+        parts.push("{quote(headers[i])}: {value(cells[i])}")
+    lb := "\{"
+    rb := "}"
+    body := parts.join(", ")
+    "{lb}{body}{rb}"
+
+fn convert(lines List[str], mut skipped List[str]) List[str]
+    headers := [h.trim() for h in lines[0].split(",")]
+    mut objs := List[str]()
+    for i in 1..lines.len()
+        cells := [c.trim() for c in lines[i].split(",")]
+        if cells.len() != headers.len()
+            skipped.push("line {i + 1}: expected {headers.len()} cells, got {cells.len()}")
+            continue
+        objs.push(object(headers, cells))
+    objs
+
+fn main()
+    mut skipped := List[str]()
+    objs := convert(data(), mut skipped)
+    print("[")
+    for i in 0..objs.len()
+        comma := if i < objs.len() - 1 then "," else ""
+        print("  {objs[i]}{comma}")
+    print("]")
+    print("{objs.len()} objects, {skipped.len()} skipped")
+    for s in skipped
+        print("skipped {s}")
+
+@test fn values_are_typed()
+    assert_eq(value("42"), "42")
+    assert_eq(value("true"), "true")
+    assert_eq(value(""), "null")
+    assert_eq(value("hi"), "\"hi\"")
+
+@test fn quotes_are_escaped()
+    assert_eq(quote("a\"b"), "\"a\\\"b\"")
+
+@test fn short_rows_are_skipped()
+    mut skipped := List[str]()
+    objs := convert(["a,b", "1,2", "3"], mut skipped)
+    assert_eq(objs.len(), 1)
+    assert_eq(skipped.len(), 1)

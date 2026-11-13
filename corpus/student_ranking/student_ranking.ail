@@ -1,0 +1,79 @@
+## Student ranking: averages each student's exam scores in tenths (integer
+## math), then ranks them with ties sharing a rank (1, 2, 2, 4).
+
+struct Standing
+    name str
+    total int
+    count int
+    tenths int
+
+fn data() List[str]
+    [
+        "ana,math,92",
+        "ben,math,75",
+        "cy,math,88",
+        "ana,art,85",
+        "dee,math,75",
+        "ben,art,80",
+        "cy,art,80",
+        "eli,math,60",
+        "dee,art,80",
+        "eli,art,x",
+        "ana,music,90",
+        "ben,music,70",
+        "cy,music,97",
+        "fay,music",
+    ]
+
+fn collect(lines List[str]) List[Standing]
+    mut totals := Map[str, int]()
+    mut counts := Map[str, int]()
+    for line in lines
+        cells := line.split(",")
+        if cells.len() != 3
+            continue
+        score := cells[2].to_int() else continue
+        totals[cells[0]] += score
+        counts[cells[0]] += 1
+    mut out := List[Standing]()
+    for name in totals.keys().sorted()
+        t := totals[name]
+        c := counts[name]
+        out.push(Standing(name: name, total: t, count: c, tenths: t * 10 / c))
+    out
+
+fn rank_all(st List[Standing]) List[Standing]
+    st.sorted(by: |s| s.name).sorted(by: |s| -s.tenths)
+
+fn fmt_tenths(t int) str
+    "{t / 10}.{t % 10}"
+
+fn main()
+    ranked := rank_all(collect(data()))
+    print("rank name  exams  avg")
+    mut rank := 0
+    mut prev := -1
+    for i in 0..ranked.len()
+        s := ranked[i]
+        if s.tenths != prev
+            rank = i + 1
+            prev = s.tenths
+        avg := fmt_tenths(s.tenths)
+        print("{rank:>4} {s.name:<5} {s.count:>5} {avg:>5}")
+    best := ranked[0]
+    print("top: {best.name} with total {best.total}")
+
+@test fn averages_in_tenths()
+    st := collect(["a,x,90", "a,y,85"])
+    assert_eq(st.len(), 1)
+    assert_eq(st[0].tenths, 875)
+    assert_eq(fmt_tenths(875), "87.5")
+
+@test fn skips_bad_lines()
+    st := collect(["a,x,1", "a,y", "b,x,q"])
+    assert_eq(st.len(), 1)
+    assert_eq(st[0].count, 1)
+
+@test fn ties_sort_by_name()
+    st := rank_all(collect(["z,m,50", "a,m,50", "k,m,70"]))
+    assert_eq([s.name for s in st], ["k", "a", "z"])

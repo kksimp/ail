@@ -1,0 +1,24 @@
+origin
+y axis 5
+x axis 6
+small
+at 30,4
+from origin
+from origin: a
+vertical to 2,9
+line
+empty
+circle 2
+strip 7
+rect
+poly
+minus
+plus or times
+op
+zero
+num
+let at column 1
+keyword
+go
+x0 on
+0 1

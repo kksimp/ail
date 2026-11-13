@@ -1,0 +1,109 @@
+## Sparse text diff: builds a shortest edit script between two texts with a
+## longest-common-subsequence table, then prints only the changed hunks with a
+## chosen number of context lines and "@@ -start,len +start,len @@" headers.
+
+struct Edit
+    kind str
+    text str
+
+fn edit_script(a List[str], b List[str]) List[Edit]
+    mut g := Grid.fill(a.len() + 1, b.len() + 1, 0)
+    for r in 0..a.len()
+        for c in 0..b.len()
+            if a[r] == b[c]
+                g[r + 1, c + 1] = g[r, c] + 1
+            else
+                g[r + 1, c + 1] = g[r, c + 1].max(g[r + 1, c])
+    mut rev := List[Edit]()
+    mut i := a.len()
+    mut j := b.len()
+    while i > 0 or j > 0
+        if i > 0 and j > 0 and a[i - 1] == b[j - 1]
+            rev.push(Edit(kind: " ", text: a[i - 1]))
+            i -= 1
+            j -= 1
+        elif j > 0 and (i == 0 or g[i, j - 1] >= g[i - 1, j])
+            rev.push(Edit(kind: "+", text: b[j - 1]))
+            j -= 1
+        else
+            rev.push(Edit(kind: "-", text: a[i - 1]))
+            i -= 1
+    rev.reversed()
+
+## Marks every edit that is a change or lies within `ctx` lines of one.
+fn keep_flags(edits List[Edit], ctx int) List[bool]
+    n := edits.len()
+    mut keep := List[bool]()
+    for i in 0..n
+        keep.push(false)
+    for i in 0..n
+        if edits[i].kind != " "
+            lo := (i - ctx).max(0)
+            hi := (i + ctx).min(n - 1)
+            for j in lo..=hi
+                keep[j] = true
+    keep
+
+fn hunks(edits List[Edit], ctx int) List[str]
+    keep := keep_flags(edits, ctx)
+    mut out := List[str]()
+    mut old_seen := 0
+    mut new_seen := 0
+    mut i := 0
+    while i < edits.len()
+        if not keep[i]
+            old_seen += 1
+            new_seen += 1
+            i += 1
+            continue
+        o0 := old_seen
+        n0 := new_seen
+        mut body := List[str]()
+        while i < edits.len() and keep[i]
+            e := edits[i]
+            body.push("{e.kind}{e.text}")
+            if e.kind != "+"
+                old_seen += 1
+            if e.kind != "-"
+                new_seen += 1
+            i += 1
+        out.push("@@ -{o0 + 1},{old_seen - o0} +{n0 + 1},{new_seen - n0} @@")
+        out.extend(body)
+    out
+
+fn show(label str, a List[str], b List[str], ctx int)
+    print("{label} (context {ctx}):")
+    out := hunks(edit_script(a, b), ctx)
+    if out.is_empty()
+        print("  no differences")
+    for line in out
+        print("  {line}")
+
+fn main()
+    before := [
+        "alpha", "beta", "gamma", "delta", "epsilon", "zeta",
+        "eta", "theta", "iota", "kappa", "lambda", "mu",
+    ]
+    mut after := before
+    after[1] = "BETA"
+    after.remove_at(7)
+    after.insert(10, "nu")
+    show("two changes", before, after, 1)
+    show("two changes", before, after, 0)
+    show("wide", before, after, 3)
+    show("same", before, before, 2)
+    show("from empty", [], ["one", "two"], 1)
+
+@test fn single_change_hunk()
+    out := hunks(edit_script(["a", "b", "c", "d"], ["a", "x", "c", "d"]), 1)
+    assert_eq(out, ["@@ -1,3 +1,3 @@", " a", "-b", "+x", " c"])
+
+@test fn no_change_no_hunks()
+    assert(hunks(edit_script(["a", "b"], ["a", "b"]), 2).is_empty())
+
+@test fn distant_changes_split()
+    a := ["1", "2", "3", "4", "5", "6", "7"]
+    b := ["x", "2", "3", "4", "5", "6", "y"]
+    out := hunks(edit_script(a, b), 1)
+    assert_eq(out.len(), 8)
+    assert(out[0].starts_with("@@ -1,2"))

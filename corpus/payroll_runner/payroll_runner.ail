@@ -1,0 +1,104 @@
+## Payroll runner. Reads "name,kind,rate,hours" records (hourly or salary),
+## computes gross pay (overtime at 1.5x over 40 hours; salary is one of 26
+## periods), a 5% pension and a two-rate income tax, and prints a pay slip per
+## employee plus totals. Bad records are reported and skipped.
+
+error enum PayError
+    BadRecord(text str) "bad record '{text}'"
+    BadKind(name str, kind str) "{name}: unknown pay kind {kind}"
+    BadHours(name str, hours int) "{name}: hours out of range ({hours})"
+
+enum Pay
+    Hourly(rate int)
+    Salary(annual int)
+
+struct Employee
+    name str
+    pay Pay
+    hours int
+
+struct Slip
+    name str
+    gross int
+    pension int
+    tax int
+    net int
+
+fn money(cents int) str
+    rest := cents % 100
+    "{cents / 100}.{rest:0>2}"
+
+fn parse_employee(text str) Employee ! PayError
+    parts := text.split(",")
+    if parts.len() != 4
+        return BadRecord(text: text)
+    name := parts[0]
+    amount := parts[2].to_int() else return BadRecord(text: text)
+    hours := parts[3].to_int() else return BadRecord(text: text)
+    if hours < 0 or hours > 80
+        return BadHours(name: name, hours: hours)
+    if parts[1] == "hourly"
+        return Employee(name: name, pay: Pay.Hourly(rate: amount), hours: hours)
+    if parts[1] == "salary"
+        return Employee(name: name, pay: Pay.Salary(annual: amount), hours: 0)
+    return BadKind(name: name, kind: parts[1])
+
+fn gross_pay(e Employee) int
+    match e.pay
+        Hourly(rate) =>
+            base := e.hours.min(40)
+            extra := if e.hours > 40 then e.hours - 40 else 0
+            base * rate + extra * rate * 3 / 2
+        Salary(annual) => annual / 26
+
+fn income_tax(taxable int) int
+    if taxable <= 100000
+        return taxable * 10 / 100
+    10000 + (taxable - 100000) * 20 / 100
+
+fn slip_for(e Employee) Slip
+    gross := gross_pay(e)
+    pension := gross * 5 / 100
+    tax := income_tax(gross - pension)
+    Slip(name: e.name, gross: gross, pension: pension, tax: tax, net: gross - pension - tax)
+
+fn main()
+    records := [
+        "ann,hourly,2250,45",
+        "bob,salary,5200000,0",
+        "cy,hourly,1800,38",
+        "dee,hourly,2000,95",
+        "eli,contract,100,10",
+        "fay,hourly,abc,10",
+        "gus,hourly,4000,40,1",
+        "hal,hourly,3100,60",
+    ]
+    mut total_gross := 0
+    mut total_net := 0
+    print("name      gross   pension       tax       net")
+    for rec in records
+        e := parse_employee(rec) else err
+            print("skipped: {err}")
+            continue
+        s := slip_for(e)
+        total_gross += s.gross
+        total_net += s.net
+        print("{s.name:<5}{money(s.gross):>10}{money(s.pension):>10}{money(s.tax):>10}{money(s.net):>10}")
+    print("gross {money(total_gross)} net {money(total_net)}")
+
+@test fn overtime_pays_time_and_a_half()
+    e := Employee(name: "t", pay: Pay.Hourly(rate: 1000), hours: 50)
+    assert_eq(gross_pay(e), 40000 + 15000)
+
+@test fn salary_is_one_period()
+    e := Employee(name: "t", pay: Pay.Salary(annual: 2600000), hours: 0)
+    assert_eq(gross_pay(e), 100000)
+
+@test fn tax_has_two_rates()
+    assert_eq(income_tax(50000), 5000)
+    assert_eq(income_tax(150000), 20000)
+
+@test fn bad_records_fail()
+    assert_err(parse_employee("a,hourly,10"))
+    assert_err(parse_employee("a,hourly,10,99"))
+    assert_err(parse_employee("a,intern,10,5"))

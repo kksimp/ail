@@ -1,0 +1,57 @@
+## An unused local is a warning (expr.bind.14, ADR 1087): a name bound with `:=` that the function
+## never reads. Parameters, loop variables and names starting with `_` don't count; the fix
+## renames it `_`. Only the main program's own functions are checked.
+use ast
+use fix
+
+## A `:=` binding of the function being checked.
+pub struct BindDecl
+    pub name str
+    pub at ast.Pos
+    pub used bool
+
+## Remember the binding `n` written at `at`.
+fn Checker.note_binding(mut self, n str, at ast.Pos)
+    if n.starts_with("_") or at.line >= 1073741824 or is_prelude_line(at.line) or module_at(
+        prog,
+        at,
+    ) != ""
+        return
+    key := pos_key(at)
+    if bind_seen.contains(key)
+        return
+    bind_seen.add(key)
+    bind_decls.push(BindDecl(name: n, at: at, used: false))
+
+## A read of the local declared at `decl`.
+fn Checker.note_read(mut self, decl ast.Pos)
+    for k in 0..bind_decls.len()
+        if bind_decls[k].at == decl
+            bind_decls[k].used = true
+
+## Warn for each binding of the function just checked that nothing read, then forget them.
+fn Checker.report_unused(mut self)
+    for b in bind_decls
+        if not b.used
+            mut d := new_diag("expr.bind.14", b.at, "`{b.name}` is bound but never used")
+            d.warning = true
+            d = d.with_help("remove it, or name it `_` to say the value is ignored on purpose")
+            diags.push(d)
+            fix_last("name it `_`", [fix.replace(b.at, b.name, "_")])
+    bind_decls = []
+    bind_seen = Set[int]()
+
+## A program with an error gets no unused-local warnings (expr.bind.14): they would bury the
+## error under noise, and a draft that fails to check often has names it hasn't used yet.
+fn quiet_unused(ds List[Diag]) List[Diag]
+    mut failing := false
+    for d in ds
+        if not d.warning
+            failing = true
+    if not failing
+        return ds
+    mut out := List[Diag]()
+    for d in ds
+        if d.rule != "expr.bind.14"
+            out.push(d)
+    out

@@ -1,0 +1,28 @@
+# An inner loop whose fixed index `bi + k` the counted loop around it bounds to
+# constants (native.bce.10): its guard is one test of the highest index against the
+# length, merged with the inner counter's. A list one element too short takes the
+# checked loop and gives the same result where it doesn't trap.
+fn step(mut s List[float], dt float)
+    for i in 0..5
+        bi := i * 7
+        for j in i + 1..5
+            bj := j * 7
+            d := s[bi] - s[bj]
+            s[bi + 3] -= d * dt * s[bj + 6]
+            s[bj + 3] += d * dt * s[bi + 6]
+
+fn rows(s List[int], n int) int
+    mut t := 0
+    for r in 1..4
+        b := r * 3 - 1
+        for c in 0..n
+            t += s[b] * c + s[b + 2]
+    t
+
+fn main()
+    mut s := [(i % 11).to_float() * 0.5 for i in 0..35]
+    for _ in 0..3
+        step(mut s, 0.125)
+    print(s)
+    print(rows([i * i for i in 0..12], 4))
+    print(rows([i - 3 for i in 0..11], 2))

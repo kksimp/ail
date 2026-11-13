@@ -138,13 +138,16 @@ enum Color
     Green
 
 fn Point.sum(self) int            # method; `self` is read-only
-    x + y                         # fields and methods by bare name (self.x)
+    self.x + self.y               # canonical; bare `x + y` works too
 
 fn Point.shift(mut self, dx int)  # may change self
-    x += dx
+    self.x += dx
 
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
+
+fn Point.scaled(self, k int = 2) Point   # a default: p.scaled() or p.scaled(k: 3), by name only
+    Point(x: x * k, y: y * k)
 
 fn is_red(c Color) bool
     match c
@@ -182,7 +185,9 @@ fn area(s Shape) int
 A bare variant pattern matches any fields and binds none (`Circle => true`).
 Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Neg(Num(0..=9))`,
 `Word("fn", (1, _))`. A bare name in a field binds it, so a variant without
-fields is written qualified there (`Cons(_, Items.Nil)`).
+fields is written qualified there (`Cons(_, Items.Nil)`). A struct is matched by
+field name, `Point(x: 0, y) =>`: a bare field name binds that field and
+unnamed fields match anything; `Rect(w: 0)` names a variant's fields.
 
 ## Absence and errors
 
@@ -222,6 +227,7 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
+- A function may end with `s.to_int() else return BadNumber(text: s)`: as a block's last line, `else return` gives the value (`err.else.7`).
 - A failing result must be handled: `?`, `else`, or returned. `parse(s)` alone
   on a line is an error.
 - `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
@@ -517,7 +523,7 @@ Inside a `for mut` loop the body can't use the list itself.
 `Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
 for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
 `Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
-`last()`, `d.at(i)`, `d.to_list()`.
+`last()`, `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 A comprehension builds a list, set or map in one expression:
 
@@ -623,6 +629,9 @@ is one expression on the same line. Parameter types come from the expected
 `fn(...)` type, or are written: `|x int| x * 2`. It copies the locals its body
 names when it is made, and can't change them; to share state, capture a `ref`.
 `fn(A) R ! E` is a function that can fail; `?` in a literal leaves the literal.
+A `fn` declared inside a function body is a local function: a block body that
+copies the outer locals it names, can call itself, and is a value. It isn't
+generic, and its parameters aren't `mut`.
 
 ```ail
 fn adder(n int) fn(int) int
@@ -633,7 +642,8 @@ fn main()
     lo := 4
     print(xs.filter(|x| x > lo))      # [8, 5, 12]
     print(xs.map(adder(1)))           # [4, 9, 6, 13]
-    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by
+    print(xs.any(|x| x > 10))         # true; also all, find (T?), group_by, count, flat_map, skip_while
+    print(xs.fold(0, |acc, x| acc + x))   # 28; Set, Map (|k, v|), Deque, Seq take the same names
 ```
 
 ## Shared cells, resources and `move`
@@ -745,6 +755,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
 | `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
 | `std.mcp` | `use std.mcp`; `connect(cmd, args) Client ! mcp.McpError { kind, message }`; `c.tools() List[Tool]`, `c.call(name, Json) Json` (`structuredContent` or the result; `mcp.text(r)` joins text blocks), `c.close()` |
+| `std.test` | `use std.test`; stubs for one test run by `ail test`, active until it ends: `files(Map[str, str])` (`fs.read_text`, `read_bytes`, `exists`), `env(Map[str, str])` (`env.get`), `clock(ms)` and `advance(ms)` (`time.now_ms`; `time.sleep_ms` moves it on), `http("GET https://host/x", status, body)` (`std.net`, no `@needs(net)`); tests are sandboxed (no net, proc or files outside the package and the test's `fs.temp_dir()`) unless `@needs(net)`, `@needs(proc)`, `@needs(fs)` (test.sandbox.1-4, test.stub.1-6) |
 | `std.toml` | `use std.toml`; `parse(text) Json ! toml.TomlError { why, line }`; tables are `Obj`, arrays `Arr`, numbers `Num`, dates `Str` (read with `get`, `str`, `num`) |
 | `std.yaml` | `use std.yaml`; `parse(text) Json ! yaml.YamlError { why, line }`; maps `Obj` (string keys), lists `Arr`, `yes`/`no` stay strings; anchors, aliases, tags, several documents and multi-line plain scalars are refused with a message |
 | `std.term` | `use std.term`; `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)` with `term.KeyCode` as `ui.KeyCode`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
@@ -878,7 +889,10 @@ fn safe_twice(x int) int
 
 C functions are declared, not imported. Types: `int`, `float`, `bool`,
 `i8`...`u64`, `f32`, and `*T` pointers; at most 6 integer-like and 8 float
-arguments; no `mut`. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
+arguments; no `mut`. A struct of those types passes and returns by value in the
+platform's C layout. A `fn(...)` parameter is a C callback: pass a declared
+function's name (`qsort(p, n, 8, compare)`), or `mem.c_fn(compare)` where C
+wants a `*u8`; state goes through a `*u8` user-data argument. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
 A narrow C `int` result is declared `i32`.
 Pointers: `p.read()`, `p.write(v)`, `p.offset(n)`, `p.is_null()`;
 `mem.alloc(n, 0)` allocates `n` ints set to the example (`0.0` gives `*float`),

@@ -1,0 +1,100 @@
+## A small suffix array built by sorting the suffixes of a short text, with
+## Kasai's linear LCP array. From them it counts the distinct substrings, finds
+## the longest repeated substring, and locates a pattern by binary search.
+
+struct SuffixArray
+    text str
+    sa List[int]
+    lcp List[int]
+
+fn SuffixArray.build(source str) SuffixArray
+    cs := source.chars()
+    count := cs.len()
+    idx := [x for x in 0..count]
+    order := idx.sorted(by: |s| source.slice(s, count))
+    mut pos_of := List[int]()
+    mut common := List[int]()
+    for _ in 0..count
+        pos_of.push(0)
+        common.push(0)
+    for k in 0..count
+        pos_of[order[k]] = k
+    mut h := 0
+    for i in 0..count
+        if pos_of[i] > 0
+            j := order[pos_of[i] - 1]
+            while i + h < count and j + h < count and cs[i + h] == cs[j + h]
+                h += 1
+            common[pos_of[i]] = h
+            if h > 0
+                h -= 1
+        else
+            h = 0
+    SuffixArray(text: source, sa: order, lcp: common)
+
+fn SuffixArray.suffix(self, k int) str
+    text.slice(sa[k], text.len())
+
+fn SuffixArray.distinct(self) int
+    n := text.len()
+    mut total := n * (n + 1) / 2
+    for v in lcp
+        total -= v
+    total
+
+fn SuffixArray.longest_repeat(self) str
+    mut best := 0
+    mut loc := 0
+    for k in 0..lcp.len()
+        if lcp[k] > best
+            best = lcp[k]
+            loc = k
+    text.slice(sa[loc], sa[loc] + best)
+
+## First rank whose suffix is >= pattern.
+fn SuffixArray.lower_bound(self, pattern str) int
+    mut lo := 0
+    mut hi := sa.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if self.suffix(mid) < pattern
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+fn SuffixArray.find_all(self, pattern str) List[int]
+    start := self.lower_bound(pattern)
+    mut stop := start
+    while stop < sa.len() and self.suffix(stop).starts_with(pattern)
+        stop += 1
+    sa[start..stop].sorted()
+
+fn main()
+    arr := SuffixArray.build("mississippi")
+    print("sa:  {arr.sa}")
+    print("lcp: {arr.lcp}")
+    for k in 0..4
+        print("suffix {k}: {arr.suffix(k)}")
+    print("distinct substrings: {arr.distinct()}")
+    print("longest repeat: {arr.longest_repeat()}")
+    for p in ["ss", "i", "issi", "pp", "x", "mississippi", "ippi"]
+        hits := arr.find_all(p)
+        print("{p}: {hits.len()} at {hits}")
+    ab := SuffixArray.build("abracadabra")
+    print("abracadabra sa: {ab.sa}")
+    print("abracadabra distinct: {ab.distinct()}, repeat: {ab.longest_repeat()}")
+
+@test fn banana_suffix_array()
+    s := SuffixArray.build("banana")
+    assert_eq(s.sa, [5, 3, 1, 0, 4, 2])
+    assert_eq(s.lcp, [0, 1, 3, 0, 0, 2])
+
+@test fn counts_distinct_substrings()
+    assert_eq(SuffixArray.build("aaa").distinct(), 3)
+    assert_eq(SuffixArray.build("abc").distinct(), 6)
+
+@test fn finds_overlapping_matches()
+    s := SuffixArray.build("aaaa")
+    assert_eq(s.find_all("aa"), [0, 1, 2])
+    assert(s.find_all("b").is_empty())

@@ -1,0 +1,86 @@
+## Text report writer: builds a quarterly sales report (aligned columns,
+## row and column totals, each region's percentage share) and streams it
+## line by line into a file, then reads the file back and prints it with line
+## numbers. The file lives in a temp directory and is removed afterwards.
+use std.file
+
+struct Row
+    region str
+    q List[int]
+
+fn data() List[Row]
+    [
+        Row(region: "north", q: [120, 135, 150, 180]),
+        Row(region: "south", q: [90, 85, 110, 95]),
+        Row(region: "east", q: [200, 210, 190, 250]),
+        Row(region: "west", q: [60, 75, 80, 70]),
+    ]
+
+fn Row.total(self) int
+    q.sum()
+
+fn format_row(r Row, grand int) str
+    share := r.total() * 100 / grand
+    cells := ["{x:>6}" for x in r.q]
+    "{r.region:<8}{cells.join("")}{r.total():>7}{share:>5}%"
+
+fn report_lines(rows List[Row]) List[str]
+    mut grand := 0
+    for r in rows
+        grand += r.total()
+    rule := "-".repeat(45)
+    mut out := [
+        "SALES REPORT",
+        "{"region":<8}{"Q1":>6}{"Q2":>6}{"Q3":>6}{"Q4":>6}{"total":>7}{"share":>6}",
+        rule,
+    ]
+    for r in rows
+        out.push(format_row(r, grand))
+    out.push(rule)
+    mut sums := [0, 0, 0, 0]
+    for r in rows
+        for i in 0..4
+            sums[i] += r.q[i]
+    cells := ["{x:>6}" for x in sums]
+    out.push("{"all":<8}{cells.join("")}{grand:>7}{100:>5}%")
+    out
+
+fn write_report(p str, lines List[str]) !
+    mut w := file.create(p)?
+    for l in lines
+        w.write_line(l)?
+    w.close()?
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_text_report_writer")?
+    p := path.join(dir, "report.txt")
+    write_report(p, report_lines(data()))?
+    mut n := 0
+    for l in fs.read_text(p)?.lines()
+        n += 1
+        print("{n:>2}| {l}")
+    print("file size: {fs.metadata(p)?.size} bytes")
+    fs.remove(p)?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn row_totals_and_shares()
+    r := Row(region: "x", q: [1, 2, 3, 4])
+    assert_eq(r.total(), 10)
+    line := format_row(r, 40)
+    assert(line.starts_with("x "))
+    assert(line.ends_with("    10   25%"))
+
+@test fn report_has_header_rows_and_footer()
+    lines := report_lines(data())
+    assert_eq(lines.len(), 9)
+    assert(lines[8].starts_with("all"))
+
+@test fn report_round_trips_through_a_file()
+    dir := fs.make_temp_dir("corpus_text_report_writer_t")?
+    p := path.join(dir, "r.txt")
+    lines := report_lines(data())
+    write_report(p, lines)?
+    assert_eq(fs.read_text(p)?.lines(), lines)
+    fs.remove(p)?
+    fs.remove(dir)?

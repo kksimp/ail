@@ -1,0 +1,4 @@
+struct Meters(float)
+
+fn main()
+    print(1)

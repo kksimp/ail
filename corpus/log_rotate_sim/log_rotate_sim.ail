@@ -1,0 +1,80 @@
+## Log rotation simulator: appends events to app.log in a temp directory and
+## rotates it (app.log -> app.log.1 -> app.log.2 ...) whenever the next line
+## would push it past a size limit, keeping a fixed number of files.
+
+fn log_name(base str, n int) str
+    if n == 0
+        return base
+    "{base}.{n}"
+
+fn current_size(p str) !int
+    if not fs.exists(p)
+        return 0
+    fs.metadata(p)?.size
+
+fn rotate(dir str, base str, keep int) !
+    oldest := path.join(dir, log_name(base, keep - 1))
+    if fs.exists(oldest)
+        fs.remove(oldest)?
+    for k in 0..keep - 1
+        j := keep - 2 - k
+        src := path.join(dir, log_name(base, j))
+        if fs.exists(src)
+            fs.rename(src, path.join(dir, log_name(base, j + 1)))?
+
+## Appends one line, rotating first when it would not fit. True if it rotated.
+fn append(dir str, base str, line str, max_bytes int, keep int) !bool
+    p := path.join(dir, base)
+    size := current_size(p)?
+    mut rotated := false
+    if size > 0 and size + line.byte_len() + 1 > max_bytes
+        rotate(dir, base, keep)?
+        rotated = true
+    fs.append_text(p, "{line}\n")?
+    rotated
+
+fn show_state(dir str) !
+    for name in fs.list_dir(dir)?.sorted()
+        size := fs.metadata(path.join(dir, name))?.size
+        print("  {name:<10}{size:>3} bytes")
+
+fn clear_dir(dir str) !
+    for name in fs.list_dir(dir)?
+        fs.remove(path.join(dir, name))?
+    fs.remove(dir)?
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_log_rotate_sim")?
+    for i in 1..=14
+        rotated := append(dir, "app.log", "event {i:02} ok", 50, 3)?
+        if rotated
+            print("rotated before event {i}")
+    print("files after 14 events:")
+    show_state(dir)?
+    oldest := fs.read_text(path.join(dir, "app.log.2"))?.lines()
+    print("oldest file starts with: {oldest[0]}")
+    newest := fs.read_text(path.join(dir, "app.log"))?.lines()
+    print("current file holds {newest.len()} lines, last: {newest[newest.len() - 1]}")
+    clear_dir(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn rotation_keeps_three_files()
+    dir := fs.make_temp_dir("corpus_log_rotate_sim_t")?
+    for i in 1..=13
+        _ := append(dir, "app.log", "event {i:02} ok", 50, 3)?
+    assert_eq(fs.list_dir(dir)?.sorted(), ["app.log", "app.log.1", "app.log.2"])
+    old := fs.read_text(path.join(dir, "app.log.2"))?.lines()
+    assert_eq(old[0], "event 05 ok")
+    clear_dir(dir)?
+
+@test fn small_logs_never_rotate()
+    dir := fs.make_temp_dir("corpus_log_rotate_sim_s")?
+    for i in 1..=3
+        rotated := append(dir, "x.log", "e{i}", 100, 2)?
+        assert(not rotated)
+    assert_eq(fs.list_dir(dir)?, ["x.log"])
+    clear_dir(dir)?
+
+@test fn names_count_up()
+    assert_eq(log_name("a.log", 0), "a.log")
+    assert_eq(log_name("a.log", 2), "a.log.2")

@@ -1,0 +1,7 @@
+plan: 3 actions
+  add    a.txt
+  update b.txt
+  delete old.txt
+after apply: 0 actions
+destination: a.txt, b.txt, c.txt
+cleaned up: true

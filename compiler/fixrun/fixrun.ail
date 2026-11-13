@@ -190,7 +190,13 @@ pub fn begin(args List[str]) Run
 ## Apply the first fix of each diagnostic in `d`, which is the check of the
 ## current `src`. `false` when there was none to apply.
 pub fn step(mut r Run, d Diagnosis) bool
-    chosen := choose(d.found, r.src)
+    # fix.apply.1: an unused local (expr.bind.14) is often a bug, so renaming it `_` is the author's call; its
+    # fix is offered by `ail check`, not applied here (else `"{n"` escaped leaves `n` unused and it is renamed).
+    mut found := List[Found]()
+    for x in d.found
+        if x.rule != "expr.bind.14"
+            found.push(x)
+    chosen := choose(found, r.src)
     if chosen.len() == 0
         return false
     r.rounds += 1

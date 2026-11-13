@@ -1,0 +1,12 @@
+state     coin      push      reset
+locked    unlocked  warned    locked
+unlocked  unlocked  locked    locked
+warned    unlocked  alarm     locked
+alarm     alarm     alarm     locked
+CP        LUL final=locked passes=1 alarms=0 skipped=0
+PPCP      LWAAA final=alarm passes=0 alarms=1 skipped=0
+PPPCR     LWAAAL final=locked passes=0 alarms=1 skipped=0
+PPPCCRCP  LWAAAALUL final=locked passes=1 alarms=1 skipped=0
+CPCPCP    LULULUL final=locked passes=3 alarms=0 skipped=0
+XCPX      LUL final=locked passes=1 alarms=0 skipped=2
+          L final=locked passes=0 alarms=0 skipped=0

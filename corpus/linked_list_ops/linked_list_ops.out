@@ -1,0 +1,6 @@
+list: [1, 4, 8, 99, 15, 16, 23] size 7
+after removes: [4, 8, 15, 16, 23]
+middle value: 15
+reversed: [23, 16, 15, 8, 4]
+merged: [1, 2, 3, 4, 9, 10, 12, 15, 20]
+names reversed: edsger,grace,ada,alan

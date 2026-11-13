@@ -1,0 +1,73 @@
+## Retry with exponential backoff and jitter on a simulated clock. A flaky
+## operation fails a fixed number of times before it succeeds; the policy
+## doubles its delay each attempt up to a cap and adds jitter from an integer
+## LCG, so every run prints the same schedule. No real sleeping happens.
+
+struct Policy
+    base int
+    cap int
+    max_attempts int
+
+struct Outcome
+    ok bool
+    attempts int
+    waited int
+    delays List[int]
+
+fn next_seed(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+## Delay before retry number `k` (0-based): base * 2^k, capped, plus jitter.
+fn delay_for(p Policy, k int, seed int) int
+    raw := (p.base * (1 << k)).min(p.cap)
+    raw + seed / 65536 % (raw / 4 + 1)
+
+fn attempt(fail_until int, n int) bool
+    n >= fail_until
+
+fn run_retry(p Policy, fail_until int, seed0 int) Outcome
+    mut seed := seed0
+    mut waited := 0
+    mut delays := List[int]()
+    for n in 1..=p.max_attempts
+        if attempt(fail_until, n)
+            return Outcome(ok: true, attempts: n, waited: waited, delays: delays)
+        if n < p.max_attempts
+            seed = next_seed(seed)
+            d := delay_for(p, n - 1, seed)
+            delays.push(d)
+            waited += d
+    Outcome(ok: false, attempts: p.max_attempts, waited: waited, delays: delays)
+
+fn show(label str, o Outcome)
+    status := if o.ok then "ok" else "gave up"
+    print("{label}: {status} after {o.attempts} attempts, waited {o.waited} ms")
+    print("  delays {o.delays}")
+
+fn main()
+    p := Policy(base: 100, cap: 1000, max_attempts: 6)
+    show("first try", run_retry(p, 1, 7))
+    show("third try", run_retry(p, 3, 7))
+    show("last try", run_retry(p, 6, 7))
+    show("hopeless", run_retry(p, 99, 7))
+    tight := Policy(base: 50, cap: 120, max_attempts: 5)
+    show("capped", run_retry(tight, 99, 11))
+
+@test fn success_needs_no_waiting()
+    o := run_retry(Policy(base: 10, cap: 100, max_attempts: 3), 1, 1)
+    assert(o.ok)
+    assert_eq(o.attempts, 1)
+    assert_eq(o.waited, 0)
+
+@test fn delays_respect_the_cap()
+    p := Policy(base: 100, cap: 300, max_attempts: 8)
+    o := run_retry(p, 99, 5)
+    assert(not o.ok)
+    assert_eq(o.delays.len(), 7)
+    for d in o.delays
+        assert(d <= 300 + 300 / 4)
+
+@test fn waited_is_the_sum_of_delays()
+    o := run_retry(Policy(base: 20, cap: 500, max_attempts: 5), 4, 3)
+    assert(o.ok)
+    assert_eq(o.waited, o.delays.sum())

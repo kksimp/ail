@@ -4,7 +4,7 @@
 - **Date:** 2026-11-12
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 04 — Types; standard library
-- **Spec rules:** [type.heap.1-5, type.deque.1-5](../spec/04-types.md)
+- **Spec rules:** [type.heap.1-5, type.deque.1-7](../spec/04-types.md)
 - **Builds on:** [ADR 0937](0937-grid-flat-2d-list.md) (prelude types), [ADR 1076](1076-struct-field-defaults.md) (field defaults)
 
 ## Context
@@ -32,8 +32,12 @@ wins, as with `Grid`).
 - Method names follow `List` and `Map` (`len`, `is_empty`, `first`, `last`,
   `push`, `pop`) for the one-collection-vocabulary item.
 
-`d[i]` and `for x in d` on a deque are a second step (checker and lowering
-hooks like `Grid`'s `g[i, j]`); until then `d.at(i)` and `for x in d.to_list()`.
+`d[i]` on a deque is `d.at(i)`: the checker types it (`compiler/check/deque.ail`,
+type.deque.6) and native lowering rewrites it to the call (`lower_deque.ail`),
+as `Grid` does for `g[i, j]`. `d[i] = v` is an error whose help says
+`d.set(i, v)`. `for x in d` uses the iteration protocol of ADR 1073:
+`Deque.next` is `pop_front`, and the loop runs on a copy (type.deque.7). `Heap`
+has no `next`; `for x in h.to_sorted()` reads it in order.
 
 ## Rejected alternatives
 

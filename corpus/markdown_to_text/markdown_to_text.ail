@@ -1,0 +1,118 @@
+## Markdown to text: renders a small Markdown subset as plain text. Level 1
+## and 2 headings are underlined, links keep their target in parentheses,
+## emphasis and code marks are dropped, bullets and quotes are re-marked and
+## fenced code is indented.
+
+fn rule(ch char, n int) str
+    mut out := ""
+    mut k := 0
+    while k < n
+        out = "{out}{ch}"
+        k += 1
+    out
+
+fn index_from(cs List[char], target char, start int) int
+    mut i := start
+    while i < cs.len()
+        if cs[i] == target
+            return i
+        i += 1
+    -1
+
+fn strip_inline(s str) str
+    cs := s.chars()
+    mut out := ""
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == '*' or c == '`'
+            i += 1
+            continue
+        if c == '['
+            shut := index_from(cs, ']', i + 1)
+            if shut > 0 and shut + 1 < cs.len() and cs[shut + 1] == '('
+                stop := index_from(cs, ')', shut + 2)
+                if stop > 0
+                    lo := i + 1
+                    ulo := shut + 2
+                    label := cs[lo..shut].join("")
+                    url := cs[ulo..stop].join("")
+                    out = "{out}{label} ({url})"
+                    i = stop + 1
+                    continue
+        out = "{out}{c}"
+        i += 1
+    out
+
+fn heading_level(line str) int
+    mut n := 0
+    for c in line.chars()
+        if c != '#'
+            break
+        n += 1
+    n
+
+fn render(text str) List[str]
+    mut out := List[str]()
+    mut in_code := false
+    for raw in text.lines()
+        line := raw.trim_end()
+        if line.starts_with("```")
+            in_code = not in_code
+            continue
+        if in_code
+            out.push("    {raw}")
+            continue
+        level := heading_level(line)
+        rest := line.slice(level, line.len())
+        if level > 0 and level <= 6 and rest.starts_with(" ")
+            title := strip_inline(rest.trim())
+            if level == 1
+                out.push(title.to_upper())
+                out.push(rule('=', title.len()))
+            elif level == 2
+                out.push(title)
+                out.push(rule('-', title.len()))
+            else
+                out.push("{title}:")
+        elif line == "---"
+            out.push(rule('-', 20))
+        elif line.starts_with("> ")
+            out.push("| {strip_inline(line.slice(2, line.len()))}")
+        elif line.starts_with("- ") or line.starts_with("* ")
+            out.push("  * {strip_inline(line.slice(2, line.len()))}")
+        else
+            out.push(strip_inline(line))
+    out
+
+fn main()
+    doc := [
+        "# Release notes",
+        "Version **2.1** is out; see the [changelog](https://example.org/log) or `ail --help`.",
+        "",
+        "## Highlights",
+        "- *Faster* builds",
+        "* Better [docs](docs/index.md)",
+        "> Note: upgrade **before** friday",
+        "---",
+        "### Install",
+        "```",
+        "ail install --all",
+        "```",
+        "Done [unclosed link](oops",
+    ]
+    for line in render(doc.join("\n"))
+        print(line)
+
+@test fn strips_marks_and_links()
+    assert_eq(strip_inline("a **b** `c`"), "a b c")
+    assert_eq(strip_inline("[x](http://y) z"), "x (http://y) z")
+    assert_eq(strip_inline("[x](oops"), "[x](oops")
+
+@test fn headings_are_underlined()
+    assert_eq(render("# Hi"), ["HI", "=="])
+    assert_eq(render("## Hey"), ["Hey", "---"])
+    assert_eq(render("### Sub"), ["Sub:"])
+
+@test fn code_is_indented()
+    assert_eq(render("```\nx *y*\n```"), ["    x *y*"])

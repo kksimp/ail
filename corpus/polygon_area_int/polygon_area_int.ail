@@ -1,0 +1,95 @@
+## Polygon measurements with integer vertices only. The shoelace formula gives
+## twice the signed area (exact, no floats), the gcd of each edge counts its
+## lattice points, and Pick's theorem then yields the interior point count.
+## Also reports orientation and whether the polygon is convex.
+
+struct Pt
+    x int
+    y int
+
+fn parse(text str) List[Pt]
+    mut pts := List[Pt]()
+    for tok in text.words()
+        p := tok.split(",")
+        pts.push(Pt(x: p[0].to_int() else 0, y: p[1].to_int() else 0))
+    pts
+
+fn gcd(a int, b int) int
+    mut x := a.abs()
+    mut y := b.abs()
+    while y != 0
+        t := x % y
+        x = y
+        y = t
+    x
+
+fn twice_area(pts List[Pt]) int
+    mut sum := 0
+    n := pts.len()
+    for i in 0..n
+        a := pts[i]
+        b := pts[(i + 1) % n]
+        sum += a.x * b.y - b.x * a.y
+    sum
+
+fn boundary_points(pts List[Pt]) int
+    mut total := 0
+    n := pts.len()
+    for i in 0..n
+        a := pts[i]
+        b := pts[(i + 1) % n]
+        total += gcd(b.x - a.x, b.y - a.y)
+    total
+
+fn is_convex(pts List[Pt]) bool
+    n := pts.len()
+    mut pos := 0
+    mut neg := 0
+    for i in 0..n
+        a := pts[i]
+        b := pts[(i + 1) % n]
+        c := pts[(i + 2) % n]
+        turn := (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+        if turn > 0
+            pos += 1
+        elif turn < 0
+            neg += 1
+    pos == 0 or neg == 0
+
+fn halves(twice int) str
+    a := twice.abs()
+    if a % 2 == 0
+        "{a / 2}"
+    else
+        "{a / 2}.5"
+
+fn report(name str, text str)
+    pts := parse(text)
+    s := twice_area(pts)
+    b := boundary_points(pts)
+    inner := (s.abs() - b + 2) / 2
+    way := if s > 0 then "counter-clockwise" else "clockwise"
+    shape := if is_convex(pts) then "convex" else "concave"
+    print("{name}: {pts.len()} vertices, {way}, {shape}")
+    print("  area {halves(s)}, boundary {b}, interior {inner}")
+
+fn main()
+    report("rectangle", "0,0 4,0 4,3 0,3")
+    report("triangle", "0,0 5,0 0,5")
+    report("slanted triangle", "1,1 6,3 2,7")
+    report("L shape", "0,0 6,0 6,2 2,2 2,5 0,5")
+    report("diamond", "3,0 6,3 3,6 0,3")
+    report("clockwise square", "0,0 0,4 4,4 4,0")
+    report("arrow", "0,0 8,4 0,8 3,4")
+
+@test fn unit_square_has_twice_area_two()
+    assert_eq(twice_area(parse("0,0 1,0 1,1 0,1")), 2)
+
+@test fn picks_theorem_matches_rectangle()
+    pts := parse("0,0 4,0 4,3 0,3")
+    assert_eq(boundary_points(pts), 14)
+    assert_eq((twice_area(pts) - boundary_points(pts) + 2) / 2, 6)
+
+@test fn concavity_detected()
+    assert(is_convex(parse("0,0 4,0 4,4 0,4")))
+    assert(not is_convex(parse("0,0 4,0 1,1 0,4")))

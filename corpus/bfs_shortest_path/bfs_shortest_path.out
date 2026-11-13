@@ -1,0 +1,15 @@
+A: 0 hops from A
+B: 1 hops from A
+C: 1 hops from A
+D: 2 hops from A
+E: 3 hops from A
+F: 3 hops from A
+G: 2 hops from A
+H: 4 hops from A
+I: not reachable from A
+J: not reachable from A
+A to H: 4 hops via A > C > G > F > H
+B to G: 3 hops via B > A > C > G
+H to A: 4 hops via H > F > G > C > A
+A to J: unreachable
+I to J: 1 hops via I > J

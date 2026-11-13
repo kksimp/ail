@@ -1,0 +1,10 @@
+city = oslo => 2 -> ann, cy
+age >= 30 and city = bergen => 1 -> eli
+age < 25 or age > 50 => 2 -> dana, eli
+name ~ a and age > 30 or city = tromso => 2 -> ann, dana
+age ~ 3 => error: operator ~ does not fit the field
+colour = red => error: unknown field colour
+age > old => error: bad number old
+city = oslo and => error: query ends early
+city = oslo xor age = 3 => error: expected and/or, found xor
+ => error: empty query

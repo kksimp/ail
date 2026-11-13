@@ -51,7 +51,8 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
     if is_list_fn_call(name, args)
         return lower_list_fn(r, name, args, npos)
     e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
-    if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or structural(e))
+    # With a key, the elements are only moved: any element type sorts (`List[List[int]]`).
+    if e.is_unknown()
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if args.len() > 1
         return unsupported(npos, "`.{name}()` with {args.len()} arguments")
@@ -75,7 +76,7 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         scopes.pop()
         # A problem still closes the loop, so the half-built function stays well formed.
         if kv := k
-            if kv.ty == Ty.Int or kv.ty == Ty.Float or kv.ty == Ty.Str or orderable_record(kv.ty)
+            if orderable_key(kv.ty)
                 kt = kv.ty
                 call(push_fn(kt), [keys, kv.id], Ty.Unit)
             else
@@ -134,7 +135,7 @@ fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos as
     k := lower_value(ast.key_body(a), Ty.Int)
     scopes.pop()
     if kv := k
-        if kv.ty == Ty.Int or kv.ty == Ty.Float or kv.ty == Ty.Str or orderable_record(kv.ty)
+        if orderable_key(kv.ty)
             kt = kv.ty
             call(push_fn(kt), [keys, kv.id], Ty.Unit)
         else

@@ -70,7 +70,7 @@ STD_FUNCTIONS := [
     ],
     ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
-    ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
+    ["mem", "alloc", "c_fn", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_exact", "read_line", "write_bytes"],
     [
         "net",
@@ -517,7 +517,11 @@ fn Checker.shuffle_call(mut self, args List[ast.Arg], at ast.Pos) Ty
 fn Checker.eprint_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(
+                l.pos,
+                "this call takes no named arguments (expr.call.3: only functions and methods you declare do)",
+                "pass the arguments positionally: `f(a, b)`",
+            )
         if a.mutable
             err_help(
                 "own.param.2",

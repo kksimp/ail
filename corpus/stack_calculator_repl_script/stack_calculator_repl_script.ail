@@ -1,0 +1,146 @@
+## A stack calculator driven by an embedded REPL script. Each line is parsed
+## into a command (push, bare numbers, add/sub/mul/div/mod, dup, swap, store and
+## load of named variables, dump), then executed. Errors are typed, reported
+## with the line, and leave the stack untouched, so the session goes on.
+
+enum Cmd
+    Push(n int)
+    Binary(op str)
+    Dup
+    Swap
+    Store(name str)
+    Load(name str)
+    Dump
+
+error enum CalcError
+    Underflow(op str, need int, have int) "{op} needs {need} values, stack has {have}"
+    DivZero(op str) "{op} by zero"
+    UnknownCommand(text str) "unknown command '{text}'"
+    UnknownVar(name str) "no variable {name}"
+    BadNumber(text str) "bad number '{text}'"
+
+struct Calc
+    stack List[int]
+    vars Map[str, int]
+
+fn read_cmd(line str) Cmd ! CalcError
+    w := line.words()
+    head := w[0]
+    if v := head.to_int()
+        return Cmd.Push(n: v)
+    if head == "push" and w.len() == 2
+        v2 := w[1].to_int() else return BadNumber(text: w[1])
+        return Cmd.Push(n: v2)
+    if w.len() == 1
+        if ["add", "sub", "mul", "div", "mod"].contains(head)
+            return Cmd.Binary(op: head)
+        if head == "dup"
+            return Cmd.Dup
+        if head == "swap"
+            return Cmd.Swap
+        if head == "dump"
+            return Cmd.Dump
+    if head == "store" and w.len() == 2
+        return Cmd.Store(name: w[1])
+    if head == "load" and w.len() == 2
+        return Cmd.Load(name: w[1])
+    return UnknownCommand(text: line)
+
+fn Calc.need(self, op str, count int) ! CalcError
+    if self.stack.len() < count
+        return Underflow(op: op, need: count, have: self.stack.len())
+
+fn Calc.binary(mut self, op str) str ! CalcError
+    self.need(op, 2)?
+    top := self.stack.len() - 1
+    b := self.stack[top]
+    a := self.stack[top - 1]
+    if (op == "div" or op == "mod") and b == 0
+        return DivZero(op: op)
+    r := match op
+        "add" => a + b
+        "sub" => a - b
+        "mul" => a * b
+        "div" => a / b
+        _ => a % b
+    _ := self.stack.pop()
+    _ := self.stack.pop()
+    self.stack.push(r)
+    ""
+
+fn Calc.dump(self) str
+    if self.stack.is_empty()
+        return "stack: (empty)"
+    items := self.stack.join(" ")
+    "stack: {items}"
+
+fn Calc.exec(mut self, cmd Cmd) str ! CalcError
+    match cmd
+        Push(n) =>
+            self.stack.push(n)
+            ""
+        Binary(op) => self.binary(op)?
+        Dup =>
+            self.need("dup", 1)?
+            self.stack.push(self.stack[self.stack.len() - 1])
+            ""
+        Swap =>
+            self.need("swap", 2)?
+            x := self.stack.pop() else 0
+            y := self.stack.pop() else 0
+            self.stack.push(x)
+            self.stack.push(y)
+            ""
+        Store(name) =>
+            top := self.stack.pop() else return Underflow(op: "store", need: 1, have: 0)
+            self.vars[name] = top
+            ""
+        Load(name) =>
+            got := self.vars.get(name) else return UnknownVar(name: name)
+            self.stack.push(got)
+            ""
+        Dump => self.dump()
+
+fn main()
+    script := ["# ring area: (10 + 4) squared", "push 10", "push 4", "add", "dup", "mul", "dump", "store sq",
+        "load sq", "push 3", "div", "dump", "div", "push 0", "div", "load nope", "bogus 1", "push x1",
+        "5", "7", "swap", "sub", "dump", "", "-7", "2", "div", "dump", "17", "5", "mod", "dump"]
+    mut calc := Calc(stack: [], vars: {})
+    mut failed := 0
+    for i, line in script.enumerate()
+        text := line.trim()
+        if text == "" or text.starts_with("#")
+            continue
+        num := i + 1
+        print("{num:>2}> {text}")
+        cmd := read_cmd(text) else err
+            print("    error: {err}")
+            failed += 1
+            continue
+        out := calc.exec(cmd) else err
+            print("    error: {err}")
+            failed += 1
+            continue
+        if not out.is_empty()
+            print("    {out}")
+    print(calc.dump())
+    for name in calc.vars.keys().sorted()
+        print("{name} = {calc.vars[name]}")
+    print("{failed} errors")
+
+@test fn arithmetic_and_vars()
+    mut c := Calc(stack: [], vars: {})
+    for text in ["6", "7", "mul", "store answer"]
+        _ := c.exec(read_cmd(text)?)?
+    assert_eq(c.vars["answer"], 42)
+    assert_eq(c.dump(), "stack: (empty)")
+
+@test fn errors_keep_the_stack()
+    mut c := Calc(stack: [], vars: {})
+    _ := c.exec(read_cmd("5")?)?
+    assert_err(c.exec(read_cmd("add")?))
+    _ := c.exec(read_cmd("0")?)?
+    assert_err(c.exec(read_cmd("div")?))
+    assert_eq(c.stack, [5, 0])
+    assert_err(read_cmd("frobnicate"))
+    assert_err(read_cmd("push abc"))

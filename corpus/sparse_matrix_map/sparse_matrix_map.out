@@ -1,0 +1,15 @@
+A has 5 of 12 cells
+  2  0  0 -1
+  0  5  0  0
+  4  0  3  0
+A transposed:
+  2  0  4
+  0  5  0
+  0  0  3
+ -1  0  0
+A x B:
+ -6  2  0
+ 10  0  0
+  0  4 21
+product nonzero: 5
+A + C has 3 cells, (0,3) = 0

@@ -1,0 +1,12 @@
+Man            TWFu                   true
+Ma             TWE=                   true
+M              TQ==                   true
+                                      true
+Hello, World!  SGVsbG8sIFdvcmxkIQ==   true
+AIL is fun     QUlMIGlzIGZ1bg==       true
+foobar         Zm9vYmFy               true
+~~~???         fn5+Pz8/               true
+decode @@@@: invalid
+decode TWF: ok
+decode T: invalid
+decode TW Fu: invalid

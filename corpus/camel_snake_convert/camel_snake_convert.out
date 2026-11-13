@@ -1,0 +1,9 @@
+parseHttpResponse  camel     parse_http_response | parseHttpResponse | ParseHttpResponse | parse-http-response
+HTTPServerConfig   Pascal    http_server_config | httpServerConfig | HttpServerConfig | http-server-config
+user_id_map        snake     user_id_map | userIdMap | UserIdMap | user-id-map
+MAX_RETRY_COUNT    SCREAMING max_retry_count | maxRetryCount | MaxRetryCount | max-retry-count
+background-color   kebab     background_color | backgroundColor | BackgroundColor | background-color
+getHTTP2Client     camel     get_http2_client | getHttp2Client | GetHttp2Client | get-http2-client
+x                  lower     x | x | X | x
+XMLParser          Pascal    xml_parser | xmlParser | XmlParser | xml-parser
+RETRY_LIMIT_MS

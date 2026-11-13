@@ -1,0 +1,115 @@
+## Income tax return calculator in whole dollars. Each line is
+## "NAME STATUS WAGES INTEREST CHILDREN WITHHELD". The status picks a standard
+## deduction and the width of the progressive brackets (10/12/22/24/35 percent);
+## each child gives a 2000 credit that cannot push the tax below zero. Bad lines
+## are typed errors; the rest print a refund or a balance due.
+
+enum Status
+    Single
+    Married
+    Head
+
+error enum TaxError
+    BadLine(text str) "cannot read return '{text}'"
+    UnknownStatus(name str) "unknown filing status {name}"
+    NegativeAmount(who str) "{who} reports a negative amount"
+
+struct Bracket
+    upto int
+    rate int
+
+struct Filing
+    who str
+    gross int
+    taxable int
+    tax int
+    credit int
+    withheld int
+
+fn Status.deduction(self) int
+    match self
+        Single => 14000
+        Married => 28000
+        Head => 21000
+
+fn Status.stretch(self) int
+    match self
+        Married => 2
+        _ => 1
+
+fn brackets(status Status) List[Bracket]
+    k := status.stretch()
+    [Bracket(upto: 11000 * k, rate: 10), Bracket(upto: 44000 * k, rate: 12),
+        Bracket(upto: 95000 * k, rate: 22), Bracket(upto: 182000 * k, rate: 24),
+        Bracket(upto: 1000000000000, rate: 35)]
+
+fn tax_on(taxable int, status Status) int
+    mut prev := 0
+    mut hundredths := 0
+    for b in brackets(status)
+        if taxable > prev
+            hundredths += (taxable.min(b.upto) - prev) * b.rate
+        prev = b.upto
+    hundredths / 100
+
+fn parse_status(s str) Status ! TaxError
+    if s == "single"
+        return Status.Single
+    if s == "married"
+        return Status.Married
+    if s == "head"
+        return Status.Head
+    return UnknownStatus(name: s)
+
+fn prepare(line str) Filing ! TaxError
+    p := line.words()
+    if p.len() != 6
+        return BadLine(text: line)
+    status := parse_status(p[1])?
+    mut nums := List[int]()
+    for text in p[2..6]
+        n := text.to_int() else return BadLine(text: line)
+        if n < 0
+            return NegativeAmount(who: p[0])
+        nums.push(n)
+    gross := nums[0] + nums[1]
+    taxable := (gross - status.deduction()).max(0)
+    tax := tax_on(taxable, status)
+    Filing(who: p[0], gross: gross, taxable: taxable, tax: tax, credit: (nums[2] * 2000).min(tax), withheld: nums[3])
+
+fn Filing.describe(self) str
+    owed := tax - credit
+    diff := owed - withheld
+    eff := if gross > 0 then owed * 1000 / gross else 0
+    result := if diff <= 0 then "refund {-diff}" else "due {diff}"
+    "{who}: gross {gross} taxable {taxable} tax {tax} credit {credit} owed {owed} -> {result} (eff {eff / 10}.{eff % 10}%)"
+
+fn main()
+    lines := [
+        "ann single 52000 300 0 4800", "bo married 120000 2500 2 9000", "cy head 38000 0 1 2000",
+        "di single 9000 100 0 0", "ed widow 50000 0 0 0", "flo single -500 0 0 0",
+        "gus single abc 0 0 0", "hal married 400000 50000 3 70000", "ivy single 200000 0 0 30000",
+    ]
+    mut total := 0
+    for line in lines
+        f := prepare(line) else err
+            print("error: {err}")
+            continue
+        print(f.describe())
+        total += f.tax - f.credit
+    print("total tax owed {total}")
+
+@test fn bracket_edges()
+    assert_eq(tax_on(0, Status.Single), 0)
+    assert_eq(tax_on(11000, Status.Single), 1100)
+    assert_eq(tax_on(22000, Status.Married), 2200)
+    assert_eq(tax_on(44000, Status.Single), 1100 + 33 * 120)
+
+@test fn credit_is_capped()
+    f := prepare("a head 30000 0 5 0")?
+    assert_eq(f.credit, f.tax)
+
+@test fn rejects_bad_returns()
+    assert_err(prepare("a single 1 2 3"))
+    assert_err(prepare("a trust 1 2 3 4"))
+    assert_err(prepare("a single -1 2 3 4"))

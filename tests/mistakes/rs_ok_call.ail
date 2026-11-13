@@ -1,0 +1,10 @@
+error enum E
+    Bad
+
+fn f(n int) int ! E
+    if n > 0
+        return Ok(n)
+    return E.Bad
+
+fn main()
+    print(f(1) else 0)

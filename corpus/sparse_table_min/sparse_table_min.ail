@@ -1,0 +1,81 @@
+## A sparse table for range-minimum queries: level k holds the minimum of every
+## window of 2^k items, so a query combines two overlapping windows in O(1).
+## It reports the minimum and the position of the first minimum for a set of
+## ranges over LCG-made data, and checks every range against a plain scan.
+
+struct Sparse
+    levels List[List[int]]
+    logs List[int]
+
+fn Sparse.build(data List[int]) Sparse
+    count := data.len()
+    mut lg := [0, 0]
+    for i in 2..=count
+        lg.push(lg[i / 2] + 1)
+    mut lv := [data]
+    mut width := 1
+    while width * 2 <= count
+        prev := lv[lv.len() - 1]
+        mut row := List[int]()
+        for i in 0..count - width * 2 + 1
+            row.push(prev[i].min(prev[i + width]))
+        lv.push(row)
+        width *= 2
+    Sparse(levels: lv, logs: lg)
+
+## Minimum of the half-open range [l, r), which must not be empty.
+fn Sparse.min_of(self, l int, r int) int
+    k := logs[r - l]
+    row := levels[k]
+    row[l].min(row[r - (1 << k)])
+
+fn argmin_scan(data List[int], l int, r int) int
+    mut best := l
+    for i in l..r
+        if data[i] < data[best]
+            best = i
+    best
+
+fn next_rand(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn main()
+    mut seed := 99
+    mut data := List[int]()
+    for _ in 0..20
+        seed = next_rand(seed)
+        data.push(seed / 65536 % 90 + 10)
+    print("data: {data}")
+    sp := Sparse.build(data)
+    print("levels: {sp.levels.len()}")
+    for q in [(0, 20), (0, 1), (5, 12), (13, 20), (3, 4), (8, 16)]
+        lo := q.0
+        hi := q.1
+        m := sp.min_of(lo, hi)
+        pos := argmin_scan(data, lo, hi)
+        print("min[{lo}, {hi}) = {m} at {pos}")
+    mut bad := 0
+    mut checked := 0
+    for l in 0..20
+        for r in l + 1..21
+            checked += 1
+            if sp.min_of(l, r) != data[argmin_scan(data, l, r)]
+                bad += 1
+    print("checked {checked} ranges, {bad} wrong")
+
+@test fn single_item_windows()
+    sp := Sparse.build([5, 3, 8])
+    assert_eq(sp.min_of(0, 1), 5)
+    assert_eq(sp.min_of(1, 2), 3)
+
+@test fn overlapping_windows_cover_odd_lengths()
+    sp := Sparse.build([9, 4, 7, 1, 6, 8, 2])
+    assert_eq(sp.min_of(0, 3), 4)
+    assert_eq(sp.min_of(1, 6), 1)
+    assert_eq(sp.min_of(4, 7), 2)
+
+@test fn whole_range_is_global_minimum()
+    xs := [12, 15, 11, 30, 11, 40]
+    sp := Sparse.build(xs)
+    assert_eq(sp.min_of(0, 6), 11)
+    assert_eq(xs.min() else 0, 11)

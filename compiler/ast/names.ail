@@ -90,7 +90,7 @@ fn block_names(body List[Stmt], mut out Set[str])
     for s in body
         stmt_names(s, mut out)
 
-fn stmt_names(s Stmt, mut out Set[str])
+pub fn stmt_names(s Stmt, mut out Set[str])
     match s
         Let(_, _, _, value, otherwise) =>
             expr_names(value, mut out)
@@ -119,3 +119,6 @@ fn stmt_names(s Stmt, mut out Set[str])
             block_names(body, mut out)
         Unsafe(body, _) => block_names(body, mut out)
         LetTuple(_, value, _) => expr_names(value, mut out)
+        LocalFn(d) =>
+            if body := d.body
+                block_names(body, mut out)

@@ -1,0 +1,12 @@
+3 4 + => 7
+5 1 2 + 4 * + 3 - => 14
+2 dup * dup * => 16
+10 3 swap / => 0
+7 -2 * => -14
+1 + => error: stack underflow at +
+8 0 / => error: division by zero
+4 5 pow => error: unknown token pow
+1 2 3 => error: 3 values left on the stack
+ => error: stack underflow at end
+9 drop => error: stack underflow at end
+5 of 11 programs succeeded

@@ -1,0 +1,60 @@
+## Fan-in: several producer tasks send tagged messages into one shared
+## channel and main merges them. Arrival order varies between runs, so the
+## merged list is sorted; per-producer order is verified while receiving.
+
+struct Msg
+    src int
+    seq int
+    text str
+
+struct Merged
+    msgs List[Msg]
+    in_order bool
+
+fn producer(id int, count int, out Channel[Msg])
+    for s in 1..=count
+        out.send(Msg(src: id, seq: s, text: "p{id}-m{s}"))
+
+fn fan_in(counts List[int]) Merged
+    ch := Channel[Msg](4)
+    g := TaskGroup()
+    for k in 0..counts.len()
+        g.add(spawn producer(k + 1, counts[k], ch))
+    mut last := Map[int, int]()
+    mut in_order := true
+    mut msgs := List[Msg]()
+    for _ in 0..counts.sum()
+        m := ch.recv() else break
+        prev := last.get(m.src) else 0
+        if m.seq <= prev
+            in_order = false
+        last[m.src] = m.seq
+        msgs.push(m)
+    Merged(msgs: msgs.sorted(by: |x| x.src * 1000 + x.seq), in_order: in_order)
+
+fn main()
+    merged := fan_in([5, 3, 4, 1])
+    print("received {merged.msgs.len()} messages, per-producer order kept: {merged.in_order}")
+    mut per_src := Map[int, int]()
+    for m in merged.msgs
+        per_src[m.src] += 1
+    for s in per_src.keys().sorted()
+        print("producer {s}: {per_src[s]} messages")
+    first := merged.msgs[0]
+    last_msg := merged.msgs[merged.msgs.len() - 1]
+    print("first: {first.text}, last: {last_msg.text}")
+    texts := [x.text for x in merged.msgs]
+    print(texts.join(" "))
+    print("text bytes: {[x.text.byte_len() for x in merged.msgs].sum()}")
+
+@test fn every_message_arrives()
+    m := fan_in([2, 2, 2])
+    assert_eq(m.msgs.len(), 6)
+    assert(m.in_order)
+
+@test fn merged_list_is_sorted()
+    m := fan_in([3, 2])
+    assert_eq([x.text for x in m.msgs], ["p1-m1", "p1-m2", "p1-m3", "p2-m1", "p2-m2"])
+
+@test fn no_producers_no_messages()
+    assert_eq(fan_in([]).msgs.len(), 0)

@@ -1,0 +1,13 @@
+# ffi.cb.2: a C callback is the name of a declared function, not a local.
+use std.mem
+
+extern c fn qsort(base *int, n u64, size u64, cmp fn(*int, *int) i32)
+
+fn compare(a *int, b *int) i32
+    0
+
+fn main()
+    f := compare
+    unsafe
+        p := mem.alloc(2, 0)
+        qsort(p, 2, 8, f)

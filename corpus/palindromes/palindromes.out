@@ -1,0 +1,12 @@
+A man, a plan, a canal: Panama   true
+Was it a car or a cat I saw?     true
+No lemon, no melon               true
+Hello, World                     false
+                                 true
+babad: longest=bab count=7
+cbbd: longest=bb count=5
+forgeeksskeegfor: longest=geeksskeeg count=23
+abacdfgdcaba: longest=aba count=14
+x: longest=x count=1
+abcde: longest=a count=5
+palindromes divisible by 11 in 100..399: [121, 242, 363]

@@ -1,0 +1,14 @@
+fcfs
+  A    finish   8 turnaround   8 waiting   0
+  B    finish  12 turnaround  11 waiting   7
+  C    finish  21 turnaround  19 waiting  10
+  D    finish  26 turnaround  23 waiting  18
+  E    finish  32 turnaround   2 waiting   0
+  average waiting: 7 (total 35)
+round robin q=3
+  B    finish  16 turnaround  15 waiting  11
+  D    finish  21 turnaround  18 waiting  13
+  A    finish  23 turnaround  23 waiting  15
+  C    finish  26 turnaround  24 waiting  15
+  E    finish  32 turnaround   2 waiting   0
+  average waiting: 10 (total 54)

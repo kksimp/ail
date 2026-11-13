@@ -1,0 +1,24 @@
+## `m.to_json()` on a `Map[K, V]` and `x.to_json()` on a `T?` (json.derive.4,
+## ADR 1093): an instance of the prelude's `json_of_map` or `json_of_opt`,
+## declared on first use and keyed `Map[str, int].to_json`, as a `List[T]`
+## method from `impl ToJson for List[T ToJson]` is.
+fn Lower.json_builtin_method(mut self, t Ty, name str) str?
+    if name != "to_json"
+        return none
+    mut g := ""
+    mut binds := Map[str, Ty]()
+    match t
+        Map(k, v) =>
+            g = "json_of_map"
+            binds["K"] = k
+            binds["V"] = v
+        Opt(e) =>
+            g = "json_of_opt"
+            binds["T"] = e
+        _ => return none
+    key := "{t.name()}.{name}"
+    if sigs.contains(key) or bad.contains(key)
+        return key
+    gf := gen.fns.get(g)?
+    instance(key, gf.decl, binds, "", gf.file)?
+    key

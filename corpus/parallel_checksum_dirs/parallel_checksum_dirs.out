@@ -1,0 +1,7 @@
+dir0: 2 files, 11 bytes, 4bab7fe07b
+dir1: 2 files, 11 bytes, 4bab7fe07b
+dir2: 2 files, 12 bytes, f7d41cd9e9
+dir3: 3 files,  8 bytes, dc258b0e99
+dir0 and dir1 have identical content
+matches sequential run: true
+cleaned up: true

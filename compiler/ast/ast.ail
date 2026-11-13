@@ -50,6 +50,8 @@ pub struct SourceFile
 pub struct Grant
     pub package str
     pub caps List[str]
+    ## The entries as written, sorted, scopes included (`fs.read=./data`, `net`); `ail run` and `ail review` read them (eff.allow.10-11).
+    pub entries List[str]
     pub pos Pos
     pub own bool
 
@@ -204,6 +206,9 @@ pub struct Param
     pub mutable bool
     pub moved bool
     pub ty TypeRef
+    ## `name Type = value`: the value a call that leaves the parameter out passes
+    ## (expr.call.4). A plain constant, as a struct field's default.
+    pub default Expr?
 
 ## A type as written.
 pub struct TypeRef
@@ -247,6 +252,9 @@ pub enum Stmt
     ## `a, mut b := t`, one name per element (type.tuple.4); `for a, b in xs`
     ## starts its body with one, over the hidden variable `(a, b)`.
     LetTuple(names List[Binder], value Expr, pos Pos)
+    ## `fn name(params) R` and its block inside a function body: a named
+    ## local function (type.fn.9-10, ADR 1094).
+    LocalFn(decl FnDecl)
 
 ## One name of a destructuring binding (type.tuple.4).
 pub struct Binder
@@ -391,6 +399,9 @@ pub enum Pattern
     ## `Variant(p, ...)` whose fields hold patterns of their own
     ## (expr.match.13): a plain name binds its field, `_` ignores it.
     Nested(qualifier str?, name str, fields List[Pattern], pos Pos)
+    ## `Point(x: 0, y)` or `Circle(r: 1..=9)`: fields matched by name, a bare
+    ## name binding the field of that name (expr.match.14).
+    StructPat(qualifier str?, name str, labels List[str], fields List[Pattern], pos Pos)
 
 pub enum Literal
     IntLit(value str)
@@ -486,6 +497,36 @@ impl ToJson for Pattern
 impl FromJson for Pattern
 impl ToJson for Literal
 impl FromJson for Literal
+
+## err.else.7 (ADR 1095): `e else return ...`, `else break` or `else continue`
+## as the last statement of a block whose value is used is the expression
+## `OrElse` (err.else.6), so a function can end with
+## `m.get(k) else return Missing(key: k)`; none for any other `else`.
+pub fn tail_else(value Expr, otherwise Else) Expr?
+    match otherwise
+        Leave => Expr.OrElse(value: value, otherwise: otherwise, pos: expr_start(value))
+        _ => none
+
+## Where an expression starts, for the position of a tail `else` (err.else.7).
+fn expr_start(e Expr) Pos
+    match e
+        Str(_, p) => p
+        Bytes(_, p) => p
+        Interp(_, p) => p
+        Int(_, p) => p
+        Float(_, p) => p
+        Char(_, p) => p
+        Bool(_, p) => p
+        NoneLit(p) => p
+        Hole(p) => p
+        Name(_, p) => p
+        TypeArgs(_, _, p) => p
+        Call(callee, _, _) => expr_start(callee)
+        Method(recv, _, _, _) => expr_start(recv)
+        Member(recv, _, _) => expr_start(recv)
+        Index(recv, _, _) => expr_start(recv)
+        Try(inner, _, _) => expr_start(inner)
+        _ => Pos(line: 0, col: 0)
 
 ## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
 ## the argument's value is the function literal, and `Arg.param` names `x`.

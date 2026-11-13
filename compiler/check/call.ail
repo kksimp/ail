@@ -150,10 +150,15 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             binds = explicit_args(n, s.generics[s.owner..s.owner + s.declared], targs, npos)
         if has_attr(prog.fns[i], "variadic c")
             return check_variadic(n, s, args, npos, expect)
+        if prog.fns[i].ext != none
+            return check_c_call(n, s, binds, args, npos, expect)
         return check_call(n, s, binds, args, none, npos, expect)
     if v := bare_variant(n, npos, expect)
         return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
-    args_only(args)
+    # A habit call such as `make(Map[str, int])` (a call hint of expr.name.1) is one mistake: its fix rewrites the
+    # whole call, so its argument, often a type written as a value, isn't reported again.
+    if call_hint(n, args.len()) == none or traits.contains(n)
+        args_only(args)
     if traits.contains(n)
         err_help(
             "expr.name.1",
@@ -185,6 +190,7 @@ fn plain_sig(receiver bool?, params List[Ty], result Ty) Sig
         receiver: receiver,
         params: [SigParam(mutable: false, ty: t) for t in params],
         names: [],
+        required: params.len(),
         moves: [],
         ret: result,
         generics: [],
@@ -538,6 +544,20 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             first = i
             break
     if first < 0
+        # expr.call.4: positional arguments fill the parameters without a default.
+        if args.len() == sig.required and sig.required < sig.params.len()
+            return [i for i in 0..args.len()]
+        if args.len() > sig.required
+            and args.len() <= sig.params.len()
+            and sig.required < sig.params.len()
+            defaulted := sig.names[sig.required]
+            err_help(
+                "expr.call.4",
+                expr_pos(args[sig.required].value),
+                "`{what}`'s parameter `{defaulted}` has a default, so it is passed by name",
+                "write `{defaulted}: value`",
+            )
+            return none
         if args.len() != sig.params.len()
             mut d := new_diag("expr.call.1", at, miscount)
             # `t.reshape(2, 3)`: the shape is one list.
@@ -580,6 +600,16 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                 diags.push(d)
                 ok = false
                 continue
+        elif i >= sig.required and sig.required < sig.params.len()
+            defaulted := sig.names[sig.required]
+            err_help(
+                "expr.call.4",
+                expr_pos(a.value),
+                "`{what}`'s parameter `{defaulted}` has a default, so it is passed by name",
+                "write `{defaulted}: value`",
+            )
+            ok = false
+            continue
         elif i > first
             mut d := new_diag(
                 "expr.call.3",
@@ -613,11 +643,11 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             filled[slot] = i
     if not ok
         return none
-    missing := [sig.names[k] for k in 0..filled.len() if filled[k] < 0]
+    missing := [sig.names[k] for k in 0..filled.len() if filled[k] < 0 and k < sig.required]
     if missing.len() > 0
         err("expr.call.1", at, "`{what}` is missing {list_names(missing)}")
         return none
-    filled
+    [x for x in filled if x >= 0]
 
 @allow("expr.match.3") fn is_index(e ast.Expr) bool
     match e
@@ -652,7 +682,11 @@ fn Checker.finish(mut self, what str, vars List[int], mut binds List[Bind], at a
 fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(
+                l.pos,
+                "this call takes no named arguments (expr.call.3: only functions and methods you declare do)",
+                "pass the arguments positionally: `f(a, b)`",
+            )
         if a.mutable
             err_help(
                 "own.param.2",
@@ -1026,6 +1060,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0
+        if t := enum_name_method(rt, n, at, args)
+            return t
         args_only(args)
         if not hidden_std_module(recv, n, at)
             no_method(rt, n, at)
@@ -1213,6 +1249,9 @@ fn Checker.associated(
     i := method_index(tn, n) else
         if t := impl_assoc_call(d, explicit, n, at, args, expect)
             return t
+        if e := enum_of_def(d)
+            if t := enum_static(e, n, at, args)
+                return t
         args_only(args)
         err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
         return Ty.Unknown
@@ -1503,6 +1542,8 @@ fn Checker.has_field(self, t Ty, n str) bool
         return rt
     if ge := grid_elem(rt)
         return grid_index(index, ge)
+    if de := deque_elem(rt)
+        return deque_index(index, de)
     # `m[k]` (type.map.3).
     if is_map_ty(rt)
         if is_range(index)
@@ -1600,7 +1641,11 @@ fn Checker.reject_test_call(mut self, i int, at ast.Pos)
 fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
     for a in args
         if l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+            unsupported_help(
+                l.pos,
+                "this call takes no named arguments (expr.call.3: only functions and methods you declare do)",
+                "pass the arguments positionally: `f(a, b)`",
+            )
         if a.mutable
             err_help(
                 "own.param.2",
@@ -1649,7 +1694,12 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
             )
         if args.len() == 2
             hint := if errs.len() == 1 then errs[0] else Ty.Unknown
-            st := expr(args[1].value, if hint == Ty.Unknown then none else hint, true)
+            mut st := Ty.Unknown
+            if b := bare_variant_ty(args[1].value)
+                # `assert_err(call, E.V)` for a variant with data checks the kind alone (test.assert.3).
+                st = b
+            else
+                st = expr(args[1].value, if hint == Ty.Unknown then none else hint, true)
             if is_res(t)
                 and st != Ty.Unknown
                 and st != Ty.Never
@@ -1677,6 +1727,25 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
         operator(ast.BinOp.Eq, lt, rt, at)
         text_form(lt, expr_pos(args[0].value), "test.assert.2")
     Ty.Unit
+
+## `E.V` where `V` is a variant of the non-generic enum `E` that carries data:
+## the enum's type, so `assert_err(call, E.V)` can name the kind alone.
+@allow("expr.match.3") fn Checker.bare_variant_ty(self, e ast.Expr) Ty?
+    match e
+        Member(recv, n, _) =>
+            match recv
+                Name(head, _) =>
+                    d := types.get(head)?
+                    match d
+                        DEnum(i) =>
+                            v := variant_index(i, n)?
+                            if prog.enums[i].variants[v].fields.len() > 0
+                                and enum_params[i].len() == 0
+                                return Ty.Enum(i, [])
+                            none
+                        _ => none
+                _ => none
+        _ => none
 
 fn assert_arity(n str) int
     match n

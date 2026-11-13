@@ -1,0 +1,77 @@
+## Run-length coding: compresses runs of letters into count+letter pairs
+## ("aaab" becomes "3a1b"), decodes them back and reports the compression ratio.
+
+fn encode(text str) str
+    mut out := ""
+    mut prev := ' '
+    mut count := 0
+    for c in text.chars()
+        if count > 0 and c == prev
+            count += 1
+        else
+            if count > 0
+                out = "{out}{count}{prev}"
+            prev = c
+            count = 1
+    if count > 0
+        out = "{out}{count}{prev}"
+    out
+
+fn decode(coded str) str?
+    mut out := ""
+    mut num := ""
+    for c in coded.chars()
+        if c.is_digit()
+            num = "{num}{c}"
+            continue
+        n := num.to_int() else return none
+        for i in 0..n
+            out = "{out}{c}"
+        num = ""
+    if num != ""
+        return none
+    out
+
+fn percent(small int, big int) int
+    if big == 0
+        return 100
+    100 * small / big
+
+fn report(text str)
+    coded := encode(text)
+    back := decode(coded) else "?"
+    ok := back == text
+    pct := percent(coded.len(), text.len())
+    print("{text:<22} {coded:<18} {pct:>4}%  round trip: {ok}")
+
+fn main()
+    for s in [
+        "aaaabbbcca",
+        "WWWWWWWWWWWWBWWWWWWWWWWWWBBBWWWWWWWWWWWWWWWWWWWWWWWWBWWWWWWWWWWWWWW",
+        "abcdef",
+        "zzzzzzzzzzzzzzzzzzzz",
+        "x",
+        "",
+    ]
+        report(s)
+    bad := ["3a2", "ab", "a3", "12"]
+    for b in bad
+        r := decode(b)
+        if r == none
+            print("decode {b}: invalid")
+        else
+            print("decode {b}: ok")
+
+@test fn encodes_runs()
+    assert_eq(encode("aaabcc"), "3a1b2c")
+    assert_eq(encode(""), "")
+    assert_eq(encode("z"), "1z")
+
+@test fn decodes_runs()
+    assert_eq(decode("3a1b2c")?, "aaabcc")
+    assert_eq(decode("12x")?, "xxxxxxxxxxxx")
+    assert(decode("5") == none)
+
+@test fn round_trips()
+    for s in ["mississippi", "aaaaaaaaaaaa", "ab", "baaab"]
+        assert_eq(decode(encode(s))?, s)

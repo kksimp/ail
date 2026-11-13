@@ -1,0 +1,92 @@
+## Layered configuration: defaults, a user file and a local override file are
+## written to a temp directory and loaded in order, later layers winning. The
+## report shows each final key with the layer that supplied it; a missing
+## layer is skipped. Typed getters fall back to a default.
+
+struct Layer
+    name str
+    file str
+
+## Parses `key = value` lines; blank lines and `#` comments are skipped.
+fn parse_conf(text str) Map[str, str]
+    mut out := Map[str, str]()
+    for line in text.lines()
+        t := line.trim()
+        if t.is_empty() or t.starts_with("#")
+            continue
+        at := t.find("=") else continue
+        out[t.slice(0, at).trim()] = t.slice(at + 1, t.len()).trim()
+    out
+
+struct Merged
+    values Map[str, str]
+    source Map[str, str]
+
+fn load_layers(dir str, layers List[Layer]) !Merged
+    mut values := Map[str, str]()
+    mut source := Map[str, str]()
+    for layer in layers
+        p := path.join(dir, layer.file)
+        if not fs.exists(p)
+            print("layer {layer.name}: missing, skipped")
+            continue
+        found := parse_conf(fs.read_text(p)?)
+        for k, v in found
+            values[k] = v
+            source[k] = layer.name
+        print("layer {layer.name}: {found.len()} keys")
+    Merged(values: values, source: source)
+
+fn get_int(m Merged, key str, fallback int) int
+    text := m.values.get(key) else return fallback
+    text.to_int() else fallback
+
+fn main() !
+    dir := fs.make_temp_dir("corpus_config_loader_layers")?
+    fs.write_text(
+        path.join(dir, "defaults.conf"),
+        "host = localhost\nport = 8080\nworkers = 2\ndebug = false\n",
+    )?
+    fs.write_text(
+        path.join(dir, "user.conf"),
+        "# user prefs\nworkers = 4\n\ntheme = dark\nport = 9090\n",
+    )?
+    layers := [
+        Layer(name: "defaults", file: "defaults.conf"),
+        Layer(name: "user", file: "user.conf"),
+        Layer(name: "local", file: "local.conf"),
+    ]
+    m := load_layers(dir, layers)?
+    for k in m.values.keys().sorted()
+        print("{k:<8} = {m.values[k]:<10} from {m.source[k]}")
+    print("port + 1 = {get_int(m, "port", 0) + 1}")
+    print("retries = {get_int(m, "retries", 3)}")
+    print("host is not a number: {get_int(m, "host", -1)}")
+    for f in fs.list_dir(dir)?
+        fs.remove(path.join(dir, f))?
+    fs.remove(dir)?
+    print("cleaned up: {not fs.exists(dir)}")
+
+@test fn parse_skips_comments_and_blanks()
+    m := parse_conf("# c\n\na = 1\n b =  two words \nbad line\n")
+    assert_eq(m.len(), 2)
+    assert_eq(m["a"], "1")
+    assert_eq(m["b"], "two words")
+
+@test fn later_layers_win()
+    dir := fs.make_temp_dir("corpus_config_loader_layers_t")?
+    fs.write_text(path.join(dir, "a.conf"), "x = 1\ny = 1\n")?
+    fs.write_text(path.join(dir, "b.conf"), "y = 2\n")?
+    m := load_layers(dir, [Layer(name: "a", file: "a.conf"), Layer(name: "b", file: "b.conf")])?
+    assert_eq(m.values["x"], "1")
+    assert_eq(m.values["y"], "2")
+    assert_eq(m.source["y"], "b")
+    fs.remove(path.join(dir, "a.conf"))?
+    fs.remove(path.join(dir, "b.conf"))?
+    fs.remove(dir)?
+
+@test fn getter_falls_back()
+    m := Merged(values: {"n": "7", "s": "x"}, source: {})
+    assert_eq(get_int(m, "n", 0), 7)
+    assert_eq(get_int(m, "s", 5), 5)
+    assert_eq(get_int(m, "missing", 9), 9)

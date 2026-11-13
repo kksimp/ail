@@ -1,0 +1,6 @@
+city    text n=7 empty=0 distinct=6 min=Aarhus max=Tromso
+pop     num  n=7 empty=0 distinct=6 min=77 max=709
+        sum=2511 mean=358
+country text n=7 empty=0 distinct=3 min=DK max=SE
+area    num  n=5 empty=2 distinct=4 min=30 max=465
+        sum=1494 mean=298

@@ -1,0 +1,79 @@
+## Matrix-chain multiplication order by dynamic programming. Given the
+## dimensions of a chain of matrices (matrix i is dims[i] x dims[i+1]), finds
+## the fewest scalar multiplications and prints the best parenthesisation.
+
+INF := 1000000000000
+
+struct Plan
+    n int
+    cost List[int]
+    split List[int]
+
+fn solve(dims List[int]) Plan
+    n := dims.len() - 1
+    mut cost := List[int]()
+    mut split := List[int]()
+    cells := n * n
+    for cell in 0..cells
+        cost.push(0)
+        split.push(-1)
+    for size in 2..=n
+        for i in 0..=(n - size)
+            j := i + size - 1
+            mut best := INF
+            for k in i..j
+                c := cost[i * n + k] + cost[(k + 1) * n + j] + dims[i] * dims[k + 1] * dims[j + 1]
+                if c < best
+                    best = c
+                    split[i * n + j] = k
+            cost[i * n + j] = best
+    Plan(n: n, cost: cost, split: split)
+
+fn parenthesize(p Plan, i int, j int) str
+    if i == j
+        return "A{i + 1}"
+    k := p.split[i * p.n + j]
+    left := parenthesize(p, i, k)
+    right := parenthesize(p, k + 1, j)
+    "({left} {right})"
+
+fn naive_cost(dims List[int]) int
+    mut total := 0
+    last := dims.len() - 1
+    for i in 1..last
+        total += dims[0] * dims[i] * dims[i + 1]
+    total
+
+fn report(dims List[int])
+    p := solve(dims)
+    n := p.n
+    best := p.cost[n - 1]
+    print("dims {dims.join("x")}: {best} multiplications, order {parenthesize(p, 0, n - 1)}, left-to-right {naive_cost(dims)}")
+
+fn main()
+    report([10, 30, 5, 60])
+    report([40, 20, 30, 10, 30])
+    report([10, 20, 30, 40, 30])
+    report([5, 10, 3, 12, 5, 50, 6])
+    report([30, 35, 15, 5, 10, 20, 25])
+    report([7, 7, 7, 7, 7])
+
+@test fn three_matrices()
+    p := solve([10, 30, 5, 60])
+    assert_eq(p.cost[2], 4500)
+    assert_eq(parenthesize(p, 0, 2), "((A1 A2) A3)")
+
+@test fn textbook_chain()
+    p := solve([30, 35, 15, 5, 10, 20, 25])
+    assert_eq(p.cost[5], 15125)
+    assert_eq(parenthesize(p, 0, 5), "((A1 (A2 A3)) ((A4 A5) A6))")
+
+@test fn single_matrix_costs_nothing()
+    p := solve([4, 9])
+    assert_eq(p.cost[0], 0)
+    assert_eq(parenthesize(p, 0, 0), "A1")
+
+@test fn never_worse_than_left_to_right()
+    dims := [3, 8, 2, 9, 4, 7]
+    p := solve(dims)
+    assert(p.cost[p.n - 1] <= naive_cost(dims))

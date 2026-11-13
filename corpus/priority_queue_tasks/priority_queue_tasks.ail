@@ -1,0 +1,64 @@
+## A task dispatcher on the std Heap: tasks are ordered by priority (lower
+## runs first) and then by arrival number, so equal priorities stay in FIFO
+## order. A second, largest-first heap picks the top scores.
+
+struct Job
+    priority int
+    seq int
+    name str
+
+impl Ord for Job
+
+fn submit(mut queue Heap[Job], mut counter int, priority int, name str)
+    counter += 1
+    queue.push(Job(priority: priority, seq: counter, name: name))
+
+fn run_all(mut queue Heap[Job]) List[str]
+    mut order := List[str]()
+    while t := queue.pop()
+        order.push("{t.name}({t.priority})")
+    order
+
+fn main()
+    mut queue := Heap[Job]()
+    mut counter := 0
+    submit(mut queue, mut counter, 3, "backup")
+    submit(mut queue, mut counter, 1, "deploy")
+    submit(mut queue, mut counter, 2, "lint")
+    submit(mut queue, mut counter, 1, "migrate")
+    submit(mut queue, mut counter, 3, "report")
+    submit(mut queue, mut counter, 2, "test")
+    print("queued {queue.len()} tasks")
+    if next := queue.peek()
+        print("next up: {next.name}")
+    print(run_all(mut queue).join(" "))
+    print("empty now: {queue.is_empty()}")
+    mut best := Heap[int](max_first: true)
+    for score in [42, 7, 19, 88, 63, 5, 71]
+        best.push(score)
+    mut top3 := List[int]()
+    for _ in 0..3
+        top3.push(best.pop() else 0)
+    print("top 3 scores: {top3}")
+
+@test fn equal_priorities_keep_arrival_order()
+    mut q := Heap[Job]()
+    mut c := 0
+    submit(mut q, mut c, 1, "first")
+    submit(mut q, mut c, 1, "second")
+    assert_eq(run_all(mut q), ["first(1)", "second(1)"])
+
+@test fn lower_priority_number_runs_first()
+    mut q := Heap[Job]()
+    mut c := 0
+    submit(mut q, mut c, 5, "late")
+    submit(mut q, mut c, 0, "urgent")
+    t := q.pop() else Job(priority: 0, seq: 0, name: "")
+    assert_eq(t.name, "urgent")
+
+@test fn max_heap_pops_largest()
+    mut h := Heap[int](max_first: true)
+    h.push(3)
+    h.push(9)
+    h.push(4)
+    assert_eq(h.pop() else 0, 9)

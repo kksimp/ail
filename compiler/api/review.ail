@@ -7,6 +7,7 @@
 ## no test reaches.
 ##
 ##     ail review main..HEAD --budget 400
+use ast
 use check
 use load
 
@@ -70,6 +71,40 @@ fn rv_effect_items(imp Impact, exposed Set[str]) List[RvItem]
             hot.push(rv_item("effects", "NEW CAPABILITY {e.id}: {delta.join(" ")}", true))
         else
             cold.push(rv_item("effects", "{e.id}: {delta.join(" ")}", false))
+    for x in cold
+        hot.push(x)
+    hot
+
+## api.rev.12: a package's `caps` entries that changed in `ail.pkg`. An entry gained, or a scope widened or
+## moved (`fs.read=./data` to `fs.read=.`), is `NEW CAPABILITY grant PACKAGE: +ENTRY`; one only
+## lost is a plain line. A package that gained a `caps` line shows all its entries as gained.
+fn rv_grant_items(old List[ast.Grant], now List[ast.Grant]) List[RvItem]
+    mut hot := List[RvItem]()
+    mut cold := List[RvItem]()
+    for g in now
+        mut was := List[str]()
+        for o in old
+            if o.package == g.package and o.own == g.own
+                was = o.entries
+        delta := rv_delta(was, g.entries)
+        if delta.len() == 0
+            continue
+        who := if g.own then "{g.package} (this package)" else g.package
+        if [d for d in delta if d.starts_with("+")].len() > 0
+            hot.push(rv_item("effects", "NEW CAPABILITY grant {who}: {delta.join(" ")}", true))
+        else
+            cold.push(rv_item("effects", "grant {who}: {delta.join(" ")}", false))
+    for o in old
+        mut kept := false
+        for g in now
+            if g.package == o.package and g.own == o.own
+                kept = true
+        if not kept and o.entries.len() > 0
+            cold.push(rv_item(
+                "effects",
+                "grant {o.package}: {rv_delta(o.entries, []).join(" ")}",
+                false,
+            ))
     for x in cold
         hot.push(x)
     hot
@@ -160,6 +195,8 @@ fn rv_items(old_path str, new_path str, std str)(List[RvItem], bool)?
     api_old := public_decls(before.0.program, rv_facts(before.1), whole)
     api_new := public_decls(after.0.program, rv_facts(after.1), whole)
     mut items := rv_effect_items(imp, exposed)
+    for x in rv_grant_items(before.0.program.grants, after.0.program.grants)
+        items.push(x)
     for x in rv_api_items(api_old, api_new)
         items.push(x)
     for x in rv_contract_items(old_all, new_all)

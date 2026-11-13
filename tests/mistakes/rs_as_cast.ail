@@ -1,0 +1,4 @@
+fn main()
+    n := 3
+    x := n as float
+    print(x)

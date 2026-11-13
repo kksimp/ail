@@ -1,0 +1,47 @@
+# type.fn.9-10 (ADR 1094): named local functions copy the outer locals they
+# name, can recurse, can fail, and are function values.
+error struct Bad
+    text str
+
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    n += 1
+
+fn parse_all(texts List[str]) List[int] ! Bad
+    fn one(t str) int ! Bad
+        n := t.to_int() else return Bad(text: t)
+        n * 10
+    mut out := List[int]()
+    for t in texts
+        out.push(one(t)?)
+    out
+
+fn main()
+    base := 100
+    fn add(x int) int
+        x + base
+    print("{add(1)}")
+    fn fact(n int) int
+        if n <= 1
+            return 1
+        n * fact(n - 1)
+    print("{fact(10)}")
+    fn fib(n int) int
+        if n < 2 then n else fib(n - 1) + fib(n - 2)
+    print([0, 1, 2, 3, 10].map(fib))
+    c := ref Counter(n: 0)
+    fn tick()
+        c.bump()
+    tick()
+    tick()
+    print("{c.n}")
+    print(parse_all(["1", "2"]) else List[int]())
+    bad := parse_all(["1", "x"]) else err
+        print("bad {err.text}")
+        List[int]()
+    print(bad)
+    fn shout(s str) str
+        s.to_upper()
+    print(["a", "b"].map(shout))

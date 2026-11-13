@@ -1,0 +1,81 @@
+## Heap sort on an in-place max-heap. The program sorts numbers from an
+## integer LCG, counts the swaps the sift-down steps make, and checks the
+## result against the built-in sort.
+
+fn sift_down(mut xs List[int], start int, stop int) int
+    mut root := start
+    mut swaps := 0
+    while 2 * root + 1 < stop
+        mut child := 2 * root + 1
+        if child + 1 < stop and xs[child] < xs[child + 1]
+            child += 1
+        if xs[root] >= xs[child]
+            return swaps
+        xs.swap(root, child)
+        swaps += 1
+        root = child
+    swaps
+
+fn heap_sort(mut xs List[int]) int
+    n := xs.len()
+    mut swaps := 0
+    mut i := n / 2 - 1
+    while i >= 0
+        swaps += sift_down(mut xs, i, n)
+        i -= 1
+    mut last := n - 1
+    while last > 0
+        xs.swap(0, last)
+        swaps += 1
+        swaps += sift_down(mut xs, 0, last)
+        last -= 1
+    swaps
+
+fn is_sorted(xs List[int]) bool
+    for i in 1..xs.len()
+        if xs[i - 1] > xs[i]
+            return false
+    true
+
+fn next_rand(s int) int
+    (s * 1103515245 + 12345) % 2147483648
+
+fn make_data(n int, seed int) List[int]
+    mut s := seed
+    mut out := List[int]()
+    for k in 0..n
+        s = next_rand(s)
+        out.push(s / 65536 % 100)
+    out
+
+fn main()
+    mut data := make_data(16, 2024)
+    expected := data.sorted()
+    print("input:  {data}")
+    swaps := heap_sort(mut data)
+    print("output: {data}")
+    print("swaps: {swaps}")
+    print("sorted: {is_sorted(data)}")
+    print("matches built-in sort: {data == expected}")
+    mut tiny := [5, 1]
+    heap_sort(mut tiny)
+    print("two elements: {tiny}")
+    mut none_at_all := List[int]()
+    print("empty swaps: {heap_sort(mut none_at_all)}")
+
+@test fn sorts_a_list()
+    mut xs := [9, 4, 7, 1, 8, 2, 2, 6]
+    heap_sort(mut xs)
+    assert_eq(xs, [1, 2, 2, 4, 6, 7, 8, 9])
+
+@test fn sorted_input_stays_sorted()
+    mut xs := [1, 2, 3, 4, 5]
+    heap_sort(mut xs)
+    assert(is_sorted(xs))
+    assert_eq(xs, [1, 2, 3, 4, 5])
+
+@test fn matches_builtin_on_generated_data()
+    mut xs := make_data(40, 7)
+    want := xs.sorted()
+    heap_sort(mut xs)
+    assert_eq(xs, want)

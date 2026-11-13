@@ -99,7 +99,7 @@ fn subset(a Set[str], b Set[str]) bool
 ## Why `new` may break a caller of `old`, for one compared key (api.diff.3).
 fn breaks(key str, old str, new str) bool
     match key
-        "signature" => true
+        "signature" => not adds_defaulted_params(old, new)
         # A new effect or error type is something a caller must now allow for.
         "effects" | "fails_with" => not subset(set_of(new), set_of(old))
         # A new or changed precondition is stricter; dropping one is not.
@@ -109,6 +109,29 @@ fn breaks(key str, old str, new str) bool
         # A trait method that lost its default breaks implementers that relied on it.
         "default" => old == "true" and new != "true"
         _ => false
+
+## Whether `new` is `old` with parameters that have defaults added after the others: no
+## existing call breaks (expr.call.4, api.diff.3).
+fn adds_defaulted_params(old str, new str) bool
+    if not new.contains(" = ")
+        return false
+    parts := new.split(", ")
+    for cut in 0..parts.len()
+        mut head := ""
+        mut tail := ""
+        if cut == 0
+            lp := new.find("(") else return false
+            head = new.slice(0, lp + 1)
+            tail = new.slice(lp + 1, new.len())
+        else
+            head = parts[..cut].join(", ")
+            tail = parts[cut..].join(", ")
+        rp := tail.find(")") else continue
+        if not tail.slice(0, rp).contains(" = ")
+            continue
+        if "{head}{tail.slice(rp, tail.len())}" == old
+            return true
+    false
 
 ## Why adding `d` can break existing code (api.diff.3), if it can.
 fn added_breaks(d Decl) str
