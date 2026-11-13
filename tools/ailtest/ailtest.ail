@@ -718,16 +718,16 @@ fn rewrite(
     rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
-    for l in ["use std.env", "use std.io"]
-        if not contains_line(lines, l)
-            out.push(l)
-            origin.push(-1)
+    # Hidden aliases: a user's own `env` or `io` (a parameter, say) must never clash with the runner's (expr.bind.5).
+    for l in ["use std.env as ail_env", "use std.io as ail_io"]
+        out.push(l)
+        origin.push(-1)
     lead := out.len()
     for j in 0..rewritten.len()
         for piece in rewritten[j].split("\n")
             out.push(piece)
             origin.push(j)
-    mut tail := "\nfn main() !\n    ail_args := env.args()\n    k := ail_args[0].len()\n"
+    mut tail := "\nfn main() !\n    ail_args := ail_env.args()\n    k := ail_args[0].len()\n"
     mut slot := 1
     mut done := Set[str]()
     mut decs := ""
@@ -741,10 +741,10 @@ fn rewrite(
         for pi in 0..t.params.len()
             ty := parse_ty(t.params[pi].ty, w.decls) else continue
             decs = "{decs}{decoders(w, ty, mut done)}"
-            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
+            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_arg(ail_args[{pi + 1}], ail_args[0].starts_with(\"y\")).split(\"\\u\{1f}\"), mut ail_c{pi})\n"
             call.push("ail_p{pi}")
         callee := if t.fx.is_empty() then t.name else "ail_fx_{t.name}"
-        tail = "{tail}        {callee}({call.join(", ")})?\n        io.exit(0)\n"
+        tail = "{tail}        {callee}({call.join(", ")})?\n        ail_io.exit(0)\n"
         if not t.fx.is_empty()
             wrap = "{wrap}{fx_wrapper(t, f.fixtures).join("\n")}\n"
         slot += 1
@@ -752,14 +752,14 @@ fn rewrite(
         if mdropped.contains(i)
             continue
         mt := mf.tests[i]
-        tail = "{tail}    if k == {slot}\n        {mt.module}.ail_run_{mt.t.name}()\n        io.exit(0)\n"
+        tail = "{tail}    if k == {slot}\n        {mt.module}.ail_run_{mt.t.name}()\n        ail_io.exit(0)\n"
         slot += 1
-    tail = "{tail}    io.exit(4)\n"
+    tail = "{tail}    ail_io.exit(4)\n"
     if snap_lines > 0
         tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
     tail = "{tail}{wrap}"
     if not decs.is_empty()
-        tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
+        tail = "{tail}\nstruct AilCur\n    i int\n\nfn ail_arg(a str, hexed bool) str\n    if not hexed\n        return a\n    b := bytes.from_hex(a) else return a\n    b.text()\n{decs}"
     for l in tail.split("\n")
         out.push(l)
         origin.push(-1)
@@ -1418,9 +1418,14 @@ fn try_case_in(
     args List[Node],
     envs List[str],
 ) str?
-    mut all := [["x" for _ in 0..slot].join("")]
+    # On Windows `env` is Git's MSYS program, which re-reads its command line by shell rules: a `'` in a generated
+    # string joined two arguments, and `*` or `?` would be globbed. There each input goes as hex, and the slot
+    # word is `y`s so the test binary knows to decode it (test.prop.3).
+    hexed := windows()
+    mut all := [[if hexed then "y" else "x" for _ in 0..slot].join("")]
     for i in 0..args.len()
-        all.push(tokens(w, tys[i], args[i]).join("\u{1f}"))
+        joined := tokens(w, tys[i], args[i]).join("\u{1f}")
+        all.push(if hexed then joined.to_bytes().hex() else joined)
     mut prog := exe
     mut argv := all
     if not envs.is_empty()
@@ -3094,6 +3099,8 @@ fn report(
     src List[str],
     traces Map[str, List[str]],
     at_pos Map[str, (int, int)],
+    no_tests bool,
+    file_name str,
 ) int
     mut passed := 0
     mut failed := 0
@@ -3163,8 +3170,12 @@ fn report(
     if json
         more := if skipped > 0 then ",\"skipped\":{skipped}" else ""
         at := if seed.is_empty() then "" else ",\"schedule_seed\":{seed}"
-        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}{at}}")
+        none_json := if no_tests then ",\"no_tests\":true" else ""
+        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}{at}{none_json}}")
     else
+        # check.exit.1: a file with no tests says so; the status stays 0, since nothing failed.
+        if no_tests
+            print("no tests found in {file_name}")
         more := if skipped > 0 then ", {skipped} skipped" else ""
         print("{passed} passed, {failed} failed{more}")
         if not seed.is_empty()
@@ -3571,7 +3582,7 @@ fn main() !
         # snap.update.5: a program with no tests still has its `.out` to update.
         if update
             snap_update(file, text, [], dry, json)?
-        io.exit(report(verdicts, json, text.lines(), {}, at_pos))
+        io.exit(report(verdicts, json, text.lines(), {}, at_pos, verdicts.len() == 0, file))
     stem := path.stem(file)
     # A name of its own per run (removed at the end), so two runs on one file at once (the gate's shards) don't
     # overwrite each other's copy and executable.
@@ -3893,7 +3904,7 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines(), traces, at_pos)
+    code := report(verdicts, json, text.lines(), traces, at_pos, false, file)
     mut reached := Set[int]()
     mut base_pass := 0
     for v in verdicts

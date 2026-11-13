@@ -81,8 +81,18 @@ fn show(label str, a List[str], b List[str], ctx int)
 
 fn main()
     before := [
-        "alpha", "beta", "gamma", "delta", "epsilon", "zeta",
-        "eta", "theta", "iota", "kappa", "lambda", "mu",
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+        "iota",
+        "kappa",
+        "lambda",
+        "mu",
     ]
     mut after := before
     after[1] = "BETA"

@@ -127,15 +127,7 @@ fn show(src str)
     print("  re-parse stable: {stable}")
 
 fn main()
-    for src in [
-        "1+2*3",
-        "(1+2)*3",
-        "a - (b - c)",
-        "((a*b))/(c*d)",
-        "-(x+1)*-y",
-        "1 + * 2",
-        "(1+2",
-    ]
+    for src in ["1+2*3", "(1+2)*3", "a - (b - c)", "((a*b))/(c*d)", "-(x+1)*-y", "1 + * 2", "(1+2"]
         show(src)
 
 @test fn minimal_parentheses()

@@ -98,7 +98,15 @@ fn play(teams List[Team], rule any Rule) List[str]
     trace
 
 fn main()
-    lines := ["Lions 88", "Tigers 84", "Bears 91", "Wolves 77", "Hawks 84", "Eagles 70", "Sharks 65"]
+    lines := [
+        "Lions 88",
+        "Tigers 84",
+        "Bears 91",
+        "Wolves 77",
+        "Hawks 84",
+        "Eagles 70",
+        "Sharks 65",
+    ]
     teams := parse_teams(lines) else err
         print("error: {err}")
         return

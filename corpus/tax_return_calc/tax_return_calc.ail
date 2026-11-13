@@ -39,9 +39,13 @@ fn Status.stretch(self) int
 
 fn brackets(status Status) List[Bracket]
     k := status.stretch()
-    [Bracket(upto: 11000 * k, rate: 10), Bracket(upto: 44000 * k, rate: 12),
-        Bracket(upto: 95000 * k, rate: 22), Bracket(upto: 182000 * k, rate: 24),
-        Bracket(upto: 1000000000000, rate: 35)]
+    [
+        Bracket(upto: 11000 * k, rate: 10),
+        Bracket(upto: 44000 * k, rate: 12),
+        Bracket(upto: 95000 * k, rate: 22),
+        Bracket(upto: 182000 * k, rate: 24),
+        Bracket(upto: 1000000000000, rate: 35),
+    ]
 
 fn tax_on(taxable int, status Status) int
     mut prev := 0
@@ -75,7 +79,14 @@ fn prepare(line str) Filing ! TaxError
     gross := nums[0] + nums[1]
     taxable := (gross - status.deduction()).max(0)
     tax := tax_on(taxable, status)
-    Filing(who: p[0], gross: gross, taxable: taxable, tax: tax, credit: (nums[2] * 2000).min(tax), withheld: nums[3])
+    Filing(
+        who: p[0],
+        gross: gross,
+        taxable: taxable,
+        tax: tax,
+        credit: (nums[2] * 2000).min(tax),
+        withheld: nums[3],
+    )
 
 fn Filing.describe(self) str
     owed := tax - credit
@@ -86,9 +97,15 @@ fn Filing.describe(self) str
 
 fn main()
     lines := [
-        "ann single 52000 300 0 4800", "bo married 120000 2500 2 9000", "cy head 38000 0 1 2000",
-        "di single 9000 100 0 0", "ed widow 50000 0 0 0", "flo single -500 0 0 0",
-        "gus single abc 0 0 0", "hal married 400000 50000 3 70000", "ivy single 200000 0 0 30000",
+        "ann single 52000 300 0 4800",
+        "bo married 120000 2500 2 9000",
+        "cy head 38000 0 1 2000",
+        "di single 9000 100 0 0",
+        "ed widow 50000 0 0 0",
+        "flo single -500 0 0 0",
+        "gus single abc 0 0 0",
+        "hal married 400000 50000 3 70000",
+        "ivy single 200000 0 0 30000",
     ]
     mut total := 0
     for line in lines

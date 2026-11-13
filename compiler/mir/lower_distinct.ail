@@ -283,7 +283,8 @@ fn distinct_single(xs List[ast.Arg]) ast.Expr?
         _ => none
 
 ## `ids.UserId(x)`, a distinct type of an imported module: `x`.
-@allow("expr.match.3") fn DistinctErase.unwrapped_qualified(self, recv ast.Expr, n str, xs List[ast.Arg]) ast.Expr?
+@allow("expr.match.3")
+fn DistinctErase.unwrapped_qualified(self, recv ast.Expr, n str, xs List[ast.Arg]) ast.Expr?
     v := distinct_single(xs)?
     match recv
         Name(a, _) =>
@@ -360,7 +361,11 @@ fn distinct_zero(bn str, at ast.Pos) ast.Expr?
                 nc.cond = self.opt(c.cond)
                 cs.push(nc)
             ast.Expr.Comp(form, self.expr(elem), self.opt(value), cs, pos)
-        Index(recv, index, pos) => ast.Expr.Index(recv: self.expr(recv), index: self.expr(index), pos: pos)
+        Index(recv, index, pos) => ast.Expr.Index(
+            recv: self.expr(recv),
+            index: self.expr(index),
+            pos: pos,
+        )
         Unary(op, operand, pos) => ast.Expr.Unary(op, self.expr(operand), pos)
         NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
         Closure(params, body, pos) =>
@@ -371,7 +376,12 @@ fn distinct_zero(bn str, at ast.Pos) ast.Expr?
                     ncp.ty = self.ty(t)
                 ps.push(ncp)
             ast.Expr.Closure(ps, self.expr(body), pos)
-        Binary(op, lhs, rhs, pos) => ast.Expr.Binary(op: op, lhs: self.expr(lhs), rhs: self.expr(rhs), pos: pos)
+        Binary(op, lhs, rhs, pos) => ast.Expr.Binary(
+            op: op,
+            lhs: self.expr(lhs),
+            rhs: self.expr(rhs),
+            pos: pos,
+        )
         Range(lo, hi, inclusive, pos) =>
             ast.Expr.Range(lo: self.opt(lo), hi: self.opt(hi), inclusive: inclusive, pos: pos)
         If(branches, els, else_err, pos) =>
@@ -389,8 +399,16 @@ fn distinct_zero(bn str, at ast.Pos) ast.Expr?
         Match(scrutinee, arms, pos) =>
             mut out := List[ast.Arm]()
             for arm in arms
-                out.push(ast.Arm(pat: arm.pat, guard: self.opt(arm.guard), body: self.block(arm.body)))
+                out.push(ast.Arm(
+                    pat: arm.pat,
+                    guard: self.opt(arm.guard),
+                    body: self.block(arm.body),
+                ))
             ast.Expr.Match(self.expr(scrutinee), out, pos)
-        OrElse(value, otherwise, pos) => ast.Expr.OrElse(self.expr(value), self.otherwise(otherwise), pos)
+        OrElse(value, otherwise, pos) => ast.Expr.OrElse(
+            self.expr(value),
+            self.otherwise(otherwise),
+            pos,
+        )
         Try(inner, context, pos) => ast.Expr.Try(self.expr(inner), self.opt(context), pos)
         _ => e

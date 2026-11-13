@@ -102,9 +102,40 @@ fn Calc.exec(mut self, cmd Cmd) str ! CalcError
         Dump => self.dump()
 
 fn main()
-    script := ["# ring area: (10 + 4) squared", "push 10", "push 4", "add", "dup", "mul", "dump", "store sq",
-        "load sq", "push 3", "div", "dump", "div", "push 0", "div", "load nope", "bogus 1", "push x1",
-        "5", "7", "swap", "sub", "dump", "", "-7", "2", "div", "dump", "17", "5", "mod", "dump"]
+    script := [
+        "# ring area: (10 + 4) squared",
+        "push 10",
+        "push 4",
+        "add",
+        "dup",
+        "mul",
+        "dump",
+        "store sq",
+        "load sq",
+        "push 3",
+        "div",
+        "dump",
+        "div",
+        "push 0",
+        "div",
+        "load nope",
+        "bogus 1",
+        "push x1",
+        "5",
+        "7",
+        "swap",
+        "sub",
+        "dump",
+        "",
+        "-7",
+        "2",
+        "div",
+        "dump",
+        "17",
+        "5",
+        "mod",
+        "dump",
+    ]
     mut calc := Calc(stack: [], vars: {})
     mut failed := 0
     for i, line in script.enumerate()

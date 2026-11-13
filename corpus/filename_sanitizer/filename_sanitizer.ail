@@ -29,7 +29,7 @@ fn trim_edges(s str) str
         cs = cs[..cs.len() - 1]
     cs.join("")
 
-fn split_ext(name str) (str, str)
+fn split_ext(name str)(str, str)
     cs := name.chars()
     mut dot := -1
     for i in 0..cs.len()
@@ -39,7 +39,7 @@ fn split_ext(name str) (str, str)
         return (name, "")
     (cs[..dot].join(""), cs[dot + 1..].join(""))
 
-fn sanitize(name str) (str, str)
+fn sanitize(name str)(str, str)
     raw_stem, raw_ext := split_ext(name.trim())
     mut stem := trim_edges(clean(raw_stem))
     mut ext := clean(raw_ext).replace("-", "").replace(".", "").replace("_", "").to_lower()
@@ -99,4 +99,7 @@ fn main()
     assert_eq(join_name(stem, ext).len(), MAX_LEN)
 
 @test fn resolves_clashes()
-    assert_eq(sanitize_all(["a b.txt", "a_b.txt", "A_B.TXT"]), ["a_b.txt", "a_b-2.txt", "A_B-3.txt"])
+    assert_eq(
+        sanitize_all(["a b.txt", "a_b.txt", "A_B.TXT"]),
+        ["a_b.txt", "a_b-2.txt", "A_B-3.txt"],
+    )

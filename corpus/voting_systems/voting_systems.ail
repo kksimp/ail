@@ -134,8 +134,16 @@ fn report(title str, texts List[str])
 
 fn main()
     report("box one", [
-        "Ada>Ben>Cyd", "Ada>Cyd", "Ben>Cyd>Ada", "Ben>Cyd>Ada", "Cyd>Ben>Ada",
-        "Cyd>Ben", "Dee>Cyd>Ben", "Cyd>Dee>Ben>Ada", "Ada>Dee", "Ben>Ada",
+        "Ada>Ben>Cyd",
+        "Ada>Cyd",
+        "Ben>Cyd>Ada",
+        "Ben>Cyd>Ada",
+        "Cyd>Ben>Ada",
+        "Cyd>Ben",
+        "Dee>Cyd>Ben",
+        "Cyd>Dee>Ben>Ada",
+        "Ada>Dee",
+        "Ben>Ada",
     ])
     report("box two", ["Ada>Ben", "Ben>Ada", "Cyd>Dee", "Dee>Cyd"])
     report("box three", ["Ada>Ben", "Ada>Zed"])

@@ -1,6 +1,0 @@
-struct PriorityQueue
-    id int
-
-fn main()
-    t := PriorityQueue(id: 1)
-    print(t.id)

@@ -126,8 +126,26 @@ fn Game.render(self) List[str]
     rows
 
 fn main()
-    moves := ["e2e4", "e7e5", "d1d3", "a7a6", "a1a3", "f1c4", "b8c6", "d1h5", "g8f6",
-        "h5f7", "e8e7", "e4", "z9e4", "c1c1", "e7e6", "f7e8", "d7d5", "a2a4"]
+    moves := [
+        "e2e4",
+        "e7e5",
+        "d1d3",
+        "a7a6",
+        "a1a3",
+        "f1c4",
+        "b8c6",
+        "d1h5",
+        "g8f6",
+        "h5f7",
+        "e8e7",
+        "e4",
+        "z9e4",
+        "c1c1",
+        "e7e6",
+        "f7e8",
+        "d7d5",
+        "a2a4",
+    ]
     mut g := Game.start()
     for m in moves
         msg := g.try_move(m) else err

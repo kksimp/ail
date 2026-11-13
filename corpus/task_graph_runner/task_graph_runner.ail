@@ -40,7 +40,17 @@ fn ready_wave(jobs List[Job], finished Set[str]) List[Job]
     wave.sorted(by: |x| x.name)
 
 fn main() !
-    specs := ["pack:3:build,docs", "build:5:compile,assets", "compile:8:", "assets:2:", "docs:4:compile", "deploy:1:pack,lint", "lint:6:ghost", "a:1:b", "b:1:a"]
+    specs := [
+        "pack:3:build,docs",
+        "build:5:compile,assets",
+        "compile:8:",
+        "assets:2:",
+        "docs:4:compile",
+        "deploy:1:pack,lint",
+        "lint:6:ghost",
+        "a:1:b",
+        "b:1:a",
+    ]
     jobs := [parse_job(s) for s in specs]
     mut finished := Set[str]()
     mut values := Map[str, int]()

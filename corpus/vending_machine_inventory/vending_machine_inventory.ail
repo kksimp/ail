@@ -75,10 +75,25 @@ fn Machine.exec(mut self, line str) str ! VendError
 
 fn main()
     cmds := [
-        "stock A1 cola 150 5", "stock A2 chips 100 3", "stock B1 water 125 2", "stock B2 gum 50 99",
-        "buy A1 200", "buy A1 100", "buy A2 500", "buy B1 125", "buy B1 125", "buy B1 125",
-        "buy C9 100", "restock B1 4", "restock A1 9", "price A2 110", "buy A2 100", "buy A2 110",
-        "refund A2", "price A1 0", "stock A3 mints x 5",
+        "stock A1 cola 150 5",
+        "stock A2 chips 100 3",
+        "stock B1 water 125 2",
+        "stock B2 gum 50 99",
+        "buy A1 200",
+        "buy A1 100",
+        "buy A2 500",
+        "buy B1 125",
+        "buy B1 125",
+        "buy B1 125",
+        "buy C9 100",
+        "restock B1 4",
+        "restock A1 9",
+        "price A2 110",
+        "buy A2 100",
+        "buy A2 110",
+        "refund A2",
+        "price A1 0",
+        "stock A3 mints x 5",
     ]
     mut m := Machine(slots: {}, revenue: 0, cap: 10)
     for c in cmds

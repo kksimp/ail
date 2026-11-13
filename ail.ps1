@@ -403,7 +403,7 @@ if ($route) {
             if (-not $allowList) { $policyFile = New-TemporaryFile; $checkOpts += @('--policy-out', $policyFile.FullName) }
             & $native check-program @checkOpts $runFile
             if ($LASTEXITCODE -ne 0) { if ($policyFile) { Remove-Item -Force $policyFile }; exit $LASTEXITCODE }
-            if ($policyFile) { $allowList = (Get-Content -Raw $policyFile).Trim(); Remove-Item -Force $policyFile }
+            if ($policyFile) { $allowList = "$(Get-Content -Raw $policyFile)".Trim(); Remove-Item -Force $policyFile }
             $errFile = New-TemporaryFile
             # Start-Process with file redirection: PowerShell never wraps the child's stderr in error records,
             # so nothing on it can stop the script under 'Stop' (a `2>` redirection does, even with 'Continue').

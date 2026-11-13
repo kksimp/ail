@@ -31,7 +31,7 @@ fn digits_of(s str) str
     [c for c in s.chars() if c.is_digit()].join("")
 
 ## Splits "555 1234 ext. 7" into the number part and the extension digits.
-fn split_ext(raw str) (str, str)
+fn split_ext(raw str)(str, str)
     low := raw.to_lower()
     e := low.find("ext") else -1
     x := low.find("x") else -1

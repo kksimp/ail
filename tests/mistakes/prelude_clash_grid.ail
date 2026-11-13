@@ -1,6 +1,0 @@
-struct Grid
-    id int
-
-fn main()
-    t := Grid(id: 1)
-    print(t.id)
