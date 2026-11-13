@@ -1384,6 +1384,19 @@ fn Gate.docs(mut self)
         if r.status != 0
             red("{args.join(" ")}", "{r.out}{r.err}")
 
+## checkbench (ADR 1111): `ail check` against one injected mistake per copy of the corpus and examples programs
+## (tools/checkbench). The fast form's totals may not fall below tools/checkbench/floors.txt.
+fn Gate.checkbench(mut self)
+    if proc.which("python3") == none
+        print("checkbench: python3 not found; skipping")
+        return
+    r := proc.run(
+        "python3",
+        ["-I", "tools/checkbench/checkbench.py", "--fast", "--floors", "tools/checkbench/floors.txt"],
+    ) else return
+    if r.status != 0
+        red("checkbench", "{r.out}{r.err}")
+
 ## `ail fmt` end to end (fmt.rs, ported; ADR 0170).
 fn Gate.fmt(mut self, tmp str)
     dir := "{tmp}/fmt"
@@ -4127,6 +4140,7 @@ fn main() !
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
             "parity" => g.parity()
+            "checkbench" => g.checkbench()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)

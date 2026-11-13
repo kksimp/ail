@@ -283,7 +283,8 @@ def badness(r):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fast", action="store_true")
-    ap.add_argument("--ail", default="./ail")
+    # Windows: `ail` is a shell script, which Git's `sh` runs (the gate's own shell)
+    ap.add_argument("--ail", default="sh ./ail" if os.name == "nt" else "./ail")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--out", default="")
     ap.add_argument("--json", default="")
