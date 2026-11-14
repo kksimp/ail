@@ -10,7 +10,7 @@
 ## that is also an index or an operand keeps its comparisons, which the range
 ## passes read.
 
-## The largest divisor, and one above the largest `K`: the product is at most 2^62.
+## The largest constant on either side: the product stays below 2^62.
 DIVCMP_MOST := 2147483648
 
 ## For each value: whether it is such a quotient.
