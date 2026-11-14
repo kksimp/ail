@@ -326,6 +326,9 @@ if ($route) {
             exit $LASTEXITCODE
         }
         'check' {
+            # Diagnostics are on standard error. When the caller redirects it (`2>&1`, `*>`), Windows PowerShell 5.1
+            # makes each line an error record, and under 'Stop' the first one ended the script with status 1.
+            $ErrorActionPreference = 'Continue'
             if ($checkErrors) { & $native check-errors @rest; exit $LASTEXITCODE }
             if ($checkBudget) {
                 # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
@@ -387,6 +390,8 @@ if ($route) {
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
             $unsafe = @()
             for ($j = 0; $j -lt $rest.Count - 1; $j++) { if ($rest[$j] -eq '--unsafe' -and $rest[$j + 1] -eq 'driver') { $unsafe = @('--unsafe', 'driver') } }
+            # A warning on standard error is not an error of this script (see 'check').
+            $ErrorActionPreference = 'Continue'
             if ($f) { & $native check-program @unsafe $f; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
             & $native build @rest; exit $LASTEXITCODE
         }
@@ -401,7 +406,10 @@ if ($route) {
             # eff.allow.10: with no `--allow`, the scopes of the package's `caps` lines become the run's policy.
             $policyFile = $null
             if (-not $allowList) { $policyFile = New-TemporaryFile; $checkOpts += @('--policy-out', $policyFile.FullName) }
+            # A warning on standard error is not an error of this script (see 'check').
+            $ErrorActionPreference = 'Continue'
             & $native check-program @checkOpts $runFile
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -ne 0) { if ($policyFile) { Remove-Item -Force $policyFile }; exit $LASTEXITCODE }
             if ($policyFile) { $allowList = "$(Get-Content -Raw $policyFile)".Trim(); Remove-Item -Force $policyFile }
             $errFile = New-TemporaryFile
