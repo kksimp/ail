@@ -17,7 +17,7 @@ fix  56 items
 fixrun  17 items
 fmt  69 items
 help  10 items
-load  123 items
+load  124 items
 mir  842 items
 obj  67 items
 pkg  58 items

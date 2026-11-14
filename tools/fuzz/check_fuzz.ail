@@ -354,11 +354,12 @@ fn main() !
     work := "{env.get("TMPDIR") else "/tmp"}/ail-checkfuzz-{seed}-{time.now_ms()}"
     sh("rm -rf \"$1\" && mkdir -p \"$1\"", [work])
     # git, not `find | sort`: on Windows a shell started from a native program can reach System32's `find` and `sort`.
-    listed := proc.run("git", ["ls-files", "corpus", "examples", "tests/cases"]) else proc.Output(
-        status: 127,
-        out: "",
-        err: "could not start git",
-    )
+    listed := proc.run("git", [
+        "ls-files",
+        "corpus",
+        "examples",
+        "tests/cases",
+    ]) else proc.Output(status: 127, out: "", err: "could not start git")
     files := [l.trim() for l in listed.out.lines() if l.trim().ends_with(".ail")]
     if files.len() == 0
         print("CHECKFUZZ RED (no input programs)")
