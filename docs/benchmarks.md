@@ -5,11 +5,13 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
 
 ## Environment
 
-- date: PENDING
-- AIL commit: PENDING
-- host: PENDING
-- gcc, clang, python: PENDING
-- runs per cell: PENDING
+- date: 2026-11-14
+- AIL commit: ccf77304d (ail 0.1.0 (seed-2026.11.14a-2-gccf77304d-dirty, native))
+- host: Linux x86_64, 4 logical cores,  Intel(R) Core(TM) i5-7500T CPU @ 2.70GHz
+- gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+- clang: Ubuntu clang version 18.1.3 (1ubuntu1)
+- python: Python 3.12.3
+- runs per cell: 5 (best of; wall seconds)
 
 ## Method
 
@@ -33,26 +35,26 @@ Reproduce (needs gcc, clang and python3; Debian/Ubuntu also python3-venv):
 ## Speed: the ten small programs
 
 | program | size | AIL | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL / Python |
-|---|---|---:|---:|---:|---:|---:|---:|
-| collatz | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| nbody | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| spectralnorm | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| mandelbrot | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| fannkuch | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| binarytrees | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| fasta | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| wordfreq | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| matmul | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| sieve | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| collatz | 1600000 | 0.452 | 0.438 | 0.244 | 20.938 | 1.03 | 0.02 |
+| nbody | 6400000 | 0.556 | 0.527 | 0.544 | 54.815 | 1.06 | 0.01 |
+| spectralnorm | 4000 | 0.312 | 0.946 | 0.850 | 201.973 | 0.33 | 0.00 |
+| mandelbrot | 1920 | 0.158 | 0.433 | 0.425 | 16.219 | 0.37 | 0.01 |
+| fannkuch | 11 | 3.104 | 2.982 | 3.413 | 111.709 | 1.04 | 0.03 |
+| binarytrees | 18 | 0.382 | 0.304 | 0.316 | 15.622 | 1.26 | 0.02 |
+| fasta | 32000000 | 0.529 | 0.343 | 0.287 | 10.873 | 1.54 | 0.05 |
+| wordfreq | 32000000 | 0.501 | 0.498 | 0.703 | 7.947 | 1.01 | 0.06 |
+| matmul | 800 | 0.106 | 0.753 | 0.714 | 42.910 | 0.14 | 0.00 |
+| sieve | 48000000 | 0.439 | 0.438 | 0.409 | 10.018 | 1.00 | 0.04 |
 
 ## Speed: larger programs (AIL against C)
 
 | program | size | AIL | gcc -O2 | clang -O2 | AIL / gcc |
-|---|---|---:|---:|---:|---:|
-| lzr | PENDING | PENDING | PENDING | PENDING | PENDING |
-| vm | PENDING | PENDING | PENDING | PENDING | PENDING |
-| raytrace | PENDING | PENDING | PENDING | PENDING | PENDING |
-| matmul1400 | PENDING | PENDING | PENDING | PENDING | PENDING |
+|---|---:|---:|---:|---:|---:|
+| lzr | 12000000 | 2.997 | 2.268 | 2.377 | 1.32 |
+| vm | 700000 | 1.982 | 1.682 | 1.365 | 1.18 |
+| raytrace | 4000 | 1.699 | 1.793 | 1.512 | 0.95 |
+| matmul1400 | 1400 | 0.617 | 8.014 | 6.467 | 0.08 |
 
 ## Tokens
 
@@ -61,16 +63,17 @@ source file in each language.
 
 | program | AIL | C | Python | AIL / Python |
 |---|---:|---:|---:|---:|
-| collatz | PENDING | PENDING | PENDING | PENDING |
-| nbody | PENDING | PENDING | PENDING | PENDING |
-| spectralnorm | PENDING | PENDING | PENDING | PENDING |
-| mandelbrot | PENDING | PENDING | PENDING | PENDING |
-| fannkuch | PENDING | PENDING | PENDING | PENDING |
-| binarytrees | PENDING | PENDING | PENDING | PENDING |
-| fasta | PENDING | PENDING | PENDING | PENDING |
-| wordfreq | PENDING | PENDING | PENDING | PENDING |
-| matmul | PENDING | PENDING | PENDING | PENDING |
-| sieve | PENDING | PENDING | PENDING | PENDING |
+| collatz | 248 | 257 | 202 | 1.23 |
+| nbody | 1626 | 1594 | 1397 | 1.16 |
+| spectralnorm | 489 | 544 | 361 | 1.35 |
+| mandelbrot | 338 | 384 | 268 | 1.26 |
+| fannkuch | 524 | 562 | 428 | 1.22 |
+| binarytrees | 378 | 382 | 285 | 1.33 |
+| fasta | 345 | 354 | 263 | 1.31 |
+| wordfreq | 274 | 834 | 199 | 1.38 |
+| matmul | 341 | 388 | 237 | 1.44 |
+| sieve | 270 | 313 | 216 | 1.25 |
+| **total** | 4833 | 5612 | 3856 | 1.25 |
 
 ## Edit loop: the wait on each agent round
 
@@ -82,28 +85,39 @@ calls in one running server: the first call, then the best of the repeats of the
 `-` means the command did not exit 0 on that host. The programs are `examples/hello.ail`,
 `examples/json.ail` and `tools/ailtest/ailtest.ail`; the line count is in brackets.
 
-| command | program (lines) | host |
-|---|---|---:|
-| `ail check` | hello | PENDING |
-| `ail check` | json | PENDING |
-| `ail check` | ailtest | PENDING |
-| `ail context` | hello | PENDING |
-| `ail context` | json | PENDING |
-| `ail context` | ailtest | PENDING |
-| `ail test` | hello | PENDING |
-| `ail test` | json | PENDING |
-| `ail test` | ailtest | PENDING |
-| `ail build cold` | hello | PENDING |
-| `ail build cold` | json | PENDING |
-| `ail build cold` | ailtest | PENDING |
-| `ail build cached` | hello | PENDING |
-| `ail build cached` | json | PENDING |
-| `ail build cached` | ailtest | PENDING |
-| `ail run cached` | hello | PENDING |
-| `ail run cached` | json | PENDING |
+| command | program (lines) | Linux x86_64 | Mac arm64 |
+|---|---|---:|---:|
+| `ail check` | hello (2) | 16 | 21 |
+| `ail check` | json (430) | 32 | 24 |
+| `ail check` | ailtest (3960) | 215 | 79 |
+| `ail context` | hello (2) | 16 | 23 |
+| `ail context` | json (430) | 32 | 24 |
+| `ail context` | ailtest (3960) | 215 | 82 |
+| `ail test` | hello (2) | 315 | 201 |
+| `ail test` | json (430) | 365 | 200 |
+| `ail test` | ailtest (3960) | 466 | 202 |
+| `ail build --cold` | hello (2) | 867 | 371 |
+| `ail build --cold` | json (430) | 1368 | 550 |
+| `ail build --cold` | ailtest (3960) | 5029 | 2208 |
+| `ail build` | hello (2) | 164 | 82 |
+| `ail build` | json (430) | 165 | 85 |
+| `ail build` | ailtest (3960) | 315 | 134 |
+| `ail run` | hello (2) | 164 | 83 |
+| `ail run` | json (430) | 164 | 83 |
+| `ail mcp` `ail_check`, first call | hello (2) | 11 | 10 |
+| `ail mcp` `ail_check`, repeat | hello (2) | 7 | 6 |
+| `ail mcp` `ail_check`, first call | json (430) | 27 | 13 |
+| `ail mcp` `ail_check`, repeat | json (430) | 7 | 6 |
+| `ail mcp` `ail_check`, first call | ailtest (3960) | 165 | 56 |
+| `ail mcp` `ail_check`, repeat | ailtest (3960) | 5 | 5 |
+| first `./ail run examples/hello.ail` in a fresh clone | hello (2) | 58.4 s | 28.0 s |
 
 ## What the numbers say
 
 Generated from the tables above; nothing on this page is written by hand after the run.
 
-PENDING: the release run fills this in from the measured numbers. This page has not been measured yet.
+- **Small programs.** AIL is faster than `gcc -O2` on 3 of 10 (spectralnorm, mandelbrot, matmul) and slower on 7 (collatz, nbody, fannkuch, binarytrees, fasta, wordfreq, sieve); the geometric mean of AIL / gcc is 0.72.
+- **Larger programs.** AIL / gcc is 1.32 on lzr, 1.18 on vm, 0.95 on raytrace, 0.08 on matmul1400; the geometric mean is 0.58. Above 1 means AIL is slower.
+- **Tokens.** Across the ten programs AIL source is 125% of the Python source and 86% of the C source by mean token count (4833, 5612, 3856).
+- **Edit loop on Linux x86_64.** `ail check` of hello takes 16 ms and of the 3960-line `ailtest` 215 ms; a repeated `ail_check` through a warm `ail mcp` takes 7 ms.
+- **Edit loop on Mac arm64.** `ail check` of hello takes 21 ms and of the 3960-line `ailtest` 79 ms; a repeated `ail_check` through a warm `ail mcp` takes 6 ms.
