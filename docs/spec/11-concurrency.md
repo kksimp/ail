@@ -772,6 +772,24 @@ fn main()
     print(task.threads())
 ```
 
+**conc.par.19** — On Windows a waiting thread polls, so waking the workers and
+seeing them finish costs a parallel region about two timer ticks (31 ms). After
+two regions in a row that each ended within 40 ms, a loop the compiler chose
+runs in order; a later region that takes longer (a written `par for`, a tensor
+kernel) lets them go to the pool again. A written `par for` always goes to the
+pool. Results never depend on it (`conc.par.1`). *(ADR 1115)*
+
+```ail rules=conc.par.19
+fn main()
+    mut total := 0
+    for _ in 0..4
+        mut out := List[int]()
+        for i in 0..20000
+            out.push(i * i % 7)
+        total += out.len()
+    print(total)
+```
+
 **conc.par.16** — A loop *builds* an outer list `out` when the only mention of
 `out` in its body is one statement `out.push(e)` at the top of the body (not
 under `if`, `match` or a nested loop), the `push` is the built-in one, and no

@@ -36,6 +36,8 @@ P_LOG := 64
 # Parallel regions running now (`par_start` to the end of `par_wait`): `set_threads`
 # traps while one runs (conc.par.18).
 P_REGION := 72
+# Windows: parallel regions in a row that ended within `WIN_SHORT_MS` (conc.par.19).
+P_WSHORT := 80
 P_CUR := 128
 # macOS: each worker's restart stack pointer (workers run on pthreads there).
 P_TOP := 1024
@@ -615,8 +617,13 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     # so a big pool doesn't send a short heavy loop back in order.
     if n < 2 * par_width(n, work)
         return false
+    if auto == 0
+        return true
+    # conc.par.19: on Windows short regions cost more than they save.
+    if target() == 3 and load64(pool() + P_WSHORT) >= WIN_SHORT_RUN
+        return false
     # A loop the compiler chose also needs enough work in all.
-    auto == 0 or n >= PAR_MIN_WORK / work
+    n >= PAR_MIN_WORK / work
 
 ## Whether `n` more calls of a fork-join run may start as tasks (conc.par.15):
 ## not in a deterministic run, and while fewer than twice as many tasks as
@@ -684,8 +691,11 @@ fn par_start(id int, env int, lo int, hi int, work int) int
     size := (n + chunks - 1) / chunks
     chunks = (n + size - 1) / size
     par_log(n, work, w, chunks)
-    grp := alloc(8 * chunks + 8, KIND_ENV)
+    # One word past the records: when the region started (Windows, conc.par.19).
+    grp := alloc(8 * chunks + 16, KIND_ENV)
     store64(grp, chunks)
+    if target() == 3
+        store64(grp + 8 + 8 * chunks, win_tick())
     for c in 0..chunks
         off := c * size
         len := if size < n - off then size else n - off
@@ -706,7 +716,25 @@ fn par_wait(grp int) bool
         if atomic_load(rec + T_STATE) != 2
             ok = false
     atomic_add(pool() + P_REGION, -1)
+    if target() == 3
+        par_win_note(grp)
     ok
+
+## A region that ends within this many milliseconds is short on Windows: two
+## timer ticks (about 31 ms) go to waking the workers and noticing they are
+## done, because waiters there poll (`win_wait`).
+WIN_SHORT_MS := 40
+
+## Short regions in a row after which the loops the compiler chose run in order.
+WIN_SHORT_RUN := 2
+
+## conc.par.19: count the region `grp` if it was short, or start the count
+## again. Two regions that end at once may count as one; the count only picks
+## between two ways of running a loop that give the same result.
+fn par_win_note(grp int)
+    p := pool()
+    took := win_tick() - load64(grp + 8 + 8 * load64(grp))
+    store64(p + P_WSHORT, if took < WIN_SHORT_MS then load64(p + P_WSHORT) + 1 else 0)
 
 ## `task.threads()` (conc.par.18, ADR 1018): the pool's cap now, `AIL_THREADS`
 ## or the cores at the start, then what `set_threads` last set.
