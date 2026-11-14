@@ -18,6 +18,7 @@
 ## line is `CHECKFUZZ GREEN` or `CHECKFUZZ RED (n failures)`.
 
 use std.random
+use std.time
 
 KEYWORDS := [
     "fn",
@@ -191,7 +192,12 @@ fn Chk.mutants(mut self, files List[str], count int, seed int)
         kind := random.int(0, 7)
         target := "{self.work}/m{k}.ail"
         fs.write_text(target, mutate(lines, kind)) else continue
+        t0 := time.now_ms()
         why := verdict(check_run(target, false, 10))
+        took := time.now_ms() - t0
+        # A slow check is not a failure, but a line names it, so a suite past the gate's time limit says why.
+        if took > 3000 and why == ""
+            print("SLOW fuzz.chk.1 {k}: {took} ms (from {file}, mutation {kind}, seed {seed + k})")
         if why != ""
             self.red(
                 "fuzz.chk.1",
@@ -217,7 +223,9 @@ fn Chk.extremes(mut self)
         sh("awk \"$1\" > \"$2\"", [c.1, target])
         # 100,000 lines and 20,000 functions are volume, not depth: 60 s, and the time is for the ADR.
         secs := if c.0 == "many_lines" or c.0 == "many_fns" then 60 else 10
+        t0 := time.now_ms()
         why := verdict(check_run(target, false, secs))
+        print("fuzz.chk.2 {c.0}: {time.now_ms() - t0} ms")
         if why != ""
             self.red("fuzz.chk.2", c.0, target, why)
         sh("rm -f \"$1\"", [target])
@@ -337,7 +345,8 @@ fn main() !
     n := if args.len() > 0 then (args[0].to_int() else 300) else 300
     seed := if args.len() > 1 then (args[1].to_int() else 1) else 1
     out := if args.len() > 2 then args[2] else "tools/fuzz/failures"
-    work := "/tmp/ail-checkfuzz-{seed}"
+    # Its own directory per run: two runs at once (a gate and a rerun) must not share files.
+    work := "{env.get("TMPDIR") else "/tmp"}/ail-checkfuzz-{seed}-{time.now_ms()}"
     sh("rm -rf \"$1\" && mkdir -p \"$1\"", [work])
     listed := sh("find corpus examples tests/cases -name \"*.ail\" | sort", [])
     files := listed.out.lines()
@@ -345,9 +354,14 @@ fn main() !
         print("CHECKFUZZ RED (no input programs)")
         io.exit(1)
     mut f := Chk(fails: 0, out: out, work: work)
+    t0 := time.now_ms()
     f.mutants(files, n, seed)
+    t1 := time.now_ms()
     f.extremes()
+    t2 := time.now_ms()
     f.one_pass(n / 6 + 1, seed)
+    t3 := time.now_ms()
+    print("checkfuzz seconds: chk.1 {(t1 - t0) / 1000}, chk.2 {(t2 - t1) / 1000}, chk.3 {(t3 - t2) / 1000}")
     sh("rm -rf \"$1\"", [work])
     print("checkfuzz: {n} mutants, 7 extremes, {n / 6 + 1} generated files from seed {seed}")
     if f.fails == 0

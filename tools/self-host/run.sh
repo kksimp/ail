@@ -184,6 +184,10 @@ for f in "$tests"/*.ail; do
     rm -f "$exe" "$exe.hex" "$exe.err"
 done
 say "$pass passed, $fail failed"
+# A stage T that ran nothing is not a pass: name why (no programs found, or ONLY matched none).
+if [ $((pass + fail)) -eq 0 ]; then
+    blocked "stage T" "no native test program ran ($(ls "$tests"/*.ail 2>/dev/null | wc -l | tr -d ' ') in $tests, ONLY='${ONLY:-}', cwd $(pwd))"
+fi
 for n in ${failed[@]+"${failed[@]}"}; do say "  - $n"; done
 [ "$fail" -eq 0 ] || blocked "stage T" "$fail native test programs differ when built by the self-hosted compiler"
 say ""
