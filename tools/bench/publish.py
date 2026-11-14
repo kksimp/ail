@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Render docs/benchmarks.md from the raw numbers (measurement only, ADR 0070).
 
-    publish.py [--latency LAT.json]... RACE_SMALL.json RACE_BIG.json TOKENS.json TEMPLATE.md OUT.md ENV_FILE
+    publish.py [--latency LAT.json]... [--host DIR]... RACE_SMALL.json RACE_BIG.json TOKENS.json TEMPLATE.md OUT.md ENV_FILE
     publish.py --skeleton TEMPLATE.md OUT.md
 
 tools/bench/publish.sh produces the inputs and calls this. The template holds the prose;
-the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
-generated text. Every sentence in {{SUMMARY}} is computed from the numbers, so it cannot disagree
+the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{HOSTS}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
+generated text. Each --host DIR is another host's `publish.sh --keep-dir` directory (small.json, big.json,
+env.txt, latency.json): its speed tables go under {{HOSTS}} and its latency run joins the edit-loop table.
+Every sentence in {{SUMMARY}} is computed from the numbers, so it cannot disagree
 with the tables. --skeleton writes the page with every number replaced by PENDING (no inputs),
 for the page that ships before the release run.
 """
@@ -14,10 +16,12 @@ import json, math, os, sys
 
 PENDING = "PENDING"
 args = sys.argv[1:]
-lat_files = []
-while args and args[0] in ("--latency", "--skeleton"):
+lat_files, host_dirs = [], []
+while args and args[0] in ("--latency", "--host", "--skeleton"):
     if args[0] == "--latency":
         lat_files.append(args[1]); args = args[2:]
+    elif args[0] == "--host":
+        host_dirs.append(args[1]); args = args[2:]
     else:
         break
 skeleton = bool(args) and args[0] == "--skeleton"
@@ -27,6 +31,17 @@ else:
     small, big, tokens, tmpl, out, envf = args[:6]
     small, big, tokens = (json.load(open(p)) for p in (small, big, tokens))
     lats = [json.load(open(p)) for p in lat_files]
+    hosts = []
+    for d in host_dirs:
+        h = {k: json.load(open(os.path.join(d, k + ".json"))) for k in ("small", "big")}
+        h["env"] = open(os.path.join(d, "env.txt")).read().strip()
+        lp = os.path.join(d, "latency.json")
+        h["lat"] = json.load(open(lp)) if os.path.isfile(lp) else None
+        line = next((l for l in h["env"].splitlines() if l.startswith("- host:")), "- host: " + d)
+        h["name"] = line[len("- host:"):].split(",")[0].strip()
+        hosts.append(h)
+        if h["lat"]:  # a host directory's own latency run replaces a --latency file with the same host label
+            lats = [l for l in lats if l["host"] != h["lat"]["host"]] + [h["lat"]]
 
 
 def cell(c):
@@ -169,7 +184,24 @@ def skeleton_tables():
     return "\n".join(sp), "\n".join(bg), "\n".join(tk), "\n".join(lat)
 
 
-def summary(sm, bg, tot, lats):
+def geo_line(race, ref):
+    rp = pairs(race, ref)
+    return "%.2f" % geomean([r for _, r in rp]) if rp else "-"
+
+
+def hosts_section(hosts):
+    """One block per other host: its environment and both speed tables."""
+    if not hosts:
+        return ""
+    out = ["## Speed on the other hosts", "",
+           "The same command on each host, with the same calibration rule; every size is that host's own."]
+    for h in hosts:
+        out += ["", "### %s" % h["name"], "", h["env"], "", "Small programs:", "", speed(h["small"], True), "",
+                "Larger programs:", "", speed(h["big"], False)]
+    return "\n".join(out)
+
+
+def summary(sm, bg, tot, lats, hosts=()):
     out = []
     sp, bp = pairs(sm), pairs(bg)
     if sp:
@@ -186,6 +218,10 @@ def summary(sm, bg, tot, lats):
     if bp:
         out.append("- **Larger programs.** AIL / gcc is " + ", ".join("%.2f on %s" % (r, p) for p, r in bp)
                    + "; the geometric mean is %.2f. Above 1 means AIL is slower." % geomean([r for _, r in bp]))
+    for h in hosts:
+        refs = [("gcc", "gcc")] + [(k, n) for k, n in OTHERS if any(k in r["cells"] for r in h["small"]["rows"] + h["big"]["rows"])]
+        out.append("- **On %s.** Geometric mean of AIL / X over the small programs, then the larger ones: %s."
+                   % (h["name"], "; ".join("%s %s and %s" % (n, geo_line(h["small"], k), geo_line(h["big"], k)) for k, n in refs)))
     if tot[2]:
         out.append("- **Tokens.** Across the ten programs AIL source is %.0f%% of the Python source and %.0f%% of the C source by mean token count (%.0f, %.0f, %.0f)."
                    % (100.0 * tot[0] / tot[2], 100.0 * tot[0] / tot[1], tot[0], tot[1], tot[2]))
@@ -211,12 +247,15 @@ text = open(tmpl).read()
 if skeleton:
     sp, bg, tk, lat = skeleton_tables()
     repl = (("ENV", "- date: PENDING\n- AIL commit: PENDING\n- host: PENDING\n- gcc, clang, python: PENDING\n- runs per cell: PENDING"),
-            ("SPEED", sp), ("BIG", bg), ("TOKENS", tk), ("LATENCY", lat),
+            ("SPEED", sp), ("BIG", bg), ("HOSTS", ""), ("TOKENS", tk), ("LATENCY", lat),
             ("SUMMARY", "PENDING: the release run fills this in from the measured numbers. This page has not been measured yet."))
 else:
     tt, tot = token_table()
     repl = (("ENV", open(envf).read().strip()), ("SPEED", speed(small, True)), ("BIG", speed(big, False)),
-            ("TOKENS", tt), ("LATENCY", latency_table(lats)), ("SUMMARY", summary(small, big, tot, lats)))
+            ("HOSTS", hosts_section(hosts)), ("TOKENS", tt), ("LATENCY", latency_table(lats)),
+            ("SUMMARY", summary(small, big, tot, lats, hosts)))
 for k, v in repl:
     text = text.replace("{{%s}}" % k, v)
+while "\n\n\n" in text:  # an empty marker (no other hosts) leaves no gap
+    text = text.replace("\n\n\n", "\n\n")
 open(out, "w").write(text)

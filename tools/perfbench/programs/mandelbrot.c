@@ -6,10 +6,10 @@
 
 static const char shades[] = " .:-=+*#%@";
 
-static long escape(double cr, double ci) {
+static long long escape(double cr, double ci) {
     double zr = 0.0;
     double zi = 0.0;
-    long k = 0;
+    long long k = 0;
     while (k < MAX_ITER) {
         if (zr * zr + zi * zi > 4.0) {
             break;
@@ -23,14 +23,14 @@ static long escape(double cr, double ci) {
 }
 
 int main(int argc, char **argv) {
-    long rows = argc > 1 ? atol(argv[1]) : 160;
-    long cols = rows * 2;
+    long long rows = argc > 1 ? atoll(argv[1]) : 160;
+    long long cols = rows * 2;
     char *line = malloc(cols + 2);
-    for (long y = 0; y < rows; y++) {
+    for (long long y = 0; y < rows; y++) {
         double ci = -1.2 + 2.4 * (double)y / (double)rows;
-        for (long x = 0; x < cols; x++) {
+        for (long long x = 0; x < cols; x++) {
             double cr = -2.0 + 3.0 * (double)x / (double)cols;
-            long k = escape(cr, ci);
+            long long k = escape(cr, ci);
             line[x] = shades[k * 9 / MAX_ITER];
         }
         line[cols] = '\n';

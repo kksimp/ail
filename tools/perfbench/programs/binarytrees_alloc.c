@@ -28,7 +28,7 @@ static int make(int depth) {
     return node;
 }
 
-static long check(int node) {
+static long long check(int node) {
     if (left[node] < 0) {
         return 1;
     }
@@ -39,9 +39,9 @@ int main(int argc, char **argv) {
     int max_depth = argc > 1 ? atoi(argv[1]) : 12;
     int min_depth = 4;
     for (int d = min_depth; d <= max_depth; d += 2) {
-        long iters = 1L << (max_depth - d + min_depth);
-        long total = 0;
-        for (long t = 0; t < iters; t++) {
+        long long iters = 1LL << (max_depth - d + min_depth);
+        long long total = 0;
+        for (long long t = 0; t < iters; t++) {
             used = 0;
             cap = 0;
             left = NULL;
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
             free(left);
             free(right);
         }
-        printf("%ld trees of depth %d check: %ld\n", iters, d, total);
+        printf("%lld trees of depth %d check: %lld\n", iters, d, total);
     }
     return 0;
 }

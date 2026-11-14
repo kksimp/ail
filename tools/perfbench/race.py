@@ -15,7 +15,10 @@ import argparse, os, platform, shutil, statistics, subprocess, sys, tempfile, ti
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-AIL = os.path.join(ROOT, "ail")
+# Windows: Python can't start the bash wrapper; ail.cmd hands on to ail.ps1. Executables need .exe there.
+WINDOWS = os.name == "nt"
+AIL = os.path.join(ROOT, "ail.cmd" if WINDOWS else "ail")
+EXE = ".exe" if WINDOWS else ""
 CORPUS = os.path.join(ROOT, "tools", "tokbench", "corpus", "programs")
 DEFAULT_SET = [
     "examples/interp.ail", "examples/json.ail", "examples/sheet.ail",
@@ -126,7 +129,7 @@ def cpu_name():
 
 def build_native(prog, tmp, build_args):
     """`ail build` the program; returns the executable path or None (drag.native.1)."""
-    out = os.path.join(tmp, "native-" + os.path.basename(prog)[:-4])
+    out = os.path.join(tmp, "native-" + os.path.basename(prog)[:-4] + EXE)
     cmd = [AIL, "build"] + build_args.split() + [prog, "-o", out]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p.returncode != 0 or not os.path.isfile(out):
@@ -135,16 +138,16 @@ def build_native(prog, tmp, build_args):
 
 
 def build_c(src, tmp, cc):
-    out = os.path.join(tmp, "%s-%s" % (cc, os.path.basename(src)[:-2]))
-    # -ffp-contract=off: no fused multiply-adds, so floats match AIL and Python.
-    p = subprocess.run([cc, "-O2", "-ffp-contract=off", "-o", out, src, "-lm"], stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+    out = os.path.join(tmp, "%s-%s" % (cc, os.path.basename(src)[:-2]) + EXE)
+    # -ffp-contract=off: no fused multiply-adds, so floats match AIL and Python. Windows has no separate libm.
+    p = subprocess.run([cc, "-O2", "-ffp-contract=off", "-o", out, src] + ([] if WINDOWS else ["-lm"]),
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return out if p.returncode == 0 else None
 
 
 def build_rust(src, tmp):
     """`rustc -C opt-level=3` (safe, idiomatic Rust; no target-cpu flag, like the C columns)."""
-    out = os.path.join(tmp, "rustc-" + os.path.basename(src)[:-3])
+    out = os.path.join(tmp, "rustc-" + os.path.basename(src)[:-3] + EXE)
     p = subprocess.run(["rustc", "-C", "opt-level=3", "--edition", "2021", "-o", out, src],
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return out if p.returncode == 0 else None
@@ -152,7 +155,7 @@ def build_rust(src, tmp):
 
 def build_go(src, tmp):
     """`go build` with its default flags (the gc compiler's optimisations are always on)."""
-    out = os.path.join(tmp, "go-" + os.path.basename(src)[:-3])
+    out = os.path.join(tmp, "go-" + os.path.basename(src)[:-3] + EXE)
     p = subprocess.run(["go", "build", "-o", out, src], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=tmp)
     return out if p.returncode == 0 else None
 

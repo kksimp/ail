@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
         count[i] = 0;
     }
     int maxflips = 0;
-    long checksum = 0;
-    long permcount = 0;
+    long long checksum = 0;
+    long long permcount = 0;
     int r = n;
     int done = 0;
     while (!done) {
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
         }
         permcount += 1;
     }
-    printf("%ld\n", checksum);
+    printf("%lld\n", checksum);
     printf("Pfannkuchen(%d) = %d\n", n, maxflips);
     return 0;
 }

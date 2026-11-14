@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static long steps(long n) {
-    long k = 0;
+static long long steps(long long n) {
+    long long k = 0;
     while (n != 1) {
         if (n % 2 == 0) {
             n = n / 2;
@@ -16,19 +16,19 @@ static long steps(long n) {
 }
 
 int main(int argc, char **argv) {
-    long limit = argc > 1 ? atol(argv[1]) : 30000;
-    long total = 0;
-    long best = 1;
-    long best_steps = 0;
-    for (long i = 1; i < limit; i++) {
-        long s = steps(i);
+    long long limit = argc > 1 ? atoll(argv[1]) : 30000;
+    long long total = 0;
+    long long best = 1;
+    long long best_steps = 0;
+    for (long long i = 1; i < limit; i++) {
+        long long s = steps(i);
         total += s;
         if (s > best_steps) {
             best = i;
             best_steps = s;
         }
     }
-    printf("total steps: %ld\n", total);
-    printf("longest: %ld with %ld steps\n", best, best_steps);
+    printf("total steps: %lld\n", total);
+    printf("longest: %lld with %lld steps\n", best, best_steps);
     return 0;
 }

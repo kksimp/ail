@@ -17,7 +17,8 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   (bounds-checked indexing, `std::collections::HashMap` in wordfreq), ported line for line from the C twin;
   like the C columns it has no `target-cpu` flag. Go is `go build` with its default flags, also ported from
   the C twin (including wordfreq's hand-written FNV-1a hash map). Python is CPython 3 (`python3 -I`), no numpy.
-- Wall time of the whole process, best of the runs shown, on a machine with nothing else running (one host: the one in the environment block).
+- Wall time of the whole process, best of the runs shown, on a machine with nothing else running. The tables
+  above are the host in the environment block; any other hosts follow, each with its own environment.
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
   fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
@@ -36,6 +37,8 @@ Reproduce (needs gcc, clang, rustc, go and python3; Debian/Ubuntu also python3-v
 ## Speed: larger programs (AIL against C, Rust and Go)
 
 {{BIG}}
+
+{{HOSTS}}
 
 ## Tokens
 
