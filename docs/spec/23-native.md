@@ -634,7 +634,7 @@ fn main()
 use is an ordering against a constant may be compared through `x`:
 `x / C < K` as `x < K * C` and `x / C >= K` as `x >= K * C` for `K >= 1`,
 `x / C <= K` as `x < (K + 1) * C` and `x / C > K` as `x >= (K + 1) * C` for
-`K >= 0`, with both constants at most 2^31. The answers are the same for
+`K >= 0`, with `C` at most 2^31 and `K` below it. The answers are the same for
 every `x` (expr.arith.5), and the division is not computed. *(ADR 1114)*
 
 ```ail rules=native.range.4
