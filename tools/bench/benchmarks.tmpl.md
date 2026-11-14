@@ -16,7 +16,7 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   with `-ffp-contract=off`, so floats match. Rust is `rustc -C opt-level=3` on safe, idiomatic code
   (bounds-checked indexing, `std::collections::HashMap` in wordfreq), ported line for line from the C twin;
   like the C columns it has no `target-cpu` flag. Go is `go build` with its default flags, also ported from
-  the C twin (a `map[string]int` in wordfreq). Python is CPython 3 (`python3 -I`), no numpy.
+  the C twin (including wordfreq's hand-written FNV-1a hash map). Python is CPython 3 (`python3 -I`), no numpy.
 - Wall time of the whole process, best of the runs shown, on a machine with nothing else running (one host: the one in the environment block).
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
