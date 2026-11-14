@@ -62,14 +62,21 @@ def others(race):
     return [(k, h) for k, h in OTHERS if any(k in r["cells"] for r in race["rows"])]
 
 
-def speed(race, py):
+def gcc_is_clang(env):
+    """macOS: `gcc` is Apple clang, so the gcc and clang columns are one compiler."""
+    return any(l.startswith("- gcc:") and "clang" in l for l in env.splitlines())
+
+
+def speed(race, py, one_cc=False):
+    """one_cc: show the single C compiler once, as `clang -O2` (gcc_is_clang)."""
     ot = others(race)
-    head = (["program", "size", "AIL", "gcc -O2", "clang -O2"] + [h for _, h in ot] + (["Python"] if py else [])
-            + ["AIL / gcc"] + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
+    cc = ["clang -O2"] if one_cc else ["gcc -O2", "clang -O2"]
+    head = (["program", "size", "AIL"] + cc + [h for _, h in ot] + (["Python"] if py else [])
+            + ["AIL / clang" if one_cc else "AIL / gcc"] + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
     rows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
     for r in race["rows"]:
         c = r["cells"]
-        line = [r["program"], r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc")), cell(c.get("clang"))]
+        line = [r["program"], r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc"))] + ([] if one_cc else [cell(c.get("clang"))])
         for k, _ in ot:
             line.append(cell(c.get(k)))
         if py:
@@ -196,8 +203,12 @@ def hosts_section(hosts):
     out = ["## Speed on the other hosts", "",
            "The same command on each host, with the same calibration rule; every size is that host's own."]
     for h in hosts:
-        out += ["", "### %s" % h["name"], "", h["env"], "", "Small programs:", "", speed(h["small"], True), "",
-                "Larger programs:", "", speed(h["big"], False)]
+        one = gcc_is_clang(h["env"])
+        out += ["", "### %s" % h["name"], "", h["env"], ""]
+        if one:
+            out += ["`gcc` on this host is Apple clang, so the C column is that one compiler (run as `gcc -O2`, the "
+                    "calibration reference).", ""]
+        out += ["Small programs:", "", speed(h["small"], True, one), "", "Larger programs:", "", speed(h["big"], False, one)]
     return "\n".join(out)
 
 
@@ -219,7 +230,7 @@ def summary(sm, bg, tot, lats, hosts=()):
         out.append("- **Larger programs.** AIL / gcc is " + ", ".join("%.2f on %s" % (r, p) for p, r in bp)
                    + "; the geometric mean is %.2f. Above 1 means AIL is slower." % geomean([r for _, r in bp]))
     for h in hosts:
-        refs = [("gcc", "gcc")] + [(k, n) for k, n in OTHERS if any(k in r["cells"] for r in h["small"]["rows"] + h["big"]["rows"])]
+        refs = [("gcc", "clang" if gcc_is_clang(h["env"]) else "gcc")] + [(k, n) for k, n in OTHERS if any(k in r["cells"] for r in h["small"]["rows"] + h["big"]["rows"])]
         out.append("- **On %s.** Geometric mean of AIL / X over the small programs, then the larger ones: %s."
                    % (h["name"], "; ".join("%s %s and %s" % (n, geo_line(h["small"], k), geo_line(h["big"], k)) for k, n in refs)))
     if tot[2]:
@@ -251,7 +262,9 @@ if skeleton:
             ("SUMMARY", "PENDING: the release run fills this in from the measured numbers. This page has not been measured yet."))
 else:
     tt, tot = token_table()
-    repl = (("ENV", open(envf).read().strip()), ("SPEED", speed(small, True)), ("BIG", speed(big, False)),
+    env = open(envf).read().strip()
+    one = gcc_is_clang(env)
+    repl = (("ENV", env), ("SPEED", speed(small, True, one)), ("BIG", speed(big, False, one)),
             ("HOSTS", hosts_section(hosts)), ("TOKENS", tt), ("LATENCY", latency_table(lats)),
             ("SUMMARY", summary(small, big, tot, lats, hosts)))
 for k, v in repl:
