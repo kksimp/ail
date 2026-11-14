@@ -5,9 +5,9 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
 
 ## Environment
 
-- date: 2026-11-10
-- AIL commit: b8b80494d (ail 0.1.0 (seed-2026.11.08g-178-gb8b80494d, native))
-- host: Linux x86_64, 3 logical cores,  Intel(R) Core(TM) i5-7500T CPU @ 2.70GHz
+- date: 2026-11-14
+- AIL commit: ccf77304d (ail 0.1.0 (seed-2026.11.14a-2-gccf77304d-dirty, native))
+- host: Linux x86_64, 4 logical cores,  Intel(R) Core(TM) i5-7500T CPU @ 2.70GHz
 - gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
 - clang: Ubuntu clang version 18.1.3 (1ubuntu1)
 - python: Python 3.12.3
@@ -20,9 +20,12 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   have no Python twin). A column whose output differs from the reference is reported as `DIFF` and left out.
 - AIL is `ail build FILE -o EXE` (native code, run directly). C is `gcc -O2` and `clang -O2`
   with `-ffp-contract=off`, so floats match. Python is CPython 3 (`python3 -I`), no numpy.
-- Wall time of the whole process, best of the runs shown, on a machine with nothing else running.
+- Wall time of the whole process, best of the runs shown, on a machine with nothing else running (one host: the one in the environment block).
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
-- The size argument of each program is in its `NAME.args`.
+- Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
+  fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
+  column shows the size every language ran; the reference output is gcc's at that size. The larger programs
+  in `tools/perfbench/big/` already run for seconds.
 
 Reproduce (needs gcc, clang and python3; Debian/Ubuntu also python3-venv):
 
@@ -31,27 +34,27 @@ Reproduce (needs gcc, clang and python3; Debian/Ubuntu also python3-venv):
 
 ## Speed: the ten small programs
 
-| program | AIL | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL / Python |
-|---|---:|---:|---:|---:|---:|---:|
-| collatz | 0.026 | 0.023 | 0.013 | 1.036 | 1.13 | 0.03 |
-| nbody | 0.006 | 0.005 | 0.005 | 0.449 | 1.13 | 0.01 |
-| spectralnorm | 0.004 | 0.005 | 0.004 | 0.702 | 0.80 | 0.01 |
-| mandelbrot | 0.014 | 0.008 | 0.008 | 0.273 | 1.79 | 0.05 |
-| fannkuch | 0.028 | 0.023 | 0.025 | 0.800 | 1.22 | 0.03 |
-| binarytrees | 0.019 | 0.015 | 0.016 | 0.715 | 1.30 | 0.03 |
-| fasta | 0.010 | 0.006 | 0.006 | 0.190 | 1.54 | 0.05 |
-| wordfreq | 0.021 | 0.016 | 0.023 | 0.271 | 1.31 | 0.08 |
-| matmul | 0.004 | 0.008 | 0.007 | 0.556 | 0.50 | 0.01 |
-| sieve | 0.013 | 0.015 | 0.012 | 0.574 | 0.92 | 0.02 |
+| program | size | AIL | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL / Python |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| collatz | 1600000 | 0.452 | 0.438 | 0.244 | 20.938 | 1.03 | 0.02 |
+| nbody | 6400000 | 0.556 | 0.527 | 0.544 | 54.815 | 1.06 | 0.01 |
+| spectralnorm | 4000 | 0.312 | 0.946 | 0.850 | 201.973 | 0.33 | 0.00 |
+| mandelbrot | 1920 | 0.158 | 0.433 | 0.425 | 16.219 | 0.37 | 0.01 |
+| fannkuch | 11 | 3.104 | 2.982 | 3.413 | 111.709 | 1.04 | 0.03 |
+| binarytrees | 18 | 0.382 | 0.304 | 0.316 | 15.622 | 1.26 | 0.02 |
+| fasta | 32000000 | 0.529 | 0.343 | 0.287 | 10.873 | 1.54 | 0.05 |
+| wordfreq | 32000000 | 0.501 | 0.498 | 0.703 | 7.947 | 1.01 | 0.06 |
+| matmul | 800 | 0.106 | 0.753 | 0.714 | 42.910 | 0.14 | 0.00 |
+| sieve | 48000000 | 0.439 | 0.438 | 0.409 | 10.018 | 1.00 | 0.04 |
 
 ## Speed: larger programs (AIL against C)
 
-| program | AIL | gcc -O2 | clang -O2 | AIL / gcc |
-|---|---:|---:|---:|---:|
-| lzr | 4.108 | 2.252 | 2.365 | 1.82 |
-| vm | 2.957 | 1.673 | 1.361 | 1.77 |
-| raytrace | 1.705 | 1.789 | 1.501 | 0.95 |
-| matmul1400 | 0.706 | 6.035 | 5.844 | 0.12 |
+| program | size | AIL | gcc -O2 | clang -O2 | AIL / gcc |
+|---|---:|---:|---:|---:|---:|
+| lzr | 12000000 | 2.997 | 2.268 | 2.377 | 1.32 |
+| vm | 700000 | 1.982 | 1.682 | 1.365 | 1.18 |
+| raytrace | 4000 | 1.699 | 1.793 | 1.512 | 0.95 |
+| matmul1400 | 1400 | 0.617 | 8.014 | 6.467 | 0.08 |
 
 ## Tokens
 
@@ -72,6 +75,49 @@ source file in each language.
 | sieve | 270 | 313 | 216 | 1.25 |
 | **total** | 4833 | 5612 | 3856 | 1.25 |
 
+## Edit loop: the wait on each agent round
+
+Wall milliseconds, best of the runs shown, from the repository root of the release commit
+(`tools/bench/latency.py`, `tools/bench/publish.sh`). `ail check`, `ail context FILE main` and `ail test` are
+cold processes each time. `ail build --cold` starts with an empty build cache (`AIL_CACHE_DIR` set to a new directory); `ail build` and
+`ail run` (cached) are repeats after the build cache holds the program. The `ail mcp` rows are `ail_check`
+calls in one running server: the first call, then the best of the repeats of the same call (mcp.warm.1-4).
+`-` means the command did not exit 0 on that host. The programs are `examples/hello.ail`,
+`examples/json.ail` and `tools/ailtest/ailtest.ail`; the line count is in brackets.
+
+| command | program (lines) | Linux x86_64 | Mac arm64 |
+|---|---|---:|---:|
+| `ail check` | hello (2) | 16 | 21 |
+| `ail check` | json (430) | 32 | 24 |
+| `ail check` | ailtest (3960) | 215 | 79 |
+| `ail context` | hello (2) | 16 | 23 |
+| `ail context` | json (430) | 32 | 24 |
+| `ail context` | ailtest (3960) | 215 | 82 |
+| `ail test` | hello (2) | 315 | 201 |
+| `ail test` | json (430) | 365 | 200 |
+| `ail test` | ailtest (3960) | 466 | 202 |
+| `ail build --cold` | hello (2) | 867 | 371 |
+| `ail build --cold` | json (430) | 1368 | 550 |
+| `ail build --cold` | ailtest (3960) | 5029 | 2208 |
+| `ail build` | hello (2) | 164 | 82 |
+| `ail build` | json (430) | 165 | 85 |
+| `ail build` | ailtest (3960) | 315 | 134 |
+| `ail run` | hello (2) | 164 | 83 |
+| `ail run` | json (430) | 164 | 83 |
+| `ail mcp` `ail_check`, first call | hello (2) | 11 | 10 |
+| `ail mcp` `ail_check`, repeat | hello (2) | 7 | 6 |
+| `ail mcp` `ail_check`, first call | json (430) | 27 | 13 |
+| `ail mcp` `ail_check`, repeat | json (430) | 7 | 6 |
+| `ail mcp` `ail_check`, first call | ailtest (3960) | 165 | 56 |
+| `ail mcp` `ail_check`, repeat | ailtest (3960) | 5 | 5 |
+| first `./ail run examples/hello.ail` in a fresh clone | hello (2) | 58.4 s | 28.0 s |
+
 ## What the numbers say
 
-(Filled in from the first published run.)
+Generated from the tables above; nothing on this page is written by hand after the run.
+
+- **Small programs.** AIL is faster than `gcc -O2` on 3 of 10 (spectralnorm, mandelbrot, matmul) and slower on 7 (collatz, nbody, fannkuch, binarytrees, fasta, wordfreq, sieve); the geometric mean of AIL / gcc is 0.72.
+- **Larger programs.** AIL / gcc is 1.32 on lzr, 1.18 on vm, 0.95 on raytrace, 0.08 on matmul1400; the geometric mean is 0.58. Above 1 means AIL is slower.
+- **Tokens.** Across the ten programs AIL source is 125% of the Python source and 86% of the C source by mean token count (4833, 5612, 3856).
+- **Edit loop on Linux x86_64.** `ail check` of hello takes 16 ms and of the 3960-line `ailtest` 215 ms; a repeated `ail_check` through a warm `ail mcp` takes 7 ms.
+- **Edit loop on Mac arm64.** `ail check` of hello takes 21 ms and of the 3960-line `ailtest` 79 ms; a repeated `ail_check` through a warm `ail mcp` takes 6 ms.
