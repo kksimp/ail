@@ -2,12 +2,12 @@
 """Drag-race harness (drag.*, ADR 0460). Measurement only (ADR 0070).
 
 Times the same program in `ail run` (native, through the build cache), AIL native
-(`ail build`, once lane 120 lands it), C (`clang -O2` and `gcc -O2`) and
-Python, then prints one table: min and median wall seconds per column and
+(`ail build`, once lane 120 lands it), C (`clang -O2` and `gcc -O2`), Rust
+(`rustc -C opt-level=3`, with `--rust`) and Python, then prints one table: min and median wall seconds per column and
 ratios to C and to Python (below 1 beats it).
 
 A program NAME.ail in tools/perfbench/programs/ (or the interpreter set in
-run.sh) has twins NAME.c and NAME.py beside it. The programs must print the
+run.sh) has twins NAME.c, NAME.rs and NAME.py beside it. The programs must print the
 same bytes: a column whose output differs from NAME.out (or, without one, the AIL interpreter's) is
 reported as DIFF and left out of the ratios (drag.out.1).
 """
@@ -142,6 +142,14 @@ def build_c(src, tmp, cc):
     return out if p.returncode == 0 else None
 
 
+def build_rust(src, tmp):
+    """`rustc -C opt-level=3` (safe, idiomatic Rust; no target-cpu flag, like the C columns)."""
+    out = os.path.join(tmp, "rustc-" + os.path.basename(src)[:-3])
+    p = subprocess.run(["rustc", "-C", "opt-level=3", "--edition", "2021", "-o", out, src],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return out if p.returncode == 0 else None
+
+
 def fmt(x):
     return "-" if x is None else "%.3f" % x
 
@@ -156,6 +164,7 @@ def main():
     ap.add_argument("--runs", type=int, default=None)
     ap.add_argument("--native", action="store_true", help="also time `ail build` output")
     ap.add_argument("--c", action="store_true", help="also time C twins (clang and gcc -O2)")
+    ap.add_argument("--rust", action="store_true", help="also time Rust twins (rustc -C opt-level=3)")
     ap.add_argument("--python", action="store_true", help="also time Python twins")
     ap.add_argument("--all", action="store_true", help="--native --c --python")
     ap.add_argument("--timeout", type=int, default=120)
@@ -186,6 +195,11 @@ def main():
     alloc = a.c and shutil.which("gcc") is not None
     if alloc:
         cols.append("gcc-alloc")
+    rust = a.rust and shutil.which("rustc") is not None
+    if a.rust and not rust:
+        print("perfbench: --rust needs rustc; it is not installed", file=sys.stderr)
+    if rust:
+        cols.append("rustc")
     py = sys.executable if a.python else None
     if py: cols.append("python")
 
@@ -222,6 +236,10 @@ def main():
                 src = twin(p, "_alloc.c")
                 exe = build_c(src, tmp, "gcc") if src else None
                 res["gcc-alloc"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
+            if rust:
+                src = twin(p, ".rs")
+                exe = build_rust(src, tmp) if src else None
+                res["rustc"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
             if py:
                 src = twin(p, ".py")
                 res["python"] = measure([py, "-I", src] + extra, runs, a.timeout) if src else {"err": "no twin"}
@@ -239,7 +257,7 @@ def main():
     for c in cols:
         head += [c + " min", c + " med"]
     ratio_cols = []
-    for ref in ("clang", "gcc", "gcc-alloc", "python"):
+    for ref in ("clang", "gcc", "gcc-alloc", "rustc", "python"):
         if ref in cols:
             for c in cols:
                 if c != ref and c in ("ail", "native"):

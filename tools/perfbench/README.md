@@ -1,16 +1,18 @@
 # Perfbench drag-race programs
 
-Ten programs, each written three times with the same algorithm and the same
-output: `NAME.ail` (AIL), `NAME.c` (C11, libc only; `sqrt` from libm), and
-`NAME.py` (CPython 3, no numpy). `NAME.out` is the expected output (all three
-agree on Linux x86-64). `NAME.args` holds the size argument, which each
-program reads from `env.args()`, `argv`, or `sys.argv`; without it the
-program uses its built-in default.
+Ten programs, each written four times with the same algorithm and the same
+output: `NAME.ail` (AIL), `NAME.c` (C11, libc only; `sqrt` from libm), `NAME.rs`
+(safe Rust, std only, ported line for line from the C twin) and `NAME.py`
+(CPython 3, no numpy). `NAME.out` is the expected output (they agree on Linux
+x86-64). `NAME.args` holds the size argument, which each program reads from
+`env.args()`, `argv`, `std::env::args()` or `sys.argv`; without it the program
+uses its built-in default. The larger programs in `big/` have C and Rust twins.
 
 Build and run by hand:
 
     ./ail run tools/perfbench/programs/NAME.ail $(cat tools/perfbench/programs/NAME.args)
     gcc -std=c11 -O2 -ffp-contract=off -o NAME NAME.c -lm && ./NAME $(cat NAME.args)
+    rustc -C opt-level=3 --edition 2021 -o NAME NAME.rs && ./NAME $(cat NAME.args)
     python3 -I NAME.py $(cat NAME.args)
 
 `-ffp-contract=off` keeps C from fusing multiply-adds, so floats match the

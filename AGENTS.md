@@ -181,7 +181,7 @@ tools/
   native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native-matrix/          matrix.py: every built-in method x element type that `ail check` accepts, built natively; writes tests/native_matrix/ (ADR 1109)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
-  perfbench/              drag-race programs: AIL, C and Python twins
+  perfbench/              drag-race programs: AIL, C, Rust and Python twins
   self-compile/           survey of the native subset over the compiler's own source
   checkbench/             `ail check` against injected mistakes: per-class table, floors for the gate suite `checkbench` (ADR 1111)
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
