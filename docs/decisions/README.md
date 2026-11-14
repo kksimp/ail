@@ -899,3 +899,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1111](1111-checkbench.md) | checkbench: `ail check` measured against one injected mistake per copy of the corpus and examples, floors in the gate suite `checkbench` *(delegated)* | Accepted | 2026-11-13 |
 | [1112](1112-check-one-pass-and-fuzz.md) | `ail check` reports everything in one pass, and a checker fuzz guards it *(delegated)* | Accepted | 2026-11-13 |
 | [1113](1113-check-output-for-agents.md) | `ail check` output for agents: `ok` line, `next:` on each error, JSON schema and summary record, exit statuses *(delegated)* | Accepted | 2026-11-13 |
+| [1115](1115-windows-short-parallel-regions.md) | Windows: after two parallel regions in a row that end within 40 ms, loops the compiler chose run in order (waiters poll there) *(delegated)* | Accepted | 2026-11-14 |
