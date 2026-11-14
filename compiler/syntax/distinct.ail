@@ -42,7 +42,7 @@ fn Parser.distinct_decl(mut self) ast.StructDecl?
         skip_statement()
         return none
     if not at_sym("=")
-        distinct_without_eq(n.name)
+        self.distinct_without_eq(n.name)
         skip_statement()
         return none
     i += 1

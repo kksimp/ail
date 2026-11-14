@@ -1,6 +1,7 @@
 WIDTH := 48
 HEIGHT := 16
 LIMIT := 200
+
 fn escape(cr float, ci float) int
     mut zr := 0.0
     mut zi := 0.0
@@ -11,6 +12,7 @@ fn escape(cr float, ci float) int
         zr = t
         n += 1
     n
+
 fn shade(n int) str
     if n >= LIMIT
         return "#"
@@ -19,6 +21,7 @@ fn shade(n int) str
     if n > 4
         return "."
     " "
+
 fn main()
     mut rows := List[str]()
     for _ in 0..HEIGHT

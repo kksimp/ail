@@ -41,11 +41,11 @@ struct Gate
 
 ## True when this run's shard owns the next item of a sharded suite (always, for an unsharded run).
 fn Gate.mine(mut self) bool
-    i := seq
-    seq += 1
-    owned := shard_count <= 1 or i % shard_count == part
+    i := self.seq
+    self.seq += 1
+    owned := self.shard_count <= 1 or i % self.shard_count == self.part
     if owned
-        ran += 1
+        self.ran += 1
     owned
 
 ## The names directly under `dir`, sorted. A sharded run takes them from git (`git ls-files`), not the working tree: each
@@ -54,7 +54,7 @@ fn Gate.mine(mut self) bool
 ## and in an unsharded run, it is the directory listing.
 fn Gate.listing(self, dir str) List[str]
     listed := (fs.list_dir(dir) else []).sorted()
-    if shard_count <= 1
+    if self.shard_count <= 1
         return listed
     r := proc.run("git", ["ls-files", "--", dir]) else return listed
     if r.status != 0
@@ -94,7 +94,7 @@ fn first_lines(text str, n int) str
     text.lines().take(n).join("\n")
 
 fn Gate.red(mut self, name str, why str)
-    fails += 1
+    self.fails += 1
     print("RED {name}")
     print(first_lines(why, 30))
 
@@ -111,17 +111,17 @@ fn Gate.examples(mut self, tmp str)
         if (fs.read_text("examples/{name}") else "").contains("use std.app")
             continue
         if why := build("examples/{name}", exe)
-            unbuilt.push("examples/{name}")
+            self.unbuilt.push("examples/{name}")
             continue
-        built += 1
+        self.built += 1
         # Under a 60 second alarm: one hang is one red example, not a stuck gate.
         got := proc.run("perl", ["-e", "alarm {alarm_for(stem)}; exec @ARGV", exe]) else
-            red("examples/{name}", "could not run the executable")
+            self.red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
         # Windows may hand a program's lines back as CRLF (a checkout with autocrlf, the console's translation): compare LF.
         if got.status != 0 or lf(got.out) != lf(want)
-            red(
+            self.red(
                 "examples/{name}",
                 "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
@@ -150,28 +150,28 @@ fn Gate.corpus(mut self, tmp str)
         if not fs.exists(src)
             or not fs.exists("{dir}/{name}.py")
             or not fs.exists("{dir}/{name}.out")
-            red(dir, "needs {name}.ail, {name}.py and {name}.out")
+            self.red(dir, "needs {name}.ail, {name}.py and {name}.out")
             continue
         exe := "{tmp}/co_{name}"
         if why := build(src, exe)
-            red(src, "does not build: {why}")
+            self.red(src, "does not build: {why}")
             continue
         self.built += 1
         got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
-            red(src, "could not run the executable")
+            self.red(src, "could not run the executable")
             continue
         want := fs.read_text("{dir}/{name}.out") else ""
         if got.status != 0 or lf(got.out) != lf(want)
-            red(
+            self.red(
                 src,
                 "exit {got.status}; output differs from {name}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
             continue
         t := proc.run("./ail", ["test", src], none, 120000) else
-            red(src, "could not start ail test")
+            self.red(src, "could not start ail test")
             continue
         if t.status != 0
-            red(src, "ail test failed\n{t.out}{t.err}")
+            self.red(src, "ail test failed\n{t.out}{t.err}")
 
 ## The check-means-build matrix (ADR 1109): tests/native_matrix/NAME.ail, one program per collection and element
 ## type that tools/native-matrix/matrix.py wrote with every snippet `ail check` accepts. Each must pass `ail check`,
@@ -185,25 +185,25 @@ fn Gate.native_matrix(mut self, tmp str)
         stem := name.replace(".ail", "")
         src := "tests/native_matrix/{name}"
         c := proc.run("./ail", ["check", src]) else
-            red(src, "could not start ail check")
+            self.red(src, "could not start ail check")
             continue
         if c.status != 0
-            red(
+            self.red(
                 src,
                 "ail check refuses it (regenerate with tools/native-matrix/matrix.py)\n{c.out}{c.err}",
             )
             continue
         exe := "{tmp}/nm_{stem}"
         if why := build(src, exe)
-            red(src, "ail check accepts it but the native build refuses it: {why}")
+            self.red(src, "ail check accepts it but the native build refuses it: {why}")
             continue
         self.built += 1
         got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
-            red(src, "could not run the executable")
+            self.red(src, "could not run the executable")
             continue
         want := fs.read_text("tests/native_matrix/{stem}.out") else ""
         if got.status != 0 or lf(got.out) != lf(want)
-            red(
+            self.red(
                 src,
                 "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
@@ -216,10 +216,10 @@ fn Gate.selfhost(mut self)
         cmd = "powershell"
         cmd_args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools/self-host/run.ps1"]
     r := proc.run(cmd, cmd_args, none, 3600000) else
-        red("selfhost", "could not start {cmd}")
+        self.red("selfhost", "could not start {cmd}")
         return
     if r.status != 0
-        red("selfhost", r.out.lines().last() else "failed")
+        self.red("selfhost", r.out.lines().last() else "failed")
 
 ## The parity probe (ADR 0925): tools/gate/parity.ail prints one line per feature, and every line must be
 ## `FEATURE works` but for the ones tests/parity/expected-differences.txt lists for this host (`HOST FEATURE STATE`,
@@ -237,12 +237,12 @@ fn Gate.parity(mut self)
         if w.len() >= 3 and w[0] == host
             expected[w[1]] = w[2]
     r := proc.run("./ail", ["run", "tools/gate/parity.ail"], "", 3600000) else
-        red("parity", "could not start tools/gate/parity.ail")
+        self.red("parity", "could not start tools/gate/parity.ail")
         return
     out_lines := lf(r.out).lines()
     last := out_lines.last() else ""
     if r.status != 0 or not last.starts_with("PARITY ")
-        red("parity", "parity.ail exit {r.status}\n{r.out}{r.err}")
+        self.red("parity", "parity.ail exit {r.status}\n{r.out}{r.err}")
         return
     mut seen := 0
     for l in out_lines
@@ -253,17 +253,17 @@ fn Gate.parity(mut self)
         seen += 1
         want_state := expected.get(w[0]) else "works"
         if w[1] != want_state and want_state == "works"
-            red(
+            self.red(
                 "parity {w[0]}",
                 "{l}\nnot the same as on the other hosts, and not in tests/parity/expected-differences.txt for {host}",
             )
         elif w[1] != want_state
-            red(
+            self.red(
                 "parity {w[0]}",
                 "{l}\ntests/parity/expected-differences.txt says `{want_state}` for {host}: update or delete that line",
             )
     if last != "PARITY {seen} features" or seen < 50
-        red("parity", "the probe printed {seen} feature lines and ended with `{last}`")
+        self.red("parity", "the probe printed {seen} feature lines and ended with `{last}`")
 
 ## The tools written in AIL. Each check
 ## runs `ail` from `root` (the repository) and compares its output.
@@ -299,18 +299,18 @@ fn sh_run(script str) proc.Output
 fn Gate.want(mut self, name str, text str, wants List[str])
     for w in wants
         if not text.contains(w)
-            red(name, "lacks `{w}`:\n{text}")
+            self.red(name, "lacks `{w}`:\n{text}")
             return
 
 fn Gate.check_clean(mut self, root str, path str)
     r := ail_in(root, root, ["check", path])
     if r.status != 0 or not r.err.is_empty()
-        red("ail check {path}", r.err)
+        self.red("ail check {path}", r.err)
 
 fn Gate.tests_pass(mut self, root str, path str)
     r := ail_in(root, root, ["test", path])
     if r.status != 0 or not r.out.contains(" 0 failed")
-        red("ail test {path}", r.out)
+        self.red("ail test {path}", r.out)
 
 ## The end-to-end cases: `examples/` and
 ## `tests/cases/` hold NAME.ail with one expectation file beside
@@ -426,15 +426,15 @@ fn Gate.case_dir(mut self, dir str)
         # golden/pending.txt names features the native CLI lacks for now
         # (`ail test --coverage`, `--update`): named here, not checked.
         if pending_cases.contains(name.replace(".ail", ""))
-            if mine()
+            if self.mine()
                 print("PENDING {at}")
             continue
-        if not mine()
+        if not self.mine()
             continue
         if why := run_case(at, "{dir}/{name.replace(".ail", "")}.")
-            red(at, why)
+            self.red(at, why)
         else
-            built += 1
+            self.built += 1
 
 fn Gate.packages(mut self)
     root := "tests/cases/packages"
@@ -446,18 +446,18 @@ fn Gate.packages(mut self)
             and not fs.exists("{at}/expected.trap")
             and not fs.exists("{at}/expected.err")
             continue
-        if not mine()
+        if not self.mine()
             continue
         if why := run_case(at, "{at}/expected.")
-            red(at, why)
+            self.red(at, why)
         else
-            built += 1
+            self.built += 1
 
 ## The small checks of cases.rs that name their commands and outputs.
 fn Gate.cli_checks(mut self)
     u := ail_run(["nonsense"]) else return
     if u.status != 2
-        red("usage error", "exit {u.status}, want 2")
+        self.red("usage error", "exit {u.status}, want 2")
     # Diagnostics schema v1 (ADR 0145): version, span and machine-applicable fixes.
     path := "tests/cases/diag_fixes.ail"
     r := ail_run(["check", "--json", path]) else return
@@ -465,20 +465,20 @@ fn Gate.cli_checks(mut self)
     if lines.len() != 2
         or not lines[0].starts_with("\{\"api\":1,")
         or not lines[1].starts_with("\{\"api\":1,")
-        red("json diagnostics", r.err)
+        self.red("json diagnostics", r.err)
     else
-        want(
+        self.want(
             "json diagnostics: fix of `mut total`",
             lines[0],
             ["\"end_line\":4,\"end_col\":18,\"notes\":[\{\"line\":2,\"col\":9,\"message\":\"`total` is first declared here\"}],\"fixes\":[\{\"title\":\"assign to `total` with `=`\",\"edits\":[\{\"line\":4,\"col\":9,\"end_line\":4,\"end_col\":13,\"text\":\"\"},\{\"line\":4,\"col\":19,\"end_line\":4,\"end_col\":21,\"text\":\"=\"}]}]"],
         )
-        want(
+        self.want(
             "json diagnostics: fix of `prnt`",
             lines[1],
             ["\"edits\":[\{\"line\":5,\"col\":5,\"end_line\":5,\"end_col\":9,\"text\":\"print\"}]"],
         )
     t := ail_run(["check", path]) else return
-    want("text diagnostics fix line", t.err, [
+    self.want("text diagnostics fix line", t.err, [
         "\nfix: replace `prnt` with `print`",
         "\nnext: ail fix {path}",
     ])
@@ -487,49 +487,49 @@ fn Gate.cli_checks(mut self)
     if ok.status != 0
         or not ok.out.starts_with("ok examples/hello.ail: ")
         or not ok.out.contains(" functions, 0 warnings")
-        red("check ok line", "exit {ok.status}\n{ok.out}{ok.err}")
+        self.red("check ok line", "exit {ok.status}\n{ok.out}{ok.err}")
     oj := ail_run(["check", "--json", "examples/hello.ail"]) else return
     if oj.status != 0
         or oj.out.trim() != "\{\"api\":1,\"summary\":true,\"errors\":0,\"warnings\":0,\"fixable\":0}"
-        red("check --json summary", "exit {oj.status}\n{oj.out}{oj.err}")
+        self.red("check --json summary", "exit {oj.status}\n{oj.out}{oj.err}")
     sj := ail_run(["check", "--json", path]) else return
     if sj.status != 2 or not sj.out.contains("\"summary\":true,\"errors\":2,")
-        red("check --json summary of errors", "exit {sj.status}\n{sj.out}")
+        self.red("check --json summary of errors", "exit {sj.status}\n{sj.out}")
     if bad := schema_problem(sj.out.trim())
-        red("check --json summary schema", bad)
+        self.red("check --json summary schema", bad)
     un := ail_run(["check", "tests/mistakes/abs_function.ail"]) else return
     if un.status != 2 or not un.err.contains("\nnext: ail ")
-        red("check next line", "exit {un.status}\n{un.err}")
+        self.red("check next line", "exit {un.status}\n{un.err}")
     # check.exit.1: a program that doesn't compile stops `ail run` (2, as `check`) and `ail test` (not 0) before anything runs.
     rb := ail_run(["run", "tests/mistakes/abs_function.ail"]) else return
     if rb.status != 2 or not rb.out.is_empty()
-        red("run of a program with errors", "exit {rb.status}\n{rb.out}{rb.err}")
+        self.red("run of a program with errors", "exit {rb.status}\n{rb.out}{rb.err}")
     tb := ail_run(["test", "tests/mistakes/abs_function.ail"]) else return
     if tb.status == 0
-        red("test of a program with errors", "exit 0\n{tb.out}{tb.err}")
+        self.red("test of a program with errors", "exit 0\n{tb.out}{tb.err}")
     nt := ail_run(["test", "examples/hello.ail"]) else return
     if nt.status != 0
         or not nt.out.starts_with("no tests found in examples/hello.ail\n0 passed, 0 failed")
-        red("test of a file with no tests", "exit {nt.status}\n{nt.out}{nt.err}")
+        self.red("test of a file with no tests", "exit {nt.status}\n{nt.out}{nt.err}")
     nf := ail_run(["check", "tests/cases/no_such_file.ail"]) else return
     if nf.status != 2
-        red("check missing file exit", "exit {nf.status}, want 2")
+        self.red("check missing file exit", "exit {nf.status}, want 2")
     # `ail explain` (ADR 0146): a known rule, JSON, and an unknown rule.
     e1 := ail_run(["explain", "expr.hole.2"]) else return
     if e1.status != 0 or not e1.out.starts_with("expr.hole.2 (05-expressions.md:")
-        red("explain", e1.out)
-    want("explain", e1.out, ["Evaluating a hole MUST trap", "(ADR 0147)"])
+        self.red("explain", e1.out)
+    self.want("explain", e1.out, ["Evaluating a hole MUST trap", "(ADR 0147)"])
     e2 := ail_run(["explain", "--json", "expr.bind.4"]) else return
     if not e2.out.starts_with("\{\"api\":1,\"rule\":\"expr.bind.4\",\"file\":\"docs/spec/05-expressions.md\"")
-        red("explain --json", e2.out)
-    want("explain --json", e2.out, ["\{\"id\":\"0039\",\"title\":", "\"example\":\"fn total("])
+        self.red("explain --json", e2.out)
+    self.want("explain --json", e2.out, ["\{\"id\":\"0039\",\"title\":", "\"example\":\"fn total("])
     e3 := ail_run(["explain", "expr.bind.99"]) else return
     if e3.status != 2
         or not e3.err.starts_with("error: unknown rule `expr.bind.99`\nhelp: known rules nearby: expr.bind.1")
-        red("explain unknown rule", e3.err)
+        self.red("explain unknown rule", e3.err)
     e4 := ail_run(["explain", "bootstrap.unsupported"]) else return
     if e4.status != 0
-        red("explain bootstrap.unsupported", "exit {e4.status}")
+        self.red("explain bootstrap.unsupported", "exit {e4.status}")
     # test.prop.3: `--cases` and `--seed` fix a property's inputs.
     prop := "tests/cases/test_prop_fail.ail"
     a := prop_run(["--seed", "7", "--cases", "50"], prop)
@@ -537,34 +537,34 @@ fn Gate.cli_checks(mut self)
         ["--cases", "50", "--seed", "7"],
         prop,
     ) or a == prop_run(["--seed", "8", "--cases", "50"], prop)
-        red("property options replay", a)
-    want("property options replay", a, ["\"seed\":7,", "\"cases\":50"])
+        self.red("property options replay", a)
+    self.want("property options replay", a, ["\"seed\":7,", "\"cases\":50"])
     pc := ail_run(["test", "--cases", "x", prop]) else return
     if pc.status != 2
-        red("property --cases x", "exit {pc.status}, want 2")
+        self.red("property --cases x", "exit {pc.status}, want 2")
     # trace.test.1-2: a failing test's events go in its JSON entry only.
     tp := "tests/trace/test_trace_fail.ail"
     plain := prop_run([], tp)
     if plain.contains("\"trace\"")
-        red("test --trace", "a plain run has a trace key:\n{plain}")
+        self.red("test --trace", "a plain run has a trace key:\n{plain}")
     traced := prop_run(["--trace=calls"], tp).lines()
     if traced.len() < 2
         or not traced[0].contains("\"test\":\"passes\"")
         or traced[0].contains("\"trace\"")
-        red("test --trace=calls", "{traced}")
+        self.red("test --trace=calls", "{traced}")
     else
-        want("test --trace=calls", traced[1], [
+        self.want("test --trace=calls", traced[1], [
             "\"test\":\"fails\"",
             "\"trace\":[\{",
             "\"fn\":\"Counter.bump\"",
         ])
-    want(
+    self.want(
         "test --trace-limit",
         prop_run(["--trace", "--trace-limit", "1"], tp),
         ["\"trace\":\"dropped\""],
     )
     h := native_run(["test", "--trace=calls", tp]) else return
-    want("test --trace=calls human", h.out, ["  trace: call fails()"])
+    self.want("test --trace=calls human", h.out, ["  trace: call fails()"])
     # fix.note.1: a duplicate declaration points at the first.
     for pair in [
         [
@@ -577,7 +577,7 @@ fn Gate.cli_checks(mut self)
         ],
     ]
         d := ail_run(["check", "--json", "tests/cases/{pair[0]}.ail"]) else return
-        want("duplicate notes {pair[0]}", d.err, [pair[1]])
+        self.want("duplicate notes {pair[0]}", d.err, [pair[1]])
     # trace.run.1, trace.run.4, trace.watch.1: bad tracing options are rejected before anything runs.
     hello := "examples/hello.ail"
     for pair in [
@@ -588,12 +588,12 @@ fn Gate.cli_checks(mut self)
     ]
         d := native_run(cat(pair[0].words(), [hello])) else return
         if d.status != 2 or not d.err.contains(pair[1]) or not d.out.is_empty()
-            red("trace options {pair[0]}", "exit {d.status}\n{d.err}")
+            self.red("trace options {pair[0]}", "exit {d.status}\n{d.err}")
     # trace.run.2: a trace goes to standard error; standard output is unchanged.
     plain_run := native_run(["run", hello]) else return
     traced_run := native_run(["run", "--trace", hello]) else return
     if plain_run.out != traced_run.out or not traced_run.err.contains("trace: summary:")
-        red("trace run", traced_run.err)
+        self.red("trace run", traced_run.err)
 
 fn prop_run(extra List[str], path str) str
     r := native_run(cat(cat(["test", "--json"], extra), [path])) else return ""
@@ -616,22 +616,22 @@ fn Gate.api_outlines(mut self)
             args := if extra.is_empty() then ["api", path] else ["api", extra, path]
             r := ail_run(args) else return
             if r.status != 0
-                red("api {extra} {path}", r.err)
+                self.red("api {extra} {path}", r.err)
     r := ail_run(["api", "--json", "tests/cases/condition_not_bool.ail"]) else return
     if r.status != 2 or not r.err.contains("\"rule\":")
-        red("api on a rejected program", r.err)
+        self.red("api on a rejected program", r.err)
     b := ail_run(["api", "--bogus", "x.ail"]) else return
     if b.status != 2
-        red("api --bogus", "exit {b.status}, want 2")
+        self.red("api --bogus", "exit {b.status}, want 2")
 
 fn Gate.cases(mut self)
-    case_dir("examples")
-    case_dir("tests/cases")
-    packages()
+    self.case_dir("examples")
+    self.case_dir("tests/cases")
+    self.packages()
     # The two small groups have no items of their own to split: shard 0 runs them.
-    if part == 0
-        cli_checks()
-        api_outlines()
+    if self.part == 0
+        self.cli_checks()
+        self.api_outlines()
 
 ## `ail explain` and `ail fix` coverage: every rule a diagnostic can carry has a spec entry, the spec cites
 ## only rules that exist, compiler/explain/fixable.txt matches the fixes the corpora
@@ -718,7 +718,7 @@ fn Gate.explain_coverage(mut self)
         if not spec.contains(r) and r != "expr.nope.1"
             missing.push(r)
     if not missing.is_empty()
-        red("explain.cover.1", "rule IDs in src/ with no rule in docs/spec: {missing}")
+        self.red("explain.cover.1", "rule IDs in src/ with no rule in docs/spec: {missing}")
     # explain.cover.2
     mut bad := List[str]()
     for path in fs.glob("docs/spec/**/*.md")
@@ -729,7 +729,10 @@ fn Gate.explain_coverage(mut self)
                 if not spec.contains(id)
                     bad.push("{path}:{n}: {id}")
     if not bad.is_empty()
-        red("explain.cover.2", "docs/spec cites rules that no chapter defines:\n{bad.join("\n")}")
+        self.red(
+            "explain.cover.2",
+            "docs/spec cites rules that no chapter defines:\n{bad.join("\n")}",
+        )
     # explain.cover.3
     mut seen := Set[str]()
     mut files := fs.glob("tests/**/*.ail")
@@ -747,15 +750,15 @@ fn Gate.explain_coverage(mut self)
     if listed.sorted() != seen.sorted()
         extra := [r for r in seen.sorted() if not listed.contains(r)]
         gone := [r for r in listed.sorted() if not seen.contains(r)]
-        red(
+        self.red(
             "explain.cover.3",
             "compiler/explain/fixable.txt is out of step with the fixes the test programs produce; produced but not listed: {extra}; listed but not produced: {gone}",
         )
     for r in listed.sorted()
         if not spec.contains(r)
-            red("explain.cover.3", "src/fixable.txt names a rule missing from docs/spec: {r}")
+            self.red("explain.cover.3", "src/fixable.txt names a rule missing from docs/spec: {r}")
     j := ail_run(["explain", "--json"]) else return
-    want("explain --json", j.out, [
+    self.want("explain --json", j.out, [
         "\"fixable\":{listed.len()}",
         "\"rule\":\"trait.op.3\",\"chapter\":\"trait\"",
         "\"fix\":true",
@@ -773,7 +776,7 @@ fn Gate.explain_coverage(mut self)
             longest_id = r
     mean := total / spec.len()
     if mean >= 400
-        red(
+        self.red(
             "explain.cover.4",
             "mean explain entry is {mean} characters; longest is {longest_id} ({longest})",
         )
@@ -794,33 +797,33 @@ fn Gate.fix(mut self, tmp str)
         sh_run("rm -rf {scratch}; mkdir -p {scratch}; cp {dir}/{name} {work}")
         f := ail_run(["fix", work]) else continue
         if f.status != 0
-            red("fix {stem}", "ail fix exit {f.status}\n{f.out}{f.err}")
+            self.red("fix {stem}", "ail fix exit {f.status}\n{f.out}{f.err}")
             continue
         if slurp(work) != slurp("{dir}/{stem}.fixed")
-            red("fix {stem}", "fixed text differs\n{f.out}")
+            self.red("fix {stem}", "fixed text differs\n{f.out}")
         c := ail_run(["check", work]) else continue
         if c.status != 0
-            red("fix {stem}", "fixed file doesn't check\n{c.err}")
+            self.red("fix {stem}", "fixed file doesn't check\n{c.err}")
         again := ail_run(["fix", "--json", work]) else continue
         if not again.out.contains("\"applied\":0,\"rounds\":0")
             or not again.out.contains("\"clean\":true")
-            red("fix {stem}", "not stable\n{again.out}")
+            self.red("fix {stem}", "not stable\n{again.out}")
     if count < 6
-        red("fix", "expected the fix fixtures, found {count}")
+        self.red("fix", "expected the fix fixtures, found {count}")
     work := "{scratch}/x.ail"
     src := "fn main()\n    n := 1\n    n = 2\n    print(n)\n"
     sh_run("rm -rf {scratch}; mkdir -p {scratch}")
     fs.write_text(work, src) else return
     d := ail_run(["fix", "--dry-run", work]) else return
     if d.status != 0
-        red("fix --dry-run", d.out)
-    want("fix --dry-run", d.out, ["+    mut n := 1", "would apply 1 fix(es)"])
+        self.red("fix --dry-run", d.out)
+    self.want("fix --dry-run", d.out, ["+    mut n := 1", "would apply 1 fix(es)"])
     if slurp(work) != src
-        red("fix --dry-run", "changed the file")
+        self.red("fix --dry-run", "changed the file")
     fs.write_text(work, "fn main()\n    print(y)\n") else return
     u := ail_run(["fix", "--json", work]) else return
     if u.status != 1 or not u.out.contains("\"applied\":0") or not u.out.contains("\"clean\":false")
-        red("fix unfixable", "exit {u.status}\n{u.out}")
+        self.red("fix unfixable", "exit {u.status}\n{u.out}")
     sh_run("rm -rf {scratch}")
 
 ## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
@@ -914,12 +917,12 @@ fn Gate.wrapper_parity(mut self)
 fn Gate.cli_help(mut self, tmp str)
     h := ail_run(["help", "--json"]) else return
     if h.status != 0
-        red("help --json", "exit {h.status}\n{h.err}")
+        self.red("help --json", "exit {h.status}\n{h.err}")
         return
     sh_text := slurp("ail")
     ps_text := slurp("ail.ps1")
     parsed := parse_json(h.out) else
-        red("help --json", "not JSON:\n{h.out}")
+        self.red("help --json", "not JSON:\n{h.out}")
         return
     mut listed := 0
     for item in parsed.as_arr() else []
@@ -930,30 +933,33 @@ fn Gate.cli_help(mut self, tmp str)
             or sh_text.contains("| {n}")
             or sh_text.contains("{n})")
         if not known
-            red("help routes: ail", "`{n}` is listed by `ail help` but not routed in ail")
+            self.red("help routes: ail", "`{n}` is listed by `ail help` but not routed in ail")
         if not ps_text.contains("'{n}'")
-            red("help routes: ail.ps1", "`{n}` is listed by `ail help` but not routed in ail.ps1")
+            self.red(
+                "help routes: ail.ps1",
+                "`{n}` is listed by `ail help` but not routed in ail.ps1",
+            )
         r := ail_run([n, "--help"]) else return
         if r.status != 0 or not r.out.contains("usage: ail {n}")
-            red("{n} --help", "exit {r.status}\n{r.out}{r.err}")
+            self.red("{n} --help", "exit {r.status}\n{r.out}{r.err}")
     if listed < 30
-        red("help --json", "only {listed} commands listed")
+        self.red("help --json", "only {listed} commands listed")
     bare := ail_run([]) else return
     if bare.status != 0 or not bare.out.contains("Build and run")
-        red("ail with no arguments", "exit {bare.status}\n{bare.out}{bare.err}")
+        self.red("ail with no arguments", "exit {bare.status}\n{bare.out}{bare.err}")
     u := ail_run(["nosuchcommand"]) else return
     if u.status != 2 or not u.err.contains("unknown command nosuchcommand; run `ail help`")
-        red("unknown command", "exit {u.status}\n{u.err}")
+        self.red("unknown command", "exit {u.status}\n{u.err}")
     # tool.path.1: a symlink to `ail` runs the same toolchain (a link needs no privilege off Windows).
     if (env.get("OS") else "") != "Windows_NT"
         link := "{tmp}/ail-link"
         sh_run("rm -f {link}; ln -s \"{repo_root()}/ail\" {link}")
         l := proc.run(link, ["help", "run"]) else return
         if l.status != 0 or not l.out.contains("usage: ail run")
-            red("symlinked ail", "exit {l.status}\n{l.out}{l.err}")
+            self.red("symlinked ail", "exit {l.status}\n{l.out}{l.err}")
         d := proc.run(link, ["doctor", "--path"]) else return
         if d.status != 0 or not d.out.contains(repo_root())
-            red("symlinked ail doctor --path", "exit {d.status}\n{d.out}{d.err}")
+            self.red("symlinked ail doctor --path", "exit {d.status}\n{d.out}{d.err}")
         sh_run("rm -f {link}")
 
 ## `ail effects` and `--deny` (effects.rs), `check --errors` and `fails_with`
@@ -962,35 +968,35 @@ fn Gate.cli_effects(mut self, tmp str)
     self.wrapper_parity()
     e := ail_run(["effects", "examples/commands.ail"]) else return
     if e.status != 0 or e.out != slurp("tests/effects/commands.effects")
-        red("effects commands.ail", e.out)
+        self.red("effects commands.ail", e.out)
     r := ail_run(["run", "--deny", "all", "examples/hello.ail"]) else return
     if r.status != 0
-        red("run --deny all", r.err)
+        self.red("run --deny all", r.err)
     r2 := ail_run(["check", "--deny", "fs,proc", "examples/commands.ail"]) else return
     if r2.status != 0
-        red("check --deny fs,proc", r2.err)
+        self.red("check --deny fs,proc", r2.err)
     # An error at the end of the input (an unclosed `fn broken(`) has a real line, not the next file's base line.
     eof := "{tmp}/eof.ail"
     fs.write_text(eof, "fn main()\n    print(1)\n\nfn broken(\n") else return
     eo := ail_run(["check", eof]) else return
     if eo.status == 0 or eo.err.contains("1048576") or not eo.err.contains("eof.ail:5:1")
-        red("error at end of input", "exit {eo.status}\n{eo.err}")
+        self.red("error at end of input", "exit {eo.status}\n{eo.err}")
     r3 := ail_run(["run", "--deny", "disk", "examples/hello.ail"]) else return
     if r3.status != 2 or not r3.err.contains("eff.cap.2")
-        red("--deny disk", "exit {r3.status}\n{r3.err}")
+        self.red("--deny disk", "exit {r3.status}\n{r3.err}")
     p := native_run(["effects", "--parallel", "examples/parallel.ail"]) else return
     if p.status != 0 or p.out != slurp("tests/effects/parallel.loops")
-        red("effects --parallel", "{p.out}{p.err}")
+        self.red("effects --parallel", "{p.out}{p.err}")
     pj := native_run(["effects", "--parallel", "--json", "examples/parallel.ail"]) else return
     if not pj.out.starts_with("\{\"ail_api\":1,\"loops\":[\{\"at\":\"examples/parallel.ail:32:5\"")
         or pj.out.count("\"verdict\":\"parallel\"") != 3
-        red("effects --parallel --json", pj.out)
+        self.red("effects --parallel --json", pj.out)
     # error_paths.rs, on cases/err_paths_ok.ail
     case := "tests/cases/err_paths_ok.ail"
     c := native_run(["check", "--errors", case]) else return
     if c.status != 0
-        red("check --errors", c.err)
-    want("check --errors", c.out, [
+        self.red("check --errors", c.err)
+    self.want("check --errors", c.out, [
         "\"id\":\"fn:both\",\"name\":\"both\",\"line\":17,\"fails_with\":[\"A\",\"B\"]",
         "\{\"line\":18,\"col\":14,\"kind\":\"propagate\",\"call\":\"a\",\"errors\":[\"A\"],\"context\":true}",
         "\{\"line\":19,\"col\":14,\"kind\":\"propagate\",\"call\":\"b\",\"errors\":[\"B\"]}",
@@ -998,13 +1004,13 @@ fn Gate.cli_effects(mut self, tmp str)
         "\"name\":\"main\",\"line\":22,\"paths\":[\{\"line\":23,\"col\":11,\"kind\":\"handle\",\"how\":\"default\"",
     ])
     a := ail_run(["api", case]) else return
-    want("api fails_with", a.out, ["\"returns\":\"!int\",\"fails_with\":[\"A\",\"B\"]"])
+    self.want("api fails_with", a.out, ["\"returns\":\"!int\",\"fails_with\":[\"A\",\"B\"]"])
     at := ail_run(["api", "--text", case]) else return
-    want("api --text fails_with", at.out, ["fn both(n int) !int\n           fails with A | B"])
+    self.want("api --text fails_with", at.out, ["fn both(n int) !int\n           fails with A | B"])
     x := ail_run(["explain", "err.ret.1"]) else return
-    want("explain err.ret.1", x.out, ["rejected example:", "repaired:"])
+    self.want("explain err.ret.1", x.out, ["rejected example:", "repaired:"])
     if x.out.contains("\nexample:")
-        red("explain err.ret.1", x.out)
+        self.red("explain err.ret.1", x.out)
     # cli_errors.rs: diagnostics the case harness can't check.
     dir := "{tmp}/cli"
     sh_run("rm -rf {dir}; mkdir -p {dir}/gone")
@@ -1012,19 +1018,19 @@ fn Gate.cli_effects(mut self, tmp str)
     fs.write_text(main, "fn main()\n    print(1)\n") else return
     d := ail_run(["run", "--deny", "io", main]) else return
     if d.status != 2 or not d.err.contains("(eff.cap.3)")
-        red("--deny io", "exit {d.status}\n{d.err}")
+        self.red("--deny io", "exit {d.status}\n{d.err}")
     fs.write_text(main, "use std.env\n\nfn main()\n    print(env.cwd())\n") else return
     root := repo_root()
     # Windows refuses to remove a directory a process is in, so std.env.3 can't be reached there.
     if (env.get("OS") else "") != "Windows_NT"
         w := sh_run("cd {dir}/gone && rmdir {dir}/gone && exec {bin_path(root)} run {main}")
         if w.status != 1 or not w.err.contains("trap[std.env.3]")
-            red("env.cwd removed", "exit {w.status}\n{w.err}")
+            self.red("env.cwd removed", "exit {w.status}\n{w.err}")
     for t in [["print(io.read_line())", "std.io.1"], ["print(io.read_all().len())", "std.io.2"]]
         fs.write_text(main, "use std.io\n\nfn main()\n    {t[0]}\n") else return
         i := sh_run("{bin_path(root)} run {main} < {dir}")
         if i.status != 1 or not i.err.contains("trap[{t[1]}]")
-            red("stdin a directory {t[1]}", "exit {i.status}\n{i.err}")
+            self.red("stdin a directory {t[1]}", "exit {i.status}\n{i.err}")
     fs.write_text(
         main,
         "extern c fn abs(n int) int\n\nfn main()\n    unsafe\n        print(abs(-3))\n",
@@ -1032,7 +1038,7 @@ fn Gate.cli_effects(mut self, tmp str)
     b := ail_run(["build", main, "-o", "{dir}/main.out", "--no-cache"]) else return
     # ffi.native.1, ADR 0870: a C function outside the libc subset builds (it binds at the first call).
     if b.status != 0 or not fs.exists("{dir}/main.out")
-        red("build extern c fn", "exit {b.status}\n{b.err}")
+        self.red("build extern c fn", "exit {b.status}\n{b.err}")
     sh_run("rm -rf {dir}")
 
 ## The mistakes corpus (gram.help.2,
@@ -1082,16 +1088,16 @@ fn Gate.mistakes(mut self, tmp str)
         mut rules := List[str]()
         for l in r.err.lines()
             if bad := schema_problem(l)
-                red("mistakes {stem}", "record breaks check-json.schema.json: {bad}\n{l}")
+                self.red("mistakes {stem}", "record breaks check-json.schema.json: {bad}\n{l}")
             if l.contains("\"severity\":\"error\"")
                 rules.push(rule_of(l))
                 if not l.contains("\"help\":\"")
-                    red("mistakes {stem}", "a diagnostic has no help\n{l}")
+                    self.red("mistakes {stem}", "a diagnostic has no help\n{l}")
                 if rule_of(l) == "bootstrap.unsupported"
-                    red("mistakes {stem}", "a mistake is reported as unsupported\n{l}")
+                    self.red("mistakes {stem}", "a mistake is reported as unsupported\n{l}")
         want_rules := slurp("{dir}/{stem}.rules").lines()
         if rules != want_rules
-            red("mistakes {stem}", "rules differ\n  expected {want_rules}\n  got      {rules}")
+            self.red("mistakes {stem}", "rules differ\n  expected {want_rules}\n  got      {rules}")
         work := "{scratch}/{name}"
         sh_run("rm -rf {scratch}; mkdir -p {scratch}; cp {path} {work}")
         f := ail_run(["fix", work]) else continue
@@ -1099,14 +1105,14 @@ fn Gate.mistakes(mut self, tmp str)
         if fs.exists("{dir}/{stem}.fixed")
             fixed_count += 1
             if slurp(work) != slurp("{dir}/{stem}.fixed")
-                red("mistakes {stem}", "fixed text differs\n--- actual\n{slurp(work)}")
+                self.red("mistakes {stem}", "fixed text differs\n--- actual\n{slurp(work)}")
             if c.status != 0
-                red("mistakes {stem}", "the fixed file doesn't check\n{c.err}")
+                self.red("mistakes {stem}", "the fixed file doesn't check\n{c.err}")
             again := ail_run(["fix", "--json", work]) else continue
             if not again.out.contains("\"applied\":0,\"rounds\":0")
-                red("mistakes {stem}", "a second `ail fix` still changes the file")
+                self.red("mistakes {stem}", "a second `ail fix` still changes the file")
         elif c.status == 0 or f.status == 0
-            red(
+            self.red(
                 "mistakes {stem}",
                 "has no .fixed file, but `ail fix` resolved it; record the result",
             )
@@ -1115,9 +1121,9 @@ fn Gate.mistakes(mut self, tmp str)
     # The coverage figure is printed here so it can't drift from the corpus (fix.check.1, ADR 1047).
     print("mistakes: `ail fix` resolves {fixed_count} of {total} ({fixed_count * 100 / total}%)")
     if total < 60
-        red("mistakes", "the corpus has {total} programs")
+        self.red("mistakes", "the corpus has {total} programs")
     if fixed_count * 100 < total * 60
-        red("mistakes", "`ail fix` resolves only {fixed_count} of {total}")
+        self.red("mistakes", "`ail fix` resolves only {fixed_count} of {total}")
 
 ## `requires`, `ensures`, `old`, inheritance and invariants end to end
 ##.
@@ -1127,35 +1133,35 @@ fn case_path(name str) str
 fn Gate.trap_has(mut self, label str, case str, wants List[str])
     r := ail_run(["run", case_path(case)]) else return
     if r.status != 1
-        red(label, "exit {r.status}, want 1\n{r.err}")
-    want(label, r.err, wants)
+        self.red(label, "exit {r.status}, want 1\n{r.err}")
+    self.want(label, r.err, wants)
 
 fn Gate.api_has(mut self, label str, flag str, case str, wants List[str])
     args := if flag.is_empty() then ["api", case_path(case)] else ["api", flag, case_path(case)]
     r := ail_run(args) else return
-    want(label, r.out, wants)
+    self.want(label, r.out, wants)
 
 fn Gate.contracts(mut self)
-    trap_has(
+    self.trap_has(
         "contract requires trap",
         "contract_requires_trap",
         [":8:11: trap[contract.req.1]: `divide` requires `b != 0`, but it was called with a = 7, b = 0 (contract at 3:5)"],
     )
-    trap_has(
+    self.trap_has(
         "contract ensures trap",
         "contract_ensures_trap",
         [":4:5: trap[contract.ens.1]: `divide` ensures `result * b == a`, but it returned 3 at 5:5 with a = 7, b = 2"],
     )
     n := native_run(["run", "--no-contracts", case_path("contract_ensures_trap")]) else return
     if n.status != 0 or n.out != "4\n3\n"
-        red("--no-contracts", "exit {n.status}\n{n.out}{n.err}")
-    api_has(
+        self.red("--no-contracts", "exit {n.status}\n{n.out}{n.err}")
+    self.api_has(
         "api contracts",
         "",
         "contract_ensures_trap",
         ["\"requires\":[\"b != 0\"],\"ensures\":[\"result * b == a\"]"],
     )
-    api_has(
+    self.api_has(
         "api --text contracts",
         "--text",
         "contract_ensures_trap",
@@ -1177,53 +1183,53 @@ fn Gate.contracts(mut self)
     ]
         e := ail_run(["explain", rule]) else return
         if e.status != 0
-            red("explain {rule}", "exit {e.status}")
+            self.red("explain {rule}", "exit {e.status}")
     old := native_run(["run", "--values", case_path("contract_old_trap")]) else return
     if old.status != 1
-        red("contract old trap", "exit {old.status}, want 1\n{old.err}")
-    want("contract old trap", old.err, [
+        self.red("contract old trap", "exit {old.status}, want 1\n{old.err}")
+    self.want("contract old trap", old.err, [
         "`Counter.add` ensures `n == old(n) + k`, but it returned at 4:5 with self = Counter(n: 4), k = 2",
         "values: self = Counter(n: 4), old(n) = 1, k = 2",
     ])
-    trap_has(
+    self.trap_has(
         "inherited requires",
         "contract_trait_requires_trap",
         ["`Plain.scale` requires `k > 0` (inherited from `Shape.scale`), but it was called with self = Plain(side: 4), factor = 0 (contract at 5:9)"],
     )
-    trap_has(
+    self.trap_has(
         "inherited ensures",
         "contract_trait_ensures_trap",
         ["`Odd.area` ensures `result >= 0` (inherited from `Shape.area`), but it returned -6"],
     )
-    trap_has(
+    self.trap_has(
         "invariant method",
         "contract_invariant_method_trap",
         ["`Account` invariant `balance >= 0` was broken by `Account.withdraw`, which returned at 7:5 with self = Account(balance: -7) (invariant at 4:5)"],
     )
-    trap_has(
+    self.trap_has(
         "invariant built",
         "contract_invariant_built_trap",
         ["`Range` invariant `lo <= hi` doesn't hold for Range(lo: 3, hi: 2), built at 9:16 (invariant at 5:5)"],
     )
-    api_has(
+    self.api_has(
         "api inherited",
         "",
         "contract_trait_inherit",
         ["\"inherits\":\"Shape.scale\",\"inherited_requires\":[\"k > 0\"],\"inherited_ensures\":[\"result >= 0\"]"],
     )
-    api_has(
+    self.api_has(
         "api invariants",
         "",
         "contract_invariant",
         ["\"invariants\":[\"balance >= 0\",\"balance <= limit\"]"],
     )
-    api_has(
+    self.api_has(
         "api --text inherited",
         "--text",
         "contract_trait_inherit",
         ["requires k > 0 (inherited)"],
     )
-    proved_contracts()
+    self.proved_contracts()
 
 ## contract.prove.1-3, prove.cmd.1-2 (ADR 1055). A proved check is left out of the build, so a
 ## prover bug would remove a check silently: every contract case must run the same with proving
@@ -1240,14 +1246,14 @@ fn Gate.proved_contracts(mut self)
         lean := ail_run(["run", at]) else return
         kept := ail_env("AIL_OPT_OFF=prove", ["run", at]) else return
         if lean.status != kept.status or lean.out != kept.out or lean.err != kept.err
-            red(
+            self.red(
                 "proved checks {name}",
                 "proving on: exit {lean.status}\n{lean.out}{lean.err}\nAIL_OPT_OFF=prove: exit {kept.status}\n{kept.out}{kept.err}",
             )
     p := ail_run(["prove", case_path("prove_contracts")]) else return
     if p.status != 0
-        red("ail prove", "exit {p.status}\n{p.err}")
-    want("ail prove", p.out, [
+        self.red("ail prove", "exit {p.status}\n{p.err}")
+    self.want("ail prove", p.out, [
         "requires `i < xs.len()` of `at` in `total`: proved\n",
         "requires `i < xs.len()` of `at` in `main`: proved\n",
         "ensures `result < 10` of `digit`: proved\n",
@@ -1257,24 +1263,24 @@ fn Gate.proved_contracts(mut self)
     # The negative cases: a `mut` name, a call into another file, and a contract the facts
     # don't settle keep their checks (they trap in the cases suite, both ways above).
     m := ail_run(["prove", case_path("prove_mut_trap")]) else return
-    want("ail prove mut", m.out, [
+    self.want("ail prove mut", m.out, [
         "requires `n >= 0` of `half` in `main`: checked\n",
         "0 of 2 contract checks proved\n",
     ])
     x := ail_run(["prove", case_path("prove_module_trap")]) else return
-    want("ail prove other file", x.out, [
+    self.want("ail prove other file", x.out, [
         "requires `n > 0` of `go` in `main`: proved\n",
         "2 of 2 contract checks proved\n",
     ])
     j := ail_run(["prove", "--json", case_path("prove_unproved_trap")]) else return
-    want("ail prove --json", j.out, [
+    self.want("ail prove --json", j.out, [
         "\"ail_api\":1,\"prove\":1,\"proved\":1,\"total\":2,",
         "\"kind\":\"requires\",\"fn\":\"half\",\"cond\":\"n >= 0\",",
         "\"in\":\"half_less\",\"proved\":false}",
     ])
     u := ail_run(["prove"]) else return
     if u.status != 2
-        red("ail prove usage", "exit {u.status}, want 2")
+        self.red("ail prove usage", "exit {u.status}, want 2")
 
 ## `ail test --update` (snap.update.1-6).
 fn Gate.snapshot(mut self, tmp str)
@@ -1287,25 +1293,25 @@ fn Gate.snapshot(mut self, tmp str)
     fs.write_text(f, program) else return
     fs.write_text("{d}/p.out", "old\n") else return
     r := native_run(["test", "--update", f]) else return
-    want("snapshot update", r.out, [
+    self.want("snapshot update", r.out, [
         "-    assert_eq(greet(\"bo\"), \"hello\")\n",
         "+    assert_eq(greet(\"bo\"), \"hi, bo!\")\n",
         "updated 5 snapshots in 2 files\n",
     ])
     if r.status != 0 or not r.out.ends_with("ok greets\nok doc:double\n2 passed, 0 failed\n")
-        red("snapshot update", "exit {r.status}\n{r.out}")
+        self.red("snapshot update", "exit {r.status}\n{r.out}")
     if slurp(f) != updated or slurp("{d}/p.out") != "hi, x!\n"
-        red("snapshot update", "files not rewritten:\n{slurp(f)}")
+        self.red("snapshot update", "files not rewritten:\n{slurp(f)}")
     again := native_run(["test", "--update", f]) else return
     if not again.out.starts_with("updated 0 snapshots in 0 files\n")
-        red("snapshot update again", again.out)
+        self.red("snapshot update again", again.out)
     # snap.update.6: `--dry-run` writes nothing; `--json` lists each change.
     sh_run("rm -rf {d}; mkdir -p {d}")
     fs.write_text(f, program) else return
     j := native_run(["test", "--update", "--dry-run", "--json", f]) else return
     if slurp(f) != program
-        red("snapshot dry-run", "wrote the file")
-    want("snapshot --json", j.out, [
+        self.red("snapshot dry-run", "wrote the file")
+    self.want("snapshot --json", j.out, [
         "\{\"snapshot\":\"assert_eq\",\"file\":\"{f}\",\"line\":14,\"col\":28,\"old\":\"\\\"hello\\\"\",\"new\":\"\\\"hi, bo!\\\"\"}\n",
         "\{\"snapshot\":\"doc\",",
         "\{\"snapshots\":true,\"dry_run\":true,\"updated\":4,\"files\":1,\"skipped\":0}\n",
@@ -1316,14 +1322,14 @@ fn Gate.snapshot(mut self, tmp str)
     fs.write_text(f, src) else return
     c := native_run(["test", "--update", f]) else return
     if c.status != 1
-        red("snapshot conflict", "exit {c.status}\n{c.out}")
-    want("snapshot conflict", c.out, [
+        self.red("snapshot conflict", "exit {c.status}\n{c.out}")
+    self.want("snapshot conflict", c.out, [
         "left 1 whose value differed between runs (snap.update.3)",
         "FAIL loops: trap[test.assert.1]: assertion failed: left is 4, right is 0",
         "FAIL named:",
     ])
     if slurp(f) != src
-        red("snapshot conflict", "rewrote the file")
+        self.red("snapshot conflict", "rewrote the file")
     sh_run("rm -rf {d}")
 
 ## Small end-to-end checks of derive_json.rs, ct_limit.rs, deterministic.rs,
@@ -1335,8 +1341,8 @@ fn Gate.misc(mut self, tmp str)
     # json.derive.1-3, ADR 0343
     a := ail_run(["api", "--expanded", "tests/cases/derive_json_enum_payloads.ail"]) else return
     if a.status != 0
-        red("api --expanded", a.err)
-    want("api --expanded", a.out, [
+        self.red("api --expanded", a.err)
+    self.want("api --expanded", a.out, [
         "\"signature\":\"fn from_json(j Json) Self ! JsonError\"",
         "name := j.variant_name()?",
         "return Shape.Poly(points: v_points)",
@@ -1348,29 +1354,29 @@ fn Gate.misc(mut self, tmp str)
     spin := "tests/ct_limit/spin.ail"
     c := ail_env("AIL_CT_MAX_STEPS=1000", ["run", spin]) else return
     if c.status != 1
-        red("ct limit", "exit {c.status}\n{c.err}")
-    want("ct limit", c.err, ["trap[ct.eval.3]", "the constant `BIG`"])
+        self.red("ct limit", "exit {c.status}\n{c.err}")
+    self.want("ct limit", c.err, ["trap[ct.eval.3]", "the constant `BIG`"])
     c2 := ail_env("AIL_CT_MAX_STEPS=100000", ["run", spin]) else return
     if c2.status != 0 or c2.out.trim() != "499500"
-        red("ct limit under", "exit {c2.status}\n{c2.out}{c2.err}")
+        self.red("ct limit under", "exit {c2.status}\n{c2.out}{c2.err}")
     # std.random.3, std.random.5
     unseeded := "tests/deterministic/unseeded.ail"
     s11 := ail_run(["run", "--seed", "11", unseeded]) else return
     s11b := ail_run(["run", "--seed", "11", unseeded]) else return
     s12 := ail_run(["run", "--seed", "12", unseeded]) else return
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
-        red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
+        self.red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
     for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
         d := native_run(["run", "--deterministic", program]) else return
         if d.status != 2 or not d.err.contains("eff.cap.1")
-            red("--deterministic {program}", "exit {d.status}\n{d.err}")
+            self.red("--deterministic {program}", "exit {d.status}\n{d.err}")
     h1 := native_run(["run", "--deterministic", "examples/hello.ail"]) else return
     h2 := native_run(["run", "--deterministic", "examples/hello.ail"]) else return
     if h1.status != 0 or h1.out != h2.out
-        red("--deterministic hello", h1.err)
+        self.red("--deterministic hello", h1.err)
     sx := ail_run(["run", "--seed", "x", unseeded]) else return
     if sx.status != 2 or not sx.err.contains("std.random.3")
-        red("--seed x", "exit {sx.status}\n{sx.err}")
+        self.red("--seed x", "exit {sx.status}\n{sx.err}")
     # test.run.2: `ail test` captures standard error; `ail run` does not.
     dir := "{tmp}/misc"
     sh_run("rm -rf {dir}; mkdir -p {dir}")
@@ -1383,11 +1389,11 @@ fn Gate.misc(mut self, tmp str)
         or not t.out.contains("  ! boom on stderr")
         or t.out.contains("noise from a passing test")
         or t.err.contains("noise from a passing test")
-        red("test stderr capture", "exit {t.status}\n{t.out}{t.err}")
+        self.red("test stderr capture", "exit {t.status}\n{t.out}{t.err}")
     fs.write_text("{dir}/run.ail", "use std.io\nfn main()\n    io.eprint(\"direct\")\n") else return
     r := ail_run(["run", "{dir}/run.ail"]) else return
     if r.status != 0 or r.err != "direct\n"
-        red("run stderr direct", "exit {r.status}\n{r.err}")
+        self.red("run stderr direct", "exit {r.status}\n{r.err}")
     sh_run("rm -rf {dir}")
     # conc.sched.1-2: a seed picks the task switch points, so a failing interleaving replays.
     race := "tests/schedule/race.ail"
@@ -1398,29 +1404,29 @@ fn Gate.misc(mut self, tmp str)
     if first.status != 1
         or not first.out.contains("left is 1, right is 2")
         or not first.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":{fail_seed}}\n")
-        red("schedule seed {fail_seed}", "exit {first.status}\n{first.out}")
+        self.red("schedule seed {fail_seed}", "exit {first.status}\n{first.out}")
     for _ in 0..3
         again := ail_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
         if again.out != first.out
-            red("schedule replay", again.out)
+            self.red("schedule replay", again.out)
     passed := ail_run(["test", "--json", "--schedule=random:{pass_seed}", race]) else return
     if passed.status != 0
         or not passed.out.ends_with("\{\"summary\":true,\"passed\":1,\"failed\":0}\n")
-        red("schedule seed {pass_seed}", "exit {passed.status}\n{passed.out}")
+        self.red("schedule seed {pass_seed}", "exit {passed.status}\n{passed.out}")
     human := ail_run(["test", "--schedule=random:{fail_seed}", race]) else return
-    want(
+    self.want(
         "schedule prints the seed",
         human.out,
         ["schedule seed {fail_seed}: replay with `ail test --schedule=random:{fail_seed} "],
     )
     bad := ail_run(["test", "--schedule=sometimes", race]) else return
     if bad.status != 2
-        red("schedule sometimes", "exit {bad.status}, want 2")
+        self.red("schedule sometimes", "exit {bad.status}, want 2")
     # conc.cancel.3-4, conc.atomic.7: cancel trees and orderings pass every seed.
     for seed in 1..25
         x := ail_run(["test", "--schedule=random:{seed}", "tests/schedule/cancel.ail"]) else return
         if x.status != 0 or not x.out.ends_with("4 passed, 0 failed\n")
-            red("schedule cancel seed {seed}", x.out)
+            self.red("schedule cancel seed {seed}", x.out)
 
 ## The documentation checks in tools/ (doc_scripts.rs, ported; ADR 0002).
 fn Gate.docs(mut self)
@@ -1440,7 +1446,25 @@ fn Gate.docs(mut self)
     ]
         r := proc.run("python3", cat(["-I"], args)) else return
         if r.status != 0
-            red("{args.join(" ")}", "{r.out}{r.err}")
+            self.red("{args.join(" ")}", "{r.out}{r.err}")
+
+## checkbench (ADR 1111): `ail check` against one injected mistake per copy of the corpus and examples programs
+## (tools/checkbench). The fast form's totals may not fall below tools/checkbench/floors.txt.
+fn Gate.checkbench(mut self)
+    if proc.which("python3") == none
+        print("checkbench: python3 not found; skipping")
+        return
+    r := proc.run("python3", [
+        "-I",
+        "tools/checkbench/checkbench.py",
+        "--fast",
+        "--jobs",
+        "2",
+        "--floors",
+        "tools/checkbench/floors.txt",
+    ]) else return
+    if r.status != 0
+        self.red("checkbench", "{r.out}{r.err}")
 
 ## `ail fmt` end to end (fmt.rs, ported; ADR 0170).
 fn Gate.fmt(mut self, tmp str)
@@ -1455,13 +1479,13 @@ fn Gate.fmt(mut self, tmp str)
         f := "examples/{name}"
         formatted := ail_run(["fmt", "--stdout", f]) else continue
         if formatted.status != 0
-            red("fmt {f}", formatted.err)
+            self.red("fmt {f}", formatted.err)
             continue
         source := slurp(f)
         # ADR 0218: programs that find fixtures from their own path can't run as a copy.
         if source.contains("env.program()") or source.contains("/../ail")
             if formatted.out != source
-                red("fmt {f}", "not in canonical layout")
+                self.red("fmt {f}", "not in canonical layout")
             checked += 1
             continue
         # std.ui and std.app programs open a real window; only their formatting is checked.
@@ -1473,10 +1497,10 @@ fn Gate.fmt(mut self, tmp str)
         before := ail_run(["run", f]) else continue
         after := ail_run(["run", copy]) else continue
         if before.status != after.status or before.out != after.out
-            red("fmt {f}", "output changed after formatting")
+            self.red("fmt {f}", "output changed after formatting")
         checked += 1
     if checked < 6
-        red("fmt examples", "only {checked} checked")
+        self.red("fmt examples", "only {checked} checked")
     messy := "{dir}/messy.ail"
     fs.write_text(
         messy,
@@ -1484,8 +1508,8 @@ fn Gate.fmt(mut self, tmp str)
     ) else return
     ch := ail_run(["fmt", "--check", messy]) else return
     if ch.status != 1
-        red("fmt --check", "exit {ch.status}, want 1")
-    want("fmt --check diff", ch.out, [
+        self.red("fmt --check", "exit {ch.status}, want 1")
+    self.want("fmt --check diff", ch.out, [
         "\n-    print( x )\n",
         "\n+    print(x)\n",
         "+    x := [1, 2]\n",
@@ -1493,20 +1517,20 @@ fn Gate.fmt(mut self, tmp str)
     tidy := "fn main()\n    x := [1, 2]\n    print(x)\n"
     so := ail_run(["fmt", "--stdout", messy]) else return
     if so.out != tidy
-        red("fmt --stdout", so.out)
+        self.red("fmt --stdout", so.out)
     w := ail_run(["fmt", messy]) else return
     if w.status != 0 or slurp(messy) != tidy
-        red("fmt rewrite", "exit {w.status}\n{slurp(messy)}")
+        self.red("fmt rewrite", "exit {w.status}\n{slurp(messy)}")
     ck := ail_run(["fmt", "--check", messy]) else return
     if ck.status != 0
-        red("fmt --check after rewrite", ck.out)
+        self.red("fmt --check after rewrite", ck.out)
     broken := "{dir}/broken.ail"
     fs.write_text(broken, "fn main()\n   print(1)\n") else return
     b := ail_run(["fmt", broken]) else return
     if b.status != 2
         or not b.err.contains("lex.block.2")
         or slurp(broken) != "fn main()\n   print(1)\n"
-        red("fmt broken file", "exit {b.status}\n{b.err}")
+        self.red("fmt broken file", "exit {b.status}\n{b.err}")
     # A directory is checked file by file: one layout diff in a tree is exit 1 and names the file.
     tree := "{dir}/tree"
     fs.make_dir(tree) else return
@@ -1514,8 +1538,8 @@ fn Gate.fmt(mut self, tmp str)
     fs.write_text("{tree}/off.ail", "fn main()\n    print( 1 )\n") else return
     td := ail_run(["fmt", "--check", tree]) else return
     if td.status != 1 or not td.out.contains("off.ail") or td.out.contains("ok.ail")
-        red("fmt --check directory", "exit {td.status}\n{td.out}")
-    # fmt.self (ADR 1081): `--self` writes `self.` before bare members; plain `fmt` keeps them.
+        self.red("fmt --check directory", "exit {td.status}\n{td.out}")
+    # fmt.self (ADR 1081): `fmt` writes `self.` before bare members, and has no option to keep them.
     bare := [
         "struct Pt",
         "    x int",
@@ -1540,10 +1564,14 @@ fn Gate.fmt(mut self, tmp str)
         "fn Pt.scaled(self, k int) Pt",
         "    Pt(x: x * k, y: self.y * k)",
         "",
+        "fn Pt.copy(self) Pt",
+        "    Pt(x, y)",
+        "",
         "fn main()",
         "    mut p := Pt(x: 1, y: 2)",
         "    p.shift(3)",
         "    print(p.scaled(2).sum())",
+        "    print(p.copy().sum())",
         "    print(p.hello())",
         "",
     ].join("\n")
@@ -1553,28 +1581,31 @@ fn Gate.fmt(mut self, tmp str)
         .replace("    x += d", "    self.x += d")
         .replace("\{x} \{sum()}", "\{self.x} \{self.sum()}")
         .replace("x: x * k", "x: self.x * k")
+        # Shorthand fields of one type: named, so they are never positional (type.struct.7).
+        .replace("    Pt(x, y)", "    Pt(x: self.x, y: self.y)")
     members := "{dir}/members.ail"
     fs.write_text(members, bare) else return
-    kept := ail_run(["fmt", "--stdout", members]) else return
-    if kept.status != 0 or kept.out != bare
-        red("fmt keeps bare members", "exit {kept.status}\n{kept.out}{kept.err}")
-    sf := ail_run(["fmt", "--self", "--stdout", members]) else return
+    sf := ail_run(["fmt", "--stdout", members]) else return
     if sf.status != 0 or sf.out != explicit
-        red("fmt --self", "exit {sf.status}\n{sf.out}{sf.err}")
+        self.red("fmt.self", "exit {sf.status}\n{sf.out}{sf.err}")
     run_bare := ail_run(["run", members]) else return
     fs.write_text(members, explicit) else return
-    again := ail_run(["fmt", "--self", "--check", members]) else return
+    again := ail_run(["fmt", "--check", members]) else return
     if again.status != 0
-        red("fmt --self --check", "exit {again.status}\n{again.out}{again.err}")
+        self.red("fmt.self --check", "exit {again.status}\n{again.out}{again.err}")
     run_explicit := ail_run(["run", members]) else return
-    if run_bare.out != "now 4 6\n12\nhi pt\n" or run_explicit.out != run_bare.out
-        red("fmt --self meaning", "{run_bare.out}{run_bare.err}---\n{run_explicit.out}")
+    if run_bare.out != "now 4 6\n12\n6\nhi pt\n" or run_explicit.out != run_bare.out
+        self.red("fmt.self meaning", "{run_bare.out}{run_bare.err}---\n{run_explicit.out}")
+    # The staging switch `--self` is gone (ADR 1081): one layout, no option.
+    gone := ail_run(["fmt", "--self", "--stdout", members]) else return
+    if gone.status != 2 or not gone.err.contains("unknown option --self")
+        self.red("fmt --self removed", "exit {gone.status}\n{gone.err}")
     # Every source file of the compiler and the gate is canonical (ready-check checks the files a
     # branch changes; DK missed a layout diff in compiler/main.ail because this suite looked only at examples).
     for root in ["compiler", "tools/gate"]
         tr := ail_run(["fmt", "--check", root]) else continue
         if tr.status != 0
-            red("fmt --check {root}", "run `./ail fmt {root}`:\n{tr.out}{tr.err}")
+            self.red("fmt --check {root}", "run `./ail fmt {root}`:\n{tr.out}{tr.err}")
     sh_run("rm -rf {dir}")
 
 ## `--budget N [--from K]` on every command (budget.rs, ported; budget.out.1-6, ADR 0394).
@@ -1588,26 +1619,26 @@ fn Gate.budget(mut self, tmp str)
     plain := ail_run(["check", f]) else return
     fits := ail_run(["check", "--budget", "100000", f]) else return
     if plain.err != fits.err or plain.status != 2 or fits.status != 2
-        red("budget.out.1", "fitting output changed:\n{fits.err}")
+        self.red("budget.out.1", "fitting output changed:\n{fits.err}")
     # budget.out.3-4: the error comes before the warnings; the note counts the rest.
     w := plain.err.find("warning[") else 0
     e := plain.err.find("error[") else 0
     if w >= e
-        red("budget.out.3", "a warning is not before the error:\n{plain.err}")
+        self.red("budget.out.3", "a warning is not before the error:\n{plain.err}")
     cut := ail_run(["check", "--budget", "10", f]) else return
     if not cut.err.contains("error[")
         or cut.err.contains("warning[")
         or not cut.err.ends_with("not shown: 2 warnings; continue with --from 1]\n")
-        red("budget.out.3", cut.err)
+        self.red("budget.out.3", cut.err)
     next := ail_run(["check", "--budget", "10", "--from", "1", f]) else return
     if not next.err.starts_with("{f}:2:") or next.err.contains("error[")
-        red("budget --from", next.err)
+        self.red("budget --from", next.err)
     # budget.out.4: the JSON note.
     j := ail_run(["check", "--json", "--budget", "10", f]) else return
     last := j.err.lines().last() else ""
     if not last.starts_with("\{\"budget\":10,\"from\":0,\"shown\":1,\"full\":1,\"total\":3,\"tokens\":")
         or not last.ends_with("\"omitted\":\{\"warning\":2},\"next\":1}")
-        red("budget json note", last)
+        self.red("budget json note", last)
     # budget.out.3: a test summary is always shown; failures come first.
     t := "{dir}/t.ail"
     fs.write_text(
@@ -1619,7 +1650,7 @@ fn Gate.budget(mut self, tmp str)
         or not tr.out.contains("1 passed, 1 failed\n")
         or not tr.out.ends_with("not shown: 1 passed test; continue with --from 1]\n")
         or tr.status != 1
-        red("budget test summary", "exit {tr.status}\n{tr.out}")
+        self.red("budget test summary", "exit {tr.status}\n{tr.out}")
     # budget.out.1, std.env.1: a `--budget` after FILE belongs to the program.
     a := "{dir}/args.ail"
     fs.write_text(
@@ -1628,14 +1659,14 @@ fn Gate.budget(mut self, tmp str)
     ) else return
     ra := ail_run(["run", "--budget", "1", a, "x", "--budget", "y"]) else return
     if not ra.out.starts_with("x\n[budget 1: records 1-1 of 3")
-        red("budget run args", ra.out)
+        self.red("budget run args", ra.out)
     # budget.out.5: a bare `--budget` takes the command's default.
     bare := ail_run(["check", "--budget", f]) else return
     if bare.err != plain.err
-        red("bare --budget", bare.err)
+        self.red("bare --budget", bare.err)
     bad := ail_run(["check", "--from", "x", f]) else return
     if not bad.err.contains("budget.out.4") or bad.status != 2
-        red("--from x", "exit {bad.status}\n{bad.err}")
+        self.red("--from x", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {dir}")
 
 ## Run limits and coverage (limits.rs, ported; run.limit.1-4, test.cover.1-3, test.run.5).
@@ -1643,30 +1674,30 @@ fn Gate.limits(mut self, tmp str)
     case := "tests/limits"
     r := ail_run(["run", "--timeout", "200", "{case}/limit_endless.ail"]) else return
     if r.status != 1 or not r.err.contains("trap[run.limit.1]") or not r.err.contains("in main(")
-        red("--timeout", "exit {r.status}\n{r.err}")
+        self.red("--timeout", "exit {r.status}\n{r.err}")
     # run.limit.3 is native only (ADR 0883): the Rust binary doesn't know `--max-steps`.
     a := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
     b := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
     if a.status != 1 or not a.err.contains("trap[run.limit.3]") or a.err != b.err
-        red("--max-steps", "exit {a.status}\n{a.err}")
+        self.red("--max-steps", "exit {a.status}\n{a.err}")
     # trace.watch.5: native `--watch`, live and over a recording (ADR 0868 item 4).
     w := native_run(["run", "--watch", "n", "{case}/watch_when.ail"]) else return
     if w.status != 0
         or not w.err.contains("watch: n = 0 at 5:5\n")
         or not w.err.contains("(watch 4)")
-        red("--watch", "exit {w.status}\n{w.err}")
+        self.red("--watch", "exit {w.status}\n{w.err}")
     rec := "{tmp}/watch.rec"
     _r := native_run(["run", "--record", rec, "{case}/watch_when.ail"]) else return
     w2 := native_run(["run", "--replay", rec, "--watch", "n"]) else return
     if w2.status != 0 or w2.err != w.err
-        red("--watch over --replay", "exit {w2.status}\n{w2.err}")
+        self.red("--watch over --replay", "exit {w2.status}\n{w2.err}")
     m := ail_run(["run", "--max-memory", "100", "{case}/limit_memory.ail"]) else return
     if m.status != 1 or not m.err.contains("trap[run.limit.2]")
-        red("--max-memory", "exit {m.status}\n{m.err}")
+        self.red("--max-memory", "exit {m.status}\n{m.err}")
     t := ail_run(["test", "--timeout", "200", "{case}/limit_test_timeout.ail"]) else return
     if t.status != 1
-        red("test --timeout", "exit {t.status}\n{t.out}")
-    want("test --timeout", t.out, [
+        self.red("test --timeout", "exit {t.status}\n{t.out}")
+    self.want("test --timeout", t.out, [
         "FAIL slow: trap[run.limit.1]",
         "ok quick",
         "1 passed, 1 failed",
@@ -1682,23 +1713,27 @@ fn Gate.limits(mut self, tmp str)
         else
             u = ail_run(args) else return
         if u.status != 2 or not u.err.contains("run.limit.4")
-            red("limit usage {args}", "exit {u.status}\n{u.err}")
+            self.red("limit usage {args}", "exit {u.status}\n{u.err}")
     c := native_run(["test", "--coverage=lines", "{case}/coverage_two_fns.ail"]) else return
     if c.status != 0
-        red("coverage", "exit {c.status}\n{c.err}{c.out}")
-    want("coverage", c.out, ["coverage ", ": lines 3/5 (60%), functions 1/2", "  not run: 11-12"])
+        self.red("coverage", "exit {c.status}\n{c.err}{c.out}")
+    self.want("coverage", c.out, [
+        "coverage ",
+        ": lines 3/5 (60%), functions 1/2",
+        "  not run: 11-12",
+    ])
     cj := native_run(["test", "--json", "--coverage", "{case}/coverage_two_fns.ail"]) else return
     line := cj.out.lines().last() else ""
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
-        red("coverage --json", cj.out)
+        self.red("coverage --json", cj.out)
     # Native traps show their values only under `--values` (ADR 0886).
     k := ail_run(["test", "--values", "{case}/limit_test_contract.ail"]) else return
     if k.status != 1
-        red("test contract", "exit {k.status}")
-    want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
+        self.red("test contract", "exit {k.status}")
+    self.want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
     kj := ail_run(["test", "--json", "{case}/limit_test_contract.ail"]) else return
-    want("test contract json", kj.out, ["\"snapshot\":\""])
+    self.want("test contract json", kj.out, ["\"snapshot\":\""])
 
 ## `ail diff OLD NEW` (diff.rs, ported; diff.out.1-7, ADRs 0396, 0399).
 ## The binary the suites call.
@@ -1716,8 +1751,8 @@ fn Gate.diff(mut self, tmp str)
     fs.write_text(new, new_src) else return
     t := ail_run(["diff", old, new]) else return
     if t.status != 1
-        red("diff text", "exit {t.status}\n{t.out}{t.err}")
-    want("diff text", t.out, [
+        self.red("diff text", "exit {t.status}\n{t.out}{t.err}")
+    self.want("diff text", t.out, [
         "~ fn:add (doc, body changed)\n    signature: fn add(a int, b int) int -> fn add(a int, b int, c int) int\n    pub: false -> true\n    requires: (none) -> [\"c >= 0\"]\n    +requires c >= 0\n",
         "+ fn:fresh fn fresh() int\n~ fn:adds (body changed)\n    -assert(add(1, 2) == 3)\n    +assert(add(1, 2, 0) == 4)\n~ fn:main (body changed)\n    -print(add(1, 2))\n    +print(add(1, 2, 0))\n",
         "- fn:gone fn gone() int\n",
@@ -1726,10 +1761,10 @@ fn Gate.diff(mut self, tmp str)
         "1 added, 1 removed, 3 changed; diagnostics +1 -0; failing tests 0 -> 1\n",
     ])
     if t.out.contains("fn:same")
-        red("diff text", "reports an unchanged fn:\n{t.out}")
+        self.red("diff text", "reports an unchanged fn:\n{t.out}")
     n := ail_run(["diff", "--no-tests", old, old]) else return
     if n.status != 0 or n.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
-        red("diff no change", "exit {n.status}\n{n.out}")
+        self.red("diff no change", "exit {n.status}\n{n.out}")
     # An attribute on its own line or on the declaration's line is layout, not a change (api.impact.1):
     # the `@test` above `fn t` was once counted as the body of the function before it.
     fs.write_text(old, "fn a() int\n    1\n\n@test\nfn t()\n    assert(a() == 1)\n") else return
@@ -1737,7 +1772,7 @@ fn Gate.diff(mut self, tmp str)
     at := ail_run(["diff", "--no-tests", old, new]) else return
     if at.status != 0
         or at.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
-        red("diff attribute layout", "exit {at.status}\n{at.out}")
+        self.red("diff attribute layout", "exit {at.status}\n{at.out}")
     # diff.out.9: the same function under another name is a rename, not a removal and an addition.
     fs.write_text(
         old,
@@ -1748,7 +1783,7 @@ fn Gate.diff(mut self, tmp str)
         "fn sum(a int, b int) int\n    a + b\n\nfn main()\n    print(sum(1, 2))\n",
     ) else return
     rn := ail_run(["diff", "--no-tests", old, new]) else return
-    want("diff rename", rn.out, [
+    self.want("diff rename", rn.out, [
         "> fn:plus -> fn:sum (renamed)\n",
         "~ fn:main (body changed)\n",
         "0 added, 0 removed, 1 changed, 1 renamed; diagnostics +0 -0; tests not run\n",
@@ -1756,7 +1791,7 @@ fn Gate.diff(mut self, tmp str)
     fs.write_text(old, old_src) else return
     fs.write_text(new, new_src) else return
     j := ail_run(["diff", "--json", old, new]) else return
-    want("diff --json", j.out, [
+    self.want("diff --json", j.out, [
         "\{\"change\":\"api\",\"op\":\"added\",\"id\":\"fn:fresh\",\"kind\":\"fn\",\"signature\":\"fn fresh() int\"}\n",
         "\{\"change\":\"test\",\"test\":\"adds\",\"old\":\"pass\",\"new\":\"fail\",\"status\":\"fail\",",
         "\"pub\":\{\"old\":\"false\",\"new\":\"true\"}",
@@ -1764,7 +1799,7 @@ fn Gate.diff(mut self, tmp str)
     last := j.out.lines().last() else ""
     if not last.starts_with("\{\"summary\":true,")
         or not last.ends_with("\"added\":1,\"removed\":1,\"changed\":3,\"diagnostics_added\":1,\"diagnostics_removed\":0,\"tests_changed\":1,\"failing_before\":0,\"failing_after\":1}")
-        red("diff --json summary", last)
+        self.red("diff --json summary", last)
     # diff.out.5: `--rev REV PATH` compares against git's copy.
     if proc.which("git") != none
         root := repo_root()
@@ -1773,15 +1808,15 @@ fn Gate.diff(mut self, tmp str)
         fs.write_text("{g}/p.ail", old_src) else return
         s1 := sh_run("cd {g} && git init -q && git add p.ail && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q -m old")
         if s1.status != 0
-            red("diff --rev", "git setup failed: {s1.err}")
+            self.red("diff --rev", "git setup failed: {s1.err}")
         fs.write_text("{g}/p.ail", new_src) else return
         bin := bin_path(root)
         r := sh_run("cd {g} && {bin} diff --rev HEAD --no-tests p.ail")
         if not r.out.ends_with("1 added, 1 removed, 3 changed; diagnostics +1 -0; tests not run\n")
-            red("diff --rev", "{r.out}{r.err}")
+            self.red("diff --rev", "{r.out}{r.err}")
         bad := sh_run("cd {g} && {bin} diff --rev nosuchrev p.ail")
         if bad.status != 2 or not bad.err.contains("(diff.out.5)")
-            red("diff --rev nosuchrev", "exit {bad.status}\n{bad.err}")
+            self.red("diff --rev nosuchrev", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {d}")
 
 ## The `ail build` cache (build_cache.rs, ported; ADR 0655, native.build.5).
@@ -1802,32 +1837,32 @@ fn Gate.build_cache(mut self, tmp str)
     bin := bin_path(root)
     f := build_with(bin, backend, cache, prog, "{d}/first", "")
     if f.status != 0
-        red("build cache", "first build failed: {f.err}")
+        self.red("build cache", "first build failed: {f.err}")
     if cache_entries(cache) != 1
-        red("build cache", "a build is stored")
+        self.red("build cache", "a build is stored")
     build_with(bin, backend, cache, prog, "{d}/second", "")
     if cache_entries(cache) != 1
-        red("build cache", "an unchanged program is a hit")
+        self.red("build cache", "an unchanged program is a hit")
     build_with(bin, backend, "{d}/nocache_cache", prog, "{d}/plain", "--no-cache")
     if cache_entries("{d}/nocache_cache") != 0
-        red("build cache", "--no-cache stores nothing")
+        self.red("build cache", "--no-cache stores nothing")
     same := sh_run("cmp -s {d}/first {d}/second")
     if same.status != 0
-        red("build cache", "a hit returns the stored bytes")
+        self.red("build cache", "a hit returns the stored bytes")
     plain := sh_run("cmp -s {d}/first {d}/plain")
     if plain.status != 0
-        red("build cache", "cached and uncached builds are not the same bytes")
+        self.red("build cache", "cached and uncached builds are not the same bytes")
     # A changed program, and a changed file beside it, are new entries.
     fs.write_text(prog, "fn main()\n    print(\"two\")\n") else return
     build_with(bin, backend, cache, prog, "{d}/fresh", "")
     if cache_entries(cache) != 2
-        red("build cache", "a changed program is a new entry")
+        self.red("build cache", "a changed program is a new entry")
     if sh_run("cmp -s {d}/first {d}/fresh").status == 0
-        red("build cache", "a changed program gave the same bytes")
+        self.red("build cache", "a changed program gave the same bytes")
     fs.write_text("{d}/other.ail", "fn unused() int\n    1\n") else return
     build_with(bin, backend, cache, prog, "{d}/fresh", "")
     if cache_entries(cache) != 3
-        red("build cache", "any .ail file of the package is part of the key")
+        self.red("build cache", "any .ail file of the package is part of the key")
     sh_run("rm -rf {d} {backend}")
 
 fn build_with(bin str, backend str, cache str, prog str, out str, extra str) proc.Output
@@ -1848,8 +1883,8 @@ fn Gate.api_queries(mut self, tmp str)
     ) else return
     r := ail_run(["api", "--refs", main, "4", "12"]) else return
     if r.status != 0
-        red("api --refs", r.err)
-    want("api --refs", r.out, [
+        self.red("api --refs", r.err)
+    self.want("api --refs", r.out, [
         "\"symbol\":\"fn:geo.origin\"",
         "\{\"file\":\"{d}/geo/shapes.ail\",\"line\":4,\"col\":8,\"def\":true}",
         "\"line\":4,\"col\":10,\"def\":false",
@@ -1857,18 +1892,18 @@ fn Gate.api_queries(mut self, tmp str)
     ty := ail_run(["api", "--type", main, "4", "12"]) else return
     if not ty.out.contains("\"type\":\"geo.P\"")
         or not (ty.out.contains("\"signature\":\"fn geo.origin() P\"") or ty.out.contains("\"id\":\"fn:geo.origin\""))
-        red("api --type", ty.out)
+        self.red("api --type", ty.out)
     # api.query.1: nothing at the position is exit 1 with a JSON error on stderr.
     n := ail_run(["api", "--type", main, "3", "1"]) else return
     if n.status != 1 or not n.err.starts_with("\{\"api\":1,\"severity\":\"error\"")
-        red("api --type nothing", "exit {n.status}\n{n.err}")
+        self.red("api --type nothing", "exit {n.status}\n{n.err}")
     m := ail_run(["api", "--locals", main]) else return
     if m.status != 2
-        red("api --locals no position", "exit {m.status}, want 2")
+        self.red("api --locals no position", "exit {m.status}, want 2")
     fs.write_text("{d}/bad.ail", "fn main()\n    x\n") else return
     b := ail_run(["api", "--locals", "--json", "{d}/bad.ail", "2", "5"]) else return
     if b.status != 2 or not b.err.contains("\"rule\":")
-        red("api --locals rejected", "exit {b.status}\n{b.err}")
+        self.red("api --locals rejected", "exit {b.status}\n{b.err}")
     sh_run("rm {d}/bad.ail")
     for name in fs.list_dir("examples") else []
         stem := name.replace(".ail", "")
@@ -1876,7 +1911,7 @@ fn Gate.api_queries(mut self, tmp str)
             lines := slurp("examples/{name}").lines().len()
             e := ail_run(["api", "--locals", "examples/{name}", "{lines}", "5"]) else continue
             if e.status != 0
-                red("api --locals examples/{name}", e.err)
+                self.red("api --locals examples/{name}", e.err)
     # api.pkg.1: a package directory is outlined whole.
     fs.write_text(
         main,
@@ -1886,8 +1921,8 @@ fn Gate.api_queries(mut self, tmp str)
     fs.write_text(util, "use geo\n\npub fn far() int\n    geo.origin().x\n") else return
     o := ail_run(["api", "--outline", d]) else return
     if o.status != 0 or not o.out.starts_with("\{\"api\":1,\"package\":")
-        red("api --outline", "exit {o.status}\n{o.err}{o.out}")
-    want("api --outline", o.out, [
+        self.red("api --outline", "exit {o.status}\n{o.err}{o.out}")
+    self.want("api --outline", o.out, [
         "\"id\":\"fn:geo.origin\"",
         "\"id\":\"type:geo.P\"",
         "\"id\":\"fn:far\"",
@@ -1895,18 +1930,18 @@ fn Gate.api_queries(mut self, tmp str)
         "util.ail",
     ])
     sy := ail_run(["api", "--symbols", d]) else return
-    want("api --symbols", sy.out, ["\"references\":[", "\"id\":\"fn:geo.origin\""])
+    self.want("api --symbols", sy.out, ["\"references\":[", "\"id\":\"fn:geo.origin\""])
     tx := ail_run(["api", "--text", d]) else return
-    want("api --text package", tx.out, ["fn geo.origin() geo.P"])
+    self.want("api --text package", tx.out, ["fn geo.origin() geo.P"])
     # api.pkg.2-3: `--refs DIR FILE LINE COL` finds uses in every file of the package.
     shapes := "{d}/geo/shapes.ail"
     for q in [[util, "4", "9"], [util, "4", "5"], [shapes, "4", "8"]]
         a := ail_run(["api", "--refs", d, q[0], q[1], q[2]]) else return
         if a.status != 0 or not a.out.contains("\"symbol\":\"fn:geo.origin\"")
-            red("api --refs package {q}", "exit {a.status}\n{a.err}{a.out}")
+            self.red("api --refs package {q}", "exit {a.status}\n{a.err}{a.out}")
         for file in ["main.ail", "util.ail", "geo/shapes.ail"]
             if not a.out.contains("{d}/{file}\"")
-                red("api --refs package {q}", "{file} missing in\n{a.out}")
+                self.red("api --refs package {q}", "{file} missing in\n{a.out}")
     # api.pkg.4: the single-file form keeps working; a file outside the package is an error.
     single := "{tmp}/api_queries_single"
     sh_run("rm -rf {single}; mkdir -p {single}/geo; cp {d}/geo/shapes.ail {single}/geo/")
@@ -1916,12 +1951,12 @@ fn Gate.api_queries(mut self, tmp str)
     ) else return
     sf := ail_run(["api", "--refs", "{single}/main.ail", "4", "12"]) else return
     if sf.status != 0
-        red("api --refs single file", sf.err)
+        self.red("api --refs single file", sf.err)
     stray := "{tmp}/stray.ail"
     fs.write_text(stray, "fn main()\n    print(\"x\")\n") else return
     st := ail_run(["api", "--refs", d, stray, "1", "4"]) else return
     if st.status != 2 or not st.err.contains("api.pkg.2")
-        red("api --refs stray", "exit {st.status}\n{st.err}")
+        self.red("api --refs stray", "exit {st.status}\n{st.err}")
     sh_run("rm -rf {d} {single} {stray}")
 
 ## Record and replay (replay.rs, ported; replay.rec, replay.cap, replay.run, ADR 0398).
@@ -1948,19 +1983,19 @@ fn Gate.replay(mut self, tmp str)
     if first.status != 1
         or not first.out.contains(" first hello 3 fs.IoKind.NotFound")
         or not first.err.contains("prog.ail:11:13: trap[type.coll.4]")
-        red("replay record", "exit {first.status}\n{first.out}{first.err}")
+        self.red("replay record", "exit {first.status}\n{first.out}{first.err}")
     rec := slurp("{d}/r.json")
     if not rec.starts_with("\{\"ail_record\":1,\"program\":\"prog.ail\"")
         or not rec.contains("\{\"call\":\"io.read_line\",\"line\":6,\"col\":16,\"result\":\"hello\"}")
-        red("replay recording", rec)
+        self.red("replay recording", rec)
     fs.write_text("{d}/input.txt", "x\n") else return
     again := rpl(d, "", ["run", "--replay", "r.json"])
     if again.out != first.out or again.err != first.err or again.status != 1
-        red("replay repeats the run", "exit {again.status}\n{again.out}{again.err}")
+        self.red("replay repeats the run", "exit {again.status}\n{again.out}{again.err}")
     # replay.run.1: `--replay R FILE` runs FILE, and an argument after the recording is not its program.
     rf := rpl(d, "hello\n", ["run", "--replay", "r.json", "prog.ail"])
     if rf.out != again.out or rf.err != again.err
-        red("replay with a file", "{rf.out}{rf.err}|{again.out}{again.err}")
+        self.red("replay with a file", "{rf.out}{rf.err}|{again.out}{again.err}")
     # replay.run.3: a program that changed since the recording traps at the first call that differs.
     d2 := "{base}/diverge"
     fs.write_text(
@@ -1968,10 +2003,10 @@ fn Gate.replay(mut self, tmp str)
         "fn main()\n    print(env.get(\"REPLAY_NAME\") else \"\")\n",
     ) else return
     if rpl(d2, "", ["run", "--record", "r.json", "prog.ail"]).status != 0
-        red("replay diverge", "recording failed")
+        self.red("replay diverge", "recording failed")
     fs.write_text("{d2}/prog.ail", "fn main()\n    print(fs.exists(\"x\"))\n") else return
     dv := rpl(d2, "", ["run", "--replay", "r.json", "prog.ail"])
-    want("replay diverges", dv.err, [
+    self.want("replay diverges", dv.err, [
         "prog.ail:2:14: trap[replay.run.3]",
         "the recording's next effect is `env.get`",
     ])
@@ -1984,10 +2019,10 @@ fn Gate.replay(mut self, tmp str)
     ) else return
     rpl(d3, "", ["run", "--record", "s.json", "start.ail"])
     if not slurp("{d3}/s.json").contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"result\":")
-        red("replay handle", slurp("{d3}/s.json"))
+        self.red("replay handle", slurp("{d3}/s.json"))
     h := rpl(d3, "", ["run", "--replay", "s.json"])
     if h.out != "a\n" or h.status != 0
-        red("replay handle", "{h.out}{h.err}")
+        self.red("replay handle", "{h.out}{h.err}")
     # replay.nat.1: lists, structs, maps, a child's streams and the HTTP client replay without the world.
     d6 := "{base}/world"
     sh_run("rm -rf {d6}; mkdir -p {d6}/dir; echo hello > {d6}/dir/a.txt; touch {d6}/dir/b.txt")
@@ -1999,12 +2034,12 @@ fn Gate.replay(mut self, tmp str)
     sh_run("rm -rf {d6}/dir")
     w2 := rpl(d6, "", ["run", "--replay", "w.json"])
     if w1.status != 0 or w2.out != w1.out or w2.status != 0 or not w1.out.contains("out got in")
-        red("replay world", "{w1.out}{w1.err}|{w2.out}{w2.err}")
+        self.red("replay world", "{w1.out}{w1.err}|{w2.out}{w2.err}")
     fs.write_text("{d3}/sleep.ail", "fn main()\n    time.sleep_ms(-1)\n") else return
     sf := rpl(d3, "", ["run", "--record", "t.json", "sleep.ail"])
     sa := rpl(d3, "", ["run", "--replay", "t.json"])
     if not sf.err.contains("trap[std.time.2]") or sa.err != sf.err
-        red("replay trap in a call", "{sf.err}|{sa.err}")
+        self.red("replay trap in a call", "{sf.err}|{sa.err}")
     # replay.rec.1, replay.rec.5, replay.run.1: `ail test --record` keeps the failed tests' effects.
     d4 := "{base}/tests"
     fs.write_text(
@@ -2017,7 +2052,7 @@ fn Gate.replay(mut self, tmp str)
         or not trec.contains("\{\"test\":\"flaky\"}\n\{\"call\":\"env.get\"")
         or trec.contains("passes")
         or not trec.contains("\{\"call\":\"env.get\",\"line\":2,")
-        red("test --record", "exit {tf.status}\n{trec}")
+        self.red("test --record", "exit {tf.status}\n{trec}")
     ta := rpl(d4, "", ["test", "--replay", "r.json"])
     mut fail_a := ""
     for l in tf.out.lines()
@@ -2028,15 +2063,15 @@ fn Gate.replay(mut self, tmp str)
         if l.starts_with("FAIL flaky")
             fail_b = l
     if fail_a != fail_b or not ta.out.contains("0 passed, 1 failed")
-        red("test --replay", ta.out)
+        self.red("test --replay", ta.out)
     # replay.rec.1: the options need `run` or `test` and a file.
     d5 := "{base}/options"
     o1 := rpl(d5, "", ["check", "--record", "r.json", "x.ail"])
     if o1.status != 2 or not o1.err.contains("(replay.rec.1)")
-        red("check --record", "exit {o1.status}\n{o1.err}")
+        self.red("check --record", "exit {o1.status}\n{o1.err}")
     o2 := rpl(d5, "", ["run", "--replay", "nothing.json"])
     if o2.status != 2 or not o2.err.contains("can't read the recording nothing.json")
-        red("--replay nothing", "exit {o2.status}\n{o2.err}")
+        self.red("--replay nothing", "exit {o2.status}\n{o2.err}")
     sh_run("rm -rf {base}")
 
 ## `ail api --card` (api_card.rs, ported; api.card.1-7, ADRs 0310-0311, 0703).
@@ -2074,7 +2109,7 @@ fn Gate.api_card(mut self, tmp str)
     # api.card.1
     dir := card_pkg(tmp, "lists")
     card := card_of(dir, [])
-    want("card lists the program", card, [
+    self.want("card lists the program", card, [
         "# notes\n",
         "entry: main in main.ail\n",
         "tests: shows_origin\n",
@@ -2090,11 +2125,11 @@ fn Gate.api_card(mut self, tmp str)
         "fn geo.hidden() int\n",
     ])
     if card.contains("trimmed")
-        red("card lists the program", "trimmed:\n{card}")
+        self.red("card lists the program", "trimmed:\n{card}")
     a := card.find("## (root)") else 0
     b := card.find("## geo") else 0
     if a >= b
-        red("card module order", card)
+        self.red("card module order", card)
     # api.card.3: over budget, private items go first, and the card says so.
     full := card_of(dir, [])
     mut found := ""
@@ -2105,19 +2140,19 @@ fn Gate.api_card(mut self, tmp str)
             found = c
         budget -= 1
     if found.is_empty()
-        red("card private items", "no budget drops only private items")
+        self.red("card private items", "no budget drops only private items")
     elif found.contains("hidden()")
         or not found.contains("pub fn geo.origin() geo.P  ## The origin.")
         or not last_line(found).starts_with("trimmed to fit ")
-        red("card private items", found)
+        self.red("card private items", found)
     # a tiny budget drops docs, parameter names, then signatures.
     docs_gone := card_of(dir, ["--budget", "120"])
     if docs_gone.contains("## The origin.")
         or not last_line(docs_gone).contains("private items, doc comments")
-        red("card small budget", docs_gone)
+        self.red("card small budget", docs_gone)
     names := card_of(dir, ["--budget", "1"])
     if not names.contains("items)") or not last_line(names).ends_with("signatures (names only)")
-        red("card budget 1", names)
+        self.red("card budget 1", names)
     # api.card.3 (ADR 0703): the middle level keeps each public signature and the first sentence of its doc.
     mid := "{tmp}/api_card/middle/pkg"
     sh_run("rm -rf {mid}; mkdir -p {mid}")
@@ -2134,13 +2169,13 @@ fn Gate.api_card(mut self, tmp str)
             middle = c
         b2 -= 40
     if middle.is_empty()
-        red("card middle level", "no budget gives the middle level")
+        self.red("card middle level", "no budget gives the middle level")
     elif not middle.contains("pub fn step3(int) int  ## Step 3 of the walk.")
         or middle.contains("It is long")
-        red("card middle level", middle)
+        self.red("card middle level", middle)
     # api.card.2: the JSON form has the same content.
     j := ail_run(["api", "--card", "--json", dir]) else return
-    want("card json", j.out, [
+    self.want("card json", j.out, [
         "\"card\":\"notes\"",
         "\"entry\":\"main in main.ail\"",
         "\"tests\":[\"shows_origin\"]",
@@ -2155,18 +2190,18 @@ fn Gate.api_card(mut self, tmp str)
     fs.write_text("{bad}/main.ail", "fn main()\n    x := nope()\n") else return
     r1 := ail_run(["api", "--card", bad]) else return
     if r1.status != 2 or not r1.out.is_empty()
-        red("card rejected program", "exit {r1.status}\n{r1.out}")
+        self.red("card rejected program", "exit {r1.status}\n{r1.out}")
     r2 := ail_run(["api", "--card", "--budget", "many", bad]) else return
     if r2.status != 2
-        red("card --budget many", "exit {r2.status}")
+        self.red("card --budget many", "exit {r2.status}")
     # api.card.6, api.card.7: the committed module and index cards, and the whole cards, are fresh.
     for pair in [["compiler", "compiler"], ["std", "std"]]
         index := ail_run(["api", "--card", "--index", pair[0]]) else return
         if index.status != 0
-            red("card index {pair[0]}", index.err)
+            self.red("card index {pair[0]}", index.err)
             continue
         if slurp("docs/design/cards/{pair[1]}/index.md") != index.out
-            red(
+            self.red(
                 "card {pair[1]}/index.md",
                 "is stale; regenerate it for {pair[0]} (see docs/design/cards/README.md)",
             )
@@ -2187,15 +2222,15 @@ fn Gate.api_card(mut self, tmp str)
                 pair[0],
             ]) else return
             if m.status != 0
-                red("card module {module}", m.err)
+                self.red("card module {module}", m.err)
             elif slurp("docs/design/cards/{pair[1]}/{file}.md") != m.out
-                red("card {pair[1]}/{file}.md", "is stale; regenerate it for {pair[0]}")
+                self.red("card {pair[1]}/{file}.md", "is stale; regenerate it for {pair[0]}")
     for pair in [["std", "std.md"], ["compiler", "compiler.md"]]
         w := ail_run(["api", "--card", pair[0]]) else return
         if w.status != 0
-            red("card {pair[0]}", w.err)
+            self.red("card {pair[0]}", w.err)
         elif slurp("docs/design/cards/{pair[1]}") != w.out
-            red(
+            self.red(
                 "card {pair[1]}",
                 "is stale; run `./ail api --card {pair[0]} > docs/design/cards/{pair[1]}`",
             )
@@ -2207,24 +2242,24 @@ fn Gate.api_card(mut self, tmp str)
         or geo.contains("entry:")
         or geo.contains("ail.pkg")
         or geo.contains("examples:")
-        red("card --module geo", geo)
+        self.red("card --module geo", geo)
     root := card_of(dir, ["--module", "(root)"])
-    want("card --module (root)", root, ["entry: main in main.ail\n", "tests: shows_origin\n"])
+    self.want("card --module (root)", root, ["entry: main in main.ail\n", "tests: shows_origin\n"])
     if root.contains("geo.origin")
-        red("card --module (root)", root)
+        self.red("card --module (root)", root)
     nope := ail_run(["api", "--card", "--module", "nope", dir]) else return
     if nope.status != 2 or not nope.err.contains("--index")
-        red("card --module nope", "exit {nope.status}\n{nope.err}")
+        self.red("card --module nope", "exit {nope.status}\n{nope.err}")
     both := ail_run(["api", "--card", "--index", "--module", "geo", dir]) else return
     if both.status != 2
-        red("card --index --module", "exit {both.status}")
+        self.red("card --index --module", "exit {both.status}")
     # api.card.7: `--index` lists each module with its count, root first.
     index := card_of(dir, ["--index"])
     if index != "# notes\n(root)  2 items\ngeo  7 items\n"
-        red("card --index", index)
+        self.red("card --index", index)
     ij := card_of(dir, ["--index", "--json"])
     if not ij.contains("\{\"module\":\"geo\",\"count\":7}") or not ij.starts_with("\{\"api\"")
-        red("card --index --json", ij)
+        self.red("card --index --json", ij)
     sh_run("rm -rf {tmp}/api_card")
 
 ## `ail edit PATH < EDITS` (edit.rs, ported; edit.in, edit.id, edit.op, edit.out, ADRs 0397, 0399).
@@ -2244,9 +2279,9 @@ fn Gate.edit(mut self, tmp str)
     fs.write_text(f, src) else return
     ops := "[\n\{\"op\":\"rename\",\"id\":\"fn:add\",\"to\":\"plus\"},\n\{\"op\":\"replace_body\",\"id\":\"fn:plus\",\"body\":\"a+b+0\"},\n\{\"op\":\"insert\",\"after\":\"fn:plus\",\"text\":\"## Twice.\\nfn twice(n int) int\\n    plus(n, n)\"},\n\{\"op\":\"delete\",\"id\":\"fn:old\"},\n\{\"op\":\"import\",\"module\":\"std.fs\"},\n\{\"op\":\"rename\",\"id\":\"type:Point\",\"to\":\"Pt\"},\n\{\"op\":\"rename\",\"id\":\"field:Pt.x\",\"to\":\"xx\"},\n\{\"op\":\"replace\",\"id\":\"fn:main\",\"text\":\"fn main()\\n    mut p := Pt(xx: twice(2))\\n    p.shift(plus(3, 4))\\n    print(p)\"}\n]"
     o := edit_run(f, [], ops)
-    want_text := "use std.fs\n\nstruct Pt\n    xx int\n\nfn Pt.shift(mut self, d int)\n    xx += d\n\n## Adds.\nfn plus(a int, b int) int\n    requires a >= 0\n    a + b + 0\n\n## Twice.\nfn twice(n int) int\n    plus(n, n)\n\nfn main()\n    mut p := Pt(xx: twice(2))\n    p.shift(plus(3, 4))\n    print(p)\n"
+    want_text := "use std.fs\n\nstruct Pt\n    xx int\n\nfn Pt.shift(mut self, d int)\n    self.xx += d\n\n## Adds.\nfn plus(a int, b int) int\n    requires a >= 0\n    a + b + 0\n\n## Twice.\nfn twice(n int) int\n    plus(n, n)\n\nfn main()\n    mut p := Pt(xx: twice(2))\n    p.shift(plus(3, 4))\n    print(p)\n"
     if o.status != 0 or o.out != "edited 1 file; 0 errors\n" or slurp(f) != want_text
-        red("edit every op", "exit {o.status}\n{o.out}{o.err}\n{slurp(f)}")
+        self.red("edit every op", "exit {o.status}\n{o.out}{o.err}\n{slurp(f)}")
     # edit.in.2: a failing edit stops the run and nothing is written.
     fs.write_text(f, src) else return
     a := edit_run(
@@ -2257,9 +2292,9 @@ fn Gate.edit(mut self, tmp str)
     if a.status != 2
         or a.err != "error: edit 2 of 2: no declaration has the id `fn:nope` (edit.id.1); nothing was written\n"
         or slurp(f) != src
-        red("edit all or nothing", "exit {a.status}\n{a.err}")
+        self.red("edit all or nothing", "exit {a.status}\n{a.err}")
     bad := edit_run(f, [], "[\{\"op\":")
-    want("edit bad json", bad.err, ["(edit.in.1)"])
+    self.want("edit bad json", bad.err, ["(edit.in.1)"])
     # edit.out.2-3: the new diagnostics; `--if-clean` and `--dry-run` write nothing.
     broken := "[\{\"op\":\"replace_body\",\"id\":\"fn:main\",\"body\":\"print(nope)\"}]"
     c := edit_run(f, ["--if-clean"], broken)
@@ -2267,14 +2302,14 @@ fn Gate.edit(mut self, tmp str)
         or not c.err.contains("error[expr.name.1]: unknown name `nope`")
         or not c.out.starts_with("not written (--if-clean) 1 file; 1 error")
         or slurp(f) != src
-        red("edit --if-clean", "exit {c.status}\n{c.out}{c.err}")
+        self.red("edit --if-clean", "exit {c.status}\n{c.out}{c.err}")
     dr := edit_run(f, ["--dry-run", "--json"], "[\{\"op\":\"delete\",\"id\":\"fn:old\"}]")
-    want("edit --dry-run", dr.out, ["-fn old() int\n", "\"written\":false"])
+    self.want("edit --dry-run", dr.out, ["-fn old() int\n", "\"written\":false"])
     if slurp(f) != src
-        red("edit --dry-run", "wrote the file")
+        self.red("edit --dry-run", "wrote the file")
     w := edit_run(f, [], broken)
     if w.status != 2 or not slurp(f).contains("print(nope)")
-        red("edit writes a broken file", "exit {w.status}")
+        self.red("edit writes a broken file", "exit {w.status}")
     # edit.id.2, edit.op.5: in a package, ids carry the module and a rename reaches every file.
     pkg := "{d}/app"
     sh_run("mkdir -p {pkg}/geo")
@@ -2284,7 +2319,7 @@ fn Gate.edit(mut self, tmp str)
     if p.status != 0
         or slurp("{pkg}/geo/shapes.ail") != "pub fn zero() int\n    0\n"
         or slurp("{pkg}/main.ail") != "use geo\n\nfn main()\n    print(geo.zero())\n"
-        red("edit package rename", "exit {p.status}\n{p.out}{p.err}")
+        self.red("edit package rename", "exit {p.status}\n{p.out}{p.err}")
     # edit.in.3, edit.id.3, edit.op.7, edit.out.4: compact hunks.
     avg := "fn average(xs List[int]) int\n    mut total := 0\n    for x in xs\n        total += x\n    total / xs.len()\n\n@test fn empty_is_zero()\n    assert_eq(average([]), 0)\n"
     g := "{d}/avg.ail"
@@ -2293,24 +2328,24 @@ fn Gate.edit(mut self, tmp str)
     if h.status != 0
         or h.out != "edited 1 file; 0 errors\nok empty_is_zero\n1 passed, 0 failed\n"
         or not slurp(g).starts_with("fn average(xs List[int]) int\n    if xs.len() == 0\n        return 0\n    mut total")
-        red("edit compact hunk", "exit {h.status}\n{h.out}{h.err}")
+        self.red("edit compact hunk", "exit {h.status}\n{h.out}{h.err}")
     h2 := edit_run(g, [], "fn:average\n-total / xs.len()\n+total / xs.len().max(1)\n")
     if h2.status != 0 or not slurp(g).contains("    total / xs.len().max(1)\n")
-        red("edit compact part", "exit {h2.status}\n{h2.err}")
+        self.red("edit compact part", "exit {h2.status}\n{h2.err}")
     h3 := edit_run(g, [], "average\n-total\n+sum\n")
     if h3.status != 2
         or not h3.err.contains("`total` occurs 3 times; quote more of its line in `fn:average` (edit.op.7)")
-        red("edit ambiguous", "exit {h3.status}\n{h3.err}")
+        self.red("edit ambiguous", "exit {h3.status}\n{h3.err}")
     h4 := edit_run(g, [], "average\n-nothing here\n+x\n")
-    want("edit not found", h4.err, ["`nothing here` is not found"])
+    self.want("edit not found", h4.err, ["`nothing here` is not found"])
     # edit.in.3: `rename OLD NEW` and lines that are neither.
     fs.write_text(g, avg) else return
     r1 := edit_run(g, [], "rename average mean\n")
     if r1.status != 0 or not slurp(g).contains("assert_eq(mean([]), 0)")
-        red("edit rename", "exit {r1.status}\n{r1.err}")
+        self.red("edit rename", "exit {r1.status}\n{r1.err}")
     r2 := edit_run(g, [], "mean is wrong\n")
     if r2.status != 2 or not r2.err.contains("line 1: expected an id")
-        red("edit bad line", "exit {r2.status}\n{r2.err}")
+        self.red("edit bad line", "exit {r2.status}\n{r2.err}")
     # edit.out.3: a preview or a refused edit never writes the file, even for a moment.
     fs.write_text(f, src) else return
     before := sh_run("stat -c %Y {f} 2>/dev/null || stat -f %m {f}").out
@@ -2319,7 +2354,7 @@ fn Gate.edit(mut self, tmp str)
     m2 := edit_run(f, ["--if-clean"], nope)
     after := sh_run("stat -c %Y {f} 2>/dev/null || stat -f %m {f}").out
     if m1.status != 2 or m2.status != 2 or before != after or slurp(f) != src
-        red("edit from memory", "{m1.status} {m2.status} {before}|{after}")
+        self.red("edit from memory", "{m1.status} {m2.status} {before}|{after}")
     sh_run("rm -rf {d}")
 
 ## Git dependencies and `ail.lock` (git_deps.rs, ported; mod.pkg.6-9, eff.cap.4),
@@ -2382,25 +2417,25 @@ fn Gate.git_deps(mut self, tmp str)
     r := gd_ail(dir, dir, "", "run app")
     if r.out != "12\nfalse\n"
         or not slurp(lock).contains("dep geo git {url} tag v1 commit {first}\n")
-        red("git dep first run", "{r.out}{r.err}\n{slurp(lock)}")
+        self.red("git dep first run", "{r.out}{r.err}\n{slurp(lock)}")
     cached := "{dir}/home/deps/geo-{first}"
     # Windows keeps no write bits in the file mode, so only the `.git` half is checked there.
     writable := (env.get("OS") else "") != "Windows_NT"
         and sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
     if fs.exists("{cached}/.git") or writable
-        red("git dep cache", "cache files must be read-only and have no .git")
+        self.red("git dep cache", "cache files must be read-only and have no .git")
     # A moved tag changes nothing while the lock pins the commit.
     second := gd_commit(dir, url, "w * h + 1", "v1")
     if gd_ail(dir, dir, "", "run app").out != "12\nfalse\n"
-        red("git dep locked", "the moved tag changed the run")
+        self.red("git dep locked", "the moved tag changed the run")
     # mod.pkg.9: `ail pkg update geo` locks what the tag names now.
     u := gd_ail(dir, "{dir}/app", "", "pkg update geo")
     if u.out != "locked geo {second}\n"
-        red("git dep update", "{u.out}{u.err}")
+        self.red("git dep update", "{u.out}{u.err}")
     if gd_ail(dir, dir, "", "run app").out != "13\nfalse\n" or not slurp(lock).contains(second)
-        red("git dep after update", slurp(lock))
+        self.red("git dep after update", slurp(lock))
     if gd_ail(dir, dir, "", "run --deterministic app").out != "13\nfalse\n"
-        red("git dep --deterministic", "differs")
+        self.red("git dep --deterministic", "differs")
     # mod.pkg.8: a manifest that no longer matches the lock is stale.
     gd_manifest(dir, url, "rev {first} caps fs")
     st := gd_ail(dir, dir, "", "run --deterministic app")
@@ -2408,46 +2443,50 @@ fn Gate.git_deps(mut self, tmp str)
         or not st.err.contains("error[mod.pkg.8]")
         or not st.err.contains("ail pkg update geo")
         or not slurp(lock).contains(second)
-        red("git dep stale lock", "exit {st.status}\n{st.err}")
+        self.red("git dep stale lock", "exit {st.status}\n{st.err}")
     rl := gd_ail(dir, dir, "", "run app")
     if rl.out != "12\nfalse\n" or not slurp(lock).contains("rev {first} commit {first}")
-        red("git dep relock", "exit {rl.status}\n{rl.out}{rl.err}\n{slurp(lock)}")
+        self.red("git dep relock", "exit {rl.status}\n{rl.out}{rl.err}\n{slurp(lock)}")
     # eff.cap.4: grants apply to git dependencies as to path ones.
     gd_manifest(dir, url, "rev {first}")
     cp := gd_ail(dir, dir, "", "check app")
-    want("git dep caps", cp.err, ["error[eff.cap.4]"])
+    self.want("git dep caps", cp.err, ["error[eff.cap.4]"])
     sh_run("chmod -R u+w {dir}; rm -rf {dir}")
     # fetch errors name the dependency.
     dir2 := gd_setup(tmp, "errors")
     url2 := file_url("{dir2}/remote.git")
     n := gd_ail(dir2, dir2, "", "check --deny net app")
-    want("git dep --deny net", n.err, ["error[mod.pkg.7]: dependency `geo` isn't in the cache"])
+    self.want(
+        "git dep --deny net",
+        n.err,
+        ["error[mod.pkg.7]: dependency `geo` isn't in the cache"],
+    )
     if fs.exists("{dir2}/app/ail.lock")
-        red("git dep --deny net", "wrote a lock")
+        self.red("git dep --deny net", "wrote a lock")
     gd_manifest(dir2, url2, "tag v9 caps fs")
     t := gd_ail(dir2, dir2, "", "run app")
-    want("git dep unknown tag", t.err, ["dependency `geo`", "has no tag `v9`"])
+    self.want("git dep unknown tag", t.err, ["dependency `geo`", "has no tag `v9`"])
     if fs.exists("{dir2}/app/ail.lock")
-        red("git dep unknown tag", "a failed fetch wrote a lock")
+        self.red("git dep unknown tag", "a failed fetch wrote a lock")
     fs.write_text(
         "{dir2}/app/ail.pkg",
         "package app\ndep geo git \"file:///no/such/repo.git\" tag v1\n",
     ) else return
     ur := gd_ail(dir2, dir2, "", "run app")
-    want("git dep unreachable", ur.err, ["error[mod.pkg.7]: can't fetch dependency `geo`"])
+    self.want("git dep unreachable", ur.err, ["error[mod.pkg.7]: can't fetch dependency `geo`"])
     gd_manifest(dir2, url2, "tag v1 caps fs")
     # A PATH without git: the shell tools `./ail` itself uses are linked in, git is not.
     # Windows has no `./ail` script to run on such a PATH.
     if (env.get("OS") else "") != "Windows_NT"
         sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
         ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
-        want(
+        self.want(
             "git dep no git",
             ng.err,
             ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"],
         )
     nu := gd_ail(dir2, "{dir2}/app", "", "pkg update nope")
-    want("git dep update nope", nu.err, ["error[mod.pkg.9]"])
+    self.want("git dep update nope", nu.err, ["error[mod.pkg.9]"])
     sh_run("chmod -R u+w {dir2}; rm -rf {dir2}")
 
 ## `std.net` end to end (net.rs, ported; std.net.1-5, 13, 14): a loopback HTTP
@@ -2478,14 +2517,14 @@ fn Gate.net(mut self)
     c := ail_run(["run", "tests/net/client.ail", "http://127.0.0.1:{port}"]) else return
     net_stop(pid)
     if c.status != 0 or c.out != slurp("tests/net/client.out")
-        red("net client", "exit {c.status}\n{c.out}{c.err}")
+        self.red("net client", "exit {c.status}\n{c.out}{c.err}")
     # eff.cap.1, std.net.1: `--deny net` and `--deterministic` refuse it.
     for flags in [["--deny", "net"], ["--deterministic"]]
         r := ail_run(cat(cat(["run"], flags), ["tests/net/client.ail"])) else return
         if r.status != 2 or not r.err.contains("eff.cap.1") or not r.err.contains("`net`")
-            red("net is a capability {flags}", "exit {r.status}\n{r.err}")
+            self.red("net is a capability {flags}", "exit {r.status}\n{r.err}")
     e := ail_run(["effects", "tests/net/client.ail"]) else return
-    want("net effects", e.out, ["net"])
+    self.want("net effects", e.out, ["net"])
     # attach.cli.1-3: `ail attach` finds the program's socket from its discovery file, sends the token
     # and the query's fields, and prints the reply line.
     ad := "{repo_root()}/.gate-attach"
@@ -2500,8 +2539,8 @@ fn Gate.net(mut self)
     net_stop(apid)
     req := slurp("{ad}/req.txt")
     if at.status != 0 or at.out != "\{\"v\":1,\"rev\":1,\"values\":\{}}\n"
-        red("attach reply", "exit {at.status}\n{at.out}{at.err}")
-    want("attach request", req, [
+        self.red("attach reply", "exit {at.status}\n{at.out}{at.err}")
+    self.want("attach request", req, [
         "\"q\":\"observe\"",
         "\"token\":\"tok\"",
         "\"names\":[\"n\",\"m\"]",
@@ -2511,7 +2550,7 @@ fn Gate.net(mut self)
     apid2 := net_start("python3 -I tools/gate/attach_server.py {aport} {ad}/req.txt", aport)
     ip := sh_run("TMPDIR={ad} ./ail attach input kind=click id=cv x=3 y=4 shift=true")
     net_stop(apid2)
-    want("attach input request", slurp("{ad}/req.txt"), [
+    self.want("attach input request", slurp("{ad}/req.txt"), [
         "\"q\":\"input\"",
         "\"kind\":\"click\"",
         "\"id\":\"cv\"",
@@ -2519,13 +2558,13 @@ fn Gate.net(mut self)
         "\"shift\":true",
     ])
     if ip.status != 0
-        red("attach input", "exit {ip.status}\n{ip.out}{ip.err}")
+        self.red("attach input", "exit {ip.status}\n{ip.out}{ip.err}")
     nobody := sh_run("TMPDIR={ad}/nowhere ./ail attach")
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
-        red("attach none", "exit {nobody.status}\n{nobody.err}")
+        self.red("attach none", "exit {nobody.status}\n{nobody.err}")
     bad := sh_run("TMPDIR={ad} ./ail attach set x=1")
     if bad.status != 2 or not bad.err.contains("the queries are observe, screen, heap and tools")
-        red("attach unknown query", "exit {bad.status}\n{bad.err}")
+        self.red("attach unknown query", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {ad}")
     # std.net.5, std.net.13: https and a raw TLS Conn against `openssl s_server`.
     v := sh_run("openssl version").out
@@ -2541,31 +2580,31 @@ fn Gate.net(mut self)
         a := sh_run("SSL_CERT_FILE={data}/root.pem {root}/ail run tests/net/https.ail {ok} {by_ip}")
         if a.status != 0
             or a.out != "200 <HTML><BODY BGCOLOR=\"#ffffff\">\nnet.NetKind.Tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
-            red("net https", "exit {a.status}\n{a.out}{a.err}")
+            self.red("net https", "exit {a.status}\n{a.out}{a.err}")
         b := sh_run("SSL_CERT_FILE={data}/rsa_leaf.pem {root}/ail run tests/net/https.ail {ok}")
         if b.out
             != "net.NetKind.Tls: the certificate for `localhost` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store\n"
-            red("net https untrusted root", "{b.out}{b.err}")
+            self.red("net https untrusted root", "{b.out}{b.err}")
         t := sh_run("SSL_CERT_FILE={data}/root.pem {root}/ail run tests/net/tls_conn.ail {tport}")
         if t.status != 0
             or t.out != "HTTP/1.0 200 ok\nnet.NetKind.Tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
-            red("net tls conn", "exit {t.status}\n{t.out}{t.err}")
+            self.red("net tls conn", "exit {t.status}\n{t.out}{t.err}")
         net_stop(spid)
         sh_run("pkill -f 'openssl s_server.*{tport}' 2>/dev/null")
     # std.net.14: serving is a capability of its own, on top of `net`.
     program := "tests/cases/std_net_serve.ail"
     d := ail_run(["run", "--deny", "net.serve", program]) else return
     if d.status != 2 or not d.err.contains("eff.cap.1") or not d.err.contains("`net.serve`")
-        red("net.serve capability", "exit {d.status}\n{d.err}")
+        self.red("net.serve capability", "exit {d.status}\n{d.err}")
     for args in [["check", "--deny", "net", program], ["check", "--deterministic", program]]
         x := ail_run(args) else return
         if x.status != 2
-            red("net.serve denied by {args}", "exit {x.status}")
+            self.red("net.serve denied by {args}", "exit {x.status}")
     k := ail_run(["check", "--deny", "net.serve", "tests/net/client.ail"]) else return
     if k.status != 0
-        red("client-only program", k.err)
+        self.red("client-only program", k.err)
     ef := ail_run(["effects", program]) else return
-    want("net.serve effects", ef.out, [
+    self.want("net.serve effects", ef.out, [
         "fn:main \{fail, io, net, net.serve, spawn}",
         "fn:worker \{fail, io, net}",
     ])
@@ -2573,9 +2612,9 @@ fn Gate.net(mut self)
 ## The spec conformance harness (spec.rs, ported to tools/gate/spec.ail; ADR 0002).
 fn Gate.spec(mut self)
     # A shard (`spec@K/N`) goes on to spec.ail, which checks the fences i % N == K.
-    shard := if shard_count > 1 then ["{part}/{shard_count}"] else []
+    shard := if self.shard_count > 1 then ["{self.part}/{self.shard_count}"] else []
     r := proc.run("./ail", cat(["run", "tools/gate/spec.ail"], shard), "", 3600000) else
-        red("spec", "could not start tools/gate/spec.ail")
+        self.red("spec", "could not start tools/gate/spec.ail")
         return
     for l in r.out.lines()
         if l.starts_with("SHARD ")
@@ -2586,7 +2625,7 @@ fn Gate.spec(mut self)
         for i in 0..errl.len()
             if i < 8
                 tail.push(errl[i])
-        red("spec", "{r.out}\nspec.ail exit {r.status}; stderr:\n{tail.join("\n")}")
+        self.red("spec", "{r.out}\nspec.ail exit {r.status}; stderr:\n{tail.join("\n")}")
 
 ## The native runtime's tests, the refusals of ADR 0900, and the native subset table
 ## (native_runtime.rs, native_test.rs, native_subset_table.rs, ported).
@@ -2611,61 +2650,61 @@ fn owner_ok(owner str) bool
 ## Native-only features (ADR 0865) build here, so nativex runs on `./ail` with no AIL_BINARY.
 fn Gate.nativex(mut self)
     # `nativex@K/N`: one shard, one process (the gate's pool supplies the parallelism); see nativex.ail.
-    shard := if shard_count > 1 then " --shard {part}/{shard_count}" else ""
+    shard := if self.shard_count > 1 then " --shard {self.part}/{self.shard_count}" else ""
     r := proc.run("sh", [
         "-c",
         "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail{shard}",
     ]) else
-        red("nativex", "could not start tools/gate/nativex.ail")
+        self.red("nativex", "could not start tools/gate/nativex.ail")
         return
     for l in r.out.lines()
         if l.starts_with("SHARD ")
             print(l)
     if r.status != 0 or not r.out.contains("NATIVEX GREEN")
-        red("nativex", "{r.out}{r.err}")
+        self.red("nativex", "{r.out}{r.err}")
 
 ## ported to tools/gate/globals.ail (B6).
 fn Gate.globals(mut self)
     r := ail_run(["run", "tools/gate/globals.ail"]) else
-        red("globals", "could not start tools/gate/globals.ail")
+        self.red("globals", "could not start tools/gate/globals.ail")
         return
     if r.status != 0 or not r.out.contains("GLOBALS GREEN")
-        red("globals", "{r.out}{r.err}")
+        self.red("globals", "{r.out}{r.err}")
 
 ## ported to tools/gate/pe.ail (B6).
 fn Gate.pe(mut self)
     r := ail_run(["run", "tools/gate/pe.ail"]) else
-        red("pe", "could not start tools/gate/pe.ail")
+        self.red("pe", "could not start tools/gate/pe.ail")
         return
     if r.status != 0 or not r.out.contains("PE GREEN")
-        red("pe", "{r.out}{r.err}")
+        self.red("pe", "{r.out}{r.err}")
 
 ## ported to tools/gate/asm.ail (B6).
 fn Gate.asm(mut self)
     r := ail_run(["run", "tools/gate/asm.ail"]) else
-        red("asm", "could not start tools/gate/asm.ail")
+        self.red("asm", "could not start tools/gate/asm.ail")
         return
     if r.status != 0 or not r.out.contains("ASM GREEN")
-        red("asm", "{r.out}{r.err}")
+        self.red("asm", "{r.out}{r.err}")
 
 fn Gate.native_misc(mut self)
     r := ail_run(["test", "compiler/rt/rt.ail"]) else return
     if r.status != 0 or not r.out.contains(" 0 failed")
-        red("native runtime tests", "{r.out}{r.err}")
+        self.red("native runtime tests", "{r.out}{r.err}")
     mixed := "tests/native_test/mixed.ail"
     # ADR 0900: `test --native` is refused; `ail test` runs the same tests natively.
     n := native_run(["test", "--native", mixed]) else return
     if n.status != 2 or not n.err.contains("ADR 0900")
-        red("test --native refusal", "exit {n.status}\n{n.out}{n.err}")
+        self.red("test --native refusal", "exit {n.status}\n{n.out}{n.err}")
     nt := native_run(["test", mixed]) else return
-    want("test mixed", nt.out, ["adds", "fails_on_purpose", "uses_defer"])
+    self.want("test mixed", nt.out, ["adds", "fails_on_purpose", "uses_defer"])
     # test.stub.1-6 (ADR 1101): every stub works in a test run.
     sb := native_run(["test", "tests/native_test/stubs.ail"]) else return
     if sb.status != 0 or not sb.out.contains(" 0 failed")
-        red("std.test stubs", "exit {sb.status}\n{sb.out}{sb.err}")
+        self.red("std.test stubs", "exit {sb.status}\n{sb.out}{sb.err}")
     st := native_run(["selftest", "--test", "x"]) else return
     if st.status != 2 or not st.err.contains("ADR 0900")
-        red("selftest --test refusal", "exit {st.status}\n{st.out}{st.err}")
+        self.red("selftest --test refusal", "exit {st.status}\n{st.out}{st.err}")
     # ADR 0746: every row of the table has a construct, a wording and an owner.
     mut rows := List[List[str]]()
     for l in slurp("docs/design/native-subset-constructs.md").lines()
@@ -2677,15 +2716,15 @@ fn Gate.native_misc(mut self)
             if row.len() == 3 and row[0] != "Construct" and not row[0].starts_with("---")
                 rows.push(row)
     if rows.len() < 10
-        red("native subset table", "the table has {rows.len()} rows")
+        self.red("native subset table", "the table has {rows.len()} rows")
     mut text := slurp("docs/design/native-coverage.md").replace("`", "")
     for f in fs.glob("compiler/**/*.ail")
         text = "{text}{slurp(f).replace("`", "")}"
     for row in rows
         if not owner_ok(row[2])
-            red("native subset table", "bad owner `{row[2]}` for `{row[0]}`")
+            self.red("native subset table", "bad owner `{row[2]}` for `{row[0]}`")
         if not text.contains(row[1])
-            red("native subset table", "wording `{row[1]}` for `{row[0]}` is in no diagnostic")
+            self.red("native subset table", "wording `{row[1]}` for `{row[0]}` is in no diagnostic")
 
 ## The `std` suite (ported from std_sources.rs and std_call_gate.rs): the AIL std sources check and format
 ## cleanly, a program importing every module checks, and every public std
@@ -2834,14 +2873,14 @@ fn Gate.sched(mut self)
     order := "tests/sched/order.ail"
     first := native_run(["run", "--deterministic", order]) else return
     if first.status != 0 or first.out != slurp("tests/sched/order.out")
-        red("--deterministic order", "exit {first.status}\n{first.out}{first.err}")
+        self.red("--deterministic order", "exit {first.status}\n{first.out}{first.err}")
     for _ in 0..2
         again := native_run(["run", "--deterministic", order]) else return
         if again.out != first.out
-            red("--deterministic repeat", again.out)
+            self.red("--deterministic repeat", again.out)
     fixed := native_run(["run", "--schedule=fixed", order]) else return
     if fixed.out != first.out
-        red("--schedule=fixed", fixed.out)
+        self.red("--schedule=fixed", fixed.out)
     # conc.sched.1: a seed replays, and different seeds find a lost update that seed 1 does not.
     race := "tests/schedule/race.ail"
     fail_seed := "2"
@@ -2849,24 +2888,24 @@ fn Gate.sched(mut self)
     if bad.status != 1
         or not bad.out.contains("left is 1, right is 2")
         or not bad.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":{fail_seed}}\n")
-        red("schedule seed {fail_seed}", "exit {bad.status}\n{bad.out}")
+        self.red("schedule seed {fail_seed}", "exit {bad.status}\n{bad.out}")
     for _ in 0..2
         again := native_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
         if again.out != bad.out
-            red("schedule replay", again.out)
+            self.red("schedule replay", again.out)
     passed := native_run(["test", "--json", "--schedule=random:1", race]) else return
     if passed.status != 0
         or not passed.out.ends_with("\{\"summary\":true,\"passed\":1,\"failed\":0}\n")
-        red("schedule seed 1", "exit {passed.status}\n{passed.out}")
+        self.red("schedule seed 1", "exit {passed.status}\n{passed.out}")
     human := native_run(["test", "--schedule=random:{fail_seed}", race]) else return
-    want(
+    self.want(
         "schedule prints the seed",
         human.out,
         ["schedule seed {fail_seed}: replay with `ail test --schedule=random:{fail_seed} "],
     )
     nonsense := native_run(["test", "--schedule=sometimes", race]) else return
     if nonsense.status != 2
-        red("schedule sometimes", "exit {nonsense.status}, want 2")
+        self.red("schedule sometimes", "exit {nonsense.status}, want 2")
     # conc.cancel.3-4, conc.atomic.7: cancel trees pass every seed.
     for seed in 1..9
         x := native_run([
@@ -2875,26 +2914,26 @@ fn Gate.sched(mut self)
             "tests/schedule/cancel.ail",
         ]) else return
         if x.status != 0 or not x.out.ends_with("4 passed, 0 failed\n")
-            red("schedule cancel seed {seed}", x.out)
+            self.red("schedule cancel seed {seed}", x.out)
     # conc.task.7: a deadlock still traps, from any task that finds it.
     for case in ["conc_deadlock", "conc_for_channel_deadlock"]
         d := native_run(["run", "--deterministic", "tests/cases/{case}.ail"]) else return
         if d.status != 1 or not d.err.contains("trap[conc.task.7]")
-            red("deterministic {case}", "exit {d.status}\n{d.err}")
+            self.red("deterministic {case}", "exit {d.status}\n{d.err}")
     # std.random.3, eff.det.3: --seed repeats; eff.det.1-2: --deterministic denies clock, proc, random.
     unseeded := "tests/deterministic/unseeded.ail"
     s11 := native_run(["run", "--seed", "11", unseeded]) else return
     s11b := native_run(["run", "--seed", "11", unseeded]) else return
     s12 := native_run(["run", "--seed", "12", unseeded]) else return
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
-        red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
+        self.red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
     for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
         e := native_run(["run", "--deterministic", program]) else return
         if e.status != 2 or not e.err.contains("eff.cap.1")
-            red("--deterministic {program}", "exit {e.status}\n{e.err}")
+            self.red("--deterministic {program}", "exit {e.status}\n{e.err}")
     sx := native_run(["run", "--seed", "x", unseeded]) else return
     if sx.status != 2 or not sx.err.contains("std.random.3")
-        red("--seed x", "exit {sx.status}\n{sx.err}")
+        self.red("--seed x", "exit {sx.status}\n{sx.err}")
 
 ## ---- agent_tools: the commands an AI agent drives (ADRs 0921, 0966, 0967, 0969, 1015, 1020, 1022, 1023)
 
@@ -2903,9 +2942,9 @@ fn Gate.tool(mut self, label str, d str, args List[str], status int, wants List[
     r := ail_in(repo_root(), d, args)
     text := "{r.out}{r.err}"
     if r.status != status
-        red(label, "exit {r.status}, want {status}\n{text}")
+        self.red(label, "exit {r.status}, want {status}\n{text}")
     else
-        want(label, text, wants)
+        self.want(label, text, wants)
     r
 
 fn src_of(ls List[str]) str
@@ -3008,7 +3047,7 @@ fn Gate.cert(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "attest",
         base,
         ["verify", "--diff", "--mutate", "--attest", "cert.json", "prog.ail"],
@@ -3016,9 +3055,9 @@ fn Gate.cert(mut self, tmp str)
         [],
     )
     doc := fs.read_text("{base}/cert.json") else
-        red("cert", "no certificate written")
+        self.red("cert", "no certificate written")
         return
-    want("cert members", doc, [
+    self.want("cert members", doc, [
         "\"cert\":1",
         "\"base\":\"",
         "\"hash\":\"",
@@ -3026,7 +3065,7 @@ fn Gate.cert(mut self, tmp str)
         "\"mutation\":",
         "\"survivors_in_changed\":",
     ])
-    tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
+    self.tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
     fs.write_text("{base}/prog.ail", src_of([
         "fn sign(n int) int",
         "    if n > 0",
@@ -3041,14 +3080,14 @@ fn Gate.cert(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "check differs",
         base,
         ["verify", "--check", "cert.json"],
         1,
         ["differs: files", "certificate differs"],
     )
-    tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+    self.tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
 
 ## ---- try: `ail try` (ADR 0893, try.*), several patch sets in one call on scratch copies
 
@@ -3073,7 +3112,7 @@ fn Gate.try_cmd(mut self, tmp str)
     fs.write_text("{d}/wrong.json", wrong) else return
     fs.write_text("{d}/nowhere.json", nowhere) else return
     # try.in.1, try.run.1, try.verdict.1-4: one line per set, nothing on disk changes, status 1 when any set is not clean.
-    res := tool(
+    res := self.tool(
         "try sets",
         d,
         [
@@ -3099,18 +3138,18 @@ fn Gate.try_cmd(mut self, tmp str)
         ],
     )
     if slurp("{d}/p.ail") != prog
-        red("try writes nothing", "p.ail changed\n{res.out}")
+        self.red("try writes nothing", "p.ail changed\n{res.out}")
     left := sh_run("test -e {d}/.ail/try/0 && echo left")
     if left.out.contains("left")
-        red("try removes its copies", "{d}/.ail/try/0 is still there")
+        self.red("try removes its copies", "{d}/.ail/try/0 is still there")
     # try.in.1: one set on standard input; try.verdict.4: status 0 when clean.
     one := sh_run("cd {d} && AIL=\"{repo_root()}/ail\" \"{repo_root()}/ail\" try p.ail < good.json")
     if one.status != 0
-        red("try stdin", "exit {one.status}\n{one.out}{one.err}")
+        self.red("try stdin", "exit {one.status}\n{one.out}{one.err}")
     else
-        want("try stdin", one.out, ["set stdin: check ok; tests 1 passed, 0 failed"])
+        self.want("try stdin", one.out, ["set stdin: check ok; tests 1 passed, 0 failed"])
     # try.apply.1: a clean set is written, a red one and several sets are not.
-    tool(
+    self.tool(
         "try apply refuses red",
         d,
         ["try", "p.ail", "--set", "wrong.json", "--apply"],
@@ -3118,32 +3157,44 @@ fn Gate.try_cmd(mut self, tmp str)
         ["not applied"],
     )
     if slurp("{d}/p.ail") != prog
-        red("try apply refuses red", "p.ail changed")
-    tool(
+        self.red("try apply refuses red", "p.ail changed")
+    self.tool(
         "try apply wants one",
         d,
         ["try", "p.ail", "--set", "good.json", "--set", "wrong.json", "--apply"],
         2,
         ["try.apply.1"],
     )
-    tool("try apply", d, ["try", "p.ail", "--set", "good.json", "--apply"], 0, ["applied to p.ail"])
+    self.tool(
+        "try apply",
+        d,
+        ["try", "p.ail", "--set", "good.json", "--apply"],
+        0,
+        ["applied to p.ail"],
+    )
     if not slurp("{d}/p.ail").contains("a + b + 0")
-        red("try apply writes", "p.ail lacks the patch\n{slurp("{d}/p.ail")}")
+        self.red("try apply writes", "p.ail lacks the patch\n{slurp("{d}/p.ail")}")
 
 fn Gate.agent_tools(mut self, tmp str)
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
     # task.log.1, fix.check.1-2 (ADRs 1047, 1048): verify --fix repairs, and the ledger line is the same on a rerun but for `ms`.
     sh_run("mkdir -p {base}/ledger && cp -R {repo_root()}/tests/cases/packages/task_fix/. {base}/ledger/")
-    tool("verify --fix", "{base}/ledger", ["task", "verify", "--fix"], 1, ["fixed 1: expr.op.1"])
+    self.tool(
+        "verify --fix",
+        "{base}/ledger",
+        ["task", "verify", "--fix"],
+        1,
+        ["fixed 1: expr.op.1"],
+    )
     first := slurp("{base}/ledger/.ail/task-log.jsonl")
     for piece in ["\"stage\":\"check\",\"result\":\"red\"", "\"fixed\":1", "\"expr.name.1\":1"]
         if not first.contains(piece)
-            red("task ledger line", "no {piece}\n{first}")
+            self.red("task ledger line", "no {piece}\n{first}")
     if slurp("{base}/ledger/main.ail").contains("&&")
-        red("check --fix", "the file still has `&&`")
+        self.red("check --fix", "the file still has `&&`")
     sh_run("cd {base}/ledger && rm -rf .ail && printf 'fn main()\\n    a := true\\n    b := false\\n    if a && b\\n        print(undefined_name)\\n' > main.ail")
-    tool(
+    self.tool(
         "verify --fix again",
         "{base}/ledger",
         ["task", "verify", "--fix"],
@@ -3152,12 +3203,12 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     second := slurp("{base}/ledger/.ail/task-log.jsonl")
     if first.split(",\"ms\":")[0] != second.split(",\"ms\":")[0]
-        red("task ledger is stable", "two runs differ\n{first}{second}")
+        self.red("task ledger is stable", "two runs differ\n{first}{second}")
     # task.finish.3 (ADR 1046): `finish` writes the change certificate and names it.
     sh_run("mkdir -p {base}/cert")
     fs.write_text("{base}/cert/main.ail", "fn main()\n    print(1)\n") else return
     sh_run("cd {base}/cert && git init -q && git add -A && git -c user.name=g -c user.email=g@g commit -qm seed")
-    tool(
+    self.tool(
         "task start for finish",
         "{base}/cert",
         ["task", "start", "main.ail", "print", "two"],
@@ -3165,21 +3216,21 @@ fn Gate.agent_tools(mut self, tmp str)
         ["task open"],
     )
     fs.write_text("{base}/cert/main.ail", "fn main()\n    print(2)\n") else return
-    tool("task verify for finish", "{base}/cert", ["task", "verify"], 0, ["green"])
-    tool(
+    self.tool("task verify for finish", "{base}/cert", ["task", "verify"], 0, ["green"])
+    self.tool(
         "task finish certificate",
         "{base}/cert",
         ["task", "finish", "--json"],
         0,
         ["\"certificate\":\".ail/cert.json\""],
     )
-    want(
+    self.want(
         "task finish writes the certificate",
         slurp("{base}/cert/.ail/cert.json"),
         ["\"cert\"", "main.ail"],
     )
     if fs.exists("{base}/cert/.ail-task")
-        red("task finish", "the task is still open")
+        self.red("task finish", "the task is still open")
     # api.ctx.1-7 (ADR 1020)
     ctx := src_of([
         "fn show(n int) str",
@@ -3192,7 +3243,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "    print(pay(1))",
     ])
     fs.write_text("{base}/ctx/prog.ail", ctx) else return
-    full := tool("context", "{base}/ctx", ["context", "prog.ail", "pay"], 0, [
+    full := self.tool("context", "{base}/ctx", ["context", "prog.ail", "pay"], 0, [
         "signature",
         "callees",
         "show",
@@ -3202,32 +3253,32 @@ fn Gate.agent_tools(mut self, tmp str)
         "pays",
     ])
     if full.out.contains("cut:")
-        red("context full pack", "a default budget cut a tiny program\n{full.out}")
+        self.red("context full pack", "a default budget cut a tiny program\n{full.out}")
     again := ail_in(repo_root(), "{base}/ctx", ["context", "prog.ail", "fn:pay"])
     if again.out != full.out
-        red("context is deterministic", "`fn:pay` and `pay` differ\n{again.out}")
-    tool(
+        self.red("context is deterministic", "`fn:pay` and `pay` differ\n{again.out}")
+    self.tool(
         "context budget",
         "{base}/ctx",
         ["context", "prog.ail", "pay", "--budget", "1"],
         0,
         ["cut:", "--budget"],
     )
-    tool(
+    self.tool(
         "context json",
         "{base}/ctx",
         ["context", "prog.ail", "pay", "--budget", "1", "--json"],
         0,
         ["\"target\":\"fn:pay\"", "\"cut\":"],
     )
-    tool(
+    self.tool(
         "context unknown symbol",
         "{base}/ctx",
         ["context", "prog.ail", "nosuch"],
         2,
         ["api.ctx.6"],
     )
-    tool(
+    self.tool(
         "context zero budget",
         "{base}/ctx",
         ["context", "prog.ail", "pay", "--budget", "0"],
@@ -3245,14 +3296,14 @@ fn Gate.agent_tools(mut self, tmp str)
         "    print(pay(1))",
     ])
     fs.write_text("{base}/infer/prog.ail", infer) else return
-    tool(
+    self.tool(
         "infer proposes",
         "{base}/infer",
         ["infer", "--contracts", "pay", "prog.ail"],
         0,
         ["requires n > 0", "proved"],
     )
-    tool(
+    self.tool(
         "infer json",
         "{base}/infer",
         ["infer", "--contracts", "pay", "prog.ail", "--json"],
@@ -3260,22 +3311,22 @@ fn Gate.agent_tools(mut self, tmp str)
         ["\"kind\":\"requires\"", "\"cond\":\"n > 0\"", "\"applied\":false"],
     )
     if slurp("{base}/infer/prog.ail") != infer
-        red("infer without --apply", "wrote the file")
-    tool(
+        self.red("infer without --apply", "wrote the file")
+    self.tool(
         "infer min",
         "{base}/infer",
         ["infer", "--contracts", "pay", "prog.ail", "--min", "100"],
         0,
         ["needed"],
     )
-    tool(
+    self.tool(
         "infer bad function",
         "{base}/infer",
         ["infer", "--contracts", "nosuch", "prog.ail"],
         2,
         ["infer.cand.1"],
     )
-    tool(
+    self.tool(
         "infer apply",
         "{base}/infer",
         ["infer", "--contracts", "pay", "prog.ail", "--apply"],
@@ -3284,10 +3335,16 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     applied := slurp("{base}/infer/prog.ail")
     if not applied.contains("requires n > 0")
-        red("infer --apply", "the file has no `requires n > 0`:\n{applied}")
-    tool("infer applied file checks", "{base}/infer", ["check", "prog.ail"], 0, [""])
-    tool("infer applied file tests", "{base}/infer", ["test", "prog.ail"], 0, [" 0 failed"])
-    tool("infer holds", "{base}/infer", ["infer", "--contracts", "pay", "prog.ail"], 0, ["holds"])
+        self.red("infer --apply", "the file has no `requires n > 0`:\n{applied}")
+    self.tool("infer applied file checks", "{base}/infer", ["check", "prog.ail"], 0, [""])
+    self.tool("infer applied file tests", "{base}/infer", ["test", "prog.ail"], 0, [" 0 failed"])
+    self.tool(
+        "infer holds",
+        "{base}/infer",
+        ["infer", "--contracts", "pay", "prog.ail"],
+        0,
+        ["holds"],
+    )
     # probe.run.1-4 (ADR 0921): natively, and over a replay
     fs.write_text("{base}/probe/prog.ail", src_of([
         "fn main()",
@@ -3296,7 +3353,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "        total += n",
         "    print(total)",
     ])) else return
-    probe := tool(
+    probe := self.tool(
         "probe",
         "{base}/probe",
         ["run", "--at", "prog.ail:4", "--show", "n,total", "prog.ail"],
@@ -3308,23 +3365,23 @@ fn Gate.agent_tools(mut self, tmp str)
         ],
     )
     if probe.out != "6\n"
-        red("probe leaves the output alone", probe.out)
-    tool(
+        self.red("probe leaves the output alone", probe.out)
+    self.tool(
         "probe unset",
         "{base}/probe",
         ["run", "--at", "prog.ail:4", "--show", "nosuch", "prog.ail"],
         0,
         ["nosuch = <unset>"],
     )
-    tool(
+    self.tool(
         "probe needs --show",
         "{base}/probe",
         ["run", "--at", "prog.ail:4", "prog.ail"],
         2,
         ["probe.run.4"],
     )
-    tool("probe record", "{base}/probe", ["run", "--record", "r.json", "prog.ail"], 0, [""])
-    tool(
+    self.tool("probe record", "{base}/probe", ["run", "--record", "r.json", "prog.ail"], 0, [""])
+    self.tool(
         "probe over replay",
         "{base}/probe",
         ["run", "--replay", "r.json", "--at", "prog.ail:4", "--show", "n,total"],
@@ -3333,23 +3390,23 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     # san.sched.1-2 (ADR 0967): a clean program, and a lost update that seed 2 shows (the native scheduler, see `misc`)
     fs.write_text("{base}/san/prog.ail", "fn main()\n    print(1)\n") else return
-    tool(
+    self.tool(
         "sanitize clean",
         "{base}/san",
         ["sanitize", "prog.ail"],
         0,
         ["8 schedules, 0 differ from the fixed schedule"],
     )
-    tool("sanitize bad arguments", "{base}/san", ["sanitize"], 2, ["usage: ail sanitize"])
+    self.tool("sanitize bad arguments", "{base}/san", ["sanitize"], 2, ["usage: ail sanitize"])
     race := "{repo_root()}/tests/schedule/race.ail"
-    tool(
+    self.tool(
         "sanitize finds the lost update",
         "{base}/san",
         ["sanitize", "--tests", "--seeds", "2", race],
         1,
         ["warning[san.sched.1]: schedule seed 2", "2 schedules, 1 differ from the fixed schedule"],
     )
-    tool(
+    self.tool(
         "sanitize json",
         "{base}/san",
         ["sanitize", "--tests", "--seeds", "2", "--json", race],
@@ -3375,7 +3432,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "        i += 1",
         "    print(keep.len())",
     ])) else return
-    lk := tool(
+    lk := self.tool(
         "leak grows",
         "{base}/leak",
         ["leak", "prog.ail"],
@@ -3383,14 +3440,14 @@ fn Gate.agent_tools(mut self, tmp str)
         ["leak[san.leak.1]", "growing"],
     )
     if lk.out != "48\n"
-        red("leak leaves the output alone", lk.out)
-    tool("leak json", "{base}/leak", ["leak", "--json", "prog.ail"], 0, [
+        self.red("leak leaves the output alone", lk.out)
+    self.tool("leak json", "{base}/leak", ["leak", "--json", "prog.ail"], 0, [
         "\"rule\":\"san.leak.1\"",
         "\"summary\":true,\"collections\":",
         "\"grew\":true",
     ])
     fs.write_text("{base}/leak/small.ail", "fn main()\n    print(1)\n") else return
-    tool("leak quiet", "{base}/leak", ["leak", "small.ail"], 0, ["no growth"])
+    self.tool("leak quiet", "{base}/leak", ["leak", "small.ail"], 0, ["no growth"])
     # eff.allow.1-9 (ADR 1072): scoped capabilities. Each program runs under `ail run --allow`; a denial is one trap line.
     sh_run("mkdir -p {base}/allow/data {base}/allow/secret")
     fs.write_text("{base}/allow/data/a.txt", "alpha") else return
@@ -3401,35 +3458,35 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(fs.read_text(\"data/a.txt\") else \"no\")",
     ])) else return
-    tool(
+    self.tool(
         "allow read in scope",
         "{base}/allow",
         ["run", "--allow", "fs.read=./data", "inside.ail"],
         0,
         ["alpha"],
     )
-    tool(
+    self.tool(
         "allow read, bare fs",
         "{base}/allow",
         ["run", "--allow", "fs", "inside.ail"],
         0,
         ["alpha"],
     )
-    tool(
+    self.tool(
         "allow read, two entries",
         "{base}/allow",
         ["run", "--allow", "fs.read=./nothing,fs.read=./data", "inside.ail"],
         0,
         ["alpha"],
     )
-    tool(
+    self.tool(
         "allow read out of scope",
         "{base}/allow",
         ["run", "--allow", "fs.read=./secret", "inside.ail"],
         1,
         ["trap[eff.allow.3]", "fs.read of", "by fs.read_text", "--allow fs.read="],
     )
-    tool(
+    self.tool(
         "allow nothing",
         "{base}/allow",
         ["run", "--allow", "none", "inside.ail"],
@@ -3442,7 +3499,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(fs.read_text(\"secret/s.txt\") else \"no\")",
     ])) else return
-    tool(
+    self.tool(
         "allow read outside",
         "{base}/allow",
         ["run", "--allow", "fs.read=./data", "outside.ail"],
@@ -3455,7 +3512,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(fs.read_text(\"data/../secret/s.txt\") else \"no\")",
     ])) else return
-    tool(
+    self.tool(
         "allow dotdot traversal",
         "{base}/allow",
         ["run", "--allow", "fs.read=./data", "dots.ail"],
@@ -3468,7 +3525,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(fs.read_text(\"./data/../data/a.txt\") else \"no\")",
     ])) else return
-    tool(
+    self.tool(
         "allow dotdot inside scope",
         "{base}/allow",
         ["run", "--allow", "fs.read=./data", "dots2.ail"],
@@ -3481,7 +3538,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(fs.exists(\"data_extra/a.txt\"))",
     ])) else return
-    tool(
+    self.tool(
         "allow sibling with the same prefix",
         "{base}/allow",
         ["run", "--allow", "fs.read=./data", "prefix.ail"],
@@ -3495,14 +3552,14 @@ fn Gate.agent_tools(mut self, tmp str)
         "    fs.write_text(\"data/b.txt\", \"beta\")?",
         "    print(\"done\")",
     ])) else return
-    tool(
+    self.tool(
         "allow write needs fs.write",
         "{base}/allow",
         ["run", "--allow", "fs.read=./data", "writer.ail"],
         1,
         ["trap[eff.allow.3]", "fs.write of", "--allow fs.write="],
     )
-    tool(
+    self.tool(
         "allow write in scope",
         "{base}/allow",
         ["run", "--allow", "fs.write=./data", "writer.ail"],
@@ -3510,7 +3567,7 @@ fn Gate.agent_tools(mut self, tmp str)
         ["done"],
     )
     if slurp("{base}/allow/data/b.txt") != "beta"
-        red("allow write in scope", "the file was not written")
+        self.red("allow write in scope", "the file was not written")
     # A link made inside the scope that points out of it (skipped where links can't be made, Windows without developer mode).
     fs.write_text("{base}/allow/linker.ail", src_of([
         "use std.fs",
@@ -3532,7 +3589,7 @@ fn Gate.agent_tools(mut self, tmp str)
         if link.status != 1
             or not link.err.contains("trap[eff.allow.3]")
             or not link.err.contains("secret")
-            red("allow link escape", "exit {link.status}\n{link.out}{link.err}")
+            self.red("allow link escape", "exit {link.status}\n{link.out}{link.err}")
     sh_run("rm -rf {base}/allow/data/escape")
     fs.write_text("{base}/allow/net.ail", src_of([
         "use std.net",
@@ -3543,35 +3600,35 @@ fn Gate.agent_tools(mut self, tmp str)
         "        return",
         "    print(r.status)",
     ])) else return
-    tool(
+    self.tool(
         "allow net host",
         "{base}/allow",
         ["run", "--allow", "net=api.example.com", "net.ail"],
         1,
         ["trap[eff.allow.4]", "127.0.0.1:1", "--allow net=127.0.0.1:1"],
     )
-    tool(
+    self.tool(
         "allow net by address",
         "{base}/allow",
         ["run", "--allow", "net=127.0.0.1:1", "net.ail"],
         0,
         ["not-trapped"],
     )
-    tool(
+    self.tool(
         "allow net wrong port",
         "{base}/allow",
         ["run", "--allow", "net=127.0.0.1:2", "net.ail"],
         1,
         ["trap[eff.allow.4]"],
     )
-    tool(
+    self.tool(
         "allow net domain scope",
         "{base}/allow",
         ["run", "--allow", "net=*.example.com", "net.ail"],
         1,
         ["trap[eff.allow.4]"],
     )
-    tool(
+    self.tool(
         "allow net is not fs",
         "{base}/allow",
         ["run", "--allow", "fs", "net.ail"],
@@ -3587,7 +3644,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "        return",
         "    print(r.status >= 0)",
     ])) else return
-    tool(
+    self.tool(
         "allow proc by name",
         "{base}/allow",
         ["run", "--allow", "proc=git", "proc.ail"],
@@ -3601,7 +3658,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "    print(env.get(\"PATH\") else \"unset\") ",
         "    print(env.get(\"HOME\") else \"unset\")",
     ])) else return
-    tool(
+    self.tool(
         "allow env by name",
         "{base}/allow",
         ["run", "--allow", "env=PATH", "env.ail"],
@@ -3616,7 +3673,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "    print(vs.contains(\"PATH\") or vs.contains(\"Path\") or vs.contains(\"AIL_ALLOW\"))",
         "    print(vs.contains(\"HOME\") or vs.contains(\"USERPROFILE\") or vs.contains(\"USER\"))",
     ])) else return
-    tool(
+    self.tool(
         "allow env.vars is filtered",
         "{base}/allow",
         ["run", "--allow", "env=AIL_*", "vars.ail"],
@@ -3631,42 +3688,42 @@ fn Gate.agent_tools(mut self, tmp str)
         "        xs := mem.alloc(4, 0)",
         "        print(\"ok\")",
     ])) else return
-    tool(
+    self.tool(
         "allow refuses unsafe code",
         "{base}/allow",
         ["check", "--allow", "fs", "unsafe.ail"],
         2,
         ["eff.cap.1", "unsafe"],
     )
-    tool(
+    self.tool(
         "allow accepts unsafe when listed",
         "{base}/allow",
         ["check", "--allow", "fs,unsafe", "unsafe.ail"],
         0,
         [],
     )
-    tool(
+    self.tool(
         "allow unknown name",
         "{base}/allow",
         ["check", "--allow", "disk", "inside.ail"],
         2,
         ["eff.allow.2", "disk"],
     )
-    tool(
+    self.tool(
         "allow empty scope",
         "{base}/allow",
         ["check", "--allow", "fs=", "inside.ail"],
         2,
         ["eff.allow.2"],
     )
-    tool(
+    self.tool(
         "allow scope on a name without scopes",
         "{base}/allow",
         ["check", "--allow", "clock=now", "inside.ail"],
         2,
         ["eff.allow.2"],
     )
-    tool(
+    self.tool(
         "allow with deny",
         "{base}/allow",
         ["check", "--allow", "fs", "--deny", "fs", "inside.ail"],
@@ -3681,7 +3738,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "fuzz finds a failure",
         "{base}/fuzz",
         ["test", "--fuzz", "small", "--cases", "400", "--corpus", "corpus", "prog.ail"],
@@ -3693,15 +3750,15 @@ fn Gate.agent_tools(mut self, tmp str)
         if f.starts_with("crash-")
             crash = true
     if not crash
-        red("fuzz corpus", "no crash- file in {base}/fuzz/corpus")
-    tool(
+        self.red("fuzz corpus", "no crash- file in {base}/fuzz/corpus")
+    self.tool(
         "fuzz replays the crash first",
         "{base}/fuzz",
         ["test", "--fuzz", "small", "--cases", "400", "--corpus", "corpus", "prog.ail"],
         1,
         ["input:"],
     )
-    tool(
+    self.tool(
         "fuzz unknown test",
         "{base}/fuzz",
         ["test", "--fuzz", "nosuch", "prog.ail"],
@@ -3715,7 +3772,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "fuzz clean run",
         "{base}/fuzz2",
         ["test", "--fuzz", "small", "--cases", "50", "prog.ail"],
@@ -3737,14 +3794,14 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "mutate survivors",
         "{base}/mut",
         ["test", "--mutate", "prog.ail"],
         1,
         ["survived ", "(in sign)", "mutants: ", "score "],
     )
-    tool(
+    self.tool(
         "mutate json",
         "{base}/mut",
         ["test", "--mutate", "--json", "prog.ail"],
@@ -3762,7 +3819,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "mutate all killed",
         "{base}/mut2",
         ["test", "--mutate", "prog.ail"],
@@ -3779,7 +3836,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "fn main()",
         "    print(\"x\")",
     ])) else return
-    tool(
+    self.tool(
         "mutate needs green tests",
         "{base}/mut2",
         ["test", "--mutate", "bad.ail"],
@@ -3815,19 +3872,19 @@ fn Gate.agent_tools(mut self, tmp str)
             "~'textDocument':~'uri':'{u1}'^,'position':~'line':4,'character':4^,'newName':'1x'^",
         ),
     ])
-    want("lsp initialize", s1.out, [
+    self.want("lsp initialize", s1.out, [
         "\"completionProvider\"",
         "\"renameProvider\"",
         "\"codeActionProvider\"",
     ])
-    want("lsp completion", s1.out, ["\"label\":\"norm\""])
+    self.want("lsp completion", s1.out, ["\"label\":\"norm\""])
     if s1.out.contains("\"label\":\"main\"")
-        red("lsp completion prefix", "`main` was offered after `no`")
+        self.red("lsp completion prefix", "`main` was offered after `no`")
     if s1.out.split("\"newText\":\"size\"").len() != 3
-        red("lsp rename", "want the declaration and the call renamed\n{s1.out}")
-    want("lsp rename refuses a bad name", s1.out, ["-32602"])
+        self.red("lsp rename", "want the declaration and the call renamed\n{s1.out}")
+    self.want("lsp rename refuses a bad name", s1.out, ["-32602"])
     if slurp("{base}/lsp1/main.ail") != prog1
-        red("lsp rename", "wrote the file")
+        self.red("lsp rename", "wrote the file")
     prog2 := src_of([
         "struct Pt",
         "    x int",
@@ -3853,7 +3910,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "textDocument/completion",
         lsp_pos(u2, 6, 12),
     )])
-    want("lsp completion after a dot", s2.out, ["\"label\":\"x\"", "\"label\":\"y\""])
+    self.want("lsp completion after a dot", s2.out, ["\"label\":\"x\"", "\"label\":\"y\""])
     prog3 := src_of([
         "fn main()",
         "    a := 1",
@@ -3869,11 +3926,11 @@ fn Gate.agent_tools(mut self, tmp str)
         "textDocument/codeAction",
         "~'textDocument':~'uri':'{u3}'^,'range':~'start':~'line':0,'character':0^,'end':~'line':5,'character':0^^,'context':~'diagnostics':[]^^",
     )])
-    want("lsp code actions", s3.out, ["\"quickfix\"", "mut ", "source.fixAll.ail"])
+    self.want("lsp code actions", s3.out, ["\"quickfix\"", "mut ", "source.fixAll.ail"])
     # mcp.tools.1, mcp.call.3, mcp.call.4 (ADR 0918, amended): the tools added to `ail mcp`
     fs.write_text("{base}/mcp/prog.ail", ctx) else return
     listed := mcp_session("{base}/mcp", [jreq(1, "tools/list", "~^")])
-    want("mcp tools/list", listed.out, [
+    self.want("mcp tools/list", listed.out, [
         "ail_context",
         "ail_edit",
         "ail_fix",
@@ -3891,7 +3948,7 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     # mcp.tools.3: the whole `tools/list` answer stays under 1,500 tokens (about 4 bytes each).
     if listed.out.len() > 6000
-        red(
+        self.red(
             "mcp tools/list size",
             "{listed.out.len()} bytes; mcp.tools.3 allows about 1,500 tokens",
         )
@@ -3904,7 +3961,7 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(7, "ail_fix", "'program':'prog.ail','dry_run':true"),
         mcp_call(8, "ail_context", "'program':'--files','symbol':'pay'"),
     ])
-    want("mcp context, explain, api, fix", m1.out, [
+    self.want("mcp context, explain, api, fix", m1.out, [
         "signature",
         "structuredContent",
         "ail context",
@@ -3912,21 +3969,21 @@ fn Gate.agent_tools(mut self, tmp str)
         "unknown form bogus",
         "must not start with - (mcp.call.4)",
     ])
-    want("mcp fix is not an error", m1.out, [jm("'id':7,'result':~'content'")])
+    self.want("mcp fix is not an error", m1.out, [jm("'id':7,'result':~'content'")])
     m2 := mcp_session("{base}/mcp", [mcp_call(
         2,
         "ail_edit",
         "'program':'prog.ail','edits':'rename show display','test':true,'impact':true",
     )])
-    want("mcp edit with test and impact", m2.out, ["passed", "tests", "\"isError\":false"])
+    self.want("mcp edit with test and impact", m2.out, ["passed", "tests", "\"isError\":false"])
     if not slurp("{base}/mcp/prog.ail").contains("display")
-        red("mcp edit wrote the file", slurp("{base}/mcp/prog.ail"))
+        self.red("mcp edit wrote the file", slurp("{base}/mcp/prog.ail"))
     m3 := mcp_session(repo_root(), [mcp_call(
         2,
         "ail_review",
         "'range':'HEAD..HEAD','path':'examples/hello.ail'",
     )])
-    want("mcp review", m3.out, ["\"isError\":false"])
+    self.want("mcp review", m3.out, ["\"isError\":false"])
     # mcp.tools.1 (round 2): one real session per added tool.
     fs.write_text("{base}/mcp/prove.ail", src_of([
         "fn at(xs List[int], i int) int",
@@ -3959,25 +4016,25 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(12, "ail_verify_check", "'cert':'-x'"),
         mcp_call(13, "ail_find", "'how':'sort descending'"),
     ])
-    want("mcp card", reply_of(r2.out, 2), ["AIL core card", "\"isError\":false"])
-    want("mcp card repeat is memoised", reply_of(r2.out, 3), [jm("'ail/warm':'memo'")])
-    want("mcp card topic", reply_of(r2.out, 4), ["\"isError\":false"])
-    want("mcp find by words", reply_of(r2.out, 5), ["fs.read_text(path"])
-    want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
-    want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
+    self.want("mcp card", reply_of(r2.out, 2), ["AIL core card", "\"isError\":false"])
+    self.want("mcp card repeat is memoised", reply_of(r2.out, 3), [jm("'ail/warm':'memo'")])
+    self.want("mcp card topic", reply_of(r2.out, 4), ["\"isError\":false"])
+    self.want("mcp find by words", reply_of(r2.out, 5), ["fs.read_text(path"])
+    self.want("mcp find by shape", reply_of(r2.out, 6), ["read_bytes(path"])
+    self.want("mcp find needs words or sig", reply_of(r2.out, 7), ["-32602", "words"])
     # api.find.7: `how` reaches `ail ask how`.
-    want("mcp find how", reply_of(r2.out, 13), ["sorted(by:"])
-    want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
+    self.want("mcp find how", reply_of(r2.out, 13), ["sorted(by:"])
+    self.want("mcp try", reply_of(r2.out, 8), ["set 1: check ok", "set 2: patch does not apply"])
     if slurp("{base}/mcp/try.ail") != ctx
-        red("mcp try", "wrote the program")
-    want("mcp prove", reply_of(r2.out, 9), ["proved", "\"isError\":false"])
-    want("mcp infer", reply_of(r2.out, 10), ["\"isError\":false"])
+        self.red("mcp try", "wrote the program")
+    self.want("mcp prove", reply_of(r2.out, 9), ["proved", "\"isError\":false"])
+    self.want("mcp infer", reply_of(r2.out, 10), ["\"isError\":false"])
     if slurp("{base}/mcp/try.ail") != ctx
-        red("mcp infer", "wrote the program")
-    want("mcp merge check", reply_of(r2.out, 11), ["merged and checked", "\"isError\":false"])
-    want("mcp verify check refuses an option", reply_of(r2.out, 12), ["-32602", "cert"])
+        self.red("mcp infer", "wrote the program")
+    self.want("mcp merge check", reply_of(r2.out, 11), ["merged and checked", "\"isError\":false"])
+    self.want("mcp verify check refuses an option", reply_of(r2.out, 12), ["-32602", "cert"])
     r3 := mcp_session("{base}/cert", [mcp_call(2, "ail_verify_check", "'cert':'.ail/cert.json'")])
-    want("mcp verify check", reply_of(r3.out, 2), ["certificate holds", "\"isError\":false"])
+    self.want("mcp verify check", reply_of(r3.out, 2), ["certificate holds", "\"isError\":false"])
     # attach.tool.3-5 (ADR 0986): `ail attach mcp` lists an app's `@tool` next to the fixed tools, and a call
     # reaches the app as a `call` request with the tool's name and arguments.
     td := "{base}/attach_mcp"
@@ -3997,14 +4054,14 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     tl := sh_run("cd {repo_root()} && printf '%s\\n' '{jreq(1, "tools/list", "~^")}' '{mcp_call(2, "add", "'n':2")}' | TMPDIR={td} ./ail attach mcp")
     net_stop(tpid)
-    want("attach mcp tools/list", tl.out, [
+    self.want("attach mcp tools/list", tl.out, [
         "app_observe",
         "app_input",
         "\"name\":\"add\"",
         "\"integer\"",
     ])
-    want("attach mcp call", reply_of(tl.out, 2), ["\"isError\":false"])
-    want("attach mcp call request", slurp("{td}/req.txt"), [
+    self.want("attach mcp call", reply_of(tl.out, 2), ["\"isError\":false"])
+    self.want("attach mcp call request", slurp("{td}/req.txt"), [
         "\"q\":\"call\"",
         "\"name\":\"add\"",
         "\"token\":\"tok\"",
@@ -4020,10 +4077,14 @@ fn Gate.agent_tools(mut self, tmp str)
         mcp_call(5, "ail_check", "'program':'warm.ail'"),
         mcp_call(6, "ail_test", "'program':'warm.ail'"),
     ])
-    want("mcp warm first call", reply_of(w1.out, 2), [jm("'ail/warm':'direct'")])
-    want("mcp warm repeat", reply_of(w1.out, 3), [jm("'ail/warm':'memo'")])
-    want("mcp warm after an edit", reply_of(w1.out, 5), [jm("'ail/warm':'direct'")])
-    want("mcp warm test keeps the launcher", reply_of(w1.out, 6), [jm("'ail/warm':'launcher'")])
+    self.want("mcp warm first call", reply_of(w1.out, 2), [jm("'ail/warm':'direct'")])
+    self.want("mcp warm repeat", reply_of(w1.out, 3), [jm("'ail/warm':'memo'")])
+    self.want("mcp warm after an edit", reply_of(w1.out, 5), [jm("'ail/warm':'direct'")])
+    self.want(
+        "mcp warm test keeps the launcher",
+        reply_of(w1.out, 6),
+        [jm("'ail/warm':'launcher'")],
+    )
     warm_again := mcp_call(3, "ail_check", "'program':'warm.ail'")
     cold := proc.run(
         "sh",
@@ -4035,12 +4096,12 @@ fn Gate.agent_tools(mut self, tmp str)
         ],
         "{warm_again}\n{warm_again}\n",
     ) else proc.Output(status: 127, out: "", err: "could not start sh")
-    want("mcp cold", reply_of(cold.out, 3), [jm("'ail/warm':'launcher'")])
+    self.want("mcp cold", reply_of(cold.out, 3), [jm("'ail/warm':'launcher'")])
     # tool.new.1-4 (ADR 1046): the agent kit that `ail new` writes, and `--no-agent`.
     sh_run("mkdir -p {base}/new")
-    tool("new writes the kit", "{base}/new", ["new", "kit"], 0, ["AGENTS.md", ".mcp.json"])
+    self.tool("new writes the kit", "{base}/new", ["new", "kit"], 0, ["AGENTS.md", ".mcp.json"])
     kit := fs.read_text("{base}/new/kit/AGENTS.md") else return
-    want("new AGENTS.md", kit, [
+    self.want("new AGENTS.md", kit, [
         "ail task start",
         "ail context",
         "ail task verify",
@@ -4055,24 +4116,24 @@ fn Gate.agent_tools(mut self, tmp str)
         "cert.json",
     ])
     if kit.contains("ail api --card")
-        red("new AGENTS.md", "still sends the agent to the full card")
+        self.red("new AGENTS.md", "still sends the agent to the full card")
     if kit.len() > 1400
-        red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 350 tokens")
+        self.red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 350 tokens")
     mcp := fs.read_text("{base}/new/kit/.mcp.json") else return
-    want("new .mcp.json", mcp, ["\"mcpServers\"", "\"command\": \"ail\"", "\"mcp\""])
-    tool("new --no-agent", "{base}/new", ["new", "--no-agent", "bare"], 0, ["created bare/"])
+    self.want("new .mcp.json", mcp, ["\"mcpServers\"", "\"command\": \"ail\"", "\"mcp\""])
+    self.tool("new --no-agent", "{base}/new", ["new", "--no-agent", "bare"], 0, ["created bare/"])
     if fs.exists("{base}/new/bare/AGENTS.md") or fs.exists("{base}/new/bare/.mcp.json")
-        red("new --no-agent", "the kit was written")
-    tool("new refuses an existing name", "{base}/new", ["new", "kit"], 2, ["tool.new.1"])
+        self.red("new --no-agent", "the kit was written")
+    self.tool("new refuses an existing name", "{base}/new", ["new", "kit"], 2, ["tool.new.1"])
     # tool.new.5: `ail new .` writes only the kit, into a project that already has `.ail` files, and overwrites nothing.
     sh_run("mkdir -p {base}/here {base}/empty")
-    tool("new . outside a project", "{base}/empty", ["new", "."], 2, ["tool.new.5"])
+    self.tool("new . outside a project", "{base}/empty", ["new", "."], 2, ["tool.new.5"])
     fs.write_text("{base}/here/main.ail", "fn main()\n    print(1)\n") else return
-    tool("new .", "{base}/here", ["new", "."], 0, ["wrote AGENTS.md, .mcp.json"])
-    want("new . kit", slurp("{base}/here/AGENTS.md"), ["ail card", "ail task finish"])
+    self.tool("new .", "{base}/here", ["new", "."], 0, ["wrote AGENTS.md, .mcp.json"])
+    self.want("new . kit", slurp("{base}/here/AGENTS.md"), ["ail card", "ail task finish"])
     fs.write_text("{base}/here/AGENTS.md", "mine\n") else return
     fs.remove("{base}/here/.mcp.json") else return
-    tool(
+    self.tool(
         "new . keeps AGENTS.md",
         "{base}/here",
         ["new", "."],
@@ -4080,8 +4141,8 @@ fn Gate.agent_tools(mut self, tmp str)
         ["left alone", "ail task start", "wrote .mcp.json"],
     )
     if slurp("{base}/here/AGENTS.md") != "mine\n"
-        red("new .", "changed an existing AGENTS.md")
-    tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])
+        self.red("new .", "changed an existing AGENTS.md")
+    self.tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
@@ -4091,13 +4152,20 @@ fn Gate.agent_tools(mut self, tmp str)
 fn Gate.crypto(mut self)
     v := sh_run("bash tools/native-tls/prim-check.sh 2>&1")
     if v.status != 0 or not v.out.contains(" 0 failed")
-        red("crypto vectors", "exit {v.status}\n{v.out}")
+        self.red("crypto vectors", "exit {v.status}\n{v.out}")
     f := sh_run("bash tools/native-tls/fuzz-check.sh 1500 1 2>&1")
     if f.status != 0
-        red("crypto parser fuzz", "exit {f.status}\n{f.out}")
+        self.red("crypto parser fuzz", "exit {f.status}\n{f.out}")
     w := sh_run("bash tools/native-tls/wire-fuzz.sh 60 1 2>&1")
     if w.status != 0
-        red("crypto wire fuzz", "exit {w.status}\n{w.out}")
+        self.red("crypto wire fuzz", "exit {w.status}\n{w.out}")
+
+## The checker fuzz in its fast form (fuzz.chk.1-3, ADR 1112): 300 mutants, the extremes, and files of
+## five functions with one mistake each. `ail check` must neither hang nor trap, and must report all five.
+fn Gate.checkfuzz(mut self, tmp str)
+    r := sh_run("perl -e 'alarm 900; exec @ARGV' \"$PWD/ail\" run tools/fuzz/check_fuzz.ail 300 1 \"{tmp}/checkfuzz\" 2>&1")
+    if r.status != 0 or not r.out.contains("CHECKFUZZ GREEN")
+        self.red("checkfuzz", "exit {r.status}\n{r.out}")
 
 fn main() !
     args := env.args()
@@ -4122,6 +4190,8 @@ fn main() !
         "parity",
         "corpus",
         "native_matrix",
+        "checkfuzz",
+        "checkbench",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -4187,6 +4257,8 @@ fn main() !
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
             "parity" => g.parity()
+            "checkfuzz" => g.checkfuzz(tmp)
+            "checkbench" => g.checkbench()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)

@@ -204,7 +204,9 @@ next iteration. `break name` and `continue name` name an enclosing loop
 instead (`expr.loop.10`). *(ADR 0091, ADR 1107)*
 
 **expr.loop.3** — `a..b` is the half-open range from `a` up to but excluding
-`b`. `a..=b` includes `b`. *(ADR 0091)*
+`b`. `a..=b` includes `b`. A range is written only as a `for` bound, a slice
+index `xs[a..b]` or a `match` pattern; anywhere else (`(0..10).step_by(3)`,
+`r := 0..n`) it is an error under this rule. *(ADR 0091, ADR 1111)*
 
 **expr.loop.4** — In `for x in e`, `e` MUST be a `List[T]`, giving `x` type
 `T`, a `Set[T]`, giving `x` type `T`, or a range of `int`, giving `x` type

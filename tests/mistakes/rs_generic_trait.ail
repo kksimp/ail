@@ -1,0 +1,12 @@
+trait Into[T]
+    fn into(self) T
+
+struct A
+    n int
+
+impl Into[str] for A
+    fn into(self) str
+        "{self.n}"
+
+fn main()
+    print(A(n: 1).into())

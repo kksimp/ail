@@ -24,7 +24,7 @@ fn Lower.gen_drops(mut self)
                 continue
             done.add(name)
             more = true
-            gen_drop(name, uniq.wanted[name])
+            self.gen_drop(name, uniq.wanted[name])
 
 fn Lower.gen_drop(mut self, name str, t Ty)
     x := begin_fn(name, Ty.Unit, [t])[0]
@@ -36,7 +36,7 @@ fn Lower.gen_drop(mut self, name str, t Ty)
             mut k := slots.len() - 1
             while k >= 0
                 if is_uniq(slots[k].ty)
-                    drop_call(load(x, k, slots[k].ty), slots[k].ty)
+                    self.drop_call(load(x, k, slots[k].ty), slots[k].ty)
                 elif slots[k].ty == Ty.Group
                     # conc.task.10: the struct's release waits for the group's tasks.
                     call("rt.group_release", [load(x, k, Ty.Group)], Ty.Unit)
@@ -61,7 +61,7 @@ fn Lower.gen_drop(mut self, name str, t Ty)
                     mut j := fs.len() - 1
                     while j >= 0
                         if is_uniq(fs[j].ty)
-                            drop_call(load(x, j + 1, fs[j].ty), fs[j].ty)
+                            self.drop_call(load(x, j + 1, fs[j].ty), fs[j].ty)
                         j -= 1
                     jump(next, [])
                     cur = next
@@ -70,7 +70,7 @@ fn Lower.gen_drop(mut self, name str, t Ty)
             none_ := new_block()
             branch(op("eq", [x, konst(0, Ty.Int)], Ty.Bool), none_, [], some, [])
             cur = some
-            drop_call(unwrap(Val(id: x, ty: t)).id, inner)
+            self.drop_call(unwrap(Val(id: x, ty: t)).id, inner)
             jump(none_, [])
             cur = none_
         List(e) =>
@@ -84,7 +84,7 @@ fn Lower.gen_drop(mut self, name str, t Ty)
             exit := new_block()
             branch(op("ge", [i, konst(0, Ty.Int)], Ty.Bool), body, [], exit, [])
             cur = body
-            drop_call(op("get", [x, i], e), e)
+            self.drop_call(op("get", [x, i], e), e)
             jump(head, [op("sub", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
         Map(_, vt) =>
@@ -105,7 +105,7 @@ fn Lower.gen_drop(mut self, name str, t Ty)
             live := new_block()
             branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], step, [])
             cur = live
-            drop_call(entry_value(e, vt), vt)
+            self.drop_call(entry_value(e, vt), vt)
             jump(step, [])
             cur = step
             jump(head, [op("sub", [i, konst(1, Ty.Int)], Ty.Int)])

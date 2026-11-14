@@ -39,12 +39,12 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
         mut next := -1
         if tree.len() == 0
             next = new_block()
-            if not test_pattern(arm.pat, s, tag, body, next)
+            if not self.test_pattern(arm.pat, s, tag, body, next)
                 return none
         seal(body)
         cur = body
         scopes.push(Map[str, str]())
-        bind_fields(arm.pat, s)
+        self.bind_fields(arm.pat, s)
         if g := arm.guard
             c := lower_value(g, Ty.Bool)?
             pass := new_block()
@@ -52,7 +52,7 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
             seal(pass)
             cur = pass
         before := problems.len()
-        v := lower_arm(arm.body, value, rty)
+        v := self.lower_arm(arm.body, value, rty)
         if value and v == none and problems.len() > before
             # Reported in the arm; nothing is built.
             finish(unreachable_term())
@@ -106,11 +106,11 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
         Wildcard =>
             jump(yes, [])
         Literal(lit, lpos) =>
-            c := literal_test(lit, s, lpos) else return false
+            c := self.literal_test(lit, s, lpos) else return false
             branch(c, yes, [], no, [])
         Range(lo, hi, inclusive, rpos) =>
-            a := literal_int(lo, s, rpos) else return false
-            b := literal_int(hi, s, rpos) else return false
+            a := self.literal_int(lo, s, rpos) else return false
+            b := self.literal_int(hi, s, rpos) else return false
             mid := new_block()
             branch(op("ge", [s.id, konst(a, s.ty)], Ty.Bool), mid, [], no, [])
             seal(mid)
@@ -120,9 +120,9 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
         Alt(alts, _) =>
             for k in 0..alts.len()
                 if k == alts.len() - 1
-                    return test_pattern(alts[k], s, tag, yes, no)
+                    return self.test_pattern(alts[k], s, tag, yes, no)
                 other := new_block()
-                if not test_pattern(alts[k], s, tag, yes, other)
+                if not self.test_pattern(alts[k], s, tag, yes, other)
                     return false
                 seal(other)
                 cur = other
@@ -151,7 +151,7 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
 fn Lower.literal_test(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
     match lit
         IntLit(_) =>
-            n := literal_int(lit, s, pos)?
+            n := self.literal_int(lit, s, pos)?
             op("eq", [s.id, konst(n, Ty.Int)], Ty.Bool)
         BoolLit(b) =>
             if not (s.ty == Ty.Bool)
@@ -164,7 +164,7 @@ fn Lower.literal_test(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
                 return none
             call("rt.str_eq", [s.id, str_value(text)], Ty.Bool)
         CharLit(_) =>
-            n := literal_int(lit, s, pos)?
+            n := self.literal_int(lit, s, pos)?
             op("eq", [s.id, konst(n, Ty.Char)], Ty.Bool)
 
 fn Lower.literal_int(mut self, lit ast.Literal, s Val, pos ast.Pos) int?

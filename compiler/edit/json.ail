@@ -21,7 +21,7 @@ pub fn J.get(self, key str) J?
 
 ## The string member of an object.
 pub fn J.str_of(self, key str) str?
-    if v := get(key)
+    if v := self.get(key)
         match v
             Str(s) => return s
             _ => return none

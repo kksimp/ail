@@ -608,7 +608,7 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
         )
         return Ty.Unknown
     if keyed(args, n)
-        return keyed_call(recv, rt, n, at, args)
+        return self.keyed_call(recv, rt, n, at, args)
     b := builtin(rt, n) else return Ty.Unknown
     # type.str.6: these take a `str` or a `char`.
     if rt == Ty.Str and [
@@ -798,7 +798,7 @@ fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args Li
     if not shape_ok
         for a in args
             if p := a.param
-                key_misplaced(p.pos)
+                self.key_misplaced(p.pos)
             else
                 expr(a.value, none, true)
         mut where := at
@@ -825,7 +825,13 @@ fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args Li
     # expr.key.2: the parameter is a new immutable name, like a loop variable.
     mark := locals.len()
     if declare(p.name, p.pos)
-        locals.push(Local(name: p.name, ty: e, mutable: false, how: LocalKind.LoopVar, decl: none))
+        self.add_local(Local(
+            name: p.name,
+            ty: e,
+            mutable: false,
+            how: LocalKind.LoopVar,
+            decl: none,
+        ))
     kt := expr(ast.key_body(a), none, true)
     end_scope(mark)
     if kt != Ty.Unknown and not implements(kt, std_ord)

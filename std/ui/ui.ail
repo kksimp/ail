@@ -171,10 +171,10 @@ impl app.App for Screen
         return
 
     fn view(self) app.Node
-        app.canvas("grid", w, h, ops)
+        app.canvas("grid", self.w, self.h, self.ops)
 
     fn title(self) str
-        title
+        self.title
 
 ## Supplied by the lowering (runtime `chan_ready`): whether `recv` on `ch`
 ## would return at once, reading what the host child has written so far.
@@ -227,101 +227,106 @@ pub fn open(title str, cols int, rows int) Window ! UiError
 
 ## The font size in points for a cell `px` pixels high.
 fn Window.pts(self) float
-    px.to_float() / 1.2
+    self.px.to_float() / 1.2
 
 ## A cell's width in points (the host's mono advance at 13 points, scaled).
 fn Window.cw(self) float
-    if cell_w <= 0.0
-        return pts() * 0.6
-    cell_w * pts() / 13.0
+    if self.cell_w <= 0.0
+        return self.pts() * 0.6
+    self.cell_w * self.pts() / 13.0
 
 fn Window.ch(self) float
-    px.to_float()
+    self.px.to_float()
 
 ## Send the grid; `first` gives the canvas its size from the cell counts,
 ## after that it fills the window.
 fn Window.send_view(mut self, first bool)
-    if not live
+    if not self.live
         return
-    s := pts()
+    s := self.pts()
     mut ops := List[app.Op]()
-    cwp := cw()
-    chp := ch()
+    cwp := self.cw()
+    chp := self.ch()
     # A run of cells with one background becomes one `Fill`; one style, one `Str`.
-    for r in 0..rows
+    for r in 0..self.rows
         mut c := 0
-        while c < cols
-            i := r * cols + c
+        while c < self.cols
+            i := r * self.cols + c
             mut e := c + 1
-            while e < cols and bgs[r * cols + e] == bgs[i]
+            while e < self.cols and self.bgs[r * self.cols + e] == self.bgs[i]
                 e += 1
-            if bgs[i] != BLACK
+            if self.bgs[i] != BLACK
                 ops.push(app.Op.Fill(
                     c.to_float() * cwp,
                     r.to_float() * chp,
                     (e - c).to_float() * cwp,
                     chp,
-                    bgs[i],
+                    self.bgs[i],
                 ))
             c = e
         c = 0
-        while c < cols
-            i := r * cols + c
+        while c < self.cols
+            i := r * self.cols + c
             mut e := c + 1
-            while e < cols and fgs[r * cols + e] == fgs[i] and sts[r * cols + e] == sts[i]
+            while e < self.cols
+                and self.fgs[r * self.cols + e] == self.fgs[i]
+                and self.sts[r * self.cols + e] == self.sts[i]
                 e += 1
             mut text := ""
             for k in c..e
-                text = "{text}{chars[r * cols + k]}"
-            if text.trim_end() != "" or sts[i].bit_and(4) != 0
+                text = "{text}{self.chars[r * self.cols + k]}"
+            if text.trim_end() != "" or self.sts[i].bit_and(4) != 0
                 ops.push(app.Op.Str(
                     c.to_float() * cwp,
                     r.to_float() * chp,
                     text,
                     "mono",
                     s,
-                    fgs[i],
-                    sts[i].bit_and(1) != 0,
-                    sts[i].bit_and(2) != 0,
-                    sts[i].bit_and(4) != 0,
+                    self.fgs[i],
+                    self.sts[i].bit_and(1) != 0,
+                    self.sts[i].bit_and(2) != 0,
+                    self.sts[i].bit_and(4) != 0,
                 ))
             c = e
-    if cur_col >= 0 and cur_col < cols and cur_row >= 0 and cur_row < rows
-        x := cur_col.to_float() * cwp
-        y := cur_row.to_float() * chp
-        if shape == Cursor.Block
+    if self.cur_col >= 0
+        and self.cur_col < self.cols
+        and self.cur_row >= 0
+        and self.cur_row < self.rows
+        x := self.cur_col.to_float() * cwp
+        y := self.cur_row.to_float() * chp
+        if self.shape == Cursor.Block
             ops.push(app.Op.Fill(x, y, cwp, chp, WHITE))
-        elif shape == Cursor.Underline
+        elif self.shape == Cursor.Underline
             ops.push(app.Op.Fill(x, y + chp - 2.0, cwp, 2.0, WHITE))
         else
             ops.push(app.Op.Fill(x, y, 2.0, chp, WHITE))
     screen := Screen(
-        title: title,
-        w: if first then cols.to_float() * cwp else 0.0,
-        h: if first then rows.to_float() * chp else 0.0,
+        title: self.title,
+        w: if first then self.cols.to_float() * cwp else 0.0,
+        h: if first then self.rows.to_float() * chp else 0.0,
         ops: ops,
     )
-    to_host.send("{app.frame(screen)}\n")
+    self.to_host.send("{app.frame(screen)}\n")
 
 pub fn Window.size(self) Size
-    if not live
+    if not self.live
         return Size(cols: 0, rows: 0)
-    Size(cols: cols, rows: rows)
+    Size(cols: self.cols, rows: self.rows)
 
 pub fn Window.clear(mut self, bg int)
-    if not live
+    if not self.live
         return
-    for i in 0..cols * rows
-        chars[i] = " "
-        bgs[i] = bg
-        sts[i] = 0
-        fgs[i] = WHITE
+    for i in 0..self.cols * self.rows
+        self.chars[i] = " "
+        self.bgs[i] = bg
+        self.sts[i] = 0
+        self.fgs[i] = WHITE
 
 pub fn Window.put(mut self, col int, row int, text str, fg int, bg int)
-    put_styled(col, row, text, fg, bg, Style(bold: false, italic: false, underline: false))
+    self.put_styled(col, row, text, fg, bg, Style(bold: false, italic: false, underline: false))
 
 pub fn Window.put_styled(mut self, col int, row int, text str, fg int, bg int, style Style)
-    if not live or row < 0 or row >= rows
+    if not self.live or row < 0 or row >= self.rows
         return
     mut flags := 0
     if style.bold
@@ -332,54 +337,59 @@ pub fn Window.put_styled(mut self, col int, row int, text str, fg int, bg int, s
         flags = flags + 4
     mut c := col
     for g in text.chars()
-        if c >= 0 and c < cols
-            i := row * cols + c
-            chars[i] = "{g}"
-            fgs[i] = fg
-            bgs[i] = bg
-            sts[i] = flags
+        if c >= 0 and c < self.cols
+            i := row * self.cols + c
+            self.chars[i] = "{g}"
+            self.fgs[i] = fg
+            self.bgs[i] = bg
+            self.sts[i] = flags
         c += 1
 
 pub fn Window.cursor(mut self, col int, row int)
-    cur_col = col
-    cur_row = row
+    self.cur_col = col
+    self.cur_row = row
 
 pub fn Window.set_cursor(mut self, col int, row int, shape Cursor)
-    cur_col = col
-    cur_row = row
-    self.shape = shape
+    self.cur_col = col
+    self.cur_row = row
+    self.shape = self.shape
 
 pub fn Window.present(mut self)
-    send_view(false)
+    self.send_view(false)
 
 ## One host line as an `Event`, or none when it is not one the program sees.
 fn Window.decode(mut self, line str) Event?
     j := parse_json(line) else return none
     ev := app.event_from_json(j)
-    mods = Modifiers(ctrl: ev.ctrl or ev.meta, alt: ev.alt, shift: ev.shift)
+    self.mods = Modifiers(ctrl: ev.ctrl or ev.meta, alt: ev.alt, shift: ev.shift)
     if ev.kind == app.EventKind.Key
         return Event.Key(key_code(ev.text), ev.ctrl or ev.meta, ev.alt, ev.shift)
     if ev.kind == app.EventKind.Click
         button := if ev.text
             == "right" then MouseButton.Right else if ev.text
             == "left" then MouseButton.Left else MouseButton.Middle
-        return Event.Mouse((ev.x / cw()).to_int(), (ev.y / ch()).to_int(), button, MouseKind.Down)
+        return Event.Mouse(
+            (ev.x / self.cw()).to_int(),
+            (ev.y / self.ch()).to_int(),
+            button,
+            MouseKind.Down,
+        )
     if ev.kind == app.EventKind.Scroll
-        lines := (ev.dy / ch()).round().to_int()
+        lines := (ev.dy / self.ch()).round().to_int()
         if lines == 0
             return none
         return Event.Scroll(lines)
     if ev.kind == app.EventKind.Resize
         if ev.cell_w > 0.0
-            cell_w = ev.cell_w
-        nc := bounded((ev.dx / cw()).to_int())
-        nr := bounded((ev.dy / ch()).to_int())
-        if nc == cols and nr == rows
+            self.cell_w = ev.cell_w
+        nc := bounded((ev.dx / self.cw()).to_int())
+        nr := bounded((ev.dy / self.ch()).to_int())
+        if nc == self.cols and nr == self.rows
             return none
-        resize_grid(nc, nr)
+        self.resize_grid(nc, nr)
         return Event.Resize(nc, nr)
     if ev.kind == app.EventKind.Close
-        shut()
+        self.shut()
         return Event.Close
     none
 
@@ -398,77 +408,77 @@ fn Window.resize_grid(mut self, nc int, nr int)
     mut ss := List[int]()
     for r in 0..nr
         for c in 0..nc
-            if r < rows and c < cols
-                i := r * cols + c
-                cs.push(chars[i])
-                fs.push(fgs[i])
-                bs.push(bgs[i])
-                ss.push(sts[i])
+            if r < self.rows and c < self.cols
+                i := r * self.cols + c
+                cs.push(self.chars[i])
+                fs.push(self.fgs[i])
+                bs.push(self.bgs[i])
+                ss.push(self.sts[i])
             else
                 cs.push(" ")
                 fs.push(WHITE)
                 bs.push(BLACK)
                 ss.push(0)
-    chars = cs
-    fgs = fs
-    bgs = bs
-    sts = ss
-    cols = nc
-    rows = nr
+    self.chars = cs
+    self.fgs = fs
+    self.bgs = bs
+    self.sts = ss
+    self.cols = nc
+    self.rows = nr
 
 fn Window.shut(mut self)
-    if live
-        live = false
-        to_host.close()
+    if self.live
+        self.live = false
+        self.to_host.close()
 
 pub fn Window.next_event(mut self) Event
     while true
-        if queue.len() > 0
-            ev := queue[0]
-            queue = queue[1..]
+        if self.queue.len() > 0
+            ev := self.queue[0]
+            self.queue = self.queue[1..]
             return ev
-        if not live
+        if not self.live
             return Event.Close
-        line := from_host.recv() else
-            shut()
+        line := self.from_host.recv() else
+            self.shut()
             return Event.Close
-        ev := decode(line) else continue
+        ev := self.decode(line) else continue
         return ev
     Event.Close
 
 pub fn Window.poll_event(mut self) Event?
     while true
-        if queue.len() > 0
-            ev := queue[0]
-            queue = queue[1..]
+        if self.queue.len() > 0
+            ev := self.queue[0]
+            self.queue = self.queue[1..]
             return ev
-        if not live
+        if not self.live
             return Event.Close
-        if not chan_ready(from_host)
+        if not chan_ready(self.from_host)
             return none
-        line := from_host.recv() else
-            shut()
+        line := self.from_host.recv() else
+            self.shut()
             return Event.Close
-        ev := decode(line) else continue
+        ev := self.decode(line) else continue
         return ev
     none
 
 pub fn Window.modifiers(self) Modifiers
-    if not live
+    if not self.live
         return Modifiers(ctrl: false, alt: false, shift: false)
-    mods
+    self.mods
 
 pub fn Window.set_title(mut self, text str)
-    title = text
+    self.title = text
 
 pub fn Window.set_font_size(mut self, px int)
     # std.ui.15: a window that is not open keeps 20.
-    if not live
+    if not self.live
         return
     mut best := 20
     mut gap := 1000
     for n in [10, 12, 13, 14, 15, 18, 20, 24, 26, 28, 30, 36, 40]
-        d := if n > px then n - px else px - n
+        d := if n > self.px then n - self.px else self.px - n
         if d < gap
             gap = d
             best = n
@@ -476,10 +486,10 @@ pub fn Window.set_font_size(mut self, px int)
 
 ## std.ui.15: a window opens at 20.
 pub fn Window.font_size(self) int
-    if live then px else 20
+    if self.live then self.px else 20
 
 pub fn Window.close(mut self)
-    shut()
+    self.shut()
 
 ## std.ui.12: the program's own clipboard (the native runtime keeps it; the
 ## lowering supplies the bodies of these two).

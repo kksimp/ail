@@ -79,7 +79,7 @@ pub fn imports_of(prog ast.Program) List[str]
 
 ## Lower from now on as file `k`: its module's names and its imports.
 fn Lower.enter_file(mut self, k int)
-    stamp_problems()
+    self.stamp_problems()
     file = k
     path = file_paths[k]
     prefix = file_prefix[k]
@@ -132,7 +132,7 @@ fn Lower.qualified(self, e ast.Expr) str?
     parts := p.split(".")
     if parts.len() < 2
         return none
-    m := module_of(parts[0])?
+    m := self.module_of(parts[0])?
     "{m}.{parts[1..].join(".")}"
 
 ## A constant's value, lowered where it is declared so its names are that

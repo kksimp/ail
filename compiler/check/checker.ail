@@ -112,6 +112,9 @@ pub struct Checker
     ## typed by their first use, its return type, loop depth, and how many
     ## `else` values enclose the expression and caught an optional `?`.
     pub locals List[Local]
+    ## Every name `add_local` has bound in this checker: a name missing here is in no scope, so `local`
+    ## answers it without a scan (a function of 100,000 bindings would otherwise take quadratic time).
+    pub ever_named Set[str]
     ## `ail api --locals/--type` facts (api.loc.1, api.type.1): recorded only
     ## by the last pass of `analyze(p, true)`. `anchors` and `bound` are by
     ## local index; locals below `anchored` have an anchor.
@@ -259,6 +262,7 @@ pub fn new_checker(p ast.Program) Checker
         in_requires: false,
         requires_pos: none,
         locals: [],
+        ever_named: Set[str](),
         record: false,
         anchored: 0,
         anchors: Map[int, ast.Pos](),
@@ -307,10 +311,10 @@ pub fn new_checker(p ast.Program) Checker
     )
 
 fn Checker.err(mut self, rule str, at ast.Pos, text str)
-    diags.push(new_diag(rule, at, text))
+    self.diags.push(new_diag(rule, at, text))
 
 fn Checker.err_help(mut self, rule str, at ast.Pos, text str, hint str)
-    diags.push(new_diag(rule, at, text).with_help(hint))
+    self.diags.push(new_diag(rule, at, text).with_help(hint))
 
 ## `err_help` with a fix.
 fn Checker.err_fix(
@@ -322,47 +326,47 @@ fn Checker.err_fix(
     title str,
     edits List[fix.Edit],
 )
-    diags.push(new_diag(rule, at, text).with_help(hint).with_fix(title, edits))
+    self.diags.push(new_diag(rule, at, text).with_help(hint).with_fix(title, edits))
 
 ## Add a fix to the diagnostic just reported.
 fn Checker.fix_last(mut self, title str, edits List[fix.Edit])
-    if diags.len() > 0
-        diags[diags.len() - 1].fixes.push(fix.Fix(title: title, edits: edits))
+    if self.diags.len() > 0
+        self.diags[self.diags.len() - 1].fixes.push(fix.Fix(title: title, edits: edits))
 
 fn Checker.unsupported(mut self, at ast.Pos, text str)
-    diags.push(new_diag("bootstrap.unsupported", at, text))
+    self.diags.push(new_diag("bootstrap.unsupported", at, text))
 
 ## A construct with no AIL form in 0.1: what it is, and what to write instead.
 fn Checker.unsupported_help(mut self, at ast.Pos, text str, help str)
-    diags.push(new_diag("bootstrap.unsupported", at, text).with_help(help))
+    self.diags.push(new_diag("bootstrap.unsupported", at, text).with_help(help))
 
 fn Checker.new_param(mut self, n str, bounds List[int]) int
-    tparams.push(TParam(name: n, bounds: bounds, is_const: false))
-    tparams.len() - 1
+    self.tparams.push(TParam(name: n, bounds: bounds, is_const: false))
+    self.tparams.len() - 1
 
 fn Checker.scope_of(self, ids List[int]) List[Scoped]
-    [Scoped(name: tparams[id].name, id: id) for id in ids]
+    [Scoped(name: self.tparams[id].name, id: id) for id in ids]
 
 fn Checker.in_scope(self, n str) bool
-    for s in scope
+    for s in self.scope
         if s.name == n
             return true
     false
 
 fn Checker.def_params(self, d Def) List[int]
     match d
-        DStruct(s) => struct_params[s]
-        DEnum(e) => enum_params[e]
+        DStruct(s) => self.struct_params[s]
+        DEnum(e) => self.enum_params[e]
 
 fn Checker.def_name(self, d Def) str
     match d
-        DStruct(s) => prog.structs[s].name
-        DEnum(e) => prog.enums[e].name
+        DStruct(s) => self.prog.structs[s].name
+        DEnum(e) => self.prog.enums[e].name
 
 fn Checker.def_pos(self, d Def) ast.Pos
     match d
-        DStruct(s) => prog.structs[s].pos
-        DEnum(e) => prog.enums[e].pos
+        DStruct(s) => self.prog.structs[s].pos
+        DEnum(e) => self.prog.enums[e].pos
 
 fn def_ty(d Def, args List[Ty]) Ty
     match d
@@ -375,48 +379,48 @@ fn Checker.is_builtin_type(self, n str) bool
 ## ---- Traits (traits.rs) ----
 
 fn Checker.collect_traits(mut self)
-    for i in 0..prog.traits.len()
-        tr := prog.traits[i]
+    for i in 0..self.prog.traits.len()
+        tr := self.prog.traits[i]
         n := tr.name
-        if j := traits.get(n)
-            if is_prelude_line(prog.traits[j].pos.line)
-                err("mod.unit.1", tr.pos, "`{n}` is already a built-in trait")
+        if j := self.traits.get(n)
+            if is_prelude_line(self.prog.traits[j].pos.line)
+                self.err("mod.unit.1", tr.pos, "`{n}` is already a built-in trait")
             else
-                err("mod.unit.1", tr.pos, "`{n}` is declared more than once in this module")
+                self.err("mod.unit.1", tr.pos, "`{n}` is declared more than once in this module")
         else
-            traits[n] = i
-        self_param := new_param("Self", [i])
-        trait_self.push(self_param)
+            self.traits[n] = i
+        self_param := self.new_param("Self", [i])
+        self.trait_self.push(self_param)
         if is_prelude_line(tr.pos.line)
             if n == "Eq"
-                std_eq = i
+                self.std_eq = i
             elif n == "Ord"
-                std_ord = i
+                self.std_ord = i
             elif n == "ToStr"
-                std_to_str = i
+                self.std_to_str = i
             elif n == "Hash"
-                std_hash = i
+                self.std_hash = i
             elif n == "Drop"
-                std_drop = i
+                self.std_drop = i
         for k in 0..tr.methods.len()
-            f := prog.fns[tr.methods[k]]
+            f := self.prog.fns[tr.methods[k]]
             for m in tr.methods[..k]
-                if prog.fns[m].name == f.name
-                    err("mod.unit.1", f.pos, "`{n}.{f.name}` is declared more than once")
+                if self.prog.fns[m].name == f.name
+                    self.err("mod.unit.1", f.pos, "`{n}.{f.name}` is declared more than once")
                     break
-    collect_supers()
+    self.collect_supers()
 
 ## Each trait's supertraits, transitively (trait.super.1).
 fn Checker.collect_supers(mut self)
     mut direct := List[List[int]]()
-    for tr in prog.traits
+    for tr in self.prog.traits
         mut ds := List[int]()
         for s in tr.supers
-            if j := trait_named(s.name, s.pos, "trait.super.1")
+            if j := self.trait_named(s.name, s.pos, "trait.super.1")
                 ds.push(j)
         direct.push(ds)
-    for i in 0..prog.traits.len()
-        tr := prog.traits[i]
+    for i in 0..self.prog.traits.len()
+        tr := self.prog.traits[i]
         mut all := List[int]()
         mut todo_list := direct[i]
         while todo_list.len() > 0
@@ -425,18 +429,18 @@ fn Checker.collect_supers(mut self)
                 all.push(s)
                 todo_list.extend(direct[s])
         if all.contains(i)
-            err_help(
+            self.err_help(
                 "trait.super.1",
                 tr.pos,
                 "`{tr.name}` requires itself through its supertraits",
                 "remove one of the supertraits so they don't form a cycle",
             )
             all = [s for s in all if s != i]
-        supers.push(all)
+        self.supers.push(all)
 
 ## Whether bound `b` provides trait `tr` (gen.bound.2, trait.super.3).
 fn Checker.provides(self, b int, tr int) bool
-    b == tr or (b < supers.len() and supers[b].contains(tr))
+    b == tr or (b < self.supers.len() and self.supers[b].contains(tr))
 
 ## Traits other languages use to define operators AIL has none of (trait.op.2).
 OTHER_OPERATOR_TRAITS := [
@@ -471,10 +475,10 @@ OTHER_OPERATOR_TRAITS := [
 
 ## The trait called `n`, reporting when there's none.
 fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
-    if j := traits.get(n)
+    if j := self.traits.get(n)
         return j
-    if types.contains(n) or is_builtin_type(n)
-        err_help(
+    if self.types.contains(n) or self.is_builtin_type(n)
+        self.err_help(
             rule,
             at,
             "`{n}` is a type, not a trait",
@@ -482,7 +486,7 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
         )
         return none
     if OTHER_OPERATOR_TRAITS.contains(n)
-        err_help(
+        self.err_help(
             "trait.op.2",
             at,
             "`{n}` would define an operator, and no operator beyond those of `trait.op.1` can be defined",
@@ -490,50 +494,50 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
         )
         return none
     mut d := new_diag("expr.name.1", at, "unknown trait `{n}`")
-    if s := suggest(n, traits.keys())
+    if s := suggest(n, self.traits.keys())
         d = d.did_you_mean(n, s)
-    diags.push(d)
+    self.diags.push(d)
     none
 
 ## ---- Types (check.rs) ----
 
 fn Checker.collect_types(mut self)
     mut decls := List[Def]()
-    for i in 0..prog.structs.len()
+    for i in 0..self.prog.structs.len()
         decls.push(Def.DStruct(i))
-    for i in 0..prog.enums.len()
+    for i in 0..self.prog.enums.len()
         decls.push(Def.DEnum(i))
     for d in decls
-        n := def_name(d)
-        at := def_pos(d)
+        n := self.def_name(d)
+        at := self.def_pos(d)
         mut built_in := false
-        if first := types.get(n)
-            built_in = is_prelude_line(def_pos(first).line)
+        if first := self.types.get(n)
+            built_in = is_prelude_line(self.def_pos(first).line)
         if BUILTIN_TYPES.contains(n) or SPEC_TYPES_NOT_YET.contains(n) or built_in
             alt := prelude_alt(n)
-            diags.push(
+            self.diags.push(
                 new_diag("mod.unit.1", at, "`{n}` is a prelude type; rename yours, e.g. `{alt}`").with_fix(
                     "rename `{n}` to `{alt}` in this file",
                     [fix.rename_all(at, n, alt)],
                 ),
             )
-        elif types.contains(n) or traits.contains(n)
+        elif self.types.contains(n) or self.traits.contains(n)
             mut dg := new_diag("mod.unit.1", at, "`{n}` is declared more than once in this module")
-            if first := types.get(n)
-                dg = dg.with_note(def_pos(first), "`{n}` is first declared here")
-            diags.push(dg)
+            if first := self.types.get(n)
+                dg = dg.with_note(self.def_pos(first), "`{n}` is first declared here")
+            self.diags.push(dg)
         else
-            types[n] = d
-    for i in 0..prog.enums.len()
-        if prog.enums[i].name == "Ordering" and is_prelude_line(prog.enums[i].pos.line)
-            std_ordering = i
+            self.types[n] = d
+    for i in 0..self.prog.enums.len()
+        if self.prog.enums[i].name == "Ordering" and is_prelude_line(self.prog.enums[i].pos.line)
+            self.std_ordering = i
             break
-    for s in prog.structs
-        ids := declare_generics(s.generics)
-        struct_params.push(ids)
-    for e in prog.enums
-        ids := declare_generics(e.generics)
-        enum_params.push(ids)
+    for s in self.prog.structs
+        ids := self.declare_generics(s.generics)
+        self.struct_params.push(ids)
+    for e in self.prog.enums
+        ids := self.declare_generics(e.generics)
+        self.enum_params.push(ids)
 
 ## The type parameters of a declaration, with their bounds (gen.decl.2, gen.bound.1).
 fn Checker.declare_generics(mut self, gs List[ast.GenericParam]) List[int]
@@ -541,21 +545,21 @@ fn Checker.declare_generics(mut self, gs List[ast.GenericParam]) List[int]
     for k in 0..gs.len()
         g := gs[k]
         n := g.name
-        mut twice := in_scope(n)
+        mut twice := self.in_scope(n)
         for h in gs[..k]
             if h.name == n
                 twice = true
         if twice
-            err("gen.decl.2", g.pos, "the type parameter `{n}` is declared twice")
-        elif types.contains(n) or is_builtin_type(n) or n == "Self"
-            err_help(
+            self.err("gen.decl.2", g.pos, "the type parameter `{n}` is declared twice")
+        elif self.types.contains(n) or self.is_builtin_type(n) or n == "Self"
+            self.err_help(
                 "gen.decl.2",
                 g.pos,
                 "`{n}` is already a type",
                 "choose another name for the type parameter, e.g. `T`",
             )
-        elif traits.contains(n)
-            err_help(
+        elif self.traits.contains(n)
+            self.err_help(
                 "gen.decl.2",
                 g.pos,
                 "`{n}` is a trait, so it can't name a type parameter",
@@ -563,53 +567,57 @@ fn Checker.declare_generics(mut self, gs List[ast.GenericParam]) List[int]
             )
         if g.is_const
             if g.bounds.len() != 1 or g.bounds[0].name != "int"
-                err_help(
+                self.err_help(
                     "gen.const.1",
                     g.pos,
                     "the const parameter `{n}` must have type `int`",
                     "write `const {n} int`",
                 )
-            id := new_param(n, [])
-            tparams[id].is_const = true
+            id := self.new_param(n, [])
+            self.tparams[id].is_const = true
             ids.push(id)
             continue
-        bounds := resolve_bounds(g.bounds)
-        ids.push(new_param(n, bounds))
+        bounds := self.resolve_bounds(g.bounds)
+        ids.push(self.new_param(n, bounds))
     ids
 
 ## Whether `n` names a const generic parameter in scope (gen.const.3).
 fn Checker.is_const_param(self, n str) bool
-    for k in 0..scope.len()
-        s := scope[scope.len() - 1 - k]
+    for k in 0..self.scope.len()
+        s := self.scope[self.scope.len() - 1 - k]
         if s.name == n
-            return tparams[s.id].is_const
+            return self.tparams[s.id].is_const
     false
 
 fn Checker.resolve_bounds(mut self, bounds List[ast.Ident]) List[int]
     mut out := List[int]()
     for b in bounds
-        if j := trait_named(b.name, b.pos, "gen.bound.1")
+        if j := self.trait_named(b.name, b.pos, "gen.bound.1")
             out.push(j)
     out
 
 fn Checker.resolve_fields(mut self)
-    for i in 0..prog.enums.len()
-        e := prog.enums[i]
-        scope = scope_of(enum_params[i])
+    for i in 0..self.prog.enums.len()
+        e := self.prog.enums[i]
+        self.scope = self.scope_of(self.enum_params[i])
         mut vs := List[List[Ty]]()
         for k in 0..e.variants.len()
             v := e.variants[k]
             for w in e.variants[..k]
                 if w.name == v.name
-                    err("type.enum.5", v.pos, "variant `{v.name}` is declared twice in `{e.name}`")
+                    self.err(
+                        "type.enum.5",
+                        v.pos,
+                        "variant `{v.name}` is declared twice in `{e.name}`",
+                    )
                     break
-            vs.push(field_list(v.fields, "{e.name}.{v.name}"))
-        variant_types.push(vs)
-    for i in 0..prog.structs.len()
-        s := prog.structs[i]
-        scope = scope_of(struct_params[i])
-        field_types.push(field_list(s.fields, s.name))
-    scope = []
+            vs.push(self.field_list(v.fields, "{e.name}.{v.name}"))
+        self.variant_types.push(vs)
+    for i in 0..self.prog.structs.len()
+        s := self.prog.structs[i]
+        self.scope = self.scope_of(self.struct_params[i])
+        self.field_types.push(self.field_list(s.fields, s.name))
+    self.scope = []
 
 ## The types of a field list, reporting repeated names (type.struct.5).
 fn Checker.field_list(mut self, fields List[ast.Field], owner str) List[Ty]
@@ -618,7 +626,7 @@ fn Checker.field_list(mut self, fields List[ast.Field], owner str) List[Ty]
         f := fields[i]
         for g in fields[..i]
             if g.name == f.name
-                err("type.struct.5", f.pos, "field `{f.name}` is declared twice in `{owner}`")
+                self.err("type.struct.5", f.pos, "field `{f.name}` is declared twice in `{owner}`")
                 break
         tys.push(resolve_type(f.ty))
     tys
@@ -626,7 +634,7 @@ fn Checker.field_list(mut self, fields List[ast.Field], owner str) List[Ty]
 ## The type parameters of a method's or `impl`'s owner: copies of the
 ## type's declared ones, with any bounds the head adds (gen.method.1-2).
 fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
-    names := [tparams[d].name for d in declared]
+    names := [self.tparams[d].name for d in declared]
     mut matching := true
     if given := owner.params
         matching = given.len() == names.len()
@@ -639,7 +647,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             "`{owner.name}` has no type parameters"
         else
             "`{owner.name}` has the type parameters {list_names(names)}"
-        err_help(
+        self.err_help(
             "gen.method.2",
             owner.pos,
             "{shown}; a method or `impl` names them in order, to add constraints",
@@ -647,44 +655,44 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
         )
     mut ids := List[int]()
     for k in 0..declared.len()
-        mut bounds := tparams[declared[k]].bounds
+        mut bounds := self.tparams[declared[k]].bounds
         mut n := names[k]
-        is_const := tparams[declared[k]].is_const
+        is_const := self.tparams[declared[k]].is_const
         if given := owner.params
             if matching and not is_const
-                for b in resolve_bounds(given[k].bounds)
+                for b in self.resolve_bounds(given[k].bounds)
                     if not bounds.contains(b)
                         bounds.push(b)
             if given.len() == names.len()
                 n = given[k].name
-        id := new_param(n, bounds)
-        tparams[id].is_const = is_const
+        id := self.new_param(n, bounds)
+        self.tparams[id].is_const = is_const
         ids.push(id)
     ids
 
 ## ---- Functions ----
 
 @allow("expr.match.3") fn Checker.collect_fns(mut self)
-    for i in 0..prog.fns.len()
-        f := prog.fns[i]
+    for i in 0..self.prog.fns.len()
+        f := self.prog.fns[i]
         mut owner_ids := List[int]()
         mut own_self := none
         match f.within
             InTrait(t) =>
-                owner_ids = [trait_self[t]]
-                own_self = Ty.Param(trait_self[t])
+                owner_ids = [self.trait_self[t]]
+                own_self = Ty.Param(self.trait_self[t])
             InImpl(k) =>
-                owner_ids = impl_info[k].params
-                own_self = impl_info[k].target
+                owner_ids = self.impl_info[k].params
+                own_self = self.impl_info[k].target
             TopLevel =>
                 if o := f.owner
-                    if d := types.get(o.name)
-                        owner_ids = owner_params(o, def_params(d))
+                    if d := self.types.get(o.name)
+                        owner_ids = self.owner_params(o, self.def_params(d))
                         own_self = def_ty(d, [Ty.Param(p) for p in owner_ids])
-        scope = scope_of(owner_ids)
-        self_ty = own_self
-        own := declare_generics(f.generics)
-        scope.extend(scope_of(own))
+        self.scope = self.scope_of(owner_ids)
+        self.self_ty = own_self
+        own := self.declare_generics(f.generics)
+        self.scope.extend(self.scope_of(own))
         mut generics := owner_ids
         generics.extend(own)
         mut params := List[SigParam]()
@@ -693,9 +701,9 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             mut anonymous := false
             match p.ty.shape
                 Named(n, args) =>
-                    if args.len() == 0 and not in_scope(n)
-                        if tr := traits.get(n)
-                            id := new_param(n, [tr])
+                    if args.len() == 0 and not self.in_scope(n)
+                        if tr := self.traits.get(n)
+                            id := self.new_param(n, [tr])
                             generics.push(id)
                             pty = Ty.Param(id)
                             anonymous = true
@@ -708,10 +716,10 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             ret = resolve_ret(r, i)
             # err.type.3: a function of a package's public API states its error type.
             if is_inferred(ret)
-                and prog.public.contains(f.pos.line)
+                and self.prog.public.contains(f.pos.line)
                 and not (f.owner == none and f.name == "main")
-                and prog.files.len() > 1
-                err_help(
+                and self.prog.files.len() > 1
+                self.err_help(
                     "err.type.3",
                     r.pos,
                     "`{f.name}` is public, so its return type must name the errors it can fail with",
@@ -728,7 +736,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
         match f.within
             InTrait =>
                 if f.generics.len() > 0
-                    unsupported_help(
+                    self.unsupported_help(
                         f.pos,
                         "a trait method can't have type parameters of its own",
                         "declare a generic free function `fn f[T](x T)`, or put the parameter on the implementors",
@@ -737,18 +745,18 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
                     mut at := f.pos
                     if r := f.ret
                         at = r.pos
-                    unsupported_help(
+                    self.unsupported_help(
                         at,
                         "a trait method that can fail must name its error type",
                         "write `T ! E` in the trait and in every `impl` (err.type.1)",
                     )
             TopLevel | InImpl => ret = ret
-        fn_scopes.push(scope)
-        scope = []
-        fn_self.push(own_self)
-        self_ty = none
+        self.fn_scopes.push(self.scope)
+        self.scope = []
+        self.fn_self.push(own_self)
+        self.self_ty = none
         param_moves := [p.moved for p in f.params]
-        sigs.push(Sig(
+        self.sigs.push(Sig(
             receiver: receiver_of(f),
             params: params,
             names: [p.name for p in f.params],
@@ -760,7 +768,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             declared: own.len(),
         ))
         if f.within == ast.Within.TopLevel
-            register_fn(i, f)
+            self.register_fn(i, f)
 
 ## `true` for `mut self`, `false` for `self`, `none` without a receiver.
 fn receiver_of(f ast.FnDecl) bool?
@@ -787,35 +795,35 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     o := f.owner?.name else ""
     if f.owner == none
         if PRELUDE_FNS.contains(n)
-            unsupported_help(
+            self.unsupported_help(
                 f.pos,
                 "`{n}` is a built-in function and can't be redeclared",
                 "choose another name, e.g. `my_{n}`",
             )
-        elif fns.contains(n) or types.contains(n) or traits.contains(n)
+        elif self.fns.contains(n) or self.types.contains(n) or self.traits.contains(n)
             mut d := new_diag(
                 "mod.unit.1",
                 f.pos,
                 "`{n}` is declared more than once in this module",
             )
-            if j := fns.get(n)
-                d = d.with_note(prog.fns[j].pos, "`{n}` is first declared here")
-            elif t := types.get(n)
-                d = d.with_note(def_pos(t), "`{n}` is first declared here")
-            diags.push(d)
+            if j := self.fns.get(n)
+                d = d.with_note(self.prog.fns[j].pos, "`{n}` is first declared here")
+            elif t := self.types.get(n)
+                d = d.with_note(self.def_pos(t), "`{n}` is first declared here")
+            self.diags.push(d)
         else
-            fns[n] = i
+            self.fns[n] = i
         return
     at := f.owner?.pos else f.pos
-    if not types.contains(o)
+    if not self.types.contains(o)
         if BUILTIN_TYPES.contains(o) or SPEC_TYPES_NOT_YET.contains(o)
-            err(
+            self.err(
                 "trait.method.5",
                 at,
                 "methods of `{o}` can only be declared where `{o}` is declared",
             )
-        elif traits.contains(o)
-            err_help(
+        elif self.traits.contains(o)
+            self.err_help(
                 "trait.impl.1",
                 at,
                 "`{o}` is a trait; its methods are declared in its `trait` block",
@@ -825,43 +833,42 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
             unknown_type(o, at)
         return
     if n == "eq"
-        err_help(
+        self.err_help(
             "trait.auto.4",
             f.pos,
             "`eq` is the method of the standard trait `Eq`, which every type has",
             "to replace `{o}`'s, write `impl Eq for {o}` with `fn eq(self, other Self) bool` indented below",
         )
     if n == "to_str"
-        err_help(
+        self.err_help(
             "trait.auto.4",
             f.pos,
             "`to_str` is the method of the standard trait `ToStr`, which every type has",
             "to replace `{o}`'s, write `impl ToStr for {o}` with `fn to_str(self) str` indented below",
         )
     key := "{o}.{n}"
-    if j := methods.get(key)
-        diags.push(
-            new_diag(
-                "mod.unit.1",
-                f.pos,
-                "`{o}.{n}` is declared more than once",
-            ).with_note(prog.fns[j].pos, "`{o}.{n}` is first declared here"),
+    if j := self.methods.get(key)
+        self.diags.push(
+            new_diag("mod.unit.1", f.pos, "`{o}.{n}` is declared more than once").with_note(
+                self.prog.fns[j].pos,
+                "`{o}.{n}` is first declared here",
+            ),
         )
     else
-        methods[key] = i
+        self.methods[key] = i
 
 ## ---- Constants (mod.const.1-3) ----
 
 ## Register each constant's name and check that its value is a constant
 ## expression; typing the values comes with expressions.
 fn Checker.collect_consts(mut self)
-    for i in 0..prog.consts.len()
-        c := prog.consts[i]
+    for i in 0..self.prog.consts.len()
+        c := self.prog.consts[i]
         n := c.name
-        taken := fns.contains(n)
-            or types.contains(n)
-            or traits.contains(n)
-            or consts.contains(n)
+        taken := self.fns.contains(n)
+            or self.types.contains(n)
+            or self.traits.contains(n)
+            or self.consts.contains(n)
             or PRELUDE_FNS.contains(n)
             or BUILTIN_TYPES.contains(n)
         if taken
@@ -870,22 +877,22 @@ fn Checker.collect_consts(mut self)
                 c.pos,
                 "`{n}` is declared more than once in this module",
             )
-            if j := consts.get(n)
-                d = d.with_note(prog.consts[j].pos, "`{n}` is first declared here")
-            elif j := fns.get(n)
-                d = d.with_note(prog.fns[j].pos, "`{n}` is first declared here")
-            elif t := types.get(n)
-                d = d.with_note(def_pos(t), "`{n}` is first declared here")
-            diags.push(d)
+            if j := self.consts.get(n)
+                d = d.with_note(self.prog.consts[j].pos, "`{n}` is first declared here")
+            elif j := self.fns.get(n)
+                d = d.with_note(self.prog.fns[j].pos, "`{n}` is first declared here")
+            elif t := self.types.get(n)
+                d = d.with_note(self.def_pos(t), "`{n}` is first declared here")
+            self.diags.push(d)
         else
-            consts[n] = i
-        constant_expr(c.value)
-    for i in 0..prog.consts.len()
-        gap_now = false
+            self.consts[n] = i
+        self.constant_expr(c.value)
+    for i in 0..self.prog.consts.len()
+        self.gap_now = false
         const_type(i)
-        if gap_now
-            gapped_consts.add(i)
-    gap_now = false
+        if self.gap_now
+            self.gapped_consts.add(i)
+    self.gap_now = false
 
 ## Report the parts of a constant's value the bootstrap can't compute (ct.const.1).
 @allow("expr.match.3") fn Checker.constant_expr(mut self, e ast.Expr)
@@ -893,70 +900,74 @@ fn Checker.collect_consts(mut self)
         Interp(parts, _) =>
             for p in parts
                 match p
-                    Hole(x) => constant_expr(x)
-                    Fmt(x, _) => constant_expr(x)
+                    Hole(x) => self.constant_expr(x)
+                    Fmt(x, _) => self.constant_expr(x)
                     Lit => continue
         ListLit(items, _) =>
             for x in items
-                constant_expr(x)
+                self.constant_expr(x)
         SetLit(items, _) =>
             for x in items
-                constant_expr(x)
+                self.constant_expr(x)
         TupleLit(items, _) =>
             for x in items
-                constant_expr(x)
+                self.constant_expr(x)
         MapLit(entries, _) =>
             for m in entries
-                constant_expr(m.key)
-                constant_expr(m.value)
-        Unary(_, operand, _) => constant_expr(operand)
+                self.constant_expr(m.key)
+                self.constant_expr(m.value)
+        Unary(_, operand, _) => self.constant_expr(operand)
         Closure(_, _, at) =>
-            err_help(
+            self.err_help(
                 "mod.const.2",
                 at,
                 "a constant's value can't be a function literal",
                 "declare a function and name it where the value is needed",
             )
         NewRef(_, at) =>
-            err_help(
+            self.err_help(
                 "mod.const.2",
                 at,
                 "a constant's value can't contain a `ref` cell",
                 "a constant is shared by the whole program; make the cell inside a function",
             )
         Binary(_, lhs, rhs, _) =>
-            constant_expr(lhs)
-            constant_expr(rhs)
-        Member(recv, _, _) => constant_expr(recv)
+            self.constant_expr(lhs)
+            self.constant_expr(rhs)
+        Member(recv, _, _) => self.constant_expr(recv)
         Call(callee, args, _) =>
-            constant_expr(callee)
+            self.constant_expr(callee)
             for a in args
-                constant_expr(a.value)
+                self.constant_expr(a.value)
         Method(recv, _, _, args) =>
-            constant_expr(recv)
+            self.constant_expr(recv)
             for a in args
-                constant_expr(a.value)
+                self.constant_expr(a.value)
         Index(recv, index, _) =>
-            constant_expr(recv)
-            constant_expr(index)
+            self.constant_expr(recv)
+            self.constant_expr(index)
         Range(lo, hi, _, _) =>
             if x := lo
-                constant_expr(x)
+                self.constant_expr(x)
             if x := hi
-                constant_expr(x)
+                self.constant_expr(x)
         OrElse(value, otherwise, at) =>
             match otherwise
                 Fallback(d) =>
-                    constant_expr(value)
-                    constant_expr(d)
-                Leave | Handler => not_constant(at, "`else` with a block or a jump", "ct.const.1")
-        If(_, _, _, at) => not_constant(at, "`if`", "ct.const.1")
-        Match(_, _, at) => not_constant(at, "`match`", "ct.const.1")
-        Try(_, _, at) => not_constant(at, "`?`", "ct.const.3")
+                    self.constant_expr(value)
+                    self.constant_expr(d)
+                Leave | Handler => self.not_constant(
+                    at,
+                    "`else` with a block or a jump",
+                    "ct.const.1",
+                )
+        If(_, _, _, at) => self.not_constant(at, "`if`", "ct.const.1")
+        Match(_, _, at) => self.not_constant(at, "`match`", "ct.const.1")
+        Try(_, _, at) => self.not_constant(at, "`?`", "ct.const.3")
         _ => return
 
 fn Checker.not_constant(mut self, at ast.Pos, what str, rule str)
-    err_help(
+    self.err_help(
         "bootstrap.unsupported",
         at,
         "{what} isn't allowed in a constant ({rule})",
@@ -966,25 +977,25 @@ fn Checker.not_constant(mut self, at ast.Pos, what str, rule str)
 ## ---- `main`, attributes ----
 
 fn Checker.check_main(mut self)
-    for f in prog.fns
+    for f in self.prog.fns
         if f.name == "main" and f.owner == none and f.within == ast.Within.TopLevel
             if f.generics.len() > 0
-                err("mod.main.1", f.generics[0].pos, "`main` can't have type parameters")
+                self.err("mod.main.1", f.generics[0].pos, "`main` can't have type parameters")
             if f.params.len() > 0
-                err("mod.main.1", f.params[0].pos, "`main` takes no parameters")
+                self.err("mod.main.1", f.params[0].pos, "`main` takes no parameters")
             mut ok := false
-            if i := fns.get("main")
-                ok = fails_only(sigs[i].ret)
+            if i := self.fns.get("main")
+                ok = fails_only(self.sigs[i].ret)
             if r := f.ret
                 if not ok
-                    err_help(
+                    self.err_help(
                         "mod.main.1",
                         r.pos,
                         "`main` returns nothing, or only an error",
                         "write `fn main()`, or `fn main() !` if it can fail",
                     )
             return
-    diags.push(
+    self.diags.push(
         new_diag(
             "mod.main.1",
             ast.Pos(line: 1, col: 1),
@@ -994,54 +1005,54 @@ fn Checker.check_main(mut self)
 
 ## test.attr.1-2, gram.attr.4-5: known attributes, and the shape of a test.
 @allow("expr.match.3") fn Checker.check_attrs(mut self)
-    for f in prog.fns
+    for f in self.prog.fns
         mut is_test := false
         for a in f.attrs
             if a.name == "test"
                 is_test = true
             if a.name != "export c" and a.name != "variadic c" and not KNOWN_ATTRS.contains(a.name)
                 known := ["`@{k}`" for k in KNOWN_ATTRS].join(", ")
-                err_help(
+                self.err_help(
                     "test.attr.1",
                     a.pos,
                     "unknown attribute `@{a.name}`",
                     "the known attributes are {known}",
                 )
             if a.name == "allow" and not ALLOWABLE.contains(a.arg else "")
-                err_help(
+                self.err_help(
                     "gram.attr.5",
                     a.pos,
                     "`@allow` names a warning that a function may allow",
                     "write `@allow(\"{ALLOWABLE.join("\")` or `@allow(\"")}\")`",
                 )
             if a.name == "deprecated" and a.arg == none
-                err_help(
+                self.err_help(
                     "gram.attr.4",
                     a.pos,
                     "`@deprecated` needs a reason",
                     "write `@deprecated(\"use new_name instead\")`",
                 )
         if not is_test and [a for a in f.attrs if a.name == "needs"].len() > 0
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 f.pos,
                 "`@needs` applies to a `@test` function",
                 "remove `@needs`, or make the function a `@test`",
             )
         if fx := attr_named(f, "fixture")
-            check_fixture(f, fx)
+            self.check_fixture(f, fx)
         if not is_test
             continue
         mut bad_shape := true
         if f.owner != none or f.within != ast.Within.TopLevel
-            err_help(
+            self.err_help(
                 "test.attr.2",
                 f.pos,
                 "a test is a plain top-level function, not a method",
                 "write `@test fn name()`",
             )
         elif f.generics.len() > 0
-            err_help(
+            self.err_help(
                 "test.attr.2",
                 f.generics[0].pos,
                 "a test has no type parameters",
@@ -1050,16 +1061,16 @@ fn Checker.check_main(mut self)
         else
             bad_shape = false
         if not bad_shape
-            check_with(f)
-            check_needs_caps(f)
-            check_prop_params(f)
+            self.check_with(f)
+            self.check_needs_caps(f)
+            self.check_prop_params(f)
         if r := f.ret
             mut fails := false
             match r.shape
                 Fallible(ok, _) => fails = ok == none
                 _ => fails = false
             if not fails
-                err_help(
+                self.err_help(
                     "test.attr.2",
                     r.pos,
                     "a test returns nothing, or only an error",
@@ -1092,14 +1103,14 @@ fn Checker.check_needs_caps(mut self, f ast.FnDecl)
             continue
         for word in text.slice(4, text.len()).split(",")
             if not SANDBOX_NEEDS.contains(word)
-                err_help(
+                self.err_help(
                     "test.sandbox.2",
                     a.pos,
                     "`@needs({word})` is not a capability a test can ask for",
                     "write `@needs(fs)`, `@needs(net)`, `@needs(net.serve)` or `@needs(proc)`; a fixture is `@needs(\"name\")` in quotes",
                 )
             elif seen.contains(word)
-                err_help(
+                self.err_help(
                     "test.sandbox.2",
                     a.pos,
                     "`@needs({word})` is listed twice",
@@ -1137,7 +1148,7 @@ fn Checker.check_needs_caps(mut self, f ast.FnDecl)
 
 ## A top-level function of the program, by name.
 fn Checker.top_fn(self, name str) ast.FnDecl?
-    for g in prog.fns
+    for g in self.prog.fns
         if g.name == name and g.owner == none and g.within == ast.Within.TopLevel
             return g
     none
@@ -1156,7 +1167,7 @@ fn Checker.check_fixture(mut self, f ast.FnDecl, a ast.Attr)
     elif fixture_value(f) == none
         bad = "a fixture returns the value its tests get"
     if bad != ""
-        err_help(
+        self.err_help(
             "test.fixture.1",
             f.pos,
             bad,
@@ -1165,8 +1176,8 @@ fn Checker.check_fixture(mut self, f ast.FnDecl, a ast.Attr)
         return
     end := a.arg else return
     v := fixture_value(f) else return
-    g := top_fn(end) else
-        err_help(
+    g := self.top_fn(end) else
+        self.err_help(
             "test.fixture.2",
             a.pos,
             "the teardown `{end}` is not a top-level function of the program",
@@ -1174,14 +1185,14 @@ fn Checker.check_fixture(mut self, f ast.FnDecl, a ast.Attr)
         )
         return
     if g.params.len() != 1 or g.ret != none or g.generics.len() > 0
-        err_help(
+        self.err_help(
             "test.fixture.2",
             g.pos,
             "a teardown takes the fixture's value and returns nothing",
             "write `fn {end}(value Type)`",
         )
     elif written_type(v) != "" and written_type(g.params[0].ty) != written_type(v)
-        err_help(
+        self.err_help(
             "test.fixture.2",
             g.params[0].pos,
             "the teardown's parameter must have the type the fixture returns, `{written_type(v)}`",
@@ -1198,7 +1209,7 @@ fn Checker.check_with(mut self, f ast.FnDecl)
         if name.starts_with("cap:")
             continue
         if seen.contains(name)
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 a.pos,
                 "the fixture `{name}` is listed twice",
@@ -1206,16 +1217,16 @@ fn Checker.check_with(mut self, f ast.FnDecl)
             )
             continue
         seen.push(name)
-        fx := top_fn(name) else
+        fx := self.top_fn(name) else
             if SANDBOX_NEEDS.contains(name)
-                err_help(
+                self.err_help(
                     "test.sandbox.2",
                     a.pos,
                     "`@needs(\"{name}\")` names a fixture, and the program has none called `{name}`",
                     "to let the test use the capability write `@needs({name})` without quotes",
                 )
                 continue
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 a.pos,
                 "`{name}` is not a function of the program",
@@ -1223,7 +1234,7 @@ fn Checker.check_with(mut self, f ast.FnDecl)
             )
             continue
         if attr_named(fx, "fixture") == none
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 a.pos,
                 "`{name}` is not a fixture",
@@ -1236,21 +1247,21 @@ fn Checker.check_with(mut self, f ast.FnDecl)
             if f.params[i].name == name
                 at = i
         if at < 0
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 a.pos,
                 "the test has no parameter `{name}` to receive the fixture",
                 "add `{name} {written_type(v)}` to the parameters",
             )
         elif f.params[at].mutable
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 f.params[at].pos,
                 "a fixture's parameter is not `mut`",
                 "write `{name} {written_type(v)}`",
             )
         elif written_type(v) != "" and written_type(f.params[at].ty) != written_type(v)
-            err_help(
+            self.err_help(
                 "test.fixture.3",
                 f.params[at].pos,
                 "the parameter `{name}` must have the type the fixture returns, `{written_type(v)}`",
@@ -1266,10 +1277,10 @@ fn Checker.check_prop_params(mut self, f ast.FnDecl)
         mut why := ""
         if p.mutable
             why = "a property's parameters aren't `mut`"
-        elif bad := ungeneratable(p.ty, [])
+        elif bad := self.ungeneratable(p.ty, [])
             why = "`ail test` can't generate values of type `{bad}`"
         if why != ""
-            err_help(
+            self.err_help(
                 "test.prop.2",
                 p.pos,
                 why,
@@ -1279,13 +1290,13 @@ fn Checker.check_prop_params(mut self, f ast.FnDecl)
 ## The first part of `t` that can't be generated (test.prop.2), as written.
 fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
     match t.shape
-        Optional(inner) => ungeneratable(inner, seen)
+        Optional(inner) => self.ungeneratable(inner, seen)
         RefTo => "ref"
         PtrTo => "a raw pointer"
         FnType => "fn"
         TupleType(elems) =>
             for el in elems
-                if bad := ungeneratable(el, seen)
+                if bad := self.ungeneratable(el, seen)
                     return bad
             none
         AnyTrait(tr) => "any {tr}"
@@ -1295,7 +1306,7 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
                 return none
             if ["List", "Set", "Map"].contains(n)
                 for a in args
-                    if bad := ungeneratable(a, seen)
+                    if bad := self.ungeneratable(a, seen)
                         return bad
                 return none
             if args.len() > 0
@@ -1304,21 +1315,21 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
                 return none
             mut more := seen
             more.push(n)
-            for s in prog.structs
+            for s in self.prog.structs
                 if s.name == n
                     if s.is_error or s.generics.len() > 0
                         return n
                     for f in s.fields
-                        if bad := ungeneratable(f.ty, more)
+                        if bad := self.ungeneratable(f.ty, more)
                             return bad
                     return none
-            for e in prog.enums
+            for e in self.prog.enums
                 if e.name == n
                     if e.is_error or e.generics.len() > 0
                         return n
                     for v in e.variants
                         for f in v.fields
-                            if bad := ungeneratable(f.ty, more)
+                            if bad := self.ungeneratable(f.ty, more)
                                 return bad
                     return none
             n
@@ -1327,17 +1338,17 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
 
 @allow("expr.match.3") fn Checker.is_unique(self, t Ty) bool
     match t
-        Struct(i, _) => prog.structs[i].is_unique
-        Enum(i, _) => prog.enums[i].is_unique
-        Opt(x) => is_unique(x)
-        Res(x, _) => is_unique(x)
-        ListOf(x) => is_unique(x)
-        MapOf(_, x) => is_unique(x)
+        Struct(i, _) => self.prog.structs[i].is_unique
+        Enum(i, _) => self.prog.enums[i].is_unique
+        Opt(x) => self.is_unique(x)
+        Res(x, _) => self.is_unique(x)
+        ListOf(x) => self.is_unique(x)
+        MapOf(_, x) => self.is_unique(x)
         _ => false
 
 fn Checker.no_unique(mut self, t Ty, at ast.Pos, what str)
-    if is_unique(t)
-        err_help(
+    if self.is_unique(t)
+        self.err_help(
             "own.uniq.5",
             at,
             "{show(t)} is a unique type, so it can't be {what}",
@@ -1350,7 +1361,7 @@ fn Checker.no_unique(mut self, t Ty, at ast.Pos, what str)
         Int | Float | Bool | Num(_) | PtrOf(_) | Unknown => true
         _ => false
     if not ok
-        err_help(
+        self.err_help(
             "unsafe.ptr.1",
             at,
             "a raw pointer can't point to {show(inner)}, which has no fixed C layout",
@@ -1358,32 +1369,32 @@ fn Checker.no_unique(mut self, t Ty, at ast.Pos, what str)
         )
 
 fn Checker.check_unique_fields(mut self)
-    for s in 0..prog.structs.len()
-        decl := prog.structs[s]
+    for s in 0..self.prog.structs.len()
+        decl := self.prog.structs[s]
         if decl.is_unique
             continue
         for f in 0..decl.fields.len()
-            unique_field(field_types[s][f], decl.fields[f].ty.pos, decl.name, "struct")
-            group_field(field_types[s][f], decl.fields[f].ty.pos, decl.name)
-    for e in 0..prog.enums.len()
-        decl := prog.enums[e]
+            self.unique_field(self.field_types[s][f], decl.fields[f].ty.pos, decl.name, "struct")
+            group_field(self.field_types[s][f], decl.fields[f].ty.pos, decl.name)
+    for e in 0..self.prog.enums.len()
+        decl := self.prog.enums[e]
         for v in 0..decl.variants.len()
             for f in 0..decl.variants[v].fields.len()
-                group_in_enum(variant_types[e][v][f], decl.variants[v].fields[f].ty.pos)
+                group_in_enum(self.variant_types[e][v][f], decl.variants[v].fields[f].ty.pos)
         if decl.is_unique
             continue
         for v in 0..decl.variants.len()
             for f in 0..decl.variants[v].fields.len()
-                unique_field(
-                    variant_types[e][v][f],
+                self.unique_field(
+                    self.variant_types[e][v][f],
                     decl.variants[v].fields[f].ty.pos,
                     decl.name,
                     "enum",
                 )
 
 fn Checker.unique_field(mut self, t Ty, at ast.Pos, owner str, kind str)
-    if is_unique(t)
-        err_help(
+    if self.is_unique(t)
+        self.err_help(
             "own.uniq.5",
             at,
             "{show(t)} is a unique type, so a field of it makes `{owner}` unique too",
@@ -1394,12 +1405,12 @@ fn Checker.unique_field(mut self, t Ty, at ast.Pos, owner str, kind str)
 
 fn Checker.check_uses(mut self)
     mut seen := Map[str, ast.Pos]()
-    for u in prog.uses
+    for u in self.prog.uses
         if u.path.len() == 0 or u.path[0].name != "std"
             continue
         dotted := [p.name for p in u.path].join(".")
         if u.path.len() == 1
-            err_help(
+            self.err_help(
                 "std.use.1",
                 u.path[0].pos,
                 "`std` is a collection of modules; import one of them",
@@ -1416,13 +1427,13 @@ fn Checker.check_uses(mut self)
                     d.with_help("did you mean `use std.{s}`?")
                 else
                     d.with_help("the standard modules are {list_names(STD_MODULES)}")
-                diags.push(d)
+                self.diags.push(d)
                 continue
         else
             if AIL_STD_MODULES.contains(dotted)
                 continue
             last := u.path[u.path.len() - 1]
-            err_help(
+            self.err_help(
                 "std.use.1",
                 last.pos,
                 "the standard modules have no submodules",
@@ -1431,9 +1442,9 @@ fn Checker.check_uses(mut self)
             continue
         named := u.alias else u.path[u.path.len() - 1]
         alias := named.name
-        key := "{file_of(u.pos)}/{alias}"
+        key := "{self.file_of(u.pos)}/{alias}"
         if first := seen.get(key)
-            diags.push(
+            self.diags.push(
                 new_diag(
                     "std.use.3",
                     named.pos,
@@ -1448,7 +1459,7 @@ fn Checker.file_of(self, at ast.Pos) str
     if is_prelude_line(at.line)
         return ""
     mut out := ""
-    for f in prog.files
+    for f in self.prog.files
         if f.base < at.line
             out = f.path
     out
@@ -1457,14 +1468,17 @@ fn Checker.file_of(self, at ast.Pos) str
 ## name, or the standard module called `n` unless the program declares or
 ## imports something else under that name.
 fn Checker.std_module(self, n str) str?
-    for u in prog.uses
+    for u in self.prog.uses
         if u.path.len() == 2 and u.path[0].name == "std"
             alias := u.alias?.name else u.path[1].name
             if alias == n and STD_MODULES.contains(u.path[1].name)
                 return u.path[1].name
-    if types.contains(n) or traits.contains(n) or consts.contains(n) or fns.contains(n)
+    if self.types.contains(n)
+        or self.traits.contains(n)
+        or self.consts.contains(n)
+        or self.fns.contains(n)
         return none
-    for u in prog.uses
+    for u in self.prog.uses
         alias := u.alias?.name else u.path[u.path.len() - 1].name
         if alias == n
             return none
@@ -1472,7 +1486,7 @@ fn Checker.std_module(self, n str) str?
 
 ## The module imported by an explicit `use std.NAME` under `n`.
 fn Checker.std_imported(self, n str) str?
-    for u in prog.uses
+    for u in self.prog.uses
         if u.path.len() == 2 and u.path[0].name == "std"
             alias := u.alias?.name else u.path[1].name
             if alias == n and STD_MODULES.contains(u.path[1].name)

@@ -2,7 +2,7 @@ struct Point
     x int
 
 fn Point.get(self) int
-    x
+    self.x
 
 fn main()
     print(1)

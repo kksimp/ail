@@ -31,9 +31,9 @@ fn Lower.ffi_bound(mut self, lib str?, name str, pos ast.Pos) int
     seal(lib_block)
     seal(rest)
     cur = lib_block
-    ffi_trap("ffi.load.1", msg, pos)
+    self.ffi_trap("ffi.load.1", msg, pos)
     cur = rest
-    ffi_trap("ffi.load.2", msg, pos)
+    self.ffi_trap("ffi.load.2", msg, pos)
     cur = good
     a
 
@@ -65,7 +65,7 @@ fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
         problem(f.pos, "`extern c fn {f.name}` takes more arguments than the C registers hold")
         return
     lib := if e := f.ext then e.lib else none
-    addr := ffi_bound(lib, f.name, f.pos)
+    addr := self.ffi_bound(lib, f.name, f.pos)
     mut args := [addr]
     for k in 0..params.len()
         # A C `float` takes the single in its register (ffi.map.1).
@@ -85,7 +85,7 @@ fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
         finish(return_of(call("rt.ffi_f32_res", [r], Ty.F32)))
     else
         r := emit(i, sig.ret)
-        finish(return_of(ffi_result(r, sig.ret)))
+        finish(return_of(self.ffi_result(r, sig.ret)))
     end_fn(name, f.pos)
 
 ## A C result as the declared type (ffi.map.2): the upper bits of a narrow
@@ -121,7 +121,7 @@ fn Lower.lower_variadic(
 ) Val?
     f := fn_decl.get(key) else return unsupported(npos, "this call")
     nfixed := sig.params.len()
-    if args.len() < nfixed or (args.len() > nfixed and not variadic_decl(key))
+    if args.len() < nfixed or (args.len() > nfixed and not self.variadic_decl(key))
         return unsupported(pos, "this call")
     if ffi_k >= FFI_CELLS
         return unsupported(pos, "more than {FFI_CELLS} C functions")
@@ -154,8 +154,8 @@ fn Lower.lower_variadic(
     if floats > 8
         return unsupported(pos, "more than 8 float arguments in a C call")
     lib := if e := f.ext then e.lib else none
-    variadic := variadic_decl(key)
-    addr := ffi_bound(lib, f.name, f.pos)
+    variadic := self.variadic_decl(key)
+    addr := self.ffi_bound(lib, f.name, f.pos)
     if cs_needed(sig) and not variadic
         return cs_call(addr, sig, vs, pos)
     mut cargs := [addr]
@@ -171,4 +171,4 @@ fn Lower.lower_variadic(
         r := emit(i, Ty.Float)
         return Val(id: call("rt.ffi_f32_res", [r], Ty.F32), ty: Ty.F32)
     r := emit(i, sig.ret)
-    Val(id: ffi_result(r, sig.ret), ty: sig.ret)
+    Val(id: self.ffi_result(r, sig.ret), ty: sig.ret)

@@ -9,43 +9,43 @@ use fix
         Fallible(ok, errors) =>
             mut ok_ty := Ty.Unit
             if o := ok
-                ok_ty = resolve_type(o)
+                ok_ty = self.resolve_type(o)
             given := errors else []
-            if errors == none and is_error_type(ok_ty)
+            if errors == none and self.is_error_type(ok_ty)
                 return Ty.Res(Ty.Unit, Errs.ErrSet([ok_ty]))
-            if is_error_type(ok_ty)
+            if self.is_error_type(ok_ty)
                 err_help(
                     "err.decl.3",
                     t.pos,
-                    "{show(ok_ty)} is an error type, so it can't also be the success value",
+                    "{self.show(ok_ty)} is an error type, so it can't also be the success value",
                     "return it as an error, or declare the type without `error`",
                 )
             if errors == none
                 return Ty.Res(ok_ty, Errs.Inferred(fn_index))
             mut set := List[Ty]()
             for e in given
-                et := resolve_type(e)
-                if et != Ty.Unknown and not is_error_type(et)
+                et := self.resolve_type(e)
+                if et != Ty.Unknown and not self.is_error_type(et)
                     err_help(
                         "err.decl.2",
                         e.pos,
-                        "{show(et)} isn't an error type",
+                        "{self.show(et)} isn't an error type",
                         "declare it with `error struct` or `error enum`",
                     )
                 elif et != Ty.Unknown and not set.contains(et)
                     set.push(et)
             Ty.Res(ok_ty, Errs.ErrSet(sort_errors(set)))
-        _ => resolve_type(t)
+        _ => self.resolve_type(t)
 
 fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
     match t.shape
-        Optional(inner) => return Ty.Opt(resolve_type(inner))
+        Optional(inner) => return Ty.Opt(self.resolve_type(inner))
         RefTo(inner) =>
-            inner_ty := resolve_type(inner)
+            inner_ty := self.resolve_type(inner)
             no_unique(inner_ty, inner.pos, "the contents of a `ref`")
             return Ty.RefOf(inner_ty)
         PtrTo(inner) =>
-            inner_ty := resolve_type(inner)
+            inner_ty := self.resolve_type(inner)
             ptr_target(inner_ty, inner.pos)
             return Ty.PtrOf(inner_ty)
         Fallible =>
@@ -62,18 +62,18 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
         FnType(params, ret) =>
             mut ps := List[Ty]()
             for p in params
-                ps.push(resolve_type(p))
+                ps.push(self.resolve_type(p))
             mut r := Ty.Unit
             if rt := ret
                 # type.fn.6: `fn(A) R ! E` can fail; the parser gives it its error types.
-                r = resolve_ret(rt, -1)
+                r = self.resolve_ret(rt, -1)
             return Ty.FnTy(ps, r)
         TupleType(elems) =>
-            ts := [resolve_type(e) for e in elems]
+            ts := [self.resolve_type(e) for e in elems]
             for k in 0..ts.len()
                 no_unique(ts[k], elems[k].pos, "an element of a tuple")
             return Ty.Tuple(ts)
-        Named(n, args) => return resolve_named(n, args, t.pos)
+        Named(n, args) => return self.resolve_named(n, args, t.pos)
 
 fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
     if n.len() > 0 and "0123456789".contains(n.slice(0, 1))
@@ -84,7 +84,7 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
             if args.len() > 0
                 err("gen.decl.1", at, "the type parameter `{n}` takes no type arguments")
             return Ty.Param(s.id)
-    if t := std_type(n, args, at)
+    if t := self.std_type(n, args, at)
         return t
     mut ty := Ty.Unknown
     if n == "int" or n == "i64"
@@ -121,7 +121,7 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
                 "write e.g. `List[int]`",
             )
             return Ty.Unknown
-        return Ty.ListOf(resolve_type(args[0]))
+        return Ty.ListOf(self.resolve_type(args[0]))
     elif n == "Map" or n == "Set"
         want := if n == "Map" then 2 else 1
         if args.len() != want
@@ -133,14 +133,14 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
                 "write e.g. `{example}`",
             )
             return Ty.Unknown
-        first := resolve_type(args[0])
+        first := self.resolve_type(args[0])
         mut out := Ty.SetOf(first)
         if want == 2
-            out = Ty.MapOf(key: first, value: resolve_type(args[1]))
-        require_key(first, at)
+            out = Ty.MapOf(key: first, value: self.resolve_type(args[1]))
+        self.require_key(first, at)
         return out
     elif CONC_TYPES.contains(n)
-        return conc_type(n, args, at)
+        return self.conc_type(n, args, at)
     elif n == "Option" and args.len() == 1
         err_fix(
             "type.opt.3",
@@ -163,9 +163,9 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         )
         return Ty.Unknown
     elif d := types.get(n)
-        return generic_type(d, args, at)
+        return self.generic_type(d, args, at)
     else
-        unknown_type(n, at)
+        self.unknown_type(n, at)
         return Ty.Unknown
     if args.len() > 0
         err("gram.generic.1", at, "`{n}` takes no type arguments")
@@ -188,20 +188,20 @@ fn Checker.generic_type(mut self, d Def, args List[ast.TypeRef], at ast.Pos) Ty
                 "write `{n}[{names.join(", ")}]` with types in place of the parameters",
             )
         return Ty.Unknown
-    tys := [resolve_type(a) for a in args]
+    tys := [self.resolve_type(a) for a in args]
     for k in 0..tys.len()
         no_unique(tys[k], args[k].pos, "a type argument")
     for k in 0..params.len()
         p := params[k]
         pname := tparams[p].name
-        if tparams[p].is_const and not is_const_arg_ty(tys[k])
+        if tparams[p].is_const and not self.is_const_arg_ty(tys[k])
             err_help(
                 "gen.const.2",
                 args[k].pos,
                 "`{pname}` is a const parameter of `{n}`, so it takes an int literal or a const parameter",
                 "write a number, e.g. `{n}[..., 3]`",
             )
-        elif not tparams[p].is_const and tys[k] != Ty.Unknown and is_const_arg_ty(tys[k])
+        elif not tparams[p].is_const and tys[k] != Ty.Unknown and self.is_const_arg_ty(tys[k])
             err_help(
                 "gen.const.2",
                 args[k].pos,
@@ -209,7 +209,7 @@ fn Checker.generic_type(mut self, d Def, args List[ast.TypeRef], at ast.Pos) Ty
                 "write a type in its place",
             )
         for b in tparams[p].bounds
-            require(tys[k], b, at, "`{n}`'s parameter `{tparams[p].name}`")
+            self.require(tys[k], b, at, "`{n}`'s parameter `{tparams[p].name}`")
     def_ty(d, tys)
 
 ## Whether `t` can fill a const parameter: a literal or a const parameter (gen.const.2).
@@ -228,7 +228,7 @@ fn Checker.require(mut self, t Ty, tr int, at ast.Pos, what str)
         return
     if implements(t, tr)
         return
-    text := "{what} must implement `{prog.traits[tr].name}`, but {show(t)} doesn't"
+    text := "{what} must implement `{prog.traits[tr].name}`, but {self.show(t)} doesn't"
     if h := how_to_implement(t, tr)
         err_help("gen.bound.3", at, text, h)
     else
@@ -239,7 +239,7 @@ fn Checker.check_deferred_bounds(mut self)
     waiting := deferred
     deferred = []
     for d in waiting
-        require(d.ty, d.tr, d.pos, d.what)
+        self.require(d.ty, d.tr, d.pos, d.what)
 
 ## Whether a type was declared with `error` (err.decl.1).
 @allow("expr.match.3") fn Checker.is_error_type(self, t Ty) bool
@@ -282,37 +282,37 @@ fn Checker.ty_name(self, t Ty) str
         Unit => "no value"
         Never => "no value"
         Unknown => "?"
-        Struct(i, args) => with_args(prog.structs[i].name, args)
-        Enum(i, args) => with_args(prog.enums[i].name, args)
-        ListOf(e) => "List[{ty_name(e)}]"
-        MapOf(k, v) => "Map[{ty_name(k)}, {ty_name(v)}]"
-        SetOf(e) => "Set[{ty_name(e)}]"
-        Opt(x) => "{ty_name(x)}?"
+        Struct(i, args) => self.with_args(prog.structs[i].name, args)
+        Enum(i, args) => self.with_args(prog.enums[i].name, args)
+        ListOf(e) => "List[{self.ty_name(e)}]"
+        MapOf(k, v) => "Map[{self.ty_name(k)}, {self.ty_name(v)}]"
+        SetOf(e) => "Set[{self.ty_name(e)}]"
+        Opt(x) => "{self.ty_name(x)}?"
         Res(ok, errs) =>
-            set := [ty_name(e) for e in errs_of(errs)]
-            okt := if ok == Ty.Unit then "" else "{ty_name(ok)} "
+            set := [self.ty_name(e) for e in self.errs_of(errs)]
+            okt := if ok == Ty.Unit then "" else "{self.ty_name(ok)} "
             if set.len() == 0 then "!{okt.trim()}" else "{okt}! {set.join(" | ")}"
-        Union(m) => [ty_name(x) for x in m].join(" | ")
+        Union(m) => [self.ty_name(x) for x in m].join(" | ")
         Param(p) => tparams[p].name
         AnyOf(tr) => "any {prog.traits[tr].name}"
-        RefOf(x) => "ref {ty_name(x)}"
-        PtrOf(x) => "*{ty_name(x)}"
-        Conc(k, x) => if k == "TaskGroup" then "TaskGroup" else "{k}[{ty_name(x)}]"
+        RefOf(x) => "ref {self.ty_name(x)}"
+        PtrOf(x) => "*{self.ty_name(x)}"
+        Conc(k, x) => if k == "TaskGroup" then "TaskGroup" else "{k}[{self.ty_name(x)}]"
         FnTy(ps, r) =>
-            args := [ty_name(p) for p in ps].join(", ")
-            if r == Ty.Unit then "fn({args})" else "fn({args}) {ty_name(r)}"
-        Tuple(xs) => "({[ty_name(x) for x in xs].join(", ")})"
+            args := [self.ty_name(p) for p in ps].join(", ")
+            if r == Ty.Unit then "fn({args})" else "fn({args}) {self.ty_name(r)}"
+        Tuple(xs) => "({[self.ty_name(x) for x in xs].join(", ")})"
         ConstVal(v) => "{v}"
 
 fn Checker.with_args(self, n str, args List[Ty]) str
-    if args.len() == 0 then n else "{n}[{[ty_name(a) for a in args].join(", ")}]"
+    if args.len() == 0 then n else "{n}[{[self.ty_name(a) for a in args].join(", ")}]"
 
 ## A type for messages: "`int`", or "no value".
 @allow("expr.match.3") fn Checker.show(self, t Ty) str
     match t
         Unit => "no value"
         Never => "no value"
-        _ => "`{ty_name(t)}`"
+        _ => "`{self.ty_name(t)}`"
 
 @allow("expr.match.3") fn Checker.type_name_of(self, t Ty) str?
     match t
@@ -330,7 +330,7 @@ fn Checker.require_key(mut self, t Ty, at ast.Pos)
     err_help(
         "type.map.2",
         at,
-        "{show(t)} can't be a map key or set element (it isn't `Hash`)",
+        "{self.show(t)} can't be a map key or set element (it isn't `Hash`)",
         hash_cause(t),
     )
 
@@ -357,12 +357,12 @@ fn Checker.conc_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
             "write e.g. `{n}[int]`",
         )
         return Ty.Unknown
-    inner := resolve_type(args[0])
+    inner := self.resolve_type(args[0])
     if n == "Atomic" and inner != Ty.Int and inner != Ty.Bool and inner != Ty.Unknown
         err_help(
             "conc.atomic.3",
             at,
-            "an `Atomic` holds an `int` or a `bool`, not {show(inner)}",
+            "an `Atomic` holds an `int` or a `bool`, not {self.show(inner)}",
             "share other values through a `Mutex`, e.g. `Mutex(value)`",
         )
         return Ty.Unknown
@@ -375,7 +375,7 @@ fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
     item := n.slice(dot + 1, n.len())
     if m := std_module(head)
         if d := types.get("{m}.{item}")
-            return generic_type(d, args, at)
+            return self.generic_type(d, args, at)
         err("std.use.2", at, "module `{head}` has no type `{item}`")
         return Ty.Unknown
     if types.contains(n) and not STD_MODULES.contains(head)

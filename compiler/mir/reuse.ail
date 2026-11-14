@@ -63,21 +63,21 @@ struct Escape
 
 fn Escape.root(self, v int) int
     mut x := v
-    while up[x] != x
-        x = up[x]
+    while self.up[x] != x
+        x = self.up[x]
     x
 
 fn Escape.join(mut self, a int, b int)
-    x := root(a)
-    y := root(b)
+    x := self.root(a)
+    y := self.root(b)
     if x == y
         return
-    up[x] = y
-    if escapes[x]
-        escapes[y] = true
+    self.up[x] = y
+    if self.escapes[x]
+        self.escapes[y] = true
 
 fn Escape.mark(mut self, v int)
-    escapes[root(v)] = true
+    self.escapes[self.root(v)] = true
 
 fn escaping(f Func, by_name Map[str, int], free List[List[bool]]) Escape
     n := f.vals.len()

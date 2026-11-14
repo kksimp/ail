@@ -10,7 +10,7 @@ use ast
 
 ## The shape of `t` as a key, or "" when it can't be one.
 fn Lower.shape_of(self, t Ty, seen List[str]) str
-    shape_from(t, [], [], 0)
+    self.shape_from(t, [], [], 0)
 
 ## The shape of `t`, written at offset `base` of the whole shape. `outer`
 ## and `offs` are the structs and enums being described and where their
@@ -18,7 +18,7 @@ fn Lower.shape_of(self, t Ty, seen List[str]) str
 fn Lower.shape_from(self, t Ty, outer List[str], offs List[int], base int) str
     if inner := t.opt_inner()
         # `O`: 0 is `none`; a number inside is boxed (rt/native/map.ail).
-        s := shape_from(inner, outer, offs, base + 1)
+        s := self.shape_from(inner, outer, offs, base + 1)
         return if s == "" then "" else "O{s}"
     match t
         Int | Char | Sized(_) => "i"
@@ -26,24 +26,24 @@ fn Lower.shape_from(self, t Ty, outer List[str], offs List[int], base int) str
         Float => "f"
         Str | Bytes => "s"
         List(e) =>
-            inner := shape_from(e, outer, offs, base + 1)
+            inner := self.shape_from(e, outer, offs, base + 1)
             if inner == ""
                 return ""
             "L{inner}"
-        Tuple(xs) => shapes_from(xs, outer, offs, base)
+        Tuple(xs) => self.shapes_from(xs, outer, offs, base)
         Struct(n) =>
             k := name_at(outer, n)
             if k >= 0
                 return "@{offs[k]};"
             if not structs.contains(n)
                 return ""
-            used := hash_uses(n)
+            used := self.hash_uses(n)
             if used.len() > 0
-                return used_struct_shape(n, used, outer, offs, base)
+                return self.used_struct_shape(n, used, outer, offs, base)
             mut ts := List[Ty]()
             for sl in structs[n]
                 ts.push(sl.ty)
-            shapes_from(ts, with_name(outer, n), with_off(offs, base), base)
+            self.shapes_from(ts, with_name(outer, n), with_off(offs, base), base)
         Enum(n) =>
             if is_flat(n)
                 return "i"
@@ -60,7 +60,7 @@ fn Lower.shape_from(self, t Ty, outer List[str], offs List[int], base int) str
                 for f in c.fields
                     ts.push(f.ty)
                 head := "V{ts.len()};"
-                inner := field_shapes(ts, ns, os, base + out.len() + head.len())
+                inner := self.field_shapes(ts, ns, os, base + out.len() + head.len())
                 if inner == "!"
                     return ""
                 out = "{out}{head}{inner}"
@@ -97,7 +97,7 @@ fn Lower.used_struct_shape(
         if not used.contains(sl.name)
             out = "{out}_"
             continue
-        s := shape_from(sl.ty, ns, os, base + head.len() + out.len())
+        s := self.shape_from(sl.ty, ns, os, base + head.len() + out.len())
         if s == ""
             return ""
         out = "{out}{s}"
@@ -108,7 +108,7 @@ fn Lower.used_struct_shape(
 fn Lower.field_shapes(self, ts List[Ty], outer List[str], offs List[int], base int) str
     mut out := ""
     for t in ts
-        s := shape_from(t, outer, offs, base + out.len())
+        s := self.shape_from(t, outer, offs, base + out.len())
         if s == ""
             return "!"
         out = "{out}{s}"
@@ -117,7 +117,7 @@ fn Lower.field_shapes(self, ts List[Ty], outer List[str], offs List[int], base i
 ## `S n ; shapes` for the field types `ts`, or "" when one can't be a key.
 fn Lower.shapes_from(self, ts List[Ty], outer List[str], offs List[int], base int) str
     head := "S{ts.len()};"
-    inner := field_shapes(ts, outer, offs, base + head.len())
+    inner := self.field_shapes(ts, outer, offs, base + head.len())
     if inner == "!"
         return ""
     "{head}{inner}"
@@ -137,13 +137,13 @@ fn with_off(offs List[int], k int) List[int]
 fn Lower.key_ok(self, t Ty) bool
     if is_key_ty(t)
         return true
-    t != Ty.Bool and shape_of(t, []) != ""
+    t != Ty.Bool and self.shape_of(t, []) != ""
 
 ## The key kind for tables of `t` keys: a small integer, or the shape.
 fn Lower.kind_val(mut self, t Ty) int
     if is_key_ty(t)
         return konst(key_kind(t), Ty.Int)
-    str_value(shape_of(t, []))
+    str_value(self.shape_of(t, []))
 
 ## A key about to be stored: converted, and copied when it is a composite
 ## value somebody else holds (own.val.1).
@@ -181,9 +181,9 @@ fn Lower.keyed_table(mut self, t Ty) int
             if is_key_ty(k)
                 return new_table(t)
             m := value_mode(v)
-            call("rt.map_new", [kind_val(k), konst(m[0], Ty.Int), konst(m[1], Ty.Int)], t)
+            call("rt.map_new", [self.kind_val(k), konst(m[0], Ty.Int), konst(m[1], Ty.Int)], t)
         Set(e) =>
             if is_key_ty(e)
                 return new_table(t)
-            call("rt.map_new", [kind_val(e), konst(0, Ty.Int), konst(0, Ty.Int)], t)
+            call("rt.map_new", [self.kind_val(e), konst(0, Ty.Int), konst(0, Ty.Int)], t)
         _ => new_table(t)

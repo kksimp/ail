@@ -66,7 +66,7 @@ fn Lower.probe_stmt(mut self, s ast.Stmt)
         say("\{\"api\":1,\"trace\":\"probe\",\"at\":\"{jq(path)}:{p.line}\"")
         for name in p.names
             say(",\"{jq(name)}\":\"")
-            probe_value(name, true, pos)
+            self.probe_value(name, true, pos)
             say("\"")
         say("}\n")
     else
@@ -74,7 +74,7 @@ fn Lower.probe_stmt(mut self, s ast.Stmt)
         mut sep := " "
         for name in p.names
             say("{sep}{name} = ")
-            probe_value(name, false, pos)
+            self.probe_value(name, false, pos)
             sep = ", "
         say("\n")
     call("rt.watch_close", [], Ty.Unit)

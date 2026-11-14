@@ -41,17 +41,17 @@ struct ForkCall
 ## The one dispatch from `lower_block`: lowers the fork run starting at
 ## `body[i]`, and reports true for it and for the statements it covered.
 fn Lower.fork_stmt(mut self, body List[ast.Stmt], i int) bool
-    m := fork_mark(body[i])
+    m := self.fork_mark(body[i])
     if m == "C"
         return true
     if m != "F"
         return false
-    lower_fork_run(body[i..fork_run_end(body, i)])
+    self.lower_fork_run(body[i..self.fork_run_end(body, i)])
     true
 
 fn Lower.fork_run_end(self, body List[ast.Stmt], i int) int
     mut j := i + 1
-    while j < body.len() and fork_mark(body[j]) == "C"
+    while j < body.len() and self.fork_mark(body[j]) == "C"
         j += 1
     j
 
@@ -99,7 +99,7 @@ fn positive(v str) bool
                             if not (sig.ret == Ty.Int or sig.ret == Ty.Bool or sig.ret.is_float())
                                 return none
                             for a in args
-                                if a.label != none or a.mutable or not fork_arg_ok(a.value)
+                                if a.label != none or a.mutable or not self.fork_arg_ok(a.value)
                                     return none
                             ForkCall(
                                 name: name,
@@ -154,7 +154,7 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
     mut plan := List[ForkCall]()
     if tk.on and not tk.in_chunk and run.len() >= 2
         for s in run
-            p := fork_plan(s) else break
+            p := self.fork_plan(s) else break
             plan.push(p)
     if plan.len() != run.len()
         for s in run
@@ -168,13 +168,13 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
         keys.push(lookup(p.name) else "")
     for p in plan
         if p.key == fname
-            want_seq(p.key)
+            self.want_seq(p.key)
     fork_blk := new_block()
     seq := new_block()
     join := new_block()
     for k in 1..n
         for a in plan[k].args
-            fork_guard(a.value, seq)
+            self.fork_guard(a.value, seq)
     room := call("rt.fork_ok", [konst(n - 1, Ty.Int)], Ty.Bool)
     branch(room, fork_blk, [], seq, [])
     seal(fork_blk)
@@ -205,7 +205,7 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
         # The task trapped: clear its failure and run the call here, in order.
         cur = again
         call("rt.err_take", [], Ty.Str)
-        v := call_in_order(p) else return
+        v := self.call_in_order(p) else return
         write_var(keys[k], cur, v.id)
         jump(next, [])
         seal(next)
@@ -214,7 +214,7 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
     seal(seq)
     cur = seq
     for p in plan
-        v := call_in_order(p) else return
+        v := self.call_in_order(p) else return
         write_var(lookup(p.name) else "", cur, v.id)
     jump(join, [])
     seal(join)

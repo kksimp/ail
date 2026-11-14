@@ -30,5 +30,5 @@ fn Checker.deque_index(mut self, index ast.Expr, elem Ty) Ty
 ## `d[i] = ...` on a deque (type.deque.6).
 @allow("expr.match.3") fn Checker.deque_element_target(mut self, target ast.Expr) bool
     match target
-        Index(recv, _, _) => deque_elem(quiet_type(recv)) != none
+        Index(recv, _, _) => self.deque_elem(quiet_type(recv)) != none
         _ => false

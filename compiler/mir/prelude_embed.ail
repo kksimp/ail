@@ -95,128 +95,128 @@ fn JsonParser.fail_at(self, at int, message str) JsonError
     JsonError(at, message)
 
 fn JsonParser.fail(self, message str) JsonError
-    JsonError(pos, message)
+    JsonError(self.pos, message)
 
 fn JsonParser.at_end(self) bool
-    pos >= chars.len()
+    self.pos >= self.chars.len()
 
 fn JsonParser.peek(self) char?
-    if at_end()
+    if self.at_end()
         return none
-    chars[pos]
+    self.chars[self.pos]
 
 fn JsonParser.unexpected(self) JsonError
-    if c := peek()
-        return fail("unexpected character '{c}'")
-    fail("unexpected end of input")
+    if c := self.peek()
+        return self.fail("unexpected character '{c}'")
+    self.fail("unexpected end of input")
 
 fn JsonParser.skip_space(mut self)
-    while not at_end() and " \t\n\r".contains(chars[pos])
-        pos += 1
+    while not self.at_end() and " \t\n\r".contains(self.chars[self.pos])
+        self.pos += 1
 
 fn JsonParser.document(mut self) !Json
-    value := value()?
-    skip_space()
-    if not at_end()
-        return fail("extra data after value")
+    value := self.value()?
+    self.skip_space()
+    if not self.at_end()
+        return self.fail("extra data after value")
     value
 
 fn JsonParser.value(mut self) !Json
-    skip_space()
-    c := peek() else return unexpected()
+    self.skip_space()
+    c := self.peek() else return self.unexpected()
     if c == '-' or c.is_digit()
-        return number()
+        return self.number()
     match c
-        '{' => object()
-        '[' => array()
-        '"' => Str(string()?)
+        '{' => self.object()
+        '[' => self.array()
+        '"' => Str(self.string()?)
         _ =>
-            if word("true")
+            if self.word("true")
                 return Bool(true)
-            if word("false")
+            if self.word("false")
                 return Bool(false)
-            if word("null")
+            if self.word("null")
                 return Null
-            unexpected()
+            self.unexpected()
 
 fn JsonParser.word(mut self, w str) bool
-    end := pos + w.chars().len()
-    if end > chars.len() or chars[pos..end].join("") != w
+    end := self.pos + w.chars().len()
+    if end > self.chars.len() or self.chars[self.pos..end].join("") != w
         return false
-    pos = end
+    self.pos = end
     true
 
 fn JsonParser.object(mut self) !Json
-    pos += 1
-    skip_space()
-    if peek() == '}'
-        pos += 1
+    self.pos += 1
+    self.skip_space()
+    if self.peek() == '}'
+        self.pos += 1
         return Obj([])
     mut members := []
     while true
-        skip_space()
-        if peek() != '"'
-            return unexpected()
-        key := string()?
-        skip_space()
-        if peek() != ':'
-            if at_end()
-                return unexpected()
-            return fail("expected ':' after object key")
-        pos += 1
-        members.push(JsonMember(key, value()?))
-        if container_end('}')?
+        self.skip_space()
+        if self.peek() != '"'
+            return self.unexpected()
+        key := self.string()?
+        self.skip_space()
+        if self.peek() != ':'
+            if self.at_end()
+                return self.unexpected()
+            return self.fail("expected ':' after object key")
+        self.pos += 1
+        members.push(JsonMember(key, self.value()?))
+        if self.container_end('}')?
             return Obj(members)
 
 fn JsonParser.array(mut self) !Json
-    pos += 1
-    skip_space()
-    if peek() == ']'
-        pos += 1
+    self.pos += 1
+    self.skip_space()
+    if self.peek() == ']'
+        self.pos += 1
         return Arr([])
     mut items := []
     while true
-        items.push(value()?)
-        if container_end(']')?
+        items.push(self.value()?)
+        if self.container_end(']')?
             return Arr(items)
 
 fn JsonParser.container_end(mut self, close char) !bool
-    skip_space()
-    if peek() == close
-        pos += 1
+    self.skip_space()
+    if self.peek() == close
+        self.pos += 1
         return true
-    if peek() != ','
-        return unexpected()
-    comma := pos
-    pos += 1
-    skip_space()
-    if peek() == ']' or peek() == '}'
-        return fail_at(comma, "trailing comma")
+    if self.peek() != ','
+        return self.unexpected()
+    comma := self.pos
+    self.pos += 1
+    self.skip_space()
+    if self.peek() == ']' or self.peek() == '}'
+        return self.fail_at(comma, "trailing comma")
     false
 
 fn JsonParser.string(mut self) !str
-    start := pos
-    pos += 1
+    start := self.pos
+    self.pos += 1
     mut text := []
     while true
-        c := peek() else return fail_at(start, "unterminated string")
+        c := self.peek() else return self.fail_at(start, "unterminated string")
         match c
             '"' => break
-            '\n' => return fail_at(start, "unterminated string")
-            '\\' => text.push(escape(start)?)
+            '\n' => return self.fail_at(start, "unterminated string")
+            '\\' => text.push(self.escape(start)?)
             _ =>
                 if c.code() < 0x20
-                    return fail("control character in string")
+                    return self.fail("control character in string")
                 text.push(c)
-                pos += 1
-    pos += 1
+                self.pos += 1
+    self.pos += 1
     text.join("")
 
 fn JsonParser.escape(mut self, start int) !char
-    at := pos
-    pos += 1
-    c := peek() else return fail_at(start, "unterminated string")
-    pos += 1
+    at := self.pos
+    self.pos += 1
+    c := self.peek() else return self.fail_at(start, "unterminated string")
+    self.pos += 1
     match c
         '"' | '\\' | '/' => c
         'b' => '\u{8}'
@@ -224,66 +224,68 @@ fn JsonParser.escape(mut self, start int) !char
         'n' => '\n'
         'r' => '\r'
         't' => '\t'
-        'u' => unicode(at)
-        _ => return fail_at(at, "invalid escape '\\{c}'")
+        'u' => self.unicode(at)
+        _ => return self.fail_at(at, "invalid escape '\\{c}'")
 
 ## Four hex digits at `pos`, advancing past them.
 fn JsonParser.hex4(mut self, at int) !int
-    end := pos + 4
-    if end > chars.len()
-        return fail_at(at, "invalid unicode escape")
+    end := self.pos + 4
+    if end > self.chars.len()
+        return self.fail_at(at, "invalid unicode escape")
     mut code := 0
-    for d in chars[pos..end]
-        code = code * 16 + (d.to_digit(16) else return fail_at(at, "invalid unicode escape"))
-    pos = end
+    for d in self.chars[self.pos..end]
+        code = code * 16 + (d.to_digit(16) else return self.fail_at(at, "invalid unicode escape"))
+    self.pos = end
     code
 
 ## A `\u` escape; a high surrogate must be followed by `\u` and a low one.
 fn JsonParser.unicode(mut self, at int) !char
-    mut code := hex4(at)?
+    mut code := self.hex4(at)?
     if code >= 0xDC00 and code <= 0xDFFF
-        return fail_at(at, "unpaired surrogate escape")
+        return self.fail_at(at, "unpaired surrogate escape")
     if code >= 0xD800 and code <= 0xDBFF
-        if pos + 2 > chars.len() or chars[pos] != '\\' or chars[pos + 1] != 'u'
-            return fail_at(at, "unpaired surrogate escape")
-        low_at := pos
-        pos += 2
-        low := hex4(low_at)?
+        if self.pos + 2 > self.chars.len()
+            or self.chars[self.pos] != '\\'
+            or self.chars[self.pos + 1] != 'u'
+            return self.fail_at(at, "unpaired surrogate escape")
+        low_at := self.pos
+        self.pos += 2
+        low := self.hex4(low_at)?
         if low < 0xDC00 or low > 0xDFFF
-            return fail_at(at, "unpaired surrogate escape")
+            return self.fail_at(at, "unpaired surrogate escape")
         code = 0x10000 + (code - 0xD800) * 0x400 + (low - 0xDC00)
-    ch := char.from_code(code) else return fail_at(at, "invalid unicode escape")
+    ch := char.from_code(code) else return self.fail_at(at, "invalid unicode escape")
     ch
 
 fn JsonParser.digits(mut self) int
-    start := pos
-    while not at_end() and chars[pos].is_digit()
-        pos += 1
-    pos - start
+    start := self.pos
+    while not self.at_end() and self.chars[self.pos].is_digit()
+        self.pos += 1
+    self.pos - start
 
 fn JsonParser.number(mut self) !Json
-    start := pos
-    if peek() == '-'
-        pos += 1
-    if peek() == '0'
-        pos += 1
-    elif digits() == 0
-        return fail("invalid number")
-    if peek() == '.'
-        pos += 1
-        if digits() == 0
-            return fail("invalid number")
-    if peek() == 'e' or peek() == 'E'
-        pos += 1
-        if peek() == '+' or peek() == '-'
-            pos += 1
-        if digits() == 0
-            return fail("invalid number")
-    text := chars[start..pos].join("")
-    n := text.to_float() else return fail_at(start, "invalid number")
+    start := self.pos
+    if self.peek() == '-'
+        self.pos += 1
+    if self.peek() == '0'
+        self.pos += 1
+    elif self.digits() == 0
+        return self.fail("invalid number")
+    if self.peek() == '.'
+        self.pos += 1
+        if self.digits() == 0
+            return self.fail("invalid number")
+    if self.peek() == 'e' or self.peek() == 'E'
+        self.pos += 1
+        if self.peek() == '+' or self.peek() == '-'
+            self.pos += 1
+        if self.digits() == 0
+            return self.fail("invalid number")
+    text := self.chars[start..self.pos].join("")
+    n := text.to_float() else return self.fail_at(start, "invalid number")
     ## json.parse.2: an infinite or NaN number fails at its first character.
     if n - n != 0.0
-        return fail_at(start, "number out of range")
+        return self.fail_at(start, "number out of range")
     Num(n)
 
 ## Every line of `text` that is one JSON document, in order; other lines are
@@ -393,31 +395,31 @@ fn Json.as_obj(self) List[JsonMember]?
 
 ## Typed fields: member `key` when it holds that variant, else `none` (json.query.2).
 fn Json.str(self, key str) str?
-    get(key)?.as_str()
+    self.get(key)?.as_str()
 
 fn Json.num(self, key str) float?
-    get(key)?.as_num()
+    self.get(key)?.as_num()
 
 fn Json.bool(self, key str) bool?
-    get(key)?.as_bool()
+    self.get(key)?.as_bool()
 
 fn Json.arr(self, key str) List[Json]?
-    get(key)?.as_arr()
+    self.get(key)?.as_arr()
 
 ## The text member `key`, or `default` when it is missing or not text (json.query.5).
 fn Json.text(self, key str, default str) str
-    v := get(key) else return default
+    v := self.get(key) else return default
     v.as_str() else default
 
 ## The bool member `key`, or `default` when it is missing or not a bool (json.query.6).
 fn Json.flag(self, key str, default bool) bool
-    v := get(key) else return default
+    v := self.get(key) else return default
     v.as_bool() else default
 
 ## Replaces the first member named `key`, or adds one at the end; traps unless
 ## this is an object (json.query.3).
 fn Json.set(mut self, key str, value Json)
-    mut members := as_obj() else unreachable("json.query.3: `set` needs a JSON object")
+    mut members := self.as_obj() else unreachable("json.query.3: `set` needs a JSON object")
     if i := [m.key for m in members].index_of(key)
         members[i].value = value
     else
@@ -426,13 +428,13 @@ fn Json.set(mut self, key str, value Json)
 
 ## A whole number, or `none` unless this is a number without a fraction.
 fn Json.as_int(self) int?
-    n := as_num()?
+    n := self.as_num()?
     if n.floor() != n
         return none
     n.to_int()
 
 fn Json.int(self, key str) int?
-    get(key)?.as_int()
+    self.get(key)?.as_int()
 
 ## The JSON kind of this value, for messages: `null`, `bool`, `number`, ...
 fn Json.kind(self) str
@@ -448,31 +450,31 @@ fn Json.kind(self) str
 ## forms fail with the kind they expected; derived `from_json` uses them.
 ## `at` is -1: the value isn't tied to a place in a text.
 fn Json.need(self, key str) Json ! JsonError
-    v := get(key) else return JsonError(-1, "missing {key}")
+    v := self.get(key) else return JsonError(-1, "missing {key}")
     v
 
 fn Json.need_str(self) str ! JsonError
-    v := as_str() else return JsonError(-1, "expected a string, found {kind()}")
+    v := self.as_str() else return JsonError(-1, "expected a string, found {self.kind()}")
     v
 
 fn Json.need_num(self) float ! JsonError
-    v := as_num() else return JsonError(-1, "expected a number, found {kind()}")
+    v := self.as_num() else return JsonError(-1, "expected a number, found {self.kind()}")
     v
 
 fn Json.need_int(self) int ! JsonError
-    v := as_int() else return JsonError(-1, "expected a whole number, found {to_text()}")
+    v := self.as_int() else return JsonError(-1, "expected a whole number, found {self.to_text()}")
     v
 
 fn Json.need_bool(self) bool ! JsonError
-    v := as_bool() else return JsonError(-1, "expected a bool, found {kind()}")
+    v := self.as_bool() else return JsonError(-1, "expected a bool, found {self.kind()}")
     v
 
 fn Json.need_arr(self) List[Json] ! JsonError
-    v := as_arr() else return JsonError(-1, "expected an array, found {kind()}")
+    v := self.as_arr() else return JsonError(-1, "expected an array, found {self.kind()}")
     v
 
 fn Json.need_obj(self) List[JsonMember] ! JsonError
-    v := as_obj() else return JsonError(-1, "expected an object, found {kind()}")
+    v := self.as_obj() else return JsonError(-1, "expected an object, found {self.kind()}")
     v
 
 ## `self`, or `none` when it is `null` (json.query.4).
@@ -483,17 +485,20 @@ fn Json.non_null(self) Json?
 
 ## Member `key` unless it is missing or `null` (json.query.4).
 fn Json.opt(self, key str) Json?
-    v := get(key)?
+    v := self.get(key)?
     v.non_null()
 
 ## The variant a derived `from_json` reads: a string, or the member `kind`
 ## of an object (json.derive.2).
 fn Json.variant_name(self) str ! JsonError
-    if s := as_str()
+    if s := self.as_str()
         return s
-    if as_obj() == none
-        return JsonError(-1, "expected a variant name or an object with `kind`, found {kind()}")
-    k := need("kind")?
+    if self.as_obj() == none
+        return JsonError(
+            -1,
+            "expected a variant name or an object with `kind`, found {self.kind()}",
+        )
+    k := self.need("kind")?
     s := k.need_str() else e
         return e.under("kind")
     s
@@ -503,13 +508,13 @@ fn Json.variant_name(self) str ! JsonError
 ## `expected a string, found number` under `name` gives
 ## `name: expected a string, found number`.
 fn JsonError.under(self, part str) JsonError
-    if rest := message.strip_prefix("missing ")
-        return JsonError(at, "missing {json_path(part, rest)}")
-    if i := message.find(": ")
-        head := message.slice(0, i)
+    if rest := self.message.strip_prefix("missing ")
+        return JsonError(self.at, "missing {json_path(part, rest)}")
+    if i := self.message.find(": ")
+        head := self.message.slice(0, i)
         if not head.contains(" ")
-            return JsonError(at, json_path(part, message))
-    JsonError(at, "{part}: {message}")
+            return JsonError(self.at, json_path(part, self.message))
+    JsonError(self.at, "{part}: {self.message}")
 
 fn json_path(part str, rest str) str
     if rest.starts_with("[")
@@ -835,7 +840,7 @@ fn default_of(type_text str) str
 
 ## @module argsderive
 ## What was wrong with the command line, with the usage text (std.args.6).
-error struct ArgsFailure "{why}\n{usage}"
+error struct ArgsFailure "{self.why}\n{self.usage}"
     why str
     usage str
 
@@ -950,11 +955,11 @@ fn Grid.from(xs List[List[T]]) Self
 
 ## Row `i` as a list (type.grid.4).
 fn Grid.row(self, i int) List[T]
-    cells[i * cols..(i + 1) * cols]
+    self.cells[i * self.cols..(i + 1) * self.cols]
 
 ## The rows as lists (type.grid.4).
 fn Grid.to_list(self) List[List[T]]
-    [row(i) for i in 0..rows]
+    [self.row(i) for i in 0..self.rows]
 ## @module heap
 ## `Heap[T]` (type.heap.1-6, ADR 1086): a priority queue, smallest first, or
 ## largest first with `max_first: true`. It is read only when the program
@@ -981,13 +986,13 @@ fn Heap.from_max(xs List[T]) Self
 
 ## Whether `a` comes out before `b`.
 fn Heap.before(self, a T, b T) bool
-    if max_first then a > b else a < b
+    if self.max_first then a > b else a < b
 
 fn Heap.heapify(mut self)
-    mut k := items.len() / 2
+    mut k := self.items.len() / 2
     while k > 0
         k -= 1
-        sift_down(k)
+        self.sift_down(k)
 
 fn Heap.sift_down(mut self, start int)
     mut i := start
@@ -995,23 +1000,23 @@ fn Heap.sift_down(mut self, start int)
         l := 2 * i + 1
         r := l + 1
         mut m := i
-        if l < items.len() and before(items[l], items[m])
+        if l < self.items.len() and self.before(self.items[l], self.items[m])
             m = l
-        if r < items.len() and before(items[r], items[m])
+        if r < self.items.len() and self.before(self.items[r], self.items[m])
             m = r
         if m == i
             break
-        items.swap(i, m)
+        self.items.swap(i, m)
         i = m
 
 ## Add `x` (type.heap.3).
 fn Heap.push(mut self, x T)
-    items.push(x)
-    mut i := items.len() - 1
+    self.items.push(x)
+    mut i := self.items.len() - 1
     while i > 0
         parent := (i - 1) / 2
-        if before(items[i], items[parent])
-            items.swap(i, parent)
+        if self.before(self.items[i], self.items[parent])
+            self.items.swap(i, parent)
             i = parent
         else
             break
@@ -1019,29 +1024,29 @@ fn Heap.push(mut self, x T)
 ## Remove and return the element that comes first, or `none` when the heap is
 ## empty (type.heap.3).
 fn Heap.pop(mut self) T?
-    if items.is_empty()
+    if self.items.is_empty()
         return none
-    last := items.len() - 1
-    items.swap(0, last)
-    top := items.pop()
-    sift_down(0)
+    last := self.items.len() - 1
+    self.items.swap(0, last)
+    top := self.items.pop()
+    self.sift_down(0)
     top
 
 ## The element `pop` would return, left in place (type.heap.3).
 fn Heap.peek(self) T?
-    items.first()
+    self.items.first()
 
 ## The number of elements (type.heap.4).
 fn Heap.len(self) int
-    items.len()
+    self.items.len()
 
 fn Heap.is_empty(self) bool
-    items.is_empty()
+    self.items.is_empty()
 
 ## Every element in the order `pop` returns them, leaving the heap as it is
 ## (type.heap.4).
 fn Heap.to_sorted(self) List[T]
-    mut h := Heap(items: items, max_first: max_first)
+    mut h := Heap(items: self.items, max_first: self.max_first)
     mut out := List[T]()
     while x := h.pop()
         out.push(x)
@@ -1063,140 +1068,140 @@ fn Deque.from(xs List[T]) Self
 
 ## Add `x` as the last element (type.deque.2).
 fn Deque.push_back(mut self, x T)
-    back.push(x)
+    self.back.push(x)
 
 ## Add `x` as the first element (type.deque.2).
 fn Deque.push_front(mut self, x T)
-    front.push(x)
+    self.front.push(x)
 
 ## Remove and return the last element, or `none` when empty (type.deque.2).
 fn Deque.pop_back(mut self) T?
-    if back.is_empty()
-        n := front.len()
+    if self.back.is_empty()
+        n := self.front.len()
         if n == 0
             return none
         k := (n + 1) / 2
-        back = [front[k - 1 - i] for i in 0..k]
-        front = front[k..]
-    back.pop()
+        self.back = [self.front[k - 1 - i] for i in 0..k]
+        self.front = self.front[k..]
+    self.back.pop()
 
 ## Remove and return the first element, or `none` when empty (type.deque.2).
 fn Deque.pop_front(mut self) T?
-    if front.is_empty()
-        n := back.len()
+    if self.front.is_empty()
+        n := self.back.len()
         if n == 0
             return none
         k := (n + 1) / 2
-        front = [back[k - 1 - i] for i in 0..k]
-        back = back[k..]
-    front.pop()
+        self.front = [self.back[k - 1 - i] for i in 0..k]
+        self.back = self.back[k..]
+    self.front.pop()
 
 ## The first element, or `none` when empty (type.deque.3).
 fn Deque.first(self) T?
-    if front.is_empty()
-        return back.first()
-    front[front.len() - 1]
+    if self.front.is_empty()
+        return self.back.first()
+    self.front[self.front.len() - 1]
 
 ## The last element, or `none` when empty (type.deque.3).
 fn Deque.last(self) T?
-    if back.is_empty()
-        return front.first()
-    back[back.len() - 1]
+    if self.back.is_empty()
+        return self.front.first()
+    self.back[self.back.len() - 1]
 
 ## The number of elements (type.deque.3).
 fn Deque.len(self) int
-    front.len() + back.len()
+    self.front.len() + self.back.len()
 
 fn Deque.is_empty(self) bool
-    front.is_empty() and back.is_empty()
+    self.front.is_empty() and self.back.is_empty()
 
 ## The element at position `i` from the front; an index outside `0..len()`
 ## traps (type.deque.4).
 fn Deque.at(self, i int) T
-    n := front.len()
-    if i < 0 or i >= n + back.len()
-        unreachable("type.deque.4: index {i} is outside 0..{n + back.len()}")
-    if i < n then front[n - 1 - i] else back[i - n]
+    n := self.front.len()
+    if i < 0 or i >= n + self.back.len()
+        unreachable("type.deque.4: index {i} is outside 0..{n + self.back.len()}")
+    if i < n then self.front[n - 1 - i] else self.back[i - n]
 
 ## The elements, first to last, as a list (type.deque.4).
 fn Deque.to_list(self) List[T]
     mut out := List[T]()
-    for i in 0..front.len()
-        out.push(front[front.len() - 1 - i])
-    out.extend(back)
+    for i in 0..self.front.len()
+        out.push(self.front[self.front.len() - 1 - i])
+    out.extend(self.back)
     out
 
 ## The elements `keep` is true for, as a deque (type.deque.6, type.coll.24).
 fn Deque.filter(self, keep fn(T) bool) Deque[T]
-    Deque.from(to_list().filter(keep))
+    Deque.from(self.to_list().filter(keep))
 
 ## `f` of each element, first to last, as a list (type.deque.6, type.coll.25).
 fn Deque.map[U](self, f fn(T) U) List[U]
-    to_list().map(f)
+    self.to_list().map(f)
 
 ## The elements of the lists `f` gives for each element (type.deque.6, type.coll.30).
 fn Deque.flat_map[U](self, f fn(T) List[U]) List[U]
-    to_list().flat_map(f)
+    self.to_list().flat_map(f)
 
 ## Whether `keep` is true for some element (type.deque.6, type.coll.22).
 fn Deque.any(self, keep fn(T) bool) bool
-    to_list().any(keep)
+    self.to_list().any(keep)
 
 ## Whether `keep` is true for every element (type.deque.6, type.coll.22).
 fn Deque.all(self, keep fn(T) bool) bool
-    to_list().all(keep)
+    self.to_list().all(keep)
 
 ## The first element `keep` is true for, or `none` (type.deque.6, type.coll.23).
 fn Deque.find(self, keep fn(T) bool) T?
-    to_list().find(keep)
+    self.to_list().find(keep)
 
 ## How many elements `keep` is true for (type.deque.6, type.coll.28).
 fn Deque.count(self, keep fn(T) bool) int
-    to_list().count(keep)
+    self.to_list().count(keep)
 
 ## `f(acc, x)` over the elements in order from `init` (type.deque.6, type.coll.29).
 fn Deque.fold[A](self, init A, f fn(A, T) A) A
-    to_list().fold(init, f)
+    self.to_list().fold(init, f)
 
 ## The first `n` elements, as a deque (type.deque.6, type.coll.15).
 fn Deque.take(self, n int) Deque[T]
-    Deque.from(to_list().take(n))
+    Deque.from(self.to_list().take(n))
 
 ## The elements after the first `n`, as a deque (type.deque.6, type.coll.31).
 fn Deque.skip(self, n int) Deque[T]
-    Deque.from(to_list().skip(n))
+    Deque.from(self.to_list().skip(n))
 
 ## The elements up to the first `keep` is false for (type.deque.6, type.coll.31).
 fn Deque.take_while(self, keep fn(T) bool) Deque[T]
-    Deque.from(to_list().take_while(keep))
+    Deque.from(self.to_list().take_while(keep))
 
 ## The elements from the first `keep` is false for (type.deque.6, type.coll.31).
 fn Deque.skip_while(self, keep fn(T) bool) Deque[T]
-    Deque.from(to_list().skip_while(keep))
+    Deque.from(self.to_list().skip_while(keep))
 
 ## Each element with its index from 0, as a list (type.deque.6, type.tuple.9).
 fn Deque.enumerate(self) List[(int, T)]
-    to_list().enumerate()
+    self.to_list().enumerate()
 
 ## Pairs of elements of this deque and the list `other`, until either ends
 ## (type.deque.6, type.coll.31).
 fn Deque.zip[U](self, other List[U]) List[(T, U)]
-    to_list().zip(other)
+    self.to_list().zip(other)
 
 ## Replace the element at position `i` with `v`; an index outside `0..len()`
 ## traps (type.deque.6).
 fn Deque.set(mut self, i int, v T)
-    n := front.len()
-    if i < 0 or i >= n + back.len()
-        unreachable("type.deque.6: index {i} is outside 0..{n + back.len()}")
+    n := self.front.len()
+    if i < 0 or i >= n + self.back.len()
+        unreachable("type.deque.6: index {i} is outside 0..{n + self.back.len()}")
     if i < n
-        front[n - 1 - i] = v
+        self.front[n - 1 - i] = v
     else
-        back[i - n] = v
+        self.back[i - n] = v
 
 ## The next element for a `for` loop, taken from the front (type.deque.7).
 fn Deque.next(mut self) T?
-    pop_front()
+    self.pop_front()
 
 ## @module seq
 ## `Seq[T]` (expr.yield.1-5, expr.iter.1-3, ADR 1073): a lazy sequence, what a
@@ -1211,7 +1216,7 @@ unique struct Seq[T]
 
 ## The next element, or `none` once the sequence has ended (expr.iter.2).
 fn Seq.next(mut self) T?
-    f := step
+    f := self.step
     f()
 
 ## The elements of `xs`, in order (expr.iter.3).

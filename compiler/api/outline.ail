@@ -86,16 +86,16 @@ struct Group
 
 fn Item.json(self) J
     mut kvs := [
-        kv("kind", J.Str(kind)),
-        kv("name", J.Str(name)),
-        kv("id", J.Str(id)),
-        kv("line", J.Int(line)),
-        kv("col", J.Int(col)),
-        kv("doc", opt_str(doc)),
-        kv("signature", J.Str(signature)),
+        kv("kind", J.Str(self.kind)),
+        kv("name", J.Str(self.name)),
+        kv("id", J.Str(self.id)),
+        kv("line", J.Int(self.line)),
+        kv("col", J.Int(self.col)),
+        kv("doc", opt_str(self.doc)),
+        kv("signature", J.Str(self.signature)),
     ]
-    kvs.extend(extra)
-    for g in members
+    kvs.extend(self.extra)
+    for g in self.members
         kvs.push(kv(g.key, J.Arr([m.json() for m in g.items])))
     J.Obj(kvs)
 
@@ -115,7 +115,7 @@ fn spaces(n int) str
 ## The strings of the array under `key` in `extra`.
 fn Item.extra_strs(self, key str) List[str]
     mut out := List[str]()
-    for p in extra
+    for p in self.extra
         if p.key == key
             match p.val
                 Arr(items) =>
@@ -127,16 +127,16 @@ fn Item.extra_strs(self, key str) List[str]
     out
 
 fn Item.has_extra(self, key str) bool
-    for p in extra
+    for p in self.extra
         if p.key == key
             return true
     false
 
 fn Item.text(self, depth int, mut out List[str])
     pad := spaces(depth * 4)
-    out.push("{pad_left(line, 5)}  {pad}{signature}")
+    out.push("{pad_left(self.line, 5)}  {pad}{self.signature}")
     # Contracts are part of the signature (contract.api.1).
-    for p in extra
+    for p in self.extra
         word := match p.key
             "requires" => "requires"
             "ensures" => "ensures"
@@ -146,26 +146,26 @@ fn Item.text(self, depth int, mut out List[str])
             _ => ""
         from := if p.key.starts_with("inherited") then " (inherited)" else ""
         if word != ""
-            for c in extra_strs(p.key)
+            for c in self.extra_strs(p.key)
                 out.push("       {pad}    {word} {c}{from}")
     # err.api.1: an inferred error set is spelled out.
-    if signature.contains(") !") and has_extra("fails_with")
-        out.push("       {pad}    fails with {extra_strs("fails_with").join(" | ")}")
+    if self.signature.contains(") !") and self.has_extra("fails_with")
+        out.push("       {pad}    fails with {self.extra_strs("fails_with").join(" | ")}")
     # ct.gen.4: `--expanded` shows generated code under its signature.
     if code := extra_text("text")
         for l in code.lines()[1..]
             out.push("       {pad}{l}")
-    if d := doc
+    if d := self.doc
         for l in d.split("\n")
             out.push("       {pad}    ## {l}")
     # A variant's signature already shows its fields.
-    if kind != "variant"
-        for g in members
+    if self.kind != "variant"
+        for g in self.members
             for m in g.items
                 m.text(depth + 1, mut out)
 
 fn Item.pos_key(self) int
-    line * 100000 + col
+    self.line * 100000 + self.col
 
 fn ref_json(r Ref) J
     J.Obj([kv("id", J.Str(r.id)), kv("line", J.Int(r.pos.line)), kv("col", J.Int(r.pos.col))])
@@ -245,7 +245,7 @@ fn new_expanded_api(prog ast.Program, facts Facts, texts List[str]) Api
     api
 
 fn Api.hidden(self, pos ast.Pos) bool
-    if whole
+    if self.whole
         return pos.line >= 1073741824
     outside(pos)
 
@@ -430,8 +430,8 @@ fn param_fields(p ast.Param) List[Kv]
     fields
 
 fn Api.fn_item(self, i int) Item
-    f := prog.fns[i]
-    method := owner_name(prog, f) != none
+    f := self.prog.fns[i]
+    method := owner_name(self.prog, f) != none
     mut extra := List[Kv]()
     if method
         extra.push(kv("receiver", opt_str(receiver_of(f))))
@@ -441,9 +441,12 @@ fn Api.fn_item(self, i int) Item
         returns = type_text(t)
     extra.push(kv("returns", opt_str(returns)))
     # err.api.1: the error types a fallible function can fail with.
-    if errs := facts.errors.get(i)
+    if errs := self.facts.errors.get(i)
         extra.push(kv("fails_with", strs(errs)))
-    extra.push(kv("effects", strs(if i < facts.effects.len() then facts.effects[i] else [])))
+    extra.push(kv(
+        "effects",
+        strs(if i < self.facts.effects.len() then self.facts.effects[i] else []),
+    ))
     # contract.api.1: the conditions as written, when there are any.
     for post in [false, true]
         conds := cond_texts(f.contracts, post)
@@ -451,9 +454,9 @@ fn Api.fn_item(self, i int) Item
             extra.push(kv(if post then "ensures" else "requires", strs(conds)))
     # contract.api.2: what an implementation inherits from its trait's method.
     if m := f.inherits
-        t := prog.fns[m]
+        t := self.prog.fns[m]
         if k := trait_index(t)
-            extra.push(kv("inherits", J.Str("{prog.traits[k].name}.{t.name}")))
+            extra.push(kv("inherits", J.Str("{self.prog.traits[k].name}.{t.name}")))
         for post in [false, true]
             conds := cond_texts(t.contracts, post)
             if conds.len() > 0
@@ -468,7 +471,7 @@ fn Api.fn_item(self, i int) Item
         col: f.pos.col,
         kind: if method then "method" else "fn",
         name: f.name,
-        id: fn_ids[i],
+        id: self.fn_ids[i],
         doc: f.doc,
         signature: fn_signature(f),
         extra: extra,
@@ -477,16 +480,16 @@ fn Api.fn_item(self, i int) Item
 
 ## Whether `pos` is in the code a generator wrote into `im`.
 fn Api.in_generated(self, im ast.ImplDecl, pos ast.Pos) bool
-    for g in prog.generated
+    for g in self.prog.generated
         if g.impl_pos == im.pos
-            base := prog.files[g.file].base
+            base := self.prog.files[g.file].base
             return pos.line > base and pos.line <= base + 1048576
     false
 
 fn Api.impl_methods(self, im ast.ImplDecl) List[Item]
-    if expanded
+    if self.expanded
         return expanded_methods(im)
-    [fn_item(m) for m in im.methods if not in_generated(im, prog.fns[m].pos)]
+    [self.fn_item(m) for m in im.methods if not self.in_generated(im, self.prog.fns[m].pos)]
 
 fn take(mut methods Map[str, List[Item]], name str) List[Item]
     ms := methods.get(name) else []
@@ -500,23 +503,23 @@ fn Api.items(self) List[Item]
     mut methods := Map[str, List[Item]]()
     mut items := List[Item]()
     mut local_types := Set[str]()
-    for s in prog.structs
+    for s in self.prog.structs
         local_types.add(s.name)
-    for e in prog.enums
+    for e in self.prog.enums
         local_types.add(e.name)
-    for i in 0..prog.fns.len()
-        f := prog.fns[i]
-        if hidden(f.pos) or not is_top(f)
+    for i in 0..self.prog.fns.len()
+        f := self.prog.fns[i]
+        if self.hidden(f.pos) or not is_top(f)
             continue
         if o := f.owner
             if local_types.contains(o.name)
                 mut list := methods.get(o.name) else []
-                list.push(fn_item(i))
+                list.push(self.fn_item(i))
                 methods[o.name] = list
                 continue
-        items.push(fn_item(i))
-    for s in prog.structs
-        if hidden(s.pos)
+        items.push(self.fn_item(i))
+    for s in self.prog.structs
+        if self.hidden(s.pos)
             continue
         mut extra := type_extra(s.is_error, s.is_unique)
         # contract.api.2: the invariants as written.
@@ -536,8 +539,8 @@ fn Api.items(self) List[Item]
                 Group(key: "methods", items: take(mut methods, s.name)),
             ],
         ))
-    for e in prog.enums
-        if hidden(e.pos)
+    for e in self.prog.enums
+        if self.hidden(e.pos)
             continue
         items.push(Item(
             line: e.pos.line,
@@ -553,8 +556,8 @@ fn Api.items(self) List[Item]
                 Group(key: "methods", items: take(mut methods, e.name)),
             ],
         ))
-    for t in prog.traits
-        if hidden(t.pos)
+    for t in self.prog.traits
+        if self.hidden(t.pos)
             continue
         items.push(Item(
             line: t.pos.line,
@@ -565,10 +568,10 @@ fn Api.items(self) List[Item]
             doc: t.doc,
             signature: "trait {t.name}",
             extra: [],
-            members: [Group(key: "methods", items: [fn_item(m) for m in t.methods])],
+            members: [Group(key: "methods", items: [self.fn_item(m) for m in t.methods])],
         ))
-    for im in prog.impls
-        if hidden(im.pos)
+    for im in self.prog.impls
+        if self.hidden(im.pos)
             continue
         items.push(Item(
             line: im.pos.line,
@@ -582,10 +585,10 @@ fn Api.items(self) List[Item]
                 kv("trait", J.Str("trait:{im.trait_name}")),
                 kv("type", J.Str("type:{im.target.name}")),
             ]),
-            members: [Group(key: "methods", items: impl_methods(im))],
+            members: [Group(key: "methods", items: self.impl_methods(im))],
         ))
-    for c in prog.consts
-        if hidden(c.pos)
+    for c in self.prog.consts
+        if self.hidden(c.pos)
             continue
         items.push(Item(
             line: c.pos.line,

@@ -80,33 +80,33 @@ struct MemoBuild
     g Func
 
 fn MemoBuild.val(mut self, t Ty) int
-    g.vals.push(t)
-    g.names.push("")
-    g.vals.len() - 1
+    self.g.vals.push(t)
+    self.g.names.push("")
+    self.g.vals.len() - 1
 
 fn MemoBuild.add(mut self, b int, op str, args List[int], t Ty) int
-    d := val(t)
-    g.blocks[b].insts.push(inst(d, op, args))
+    d := self.val(t)
+    self.g.blocks[b].insts.push(inst(d, op, args))
     d
 
 fn MemoBuild.konst(mut self, b int, n int) int
-    d := val(Ty.Int)
+    d := self.val(Ty.Int)
     mut i := inst(d, "const", [])
     i.imm = n
-    g.blocks[b].insts.push(i)
+    self.g.blocks[b].insts.push(i)
     d
 
 fn MemoBuild.load(mut self, b int, addr int, off int) int
-    d := val(Ty.Int)
+    d := self.val(Ty.Int)
     mut i := inst(d, "load", [addr])
     i.imm = off
-    g.blocks[b].insts.push(i)
+    self.g.blocks[b].insts.push(i)
     d
 
 fn MemoBuild.store(mut self, b int, addr int, off int, v int)
     mut i := inst(-1, "store", [addr, v])
     i.imm = off
-    g.blocks[b].insts.push(i)
+    self.g.blocks[b].insts.push(i)
 
 ## The cache in front of `raw` (the old body, now `name$raw`), under `name`.
 fn memo_wrapper(f Func, base int) Func

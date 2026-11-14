@@ -215,12 +215,12 @@ fn Lower.lower_binary_expr(
     want Ty?,
 ) Val?
     match o
-        And => short_circuit(true, lhs, rhs)
-        Or => short_circuit(false, lhs, rhs)
+        And => self.short_circuit(true, lhs, rhs)
+        Or => self.short_circuit(false, lhs, rhs)
         _ =>
             if fused := try_fuse(o, lhs, rhs, pos, want)
                 return fused
-            lower_binary_plain(o, lhs, rhs, pos, want)
+            self.lower_binary_plain(o, lhs, rhs, pos, want)
 
 fn Lower.lower_binary_plain(
     mut self,
@@ -236,10 +236,10 @@ fn Lower.lower_binary_plain(
         # Lower the other side first to learn the type: a literal has no effects.
         b := lower_value(rhs, operand_want(o, want))?
         a := lower_value(lhs, b.ty)?
-        return binary(o, a, b, pos)
+        return self.binary(o, a, b, pos)
     a := lower_value(lhs, operand_want(o, want))?
     b := lower_value(rhs, a.ty)?
-    binary(o, a, b, pos)
+    self.binary(o, a, b, pos)
 
 ## A method of an `int`: `to_float`, `abs`, `min`, `max`, the bit operations.
 fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
@@ -268,15 +268,15 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if name == "to_float" and vs.len() == 0
         return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
     if name == "abs" and vs.len() == 0
-        return Val(id: int_abs(r.id, npos), ty: Ty.Int)
+        return Val(id: self.int_abs(r.id, npos), ty: Ty.Int)
     # type.str.8
     if name == "to_hex" and vs.len() == 0
         return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
     # type.num.11
     if name == "cmp" and vs.len() == 1 and vs[0].ty == Ty.Int and enums.contains("Ordering")
-        return ordering(call("rt.int_cmp", [r.id, vs[0].id], Ty.Int))
+        return self.ordering(call("rt.int_cmp", [r.id, vs[0].id], Ty.Int))
     if (name == "min" or name == "max") and vs.len() == 1
-        return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
+        return Val(id: self.int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
     # expr.bit.1-2
     if BIT_OPS.contains(name) and vs.len() == 1
         mut s := -1
@@ -303,7 +303,7 @@ fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val
         return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
     # type.num.11
     if name == "cmp" and vs.len() == 1 and vs[0].ty == Ty.Float and enums.contains("Ordering")
-        return ordering(call("rt.float_cmp", [r.id, vs[0].id], Ty.Int))
+        return self.ordering(call("rt.float_cmp", [r.id, vs[0].id], Ty.Int))
     # type.num.9
     if name == "round" and vs.len() == 0
         return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)

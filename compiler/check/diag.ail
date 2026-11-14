@@ -31,7 +31,7 @@ fn Diag.with_help(self, text str) Diag
 
 ## `did you mean `s`?` as help only.
 fn Diag.did_you_mean_help(self, s str) Diag
-    with_help("did you mean `{s}`?")
+    self.with_help("did you mean `{s}`?")
 
 fn Diag.with_fix(self, title str, edits List[fix.Edit]) Diag
     mut d := self
@@ -40,10 +40,9 @@ fn Diag.with_fix(self, title str, edits List[fix.Edit]) Diag
 
 ## `did you mean `s`?` and the fix that replaces `name` by `s` (diag.rs `did_you_mean`).
 fn Diag.did_you_mean(self, name str, s str) Diag
-    with_help("did you mean `{s}`?").with_fix(
-        "replace `{name}` with `{s}`",
-        [fix.replace(pos, name, s)],
-    )
+    self
+        .with_help("did you mean `{s}`?")
+        .with_fix("replace `{name}` with `{s}`", [fix.replace(self.pos, name, s)])
 
 ## One line of JSON: severity, rule, file, local line and column, message,
 ## help and fixes, in the order `ail check --json` writes them. `sources`
@@ -52,22 +51,22 @@ fn Diag.did_you_mean(self, name str, s str) Diag
 pub fn Diag.to_json(self, files List[ast.SourceFile], sources Map[str, List[List[char]]]) str
     mut file := ""
     mut base := 0
-    mut line := pos.line
+    mut line := self.pos.line
     if line < 1073741824
         for f in files
-            if f.base < pos.line
+            if f.base < self.pos.line
                 file = f.path
                 base = f.base
-                line = pos.line - f.base
-    severity := if warning then "warning" else "error"
-    mut out := "\{\"severity\":\"{severity}\",\"rule\":\"{rule}\",\"file\":{quote(file)},\"line\":{line},\"col\":{pos.col},\"message\":{quote(message)}"
-    if h := help
+                line = self.pos.line - f.base
+    severity := if self.warning then "warning" else "error"
+    mut out := "\{\"severity\":\"{severity}\",\"rule\":\"{self.rule}\",\"file\":{quote(file)},\"line\":{line},\"col\":{self.pos.col},\"message\":{quote(self.message)}"
+    if h := self.help
         out = "{out},\"help\":{quote(h)}"
-    if fixes.len() > 0
+    if self.fixes.len() > 0
         if lines := sources.get(file)
             local := [
                 fix.Fix(title: f.title, edits: [shifted(e, base) for e in f.edits])
-                for f in fixes
+                for f in self.fixes
             ]
             settled := fix.settle_fixes(local, lines)
             if settled.len() > 0

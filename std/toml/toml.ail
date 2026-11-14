@@ -5,7 +5,7 @@
 ## in their TOML spelling (std.toml.3).
 
 ## Why the text is not TOML (std.toml.8). `line` is 1-based.
-pub error struct TomlError "{why} (line {line})"
+pub error struct TomlError "{self.why} (line {self.line})"
     pub why str
     pub line int
 
@@ -21,90 +21,90 @@ pub fn parse(text str) Json ! TomlError
 fn TomlParser.fail(self, why str) TomlError
     mut line := 1
     mut i := 0
-    while i < pos and i < chars.len()
-        if chars[i] == '\n'
+    while i < self.pos and i < self.chars.len()
+        if self.chars[i] == '\n'
             line += 1
         i += 1
     TomlError(why: why, line: line)
 
 fn TomlParser.at_end(self) bool
-    pos >= chars.len()
+    self.pos >= self.chars.len()
 
 fn TomlParser.peek(self) char?
-    if at_end()
+    if self.at_end()
         return none
-    chars[pos]
+    self.chars[self.pos]
 
 fn TomlParser.peek_at(self, k int) char?
-    if pos + k >= chars.len()
+    if self.pos + k >= self.chars.len()
         return none
-    chars[pos + k]
+    self.chars[self.pos + k]
 
 ## Spaces and tabs only.
 fn TomlParser.skip_blank(mut self)
-    while not at_end() and (chars[pos] == ' ' or chars[pos] == '\t')
-        pos += 1
+    while not self.at_end() and (self.chars[self.pos] == ' ' or self.chars[self.pos] == '\t')
+        self.pos += 1
 
 ## Blanks, line breaks and comments (between statements and inside arrays).
 fn TomlParser.skip_all(mut self)
-    while not at_end()
-        c := chars[pos]
+    while not self.at_end()
+        c := self.chars[self.pos]
         if c == ' ' or c == '\t' or c == '\n' or c == '\r'
-            pos += 1
+            self.pos += 1
         elif c == '#'
-            while not at_end() and chars[pos] != '\n'
-                pos += 1
+            while not self.at_end() and self.chars[self.pos] != '\n'
+                self.pos += 1
         else
             break
 
 ## After a statement: blanks, an optional comment, then a line break or the end.
 fn TomlParser.end_of_line(mut self) !
-    skip_blank()
-    if peek() == '#'
-        while not at_end() and chars[pos] != '\n'
-            pos += 1
-    if at_end()
+    self.skip_blank()
+    if self.peek() == '#'
+        while not self.at_end() and self.chars[self.pos] != '\n'
+            self.pos += 1
+    if self.at_end()
         return
-    if chars[pos] == '\r' and peek_at(1) == '\n'
-        pos += 1
-    if chars[pos] != '\n'
-        return fail("expected end of line")
-    pos += 1
+    if self.chars[self.pos] == '\r' and self.peek_at(1) == '\n'
+        self.pos += 1
+    if self.chars[self.pos] != '\n'
+        return self.fail("expected end of line")
+    self.pos += 1
 
 fn TomlParser.document(mut self) !Json
     mut root := Json.Obj([])
     mut cur := List[str]()
     while true
-        skip_all()
-        if at_end()
+        self.skip_all()
+        if self.at_end()
             break
-        if chars[pos] == '['
-            double := peek_at(1) == '['
-            pos += 1
+        if self.chars[self.pos] == '['
+            double := self.peek_at(1) == '['
+            self.pos += 1
             if double
-                pos += 1
-            skip_blank()
-            cur = key_path()?
-            skip_blank()
-            if peek() != ']'
-                return fail("expected ']'")
-            pos += 1
+                self.pos += 1
+            self.skip_blank()
+            cur = self.key_path()?
+            self.skip_blank()
+            if self.peek() != ']'
+                return self.fail("expected ']'")
+            self.pos += 1
             if double
-                if peek() != ']'
-                    return fail("expected ']]'")
-                pos += 1
+                if self.peek() != ']'
+                    return self.fail("expected ']]'")
+                self.pos += 1
             mode := if double then 2 else 1
-            root = put(root, cur, Json.Null, mode)?
-            end_of_line()?
+            root = self.put(root, cur, Json.Null, mode)?
+            self.end_of_line()?
         else
-            key := key_path()?
-            skip_blank()
-            if peek() != '='
-                return fail("expected '=' after key")
-            pos += 1
-            v := value()?
-            root = put(root, joined(cur, key), v, 0)?
-            end_of_line()?
+            key := self.key_path()?
+            self.skip_blank()
+            if self.peek() != '='
+                return self.fail("expected '=' after key")
+            self.pos += 1
+            v := self.value()?
+            root = self.put(root, self.joined(cur, key), v, 0)?
+            self.end_of_line()?
     root
 
 fn TomlParser.joined(self, a List[str], b List[str]) List[str]
@@ -122,14 +122,14 @@ fn TomlParser.put(self, node Json, path List[str], val Json, mode int) !Json
     match node
         Json.Arr(items) =>
             if items.len() == 0
-                return fail("key path runs through an empty array")
+                return self.fail("key path runs through an empty array")
             mut copy := items
-            last := put(copy[copy.len() - 1], path, val, mode)?
+            last := self.put(copy[copy.len() - 1], path, val, mode)?
             copy[copy.len() - 1] = last
             Json.Arr(copy)
         Json.Obj(members) =>
             if path.len() == 0
-                return fail("empty key")
+                return self.fail("empty key")
             key := path[0]
             rest := path[1..path.len()]
             mut idx := -1
@@ -140,124 +140,124 @@ fn TomlParser.put(self, node Json, path List[str], val Json, mode int) !Json
             if rest.len() == 0
                 if mode == 0
                     if idx >= 0
-                        return fail("duplicate key '{key}'")
+                        return self.fail("duplicate key '{key}'")
                     ms.push(JsonMember(key, val))
                 elif mode == 1
                     if idx >= 0
-                        _ := ms[idx].value.as_obj() else return fail("'{key}' is already a value, not a table")
+                        _ := ms[idx].value.as_obj() else return self.fail("'{key}' is already a value, not a table")
                     else
                         ms.push(JsonMember(key, Json.Obj([])))
                 else
                     if idx < 0
                         ms.push(JsonMember(key, Json.Arr([Json.Obj([])])))
                     else
-                        arr := ms[idx].value.as_arr() else return fail("'{key}' is already a value, not an array of tables")
+                        arr := ms[idx].value.as_arr() else return self.fail("'{key}' is already a value, not an array of tables")
                         mut a := arr
                         a.push(Json.Obj([]))
                         ms[idx] = JsonMember(key, Json.Arr(a))
             elif idx >= 0
-                sub := put(ms[idx].value, rest, val, mode)?
+                sub := self.put(ms[idx].value, rest, val, mode)?
                 ms[idx] = JsonMember(key, sub)
             else
-                sub := put(Json.Obj([]), rest, val, mode)?
+                sub := self.put(Json.Obj([]), rest, val, mode)?
                 ms.push(JsonMember(key, sub))
             Json.Obj(ms)
-        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => return fail("key path runs through a value that is not a table")
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => return self.fail("key path runs through a value that is not a table")
 
 ## A key: bare, "quoted" or 'literal', with dots between parts (std.toml.4).
 fn TomlParser.key_path(mut self) !List[str]
     mut parts := List[str]()
     while true
-        skip_blank()
-        c := peek() else return fail("expected a key")
+        self.skip_blank()
+        c := self.peek() else return self.fail("expected a key")
         if c == '"'
-            parts.push(basic_string()?)
+            parts.push(self.basic_string()?)
         elif c == '\''
-            parts.push(literal_string()?)
+            parts.push(self.literal_string()?)
         else
-            start := pos
-            while not at_end()
-                and (chars[pos].is_alpha() or chars[pos].is_digit() or chars[pos] == '_' or chars[pos] == '-')
-                pos += 1
-            if pos == start
-                return fail("expected a key")
-            parts.push(chars[start..pos].join(""))
-        skip_blank()
-        if peek() == '.'
-            pos += 1
+            start := self.pos
+            while not self.at_end()
+                and (self.chars[self.pos].is_alpha() or self.chars[self.pos].is_digit() or self.chars[self.pos] == '_' or self.chars[self.pos] == '-')
+                self.pos += 1
+            if self.pos == start
+                return self.fail("expected a key")
+            parts.push(self.chars[start..self.pos].join(""))
+        self.skip_blank()
+        if self.peek() == '.'
+            self.pos += 1
         else
             break
     parts
 
 fn TomlParser.value(mut self) !Json
-    skip_blank()
-    c := peek() else return fail("expected a value")
+    self.skip_blank()
+    c := self.peek() else return self.fail("expected a value")
     match c
         '"' =>
-            if peek_at(1) == '"' and peek_at(2) == '"'
-                return Json.Str(multi_basic()?)
-            Json.Str(basic_string()?)
+            if self.peek_at(1) == '"' and self.peek_at(2) == '"'
+                return Json.Str(self.multi_basic()?)
+            Json.Str(self.basic_string()?)
         '\'' =>
-            if peek_at(1) == '\'' and peek_at(2) == '\''
-                return Json.Str(multi_literal()?)
-            Json.Str(literal_string()?)
-        '[' => array()
-        '{' => inline_table()
-        _ => scalar()
+            if self.peek_at(1) == '\'' and self.peek_at(2) == '\''
+                return Json.Str(self.multi_literal()?)
+            Json.Str(self.literal_string()?)
+        '[' => self.array()
+        '{' => self.inline_table()
+        _ => self.scalar()
 
 fn TomlParser.array(mut self) !Json
-    pos += 1
+    self.pos += 1
     mut items := List[Json]()
     while true
-        skip_all()
-        if peek() == ']'
-            pos += 1
+        self.skip_all()
+        if self.peek() == ']'
+            self.pos += 1
             break
-        items.push(value()?)
-        skip_all()
-        if peek() == ','
-            pos += 1
-        elif peek() == ']'
-            pos += 1
+        items.push(self.value()?)
+        self.skip_all()
+        if self.peek() == ','
+            self.pos += 1
+        elif self.peek() == ']'
+            self.pos += 1
             break
         else
-            return fail("expected ',' or ']' in array")
+            return self.fail("expected ',' or ']' in array")
     Json.Arr(items)
 
 fn TomlParser.inline_table(mut self) !Json
-    pos += 1
+    self.pos += 1
     mut t := Json.Obj([])
-    skip_blank()
-    if peek() == '}'
-        pos += 1
+    self.skip_blank()
+    if self.peek() == '}'
+        self.pos += 1
         return t
     while true
-        key := key_path()?
-        skip_blank()
-        if peek() != '='
-            return fail("expected '=' after key")
-        pos += 1
-        v := value()?
-        t = put(t, key, v, 0)?
-        skip_blank()
-        if peek() == ','
-            pos += 1
-        elif peek() == '}'
-            pos += 1
+        key := self.key_path()?
+        self.skip_blank()
+        if self.peek() != '='
+            return self.fail("expected '=' after key")
+        self.pos += 1
+        v := self.value()?
+        t = self.put(t, key, v, 0)?
+        self.skip_blank()
+        if self.peek() == ','
+            self.pos += 1
+        elif self.peek() == '}'
+            self.pos += 1
             break
         else
-            return fail("expected ',' or '}' in inline table")
+            return self.fail("expected ',' or '}' in inline table")
     t
 
 ## A bare word: boolean, number or date-time.
 fn TomlParser.scalar(mut self) !Json
-    mut word := token()
+    mut word := self.token()
     if word == ""
-        return fail("expected a value")
+        return self.fail("expected a value")
     # A date and a time may be separated by one space.
-    if word.len() == 10 and word.char_at(4) == '-' and peek() == ' ' and digit_at(1)
-        pos += 1
-        word = "{word} {token()}"
+    if word.len() == 10 and word.char_at(4) == '-' and self.peek() == ' ' and self.digit_at(1)
+        self.pos += 1
+        word = "{word} {self.token()}"
     if word == "true"
         return Json.Bool(true)
     if word == "false"
@@ -274,102 +274,102 @@ fn TomlParser.scalar(mut self) !Json
             base = 8
         mut n := 0
         for d in clean.slice(2, clean.len()).chars()
-            digit := d.to_digit(base) else return fail("invalid number '{word}'")
+            digit := d.to_digit(base) else return self.fail("invalid number '{word}'")
             n = n * base + digit
         return Json.Num(n.to_float())
     if clean.contains('.') or clean.contains('e') or clean.contains('E')
-        f := clean.to_float() else return fail("invalid number '{word}'")
+        f := clean.to_float() else return self.fail("invalid number '{word}'")
         return Json.Num(f)
     body := if clean.starts_with("+") then clean.slice(1, clean.len()) else clean
-    n := body.to_int() else return fail("invalid value '{word}'")
+    n := body.to_int() else return self.fail("invalid value '{word}'")
     Json.Num(n.to_float())
 
 fn TomlParser.digit_at(self, k int) bool
-    c := peek_at(k) else return false
+    c := self.peek_at(k) else return false
     c.is_digit()
 
 fn TomlParser.token(mut self) str
-    start := pos
-    while not at_end() and not " \t\n\r,]}#".contains(chars[pos])
-        pos += 1
-    chars[start..pos].join("")
+    start := self.pos
+    while not self.at_end() and not " \t\n\r,]}#".contains(self.chars[self.pos])
+        self.pos += 1
+    self.chars[start..self.pos].join("")
 
 fn TomlParser.basic_string(mut self) !str
-    pos += 1
+    self.pos += 1
     mut out := List[char]()
     while true
-        c := peek() else return fail("unterminated string")
+        c := self.peek() else return self.fail("unterminated string")
         if c == '\n'
-            return fail("unterminated string")
-        pos += 1
+            return self.fail("unterminated string")
+        self.pos += 1
         if c == '"'
             break
         if c == '\\'
-            out.push(escape()?)
+            out.push(self.escape()?)
         else
             out.push(c)
     out.join("")
 
 fn TomlParser.literal_string(mut self) !str
-    pos += 1
-    start := pos
+    self.pos += 1
+    start := self.pos
     while true
-        c := peek() else return fail("unterminated string")
+        c := self.peek() else return self.fail("unterminated string")
         if c == '\n'
-            return fail("unterminated string")
+            return self.fail("unterminated string")
         if c == '\''
             break
-        pos += 1
-    text := chars[start..pos].join("")
-    pos += 1
+        self.pos += 1
+    text := self.chars[start..self.pos].join("")
+    self.pos += 1
     text
 
 fn TomlParser.multi_literal(mut self) !str
-    pos += 3
-    if peek() == '\r' and peek_at(1) == '\n'
-        pos += 1
-    if peek() == '\n'
-        pos += 1
-    start := pos
+    self.pos += 3
+    if self.peek() == '\r' and self.peek_at(1) == '\n'
+        self.pos += 1
+    if self.peek() == '\n'
+        self.pos += 1
+    start := self.pos
     while true
-        if at_end()
-            return fail("unterminated string")
-        if chars[pos] == '\'' and peek_at(1) == '\'' and peek_at(2) == '\''
+        if self.at_end()
+            return self.fail("unterminated string")
+        if self.chars[self.pos] == '\'' and self.peek_at(1) == '\'' and self.peek_at(2) == '\''
             break
-        pos += 1
-    text := chars[start..pos].join("")
-    pos += 3
+        self.pos += 1
+    text := self.chars[start..self.pos].join("")
+    self.pos += 3
     text
 
 fn TomlParser.multi_basic(mut self) !str
-    pos += 3
-    if peek() == '\r' and peek_at(1) == '\n'
-        pos += 1
-    if peek() == '\n'
-        pos += 1
+    self.pos += 3
+    if self.peek() == '\r' and self.peek_at(1) == '\n'
+        self.pos += 1
+    if self.peek() == '\n'
+        self.pos += 1
     mut out := List[char]()
     while true
-        c := peek() else return fail("unterminated string")
-        if c == '"' and peek_at(1) == '"' and peek_at(2) == '"'
-            pos += 3
+        c := self.peek() else return self.fail("unterminated string")
+        if c == '"' and self.peek_at(1) == '"' and self.peek_at(2) == '"'
+            self.pos += 3
             break
-        pos += 1
+        self.pos += 1
         if c == '\\'
-            nxt := peek() else return fail("unterminated string")
+            nxt := self.peek() else return self.fail("unterminated string")
             if nxt == '\n' or nxt == ' ' or nxt == '\t' or nxt == '\r'
                 # A line-ending backslash drops the break and the blanks after it.
-                while not at_end() and " \t\n\r".contains(chars[pos])
-                    pos += 1
+                while not self.at_end() and " \t\n\r".contains(self.chars[self.pos])
+                    self.pos += 1
             else
-                out.push(escape()?)
+                out.push(self.escape()?)
         else
             out.push(c)
     out.join("")
 
 ## The escape after a backslash that `pos` has already passed (std.toml.2).
 fn TomlParser.escape(mut self) !char
-    c := peek() else return fail("unterminated string")
-    pos += 1
+    c := self.peek() else return self.fail("unterminated string")
+    self.pos += 1
     match c
         'b' => '\u{8}'
         't' => '\t'
@@ -378,17 +378,17 @@ fn TomlParser.escape(mut self) !char
         'r' => '\r'
         '"' => '"'
         '\\' => '\\'
-        'u' => hex_char(4)?
-        'U' => hex_char(8)?
-        _ => return fail("invalid escape '\\{c}'")
+        'u' => self.hex_char(4)?
+        'U' => self.hex_char(8)?
+        _ => return self.fail("invalid escape '\\{c}'")
 
 fn TomlParser.hex_char(mut self, n int) !char
-    end := pos + n
-    if end > chars.len()
-        return fail("invalid unicode escape")
+    end := self.pos + n
+    if end > self.chars.len()
+        return self.fail("invalid unicode escape")
     mut code := 0
-    for d in chars[pos..end]
-        code = code * 16 + (d.to_digit(16) else return fail("invalid unicode escape"))
-    pos = end
-    ch := char.from_code(code) else return fail("invalid unicode escape")
+    for d in self.chars[self.pos..end]
+        code = code * 16 + (d.to_digit(16) else return self.fail("invalid unicode escape"))
+    self.pos = end
+    ch := char.from_code(code) else return self.fail("invalid unicode escape")
     ch

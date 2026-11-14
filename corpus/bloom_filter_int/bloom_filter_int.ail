@@ -25,16 +25,16 @@ fn slot(x int, i int) int
 fn Bloom.add(mut self, x int)
     for i in 0..HASHES
         self.bits[slot(x, i)] = 1
-    added += 1
+    self.added += 1
 
 fn Bloom.check(self, x int) Verdict
     for i in 0..HASHES
-        if bits[slot(x, i)] == 0
+        if self.bits[slot(x, i)] == 0
             return Absent
     Maybe
 
 fn Bloom.fill(self) int
-    bits.sum()
+    self.bits.sum()
 
 fn main()
     mut bloom := Bloom.new()

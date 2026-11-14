@@ -44,7 +44,7 @@ fn Checker.reject_drop_call(mut self, rt Ty, n str, at ast.Pos) bool
 ## `e` gives its value away; a unique value moves (own.uniq.2).
 fn Checker.consume(mut self, e ast.Expr, t Ty)
     if is_unique(t)
-        take(e, "own.uniq.2")
+        self.take(e, "own.uniq.2")
 
 ## Move the value of `e` out of its binding.
 @allow("expr.match.3") fn Checker.take(mut self, e ast.Expr, rule str)
@@ -98,14 +98,14 @@ fn Checker.consume(mut self, e ast.Expr, t Ty)
                     "own.uniq.1",
                     expr_pos(e),
                     "this value is unique and belongs to `{root}`, so it can't be copied out of it",
-                    take_out_help(e, root),
+                    self.take_out_help(e, root),
                 )
 
 ## own.move.2: an argument to a `move` parameter is marked `move`, and only
 ## such an argument is.
 fn Checker.move_arg(mut self, a ast.Arg, param_moves bool)
     if param_moves and a.moved
-        take(a.value, "own.move.2")
+        self.take(a.value, "own.move.2")
     elif param_moves
         mut d := new_diag(
             "own.move.2",
@@ -126,14 +126,14 @@ fn Checker.move_arg(mut self, a ast.Arg, param_moves bool)
 ## own.move.6: calling a `move self` method on `recv` moves it.
 fn Checker.move_receiver(mut self, f int, recv ast.Expr)
     if (prog.fns[f].receiver?.moved else false)
-        take(recv, "own.move.6")
+        self.take(recv, "own.move.6")
 
 ## The elements of a list literal, or the values of a map literal, of a
 ## unique type move into it (own.uniq.8).
 fn Checker.consume_elems(mut self, es List[ast.Expr], elem Ty)
     if is_unique(elem)
         for e in es
-            take(e, "own.uniq.8")
+            self.take(e, "own.uniq.8")
 
 ## own.uniq.9-10: a built-in method of a list or map whose elements are
 ## unique: which parameters take ownership; one that would copy is an error.
@@ -213,8 +213,8 @@ fn Checker.unique_builtin(mut self, rt Ty, n str, at ast.Pos, nparams int) List[
     if receiver and is_ref(quiet_type(e))
         return true
     match e
-        Member(recv, _, _) => is_ref(quiet_type(recv)) or writes_through_ref(recv, false)
-        Index(recv, _, _) => is_ref(quiet_type(recv)) or writes_through_ref(recv, false)
+        Member(recv, _, _) => is_ref(quiet_type(recv)) or self.writes_through_ref(recv, false)
+        Index(recv, _, _) => is_ref(quiet_type(recv)) or self.writes_through_ref(recv, false)
         _ => false
 
 ## `defer S` (own.defer.1-3): `S` runs when the block exits, so it can't

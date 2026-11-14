@@ -193,8 +193,13 @@ fn report_in(
         sorted := groups[fi].sorted(by: |d| d.pos.line * 100000 + d.pos.col)
         text := if fi < texts.len() then texts[fi] else ""
         lines := [chop_cr(l) for l in text.split("\n")]
+        # Split once per file, not once per diagnostic: 100,000 warnings in one file were quadratic.
+        src_lines := text.lines()
+        fix_lines := fix.split_lines(text)
         for d in sorted
             mut shown := d
+            if shown.help == none and not shown.warning and shown.rule == "gram.syntax.1"
+                shown.help = syntax_help(shown.message)
             if shown.help == none and not shown.warning
                 shown.help = default_help(shown.rule)
             end := token_end(lines, shown.pos)
@@ -206,12 +211,12 @@ fn report_in(
                     ])
                     for f in shown.edits
                 ]
-                shown.edits = fix.settle_fixes(local, fix.split_lines(text))
+                shown.edits = fix.settle_fixes(local, fix_lines)
                 shown.fixes = [f.title for f in shown.edits]
             if json
                 out.push(to_json(shown, end, files[fi].path, follow))
             else
-                out.push(to_text(shown, files[fi].path, text, follow))
+                out.push(to_text(shown, files[fi].path, src_lines, follow))
     out.join("\n")
 
 fn severity(d Shown) str
@@ -226,9 +231,9 @@ fn next_step(d Shown, path str) str?
         return "ail fix {path}"
     "ail explain {d.rule}"
 
-fn to_text(d Shown, path str, text str, follow bool) str
+## `src` is the file's text as `text.lines()` gives it.
+fn to_text(d Shown, path str, src List[str], follow bool) str
     mut lines := ["{path}:{d.pos.line}:{d.pos.col}: {severity(d)}[{d.rule}]: {d.message}"]
-    src := text.lines()
     if d.pos.line >= 1 and d.pos.line <= src.len()
         lines.push("    {src[d.pos.line - 1]}")
         pad := spaces(if d.pos.col > 1 then d.pos.col - 1 else 0)

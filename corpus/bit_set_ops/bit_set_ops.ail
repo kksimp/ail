@@ -16,7 +16,7 @@ fn BitSet.new(n int) BitSet
     BitSet(words: cells, limit: n)
 
 fn BitSet.has(self, i int) bool
-    ((words[i / WORD] >> (i % WORD)) & 1) == 1
+    ((self.words[i / WORD] >> (i % WORD)) & 1) == 1
 
 fn BitSet.add(mut self, i int)
     if not self.has(i)
@@ -38,13 +38,13 @@ fn popcount(w int) int
 
 fn BitSet.count(self) int
     mut total := 0
-    for w in words
+    for w in self.words
         total += popcount(w)
     total
 
 fn BitSet.members(self) List[int]
     mut out := List[int]()
-    for i in 0..limit
+    for i in 0..self.limit
         if self.has(i)
             out.push(i)
     out
@@ -57,9 +57,9 @@ fn word_op(a int, b int, mode int) int
     a ^ (a & b)
 
 fn BitSet.combine(self, other BitSet, mode int) BitSet
-    mut res := BitSet.new(limit)
-    for i in 0..words.len()
-        res.words[i] = word_op(words[i], other.words[i], mode)
+    mut res := BitSet.new(self.limit)
+    for i in 0..self.words.len()
+        res.words[i] = word_op(self.words[i], other.words[i], mode)
     res
 
 fn sieve(n int) BitSet

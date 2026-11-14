@@ -1,6 +1,7 @@
 READ := 1.shl(2)
 WRITE := 1.shl(1)
 EXEC := 1.shl(0)
+
 fn mode_text(mode int) str
     r := if mode.bit_and(READ) != 0 then "r" else "-"
     w := if mode.bit_and(WRITE) != 0 then "w" else "-"
@@ -14,11 +15,13 @@ fn count_bits(n int) int
         count = count + left.bit_and(1)
         left = left.shr(1)
     count
+
 fn mix(h int) int
     mut x := h
     x = x.bit_xor(x.shr(7))
     x = x.bit_xor(x.shl(3))
     x.bit_and(0xFFFF)
+
 fn main()
     print("mode 6 is {mode_text(6)}, mode 5 is {mode_text(5)}")
     print("set bits in 0b1011: {count_bits(11)}")

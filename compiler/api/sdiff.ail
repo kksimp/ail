@@ -39,7 +39,7 @@ struct SDecl
     body List[str]
 
 fn SDecl.get(self, key str) str
-    for p in props
+    for p in self.props
         if p.0 == key
             return p.1
     ""

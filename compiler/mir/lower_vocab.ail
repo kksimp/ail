@@ -230,14 +230,14 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
             none,
         )
     if name == "fold"
-        f := vocab_fn(args[1], per + 1, id, pos)
+        f := self.vocab_fn(args[1], per + 1, id, pos)
         acc := "#va{id}"
         lower_stmt(vlet(acc, args[0].value, true, pos))
         items := f.names[1..]
         inner := [vlet(f.names[0], vname(acc, pos), false, pos), vassign(acc, f.body, pos)]
         lower_stmt(vloop(me, is_map, id, items, inner, pos))
         return lower_value(vname(acc, pos), none)
-    f := vocab_fn(args[0], per, id, pos)
+    f := self.vocab_fn(args[0], per, id, pos)
     if name == "any" or name == "all"
         lower_stmt(vlet(res, ast.Expr.Bool(value: name == "all", pos: pos), true, pos))
         cond := if name == "all" then vnot(f.body, pos) else f.body

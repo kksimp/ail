@@ -56,34 +56,34 @@ fn Checker.net_method(
     mut params := List[Ty]()
     mut ret := Ty.Unit
     if key == "Server.accept"
-        ret = net_fails(std_named("net.Exchange"))
+        ret = self.net_fails(std_named("net.Exchange"))
     elif key == "Listener.accept"
-        ret = net_fails(std_named("net.Conn"))
+        ret = self.net_fails(std_named("net.Conn"))
     elif n == "addr" or n == "peer"
         ret = Ty.Str
     elif key == "Body.read_bytes"
         params = [Ty.Int]
-        ret = net_fails(Ty.Bytes)
+        ret = self.net_fails(Ty.Bytes)
     elif n == "respond"
         params = [std_named("net.Response")]
-        ret = net_fails(Ty.Unit)
+        ret = self.net_fails(Ty.Unit)
     elif n == "respond_bytes"
         params = [Ty.Int, Ty.MapOf(key: Ty.Str, value: Ty.Str), Ty.Bytes]
-        ret = net_fails(Ty.Unit)
+        ret = self.net_fails(Ty.Unit)
     elif n == "read"
         params = [Ty.Int]
-        ret = net_fails(Ty.Str)
+        ret = self.net_fails(Ty.Str)
     elif n == "read_line"
-        ret = net_fails(Ty.Opt(Ty.Str))
+        ret = self.net_fails(Ty.Opt(Ty.Str))
     elif n == "write"
         params = [Ty.Str]
-        ret = net_fails(Ty.Unit)
+        ret = self.net_fails(Ty.Unit)
     elif n == "read_bytes"
         params = [Ty.Int]
-        ret = net_fails(Ty.Bytes)
+        ret = self.net_fails(Ty.Bytes)
     elif n == "write_bytes"
         params = [Ty.Bytes]
-        ret = net_fails(Ty.Unit)
+        ret = self.net_fails(Ty.Unit)
     elif n == "set_timeout"
         params = [Ty.Int]
     check_call("net.{tn}.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)

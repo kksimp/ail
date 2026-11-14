@@ -25,7 +25,7 @@ fn Lower.c_code(self, t Ty) str?
             slots := structs.get(n) else return none
             mut s := "\{"
             for sl in slots
-                c := c_code(sl.ty) else return none
+                c := self.c_code(sl.ty) else return none
                 s = "{s}{c}"
             return [s, "}"].join("")
         _ => return none
@@ -48,11 +48,11 @@ fn cs_needed(sig Sig) bool
 fn Lower.cs_call(mut self, addr int, sig Sig, vs List[int], pos ast.Pos) Val?
     mut desc := ""
     for t in sig.params
-        c := c_code(t) else return unsupported(pos, "this C call")
+        c := self.c_code(t) else return unsupported(pos, "this C call")
         desc = "{desc}{c}"
     desc = "{desc}:"
     if not sig.ret.is_unit()
-        c := c_code(sig.ret) else return unsupported(pos, "this C call")
+        c := self.c_code(sig.ret) else return unsupported(pos, "this C call")
         desc = "{desc}{c}"
     words := call(
         "rt.obj_new",
@@ -77,7 +77,7 @@ fn Lower.cs_call(mut self, addr int, sig Sig, vs List[int], pos ast.Pos) Val?
 fn Lower.lower_extern_cs(mut self, f ast.FnDecl, name str, params List[int], sig Sig)
     lib := if e := f.ext then e.lib else none
     addr := ffi_bound(lib, f.name, f.pos)
-    r := cs_call(addr, sig, params, f.pos) else return
+    r := self.cs_call(addr, sig, params, f.pos) else return
     finish(return_of(r.id))
     end_fn(name, f.pos)
 
@@ -130,7 +130,7 @@ fn Lower.cb_entry(mut self, name str, pos ast.Pos) int?
 fn Lower.cb_arg(mut self, e ast.Expr) Val?
     match e
         Name(n, p) =>
-            a := cb_entry(n, p) else return unsupported(
+            a := self.cb_entry(n, p) else return unsupported(
                 p,
                 "a C callback that isn't a declared function",
             )

@@ -95,12 +95,12 @@ fn distinct_imports(p ast.Program) Map[str, str]
 ## The base of the distinct type written `n` here, if it is one.
 fn DistinctErase.base_of(self, n str) ast.TypeRef?
     if not n.contains(".")
-        return bases.get("{home}|{n}")
+        return self.bases.get("{self.home}|{n}")
     cut := n.split(".")
     tail := cut[cut.len() - 1]
     prefix_part := cut[..cut.len() - 1].join(".")
-    target := imports.get(prefix_part) else prefix_part
-    bases.get("{target}|{tail}")
+    target := self.imports.get(prefix_part) else prefix_part
+    self.bases.get("{target}|{tail}")
 
 ## The base type's name, `int` for `type UserId = int`.
 @allow("expr.match.3") fn distinct_base_text(t ast.TypeRef) str
@@ -277,7 +277,7 @@ fn distinct_single(xs List[ast.Arg]) ast.Expr?
         Name(n, _) =>
             if self.base_of(n) != none
                 return v
-            if DISTINCT_BASES.contains(n) and not own_fns.contains(n)
+            if DISTINCT_BASES.contains(n) and not self.own_fns.contains(n)
                 return v
             none
         _ => none
@@ -288,7 +288,7 @@ fn DistinctErase.unwrapped_qualified(self, recv ast.Expr, n str, xs List[ast.Arg
     v := distinct_single(xs)?
     match recv
         Name(a, _) =>
-            if imports.contains(a) and self.base_of("{a}.{n}") != none
+            if self.imports.contains(a) and self.base_of("{a}.{n}") != none
                 return v
             none
         _ => none

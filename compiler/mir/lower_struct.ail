@@ -287,7 +287,7 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     t := Ty.Struct(n)
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()
-        store(obj, k, vs[k])
+        self.store(obj, k, vs[k])
     check_invariants(n, obj, pos, "", pos)
     Val(id: obj, ty: t)
 
@@ -310,11 +310,11 @@ fn Lower.lower_member(mut self, recv ast.Expr, name str, pos ast.Pos) Val?
     if xs := tuple_elems(r.ty)
         return tuple_member(r, xs, name, pos)
     n := struct_name(r.ty) else return unsupported(pos, "`.{name}` on `{r.ty.name()}`")
-    k := slot_of(n, name)
+    k := self.slot_of(n, name)
     if k < 0
         return unsupported(pos, "`{n}` has no field `{name}`")
     t := structs[n][k].ty
-    Val(id: load(r.id, k, t), ty: t)
+    Val(id: self.load(r.id, k, t), ty: t)
 
 fn struct_name(t Ty) str?
     match t
@@ -339,28 +339,28 @@ fn Lower.assign_member(
     n := struct_name(r.ty) else
         problem(pos, "assigning `.{name}` on `{r.ty.name()}` isn't in the native subset yet")
         return
-    k := slot_of(n, name)
+    k := self.slot_of(n, name)
     if k < 0
         problem(pos, "`{n}` has no field `{name}`")
         return
-    assign_slot(r.id, n, k, op, value, at)
+    self.assign_slot(r.id, n, k, op, value, at)
 
 fn Lower.assign_slot(mut self, obj int, n str, k int, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     t := structs[n][k].ty
     if o := op
-        old := Val(id: load(obj, k, t), ty: t)
+        old := Val(id: self.load(obj, k, t), ty: t)
         v := lower_value(value, t) else return
-        store(obj, k, binary(o, old, v, pos).id)
+        self.store(obj, k, binary(o, old, v, pos).id)
     else
         v := lower_value(value, t) else return
         uniq_drop_field(obj, k, t)
-        store(obj, k, copy_if_place(value, Val(id: convert(v, t, pos), ty: t)))
+        self.store(obj, k, copy_if_place(value, Val(id: convert(v, t, pos), ty: t)))
 
 ## Inside a method, a field of `self` named without `self.`.
 fn Lower.self_slot(self, name str) int
     if self_ty == ""
         return -1
-    slot_of(self_ty, name)
+    self.slot_of(self_ty, name)
 
 fn Lower.self_value(mut self) int
     key := lookup("self") else return -1
@@ -369,7 +369,7 @@ fn Lower.self_value(mut self) int
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     if ordered := label_ordered_method(key, args)
-        return struct_call(key, recv, ordered, pos)
+        return self.struct_call(key, recv, ordered, pos)
     mut rcv := take_receiver()
     rcv.ref_obj = ref_of(rcv.ref_obj, recv)
     if not sigs.contains(key)
@@ -395,7 +395,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
             t := display_call(r) else return unsupported(pos, "`.to_str()` on `{r.ty.name()}`")
             return Val(id: t, ty: Ty.Str)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
-        return proc_output_method(key, recv, args, pos)
+        return self.proc_output_method(key, recv, args, pos)
     if key.starts_with("net.")
         return lower_net_method(key, recv, args, pos)
     if key.ends_with(".cmp") and args.len() == 1 and not sigs.contains(key)
@@ -448,10 +448,10 @@ fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], po
     if args.len() > 0
         return unsupported(pos, "`{key}` takes no arguments")
     if key == "{PROC_OUTPUT}.ok"
-        status := load(r.id, 0, Ty.Int)
+        status := self.load(r.id, 0, Ty.Int)
         return Val(id: op("eq", [status, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
-    out := load(r.id, 1, Ty.Str)
-    err := load(r.id, 2, Ty.Str)
+    out := self.load(r.id, 1, Ty.Str)
+    err := self.load(r.id, 2, Ty.Str)
     Val(id: call("rt.str_cat", [out, err], Ty.Str), ty: Ty.Str)
 
 ## Whether a value of type `t` read from a place must be copied to stay
@@ -492,7 +492,7 @@ fn Lower.gen_copies(mut self)
                 continue
             done.add(name)
             more = true
-            gen_copy(name, copy_tys[name])
+            self.gen_copy(name, copy_tys[name])
 
 fn Lower.gen_copy(mut self, name str, t Ty)
     x := begin_fn(name, t, [t])[0]
@@ -507,18 +507,18 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             )
             for k in 0..slots.len()
                 st := slots[k].ty
-                mut v := load(x, k, st)
+                mut v := self.load(x, k, st)
                 if needs_copy(st)
-                    v = copy_value(Val(id: v, ty: st))
-                store(obj, k, v)
+                    v = self.copy_value(Val(id: v, ty: st))
+                self.store(obj, k, v)
             finish(return_of(obj))
         Tuple(xs) =>
             obj := call("rt.obj_new", [konst(8 * xs.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
             for k in 0..xs.len()
-                mut v := load(x, k, xs[k])
+                mut v := self.load(x, k, xs[k])
                 if needs_copy(xs[k])
-                    v = copy_value(Val(id: v, ty: xs[k]))
-                store(obj, k, v)
+                    v = self.copy_value(Val(id: v, ty: xs[k]))
+                self.store(obj, k, v)
             finish(return_of(obj))
         List(e) =>
             n := op("len", [x], Ty.Int)
@@ -532,7 +532,7 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             exit := new_block()
             branch(op("lt", [i, n], Ty.Bool), body, [], exit, [])
             cur = body
-            item := copy_value(Val(id: op("get", [x, i], e), ty: e))
+            item := self.copy_value(Val(id: op("get", [x, i], e), ty: e))
             call(push_fn(e), [out, item], Ty.Unit)
             jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
@@ -557,7 +557,7 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             live := new_block()
             branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], step, [])
             cur = live
-            c := copy_value(Val(id: entry_value(e, vt), ty: vt))
+            c := self.copy_value(Val(id: entry_value(e, vt), ty: vt))
             rawop("store64", [op("add", [e, konst(16, Ty.Int)], Ty.Int), c], Ty.Unit)
             jump(step, [])
             cur = step
@@ -588,4 +588,4 @@ fn Lower.lower_member_expr(
         if globals.contains(key)
             return global_const(key)
         return unsupported(pos, "`{key}` as a value")
-    lower_member(recv, name, pos)
+    self.lower_member(recv, name, pos)

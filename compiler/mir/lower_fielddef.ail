@@ -25,12 +25,12 @@ fn Lower.has_defaults(self, n str) bool
 
 ## Give each field no argument set its default.
 fn Lower.fill_defaults(mut self, n str, slots List[Slot], mut vs List[int]) bool
-    if not has_defaults(n)
+    if not self.has_defaults(n)
         return true
     for k in 0..vs.len()
         if vs[k] >= 0
             continue
-        d := default_of(n, k) else continue
+        d := self.default_of(n, k) else continue
         v := lower_value(d, slots[k].ty) else return false
         vs[k] = convert(v, slots[k].ty, expr_pos(d))
     true

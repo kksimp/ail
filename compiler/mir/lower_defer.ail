@@ -26,7 +26,7 @@ fn Lower.defer_note(mut self, st ast.Stmt)
 ## The block ends: its deferred statements run unless the block already left.
 fn Lower.defer_exit(mut self)
     if not done()
-        defer_run_from(facts.defers.len() - 1)
+        self.defer_run_from(facts.defers.len() - 1)
     facts.defers.pop()
     facts.defer_loops.pop()
     uniq.depths.pop()
@@ -51,11 +51,11 @@ fn Lower.defer_run_from(mut self, first int)
 ## A `return` or a failure leaves the function: every open block's `defer`s run.
 fn Lower.defer_all(mut self)
     if facts.defers.len() > 0
-        defer_run_from(0)
+        self.defer_run_from(0)
 
 ## `break` or `continue` leaves the blocks of the innermost loop.
 fn Lower.defer_loop_exit(mut self)
-    defer_loop_exit_to(loops.len())
+    self.defer_loop_exit_to(loops.len())
 
 ## `break outer` or `continue outer` leaves the blocks of the loops from the
 ## `depth`-th one inward (expr.loop.10).
@@ -63,4 +63,4 @@ fn Lower.defer_loop_exit_to(mut self, depth int)
     mut first := facts.defers.len()
     while first > 0 and facts.defer_loops[first - 1] >= depth
         first -= 1
-    defer_run_from(first)
+    self.defer_run_from(first)

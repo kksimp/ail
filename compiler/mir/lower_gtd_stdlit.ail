@@ -17,7 +17,7 @@ fn Lower.std_partial(self, n str, args List[ast.Arg]) bool
 fn Lower.fill_private(mut self, slots List[Slot], mut vs List[int], pos ast.Pos) bool
     for k in 0..vs.len()
         if vs[k] < 0
-            z := zero_field(slots[k].ty, 0) else
+            z := self.zero_field(slots[k].ty, 0) else
                 unsupported(pos, "leaving out field `{slots[k].name}`")
                 return false
             vs[k] = z
@@ -39,7 +39,7 @@ fn Lower.zero_field(mut self, t Ty, depth int) int?
             slots := structs.get(n)?
             mut ids := List[int]()
             for s in slots
-                ids.push(zero_field(s.ty, depth + 1)?)
+                ids.push(self.zero_field(s.ty, depth + 1)?)
             obj := call(
                 "rt.obj_new",
                 [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)],

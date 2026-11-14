@@ -26,17 +26,17 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
         Opt(w) =>
             match got
                 Opt(g) => same(w, g)
-                _ => accepts(w, got)
+                _ => self.accepts(w, got)
         Res(w, we) =>
             match got
                 Res(g, ge) =>
                     gerrs := errs_of(ge)
-                    same(w, g) and add_errors(we, gerrs).len() == 0
-                Union(m) => add_errors(we, m).len() == 0
+                    same(w, g) and self.add_errors(we, gerrs).len() == 0
+                Union(m) => self.add_errors(we, m).len() == 0
                 _ =>
                     if is_error_type(got)
-                        return add_errors(we, [got]).len() == 0
-                    accepts(w, got)
+                        return self.add_errors(we, [got]).len() == 0
+                    self.accepts(w, got)
         Union(w) =>
             match got
                 Union(g) =>
@@ -63,7 +63,7 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
                     match wr
                         Res(w, _) =>
                             match gr
-                                Res => accepts(wr, gr)
+                                Res => self.accepts(wr, gr)
                                 _ => same(w, gr)
                         _ => false
                 _ => same(want, got)
@@ -72,13 +72,15 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
 ## Report a value of type `got` where `want` was expected, under `rule`. An
 ## unhandled failure is reported as such (err.use.1).
 @allow("expr.match.3") fn Checker.mismatch(mut self, rule str, at ast.Pos, want Ty, got Ty)
-    if not is_res(want) and reject_unhandled(got, at)
+    if not is_res(want) and self.reject_unhandled(got, at)
         return
     text := "expected {show(want)}, found {show(got)}"
     match want
-        Res(_, we) => mismatch_errors(rule, at, text, we, got)
+        Res(_, we) => self.mismatch_errors(rule, at, text, we, got)
         _ =>
             if h := mismatch_help(want, got)
+                err_help(rule, at, text, h)
+            elif h := self.distinct_wrap(want, got)
                 err_help(rule, at, text, h)
             else
                 err(rule, at, text)
@@ -104,6 +106,17 @@ fn Checker.mismatch_errors(mut self, rule str, at ast.Pos, text str, we Errs, go
             "{text}: the error type doesn't include {list_names(names)}",
             "add them to the return type, e.g. `T ! A | B`, or use `!T` to infer the errors",
         )
+
+## A distinct type where its base is given, or the other way round (type.distinct.1): wrap or unwrap, not
+## `to_float()` (checkbench, ADR 1111).
+fn Checker.distinct_wrap(self, want Ty, got Ty) str?
+    if wb := self.distinct_base(want)
+        if same(wb, got)
+            return "{show(want)} is a distinct type: wrap the value, `{ty_name(want)}(x)`"
+    if gb := self.distinct_base(got)
+        if same(gb, want)
+            return "{show(got)} is a distinct type: unwrap it with `{ty_name(gb)}(x)`"
+    none
 
 ## Help for a mismatch between two types (type.opt.7, expr.name.2).
 fn mismatch_help(want Ty, got Ty) str?
@@ -145,7 +158,7 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
         return false
     hint := if is_res(fn_ret) then "pass the error on with `?`, or handle it with `x := ... else ...`" else "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
     err_help("err.use.1", at, "this can fail, and the failure isn't handled", hint)
-    try_fix_at(t, at)
+    self.try_fix_at(t, at)
     true
 
 ## fix.edit.3: offer `?` after the failure when this function's error type
@@ -162,7 +175,7 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
                 Inferred => admits = true
                 ErrSet(want) => admits = [g for g in errors if not want.contains(g)].len() == 0
         _ => admits = false
-    sig := if admits then none else signature_fix(errors)
+    sig := if admits then none else self.signature_fix(errors)
     if diags.len() == 0
         return
     last := diags[diags.len() - 1]
@@ -182,7 +195,7 @@ pub struct SigFix
 @allow("expr.match.3") fn Checker.signature_fix(self, extra List[Ty]) SigFix?
     if is_res(fn_ret) or is_opt(fn_ret)
         return none
-    names := error_names(extra)
+    names := self.error_names(extra)
     # A module's error type is written with the module's alias, which isn't
     # the name it has here: offer the fix only for names as written.
     if [n for n in names if n.contains(".")].len() > 0
@@ -195,7 +208,7 @@ pub struct SigFix
 
 ## Add the signature fix, if any, to the diagnostic just reported.
 fn Checker.sig_fix_last(mut self, errors List[Ty])
-    if s := signature_fix(errors)
+    if s := self.signature_fix(errors)
         fix_last(s.title, [s.edit])
 
 ## Sorted, distinct display names of error types.
@@ -244,7 +257,7 @@ fn Checker.note_path(
         kind: kind,
         how: how,
         call: call,
-        errors: error_names(errors),
+        errors: self.error_names(errors),
         context: context,
     ))
 
@@ -253,10 +266,10 @@ fn Checker.note_path(
 @allow("expr.match.3") fn Checker.failing_ret(self, extra List[Ty]) str?
     mut names := List[str]()
     match fn_ret
-        Res(_, errs) => names = error_names(errs_of(errs))
+        Res(_, errs) => names = self.error_names(errs_of(errs))
         Opt => return none
         _ => names = []
-    for n in error_names(extra)
+    for n in self.error_names(extra)
         names.push(n)
     names.sort()
     mut uniq := List[str]()

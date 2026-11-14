@@ -2,15 +2,18 @@ use std.mem
 extern c fn memset(p *u8, byte i32, n int) *u8
 extern c fn memcpy(dst *int, src *int, bytes int) *int
 extern c fn strtod(text *u8, rest **u8) float
+
 fn sum(p *int, n int) int
     mut total := 0
     unsafe
         for i in 0..n
             total += p.offset(i).read()
     total
+
 struct Parsed
     value float
     rest str
+
 fn parse_prefix(text str) Parsed
     unsafe
         s := mem.cstr(text)
@@ -20,6 +23,7 @@ fn parse_prefix(text str) Parsed
         mem.free(rest)
         mem.free(s)
         Parsed(value: value, rest: after)
+
 fn main()
     unsafe
         a := mem.alloc(4, 0)

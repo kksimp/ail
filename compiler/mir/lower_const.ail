@@ -44,7 +44,7 @@ fn Lower.global_const(mut self, key str) Val?
     g := globals.get(key)?
     if g.slot < 0
         return none
-    Val(id: load(global_addr(g.slot), 0, g.ty), ty: g.ty)
+    Val(id: load(self.global_addr(g.slot), 0, g.ty), ty: g.ty)
 
 ## Lower `init.consts`: each computed constant into its slot, a constant
 ## after those it names.
@@ -54,7 +54,7 @@ fn Lower.gen_const_init(mut self)
     mut order := List[int]()
     mut state := [0 for _ in global_consts]
     for k in 0..global_consts.len()
-        const_order(k, mut order, mut state)
+        self.const_order(k, mut order, mut state)
     sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.consts", Ty.Unit, [])
     for k in order
@@ -64,8 +64,8 @@ fn Lower.gen_const_init(mut self)
         v := lower_value(c.decl.value, none) else
             globals[c.key] = Global(slot: -1, ty: Ty.Unknown)
             continue
-        slot := new_global(c.key, v.ty)
-        store(global_addr(slot), 0, v.id)
+        slot := self.new_global(c.key, v.ty)
+        store(self.global_addr(slot), 0, v.id)
     finish(return_of(-1))
     end_fn("init.consts", ast.Pos(line: 1, col: 1))
     enter_file(0)
@@ -82,7 +82,7 @@ fn Lower.const_order(self, k int, mut order List[int], mut state List[int])
     for n in refs
         for j in 0..global_consts.len()
             if global_consts[j].key == "{file_prefix[c.file]}{n}"
-                const_order(j, mut order, mut state)
+                self.const_order(j, mut order, mut state)
     state[k] = 2
     order.push(k)
 

@@ -13,7 +13,7 @@ fn Lower.lower_bytes_lit(mut self, hex str, pos ast.Pos) Val?
 fn Lower.bytes_index(mut self, l Val, index ast.Expr, pos ast.Pos) Val?
     if is_range(index)
         return match index
-            Range(lo, hi, incl, rpos) => bytes_slice(l, lo, hi, incl, rpos)
+            Range(lo, hi, incl, rpos) => self.bytes_slice(l, lo, hi, incl, rpos)
             _ => none
     i := lower_value(index, Ty.Int)?
     n := op("len", [l.id], Ty.Int)
@@ -68,7 +68,7 @@ fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
 fn Lower.bytes_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
     if name == "add"
-        return bytes_concat(a, b)
+        return self.bytes_concat(a, b)
     if name == "lt" or name == "le" or name == "gt" or name == "ge"
         # Byte-wise order, shorter first when one is a prefix (type.bytes.2).
         c := call("rt.bytes_cmp", [a.id, b.id], Ty.Int)
@@ -116,7 +116,7 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
         return Val(id: call("rt.bytes_hex_sep", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
     if nargs == 1 and vs[0].ty == Ty.Bytes
         if name == "concat"
-            return bytes_concat(r, vs[0])
+            return self.bytes_concat(r, vs[0])
         if name == "contains" or name == "starts_with" or name == "ends_with"
             return Val(id: call("rt.bytes_{name}", [r.id, vs[0].id], Ty.Bool), ty: Ty.Bool)
         if name == "find"

@@ -15,16 +15,16 @@ struct Index
     spans List[Interval]
 
 fn Index.add(mut self, lo int, hi int, label str)
-    mut at := spans.len()
-    for i in 0..spans.len()
-        if spans[i].lo > lo
+    mut at := self.spans.len()
+    for i in 0..self.spans.len()
+        if self.spans[i].lo > lo
             at = i
             break
-    spans.insert(at, Interval(lo: lo, hi: hi, label: label))
+    self.spans.insert(at, Interval(lo: lo, hi: hi, label: label))
 
 fn Index.find(self, q Query) List[str]
     mut out := List[str]()
-    for iv in spans
+    for iv in self.spans
         hit := match q
             Point(x) => iv.lo <= x and x <= iv.hi
             Range(a, b) => iv.lo <= b and a <= iv.hi
@@ -35,7 +35,7 @@ fn Index.find(self, q Query) List[str]
 fn Index.covered(self) int
     mut total := 0
     mut reach := -1
-    for iv in spans
+    for iv in self.spans
         if iv.hi > reach
             start := iv.lo.max(reach + 1)
             total += iv.hi - start + 1

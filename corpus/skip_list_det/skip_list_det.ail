@@ -26,10 +26,10 @@ fn height(key int) int
 fn SkipList.before(self, key int, level int, start int) int
     mut cur := start
     while true
-        nx := links[cur * LEVELS + level]
+        nx := self.links[cur * LEVELS + level]
         if nx == -1
             break
-        if keys[nx] >= key
+        if self.keys[nx] >= key
             break
         cur = nx
     cur
@@ -43,44 +43,44 @@ fn SkipList.insert(mut self, key int) bool
         lv := LEVELS - 1 - i
         cur = self.before(key, lv, cur)
         update[lv] = cur
-    nxt := links[cur * LEVELS]
+    nxt := self.links[cur * LEVELS]
     if nxt != -1
-        if keys[nxt] == key
+        if self.keys[nxt] == key
             return false
-    nid := keys.len()
+    nid := self.keys.len()
     h := height(key)
-    keys.push(key)
+    self.keys.push(key)
     for _ in 0..LEVELS
-        links.push(-1)
+        self.links.push(-1)
     for lv2 in 0..h
-        self.links[nid * LEVELS + lv2] = links[update[lv2] * LEVELS + lv2]
+        self.links[nid * LEVELS + lv2] = self.links[update[lv2] * LEVELS + lv2]
         self.links[update[lv2] * LEVELS + lv2] = nid
-    count += 1
+    self.count += 1
     true
 
 fn SkipList.contains(self, key int) bool
     mut cur := 0
     for i in 0..LEVELS
         cur = self.before(key, LEVELS - 1 - i, cur)
-    nxt := links[cur * LEVELS]
+    nxt := self.links[cur * LEVELS]
     if nxt == -1
         return false
-    keys[nxt] == key
+    self.keys[nxt] == key
 
 fn SkipList.to_list(self) List[int]
     mut out := List[int]()
-    mut cur := links[0]
+    mut cur := self.links[0]
     while cur != -1
-        out.push(keys[cur])
-        cur = links[cur * LEVELS]
+        out.push(self.keys[cur])
+        cur = self.links[cur * LEVELS]
     out
 
 fn SkipList.level_size(self, level int) int
     mut n := 0
-    mut cur := links[level]
+    mut cur := self.links[level]
     while cur != -1
         n += 1
-        cur = links[cur * LEVELS + level]
+        cur = self.links[cur * LEVELS + level]
     n
 
 fn main()

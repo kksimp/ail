@@ -72,14 +72,14 @@ fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
     shape := Ty.ListOf(Ty.Int)
     mut wanted := none
     if t := expect
-        if e := tensor_elem(t)
+        if e := self.tensor_elem(t)
             if is_elem(e)
                 wanted = e
     if f == "from_fn"
-        return tensor_from_fn(args, at)
+        return self.tensor_from_fn(args, at)
     if f == "zeros"
         elem := wanted else Ty.Float
-        sig := plain_sig(none, [shape], tensor_ty(elem))
+        sig := plain_sig(none, [shape], self.tensor_ty(elem))
         return check_call("tensor.zeros", sig, [], args, none, at, expect)
     # `from(xs)` is 1-D; `from(xs, shape)` gives the shape.
     mut elem := Ty.Float
@@ -109,7 +109,15 @@ fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
     mut params := [Ty.ListOf(list_elem(elem))]
     if args.len() != 1
         params.push(shape)
-    check_call("tensor.from", plain_sig(none, params, tensor_ty(elem)), [], args, none, at, expect)
+    check_call(
+        "tensor.from",
+        plain_sig(none, params, self.tensor_ty(elem)),
+        [],
+        args,
+        none,
+        at,
+        expect,
+    )
 
 ## std.tensor.25: `tensor.from_fn(shape, |i| e)`. `shape` is an `int` (a 1-D
 ## length) or a `List[int]`; the function takes the flat index and gives an
@@ -147,7 +155,7 @@ fn Checker.tensor_from_fn(mut self, args List[ast.Arg], at ast.Pos) Ty
         return Ty.Unknown
     mark := locals.len()
     if declare(p.name, p.pos)
-        locals.push(Local(
+        self.add_local(Local(
             name: p.name,
             ty: Ty.Int,
             mutable: false,
@@ -157,7 +165,7 @@ fn Checker.tensor_from_fn(mut self, args List[ast.Arg], at ast.Pos) Ty
     out := expr(ast.key_body(f), none, true)
     end_scope(mark)
     if is_elem(out)
-        return tensor_ty(out)
+        return self.tensor_ty(out)
     if out != Ty.Unknown
         err_help(
             "std.tensor.25",
@@ -177,7 +185,7 @@ fn Checker.tensor_method(
     args List[ast.Arg],
     expect Ty?,
 ) Ty
-    elem := tensor_elem(rt) else Ty.Unknown
+    elem := self.tensor_elem(rt) else Ty.Unknown
     if not TENSOR_METHODS.contains(n)
         args_only(args)
         mut d := new_diag("std.tensor.3", at, "`tensor.Tensor` has no method `{n}`")
@@ -189,9 +197,9 @@ fn Checker.tensor_method(
         return Ty.Unknown
     std_any.add(pos_key(at))
     if n == "map"
-        return tensor_map(rt, elem, args, at)
+        return self.tensor_map(rt, elem, args, at)
     if n == "to_f32" or n == "to_float"
-        return tensor_convert(n, elem, args, at)
+        return self.tensor_convert(n, elem, args, at)
     if n == "top2" and elem == Ty.Int
         args_only(args)
         err_help(
@@ -269,13 +277,13 @@ fn Checker.tensor_method(
         else
             params = [Ty.Int]
     elif n == "round"
-        ret = tensor_ty(Ty.Int)
+        ret = self.tensor_ty(Ty.Int)
     elif n == "argmax" or n == "argmin"
         if args.len() == 0
             ret = Ty.Int
         else
             params = [Ty.Int]
-            ret = tensor_ty(Ty.Int)
+            ret = self.tensor_ty(Ty.Int)
     elif n == "clamp"
         # std.tensor.21: an `f32` tensor's bounds are `float`.
         params = [list_elem(elem), list_elem(elem)]
@@ -289,7 +297,7 @@ fn Checker.tensor_method(
     elif n == "top2"
         # std.tensor.23: (best index, second index, margin) along an axis.
         params = [Ty.Int]
-        ret = Ty.Tuple([tensor_ty(Ty.Int), tensor_ty(Ty.Int), rt])
+        ret = Ty.Tuple([self.tensor_ty(Ty.Int), self.tensor_ty(Ty.Int), rt])
     check_call("tensor.Tensor.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)
 
 ## std.tensor.22: `to_f32()` on a `float` tensor and `to_float()` on an `f32`
@@ -306,7 +314,7 @@ fn Checker.tensor_convert(mut self, n str, elem Ty, args List[ast.Arg], at ast.P
             "`to_f32()` takes `float` tensors and `to_float()` takes `f32` ones",
         )
         return Ty.Unknown
-    tensor_ty(to_t)
+    self.tensor_ty(to_t)
 
 ## std.tensor.8: `t.map(|x| e)`: `x` is each element, and `e` is an `int`,
 ## `float` or `f32`, the new tensor's element type.
@@ -332,7 +340,7 @@ fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) 
         return rt
     mark := locals.len()
     if declare(p.name, p.pos)
-        locals.push(Local(
+        self.add_local(Local(
             name: p.name,
             ty: elem,
             mutable: false,
@@ -342,7 +350,7 @@ fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) 
     out := expr(ast.key_body(a), elem, true)
     end_scope(mark)
     if is_elem(out)
-        return tensor_ty(out)
+        return self.tensor_ty(out)
     if out != Ty.Unknown
         err_help(
             "std.tensor.8",
@@ -355,14 +363,14 @@ fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) 
 ## type.num.10 for std.tensor.10: an `int` literal `scalar` beside a
 ## `Tensor[float]` `t` is a `float`.
 fn Checker.float_tensor_scalar(mut self, t Ty, st Ty, scalar ast.Expr) bool
-    st == Ty.Int and tensor_elem(t) == Ty.Float and float_literal(scalar)
+    st == Ty.Int and self.tensor_elem(t) == Ty.Float and float_literal(scalar)
 
 ## std.tensor.10: `+`, `-` and `*` with a tensor operand: two tensors of one
 ## element type, or a tensor and a scalar of its element type, either side.
 ## `none` when neither operand is a tensor.
 fn Checker.tensor_operator(mut self, sym str, arith bool, lt Ty, rt Ty, at ast.Pos) Ty?
-    le := tensor_elem(lt)
-    re := tensor_elem(rt)
+    le := self.tensor_elem(lt)
+    re := self.tensor_elem(rt)
     if le == none and re == none
         return none
     if not arith or not ["+", "-", "*", "/"].contains(sym)

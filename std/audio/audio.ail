@@ -3,7 +3,7 @@
 ## count. Everything here is pure; devices (playback, capture) come from
 ## `std.audio.device`, which needs a host program and is not written yet.
 
-pub error struct AudioError "{why}"
+pub error struct AudioError "{self.why}"
     pub why str
 
 pub struct Clip

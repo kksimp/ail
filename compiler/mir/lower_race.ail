@@ -17,13 +17,13 @@ fn Lower.race_here(self) bool
 
 ## The start of `main`: turn the detector on before anything runs.
 fn Lower.race_enter(mut self)
-    if race_here() and fname == "main"
+    if self.race_here() and fname == "main"
         call("rt.race_init", [], Ty.Unit)
 
 ## Before a raw-pointer access of `w` bytes at `addr` (san.race.1). A volatile
 ## access is a device register's, not shared memory.
 fn Lower.race_access(mut self, addr int, w int, is_write bool, volatile bool, pos ast.Pos)
-    if volatile or not race_here()
+    if volatile or not self.race_here()
         return
     site := str_value("{path}:{pos.line}:{pos.col} in {fname}")
     call(
@@ -36,7 +36,7 @@ fn Lower.race_access(mut self, addr int, w int, is_write bool, volatile bool, po
 ## when `rel`, and takes what other tasks published when `acq`. The publish
 ## comes first, so an acquirer that sees the new value also sees the clock.
 fn Lower.race_sync(mut self, cell int, acq bool, rel bool)
-    if not race_here()
+    if not self.race_here()
         return
     if rel
         call("rt.race_release", [cell], Ty.Unit)

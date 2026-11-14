@@ -4,8 +4,8 @@ use ast
 
 fn Lower.lower_assert_more(mut self, name str, args List[ast.Arg], pos ast.Pos) Val?
     if name == "assert_near"
-        return lower_assert_near(args, pos)
-    lower_assert_err(args, pos)
+        return self.lower_assert_near(args, pos)
+    self.lower_assert_err(args, pos)
 
 ## The call must fail; with a second argument, it must fail with that error.
 fn Lower.lower_assert_err(mut self, args List[ast.Arg], pos ast.Pos) Val?
@@ -32,7 +32,7 @@ fn Lower.lower_assert_err(mut self, args List[ast.Arg], pos ast.Pos) Val?
     raw := call("rt.err_take_value", [], Ty.Int)
     got := Val(id: op("copy", [raw], m.err), ty: m.err)
     mut same := -1
-    if k := bare_data_variant(args[1].value, m.err)
+    if k := self.bare_data_variant(args[1].value, m.err)
         # `E.V` for a variant with data: the kind alone is compared.
         en := enum_name(m.err) else ""
         same = op("eq", [tag_of(en, got.id), konst(k, Ty.Int)], Ty.Bool)
@@ -69,11 +69,11 @@ fn Lower.lower_assert_near(mut self, args List[ast.Arg], pos ast.Pos) Val?
     e := lower_value(args[2].value, Ty.Float)?
     d1 := binary(ast.BinOp.Sub, a, b, pos)
     ok1 := check_branch(binary(ast.BinOp.Le, d1, e, pos).id)
-    near_trap(a, b, e, pos)
+    self.near_trap(a, b, e, pos)
     cur = ok1
     d2 := binary(ast.BinOp.Sub, b, a, pos)
     ok2 := check_branch(binary(ast.BinOp.Le, d2, e, pos).id)
-    near_trap(a, b, e, pos)
+    self.near_trap(a, b, e, pos)
     cur = ok2
     Val(id: -1, ty: Ty.Unit)
 

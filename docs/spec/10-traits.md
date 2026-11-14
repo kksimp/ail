@@ -7,8 +7,8 @@ Chapter key: `trait`
 > supertraits, associated functions in traits, call resolution, `Self`,
 > operator traits, `any` dynamic dispatch, and the standard traits `Eq`,
 > `Ord`, `ToStr`, `Hash` and `Default`. Not yet designed: associated types
-> (OQ-037), the arithmetic and indexing operator trait names, and custom
-> hashing.
+> (OQ-037), the arithmetic and indexing operator trait names (`trait.op.1`), and custom
+> hashing beyond the `uses` form (`trait.hash.1`, ADR 0955).
 
 ## Methods
 
@@ -45,6 +45,9 @@ field and method of the receiver is in scope by its bare name: `x` means
 and those of the traits it implements; in a trait's default method, they are
 the trait's methods. `self.x` stays valid and is the canonical form: `ail fmt`
 writes `self.x` and `self.f(args)` for a bare member it can see (fmt.self).
+A bare member that is a shorthand argument of a constructor (`Pt(x, y)`) is
+written `Pt(x: self.x, y: self.y)`, so it stays named (type.struct.7); one whose
+constructor is declared in another file is left bare.
 Associated functions see no members by bare name. *(ADR 0141, ADR 1081)*
 
 **trait.method.7** — A parameter or local of a method MUST NOT have the name
@@ -75,6 +78,19 @@ an indented block of method signatures. *(ADR 0073)*
 **trait.decl.2** — A method in a trait MAY have a body (a default
 implementation). Implementations inherit it unless they define the method
 themselves. *(ADR 0081)*
+
+**trait.decl.3** — A trait has no type parameters in 0.1: `trait From[T]` is
+an error, reported once at the `[`; an `impl From[X] for T` of it and calls
+of its methods are not reported again. A generic function `fn f[T](x T)` or one trait per type takes
+its place (OQ-037). *(ADR 1111)*
+
+```ail error=trait.decl.3
+trait Convert[T]
+    fn convert(self) T
+
+fn main()
+    print(1)
+```
 
 **trait.impl.1** — A type implements a trait only through an
 `impl Trait for Type` block containing definitions of the trait's methods.

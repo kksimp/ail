@@ -20,7 +20,7 @@ fn Lower.share_std_aliases(mut self, srcs List[Source])
 ## Give each generated source (`gen:...`) the imports of the written files
 ## of its module.
 fn Lower.share_gen_aliases(mut self, srcs List[Source])
-    share_std_aliases(srcs)
+    self.share_std_aliases(srcs)
     for k in 0..srcs.len()
         if not srcs[k].path.starts_with("gen:")
             continue

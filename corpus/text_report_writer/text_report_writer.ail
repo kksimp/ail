@@ -17,7 +17,7 @@ fn data() List[Row]
     ]
 
 fn Row.total(self) int
-    q.sum()
+    self.q.sum()
 
 fn format_row(r Row, grand int) str
     share := r.total() * 100 / grand

@@ -72,9 +72,9 @@ fn Lower.is_uniq(self, t Ty) bool
     match t
         Struct(n) => uniq.types.contains(n)
         Enum(n) => uniq.types.contains(n)
-        Opt(inner) => is_uniq(inner)
-        List(e) => is_uniq(e)
-        Map(_, v) => is_uniq(v)
+        Opt(inner) => self.is_uniq(inner)
+        List(e) => self.is_uniq(e)
+        Map(_, v) => self.is_uniq(v)
         _ => false
 
 ## Whether any type is unique: when none is, nothing here costs anything.
@@ -95,13 +95,13 @@ fn Lower.uniq_flag(mut self, key str)
 ## released where its block ends. A borrowed binding (a parameter, a `for`
 ## variable) never is.
 fn Lower.uniq_declared(mut self, name str)
-    if not uniq_on() or facts.defers.len() == 0
+    if not self.uniq_on() or facts.defers.len() == 0
         return
     key := lookup(name) else return
     ty := var_ty[key]
-    if not is_uniq(ty)
+    if not self.is_uniq(ty)
         return
-    uniq_flag(key)
+    self.uniq_flag(key)
     # Declared in a scope whose block hasn't begun (`if x := e`): the block
     # about to begin releases it.
     if scopes.len() != uniq.depths[uniq.depths.len() - 1]
@@ -114,20 +114,20 @@ fn Lower.uniq_declared(mut self, name str)
 ## (own.uniq.7).
 fn Lower.uniq_params(mut self, f ast.FnDecl)
     uniq.pending = []
-    if not uniq_on()
+    if not self.uniq_on()
         return
     if recv := f.receiver
         if recv.moved
-            uniq_own_param("self")
+            self.uniq_own_param("self")
     for p in f.params
         if p.moved
-            uniq_own_param(p.name)
+            self.uniq_own_param(p.name)
 
 fn Lower.uniq_own_param(mut self, name str)
     key := lookup(name) else return
-    if not is_uniq(var_ty[key])
+    if not self.is_uniq(var_ty[key])
         return
-    uniq_flag(key)
+    self.uniq_flag(key)
     uniq.pending.push(key)
     # A moved parameter is not borrowed: the callee owns it.
     borrowed.remove(key)
@@ -147,21 +147,21 @@ fn Lower.uniq_take(mut self, e ast.Expr)
 fn Lower.uniq_recv(mut self, key str, recv ast.Expr?)
     if uniq.moves_self.contains(key)
         if e := recv
-            uniq_take(e)
+            self.uniq_take(e)
 
 ## `xs[i] = v` releases the element it replaces (own.uniq.8).
 fn Lower.uniq_drop_elem(mut self, l int, i int, elem Ty, pos ast.Pos)
-    if is_uniq(elem)
+    if self.is_uniq(elem)
         drop_call(checked("get", [l, i], bounds_site(pos), elem), elem)
 
 ## `x.f = v` releases the value the field held (own.uniq.7).
 fn Lower.uniq_drop_field(mut self, obj int, k int, t Ty)
-    if is_uniq(t)
+    if self.is_uniq(t)
         drop_call(load(obj, k, t), t)
 
 ## `m[k] = v` releases the value it replaces (own.uniq.8).
 fn Lower.uniq_drop_entry(mut self, m int, k int, vt Ty)
-    if not is_uniq(vt)
+    if not self.is_uniq(vt)
         return
     e := call("rt.map_find", [m, k], Ty.Int)
     yes := new_block()
@@ -176,24 +176,24 @@ fn Lower.uniq_drop_entry(mut self, m int, k int, vt Ty)
 
 ## `xs.clear()` releases the elements it removes, last first (own.uniq.8).
 fn Lower.uniq_clear(mut self, l Val)
-    if is_uniq(l.ty)
+    if self.is_uniq(l.ty)
         drop_call(l.id, l.ty)
 
 ## A unique value read from `e` where a copy would be made moves instead.
 fn Lower.uniq_move(mut self, e ast.Expr, v Val) int
-    uniq_take(e)
+    self.uniq_take(e)
     v.id
 
 ## A `move` argument gives its value away (own.move.2).
 fn Lower.uniq_arg(mut self, a ast.Arg)
     if a.moved
-        uniq_take(a.value)
+        self.uniq_take(a.value)
 
 ## The result of a statement that nothing uses is released at its end
 ## (own.uniq.7).
 fn Lower.uniq_discard(mut self, e ast.Expr, v Val?)
     x := v else return
-    if not is_uniq(x.ty) or x.id < 0 or is_place(e)
+    if not self.is_uniq(x.ty) or x.id < 0 or is_place(e)
         return
     drop_call(x.id, x.ty)
 
@@ -202,8 +202,8 @@ fn Lower.uniq_discard(mut self, e ast.Expr, v Val?)
 fn Lower.uniq_replace(mut self, key str)
     if uniq.flags.contains("{fname}|{key}")
         unwind_disarm(key)
-        uniq_release(key)
-        uniq_flag(key)
+        self.uniq_release(key)
+        self.uniq_flag(key)
 
 # ---- release ----
 

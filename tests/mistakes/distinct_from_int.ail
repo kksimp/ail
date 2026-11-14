@@ -1,0 +1,7 @@
+type Id = int
+
+fn show_id(id Id) str
+    "id {int(id)}"
+
+fn main()
+    print(show_id(1))

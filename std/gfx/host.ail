@@ -38,7 +38,7 @@ extern c "kernel32" fn GetTickCount64() int
 ## one must not start at the mapping's first byte. A multiple of every page size.
 GUARD := 16384
 
-pub error struct GfxError "{why}"
+pub error struct GfxError "{self.why}"
     pub why str
 
 ## The shared frame buffers: `count` of them, each `stride` bytes by `h` rows.
@@ -227,17 +227,17 @@ pub struct Loop[T gfx.Game]
 impl app.App for Loop[T gfx.Game]
     fn update(mut self, ev app.Event)
         if ev.kind == app.EventKind.Start
-            made := make_surface(w, h) else err
-                failed = "{err}"
+            made := make_surface(self.w, self.h) else err
+                self.failed = "{err}"
                 return
-            surf = made
-            out.push(surface_line(made))
+            self.surf = made
+            self.out.push(surface_line(made))
             step(mut self, 0.0)
         elif ev.kind == app.EventKind.Vsync
-            if not unlinked
-                if s := surf
+            if not self.unlinked
+                if s := self.surf
                     drop_file(s)
-                unlinked = true
+                self.unlinked = true
             dt := if ev.dx > 0.1 then 0.1 else ev.dx
             step(mut self, dt)
         elif ev.kind == app.EventKind.Key
@@ -246,23 +246,23 @@ impl app.App for Loop[T gfx.Game]
             or ev.kind == app.EventKind.Move
             or ev.kind == app.EventKind.Scroll
             or ev.kind == app.EventKind.Pad
-            pending.push(ev)
+            self.pending.push(ev)
 
     fn view(self) app.Node
-        app.canvas(CANVAS, w.to_float(), h.to_float(), [])
+        app.canvas(CANVAS, self.w.to_float(), self.h.to_float(), [])
 
     fn title(self) str
-        name
+        self.name
 
     fn shown(self) app.Node
-        app.canvas(CANVAS, w.to_float(), h.to_float(), ops_of(last))
+        app.canvas(CANVAS, self.w.to_float(), self.h.to_float(), ops_of(self.last))
 
     fn hover(self) bool
         true
 
     fn lines(mut self) List[str]
-        sent := out
-        out = []
+        sent := self.out
+        self.out = []
         sent
 
 ## One frame: this frame's input, `update`, `draw`, raster, and present.
@@ -349,8 +349,8 @@ fn ops_of(f gfx.Frame) List[app.Op]
 ## game's own values, and the last frame's command counts.
 impl attach.Observe for Loop[T gfx.Game + attach.Observe]
     fn observed(self) List[attach.Observed]
-        mut seen := game.observed()
-        st := gfx.stats(last)
+        mut seen := self.game.observed()
+        st := gfx.stats(self.last)
         seen.push(attach.observed("gfx.cmds", "int", "{st.cmds}"))
         seen.push(attach.observed("gfx.fills", "int", "{st.fills}"))
         seen.push(attach.observed("gfx.lines", "int", "{st.lines}"))
@@ -359,10 +359,10 @@ impl attach.Observe for Loop[T gfx.Game + attach.Observe]
 
     ## The game's `@tool` methods (attach.tool.3).
     fn tools(self) List[attach.Tool]
-        game.tools()
+        self.game.tools()
 
     fn call(mut self, ail_tool str, ail_args Json) str
-        game.call(ail_tool, ail_args)
+        self.game.call(ail_tool, ail_args)
 
 ## The loop for `g`, for `std.gfx.watch` (which runs it with the attach
 ## listener); `run` is the same without it.

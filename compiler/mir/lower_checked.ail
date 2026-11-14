@@ -35,7 +35,7 @@ fn Lower.int_checked(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         )
     code := checked_code(name)
     if code >= 0 and r.ty.is_sized()
-        return sized_checked(r, code, vs)
+        return self.sized_checked(r, code, vs)
     if code < 0 or r.ty != Ty.Int
         return none
     if (code == 5) != (vs.len() == 0) or vs.len() > 1

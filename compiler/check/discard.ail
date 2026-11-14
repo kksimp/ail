@@ -56,7 +56,7 @@ fn Checker.check_discards(self) List[Diag]
     mut out := List[Diag]()
     for k in discards.keys().sorted()
         d := discards[k]
-        if opaque_call(f, d.value)
+        if self.opaque_call(f, d.value)
             continue
         mut w := Walked(direct: Map[str, str](), calls: [])
         w.expr(prog, f, d.value)

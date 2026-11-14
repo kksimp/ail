@@ -6,6 +6,7 @@ fn main() !
     lines := body.lines()
     print("{path.base(url)}: {lines.len()} lines, {body.len()} characters")
     print(lines[0])
+
 fn fetch(url str) str ! net.NetError
     r := net.get(url)?
     if r.status != 200

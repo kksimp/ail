@@ -143,31 +143,31 @@ pub fn TextField.new(label str, text str) TextField
 
 pub fn TextField.on_event(mut self, ev ui.Event) Action
     k := plain_key(ev) else return Ignored
-    cs := text.chars()
+    cs := self.text.chars()
     if k == Enter
         return Submit
     if k == Escape
         return Cancel
     if k == Backspace
-        if cursor == 0
+        if self.cursor == 0
             return Ignored
-        text = "{cs[..cursor - 1].join("")}{cs[cursor..].join("")}"
-        cursor -= 1
+        self.text = "{cs[..self.cursor - 1].join("")}{cs[self.cursor..].join("")}"
+        self.cursor -= 1
     elif k == Delete
-        if cursor >= cs.len()
+        if self.cursor >= cs.len()
             return Ignored
-        text = "{cs[..cursor].join("")}{cs[cursor + 1..].join("")}"
+        self.text = "{cs[..self.cursor].join("")}{cs[self.cursor + 1..].join("")}"
     elif k == Left
-        cursor = (cursor - 1).max(0)
+        self.cursor = (self.cursor - 1).max(0)
     elif k == Right
-        cursor = (cursor + 1).min(cs.len())
+        self.cursor = (self.cursor + 1).min(cs.len())
     elif k == Home
-        cursor = 0
+        self.cursor = 0
     elif k == End
-        cursor = cs.len()
+        self.cursor = cs.len()
     elif t := k.text()
-        text = "{cs[..cursor].join("")}{t}{cs[cursor..].join("")}"
-        cursor += t.chars().len()
+        self.text = "{cs[..self.cursor].join("")}{t}{cs[self.cursor..].join("")}"
+        self.cursor += t.chars().len()
     else
         return Ignored
     Changed
@@ -176,7 +176,7 @@ pub fn TextField.render(self, r Rect, theme Map[str, int]) List[Run]
     [Run(
         col: r.col,
         row: r.row,
-        text: fit(" {label}{text}", r.cols),
+        text: fit(" {self.label}{self.text}", r.cols),
         fg: color(theme, "status_fg"),
         bg: color(theme, "select_bg"),
         bold: false,
@@ -184,11 +184,11 @@ pub fn TextField.render(self, r Rect, theme Map[str, int]) List[Run]
 
 ## The column of the caret on the screen.
 pub fn TextField.caret_col(self, r Rect) int
-    r.col + 1 + label.chars().len() + cursor
+    r.col + 1 + self.label.chars().len() + self.cursor
 
 pub fn TextField.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
-    w.set_cursor(caret_col(r), r.row, Bar)
+    draw_runs(mut w, self.render(r, theme))
+    w.set_cursor(self.caret_col(r), r.row, Bar)
 
 # ---- ListView --------------------------------------------------------------
 
@@ -208,23 +208,23 @@ pub fn ListView.new(items List[str]) ListView
 ## The items the filter keeps, in order.
 pub fn ListView.shown(self) List[str]
     mut out := List[str]()
-    for it in items
-        if fuzzy(it, filter)
+    for it in self.items
+        if fuzzy(it, self.filter)
             out.push(it)
     out
 
 ## The selected item, if any item is shown.
 pub fn ListView.chosen(self) str?
-    s := shown()
-    if selected < s.len()
-        return s[selected]
+    s := self.shown()
+    if self.selected < s.len()
+        return s[self.selected]
     none
 
 pub fn ListView.on_event(mut self, ev ui.Event, r Rect) Action
-    n := shown().len()
+    n := self.shown().len()
     if at := clicked(ev, r)
-        if top + at.row < n
-            selected = top + at.row
+        if self.top + at.row < n
+            self.selected = self.top + at.row
             return Submit
         return Ignored
     k := plain_key(ev) else return Ignored
@@ -233,41 +233,41 @@ pub fn ListView.on_event(mut self, ev ui.Event, r Rect) Action
     if k == Escape
         return Cancel
     if k == Up
-        selected = (selected - 1).max(0)
+        self.selected = (self.selected - 1).max(0)
     elif k == Down
-        selected = (selected + 1).min((n - 1).max(0))
+        self.selected = (self.selected + 1).min((n - 1).max(0))
     elif k == PageUp
-        selected = (selected - r.rows).max(0)
+        self.selected = (self.selected - r.rows).max(0)
     elif k == PageDown
-        selected = (selected + r.rows).min((n - 1).max(0))
+        self.selected = (self.selected + r.rows).min((n - 1).max(0))
     elif k == Backspace
-        cs := filter.chars()
+        cs := self.filter.chars()
         if cs.len() == 0
             return Ignored
-        filter = cs[..cs.len() - 1].join("")
-        selected = 0
+        self.filter = cs[..cs.len() - 1].join("")
+        self.selected = 0
     elif t := k.text()
-        filter = "{filter}{t}"
-        selected = 0
+        self.filter = "{self.filter}{t}"
+        self.selected = 0
     else
         return Ignored
-    scroll_to(r.rows)
+    self.scroll_to(r.rows)
     Changed
 
 ## Keeps the selection within the `rows` shown.
 pub fn ListView.scroll_to(mut self, rows int)
-    if selected < top
-        top = selected
-    if selected >= top + rows
-        top = selected - rows + 1
+    if self.selected < self.top
+        self.top = self.selected
+    if self.selected >= self.top + rows
+        self.top = self.selected - rows + 1
 
 pub fn ListView.render(self, r Rect, theme Map[str, int]) List[Run]
-    s := shown()
+    s := self.shown()
     mut out := List[Run]()
     for i in 0..r.rows
-        at := top + i
+        at := self.top + i
         mut bg := color(theme, "pane_bg")
-        if at == selected
+        if at == self.selected
             bg = color(theme, "select_bg")
         mut text := ""
         if at < s.len()
@@ -284,7 +284,7 @@ pub fn ListView.render(self, r Rect, theme Map[str, int]) List[Run]
         out[0] = Run(
             col: r.col,
             row: r.row,
-            text: fit(" {empty}", r.cols),
+            text: fit(" {self.empty}", r.cols),
             fg: color(theme, "gutter_fg"),
             bg: color(theme, "pane_bg"),
             bold: false,
@@ -292,7 +292,7 @@ pub fn ListView.render(self, r Rect, theme Map[str, int]) List[Run]
     out
 
 pub fn ListView.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Button ------------------------------------------------------------------
 
@@ -305,25 +305,25 @@ pub fn Button.on_event(mut self, ev ui.Event, r Rect) Action
     if _ := clicked(ev, r)
         return Submit
     k := plain_key(ev) else return Ignored
-    if focused and (k == Enter or k == Text(" "))
+    if self.focused and (k == Enter or k == Text(" "))
         return Submit
     Ignored
 
 pub fn Button.render(self, r Rect, theme Map[str, int]) List[Run]
     mut bg := color(theme, "line_bg")
-    if focused
+    if self.focused
         bg = color(theme, "status_bg")
     [Run(
         col: r.col,
         row: r.row,
-        text: fit("[ {label} ]", r.cols),
+        text: fit("[ {self.label} ]", r.cols),
         fg: color(theme, "status_fg"),
         bg: bg,
-        bold: focused,
+        bold: self.focused,
     )]
 
 pub fn Button.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Dialog ------------------------------------------------------------------
 
@@ -340,28 +340,28 @@ pub fn Dialog.new(message str, choices List[str]) Dialog
 fn Dialog.button_col(self, r Rect, i int) int
     mut c := r.col + 1
     for j in 0..i
-        c += choices[j].chars().len() + 5
+        c += self.choices[j].chars().len() + 5
     c
 
 pub fn Dialog.on_event(mut self, ev ui.Event, r Rect) Action
     if at := clicked(ev, r)
         if at.row == r.rows - 1
-            for i in 0..choices.len()
-                c := button_col(r, i) - r.col
-                if at.col >= c and at.col < c + choices[i].chars().len() + 4
-                    selected = i
+            for i in 0..self.choices.len()
+                c := self.button_col(r, i) - r.col
+                if at.col >= c and at.col < c + self.choices[i].chars().len() + 4
+                    self.selected = i
                     return Submit
         return Ignored
     k := plain_key(ev) else return Ignored
-    n := choices.len()
+    n := self.choices.len()
     if k == Enter
         return Submit
     if k == Escape
         return Cancel
     if k == Left
-        selected = (selected + n - 1) % n
+        self.selected = (self.selected + n - 1) % n
     elif k == Right or k == Tab
-        selected = (selected + 1) % n
+        self.selected = (self.selected + 1) % n
     else
         return Ignored
     Changed
@@ -378,7 +378,7 @@ pub fn Dialog.render(self, r Rect, theme Map[str, int]) List[Run]
             bg: bg,
             bold: false,
         ))
-    lines := message.split("\n")
+    lines := self.message.split("\n")
     for i in 0..lines.len().min((r.rows - 2).max(0))
         out.push(Run(
             col: r.col + 1,
@@ -388,13 +388,13 @@ pub fn Dialog.render(self, r Rect, theme Map[str, int]) List[Run]
             bg: bg,
             bold: false,
         ))
-    for i in 0..choices.len()
-        b := Button(label: choices[i], focused: i == selected)
+    for i in 0..self.choices.len()
+        b := Button(label: self.choices[i], focused: i == self.selected)
         for run in b.render(
             Rect(
-                col: button_col(r, i),
+                col: self.button_col(r, i),
                 row: r.row + r.rows - 1,
-                cols: choices[i].chars().len() + 4,
+                cols: self.choices[i].chars().len() + 4,
                 rows: 1,
             ),
             theme,
@@ -403,7 +403,7 @@ pub fn Dialog.render(self, r Rect, theme Map[str, int]) List[Run]
     out
 
 pub fn Dialog.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Pane ----------------------------------------------------------------------
 
@@ -418,20 +418,20 @@ pub fn Pane.new(lines List[str]) Pane
 
 ## Moves the cursor to the last line, scrolled into the `rows` shown.
 pub fn Pane.to_end(mut self, rows int)
-    cursor = (lines.len() - 1).max(0)
-    top = (lines.len() - rows).max(0)
+    self.cursor = (self.lines.len() - 1).max(0)
+    self.top = (self.lines.len() - rows).max(0)
 
 pub fn Pane.on_event(mut self, ev ui.Event, r Rect) Action
-    last := (lines.len() - 1).max(0)
+    last := (self.lines.len() - 1).max(0)
     lines_scrolled := match ev
         Scroll(n) => n
         Key(_, _, _, _) | Resize(_, _) | Close | Mouse(_, _, _, _) => 0
     if lines_scrolled != 0
-        top = (top + lines_scrolled).max(0).min((lines.len() - r.rows).max(0))
+        self.top = (self.top + lines_scrolled).max(0).min((self.lines.len() - r.rows).max(0))
         return Changed
     if at := clicked(ev, r)
-        if top + at.row < lines.len()
-            cursor = top + at.row
+        if self.top + at.row < self.lines.len()
+            self.cursor = self.top + at.row
             return Submit
         return Ignored
     k := plain_key(ev) else return Ignored
@@ -440,35 +440,35 @@ pub fn Pane.on_event(mut self, ev ui.Event, r Rect) Action
     if k == Escape
         return Cancel
     if k == Up
-        cursor = (cursor - 1).max(0)
+        self.cursor = (self.cursor - 1).max(0)
     elif k == Down
-        cursor = (cursor + 1).min(last)
+        self.cursor = (self.cursor + 1).min(last)
     elif k == PageUp
-        cursor = (cursor - r.rows).max(0)
+        self.cursor = (self.cursor - r.rows).max(0)
     elif k == PageDown
-        cursor = (cursor + r.rows).min(last)
+        self.cursor = (self.cursor + r.rows).min(last)
     elif k == Home
-        cursor = 0
+        self.cursor = 0
     elif k == End
-        cursor = last
+        self.cursor = last
     else
         return Ignored
-    if cursor < top
-        top = cursor
-    if cursor >= top + r.rows
-        top = cursor - r.rows + 1
+    if self.cursor < self.top
+        self.top = self.cursor
+    if self.cursor >= self.top + r.rows
+        self.top = self.cursor - r.rows + 1
     Changed
 
 pub fn Pane.render(self, r Rect, theme Map[str, int]) List[Run]
     mut out := List[Run]()
     for i in 0..r.rows
-        at := top + i
+        at := self.top + i
         mut bg := color(theme, "pane_bg")
-        if at == cursor
+        if at == self.cursor
             bg = color(theme, "line_bg")
         mut text := ""
-        if at < lines.len()
-            text = lines[at]
+        if at < self.lines.len()
+            text = self.lines[at]
         out.push(Run(
             col: r.col,
             row: r.row + i,
@@ -480,7 +480,7 @@ pub fn Pane.render(self, r Rect, theme Map[str, int]) List[Run]
     out
 
 pub fn Pane.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Tree ----------------------------------------------------------------------
 
@@ -501,29 +501,29 @@ pub fn Tree.new(nodes List[Node]) Tree
 
 ## Whether node `i` has children.
 pub fn Tree.has_children(self, i int) bool
-    i + 1 < nodes.len() and nodes[i + 1].depth > nodes[i].depth
+    i + 1 < self.nodes.len() and self.nodes[i + 1].depth > self.nodes[i].depth
 
 ## The indices of the nodes not hidden under a closed node.
 pub fn Tree.visible(self) List[int]
     mut out := List[int]()
     mut hide_below := -1
-    for i in 0..nodes.len()
-        if hide_below >= 0 and nodes[i].depth > hide_below
+    for i in 0..self.nodes.len()
+        if hide_below >= 0 and self.nodes[i].depth > hide_below
             continue
         hide_below = -1
         out.push(i)
-        if not nodes[i].open and has_children(i)
-            hide_below = nodes[i].depth
+        if not self.nodes[i].open and self.has_children(i)
+            hide_below = self.nodes[i].depth
     out
 
 pub fn Tree.on_event(mut self, ev ui.Event, r Rect) Action
-    vis := visible()
-    at := vis.index_of(selected) else 0
+    vis := self.visible()
+    at := vis.index_of(self.selected) else 0
     if hit := clicked(ev, r)
         if hit.row < vis.len()
-            selected = vis[hit.row]
-            if has_children(selected)
-                nodes[selected].open = not nodes[selected].open
+            self.selected = vis[hit.row]
+            if self.has_children(self.selected)
+                self.nodes[self.selected].open = not self.nodes[self.selected].open
                 return Changed
             return Submit
         return Ignored
@@ -531,36 +531,36 @@ pub fn Tree.on_event(mut self, ev ui.Event, r Rect) Action
     if k == Escape
         return Cancel
     if k == Up
-        selected = vis[(at - 1).max(0)]
+        self.selected = vis[(at - 1).max(0)]
     elif k == Down
-        selected = vis[(at + 1).min(vis.len() - 1)]
-    elif k == Right and has_children(selected)
-        nodes[selected].open = true
-    elif k == Left and has_children(selected) and nodes[selected].open
-        nodes[selected].open = false
+        self.selected = vis[(at + 1).min(vis.len() - 1)]
+    elif k == Right and self.has_children(self.selected)
+        self.nodes[self.selected].open = true
+    elif k == Left and self.has_children(self.selected) and self.nodes[self.selected].open
+        self.nodes[self.selected].open = false
     elif k == Enter
-        if not has_children(selected)
+        if not self.has_children(self.selected)
             return Submit
-        nodes[selected].open = not nodes[selected].open
+        self.nodes[self.selected].open = not self.nodes[self.selected].open
     else
         return Ignored
     Changed
 
 pub fn Tree.render(self, r Rect, theme Map[str, int]) List[Run]
-    vis := visible()
+    vis := self.visible()
     mut out := List[Run]()
     for i in 0..r.rows
         mut text := ""
         mut bg := color(theme, "pane_bg")
         if i < vis.len()
-            n := nodes[vis[i]]
+            n := self.nodes[vis[i]]
             mut mark := "  "
-            if has_children(vis[i])
+            if self.has_children(vis[i])
                 mark = "+ "
                 if n.open
                     mark = "- "
             text = "{" ".repeat(n.depth * 2)}{mark}{n.label}"
-            if vis[i] == selected
+            if vis[i] == self.selected
                 bg = color(theme, "select_bg")
         out.push(Run(
             col: r.col,
@@ -573,25 +573,30 @@ pub fn Tree.render(self, r Rect, theme Map[str, int]) List[Run]
     out
 
 pub fn Tree.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Layout --------------------------------------------------------------------
 
 ## The first `n` columns of `r`, clamped to its width (std.ui.25).
 pub fn Rect.left(self, n int) Rect
-    Rect(col: col, row: row, cols: n.max(0).min(cols), rows: rows)
+    Rect(col: self.col, row: self.row, cols: n.max(0).min(self.cols), rows: self.rows)
 
 ## The first `n` rows of `r`, clamped to its height (std.ui.25).
 pub fn Rect.top(self, n int) Rect
-    Rect(col: col, row: row, cols: cols, rows: n.max(0).min(rows))
+    Rect(col: self.col, row: self.row, cols: self.cols, rows: n.max(0).min(self.rows))
 
 ## `r` shrunk by `n` cells on every side, never below zero (std.ui.25).
 pub fn Rect.inset(self, n int) Rect
-    Rect(col: col + n, row: row + n, cols: (cols - 2 * n).max(0), rows: (rows - 2 * n).max(0))
+    Rect(
+        col: self.col + n,
+        row: self.row + n,
+        cols: (self.cols - 2 * n).max(0),
+        rows: (self.rows - 2 * n).max(0),
+    )
 
 ## Whether the cell (`c`, `rw`) lies inside `r`.
 pub fn Rect.has(self, c int, rw int) bool
-    c >= col and c < col + cols and rw >= row and rw < row + rows
+    c >= self.col and c < self.col + self.cols and rw >= self.row and rw < self.row + self.rows
 
 ## The sizes in `sizes` made to fill `total`: a size of 0 or more is fixed,
 ## and -1 shares what is left evenly (the first ones take any remainder).
@@ -620,18 +625,18 @@ fn share(sizes List[int], total int) List[int]
 ## Splits `r` into side-by-side rectangles of the given widths (std.ui.25).
 pub fn Rect.cols_of(self, sizes List[int]) List[Rect]
     mut out := List[Rect]()
-    mut c := col
-    for w in share(sizes, cols)
-        out.push(Rect(col: c, row: row, cols: w, rows: rows))
+    mut c := self.col
+    for w in share(sizes, self.cols)
+        out.push(Rect(col: c, row: self.row, cols: w, rows: self.rows))
         c += w
     out
 
 ## Splits `r` into stacked rectangles of the given heights (std.ui.25).
 pub fn Rect.rows_of(self, sizes List[int]) List[Rect]
     mut out := List[Rect]()
-    mut y := row
-    for h in share(sizes, rows)
-        out.push(Rect(col: col, row: y, cols: cols, rows: h))
+    mut y := self.row
+    for h in share(sizes, self.rows)
+        out.push(Rect(col: self.col, row: y, cols: self.cols, rows: h))
         y += h
     out
 
@@ -646,14 +651,14 @@ pub fn Label.render(self, r Rect, theme Map[str, int]) List[Run]
     [Run(
         col: r.col,
         row: r.row,
-        text: fit(text, r.cols),
+        text: fit(self.text, r.cols),
         fg: color(theme, "fg"),
         bg: color(theme, "bg"),
-        bold: bold,
+        bold: self.bold,
     )]
 
 pub fn Label.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Checkbox ----------------------------------------------------------------------
 
@@ -666,32 +671,32 @@ pub struct Checkbox
 
 pub fn Checkbox.on_event(mut self, ev ui.Event, r Rect) Action
     if _ := clicked(ev, r)
-        checked = not checked
+        self.checked = not self.checked
         return Changed
     k := plain_key(ev) else return Ignored
-    if focused and (k == Text(" ") or k == Enter)
-        checked = not checked
+    if self.focused and (k == Text(" ") or k == Enter)
+        self.checked = not self.checked
         return Changed
     Ignored
 
 pub fn Checkbox.render(self, r Rect, theme Map[str, int]) List[Run]
     mut mark := " "
-    if checked
+    if self.checked
         mark = "x"
     mut bg := color(theme, "bg")
-    if focused
+    if self.focused
         bg = color(theme, "select_bg")
     [Run(
         col: r.col,
         row: r.row,
-        text: fit("[{mark}] {label}", r.cols),
+        text: fit("[{mark}] {self.label}", r.cols),
         fg: color(theme, "fg"),
         bg: bg,
-        bold: focused,
+        bold: self.focused,
     )]
 
 pub fn Checkbox.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- RadioGroup --------------------------------------------------------------------
 
@@ -705,24 +710,24 @@ pub fn RadioGroup.new(choices List[str]) RadioGroup
     RadioGroup(choices: choices, selected: 0)
 
 pub fn RadioGroup.chosen(self) str?
-    if selected < 0 or selected >= choices.len()
+    if self.selected < 0 or self.selected >= self.choices.len()
         return none
-    choices[selected]
+    self.choices[self.selected]
 
 pub fn RadioGroup.on_event(mut self, ev ui.Event, r Rect) Action
     if hit := clicked(ev, r)
-        if hit.row < choices.len() and hit.row != selected
-            selected = hit.row
+        if hit.row < self.choices.len() and hit.row != self.selected
+            self.selected = hit.row
             return Changed
         return Ignored
     k := plain_key(ev) else return Ignored
     if k == Enter
         return Submit
-    if k == Up and selected > 0
-        selected -= 1
+    if k == Up and self.selected > 0
+        self.selected -= 1
         return Changed
-    if k == Down and selected < choices.len() - 1
-        selected += 1
+    if k == Down and self.selected < self.choices.len() - 1
+        self.selected += 1
         return Changed
     Ignored
 
@@ -731,12 +736,12 @@ pub fn RadioGroup.render(self, r Rect, theme Map[str, int]) List[Run]
     for i in 0..r.rows
         mut text := ""
         mut on := false
-        if i < choices.len()
-            on = i == selected
+        if i < self.choices.len()
+            on = i == self.selected
             mut mark := " "
             if on
                 mark = "*"
-            text = "({mark}) {choices[i]}"
+            text = "({mark}) {self.choices[i]}"
         mut bg := color(theme, "bg")
         if on
             bg = color(theme, "select_bg")
@@ -751,7 +756,7 @@ pub fn RadioGroup.render(self, r Rect, theme Map[str, int]) List[Run]
     out
 
 pub fn RadioGroup.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- ProgressBar -------------------------------------------------------------------
 
@@ -762,14 +767,14 @@ pub struct ProgressBar
 
 ## The percentage done, 0 to 100; an empty total counts as 0.
 pub fn ProgressBar.percent(self) int
-    if total <= 0
+    if self.total <= 0
         return 0
-    (done.max(0).min(total) * 100) / total
+    (self.done.max(0).min(self.total) * 100) / self.total
 
 pub fn ProgressBar.render(self, r Rect, theme Map[str, int]) List[Run]
-    label := " {percent()}%"
+    label := " {self.percent()}%"
     inner := (r.cols - 2 - label.chars().len()).max(0)
-    full := inner * percent() / 100
+    full := inner * self.percent() / 100
     bar := "[{"#".repeat(full)}{" ".repeat(inner - full)}]{label}"
     [Run(
         col: r.col,
@@ -781,7 +786,7 @@ pub fn ProgressBar.render(self, r Rect, theme Map[str, int]) List[Run]
     )]
 
 pub fn ProgressBar.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))
 
 # ---- Tabs --------------------------------------------------------------------------
 
@@ -798,37 +803,38 @@ pub fn Tabs.new(titles List[str]) Tabs
 fn Tabs.title_col(self, i int) int
     mut c := 0
     for j in 0..i
-        c += titles[j].chars().len() + 3
+        c += self.titles[j].chars().len() + 3
     c
 
 pub fn Tabs.on_event(mut self, ev ui.Event, r Rect) Action
     if hit := clicked(ev, r)
         if hit.row != 0
             return Ignored
-        for i in 0..titles.len()
-            if hit.col >= title_col(i) and hit.col < title_col(i) + titles[i].chars().len() + 2
-                if i == selected
+        for i in 0..self.titles.len()
+            if hit.col >= self.title_col(i)
+                and hit.col < self.title_col(i) + self.titles[i].chars().len() + 2
+                if i == self.selected
                     return Ignored
-                selected = i
+                self.selected = i
                 return Changed
         return Ignored
     k := plain_key(ev) else return Ignored
     if k == Right or k == Tab
-        if selected < titles.len() - 1
-            selected += 1
+        if self.selected < self.titles.len() - 1
+            self.selected += 1
             return Changed
         return Ignored
-    if k == Left and selected > 0
-        selected -= 1
+    if k == Left and self.selected > 0
+        self.selected -= 1
         return Changed
     Ignored
 
 pub fn Tabs.render(self, r Rect, theme Map[str, int]) List[Run]
     mut out := List[Run]()
     mut used := 0
-    for i in 0..titles.len()
-        text := " {titles[i]} "
-        on := i == selected
+    for i in 0..self.titles.len()
+        text := " {self.titles[i]} "
+        on := i == self.selected
         mut bg := color(theme, "line_bg")
         if on
             bg = color(theme, "status_bg")
@@ -866,4 +872,4 @@ pub fn Tabs.render(self, r Rect, theme Map[str, int]) List[Run]
     out
 
 pub fn Tabs.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
-    draw_runs(mut w, render(r, theme))
+    draw_runs(mut w, self.render(r, theme))

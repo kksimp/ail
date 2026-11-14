@@ -6,7 +6,7 @@
 ## from tracks and frames, for tests and for programs that make media.
 
 ## Why the bytes could not be read (std.webm.1).
-pub error struct WebmError "webm: {why}"
+pub error struct WebmError "webm: {self.why}"
     pub why str
 
 ## One track of the file (std.webm.2). `kind` is "video", "audio" or

@@ -241,28 +241,28 @@ pub struct Inst
 ## The elements `ldx`/`stx` add to their index (carried in `fimm`, which no
 ## integer instruction uses, so that `Inst` keeps its fields; ADR 0625).
 pub fn Inst.elem_off(self) int
-    fimm.to_int()
+    self.fimm.to_int()
 
 ## The operands of an instruction go through these accessors, so that how
 ## `Inst` stores them can change (see docs/design/compact-inst.md).
 pub fn Inst.arg(self, k int) int
     if k == 0
-        return a
+        return self.a
     if k == 1
-        return b
+        return self.b
     if k == 2
-        return c
-    ms := more else return -1
+        return self.c
+    ms := self.more else return -1
     ms[k - 3]
 
 pub fn Inst.argc(self) int
-    n
+    self.n
 
 pub fn Inst.operands(self) List[int]
-    [self.arg(k) for k in 0..n]
+    [self.arg(k) for k in 0..self.n]
 
 pub fn Inst.with_args(self, xs List[int]) Inst
-    packed(dst, op, xs, imm, fimm, name, site)
+    packed(self.dst, self.op, xs, self.imm, self.fimm, self.name, self.site)
 
 pub fn Inst.with_arg(self, k int, v int) Inst
     mut r := self
@@ -273,7 +273,7 @@ pub fn Inst.with_arg(self, k int, v int) Inst
     elif k == 2
         r.c = v
     else
-        mut ms := more else return self
+        mut ms := self.more else return self
         ms[k - 3] = v
         r.more = ms
     r
@@ -358,12 +358,12 @@ pub fn unreachable_term() Term
 ## The values a terminator reads, including edge arguments.
 pub fn Term.uses(self) List[int]
     mut out := List[int]()
-    if cond >= 0
-        out.push(cond)
-    for a in args
+    if self.cond >= 0
+        out.push(self.cond)
+    for a in self.args
         out.extend(a)
-    if value >= 0
-        out.push(value)
+    if self.value >= 0
+        out.push(self.value)
     out
 
 pub struct Block
@@ -423,14 +423,14 @@ pub struct Module
 
 ## Whether an instruction may be removed when its value is unused.
 pub fn Inst.is_pure(self) bool
-    match op
+    match self.op
         "const" | "fconst" | "str" | "fnaddr" | "fadd" | "fsub" | "fmul" | "fdiv" => true
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
         "band" | "bor" | "bxor" | "bnot" => true
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vsplat" | "vpack" | "vlane" | "vhadd" => true
-        "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => site < 0
+        "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => self.site < 0
         _ => false
 
 ## A call's position as one number (trace.frame.1): file 44.., line 20..43,

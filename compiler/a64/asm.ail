@@ -44,17 +44,17 @@ pub fn new_asm() Asm
 
 fn Asm.word(mut self, w int)
     for i in 0..4
-        code.push(w.shr(8 * i).bit_and(255).to_u8())
+        self.code.push(w.shr(8 * i).bit_and(255).to_u8())
 
 pub fn Asm.here(self) int
-    code.len()
+    self.code.len()
 
 pub fn Asm.label(mut self) int
-    labels.push(-1)
-    labels.len() - 1
+    self.labels.push(-1)
+    self.labels.len() - 1
 
 pub fn Asm.bind(mut self, l int)
-    labels[l] = code.len()
+    self.labels[l] = self.code.len()
 
 pub fn fits_imm12(v int) bool
     v >= 0 and v < 4096
@@ -66,9 +66,9 @@ pub fn Asm.mov_rr(mut self, d int, m int)
     if d == m
         return
     if d == SP or m == SP
-        word(2432696320 + m * 32 + d)
+        self.word(2432696320 + m * 32 + d)
         return
-    word(2852127712 + m * 65536 + d)
+    self.word(2852127712 + m * 65536 + d)
 
 ## Any 64-bit constant: `movz`/`movn` then `movk` for each other 16-bit part.
 pub fn Asm.mov_ri(mut self, d int, v int)
@@ -89,24 +89,24 @@ pub fn Asm.mov_ri(mut self, d int, v int)
             if parts[k] != 65535 and first < 0
                 first = k
         if first < 0
-            word(2457862144 + d)
+            self.word(2457862144 + d)
             return
-        word(2457862144 + first * 2097152 + parts[first].bit_xor(65535) * 32 + d)
+        self.word(2457862144 + first * 2097152 + parts[first].bit_xor(65535) * 32 + d)
         for k in first + 1..4
             if parts[k] != 65535
-                word(4068474880 + k * 2097152 + parts[k] * 32 + d)
+                self.word(4068474880 + k * 2097152 + parts[k] * 32 + d)
         return
     mut first := -1
     for k in 0..4
         if parts[k] != 0 and first < 0
             first = k
     if first < 0
-        word(3531603968 + d)
+        self.word(3531603968 + d)
         return
-    word(3531603968 + first * 2097152 + parts[first] * 32 + d)
+    self.word(3531603968 + first * 2097152 + parts[first] * 32 + d)
     for k in first + 1..4
         if parts[k] != 0
-            word(4068474880 + k * 2097152 + parts[k] * 32 + d)
+            self.word(4068474880 + k * 2097152 + parts[k] * 32 + d)
 
 # ---- integer arithmetic ----
 
@@ -124,7 +124,7 @@ pub fn Asm.alu_rr(mut self, op str, d int, n int, m int)
         "orr" => 2852126720
         "ands" => 3925868544
         _ => 3388997632
-    word(rrr(base, d, n, m))
+    self.word(rrr(base, d, n, m))
 
 ## `add`, `sub`, `adds`, `subs` with a 12-bit unsigned immediate.
 pub fn Asm.alu_ri(mut self, op str, d int, n int, imm int)
@@ -140,86 +140,86 @@ pub fn Asm.alu_ri(mut self, op str, d int, n int, imm int)
         # shifted form (`lsl #12`), the low part is a second instruction.
         if op != "add" and op != "sub"
             unreachable("a64: the {op} immediate {imm} does not fit in 12 bits")
-        word(base + 4194304 + imm / 4096 * 1024 + n * 32 + d)
+        self.word(base + 4194304 + imm / 4096 * 1024 + n * 32 + d)
         if imm % 4096 != 0
-            word(base + imm % 4096 * 1024 + d * 32 + d)
+            self.word(base + imm % 4096 * 1024 + d * 32 + d)
         return
-    word(base + imm * 1024 + n * 32 + d)
+    self.word(base + imm * 1024 + n * 32 + d)
 
 pub fn Asm.cmp_rr(mut self, n int, m int)
-    alu_rr("subs", XZR, n, m)
+    self.alu_rr("subs", XZR, n, m)
 
 ## `cmp sp, xm` (`subs xzr, sp, xm, uxtx`): register 31 as the first
 ## operand is `sp` only in the extended-register form.
 pub fn Asm.cmp_sp(mut self, m int)
-    word(3944768511 + m * 65536)
+    self.word(3944768511 + m * 65536)
 
 ## `tst n, m`: the flags of `n & m`.
 pub fn Asm.tst_rr(mut self, n int, m int)
-    alu_rr("ands", XZR, n, m)
+    self.alu_rr("ands", XZR, n, m)
 
 pub fn Asm.cmp_ri(mut self, n int, imm int)
-    alu_ri("subs", XZR, n, imm)
+    self.alu_ri("subs", XZR, n, imm)
 
 ## `cmn xn, #imm`: compare with `-imm`.
 pub fn Asm.cmn_ri(mut self, n int, imm int)
-    alu_ri("adds", XZR, n, imm)
+    self.alu_ri("adds", XZR, n, imm)
 
 ## `cmp n, m, asr #63`: whether `n` is the sign of `m` (the high half of a
 ## product that didn't overflow).
 pub fn Asm.cmp_sign(mut self, n int, m int)
-    word(rrr(3951034368, XZR, n, m) + 63 * 1024)
+    self.word(rrr(3951034368, XZR, n, m) + 63 * 1024)
 
 ## `eor d, n, #1`.
 pub fn Asm.eor1(mut self, d int, n int)
-    word(3527409664 + n * 32 + d)
+    self.word(3527409664 + n * 32 + d)
 
 ## `cbz n, l` and `cbnz n, l`.
 pub fn Asm.cbz(mut self, n int, l int)
-    fixups.push(Fixup(at: code.len(), kind: "b19", label: l, sym: ""))
-    word(3019898880 + n)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "b19", label: l, sym: ""))
+    self.word(3019898880 + n)
 
 pub fn Asm.mul(mut self, d int, n int, m int)
-    word(rrr(2600468480, d, n, m) + 31 * 1024)
+    self.word(rrr(2600468480, d, n, m) + 31 * 1024)
 
 pub fn Asm.smulh(mut self, d int, n int, m int)
-    word(rrr(2604662784, d, n, m) + 31 * 1024)
+    self.word(rrr(2604662784, d, n, m) + 31 * 1024)
 
 ## `msub d, n, m, a`: a - n * m.
 pub fn Asm.msub(mut self, d int, n int, m int, a int)
-    word(rrr(2600501248, d, n, m) + a * 1024)
+    self.word(rrr(2600501248, d, n, m) + a * 1024)
 
 pub fn Asm.sdiv(mut self, d int, n int, m int)
-    word(rrr(2596277248, d, n, m))
+    self.word(rrr(2596277248, d, n, m))
 
 ## `lslv`, `asrv` (shift by a register, count modulo 64).
 pub fn Asm.shift_rr(mut self, op str, d int, n int, m int)
     base := if op == "lsl" then 2596282368 else 2596284416
-    word(rrr(base, d, n, m))
+    self.word(rrr(base, d, n, m))
 
 ## `lsl`, `lsr`, `asr` by a constant 0-63.
 pub fn Asm.shift_ri(mut self, op str, d int, n int, k int)
     if op == "lsl"
         immr := (64 - k) % 64
-        word(3544186880 + immr * 65536 + (63 - k) * 1024 + n * 32 + d)
+        self.word(3544186880 + immr * 65536 + (63 - k) * 1024 + n * 32 + d)
     elif op == "lsr"
-        word(3544186880 + k * 65536 + 63 * 1024 + n * 32 + d)
+        self.word(3544186880 + k * 65536 + 63 * 1024 + n * 32 + d)
     else
-        word(2470445056 + k * 65536 + 63 * 1024 + n * 32 + d)
+        self.word(2470445056 + k * 65536 + 63 * 1024 + n * 32 + d)
 
 pub fn Asm.neg(mut self, d int, m int)
-    alu_rr("sub", d, XZR, m)
+    self.alu_rr("sub", d, XZR, m)
 
 pub fn Asm.negs(mut self, d int, m int)
-    alu_rr("subs", d, XZR, m)
+    self.alu_rr("subs", d, XZR, m)
 
 ## `mvn d, m` (`orn d, xzr, m`).
 pub fn Asm.mvn(mut self, d int, m int)
-    word(rrr(2854223872, d, XZR, m))
+    self.word(rrr(2854223872, d, XZR, m))
 
 ## `cset d, cond` (`csinc d, xzr, xzr, !cond`).
 pub fn Asm.cset(mut self, d int, cond int)
-    word(2594113504 + invert(cond) * 4096 + d)
+    self.word(2594113504 + invert(cond) * 4096 + d)
 
 pub fn invert(cond int) int
     cond.bit_xor(1)
@@ -230,146 +230,146 @@ pub fn invert(cond int) int
 ## offset is a multiple of 8 in range, else the unscaled 9-bit form; `off`
 ## must be in one of them.
 pub fn Asm.ldr(mut self, t int, n int, off int)
-    mem(4181721088, 4164943872, t, n, off)
+    self.mem(4181721088, 4164943872, t, n, off)
 
 pub fn Asm.str(mut self, t int, n int, off int)
-    mem(4177526784, 4160749568, t, n, off)
+    self.mem(4177526784, 4160749568, t, n, off)
 
 pub fn Asm.ldr_d(mut self, t int, n int, off int)
-    mem(4248829952, 4232052736, t, n, off)
+    self.mem(4248829952, 4232052736, t, n, off)
 
 pub fn Asm.str_d(mut self, t int, n int, off int)
-    mem(4244635648, 4227858432, t, n, off)
+    self.mem(4244635648, 4227858432, t, n, off)
 
 ## `ldr st, [n, #off]` and `str st, [n, #off]` of one single: scaled 12-bit
 ## when `off` is a multiple of 4 in range, else the unscaled 9-bit form.
 pub fn Asm.ldr_s(mut self, t int, n int, off int)
-    mem4(3175088128, 3158310912, t, n, off)
+    self.mem4(3175088128, 3158310912, t, n, off)
 
 pub fn Asm.str_s(mut self, t int, n int, off int)
-    mem4(3170893824, 3154116608, t, n, off)
+    self.mem4(3170893824, 3154116608, t, n, off)
 
 fn Asm.mem4(mut self, scaled int, unscaled int, t int, n int, off int)
     if off >= 0 and off % 4 == 0 and off < 16384
-        word(scaled + off / 4 * 1024 + n * 32 + t)
+        self.word(scaled + off / 4 * 1024 + n * 32 + t)
         return
     if off < -256 or off > 255
         unreachable("a64: offset {off} out of range")
-    word(unscaled + off.bit_and(511) * 4096 + n * 32 + t)
+    self.word(unscaled + off.bit_and(511) * 4096 + n * 32 + t)
 
 fn Asm.mem(mut self, scaled int, unscaled int, t int, n int, off int)
     if off >= 0 and off % 8 == 0 and off < 32768
-        word(scaled + off / 8 * 1024 + n * 32 + t)
+        self.word(scaled + off / 8 * 1024 + n * 32 + t)
         return
     if off < -256 or off > 255
         unreachable("a64: offset {off} out of range")
-    word(unscaled + off.bit_and(511) * 4096 + n * 32 + t)
+    self.word(unscaled + off.bit_and(511) * 4096 + n * 32 + t)
 
 ## `ldr`/`str t, [n, m, lsl #3]`.
 pub fn Asm.ldr_idx(mut self, t int, n int, m int)
-    word(rrr(4167071744, t, n, m))
+    self.word(rrr(4167071744, t, n, m))
 
 pub fn Asm.str_idx(mut self, t int, n int, m int)
-    word(rrr(4162877440, t, n, m))
+    self.word(rrr(4162877440, t, n, m))
 
 pub fn Asm.ldr_d_idx(mut self, t int, n int, m int)
-    word(rrr(4234180608, t, n, m))
+    self.word(rrr(4234180608, t, n, m))
 
 pub fn Asm.str_d_idx(mut self, t int, n int, m int)
-    word(rrr(4229986304, t, n, m))
+    self.word(rrr(4229986304, t, n, m))
 
 pub fn Asm.ldrb(mut self, t int, n int)
-    word(960495616 + n * 32 + t)
+    self.word(960495616 + n * 32 + t)
 
 pub fn Asm.strb(mut self, t int, n int)
-    word(956301312 + n * 32 + t)
+    self.word(956301312 + n * 32 + t)
 
 ## `ldrh wt, [xn]`, `strh wt, [xn]`, `ldr wt, [xn]` and `str wt, [xn]` (the
 ## 32-bit forms, zero-extending on a load).
 pub fn Asm.ldrh(mut self, t int, n int)
-    word(2034237440 + n * 32 + t)
+    self.word(2034237440 + n * 32 + t)
 
 pub fn Asm.strh(mut self, t int, n int)
-    word(2030043136 + n * 32 + t)
+    self.word(2030043136 + n * 32 + t)
 
 pub fn Asm.ldr_w(mut self, t int, n int)
-    word(3107979264 + n * 32 + t)
+    self.word(3107979264 + n * 32 + t)
 
 pub fn Asm.str_w(mut self, t int, n int)
-    word(3103784960 + n * 32 + t)
+    self.word(3103784960 + n * 32 + t)
 
 ## `dmb ish` and `dsb sy`.
 pub fn Asm.dmb_ish(mut self)
-    word(3573758911)
+    self.word(3573758911)
 
 pub fn Asm.dsb_sy(mut self)
-    word(3573759903)
+    self.word(3573759903)
 
 ## `ldrb`/`strb wt, [xn, #k]` (k < 4096) and `[xn, xm]`.
 pub fn Asm.ldrb_off(mut self, t int, n int, k int)
-    word(960495616 + k * 1024 + n * 32 + t)
+    self.word(960495616 + k * 1024 + n * 32 + t)
 
 pub fn Asm.strb_off(mut self, t int, n int, k int)
-    word(956301312 + k * 1024 + n * 32 + t)
+    self.word(956301312 + k * 1024 + n * 32 + t)
 
 pub fn Asm.ldrb_idx(mut self, t int, n int, m int)
-    word(rrr(945842176, t, n, m))
+    self.word(rrr(945842176, t, n, m))
 
 pub fn Asm.strb_idx(mut self, t int, n int, m int)
-    word(rrr(941647872, t, n, m))
+    self.word(rrr(941647872, t, n, m))
 
 ## `ldrh`/`strh` and `ldr`/`str` of a 32-bit register (zero-extending on a
 ## load) at `[xn, #k * size]` (k < 4096) and `[xn, xm, lsl #1]` or `lsl #2`.
 pub fn Asm.ldrh_off(mut self, t int, n int, k int)
-    word(2034237440 + k * 1024 + n * 32 + t)
+    self.word(2034237440 + k * 1024 + n * 32 + t)
 
 pub fn Asm.strh_off(mut self, t int, n int, k int)
-    word(2030043136 + k * 1024 + n * 32 + t)
+    self.word(2030043136 + k * 1024 + n * 32 + t)
 
 pub fn Asm.ldr_w_off(mut self, t int, n int, k int)
-    word(3107979264 + k * 1024 + n * 32 + t)
+    self.word(3107979264 + k * 1024 + n * 32 + t)
 
 pub fn Asm.str_w_off(mut self, t int, n int, k int)
-    word(3103784960 + k * 1024 + n * 32 + t)
+    self.word(3103784960 + k * 1024 + n * 32 + t)
 
 pub fn Asm.ldrh_idx(mut self, t int, n int, m int)
-    word(rrr(2019588096, t, n, m))
+    self.word(rrr(2019588096, t, n, m))
 
 pub fn Asm.strh_idx(mut self, t int, n int, m int)
-    word(rrr(2015393792, t, n, m))
+    self.word(rrr(2015393792, t, n, m))
 
 pub fn Asm.ldr_w_idx(mut self, t int, n int, m int)
-    word(rrr(3093329920, t, n, m))
+    self.word(rrr(3093329920, t, n, m))
 
 pub fn Asm.str_w_idx(mut self, t int, n int, m int)
-    word(rrr(3089135616, t, n, m))
+    self.word(rrr(3089135616, t, n, m))
 
 ## `stp a, b, [sp, #-16]!` and `ldp a, b, [sp], #16`.
 pub fn Asm.push_pair(mut self, a int, b int)
-    word(2843738112 + 126 * 32768 + b * 1024 + SP * 32 + a)
+    self.word(2843738112 + 126 * 32768 + b * 1024 + SP * 32 + a)
 
 pub fn Asm.pop_pair(mut self, a int, b int)
-    word(2831155200 + 2 * 32768 + b * 1024 + SP * 32 + a)
+    self.word(2831155200 + 2 * 32768 + b * 1024 + SP * 32 + a)
 
 ## `stp a, b, [n, #off]` and `ldp a, b, [n, #off]` (signed offset, a multiple
 ## of 8 from 0 to 504).
 pub fn Asm.stp_off(mut self, a int, b int, n int, off int)
-    word(2835349504 + off / 8 * 32768 + b * 1024 + n * 32 + a)
+    self.word(2835349504 + off / 8 * 32768 + b * 1024 + n * 32 + a)
 
 pub fn Asm.ldp_off(mut self, a int, b int, n int, off int)
-    word(2839543808 + off / 8 * 32768 + b * 1024 + n * 32 + a)
+    self.word(2839543808 + off / 8 * 32768 + b * 1024 + n * 32 + a)
 
 ## The address of symbol `sym`: `adrp` and `add`, fixed when it is laid out
 ## (`adrp` alone for the page-aligned `globals`).
 pub fn Asm.adr_sym(mut self, d int, sym str)
-    fixups.push(Fixup(at: code.len(), kind: "adrp", label: -1, sym: sym))
-    word(2415919104 + d)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "adrp", label: -1, sym: sym))
+    self.word(2415919104 + d)
     # The globals start on a page (`bss` in each object writer is aligned up
     # to a page), so the page address is the address: no `add` (ADR 0890).
     if sym == "globals"
         return
-    fixups.push(Fixup(at: code.len(), kind: "add12", label: -1, sym: sym))
-    word(2432696320 + d * 32 + d)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "add12", label: -1, sym: sym))
+    self.word(2432696320 + d * 32 + d)
 
 # ---- floating point ----
 
@@ -380,7 +380,7 @@ pub fn Asm.fop(mut self, op str, d int, n int, m int)
         "fsub" => 509622272
         "fmul" => 509609984
         _ => 509614080
-    word(rrr(base, d, n, m))
+    self.word(rrr(base, d, n, m))
 
 ## One-operand double operations: `fsqrt`, `fneg`, `fabs`, `frintm`
 ## (floor), `frintp` (ceil), `fmov`.
@@ -395,26 +395,26 @@ pub fn Asm.fop1(mut self, op str, d int, n int)
         "fcvt_sd" => 509755392
         "fcvt_ds" => 505593856
         _ => 509624320
-    word(base + n * 32 + d)
+    self.word(base + n * 32 + d)
 
 pub fn Asm.fcmp(mut self, n int, m int)
-    word(rrr(509616128, 0, n, m))
+    self.word(rrr(509616128, 0, n, m))
 
 ## `scvtf dd, xn` and `fcvtzs xd, dn`.
 pub fn Asm.scvtf(mut self, d int, n int)
-    word(2657222656 + n * 32 + d)
+    self.word(2657222656 + n * 32 + d)
 
 pub fn Asm.fcvtzs(mut self, d int, n int)
-    word(2658664448 + n * 32 + d)
+    self.word(2658664448 + n * 32 + d)
 
 # ---- NEON (tensor kernels, ADR 0815) ----
 
 ## `ldr qt, [xn], #16` and `str qt, [xn], #16`: two doubles, then advance.
 pub fn Asm.ldr_q_post(mut self, t int, n int)
-    word(1019282432 + n * 32 + t)
+    self.word(1019282432 + n * 32 + t)
 
 pub fn Asm.str_q_post(mut self, t int, n int)
-    word(1015088128 + n * 32 + t)
+    self.word(1015088128 + n * 32 + t)
 
 ## `fadd`, `fsub`, `fmul`, `fdiv` on `v.2d`.
 pub fn Asm.vop(mut self, op str, d int, n int, m int)
@@ -423,49 +423,49 @@ pub fn Asm.vop(mut self, op str, d int, n int, m int)
         "fsub" => 1323357184
         "fmul" => 1851841536
         _ => 1851849728
-    word(rrr(base, d, n, m))
+    self.word(rrr(base, d, n, m))
 
 ## `dup vd.2d, vn.d[0]`.
 pub fn Asm.vdup(mut self, d int, n int)
-    word(1309148160 + n * 32 + d)
+    self.word(1309148160 + n * 32 + d)
 
 ## `fcvtn vd.2s, vn.2d` and `fcvtl vd.2d, vn.2s`: the two lanes rounded to
 ## `f32` and widened back (through the low half of a scratch register).
 pub fn Asm.vcvtn(mut self, d int, n int)
-    word(241264640 + n * 32 + d)
+    self.word(241264640 + n * 32 + d)
 
 pub fn Asm.vcvtl(mut self, d int, n int)
-    word(241268736 + n * 32 + d)
+    self.word(241268736 + n * 32 + d)
 
 ## `ldr qt, [xn, #off]` and `str qt, [xn, #off]`; `off` a multiple of 16 up to 65520.
 pub fn Asm.ldr_q(mut self, t int, n int, off int)
-    word(1035993088 + off / 16 * 1024 + n * 32 + t)
+    self.word(1035993088 + off / 16 * 1024 + n * 32 + t)
 
 pub fn Asm.str_q(mut self, t int, n int, off int)
-    word(1031798784 + off / 16 * 1024 + n * 32 + t)
+    self.word(1031798784 + off / 16 * 1024 + n * 32 + t)
 
 ## `ldur qt, [xn, #off]` and `stur qt, [xn, #off]`: any `off` from -256 to 255.
 pub fn Asm.ldur_q(mut self, t int, n int, off int)
-    word(1019215872 + off.bit_and(511) * 4096 + n * 32 + t)
+    self.word(1019215872 + off.bit_and(511) * 4096 + n * 32 + t)
 
 pub fn Asm.stur_q(mut self, t int, n int, off int)
-    word(1015021568 + off.bit_and(511) * 4096 + n * 32 + t)
+    self.word(1015021568 + off.bit_and(511) * 4096 + n * 32 + t)
 
 ## `mov vd.d[1], vn.d[0]`: the low lane of `vn` into the high lane of `vd`.
 pub fn Asm.vins_hi(mut self, d int, n int)
-    word(1847067648 + n * 32 + d)
+    self.word(1847067648 + n * 32 + d)
 
 ## `mov dd, vn.d[1]`: the high lane as a scalar.
 pub fn Asm.vlane_hi(mut self, d int, n int)
-    word(1578632192 + n * 32 + d)
+    self.word(1578632192 + n * 32 + d)
 
 ## `faddp dd, vn.2d`: lane 0 + lane 1.
 pub fn Asm.vfaddp_d(mut self, d int, n int)
-    word(2121324544 + n * 32 + d)
+    self.word(2121324544 + n * 32 + d)
 
 ## `movi vd.2d, #0`.
 pub fn Asm.vzero(mut self, d int)
-    word(1862329344 + d)
+    self.word(1862329344 + d)
 
 ## `fadd`, `fsub`, `fmul`, `fdiv` on `v.4s` (four singles).
 pub fn Asm.vop4(mut self, op str, d int, n int, m int)
@@ -474,40 +474,40 @@ pub fn Asm.vop4(mut self, op str, d int, n int, m int)
         "fsub" => 1319162880
         "fmul" => 1847647232
         _ => 1847655424
-    word(rrr(base, d, n, m))
+    self.word(rrr(base, d, n, m))
 
 ## `fcvtn2 vd.4s, vn.2d` and `fcvtl2 vd.2d, vn.4s`: the upper halves.
 pub fn Asm.vcvtn2(mut self, d int, n int)
-    word(1315006464 + n * 32 + d)
+    self.word(1315006464 + n * 32 + d)
 
 pub fn Asm.vcvtl2(mut self, d int, n int)
-    word(1315010560 + n * 32 + d)
+    self.word(1315010560 + n * 32 + d)
 
 ## Integer NEON for `rt.vec_axpyi` (ADR 0942): `xtn vd.2s, vn.2d` and
 ## `xtn2 vd.4s, vn.2d` (the low 32 bits of each lane), `smull vd.2d, vn.2s,
 ## vm.2s` and `smull2 vd.2d, vn.4s, vm.4s` (signed 32 by 32 to 64),
 ## `add vd.2d, vn.2d, vm.2d`, and `dup vd.4s, wn`.
 pub fn Asm.vxtn(mut self, d int, n int)
-    word(245442560 + n * 32 + d)
+    self.word(245442560 + n * 32 + d)
 
 pub fn Asm.vxtn2(mut self, d int, n int)
-    word(1319184384 + n * 32 + d)
+    self.word(1319184384 + n * 32 + d)
 
 pub fn Asm.vsmull(mut self, d int, n int, m int)
-    word(rrr(245415936, d, n, m))
+    self.word(rrr(245415936, d, n, m))
 
 pub fn Asm.vsmull2(mut self, d int, n int, m int)
-    word(rrr(1319157760, d, n, m))
+    self.word(rrr(1319157760, d, n, m))
 
 pub fn Asm.vadd2d(mut self, d int, n int, m int)
-    word(rrr(1323336704, d, n, m))
+    self.word(rrr(1323336704, d, n, m))
 
 pub fn Asm.vdup4w(mut self, d int, n int)
-    word(1308888064 + n * 32 + d)
+    self.word(1308888064 + n * 32 + d)
 
 ## `dup vd.4s, vn.s[0]`.
 pub fn Asm.vdup4(mut self, d int, n int)
-    word(1308886016 + n * 32 + d)
+    self.word(1308886016 + n * 32 + d)
 
 ## `fadd`, `fsub`, `fmul`, `fdiv` on singles (`s` registers).
 pub fn Asm.fop_s(mut self, op str, d int, n int, m int)
@@ -516,80 +516,80 @@ pub fn Asm.fop_s(mut self, op str, d int, n int, m int)
         "fsub" => 505427968
         "fmul" => 505415680
         _ => 505419776
-    word(rrr(base, d, n, m))
+    self.word(rrr(base, d, n, m))
 
 ## `fmov xd, dn` and `fmov dd, xn`: the bits, unchanged.
 pub fn Asm.fmov_xd(mut self, d int, n int)
-    word(2657484800 + n * 32 + d)
+    self.word(2657484800 + n * 32 + d)
 
 pub fn Asm.fmov_dx(mut self, d int, n int)
-    word(2657550336 + n * 32 + d)
+    self.word(2657550336 + n * 32 + d)
 
 # ---- control ----
 
 pub fn Asm.b(mut self, l int)
-    fixups.push(Fixup(at: code.len(), kind: "b26", label: l, sym: ""))
-    word(335544320)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "b26", label: l, sym: ""))
+    self.word(335544320)
 
 pub fn Asm.b_cond(mut self, cond int, l int)
-    fixups.push(Fixup(at: code.len(), kind: "b19", label: l, sym: ""))
-    word(1409286144 + cond)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "b19", label: l, sym: ""))
+    self.word(1409286144 + cond)
 
 ## `br xn`: an indirect jump (a `switch`, native.match.2).
 pub fn Asm.br(mut self, n int)
-    word(3592355840 + n * 32)
+    self.word(3592355840 + n * 32)
 
 ## `adr xd, l`: the address of local label `l`, within 1 MiB.
 pub fn Asm.adr_label(mut self, d int, l int)
-    fixups.push(Fixup(at: code.len(), kind: "adr", label: l, sym: ""))
-    word(268435456 + d)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "adr", label: l, sym: ""))
+    self.word(268435456 + d)
 
 ## `add xd, xn, xm, lsl #k`.
 pub fn Asm.add_lsl(mut self, d int, n int, m int, k int)
-    word(rrr(2332033024, d, n, m) + k * 1024)
+    self.word(rrr(2332033024, d, n, m) + k * 1024)
 
 ## `ldrsw xt, [xn]`: a signed 32-bit load.
 pub fn Asm.ldrsw(mut self, t int, n int)
-    word(3112173568 + n * 32 + t)
+    self.word(3112173568 + n * 32 + t)
 
 ## A jump table entry: the 32-bit distance from the entry itself to label `l`.
 pub fn Asm.table_entry(mut self, l int)
-    fixups.push(Fixup(at: code.len(), kind: "w32", label: l, sym: ""))
-    word(0)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "w32", label: l, sym: ""))
+    self.word(0)
 
 pub fn Asm.bl(mut self, sym str)
-    fixups.push(Fixup(at: code.len(), kind: "b26", label: -1, sym: sym))
-    word(2483027968)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "b26", label: -1, sym: sym))
+    self.word(2483027968)
 
 pub fn Asm.blr(mut self, r int)
-    word(3594452992 + r * 32)
+    self.word(3594452992 + r * 32)
 
 pub fn Asm.ret(mut self)
-    word(3596551104)
+    self.word(3596551104)
 
 pub fn Asm.svc(mut self, imm int)
-    word(3556769793 + imm * 32)
+    self.word(3556769793 + imm * 32)
 
 ## ARMv8.1 LSE atomics and acquire/release accesses on a 64-bit location
 ## (ADR 0600): `swpal`, `ldaddal` and `casal` put the old value in `t`
 ## (`casal` in `s`, which also holds the expected value); `ldar`/`stlr`.
 pub fn Asm.swpal(mut self, s int, t int, n int)
-    word(4175462400 + s * 65536 + n * 32 + t)
+    self.word(4175462400 + s * 65536 + n * 32 + t)
 
 pub fn Asm.ldaddal(mut self, s int, t int, n int)
-    word(4175429632 + s * 65536 + n * 32 + t)
+    self.word(4175429632 + s * 65536 + n * 32 + t)
 
 pub fn Asm.casal(mut self, s int, t int, n int)
-    word(3370187776 + s * 65536 + n * 32 + t)
+    self.word(3370187776 + s * 65536 + n * 32 + t)
 
 pub fn Asm.ldar(mut self, t int, n int)
-    word(3370122240 + n * 32 + t)
+    self.word(3370122240 + n * 32 + t)
 
 pub fn Asm.stlr(mut self, t int, n int)
-    word(3365927936 + n * 32 + t)
+    self.word(3365927936 + n * 32 + t)
 
 pub fn Asm.brk(mut self)
-    word(3558866944)
+    self.word(3558866944)
 
 ## Patch a field at `at` for a target `delta` bytes away (or, for `adrp`
 ## and `add12`, the target address `to` and the field's address `pc`).
@@ -614,58 +614,58 @@ pub fn patch(mut code List[u8], f Fixup, pc int, to int)
 ## Patch every branch to a local label; symbol fixups stay for the writer.
 pub fn Asm.resolve_labels(mut self)
     mut rest := List[Fixup]()
-    for f in fixups
+    for f in self.fixups
         if f.label < 0
             rest.push(f)
             continue
-        to := labels[f.label]
+        to := self.labels[f.label]
         if to < 0
             unreachable("label {f.label} was never placed")
-        patch(mut code, f, f.at, to)
-    fixups = rest
+        patch(mut self.code, f, f.at, to)
+    self.fixups = rest
 
 # ---- crypto and byte vectors (AES and GHASH kernels) ----
 
 ## `aese vd.16b, vn.16b` and `aesmc vd.16b, vn.16b`.
 pub fn Asm.aese(mut self, d int, n int)
-    word(1311262720 + n * 32 + d)
+    self.word(1311262720 + n * 32 + d)
 
 pub fn Asm.aesmc(mut self, d int, n int)
-    word(1311270912 + n * 32 + d)
+    self.word(1311270912 + n * 32 + d)
 
 ## `eor vd.16b, vn.16b, vm.16b` and `orr vd.16b, vn.16b, vm.16b`.
 pub fn Asm.veor(mut self, d int, n int, m int)
-    word(rrr(1847598080, d, n, m))
+    self.word(rrr(1847598080, d, n, m))
 
 pub fn Asm.vorr(mut self, d int, n int, m int)
-    word(rrr(1319115776, d, n, m))
+    self.word(rrr(1319115776, d, n, m))
 
 ## `mov vd.16b, vn.16b`.
 pub fn Asm.vmov(mut self, d int, n int)
-    word(rrr(1319115776, d, n, n))
+    self.word(rrr(1319115776, d, n, n))
 
 ## `pmull vd.1q, vn.1d, vm.1d` and `pmull2 vd.1q, vn.2d, vm.2d`: the carry-less
 ## product of the low (high) 64-bit halves.
 pub fn Asm.pmull(mut self, d int, n int, m int)
-    word(rrr(249618432, d, n, m))
+    self.word(rrr(249618432, d, n, m))
 
 pub fn Asm.pmull2(mut self, d int, n int, m int)
-    word(rrr(1323360256, d, n, m))
+    self.word(rrr(1323360256, d, n, m))
 
 ## `ext vd.16b, vn.16b, vm.16b, #k`: bytes `k..k+15` of `vn` followed by `vm`.
 pub fn Asm.vext(mut self, d int, n int, m int, k int)
-    word(rrr(1845493760, d, n, m) + k * 2048)
+    self.word(rrr(1845493760, d, n, m) + k * 2048)
 
 ## `shl vd.4s, vn.4s, #k` and `ushr vd.4s, vn.4s, #k`, for `k` in 1..31.
 pub fn Asm.vshl4(mut self, d int, n int, k int)
-    word(1325421568 + (32 + k) * 65536 + n * 32 + d)
+    self.word(1325421568 + (32 + k) * 65536 + n * 32 + d)
 
 pub fn Asm.vushr4(mut self, d int, n int, k int)
-    word(1862272000 + (64 - k) * 65536 + n * 32 + d)
+    self.word(1862272000 + (64 - k) * 65536 + n * 32 + d)
 
 ## `rev64 vd.16b, vn.16b`: the bytes of each half reversed.
 pub fn Asm.vrev64(mut self, d int, n int)
-    word(1310722048 + n * 32 + d)
+    self.word(1310722048 + n * 32 + d)
 
 ## Lane masks for `rt.vec_escape` (native.vec.2), all on `.2d` (or `.16b`)
 ## vectors: `fcmgt vd, vn, vm` and `fcmeq vd, vn, vm` (all ones where true,
@@ -674,26 +674,26 @@ pub fn Asm.vrev64(mut self, d int, n int)
 ## `addp dd, vn.2d` (the two lanes' sum, zero only if both are zero for masks);
 ## `fcvtzs vd.2d, vn.2d`.
 pub fn Asm.vfcmgt(mut self, d int, n int, m int)
-    word(rrr(1860232192, d, n, m))
+    self.word(rrr(1860232192, d, n, m))
 
 pub fn Asm.vfcmeq(mut self, d int, n int, m int)
-    word(rrr(1314972672, d, n, m))
+    self.word(rrr(1314972672, d, n, m))
 
 pub fn Asm.vbsl(mut self, d int, n int, m int)
-    word(rrr(1851792384, d, n, m))
+    self.word(rrr(1851792384, d, n, m))
 
 pub fn Asm.vand(mut self, d int, n int, m int)
-    word(rrr(1310727168, d, n, m))
+    self.word(rrr(1310727168, d, n, m))
 
 pub fn Asm.vbic(mut self, d int, n int, m int)
-    word(rrr(1314921472, d, n, m))
+    self.word(rrr(1314921472, d, n, m))
 
 pub fn Asm.vaddp_d(mut self, d int, n int)
-    word(1592899584 + n * 32 + d)
+    self.word(1592899584 + n * 32 + d)
 
 pub fn Asm.vfcvtzs2d(mut self, d int, n int)
-    word(1323415552 + n * 32 + d)
+    self.word(1323415552 + n * 32 + d)
 
 ## `bif vd, vn, vm`: the bits of `vn` where `vm` is zero, else `vd`'s own.
 pub fn Asm.vbif(mut self, d int, n int, m int)
-    word(rrr(1860180992, d, n, m))
+    self.word(rrr(1860180992, d, n, m))

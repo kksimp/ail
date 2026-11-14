@@ -1390,6 +1390,13 @@ fn check_cmd(rest List[str])
             load.shown_check(d)
             for d in check.analyze_denying(program, false, deny).report.diags
         ]
+    else
+        # gram.rec.4: the checker's errors from the declarations that parsed cleanly.
+        more := [
+            load.shown_check(d)
+            for d in check.analyze_denying(loaded.program, false, deny).report.diags
+        ]
+        found.extend(load.one_pass(loaded, more, found))
     if found.len() > 0
         io.eprint(load.report_next(loaded.program.files, loaded.texts, found, json))
     mut n_err := 0

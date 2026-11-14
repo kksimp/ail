@@ -34,7 +34,7 @@ MONTHS := [
 WEEKDAYS := ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 ## Why a date, time or zone was refused (std.date.15).
-pub error struct DateError "{why}: `{text}`"
+pub error struct DateError "{self.why}: `{self.text}`"
     pub text str
     pub why str
 
@@ -49,7 +49,7 @@ impl Ord for Date
 
 impl ToStr for Date
     fn to_str(self) str
-        iso()
+        self.iso()
 
 ## An instant with its zone and the calendar fields there (std.date.8).
 ## `==` compares the fields, so the same instant in two zones differs; compare
@@ -123,40 +123,40 @@ pub fn Date.new(year int, month int, day int) Date?
 
 ## Days since 1970-01-01 (std.date.2).
 pub fn Date.days(self) int
-    days_from_civil(year, month, day)
+    days_from_civil(self.year, self.month, self.day)
 
 ## 1 for Monday to 7 for Sunday (std.date.3).
 pub fn Date.weekday(self) int
-    fmod(days() + 3, 7) + 1
+    fmod(self.days() + 3, 7) + 1
 
 ## 1 for January 1 (std.date.3).
 pub fn Date.yday(self) int
-    days() - days_from_civil(year, 1, 1) + 1
+    self.days() - days_from_civil(self.year, 1, 1) + 1
 
 ## This date plus `n` days, `n` may be negative (std.date.4).
 pub fn Date.add_days(self, n int) Date
-    Date.from_days(days() + n)
+    Date.from_days(self.days() + n)
 
 ## This date plus `n` months. A day the target month lacks becomes its last
 ## day: January 31 plus one month is February 28 or 29 (std.date.5).
 pub fn Date.add_months(self, n int) Date
-    index := year * 12 + month - 1 + n
+    index := self.year * 12 + self.month - 1 + n
     y := fdiv(index, 12)
     m := fmod(index, 12) + 1
-    Date(year: y, month: m, day: lo(day, days_in_month(y, m)))
+    Date(year: y, month: m, day: lo(self.day, days_in_month(y, m)))
 
 ## This date plus `n` years; February 29 becomes February 28 in a common
 ## year (std.date.5).
 pub fn Date.add_years(self, n int) Date
-    add_months(12 * n)
+    self.add_months(12 * n)
 
 ## Days from `other` to this date (std.date.4).
 pub fn Date.since(self, other Date) int
-    days() - other.days()
+    self.days() - other.days()
 
 ## `2026-10-20` (std.date.9).
 pub fn Date.iso(self) str
-    "{pad4(year)}-{pad2(month)}-{pad2(day)}"
+    "{pad4(self.year)}-{pad2(self.month)}-{pad2(self.day)}"
 
 ## The date formatted by `pattern` (std.date.10): the fields of the time are 0.
 pub fn Date.format(self, pattern str) str
@@ -278,54 +278,56 @@ pub fn now_local() DateTime
 
 ## Milliseconds since 1970-01-01T00:00:00Z (std.date.8).
 pub fn DateTime.unix_ms(self) int
-    ((date.days() * 86400 + hour * 3600 + minute * 60 + second) - offset) * 1000 + ms
+    ((self.date.days() * 86400 + self.hour * 3600 + self.minute * 60 + self.second) - self.offset)
+        * 1000
+        + self.ms
 
 ## Whether this instant is earlier than `other`'s (std.date.8).
 pub fn DateTime.before(self, other DateTime) bool
-    unix_ms() < other.unix_ms()
+    self.unix_ms() < other.unix_ms()
 
 ## Milliseconds from `other` to this instant (std.date.8).
 pub fn DateTime.since(self, other DateTime) int
-    unix_ms() - other.unix_ms()
+    self.unix_ms() - other.unix_ms()
 
 ## This instant `n` milliseconds later, in the same zone: exact elapsed
 ## time, so across a clock change the wall time jumps (std.date.12).
 pub fn DateTime.add_ms(self, n int) DateTime
-    build(unix_ms() + n, zone)
+    build(self.unix_ms() + n, self.zone)
 
 ## The same instant seen in another zone (std.date.7).
 pub fn DateTime.in_zone(self, other str) DateTime ! DateError
-    at(unix_ms(), other)
+    at(self.unix_ms(), other)
 
 fn DateTime.on(self, d Date) DateTime
-    tod := hour * 3600 + minute * 60 + second
+    tod := self.hour * 3600 + self.minute * 60 + self.second
     local := d.days() * 86400 + tod
-    secs := resolve(local, zone) else local - offset
-    build(secs * 1000 + ms, zone)
+    secs := resolve(local, self.zone) else local - self.offset
+    build(secs * 1000 + self.ms, self.zone)
 
 ## The same wall-clock time `n` days later in the same zone, so across a
 ## clock change the elapsed time is 23 or 25 hours (std.date.12).
 pub fn DateTime.add_days(self, n int) DateTime
-    on(date.add_days(n))
+    self.on(self.date.add_days(n))
 
 ## The same wall-clock time `n` months later; see `Date.add_months`.
 pub fn DateTime.add_months(self, n int) DateTime
-    on(date.add_months(n))
+    self.on(self.date.add_months(n))
 
 ## The same wall-clock time `n` years later; see `Date.add_years`.
 pub fn DateTime.add_years(self, n int) DateTime
-    on(date.add_years(n))
+    self.on(self.date.add_years(n))
 
 ## 1 for Monday to 7 for Sunday.
 pub fn DateTime.weekday(self) int
-    date.weekday()
+    self.date.weekday()
 
 ## `2026-10-20T17:01:52.123Z`, or with `+05:30` for a zone that isn't UTC; the
 ## fraction is left out when it is zero (std.date.9). `parse_iso` reads it back.
 pub fn DateTime.iso(self) str
-    frac := if ms != 0 then ".{pad3(ms)}" else ""
-    zone_text := if offset == 0 then "Z" else fixed_name(offset)
-    "{date.iso()}T{pad2(hour)}:{pad2(minute)}:{pad2(second)}{frac}{zone_text}"
+    frac := if self.ms != 0 then ".{pad3(self.ms)}" else ""
+    zone_text := if self.offset == 0 then "Z" else fixed_name(self.offset)
+    "{self.date.iso()}T{pad2(self.hour)}:{pad2(self.minute)}:{pad2(self.second)}{frac}{zone_text}"
 
 fn pad3(n int) str
     "{n}".pad_left(3, '0')
@@ -349,50 +351,50 @@ pub fn DateTime.format(self, pattern str) str
         t := cs[i]
         i += 1
         if t == 'Y'
-            out.push(pad4(date.year))
+            out.push(pad4(self.date.year))
         elif t == 'y'
-            out.push(pad2(fmod(date.year, 100)))
+            out.push(pad2(fmod(self.date.year, 100)))
         elif t == 'm'
-            out.push(pad2(date.month))
+            out.push(pad2(self.date.month))
         elif t == 'd'
-            out.push(pad2(date.day))
+            out.push(pad2(self.date.day))
         elif t == 'e'
-            out.push("{date.day}".pad_left(2, ' '))
+            out.push("{self.date.day}".pad_left(2, ' '))
         elif t == 'j'
-            out.push("{date.yday()}".pad_left(3, '0'))
+            out.push("{self.date.yday()}".pad_left(3, '0'))
         elif t == 'H'
-            out.push(pad2(hour))
+            out.push(pad2(self.hour))
         elif t == 'I'
-            h := hour % 12
+            h := self.hour % 12
             h12 := if h == 0 then 12 else h
             out.push(pad2(h12))
         elif t == 'p'
-            out.push(if hour < 12 then "AM" else "PM")
+            out.push(if self.hour < 12 then "AM" else "PM")
         elif t == 'M'
-            out.push(pad2(minute))
+            out.push(pad2(self.minute))
         elif t == 'S'
-            out.push(pad2(second))
+            out.push(pad2(self.second))
         elif t == 'f'
-            out.push(pad3(ms))
+            out.push(pad3(self.ms))
         elif t == 'a'
-            out.push(WEEKDAYS[date.weekday() - 1].slice(0, 3))
+            out.push(WEEKDAYS[self.date.weekday() - 1].slice(0, 3))
         elif t == 'A'
-            out.push(WEEKDAYS[date.weekday() - 1])
+            out.push(WEEKDAYS[self.date.weekday() - 1])
         elif t == 'b'
-            out.push(MONTHS[date.month - 1].slice(0, 3))
+            out.push(MONTHS[self.date.month - 1].slice(0, 3))
         elif t == 'B'
-            out.push(MONTHS[date.month - 1])
+            out.push(MONTHS[self.date.month - 1])
         elif t == 'z' or (t == ':' and i < cs.len() and cs[i] == 'z')
             if t == ':'
                 i += 1
-            sign := if offset < 0 then "-" else "+"
-            a := if offset < 0 then -offset else offset
+            sign := if self.offset < 0 then "-" else "+"
+            a := if self.offset < 0 then -self.offset else self.offset
             sep := if t == ':' then ":" else ""
             out.push("{sign}{pad2(a / 3600)}{sep}{pad2(a % 3600 / 60)}")
         elif t == 'Z'
-            out.push(zone)
+            out.push(self.zone)
         elif t == 's'
-            out.push("{fdiv(unix_ms(), 1000)}")
+            out.push("{fdiv(self.unix_ms(), 1000)}")
         elif t == '%'
             out.push("%")
         else

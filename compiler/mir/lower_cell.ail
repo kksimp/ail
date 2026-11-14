@@ -57,7 +57,7 @@ fn Lower.declare_param(mut self, p ast.Param, ty Ty, v int)
             return none
         place = a.value
     v := lower_value(a.value, t)?
-    cell := new_cell(convert(v, t, at))
+    cell := self.new_cell(convert(v, t, at))
     cells.push(Cell(key: key, place: place, cell: cell, ty: t, pos: at))
     cell
 

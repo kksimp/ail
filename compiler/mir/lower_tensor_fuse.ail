@@ -36,10 +36,10 @@ fn Lower.fuse_collect(mut self, e ast.Expr, mut p FusePlan) int
         Binary(o, l, r, _) =>
             if not fuse_arith(o)
                 return -1
-            a := fuse_collect(l, mut p)
+            a := self.fuse_collect(l, mut p)
             if a < 0
                 return -1
-            b := fuse_collect(r, mut p)
+            b := self.fuse_collect(r, mut p)
             if b < 0 or (p.kinds[a] == 1 and p.kinds[b] == 1)
                 return -1
             p.kinds.push(2)
@@ -78,7 +78,7 @@ fn Lower.try_fuse(mut self, o ast.BinOp, lhs ast.Expr, rhs ast.Expr, pos ast.Pos
         return none
     mut p := FusePlan(kinds: [], vals: [], ops: [], lhs: [], rhs: [], ty: Ty.Unknown)
     e := ast.Expr.Binary(o, lhs, rhs, pos)
-    root := fuse_collect(e, mut p)
+    root := self.fuse_collect(e, mut p)
     if root < 0 or p.ty == Ty.Unknown or p.kinds[root] != 2
         return none
     n := p.kinds.len()

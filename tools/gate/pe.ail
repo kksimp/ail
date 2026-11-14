@@ -12,11 +12,11 @@ struct Run
     checks int
 
 fn Run.red(mut self, why str)
-    fails += 1
+    self.fails += 1
     print("RED {why}")
 
 fn Run.same(mut self, what str, got int, want int)
-    checks += 1
+    self.checks += 1
     if got != want
         self.red("{what}: got {got}, want {want}")
 

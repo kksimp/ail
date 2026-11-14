@@ -75,7 +75,7 @@ struct MemberPat
     match p
         Variant(q, name, bindings, vpos) =>
             full := if qual := q then "{qual}.{name}" else name
-            if k := error_key(full)
+            if k := self.error_key(full)
                 if bindings != none
                     problem(
                         vpos,
@@ -86,7 +86,7 @@ struct MemberPat
             qq := q else
                 problem(vpos, "`{name}` is not an error type of this union (err.match.1)")
                 return none
-            ek := error_key(qq) else
+            ek := self.error_key(qq) else
                 problem(vpos, "`{qq}` is not an error type of this union (err.match.1)")
                 return none
             if not enums.contains(ek)
@@ -118,7 +118,7 @@ fn pattern_pos_of(p ast.Pattern) ast.Pos
 ## The member's value as its own type.
 fn Lower.member_value(mut self, n str, key str, pos ast.Pos) Val?
     raw := lower_value(ast.Expr.Name("{n}$v", pos), Ty.Int)?
-    t := error_ty(key)
+    t := self.error_ty(key)
     Val(id: op("copy", [raw.id], t), ty: t)
 
 ## End the current block: to `yes` when pattern `p` matches the union value
@@ -140,14 +140,14 @@ fn Lower.union_test(mut self, n str, p ast.Pattern, tag int, yes int, no int, po
     if alts := alts_of(p)
         for k in 0..alts.len()
             if k == alts.len() - 1
-                return union_test(n, alts[k], tag, yes, no, pos)
+                return self.union_test(n, alts[k], tag, yes, no, pos)
             other := new_block()
-            if not union_test(n, alts[k], tag, yes, other, pos)
+            if not self.union_test(n, alts[k], tag, yes, other, pos)
                 return false
             seal(other)
             cur = other
         return true
-    m := member_pat(p) else return false
+    m := self.member_pat(p) else return false
     c := op("eq", [tag, konst(err_tag_hash(m.key), Ty.Int)], Ty.Bool)
     if m.variant == ""
         branch(c, yes, [], no, [])
@@ -156,7 +156,7 @@ fn Lower.union_test(mut self, n str, p ast.Pattern, tag int, yes int, no int, po
     branch(c, mid, [], no, [])
     seal(mid)
     cur = mid
-    v := member_value(n, m.key, pos) else return false
+    v := self.member_value(n, m.key, pos) else return false
     test_pattern(p, v, tag_of(m.key, v.id), yes, no)
 
 ## In the arm of pattern `p`: `n` is the member's value, and the fields of a
@@ -164,11 +164,11 @@ fn Lower.union_test(mut self, n str, p ast.Pattern, tag int, yes int, no int, po
 @allow("expr.match.3") fn Lower.union_bind(mut self, n str, p ast.Pattern, pos ast.Pos)
     match p
         Variant =>
-            m := member_pat(p) else return
+            m := self.member_pat(p) else return
             # `Absent` has no fields and no stored value: `n` stays its text.
             if m.key == "Absent"
                 return
-            v := member_value(n, m.key, pos) else return
+            v := self.member_value(n, m.key, pos) else return
             declare(n, v.ty, v.id)
             if m.variant != ""
                 bind_fields(p, v)
@@ -190,12 +190,12 @@ fn Lower.lower_union_match(mut self, n str, arms List[ast.Arm], pos ast.Pos, wan
             break
         body := new_block()
         next := new_block()
-        if not union_test(n, arm.pat, tag, body, next, pos)
+        if not self.union_test(n, arm.pat, tag, body, next, pos)
             return none
         seal(body)
         cur = body
         scopes.push(Map[str, str]())
-        union_bind(n, arm.pat, pos)
+        self.union_bind(n, arm.pat, pos)
         if g := arm.guard
             c := lower_value(g, Ty.Bool)?
             pass := new_block()

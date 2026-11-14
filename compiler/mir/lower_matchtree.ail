@@ -33,7 +33,7 @@ fn Lower.tree_values(mut self, p ast.Pattern, s Val) List[int]?
         Alt(alts, _) =>
             mut out := List[int]()
             for a in alts
-                vs := tree_values(a, s)?
+                vs := self.tree_values(a, s)?
                 for v in vs
                     out.push(v)
             return out
@@ -59,7 +59,7 @@ fn Lower.match_tree(mut self, arms List[ast.Arm], s Val, tag int, en str) List[i
         match arm.pat
             Wildcard(_) => dflt = idx
             _ =>
-                vs := tree_values(arm.pat, s) else return no_tree
+                vs := self.tree_values(arm.pat, s) else return no_tree
                 for v in vs
                     if not cases.contains(v)
                         cases.push(v)
@@ -89,9 +89,9 @@ fn Lower.match_tree(mut self, arms List[ast.Arm], s Val, tag int, en str) List[i
     # A flat enum's variant index is the value itself, typed as the enum: `lt` takes an `int`.
     key := if en != "" then op("copy", [tag], Ty.Int) else tag
     if dense(sv)
-        switch_emit(sv, sb, key, target)
+        self.switch_emit(sv, sb, key, target)
     else
-        tree_emit(sv, sb, 0, sv.len(), key, target)
+        self.tree_emit(sv, sb, 0, sv.len(), key, target)
     if dflt < 0
         # Exhaustive (expr.match.2): no value reaches here.
         seal(target)
@@ -118,10 +118,10 @@ fn Lower.tree_emit(mut self, sv List[int], sb List[int], lo int, hi int, tag int
     branch(op("lt", [tag, konst(sv[mid], Ty.Int)], Ty.Bool), left, [], right, [])
     seal(left)
     cur = left
-    tree_emit(sv, sb, lo, mid, tag, target)
+    self.tree_emit(sv, sb, lo, mid, tag, target)
     seal(right)
     cur = right
-    tree_emit(sv, sb, mid, hi, tag, target)
+    self.tree_emit(sv, sb, mid, hi, tag, target)
 
 ## Whether the sorted values `sv` are dense enough for a jump table
 ## (native.match.2): at most `SWITCH_MAX` entries, a third or more of them

@@ -104,10 +104,10 @@ fn Machine.service(mut self, units int) str
 
 fn Machine.handle(mut self, ev Event) str
     match ev
-        Coin(cents) => coin(cents)
-        Select(slot) => choose(slot)
-        Refund => refund()
-        Service(units) => service(units)
+        Coin(cents) => self.coin(cents)
+        Select(slot) => self.choose(slot)
+        Refund => self.refund()
+        Service(units) => self.service(units)
 
 fn describe(ev Event) str
     match ev

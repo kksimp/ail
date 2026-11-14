@@ -26,7 +26,7 @@ fn Lower.grid_place(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) ast.Ex
     items := match index
         TupleLit(xs, _) => xs
         _ => return none
-    if items.len() != 2 or not is_grid_ty(recv_ty(recv)?)
+    if items.len() != 2 or not self.is_grid_ty(recv_ty(recv)?)
         return none
     if not plain_place(recv)
         problem(
@@ -38,8 +38,8 @@ fn Lower.grid_place(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) ast.Ex
     j := lower_value(items[1], Ty.Int)?
     rows := lower_value(ast.Expr.Member(recv: recv, name: "rows", name_pos: pos), Ty.Int)?
     cols := lower_value(ast.Expr.Member(recv: recv, name: "cols", name_pos: pos), Ty.Int)?
-    grid_bound(i.id, rows.id, pos)
-    grid_bound(j.id, cols.id, pos)
+    self.grid_bound(i.id, rows.id, pos)
+    self.grid_bound(j.id, cols.id, pos)
     at := op("add", [op("mul", [i.id, cols.id], Ty.Int), j.id], Ty.Int)
     name := "~g{nvars}"
     declare(name, Ty.Int, at)
@@ -57,7 +57,7 @@ fn Lower.grid_bound(mut self, x int, n int, pos ast.Pos)
 
 ## The type of `x[...]` where `x` is a `t`: a grid's element, else a list's.
 fn Lower.index_ty(self, t Ty) Ty?
-    if is_grid_ty(t)
+    if self.is_grid_ty(t)
         match t
             Struct(n) => return gen.targs.get(n)?[0]
             _ => return none

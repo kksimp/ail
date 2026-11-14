@@ -9,7 +9,7 @@
 use std.audio
 
 ## Why a device could not be used (std.audio.9).
-pub error struct DeviceError "{message}"
+pub error struct DeviceError "{self.message}"
     pub kind DeviceKind
     pub message str
 

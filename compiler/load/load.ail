@@ -463,6 +463,10 @@ fn one_per_line(diags List[syntax.Diag]) List[syntax.Diag]
             kept.push(d)
             continue
         prev := kept[kept.len() - 1]
+        # Two reports of one mistake at one place (the lexer's with a fix, the parser's without): keep the fixed one.
+        if d.fixed and not prev.fixed and d.pos == prev.pos
+            kept[kept.len() - 1] = d
+            continue
         if prev.fixed and d.fixed and explicit(prev.edits) and explicit(d.edits) and apart(
             prev.edits,
             d.edits,

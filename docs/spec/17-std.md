@@ -3555,7 +3555,7 @@ program that speaks the protocol. *(ADR 1091)*
 
 **std.mcp.2** — `connect` sends `initialize` with protocol revision
 `2025-03-26`, waits for the reply, then sends the `notifications/initialized`
-notification. A server that can't start fails with kind `start`. *(ADR 1091)*
+notification. A server that can't start fails with kind `Start`. *(ADR 1091)*
 
 **std.mcp.3** — `c.tools() List[Tool] ! McpError` is the server's `tools/list`,
 following `nextCursor` until there is none. `struct Tool { name str,
@@ -3569,19 +3569,19 @@ with `args` (a `Json` object) as the arguments. It returns the reply's
 
 **std.mcp.5** — `mcp.text(result Json) str` joins the `text` blocks of a result's
 `content` with newlines. A result whose `isError` is true fails `call` with kind
-`tool` and that text as the message. *(ADR 1091)*
+`Tool` and that text as the message. *(ADR 1091)*
 
 **std.mcp.6** — A line from the server that is not JSON, has no `id` or has an
 `id` other than the pending request's is skipped, so notifications and log
 lines don't disturb a call. A reply with an `error` member fails with kind
-`rpc`; the message is the server's text and `(code N)`. *(ADR 1091)*
+`Rpc`; the message is the server's text and `(code N)`. *(ADR 1091)*
 
-**std.mcp.7** — `McpError` is an error with `kind str` and `message str`. The
-kinds are the strings `start`, `rpc`, `tool` and `timeout` (unlike the enum
-kinds of `std.err.1`, because a server's failures are open-ended); a server
-that has exited fails with `timeout`, not a kind of its own. A request
+**std.mcp.7** — `McpError` is an error with `kind McpKind` and `message str`
+(ADR 1068). `enum McpKind` has the variants `Start`, `Rpc`, `Tool` and
+`Timeout`; a server that has exited fails with `Timeout`, not a kind of its
+own. A request
 waits at most 30 seconds for its reply (`c.set_timeout(ms int)` changes it);
-when the time runs out or the server has exited it fails with kind `timeout`,
+when the time runs out or the server has exited it fails with kind `Timeout`,
 and the message ends with ` (server stderr: ...)`, the first ten lines the
 server wrote to its standard error joined with ` | `, when there are any.
 *(ADR 1091)*

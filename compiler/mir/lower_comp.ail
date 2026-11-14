@@ -73,10 +73,10 @@ fn Lower.lower_comp(
             t := Ty.List(et)
             declare(name, t, call("rt.list_new", [konst(0, Ty.Int)], t))
         SetComp =>
-            known := want else return lower_comp_untyped(form, elem, value_expr, clauses, pos)
+            known := want else return self.lower_comp_untyped(form, elem, value_expr, clauses, pos)
             t := known
             if not is_set_ty(t)
-                return lower_comp_untyped(form, elem, value_expr, clauses, pos)
+                return self.lower_comp_untyped(form, elem, value_expr, clauses, pos)
             declare(name, t, new_table(t))
             push = ast.Stmt.Eval(value: ast.Expr.Method(
                 recv: me,
@@ -86,10 +86,10 @@ fn Lower.lower_comp(
             ))
         MapComp =>
             v := value_expr else return none
-            known := want else return lower_comp_untyped(form, elem, value_expr, clauses, pos)
+            known := want else return self.lower_comp_untyped(form, elem, value_expr, clauses, pos)
             t := known
             if not is_map_ty(t)
-                return lower_comp_untyped(form, elem, value_expr, clauses, pos)
+                return self.lower_comp_untyped(form, elem, value_expr, clauses, pos)
             declare(name, t, new_table(t))
             push = ast.Stmt.Assign(
                 target: ast.Expr.Index(recv: me, index: elem, pos: pos),
@@ -122,7 +122,7 @@ fn Lower.lower_comp_untyped(
 ) Val?
     what := if form == ast.CompKind.SetComp then "a set" else "a map"
     if form == ast.CompKind.SetComp
-        xs := lower_comp(ast.CompKind.ListComp, elem, none, clauses, pos, none)?
+        xs := self.lower_comp(ast.CompKind.ListComp, elem, none, clauses, pos, none)?
         e := xs.ty.elem() else Ty.Unknown
         if not key_ok(e)
             return unsupported(pos, "{what} comprehension whose type isn't known")
@@ -204,11 +204,11 @@ fn Lower.lower_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
             # Wraps only for the largest `int`, which the check below rejects.
             end = op("add", [b, konst(1, Ty.Int)], Ty.Int)
     fail := new_block()
-    check(op("le", [zero, a], Ty.Bool), fail)
+    self.check(op("le", [zero, a], Ty.Bool), fail)
     if inclusive and hi != none
-        check(op("ne", [b, konst(9223372036854775807, Ty.Int)], Ty.Bool), fail)
-    check(op("le", [a, end], Ty.Bool), fail)
-    check(op("le", [end, n], Ty.Bool), fail)
+        self.check(op("ne", [b, konst(9223372036854775807, Ty.Int)], Ty.Bool), fail)
+    self.check(op("le", [a, end], Ty.Bool), fail)
+    self.check(op("le", [end, n], Ty.Bool), fail)
     good := cur
     seal(fail)
     cur = fail

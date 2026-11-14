@@ -21,7 +21,7 @@ use ast
             for k in 0..d.fields.len().min(field_types[s].len())
                 ft := field_types[s][k]
                 if is_struct_ty(ft)
-                    if why := c_struct_why(ft, depth + 1)
+                    if why := self.c_struct_why(ft, depth + 1)
                         return why
                 elif not c_layout(ft) and ft != Ty.Unknown
                     return "field `{d.fields[k].name}` of `{d.name}` is {show(ft)}, which has no C layout"
@@ -63,7 +63,7 @@ use ast
 ## an error already reported when it is not.
 fn Checker.c_extra_ok(mut self, t Ty, at ast.Pos, is_result bool) bool
     if is_struct_ty(t)
-        if why := c_struct_why(t, 0)
+        if why := self.c_struct_why(t, 0)
             err_help(
                 "ffi.struct.1",
                 at,
@@ -104,7 +104,7 @@ fn Checker.check_c_call(
     t := check_call(n, s, binds, args, none, at, expect)
     for k in 0..args.len().min(s.params.len())
         if is_fn_ty(s.params[k].ty)
-            cb_name(args[k].value, "ffi.cb.2")
+            self.cb_name(args[k].value, "ffi.cb.2")
     t
 
 ## ffi.cb.2-3: `e` names a declared function (already checked as a value of
@@ -136,7 +136,7 @@ fn Checker.mem_c_fn(mut self, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
             expect,
         )
     t := expr(args[0].value, no_ty(), true)
-    cb_name(args[0].value, "ffi.cb.3")
+    self.cb_name(args[0].value, "ffi.cb.3")
     if is_fn_ty(t) and not c_callback_ty(t)
         err_help(
             "ffi.cb.3",

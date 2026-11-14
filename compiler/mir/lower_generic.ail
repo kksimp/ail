@@ -132,11 +132,11 @@ fn Lower.generic_type(mut self, name str, args List[ast.TypeRef]) Ty?
             return Ty.Struct(name)
         # A trait written as a type means `any Trait` (trait.any.1).
         return any_type(name)
-    g := generic_type_key(name)?
+    g := self.generic_type_key(name)?
     mut tys := List[Ty]()
     for a in args
         tys.push(type_of(a)?)
-    instance_type(g, tys)
+    self.instance_type(g, tys)
 
 ## Instance `G[A, B]` of generic type `g`, declared on first use.
 fn Lower.instance_type(mut self, g str, tys List[Ty]) Ty?
@@ -153,7 +153,7 @@ fn Lower.instance_type(mut self, g str, tys List[Ty]) Ty?
     mut binds := Map[str, Ty]()
     for k in 0..tys.len()
         binds[gt.params[k]] = tys[k]
-    saved := enter_decl(gt.file, binds)
+    saved := self.enter_decl(gt.file, binds)
     if s := gt.sdecl
         structs[key] = []
         mut slots := List[Slot]()
@@ -175,7 +175,7 @@ fn Lower.instance_type(mut self, g str, tys List[Ty]) Ty?
                 slots.push(Slot(name: fd.name, ty: t))
             cases.push(Case(name: v.name, fields: slots))
         enums[key] = cases
-    leave_decl(saved)
+    self.leave_decl(saved)
     if structs.contains(key) then Ty.Struct(key) else Ty.Enum(key)
 
 ## The lowering's place before `enter_decl`.
@@ -207,9 +207,9 @@ fn Lower.leave_decl(mut self, p Place)
 fn Lower.decl_type(mut self, t ast.TypeRef, binds Map[str, Ty], params List[str], k int) Ty?
     if names_unbound(t, binds, params)
         return none
-    saved := enter_decl(k, binds)
+    saved := self.enter_decl(k, binds)
     r := type_of(t)
-    leave_decl(saved)
+    self.leave_decl(saved)
     r
 
 fn names_unbound(t ast.TypeRef, binds Map[str, Ty], params List[str]) bool
@@ -247,18 +247,18 @@ fn Lower.unify(self, t ast.TypeRef, ty Ty, params List[str], mut binds Map[str, 
                 return
             if n == "List" and args.len() == 1
                 e := ty.elem() else return
-                unify(args[0], e, params, mut binds)
+                self.unify(args[0], e, params, mut binds)
                 return
             if n == "Map" and args.len() == 2
                 match ty
                     Map(kt, vt) =>
-                        unify(args[0], kt, params, mut binds)
-                        unify(args[1], vt, params, mut binds)
+                        self.unify(args[0], kt, params, mut binds)
+                        self.unify(args[1], vt, params, mut binds)
                     _ => return
                 return
             if n == "Set" and args.len() == 1
                 match ty
-                    Set(et) => unify(args[0], et, params, mut binds)
+                    Set(et) => self.unify(args[0], et, params, mut binds)
                     _ => return
                 return
             key := match ty
@@ -269,30 +269,30 @@ fn Lower.unify(self, t ast.TypeRef, ty Ty, params List[str], mut binds Map[str, 
             if tys.len() != args.len()
                 return
             for k in 0..args.len()
-                unify(args[k], tys[k], params, mut binds)
+                self.unify(args[k], tys[k], params, mut binds)
         Optional(inner) =>
             i := ty.opt_inner() else return
-            unify(inner, i, params, mut binds)
+            self.unify(inner, i, params, mut binds)
         FnType(ps, r) =>
             match ty
                 Fn(tps, tr, _) =>
                     if tps.len() != ps.len()
                         return
                     for k in 0..ps.len()
-                        unify(ps[k], tps[k], params, mut binds)
+                        self.unify(ps[k], tps[k], params, mut binds)
                     if rt := r
                         match rt.shape
                             Fallible(ok, _) =>
                                 if o := ok
-                                    unify(o, tr, params, mut binds)
-                            _ => unify(rt, tr, params, mut binds)
+                                    self.unify(o, tr, params, mut binds)
+                            _ => self.unify(rt, tr, params, mut binds)
                 _ => return
         TupleType(elems) =>
             xs := tuple_elems(ty) else return
             if xs.len() != elems.len()
                 return
             for k in 0..elems.len()
-                unify(elems[k], xs[k], params, mut binds)
+                self.unify(elems[k], xs[k], params, mut binds)
         _ => return
 
 ## Whether a call's callee is a generic function or a generic struct.
@@ -304,9 +304,9 @@ fn Lower.is_generic_callee(self, callee ast.Expr) bool
         _ => return false
     if name == ""
         return false
-    if generic_fn_key(name) != none
+    if self.generic_fn_key(name) != none
         return true
-    lookup(name) == none and generic_type_key(name) != none
+    lookup(name) == none and self.generic_type_key(name) != none
 
 ## `f(...)`, `f[T](...)`, `G(...)` or `G[T](...)` of a generic function or
 ## struct.
@@ -333,10 +333,10 @@ fn Lower.lower_generic_callee(
             name = path_of(callee) else return unsupported(pos, "this call")
             at = p
         _ => return unsupported(pos, "this call")
-    if g := generic_fn_key(name)
-        return generic_call(g, name, targs, args, at, want)
-    g := generic_type_key(name) else return unsupported(pos, "this call")
-    generic_struct(g, targs, args, pos, want)
+    if g := self.generic_fn_key(name)
+        return self.generic_call(g, name, targs, args, at, want)
+    g := self.generic_type_key(name) else return unsupported(pos, "this call")
+    self.generic_struct(g, targs, args, pos, want)
 
 ## The type arguments written in `f[A, B]`, bound to `params`.
 fn Lower.explicit_binds(
@@ -394,7 +394,7 @@ fn Lower.generic_call(
     gf := gen.fns[g]
     f := gf.decl
     params := generic_names(f.generics)
-    mut binds := explicit_binds(params, targs, pos)?
+    mut binds := self.explicit_binds(params, targs, pos)?
     if args.len() != f.params.len()
         return unsupported(pos, "this call")
     mut vs := List[Val]()
@@ -403,22 +403,22 @@ fn Lower.generic_call(
         if a.label != none
             return unsupported(pos, "labelled arguments")
         pt := f.params[k].ty
-        mut aw := decl_type(pt, binds, params, gf.file)
+        mut aw := self.decl_type(pt, binds, params, gf.file)
         if aw == none
             # A function literal before its result type parameter is bound (type.fn.8).
             aw = partial_fn_want(pt, binds, params, gf.file)
         v := lower_value(a.value, aw)?
-        unify(pt, v.ty, params, mut binds)
+        self.unify(pt, v.ty, params, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     check_mut_overlap(args, pos)
     if r := f.ret
         if w := want
             if not w.is_unit()
-                unify(r, w, params, mut binds)
-    if not all_bound(params, binds, shown, pos)
+                self.unify(r, w, params, mut binds)
+    if not self.all_bound(params, binds, shown, pos)
         return none
     key := "{g}[{[binds[n].name() for n in params].join(", ")}]"
-    sig := instance(key, f, binds, "", gf.file)?
+    sig := self.instance(key, f, binds, "", gf.file)?
     if e := fn_errs.get(key)
         fn_errs[g] = e
     mut cells := List[Cell]()
@@ -434,7 +434,7 @@ fn Lower.instance(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner str
     saved := self_ty
     if owner != ""
         self_ty = owner
-    sig := instance_sig(key, f, binds, owner, k)
+    sig := self.instance_sig(key, f, binds, owner, k)
     self_ty = saved
     sig
 
@@ -449,7 +449,7 @@ fn Lower.instance_sig(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner
         ps.push(owner_ty(owner))
     no := List[str]()
     for p in f.params
-        t := decl_type(p.ty, binds, no, k) else
+        t := self.decl_type(p.ty, binds, no, k) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             bad.add(key)
             return none
@@ -463,7 +463,7 @@ fn Lower.instance_sig(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner
         here_aliases := aliases
         prefix = file_prefix[k]
         aliases = file_aliases[k]
-        t := (if can_fail then instance_ok(r, binds, k) else decl_type(r, binds, no, k)) else
+        t := (if can_fail then self.instance_ok(r, binds, k) else self.decl_type(r, binds, no, k)) else
             prefix = here
             aliases = here_aliases
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
@@ -487,7 +487,7 @@ fn Lower.instance_ok(mut self, t ast.TypeRef, binds Map[str, Ty], k int) Ty?
             if n := written_name(o)
                 if names_error(n)
                     return Ty.Unit
-            decl_type(o, binds, List[str](), k)
+            self.decl_type(o, binds, List[str](), k)
         _ => none
 
 ## Whether the generic function `key` can fail (its declaration says so).
@@ -521,7 +521,7 @@ fn Lower.instance_method(mut self, key str)
     mut binds := Map[str, Ty]()
     for k in 0..pnames.len()
         binds[pnames[k]] = tys[k]
-    instance(key, gf.decl, binds, tkey, gf.file)
+    self.instance(key, gf.decl, binds, tkey, gf.file)
 
 ## Whether `key` (`Pair[int, str].with_first`) is a method of a generic
 ## type's instance that has type parameters of its own.
@@ -562,17 +562,17 @@ fn Lower.generic_method_call(mut self, key str, recv Val, args List[ast.Arg], po
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         pt := f.params[k].ty
-        mut aw := decl_type(pt, binds, mnames, gf.file)
+        mut aw := self.decl_type(pt, binds, mnames, gf.file)
         if aw == none
             aw = partial_fn_want(pt, binds, mnames, gf.file)
         v := lower_value(a.value, aw)?
-        unify(pt, v.ty, mnames, mut binds)
+        self.unify(pt, v.ty, mnames, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     check_mut_overlap(args, pos)
-    if not all_bound(mnames, binds, m, pos)
+    if not self.all_bound(mnames, binds, m, pos)
         return none
     full := "{key}[{[binds[n].name() for n in mnames].join(", ")}]"
-    sig := instance(full, f, binds, tkey, gf.file)?
+    sig := self.instance(full, f, binds, tkey, gf.file)?
     mut cells := List[Cell]()
     mut ids := [recv.id]
     ids.extend(generic_arg_ids(args, vs, sig.params, 1, mut cells))
@@ -601,17 +601,17 @@ fn Lower.owner_method_call(mut self, key str, recv Val, args List[ast.Arg], pos 
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         pt := f.params[k].ty
-        mut aw := decl_type(pt, binds, mnames, gf.file)
+        mut aw := self.decl_type(pt, binds, mnames, gf.file)
         if aw == none
             aw = partial_fn_want(pt, binds, mnames, gf.file)
         v := lower_value(a.value, aw)?
-        unify(pt, v.ty, mnames, mut binds)
+        self.unify(pt, v.ty, mnames, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     check_mut_overlap(args, pos)
-    if not all_bound(mnames, binds, m, pos)
+    if not self.all_bound(mnames, binds, m, pos)
         return none
     full := "{key}[{[binds[n].name() for n in mnames].join(", ")}]"
-    sig := instance(full, f, binds, owner, gf.file)?
+    sig := self.instance(full, f, binds, owner, gf.file)?
     mut cells := List[Cell]()
     mut ids := [recv.id]
     ids.extend(generic_arg_ids(args, vs, sig.params, 1, mut cells))
@@ -631,8 +631,8 @@ fn Lower.generic_struct(
 ) Val?
     gt := gen.types[g]
     s := gt.sdecl else return unsupported(pos, "this call")
-    mut binds := explicit_binds(gt.params, targs, pos)?
-    binds_from_want(g, gt.params, want, mut binds)
+    mut binds := self.explicit_binds(gt.params, targs, pos)?
+    self.binds_from_want(g, gt.params, want, mut binds)
     if args.len() != s.fields.len() and not has_defaults(g)
         return unsupported(pos, "`{s.name}(...)` without every field")
     mut at := List[int]()
@@ -646,13 +646,16 @@ fn Lower.generic_struct(
                 return unsupported(l.pos, "field `{l.name}` of `{s.name}`")
             return unsupported(expr_pos(a.value), "too many arguments for `{s.name}(...)`")
         ft := s.fields[j].ty
-        v := lower_value(a.value, decl_type(ft, binds, gt.params, gt.file))?
-        unify(ft, v.ty, gt.params, mut binds)
+        v := lower_value(a.value, self.decl_type(ft, binds, gt.params, gt.file))?
+        self.unify(ft, v.ty, gt.params, mut binds)
         at.push(j)
         vs.push(Val(id: copy_if_place(a.value, v), ty: v.ty))
-    if not all_bound(gt.params, binds, s.name, pos)
+    if not self.all_bound(gt.params, binds, s.name, pos)
         return none
-    t := instance_type(g, [binds[n] for n in gt.params]) else return unsupported(pos, "this struct")
+    t := self.instance_type(g, [
+        binds[n]
+        for n in gt.params
+    ]) else return unsupported(pos, "this struct")
     key := struct_name(t) else ""
     slots := structs[key]
     mut ids := [-1 for _ in slots]
@@ -670,7 +673,7 @@ fn Lower.generic_enum_ref(self, e ast.Expr) str?
     p := path_of(e)?
     if lookup(p.split(".")[0]) != none
         return none
-    g := generic_type_key(p)?
+    g := self.generic_type_key(p)?
     if gen.types[g].edecl != none then g else none
 
 ## The generic type a `E`, `E.V` receiver or a written `G[A]` names: an enum
@@ -683,7 +686,7 @@ fn Lower.generic_member_ref(self, e ast.Expr) str?
             if n == "List"
                 # `List[U].from_json(...)`: a function of a built-in type.
                 return "#list"
-            generic_type_key(n)
+            self.generic_type_key(n)
         Name(n, _) =>
             if lookup(n) == none and traits.impls.contains(trait_key(n))
                 return trait_key(n)
@@ -693,10 +696,10 @@ fn Lower.generic_member_ref(self, e ast.Expr) str?
                         # A type parameter bound to a list (`T.default()`, T = `List[str]`).
                         return "#tparam:{n}"
             if lookup(n) == none
-                if g := generic_type_key(n)
+                if g := self.generic_type_key(n)
                     return g
-            generic_enum_ref(e)
-        _ => generic_enum_ref(e)
+            self.generic_enum_ref(e)
+        _ => self.generic_enum_ref(e)
 
 ## `E.V(...)`, `E.V`, `G[A].f(...)` or `G[A].V`: a variant of a generic enum
 ## (its type arguments from the expected type, or written), or a function of
@@ -715,7 +718,7 @@ fn Lower.generic_member(
             TypeArgs(_, targs, tpos) =>
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
                     return unsupported(tpos, "this list type")
-                key := builtin_method(t, name) else return unsupported(
+                key := self.builtin_method(t, name) else return unsupported(
                     pos,
                     "`.{name}()` on `{t.name()}`",
                 )
@@ -726,7 +729,10 @@ fn Lower.generic_member(
             _ => return none
     if g.starts_with("#tparam:")
         t := gen.tsubst[g.slice(8, g.len())]
-        key := builtin_method(t, name) else return unsupported(pos, "`.{name}()` on `{t.name()}`")
+        key := self.builtin_method(t, name) else return unsupported(
+            pos,
+            "`.{name}()` on `{t.name()}`",
+        )
         call_args := args else return unsupported(pos, "`{name}` without a call")
         if e := fn_errs.get(key)
             fn_errs["List.{name}"] = e
@@ -748,23 +754,23 @@ fn Lower.generic_member(
     match recv
         TypeArgs(_, targs, _) =>
             gt := gen.types[g]
-            binds := explicit_binds(gt.params, targs, pos)?
-            if not all_bound(gt.params, binds, gt.params.join(", "), pos)
+            binds := self.explicit_binds(gt.params, targs, pos)?
+            if not self.all_bound(gt.params, binds, gt.params.join(", "), pos)
                 return none
-            t := instance_type(g, [binds[n] for n in gt.params]) else
+            t := self.instance_type(g, [binds[n] for n in gt.params]) else
                 return unsupported(pos, "`{g}` with these type arguments")
             if gt.edecl != none
-                return generic_variant(g, name, args, pos, some_ty(t))
+                return self.generic_variant(g, name, args, pos, some_ty(t))
             key := struct_name(t) else return unsupported(pos, "`{g}.{name}`")
             call_args := args else return unsupported(pos, "`{g}.{name}` without a call")
-            instance_method("{key}.{name}")
+            self.instance_method("{key}.{name}")
             if e := fn_errs.get("{key}.{name}")
                 fn_errs["{g}.{name}"] = e
             struct_call("{key}.{name}", none, call_args, pos)
         _ =>
             if gen.fns.contains("{g}.{name}")
-                return generic_static(g, name, args, pos, want)
-            generic_variant(g, name, args, pos, want)
+                return self.generic_static(g, name, args, pos, want)
+            self.generic_variant(g, name, args, pos, want)
 
 ## `G.f(args)` of a generic type written with no type arguments: a function of
 ## the type without `self`. The type arguments come from the arguments and the
@@ -783,19 +789,19 @@ fn Lower.generic_static(mut self, g str, name str, args List[ast.Arg]?, pos ast.
         if a.label != none
             return unsupported(pos, "labelled arguments")
         pt := f.params[k].ty
-        v := lower_value(a.value, decl_type(pt, binds, gt.params, gf.file))?
-        unify(pt, v.ty, gt.params, mut binds)
+        v := lower_value(a.value, self.decl_type(pt, binds, gt.params, gf.file))?
+        self.unify(pt, v.ty, gt.params, mut binds)
         vs.push(Val(id: shield_arg(given, k, v), ty: v.ty))
     check_mut_overlap(given, pos)
-    binds_from_want(g, gt.params, want, mut binds)
-    if not all_bound(gt.params, binds, g, pos)
+    self.binds_from_want(g, gt.params, want, mut binds)
+    if not self.all_bound(gt.params, binds, g, pos)
         return none
-    t := instance_type(g, [
+    t := self.instance_type(g, [
         binds[n]
         for n in gt.params
     ]) else return unsupported(pos, "`{g}` with these type arguments")
     key := "{t.name()}.{name}"
-    instance_method(key)
+    self.instance_method(key)
     sig := sigs.get(key) else return unsupported(pos, "`{g}.{name}`")
     mut cells := List[Cell]()
     ids := generic_arg_ids(given, vs, sig.params, 0, mut cells)
@@ -820,7 +826,7 @@ fn Lower.generic_variant(mut self, g str, name str, args List[ast.Arg]?, pos ast
         return unsupported(pos, "`{e.name}` has no variant `{name}`")
     fields := e.variants[k].fields
     mut binds := Map[str, Ty]()
-    binds_from_want(g, gt.params, want, mut binds)
+    self.binds_from_want(g, gt.params, want, mut binds)
     given := args else []
     if given.len() != fields.len()
         return unsupported(pos, "`{name}(...)` without every field")
@@ -837,13 +843,16 @@ fn Lower.generic_variant(mut self, g str, name str, args List[ast.Arg]?, pos ast
             if j < 0
                 return unsupported(l.pos, "field `{l.name}` of `{name}`")
         ft := fields[j].ty
-        v := lower_value(a.value, decl_type(ft, binds, gt.params, gt.file))?
-        unify(ft, v.ty, gt.params, mut binds)
+        v := lower_value(a.value, self.decl_type(ft, binds, gt.params, gt.file))?
+        self.unify(ft, v.ty, gt.params, mut binds)
         at.push(j)
         vs.push(Val(id: copy_if_place(a.value, v), ty: v.ty))
-    if not all_bound(gt.params, binds, e.name, pos)
+    if not self.all_bound(gt.params, binds, e.name, pos)
         return none
-    t := instance_type(g, [binds[n] for n in gt.params]) else return unsupported(pos, "this enum")
+    t := self.instance_type(g, [
+        binds[n]
+        for n in gt.params
+    ]) else return unsupported(pos, "this enum")
     key := enum_name(t) else ""
     v := VariantRef(en: key, k: k)
     if fields.len() == 0
@@ -1006,7 +1015,7 @@ fn Lower.builtin_method(mut self, t Ty, name str) str?
             if ps.len() != 1
                 return none
             gen.owner_tys[t.name()] = t
-            instance(key, gf.decl, {ps[0].name: e}, t.name(), gf.file)?
+            self.instance(key, gf.decl, {ps[0].name: e}, t.name(), gf.file)?
             key
         Map | Opt => json_builtin_method(t, name)
         _ => none
@@ -1037,7 +1046,7 @@ fn Lower.assoc_instance(mut self, recv ast.Expr, name str)
             t := gen.tsubst.get(n) else return
             match t
                 List(_) =>
-                    if k := builtin_method(t, name)
+                    if k := self.builtin_method(t, name)
                         return
                 _ => return
         _ => return
@@ -1048,6 +1057,6 @@ fn Lower.qualified_generic_callee(self, recv ast.Expr, name str, pos ast.Pos) as
     n := match recv
         Name(r, _) => "{r}.{name}"
         _ => return none
-    if generic_fn_key(n) != none or (lookup(n) == none and generic_type_key(n) != none)
+    if self.generic_fn_key(n) != none or (lookup(n) == none and self.generic_type_key(n) != none)
         return ast.Expr.Name(name: n, pos: pos)
     none

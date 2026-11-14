@@ -5,7 +5,7 @@
 ##
 ## The formatter works on the lexer's token stream with the comment side
 ## table. It only changes whitespace, line breaks and trailing commas (and,
-## with `write_self`, writes `self.` before bare members: explicit.ail), and
+## by fmt.self, writes `self.` before bare members: explicit.ail), and
 ## refuses to write output whose token stream differs from the input's
 ## (fmt.safe). The spelling of a type is kept as written (type.num.4).
 use ast
@@ -44,23 +44,23 @@ struct FTok
     tuple_ty bool
 
 fn FTok.sym(self, s str) bool
-    kind == SYM and text == s
+    self.kind == SYM and self.text == s
 
 fn FTok.opens(self) bool
-    kind == SYM and (text == "(" or text == "[" or text == "\{")
+    self.kind == SYM and (self.text == "(" or self.text == "[" or self.text == "\{")
 
 fn FTok.closes(self) bool
-    kind == SYM and (text == ")" or text == "]" or text == "}")
+    self.kind == SYM and (self.text == ")" or self.text == "]" or self.text == "}")
 
 ## Ends an operand, so a following `(` or `[` is a call or an index. `then` is a
 ## contextual keyword lexed as a word (expr.if.*): `then (a + b)` stays spaced.
 fn FTok.ends_operand(self) bool
-    if kind == WORD and text == "then"
+    if self.kind == WORD and self.text == "then"
         return false
-    kind == WORD
-        or kind == LIT
-        or (kind == KW and text == "self")
-        or (kind == SYM and (text == ")" or text == "]" or text == "}" or text == "?"))
+    self.kind == WORD
+        or self.kind == LIT
+        or (self.kind == KW and self.text == "self")
+        or (self.kind == SYM and (self.text == ")" or self.text == "]" or self.text == "}" or self.text == "?"))
 
 fn comma_tok() FTok
     FTok(text: ",", kind: SYM, line: 0, end_line: 0, space_after: true, tuple_ty: false)
@@ -98,17 +98,9 @@ struct Formatter
     comments List[syntax.Comment]
     out List[str]
 
-## `ail fmt` writes `self.` before a bare member of the receiver (fmt.self,
-## ADR 1081). Off until the tree is reformatted in one commit; `--self` turns it on.
-## Staging only: that commit removes this constant and `--self` (one layout, no option).
-WRITE_SELF := false
-
-## The canonical form of `src`.
-pub fn format(src str) Formatted
-    format_with(src, WRITE_SELF)
-
-## `format`, with `write_self` choosing whether bare members get `self.` (fmt.self).
-pub fn format_with(original str, write_self bool) Formatted
+## The canonical form of `original`. Inside a method or an invariant a bare member
+## of the receiver gets `self.` (fmt.self, ADR 1081).
+pub fn format(original str) Formatted
     mut src := original
     mut lexed := syntax.lex(src)
     mut diags := lexed.diags
@@ -125,13 +117,12 @@ pub fn format_with(original str, write_self bool) Formatted
     for c in lexed.comments
         if c.pos.line < first_code and c.text.starts_with(OFF)
             return Formatted(status: 0, text: src, diags: [], why: "")
-    if write_self
-        ex := explicit_self(src, lexed.tokens)
-        if ex.status != 0
-            return ex
-        if ex.text != src
-            src = ex.text
-            lexed = syntax.lex(src)
+    ex := explicit_self(src, lexed.tokens)
+    if ex.status != 0
+        return ex
+    if ex.text != src
+        src = ex.text
+        lexed = syntax.lex(src)
     out := run(new_formatter(src, lexed.tokens, lexed.comments))
     # fmt.safe: the same tokens, apart from trailing commas, and the same comments.
     again := syntax.lex(out)

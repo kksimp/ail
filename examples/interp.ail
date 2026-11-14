@@ -38,11 +38,11 @@ struct Token
     pos Pos
 
 fn Token.describe(self) str
-    match kind
+    match self.kind
         End => "end of input"
-        Int => "number {text}"
+        Int => "number {self.text}"
         Str => "string"
-        Ident | Keyword | Op => "'{text}'"
+        Ident | Keyword | Op => "'{self.text}'"
 
 struct Lexer
     chars List[char]
@@ -54,88 +54,88 @@ fn Lexer.new(src str) Lexer
     Lexer(chars: src.chars(), i: 0, line: 1, col: 1)
 
 fn Lexer.peek_at(self, offset int) char
-    j := i + offset
-    if j < chars.len()
-        return chars[j]
+    j := self.i + offset
+    if j < self.chars.len()
+        return self.chars[j]
     '\0'
 
 fn Lexer.peek(self) char
-    peek_at(0)
+    self.peek_at(0)
 
 fn Lexer.pos(self) Pos
-    Pos(line, col)
+    Pos(line: self.line, col: self.col)
 
 fn Lexer.advance(mut self) char
-    c := chars[i]
-    i += 1
+    c := self.chars[self.i]
+    self.i += 1
     if c == '\n'
-        line += 1
-        col = 1
+        self.line += 1
+        self.col = 1
     else
-        col += 1
+        self.col += 1
     c
 
 fn Lexer.text_from(self, start int) str
-    chars[start..i].join("")
+    self.chars[start..self.i].join("")
 
 fn Lexer.skip_blank(mut self)
     while true
-        match peek()
-            ' ' | '\n' | '\t' | '\r' => advance()
+        match self.peek()
+            ' ' | '\n' | '\t' | '\r' => self.advance()
             '/' =>
-                if peek_at(1) != '/'
+                if self.peek_at(1) != '/'
                     return
-                while peek() != '\0' and peek() != '\n'
-                    advance()
+                while self.peek() != '\0' and self.peek() != '\n'
+                    self.advance()
             _ => return
 
 fn Lexer.token(mut self) Token ! MiniError
-    pos := pos()
-    c := peek()
+    pos := self.pos()
+    c := self.peek()
     if c.is_digit()
-        start := i
-        while peek().is_digit()
-            advance()
-        return Token(Int, text_from(start), pos)
+        start := self.i
+        while self.peek().is_digit()
+            self.advance()
+        return Token(Int, self.text_from(start), pos)
     if c.is_alpha() or c == '_'
-        start := i
-        while peek().is_alnum() or peek() == '_'
-            advance()
-        word := text_from(start)
+        start := self.i
+        while self.peek().is_alnum() or self.peek() == '_'
+            self.advance()
+        word := self.text_from(start)
         kind := if KEYWORDS.contains(word) then TokKind.Keyword else Ident
         return Token(kind, word, pos)
     if c == '"'
-        return string(pos)
-    if TWO_CHAR_OPS.contains("{c}{peek_at(1)}")
-        advance()
-        advance()
-        return Token(Op, text_from(i - 2), pos)
+        return self.string(pos)
+    if TWO_CHAR_OPS.contains("{c}{self.peek_at(1)}")
+        self.advance()
+        self.advance()
+        return Token(Op, self.text_from(self.i - 2), pos)
     if ONE_CHAR_OPS.contains(c)
-        advance()
+        self.advance()
         return Token(Op, "{c}", pos)
     MiniError(pos, "unexpected character '{c}'")
 
 fn Lexer.string(mut self, pos Pos) Token ! MiniError
-    advance()
+    self.advance()
     mut parts := []
     while true
-        match peek()
+        match self.peek()
             '\0' | '\n' => return MiniError(pos, "unterminated string")
             '"' => break
             '\\' =>
-                escape_pos := pos()
-                advance()
-                e := peek()
+                escape_pos := self.pos()
+                self.advance()
+                e := self.peek()
                 if e == '\0' or e == '\n'
                     continue
                 decoded := ESCAPES.get(e) else return MiniError(
                     escape_pos,
                     "unknown escape '\\{e}'",
                 )
-                advance()
+                self.advance()
                 parts.push(decoded)
-            _ => parts.push(advance())
-    advance()
+            _ => parts.push(self.advance())
+    self.advance()
     Token(Str, parts.join(""), pos)
 
 fn tokenize(src str) List[Token] ! MiniError
@@ -186,153 +186,153 @@ struct Parser
     i int
 
 fn Parser.peek(self) Token
-    tokens[i]
+    self.tokens[self.i]
 
 fn Parser.peek_next(self) Token
-    tokens[(i + 1).min(tokens.len() - 1)]
+    self.tokens[(self.i + 1).min(self.tokens.len() - 1)]
 
 fn Parser.advance(mut self) Token
-    tok := peek()
+    tok := self.peek()
     if tok.kind != End
-        i += 1
+        self.i += 1
     tok
 
 fn Parser.at_any(self, ops List[str]) bool
-    tok := peek()
+    tok := self.peek()
     (tok.kind == Op or tok.kind == Keyword) and ops.contains(tok.text)
 
 fn Parser.at(self, text str) bool
-    at_any([text])
+    self.at_any([text])
 
 fn Parser.expected(self, what str) MiniError
-    tok := peek()
+    tok := self.peek()
     MiniError(tok.pos, "expected {what} but found {tok.describe()}")
 
 fn Parser.expect(mut self, text str) Token ! MiniError
-    if not at(text)
-        return expected("'{text}'")
-    advance()
+    if not self.at(text)
+        return self.expected("'{text}'")
+    self.advance()
 
 fn Parser.expect_ident(mut self) str ! MiniError
-    if peek().kind != Ident
-        return expected("identifier")
-    advance().text
+    if self.peek().kind != Ident
+        return self.expected("identifier")
+    self.advance().text
 
 fn Parser.program(mut self) List[Stmt] ! MiniError
     mut stmts := []
-    while peek().kind != End
-        stmts.push(statement()?)
+    while self.peek().kind != End
+        stmts.push(self.statement()?)
     stmts
 
 fn Parser.block(mut self) List[Stmt] ! MiniError
-    expect("\{")?
+    self.expect("\{")?
     mut stmts := []
-    while not at("}")
-        if peek().kind == End
-            return expected("'}'")
-        stmts.push(statement()?)
-    advance()
+    while not self.at("}")
+        if self.peek().kind == End
+            return self.expected("'}'")
+        stmts.push(self.statement()?)
+    self.advance()
     stmts
 
 fn Parser.statement(mut self) Stmt ! MiniError
-    tok := peek()
+    tok := self.peek()
     pos := tok.pos
-    if at("let")
-        advance()
-        name := expect_ident()?
-        expect("=")?
-        return Let(pos, name, expression(0)?)
-    if at("if")
-        return if_statement()
-    if at("while")
-        advance()
-        cond := expression(0)?
-        return While(pos, cond, block()?)
-    if at("fn")
-        advance()
-        name := expect_ident()?
-        expect("(")?
+    if self.at("let")
+        self.advance()
+        name := self.expect_ident()?
+        self.expect("=")?
+        return Let(pos, name, self.expression(0)?)
+    if self.at("if")
+        return self.if_statement()
+    if self.at("while")
+        self.advance()
+        cond := self.expression(0)?
+        return While(pos, cond, self.block()?)
+    if self.at("fn")
+        self.advance()
+        name := self.expect_ident()?
+        self.expect("(")?
         mut params := []
-        if not at(")")
-            params.push(expect_ident()?)
-            while at(",")
-                advance()
-                params.push(expect_ident()?)
-        expect(")")?
-        return FnDecl(FnDef(name, params, block()?))
-    if at("return")
-        advance()
-        if at("}")
+        if not self.at(")")
+            params.push(self.expect_ident()?)
+            while self.at(",")
+                self.advance()
+                params.push(self.expect_ident()?)
+        self.expect(")")?
+        return FnDecl(FnDef(name, params, self.block()?))
+    if self.at("return")
+        self.advance()
+        if self.at("}")
             return Return(pos, none)
-        return Return(pos, expression(0)?)
-    next := peek_next()
+        return Return(pos, self.expression(0)?)
+    next := self.peek_next()
     if tok.kind == Ident and next.kind == Op and next.text == "="
-        advance()
-        advance()
-        return Assign(pos, tok.text, expression(0)?)
-    ExprStmt(expression(0)?)
+        self.advance()
+        self.advance()
+        return Assign(pos, tok.text, self.expression(0)?)
+    ExprStmt(self.expression(0)?)
 
 fn Parser.if_statement(mut self) Stmt ! MiniError
-    pos := expect("if")?.pos
-    cond := expression(0)?
-    then_body := block()?
+    pos := self.expect("if")?.pos
+    cond := self.expression(0)?
+    then_body := self.block()?
     mut else_body := []
-    if at("else")
-        advance()
-        else_body = if at("if") then [if_statement()?] else block()?
+    if self.at("else")
+        self.advance()
+        else_body = if self.at("if") then [self.if_statement()?] else self.block()?
     If(pos, cond, then_body, else_body)
 
 fn Parser.expression(mut self, level int) Expr ! MiniError
     if level == BINARY_LEVELS.len()
-        return unary()
-    mut left := expression(level + 1)?
-    while at_any(BINARY_LEVELS[level])
-        op := advance()
-        right := expression(level + 1)?
+        return self.unary()
+    mut left := self.expression(level + 1)?
+    while self.at_any(BINARY_LEVELS[level])
+        op := self.advance()
+        right := self.expression(level + 1)?
         left = Binary(op.pos, op.text, left, right)
     left
 
 fn Parser.unary(mut self) Expr ! MiniError
-    if at("-") or at("not")
-        op := advance()
-        return Unary(op.pos, op.text, unary()?)
-    primary()
+    if self.at("-") or self.at("not")
+        op := self.advance()
+        return Unary(op.pos, op.text, self.unary()?)
+    self.primary()
 
 fn Parser.primary(mut self) Expr ! MiniError
-    tok := peek()
+    tok := self.peek()
     match tok.kind
         Int =>
-            advance()
+            self.advance()
             IntLit(tok.pos, tok.text.to_int() else return MiniError(tok.pos, "number too large"))
         Str =>
-            advance()
+            self.advance()
             StrLit(tok.pos, tok.text)
         Ident =>
-            advance()
-            if not at("(")
+            self.advance()
+            if not self.at("(")
                 return Var(tok.pos, tok.text)
-            advance()
+            self.advance()
             mut args := []
-            if not at(")")
-                args.push(expression(0)?)
-                while at(",")
-                    advance()
-                    args.push(expression(0)?)
-            expect(")")?
+            if not self.at(")")
+                args.push(self.expression(0)?)
+                while self.at(",")
+                    self.advance()
+                    args.push(self.expression(0)?)
+            self.expect(")")?
             Call(tok.pos, tok.text, args)
         Keyword =>
             if tok.text != "true" and tok.text != "false"
-                return expected("expression")
-            advance()
+                return self.expected("expression")
+            self.advance()
             BoolLit(tok.pos, tok.text == "true")
         Op =>
             if tok.text != "("
-                return expected("expression")
-            advance()
-            inner := expression(0)?
-            expect(")")?
+                return self.expected("expression")
+            self.advance()
+            inner := self.expression(0)?
+            self.expect(")")?
             inner
-        End => expected("expression")
+        End => self.expected("expression")
 
 enum Value
     Int(n int)
@@ -379,18 +379,18 @@ struct Env
     base int
 
 fn Env.find(self, name str) int?
-    mut k := scopes.len()
-    while k > base
+    mut k := self.scopes.len()
+    while k > self.base
         k -= 1
-        if scopes[k].contains(name)
+        if self.scopes[k].contains(name)
             return k
-    if scopes[0].contains(name)
+    if self.scopes[0].contains(name)
         return 0
     none
 
 fn Env.get(self, name str) Value?
-    k := find(name)?
-    scopes[k].get(name)
+    k := self.find(name)?
+    self.scopes[k].get(name)
 
 struct Interp
     env Env
@@ -407,46 +407,46 @@ fn checked(pos Pos, result int?) Value ! MiniError
     Int(result else return MiniError(pos, "integer overflow"))
 
 fn Interp.run(mut self, program List[Stmt]) !
-    exec_all(program)?
+    self.exec_all(program)?
 
 fn Interp.exec_all(mut self, body List[Stmt]) Flow ! MiniError
     for stmt in body
-        flow := exec(stmt)?
+        flow := self.exec(stmt)?
         if flow != Next
             return flow
     Next
 
 fn Interp.exec_block(mut self, body List[Stmt]) Flow ! MiniError
-    env.scopes.push({})
-    flow := exec_all(body)?
-    env.scopes.pop()
+    self.env.scopes.push({})
+    flow := self.exec_all(body)?
+    self.env.scopes.pop()
     flow
 
 fn Interp.exec(mut self, stmt Stmt) Flow ! MiniError
     match stmt
-        Let(_, name, value) => env.scopes[env.scopes.len() - 1][name] = eval(value)?
+        Let(_, name, value) => self.env.scopes[self.env.scopes.len() - 1][name] = self.eval(value)?
         Assign(pos, name, value) =>
-            k := env.find(name) else return undefined_variable(pos, name)
-            env.scopes[k][name] = eval(value)?
+            k := self.env.find(name) else return undefined_variable(pos, name)
+            self.env.scopes[k][name] = self.eval(value)?
         If(_, cond, then_body, else_body) =>
-            if condition(cond)?
-                return exec_block(then_body)
-            return exec_block(else_body)
+            if self.condition(cond)?
+                return self.exec_block(then_body)
+            return self.exec_block(else_body)
         While(_, cond, body) =>
-            while condition(cond)?
-                flow := exec_block(body)?
+            while self.condition(cond)?
+                flow := self.exec_block(body)?
                 if flow != Next
                     return flow
-        FnDecl(def) => functions[def.name] = def
+        FnDecl(def) => self.functions[def.name] = def
         Return(_, value) =>
             if e := value
-                return Returned(eval(e)?)
+                return Returned(self.eval(e)?)
             return Returned(Nil)
-        ExprStmt(e) => eval(e)?
+        ExprStmt(e) => self.eval(e)?
     Next
 
 fn Interp.condition(mut self, e Expr) bool ! MiniError
-    v := eval(e)?
+    v := self.eval(e)?
     (v.as_bool() else return MiniError(e.pos(), "type mismatch: condition must be bool, got {v.type_name()}"))
 
 fn Interp.eval(mut self, e Expr) Value ! MiniError
@@ -455,10 +455,10 @@ fn Interp.eval(mut self, e Expr) Value ! MiniError
         StrLit(_, s) => Str(s)
         BoolLit(_, b) => Bool(b)
         Var(pos, name) =>
-            v := env.get(name) else return undefined_variable(pos, name)
+            v := self.env.get(name) else return undefined_variable(pos, name)
             v
         Unary(pos, op, operand) =>
-            v := eval(operand)?
+            v := self.eval(operand)?
             if op == "-"
                 if n := v.as_int()
                     return checked(pos, n.checked_neg())
@@ -468,19 +468,19 @@ fn Interp.eval(mut self, e Expr) Value ! MiniError
             MiniError(pos, "type mismatch: cannot apply '{op}' to {v.type_name()}")
         Binary(pos, op, left, right) =>
             if op == "and" or op == "or"
-                return logical(pos, op, left, right)
-            binary(pos, op, eval(left)?, eval(right)?)
-        Call(pos, name, args) => call(pos, name, [eval(arg)? for arg in args])
+                return self.logical(pos, op, left, right)
+            binary(pos, op, self.eval(left)?, self.eval(right)?)
+        Call(pos, name, args) => self.call(pos, name, [self.eval(arg)? for arg in args])
 
 fn Interp.logical(mut self, pos Pos, op str, left Expr, right Expr) Value ! MiniError
-    a := eval(left)?
+    a := self.eval(left)?
     x := a.as_bool() else return MiniError(
         pos,
         "type mismatch: '{op}' needs bool operands, got {a.type_name()}",
     )
     if (op == "and" and not x) or (op == "or" and x)
         return a
-    b := eval(right)?
+    b := self.eval(right)?
     if b.as_bool() == none
         return MiniError(pos, "type mismatch: '{op}' needs bool operands, got {b.type_name()}")
     b
@@ -525,22 +525,22 @@ fn Interp.call(mut self, pos Pos, name str, args List[Value]) Value ! MiniError
             return Str("{args[0]}")
         print(args[0])
         return Nil
-    def := functions.get(name) else return MiniError(pos, "undefined function '{name}'")
+    def := self.functions.get(name) else return MiniError(pos, "undefined function '{name}'")
     if args.len() != def.params.len()
         return wrong_arguments(pos, name, def.params.len(), args.len())
-    if depth == MAX_DEPTH
+    if self.depth == MAX_DEPTH
         return MiniError(pos, "stack overflow")
     mut frame := {}
     for i in 0..args.len()
         frame[def.params[i]] = args[i]
-    saved_base := env.base
-    env.base = env.scopes.len()
-    env.scopes.push(frame)
-    depth += 1
-    flow := exec_all(def.body)?
-    depth -= 1
-    env.scopes = env.scopes[..env.base]
-    env.base = saved_base
+    saved_base := self.env.base
+    self.env.base = self.env.scopes.len()
+    self.env.scopes.push(frame)
+    self.depth += 1
+    flow := self.exec_all(def.body)?
+    self.depth -= 1
+    self.env.scopes = self.env.scopes[..self.env.base]
+    self.env.base = saved_base
     match flow
         Next => Nil
         Returned(v) => v

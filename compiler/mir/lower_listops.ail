@@ -39,7 +39,7 @@ fn Lower.lower_list_build(mut self, r Val, e Ty, name str, npos ast.Pos, vs List
             return Val(id: copy_value(flat), ty: e)
         return flat
     if e != Ty.Int and e != Ty.Str and e != Ty.Char
-        return counts_loop(r, e, npos)
+        return self.counts_loop(r, e, npos)
     want := Ty.Map(key: e, val: Ty.Int)
     kind := konst(key_kind(e), Ty.Int)
     Val(id: call("rt.map_counts", [kind, r.id], want), ty: want)

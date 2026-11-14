@@ -88,11 +88,11 @@ fn parse_cron(expr str) Schedule ! CronError
     Schedule(minutes: f_min, hours: f_hour, days: f_day, months: f_month, weekdays: f_week)
 
 fn Schedule.fires(self, month int, dom int, dow int, hour int, minute int) bool
-    months.contains(month)
-        and days.contains(dom)
-        and weekdays.contains(dow)
-        and hours.contains(hour)
-        and minutes.contains(minute)
+    self.months.contains(month)
+        and self.days.contains(dom)
+        and self.weekdays.contains(dow)
+        and self.hours.contains(hour)
+        and self.minutes.contains(minute)
 
 fn brief(xs List[int]) str
     if xs.len() <= 8

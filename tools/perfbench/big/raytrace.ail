@@ -8,16 +8,16 @@ struct Vec
     z float
 
 fn Vec.add(self, o Vec) Vec
-    Vec(x: x + o.x, y: y + o.y, z: z + o.z)
+    Vec(x: self.x + o.x, y: self.y + o.y, z: self.z + o.z)
 
 fn Vec.sub(self, o Vec) Vec
-    Vec(x: x - o.x, y: y - o.y, z: z - o.z)
+    Vec(x: self.x - o.x, y: self.y - o.y, z: self.z - o.z)
 
 fn Vec.scale(self, k float) Vec
-    Vec(x: x * k, y: y * k, z: z * k)
+    Vec(x: self.x * k, y: self.y * k, z: self.z * k)
 
 fn Vec.dot(self, o Vec) float
-    x * o.x + y * o.y + z * o.z
+    self.x * o.x + self.y * o.y + self.z * o.z
 
 fn Vec.unit(self) Vec
     k := 1.0 / self.dot(self).sqrt()

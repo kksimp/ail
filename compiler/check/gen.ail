@@ -33,7 +33,7 @@ fn Checker.gen_start(mut self, f ast.FnDecl, ret Ty) Ty?
     if not ast.has_yield(body)
         return none
     # Without a `Seq[T]` result each `yield` reports expr.yield.1.
-    elem := seq_elem(ret) else return none
+    elem := self.seq_elem(ret) else return none
     if recv := f.receiver
         if recv.mutable
             err_help(
@@ -57,7 +57,7 @@ fn Checker.gen_start(mut self, f ast.FnDecl, ret Ty) Ty?
             "a generator can't have `requires` or `ensures` yet",
             "check the condition in the body, before the first `yield`",
         )
-    gen_rules(body, "")
+    self.gen_rules(body, "")
     elem
 
 ## expr.yield.4: no `defer` in a generator, and no `yield` inside `par for`
@@ -81,27 +81,27 @@ fn Checker.gen_start(mut self, f ast.FnDecl, ret Ty) Ty?
                     "do the cleanup at the end of the body, before the generator returns",
                 )
             For(is_par, _, _, _, _, inner, _) =>
-                gen_rules(inner, if is_par then "`par for`" else within)
-            With(_, _, _, inner, _) => gen_rules(inner, "`with`")
-            While(_, inner, _) => gen_rules(inner, within)
-            Unsafe(inner, _) => gen_rules(inner, within)
+                self.gen_rules(inner, if is_par then "`par for`" else within)
+            With(_, _, _, inner, _) => self.gen_rules(inner, "`with`")
+            While(_, inner, _) => self.gen_rules(inner, within)
+            Unsafe(inner, _) => self.gen_rules(inner, within)
             Select(arms, _) =>
                 for inner in ast.select_bodies(arms)
-                    gen_rules(inner, within)
-            Eval(e) => gen_rules_expr(e, within)
-            Let(_, _, _, value, _) => gen_rules_expr(value, within)
+                    self.gen_rules(inner, within)
+            Eval(e) => self.gen_rules_expr(e, within)
+            Let(_, _, _, value, _) => self.gen_rules_expr(value, within)
             _ => continue
 
 @allow("expr.match.3") fn Checker.gen_rules_expr(mut self, e ast.Expr, within str)
     match e
         If(branches, els, _, _) =>
             for b in branches
-                gen_rules(b.body, within)
+                self.gen_rules(b.body, within)
             if body := els
-                gen_rules(body, within)
+                self.gen_rules(body, within)
         Match(_, arms, _) =>
             for a in arms
-                gen_rules(a.body, within)
+                self.gen_rules(a.body, within)
         _ => return
 
 ## `yield e` (expr.yield.2): `e` is the generator's next element.
@@ -151,9 +151,9 @@ fn Checker.iter_next(mut self, t Ty, at ast.Pos, iter ast.Expr) Ty
     i := method_index(tn, "next") else return iterate_error(t, at, iter)
     sig := sigs[i]
     elem := opt_inner_of(sig.ret) else
-        return bad_next(tn, at)
+        return self.bad_next(tn, at)
     if sig.receiver != true or sig.params.len() > 0
-        return bad_next(tn, at)
+        return self.bad_next(tn, at)
     gen.nexts[pos_key(at)] = i
     consume(iter, t)
     subst(elem, zip_binds(sig.generics[..sig.owner], args_of(t)))

@@ -432,19 +432,28 @@ fn wait_done_dl(rec int, report bool) bool
     race_join(load64(rec + T_RACE))
     dead
 
-## A worker is about to sleep in `wait`: it stops counting as running, and
-## a replacement starts if work is queued and nobody could take it.
+## A worker is about to sleep in `wait`: it stops counting as running, so
+## queued work may now run. An idle worker is woken: it may have gone idle
+## past the cap (conc.par.18) while this one still ran, and nothing else
+## would wake it. With none idle a replacement starts. `seq` changes under
+## the lock, so a worker about to sleep on it sees the change.
 fn wait_enter()
     p := load64(global(TASKS))
     lock(p + P_LOCK)
     store64(p + P_BLOCKED, load64(p + P_BLOCKED) + 1)
     live := load64(p + P_LIVE)
     mut fresh := -1
-    if load64(p + P_HEAD) != 0 and load64(p + P_IDLE) == 0
-        if live - load64(p + P_BLOCKED) < load64(p + P_TARGET) and live < MAXW
+    mut wake := false
+    if load64(p + P_HEAD) != 0
+        if load64(p + P_IDLE) > 0
+            store64(p + P_SEQ, load64(p + P_SEQ) + 1)
+            wake = true
+        elif live - load64(p + P_BLOCKED) < load64(p + P_TARGET) and live < MAXW
             store64(p + P_LIVE, live + 1)
             fresh = live
     unlock(p + P_LOCK)
+    if wake
+        futex_wake(p + P_SEQ, 1)
     if fresh >= 0
         start_thread(p, fresh)
 
@@ -712,7 +721,11 @@ fn task_set_threads(n int)
     p := pool()
     if atomic_load(p + P_REGION) > 0
         os_usage_trap("conc.par.18", "`task.set_threads` while a parallel loop runs")
+    lock(p + P_LOCK)
     store64(p + P_TARGET, if n < 1 then 1 else if n > MAXW then MAXW else n)
+    # A worker about to sleep sees the change; Windows waiters poll the word.
+    store64(p + P_SEQ, load64(p + P_SEQ) + 1)
+    unlock(p + P_LOCK)
     futex_wake(p + P_SEQ, MAXW)
 
 ## A chunk of a loop that can't be run again trapped: report the first

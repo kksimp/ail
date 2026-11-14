@@ -15,7 +15,7 @@ fn Parser.fn_body(mut self, after str, bodyless_ok bool) FnBody?
     # A loop label is visible only inside its own function (expr.loop.10).
     saved := loops
     loops = []
-    out := fn_body_inner(after, bodyless_ok)
+    out := self.fn_body_inner(after, bodyless_ok)
     loops = saved
     out
 
@@ -31,7 +31,7 @@ fn Parser.fn_body_inner(mut self, after str, bodyless_ok bool) FnBody?
         is_ensures := at_kw("ensures")
         if not is_ensures and not at_kw("requires")
             break
-        if c := contract_line(is_ensures)
+        if c := self.contract_line(is_ensures)
             contracts.push(c)
         else
             skip_statement()
@@ -337,7 +337,7 @@ fn names_in(tok Tok) List[str]
 ## `use a.b.c` or `use a.b.c as d`, on a line of its own (mod.use.1).
 fn Parser.use_decl(mut self)
     pos := bump().pos
-    if u := use_path(pos)
+    if u := self.use_path(pos)
         last := if a := u.alias then a else u.path[u.path.len() - 1]
         aliases.add(last.name)
         uses.push(u)
@@ -345,8 +345,8 @@ fn Parser.use_decl(mut self)
         skip_statement()
 
 fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
-    if header := c_header()
-        return header_use(pos, header)
+    if header := self.c_header()
+        return self.header_use(pos, header)
     mut path := [take_name("a module path after `use`", "mod.use.1")?]
     while true
         if at_sym(":") and sym_at(1) == ":" and adjacent(i)
@@ -376,7 +376,7 @@ fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
 fn Parser.c_header(self) str?
     if tag_at(0) != "id" or ident() != "c"
         return none
-    h := str_at(1)
+    h := self.str_at(1)
     if h == ""
         return none
     h
@@ -576,7 +576,7 @@ fn Parser.foreign_decl(mut self, w str) bool
         return false
     # `from a.b import c` becomes `use a.b.c`.
     if w == "from"
-        return from_import()
+        return self.from_import()
     repl := decl_fix(w) else return false
     info := decl_info(w)
     error_text(
@@ -654,6 +654,9 @@ fn Parser.foreign_stmt(mut self) bool
         repl = "while true"
     elif word == "elseif" or word == "elsif" or word == "else_if"
         repl = "elif"
+    elif word == "switch" and t != "nl"
+        # `switch x` over `pattern =>` arms is a `match` (checkbench, ADR 1111).
+        repl = "match"
     if repl != ""
         attach("write `{repl}`", [fix.span(here(), tok_end(i) else here(), repl)])
     skip_statement()
@@ -779,9 +782,9 @@ fn Parser.stray_after_statement(mut self, start int) bool
     if cur == "!"
         and k0 >= 1
         and tok_tag(tokens[k0 - 1].tok) == "id"
-        and touches(k0)
+        and self.touches(k0)
         and (sym_at(1) == "(" or sym_at(1) == "[")
-        return macro_call(k0)
+        return self.macro_call(k0)
     # `go work(1)`
     if tokens[start].tok == Tok.Ident("go") and k0 == start + 1 and tag_at(0) == "id"
         error_text(
@@ -793,7 +796,10 @@ fn Parser.stray_after_statement(mut self, start int) bool
         )
         return true
     # `a, b = b, a`
-    if tok_tag(tokens[start].tok) == "id" and cur == "," and k0 == start + 1 and assign_ahead(k0)
+    if tok_tag(tokens[start].tok) == "id"
+        and cur == ","
+        and k0 == start + 1
+        and self.assign_ahead(k0)
         error_text(
             "gram.foreign.1",
             tok_pos(start),
@@ -880,7 +886,7 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "put the parameters between bars and the body after them, on the same line",
             "",
         )
-        if first := arrow_params(k0)
+        if first := self.arrow_params(k0)
             names := [tok_text(tokens[k].tok) for k in first..k0 if tok_tag(tokens[k].tok) == "id"]
             head := "|{names.join(", ")}|"
             attach("write `{head}`", [fix.span(tokens[first].pos, tok_end(k0) else pos, head)])

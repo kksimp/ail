@@ -15,7 +15,7 @@ fn Checker.fieldless(self, e int) bool
 ## `Enum.variants()` and `Enum.from_str(s)`: their type, or `none` when `n` isn't one of them or
 ## the enum isn't field-less.
 fn Checker.enum_static(mut self, e int, n str, at ast.Pos, args List[ast.Arg]) Ty?
-    if not fieldless(e) or (n != "variants" and n != "from_str")
+    if not self.fieldless(e) or (n != "variants" and n != "from_str")
         return none
     t := Ty.Enum(e, [])
     want := if n == "variants" then 0 else 1
@@ -51,7 +51,7 @@ fn Checker.enum_name_method(mut self, rt Ty, n str, at ast.Pos, args List[ast.Ar
         return none
     match rt
         Enum(e, _) =>
-            if not fieldless(e)
+            if not self.fieldless(e)
                 return none
             args_only(args)
             if args.len() > 0

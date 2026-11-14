@@ -86,24 +86,24 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         if l := local(n)
             return call_value(n, l.ty, args, npos)
     if n == "print"
-        return print_call(args, npos)
+        return self.print_call(args, npos)
     if n == ast.YIELD
         return yield_call(args, npos)
     # err.model.2: `unreachable(message)` traps; it never returns.
     if n == "unreachable"
         s := plain_sig(none, [Ty.Str], Ty.Unit)
-        check_call(n, s, [], args, none, npos, none)
+        self.check_call(n, s, [], args, none, npos, none)
         return Ty.Never
     if ASSERT_FNS.contains(n)
-        return assert_call(n, args, npos)
+        return self.assert_call(n, args, npos)
     if n == "zip" and not has_targs and not fns.contains("zip")
         return zip_call(args, npos)
     if CONC_TYPES.contains(n)
         return conc_constructor(n, targs, has_targs, args, npos, expect)
     if has_targs and (n == "List" or n == "Set" or n == "Map")
-        t := collection_constructor(n, targs, npos)
+        t := self.collection_constructor(n, targs, npos)
         if args.len() > 0
-            args_only(args)
+            self.args_only(args)
             err_help(
                 "type.coll.8",
                 npos,
@@ -112,20 +112,20 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             )
         return t
     if d := types.get(n)
-        if root_decl_hidden(d, npos)
+        if self.root_decl_hidden(d, npos)
             # Inside a module a bare name is its own or the standard one: a root type of the same
             # name is not in scope there (mod.unit.1), so a variant such as `Field(...)` wins.
             if v := bare_variant(n, npos, expect)
-                return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
+                return self.variant_literal(v.enum_index, v.variant, none, args, npos, expect)
         match d
             DStruct(s) =>
                 symbols[pos_key(npos)] = "type:{n}"
                 mut explicit := no_binds()
                 if has_targs
-                    explicit = explicit_args(n, struct_params[s], targs, npos)
-                return struct_literal(s, explicit, args, npos, expect)
+                    explicit = self.explicit_args(n, struct_params[s], targs, npos)
+                return self.struct_literal(s, explicit, args, npos, expect)
             DEnum(e) =>
-                args_only(args)
+                self.args_only(args)
                 err_help(
                     "expr.name.1",
                     npos,
@@ -134,8 +134,8 @@ fn Checker.args_only(mut self, args List[ast.Arg])
                 )
                 return Ty.Unknown
     if i := fns.get(n)
-        reject_test_call(i, npos)
-        note_deprecated(i, npos)
+        self.reject_test_call(i, npos)
+        self.note_deprecated(i, npos)
         note_unsafe_call(i, npos)
         declared_fns.add(pos_key(npos))
         symbols[pos_key(npos)] = "fn:{n}"
@@ -147,22 +147,22 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             gap("calls a gapped function")
         mut binds := List[Bind]()
         if has_targs
-            binds = explicit_args(n, s.generics[s.owner..s.owner + s.declared], targs, npos)
+            binds = self.explicit_args(n, s.generics[s.owner..s.owner + s.declared], targs, npos)
         if has_attr(prog.fns[i], "variadic c")
-            return check_variadic(n, s, args, npos, expect)
+            return self.check_variadic(n, s, args, npos, expect)
         if prog.fns[i].ext != none
             return check_c_call(n, s, binds, args, npos, expect)
-        return check_call(n, s, binds, args, none, npos, expect)
+        return self.check_call(n, s, binds, args, none, npos, expect)
     # type.distinct.3: `int(id)` gives a distinct type's value as its base.
     if not has_targs
         if back := distinct_unwrap(n, args, npos)
             return back
     if v := bare_variant(n, npos, expect)
-        return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
+        return self.variant_literal(v.enum_index, v.variant, none, args, npos, expect)
     # A habit call such as `make(Map[str, int])` (a call hint of expr.name.1) is one mistake: its fix rewrites the
     # whole call, so its argument, often a type written as a value, isn't reported again.
     if call_hint(n, args.len()) == none or traits.contains(n)
-        args_only(args)
+        self.args_only(args)
     if traits.contains(n)
         err_help(
             "expr.name.1",
@@ -245,10 +245,10 @@ fn Checker.map_literal(mut self, entries List[ast.MapEntry], at ast.Pos, expect 
         _ => kh = none
     keys := [en.key for en in entries]
     vals := [en.value for en in entries]
-    k := elements(keys, kh, "map keys")
-    v := elements(vals, vh, "map values")
+    k := self.elements(keys, kh, "map keys")
+    v := self.elements(vals, vh, "map values")
     require_key(k, at)
-    duplicate_literals(keys, "key")
+    self.duplicate_literals(keys, "key")
     Ty.MapOf(key: k, value: v)
 
 ## `{a, b, ...}` (type.coll.2).
@@ -258,9 +258,9 @@ fn Checker.set_literal(mut self, items List[ast.Expr], at ast.Pos, expect Ty?) T
     match opt_inner(expect else Ty.Unknown)
         SetOf(x) => hint = x
         _ => hint = none
-    t := elements(items, hint, "set elements")
+    t := self.elements(items, hint, "set elements")
     require_key(t, at)
-    duplicate_literals(items, "element")
+    self.duplicate_literals(items, "element")
     Ty.SetOf(t)
 
 ## A literal key or element as text, to compare (type.map.1).
@@ -360,7 +360,7 @@ fn Checker.variant_literal(
 ) Ty
     variant := prog.enums[e].variants[v]
     if variant.fields.len() == 0
-        args_only(args)
+        self.args_only(args)
         err_help(
             "type.enum.6",
             at,
@@ -374,9 +374,9 @@ fn Checker.variant_literal(
     mut binds := explicit else expected_binds(Def.DEnum(e), expect)
     label := "{prog.enums[e].name}.{variant.name}"
     before := diags.len()
-    fields_literal(label, variant.fields, variant_types[e][v], params, mut binds, args, at)
+    self.fields_literal(label, variant.fields, variant_types[e][v], params, mut binds, args, at)
     quiet := diags.len() > before
-    finish(label, params, mut binds, at, quiet)
+    self.finish(label, params, mut binds, at, quiet)
     Ty.Enum(e, [bound(binds, p) for p in params])
 
 ## Check a call's arguments against a signature (expr.call.1-2, own.param.2,
@@ -394,8 +394,8 @@ fn Checker.check_call(
 ) Ty
     mut binds := given
     vars := sig.generics
-    order := arg_slots(what, sig, args, at) else
-        args_only(args)
+    order := self.arg_slots(what, sig, args, at) else
+        self.args_only(args)
         return subst_unknown(sig.ret, binds, vars)
     before := diags.len()
     for i in order
@@ -441,7 +441,7 @@ fn Checker.check_call(
         if open
             bind(sig.ret, e, vars, mut binds)
     quiet := diags.len() > before
-    finish(what, vars, mut binds, at, quiet)
+    self.finish(what, vars, mut binds, at, quiet)
     # own.uniq.5: generic code may copy its values, so a unique type can't be
     # a function's type argument.
     own := vars[sig.owner.min(vars.len())..]
@@ -475,7 +475,7 @@ fn Checker.check_call(
 fn Checker.check_variadic(mut self, n str, s Sig, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
     want := s.params.len()
     if args.len() < want
-        args_only(args)
+        self.args_only(args)
         err_help(
             "ffi.var.2",
             at,
@@ -484,7 +484,7 @@ fn Checker.check_variadic(mut self, n str, s Sig, args List[ast.Arg], at ast.Pos
         )
         return s.ret
     fixed := [args[k] for k in 0..want]
-    t := check_call(n, s, [], fixed, none, at, expect)
+    t := self.check_call(n, s, [], fixed, none, at, expect)
     mut ints := 0
     mut floats := 0
     for p in s.params
@@ -572,6 +572,12 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                     "reshape",
                     "reshape([$a])",
                 )])
+            elif sig.names.len() == sig.params.len() and sig.params.len() > 0
+                # Name each parameter with its type, so the call can be written without a lookup (checkbench, ADR 1111).
+                shown := ["{sig.names[k]} {show(sig.params[k].ty)}" for k in 0..sig.params.len()]
+                d = d.with_help("`{what}` is `{what}({shown.join(", ")})`; pass one value for each")
+            elif sig.params.len() == 0
+                d = d.with_help("`{what}` takes no arguments: write `{what}()`")
             diags.push(d)
             return none
         return [i for i in 0..args.len()]
@@ -699,7 +705,7 @@ fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
                 "remove the `mut`",
             )
     if args.len() != 1
-        args_only(args)
+        self.args_only(args)
         mut d := new_diag(
             "mod.main.3",
             at,
@@ -712,7 +718,7 @@ fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     v := args[0].value
     t := expr(v, none, true)
     if t == Ty.Unit
-        if f := called_fn(v)
+        if f := self.called_fn(v)
             err_help(
                 "mod.main.3",
                 expr_pos(v),
@@ -741,10 +747,10 @@ fn Checker.struct_literal(
     params := struct_params[s]
     mut binds := explicit else expected_binds(Def.DStruct(s), expect)
     before := diags.len()
-    private_literal(s, at)
-    fields_literal(decl.name, decl.fields, field_types[s], params, mut binds, args, at)
+    self.private_literal(s, at)
+    self.fields_literal(decl.name, decl.fields, field_types[s], params, mut binds, args, at)
     quiet := diags.len() > before
-    finish(decl.name, params, mut binds, at, quiet)
+    self.finish(decl.name, params, mut binds, at, quiet)
     Ty.Struct(s, [bound(binds, p) for p in params])
 
 ## The `(field: value, ...)` of a struct literal or a variant with data
@@ -761,7 +767,7 @@ fn Checker.fields_literal(
 )
     mut given := [false for _ in fields]
     slots := field_slots(fields, args)
-    positional_types(label, fields, ts, args, slots, at)
+    self.positional_types(label, fields, ts, args, slots, at)
     mut lost := false
     for k in 0..args.len()
         a := args[k]
@@ -781,6 +787,10 @@ fn Checker.fields_literal(
                 mut d := new_diag("type.struct.4", l.pos, "`{label}` has no field `{l.name}`")
                 if s := suggest(l.name, names)
                     d = d.did_you_mean(l.name, s)
+                elif names.len() > 0
+                    d = d.with_help("`{label}` has the fields {list_names(names)}; remove `{l.name}:` and its value, or add the field to the struct")
+                else
+                    d = d.with_help("`{label}` has no fields: write `{label}()`")
                 diags.push(d)
             else
                 err(
@@ -903,7 +913,7 @@ fn Checker.method_index(self, tn str, n str) int?
     if builtin(t, n) != none
         found.push(Cand.CBuiltin)
     if tn := type_name_of(t)
-        if i := method_index(tn, n)
+        if i := self.method_index(tn, n)
             found.push(Cand.CInherent(i))
     for tr in 0..prog.traits.len()
         if trait_method(tr, n) == none
@@ -937,7 +947,7 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
     elif n == "zeros"
         sig = plain_sig(none, [Ty.Int], Ty.Bytes)
     elif n != "from_list"
-        args_only(args)
+        self.args_only(args)
         mut d := new_diag(
             "type.bytes.13",
             at,
@@ -951,29 +961,29 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
                 break
         diags.push(d)
         return Ty.Unknown
-    check_call("bytes.{n}", sig, [], args, none, at, expect)
+    self.check_call("bytes.{n}", sig, [], args, none, at, expect)
 
 @allow("expr.match.3")
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
-    if k := pending_recv(recv)
+    if k := self.pending_recv(recv)
         if args.len() == 1 and not pending[k].opt
             if n == "push" and not pending[k].brace
                 t := quiet_type(args[0].value)
-                if k2 := pending_recv(recv)
+                if k2 := self.pending_recv(recv)
                     settle(k2, Ty.ListOf(t))
             elif n == "add" and pending[k].brace
                 t := quiet_type(args[0].value)
-                if k2 := pending_recv(recv)
+                if k2 := self.pending_recv(recv)
                     if t != Ty.Unknown
                         require_key(t, expr_pos(args[0].value))
                     settle(k2, Ty.SetOf(t))
     # type.coll.13: `m.push(k, x)` makes a pending `{}` a `Map[K, List[X]]`.
-    if k := pending_recv(recv)
+    if k := self.pending_recv(recv)
         if n == "push" and pending[k].brace and args.len() == 2
             kt := quiet_type(args[0].value)
             vt := quiet_type(args[1].value)
-            if k2 := pending_recv(recv)
+            if k2 := self.pending_recv(recv)
                 if kt != Ty.Unknown
                     require_key(kt, expr_pos(args[0].value))
                 settle(k2, Ty.MapOf(key: kt, value: Ty.ListOf(vt)))
@@ -1001,8 +1011,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         if d := types.get(head)
             mut explicit := no_binds()
             if has_targs
-                explicit = explicit_args(head, def_params(d), targs, at)
-            return associated(d, explicit, n, at, args, expect)
+                explicit = self.explicit_args(head, def_params(d), targs, at)
+            return self.associated(d, explicit, n, at, args, expect)
         # trait.assoc.4: `List[U].from_json(j)`, an associated function of a
         # trait that a builtin generic type implements (ADR 0748).
         if head == "List" and has_targs and targs.len() == 1
@@ -1010,14 +1020,14 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
                 return t
         # type.bytes.13: `bytes.from_list(xs)` and the like.
         if head == "bytes" and not has_targs
-            return bytes_assoc(n, at, args, expect)
+            return self.bytes_assoc(n, at, args, expect)
         # type.char.4: `char.from_code(n)`.
         if head == "char" and not has_targs
             if n != "from_code"
-                args_only(args)
+                self.args_only(args)
                 err("expr.name.1", at, "`char` has no associated function `{n}`")
                 return Ty.Unknown
-            return check_call(
+            return self.check_call(
                 "char.from_code",
                 plain_sig(none, [Ty.Int], Ty.Opt(Ty.Char)),
                 [],
@@ -1028,10 +1038,10 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             )
         if not has_targs
             if tr := traits.get(head)
-                return qualified(tr, n, at, args)
+                return self.qualified(tr, n, at, args)
     rt0 := expr(recv, none, true)
     if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
-        args_only(args)
+        self.args_only(args)
         return Ty.Unknown
     # own.ref.3: a method of a `ref T` is called on the `T` in the cell.
     mut rt := rt0
@@ -1039,7 +1049,7 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         RefOf(t) => rt = t
         _ => rt = rt0
     if reject_drop_call(rt, n, at)
-        args_only(args)
+        self.args_only(args)
         return Ty.Unknown
     match rt
         Conc(k, inner) =>
@@ -1062,23 +1072,29 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             if sn == "tensor.Tensor"
                 return tensor_method(recv, rt, n, at, args, expect)
             if sn == "proc.Output"
-                return output_method(n, at, args)
+                return self.output_method(n, at, args)
         PtrOf(target) => return ptr_method(rt, target, n, at, args, expect)
         Enum(e, _) =>
             if prog.enums[e].name == "ui.KeyCode"
                 return key_method(recv, n, at, args, expect)
         _ => rt = rt
-    cands := candidates(rt, n)
+    cands := self.candidates(rt, n)
     if cands.len() == 0
         if t := enum_name_method(rt, n, at, args)
             return t
-        args_only(args)
-        if not hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
-            no_method(rt, n, at)
+        self.args_only(args)
+        if not self.hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
+            # `xs.iter().map(f).collect()`: one report for the chain, at its first iterator word.
+            if not (args.len() == 0 and iterator_word(rt, n) and self.iterator_reported(at))
+                self.no_method(rt, n, at)
+        # `xs.iter().map(...)`: reported once, then the chain goes on with the list itself, so `|x| ...` and
+        # `.collect()` after it are not reported again (checkbench, ADR 1111).
+        if args.len() == 0 and iterator_word(rt, n)
+            return rt
         return Ty.Unknown
     if cands.len() > 1
-        args_only(args)
-        forms := [cand_form(c, rt, n) for c in cands]
+        self.args_only(args)
+        forms := [self.cand_form(c, rt, n) for c in cands]
         err_help(
             "trait.res.1",
             at,
@@ -1088,11 +1104,11 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         return Ty.Unknown
     match cands[0]
         CBuiltin => builtin_call(recv, rt, n, at, args)
-        CInherent(i) => inherent_call(i, recv, rt, n, at, args, expect)
+        CInherent(i) => self.inherent_call(i, recv, rt, n, at, args, expect)
         CTrait(tr) =>
             if m := trait_method(tr, n)
                 if prog.fns[m].receiver == none
-                    args_only(args)
+                    self.args_only(args)
                     err_help(
                         "trait.assoc.2",
                         at,
@@ -1100,7 +1116,7 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
                         "call it on the type: `{ty_name(rt)}.{n}(...)`",
                     )
                     return Ty.Unknown
-            trait_call(tr, rt, recv, n, at, args, expect)
+            self.trait_call(tr, rt, recv, n, at, args, expect)
 
 ## A name that `ail check` treats as a standard module even when not imported.
 fn Checker.std_like(self, n str) bool
@@ -1126,11 +1142,11 @@ fn Checker.inherent_call(
     args List[ast.Arg],
     expect Ty?,
 ) Ty
-    private_fn(i, at)
+    self.private_fn(i, at)
     sig := sigs[i]
     tn := type_name_of(rt) else ""
     mutable := sig.receiver else
-        args_only(args)
+        self.args_only(args)
         err_help(
             "trait.method.4",
             at,
@@ -1142,7 +1158,7 @@ fn Checker.inherent_call(
         require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
     targets[pos_key(at)] = i
     symbols[pos_key(at)] = "method:{tn}.{n}"
-    note_deprecated(i, at)
+    self.note_deprecated(i, at)
     note_unsafe_call(i, at)
     move_receiver(i, recv)
     if gapped.contains(i) and is_inferred(sig.ret)
@@ -1153,7 +1169,7 @@ fn Checker.inherent_call(
         Struct => binds = zip_binds(sig.generics[..sig.owner], owner_args)
         Enum => binds = zip_binds(sig.generics[..sig.owner], owner_args)
         _ => binds = []
-    check_call(n, sig, binds, args, recv, at, expect)
+    self.check_call(n, sig, binds, args, recv, at, expect)
 
 @allow("expr.match.3") fn is_any(t Ty) bool
     match t
@@ -1177,7 +1193,7 @@ fn Checker.trait_call(
     f := trait_method(tr, n) else return Ty.Unknown
     sig := sigs[f]
     if is_any(rt) and not callable_through_any(tr, f)
-        args_only(args)
+        self.args_only(args)
         err_help(
             "trait.any.4",
             at,
@@ -1191,8 +1207,8 @@ fn Checker.trait_call(
     weak_symbols[pos_key(at)] = "method:{prog.traits[tr].name}.{n}"
     if c := con_of(rt)
         if k := impl_of.get(impl_key(tr, c))
-            record_impl_target(at, k, tr, n)
-    check_call(n, sig, [Bind(param: trait_self[tr], ty: rt)], args, recv, at, expect)
+            self.record_impl_target(at, k, tr, n)
+    self.check_call(n, sig, [Bind(param: trait_self[tr], ty: rt)], args, recv, at, expect)
 
 ## `x.name(...)` through trait `tr` on a value whose type has `impl` block
 ## `k` runs that block's method or the trait's default (eff.infer.5).
@@ -1210,7 +1226,7 @@ fn Checker.record_impl_target(mut self, at ast.Pos, k int, tr int, n str)
 fn Checker.qualified(mut self, tr int, n str, at ast.Pos, args List[ast.Arg]) Ty
     tname := prog.traits[tr].name
     if trait_method(tr, n) == none
-        args_only(args)
+        self.args_only(args)
         names := [prog.fns[m].name for m in prog.traits[tr].methods]
         mut d := new_diag("expr.name.1", at, "`{tname}` has no method `{n}`")
         if s := suggest(n, names)
@@ -1228,17 +1244,17 @@ fn Checker.qualified(mut self, tr int, n str, at ast.Pos, args List[ast.Arg]) Ty
     recv := args[0].value
     rt := expr(recv, none, true)
     if reject_unhandled(rt, expr_pos(recv)) or rt == Ty.Unknown
-        args_only(args[1..])
+        self.args_only(args[1..])
         return Ty.Unknown
     if not implements(rt, tr) and rt != Ty.AnyOf(tr)
-        args_only(args[1..])
+        self.args_only(args[1..])
         text := "{show(rt)} doesn't implement `{tname}`"
         if h := how_to_implement(rt, tr)
             err_help("gen.bound.3", expr_pos(recv), text, h)
         else
             err("gen.bound.3", expr_pos(recv), text)
         return Ty.Unknown
-    trait_call(tr, rt, recv, n, at, args[1..], none)
+    self.trait_call(tr, rt, recv, n, at, args[1..], none)
 
 ## `Type.name(...)` or `Type[int].name(...)`: an associated function
 ## (trait.method.4), or a variant with data (type.enum.6).
@@ -1255,8 +1271,8 @@ fn Checker.associated(
     if e := enum_of_def(d)
         if v := variant_index(e, n)
             symbols[pos_key(at)] = "variant:{tn}.{n}"
-            return variant_literal(e, v, explicit, args, at, expect)
-    i := method_index(tn, n) else
+            return self.variant_literal(e, v, explicit, args, at, expect)
+    i := self.method_index(tn, n) else
         if t := impl_assoc_call(d, explicit, n, at, args, expect)
             return t
         if e := enum_of_def(d)
@@ -1265,13 +1281,28 @@ fn Checker.associated(
         # type.distinct.5: `UserId.from_json(j)` through the base's standard trait.
         if dt := distinct_assoc(d, n, at, args, expect)
             return dt
-        args_only(args)
-        err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        self.args_only(args)
+        # The type's associated functions and variants are the names to suggest (checkbench, ADR 1111).
+        mut known := List[str]()
+        for key in methods.keys()
+            if rest := key.strip_prefix("{tn}.")
+                known.push(rest)
+        if e := enum_of_def(d)
+            for v in prog.enums[e].variants
+                known.push(v.name)
+        mut nd := new_diag("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        if s := suggest(n, known)
+            nd = nd.did_you_mean(n, s)
+        elif known.len() > 0
+            nd = nd.with_help("`{tn}` has {list_names(known.sorted())}; `ail api FILE` lists each signature")
+        else
+            nd = nd.with_help("`{tn}` has no associated functions; declare one with `fn {tn}.{n}(...)`")
+        diags.push(nd)
         return Ty.Unknown
-    private_fn(i, at)
+    self.private_fn(i, at)
     sig := sigs[i]
     if sig.receiver != none
-        args_only(args)
+        self.args_only(args)
         err_help(
             "trait.method.4",
             at,
@@ -1282,13 +1313,13 @@ fn Checker.associated(
     mut binds := List[Bind]()
     if b := explicit
         binds = zip_binds(sig.generics[..sig.owner], [x.ty for x in b])
-    note_deprecated(i, at)
+    self.note_deprecated(i, at)
     note_unsafe_call(i, at)
     targets[pos_key(at)] = i
     symbols[pos_key(at)] = "method:{tn}.{n}"
     if gapped.contains(i) and is_inferred(sig.ret)
         gap("calls a gapped associated function")
-    check_call("{tn}.{n}", sig, binds, args, none, at, expect)
+    self.check_call("{tn}.{n}", sig, binds, args, none, at, expect)
 
 fn enum_of_def(d Def) int?
     match d
@@ -1298,7 +1329,7 @@ fn enum_of_def(d Def) int?
 ## Report a method call on a type without that method.
 ## `o.m()` on a `proc.Output` (std.proc.9): `text` and `ok`, no arguments.
 fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
-    args_only(args)
+    self.args_only(args)
     names := ["ok", "text"]
     if not names.contains(n)
         mut d := new_diag("std.proc.9", at, "`proc.Output` has no method `{n}`")
@@ -1365,6 +1396,9 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         # An error's text is `to_str()` (the same text as interpolating it).
         d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
         d = d.with_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+    elif iterator_word(rt, n)
+        d = d.with_help(method_help(rt, n) else "a list is iterable as it is")
+        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif new := method_rename(rt, n)
         d = d.with_help("write `.{new}()`").with_fix("write `{new}`", [fix.replace(at, n, new)])
     elif h := method_help(rt, n)
@@ -1375,8 +1409,40 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         match rt
             Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
             Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
-            _ => d = d.with_help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types")
+            _ =>
+                # Name what there is, so the next try needs no lookup (checkbench, ADR 1111).
+                if names.len() > 0
+                    shown := names.sorted()
+                    more := if shown.len() > 24 then ", ..." else ""
+                    d = d.with_help("{show(rt)} has {list_names(shown.take(24))}{more}; `ail ask std \"WORDS\"` finds a method by what it does")
+                else
+                    d = d.with_help("{show(rt)} has no methods; `ail ask std \"WORDS\"` finds a std function by what it does")
     diags.push(d)
+
+## Whether an iterator word earlier on this line was already reported (expr.name.1).
+fn Checker.iterator_reported(self, at ast.Pos) bool
+    for d in self.diags
+        if d.rule == "expr.name.1" and d.pos.line == at.line and d.pos.col < at.col
+            for w in ["`iter`", "`into_iter`", "`iter_mut`", "`stream`"]
+                if d.message.ends_with("has no method {w}")
+                    return true
+    false
+
+## `iter`, `collect` and their kin on a list or a set: Rust's and Java's iterator words. A list is iterable and
+## `map`/`filter` give lists, so the word is dropped (expr.name.1, checkbench, ADR 1111).
+fn iterator_word(rt Ty, n str) bool
+    kind := kind_of(rt)
+    (kind == "list" or kind == "set") and [
+        "iter",
+        "into_iter",
+        "iter_mut",
+        "stream",
+        "collect",
+        "to_vec",
+        "cloned",
+        "copied",
+        "to_owned",
+    ].contains(n)
 
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
 ## which has a function `f`. Reports it and returns true.
@@ -1437,12 +1503,10 @@ fn Checker.has_field(self, t Ty, n str) bool
                             return Ty.Unknown
                         mut explicit := no_tys()
                         if has_targs
-                            explicit = [b.ty for b in explicit_args(
-                                head,
-                                enum_params[e],
-                                targs,
-                                at,
-                            )]
+                            explicit = [
+                                b.ty
+                                for b in self.explicit_args(head, enum_params[e], targs, at)
+                            ]
                         return enum_value(e, explicit, expect, at, n)
                     names := [x.name for x in prog.enums[e].variants]
                     mut diag := new_diag("expr.name.1", at, "`{head}` has no variant `{n}`")
@@ -1464,7 +1528,7 @@ fn Checker.has_field(self, t Ty, n str) bool
         _ => rt = rt0
     # trait.method.7: a method is only reached through a call, so in value
     # position a field of the same name wins.
-    if candidates(rt, n).len() > 0 and not self.has_field(rt, n)
+    if self.candidates(rt, n).len() > 0 and not self.has_field(rt, n)
         diags.push(
             new_diag("expr.op.3", at, "`{n}` is a method, so calling it needs `()`")
                 .with_help("write `.{n}()`")
@@ -1488,7 +1552,7 @@ fn Checker.has_field(self, t Ty, n str) bool
             decl := prog.structs[s]
             for i in 0..decl.fields.len()
                 if decl.fields[i].name == n
-                    private_field(s, i, at)
+                    self.private_field(s, i, at)
                     symbols[pos_key(at)] = "field:{decl.name}.{n}"
                     return subst(field_types[s][i], binds_of(struct_params[s], args))
             names := [f.name for f in decl.fields]
@@ -1671,7 +1735,7 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
     lo := assert_arity(n)
     hi := if n == "assert" or n == "assert_err" then 2 else lo
     if args.len() < lo or args.len() > hi
-        args_only(args)
+        self.args_only(args)
         want := if hi == lo then "{lo}" else "{lo} or {hi}"
         err("test.assert.2", at, "`{n}` takes {want} argument(s), but {was_were(args.len())} given")
         return Ty.Unit
@@ -1710,7 +1774,7 @@ fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
         if args.len() == 2
             hint := if errs.len() == 1 then errs[0] else Ty.Unknown
             mut st := Ty.Unknown
-            if b := bare_variant_ty(args[1].value)
+            if b := self.bare_variant_ty(args[1].value)
                 # `assert_err(call, E.V)` for a variant with data checks the kind alone (test.assert.3).
                 st = b
             else
@@ -1870,7 +1934,7 @@ fn Checker.comprehension(
         t := iterable(c.iter, unpack)
         if unpack
             # type.tuple.5: `for a, b in xs` binds the parts.
-            locals.push(Local(
+            self.add_local(Local(
                 name: c.var,
                 ty: t,
                 mutable: false,
@@ -1879,7 +1943,7 @@ fn Checker.comprehension(
             ))
             unpack_clause(c.unpack, t, c.var_pos)
         elif declare(c.var, c.var_pos)
-            locals.push(Local(
+            self.add_local(Local(
                 name: c.var,
                 ty: t,
                 mutable: false,
@@ -1888,10 +1952,10 @@ fn Checker.comprehension(
             ))
         if cond := c.cond
             condition(cond)
-    t := comp_part(elem, hint)
+    t := self.comp_part(elem, hint)
     mut vt := Ty.Unknown
     if v := value
-        vt = comp_part(v, vhint)
+        vt = self.comp_part(v, vhint)
     loop_depth -= 1
     end_scope(mark)
     if form != ast.CompKind.ListComp and not has_unknown(t) and t != Ty.Never

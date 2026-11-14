@@ -15,7 +15,7 @@ fn Lower.lower_cmp(mut self, a Val, b Val, pos ast.Pos) Val?
         if not can_order(a.ty)
             return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
         t := Ty.Enum("Ordering")
-        return Val(id: call(cmp_fn(a.ty), [a.id, b.id], t), ty: t)
+        return Val(id: call(self.cmp_fn(a.ty), [a.id, b.id], t), ty: t)
     ordering(call("rt.int_cmp", [a.id, b.id], Ty.Int))
 
 ## `cmp.T`: the generated derived `cmp` of `T`, from `lt.T`.

@@ -6,33 +6,33 @@ struct Stack[T]
     items List[T]
 
 fn Stack[T].push(mut self, x T)
-    items.push(x)
+    self.items.push(x)
 
 fn Stack[T].pop(mut self) T?
-    items.pop()
+    self.items.pop()
 
 fn Stack[T].top(self) T?
-    items.last()
+    self.items.last()
 
 fn Stack[T].size(self) int
-    items.len()
+    self.items.len()
 
 struct Queue[T]
     items List[T]
     head int
 
 fn Queue[T].enqueue(mut self, x T)
-    items.push(x)
+    self.items.push(x)
 
 fn Queue[T].dequeue(mut self) T?
-    if head >= items.len()
+    if self.head >= self.items.len()
         return none
-    v := items[head]
-    head += 1
+    v := self.items[self.head]
+    self.head += 1
     v
 
 fn Queue[T].size(self) int
-    items.len() - head
+    self.items.len() - self.head
 
 fn reverse_digits(n int) int
     mut st := Stack[int](items: [])

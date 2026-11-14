@@ -87,7 +87,7 @@ fn Lower.tuple_index(mut self, xs List[Ty], name str, pos ast.Pos) int
 
 ## `t.k` (type.tuple.3).
 fn Lower.tuple_member(mut self, r Val, xs List[Ty], name str, pos ast.Pos) Val?
-    k := tuple_index(xs, name, pos)
+    k := self.tuple_index(xs, name, pos)
     if k < 0
         return none
     Val(id: load(r.id, k, xs[k]), ty: xs[k])
@@ -104,7 +104,7 @@ fn Lower.assign_tuple_elem(
     pos ast.Pos,
     at ast.Pos,
 )
-    k := tuple_index(xs, name, pos)
+    k := self.tuple_index(xs, name, pos)
     if k < 0
         return
     t := xs[k]
@@ -157,7 +157,7 @@ fn Lower.tuple_test(mut self, p ast.Pattern, s Val, yes int, no int) bool
                 e := Val(id: load(s.id, k, xs[k]), ty: xs[k])
                 last := k == ps.len() - 1
                 next := if last then yes else new_block()
-                if not elem_test(ps[k], e, next, no)
+                if not self.elem_test(ps[k], e, next, no)
                     return false
                 if not last
                     seal(next)
@@ -171,7 +171,7 @@ fn Lower.elem_test(mut self, p ast.Pattern, e Val, yes int, no int) bool
         Wildcard | BindName =>
             jump(yes, [])
             true
-        TuplePat => tuple_test(p, e, yes, no)
+        TuplePat => self.tuple_test(p, e, yes, no)
         _ =>
             tag := if is_enum(e.ty) then tag_of(enum_name(e.ty) else "", e.id) else e.id
             test_pattern(p, e, tag, yes, no)
@@ -183,7 +183,7 @@ fn Lower.tuple_bind(mut self, p ast.Pattern, s Val)
             xs := tuple_elems(s.ty) else return
             for k in 0..ps.len()
                 if k < xs.len()
-                    bind_elem(ps[k], Val(id: load(s.id, k, xs[k]), ty: xs[k]))
+                    self.bind_elem(ps[k], Val(id: load(s.id, k, xs[k]), ty: xs[k]))
         _ => return
 
 fn Lower.bind_elem(mut self, p ast.Pattern, e Val)
@@ -191,7 +191,7 @@ fn Lower.bind_elem(mut self, p ast.Pattern, e Val)
         BindName(n, _) =>
             declare(n, e.ty, e.id)
             borrowed.add(lookup(n) else "")
-        TuplePat => tuple_bind(p, e)
+        TuplePat => self.tuple_bind(p, e)
         Variant | Nested | StructPat => bind_fields(p, e)
         _ => return
 
@@ -208,10 +208,10 @@ fn Lower.tuple_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         if name == "ne"
             return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
         return Val(id: eq, ty: Ty.Bool)
-    if not can_order(a.ty)
+    if not self.can_order(a.ty)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
         return quiet
-    f := lt_fn(a.ty)
+    f := self.lt_fn(a.ty)
     match name
         "lt" => Val(id: call(f, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
         "gt" => Val(id: call(f, [b.id, a.id], Ty.Bool), ty: Ty.Bool)
@@ -224,7 +224,7 @@ fn Lower.tuple_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
 fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
     if xs := tuple_elems(t)
         for x in xs
-            if not orderable(x, mut seen)
+            if not self.orderable(x, mut seen)
                 return false
         return true
     if s := struct_name(t)
@@ -232,7 +232,7 @@ fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
             return true
         seen.add(s)
         for sl in structs[s]
-            if not orderable(sl.ty, mut seen)
+            if not self.orderable(sl.ty, mut seen)
                 return false
         return true
     if n := enum_name(t)
@@ -241,17 +241,17 @@ fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
         seen.add(n)
         for c in enums[n]
             for fd in c.fields
-                if not orderable(fd.ty, mut seen)
+                if not self.orderable(fd.ty, mut seen)
                     return false
         return true
     match t
         Int | Bool | Char | Sized(_) | Str | Bytes | Float => true
-        List(e) => orderable(e, mut seen)
+        List(e) => self.orderable(e, mut seen)
         _ => false
 
 fn Lower.can_order(self, t Ty) bool
     mut seen := Set[str]()
-    orderable(t, mut seen)
+    self.orderable(t, mut seen)
 
 ## Whether `t` is compared and ordered field by field with generated
 ## functions: a tuple, a struct, or an enum whose variants have fields.
@@ -288,8 +288,8 @@ fn Lower.elem_lt(mut self, t Ty, x int, y int) int
     if t == Ty.Bytes
         c := call("rt.bytes_cmp", [x, y], Ty.Int)
         return op("lt", [c, konst(0, Ty.Int)], Ty.Bool)
-    if structural(t) or t.elem() != none
-        return call(lt_fn(t), [x, y], Ty.Bool)
+    if self.structural(t) or t.elem() != none
+        return call(self.lt_fn(t), [x, y], Ty.Bool)
     if t == Ty.Float
         # `x < y`, or `y` is NaN and `x` is not.
         below := op("flt", [x, y], Ty.Bool)
@@ -338,10 +338,10 @@ fn Lower.gen_list_lt(mut self, fkey str, t Ty, e Ty)
     x := op("get", [a, i], e)
     y := op("get", [b, i], e)
     l1 := new_block()
-    branch(elem_lt(e, x, y), yes, [], l1, [])
+    branch(self.elem_lt(e, x, y), yes, [], l1, [])
     cur = l1
     l2 := new_block()
-    branch(elem_lt(e, y, x), no, [], l2, [])
+    branch(self.elem_lt(e, y, x), no, [], l2, [])
     cur = l2
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
     cur = done
@@ -357,10 +357,10 @@ fn Lower.gen_tuple_lt(mut self, fkey str, t Ty, xs List[Ty])
         x := load(ps[0], k, xs[k])
         y := load(ps[1], k, xs[k])
         later := new_block()
-        branch(elem_lt(xs[k], x, y), yes, [], later, [])
+        branch(self.elem_lt(xs[k], x, y), yes, [], later, [])
         cur = later
         same := new_block()
-        branch(elem_lt(xs[k], y, x), no, [], same, [])
+        branch(self.elem_lt(xs[k], y, x), no, [], same, [])
         cur = same
     jump(no, [])
     end_eq(fkey, yes, no)
@@ -370,18 +370,18 @@ fn Lower.gen_tuple_lt(mut self, fkey str, t Ty, xs List[Ty])
 fn Lower.text_ok(mut self, t Ty) bool
     if xs := tuple_elems(t)
         for x in xs
-            if not text_ok(x)
+            if not self.text_ok(x)
                 return false
         return true
     if e := t.elem()
-        return text_ok(e)
+        return self.text_ok(e)
     if ext := text_ext_ok(t)
         return ext
     match t
         Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
         Struct | Enum | Any(_) =>
             mut seen := Set[str]()
-            displayable(t, mut seen)
+            self.displayable(t, mut seen)
         _ => false
 
 ## Whether a struct or enum has a text form `fields_text` can build: its
@@ -389,20 +389,20 @@ fn Lower.text_ok(mut self, t Ty) bool
 ## itself recursive).
 fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
     if inner := t.opt_inner()
-        return displayable(inner, mut seen)
+        return self.displayable(inner, mut seen)
     if n := any_of(t)
-        return any_displayable(n, mut seen)
+        return self.any_displayable(n, mut seen)
     key := match t
         Struct(k) => k
         Enum(k) => k
         _ => return match t
             Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
-            List(e) => displayable(e, mut seen)
+            List(e) => self.displayable(e, mut seen)
             Char => true
-            Map(k, v) => displayable(k, mut seen) and displayable(v, mut seen)
-            Set(e) => displayable(e, mut seen)
-            Tuple(xs) => tuple_displayable(xs, mut seen)
-            _ => displayable_other(t, mut seen)
+            Map(k, v) => self.displayable(k, mut seen) and self.displayable(v, mut seen)
+            Set(e) => self.displayable(e, mut seen)
+            Tuple(xs) => self.tuple_displayable(xs, mut seen)
+            _ => self.displayable_other(t, mut seen)
     if sigs.contains("{key}.to_str")
         return true
     # `seen` is the path of types being checked: a type that holds itself has
@@ -410,39 +410,39 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
     if seen.contains(key)
         return true
     seen.add(key)
-    ok := displayable_fields(key, mut seen)
+    ok := self.displayable_fields(key, mut seen)
     seen.remove(key)
     ok
 
 ## An optional keeps `seen` (its inner type may be the one being checked); the rest ask `text_ext_ok`.
 fn Lower.displayable_other(mut self, t Ty, mut seen Set[str]) bool
     if inner := t.opt_inner()
-        return displayable(inner, mut seen)
+        return self.displayable(inner, mut seen)
     text_ext_ok(t) else false
 
 fn Lower.displayable_fields(mut self, key str, mut seen Set[str]) bool
     if cases := enums.get(key)
         for c in cases
             for f in c.fields
-                if not displayable(f.ty, mut seen)
+                if not self.displayable(f.ty, mut seen)
                     return false
         return true
     slots := structs.get(key) else return false
     for s in slots
-        if not displayable(s.ty, mut seen)
+        if not self.displayable(s.ty, mut seen)
             return false
     true
 
 fn Lower.tuple_displayable(mut self, xs List[Ty], mut seen Set[str]) bool
     for x in xs
-        if not displayable(x, mut seen)
+        if not self.displayable(x, mut seen)
             return false
     true
 
 ## Whether every implementation of trait `n` has a text form.
 fn Lower.any_displayable(mut self, n str, mut seen Set[str]) bool
     for s in traits.impls.get(n) else []
-        if not displayable(impl_ty(s), mut seen)
+        if not self.displayable(impl_ty(s), mut seen)
             return false
     true
 
@@ -471,8 +471,8 @@ fn Lower.value_text(mut self, t Ty, x int) int
         Bool => call("rt.fmt_bool", [x], Ty.Str)
         Str => call("rt.str_quoted", [x], Ty.Str)
         Bytes => call("rt.bytes_show", [x], Ty.Str)
-        Tuple(xs) => tuple_text_of(xs, x)
-        List(e) => list_text(x, e)
+        Tuple(xs) => self.tuple_text_of(xs, x)
+        List(e) => self.list_text(x, e)
         Struct | Enum | Any(_) => display_call(Val(id: x, ty: t)) else str_value("")
         _ => text_ext(t, x)
 
@@ -482,7 +482,7 @@ fn Lower.tuple_text_of(mut self, xs List[Ty], obj int) int
     for k in 0..xs.len()
         if k > 0
             acc = call("rt.str_cat", [acc, str_value(", ")], Ty.Str)
-        piece := value_text(xs[k], load(obj, k, xs[k]))
+        piece := self.value_text(xs[k], load(obj, k, xs[k]))
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
 
@@ -502,7 +502,7 @@ fn Lower.list_text(mut self, l int, e Ty) int
     seal(body)
     cur = body
     sep := call("rt.text_sep", [i], Ty.Str)
-    piece := value_text(e, op("get", [l, i], e))
+    piece := self.value_text(e, op("get", [l, i], e))
     next := call("rt.str_cat", [call("rt.str_cat", [acc, sep], Ty.Str), piece], Ty.Str)
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int), next])
     seal(head)
@@ -512,9 +512,9 @@ fn Lower.list_text(mut self, l int, e Ty) int
 
 ## The text of a tuple or of a list that holds tuples (type.tuple.8).
 fn Lower.tuple_text(mut self, v Val) int?
-    if not text_ok(v.ty)
+    if not self.text_ok(v.ty)
         return none
-    value_text(v.ty, v.id)
+    self.value_text(v.ty, v.id)
 
 ## One pair of `zip` or `enumerate`: a new tuple object of `a` and `b`.
 fn Lower.pair_of(mut self, t Ty, a int, b int) int
@@ -547,7 +547,7 @@ fn Lower.lower_enumerate(mut self, l Val) Val?
     branch(op("lt", [i, n], Ty.Bool), body, [], exit, [])
     seal(body)
     cur = body
-    call("rt.list_push", [out, pair_of(pair, i, element_copy(l, e, i))], Ty.Unit)
+    call("rt.list_push", [out, self.pair_of(pair, i, self.element_copy(l, e, i))], Ty.Unit)
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
     seal(head)
     seal(exit)
@@ -582,9 +582,9 @@ fn Lower.lower_zip(mut self, args List[ast.Arg], pos ast.Pos) Val?
     branch(op("lt", [i, lb], Ty.Bool), body, [], exit, [])
     seal(body)
     cur = body
-    x := element_copy(a, ea, i)
-    y := element_copy(b, eb, i)
-    call("rt.list_push", [out, pair_of(pair, x, y)], Ty.Unit)
+    x := self.element_copy(a, ea, i)
+    y := self.element_copy(b, eb, i)
+    call("rt.list_push", [out, self.pair_of(pair, x, y)], Ty.Unit)
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
     seal(head)
     seal(exit)
@@ -603,11 +603,11 @@ fn Lower.eq_name(mut self, e Ty) str
     if e == Ty.Bytes then "rt.bytes_eq" else eq_fn(e)
 
 fn Lower.lt_name(mut self, e Ty) str
-    if e == Ty.Bytes then "rt.bytes_lt" else lt_fn(e)
+    if e == Ty.Bytes then "rt.bytes_lt" else self.lt_fn(e)
 
 ## The indices of `keys` in order (a list of tuples): `rt.sort_perm_by`.
 fn Lower.tuple_sort_perm(mut self, keys int, kt Ty) int
-    call("rt.sort_perm_by", [keys, compare_fn(lt_name(kt))], Ty.List(Ty.Int))
+    call("rt.sort_perm_by", [keys, self.compare_fn(self.lt_name(kt))], Ty.List(Ty.Int))
 
 ## `contains`, `index_of`, `min`, `max`, `sort` and `sorted` on a list of
 ## tuples (type.tuple.7), element by element as `==` and `<` compare them.
@@ -619,19 +619,23 @@ fn Lower.tuple_list_edit(mut self, r Val, e Ty, name str, npos ast.Pos, vs List[
         if not comparable(e, npos, e.name(), mut seen)
             return none
         x := convert(vs[0], e, npos)
-        idx := call("rt.list_find_by", [r.id, x, compare_fn(eq_name(e))], Ty.Int)
+        idx := call("rt.list_find_by", [r.id, x, self.compare_fn(self.eq_name(e))], Ty.Int)
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
         if name == "contains"
             return Val(id: found, ty: Ty.Bool)
         return opt_at(r, found, idx, Ty.Int, true, npos)
-    if not can_order(e) or vs.len() != 0
+    if not self.can_order(e) or vs.len() != 0
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "min" or name == "max"
         greatest := konst(if name == "max" then 1 else 0, Ty.Int)
-        idx := call("rt.list_extreme_by", [r.id, compare_fn(lt_name(e)), greatest], Ty.Int)
+        idx := call(
+            "rt.list_extreme_by",
+            [r.id, self.compare_fn(self.lt_name(e)), greatest],
+            Ty.Int,
+        )
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
         return opt_at(r, found, idx, e, false, npos)
-    perm := tuple_sort_perm(r.id, e)
+    perm := self.tuple_sort_perm(r.id, e)
     n := op("len", [r.id], Ty.Int)
     out := call("rt.list_new", [n], r.ty)
     c := count_open(n)
@@ -657,7 +661,7 @@ fn tuple_list_method(name str) bool
         or name == "sorted"
 
 fn Lower.orderable_record(self, t Ty) bool
-    structural(t) and can_order(t)
+    self.structural(t) and self.can_order(t)
 
 ## `lt.E(a, b)` for an enum with fields: the earlier variant is less; the
 ## same variant compares its fields in order, as `ail run` does.
@@ -689,10 +693,10 @@ fn Lower.gen_enum_lt(mut self, fkey str, t Ty, n str)
             x := load(a, j + 1, ft)
             y := load(b, j + 1, ft)
             l1 := new_block()
-            branch(elem_lt(ft, x, y), yes, [], l1, [])
+            branch(self.elem_lt(ft, x, y), yes, [], l1, [])
             cur = l1
             l2 := new_block()
-            branch(elem_lt(ft, y, x), no, [], l2, [])
+            branch(self.elem_lt(ft, y, x), no, [], l2, [])
             cur = l2
         jump(no, [])
         cur = other
@@ -707,9 +711,9 @@ fn Lower.has_own_cmp(self, s str) bool
 ## Generate `lt.T` for a tuple, a struct or an enum.
 fn Lower.gen_lt(mut self, fkey str, t Ty)
     if xs := tuple_elems(t)
-        gen_tuple_lt(fkey, t, xs)
+        self.gen_tuple_lt(fkey, t, xs)
     elif s := struct_name(t)
-        if has_own_cmp(s)
+        if self.has_own_cmp(s)
             # A `cmp` of the struct's own decides (trait.std.4): `a < b` is `a.cmp(b)` being `Less`.
             ps := begin_fn(fkey, Ty.Bool, [t, t])
             c := user_call(
@@ -724,8 +728,8 @@ fn Lower.gen_lt(mut self, fkey str, t Ty)
                 sealed[blk] = true
             end_fn(fkey, ast.Pos(line: 1, col: 1))
             return
-        gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])
+        self.gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])
     elif e := t.elem()
-        gen_list_lt(fkey, t, e)
+        self.gen_list_lt(fkey, t, e)
     else
-        gen_enum_lt(fkey, t, enum_name(t) else "")
+        self.gen_enum_lt(fkey, t, enum_name(t) else "")

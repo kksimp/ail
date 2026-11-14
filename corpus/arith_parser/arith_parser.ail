@@ -60,37 +60,37 @@ fn apply(op str, a int, b int) int ! CalcError
     r
 
 fn Parser.peek(self) str
-    if pos < toks.len()
-        return toks[pos]
+    if self.pos < self.toks.len()
+        return self.toks[self.pos]
     "end"
 
 fn Parser.take(mut self) str
-    t := peek()
-    pos += 1
+    t := self.peek()
+    self.pos += 1
     t
 
 fn Parser.primary(mut self) int ! CalcError
-    t := take()
+    t := self.take()
     if t == "("
-        v := expr(1)?
-        if take() != ")"
+        v := self.expr(1)?
+        if self.take() != ")"
             return Unbalanced
         return v
     if t == "-"
-        w := expr(3)?
-        rpn.push("neg")
+        w := self.expr(3)?
+        self.rpn.push("neg")
         return 0 - w
     n := t.to_int() else return Unexpected(text: t)
-    rpn.push(t)
+    self.rpn.push(t)
     n
 
 fn Parser.expr(mut self, lowest int) int ! CalcError
-    mut lhs := primary()?
-    while prec(peek()) >= lowest and prec(peek()) > 0
-        op := take()
+    mut lhs := self.primary()?
+    while prec(self.peek()) >= lowest and prec(self.peek()) > 0
+        op := self.take()
         nxt := if op == "^" then prec(op) else prec(op) + 1
-        rhs := expr(nxt)?
-        rpn.push(op)
+        rhs := self.expr(nxt)?
+        self.rpn.push(op)
         lhs = apply(op, lhs, rhs)?
     lhs
 

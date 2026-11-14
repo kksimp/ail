@@ -80,7 +80,26 @@ name as declared, so later uses don't add reports about it. *(ADR 0263)*
 **gram.rec.3** — A "did you mean" suggestion, and the fix that comes with it,
 is made only for names of 3 or more characters: with fewer, nearly any name is
 one edit away, and applying the fix would change the program's meaning.
-*(ADR 0263)*
+An edit inserts, deletes or changes a character, or swaps two neighbouring
+ones; a suggestion is at most one edit away up to 4 characters and two from 5.
+*(ADR 0263, ADR 1111)*
+
+**gram.rec.4** — A syntax error does not hide the checker's errors in other
+declarations. After one, `ail check` still reports the checker's errors from
+every declaration (the text from one column-1 line to the next) that has no
+syntax error, so five mistakes in five functions are five diagnostics in one run.
+It drops warnings, `mod.main.1`, and any error that mentions a name a broken
+declaration declares. An error in an import (`use`, or a foreign `import`) is
+not a broken declaration: after one, no checker error is added. The test is
+`tests/cases/onepass_five.ail`. *(ADR 1112)*
+
+**gram.rec.5** — A line in column 1 that starts a declaration (`fn`, `struct`,
+`enum`, `trait`, `impl`, `pub`, `use`) ends the declaration above it: an open
+bracket there is reported once and closed, and a line above that ends in an
+operator ends too. A single unfinished declaration doesn't swallow the rest of
+the file, so the declarations after it are parsed and checked. An expression
+nested more than 200 levels deep is a `gram.syntax.1` error, not a stack
+overflow. The test is `tests/cases/recover_open_bracket.ail`. *(ADR 1112)*
 
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*

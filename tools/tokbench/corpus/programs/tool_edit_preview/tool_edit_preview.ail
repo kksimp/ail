@@ -1,14 +1,9 @@
-
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
     data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
     edits := fs.read_text("{data}/edit.txt")? "reading the edit"
-    r := proc.run(
-        ail,
-        ["edit", "{data}/ok.ail", "--dry-run", "--json"],
-        edits,
-    )? "editing"
+    r := proc.run(ail, ["edit", "{data}/ok.ail", "--dry-run", "--json"], edits)? "editing"
     for line in r.out.lines()
         d := parse_json(line) else continue
         summary := d.flag("summary", false)

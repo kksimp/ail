@@ -65,10 +65,10 @@ fn Parser.opens_block(self, k int) bool
 fn Parser.brace_edits(self, open int) List[fix.Edit]
     mut edits := List[fix.Edit]()
     for k in open..tokens.len()
-        if tokens[k].tok != Tok.Sym("\{") or not line_ends_at(k) or not opens_block(k)
+        if tokens[k].tok != Tok.Sym("\{") or not line_ends_at(k) or not self.opens_block(k)
             continue
         edits.push(fix.trim_before(tokens[k].pos))
-        close := matching(k) else return []
+        close := self.matching(k) else return []
         cp := tokens[close].pos
         alone := close > 0 and tokens[close - 1].pos.line < cp.line
         if close + 1 < tokens.len()
@@ -140,7 +140,7 @@ fn Parser.ternary_edits(self, start int, q int) List[fix.Edit]?
 ## just the colon when it ends the line.
 fn Parser.colon_end(self, k int, pos ast.Pos, colon_only bool) ast.Pos
     if not colon_only
-        if e := through_blank(k)
+        if e := self.through_blank(k)
             if e.line == pos.line
                 return e
     ast.Pos(line: pos.line, col: pos.col + 1)

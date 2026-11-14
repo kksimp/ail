@@ -21,7 +21,7 @@ fn Lower.call_at(mut self, name str, args List[int], ty Ty, pos ast.Pos) int
 ## trap's source excerpt (trace.frame.1): `  at [FILE:]LINE:COL in NAME(..)`.
 fn Lower.trap_frame(self, pos ast.Pos) str
     root := if file == 0 then "" else "{src_paths[file]}:"
-    "  at {root}{pos.line}:{pos.col} in {frame_name()}\n"
+    "  at {root}{pos.line}:{pos.col} in {self.frame_name()}\n"
 
 ## `NAME(..)` of the function being lowered; a `par for` chunk reports the
 ## function that holds the loop, as the interpreter does.

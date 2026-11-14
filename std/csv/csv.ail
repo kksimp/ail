@@ -4,7 +4,7 @@
 ## Rows end at `\n` or `\r\n`; blank lines add no row.
 
 ## Why the text is not CSV (std.csv.5).
-pub error struct CsvError "{why} (row {row})"
+pub error struct CsvError "{self.why} (row {self.row})"
     pub why str
     pub row int
 

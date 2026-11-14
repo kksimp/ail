@@ -108,7 +108,7 @@ fn Checker.trait_method(self, tr int, n str) int?
 ## trait.std.2-4, trait.any.5, gen.bound.2).
 fn Checker.implements(self, t Ty, tr int) bool
     mut seen := List[str]()
-    implements_in(t, tr, mut seen)
+    self.implements_in(t, tr, mut seen)
 
 @allow("expr.match.3") fn Checker.implements_in(self, t Ty, tr int, mut seen List[str]) bool
     if tr == std_to_str
@@ -118,7 +118,7 @@ fn Checker.implements(self, t Ty, tr int) bool
             _ => true
     # type.distinct.5: a distinct type has its base's standard traits.
     if base := distinct_base(t)
-        return distinct_passes(tr) and implements_in(base, tr, mut seen)
+        return distinct_passes(tr) and self.implements_in(base, tr, mut seen)
     eq := std_eq
     match t
         Unknown => return true
@@ -130,36 +130,45 @@ fn Checker.implements(self, t Ty, tr int) bool
                 if provides(b, tr) or (tr == eq and (b == std_ord or b == std_hash))
                     return true
             return false
-        AnyOf(a) => return a == tr and whole_trait_through_any(tr)
+        AnyOf(a) => return a == tr and self.whole_trait_through_any(tr)
         RefOf | PtrOf => return tr == eq
         Num(k) => return tr == eq or tr == std_ord or (tr == std_hash and k != "f32")
         Union => return tr == eq or tr == std_hash
         # json.derive.4: `T?` and `Map[K, V]` are `ToJson` when `T` and `V` are.
         Opt(inner) =>
             if tr == eq or tr == std_hash or is_to_json(tr)
-                return implements_in(inner, tr, mut seen)
+                return self.implements_in(inner, tr, mut seen)
             return false
         MapOf(k, v) =>
             if is_to_json(tr)
-                return implements_in(v, tr, mut seen)
-            return tr == eq and implements_in(k, eq, mut seen) and implements_in(v, eq, mut seen)
-        SetOf(e) => return tr == eq and implements_in(e, eq, mut seen)
+                return self.implements_in(v, tr, mut seen)
+            return tr == eq and self.implements_in(
+                k,
+                eq,
+                mut seen,
+            ) and self.implements_in(v, eq, mut seen)
+        SetOf(e) => return tr == eq and self.implements_in(e, eq, mut seen)
         # type.tuple.7: a tuple is `Eq`, `Ord` and `Hash` when every element is.
         Tuple(xs) =>
             if tr != eq and tr != std_ord and tr != std_hash
                 return false
             for x in xs
-                if not implements_in(x, tr, mut seen)
+                if not self.implements_in(x, tr, mut seen)
                     return false
             return true
         _ => tr == tr
     con := con_of(t) else return false
     if i := impl_of.get(impl_key(tr, con))
-        return impl_applies(i, t, con, mut seen)
+        return self.impl_applies(i, t, con, mut seen)
     if tr == eq
-        return auto_derives(t, con, eq, mut seen)
+        return self.auto_derives(t, con, eq, mut seen)
     if tr == std_hash
-        return not custom_eq(t) and t != Ty.Float and auto_derives(t, con, std_hash, mut seen)
+        return not self.custom_eq(t) and t != Ty.Float and self.auto_derives(
+            t,
+            con,
+            std_hash,
+            mut seen,
+        )
     if tr == std_ord
         return match t
             Int => true
@@ -167,7 +176,7 @@ fn Checker.implements(self, t Ty, tr int) bool
             Str => true
             Bytes => true
             Char => true
-            ListOf(e) => implements_in(e, tr, mut seen)
+            ListOf(e) => self.implements_in(e, tr, mut seen)
             _ => false
     false
 
@@ -184,7 +193,7 @@ fn Checker.impl_applies(self, i int, t Ty, con str, mut seen List[str]) bool
     mut ok := true
     for k in 0..params.len().min(args.len())
         for b in tparams[params[k]].bounds
-            if ok and not implements_in(args[k], b, mut seen)
+            if ok and not self.implements_in(args[k], b, mut seen)
                 ok = false
     seen.pop()
     ok
@@ -192,8 +201,8 @@ fn Checker.impl_applies(self, i int, t Ty, con str, mut seen List[str]) bool
 ## Whether `t` has an `impl Eq` with its own `fn eq` (not a derived one).
 @allow("expr.match.3") fn Checker.custom_eq(self, t Ty) bool
     match t
-        Struct => custom_eq_con(t)
-        Enum => custom_eq_con(t)
+        Struct => self.custom_eq_con(t)
+        Enum => self.custom_eq_con(t)
         _ => false
 
 fn Checker.custom_eq_con(self, t Ty) bool
@@ -211,7 +220,7 @@ fn Checker.custom_eq_con(self, t Ty) bool
         Bytes => return true
         Char => return true
         Float => return tr == std_eq
-        ListOf(e) => return implements_in(e, tr, mut seen)
+        ListOf(e) => return self.implements_in(e, tr, mut seen)
         Struct => tr == tr
         Enum => tr == tr
         _ => return false
@@ -220,8 +229,8 @@ fn Checker.custom_eq_con(self, t Ty) bool
         return true
     seen.push(key)
     mut ok := true
-    for f in field_types_of(t)
-        if ok and not implements_in(f, tr, mut seen)
+    for f in self.field_types_of(t)
+        if ok and not self.implements_in(f, tr, mut seen)
             ok = false
     seen.pop()
     ok
@@ -257,19 +266,19 @@ fn binds_of(params List[int], args List[Ty]) List[Bind]
         SetOf => "maps and sets aren't `Hash`"
         AnyOf => "`any` values aren't `Hash`"
         Param(p) => "add the constraint where `{tparams[p].name}` is declared, e.g. `[{tparams[p].name} Hash]`"
-        ListOf(e) => hash_cause(e)
-        Opt(e) => hash_cause(e)
-        Struct => hash_cause_of_parts(t)
-        Enum => hash_cause_of_parts(t)
+        ListOf(e) => self.hash_cause(e)
+        Opt(e) => self.hash_cause(e)
+        Struct => self.hash_cause_of_parts(t)
+        Enum => self.hash_cause_of_parts(t)
         _ => "{show(t)} isn't `Hash`"
 
 fn Checker.hash_cause_of_parts(self, t Ty) str
     n := type_name_of(t) else ""
-    if custom_eq(t)
+    if self.custom_eq(t)
         return "`{n}` has its own `fn eq`; to make it `Hash`, write `impl Hash for {n}` and a line `uses a, b` naming the fields to hash (trait.hash.1)"
-    for f in field_types_of(t)
-        if not implements(f, std_hash)
-            return "`{n}` has a part of type {show(f)}: {hash_cause(f)}"
+    for f in self.field_types_of(t)
+        if not self.implements(f, std_hash)
+            return "`{n}` has a part of type {show(f)}: {self.hash_cause(f)}"
     "{show(t)} isn't `Hash`"
 
 ## Whether method `f` of trait `tr` can be called through `any`: `Self`
@@ -287,7 +296,7 @@ fn Checker.callable_through_any(self, tr int, f int) bool
 ## Whether every method of `tr` can be called through `any` (trait.any.5).
 fn Checker.whole_trait_through_any(self, tr int) bool
     for m in prog.traits[tr].methods
-        if m >= sigs.len() or not callable_through_any(tr, m)
+        if m >= sigs.len() or not self.callable_through_any(tr, m)
             return false
     true
 
@@ -298,20 +307,20 @@ fn Checker.whole_trait_through_any(self, tr int) bool
         Param(p) => return "add the constraint where `{tparams[p].name}` is declared, e.g. `[{tparams[p].name} {trait_name}]`"
         _ => tr == tr
     if tr == std_hash
-        return hash_cause(t)
+        return self.hash_cause(t)
     match t
         # json.derive.4: a list, map or optional is `ToJson` when its elements are.
-        ListOf(e) => return if is_to_json(tr) then how_to_implement(e, tr) else none
-        MapOf(_, v) => return if is_to_json(tr) then how_to_implement(v, tr) else none
-        Opt(e) => return if is_to_json(tr) then how_to_implement(e, tr) else none
+        ListOf(e) => return if is_to_json(tr) then self.how_to_implement(e, tr) else none
+        MapOf(_, v) => return if is_to_json(tr) then self.how_to_implement(v, tr) else none
+        Opt(e) => return if is_to_json(tr) then self.how_to_implement(e, tr) else none
         Struct(s, _) =>
             if tr == std_eq
                 return "{show(t)} has a field that can't be compared with `==`"
-            if is_prelude_line(prog.structs[s].pos.line) then none else impl_help(t, tr)
+            if is_prelude_line(prog.structs[s].pos.line) then none else self.impl_help(t, tr)
         Enum(e, _) =>
             if tr == std_eq
                 return "{show(t)} has a field that can't be compared with `==`"
-            if is_prelude_line(prog.enums[e].pos.line) then none else impl_help(t, tr)
+            if is_prelude_line(prog.enums[e].pos.line) then none else self.impl_help(t, tr)
         _ => none
 
 fn Checker.impl_help(self, t Ty, tr int) str
@@ -351,7 +360,7 @@ fn Checker.check_impls(mut self)
         target := impl_info[i].target
         decl := prog.traits[tr]
         if tr == std_hash
-            check_hash_uses(imp, target)
+            self.check_hash_uses(imp, target)
         binds := [Bind(param: trait_self[tr], ty: target)]
         mut defined := List[str]()
         for m in imp.methods
@@ -360,7 +369,7 @@ fn Checker.check_impls(mut self)
                 err("mod.unit.1", f.pos, "`{f.name}` is defined more than once in this `impl`")
                 continue
             defined.push(f.name)
-            t := trait_method(tr, f.name) else
+            t := self.trait_method(tr, f.name) else
                 names := [prog.fns[k].name for k in decl.methods]
                 mut d := new_diag("trait.impl.5", f.pos, "`{decl.name}` has no method `{f.name}`")
                 d = if s := suggest(f.name, names)
@@ -379,20 +388,20 @@ fn Checker.check_impls(mut self)
                         got.params[k].ty,
                     )
                         matches = false
-            matches = matches and same_result(want.ret, got.ret)
+            matches = matches and self.same_result(want.ret, got.ret)
             if not matches
                 err_help(
                     "trait.impl.3",
                     f.pos,
                     "`{f.name}` doesn't match its declaration in `{decl.name}`",
-                    "write `{sig_text(t, want)}`",
+                    "write `{self.sig_text(t, want)}`",
                 )
         built_in := is_prelude_line(decl.pos.line)
         by_generator := decl.derive != none and (imp.methods.len() == 0 or decl.methods.len() == 0)
         if by_generator
             defined = defined
         elif built_in and imp.methods.len() == 0 and not (tr == std_hash and imp.uses.len() > 0)
-            check_derived(i, tr, target)
+            self.check_derived(i, tr, target)
         else
             missing := [
                 m
@@ -401,7 +410,7 @@ fn Checker.check_impls(mut self)
             ]
             if missing.len() > 0
                 names := [prog.fns[m].name for m in missing]
-                shown := ["`{sig_text(m, sig_subst(sigs[m], binds))}`" for m in missing]
+                shown := ["`{self.sig_text(m, sig_subst(sigs[m], binds))}`" for m in missing]
                 derive := if built_in then "; or remove every method to derive it" else ""
                 err_help(
                     "trait.impl.3",
@@ -409,14 +418,14 @@ fn Checker.check_impls(mut self)
                     "`impl {decl.name} for {imp.target.name}` is missing {list_names(names)}",
                     "add {shown.join(", ")} to the block{derive}",
                 )
-        if tr == std_ord and not implements(target, std_eq)
+        if tr == std_ord and not self.implements(target, std_eq)
             err(
                 "trait.std.2",
                 imp.pos,
                 "{show(target)} implements `Ord`, so it must also support `==`",
             )
         for s in supers[tr]
-            if (tr == std_ord and s == std_eq) or implements(target, s)
+            if (tr == std_ord and s == std_eq) or self.implements(target, s)
                 continue
             tn := decl.name
             sn := prog.traits[s].name
@@ -459,9 +468,9 @@ fn Checker.check_impls(mut self)
     trait_name := prog.traits[tr].name
     for k in 0..names.len()
         t := tys[k]
-        if not implements(t, tr)
+        if not self.implements(t, tr)
             text := "`{trait_name}` can't be derived for `{imp.target.name}`: the field `{names[k]}` is {show(t)}, which doesn't implement `{trait_name}`"
-            hint := how_to_implement(
+            hint := self.how_to_implement(
                 t,
                 tr,
             ) else "define the trait's methods in this `impl` instead of deriving `{trait_name}`"
@@ -476,7 +485,7 @@ fn Checker.check_hash_uses(mut self, imp ast.ImplDecl, target Ty)
     if index < 0
         return
     decl := prog.structs[index]
-    if not custom_eq(target)
+    if not self.custom_eq(target)
         err_help(
             "trait.hash.2",
             imp.pos,
@@ -501,10 +510,10 @@ fn Checker.check_hash_uses(mut self, imp ast.ImplDecl, target Ty)
                 "`{decl.name}` has no field `{u.name}`",
                 "name a field of `{decl.name}` in `uses`",
             )
-        elif not implements(field_types[index][found], std_hash)
+        elif not self.implements(field_types[index][found], std_hash)
             err_help(
                 "trait.hash.2",
                 u.pos,
                 "field `{u.name}` isn't `Hash`",
-                hash_cause(field_types[index][found]),
+                self.hash_cause(field_types[index][found]),
             )

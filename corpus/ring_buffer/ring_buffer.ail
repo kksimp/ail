@@ -16,32 +16,32 @@ fn Ring.make(capacity int) Ring
     Ring(cap: capacity, buf: slots, head: 0, size: 0, dropped: 0)
 
 fn Ring.push(mut self, v int)
-    if size == cap
-        self.buf[head] = v
-        head = (head + 1) % cap
-        dropped += 1
+    if self.size == self.cap
+        self.buf[self.head] = v
+        self.head = (self.head + 1) % self.cap
+        self.dropped += 1
     else
-        self.buf[(head + size) % cap] = v
-        size += 1
+        self.buf[(self.head + self.size) % self.cap] = v
+        self.size += 1
 
 fn Ring.pop(mut self) int?
-    if size == 0
+    if self.size == 0
         return none
-    v := buf[head]
-    head = (head + 1) % cap
-    size -= 1
+    v := self.buf[self.head]
+    self.head = (self.head + 1) % self.cap
+    self.size -= 1
     return v
 
 fn Ring.items(self) List[int]
     mut out := List[int]()
-    for i in 0..size
-        out.push(buf[(head + i) % cap])
+    for i in 0..self.size
+        out.push(self.buf[(self.head + i) % self.cap])
     out
 
 fn Ring.average(self) int
-    if size == 0
+    if self.size == 0
         return 0
-    items().sum() / size
+    self.items().sum() / self.size
 
 fn main()
     mut ring := Ring.make(4)

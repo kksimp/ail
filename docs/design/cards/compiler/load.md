@@ -22,6 +22,7 @@ pub struct load.Loaded  ## A loaded program with the diagnostics its loading fou
 pub fn load.load(arg str, std str) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## Read the program at `arg`, a file or a package directory, with every module
 pub fn load.load_derived(arg str, std str, user Map[str, str]) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## `load`, with the texts the program's own derive generators wrote, by
 pub fn load.load_with(arg str, std str, over Map[str, str]) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## `load` with the text of some files given instead of read from disk, by
+pub fn load.one_pass(loaded load.Loaded, semantic List[load.Shown], broken List[load.Shown]) List[load.Shown]  ## The checker's errors in `semantic` that survive the syntax errors in `broken`
 pub fn load.prove_command(rest List[str], std str) int [clock env fs io proc]
 pub struct load.Shown  ## One diagnostic ready to print, from the loader's or the checker's.
     pub rule str
@@ -39,4 +40,4 @@ pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.
 pub fn load.report_next(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## `report` for `ail check` (check.out.2): each error also says what to run next.
 ```
 
-trimmed to fit 2000 tokens (~1024); dropped: private items
+trimmed to fit 2000 tokens (~1090); dropped: private items

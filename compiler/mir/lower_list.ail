@@ -148,7 +148,7 @@ fn Lower.lower_list_edit(
         cur = good
         mut w := x
         if e.is_float()
-            w = list_prim("float_bits", [x], Ty.Int)
+            w = self.list_prim("float_bits", [x], Ty.Int)
         call("rt.list_insert", [r.id, i, w, size], Ty.Unit)
         watch_note(npos, r, "insert", Val(id: x, ty: e), "index", vs[0])
         return unit
@@ -183,7 +183,7 @@ fn Lower.lower_list_edit(
             return unsupported(npos, "`.contains()` on `{r.ty.name()}`")
         mut w := convert(vs[0], e, npos)
         if e.is_float()
-            w = list_prim("float_bits", [w], Ty.Int)
+            w = self.list_prim("float_bits", [w], Ty.Int)
         return Val(
             id: call("rt.list_contains", [r.id, w, konst(k, Ty.Int), size], Ty.Bool),
             ty: Ty.Bool,
@@ -196,7 +196,7 @@ fn Lower.lower_list_edit(
         if name == "sorted"
             target = call("rt.list_copy", [r.id, size], r.ty)
         if e.elem_bytes() < 8
-            wide := words_of(Val(id: target, ty: r.ty), e)
+            wide := self.words_of(Val(id: target, ty: r.ty), e)
             call("rt.list_sort", [wide, konst(k, Ty.Int)], Ty.Unit)
             call("rt.list_narrow_into", [target, wide, size], Ty.Unit)
         else
@@ -228,7 +228,7 @@ fn Lower.lower_list_edit(
             k := sized_kind(e)
             texts := trap_texts("expr.arith.1", npos)
             sargs := [
-                words_of(r, e),
+                self.words_of(r, e),
                 konst(sized_lo(k), Ty.Int),
                 konst(sized_hi(k), Ty.Int),
                 konst(sized_code(k), Ty.Int),
@@ -243,30 +243,37 @@ fn Lower.lower_list_edit(
     n := op("len", [r.id], Ty.Int)
     nonempty := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
     if name == "first" and vs.len() == 0
-        return opt_at(r, nonempty, konst(0, Ty.Int), e, false, npos)
+        return self.opt_at(r, nonempty, konst(0, Ty.Int), e, false, npos)
     if name == "last" and vs.len() == 0
         last := op("sub", [n, konst(1, Ty.Int)], Ty.Int)
-        return opt_at(r, nonempty, last, e, false, npos)
+        return self.opt_at(r, nonempty, last, e, false, npos)
     if (name == "min" or name == "max") and vs.len() == 0
         k := ord_kind(e)
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
         greatest := konst(if name == "max" then 1 else 0, Ty.Int)
-        idx := call("rt.list_extreme", [words_of(r, e), konst(k, Ty.Int), greatest], Ty.Int)
+        idx := call("rt.list_extreme", [self.words_of(r, e), konst(k, Ty.Int), greatest], Ty.Int)
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
-        return opt_at(r, found, idx, e, false, npos)
+        return self.opt_at(r, found, idx, e, false, npos)
     if name == "index_of" and vs.len() == 1
         k := eq_kind(e)
         if k < 0
             idx := list_index_eq(r, e, convert(vs[0], e, npos)) else
                 return unsupported(npos, "`.index_of()` on `{r.ty.name()}`")
-            return opt_at(r, op("le", [konst(0, Ty.Int), idx], Ty.Bool), idx, Ty.Int, true, npos)
+            return self.opt_at(
+                r,
+                op("le", [konst(0, Ty.Int), idx], Ty.Bool),
+                idx,
+                Ty.Int,
+                true,
+                npos,
+            )
         mut w := convert(vs[0], e, npos)
         if e.is_float()
-            w = list_prim("float_bits", [w], Ty.Int)
+            w = self.list_prim("float_bits", [w], Ty.Int)
         idx := call("rt.list_index_of", [r.id, w, konst(k, Ty.Int), size], Ty.Int)
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
-        return opt_at(r, found, idx, Ty.Int, true, npos)
+        return self.opt_at(r, found, idx, Ty.Int, true, npos)
     unsupported(npos, "`.{name}()` with these arguments")
 
 ## `T?` for a list read: the element at `idx` (or `idx` itself when `index` is
@@ -451,7 +458,7 @@ fn Lower.list_method(
     if name == "cmp" and vs.len() == 1
         return list_cmp_method(r, vs[0], npos)
     if is_list_edit(name)
-        return lower_list_edit(r, e, name, npos, args, vs)
+        return self.lower_list_edit(r, e, name, npos, args, vs)
     if name == "push" and vs.len() == 1
         mut el := e
         if e.is_unknown()

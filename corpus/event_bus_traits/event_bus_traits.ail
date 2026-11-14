@@ -67,18 +67,18 @@ struct Bus
     dropped int
 
 fn Bus.subscribe(mut self, h any Handler)
-    handlers.push(h)
+    self.handlers.push(h)
 
 fn Bus.publish(mut self, ev Event) List[str]
     mut lines := List[str]()
     mut hits := 0
-    for h in handlers
+    for h in self.handlers
         if h.wants(ev)
             lines.push("[{h.label()}] {h.handle(ev)}")
             hits += 1
     if hits == 0
-        dropped += 1
-    delivered += hits
+        self.dropped += 1
+    self.delivered += hits
     lines
 
 fn main()

@@ -26,6 +26,9 @@ enum Target
 struct Resolver
     ## Module path to its top-level names and where each is declared.
     mods Map[str, Map[str, ast.Pos]]
+    ## The same, flat: `item_key(module, name)` to where it is declared. A lookup in `mods` copies the
+    ## module's map, so a program of n declarations resolved in O(n^2); this one doesn't.
+    item_at Map[str, ast.Pos]
     ## Per file: the names it imports.
     imports List[Map[str, Target]]
     ## The lines that start with `pub`.
@@ -91,20 +94,32 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         if modules.len() == 0 or modules[modules.len() - 1] != f.module
             modules.push(f.module)
     # Every module's top-level names (mod.unit.1), before renaming.
-    mut items := Map[str, Map[str, ast.Pos]]()
-    for m in modules
-        items[m] = Map[str, ast.Pos]()
+    mut item_at := Map[str, ast.Pos]()
+    mut firsts := List[(str, str, ast.Pos)]()
     for f in prog.fns
         if f.within == ast.Within.TopLevel and f.owner == none
-            add_item(prog.files, mut items, f.name, f.pos)
+            add_item(prog.files, mut item_at, mut firsts, f.name, f.pos)
     for s in prog.structs
-        add_item(prog.files, mut items, s.name, s.pos)
+        add_item(prog.files, mut item_at, mut firsts, s.name, s.pos)
     for e in prog.enums
-        add_item(prog.files, mut items, e.name, e.pos)
+        add_item(prog.files, mut item_at, mut firsts, e.name, e.pos)
     for t in prog.traits
-        add_item(prog.files, mut items, t.name, t.pos)
+        add_item(prog.files, mut item_at, mut firsts, t.name, t.pos)
     for c in prog.consts
-        add_item(prog.files, mut items, c.name, c.pos)
+        add_item(prog.files, mut item_at, mut firsts, c.name, c.pos)
+    # Each module's map is built once, not copied and written back per item.
+    mut item_modules := modules
+    for e in firsts
+        if not item_modules.contains(e.0)
+            item_modules.push(e.0)
+    mut items := Map[str, Map[str, ast.Pos]]()
+    for m in item_modules
+        if not items.contains(m)
+            mut names := Map[str, ast.Pos]()
+            for e in firsts
+                if e.0 == m
+                    names[e.1] = e.2
+            items[m] = names
     # Imports, per file (mod.use.1, mod.use.3-6).
     mut imports := [Map[str, Target]() for _ in prog.files]
     mut first_decl := [4611686018427387904 for _ in prog.files]
@@ -226,6 +241,7 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         lines.add(l)
     mut r := Resolver(
         mods: items,
+        item_at: item_at,
         imports: imports,
         public: lines,
         files: prog.files,
@@ -368,14 +384,24 @@ fn std_target(t Target) bool
         Module(_) => false
 
 ## A top-level `name` of the module its position is in (the first one wins).
-fn add_item(files List[ast.SourceFile], mut items Map[str, Map[str, ast.Pos]], name str, at ast.Pos)
+fn add_item(
+    files List[ast.SourceFile],
+    mut item_at Map[str, ast.Pos],
+    mut firsts List[(str, str, ast.Pos)],
+    name str,
+    at ast.Pos,
+)
     if is_prelude(at)
         return
     m := module_at(files, at)
-    mut names := items.get(m) else Map[str, ast.Pos]()
-    if not names.contains(name)
-        names[name] = at
-    items[m] = names
+    key := item_key(m, name)
+    if not item_at.contains(key)
+        item_at[key] = at
+        firsts.push((m, name, at))
+
+## The key of item `name` of module `m` in `Resolver.item_at` (a newline is in no name).
+fn item_key(m str, name str) str
+    "{m}\n{name}"
 
 ## mod.use.5: imports must not form a cycle. Each cycle is reported once, at
 ## its first import in source order.
@@ -441,9 +467,7 @@ fn Resolver.enter(mut self, at ast.Pos, vars List[str]) bool
 fn Resolver.own(self, name str) bool
     if self.tyvars.contains(name)
         return false
-    if names := self.mods.get(self.module)
-        return names.contains(name)
-    false
+    self.item_at.contains(item_key(self.module, name))
 
 fn Resolver.import_of(self, name str) Target?
     self.imports[self.file].get(name)
@@ -451,8 +475,7 @@ fn Resolver.import_of(self, name str) Target?
 ## The qualified name of item `item` of imported module `m`, reporting an
 ## unknown or private item (mod.use.2, mod.vis.1).
 fn Resolver.item(mut self, m str, alias str, item str, at ast.Pos) str
-    names := self.mods.get(m) else Map[str, ast.Pos]()
-    if decl := names.get(item)
+    if decl := self.item_at.get(item_key(m, item))
         if not is_prelude(decl) and not self.public.contains(decl.line)
             self.diags.push(diag(
                 "mod.vis.1",
@@ -461,6 +484,7 @@ fn Resolver.item(mut self, m str, alias str, item str, at ast.Pos) str
                 "mark it `pub` in module `{m}` to use it here",
             ))
     else
+        names := self.mods.get(m) else Map[str, ast.Pos]()
         keys := names.keys().sorted()
         help := if s := check.suggest(
             item,

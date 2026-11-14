@@ -255,11 +255,18 @@ fn Checker.warn(mut self, rule str, at ast.Pos, text str, hint str)
     diags.push(d)
 
 fn Checker.local(self, n str) Local?
+    if not ever_named.contains(n)
+        return none
     for k in 0..locals.len()
         l := locals[locals.len() - 1 - k]
         if l.name == n
             return l
     none
+
+## Bind a local; every new local goes through here, so `ever_named` holds every name `locals` can hold.
+fn Checker.add_local(mut self, l Local)
+    ever_named.add(l.name)
+    locals.push(l)
 
 fn Checker.check_fn(mut self, idx int)
     f := prog.fns[idx]
@@ -271,14 +278,14 @@ fn Checker.check_fn(mut self, idx int)
     ].len() > 0
     if f.ext != none
         check_extern(idx, f)
-        end_fn(idx)
+        self.end_fn(idx)
         return
     if [a for a in f.attrs if a.name == "export c"].len() > 0
         check_export(idx, f)
     if f.body == none
         if f.contracts.len() > 0
-            check_bodyless_contracts(idx, f)
-        end_fn(idx)
+            self.check_bodyless_contracts(idx, f)
+        self.end_fn(idx)
         return
     body := f.body else []
     bind_decls = []
@@ -293,7 +300,7 @@ fn Checker.check_fn(mut self, idx int)
     loop_depth = 0
     label_breaks = Set[int]()
     unsafe_depth = 0
-    check_param_defaults(f, sig)
+    self.check_param_defaults(f, sig)
     if f.unsafe_fn
         unsafe_opt_in(f.pos)
     catching = 0
@@ -302,13 +309,13 @@ fn Checker.check_fn(mut self, idx int)
     gen.elem = gen_start(f, sig.ret)
     if gen.elem != none
         fn_ret = Ty.Unit
-    push_params(f, sig)
-    check_contracts(f, sig.ret)
+    self.push_params(f, sig)
+    self.check_contracts(f, sig.ret)
     need := not returns_nothing(sig.ret) and gen.elem == none
     mut want := none
     if need
         want = sig.ret
-    got := block(body, want, need)
+    got := self.block(body, want, need)
     if need and not accepts(sig.ret, got)
         mut at := f.pos
         if r := f.ret
@@ -331,7 +338,7 @@ fn Checker.check_fn(mut self, idx int)
             if r := f.ret
                 d = d.with_note(r.pos, "the return type is declared here")
             diags.push(d)
-    end_fn(idx)
+    self.end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
     report_unused()
@@ -345,7 +352,7 @@ fn Checker.end_fn(mut self, idx int)
 ## The receiver and parameters of `f` as locals.
 fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
     if f.receiver != none
-        locals.push(Local(
+        self.add_local(Local(
             name: "self",
             ty: self_ty else Ty.Unknown,
             mutable: receiver_of(f) == true,
@@ -354,9 +361,9 @@ fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
         ))
     for k in 0..f.params.len()
         p := f.params[k]
-        if declare(p.name, p.pos)
+        if self.declare(p.name, p.pos)
             how := if p.moved then LocalKind.MoveParam else LocalKind.ParamLocal
-            locals.push(Local(
+            self.add_local(Local(
                 name: p.name,
                 ty: sig.params[k].ty,
                 mutable: p.mutable,
@@ -409,7 +416,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         if last
             want = expect
         marks := effect_marks
-        ty = stmt(s, want, last and need)
+        ty = self.stmt(s, want, last and need)
         if ty == Ty.Never
             leaves = true
         # own.uniq.2: a block's value leaves it.
@@ -421,7 +428,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
             ty = Ty.Unknown
         elif not last or not need
             note_discard(s, ty, marks, last)
-    end_scope(mark)
+    self.end_scope(mark)
     if leaves then Ty.Never else ty
 
 @allow("expr.match.3") fn eval_of(s ast.Stmt) ast.Expr?
@@ -449,7 +456,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
 fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
     match s
         Let(n, at, mutable, value, otherwise) =>
-            let_stmt(n, at, mutable, value, otherwise)
+            self.let_stmt(n, at, mutable, value, otherwise)
             Ty.Unit
         LetTuple(names, value, at) =>
             let_tuple(names, value, at)
@@ -458,12 +465,12 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             local_fn(d)
             Ty.Unit
         Assign(target, op, value, at) =>
-            assign(target, op, value, at)
+            self.assign(target, op, value, at)
             Ty.Unit
         While(cond, body, wpos) =>
-            condition(cond)
+            self.condition(cond)
             loop_depth += 1
-            block(body, none, false)
+            self.block(body, none, false)
             loop_depth -= 1
             # expr.loop.7: `while true` with no `break` of its own never finishes;
             # a `break outer` from a nested loop is one of its own (expr.loop.10).
@@ -476,17 +483,17 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             if need
                 if e := ast.tail_else(value, otherwise)
                     return expr(e, expect, true)
-            handle(value, otherwise)
+            self.handle(value, otherwise)
             Ty.Unit
         For(_, var, var_pos, mutable, iter, body, _) =>
-            elem := if mutable then mut_iterable(iter, var, body) else iterable(
+            elem := if mutable then self.mut_iterable(iter, var, body) else self.iterable(
                 iter,
                 is_hidden(var),
             )
             mark := locals.len()
             # type.tuple.5: the hidden variable of `for a, b in xs` clashes only when the names do.
-            if is_hidden(var) or declare(var, var_pos)
-                locals.push(Local(
+            if is_hidden(var) or self.declare(var, var_pos)
+                self.add_local(Local(
                     name: var,
                     ty: elem,
                     mutable: mutable,
@@ -494,9 +501,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
                     decl: none,
                 ))
             loop_depth += 1
-            block(body, none, false)
+            self.block(body, none, false)
             loop_depth -= 1
-            end_scope(mark)
+            self.end_scope(mark)
             Ty.Unit
         With(mutex, var, var_pos, body, at) =>
             with_stmt(mutex, var, var_pos, body, at)
@@ -504,7 +511,7 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Unsafe(body, at) =>
             unsafe_opt_in(at)
             unsafe_depth += 1
-            t := block(body, expect, need)
+            t := self.block(body, expect, need)
             unsafe_depth -= 1
             t
         Break(at, target) =>
@@ -518,7 +525,7 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
                 err("expr.loop.5", at, "`continue` outside a loop")
             Ty.Never
         Return(value, at) =>
-            return_stmt(value, at)
+            self.return_stmt(value, at)
             Ty.Never
         Eval(e) => expr(e, expect, need)
         Defer(inner, at) =>
@@ -537,9 +544,9 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     opt := mutable and is_none_literal(value)
     if (is_empty_literal(value) or opt) and otherwise == none
         # eff.use.1: `_ := e` throws the value away; `_` is never a binding.
-        if n != "_" and declare(n, at)
+        if n != "_" and self.declare(n, at)
             index := locals.len()
-            locals.push(Local(
+            self.add_local(Local(
                 name: n,
                 ty: Ty.Unknown,
                 mutable: mutable,
@@ -556,13 +563,13 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         return
     mut vt := Ty.Unit
     if otherwise != none
-        vt = else_value(value, otherwise)
+        vt = self.else_value(value, otherwise)
     else
         vt = expr(value, none, true)
     consume(value, vt)
     mut ty := vt
     if o := otherwise
-        ty = else_part(vt, value, o)
+        ty = self.else_part(vt, value, o)
     elif reject_unhandled(vt, expr_pos(value))
         ty = ok_type(vt)
     if ty == Ty.Unit
@@ -578,8 +585,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
             err("expr.bind.1", expr_pos(value), text)
     if n == "_"
         return
-    if declare(n, at)
-        locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+    if self.declare(n, at)
+        self.add_local(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
         note_binding(n, at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
@@ -609,7 +616,7 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
     if want == Ty.Unit
         t := expr(v, none, true)
         if is_error_type(t)
-            return_error_in_infallible(v, t)
+            self.return_error_in_infallible(v, t)
         else
             err_help(
                 "expr.block.2",
@@ -630,7 +637,7 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         return
     want_res := is_res(want)
     if not want_res and is_error_type(t)
-        return_error_in_infallible(v, t)
+        self.return_error_in_infallible(v, t)
     elif want_res and is_error_type(t)
         mut hint := "add it to the return type"
         if r := failing_ret([t])
@@ -709,10 +716,10 @@ fn else_name(o ast.Else?) ast.Ident?
     match vt
         Res(ok, _) =>
             if ok == Ty.Unit
-                else_part(vt, value, otherwise)
+                self.else_part(vt, value, otherwise)
                 return
-            handle_has_value(value, vt, "can fail")
-        Opt => handle_has_value(value, vt, "may be absent")
+            self.handle_has_value(value, vt, "can fail")
+        Opt => self.handle_has_value(value, vt, "may be absent")
         Unknown => return
         _ =>
             err_help(
@@ -818,14 +825,14 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                                     "{whole}",
                                 )])
                         _ => ok = ok
-        Leave(st) => stmt(st, none, false)
+        Leave(st) => self.stmt(st, none, false)
         Handler(name, body, bpos) =>
             mark := locals.len()
             if nm := name
                 if fails
                     t := if errors.len() == 1 then errors[0] else Ty.Union(errors)
-                    if declare(nm.name, nm.pos)
-                        locals.push(Local(
+                    if self.declare(nm.name, nm.pos)
+                        self.add_local(Local(
                             name: nm.name,
                             ty: t,
                             mutable: false,
@@ -843,10 +850,10 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                         ast.Pos(line: nm.pos.line, col: (nm.pos.col - 1).max(1)),
                         ast.Pos(line: nm.pos.line, col: nm.pos.col + nm.name.len()),
                     )])
-                elif declare(nm.name, nm.pos)
+                elif self.declare(nm.name, nm.pos)
                     # The value already failed to check: bind the name as unknown,
                     # so its uses in the block don't cascade.
-                    locals.push(Local(
+                    self.add_local(Local(
                         name: nm.name,
                         ty: Ty.Unknown,
                         mutable: false,
@@ -855,8 +862,8 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     ))
             # err.else.4: with no value to supply, the block may just end.
             unit := ok == Ty.Unit
-            t := if unit then block(body, none, false) else block(body, ok, true)
-            end_scope(mark)
+            t := if unit then self.block(body, none, false) else self.block(body, ok, true)
+            self.end_scope(mark)
             if not unit and not accepts(ok, t)
                 err(
                     "err.else.2",
@@ -870,7 +877,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
 fn Checker.declare(mut self, n str, at ast.Pos) bool
     if record
         bound[locals.len()] = at
-    if l := local(n)
+    if l := self.local(n)
         mut d := new_diag("expr.bind.4", at, "`{n}` is already declared in this function")
         if first := l.decl
             d = d.with_note(first, "`{n}` is first declared here")
@@ -1034,7 +1041,7 @@ fn Checker.condition(mut self, cond ast.Expr)
 ## The element type of a `for` loop's iterable (expr.loop.4).
 @allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr, pairs bool) Ty
     if is_range(iter)
-        return range_loop(iter)
+        return self.range_loop(iter)
     t := expr(iter, none, true)
     at := expr_pos(iter)
     match t
@@ -1047,7 +1054,7 @@ fn Checker.condition(mut self, cond ast.Expr)
                 # conc.share.7: the loop synchronises with other tasks (conc.par.2).
                 handle_calls.add(pos_key(at))
                 return e
-            iterate_error(t, at, iter)
+            self.iterate_error(t, at, iter)
         Unknown => Ty.Unknown
         Res =>
             reject_unhandled(t, at)
@@ -1071,11 +1078,11 @@ fn Checker.condition(mut self, cond ast.Expr)
             Ty.Unknown
         # expr.iter.1: a type with `fn next(mut self) T?`, a `Seq[T]` among them.
         Struct | Enum => iter_next(t, at, iter)
-        _ => iterate_error(t, at, iter)
+        _ => self.iterate_error(t, at, iter)
 
 @allow("expr.match.3") fn Checker.range_loop(mut self, iter ast.Expr) Ty
     match iter
-        Range(lo, hi, _, at) => loop_range(lo, hi, at)
+        Range(lo, hi, _, at) => self.loop_range(lo, hi, at)
         _ => return Ty.Int
     Ty.Int
 
@@ -1095,7 +1102,7 @@ fn Checker.condition(mut self, cond ast.Expr)
                 if mname == "recv" and args.len() == 0
                     match r
                         Name(n, p) =>
-                            if l := local(n)
+                            if l := self.local(n)
                                 if is_channel(l.ty)
                                     d = d.with_fix(
                                         "receive until the channel is closed",
@@ -1133,8 +1140,8 @@ fn Checker.mut_iterable(mut self, iter ast.Expr, var str, body List[ast.Stmt]) T
         _ =>
             err("expr.loop.6", expr_pos(iter), "`for mut` needs a list, found {show(t)}")
             return Ty.Unknown
-    require_mutable(iter, "expr.loop.6", "changed by `for mut`")
-    if at := overlapping_use(iter, body)
+    self.require_mutable(iter, "expr.loop.6", "changed by `for mut`")
+    if at := self.overlapping_use(iter, body)
         err_help(
             "own.excl.5",
             at,
@@ -1152,7 +1159,7 @@ fn Checker.loop_range(mut self, lo ast.Expr?, hi ast.Expr?, at ast.Pos)
             "a `for` range needs both bounds",
             "write `a..b`; open ranges are only for slices, `xs[a..]`",
         )
-    range_bounds(lo, hi)
+    self.range_bounds(lo, hi)
 
 fn Checker.range_bounds(mut self, lo ast.Expr?, hi ast.Expr?)
     for b in [lo, hi]
@@ -1165,7 +1172,7 @@ fn Checker.range_bounds(mut self, lo ast.Expr?, hi ast.Expr?)
 
 fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at ast.Pos)
     # std.tensor.15: a tensor is a value, so `t[i] = v` is an error.
-    if tensor_element_target(target)
+    if self.tensor_element_target(target)
         expr(value, none, true)
         err_help(
             "std.tensor.15",
@@ -1176,9 +1183,9 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
         return
     # type.coll.13: `m[k] = v`, `m[k] += n` or `x = e` can fix a pending
     # local's type; `op=` starts a missing key at zero.
-    settle_by_assign(target, op, value)
+    self.settle_by_assign(target, op, value)
     if n := name_of(target)
-        if local(n) == none
+        if self.local(n) == none
             expr(value, none, true)
             if n == "self"
                 expr(target, none, true)
@@ -1195,7 +1202,7 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
                     ])
                 diags.push(d)
                 # Later uses don't report the same name again (gram.rec.2).
-                locals.push(Local(
+                self.add_local(Local(
                     name: n,
                     ty: Ty.Unknown,
                     mutable: true,
@@ -1205,7 +1212,7 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             return
     mut rooted := false
     if root := place_root(target)
-        rooted = local(root) != none
+        rooted = self.local(root) != none
     tt := expr(target, none, true)
     if not rooted
         if tt != Ty.Unknown
@@ -1227,7 +1234,7 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
         expr(value, none, true)
         return
     # type.bytes.2: `bytes` never changes in place.
-    if bytes_element_target(target)
+    if self.bytes_element_target(target)
         err_help(
             "type.bytes.2",
             expr_pos(target),
@@ -1248,7 +1255,7 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
     if group_field_assign(target, tt)
         expr(value, none, true)
         return
-    require_mutable(target, none, "assigned")
+    self.require_mutable(target, none, "assigned")
     vt := expr(value, tt, true)
     consume(value, vt)
     if o := op
@@ -1261,14 +1268,14 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
     match target
         Index(recv, _, _) =>
             n := name_of(recv) else return false
-            l := local(n) else return false
+            l := self.local(n) else return false
             tensor_elem(l.ty) != none
         _ => false
 
 ## `b[i]` where `b` is `bytes`.
 @allow("expr.match.3") fn Checker.bytes_element_target(mut self, target ast.Expr) bool
     match target
-        Index(recv, _, _) => quiet_type(recv) == Ty.Bytes
+        Index(recv, _, _) => self.quiet_type(recv) == Ty.Bytes
         _ => false
 
 @allow("expr.match.3")
@@ -1276,30 +1283,30 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
     match target
         Index(recv, index, _) =>
             n := name_of(recv) else return
-            k := pending_of(n) else return
+            k := self.pending_of(n) else return
             if not pending[k].brace
                 return
-            kt := quiet_type(index)
-            vt := quiet_type(value)
+            kt := self.quiet_type(index)
+            vt := self.quiet_type(value)
             if op == none or vt == Ty.Int or vt == Ty.Float
-                if k2 := pending_of(n)
+                if k2 := self.pending_of(n)
                     # A key typed by its first use is a key as `Map[K, V]()` names it (type.map.2, ADR 1109).
                     if kt != Ty.Unknown
                         require_key(kt, expr_pos(index))
-                    settle(k2, Ty.MapOf(key: kt, value: vt))
+                    self.settle(k2, Ty.MapOf(key: kt, value: vt))
         Name(n, _) =>
             if op != none
                 return
-            k := pending_of(n) else return
-            vt := quiet_type(value)
+            k := self.pending_of(n) else return
+            vt := self.quiet_type(value)
             if pending[k].opt
                 # type.opt.9: the first value gives `T?` (type.opt.5).
                 if vt != Ty.Unknown and vt != Ty.Unit and vt != Ty.Never
-                    settle(k, as_opt(vt))
+                    self.settle(k, as_opt(vt))
                 return
             brace := pending[k].brace
             if (not brace and is_list_ty(vt)) or (brace and (is_map_ty(vt) or is_set_ty(vt)))
-                settle(k, vt)
+                self.settle(k, vt)
         _ => return
 
 @allow("expr.match.3") fn name_of(e ast.Expr) str?
@@ -1338,7 +1345,7 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
             "only a variable, or a field or element of one, can be {action}",
         )
         return
-    l := local(root) else return
+    l := self.local(root) else return
     if is_capture(root)
         capture_written(root, expr_pos(e), action)
         return
@@ -1407,7 +1414,7 @@ fn same_step(x Step, y Step, certain bool) bool
 fn Checker.certainly_overlap(self, a ast.Expr, b ast.Expr) bool
     pa := place_path(a) else return false
     pb := place_path(b) else return false
-    if pa.root != pb.root or local(pa.root) == none
+    if pa.root != pb.root or self.local(pa.root) == none
         return false
     for k in 0..pa.steps.len().min(pb.steps.len())
         if not same_step(pa.steps[k], pb.steps[k], true)
@@ -1419,7 +1426,7 @@ fn Checker.certainly_overlap(self, a ast.Expr, b ast.Expr) bool
 fn Checker.may_overlap(self, a ast.Expr, b ast.Expr) bool
     pa := place_path(a) else return false
     pb := place_path(b) else return false
-    if pa.root != pb.root or local(pa.root) == none
+    if pa.root != pb.root or self.local(pa.root) == none
         return false
     for k in 0..pa.steps.len().min(pb.steps.len())
         if not same_step(pa.steps[k], pb.steps[k], false)
@@ -1429,48 +1436,57 @@ fn Checker.may_overlap(self, a ast.Expr, b ast.Expr) bool
 ## The first use in `body` of a place that may overlap `target` (own.excl.5).
 fn Checker.overlapping_use(self, target ast.Expr, body List[ast.Stmt]) ast.Pos?
     for s in body
-        if at := overlap_in_stmt(target, s)
+        if at := self.overlap_in_stmt(target, s)
             return at
     none
 
 fn Checker.overlap_in_else(self, target ast.Expr, o ast.Else) ast.Pos?
     match o
-        Fallback(d) => overlap_in_expr(target, d)
-        Leave(st) => overlap_in_stmt(target, st)
-        Handler(_, body, _) => overlapping_use(target, body)
+        Fallback(d) => self.overlap_in_expr(target, d)
+        Leave(st) => self.overlap_in_stmt(target, st)
+        Handler(_, body, _) => self.overlapping_use(target, body)
 
 fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
     match s
         Let(_, _, _, value, otherwise) =>
-            if at := overlap_in_expr(target, value)
+            if at := self.overlap_in_expr(target, value)
                 return at
             o := otherwise else return none
-            overlap_in_else(target, o)
-        Assign(t, _, value, _) => either(overlap_in_expr(target, t), overlap_in_expr(target, value))
-        While(cond, body, _) => either(overlap_in_expr(target, cond), overlapping_use(target, body))
-        For(_, _, _, _, iter, body, _) => either(
-            overlap_in_expr(target, iter),
-            overlapping_use(target, body),
+            self.overlap_in_else(target, o)
+        Assign(t, _, value, _) => either(
+            self.overlap_in_expr(target, t),
+            self.overlap_in_expr(target, value),
         )
-        With(m, _, _, body, _) => either(overlap_in_expr(target, m), overlapping_use(target, body))
-        Unsafe(body, _) => overlapping_use(target, body)
+        While(cond, body, _) => either(
+            self.overlap_in_expr(target, cond),
+            self.overlapping_use(target, body),
+        )
+        For(_, _, _, _, iter, body, _) => either(
+            self.overlap_in_expr(target, iter),
+            self.overlapping_use(target, body),
+        )
+        With(m, _, _, body, _) => either(
+            self.overlap_in_expr(target, m),
+            self.overlapping_use(target, body),
+        )
+        Unsafe(body, _) => self.overlapping_use(target, body)
         Return(v, _) =>
             e := v else return none
-            overlap_in_expr(target, e)
-        Eval(e) => overlap_in_expr(target, e)
+            self.overlap_in_expr(target, e)
+        Eval(e) => self.overlap_in_expr(target, e)
         Handle(value, otherwise) => either(
-            overlap_in_expr(target, value),
-            overlap_in_else(target, otherwise),
+            self.overlap_in_expr(target, value),
+            self.overlap_in_else(target, otherwise),
         )
-        Defer(st, _) => overlap_in_stmt(target, st)
-        LetTuple(_, value, _) => overlap_in_expr(target, value)
+        Defer(st, _) => self.overlap_in_stmt(target, st)
+        LetTuple(_, value, _) => self.overlap_in_expr(target, value)
         # A local function's body works on copies (type.fn.5).
         LocalFn => none
         Select(arms, _) =>
-            if at := overlap_in_list(target, ast.select_heads(arms))
+            if at := self.overlap_in_list(target, ast.select_heads(arms))
                 return at
             for body in ast.select_bodies(arms)
-                if at := overlapping_use(target, body)
+                if at := self.overlapping_use(target, body)
                     return at
             none
         Break => none
@@ -1483,28 +1499,28 @@ fn either(a ast.Pos?, b ast.Pos?) ast.Pos?
 
 fn Checker.overlap_in_list(self, target ast.Expr, xs List[ast.Expr]) ast.Pos?
     for x in xs
-        if at := overlap_in_expr(target, x)
+        if at := self.overlap_in_expr(target, x)
             return at
     none
 
 fn Checker.overlap_in_args(self, target ast.Expr, args List[ast.Arg]) ast.Pos?
     for a in args
-        if at := overlap_in_expr(target, a.value)
+        if at := self.overlap_in_expr(target, a.value)
             return at
     none
 
 fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
     e := x else return none
-    overlap_in_expr(target, e)
+    self.overlap_in_expr(target, e)
 
 @allow("expr.match.3") fn Checker.overlap_in_expr(self, target ast.Expr, x ast.Expr) ast.Pos?
     if p := place_path(x)
-        if may_overlap(target, x)
+        if self.may_overlap(target, x)
             return expr_pos(x)
         for step in p.steps
             match step
                 SIndex(i) =>
-                    if at := overlap_in_expr(target, i)
+                    if at := self.overlap_in_expr(target, i)
                         return at
                 SField => continue
         return none
@@ -1513,77 +1529,83 @@ fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
             for part in parts
                 match part
                     Hole(y) =>
-                        if at := overlap_in_expr(target, y)
+                        if at := self.overlap_in_expr(target, y)
                             return at
                     Fmt(y, _) =>
-                        if at := overlap_in_expr(target, y)
+                        if at := self.overlap_in_expr(target, y)
                             return at
                     Lit => continue
             none
-        ListLit(items, _) => overlap_in_list(target, items)
-        SetLit(items, _) => overlap_in_list(target, items)
-        TupleLit(items, _) => overlap_in_list(target, items)
+        ListLit(items, _) => self.overlap_in_list(target, items)
+        SetLit(items, _) => self.overlap_in_list(target, items)
+        TupleLit(items, _) => self.overlap_in_list(target, items)
         Call(callee, args, _) => either(
-            overlap_in_expr(target, callee),
-            overlap_in_args(target, args),
+            self.overlap_in_expr(target, callee),
+            self.overlap_in_args(target, args),
         )
         Method(recv, _, _, args) => either(
-            overlap_in_expr(target, recv),
-            overlap_in_args(target, args),
+            self.overlap_in_expr(target, recv),
+            self.overlap_in_args(target, args),
         )
-        Member(recv, _, _) => overlap_in_expr(target, recv)
+        Member(recv, _, _) => self.overlap_in_expr(target, recv)
         Index(recv, index, _) => either(
-            overlap_in_expr(target, recv),
-            overlap_in_expr(target, index),
+            self.overlap_in_expr(target, recv),
+            self.overlap_in_expr(target, index),
         )
-        Unary(_, operand, _) => overlap_in_expr(target, operand)
-        NewRef(value, _) => overlap_in_expr(target, value)
-        Closure(_, body, _) => overlap_in_expr(target, body)
-        Binary(_, lhs, rhs, _) => either(overlap_in_expr(target, lhs), overlap_in_expr(target, rhs))
-        Range(lo, hi, _, _) => either(overlap_in_opt(target, lo), overlap_in_opt(target, hi))
+        Unary(_, operand, _) => self.overlap_in_expr(target, operand)
+        NewRef(value, _) => self.overlap_in_expr(target, value)
+        Closure(_, body, _) => self.overlap_in_expr(target, body)
+        Binary(_, lhs, rhs, _) => either(
+            self.overlap_in_expr(target, lhs),
+            self.overlap_in_expr(target, rhs),
+        )
+        Range(lo, hi, _, _) => either(
+            self.overlap_in_opt(target, lo),
+            self.overlap_in_opt(target, hi),
+        )
         MapLit(entries, _) =>
             for en in entries
-                if at := overlap_in_expr(target, en.key)
+                if at := self.overlap_in_expr(target, en.key)
                     return at
-                if at := overlap_in_expr(target, en.value)
+                if at := self.overlap_in_expr(target, en.value)
                     return at
             none
         Comp(_, elem, value, clauses, _) =>
             for c in clauses
-                if at := overlap_in_expr(target, c.iter)
+                if at := self.overlap_in_expr(target, c.iter)
                     return at
-                if at := overlap_in_opt(target, c.cond)
+                if at := self.overlap_in_opt(target, c.cond)
                     return at
-            either(overlap_in_expr(target, elem), overlap_in_opt(target, value))
+            either(self.overlap_in_expr(target, elem), self.overlap_in_opt(target, value))
         If(branches, els, _, _) =>
             for b in branches
                 match b.cond
                     Test(c) =>
-                        if at := overlap_in_expr(target, c)
+                        if at := self.overlap_in_expr(target, c)
                             return at
                     Bind(_, _, c) =>
-                        if at := overlap_in_expr(target, c)
+                        if at := self.overlap_in_expr(target, c)
                             return at
-                if at := overlapping_use(target, b.body)
+                if at := self.overlapping_use(target, b.body)
                     return at
             e := els else return none
-            overlapping_use(target, e)
+            self.overlapping_use(target, e)
         Match(scrutinee, arms, _) =>
-            if at := overlap_in_expr(target, scrutinee)
+            if at := self.overlap_in_expr(target, scrutinee)
                 return at
             for a in arms
-                if at := overlapping_use(target, a.body)
+                if at := self.overlapping_use(target, a.body)
                     return at
             none
         Try(inner, context, _) => either(
-            overlap_in_expr(target, inner),
-            overlap_in_opt(target, context),
+            self.overlap_in_expr(target, inner),
+            self.overlap_in_opt(target, context),
         )
         OrElse(value, otherwise, _) =>
-            if at := overlap_in_expr(target, value)
+            if at := self.overlap_in_expr(target, value)
                 return at
             match otherwise
-                Fallback(d) => overlap_in_expr(target, d)
+                Fallback(d) => self.overlap_in_expr(target, d)
                 Leave | Handler => none
         _ => none
 
@@ -1687,7 +1709,7 @@ fn Checker.check_bodyless_contracts(mut self, idx int, f ast.FnDecl)
     self_ty = fn_self[idx]
     locals = []
     if f.receiver != none
-        locals.push(Local(
+        self.add_local(Local(
             name: "self",
             ty: self_ty else Ty.Unknown,
             mutable: receiver_of(f) == true,
@@ -1696,14 +1718,14 @@ fn Checker.check_bodyless_contracts(mut self, idx int, f ast.FnDecl)
         ))
     for k in 0..f.params.len()
         p := f.params[k]
-        locals.push(Local(
+        self.add_local(Local(
             name: p.name,
             ty: sig.params[k].ty,
             mutable: p.mutable,
             how: LocalKind.ParamLocal,
             decl: none,
         ))
-    check_contracts(f, sig.ret)
+    self.check_contracts(f, sig.ret)
 
 ## contract.inv.1: a struct's invariants see its fields by bare name and
 ## must be `bool`.
@@ -1716,7 +1738,7 @@ fn Checker.check_invariants(mut self, struct_index int)
     scope = scope_of(declared)
     t := Ty.Struct(struct_index, [Ty.Param(p) for p in declared])
     self_ty = t
-    locals.push(Local(name: "self", ty: t, mutable: false, how: LocalKind.SelfParam, decl: none))
+    self.add_local(Local(name: "self", ty: t, mutable: false, how: LocalKind.SelfParam, decl: none))
     for c in st.invariants
         got := expr(c.cond, Ty.Bool, true)
         if not accepts(Ty.Bool, got)
@@ -1836,7 +1858,7 @@ fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
                         "rename the parameter",
                     )
             if not clash
-                locals.push(Local(
+                self.add_local(Local(
                     name: "result",
                     ty: ok_type(result_ty),
                     mutable: false,
@@ -1844,7 +1866,7 @@ fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
                     decl: none,
                 ))
         for l in olds
-            locals.push(l)
+            self.add_local(l)
         in_requires = not c.is_ensures
         requires_pos = c.pos
         got := expr(c.cond, Ty.Bool, true)

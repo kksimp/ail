@@ -622,7 +622,7 @@ struct Scan
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
 fn Scan.crosses(self, v int) bool
-    live_across(ranges[v], calls)
+    live_across(self.ranges[v], self.calls)
 
 ## Whether ranges `r` are live across any of the positions `at`: defined
 ## before one and used after it.
@@ -638,45 +638,45 @@ fn live_across(r List[int], at List[int]) bool
 ## Whether `v` may hold register `r` at all: not one a division it lives
 ## across overwrites. A division's operands and result may (ADR 1049).
 fn Scan.allowed(self, r int, v int) bool
-    not div_regs.contains(r) or not live_across(ranges[v], divs)
+    not self.div_regs.contains(r) or not live_across(self.ranges[v], self.divs)
 
 ## Whether a hinted value that starts after `v` and is not placed yet lives
 ## across a call.
 fn Scan.partner_crosses(self, v int) bool
-    for h in hints[v]
-        if loc[h] == NOWHERE and start[h] > end[v] and crosses(h)
+    for h in self.hints[v]
+        if self.loc[h] == NOWHERE and self.start[h] > self.end[v] and self.crosses(h)
             return true
     false
 
 ## Whether register `r` is the one of any of `vs`.
 fn Scan.shares(self, r int, vs List[int]) bool
     for x in vs
-        if loc[x] == r
+        if self.loc[x] == r
             return true
     false
 
 ## Whether register `r` is free for all of `v`'s ranges.
 fn Scan.free(self, r int, v int) bool
-    if not allowed(r, v)
+    if not self.allowed(r, v)
         return false
-    for a in active
-        if loc[a] == r and overlaps(ranges[a], ranges[v])
+    for a in self.active
+        if self.loc[a] == r and overlaps(self.ranges[a], self.ranges[v])
             return false
     true
 
 fn Scan.assign(mut self, v int, float bool, t Target)
     # Free the registers of values that ended.
     mut keep := List[int]()
-    for a in active
-        if end[a] >= start[v]
+    for a in self.active
+        if self.end[a] >= self.start[v]
             keep.push(a)
-    active = keep
+    self.active = keep
     # A value whose later partner (an operand it flows into, a block
     # parameter) lives across a call goes straight to a callee-saved
     # register, so the partner can take the same one and no move is left.
-    cross := crosses(v) or partner_crosses(v)
+    cross := self.crosses(v) or self.partner_crosses(v)
     mut pool := List[int]()
-    if func.vals[v].is_vec()
+    if self.func.vals[v].is_vec()
         # A `Vec2` never lives across a call (native.vec.3), and a callee-saved register keeps only its low
         # half (AAPCS64) or is saved as one `float` (Windows x86-64).
         pool.extend(t.float_caller)
@@ -689,71 +689,75 @@ fn Scan.assign(mut self, v int, float bool, t Target)
             pool.extend(t.int_caller)
         pool.extend(t.int_callee)
     mut pick := -1
-    for h in hints[v]
-        r := loc[h]
-        if r >= 0 and r < SLOT_BASE and pool.contains(r) and free(r, v)
+    for h in self.hints[v]
+        r := self.loc[h]
+        if r >= 0 and r < SLOT_BASE and pool.contains(r) and self.free(r, v)
             pick = r
             break
-    if pick < 0 and arrive[v] >= 0 and pool.contains(arrive[v]) and free(arrive[v], v)
-        pick = arrive[v]
-    if pick < 0 and apart[v].len() > 0
+    if pick < 0 and self.arrive[v] >= 0 and pool.contains(self.arrive[v]) and self.free(
+        self.arrive[v],
+        v,
+    )
+        pick = self.arrive[v]
+    if pick < 0 and self.apart[v].len() > 0
         for r in pool
-            if free(r, v) and not shares(r, apart[v])
+            if self.free(r, v) and not self.shares(r, self.apart[v])
                 pick = r
                 break
     if pick < 0
         for r in pool
-            if free(r, v)
+            if self.free(r, v)
                 pick = r
                 break
-    if pick < 0 and not weighed
-        weight = use_weights(func)
-        weighed = true
+    if pick < 0 and not self.weighed
+        self.weight = use_weights(self.func)
+        self.weighed = true
     if pick < 0
         # Spill whichever of `v` and the values in its way is cheapest to
         # keep in memory (loop-weighted uses, ADR 0622), the one that ends
         # last among equals, when that value alone holds its register over
         # `v`'s ranges.
         mut victim := -1
-        for a in active
-            if pool.contains(loc[a])
-                and allowed(loc[a], v)
-                and overlaps(ranges[a], ranges[v])
-                and sole(a, v)
-                and (victim < 0 or weight[a] < weight[victim] or (weight[a] == weight[victim] and end[a] > end[victim]))
+        for a in self.active
+            if pool.contains(self.loc[a])
+                and self.allowed(self.loc[a], v)
+                and overlaps(self.ranges[a], self.ranges[v])
+                and self.sole(a, v)
+                and (victim < 0 or self.weight[a] < self.weight[victim] or (self.weight[a] == self.weight[victim] and self.end[a] > self.end[victim]))
                 victim = a
         if victim >= 0
-            and (weight[victim] < weight[v] or (weight[victim] == weight[v] and end[victim] > end[v]))
-            pick = loc[victim]
-            loc[victim] = slot_for(victim)
+            and (self.weight[victim] < self.weight[v] or (self.weight[victim] == self.weight[v] and self.end[victim] > self.end[v]))
+            pick = self.loc[victim]
+            self.loc[victim] = self.slot_for(victim)
             mut rest := List[int]()
-            for a in active
+            for a in self.active
                 if a != victim
                     rest.push(a)
-            active = rest
+            self.active = rest
         else
-            loc[v] = slot_for(v)
+            self.loc[v] = self.slot_for(v)
             return
-    loc[v] = pick
-    active.push(v)
-    if (t.int_callee.contains(pick) or t.float_callee.contains(pick)) and not saved.contains(pick)
-        saved.push(pick)
+    self.loc[v] = pick
+    self.active.push(v)
+    if (t.int_callee.contains(pick) or t.float_callee.contains(pick))
+        and not self.saved.contains(pick)
+        self.saved.push(pick)
 
 ## Whether `a` is the only active value whose use of its register meets `v`.
 fn Scan.sole(self, a int, v int) bool
-    for b in active
-        if b != a and loc[b] == loc[a] and overlaps(ranges[b], ranges[v])
+    for b in self.active
+        if b != a and self.loc[b] == self.loc[a] and overlaps(self.ranges[b], self.ranges[v])
             return false
     true
 
 ## A stack slot for `v`. A `Vec2` takes two that follow each other (native.vec.3); the target reads its 16 bytes
 ## from whichever of the two has the lower address.
 fn Scan.slot_for(mut self, v int) int
-    at := new_slot()
-    if func.vals[v].is_vec()
-        slots += 1
+    at := self.new_slot()
+    if self.func.vals[v].is_vec()
+        self.slots += 1
     at
 
 fn Scan.new_slot(mut self) int
-    slots += 1
-    SLOT_BASE + slots - 1
+    self.slots += 1
+    SLOT_BASE + self.slots - 1

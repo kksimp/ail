@@ -14,7 +14,7 @@ fn Lower.text_fn(mut self, key str, t Ty) str
 ## `default_error_text` of `v`, or a call of `text.T` when `key` is being expanded already.
 fn Lower.nested_default(mut self, key str, v Val) int?
     if text_open.contains(key)
-        return call(text_fn(key, v.ty), [v.id], Ty.Str)
+        return call(self.text_fn(key, v.ty), [v.id], Ty.Str)
     text_open.push(key)
     r := default_error_text(key, v)
     text_open.pop()

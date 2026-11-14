@@ -123,7 +123,7 @@ fn Lower.watch_event(mut self, opened int, r Val, pos ast.Pos, frame str, via st
     cur = on
     if instr.tjson
         say("\{\"api\":1,\"trace\":\"watch\",\"name\":\"{jq(instr.watch)}\",\"value\":\"")
-        watch_value(r, pos)
+        self.watch_value(r, pos)
         say("\"")
         if frame != ""
             say(",\"frame\":\"{jq(frame)}\"")
@@ -133,21 +133,21 @@ fn Lower.watch_event(mut self, opened int, r Val, pos ast.Pos, frame str, via st
             say(",\"op\":\"{n.kind}\"")
             if e := n.elem
                 say(",\"element\":\"")
-                watch_value(e, pos)
+                self.watch_value(e, pos)
                 say("\"")
             if a := n.at
                 say(",\"{n.label}\":\"")
-                watch_value(a, pos)
+                self.watch_value(a, pos)
                 if b := n.at2
                     say(", ")
-                    watch_value(b, pos)
+                    self.watch_value(b, pos)
                 say("\"")
-        say(",{trace_at(pos)}")
+        say(",{self.trace_at(pos)}")
         say("}\n")
     else
         say("watch: {instr.watch} = ")
         describe(r, pos)
-        say(" at {trace_at(pos)}")
+        say(" at {self.trace_at(pos)}")
         if frame != ""
             say(" in {frame}")
         if via != ""
@@ -179,7 +179,7 @@ fn Lower.watch_value(mut self, v Val, pos ast.Pos)
 ## The element write of the watched statement at `pos` on `r` (trace.watch.4), written when `when`
 ## (a Bool value; -1 for always) holds.
 fn Lower.watch_note_if(mut self, pos ast.Pos, when int, r Val, note WNote)
-    if not watch_here(pos) or not vals_printable(r.ty, structs)
+    if not self.watch_here(pos) or not vals_printable(r.ty, structs)
         return
     yes := new_block()
     join := new_block()
@@ -189,7 +189,7 @@ fn Lower.watch_note_if(mut self, pos ast.Pos, when int, r Val, note WNote)
         jump(yes, [])
     seal(yes)
     cur = yes
-    watch_event(call("rt.watch_open", [], Ty.Bool), r, instr.wat, "", "", note)
+    self.watch_event(call("rt.watch_open", [], Ty.Bool), r, instr.wat, "", "", note)
     instr.noted = true
     jump(join, [])
     seal(join)
@@ -197,11 +197,17 @@ fn Lower.watch_note_if(mut self, pos ast.Pos, when int, r Val, note WNote)
 
 ## `watch_note_if` for a write that always happens.
 fn Lower.watch_note(mut self, pos ast.Pos, r Val, kind str, elem Val, label str, at Val)
-    watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: elem, label: label, at: at, at2: none))
+    self.watch_note_if(pos, 0 - 1, r, WNote(
+        kind: kind,
+        elem: elem,
+        label: label,
+        at: at,
+        at2: none,
+    ))
 
 ## An element write with no element, such as `reverse`.
 fn Lower.watch_plain(mut self, pos ast.Pos, r Val, kind str)
-    watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: none, label: "", at: none, at2: none))
+    self.watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: none, label: "", at: none, at2: none))
 
 ## After the statement `s`, an assignment to the watched variable is an event:
 ## `watch: NAME = VALUE at LINE:COL`, on standard error (trace.watch.1, trace.watch.5).
@@ -247,7 +253,7 @@ fn Lower.instr_after(mut self, s ast.Stmt)
         opened = call("rt.watch_open", [], Ty.Bool)
         if instr.tjson
             frame = plain_name(fname)
-    watch_event(opened, Val(id: read_var(key, cur), ty: ty), pos, frame, via, none)
+    self.watch_event(opened, Val(id: read_var(key, cur), ty: ty), pos, frame, via, none)
 
 ## Whether a value of type `t` is one object a callee can reach through a `mut` parameter.
 fn watch_object(t Ty) bool
@@ -320,10 +326,10 @@ fn instr_owned(p str) bool
 ## The start of statement `s` is a site.
 fn Lower.instr_stmt(mut self, s ast.Stmt)
     if instr.watch != ""
-        watch_stmt(s)
+        self.watch_stmt(s)
     probe_stmt(s)
     if instr.sp >= 0 and instr.owner == fname
-        vals_spill()
+        self.vals_spill()
     if not (instr.on or instr.steps)
         or is_rt
         or unchecked
@@ -358,7 +364,7 @@ fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
         instr.owner = fname
         instr.np = nvars
     if instr.trace and not (is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path))
-        trace_call(f, tys, params)
+        self.trace_call(f, tys, params)
         trace_requires(f, fname)
     if not instr.calls or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
         return
@@ -439,7 +445,7 @@ fn Lower.instr_end(mut self)
         return
     if instr.trace
         instr.owner = ""
-        trace_returns()
+        self.trace_returns()
     if instr.sp < 0
         return
     instr.sp = -1
@@ -490,11 +496,11 @@ fn Lower.trace_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
         first = false
         if instr.tjson
             say("\"{labels[i]}\":\"")
-            trace_value(Val(id: params[i], ty: tys[i]), f.pos)
+            self.trace_value(Val(id: params[i], ty: tys[i]), f.pos)
             say("\"")
         else
             say("{labels[i]} = ")
-            trace_value(Val(id: params[i], ty: tys[i]), f.pos)
+            self.trace_value(Val(id: params[i], ty: tys[i]), f.pos)
     say(if instr.tjson then "}," else ") at ")
     call("rt.tr_site", [konst(f.pos.line, Ty.Int), konst(f.pos.col, Ty.Int)], Ty.Unit)
     say(if instr.tjson then "}\n" else "\n")
@@ -518,7 +524,7 @@ fn Lower.trace_returns(mut self)
         if t.value < 0 or ret.is_unit()
             say("()")
         elif flat_printable(ret, structs)
-            trace_value(Val(id: t.value, ty: ret), ast.Pos(line: 1, col: 1))
+            self.trace_value(Val(id: t.value, ty: ret), ast.Pos(line: 1, col: 1))
         else
             say("…")
         say(if instr.tjson then "\"}\n" else "\n")
@@ -548,13 +554,13 @@ fn Lower.trace_effect(mut self, rtname str, tys List[Ty], vs List[int], pos ast.
         if instr.tjson
             say("\"")
         if vals_printable(tys[i], structs)
-            trace_value(Val(id: vs[i], ty: tys[i]), pos)
+            self.trace_value(Val(id: vs[i], ty: tys[i]), pos)
         else
             say("…")
         if instr.tjson
             say("\"")
     say(if instr.tjson then "]," else ") at ")
-    say(trace_at(pos))
+    say(self.trace_at(pos))
     say(if instr.tjson then "}\n" else "\n")
     call("rt.tr_close", [], Ty.Unit)
 
@@ -572,11 +578,11 @@ fn Lower.trace_spawn(mut self, key str, tys List[Ty], vs List[int], rec int, pos
         if i > 0
             say(", ")
         if vals_printable(tys[i], structs)
-            trace_value(Val(id: vs[i], ty: tys[i]), pos)
+            self.trace_value(Val(id: vs[i], ty: tys[i]), pos)
         else
             say("…")
     say(if instr.tjson then ")\"," else ") at ")
-    say(trace_at(pos))
+    say(self.trace_at(pos))
     say(if instr.tjson then "}\n" else "\n")
     call("rt.tr_close", [], Ty.Unit)
 
@@ -587,7 +593,7 @@ fn Lower.trace_wait(mut self, rec int, pos ast.Pos)
     say(if instr.tjson then "\{\"api\":1,\"trace\":\"wait\",\"task\":\"Task#" else "wait Task#")
     call("rt.tr_task_no", [rec], Ty.Unit)
     say(if instr.tjson then "\"," else " at ")
-    say(trace_at(pos))
+    say(self.trace_at(pos))
     say(if instr.tjson then "}\n" else "\n")
     call("rt.tr_close", [], Ty.Unit)
 
@@ -600,7 +606,7 @@ fn Lower.trace_contract(mut self, label str, kind str, c ast.Contract, v int)
         say("\{\"api\":1,\"trace\":\"contract\",\"fn\":\"{plain_name(label)}\",\"kind\":\"{kind}\",\"cond\":\"{jq(c.text)}\",\"held\":")
         call("rt.tr_verdict", [v], Ty.Unit)
         say(",")
-        say(trace_at(c.pos))
+        say(self.trace_at(c.pos))
         say("}\n")
     else
         say("contract {plain_name(label)} {kind} `{c.text}`: ")
@@ -646,7 +652,7 @@ fn Lower.gen_describers(mut self)
 
 ## Write the site table.
 fn Lower.instr_finish(mut self)
-    gen_describers()
+    self.gen_describers()
     out := env.get("AIL_INSTRUMENT_SITES") else ""
     if instr.on and out != ""
         fs.write_text(out, "{instr.sites.join("\n")}\n") else err

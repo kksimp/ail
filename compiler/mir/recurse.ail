@@ -15,25 +15,25 @@ struct Tarjan
     comps int
 
 fn Tarjan.visit(mut self, v int)
-    index[v] = next
-    low[v] = next
-    next += 1
-    stack.push(v)
-    on[v] = true
-    for w in edges[v]
-        if index[w] < 0
-            visit(w)
-            low[v] = low[v].min(low[w])
-        elif on[w]
-            low[v] = low[v].min(index[w])
-    if low[v] == index[v]
+    self.index[v] = self.next
+    self.low[v] = self.next
+    self.next += 1
+    self.stack.push(v)
+    self.on[v] = true
+    for w in self.edges[v]
+        if self.index[w] < 0
+            self.visit(w)
+            self.low[v] = self.low[v].min(self.low[w])
+        elif self.on[w]
+            self.low[v] = self.low[v].min(self.index[w])
+    if self.low[v] == self.index[v]
         mut done := false
         while not done
-            w := stack.pop() else v
-            on[w] = false
-            comp[w] = comps
+            w := self.stack.pop() else v
+            self.on[w] = false
+            self.comp[w] = self.comps
             done = w == v
-        comps += 1
+        self.comps += 1
 
 ## Clear the trap site of every call that can't recurse, so it gets no
 ## stack check; one copied in by inlining keeps it as a `frame` site.
