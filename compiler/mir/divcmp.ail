@@ -1,0 +1,75 @@
+## A quotient that is only compared (ADR 1114, native.range.4): `x / C < K`
+## with constants `C >= 2` and `K >= 1` is `x < K * C`, so the division goes
+## and the branch no longer waits for it. Integer division rounds toward zero
+## (expr.arith.5), so for `x >= 0` the quotient is below `K` exactly when `x`
+## is below `K * C`, and for `x < 0` the quotient is at most 0, below `K`,
+## as `x` is below `K * C`. `>=` is the negation; `<= K` is `< K + 1` and
+## `> K` is `>= K + 1`, for `K >= 0`. gcc and clang do the same.
+##
+## Only a quotient whose every use is such a comparison is rewritten: one
+## that is also an index or an operand keeps its comparisons, which the range
+## passes read.
+
+## The largest constant on either side: the product stays below 2^62.
+DIVCMP_MOST := 2147483648
+
+## For each value: whether it is such a quotient.
+fn divcmp_scan(g Func) List[bool]
+    n := g.vals.len()
+    mut is_const := [false for _ in 0..n]
+    mut cval := [0 for _ in 0..n]
+    mut div_x := [-1 for _ in 0..n]
+    mut div_c := [-1 for _ in 0..n]
+    mut any_div := false
+    for blk in g.blocks
+        for i in blk.insts
+            if i.dst < 0
+                continue
+            if i.op == "const"
+                is_const[i.dst] = true
+                cval[i.dst] = i.imm
+            elif i.op == "div" and i.argc() == 2
+                div_x[i.dst] = i.arg(0)
+                div_c[i.dst] = i.arg(1)
+                any_div = true
+    mut out := [false for _ in 0..n]
+    if not any_div
+        return out
+    mut uses := [0 for _ in 0..n]
+    mut good := [0 for _ in 0..n]
+    for blk in g.blocks
+        for i in blk.insts
+            for u in i.operands()
+                uses[u] += 1
+            if i.argc() != 2
+                continue
+            q := i.arg(0)
+            k := i.arg(1)
+            if div_x[q] < 0 or not is_const[k] or not is_const[div_c[q]]
+                continue
+            if g.vals[q] != Ty.Int or g.vals[div_x[q]] != Ty.Int
+                continue
+            c := cval[div_c[q]]
+            if c < 2 or c > DIVCMP_MOST
+                continue
+            if divcmp_mult(i.op, cval[k]) != none
+                good[q] += 1
+        for u in blk.term.uses()
+            uses[u] += 1
+    for v in 0..n
+        out[v] = div_x[v] >= 0 and uses[v] > 0 and uses[v] == good[v]
+    out
+
+## `q OP k` is `x < m * C` or `x >= m * C`: the `m`, or none when `OP` is not
+## an ordering or `k` is out of range.
+fn divcmp_mult(op str, k int) int?
+    if k < 0 or k >= DIVCMP_MOST
+        return none
+    match op
+        "lt" | "ge" => if k >= 1 then k else none
+        "le" | "gt" => k + 1
+        _ => none
+
+## The ordering `x` is compared with in place of the quotient's `op`.
+fn divcmp_op(op str) str
+    if op == "lt" or op == "le" then "lt" else "ge"

@@ -630,6 +630,28 @@ fn main()
     print(split(1037))
 ```
 
+**native.range.4** — A quotient `x / C` by a constant `C >= 2` whose every
+use is an ordering against a constant may be compared through `x`:
+`x / C < K` as `x < K * C` and `x / C >= K` as `x >= K * C` for `K >= 1`,
+`x / C <= K` as `x < (K + 1) * C` and `x / C > K` as `x >= (K + 1) * C` for
+`K >= 0`, with both constants at most 2^31. The answers are the same for
+every `x` (expr.arith.5), and the division is not computed. *(ADR 1114)*
+
+```ail rules=native.range.4
+fn bucket(seed int) int
+    t := seed * 100 / 139968
+    if t < 30
+        return 0
+    if t < 50
+        return 1
+    2
+
+fn main()
+    print(bucket(41990))
+    print(bucket(41991))
+    print(bucket(-5))
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes

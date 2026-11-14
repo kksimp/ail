@@ -2,7 +2,8 @@
 ## operations on constants that can't trap, checks that a constant operand
 ## or a dominating comparison rules out (expr.arith.4), checks and
 ## comparisons that function-wide value ranges decide (vrange.ail, ADR 1063),
-## and `x % 2^k == 0` as a bit test. Each rewrite keeps the value's id, so uses need no
+## `x % 2^k == 0` as a bit test, and a quotient that is only compared
+## (divcmp.ail, ADR 1114). Each rewrite keeps the value's id, so uses need no
 ## renaming; `simplify` then drops what died.
 
 MAX := 9223372036854775807
@@ -23,7 +24,7 @@ pub fn fold_in(mut g Func)
             if i.dst >= 0
                 defs[i.dst] = insts.len()
             insts.push(i)
-    mut fd := Folder(defs: defs, insts: insts)
+    mut fd := Folder(defs: defs, insts: insts, divcmp: divcmp_scan(g))
     for b in 0..g.blocks.len()
         mut out := List[Inst]()
         for i in g.blocks[b].insts
@@ -181,6 +182,8 @@ struct Folder
     ## The index in `insts` of each value's defining instruction, or -1.
     defs List[int]
     insts List[Inst]
+    ## Quotients that are only compared with constants (divcmp.ail).
+    divcmp List[bool]
 
 fn Folder.int_of(self, v int) int?
     d := self.defs[v]
@@ -244,6 +247,24 @@ fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List
                     self.defs.push(-1)
                     self.defs.push(-1)
                     return [konst(mask, m), band, r]
+        elif i.arg(0) < self.divcmp.len() and self.divcmp[i.arg(0)]
+            # native.range.4: `x / C < K` is `x < K * C`.
+            d := self.def(i.arg(0)) else i
+            if d.op == "div"
+                if c := self.int_of(d.arg(1))
+                    if k := self.int_of(i.arg(1))
+                        if m := divcmp_mult(i.op, k)
+                            bound := vals.len()
+                            vals.push(Ty.Int)
+                            names.push("")
+                            kb := konst(bound, m * c)
+                            self.defs.push(self.insts.len())
+                            self.insts.push(kb)
+                            r.op = divcmp_op(i.op)
+                            r = r.with_args([d.arg(0), bound])
+                            self.defs[r.dst] = self.insts.len()
+                            self.insts.push(r)
+                            return [kb, r]
     if r.dst >= 0
         self.defs[r.dst] = self.insts.len()
         self.insts.push(r)

@@ -1,0 +1,264 @@
+# native.range.4: a quotient by a constant that is only compared with constants is compared through its
+# dividend. Every ordering, with bounds the rule takes (K >= 1, or K >= 0 for <= and >) and ones it leaves
+# (K below that), counted over dividends on both sides of zero and of each boundary.
+
+fn span(c int) int
+    if c > 1000
+        return 600000
+    40
+
+fn main()
+    mut n0 := 0
+    for x in -span(2)..span(2)
+        if x / 2 < -2
+            n0 += 1
+    print("x / 2 < -2: {n0}")
+    mut n1 := 0
+    for x in -span(2)..span(2)
+        if x / 2 <= -2
+            n1 += 1
+    print("x / 2 <= -2: {n1}")
+    mut n2 := 0
+    for x in -span(2)..span(2)
+        if x / 2 > -2
+            n2 += 1
+    print("x / 2 > -2: {n2}")
+    mut n3 := 0
+    for x in -span(2)..span(2)
+        if x / 2 >= -2
+            n3 += 1
+    print("x / 2 >= -2: {n3}")
+    mut n4 := 0
+    for x in -span(2)..span(2)
+        if x / 2 < 0
+            n4 += 1
+    print("x / 2 < 0: {n4}")
+    mut n5 := 0
+    for x in -span(2)..span(2)
+        if x / 2 <= 0
+            n5 += 1
+    print("x / 2 <= 0: {n5}")
+    mut n6 := 0
+    for x in -span(2)..span(2)
+        if x / 2 > 0
+            n6 += 1
+    print("x / 2 > 0: {n6}")
+    mut n7 := 0
+    for x in -span(2)..span(2)
+        if x / 2 >= 0
+            n7 += 1
+    print("x / 2 >= 0: {n7}")
+    mut n8 := 0
+    for x in -span(2)..span(2)
+        if x / 2 < 1
+            n8 += 1
+    print("x / 2 < 1: {n8}")
+    mut n9 := 0
+    for x in -span(2)..span(2)
+        if x / 2 <= 1
+            n9 += 1
+    print("x / 2 <= 1: {n9}")
+    mut n10 := 0
+    for x in -span(2)..span(2)
+        if x / 2 > 1
+            n10 += 1
+    print("x / 2 > 1: {n10}")
+    mut n11 := 0
+    for x in -span(2)..span(2)
+        if x / 2 >= 1
+            n11 += 1
+    print("x / 2 >= 1: {n11}")
+    mut n12 := 0
+    for x in -span(2)..span(2)
+        if x / 2 < 3
+            n12 += 1
+    print("x / 2 < 3: {n12}")
+    mut n13 := 0
+    for x in -span(2)..span(2)
+        if x / 2 <= 3
+            n13 += 1
+    print("x / 2 <= 3: {n13}")
+    mut n14 := 0
+    for x in -span(2)..span(2)
+        if x / 2 > 3
+            n14 += 1
+    print("x / 2 > 3: {n14}")
+    mut n15 := 0
+    for x in -span(2)..span(2)
+        if x / 2 >= 3
+            n15 += 1
+    print("x / 2 >= 3: {n15}")
+    mut n16 := 0
+    for x in -span(7)..span(7)
+        if x / 7 < -2
+            n16 += 1
+    print("x / 7 < -2: {n16}")
+    mut n17 := 0
+    for x in -span(7)..span(7)
+        if x / 7 <= -2
+            n17 += 1
+    print("x / 7 <= -2: {n17}")
+    mut n18 := 0
+    for x in -span(7)..span(7)
+        if x / 7 > -2
+            n18 += 1
+    print("x / 7 > -2: {n18}")
+    mut n19 := 0
+    for x in -span(7)..span(7)
+        if x / 7 >= -2
+            n19 += 1
+    print("x / 7 >= -2: {n19}")
+    mut n20 := 0
+    for x in -span(7)..span(7)
+        if x / 7 < 0
+            n20 += 1
+    print("x / 7 < 0: {n20}")
+    mut n21 := 0
+    for x in -span(7)..span(7)
+        if x / 7 <= 0
+            n21 += 1
+    print("x / 7 <= 0: {n21}")
+    mut n22 := 0
+    for x in -span(7)..span(7)
+        if x / 7 > 0
+            n22 += 1
+    print("x / 7 > 0: {n22}")
+    mut n23 := 0
+    for x in -span(7)..span(7)
+        if x / 7 >= 0
+            n23 += 1
+    print("x / 7 >= 0: {n23}")
+    mut n24 := 0
+    for x in -span(7)..span(7)
+        if x / 7 < 1
+            n24 += 1
+    print("x / 7 < 1: {n24}")
+    mut n25 := 0
+    for x in -span(7)..span(7)
+        if x / 7 <= 1
+            n25 += 1
+    print("x / 7 <= 1: {n25}")
+    mut n26 := 0
+    for x in -span(7)..span(7)
+        if x / 7 > 1
+            n26 += 1
+    print("x / 7 > 1: {n26}")
+    mut n27 := 0
+    for x in -span(7)..span(7)
+        if x / 7 >= 1
+            n27 += 1
+    print("x / 7 >= 1: {n27}")
+    mut n28 := 0
+    for x in -span(7)..span(7)
+        if x / 7 < 3
+            n28 += 1
+    print("x / 7 < 3: {n28}")
+    mut n29 := 0
+    for x in -span(7)..span(7)
+        if x / 7 <= 3
+            n29 += 1
+    print("x / 7 <= 3: {n29}")
+    mut n30 := 0
+    for x in -span(7)..span(7)
+        if x / 7 > 3
+            n30 += 1
+    print("x / 7 > 3: {n30}")
+    mut n31 := 0
+    for x in -span(7)..span(7)
+        if x / 7 >= 3
+            n31 += 1
+    print("x / 7 >= 3: {n31}")
+    mut n32 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 < -2
+            n32 += 1
+    print("x / 139968 < -2: {n32}")
+    mut n33 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 <= -2
+            n33 += 1
+    print("x / 139968 <= -2: {n33}")
+    mut n34 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 > -2
+            n34 += 1
+    print("x / 139968 > -2: {n34}")
+    mut n35 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 >= -2
+            n35 += 1
+    print("x / 139968 >= -2: {n35}")
+    mut n36 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 < 0
+            n36 += 1
+    print("x / 139968 < 0: {n36}")
+    mut n37 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 <= 0
+            n37 += 1
+    print("x / 139968 <= 0: {n37}")
+    mut n38 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 > 0
+            n38 += 1
+    print("x / 139968 > 0: {n38}")
+    mut n39 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 >= 0
+            n39 += 1
+    print("x / 139968 >= 0: {n39}")
+    mut n40 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 < 1
+            n40 += 1
+    print("x / 139968 < 1: {n40}")
+    mut n41 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 <= 1
+            n41 += 1
+    print("x / 139968 <= 1: {n41}")
+    mut n42 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 > 1
+            n42 += 1
+    print("x / 139968 > 1: {n42}")
+    mut n43 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 >= 1
+            n43 += 1
+    print("x / 139968 >= 1: {n43}")
+    mut n44 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 < 3
+            n44 += 1
+    print("x / 139968 < 3: {n44}")
+    mut n45 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 <= 3
+            n45 += 1
+    print("x / 139968 <= 3: {n45}")
+    mut n46 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 > 3
+            n46 += 1
+    print("x / 139968 > 3: {n46}")
+    mut n47 := 0
+    for x in -span(139968)..span(139968)
+        if x / 139968 >= 3
+            n47 += 1
+    print("x / 139968 >= 3: {n47}")
+    big := edge(9223372036854775807)
+    print(big / 2147483648 < 2147483647)
+    print(big / 2147483648 >= 2147483647)
+    print(0 - big / 2147483648 < 1)
+    print(0 - big / 3 > 0)
+    print(big / 3 <= 3074457345618258601)
+    print(big / 3 <= 3074457345618258602)
+
+## The argument, through a call the compiler does not fold.
+fn edge(n int) int
+    args := env.args()
+    if args.len() > 5
+        return 0
+    n
