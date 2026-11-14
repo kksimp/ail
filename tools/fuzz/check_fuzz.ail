@@ -107,8 +107,9 @@ fn sh(script str, args List[str]) proc.Output
     r
 
 ## Run ARGV (after the seconds) in a process group of its own; at the alarm, kill the whole group (exit 142).
-## `alarm; exec` alone kills only the `./ail` script and leaves its `ail check-program` running.
-KILL_GROUP := "$t = shift; $p = fork; if ($p == 0) \{ setpgrp(0, 0); exec @ARGV; exit 127 } setpgrp($p, $p); $SIG\{ALRM} = sub \{ kill 'KILL', -$p; exit 142 }; alarm $t; waitpid($p, 0); exit($? & 127 ? 128 + ($? & 127) : $? >> 8)"
+## `alarm; exec` alone kills only the `./ail` script and leaves its `ail check-program` running. Where perl can't
+## fork, it falls back to `alarm; exec`.
+KILL_GROUP := "$t = shift; $p = fork; if (!defined $p) \{ alarm $t; exec @ARGV; exit 127 } if ($p == 0) \{ setpgrp(0, 0); exec @ARGV; exit 127 } setpgrp($p, $p); $SIG\{ALRM} = sub \{ kill 'KILL', -$p; exit 142 }; alarm $t; waitpid($p, 0); exit($? & 127 ? 128 + ($? & 127) : $? >> 8)"
 
 ## What one `check` run says: `status N`, then the output, from `ail check FILE`.
 fn check_run(file str, json bool, secs int) proc.Output
@@ -352,8 +353,13 @@ fn main() !
     # Its own directory per run: two runs at once (a gate and a rerun) must not share files.
     work := "{env.get("TMPDIR") else "/tmp"}/ail-checkfuzz-{seed}-{time.now_ms()}"
     sh("rm -rf \"$1\" && mkdir -p \"$1\"", [work])
-    listed := sh("find corpus examples tests/cases -name \"*.ail\" | sort", [])
-    files := listed.out.lines()
+    # git, not `find | sort`: on Windows a shell started from a native program can reach System32's `find` and `sort`.
+    listed := proc.run("git", ["ls-files", "corpus", "examples", "tests/cases"]) else proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start git",
+    )
+    files := [l.trim() for l in listed.out.lines() if l.trim().ends_with(".ail")]
     if files.len() == 0
         print("CHECKFUZZ RED (no input programs)")
         io.exit(1)
