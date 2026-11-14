@@ -217,7 +217,13 @@ fn Checker.with_stmt(
         )
     mark := locals.len()
     if declare(var, var_pos)
-        self.add_local(Local(name: var, ty: inner, mutable: true, how: LocalKind.Binding, decl: none))
+        self.add_local(Local(
+            name: var,
+            ty: inner,
+            mutable: true,
+            how: LocalKind.Binding,
+            decl: none,
+        ))
     block(body, none, false)
     end_scope(mark)
 
