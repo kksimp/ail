@@ -17,7 +17,8 @@ here="$(cd "$(dirname "$0")" && pwd)"   # file arguments stay relative to the ca
 python="${PYTHON:-}"
 if [ -z "$python" ]; then
     for candidate in python3 python; do
-        if command -v "$candidate" >/dev/null 2>&1; then python="$candidate"; break; fi
+        # `-c` too: on Windows `python3` can be the Store stub, which exists but does not run
+        if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then python="$candidate"; break; fi
     done
 fi
 if [ -z "$python" ]; then
@@ -30,6 +31,7 @@ if ! "$python" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
 fi
 
 venv_python="$here/.venv/bin/python"
+case "${OSTYPE:-}" in msys* | cygwin*) venv_python="$here/.venv/Scripts/python.exe" ;; esac  # Git for Windows' bash
 if [ ! -x "$venv_python" ]; then
     echo "setting up Python environment in tools/tokbench/.venv ..." >&2
     "$python" -m venv "$here/.venv" 1>&2 || true

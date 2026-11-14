@@ -92,11 +92,11 @@ static void advance(double dt) {
 }
 
 int main(int argc, char **argv) {
-    long steps = argc > 1 ? atol(argv[1]) : 20000;
+    long long steps = argc > 1 ? atoll(argv[1]) : 20000;
     init_bodies();
     offset_momentum();
     printf("%.9f\n", energy());
-    for (long k = 0; k < steps; k++) {
+    for (long long k = 0; k < steps; k++) {
         advance(0.01);
     }
     printf("%.9f\n", energy());

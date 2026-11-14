@@ -3,8 +3,8 @@
 **AI-First Language**, by Voltare. Pronounced "ale".
 
 AIL is a native, memory-safe, garbage-collected systems programming language
-designed from the ground up for humans **and** AI agents. It aims for speed
-equal to C, canonical formatting, and AI-first tooling: a compiler that answers
+designed from the ground up for humans **and** AI agents. It compiles to fast,
+efficient native code, with canonical formatting and AI-first tooling: a compiler that answers
 structured questions about your program and checks an agent's changes.
 
 ```
@@ -130,9 +130,9 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 - [Language specification](docs/spec/README.md)
 - [Open questions](docs/open-questions.md)
 - [Roadmap](docs/roadmap.md)
-- [Benchmarks: AIL against C and Python, with commands](docs/benchmarks.md)
+- [Benchmarks: AIL against C, Rust, Go and Python on three hosts, with commands](docs/benchmarks.md)
 - [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
-- [Research: beating C on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
+- [Research: performance on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
 
 AI agents: start with [For agents](docs/for-agents.md), then [llms.txt](llms.txt) for the list of docs to load. To work on AIL itself, read [AGENTS.md](AGENTS.md).
 

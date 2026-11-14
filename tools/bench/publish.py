@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Render docs/benchmarks.md from the raw numbers (measurement only, ADR 0070).
 
-    publish.py [--latency LAT.json]... RACE_SMALL.json RACE_BIG.json TOKENS.json TEMPLATE.md OUT.md ENV_FILE
+    publish.py [--latency LAT.json]... [--host DIR]... RACE_SMALL.json RACE_BIG.json TOKENS.json TEMPLATE.md OUT.md ENV_FILE
     publish.py --skeleton TEMPLATE.md OUT.md
 
 tools/bench/publish.sh produces the inputs and calls this. The template holds the prose;
-the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
-generated text. Every sentence in {{SUMMARY}} is computed from the numbers, so it cannot disagree
+the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{HOSTS}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
+generated text. Each --host DIR is another host's `publish.sh --keep-dir` directory (small.json, big.json,
+env.txt, latency.json): its speed tables go under {{HOSTS}} and its latency run joins the edit-loop table.
+Every sentence in {{SUMMARY}} is computed from the numbers, so it cannot disagree
 with the tables. --skeleton writes the page with every number replaced by PENDING (no inputs),
 for the page that ships before the release run.
 """
@@ -14,10 +16,12 @@ import json, math, os, sys
 
 PENDING = "PENDING"
 args = sys.argv[1:]
-lat_files = []
-while args and args[0] in ("--latency", "--skeleton"):
+lat_files, host_dirs = [], []
+while args and args[0] in ("--latency", "--host", "--skeleton"):
     if args[0] == "--latency":
         lat_files.append(args[1]); args = args[2:]
+    elif args[0] == "--host":
+        host_dirs.append(args[1]); args = args[2:]
     else:
         break
 skeleton = bool(args) and args[0] == "--skeleton"
@@ -27,6 +31,17 @@ else:
     small, big, tokens, tmpl, out, envf = args[:6]
     small, big, tokens = (json.load(open(p)) for p in (small, big, tokens))
     lats = [json.load(open(p)) for p in lat_files]
+    hosts = []
+    for d in host_dirs:
+        h = {k: json.load(open(os.path.join(d, k + ".json"))) for k in ("small", "big")}
+        h["env"] = open(os.path.join(d, "env.txt")).read().strip()
+        lp = os.path.join(d, "latency.json")
+        h["lat"] = json.load(open(lp)) if os.path.isfile(lp) else None
+        line = next((l for l in h["env"].splitlines() if l.startswith("- host:")), "- host: " + d)
+        h["name"] = line[len("- host:"):].split(",")[0].strip()
+        hosts.append(h)
+        if h["lat"]:  # a host directory's own latency run replaces a --latency file with the same host label
+            lats = [l for l in lats if l["host"] != h["lat"]["host"]] + [h["lat"]]
 
 
 def cell(c):
@@ -39,18 +54,48 @@ def ratio(a, b):
     return "-"
 
 
-def speed(race, py):
-    head = ["program", "size", "AIL", "gcc -O2", "clang -O2"] + (["Python"] if py else []) + ["AIL / gcc"] + (["AIL / Python"] if py else [])
+# The other compiled languages, in column order: (race column, heading).
+OTHERS = [("rustc", "Rust"), ("go", "Go")]
+
+
+def others(race):
+    return [(k, h) for k, h in OTHERS if any(k in r["cells"] for r in race["rows"])]
+
+
+def gcc_is_clang(env):
+    """macOS: `gcc` is Apple clang, so the gcc and clang columns are one compiler."""
+    return any(l.startswith("- gcc:") and "clang" in l for l in env.splitlines())
+
+
+# Runs under this many seconds are within the noise band (drag.size.1); calibration aims above it.
+NOISE_S = 0.3
+
+
+def speed(race, py, one_cc=False):
+    """one_cc: show the single C compiler once, as `clang -O2` (gcc_is_clang)."""
+    ot = others(race)
+    cc = ["clang -O2"] if one_cc else ["gcc -O2", "clang -O2"]
+    head = (["program", "size", "AIL"] + cc + [h for _, h in ot] + (["Python"] if py else [])
+            + ["AIL / clang" if one_cc else "AIL / gcc"] + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
     rows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
+    noisy = False
     for r in race["rows"]:
         c = r["cells"]
-        line = [r["program"], r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc")), cell(c.get("clang"))]
+        quick = num(c.get("gcc")) is not None and num(c.get("gcc")) < NOISE_S
+        noisy = noisy or quick
+        line = [r["program"] + (" †" if quick else ""), r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc"))] + ([] if one_cc else [cell(c.get("clang"))])
+        for k, _ in ot:
+            line.append(cell(c.get(k)))
         if py:
             line.append(cell(c.get("python")))
         line.append(ratio(c.get("native"), c.get("gcc")))
+        for k, _ in ot:
+            line.append(ratio(c.get("native"), c.get(k)))
         if py:
             line.append(ratio(c.get("native"), c.get("python")))
         rows.append("| " + " | ".join(line) + " |")
+    if noisy:
+        rows += ["", "† The C column ran under %.1f s on this row (its size did not calibrate), so the row's ratios are within noise." % NOISE_S]
     return "\n".join(rows)
 
 
@@ -71,28 +116,40 @@ def geomean(xs):
     return math.exp(sum(math.log(x) for x in xs) / len(xs)) if xs else None
 
 
-def pairs(race):
-    """(program, AIL/gcc) for every row where both columns have a time."""
+def pairs(race, ref="gcc"):
+    """(program, AIL/ref) for every row where both columns have a time; a † row (gcc under NOISE_S) is left out."""
     got = []
     for r in race["rows"]:
-        a, g = num(r["cells"].get("native")), num(r["cells"].get("gcc"))
+        a, g = num(r["cells"].get("native")), num(r["cells"].get(ref))
+        q = num(r["cells"].get("gcc"))
+        if q is not None and q < NOISE_S:
+            continue
         if a and g:
             got.append((r["program"], a / g))
     return got
 
 
+TOKEN_OTHERS = [(".rs", "Rust"), (".go", "Go")]
+
+
 def token_table():
-    trows = ["| program | AIL | C | Python | AIL / Python |", "|---|---:|---:|---:|---:|"]
-    tot = [0, 0, 0]
+    """Rows: AIL, C, the other compiled languages that have twins, Python. tot = [AIL, C, Python, {heading: total}]."""
+    ot = [(e, h) for e, h in TOKEN_OTHERS if all(tok(r["program"] + e) is not None for r in small["rows"])]
+    head = ["program", "AIL", "C"] + [h for _, h in ot] + ["Python", "AIL / Python"]
+    trows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
+    tot = [0, 0, 0, {h: 0 for _, h in ot}]
     for r in small["rows"]:
         n = r["program"]
         a, c, p = tok(n + ".ail"), tok(n + ".c"), tok(n + ".py")
         if None in (a, c, p):
             continue
-        tot = [tot[0] + a, tot[1] + c, tot[2] + p]
-        trows.append("| %s | %.0f | %.0f | %.0f | %.2f |" % (n, a, c, p, a / p))
+        xs = [tok(n + e) for e, _ in ot]
+        tot[0] += a; tot[1] += c; tot[2] += p
+        for (_, h), x in zip(ot, xs):
+            tot[3][h] += x
+        trows.append("| %s | %s | %.2f |" % (n, " | ".join("%.0f" % v for v in [a, c] + xs + [p]), a / p))
     if tot[2]:
-        trows.append("| **total** | %.0f | %.0f | %.0f | %.2f |" % (tot[0], tot[1], tot[2], tot[0] / tot[2]))
+        trows.append("| **total** | %s | %.2f |" % (" | ".join("%.0f" % v for v in [tot[0], tot[1]] + [tot[3][h] for _, h in ot] + [tot[2]]), tot[0] / tot[2]))
     return "\n".join(trows), tot
 
 
@@ -146,20 +203,60 @@ def skeleton_tables():
     return "\n".join(sp), "\n".join(bg), "\n".join(tk), "\n".join(lat)
 
 
-def summary(sm, bg, tot, lats):
+def geo_line(race, ref):
+    rp = pairs(race, ref)
+    return "%.2f" % geomean([r for _, r in rp]) if rp else "-"
+
+
+def commit_of(env):
+    line = next((l for l in env.splitlines() if l.startswith("- AIL commit:")), "- AIL commit: ?")
+    return line[len("- AIL commit:"):].split("(")[0].strip()
+
+
+def hosts_section(hosts):
+    """One block per other host: its environment and both speed tables."""
+    if not hosts:
+        return ""
+    out = ["## Speed on the other hosts", "",
+           "The same command on each host, with the same calibration rule; every size is that host's own."]
+    out[-1] += " Commits: " + "; ".join("%s %s" % (h["name"], commit_of(h["env"])) for h in hosts) + "."
+    for h in hosts:
+        one = gcc_is_clang(h["env"])
+        out += ["", "### %s" % h["name"], "", h["env"], ""]
+        if one:
+            out += ["`gcc` on this host is Apple clang, so the C column is that one compiler (run as `gcc -O2`, the "
+                    "calibration reference).", ""]
+        out += ["Small programs:", "", speed(h["small"], True, one), "", "Larger programs:", "", speed(h["big"], False, one)]
+    return "\n".join(out)
+
+
+def summary(sm, bg, tot, lats, hosts=()):
     out = []
     sp, bp = pairs(sm), pairs(bg)
     if sp:
         faster = [p for p, r in sp if r < 1]
         slower = [p for p, r in sp if r >= 1]
-        out.append("- **Small programs.** AIL is faster than `gcc -O2` on %d of %d (%s) and slower on %d (%s); the geometric mean of AIL / gcc is %.2f."
+        out.append("- **Small programs.** AIL / gcc is below 1 on %d of %d (%s) and 1 or above on %d (%s); the geometric mean is %.2f."
                    % (len(faster), len(sp), ", ".join(faster) or "none", len(slower), ", ".join(slower) or "none", geomean([r for _, r in sp])))
+    for key, name, how in (("rustc", "Rust", "`rustc -C opt-level=3`"), ("go", "Go", "`go build`")):
+        rp = pairs(sm, key) + pairs(bg, key)
+        if rp:
+            faster = [p for p, r in rp if r < 1]
+            out.append("- **%s (%s).** AIL / %s is below 1 on %d of %d programs (%s); the geometric mean over all %d is %.2f."
+                       % (name, how, name, len(faster), len(rp), ", ".join(faster) or "none", len(rp), geomean([r for _, r in rp])))
     if bp:
         out.append("- **Larger programs.** AIL / gcc is " + ", ".join("%.2f on %s" % (r, p) for p, r in bp)
-                   + "; the geometric mean is %.2f. Above 1 means AIL is slower." % geomean([r for _, r in bp]))
+                   + "; the geometric mean is %.2f." % geomean([r for _, r in bp]))
+    for h in hosts:
+        refs = [("gcc", "clang" if gcc_is_clang(h["env"]) else "gcc")] + [(k, n) for k, n in OTHERS if any(k in r["cells"] for r in h["small"]["rows"] + h["big"]["rows"])]
+        out.append("- **On %s.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): %s."
+                   % (h["name"], "; ".join("%s %s and %s" % (n, geo_line(h["small"], k), geo_line(h["big"], k)) for k, n in refs)))
     if tot[2]:
         out.append("- **Tokens.** Across the ten programs AIL source is %.0f%% of the Python source and %.0f%% of the C source by mean token count (%.0f, %.0f, %.0f)."
                    % (100.0 * tot[0] / tot[2], 100.0 * tot[0] / tot[1], tot[0], tot[1], tot[2]))
+        for h, t in tot[3].items():
+            if t:
+                out[-1] += " The %s source is %.0f tokens, so AIL is %.0f%% of it." % (h, t, 100.0 * tot[0] / t)
     for l in lats:
         d = {(r["cmd"], r["program"]): r for r in l["rows"]}
         c = d.get(("check", "hello"))
@@ -179,12 +276,17 @@ text = open(tmpl).read()
 if skeleton:
     sp, bg, tk, lat = skeleton_tables()
     repl = (("ENV", "- date: PENDING\n- AIL commit: PENDING\n- host: PENDING\n- gcc, clang, python: PENDING\n- runs per cell: PENDING"),
-            ("SPEED", sp), ("BIG", bg), ("TOKENS", tk), ("LATENCY", lat),
+            ("SPEED", sp), ("BIG", bg), ("HOSTS", ""), ("TOKENS", tk), ("LATENCY", lat),
             ("SUMMARY", "PENDING: the release run fills this in from the measured numbers. This page has not been measured yet."))
 else:
     tt, tot = token_table()
-    repl = (("ENV", open(envf).read().strip()), ("SPEED", speed(small, True)), ("BIG", speed(big, False)),
-            ("TOKENS", tt), ("LATENCY", latency_table(lats)), ("SUMMARY", summary(small, big, tot, lats)))
+    env = open(envf).read().strip()
+    one = gcc_is_clang(env)
+    repl = (("ENV", env), ("SPEED", speed(small, True, one)), ("BIG", speed(big, False, one)),
+            ("HOSTS", hosts_section(hosts)), ("TOKENS", tt), ("LATENCY", latency_table(lats)),
+            ("SUMMARY", summary(small, big, tot, lats, hosts)))
 for k, v in repl:
     text = text.replace("{{%s}}" % k, v)
+while "\n\n\n" in text:  # an empty marker (no other hosts) leaves no gap
+    text = text.replace("\n\n\n", "\n\n")
 open(out, "w").write(text)

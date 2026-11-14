@@ -26,7 +26,7 @@ and tooling all treat AI as a first-class user.
 ## Core goals
 
 1. **Performance:** native code, low runtime overhead, aggressive optimisation,
-   and speed equal to optimised C as the target (ADR 1065).
+   and fast, efficient programs as the target (ADR 1065).
    Measured, never just claimed.
 2. **Memory:** safe by default, with first-class GC inside a hybrid model:
    stack allocation, escape analysis, arenas, a GC heap, pinning, and

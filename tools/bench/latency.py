@@ -93,7 +93,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--ail", default="./ail")
+    ap.add_argument("--ail", default="ail.cmd" if os.name == "nt" else "./ail")  # Python can't start the bash wrapper on Windows
     ap.add_argument("--label", default="")
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--fresh-clone", action="store_true")
@@ -101,7 +101,7 @@ def main():
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     os.chdir(root)
     ail = shlex.split(a.ail, posix=(os.name != "nt"))  # a command, e.g. "powershell -NoProfile -File ail.ps1" on Windows
-    if os.sep in ail[0] or "/" in ail[0]:
+    if os.sep in ail[0] or "/" in ail[0] or os.path.isfile(ail[0]):
         ail[0] = os.path.abspath(ail[0])  # the mcp session runs in the program's directory: a relative path would not resolve there
     subprocess.run(ail + ["run", "examples/hello.ail"], stdout=subprocess.DEVNULL, check=True)  # builds the native CLI
     out = {"host": a.label or "%s %s" % (platform.system(), platform.machine()), "runs": a.runs,
@@ -122,7 +122,7 @@ def main():
                 timed(ail + ["run", path], None, a.timeout)  # warm the build cache
                 fn = lambda t, p=path: ail + ["run", p]
             else:
-                exe = os.path.join(tempfile.gettempdir(), "ail-lat-%s-%d" % (name, os.getpid()))
+                exe = os.path.join(tempfile.gettempdir(), "ail-lat-%s-%d%s" % (name, os.getpid(), ".exe" if os.name == "nt" else ""))
                 if key == "build cached":
                     timed(ail + ["build", path, "-o", exe], None, a.timeout)
                 fn = lambda t, p=path, e=exe: ail + ["build", p, "-o", e]
@@ -137,7 +137,9 @@ def main():
         tmp = tempfile.mkdtemp(prefix="ail-clone-")
         try:
             subprocess.run(["git", "clone", "-q", root, os.path.join(tmp, "c")], check=True)
-            t, rc = timed(["./ail", "run", "examples/hello.ail"], None, a.timeout, cwd=os.path.join(tmp, "c"))
+            clone = os.path.join(tmp, "c")
+            start = [os.path.join(clone, "ail.cmd")] if os.name == "nt" else ["./ail"]
+            t, rc = timed(start + ["run", "examples/hello.ail"], None, a.timeout, cwd=clone)
             out["fresh_clone"] = {"ms": round(t), "ok": rc == 0}
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

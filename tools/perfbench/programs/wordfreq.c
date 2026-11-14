@@ -11,7 +11,7 @@ static const char *WORDS[] = {"the", "of", "and", "to", "in", "fox",
 
 typedef struct {
     const char *key;
-    long count;
+    long long count;
 } Slot;
 
 typedef struct {
@@ -21,9 +21,9 @@ typedef struct {
 } Map;
 
 static size_t hash_str(const char *s) {
-    size_t h = 1469598103934665603UL;
+    size_t h = 1469598103934665603ULL;
     for (; *s; s++) {
-        h = (h ^ (unsigned char)*s) * 1099511628211UL;
+        h = (h ^ (unsigned char)*s) * 1099511628211ULL;
     }
     return h;
 }
@@ -49,12 +49,12 @@ static void grow(Map *m) {
     m->cap = ncap;
 }
 
-static long map_get(Map *m, const char *key) {
+static long long map_get(Map *m, const char *key) {
     Slot *s = find(m->slots, m->cap, key);
     return s->key != NULL ? s->count : 0;
 }
 
-static void map_set(Map *m, const char *key, long count) {
+static void map_set(Map *m, const char *key, long long count) {
     Slot *s = find(m->slots, m->cap, key);
     if (s->key == NULL) {
         if ((m->len + 1) * 4 > m->cap * 3) {
@@ -68,17 +68,17 @@ static void map_set(Map *m, const char *key, long count) {
 }
 
 int main(int argc, char **argv) {
-    long n = argc > 1 ? atol(argv[1]) : 200000;
+    long long n = argc > 1 ? atoll(argv[1]) : 200000;
     Map counts = {calloc(8, sizeof(Slot)), 8, 0};
-    long seed = 7;
-    for (long i = 0; i < n; i++) {
+    long long seed = 7;
+    for (long long i = 0; i < n; i++) {
         seed = (seed * 3877 + 29573) % 139968;
         const char *w = WORDS[seed % NWORDS];
-        long c = map_get(&counts, w);
+        long long c = map_get(&counts, w);
         map_set(&counts, w, c + 1);
     }
     for (int k = 0; k < NWORDS; k++) {
-        printf("%s %ld\n", WORDS[k], map_get(&counts, WORDS[k]));
+        printf("%s %lld\n", WORDS[k], map_get(&counts, WORDS[k]));
     }
     printf("distinct %zu\n", counts.len);
     return 0;

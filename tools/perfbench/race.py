@@ -2,12 +2,12 @@
 """Drag-race harness (drag.*, ADR 0460). Measurement only (ADR 0070).
 
 Times the same program in `ail run` (native, through the build cache), AIL native
-(`ail build`, once lane 120 lands it), C (`clang -O2` and `gcc -O2`) and
-Python, then prints one table: min and median wall seconds per column and
+(`ail build`, once lane 120 lands it), C (`clang -O2` and `gcc -O2`), Rust
+(`rustc -C opt-level=3`, with `--rust`), Go (`go build`, with `--go`) and Python, then prints one table: min and median wall seconds per column and
 ratios to C and to Python (below 1 beats it).
 
 A program NAME.ail in tools/perfbench/programs/ (or the interpreter set in
-run.sh) has twins NAME.c and NAME.py beside it. The programs must print the
+run.sh) has twins NAME.c, NAME.rs, NAME.go and NAME.py beside it. The programs must print the
 same bytes: a column whose output differs from NAME.out (or, without one, the AIL interpreter's) is
 reported as DIFF and left out of the ratios (drag.out.1).
 """
@@ -15,7 +15,10 @@ import argparse, os, platform, shutil, statistics, subprocess, sys, tempfile, ti
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-AIL = os.path.join(ROOT, "ail")
+# Windows: Python can't start the bash wrapper; ail.cmd hands on to ail.ps1. Executables need .exe there.
+WINDOWS = os.name == "nt"
+AIL = os.path.join(ROOT, "ail.cmd" if WINDOWS else "ail")
+EXE = ".exe" if WINDOWS else ""
 CORPUS = os.path.join(ROOT, "tools", "tokbench", "corpus", "programs")
 DEFAULT_SET = [
     "examples/interp.ail", "examples/json.ail", "examples/sheet.ail",
@@ -126,7 +129,7 @@ def cpu_name():
 
 def build_native(prog, tmp, build_args):
     """`ail build` the program; returns the executable path or None (drag.native.1)."""
-    out = os.path.join(tmp, "native-" + os.path.basename(prog)[:-4])
+    out = os.path.join(tmp, "native-" + os.path.basename(prog)[:-4] + EXE)
     cmd = [AIL, "build"] + build_args.split() + [prog, "-o", out]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p.returncode != 0 or not os.path.isfile(out):
@@ -135,10 +138,25 @@ def build_native(prog, tmp, build_args):
 
 
 def build_c(src, tmp, cc):
-    out = os.path.join(tmp, "%s-%s" % (cc, os.path.basename(src)[:-2]))
-    # -ffp-contract=off: no fused multiply-adds, so floats match AIL and Python.
-    p = subprocess.run([cc, "-O2", "-ffp-contract=off", "-o", out, src, "-lm"], stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+    out = os.path.join(tmp, "%s-%s" % (cc, os.path.basename(src)[:-2]) + EXE)
+    # -ffp-contract=off: no fused multiply-adds, so floats match AIL and Python. Windows has no separate libm.
+    p = subprocess.run([cc, "-O2", "-ffp-contract=off", "-o", out, src] + ([] if WINDOWS else ["-lm"]),
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return out if p.returncode == 0 else None
+
+
+def build_rust(src, tmp):
+    """`rustc -C opt-level=3` (safe, idiomatic Rust; no target-cpu flag, like the C columns)."""
+    out = os.path.join(tmp, "rustc-" + os.path.basename(src)[:-3] + EXE)
+    p = subprocess.run(["rustc", "-C", "opt-level=3", "--edition", "2021", "-o", out, src],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return out if p.returncode == 0 else None
+
+
+def build_go(src, tmp):
+    """`go build` with its default flags (the gc compiler's optimisations are always on)."""
+    out = os.path.join(tmp, "go-" + os.path.basename(src)[:-3] + EXE)
+    p = subprocess.run(["go", "build", "-o", out, src], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=tmp)
     return out if p.returncode == 0 else None
 
 
@@ -156,6 +174,8 @@ def main():
     ap.add_argument("--runs", type=int, default=None)
     ap.add_argument("--native", action="store_true", help="also time `ail build` output")
     ap.add_argument("--c", action="store_true", help="also time C twins (clang and gcc -O2)")
+    ap.add_argument("--rust", action="store_true", help="also time Rust twins (rustc -C opt-level=3)")
+    ap.add_argument("--go", action="store_true", help="also time Go twins (go build)")
     ap.add_argument("--python", action="store_true", help="also time Python twins")
     ap.add_argument("--all", action="store_true", help="--native --c --python")
     ap.add_argument("--timeout", type=int, default=120)
@@ -186,6 +206,16 @@ def main():
     alloc = a.c and shutil.which("gcc") is not None
     if alloc:
         cols.append("gcc-alloc")
+    rust = a.rust and shutil.which("rustc") is not None
+    if a.rust and not rust:
+        print("perfbench: --rust needs rustc; it is not installed", file=sys.stderr)
+    if rust:
+        cols.append("rustc")
+    gocol = a.go and shutil.which("go") is not None
+    if a.go and not gocol:
+        print("perfbench: --go needs go; it is not installed", file=sys.stderr)
+    if gocol:
+        cols.append("go")
     py = sys.executable if a.python else None
     if py: cols.append("python")
 
@@ -222,6 +252,14 @@ def main():
                 src = twin(p, "_alloc.c")
                 exe = build_c(src, tmp, "gcc") if src else None
                 res["gcc-alloc"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
+            if rust:
+                src = twin(p, ".rs")
+                exe = build_rust(src, tmp) if src else None
+                res["rustc"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
+            if gocol:
+                src = twin(p, ".go")
+                exe = build_go(src, tmp) if src else None
+                res["go"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
             if py:
                 src = twin(p, ".py")
                 res["python"] = measure([py, "-I", src] + extra, runs, a.timeout) if src else {"err": "no twin"}
@@ -239,7 +277,7 @@ def main():
     for c in cols:
         head += [c + " min", c + " med"]
     ratio_cols = []
-    for ref in ("clang", "gcc", "gcc-alloc", "python"):
+    for ref in ("clang", "gcc", "gcc-alloc", "rustc", "go", "python"):
         if ref in cols:
             for c in cols:
                 if c != ref and c in ("ail", "native"):

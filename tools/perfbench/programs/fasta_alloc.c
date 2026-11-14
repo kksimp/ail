@@ -16,16 +16,16 @@ static void emit(char *line, int used) {
 }
 
 int main(int argc, char **argv) {
-    long n = argc > 1 ? atol(argv[1]) : 100000;
+    long long n = argc > 1 ? atoll(argv[1]) : 100000;
     const char letters[] = "acgt";
-    long seed = 42;
-    long counts[4] = {0, 0, 0, 0};
+    long long seed = 42;
+    long long counts[4] = {0, 0, 0, 0};
     char *line = NULL;
     int used = 0;
     int cap = 0;
-    for (long i = 0; i < n; i++) {
+    for (long long i = 0; i < n; i++) {
         seed = (seed * 3877 + 29573) % 139968;
-        long t = seed * 100 / 139968;
+        long long t = seed * 100 / 139968;
         int base = 3;
         if (t < 30) {
             base = 0;
@@ -52,6 +52,6 @@ int main(int argc, char **argv) {
         emit(line, used);
         free(line);
     }
-    printf("a %ld c %ld g %ld t %ld\n", counts[0], counts[1], counts[2], counts[3]);
+    printf("a %lld c %lld g %lld t %lld\n", counts[0], counts[1], counts[2], counts[3]);
     return 0;
 }
