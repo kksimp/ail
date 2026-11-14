@@ -149,6 +149,18 @@ For any diagnostic run `ail explain RULE`. Never grep; use `ail ask FILE what ca
 
 `.mcp.json` registers `ail mcp` on stdio, so the same tools are MCP calls.
 
+## Built with AIL
+
+First-party apps, each in its own repository (AGPL-3.0), written in AIL and pinned to an ail commit:
+
+- [garlic](https://github.com/kksimp/garlic): a web browser
+- [garlic-press](https://github.com/kksimp/garlic-press): a PDF viewer
+- [ail-edit](https://github.com/kksimp/ail-edit): a code editor
+- [clove](https://github.com/kksimp/clove): a compressor
+- [Husk](https://github.com/kksimp/Husk): a disk analyzer for macOS
+- [Gridrun](https://github.com/kksimp/Gridrun): a game
+- [ail-kernel](https://github.com/kksimp/ail-kernel): a kernel proof of concept
+
 ## Contributing and security
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): how a change gets tested without hosted CI, and what a PR needs.
