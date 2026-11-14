@@ -1084,7 +1084,9 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             return t
         self.args_only(args)
         if not self.hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
-            self.no_method(rt, n, at)
+            # `xs.iter().map(f).collect()`: one report for the chain, at its first iterator word.
+            if not (args.len() == 0 and iterator_word(rt, n) and self.iterator_reported(at))
+                self.no_method(rt, n, at)
         # `xs.iter().map(...)`: reported once, then the chain goes on with the list itself, so `|x| ...` and
         # `.collect()` after it are not reported again (checkbench, ADR 1111).
         if args.len() == 0 and iterator_word(rt, n)
@@ -1416,6 +1418,15 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
                 else
                     d = d.with_help("{show(rt)} has no methods; `ail ask std \"WORDS\"` finds a std function by what it does")
     diags.push(d)
+
+## Whether an iterator word earlier on this line was already reported (expr.name.1).
+fn Checker.iterator_reported(self, at ast.Pos) bool
+    for d in self.diags
+        if d.rule == "expr.name.1" and d.pos.line == at.line and d.pos.col < at.col
+            for w in ["`iter`", "`into_iter`", "`iter_mut`", "`stream`"]
+                if d.message.ends_with("has no method {w}")
+                    return true
+    false
 
 ## `iter`, `collect` and their kin on a list or a set: Rust's and Java's iterator words. A list is iterable and
 ## `map`/`filter` give lists, so the word is dropped (expr.name.1, checkbench, ADR 1111).

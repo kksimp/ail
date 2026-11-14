@@ -89,10 +89,11 @@ use fix
         Comp(form, elem, value, clauses, _) => comprehension(form, elem, value, clauses, expect)
         Range(lo, hi, _, at) =>
             range_bounds(lo, hi)
-            unsupported_help(
+            err_help(
+                "expr.loop.3",
                 at,
-                "a range `a..b` is only a `for` bound, a slice index `xs[a..b]` or a `match` pattern (expr.loop.3)",
-                "to get the values as a list write `[i for i in a..b]`; to test membership write `x >= a and x < b`",
+                "a range `a..b` is only a `for` bound, a slice index `xs[a..b]` or a `match` pattern",
+                "to get the values as a list write `[i for i in a..b]` (then `.reversed()`, or a step with `[i for i in a..b if (i - a) % k == 0]`); to test membership write `x >= a and x < b`",
             )
             Ty.Unknown
         If(branches, els, else_err, at) => self.if_expr(branches, els, else_err, at, expect, need)

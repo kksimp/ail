@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2, 3]
+    ys := xs.iter().map(|x| x * 2).collect()
+    print(ys)

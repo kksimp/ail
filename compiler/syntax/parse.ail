@@ -1280,7 +1280,7 @@ fn Parser.trait_decl(mut self)
         return
     if self.at_sym("[")
         self.error_text(
-            "bootstrap.unsupported",
+            "trait.decl.3",
             self.here(),
             "a trait can't have type parameters in 0.1 (OQ-037)",
             "use a generic function `fn f[T](x T)`, or one trait per type; associated types are an open question",
@@ -1327,6 +1327,15 @@ fn Parser.trait_declared(self, name str) bool
             return true
     false
 
+## Whether this file declares `trait name[...]`, which trait.decl.3 reports.
+fn Parser.generic_trait_declared(self, name str) bool
+    for k in 0..self.tokens.len() - 2
+        if self.tokens[k].tok == Tok.Kw("trait")
+            and self.tokens[k + 1].tok == Tok.Ident(name)
+            and self.tokens[k + 2].tok == Tok.Sym("[")
+            return true
+    false
+
 ## `impl Trait for Type`, with an optional block of functions (trait.impl.1).
 fn Parser.impl_decl(mut self)
     pos := self.bump().pos
@@ -1354,7 +1363,8 @@ fn Parser.impl_decl(mut self)
                         "move the methods out of the `impl` block and name the type in each",
                         edits,
                     )
-        else
+        elif not (self.at_sym("[") and self.generic_trait_declared(trait_name.name))
+            # `impl From[str] for A` of a `trait From[T]` already reported (trait.decl.3): no second report.
             self.unexpected("`for` after the trait name", "trait.impl.1")
         self.skip_statement()
         return

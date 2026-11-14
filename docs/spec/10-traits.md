@@ -79,6 +79,19 @@ an indented block of method signatures. *(ADR 0073)*
 implementation). Implementations inherit it unless they define the method
 themselves. *(ADR 0081)*
 
+**trait.decl.3** — A trait has no type parameters in 0.1: `trait From[T]` is
+an error, reported once at the `[`; an `impl From[X] for T` of it and calls
+of its methods are not reported again. A generic function `fn f[T](x T)` or one trait per type takes
+its place (OQ-037). *(ADR 1111)*
+
+```ail error=trait.decl.3
+trait Convert[T]
+    fn convert(self) T
+
+fn main()
+    print(1)
+```
+
 **trait.impl.1** — A type implements a trait only through an
 `impl Trait for Type` block containing definitions of the trait's methods.
 *(ADR 0073)*

@@ -92,6 +92,19 @@ fn declared_names(header str) List[str]
             out.push(w)
     out
 
+## The methods a broken `trait` or `impl` declares, so `x.into()` of a broken
+## `trait Into[T]` is not reported again (trait.decl.3, checkbench, ADR 1111).
+fn method_names(lines List[str], seg (int, int)) List[str]
+    mut out := List[str]()
+    head := lines[seg.0 - 1]
+    if not head.starts_with("trait ") and not head.starts_with("impl ")
+        return out
+    for row in seg.0 + 1..seg.1 + 1
+        body := lines[row - 1].trim()
+        if body.starts_with("fn ")
+            out.extend(declared_names(body))
+    out
+
 fn mentions(text str, names List[str]) bool
     for w in words_of(text)
         if names.contains(w)
@@ -135,6 +148,7 @@ pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Sh
         ranges.push((seg.0 + files[k].base, seg.1 + files[k].base))
         if seg.0 >= 1 and seg.0 <= lines.len()
             names.extend(declared_names(lines[seg.0 - 1]))
+            names.extend(method_names(lines, seg))
     mut kept := List[Shown]()
     for d in semantic
         help_text := d.help else ""
