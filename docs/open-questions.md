@@ -451,16 +451,15 @@ adding anything to the card.
 
 ## OQ-138 — An LLM runner written in AIL (Kaleb's idea, 2026-10-22)
 
-Run a language model's inference in AIL itself, since native AIL may reach C
-speed. Not for now: it follows two milestones, `matmul` at C speed (it is 2.0x
-C in instructions today, from layout and register spills) and a GPU path
+Run a language model's inference in AIL itself. Not for now: it follows two
+milestones, a faster `matmul` (it was 2.0x C in instructions when this was written, from layout and register spills) and a GPU path
 ([ADR 0381](decisions/0381-driver-compilers-are-platform.md), AIL-generated SPIR-V
 and MSL).
 
 - **a.** A CPU-only runner first: load quantised weights (`bytes` and sized
   integers, [ADR 0834](decisions/0834-native-sized-numbers.md)), tensor kernels
-  on `Tensor[f32]`, tokeniser and sampler in AIL. Pro: a real benchmark of the
-  claim "faster than C" on a workload people care about, and a stress test of
+  on `Tensor[f32]`, tokeniser and sampler in AIL. Pro: a real benchmark on a
+  workload people care about, and a stress test of
   tensors, sized numbers and mmap. Con: CPU inference is memory-bound, so the
   win over C is small until kernels are vectorised.
 - **b.** Wait for the GPU path, then write the runner against it. Pro: where

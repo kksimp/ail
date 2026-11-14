@@ -218,17 +218,17 @@ def summary(sm, bg, tot, lats, hosts=()):
     if sp:
         faster = [p for p, r in sp if r < 1]
         slower = [p for p, r in sp if r >= 1]
-        out.append("- **Small programs.** AIL is faster than `gcc -O2` on %d of %d (%s) and slower on %d (%s); the geometric mean of AIL / gcc is %.2f."
+        out.append("- **Small programs.** AIL / gcc is below 1 on %d of %d (%s) and 1 or above on %d (%s); the geometric mean is %.2f."
                    % (len(faster), len(sp), ", ".join(faster) or "none", len(slower), ", ".join(slower) or "none", geomean([r for _, r in sp])))
     for key, name, how in (("rustc", "Rust", "`rustc -C opt-level=3`"), ("go", "Go", "`go build`")):
         rp = pairs(sm, key) + pairs(bg, key)
         if rp:
             faster = [p for p, r in rp if r < 1]
-            out.append("- **Against %s.** AIL is faster than %s on %d of %d programs (%s); the geometric mean of AIL / %s over all %d is %.2f."
-                       % (name, how, len(faster), len(rp), ", ".join(faster) or "none", name, len(rp), geomean([r for _, r in rp])))
+            out.append("- **%s (%s).** AIL / %s is below 1 on %d of %d programs (%s); the geometric mean over all %d is %.2f."
+                       % (name, how, name, len(faster), len(rp), ", ".join(faster) or "none", len(rp), geomean([r for _, r in rp])))
     if bp:
         out.append("- **Larger programs.** AIL / gcc is " + ", ".join("%.2f on %s" % (r, p) for p, r in bp)
-                   + "; the geometric mean is %.2f. Above 1 means AIL is slower." % geomean([r for _, r in bp]))
+                   + "; the geometric mean is %.2f." % geomean([r for _, r in bp]))
     for h in hosts:
         refs = [("gcc", "clang" if gcc_is_clang(h["env"]) else "gcc")] + [(k, n) for k, n in OTHERS if any(k in r["cells"] for r in h["small"]["rows"] + h["big"]["rows"])]
         out.append("- **On %s.** Geometric mean of AIL / X over the small programs, then the larger ones: %s."

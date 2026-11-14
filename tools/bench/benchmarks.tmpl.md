@@ -17,6 +17,9 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   (bounds-checked indexing, `std::collections::HashMap` in wordfreq), ported line for line from the C twin;
   like the C columns it has no `target-cpu` flag. Go is `go build` with its default flags, also ported from
   the C twin (including wordfreq's hand-written FNV-1a hash map). Python is CPython 3 (`python3 -I`), no numpy.
+- The C, Rust, Go and Python twins are single-threaded. AIL's native code runs loops the compiler proves
+  independent on all cores by default, past a work threshold, with results identical to running them in order
+  (ADR 0911); a row where that happens uses more than one core. `AIL_THREADS=1` runs AIL on one thread.
 - Wall time of the whole process, best of the runs shown, on a machine with nothing else running. The tables
   above are the host in the environment block; any other hosts follow, each with its own environment.
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
