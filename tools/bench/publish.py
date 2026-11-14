@@ -39,25 +39,29 @@ def ratio(a, b):
     return "-"
 
 
-def has_rust(race):
-    return any("rustc" in r["cells"] for r in race["rows"])
+# The other compiled languages, in column order: (race column, heading).
+OTHERS = [("rustc", "Rust"), ("go", "Go")]
+
+
+def others(race):
+    return [(k, h) for k, h in OTHERS if any(k in r["cells"] for r in race["rows"])]
 
 
 def speed(race, py):
-    rs = has_rust(race)
-    head = (["program", "size", "AIL", "gcc -O2", "clang -O2"] + (["Rust"] if rs else []) + (["Python"] if py else [])
-            + ["AIL / gcc"] + (["AIL / Rust"] if rs else []) + (["AIL / Python"] if py else []))
+    ot = others(race)
+    head = (["program", "size", "AIL", "gcc -O2", "clang -O2"] + [h for _, h in ot] + (["Python"] if py else [])
+            + ["AIL / gcc"] + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
     rows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
     for r in race["rows"]:
         c = r["cells"]
         line = [r["program"], r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc")), cell(c.get("clang"))]
-        if rs:
-            line.append(cell(c.get("rustc")))
+        for k, _ in ot:
+            line.append(cell(c.get(k)))
         if py:
             line.append(cell(c.get("python")))
         line.append(ratio(c.get("native"), c.get("gcc")))
-        if rs:
-            line.append(ratio(c.get("native"), c.get("rustc")))
+        for k, _ in ot:
+            line.append(ratio(c.get("native"), c.get(k)))
         if py:
             line.append(ratio(c.get("native"), c.get("python")))
         rows.append("| " + " | ".join(line) + " |")
@@ -91,27 +95,27 @@ def pairs(race, ref="gcc"):
     return got
 
 
+TOKEN_OTHERS = [(".rs", "Rust"), (".go", "Go")]
+
+
 def token_table():
-    rs = any(tok(r["program"] + ".rs") is not None for r in small["rows"])
-    if rs:
-        trows = ["| program | AIL | C | Rust | Python | AIL / Python |", "|---|---:|---:|---:|---:|---:|"]
-    else:
-        trows = ["| program | AIL | C | Python | AIL / Python |", "|---|---:|---:|---:|---:|"]
-    tot = [0, 0, 0, 0]
+    """Rows: AIL, C, the other compiled languages that have twins, Python. tot = [AIL, C, Python, {heading: total}]."""
+    ot = [(e, h) for e, h in TOKEN_OTHERS if all(tok(r["program"] + e) is not None for r in small["rows"])]
+    head = ["program", "AIL", "C"] + [h for _, h in ot] + ["Python", "AIL / Python"]
+    trows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
+    tot = [0, 0, 0, {h: 0 for _, h in ot}]
     for r in small["rows"]:
         n = r["program"]
-        a, c, p, x = tok(n + ".ail"), tok(n + ".c"), tok(n + ".py"), tok(n + ".rs")
-        if None in (a, c, p) or (rs and x is None):
+        a, c, p = tok(n + ".ail"), tok(n + ".c"), tok(n + ".py")
+        if None in (a, c, p):
             continue
-        tot = [tot[0] + a, tot[1] + c, tot[2] + p, tot[3] + (x or 0)]
-        if rs:
-            trows.append("| %s | %.0f | %.0f | %.0f | %.0f | %.2f |" % (n, a, c, x, p, a / p))
-        else:
-            trows.append("| %s | %.0f | %.0f | %.0f | %.2f |" % (n, a, c, p, a / p))
-    if tot[2] and rs:
-        trows.append("| **total** | %.0f | %.0f | %.0f | %.0f | %.2f |" % (tot[0], tot[1], tot[3], tot[2], tot[0] / tot[2]))
-    elif tot[2]:
-        trows.append("| **total** | %.0f | %.0f | %.0f | %.2f |" % (tot[0], tot[1], tot[2], tot[0] / tot[2]))
+        xs = [tok(n + e) for e, _ in ot]
+        tot[0] += a; tot[1] += c; tot[2] += p
+        for (_, h), x in zip(ot, xs):
+            tot[3][h] += x
+        trows.append("| %s | %s | %.2f |" % (n, " | ".join("%.0f" % v for v in [a, c] + xs + [p]), a / p))
+    if tot[2]:
+        trows.append("| **total** | %s | %.2f |" % (" | ".join("%.0f" % v for v in [tot[0], tot[1]] + [tot[3][h] for _, h in ot] + [tot[2]]), tot[0] / tot[2]))
     return "\n".join(trows), tot
 
 
@@ -173,19 +177,21 @@ def summary(sm, bg, tot, lats):
         slower = [p for p, r in sp if r >= 1]
         out.append("- **Small programs.** AIL is faster than `gcc -O2` on %d of %d (%s) and slower on %d (%s); the geometric mean of AIL / gcc is %.2f."
                    % (len(faster), len(sp), ", ".join(faster) or "none", len(slower), ", ".join(slower) or "none", geomean([r for _, r in sp])))
-    rp = pairs(sm, "rustc") + pairs(bg, "rustc")
-    if rp:
-        faster = [p for p, r in rp if r < 1]
-        out.append("- **Against Rust.** AIL is faster than `rustc -C opt-level=3` on %d of %d programs (%s); the geometric mean of AIL / Rust over all %d is %.2f."
-                   % (len(faster), len(rp), ", ".join(faster) or "none", len(rp), geomean([r for _, r in rp])))
+    for key, name, how in (("rustc", "Rust", "`rustc -C opt-level=3`"), ("go", "Go", "`go build`")):
+        rp = pairs(sm, key) + pairs(bg, key)
+        if rp:
+            faster = [p for p, r in rp if r < 1]
+            out.append("- **Against %s.** AIL is faster than %s on %d of %d programs (%s); the geometric mean of AIL / %s over all %d is %.2f."
+                       % (name, how, len(faster), len(rp), ", ".join(faster) or "none", name, len(rp), geomean([r for _, r in rp])))
     if bp:
         out.append("- **Larger programs.** AIL / gcc is " + ", ".join("%.2f on %s" % (r, p) for p, r in bp)
                    + "; the geometric mean is %.2f. Above 1 means AIL is slower." % geomean([r for _, r in bp]))
     if tot[2]:
         out.append("- **Tokens.** Across the ten programs AIL source is %.0f%% of the Python source and %.0f%% of the C source by mean token count (%.0f, %.0f, %.0f)."
                    % (100.0 * tot[0] / tot[2], 100.0 * tot[0] / tot[1], tot[0], tot[1], tot[2]))
-        if tot[3]:
-            out[-1] += " The Rust source is %.0f tokens, so AIL is %.0f%% of it." % (tot[3], 100.0 * tot[0] / tot[3])
+        for h, t in tot[3].items():
+            if t:
+                out[-1] += " The %s source is %.0f tokens, so AIL is %.0f%% of it." % (h, t, 100.0 * tot[0] / t)
     for l in lats:
         d = {(r["cmd"], r["program"]): r for r in l["rows"]}
         c = d.get(("check", "hello"))
