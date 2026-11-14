@@ -1433,8 +1433,8 @@ fn try_case_in(
         argv = envs
         argv.push(exe)
         argv.extend(all)
-    r := proc.run(prog, argv, none, RUN_LIMIT_MS) else
-        return "error: can't start the test binary"
+    r := proc.run(prog, argv, none, RUN_LIMIT_MS) else err
+        return not_run(err)
     if r.status == 0
         return none
     if r.status == 4
@@ -1864,7 +1864,13 @@ fn run_fuzz(
     Prop(status: "pass", message: "", cases: runs, input: "")
 
 ## Run the test binary on `arg`, with the trace limit `lim` (trace.run.4) when there is one.
-fn started(exe str, arg str, envs List[str]) !proc.Output
+## Why a test binary gave no result: it ran past `RUN_LIMIT_MS` and was stopped, or it never started.
+fn not_run(err proc.ProcError) str
+    if err.kind == TimedOut
+        return "error: the test ran past its time limit ({RUN_LIMIT_MS / 1000} s) and was stopped"
+    "error: can't start the test binary"
+
+fn started(exe str, arg str, envs List[str]) proc.Output ! proc.ProcError
     if envs.is_empty()
         return proc.run(exe, [arg], none, RUN_LIMIT_MS)?
     mut argv := envs
@@ -2091,8 +2097,8 @@ fn write_bundles(dir str, file str, text str, vs List[Verdict], head str, rec_ou
 
 fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := started(exe, arg, envs) else
-        return plain("", "fail", "error: can't start the test binary")
+    r := started(exe, arg, envs) else err
+        return plain("", "fail", not_run(err))
     if r.status == 0
         return Verdict(
             name: "",
@@ -2253,8 +2259,8 @@ fn run_doc(
     envs List[str],
 ) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := started(exe, arg, envs) else
-        return plain("", "fail", "error: can't start the test binary")
+    r := started(exe, arg, envs) else err
+        return plain("", "fail", not_run(err))
     if r.status != 0
         return plain("", "fail", sandbox_hint(describe(r.err, lead)))
     if expected.is_empty()
