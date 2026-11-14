@@ -143,6 +143,15 @@ Larger programs:
 | raytrace | 4000 | 1.699 | 1.851 | 1.569 | 1.547 | 1.983 | 0.92 | 1.10 | 0.86 |
 | matmul1400 | 1400 | 0.845 | 5.485 | 5.458 | 6.926 | 7.763 | 0.15 | 0.12 | 0.11 |
 
+## Known gaps
+
+Two programs whose AIL / gcc ratio is above 1 on every host have a known cause, planned for 0.1.1
+([roadmap](roadmap.md)):
+
+- `fasta`: the loop that picks a base for each character runs more instructions than the C twin's and has
+  a branch that is harder to predict.
+- `lzr`: the optimizer and the register allocator; the gap is spread across the program rather than in one loop.
+
 ## Tokens
 
 Mean token count over five offline tokenizers (`tools/tokbench/run.sh`, ADR 0029) for each program's

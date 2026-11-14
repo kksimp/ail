@@ -43,6 +43,15 @@ Reproduce (needs gcc, clang, rustc, go and python3; Debian/Ubuntu also python3-v
 
 {{HOSTS}}
 
+## Known gaps
+
+Two programs whose AIL / gcc ratio is above 1 on every host have a known cause, planned for 0.1.1
+([roadmap](roadmap.md)):
+
+- `fasta`: the loop that picks a base for each character runs more instructions than the C twin's and has
+  a branch that is harder to predict.
+- `lzr`: the optimizer and the register allocator; the gap is spread across the program rather than in one loop.
+
 ## Tokens
 
 Mean token count over five offline tokenizers (`tools/tokbench/run.sh`, ADR 0029) for each program's
