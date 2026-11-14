@@ -34,7 +34,7 @@ tests: 12 (`ail test` lists them)
 
 ## fixrun (17 items)
 
-## fmt (67 items)
+## fmt (69 items)
 
 ## help (10 items)
 
@@ -48,7 +48,7 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (6 items)
 
-## syntax (140 items)
+## syntax (142 items)
 
 ## watch (5 items)
 
