@@ -149,8 +149,9 @@ Two programs whose AIL / gcc ratio is above 1 on every host have a known cause, 
 ([roadmap](roadmap.md)):
 
 - `fasta`: the loop that picks a base for each character runs more instructions than the C twin's and has
-  a branch that is harder to predict.
-- `lzr`: the optimizer and the register allocator; the gap is spread across the program rather than in one loop.
+  a branch that is harder to predict (per base, 23 more instructions and 0.2 more mispredicted branches than
+  gcc's on Linux x86-64).
+- `lzr`: the register allocator and the remaining check work; the gap is spread across the program rather than in one loop.
 
 ## Tokens
 
