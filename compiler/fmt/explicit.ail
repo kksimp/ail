@@ -69,8 +69,8 @@ fn insert_self(src str, sites List[ast.Pos], structs List[ast.StructDecl]) SelfW
         mut from := 0
         for c in cuts
             out.push(chars[from..c - 1].join(""))
-            if prefix := site_prefix(text, starts[n - 1] + c - 1, structs)
-                out.push(prefix)
+            if before := site_prefix(text, starts[n - 1] + c - 1, structs)
+                out.push(before)
             else
                 left += 1
             from = c - 1
