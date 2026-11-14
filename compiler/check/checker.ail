@@ -112,6 +112,9 @@ pub struct Checker
     ## typed by their first use, its return type, loop depth, and how many
     ## `else` values enclose the expression and caught an optional `?`.
     pub locals List[Local]
+    ## Every name `add_local` has bound in this checker: a name missing here is in no scope, so `local`
+    ## answers it without a scan (a function of 100,000 bindings would otherwise take quadratic time).
+    pub ever_named Set[str]
     ## `ail api --locals/--type` facts (api.loc.1, api.type.1): recorded only
     ## by the last pass of `analyze(p, true)`. `anchors` and `bound` are by
     ## local index; locals below `anchored` have an anchor.
@@ -259,6 +262,7 @@ pub fn new_checker(p ast.Program) Checker
         in_requires: false,
         requires_pos: none,
         locals: [],
+        ever_named: Set[str](),
         record: false,
         anchored: 0,
         anchors: Map[int, ast.Pos](),

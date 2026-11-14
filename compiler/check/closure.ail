@@ -140,7 +140,7 @@ fn Checker.closure_expr(
     for k in 0..params.len()
         p := params[k]
         if declare(p.name, p.pos)
-            locals.push(Local(
+            self.add_local(Local(
                 name: p.name,
                 ty: ptys[k],
                 mutable: false,
@@ -237,7 +237,7 @@ fn Checker.local_fn(mut self, d ast.FnDecl)
                 fn_lits.slots[key] = slot
         ret = resolve_ret(r, slot)
     if declare(d.name, d.pos)
-        locals.push(Local(
+        self.add_local(Local(
             name: d.name,
             ty: Ty.FnTy(ptys, ret),
             mutable: false,
@@ -258,7 +258,7 @@ fn Checker.local_fn(mut self, d ast.FnDecl)
     for k in 0..d.params.len()
         p := d.params[k]
         if declare(p.name, p.pos)
-            locals.push(Local(
+            self.add_local(Local(
                 name: p.name,
                 ty: ptys[k],
                 mutable: false,

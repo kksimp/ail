@@ -69,7 +69,7 @@ fn Checker.select_stmt(mut self, arms List[ast.SelectArm], at ast.Pos) Ty
         # A receive arm's name holds the value it took (conc.select.3).
         if b := ast.select_var(arms[k].op)
             if b.name != "_" and declare(b.name, b.pos)
-                locals.push(Local(
+                self.add_local(Local(
                     name: b.name,
                     ty: elems[k],
                     mutable: false,

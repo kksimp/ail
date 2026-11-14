@@ -1923,7 +1923,7 @@ fn Checker.comprehension(
         t := iterable(c.iter, unpack)
         if unpack
             # type.tuple.5: `for a, b in xs` binds the parts.
-            locals.push(Local(
+            self.add_local(Local(
                 name: c.var,
                 ty: t,
                 mutable: false,
@@ -1932,7 +1932,7 @@ fn Checker.comprehension(
             ))
             unpack_clause(c.unpack, t, c.var_pos)
         elif declare(c.var, c.var_pos)
-            locals.push(Local(
+            self.add_local(Local(
                 name: c.var,
                 ty: t,
                 mutable: false,

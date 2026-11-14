@@ -201,7 +201,7 @@ fn Checker.union_match(
         mark := locals.len()
         if t := narrowed
             if name != ""
-                locals.push(Local(
+                self.add_local(Local(
                     name: name,
                     ty: t,
                     mutable: false,
@@ -210,7 +210,7 @@ fn Checker.union_match(
                 ))
         for b in binds
             if b.name != "_" and declare(b.name, b.pos)
-                locals.push(Local(
+                self.add_local(Local(
                     name: b.name,
                     ty: b.ty,
                     mutable: false,

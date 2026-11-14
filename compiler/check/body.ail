@@ -255,11 +255,18 @@ fn Checker.warn(mut self, rule str, at ast.Pos, text str, hint str)
     diags.push(d)
 
 fn Checker.local(self, n str) Local?
+    if not ever_named.contains(n)
+        return none
     for k in 0..locals.len()
         l := locals[locals.len() - 1 - k]
         if l.name == n
             return l
     none
+
+## Bind a local; every new local goes through here, so `ever_named` holds every name `locals` can hold.
+fn Checker.add_local(mut self, l Local)
+    ever_named.add(l.name)
+    locals.push(l)
 
 fn Checker.check_fn(mut self, idx int)
     f := prog.fns[idx]
@@ -345,7 +352,7 @@ fn Checker.end_fn(mut self, idx int)
 ## The receiver and parameters of `f` as locals.
 fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
     if f.receiver != none
-        locals.push(Local(
+        self.add_local(Local(
             name: "self",
             ty: self_ty else Ty.Unknown,
             mutable: receiver_of(f) == true,
@@ -356,7 +363,7 @@ fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
         p := f.params[k]
         if self.declare(p.name, p.pos)
             how := if p.moved then LocalKind.MoveParam else LocalKind.ParamLocal
-            locals.push(Local(
+            self.add_local(Local(
                 name: p.name,
                 ty: sig.params[k].ty,
                 mutable: p.mutable,
@@ -486,7 +493,7 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             mark := locals.len()
             # type.tuple.5: the hidden variable of `for a, b in xs` clashes only when the names do.
             if is_hidden(var) or self.declare(var, var_pos)
-                locals.push(Local(
+                self.add_local(Local(
                     name: var,
                     ty: elem,
                     mutable: mutable,
@@ -539,7 +546,7 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         # eff.use.1: `_ := e` throws the value away; `_` is never a binding.
         if n != "_" and self.declare(n, at)
             index := locals.len()
-            locals.push(Local(
+            self.add_local(Local(
                 name: n,
                 ty: Ty.Unknown,
                 mutable: mutable,
@@ -579,7 +586,7 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     if n == "_"
         return
     if self.declare(n, at)
-        locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+        self.add_local(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
         note_binding(n, at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
@@ -825,7 +832,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 if fails
                     t := if errors.len() == 1 then errors[0] else Ty.Union(errors)
                     if self.declare(nm.name, nm.pos)
-                        locals.push(Local(
+                        self.add_local(Local(
                             name: nm.name,
                             ty: t,
                             mutable: false,
@@ -846,7 +853,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 elif self.declare(nm.name, nm.pos)
                     # The value already failed to check: bind the name as unknown,
                     # so its uses in the block don't cascade.
-                    locals.push(Local(
+                    self.add_local(Local(
                         name: nm.name,
                         ty: Ty.Unknown,
                         mutable: false,
@@ -1195,7 +1202,7 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
                     ])
                 diags.push(d)
                 # Later uses don't report the same name again (gram.rec.2).
-                locals.push(Local(
+                self.add_local(Local(
                     name: n,
                     ty: Ty.Unknown,
                     mutable: true,
@@ -1702,7 +1709,7 @@ fn Checker.check_bodyless_contracts(mut self, idx int, f ast.FnDecl)
     self_ty = fn_self[idx]
     locals = []
     if f.receiver != none
-        locals.push(Local(
+        self.add_local(Local(
             name: "self",
             ty: self_ty else Ty.Unknown,
             mutable: receiver_of(f) == true,
@@ -1711,7 +1718,7 @@ fn Checker.check_bodyless_contracts(mut self, idx int, f ast.FnDecl)
         ))
     for k in 0..f.params.len()
         p := f.params[k]
-        locals.push(Local(
+        self.add_local(Local(
             name: p.name,
             ty: sig.params[k].ty,
             mutable: p.mutable,
@@ -1731,7 +1738,7 @@ fn Checker.check_invariants(mut self, struct_index int)
     scope = scope_of(declared)
     t := Ty.Struct(struct_index, [Ty.Param(p) for p in declared])
     self_ty = t
-    locals.push(Local(name: "self", ty: t, mutable: false, how: LocalKind.SelfParam, decl: none))
+    self.add_local(Local(name: "self", ty: t, mutable: false, how: LocalKind.SelfParam, decl: none))
     for c in st.invariants
         got := expr(c.cond, Ty.Bool, true)
         if not accepts(Ty.Bool, got)
@@ -1851,7 +1858,7 @@ fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
                         "rename the parameter",
                     )
             if not clash
-                locals.push(Local(
+                self.add_local(Local(
                     name: "result",
                     ty: ok_type(result_ty),
                     mutable: false,
@@ -1859,7 +1866,7 @@ fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
                     decl: none,
                 ))
         for l in olds
-            locals.push(l)
+            self.add_local(l)
         in_requires = not c.is_ensures
         requires_pos = c.pos
         got := expr(c.cond, Ty.Bool, true)

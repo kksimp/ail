@@ -183,7 +183,7 @@ fn Checker.let_tuple(mut self, names List[ast.Binder], value ast.Expr, at ast.Po
             continue
         if declare(b.name, b.pos)
             how := if in_for then LocalKind.LoopVar else LocalKind.Binding
-            locals.push(Local(
+            self.add_local(Local(
                 name: b.name,
                 ty: elems[k],
                 mutable: b.mutable,
@@ -212,7 +212,7 @@ fn Checker.unpack_clause(mut self, unpack List[ast.Binder], elem Ty, at ast.Pos)
     for k in 0..unpack.len()
         b := unpack[k]
         if b.name != "_" and declare(b.name, b.pos)
-            locals.push(Local(
+            self.add_local(Local(
                 name: b.name,
                 ty: elems[k],
                 mutable: false,

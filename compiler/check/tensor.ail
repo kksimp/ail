@@ -155,7 +155,7 @@ fn Checker.tensor_from_fn(mut self, args List[ast.Arg], at ast.Pos) Ty
         return Ty.Unknown
     mark := locals.len()
     if declare(p.name, p.pos)
-        locals.push(Local(
+        self.add_local(Local(
             name: p.name,
             ty: Ty.Int,
             mutable: false,
@@ -340,7 +340,7 @@ fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) 
         return rt
     mark := locals.len()
     if declare(p.name, p.pos)
-        locals.push(Local(
+        self.add_local(Local(
             name: p.name,
             ty: elem,
             mutable: false,

@@ -106,12 +106,16 @@ fn sh(script str, args List[str]) proc.Output
     )
     r
 
+## Run ARGV (after the seconds) in a process group of its own; at the alarm, kill the whole group (exit 142).
+## `alarm; exec` alone kills only the `./ail` script and leaves its `ail check-program` running.
+KILL_GROUP := "$t = shift; $p = fork; if ($p == 0) \{ setpgrp(0, 0); exec @ARGV; exit 127 } setpgrp($p, $p); $SIG\{ALRM} = sub \{ kill 'KILL', -$p; exit 142 }; alarm $t; waitpid($p, 0); exit($? & 127 ? 128 + ($? & 127) : $? >> 8)"
+
 ## What one `check` run says: `status N`, then the output, from `ail check FILE`.
 fn check_run(file str, json bool, secs int) proc.Output
     flag := if json then "--json" else ""
     # CHECKFUZZ_CMD names another checker (a stage-2 build: `S2 check-program`); the default is `./ail check`.
     cmd := env.get("CHECKFUZZ_CMD") else "./ail check"
-    sh("perl -e 'alarm $4; exec @ARGV' $3 $2 \"$1\" 2>&1", [file, flag, cmd, "{secs}"])
+    sh("perl -e \"$5\" $4 $3 $2 \"$1\" 2>&1", [file, flag, cmd, "{secs}", KILL_GROUP])
 
 ## Why a `check` run is a failure, or "".
 fn verdict(r proc.Output) str

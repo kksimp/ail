@@ -1015,7 +1015,7 @@ fn Checker.if_expr(
                             hint,
                         )
                 if declare(n, npos)
-                    locals.push(Local(
+                    self.add_local(Local(
                         name: n,
                         ty: ty,
                         mutable: false,
@@ -1038,7 +1038,7 @@ fn Checker.if_expr(
             if have_errors and branches.len() == 1
                 t := if errors.len() == 1 then errors[0] else Ty.Union(errors)
                 if declare(nm.name, nm.pos)
-                    locals.push(Local(
+                    self.add_local(Local(
                         name: nm.name,
                         ty: t,
                         mutable: false,
@@ -1179,7 +1179,7 @@ fn Checker.match_expr(
         mark := locals.len()
         for b in bindings
             if b.name != "_" and declare(b.name, b.pos)
-                locals.push(Local(
+                self.add_local(Local(
                     name: b.name,
                     ty: b.ty,
                     mutable: false,
