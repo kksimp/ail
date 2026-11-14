@@ -1,0 +1,38 @@
+# conc.par.18, conc.share.3: more tasks than the pool's cap block on a channel
+# while producers wait in the queue. A worker that went idle past the cap is
+# woken when another worker blocks, so the producers run and nothing hangs.
+# Before the fix this hung on Linux (4 cores) about once in six runs.
+
+fn produce(id int, n int, queue Channel[int])
+    for s in 0..n
+        queue.send(id * 100 + s + 1)
+
+fn consume(queue Channel[int], out Channel[int])
+    for v in queue
+        out.send(v)
+
+fn round(producers int, per int, consumers int) !int
+    queue := Channel[int](1)
+    out := Channel[int](producers * per + 1)
+    pg := TaskGroup()
+    cg := TaskGroup()
+    for _ in 0..consumers
+        cg.add(spawn consume(queue, out))
+    for p in 0..producers
+        pg.add(spawn produce(p, per, queue))
+    pg.wait_all()?
+    queue.close()
+    cg.wait_all()?
+    out.close()
+    mut total := 0
+    for v in out
+        total += v
+    total
+
+fn main() !
+    task.set_threads(2)
+    mut same := 0
+    for _ in 0..300
+        if round(3, 4, 4)? == 1230
+            same += 1
+    print("rounds with every value: {same} of 300")
