@@ -41,9 +41,9 @@ task 16 0
 test 54 0
 tool 16 0
 trace 22 0
-trait 45 4
+trait 46 4
 try 10 0
 type 167 12
 unsafe 21 0
 verify 9 0
-all 1568 67
+all 1569 67

@@ -38,7 +38,7 @@ tests: 12 (`ail test` lists them)
 
 ## help (10 items)
 
-## load (124 items)
+## load (125 items)
 
 ## mir (842 items)
 
