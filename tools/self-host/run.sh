@@ -27,6 +27,7 @@
 #                 after the build stages. The stage compilers are always given the
 #                 target explicitly: their own default is x86_64-linux.
 #   ONLY=NAMES    comma-separated test names (no .ail) for stage T.
+#                 ONLY=none skips stage T (the fixed point alone, as seed.sh asks).
 #   TESTS_ONLY=1  with STAGE1: skip stages 2 and 3 and run stage T with STAGE1
 #                 as the compiler (this checks the harness itself).
 #
@@ -185,7 +186,10 @@ for f in "$tests"/*.ail; do
 done
 say "$pass passed, $fail failed"
 # A stage T that ran nothing is not a pass: name why (no programs found, or ONLY matched none).
-if [ $((pass + fail)) -eq 0 ]; then
+# `ONLY=none` skips it on purpose (tools/release/seed.sh needs only the fixed point), and says so.
+if [ "${ONLY:-}" = none ]; then
+    say "(stage T skipped: ONLY=none)"
+elif [ $((pass + fail)) -eq 0 ]; then
     blocked "stage T" "no native test program ran ($(ls "$tests"/*.ail 2>/dev/null | wc -l | tr -d ' ') in $tests, ONLY='${ONLY:-}', cwd $(pwd))"
 fi
 for n in ${failed[@]+"${failed[@]}"}; do say "  - $n"; done
@@ -193,6 +197,8 @@ for n in ${failed[@]+"${failed[@]}"}; do say "  - $n"; done
 say ""
 if [ -n "${TESTS_ONLY:-}" ]; then
     say "OK (stage T only: no fixed point was checked)."
+elif [ "${ONLY:-}" = none ]; then
+    say "OK: the native compiler builds itself to a fixed point (native tests skipped: ONLY=none)."
 else
     say "OK: the native compiler builds itself to a fixed point and passes the native tests."
 fi
