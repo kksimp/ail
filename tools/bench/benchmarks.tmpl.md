@@ -22,6 +22,8 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   (ADR 0911); a row where that happens uses more than one core. `AIL_THREADS=1` runs AIL on one thread.
 - Wall time of the whole process, best of the runs shown, on a machine with nothing else running. The tables
   above are the host in the environment block; any other hosts follow, each with its own environment.
+  Each environment block names the commit that host ran. Hosts may run different commits when the change
+  between them does not touch that host's generated code (ADR 1115, the last change before the release, is Windows only).
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
   fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
@@ -69,6 +71,7 @@ cold processes each time. `ail build --cold` starts with an empty build cache (`
 calls in one running server: the first call, then the best of the repeats of the same call (mcp.warm.1-4).
 `-` means the command did not exit 0 on that host. The programs are `examples/hello.ail`,
 `examples/json.ail` and `tools/ailtest/ailtest.ail`; the line count is in brackets.
+On Windows each command starts through `ail.cmd` and PowerShell (`ail.ps1`), and that start is inside its time.
 
 {{LATENCY}}
 

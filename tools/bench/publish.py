@@ -67,6 +67,10 @@ def gcc_is_clang(env):
     return any(l.startswith("- gcc:") and "clang" in l for l in env.splitlines())
 
 
+# Runs under this many seconds are within the noise band (drag.size.1); calibration aims above it.
+NOISE_S = 0.3
+
+
 def speed(race, py, one_cc=False):
     """one_cc: show the single C compiler once, as `clang -O2` (gcc_is_clang)."""
     ot = others(race)
@@ -74,9 +78,12 @@ def speed(race, py, one_cc=False):
     head = (["program", "size", "AIL"] + cc + [h for _, h in ot] + (["Python"] if py else [])
             + ["AIL / clang" if one_cc else "AIL / gcc"] + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
     rows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
+    noisy = False
     for r in race["rows"]:
         c = r["cells"]
-        line = [r["program"], r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc"))] + ([] if one_cc else [cell(c.get("clang"))])
+        quick = num(c.get("gcc")) is not None and num(c.get("gcc")) < NOISE_S
+        noisy = noisy or quick
+        line = [r["program"] + (" †" if quick else ""), r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc"))] + ([] if one_cc else [cell(c.get("clang"))])
         for k, _ in ot:
             line.append(cell(c.get(k)))
         if py:
@@ -87,6 +94,8 @@ def speed(race, py, one_cc=False):
         if py:
             line.append(ratio(c.get("native"), c.get("python")))
         rows.append("| " + " | ".join(line) + " |")
+    if noisy:
+        rows += ["", "† The C column ran under %.1f s on this row (its size did not calibrate), so the row's ratios are within noise." % NOISE_S]
     return "\n".join(rows)
 
 
@@ -108,10 +117,13 @@ def geomean(xs):
 
 
 def pairs(race, ref="gcc"):
-    """(program, AIL/ref) for every row where both columns have a time."""
+    """(program, AIL/ref) for every row where both columns have a time; a † row (gcc under NOISE_S) is left out."""
     got = []
     for r in race["rows"]:
         a, g = num(r["cells"].get("native")), num(r["cells"].get(ref))
+        q = num(r["cells"].get("gcc"))
+        if q is not None and q < NOISE_S:
+            continue
         if a and g:
             got.append((r["program"], a / g))
     return got
@@ -196,12 +208,18 @@ def geo_line(race, ref):
     return "%.2f" % geomean([r for _, r in rp]) if rp else "-"
 
 
+def commit_of(env):
+    line = next((l for l in env.splitlines() if l.startswith("- AIL commit:")), "- AIL commit: ?")
+    return line[len("- AIL commit:"):].split("(")[0].strip()
+
+
 def hosts_section(hosts):
     """One block per other host: its environment and both speed tables."""
     if not hosts:
         return ""
     out = ["## Speed on the other hosts", "",
            "The same command on each host, with the same calibration rule; every size is that host's own."]
+    out[-1] += " Commits: " + "; ".join("%s %s" % (h["name"], commit_of(h["env"])) for h in hosts) + "."
     for h in hosts:
         one = gcc_is_clang(h["env"])
         out += ["", "### %s" % h["name"], "", h["env"], ""]
@@ -231,7 +249,7 @@ def summary(sm, bg, tot, lats, hosts=()):
                    + "; the geometric mean is %.2f." % geomean([r for _, r in bp]))
     for h in hosts:
         refs = [("gcc", "clang" if gcc_is_clang(h["env"]) else "gcc")] + [(k, n) for k, n in OTHERS if any(k in r["cells"] for r in h["small"]["rows"] + h["big"]["rows"])]
-        out.append("- **On %s.** Geometric mean of AIL / X over the small programs, then the larger ones: %s."
+        out.append("- **On %s.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): %s."
                    % (h["name"], "; ".join("%s %s and %s" % (n, geo_line(h["small"], k), geo_line(h["big"], k)) for k, n in refs)))
     if tot[2]:
         out.append("- **Tokens.** Across the ten programs AIL source is %.0f%% of the Python source and %.0f%% of the C source by mean token count (%.0f, %.0f, %.0f)."

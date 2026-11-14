@@ -30,6 +30,8 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   (ADR 0911); a row where that happens uses more than one core. `AIL_THREADS=1` runs AIL on one thread.
 - Wall time of the whole process, best of the runs shown, on a machine with nothing else running. The tables
   above are the host in the environment block; any other hosts follow, each with its own environment.
+  Each environment block names the commit that host ran. Hosts may run different commits when the change
+  between them does not touch that host's generated code (ADR 1115, the last change before the release, is Windows only).
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
   fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
@@ -67,7 +69,7 @@ Reproduce (needs gcc, clang, rustc, go and python3; Debian/Ubuntu also python3-v
 
 ## Speed on the other hosts
 
-The same command on each host, with the same calibration rule; every size is that host's own.
+The same command on each host, with the same calibration rule; every size is that host's own. Commits: Darwin arm64 8bd2a9ff9; Windows x86_64 47e1802e4.
 
 ### Darwin arm64
 
@@ -110,7 +112,7 @@ Larger programs:
 ### Windows x86_64
 
 - date: 2026-11-14
-- AIL commit: e50784115 (ail 0.1.0 (seed-2026.11.14a-16-ge50784115, native))
+- AIL commit: 47e1802e4 (ail 0.1.0 (seed-2026.11.14b-2-g47e1802e4-dirty, native))
 - host: Windows x86_64, 4 logical cores,  Intel(R) Core(TM) i5-7500T CPU @ 2.70GHz
 - gcc: gcc.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r3) 16.2.0
 - clang: (built by Brecht Sanders, r3) clang version 23.1.3
@@ -123,25 +125,27 @@ Small programs:
 
 | program | size | AIL | gcc -O2 | clang -O2 | Rust | Go | Python | AIL / gcc | AIL / Rust | AIL / Go | AIL / Python |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| collatz | 1600000 | 0.464 | 0.318 | 0.240 | 0.240 | 0.488 | 26.218 | 1.46 | 1.93 | 0.95 | 0.02 |
-| nbody | 6400000 | 0.558 | 0.542 | 0.548 | 0.330 | 0.771 | 73.286 | 1.03 | 1.69 | 0.72 | 0.01 |
-| spectralnorm | 4000 | 1.121 | 0.853 | 0.853 | 1.079 | 1.196 | 219.817 | 1.31 | 1.04 | 0.94 | 0.01 |
-| mandelbrot | 1920 | 0.182 | 0.469 | 0.468 | 0.456 | 0.498 | 20.381 | 0.39 | 0.40 | 0.37 | 0.01 |
-| fannkuch | 11 | 3.094 | 2.663 | 2.964 | 2.847 | 3.049 | 158.747 | 1.16 | 1.09 | 1.01 | 0.02 |
-| binarytrees | 19 | 0.751 | 0.526 | 0.681 | 0.749 | 0.712 | 39.598 | 1.43 | 1.00 | 1.05 | 0.02 |
-| fasta | 32000000 | 0.628 | 0.509 | 0.496 | 0.372 | 0.575 | 13.654 | 1.23 | 1.69 | 1.09 | 0.05 |
-| wordfreq | 32000000 | 0.506 | 0.547 | 0.744 | 1.528 | 0.774 | 8.662 | 0.93 | 0.33 | 0.65 | 0.06 |
-| matmul | 800 | 0.175 | 0.748 | 0.696 | 0.940 | 1.098 | 49.936 | 0.23 | 0.19 | 0.16 | 0.00 |
-| sieve | 48000000 | 0.496 | 0.492 | 0.477 | 0.459 | 0.485 | 13.378 | 1.01 | 1.08 | 1.02 | 0.04 |
+| collatz † | 100000 | 0.029 | 0.023 | 0.019 | 0.020 | 0.035 | 1.318 | 1.23 | 1.43 | 0.81 | 0.02 |
+| nbody | 6400000 | 0.560 | 0.545 | 0.553 | 0.329 | 0.772 | 74.217 | 1.03 | 1.70 | 0.73 | 0.01 |
+| spectralnorm | 4000 | 0.917 | 0.854 | 0.853 | 1.083 | 1.198 | 222.236 | 1.07 | 0.85 | 0.77 | 0.00 |
+| mandelbrot | 1920 | 0.183 | 0.466 | 0.473 | 0.457 | 0.498 | 20.386 | 0.39 | 0.40 | 0.37 | 0.01 |
+| fannkuch | 11 | 3.105 | 2.657 | 2.953 | 2.846 | 3.049 | 158.437 | 1.17 | 1.09 | 1.02 | 0.02 |
+| binarytrees | 19 | 0.752 | 0.525 | 0.682 | 0.748 | 0.707 | 39.712 | 1.43 | 1.01 | 1.06 | 0.02 |
+| fasta | 32000000 | 0.625 | 0.510 | 0.492 | 0.372 | 0.576 | 13.684 | 1.23 | 1.68 | 1.09 | 0.05 |
+| wordfreq | 32000000 | 0.505 | 0.548 | 0.745 | 1.530 | 0.774 | 8.657 | 0.92 | 0.33 | 0.65 | 0.06 |
+| matmul | 800 | 0.176 | 0.728 | 0.697 | 0.938 | 1.101 | 49.621 | 0.24 | 0.19 | 0.16 | 0.00 |
+| sieve | 48000000 | 0.495 | 0.493 | 0.479 | 0.460 | 0.489 | 13.376 | 1.00 | 1.08 | 1.01 | 0.04 |
+
+† The C column ran under 0.3 s on this row (its size did not calibrate), so the row's ratios are within noise.
 
 Larger programs:
 
 | program | size | AIL | gcc -O2 | clang -O2 | Rust | Go | AIL / gcc | AIL / Rust | AIL / Go |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| lzr | 12000000 | 2.850 | 2.272 | 2.271 | 2.764 | 2.479 | 1.25 | 1.03 | 1.15 |
-| vm | 700000 | 1.992 | 2.102 | 1.395 | 1.492 | 2.078 | 0.95 | 1.33 | 0.96 |
-| raytrace | 4000 | 1.699 | 1.851 | 1.569 | 1.547 | 1.983 | 0.92 | 1.10 | 0.86 |
-| matmul1400 | 1400 | 0.845 | 5.485 | 5.458 | 6.926 | 7.763 | 0.15 | 0.12 | 0.11 |
+| lzr | 12000000 | 2.848 | 2.277 | 2.269 | 2.767 | 2.477 | 1.25 | 1.03 | 1.15 |
+| vm | 700000 | 1.989 | 2.107 | 1.394 | 1.492 | 2.078 | 0.94 | 1.33 | 0.96 |
+| raytrace | 4000 | 1.701 | 1.847 | 1.567 | 1.547 | 1.984 | 0.92 | 1.10 | 0.86 |
+| matmul1400 | 1400 | 0.814 | 5.930 | 5.616 | 6.451 | 7.836 | 0.14 | 0.13 | 0.10 |
 
 ## Known gaps
 
@@ -181,33 +185,34 @@ cold processes each time. `ail build --cold` starts with an empty build cache (`
 calls in one running server: the first call, then the best of the repeats of the same call (mcp.warm.1-4).
 `-` means the command did not exit 0 on that host. The programs are `examples/hello.ail`,
 `examples/json.ail` and `tools/ailtest/ailtest.ail`; the line count is in brackets.
+On Windows each command starts through `ail.cmd` and PowerShell (`ail.ps1`), and that start is inside its time.
 
 | command | program (lines) | Linux x86_64 | Darwin arm64 | Windows x86_64 |
 |---|---|---:|---:|---:|
-| `ail check` | hello (2) | 16 | 22 | 496 |
-| `ail check` | json (430) | 32 | 22 | 474 |
-| `ail check` | ailtest (3960) | 215 | 81 | 608 |
+| `ail check` | hello (2) | 16 | 22 | 467 |
+| `ail check` | json (430) | 32 | 22 | 478 |
+| `ail check` | ailtest (3960) | 215 | 81 | 613 |
 | `ail context` | hello (2) | 16 | 23 | 461 |
 | `ail context` | json (430) | 32 | 23 | 471 |
-| `ail context` | ailtest (3960) | 215 | 82 | 606 |
-| `ail test` | hello (2) | 315 | 148 | 1110 |
-| `ail test` | json (430) | 365 | 193 | 1090 |
-| `ail test` | ailtest (3960) | 465 | 201 | 1226 |
-| `ail build --cold` | hello (2) | 867 | 390 | 1408 |
-| `ail build --cold` | json (430) | 1368 | 557 | 1895 |
-| `ail build --cold` | ailtest (3960) | 5030 | 2272 | 5682 |
-| `ail build` | hello (2) | 164 | 83 | 648 |
-| `ail build` | json (430) | 164 | 76 | 660 |
-| `ail build` | ailtest (3960) | 315 | 141 | 785 |
-| `ail run` | hello (2) | 164 | 87 | 752 |
-| `ail run` | json (430) | 165 | 81 | 751 |
+| `ail context` | ailtest (3960) | 215 | 82 | 602 |
+| `ail test` | hello (2) | 315 | 148 | 1086 |
+| `ail test` | json (430) | 365 | 193 | 1120 |
+| `ail test` | ailtest (3960) | 465 | 201 | 1228 |
+| `ail build --cold` | hello (2) | 867 | 390 | 1401 |
+| `ail build --cold` | json (430) | 1368 | 557 | 1899 |
+| `ail build --cold` | ailtest (3960) | 5030 | 2272 | 5683 |
+| `ail build` | hello (2) | 164 | 83 | 652 |
+| `ail build` | json (430) | 164 | 76 | 661 |
+| `ail build` | ailtest (3960) | 315 | 141 | 784 |
+| `ail run` | hello (2) | 164 | 87 | 733 |
+| `ail run` | json (430) | 165 | 81 | 728 |
 | `ail mcp` `ail_check`, first call | hello (2) | 12 | 11 | 76 |
 | `ail mcp` `ail_check`, repeat | hello (2) | 7 | 7 | 51 |
 | `ail mcp` `ail_check`, first call | json (430) | 25 | 14 | 87 |
 | `ail mcp` `ail_check`, repeat | json (430) | 7 | 7 | 51 |
-| `ail mcp` `ail_check`, first call | ailtest (3960) | 165 | 61 | 200 |
+| `ail mcp` `ail_check`, first call | ailtest (3960) | 165 | 61 | 202 |
 | `ail mcp` `ail_check`, repeat | ailtest (3960) | 5 | 5 | 36 |
-| first `./ail run examples/hello.ail` in a fresh clone | hello (2) | 57.8 s | 28.9 s | 68.2 s |
+| first `./ail run examples/hello.ail` in a fresh clone | hello (2) | 57.8 s | 28.9 s | 108.8 s |
 
 ## What the numbers say
 
@@ -217,9 +222,9 @@ Generated from the tables above; nothing on this page is written by hand after t
 - **Rust (`rustc -C opt-level=3`).** AIL / Rust is below 1 on 10 of 14 programs (collatz, spectralnorm, mandelbrot, fannkuch, binarytrees, wordfreq, matmul, vm, raytrace, matmul1400); the geometric mean over all 14 is 0.56.
 - **Go (`go build`).** AIL / Go is below 1 on 8 of 14 programs (collatz, nbody, spectralnorm, mandelbrot, wordfreq, matmul, raytrace, matmul1400); the geometric mean over all 14 is 0.55.
 - **Larger programs.** AIL / gcc is 1.33 on lzr, 1.18 on vm, 0.95 on raytrace, 0.08 on matmul1400; the geometric mean is 0.58.
-- **On Darwin arm64.** Geometric mean of AIL / X over the small programs, then the larger ones: clang 0.65 and 0.70; Rust 0.64 and 0.62; Go 0.54 and 0.49.
-- **On Windows x86_64.** Geometric mean of AIL / X over the small programs, then the larger ones: gcc 0.90 and 0.64; Rust 0.84 and 0.66; Go 0.70 and 0.57.
+- **On Darwin arm64.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): clang 0.65 and 0.70; Rust 0.64 and 0.62; Go 0.54 and 0.49.
+- **On Windows x86_64.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): gcc 0.84 and 0.62; Rust 0.75 and 0.66; Go 0.66 and 0.56.
 - **Tokens.** Across the ten programs AIL source is 125% of the Python source and 85% of the C source by mean token count (4833, 5699, 3856). The Rust source is 4990 tokens, so AIL is 97% of it. The Go source is 5715 tokens, so AIL is 85% of it.
 - **Edit loop on Linux x86_64.** `ail check` of hello takes 16 ms and of the 3960-line `ailtest` 215 ms; a repeated `ail_check` through a warm `ail mcp` takes 7 ms.
 - **Edit loop on Darwin arm64.** `ail check` of hello takes 22 ms and of the 3960-line `ailtest` 81 ms; a repeated `ail_check` through a warm `ail mcp` takes 7 ms.
-- **Edit loop on Windows x86_64.** `ail check` of hello takes 496 ms and of the 3960-line `ailtest` 608 ms; a repeated `ail_check` through a warm `ail mcp` takes 51 ms.
+- **Edit loop on Windows x86_64.** `ail check` of hello takes 467 ms and of the 3960-line `ailtest` 613 ms; a repeated `ail_check` through a warm `ail mcp` takes 51 ms.
