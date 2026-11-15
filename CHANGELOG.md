@@ -42,6 +42,8 @@ AIL (AI-First Language, "ale") is a native, garbage-collected, memory-safe syste
 
 ### Changes
 
+- Windows first run: keep the downloaded seed (#1280)
+- CHANGELOG: v0.1.0 release date, speed wording, changes since #1103 (#1279)
 - Benchmarks: AIL against C, Rust, Go and Python on Linux, macOS and Windows (#1276)
 - Pin seed seed-2026.11.14b (RC) (#1278)
 - Windows: loops the compiler chose run in order after short parallel regions (ADR 1115) (#1277)
