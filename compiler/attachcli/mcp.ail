@@ -150,7 +150,10 @@ fn mcp_call(id Json, params Json, port int)
         # As `ail attach input`: an input the program ends on is applied, not an error (attach.input.4).
         if name == "app_input" and err.connected and gone(app)
             kind := args.text("kind", "")
-            rpc_reply(id, text_result("\{\"v\":1,\"applied\":{syntax.quote(kind)},\"exited\":true}", false))
+            rpc_reply(id, text_result(
+                "\{\"v\":1,\"applied\":{syntax.quote(kind)},\"exited\":true}",
+                false,
+            ))
             return
         rpc_reply(id, text_result(err.message, true))
         return
