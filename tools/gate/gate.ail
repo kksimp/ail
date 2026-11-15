@@ -2582,6 +2582,12 @@ fn Gate.net(mut self)
     ])
     if ip.status != 0
         self.red("attach input", "exit {ip.status}\n{ip.out}{ip.err}")
+    # attach.input.4: an input the program exits on (its quit key) is applied, not a connection error.
+    apid3 := net_start("python3 -I tools/gate/attach_server.py {aport} {ad}/req.txt --exit", aport)
+    ix := sh_run("TMPDIR={ad} ./ail attach input kind=key text=q")
+    net_stop(apid3)
+    if ix.status != 0 or ix.out != "\{\"v\":1,\"applied\":\"key\",\"exited\":true}\n"
+        self.red("attach input that exits", "exit {ix.status}\n{ix.out}{ix.err}")
     nobody := sh_run("TMPDIR={ad}/nowhere ./ail attach")
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
         self.red("attach none", "exit {nobody.status}\n{nobody.err}")
