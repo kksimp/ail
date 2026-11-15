@@ -1909,7 +1909,11 @@ fn Parser.statement_core(mut self) ast.Stmt?
                 "`mut NAME := value` declares a new mutable name; `=` changes one that exists",
                 "declare it with `:=`",
             )
-            self.attach("declare it with `:=`", [fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")])
+            self.attach("declare it with `:=`", [fix.span(
+                eq,
+                ast.Pos(line: eq.line, col: eq.col + 1),
+                ":=",
+            )])
             self.i += 1
         else
             self.expect_sym(":=", "`:=` after the name", "expr.bind.2")?

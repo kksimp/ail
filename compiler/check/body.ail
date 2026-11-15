@@ -822,7 +822,12 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "`else none` gives no fallback: the value is already {show(vt)}",
                     "drop `else none` and `x := e` keeps the {show(vt)}; test it with `if v := x` or give a value: `else 0`",
                 )
-                fix_last("drop `else none`", [fix.replace(ast.Pos(line: np.line, col: (np.col - 6).max(1)), " else none", "")])
+                fix_last("drop `else none`", [fix.replace(
+                    ast.Pos(line: np.line, col: (np.col - 6).max(1)),
+                    " else none",
+                    "",
+                )])
+                ok = vt
             else
                 dt := expr(d, ok, true)
                 if not accepts(ok, dt) and not self.unit_fallback(d, dt, ok)
