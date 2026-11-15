@@ -36,7 +36,7 @@
 ./ail sanitize FILE              # run on the fixed and seeded random schedules; report results that differ (san.sched.1)
 ./ail leak FILE                  # run with the leak report: growth by kind and the roots that hold it (san.leak.1-2); AIL_LEAK works on any native exe
 ./ail perf --explain FN FILE      # per loop of FN: bounds checks removed or why not (with a fix), list headers, vector kernel, parallel verdict, calls left (tool.perf.1-2)
-./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; `ail check --fix FILE` fixes, then checks, in one call
+./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; `ail check --fix FILE` fixes, then checks, in one call; check/build/run/test write certain fixes themselves (`--no-fix`, `AIL_FIX=0` to stop)
 ./ail diff OLD NEW                  # what changed by meaning
 ./ail edit FILE.ail [--test] < EDITS    # also change_sig, extract, move (edit.op.8-10)
 ./ail fmt [--check] FILE.ail

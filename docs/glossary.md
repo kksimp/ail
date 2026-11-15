@@ -113,6 +113,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Stub** | A value `std.test` makes the standard library return for one test: a file's text, a variable, the clock, an HTTP response (`test.stub.1-6`, ADR 1101). |
 | **Fixture** | A `@fixture` function that makes a value for tests, with an optional teardown; a test takes it with `@needs("NAME")` and a parameter of that name. Made fresh for each run and always torn down (`test.fixture.1-4`, ADR 1075). |
 | **Fix** | A machine-applicable edit a diagnostic carries (ADR 0145). `ail fix` applies the first fix of each diagnostic and re-checks (ADR 0203). |
+| **Certain fix** | A fix whose rewrite has one meaning, the one written in another language's spelling (`else if` as `elif`, `eprint` as `io.eprint`). `ail check`, `build`, `run` and `test` write certain fixes into the file themselves (`fix.auto.1`, ADR 1130). |
 | **Fix anchor** | How a fix names a position the checker doesn't know by coordinates: a word on the line, the end of the line, after a block, the call `f(...)` or bracket form `T[...]` that starts there, a chained comparison, or a character with its blanks (ADRs 0145, 0264). |
 | **Fix (diagnostic)** | A machine-applicable edit attached to a diagnostic: a title and text replacements by line and column, applied all or nothing (ADR 0145). |
 | **Foreign syntax** | A construct from Python, Rust, Go or TypeScript that AIL doesn't have (`&&`, `def`, `try`, `x++`, `len(xs)`). Reported once with the AIL spelling (`gram.foreign.1`, ADR 0262). |

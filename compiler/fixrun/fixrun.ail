@@ -147,6 +147,8 @@ pub struct Run
     out str
     ## The rule of every fix applied, in order (check.fix.1).
     pub rules List[str]
+    ## Apply only certain fixes of errors (fix.auto.1, ADR 1130).
+    pub sure_only bool
 
 ## Read the command line (after the command word) and the file.
 pub fn begin(args List[str]) Run
@@ -162,6 +164,7 @@ pub fn begin(args List[str]) Run
         rounds: 0,
         out: "",
         rules: [],
+        sure_only: false,
     )
     for a in args
         if a.starts_with("--") and a != "--dry-run" and a != "--json"
@@ -194,6 +197,9 @@ pub fn step(mut r Run, d Diagnosis) bool
     # fix is offered by `ail check`, not applied here (else `"{n"` escaped leaves `n` unused and it is renamed).
     mut found := List[Found]()
     for x in d.found
+        # fix.auto.1: the commands that check first apply only an error's certain fix.
+        if r.sure_only and (x.warning or x.fixes.len() == 0 or not x.fixes[0].sure)
+            continue
         if x.rule != "expr.bind.14"
             found.push(x)
     chosen := choose(found, r.src)
@@ -209,6 +215,11 @@ pub fn step(mut r Run, d Diagnosis) bool
             r.out = "{r.out}fixed {r.path}:{c.pos.line}:{c.pos.col}: [{c.rule}] {c.title}\n"
     r.src = apply(r.src, chosen)
     true
+
+## The `fixed PATH:LINE:COL: [RULE] TITLE` lines of the fixes applied so far, each
+## ending in a newline (fix.auto.2).
+pub fn applied_text(r Run) str
+    r.out
 
 ## After the last round (fix.apply.3): a file that was canonical stays canonical.
 ## Call it once, then check `src` again for `finish`.

@@ -46,6 +46,8 @@ else {
 # The build above made .native\ail.exe if it was missing or older than the compiler sources. Nothing in the gate edits
 # those sources, so the thousands of `ail` calls the suites make skip that scan of compiler\ and std\ (ail.ps1).
 $env:AIL_NATIVE_FRESH = '1'
+# fix.auto.3 (ADR 1130): the suites check programs that are wrong on purpose, so no command writes a certain fix into them.
+$env:AIL_FIX = '0'
 # Self-host stage 1: the native compiler must build from compiler/main.ail. .native\ail.exe is that very build (the seed
 # made it), so nativex reuses it (NATIVE_COMPILER) and there is no extra 25-minute build here.
 $native = Join-Path $root '.native\ail.exe'

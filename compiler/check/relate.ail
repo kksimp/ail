@@ -83,7 +83,7 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
                 diags.push(
                     new_diag(rule, at, text)
                         .with_help("a character is written in single quotes: 'a'")
-                        .with_fix("write a character literal", [fix.char_literal(at)]),
+                        .with_sure_fix("write a character literal", [fix.char_literal(at)]),
                 )
             elif h := mismatch_help(want, got)
                 err_help(rule, at, text, h)

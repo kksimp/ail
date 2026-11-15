@@ -33,6 +33,8 @@ native_suites=$(grep -v '^#' tools/gate/suites.txt | tr '\n' ' ')
 arith_ok=1
 ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1 || arith_ok=0
 export AIL_NATIVE_FRESH=1
+# fix.auto.3 (ADR 1130): the suites check programs that are wrong on purpose, so no command writes a certain fix into them.
+export AIL_FIX=0
 jobs=${GATE_JOBS:-}
 case "$jobs" in '' | *[!0-9]* | 0) jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2); [ "$jobs" -gt "${GATE_JOBS_MAX:-4}" ] && jobs=${GATE_JOBS_MAX:-4} ;; esac
 base=${TMPDIR:-/tmp}; base=${base%/}

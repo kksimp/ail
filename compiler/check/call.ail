@@ -419,7 +419,7 @@ fn Checker.check_call(
                 "this parameter is `mut`, so the argument must be marked `mut`",
             ).with_help("write `mut` before the argument")
             if is_plain_name(a.value)
-                d = d.with_fix("mark the argument `mut`", [fix.insert(expr_pos(a.value), "mut ")])
+                d = d.with_sure_fix("mark the argument `mut`", [fix.insert(expr_pos(a.value), "mut ")])
             diags.push(d)
         elif p.mutable
             require_mutable(a.value, "own.param.2", "passed `mut`")
@@ -1381,21 +1381,21 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     kind := kind_of(rt)
     if absent != "" and is_opt(rt)
         d = d.with_help("compare the value with `none`, e.g. `x != none`")
-        d = d.with_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
+        d = d.with_sure_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
     elif oh := opt_method_help(rt, n, recv)
         # `x.unwrap_or(d)` and its kin on an optional: the `else` rewrite, in parentheses
         # since `else` binds looser than a call (type.opt.7).
         d = d.with_help(oh)
         if f := opt_method_fix(rt, n, recv, at)
-            d = d.with_fix(f.title, f.edits)
+            d = d.with_sure_fix(f.title, f.edits)
     elif wh := word_help(rt, n, recv, at)
         d = d.with_help(wh.help)
         if wh.edits.len() > 0
-            d = d.with_fix(wh.title, wh.edits)
+            d = d.with_sure_fix(wh.title, wh.edits)
     elif kind == "map" and (n == "items" or n == "entries")
         # type.tuple.5: a map iterates as its `(key, value)` pairs.
         d = d.with_help("a map iterates as its entries: `for k, v in m`")
-        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
+        d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif is_error_type(rt) and [
         "message",
         "msg",
@@ -1405,12 +1405,12 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     ].contains(n)
         # An error's text is `to_str()` (the same text as interpolating it).
         d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
-        d = d.with_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+        d = d.with_sure_fix("write `to_str`", [fix.replace(at, n, "to_str")])
     elif iterator_word(rt, n)
         d = d.with_help(method_help(rt, n) else "a list is iterable as it is")
-        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
+        d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif new := method_rename(rt, n)
-        d = d.with_help("write `.{new}()`").with_fix("write `{new}`", [fix.replace(at, n, new)])
+        d = d.with_help("write `.{new}()`").with_sure_fix("write `{new}`", [fix.replace(at, n, new)])
     elif h := method_help(rt, n)
         d = d.with_help(h)
     elif s := suggest(n, names)

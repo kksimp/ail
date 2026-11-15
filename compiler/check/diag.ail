@@ -35,7 +35,14 @@ fn Diag.did_you_mean_help(self, s str) Diag
 
 fn Diag.with_fix(self, title str, edits List[fix.Edit]) Diag
     mut d := self
-    d.fixes.push(fix.Fix(title: title, edits: edits))
+    d.fixes.push(fix.Fix(title: title, edits: edits, sure: false))
+    d
+
+## A certain fix (fix.auto.1, ADR 1130): `ail check`, `build`, `run` and `test`
+## write it into the file. Only for a rewrite with one meaning, the one written.
+fn Diag.with_sure_fix(self, title str, edits List[fix.Edit]) Diag
+    mut d := self
+    d.fixes.push(fix.sure_fix(title, edits))
     d
 
 ## `did you mean `s`?` and the fix that replaces `name` by `s` (diag.rs `did_you_mean`).
@@ -65,7 +72,7 @@ pub fn Diag.to_json(self, files List[ast.SourceFile], sources Map[str, List[List
     if self.fixes.len() > 0
         if lines := sources.get(file)
             local := [
-                fix.Fix(title: f.title, edits: [shifted(e, base) for e in f.edits])
+                fix.Fix(title: f.title, edits: [shifted(e, base) for e in f.edits], sure: f.sure)
                 for f in self.fixes
             ]
             settled := fix.settle_fixes(local, lines)

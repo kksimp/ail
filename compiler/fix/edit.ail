@@ -32,6 +32,10 @@ pub struct Edit
 pub struct Fix
     pub title str
     pub edits List[Edit]
+    ## A certain fix (fix.auto.1, ADR 1130): the rewrite has one meaning, the one the
+    ## author wrote in another language's spelling, so `ail check`, `build`, `run`
+    ## and `test` write it into the file themselves.
+    pub sure bool
 
 fn at(pos ast.Pos, end ast.Pos, old str?, anchor str, text str) Edit
     Edit(pos: pos, end: end, old: old, anchor: anchor, text: text)
@@ -111,4 +115,8 @@ pub fn range_list(pos ast.Pos) Edit
     at(pos, pos, none, "range_list", "")
 
 pub fn new_fix(title str, edits List[Edit]) Fix
-    Fix(title: title, edits: edits)
+    Fix(title: title, edits: edits, sure: false)
+
+## A certain fix (fix.auto.1, ADR 1130).
+pub fn sure_fix(title str, edits List[Edit]) Fix
+    Fix(title: title, edits: edits, sure: true)

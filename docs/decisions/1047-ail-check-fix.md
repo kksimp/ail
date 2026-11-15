@@ -1,6 +1,6 @@
 # 1047. `ail check --fix`: repair, then check, in one command
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 1130](1130-certain-fixes-applied-by-check.md) (plain `ail check`, `build`, `run` and `test` now write certain fixes)
 - **Date:** 2026-11-10
 - **Decided by:** AI (delegated, ADR 0076); scope into 0.1.0 by the designer (2026-11-10)
 - **Builds on:** [ADR 0203](0203-ail-fix-command.md) (`ail fix`), [ADR 0917](0917-ail-task-protocol.md) (`ail task`), [ADR 0918](0918-ail-mcp-compiler-tools.md) (MCP)

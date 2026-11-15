@@ -58,7 +58,7 @@ fn Checker.ask_hole(mut self, at ast.Pos, expect Ty?) Ty
             at,
             "uhwhatnow?",
             fits[k].text,
-        )]))
+        )], sure: false))
     diags.push(d)
     t
 

@@ -791,6 +791,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 )
             elif h := never_absent_help(value)
                 err_help("err.else.1", at, text, h)
+                self.map_index_else(value)
             else
                 err("err.else.1", at, text)
     match vt
@@ -822,7 +823,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "`else none` gives no fallback: the value is already {show(vt)}",
                     "drop `else none` and `x := e` keeps the {show(vt)}; test it with `if v := x` or give a value: `else 0`",
                 )
-                fix_last("drop `else none`", [fix.replace(
+                sure_fix_last("drop `else none`", [fix.replace(
                     ast.Pos(line: np.line, col: (np.col - 6).max(1)),
                     " else none",
                     "",
@@ -867,7 +868,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                         "only a failure has an error to bind; an optional is just absent",
                         "write `else` without a name",
                     )
-                    fix_last("remove `{nm.name}` from the `else`", [fix.delete(
+                    sure_fix_last("remove `{nm.name}` from the `else`", [fix.delete(
                         ast.Pos(line: nm.pos.line, col: (nm.pos.col - 1).max(1)),
                         ast.Pos(line: nm.pos.line, col: nm.pos.col + nm.name.len()),
                     )])
@@ -1401,7 +1402,7 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
     ).with_help(hint)
     # The binding's own position: where an agent changes the declaration.
     if decl := l.decl
-        d = d.with_fix("declare `{root}` with `mut`", [fix.insert(decl, "mut ")])
+        d = d.with_sure_fix("declare `{root}` with `mut`", [fix.insert(decl, "mut ")])
         d = d.with_note(decl, "`{root}` is declared here")
     diags.push(d)
 

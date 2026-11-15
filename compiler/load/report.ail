@@ -77,7 +77,7 @@ pub fn shown_syntax(d syntax.Diag) Shown
         notes: [],
         warning: false,
         fixes: fixes,
-        edits: if d.edits.len() > 0 then [fix.Fix(title: d.fix, edits: d.edits)] else [],
+        edits: if d.edits.len() > 0 then [fix.Fix(title: d.fix, edits: d.edits, sure: fix.sure_syntax(d.rule))] else [],
     )
 
 ## A checker diagnostic.
@@ -208,7 +208,7 @@ fn report_in(
                     fix.Fix(title: f.title, edits: [
                         check.shifted(e, files[fi].base)
                         for e in f.edits
-                    ])
+                    ], sure: f.sure)
                     for f in shown.edits
                 ]
                 shown.edits = fix.settle_fixes(local, fix_lines)

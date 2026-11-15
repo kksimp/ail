@@ -118,7 +118,7 @@ fn Checker.range_to_list(mut self, recv ast.Expr, n str, at ast.Pos, args List[a
             diags.push(
                 new_diag("expr.loop.3", dots, "a range `a..b` isn't a list")
                     .with_help("write the values as a comprehension: `[i for i in a..b]`")
-                    .with_fix("write a comprehension", [fix.range_list(at)]),
+                    .with_sure_fix("write a comprehension", [fix.range_list(at)]),
             )
             true
         _ => false
@@ -770,7 +770,7 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
                     diags.push(
                         new_diag("type.bool.1", expr_pos(side), text)
                             .with_help("a default for a value that may be `none` is `x else d`")
-                            .with_fix("write `else`", [fix.operands(at, "or", "$l else $r")]),
+                            .with_sure_fix("write `else`", [fix.operands(at, "or", "$l else $r")]),
                     )
                 elif is_opt(t)
                     err_help(
@@ -818,7 +818,7 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
         diags.push(
             new_diag("trait.op.3", at, text)
                 .with_help("a character is written in single quotes: 'a'")
-                .with_fix("write a character literal", [fix.char_literal(expr_pos(rhs))]),
+                .with_sure_fix("write a character literal", [fix.char_literal(expr_pos(rhs))]),
         )
         return if is_arithmetic(op) then Ty.Unknown else Ty.Bool
     self.operator(op, lt, rt, at)
@@ -853,25 +853,25 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             diags.push(
                 new_diag("trait.op.3", at, text)
                     .with_help("`int` and `float` don't mix: convert the integer with `n.to_float()`")
-                    .with_fix("convert with `.to_float()`", [fix.operands(at, sym, template)]),
+                    .with_sure_fix("convert with `.to_float()`", [fix.operands(at, sym, template)]),
             )
         elif op == ast.BinOp.Add and (lt == Ty.Str or rt == Ty.Str)
             diags.push(
                 new_diag("trait.op.3", at, text)
                     .with_help("build text with interpolation: \"\{a}\{b}\"")
-                    .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp\"")]),
+                    .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp\"")]),
             )
         elif lt == Ty.Str and op == ast.BinOp.Rem
             diags.push(
                 new_diag("trait.op.3", at, text)
                     .with_help("AIL has no `%` formatting; interpolate the values: \"n is \{n}\"")
-                    .with_fix("interpolate", [fix.operands(at, "%", "$f")]),
+                    .with_sure_fix("interpolate", [fix.operands(at, "%", "$f")]),
             )
         elif lt == Ty.Str and op == ast.BinOp.Mul
             diags.push(
                 new_diag("trait.op.3", at, text)
                     .with_help("repeat a string with `s.repeat(n)`")
-                    .with_fix("write `.repeat`", [fix.operands(at, "*", "$l.repeat($r)")]),
+                    .with_sure_fix("write `.repeat`", [fix.operands(at, "*", "$l.repeat($r)")]),
             )
         elif mix := distinct_mix(lt, rt)
             err_help("type.distinct.4", at, text, mix)
@@ -901,7 +901,7 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             diags.push(
                 new_diag("trait.op.1", at, "`+` doesn't join strings")
                     .with_help("build text with interpolation: \"\{a}\{b}\"")
-                    .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
+                    .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
             )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)
@@ -1630,11 +1630,17 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
                 if st.name == o.name and not in_assoc
                     in_assoc = true
                     assoc_fields = [x.name for x in st.fields]
-    if w := name_word(n)
-        d = d.with_help(w.help).with_fix("write `{w.new}`", [fix.replace(at, n, w.new)])
+    if q := self.with_module_item(d, n, at)
+        d = q
+    elif w := name_word(n)
+        d = d.with_help(w.help).with_sure_fix("write `{w.new}`", [fix.replace(at, n, w.new)])
     elif nargs != none and call_hint(n, nargs else 0) != none
         c := call_hint(n, nargs else 0) else return
-        d = d.with_help(c.help).with_fix("write `{c.example}`", [fix.call(at, n, c.template)])
+        # `printf` prints no newline and `print` does, so only that rewrite is not certain (fix.auto.1).
+        if n == "printf"
+            d = d.with_help(c.help).with_fix("write `{c.example}`", [fix.call(at, n, c.template)])
+        else
+            d = d.with_help(c.help).with_sure_fix("write `{c.example}`", [fix.call(at, n, c.template)])
     elif h := call_help(n)
         d = d.with_help(h)
     elif h := function_help(n)
