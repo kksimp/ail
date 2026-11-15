@@ -1,0 +1,23 @@
+{"name": "report-basic", "args": ["report"], "stdin": "receive A-1 10 100\nreceive B 5 250\nship A-1 4\n", "stdout": "A-1\t6\t6.00\nB\t5\t12.50\n", "code": 0, "stderr": ""}
+{"name": "average-cost", "args": ["report"], "stdin": "receive A 3 100\nreceive A 1 200\nship A 3\n", "stdout": "A\t1\t1.25\n", "code": 0, "stderr": ""}
+{"name": "bad-lines", "args": ["report"], "stdin": "receive A 2 10\nreceive a 1 1\nship A\nship B 1\nship A 3\nreceive A 0 5\nship A 1\n", "stdout": "A\t1\t0.10\n", "code": 2, "stderr": "error: line 2: bad line\nerror: line 3: bad line\nerror: line 4: unknown B\nerror: line 5: short A\nerror: line 6: bad line\n"}
+{"name": "low-and-total", "args": ["low", "5"], "stdin": "receive X 9 1\nreceive Y 4 1\nreceive Z 2 3\nship X 5\n", "stdout": "X\nY\nZ\n", "code": 0, "stderr": ""}
+{"name": "total", "args": ["total"], "stdin": "receive A 7 333\nship A 2\nreceive B 1 1\n", "stdout": "16.66\n", "code": 0, "stderr": ""}
+{"name": "count-down", "args": ["report"], "stdin": "receive A 10 99\ncount A 4\n", "stdout": "A\t4\t3.96\n", "code": 0, "stderr": ""}
+{"name": "count-up", "args": ["report"], "stdin": "receive A 3 100\ncount A 7\n", "stdout": "A\t7\t7.00\n", "code": 0, "stderr": ""}
+{"name": "count-zero-then-up", "args": ["report"], "stdin": "receive A 2 50\nship A 2\ncount A 5\nreceive A 1 10\n", "stdout": "A\t6\t0.10\n", "code": 0, "stderr": ""}
+{"name": "count-unknown", "args": ["report"], "stdin": "count Q 1\nreceive Q 1 1\n", "stdout": "Q\t1\t0.01\n", "code": 2, "stderr": "error: line 1: unknown Q\n"}
+{"name": "comments-and-blanks", "args": ["report"], "stdin": "# header\n\nreceive A 1 1\n\nship A 2\n# done\n", "stdout": "A\t1\t0.01\n", "code": 2, "stderr": "error: line 5: short A\n"}
+{"name": "sell-out", "args": ["report"], "stdin": "receive A 3 10\nship A 3\nreceive A 1 7\n", "stdout": "A\t1\t0.07\n", "code": 0, "stderr": ""}
+{"name": "big-numbers", "args": ["total"], "stdin": "receive A 99999 99999\nreceive B 99999 99999\nship A 33333\n", "stdout": "166663333.35\n", "code": 0, "stderr": ""}
+{"name": "rounding", "args": ["report"], "stdin": "receive A 4 1\nreceive A 3 2\nship A 1\nship A 1\nship A 1\n", "stdout": "A\t4\t0.07\n", "code": 0, "stderr": ""}
+{"name": "no-final-newline", "args": ["report"], "stdin": "receive A 1 5\nship A 1", "stdout": "A\t0\t0.00\n", "code": 0, "stderr": ""}
+{"name": "empty-input", "args": ["report"], "stdin": "", "stdout": "", "code": 0, "stderr": ""}
+{"name": "strict-fields", "args": ["report"], "stdin": "receive  A 1 1\nreceive A 1 1 x\nship A 1 \nreceive A 123456 1\nreceive A 1 1\r\nreceive A +1 1\nreceive A 1 -1\nSHIP A 1\nreceive A 2 3\n", "stdout": "A\t2\t0.06\n", "code": 2, "stderr": "error: line 1: bad line\nerror: line 2: bad line\nerror: line 3: bad line\nerror: line 4: bad line\nerror: line 5: bad line\nerror: line 6: bad line\nerror: line 7: bad line\nerror: line 8: bad line\n"}
+{"name": "low-zero", "args": ["low", "0"], "stdin": "receive A 1 1\n", "stdout": "", "code": 0, "stderr": ""}
+{"name": "low-ascending", "args": ["low", "100"], "stdin": "receive B 1 1\nreceive A-2 1 1\nreceive A-10 1 1\nreceive 9 1 1\n", "stdout": "9\nA-10\nA-2\nB\n", "code": 0, "stderr": ""}
+{"name": "usage-none", "args": [], "stdin": "receive A 1 1\n", "stdout": "", "code": 1, "stderr": "usage: stock report|low N|total\n"}
+{"name": "usage-unknown", "args": ["list"], "stdin": "", "stdout": "", "code": 1, "stderr": "usage: stock report|low N|total\n"}
+{"name": "usage-bad-n", "args": ["low", "x"], "stdin": "", "stdout": "", "code": 1, "stderr": "usage: stock report|low N|total\n"}
+{"name": "usage-long-n", "args": ["low", "123456"], "stdin": "", "stdout": "", "code": 1, "stderr": "usage: stock report|low N|total\n"}
+{"name": "usage-extra", "args": ["total", "x"], "stdin": "", "stdout": "", "code": 1, "stderr": "usage: stock report|low N|total\n"}

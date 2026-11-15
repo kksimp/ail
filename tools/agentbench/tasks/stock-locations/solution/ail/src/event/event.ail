@@ -1,0 +1,90 @@
+## One line of the stock log.
+
+pub enum Kind
+    Receive
+    Ship
+    Count
+    Move
+
+pub struct Event
+    pub kind Kind
+    pub sku str
+    pub qty int
+    pub price int
+    ## Where the event happens; for `move`, the source.
+    pub loc str
+    ## The destination of a `move`; empty otherwise.
+    pub to str
+
+pub error enum ParseError
+    BadLine "bad line"
+
+## 1 to 5 ASCII digits, as a number.
+pub fn number(s str) int?
+    if s.is_empty() or s.len() > 5
+        return none
+    for ch in s.chars()
+        if ch.code() < 48 or ch.code() > 57
+            return none
+    s.to_int()
+
+pub fn valid_sku(s str) bool
+    if s.is_empty()
+        return false
+    for ch in s.chars()
+        upper := ch.code() >= 65 and ch.code() <= 90
+        digit := ch.code() >= 48 and ch.code() <= 57
+        if not (upper or digit or ch == '-')
+            return false
+    true
+
+fn valid_loc(s str) bool
+    name := s.strip_prefix("@") else return false
+    if name.is_empty()
+        return false
+    for ch in name.chars()
+        lower := ch.code() >= 97 and ch.code() <= 122
+        digit := ch.code() >= 48 and ch.code() <= 57
+        if not (lower or digit or ch == '-')
+            return false
+    true
+
+## The event on a line, or `BadLine` if the line is not a valid event.
+pub fn parse(line str) Event ! ParseError
+    f := line.split(" ")
+    mut kind := Kind.Receive
+    mut want := 0
+    if f[0] == "receive"
+        want = 4
+    elif f[0] == "ship"
+        kind = Kind.Ship
+        want = 3
+    elif f[0] == "count"
+        kind = Kind.Count
+        want = 3
+    elif f[0] == "move"
+        kind = Kind.Move
+        want = 5
+    else
+        return BadLine
+    mut loc := "@main"
+    mut to := ""
+    if kind == Kind.Move
+        if f.len() != 5 or not valid_loc(f[3]) or not valid_loc(f[4])
+            return BadLine
+        loc = f[3]
+        to = f[4]
+    elif f.len() == want + 1 and valid_loc(f[want])
+        loc = f[want]
+    elif f.len() != want
+        return BadLine
+    if not valid_sku(f[1])
+        return BadLine
+    qty := number(f[2]) else return BadLine
+    mut price := 0
+    if kind == Kind.Receive
+        p := number(f[3]) else return BadLine
+        price = p
+    if qty == 0 and kind != Kind.Count
+        return BadLine
+    Event(kind: kind, sku: f[1], qty: qty, price: price, loc: loc, to: to)

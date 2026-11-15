@@ -29,6 +29,9 @@ PROMPT = ("You are in a fresh repository. Read SPEC.md and DOCS/, then implement
           "Work alone until `./test` passes; hidden cases will also be run. Do not edit build, test or DOCS/.")
 
 def task_dir(t): return os.path.join(HERE, "tasks", t)
+def own_or_base(t, name):  # a change task may carry its own oracle and solution; otherwise its base task's are used
+    p = os.path.join(task_dir(t), name)
+    return p if os.path.exists(p) else os.path.join(task_dir(load_task(t).get("base", t)), name)
 def load_task(t):
     with open(os.path.join(task_dir(t), "task.json")) as f: d = json.load(f)
     d.setdefault("exe", t)
@@ -41,7 +44,8 @@ def run_case(exe, case, timeout=10):
     t0 = time.time()
     try:
         p = subprocess.run([exe] + case["args"], input=case["stdin"].encode(), capture_output=True, timeout=timeout)
-        return {"name": case["name"], "ok": p.stdout.decode("utf-8", "replace") == case["stdout"] and p.returncode == case["code"],
+        err_ok = "stderr" not in case or p.stderr.decode("utf-8", "replace") == case["stderr"]  # tasks with "check_stderr" also fix stderr
+        return {"name": case["name"], "ok": p.stdout.decode("utf-8", "replace") == case["stdout"] and p.returncode == case["code"] and err_ok,
                 "code": p.returncode, "stdout": p.stdout.decode("utf-8", "replace"), "err": p.stderr.decode("utf-8", "replace")[-400:], "s": round(time.time() - t0, 3)}
     except subprocess.TimeoutExpired:
         return {"name": case["name"], "ok": False, "code": None, "stdout": "", "err": "timeout", "s": timeout}
@@ -52,11 +56,12 @@ def case_inputs(t):
     return base + (jsonl(own) if os.path.exists(own) else [])
 
 def cmd_gen(a):
-    d = task_dir(a.task); ref = os.path.join(task_dir(load_task(a.task).get("base", a.task)), "ref.py")
+    d = task_dir(a.task); ref = own_or_base(a.task, "ref.py")
     vis, hid = [], []
     for c in case_inputs(a.task):
         p = subprocess.run([sys.executable, "-I", ref] + c["args"], input=c["stdin"].encode(), capture_output=True)
         full = {"name": c["name"], "args": c["args"], "stdin": c["stdin"], "stdout": p.stdout.decode(), "code": p.returncode}
+        if load_task(a.task).get("check_stderr"): full["stderr"] = p.stderr.decode()
         hid.append(full)
         if c.get("visible"): vis.append(full)
     for n, rows in (("visible", vis), ("hidden", hid)):
@@ -114,7 +119,7 @@ def prep(t, task, arm, ws):
     shutil.copytree(os.path.join(task_dir(t), "seed", lang), ws, dirs_exist_ok=True)
     shutil.copy(os.path.join(task_dir(t), "spec.md" if task["kind"] == "build" else "issue.md"), os.path.join(ws, "SPEC.md"))
     os.makedirs(os.path.join(ws, "DOCS"), exist_ok=True); os.makedirs(os.path.join(ws, ".bench", "out"), exist_ok=True)
-    if task["kind"] == "fix": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
+    if task["kind"] != "build": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
     for p in task["docs"][lang]:
         if arm == "ail-core-card" and p == "docs/language-card.md": p = "docs/language-card-core.md"  # the one doc this arm loads; the rest is `ail card TOPIC` and `ail ask std`
@@ -234,11 +239,28 @@ def toolchain_metrics(ws, tokens=True):
 
 def score_ws(t, arm, ws):
     task = load_task(t); lang = LANG[arm]
+    import glob
     cmd = [real_ail() if (lang == "ail" and x == "ail") else x for x in task["build"][lang]]  # honours AIL=, as the shims do
+    cmd = [y for x in cmd for y in (sorted(os.path.relpath(g, ws) for g in glob.glob(os.path.join(ws, x))) or [x] if "*" in x else [x])]  # `src/*.c`, as the shell shims expand it
     r = subprocess.run(cmd, cwd=ws, capture_output=True, text=True)
-    if r.returncode: return {"built": False, "passed": 0, "total": len(jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))), "failed": []}
+    st = structure_ok(task, lang, ws)
+    if r.returncode: return {"built": False, "passed": 0, "total": len(jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))), "failed": [], "structure": st}
     res = [run_case(os.path.join(ws, task["exe"]), c) for c in jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))]
-    return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]]}
+    return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]], "structure": st}
+
+EXT = {"ail": ".ail", "c": ".c", "rust": ".rs"}
+def structure_ok(task, lang, ws):
+    """A refactor task's mechanical check (ADR 0916, amended 2026-11-15): `src/main.EXT` at most `main_max_lines` lines and at
+    least `min_modules` other source files of the language under src/ (C headers do not count). None when the task has no check."""
+    want = task.get("structure")
+    if not want: return None
+    main = os.path.join(ws, "src", "main" + EXT[lang])
+    if not os.path.exists(main): return False
+    lines = sum(1 for l in open(main, encoding="utf-8", errors="replace") if l.strip())
+    others = [f for r, _, fs in os.walk(os.path.join(ws, "src")) for f in fs if f.endswith(EXT[lang]) and os.path.join(r, f) != main]
+    return lines <= want["main_max_lines"] and len(others) >= want["min_modules"]
+
+def is_correct(sc): return sc["built"] and sc["passed"] == sc["total"] and sc.get("structure") is not False
 
 RESULTS = os.environ.get("AGENTBENCH_RESULTS") or os.path.join(HERE, "results")  # a dry run with a fake agent writes elsewhere
 
@@ -269,7 +291,7 @@ def cmd_run(a):
          "build_failures": sum(r["rc"] != 0 for r in builds), "test_failures": sum(r["rc"] != 0 for r in tests),
          "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), "score": score_ws(a.task, arm, ws),
          "charged_usd": round(mine[0], 4), "stopped": next((s for s in stops if s), None)}
-    m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
+    m["correct"] = is_correct(m["score"])
     if "api-error" in stops:  # the model was never reached, or the API failed mid-trial: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)
         with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=m["api_error"]), f, indent=1)
         print(f"INVALID {key}: API error: {m['api_error']}"); return 4
@@ -331,24 +353,27 @@ def cmd_mcpproxy(a):
 
 def cmd_score(a):
     m = json.load(open(os.path.join(a.dir, "metrics.json")))
-    m["score"] = score_ws(m["task"], arm_name(m["arm"]), os.path.join(a.dir, "ws")); m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
+    m["score"] = score_ws(m["task"], arm_name(m["arm"]), os.path.join(a.dir, "ws")); m["correct"] = is_correct(m["score"])
     json.dump(m, open(os.path.join(a.dir, "metrics.json"), "w"), indent=1); print(m["score"])
 
 def cmd_validate(a):
     """Every arm's solution/ must pass all hidden cases; a fix task's seed/ must fail some, then be fixed by solution/.
     Then each arm's workspace is built with the solution in place and driven through its shims, so a trial's logging is known to work."""
-    task = load_task(a.task); sol_task = task.get("base", a.task); ok = True
+    task = load_task(a.task); sol = own_or_base(a.task, "solution"); ok = True
     for arm in ARMS:
         lang = LANG[arm]
-        for what, src in (("solution", os.path.join(task_dir(sol_task), "solution", lang)), ("seed", os.path.join(task_dir(a.task), "seed", lang))):
-            if what == "seed" and task["kind"] != "fix": continue
+        for what, src in (("solution", os.path.join(sol, lang)), ("seed", os.path.join(task_dir(a.task), "seed", lang))):
+            if what == "seed" and task["kind"] == "build": continue
             with tempfile.TemporaryDirectory() as ws:
                 shutil.copytree(src, ws, dirs_exist_ok=True); sc = score_ws(a.task, arm, ws)
-            good = sc["built"] and (sc["passed"] == sc["total"]) == (what == "solution")
+            if task["kind"] == "refactor" and what == "seed":  # behaviour already right; only the structure check fails
+                good = sc["built"] and sc["passed"] == sc["total"] and sc["structure"] is False
+            else:
+                good = sc["built"] and (sc["passed"] == sc["total"] and sc["structure"] is not False) == (what == "solution")
             ok &= good; print(("ok  " if good else "FAIL"), arm, what, f"{sc['passed']}/{sc['total']}", "fails:", sc["failed"])
         with tempfile.TemporaryDirectory() as tmp:
             ws = os.path.join(tmp, "ws"); prep(a.task, task, arm, ws)
-            shutil.copytree(os.path.join(task_dir(sol_task), "solution", lang), ws, dirs_exist_ok=True)
+            shutil.rmtree(os.path.join(ws, "src")); shutil.copytree(os.path.join(sol, lang), ws, dirs_exist_ok=True)
             env = agent_env(ws); rcs = []
             if lang == "ail": rcs.append(subprocess.run([os.path.join(ws, ".bench", "bin", "ail"), "check", "src/main.ail"], cwd=ws, env=env, capture_output=True).returncode)
             rcs += [subprocess.run([os.path.join(ws, x)], cwd=ws, env=env, capture_output=True).returncode for x in ("build", "test")]
@@ -367,7 +392,8 @@ def cmd_visible(a):
     for c in cases:
         r = run_case(os.path.join(a.dir, open(os.path.join(a.dir, ".bench", "exe")).read()), c)
         if not r["ok"]:
-            bad += 1; print(f"FAIL {c['name']}: args={c['args']} want code {c['code']} got {r['code']}\n  want stdout {c['stdout']!r}\n  got  stdout {r['stdout']!r}\n  stderr {r['err']!r}")
+            bad += 1; print(f"FAIL {c['name']}: args={c['args']} want code {c['code']} got {r['code']}\n  want stdout {c['stdout']!r}\n  got  stdout {r['stdout']!r}\n"
+                            + (f"  want stderr {c['stderr']!r}\n" if "stderr" in c else "") + f"  got  stderr {r['err']!r}")
     print(f"{len(cases) - bad}/{len(cases)} visible cases pass"); sys.exit(1 if bad else 0)
 
 def med(xs):
