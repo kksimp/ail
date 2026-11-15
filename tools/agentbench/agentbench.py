@@ -405,6 +405,9 @@ def cmd_report(a):
     bad = [dp for dp, _, fs in os.walk(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
     if bad: print("Invalid (API error, not scored, rerun pending): " + ", ".join(os.path.relpath(d, a.results) for d in sorted(bad)) + "\n")
     for m in ms: m["arm"] = arm_name(m["arm"])
+    if a.plan:  # only the trials a plan numbered, so pilots in the same results folder stay out of a counted table
+        keep = {(t, arm_name(arm), trial) for t, arm, trial in plan(a.plan)}
+        ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
     print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
@@ -429,6 +432,7 @@ def main():
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "spend"): q.add_argument("results", nargs="?", default=RESULTS)
+        if n == "report": q.add_argument("--plan", help="report only the trials of plans/PLAN.txt")
     a = p.parse_args(); r = globals()["cmd_" + a.c](a); sys.exit(r if isinstance(r, int) else 0)
 
 if __name__ == "__main__": main()
