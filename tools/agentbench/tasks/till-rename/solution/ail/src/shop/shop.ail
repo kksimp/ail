@@ -144,7 +144,14 @@ fn Shop.order(mut self, id str, account str, wants List[journal.Want]) ! Problem
             tier,
         ))
         self.stock.reserve(w.sku, w.qty)
-    placed := orders.Order(id: id, account: account, status: orders.Status.Open, lines: lines, promo: "", paid: 0)
+    placed := orders.Order(
+        id: id,
+        account: account,
+        status: orders.Status.Open,
+        lines: lines,
+        promo: "",
+        paid: 0,
+    )
     self.book.put(self.repriced(placed))
 
 ## The order with every line priced again under its promo, if it has one.
