@@ -214,7 +214,13 @@ fn report_in(
                 shown.edits = fix.settle_fixes(local, fix_lines)
                 shown.fixes = [f.title for f in shown.edits]
             if json
-                out.push(to_json(shown, end, files[fi].path, follow, fix.expects_of(shown.edits, fix_lines)))
+                out.push(to_json(
+                    shown,
+                    end,
+                    files[fi].path,
+                    follow,
+                    fix.expects_of(shown.edits, fix_lines),
+                ))
             else
                 out.push(to_text(shown, files[fi].path, src_lines, follow))
     out.join("\n")

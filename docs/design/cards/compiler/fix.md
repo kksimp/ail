@@ -30,6 +30,7 @@ pub fn fix.rename_all(pos ast.Pos, old str, text str) fix.Edit  ## Rename every 
 pub fn fix.new_fix(title str, edits List[fix.Edit]) fix.Fix
 pub fn fix.split_lines(src str) List[List[char]]  ## The source as lines of characters, as `settle` splits it (a final empty
 pub fn fix.span_text(lines List[List[char]], pos ast.Pos, end ast.Pos) str  ## The text of the span `pos..end` (fix.edit.7): the characters between the two positions, the lines joined
+pub fn fix.expects_of(fixes List[fix.Fix], lines List[List[char]]) List[List[str]]  ## The `expect` of every edit of every fix (fix.edit.7), computed where the lines are, so the lines are not passed on.
 pub fn fix.token_end(lines List[List[char]], pos ast.Pos) ast.Pos  ## The exclusive end of the token starting at `pos`: a word, a number, a
 pub fn fix.resolve(e fix.Edit, lines List[List[char]]) fix.Edit?  ## Settle one edit.
 pub fn fix.settle_fixes(fixes List[fix.Fix], lines List[List[char]]) List[fix.Fix]  ## The fixes whose edits all settle, with the settled edits.
@@ -44,4 +45,4 @@ pub fn fix.resolve_empty_decl(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.printf_text(args List[str]) str?  ## The arguments of a `printf(format, args...)` call as one interpolated
 ```
 
-trimmed to fit 2000 tokens (~1309); dropped: private items
+trimmed to fit 2000 tokens (~1378); dropped: private items
