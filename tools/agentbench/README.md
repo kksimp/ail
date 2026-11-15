@@ -26,7 +26,7 @@ Dry run, no model and no spend: `AGENTBENCH_AGENT=tools/agentbench/fake/agent.sh
 
 `AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names), `c` and `rust` (std only, `rustc`, overflow checks on); `ail` means `ail-plain`.
 
-`metrics.json` also holds wrapper-logged `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (ADR 0916, amended 2026-11-10).
+`metrics.json` also holds wrapper-logged `fix_rounds` and `versions_to_green` (counted by checksum of `src/` per call, so several tools on one draft are one attempt), `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (calls) (ADR 0916, amended 2026-11-10).
 
 ## Scripted replays: tools, no model
 

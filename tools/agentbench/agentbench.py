@@ -81,7 +81,8 @@ def cmd_docs(a):
 # Wrapper-logged metrics (ADR 0916, amended 2026-11-10): every ./build, ./test, shimmed `ail` call and MCP tool call appends one line to
 # .bench/runs.jsonl ({"t", "k": build|test|tool|mcp, "name", "rc", "out"}) and keeps what it printed in .bench/out/, so
 # nothing is self-reported. Nested calls (./test running the build) set BENCH_INNER and are not logged twice.
-LOG = "echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
+# "src" is a checksum of src/ at the call, so the metrics can count source versions rather than calls (ADR 0916, amended 2026-11-15).
+LOG = "s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
 HEAD = "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
 SHIM_BUILD = HEAD + "{cmd} > .bench/out/$n.txt 2>&1\nrc=$?\ncat .bench/out/$n.txt\n" + LOG + "\nexit $rc\n"
 SHIM_TEST = (HEAD + "{cmd} > .bench/out/$n.b 2>&1 || {{ echo 'build failed; run ./build' > .bench/out/$n.txt; cat .bench/out/$n.txt; rm .bench/out/$n.b; rc=2; " + LOG
@@ -91,7 +92,7 @@ SHIM_AIL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)
             "if [ -n \"$BENCH_INNER\" ] || [ \"$1\" = mcp ]; then exec \"$real\" \"$@\"; fi\n"
             "n=$(ls \"$B/out\" | wc -l | tr -d ' ')-ail\n"
             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
-            "echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
+            "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
 
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
@@ -196,7 +197,27 @@ def count_tokens(paths):
     out = subprocess.run([tb, "--json"] + list(paths), capture_output=True, text=True, check=True).stdout
     return [r["mean"] for r in json.loads(out)]
 
-CHECKS = ("ail check", "ail_check", "./build")  # a first "check" is whichever of these an agent runs first: the build runs the checker
+CHECKS = ("ail check", "ail_check", "./build")
+CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task")  # shimmed calls that compile or run the program
+
+def src_sum(d):
+    """The same checksum the shims log: POSIX cksum of src/'s files concatenated in byte order of their paths."""
+    paths = sorted(os.path.relpath(os.path.join(r, f), os.path.dirname(d)) for r, _, fs in os.walk(d) for f in fs)
+    data = b"".join(open(os.path.join(os.path.dirname(d), p), "rb").read() for p in paths)
+    try: return subprocess.run(["cksum"], input=data, capture_output=True, text=False).stdout.split()[0].decode()
+    except (OSError, IndexError): return ""
+
+def version_metrics(runs):
+    """Counts source versions, not calls (ADR 0916, amended 2026-11-15): an agent that runs `ail check`, `./build` and `./test`
+    on one version has made one attempt, not three. fix_rounds: versions on which a build, test or checking call failed.
+    versions_to_green: versions checked up to and including the first passing ./test."""
+    checky = [r for r in runs if "src" in r and (r["k"] in ("build", "test", "mcp") or (r["k"] == "tool" and r["name"] in CHECKY))]
+    order, failed = [], set()
+    for r in checky:
+        if r["src"] not in order: order.append(r["src"])
+        if r["rc"] != 0: failed.add(r["src"])
+    green = next((order.index(r["src"]) + 1 for r in checky if r["k"] == "test" and r["rc"] == 0), None)
+    return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green}  # a first "check" is whichever of these an agent runs first: the build runs the checker
 
 def toolchain_metrics(ws, tokens=True):
     """The wrapper-logged figures of one trial (ADR 0916, amended 2026-11-10). `ws` is the trial workspace."""
@@ -208,7 +229,7 @@ def toolchain_metrics(ws, tokens=True):
     first = next((r for r in runs if r["name"] in CHECKS), None)
     green = next((i + 1 for i, r in enumerate(runs) if r["k"] == "test" and r["rc"] == 0), None)
     outs = [os.path.join(ws, ".bench", r["out"]) for r in runs if r.get("out") and os.path.exists(os.path.join(ws, ".bench", r["out"]))]
-    return {"first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
+    return {**version_metrics(runs), "first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
             "toolchain_tokens": round(sum(count_tokens(outs)), 1) if tokens else None, "turns_to_green": green}
 
 def score_ws(t, arm, ws):
@@ -253,7 +274,7 @@ def cmd_run(a):
         with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=m["api_error"]), f, indent=1)
         print(f"INVALID {key}: API error: {m['api_error']}"); return 4
     with open(os.path.join(out, "metrics.json"), "w") as f: json.dump(m, f, indent=1)
-    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "toolchain_tokens", "correct")}))
+    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "fix_rounds", "versions_to_green", "toolchain_tokens", "correct")}))
     return 0
 
 def plan(name):
@@ -298,7 +319,7 @@ def cmd_mcpproxy(a):
             with open(os.path.join(bench, "out", n + ".txt"), "w") as f: f.write(text)
             bad = "error" in e or (e.get("result") or {}).get("isError", False)
             with open(os.path.join(bench, "runs.jsonl"), "a") as f:
-                f.write(json.dumps({"t": int(time.time()), "k": "mcp", "name": name, "rc": 1 if bad else 0, "out": f"out/{n}.txt"}) + "\n")
+                f.write(json.dumps({"t": int(time.time()), "k": "mcp", "name": name, "rc": 1 if bad else 0, "src": src_sum(os.path.join(bench, "..", "src")), "out": f"out/{n}.txt"}) + "\n")
     def pump_up():
         for line in sys.stdin.buffer:
             note(line, up); child.stdin.write(line); child.stdin.flush()
@@ -358,7 +379,7 @@ def cmd_report(a):
     bad = [dp for dp, _, fs in os.walk(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
     if bad: print("Invalid (API error, not scored, rerun pending): " + ", ".join(os.path.relpath(d, a.results) for d in sorted(bad)) + "\n")
     for m in ms: m["arm"] = arm_name(m["arm"])
-    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median debug rounds | median min | interventions | first check clean | median toolchain tokens | median turns to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
             g = [m for m in ms if m["task"] == t and m["arm"] == arm]
@@ -366,6 +387,7 @@ def cmd_report(a):
                 fc = [m["first_check_clean"] for m in g if m.get("first_check_clean") is not None]
                 print(f"| {t} | {arm} | {len(g)} | {sum(m['correct'] for m in g)}/{len(g)} | {sum(bool(m.get('stopped')) for m in g)} | "
                       f"{statistics.median(m.get('charged_usd', m['cost_usd']) for m in g):.2f} | {statistics.median(m['output'] for m in g):.0f} | "
+                      f"{med(m.get('fix_rounds') for m in g)} | {med(m.get('versions_to_green') for m in g)} | "
                       f"{statistics.median(m['debug_rounds'] for m in g):.1f} | {statistics.median(m['elapsed_s'] for m in g)/60:.1f} | {sum(m['interventions'] for m in g)} | "
                       f"{sum(fc)}/{len(fc)} | {med(m.get('toolchain_tokens') for m in g)} | {med(m.get('turns_to_green') for m in g)} |")
 
