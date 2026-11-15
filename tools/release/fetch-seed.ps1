@@ -64,3 +64,5 @@ try {
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
+# Success is exit 0 for every caller: the plain download runs no native command, so $LASTEXITCODE would be unset.
+exit 0
