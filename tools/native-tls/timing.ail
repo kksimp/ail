@@ -1,0 +1,110 @@
+# A dudect-style timing test of the in-house constant-time code (ADR 1118): see tools/native-tls/timing-check.sh.
+# In this build `hash.hmac_sha256("time", "OP CLASS REPS SEED")` is the test hook (tlsprim.ail `tlsprim_time`): it
+# builds REPS inputs of one class, times the operation over them, and returns the nanoseconds. The classes are
+# `fixed` and `random` secrets (for `ct_eq`: equal buffers against buffers that differ at the first byte). The two
+# classes are measured in a random order, the samples are cropped at four percentiles, and Welch's t statistic
+# between the classes is the leak score. |t| above 10 (`leak`) is a leak; below that, no leak was seen (a timing test cannot
+# prove there is none). `naive_eq`, a comparison that stops at the first difference, is the control: if its score
+# is not above 10 the test is not sensitive enough and the run is red.
+use std.hash
+
+## |t| above this is a leak.
+fn leak() float
+    10.0
+
+## Nanoseconds per repetition of one timed run.
+fn sample(op str, cls str, reps int, seed int) float
+    r := hash.hmac_sha256("time", "{op} {cls} {reps} {seed}")
+    ns := r.split(" ")[0].to_int() else 0
+    ns.to_float() / reps.to_float()
+
+fn mean(xs List[float]) float
+    mut s := 0.0
+    for x in xs
+        s += x
+    s / xs.len().to_float()
+
+fn variance(xs List[float], m float) float
+    mut s := 0.0
+    for x in xs
+        s += (x - m) * (x - m)
+    s / (xs.len() - 1).to_float()
+
+fn welch_t(a List[float], b List[float]) float
+    if a.len() < 3 or b.len() < 3
+        return 0.0
+    ma := mean(a)
+    mb := mean(b)
+    se := (variance(a, ma) / a.len().to_float() + variance(b, mb) / b.len().to_float()).sqrt()
+    if se == 0.0
+        return 0.0
+    t := (ma - mb) / se
+    if t < 0.0 then 0.0 - t else t
+
+## The value below which `pct` percent of the pooled samples lie.
+fn cutoff(a List[float], b List[float], pct int) float
+    mut all := List[int]()
+    for x in a
+        all.push((x * 1000.0).to_int())
+    for x in b
+        all.push((x * 1000.0).to_int())
+    s := all.sorted()
+    mut idx := s.len() * pct / 100 - 1
+    if idx < 0
+        idx = 0
+    s[idx].to_float() / 1000.0
+
+fn below(xs List[float], c float) List[float]
+    [x for x in xs if x <= c]
+
+## The largest |t| over the crops, for `n` timed runs of each class.
+fn score(op str, reps int, n int, seed int) float
+    mut fixed := List[float]()
+    mut rnd := List[float]()
+    mut st := seed
+    for _ in 0..n
+        st = (st * 1103515245 + 12345) % 2147483648
+        if (st / 65536) % 2 == 0
+            rnd.push(sample(op, "random", reps, st))
+            fixed.push(sample(op, "fixed", reps, st))
+        else
+            fixed.push(sample(op, "fixed", reps, st))
+            rnd.push(sample(op, "random", reps, st))
+    mut worst := 0.0
+    for pct in [100, 99, 95, 90]
+        c := cutoff(fixed, rnd, pct)
+        t := welch_t(below(fixed, c), below(rnd, c))
+        if t > worst
+            worst = t
+    worst
+
+fn main()
+    args := env.args()
+    mut samples := 1500
+    if args.len() > 0
+        samples = args[0].to_int() else 1500
+    targets := [["ct_eq", "100"], ["x25519", "2"], ["chacha", "20"], ["aesgcm", "20"], ["poly1305", "50"], ["naive_eq", "100"]]
+    mut red := 0
+    for tg in targets
+        op := tg[0]
+        reps := tg[1].to_int() else 1
+        mut t := score(op, reps, samples, 12345)
+        if op != "naive_eq" and t > leak()
+            # One repeat with new inputs: a noisy machine gives a spike, a leak gives it again.
+            t = score(op, reps, samples, 6789)
+        if op == "naive_eq"
+            if t > leak()
+                print("TIMING control {op} t={t:.1} (leak seen, as it must)")
+            else
+                red += 1
+                print("TIMING RED the control {op} t={t:.1} was not flagged: the test is not sensitive enough")
+        elif t > leak()
+            red += 1
+            print("TIMING RED {op} t={t:.1}: the time depends on the secret")
+        else
+            print("TIMING {op} t={t:.1} (no leak seen)")
+    if red == 0
+        print("TIMING GREEN")
+    else
+        print("TIMING RED")
+        io.exit(1)

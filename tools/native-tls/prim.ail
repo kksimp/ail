@@ -26,8 +26,12 @@ fn run_file(path str) List[int]
             or op == "hkdf256"
             or op == "hmac384"
             or op == "hkdf384"
+            or op == "aesgcm_open"
+            or op == "chacha_open"
             want := f[f.len() - 1]
-            got := hash.hmac_sha256(op, f[1..f.len() - 1].join(" "))
+            mut got := hash.hmac_sha256(op, f[1..f.len() - 1].join(" "))
+            if got == ""
+                got = "-"
             if got == want
                 ok += 1
             else
@@ -38,8 +42,9 @@ fn run_file(path str) List[int]
 fn main()
     a := run_file(env.args()[0])
     b := run_file(env.args()[3])
-    mut ok := a[0] + b[0]
-    mut bad := a[1] + b[1]
+    wy := run_file(env.args()[5])
+    mut ok := a[0] + b[0] + wy[0]
+    mut bad := a[1] + b[1] + wy[1]
     sched := hash.hmac_sha256("rfc8448", "")
     if sched
         == "33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a 6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba"
@@ -47,17 +52,18 @@ fn main()
     else
         bad += 1
         print("FAIL rfc8448: got {sched}")
-    sigs := fs.read_text(env.args()[1]) else ""
-    for line in sigs.lines()
-        if line.starts_with("#") or line == ""
-            continue
-        f := line.split(" ")
-        got := hash.hmac_sha256(f[0], "{f[1].replace(":", " ")} {f[2]} {f[3]}")
-        if got == f[4]
-            ok += 1
-        else
-            bad += 1
-            print("FAIL {f[0]}: want {f[4]} got {got} for {f[1].slice(0, 20)}")
+    for path in [env.args()[1], env.args()[4]]
+        sigs := fs.read_text(path) else ""
+        for line in sigs.lines()
+            if line.starts_with("#") or line == ""
+                continue
+            f := line.split(" ")
+            got := hash.hmac_sha256(f[0], "{f[1].replace(":", " ")} {f[2]} {f[3]}")
+            if got == f[4]
+                ok += 1
+            else
+                bad += 1
+                print("FAIL {f[0]}: want {f[4]} got {got} for {f[1].slice(0, 20)}")
     pki := fs.read_text(env.args()[2]) else ""
     mut certs := Map[str, str]()
     for line in pki.lines()

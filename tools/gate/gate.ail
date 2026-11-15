@@ -4167,6 +4167,70 @@ fn Gate.checkfuzz(mut self, tmp str)
     if r.status != 0 or not r.out.contains("CHECKFUZZ GREEN")
         self.red("checkfuzz", "exit {r.status}\n{r.out}")
 
+## A built program through the shell with `env` (`NAME=value`, or empty) set, under a 15 minute alarm, standard error merged in.
+fn stress_run(env str, exe str) proc.Output
+    sh_run("{env} perl -e 'alarm 900; exec @ARGV' {exe} 2>&1")
+
+## The cheap GC and concurrency stress checks (ADR 1118). tests/stress/*.ail are self-checking programs with fixed totals
+## that end with `STRESS GREEN`. Each is built once (so the setting below does not reach the compiler) and run by default,
+## on one thread (`AIL_THREADS=1`), with `AIL_GC_VERIFY=1` (every block's header checked at each collection, exit 70 on a
+## bad one) and with a strided heap check during allocation. `conc_sched.ail` runs under random schedules instead
+## (`ail run --schedule=random:N`). Then every `par_*` case that has only an `.out` file must print it with
+## `AIL_THREADS=1`, so a loop that auto-parallelised wrongly (or only gave the right answer on one thread) is red.
+fn Gate.stress(mut self, tmp str)
+    modes := [
+        ["default", ""],
+        ["one thread", "AIL_THREADS=1"],
+        ["heap verify", "AIL_GC_VERIFY=1"],
+        ["strided heap verify", "AIL_GC_VERIFY=0,100000000,997"],
+    ]
+    for name in (fs.list_dir("tests/stress") else []).sorted()
+        if not name.ends_with(".ail")
+            continue
+        stem := name.replace(".ail", "")
+        at := "tests/stress/{name}"
+        exe := "{tmp}/stress_{stem}"
+        if why := build(at, exe)
+            self.red("stress {name}", "did not build: {why}")
+            continue
+        for m in modes
+            if stem == "conc_sched" and m[0] != "default"
+                continue
+            r := stress_run(m[1], exe)
+            if r.status != 0 or not lf(r.out).trim().ends_with("STRESS GREEN")
+                self.red("stress {name} ({m[0]})", "exit {r.status}\n{r.out}")
+    for seed in 1..9
+        r := sh_run("perl -e 'alarm 900; exec @ARGV' \"$PWD/ail\" run --schedule=random:{seed} tests/stress/conc_sched.ail 2>&1")
+        if r.status != 0 or not lf(r.out).trim().ends_with("STRESS GREEN")
+            self.red("stress conc_sched.ail (schedule seed {seed})", "exit {r.status}\n{r.out}")
+    for name in (fs.list_dir("tests/cases") else []).sorted()
+        if not name.starts_with("par_") or not name.ends_with(".ail")
+            continue
+        stem := name.replace(".ail", "")
+        exp := "tests/cases/{stem}."
+        if not fs.exists("{exp}out")
+            or fs.exists("{exp}trap")
+            or fs.exists("{exp}args")
+            or fs.exists("{exp}stderr")
+            or fs.exists("{exp}err")
+            or fs.exists("{exp}test")
+            or fs.exists("{exp}rules")
+            continue
+        r := sh_run("AIL_THREADS=1 perl -e 'alarm 300; exec @ARGV' \"$PWD/ail\" run tests/cases/{name} 2>/dev/null")
+        if r.status != 0 or lf(r.out) != lf(slurp("{exp}out"))
+            self.red("stress {name} (AIL_THREADS=1)", "exit {r.status}\n{r.out}")
+
+## The C ABI fixtures (ADR 1074): every struct class of System V x86-64, AAPCS64 and Win64 passes both ways, and C calls
+## AIL callbacks that allocate enough for the collector to run while C is on the stack. tools/ffi-abi/run.sh builds
+## abi.c with the host's C compiler, builds abi.ail with this checkout's compiler and compares with abi.out.
+fn Gate.ffi_abi(mut self)
+    mut script := "bash tools/ffi-abi/run.sh 2>&1"
+    if (env.get("OS") else "") == "Windows_NT"
+        script = "powershell -NoProfile -ExecutionPolicy Bypass -File tools/ffi-abi/run.ps1 2>&1"
+    r := sh_run(script)
+    if r.status != 0 or not (r.out.contains("ffi-abi: GREEN") or r.out.contains("ffi-abi: SKIPPED"))
+        self.red("ffi-abi", "exit {r.status}\n{r.out}")
+
 fn main() !
     args := env.args()
     all := [
@@ -4192,6 +4256,8 @@ fn main() !
         "native_matrix",
         "checkfuzz",
         "checkbench",
+        "stress",
+        "ffi_abi",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -4259,6 +4325,8 @@ fn main() !
             "parity" => g.parity()
             "checkfuzz" => g.checkfuzz(tmp)
             "checkbench" => g.checkbench()
+            "stress" => g.stress(tmp)
+            "ffi_abi" => g.ffi_abi()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)

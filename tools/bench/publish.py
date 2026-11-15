@@ -5,7 +5,7 @@
     publish.py --skeleton TEMPLATE.md OUT.md
 
 tools/bench/publish.sh produces the inputs and calls this. The template holds the prose;
-the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{HOSTS}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
+the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{SPREAD}}, {{HOSTS}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
 generated text. Each --host DIR is another host's `publish.sh --keep-dir` directory (small.json, big.json,
 env.txt, latency.json): its speed tables go under {{HOSTS}} and its latency run joins the edit-loop table.
 Every sentence in {{SUMMARY}} is computed from the numbers, so it cannot disagree
@@ -44,14 +44,32 @@ else:
             lats = [l for l in lats if l["host"] != h["lat"]["host"]] + [h["lat"]]
 
 
+def stat(c):
+    """The number a cell reports: the median of the runs (best-of-N hides the spread); old files without one give the min."""
+    return c.get("med", c.get("min")) if c and "min" in c else None
+
+
 def cell(c):
-    return "%.3f" % c["min"] if c and "min" in c else (c or {}).get("err", "-")
+    return "%.3f" % stat(c) if stat(c) is not None else (c or {}).get("err", "-")
 
 
 def ratio(a, b):
-    if a and b and "min" in a and "min" in b and b["min"] > 0:
-        return "%.2f" % (a["min"] / b["min"])
+    if stat(a) is not None and stat(b):
+        return "%.2f" % (stat(a) / stat(b))
     return "-"
+
+
+def spread(c):
+    return "%.3f–%.3f" % (c["min"], c.get("max", c["min"])) if c and "min" in c else "-"
+
+
+# A row ran parallel when AIL_THREADS=1 is this much slower than the default run (the runs' own noise is about 10%).
+PARALLEL_FACTOR = 1.15
+
+
+def parallel(c):
+    a, b = stat(c.get("native")), stat(c.get("native1t"))
+    return a is not None and b is not None and b > PARALLEL_FACTOR * a
 
 
 # The other compiled languages, in column order: (race column, heading).
@@ -75,27 +93,48 @@ def speed(race, py, one_cc=False):
     """one_cc: show the single C compiler once, as `clang -O2` (gcc_is_clang)."""
     ot = others(race)
     cc = ["clang -O2"] if one_cc else ["gcc -O2", "clang -O2"]
-    head = (["program", "size", "AIL"] + cc + [h for _, h in ot] + (["Python"] if py else [])
-            + ["AIL / clang" if one_cc else "AIL / gcc"] + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
+    t1 = any("native1t" in r["cells"] for r in race["rows"])
+    ref = "clang" if one_cc else "gcc"
+    head = (["program", "size", "AIL"] + (["AIL 1T"] if t1 else []) + cc + [h for _, h in ot] + (["Python"] if py else [])
+            + ["AIL / " + ref] + (["AIL 1T / " + ref] if t1 else []) + ["AIL / " + h for _, h in ot] + (["AIL / Python"] if py else []))
     rows = ["| " + " | ".join(head) + " |", "|---|" + "---:|" * (len(head) - 1)]
-    noisy = False
+    noisy = any_par = False
     for r in race["rows"]:
         c = r["cells"]
         quick = num(c.get("gcc")) is not None and num(c.get("gcc")) < NOISE_S
         noisy = noisy or quick
-        line = [r["program"] + (" †" if quick else ""), r.get("size") or "-", cell(c.get("native")), cell(c.get("gcc"))] + ([] if one_cc else [cell(c.get("clang"))])
+        par = parallel(c)
+        any_par = any_par or par
+        line = ([r["program"] + (" †" if quick else "") + (" ‡" if par else ""), r.get("size") or "-", cell(c.get("native"))]
+                + ([cell(c.get("native1t"))] if t1 else []) + [cell(c.get("gcc"))] + ([] if one_cc else [cell(c.get("clang"))]))
         for k, _ in ot:
             line.append(cell(c.get(k)))
         if py:
             line.append(cell(c.get("python")))
         line.append(ratio(c.get("native"), c.get("gcc")))
+        if t1:
+            line.append(ratio(c.get("native1t"), c.get("gcc")))
         for k, _ in ot:
             line.append(ratio(c.get("native"), c.get(k)))
         if py:
             line.append(ratio(c.get("native"), c.get("python")))
         rows.append("| " + " | ".join(line) + " |")
+    if any_par:
+        rows += ["", "‡ This row ran on several cores: with `AIL_THREADS=1` it is more than %d%% slower. Read it against the "
+                 "`AIL 1T` column, since the C, Rust, Go and Python twins are single-threaded." % round((PARALLEL_FACTOR - 1) * 100)]
     if noisy:
         rows += ["", "† The C column ran under %.1f s on this row (its size did not calibrate), so the row's ratios are within noise." % NOISE_S]
+    return "\n".join(rows)
+
+
+def spread_table(race, py):
+    """Min–max of the runs behind each median, one row per program, for every column the race measured."""
+    cols = [(k, h) for k, h in (("native", "AIL"), ("native1t", "AIL 1T"), ("gcc", "gcc -O2"), ("clang", "clang -O2"),
+                                ("rustc", "Rust"), ("go", "Go"), ("python", "Python"))
+            if any(k in r["cells"] for r in race["rows"])]
+    rows = ["| program | " + " | ".join(h for _, h in cols) + " |", "|---|" + "---:|" * len(cols)]
+    for r in race["rows"]:
+        rows.append("| %s | %s |" % (r["program"], " | ".join(spread(r["cells"].get(k)) for k, _ in cols)))
     return "\n".join(rows)
 
 
@@ -109,18 +148,18 @@ BIG_NAMES = "lzr vm raytrace matmul1400".split()
 
 
 def num(c):
-    return c["min"] if c and "min" in c else None
+    return stat(c)
 
 
 def geomean(xs):
     return math.exp(sum(math.log(x) for x in xs) / len(xs)) if xs else None
 
 
-def pairs(race, ref="gcc"):
+def pairs(race, ref="gcc", col="native"):
     """(program, AIL/ref) for every row where both columns have a time; a † row (gcc under NOISE_S) is left out."""
     got = []
     for r in race["rows"]:
-        a, g = num(r["cells"].get("native")), num(r["cells"].get(ref))
+        a, g = num(r["cells"].get(col)), num(r["cells"].get(ref))
         q = num(r["cells"].get("gcc"))
         if q is not None and q < NOISE_S:
             continue
@@ -188,10 +227,10 @@ def latency_table(lats):
 
 
 def skeleton_tables():
-    sp = ["| program | size | AIL | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL / Python |", "|---|---|---:|---:|---:|---:|---:|---:|"]
-    sp += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 6)) for n in SMALL_NAMES]
-    bg = ["| program | size | AIL | gcc -O2 | clang -O2 | AIL / gcc |", "|---|---|---:|---:|---:|---:|"]
-    bg += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 4)) for n in BIG_NAMES]
+    sp = ["| program | size | AIL | AIL 1T | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL 1T / gcc | AIL / Python |", "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    sp += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 8)) for n in SMALL_NAMES]
+    bg = ["| program | size | AIL | AIL 1T | gcc -O2 | clang -O2 | AIL / gcc | AIL 1T / gcc |", "|---|---|---:|---:|---:|---:|---:|---:|"]
+    bg += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 6)) for n in BIG_NAMES]
     tk = ["| program | AIL | C | Python | AIL / Python |", "|---|---:|---:|---:|---:|"]
     tk += ["| %s | %s |" % (n, " | ".join([PENDING] * 4)) for n in SMALL_NAMES]
     lat = ["| command | program (lines) | host |", "|---|---|---:|"]
@@ -203,8 +242,8 @@ def skeleton_tables():
     return "\n".join(sp), "\n".join(bg), "\n".join(tk), "\n".join(lat)
 
 
-def geo_line(race, ref):
-    rp = pairs(race, ref)
+def geo_line(race, ref, col="native"):
+    rp = pairs(race, ref, col)
     return "%.2f" % geomean([r for _, r in rp]) if rp else "-"
 
 
@@ -226,7 +265,8 @@ def hosts_section(hosts):
         if one:
             out += ["`gcc` on this host is Apple clang, so the C column is that one compiler (run as `gcc -O2`, the "
                     "calibration reference).", ""]
-        out += ["Small programs:", "", speed(h["small"], True, one), "", "Larger programs:", "", speed(h["big"], False, one)]
+        out += ["Small programs:", "", speed(h["small"], True, one), "", "Larger programs:", "", speed(h["big"], False, one),
+                "", "Spread (min–max wall seconds of the runs behind each median):", "", spread_table(h["small"], True), "", spread_table(h["big"], False)]
     return "\n".join(out)
 
 
@@ -238,6 +278,13 @@ def summary(sm, bg, tot, lats, hosts=()):
         slower = [p for p, r in sp if r >= 1]
         out.append("- **Small programs.** AIL / gcc is below 1 on %d of %d (%s) and 1 or above on %d (%s); the geometric mean is %.2f."
                    % (len(faster), len(sp), ", ".join(faster) or "none", len(slower), ", ".join(slower) or "none", geomean([r for _, r in sp])))
+    s1 = pairs(sm, "gcc", "native1t") + pairs(bg, "gcc", "native1t")
+    if s1:
+        both = pairs(sm, "gcc") + pairs(bg, "gcc")
+        out.append("- **Single thread.** With `AIL_THREADS=1` the geometric mean of AIL 1T / gcc over the %d programs is %.2f; with the default "
+                   "thread count it is %.2f. The programs marked ‡ ran on several cores by default (%s)."
+                   % (len(s1), geomean([r for _, r in s1]), geomean([r for _, r in both]),
+                      ", ".join(r["program"] for race in (sm, bg) for r in race["rows"] if parallel(r["cells"])) or "none"))
     for key, name, how in (("rustc", "Rust", "`rustc -C opt-level=3`"), ("go", "Go", "`go build`")):
         rp = pairs(sm, key) + pairs(bg, key)
         if rp:
@@ -276,13 +323,14 @@ text = open(tmpl).read()
 if skeleton:
     sp, bg, tk, lat = skeleton_tables()
     repl = (("ENV", "- date: PENDING\n- AIL commit: PENDING\n- host: PENDING\n- gcc, clang, python: PENDING\n- runs per cell: PENDING"),
-            ("SPEED", sp), ("BIG", bg), ("HOSTS", ""), ("TOKENS", tk), ("LATENCY", lat),
+            ("SPEED", sp), ("BIG", bg), ("SPREAD", ""), ("HOSTS", ""), ("TOKENS", tk), ("LATENCY", lat),
             ("SUMMARY", "PENDING: the release run fills this in from the measured numbers. This page has not been measured yet."))
 else:
     tt, tot = token_table()
     env = open(envf).read().strip()
     one = gcc_is_clang(env)
     repl = (("ENV", env), ("SPEED", speed(small, True, one)), ("BIG", speed(big, False, one)),
+            ("SPREAD", spread_table(small, True) + "\n\nLarger programs:\n\n" + spread_table(big, False)),
             ("HOSTS", hosts_section(hosts)), ("TOKENS", tt), ("LATENCY", latency_table(lats)),
             ("SUMMARY", summary(small, big, tot, lats, hosts)))
 for k, v in repl:

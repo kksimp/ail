@@ -1,0 +1,87 @@
+# stress.conc.5: the same shapes as conc_gc.ail at a size that random schedules can explore quickly. The gate runs
+# program under seeds 1 to 8 (`ail run --schedule=random:N`); every interleaving must give the exact totals.
+
+fn bump(hits Atomic[int], n int)
+    for _ in 0..n
+        hits.add(1)
+
+fn locked(m Mutex[int], n int)
+    for _ in 0..n
+        x := m.lock()
+        m.unlock(x + 1)
+
+fn counts() !int
+    hits := Atomic(0)
+    m := Mutex(0)
+    g := TaskGroup()
+    for _ in 0..4
+        g.add(spawn bump(hits, 25))
+    for _ in 0..3
+        g.add(spawn locked(m, 20))
+    g.wait_all()?
+    hits.load() * 1000 + m.get()
+
+fn produce(ch Channel[int], base int, n int)
+    for i in 0..n
+        ch.send(base + i)
+
+fn consume(ch Channel[int], out Channel[int])
+    mut total := 0
+    for v in ch
+        total += v
+    out.send(total)
+
+fn pipeline() !int
+    ch := Channel[int](2)
+    out := Channel[int](1)
+    c := spawn consume(ch, out)
+    g := TaskGroup()
+    for p in 0..3
+        g.add(spawn produce(ch, p * 100, 20))
+    g.wait_all()?
+    ch.close()
+    c.wait()?
+    # 20 * (0 + 100 + 200) + 3 * (0 + 1 + ... + 19)
+    out.recv() else -1
+
+fn rec_text(i int) str
+    "item{i}"
+
+fn grow(n int) int
+    mut live := List[str]()
+    for i in 0..n
+        live.push(rec_text(i))
+        if live.len() > 30
+            live = live.take(10)
+    live.len()
+
+fn grower(n int, out Channel[int])
+    out.send(grow(n))
+
+fn allocating() !int
+    out := Channel[int](3)
+    g := TaskGroup()
+    for _ in 0..3
+        g.add(spawn grower(200, out))
+    g.wait_all()?
+    mut sum := 0
+    for _ in 0..3
+        sum += out.recv() else -1
+    sum
+
+fn expect(name str, got int, want int) int
+    if got == want
+        print("ok {name}")
+        return 0
+    print("FAIL {name}: got {got}, want {want}")
+    1
+
+fn main() !
+    mut bad := 0
+    bad += expect("counts are exact", counts()?, 100 * 1000 + 60)
+    bad += expect("a pipeline loses nothing", pipeline()?, 6570)
+    bad += expect("allocating tasks agree", allocating()?, 3 * grow(200))
+    if bad > 0
+        print("STRESS RED {bad} failed")
+        io.exit(1)
+    print("STRESS GREEN")

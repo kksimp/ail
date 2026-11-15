@@ -55,22 +55,20 @@ fn tlsprim_verify(op str, f List[List[int]]) str
         curve := if op.starts_with("ecdsa_p256") then 0 else 1
         sig := f[2][0]
         sig_hash(alg, f[1][0], f[1][1], digest)
-        if load8(sig) != 48 or load8(sig + 2) != 2
+        # The DER of the signature is read by the same strict parser the TLS client uses (x_ecdsa_sig).
+        rs := x_ecdsa_sig(sig, 0, f[2][1])
+        if rs.len() == 0
             return "0"
-        rl := load8(sig + 3)
-        if load8(sig + 4 + rl) != 2
-            return "0"
-        sl := load8(sig + 5 + rl)
         ok = ecdsa_verify(
             curve,
             f[0][0],
             f[0][1],
             digest,
             sig_hlen(alg),
-            sig + 4,
-            rl,
-            sig + 6 + rl,
-            sl,
+            sig + rs[0],
+            rs[1],
+            sig + rs[2],
+            rs[3],
         )
     elif op.starts_with("rsa_pss")
         ok = rsa_verify_pss(
@@ -159,7 +157,91 @@ fn tlsprim_aesbench(args str) str
         return "open failed"
     "ok"
 
+## ---- timing (tools/native-tls/timing-check.sh, ADR 1118) ----
+
+## Nanoseconds on a clock that does not go back (the same clocks as `lim_now`, with a buffer of its own).
+fn tlsprim_now(buf int) int
+    t := target()
+    if t == 3
+        return win_mono_ns()
+    if t == 2
+        syscall(116, buf, 0, 0, 0, 0, 0)
+        return load64(buf) * 1000000000 + load64(buf + 8).bit_and(4294967295) * 1000
+    syscall(if t == 0 then 228 else 113, 1, buf, 0, 0, 0, 0)
+    load64(buf) * 1000000000 + load64(buf + 8)
+
+## A 31-bit linear congruential byte (not cryptographic: the test only needs inputs that differ).
+fn tlsprim_rnd(cell int) int
+    x := (load64(cell) * 1103515245 + 12345) % 2147483648
+    store64(cell, x)
+    x / 65536 % 256
+
+## `n` bytes at `p`: a fixed pattern, or random bytes.
+fn tlsprim_fill(p int, n int, random bool, cell int)
+    for i in 0..n
+        store8(p + i, if random then tlsprim_rnd(cell) else (i * 37 + 11) % 256)
+
+## The control: a comparison that stops at the first difference, which a timing test must flag.
+fn tlsprim_naive_eq(a int, b int, n int) bool
+    for i in 0..n
+        if load8(a + i) != load8(b + i)
+            return false
+    true
+
+## `OP CLASS REPS SEED`: build REPS inputs of class `fixed` or `random` first (outside the timed part), then time one
+## run of the operation over all of them and return the nanoseconds. `ct_eq` and `naive_eq` compare two 64-byte
+## buffers (class fixed: equal; class random: different from the first byte); the others vary the secret (a scalar or key).
+fn tlsprim_time(args str) str
+    w := args.split(" ")
+    op := w[0]
+    random := w[1] == "random"
+    reps := str_to_int(w[2])
+    cell := alloc_raw(8, KIND_BYTES)
+    store64(cell, str_to_int(w[3]))
+    clock := alloc_raw(16, KIND_BYTES)
+    a := alloc_raw(64 * reps + 8, KIND_BYTES)
+    b := alloc_raw(64 * reps + 8, KIND_BYTES)
+    out := alloc_raw(128, KIND_BYTES)
+    fixed := alloc_raw(64, KIND_BYTES)
+    tlsprim_fill(fixed, 64, false, cell)
+    for r in 0..reps
+        tlsprim_fill(a + 64 * r, 64, false, cell)
+        if op == "ct_eq" or op == "naive_eq"
+            tlsprim_fill(b + 64 * r, 64, false, cell)
+            if random
+                store8(b + 64 * r, load8(b + 64 * r).bit_xor(1 + tlsprim_rnd(cell) % 255))
+        else
+            # a secret of the class in b (64 bytes cover a 32-byte scalar or key)
+            tlsprim_fill(b + 64 * r, 64, random, cell)
+    mut sink := 0
+    ak := alloc_raw(AK_SIZE, KIND_BYTES)
+    t0 := tlsprim_now(clock)
+    for r in 0..reps
+        if op == "ct_eq"
+            if tls_ct_eq(a + 64 * r, b + 64 * r, 64)
+                sink += 1
+        elif op == "naive_eq"
+            if tlsprim_naive_eq(a + 64 * r, b + 64 * r, 64)
+                sink += 1
+        elif op == "x25519"
+            x25519_raw(out, b + 64 * r, fixed)
+            sink += load8(out)
+        elif op == "chacha"
+            chacha_seal(b + 64 * r, fixed, fixed, 0, a + 64 * r, 64, out)
+            sink += load8(out)
+        elif op == "aesgcm"
+            aes_setup(ak, b + 64 * r, 16)
+            aes_gcm_seal(ak, fixed, fixed, 0, a + 64 * r, 64, out)
+            sink += load8(out)
+        elif op == "poly1305"
+            poly1305_raw(b + 64 * r, a + 64 * r, 64, out)
+            sink += load8(out)
+    t1 := tlsprim_now(clock)
+    "{t1 - t0} {sink % 2}"
+
 fn tlsprim_call(op str, args str) str
+    if op == "time"
+        return tlsprim_time(args)
     if op == "chain"
         return tlsprim_chain(args)
     if op == "aesbench"
@@ -203,6 +285,23 @@ fn tlsprim_call(op str, args str) str
             return "tamper accepted"
         store8(out, load8(out).bit_xor(1))
         return tlsprim_hex(out, n + 16)
+    if op == "aesgcm_open" or op == "chacha_open"
+        # `KEY NONCE AAD CT TAG`: the plaintext, or "reject" when the tag does not verify (Wycheproof, ADR 1118).
+        n := f[3][1]
+        sealed := alloc_raw(n + 24, KIND_BYTES)
+        copy_bytes(sealed, f[3][0], n)
+        copy_bytes(sealed + n, f[4][0], 16)
+        back := alloc_raw(n + 24, KIND_BYTES)
+        mut rc := 1
+        if op == "chacha_open"
+            rc = chacha_open(f[0][0], f[1][0], f[2][0], f[2][1], sealed, n + 16, back)
+        else
+            ak := alloc_raw(AK_SIZE, KIND_BYTES)
+            aes_setup(ak, f[0][0], f[0][1])
+            rc = aes_gcm_open(ak, f[1][0], f[2][0], f[2][1], sealed, n + 16, back)
+        if rc != 0
+            return "reject"
+        return tlsprim_hex(back, n)
     if op == "x25519"
         out := alloc_raw(32, KIND_BYTES)
         x25519_raw(out, f[0][0], f[1][0])

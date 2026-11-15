@@ -1,0 +1,66 @@
+# stress.gc.1-3: heavy allocation churn with a small live set. The totals are fixed, so a collector that frees a
+# live block, or a store that corrupts a heap header, shows as a wrong sum or a trap. The gate builds this program once and runs it with
+# `AIL_GC_VERIFY=1` (every block's header checked at each collection) and with a strided check (tools/gate/gate.ail, `stress`).
+
+struct Rec
+    id int
+    name str
+    tags List[str]
+
+fn make_rec(i int) Rec
+    Rec(id: i, name: "rec{i}", tags: ["t{i % 7}", "u{i % 11}"])
+
+## `rounds` batches of `per` records; every tenth record survives, and the live list is cut back when it passes 500.
+fn churn(rounds int, per int, base int) int
+    mut live := List[Rec]()
+    for rd in 0..rounds
+        mut batch := List[Rec]()
+        for i in 0..per
+            batch.push(make_rec(base + rd * per + i))
+        for r in batch
+            if r.id % 10 == 0
+                live.push(r)
+        if live.len() > 500
+            live = live.take(250)
+    mut sum := 0
+    for r in live
+        sum += r.id + r.name.len() + r.tags[0].len() + r.tags[1].len()
+    sum
+
+fn grid_churn(n int) int
+    mut total := 0
+    for i in 0..n
+        mut g := List[List[int]]()
+        for r in 0..8
+            mut row := List[int]()
+            for c in 0..8
+                row.push(i + r * c)
+            g.push(row)
+        total += g[7][7] + g.len()
+    total
+
+fn map_churn(n int) int
+    mut m := Map[int, str]()
+    for i in 0..n
+        m[i % 1000] = "v{i}"
+    mut total := 0
+    for k in 0..1000
+        total += m[k].len()
+    total
+
+fn expect(name str, got int, want int) int
+    if got == want
+        print("ok {name}")
+        return 0
+    print("FAIL {name}: got {got}, want {want}")
+    1
+
+fn main()
+    mut bad := 0
+    bad += expect("records survive collection", churn(300, 200, 0), 1512054)
+    bad += expect("nested lists survive collection", grid_churn(20000), 201130000)
+    bad += expect("map values survive collection", map_churn(50000), 6000)
+    if bad > 0
+        print("STRESS RED {bad} failed")
+        io.exit(1)
+    print("STRESS GREEN")
