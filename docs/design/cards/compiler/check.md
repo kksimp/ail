@@ -61,7 +61,7 @@ pub struct check.Note
 pub struct check.Diag
 pub fn check.new_diag(str, ast.Pos, str) check.Diag
 pub fn check.shifted(fix.Edit, int) fix.Edit
-pub fn check.fix_json(fix.Fix) str
+pub fn check.fix_json(fix.Fix, List[List[char]]) str
 pub struct check.Discard
 pub fn check.deterministic_deny() List[str]
 pub fn check.parse_deny(str) (List[str], str)
@@ -130,4 +130,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1663); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1671); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

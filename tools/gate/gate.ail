@@ -4304,7 +4304,10 @@ fn Gate.position_case(mut self, name str, src str, needle str, dir str)
         got := [got_line, got_col, got_end_line, got_end_col]
         want := [want_line, want_col, want_line, want_col + needle.len()]
         if got != want
-            self.red("contract position {name}", "line, col, end_line, end_col: got {got}, want {want}\n{l}")
+            self.red(
+                "contract position {name}",
+                "line, col, end_line, end_col: got {got}, want {want}\n{l}",
+            )
         if d.text("file", "") != path
             self.red("contract position {name}", "`file` is not the path as given\n{l}")
         t := ail_run(["check", path]) else return
@@ -4365,7 +4368,10 @@ fn Gate.edit_contract(mut self, label str, path str) int
                     continue
                 held := span_of(src, line, col, el, ec)
                 if e.text("expect", "") != held
-                    self.red(label, "`expect` is `{e.text("expect", "")}` but the span holds `{held}`\n{l}")
+                    self.red(
+                        label,
+                        "`expect` is `{e.text("expect", "")}` but the span holds `{held}`\n{l}",
+                    )
                 if line < prev_line or (line == prev_line and col < prev_col)
                     self.red(label, "the edits of one fix are not in source order\n{l}")
                 prev_line = el
@@ -4377,12 +4383,32 @@ fn Gate.apicontract(mut self, tmp str)
     sh_run("rm -rf {dir}; mkdir -p {dir}")
     # ---- positions: columns are characters, the end is exclusive (semantic-api.md, Versioning)
     self.position_case("ascii", "fn main()\n    qzxv(1)\n", "qzxv", dir)
-    self.position_case("multibyte", "fn main()\n    r := [\"héllo 日本語\", qzxv(1)]\n    print(r)\n", "qzxv", dir)
-    self.position_case("emoji", "fn main()\n    r := [\"😀😀\", qzxv(1)]\n    print(r)\n", "qzxv", dir)
+    self.position_case(
+        "multibyte",
+        "fn main()\n    r := [\"héllo 日本語\", qzxv(1)]\n    print(r)\n",
+        "qzxv",
+        dir,
+    )
+    self.position_case(
+        "emoji",
+        "fn main()\n    r := [\"😀😀\", qzxv(1)]\n    print(r)\n",
+        "qzxv",
+        dir,
+    )
     self.position_case("tab", "fn main()\n    r := [1,\tqzxv(1)]\n    print(r)\n", "qzxv", dir)
     self.position_case("no_final_newline", "fn main()\n    qzxv(1)", "qzxv", dir)
-    self.position_case("crlf", "fn main()\r\n    r := [\"日本\", qzxv(1)]\r\n    print(r)\r\n", "qzxv", dir)
-    self.position_case("multiline", "fn main()\n    r := max(\n        1,\n        qzxv(2),\n    )\n    print(r)\n", "qzxv", dir)
+    self.position_case(
+        "crlf",
+        "fn main()\r\n    r := [\"日本\", qzxv(1)]\r\n    print(r)\r\n",
+        "qzxv",
+        dir,
+    )
+    self.position_case(
+        "multiline",
+        "fn main()\n    r := max(\n        1,\n        qzxv(2),\n    )\n    print(r)\n",
+        "qzxv",
+        dir,
+    )
     self.position_case("long_name", "fn main()\n    ééé_qzxv_日本(1)\n", "ééé_qzxv_日本", dir)
     self.crlf_case("crlf_pair", "fn main()\n    r := [\"日本é\", qzxv(1)]\n    print(r)\n", dir)
     self.crlf_case("crlf_fix", "fn main()\n    print(\"é\", prnt(1))\n", dir)
@@ -4399,14 +4425,22 @@ fn Gate.apicontract(mut self, tmp str)
         self.red("contract exit check clean", "exit {ok.status}\n{ok.out}{ok.err}")
     usage := ail_run(["api", "--refs", ok_path]) else return
     if usage.status != 2
-        self.red("contract exit usage", "api --refs with no position: exit {usage.status}, want 2\n{usage.err}")
+        self.red(
+            "contract exit usage",
+            "api --refs with no position: exit {usage.status}, want 2\n{usage.err}",
+        )
     # ---- an empty answer is told from "could not determine" (api.query.1, api.refs.4)
     refs_src := "fn twice(n int) int\n    m := n + 1\n    m + n\n\nfn main()\n    print(twice(2))\n"
     refs_path := "{dir}/refs.ail"
     fs.write_text(refs_path, refs_src) else return
     blank := ail_run(["api", "--refs", refs_path, "4", "1"]) else return
-    if blank.status != 1 or not blank.err.contains("\"severity\":\"error\"") or not blank.err.contains("\"api\":1")
-        self.red("contract refs off a name", "exit {blank.status}, want 1 and a JSON error\n{blank.out}{blank.err}")
+    if blank.status != 1
+        or not blank.err.contains("\"severity\":\"error\"")
+        or not blank.err.contains("\"api\":1")
+        self.red(
+            "contract refs off a name",
+            "exit {blank.status}, want 1 and a JSON error\n{blank.out}{blank.err}",
+        )
     fn_refs := ail_run(["api", "--refs", refs_path, "6", "11"]) else return
     local_refs := ail_run(["api", "--refs", refs_path, "2", "5"]) else return
     for pair in [("fn", fn_refs, "program"), ("local", local_refs, "file")]
@@ -4435,7 +4469,10 @@ fn Gate.apicontract(mut self, tmp str)
         a := ail_run(form) else continue
         b := ail_run(form) else continue
         if a.status != 0 or not a.out.starts_with("\{\"api\":1,")
-            self.red("contract api version {form.join(" ")}", "exit {a.status}\n{first_lines(a.out, 3)}{a.err}")
+            self.red(
+                "contract api version {form.join(" ")}",
+                "exit {a.status}\n{first_lines(a.out, 3)}{a.err}",
+            )
         if a.out != b.out
             self.red("contract determinism {form.join(" ")}", "two runs differ")
     # ---- fix edits carry the text they replace
@@ -4446,7 +4483,10 @@ fn Gate.apicontract(mut self, tmp str)
         if name.ends_with(".ail")
             checked += self.edit_contract("contract fix edits {name}", "tests/fix/{name}")
     if checked < 20
-        self.red("contract fix edits", "only {checked} edits were checked; the corpus has many more")
+        self.red(
+            "contract fix edits",
+            "only {checked} edits were checked; the corpus has many more",
+        )
     # ---- `ail fix`: a dry run writes nothing, and a second run changes nothing
     for name in names
         if not name.ends_with(".ail")
@@ -4486,19 +4526,29 @@ fn Gate.apicontract(mut self, tmp str)
     before := slurp(stale)
     dry := edit_run(stale, ["--dry-run"], payload)
     if dry.status != 0 or not dry.out.contains("would edit") or slurp(stale) != before
-        self.red("contract edit dry run", "exit {dry.status}; file changed: {slurp(stale) != before}\n{dry.out}{dry.err}")
+        self.red(
+            "contract edit dry run",
+            "exit {dry.status}; file changed: {slurp(stale) != before}\n{dry.out}{dry.err}",
+        )
     live := edit_run(stale, [], payload)
     if live.status != 0 or slurp(stale) != "fn main()\n    print(\"hi\")\n"
-        self.red("contract edit applies", "exit {live.status}\n{live.out}{live.err}\n{slurp(stale)}")
+        self.red(
+            "contract edit applies",
+            "exit {live.status}\n{live.out}{live.err}\n{slurp(stale)}",
+        )
     # The same edit again: the span now holds `print`, so it is stale and nothing is written.
     after := slurp(stale)
     redo := edit_run(stale, [], payload)
-    if redo.status != 2 or not "{redo.out}{redo.err}".contains("stale edit") or slurp(stale) != after
+    if redo.status != 2
+        or not "{redo.out}{redo.err}".contains("stale edit")
+        or slurp(stale) != after
         self.red("contract edit refuses a stale span", "exit {redo.status}\n{redo.out}{redo.err}")
     # Text that moved under the span (same length, other letters) is refused too.
     fs.write_text(stale, "fn main()\n    prnx(\"hi\")\n") else return
     moved := edit_run(stale, [], payload)
-    if moved.status != 2 or not "{moved.out}{moved.err}".contains("stale edit") or slurp(stale) != "fn main()\n    prnx(\"hi\")\n"
+    if moved.status != 2
+        or not "{moved.out}{moved.err}".contains("stale edit")
+        or slurp(stale) != "fn main()\n    prnx(\"hi\")\n"
         self.red("contract edit refuses moved text", "exit {moved.status}\n{moved.out}{moved.err}")
     # A span edit on multibyte text in a CRLF file lands on the right characters.
     mb := "{dir}/mb.ail"
@@ -4517,7 +4567,8 @@ fn Gate.apicontract(mut self, tmp str)
         self.red("contract edit multibyte", "the check offered no fix\n{mr.err}")
     else
         me := edit_run(mb, [], "[{mops.join(",")}]")
-        if "{me.out}{me.err}".contains("stale edit") or not slurp(mb).contains("print(\"日本é😀\", print(1))")
+        if "{me.out}{me.err}".contains("stale edit")
+            or not slurp(mb).contains("print(\"日本é😀\", print(1))")
             self.red("contract edit multibyte", "exit {me.status}\n{me.out}{me.err}\n{slurp(mb)}")
 
 ## `ail mcp`: the tool schemas against the spec and what each tool accepts; errors are structured.
@@ -4579,7 +4630,10 @@ fn Gate.mcp_contract(mut self, dir str)
             elif want_bool.contains(k)
                 want = "boolean"
             if ty != want
-                self.red("contract mcp {name}", "property `{k}` has type `{ty}`, mcp.tools.1 says `{want}`")
+                self.red(
+                    "contract mcp {name}",
+                    "property `{k}` has type `{ty}`, mcp.tools.1 says `{want}`",
+                )
         # A call that lacks a required argument is -32602, and the reply is a structured error (mcp.call.2).
         if not needs.is_empty()
             miss := mcp_session(work, [mcp_call(2, name, "")])
@@ -4590,10 +4644,25 @@ fn Gate.mcp_contract(mut self, dir str)
             code := err.int("code") else 0
             msg := err.text("message", "")
             if code != -32602 or msg == "" or e.text("jsonrpc", "") != "2.0"
-                self.red("contract mcp {name} missing argument", "want error -32602 with a message\n{miss.out}")
+                self.red(
+                    "contract mcp {name} missing argument",
+                    "want error -32602 with a message\n{miss.out}",
+                )
     # An argument that would be read as an option is refused for every tool that takes one (mcp.call.4).
-    for pair in [("ail_context", "program"), ("ail_api", "program"), ("ail_fix", "program"), ("ail_review", "range"), ("ail_verify_check", "cert"), ("ail_explain", "rule"), ("ail_card", "topic")]
-        r := mcp_session(work, [mcp_call(2, pair.0, "'{pair.1}':'-x','symbol':'s','range':'a..b','cert':'c'")])
+    for pair in [
+        ("ail_context", "program"),
+        ("ail_api", "program"),
+        ("ail_fix", "program"),
+        ("ail_review", "range"),
+        ("ail_verify_check", "cert"),
+        ("ail_explain", "rule"),
+        ("ail_card", "topic"),
+    ]
+        r := mcp_session(work, [mcp_call(
+            2,
+            pair.0,
+            "'{pair.1}':'-x','symbol':'s','range':'a..b','cert':'c'",
+        )])
         if not reply_of(r.out, 2).contains("-32602")
             self.red("contract mcp {pair.0} dashed {pair.1}", reply_of(r.out, 2))
     # Protocol errors are structured, with a null id when the request has none (mcp.proto.3).
@@ -4608,7 +4677,10 @@ fn Gate.mcp_contract(mut self, dir str)
     ])
     rows := p.out.lines()
     if rows.len() != 6
-        self.red("contract mcp protocol", "want 6 replies (a notification gets none), got {rows.len()}\n{p.out}")
+        self.red(
+            "contract mcp protocol",
+            "want 6 replies (a notification gets none), got {rows.len()}\n{p.out}",
+        )
     else
         want_codes := [-32700, -32600, -32600, -32601, -32602]
         for i in 0..5
@@ -4618,7 +4690,10 @@ fn Gate.mcp_contract(mut self, dir str)
             err := jpath(e, ["error"]) else Json.Null
             code := err.int("code") else 0
             if code != want_codes[i] or err.text("message", "") == ""
-                self.red("contract mcp protocol", "reply {i}: want code {want_codes[i]} and a message\n{rows[i]}")
+                self.red(
+                    "contract mcp protocol",
+                    "reply {i}: want code {want_codes[i]} and a message\n{rows[i]}",
+                )
         if not rows[5].contains("\"id\":5")
             self.red("contract mcp protocol", "the ping is not answered\n{rows[5]}")
     # A command that fails is a result with isError, not a protocol error; a clean one says so (mcp.call.1).
@@ -4626,10 +4701,17 @@ fn Gate.mcp_contract(mut self, dir str)
         mcp_call(2, "ail_check", "'program':'missing.ail'"),
         mcp_call(3, "ail_check", "'program':'prog.ail'"),
     ])
-    self.want("contract mcp failing command", reply_of(bad.out, 2), ["\"isError\":true", "\"content\":["])
+    self.want(
+        "contract mcp failing command",
+        reply_of(bad.out, 2),
+        ["\"isError\":true", "\"content\":["],
+    )
     self.want("contract mcp clean command", reply_of(bad.out, 3), ["\"isError\":false", "ok "])
     if reply_of(bad.out, 2).contains("\"error\":")
-        self.red("contract mcp failing command", "a failed command is a result, not an error\n{reply_of(bad.out, 2)}")
+        self.red(
+            "contract mcp failing command",
+            "a failed command is a result, not an error\n{reply_of(bad.out, 2)}",
+        )
 
 fn main() !
     args := env.args()

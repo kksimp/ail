@@ -26,11 +26,11 @@ tests: 12 (`ail test` lists them)
 
 ## doctor (25 items)
 
-## edit (97 items)
+## edit (99 items)
 
 ## explain (37 items)
 
-## fix (56 items)
+## fix (57 items)
 
 ## fixrun (17 items)
 
