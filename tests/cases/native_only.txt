@@ -27,3 +27,8 @@ conc_select_after
 conc_select_deadlock
 conc_select_send_closed
 conc_select_cancel
+std_bigint_ops
+std_bigint_div_zero
+trait_op_named_traits
+trait_op_missing_impl
+trait_op_type_name

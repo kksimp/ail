@@ -1,0 +1,21 @@
+## Totals that outgrow `int` (std.bigint.4, trait.op.1, ADR 1124): sums of
+## byte counts and the product of their sizes, written with `+`, `*` and
+## `<` on `BigInt`, printed with interpolation.
+##   ./ail run examples/bigint_sum.ail
+use std.bigint
+
+fn main()
+    sizes := [9223372036854775807, 9223372036854775807, 4611686018427387904, 12]
+    mut total := bigint.from_int(0)
+    mut product := bigint.from_int(1)
+    for n in sizes
+        b := bigint.from_int(n)
+        total += b
+        product *= b
+    print("total: {total}")
+    print("product: {product}")
+    limit := bigint.from_int(9223372036854775807)
+    print("over int: {total > limit}")
+    small := total.as_int() else -1
+    print("as int: {small}")
+    print("mean: {total / bigint.from_int(sizes.len())}")

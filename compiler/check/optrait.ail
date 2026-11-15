@@ -1,0 +1,42 @@
+## The arithmetic operator traits (trait.op.1, ADR 1124): `a + b` on a type
+## that implements the prelude's `Add` has that type, and likewise `Sub`,
+## `Mul`, `Div`, `Rem` and unary `-` with `Neg`. Built-in numbers keep their
+## own operators in `Checker.operator` and `Checker.unary`.
+use ast
+
+## The prelude trait of an arithmetic operator, or "" for any other.
+fn op_trait_name(op ast.BinOp) str
+    match op
+        Add => "Add"
+        Sub => "Sub"
+        Mul => "Mul"
+        Div => "Div"
+        Rem => "Rem"
+        _ => ""
+
+## The prelude trait called `n`, when there is one.
+fn Checker.prelude_trait(self, n str) int?
+    tr := self.traits.get(n) else return none
+    if is_prelude_line(self.prog.traits[tr].pos.line) then tr else none
+
+## Whether `t` can carry an operator trait: a struct, an enum or a type
+## parameter (whose bounds decide).
+@allow("expr.match.3") fn op_trait_operand(t Ty) bool
+    match t
+        Struct | Enum | Param => true
+        _ => false
+
+## `a OP b` with both operands of type `t` (checked equal by the caller):
+## `t` itself when `t` implements the operator's trait, else `none`.
+fn Checker.op_trait_result(self, op ast.BinOp, t Ty) Ty?
+    if not op_trait_operand(t)
+        return none
+    tr := self.prelude_trait(op_trait_name(op)) else return none
+    if self.implements(t, tr) then t else none
+
+## `-a` with `a` of type `t`: `t` itself when `t` implements `Neg`.
+fn Checker.neg_trait_result(self, t Ty) Ty?
+    if not op_trait_operand(t)
+        return none
+    tr := self.prelude_trait("Neg") else return none
+    if self.implements(t, tr) then t else none

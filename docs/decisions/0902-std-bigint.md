@@ -1,6 +1,6 @@
 # 0902. `std.bigint`: integers of any size
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 1124](1124-arithmetic-operator-traits.md)
 - **Date:** 2026-10-25
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library

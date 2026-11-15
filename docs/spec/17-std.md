@@ -2339,11 +2339,17 @@ BigIntError`. `parse` takes decimal digits with an optional leading `-` or
 `+`; leading zeros are allowed and `-0` is zero. *(ADR 0902)*
 
 **std.bigint.3** — `BigInt.to_text() str` is the decimal text with a leading
-`-` for a negative value. `BigInt.as_int() int?` is `none` when the value does
-not fit in an `int`. *(ADR 0902)*
+`-` for a negative value. It is also the text form (`trait.std.3`), so
+`print(b)` and `"{b}"` show the number. `BigInt.as_int() int?` is `none` when
+the value does not fit in an `int`. *(ADR 0902, ADR 1124)*
 
-**std.bigint.4** — `add`, `sub` and `mul` take a `BigInt` and give a `BigInt`.
-`cmp(o)` gives -1, 0 or 1. `negate()` and `abs()` give a `BigInt`. *(ADR 0902)*
+**std.bigint.4** — `a + b`, `a - b`, `a * b` and `-a` on two `BigInt`s give a
+`BigInt` (`trait.op.1`); the method forms `a.add(b)`, `a.sub(b)`, `a.mul(b)`
+and `a.negate()` are the same. `abs()` gives a `BigInt`. `BigInt` implements
+`Ord` by value: `cmp(o)` gives an `Ordering`, and `== != < <= > >=` compare
+two values (`trait.std.1–2`). Mixing a `BigInt` and an `int` in one operator
+is an error (`trait.op.3`): convert with `bigint.from_int(n)`. *(ADR 0902,
+ADR 1124)*
 
 **std.bigint.5** — `divmod(o) QuoRem ! BigIntError` divides toward zero:
 `quo` is the quotient and `rem` has the sign of the dividend, so
@@ -2362,15 +2368,22 @@ negative. *(ADR 0902)*
 digits`, `invalid digit 'C'`, `division by zero`, `negative exponent` and
 `negative factorial`. *(ADR 0902)*
 
-```ail rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
+**std.bigint.10** — `a / b` and `a % b` are `divmod`'s `quo` and `rem`
+(`std.bigint.5`). A zero divisor traps, as `int` division does
+(`expr.arith.3`); `divmod` returns `BigIntError` instead. *(ADR 1124)*
+
+```ail rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9,std.bigint.10
 use std.bigint
 
 fn main() !
     a := bigint.parse("123456789012345678901234567890")?
     b := bigint.from_int(-7)
-    print(a.add(b).to_text())
-    print(a.mul(b).to_text())
-    print(a.cmp(b))
+    print(a + b)         # 123456789012345678901234567883
+    print(a * b)         # -864197523086419752308641975230
+    print(-b)            # 7
+    print(a.cmp(b))      # Ordering.Greater
+    print(a > b)         # true
+    print("{a / b} {a % b}")
     qr := a.divmod(b)?
     print("{qr.quo.to_text()} {qr.rem.to_text()}")
     print(bigint.from_int(2).pow(70)?.to_text())
