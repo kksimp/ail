@@ -19,6 +19,7 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 | Linux ARM64 | ELF | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
 | macOS ARM64 | Mach-O | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
 | Windows x86-64 | PE | Win64: rcx rdx r8 r9, 32-byte shadow space (ADR 0598) | xmm0-3 | rax, xmm0 | 16-byte aligned at call |
+| x86-64 freestanding (`x86_64-none`, ADR 0953) | static ELF in the higher half | rdi rsi rdx rcx r8 r9 | xmm0-7 | rax, xmm0 | 16-byte aligned at call |
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
@@ -418,7 +419,8 @@ The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 (`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `loadf32`, `storef32` (one packed single, widened and narrowed exactly; ADR 0875), `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
 `f32_round`, `target`), which the code generator expands inline and only runtime code may
-call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
+call. The freestanding target (`target()` 4, ADR 0953) adds `port_out8`, `port_in8` and
+`halt` (`out dx, al`, `in al, dx`, `hlt`), used only by `none.ail`. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 
 **OS layer and number text (lane 177, ADRs 0580-0582).** `os.ail` provides
 `fs_*`, `env_*`, `time_*`, `io_*`, `err_begin`/`err_end`, `os_ok`, `os_kind`

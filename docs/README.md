@@ -65,6 +65,7 @@ Documents are written for people and for AI agents. They follow the usual order 
 Design documents dated before the Rust removal (ADR 0904) may mention `cargo`, the interpreter or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842), and `./ail selftest` runs its native suites (ADR 0865).
 
 Design notes:
+- `docs/design/kernel-poc.md` in the kksimp/ail-kernel repository: proposal for a kernel in AIL with the GC kept ([ADR 0953](decisions/0953-freestanding-targets-and-kernel-poc.md))
 - [design/feasibility.md](design/feasibility.md): is AIL achievable, and what
   token-efficiency and performance levels are realistic?
 - [design/performance-beyond-c.md](design/performance-beyond-c.md): research
