@@ -34,7 +34,7 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 
 ## Command-line programs
 
-```ail
+```ail norun
 fn main()
     args := env.args()                   # the words after the program, not its name
     if args.len() != 1
