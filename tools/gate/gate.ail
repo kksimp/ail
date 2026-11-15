@@ -1476,7 +1476,16 @@ fn Gate.golden(mut self)
     if (env.get("OS") else "") == "Windows_NT"
         print("golden: frozen on macOS; skipped on Windows")
         return
-    r := proc.run("python3", ["-I", "tools/golden/golden.py", "check", "explain", "fmt", "fix", "api", "edit"]) else return
+    r := proc.run("python3", [
+        "-I",
+        "tools/golden/golden.py",
+        "check",
+        "explain",
+        "fmt",
+        "fix",
+        "api",
+        "edit",
+    ]) else return
     if r.status != 0
         self.red("golden", "{r.out}{r.err}")
 

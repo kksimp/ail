@@ -84,6 +84,8 @@ pub struct check.GenCheck
 pub fn check.new_gen_check() check.GenCheck
 pub fn check.grants_policy(ast.Program) str
 pub fn check.check_handles(ast.Program) List[check.Diag]
+pub struct check.OptFix
+pub struct check.WordHelp
 pub check.LIST_FN_METHODS := ...
 pub fn check.check_moves(ast.Program, List[check.Moved]) List[check.Diag]
 pub check.PRELUDE_FNS := ...
@@ -134,4 +136,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1717); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1733); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

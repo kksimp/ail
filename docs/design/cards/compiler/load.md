@@ -38,6 +38,12 @@ pub fn load.shown_check(d check.Diag) load.Shown  ## A checker diagnostic.
 pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## The file path and in-file position of `at`. Prelude positions stay as they
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 pub fn load.report_next(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## `report` for `ail check` (check.out.2): each error also says what to run next.
+pub load.IMPLICIT_STD := ...  ## The modules of std.use.1's index that are written in AIL: the name a file
+pub fn load.is_implicit_use(u ast.Use) bool  ## Whether `u` is an import the loader added (std.use.4), not a written one.
+pub fn load.may_name_std(text str) bool  ## Whether `text` may name one of the implicit modules, `NAME.`: the cheap
+pub fn load.std_mentions(tokens List[syntax.Token], std str) List[int] [fs io]  ## The rows of `IMPLICIT_STD` that one file's tokens name as `NAME.MEMBER`
+pub fn load.implicit_uses(rows List[int], line int) List[ast.Use]  ## One implicit import per row of `rows`, at column 0 of `line`, the first
+pub fn load.keep_implicit(wanted List[ast.Use], written List[ast.Use], lines int) List[ast.Use]  ## The implicit imports of `wanted` that no written import of their file
 ```
 
-trimmed to fit 2000 tokens (~1090); dropped: private items
+trimmed to fit 2000 tokens (~1369); dropped: private items

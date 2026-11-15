@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (546 items)
+## check (550 items)
 
 ## codegen (56 items)
 
@@ -30,7 +30,7 @@ tests: 12 (`ail test` lists them)
 
 ## explain (53 items)
 
-## fix (59 items)
+## fix (67 items)
 
 ## fixrun (17 items)
 
@@ -38,7 +38,7 @@ tests: 12 (`ail test` lists them)
 
 ## help (10 items)
 
-## load (127 items)
+## load (146 items)
 
 ## mir (845 items)
 
@@ -48,10 +48,12 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (6 items)
 
+## std.args (13 items)
+
 ## syntax (143 items)
 
 ## watch (5 items)
 
 ## x64 (129 items)
 
-trimmed to fit 4000 tokens (~270); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~281); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

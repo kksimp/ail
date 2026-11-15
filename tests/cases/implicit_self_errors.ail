@@ -7,7 +7,7 @@ fn grow(n int) int
     n + 1
 
 fn Box.grow(self) int
-    size + 1
+    self.size + 1
 
 fn Box.resize(self, size int) int
     size
