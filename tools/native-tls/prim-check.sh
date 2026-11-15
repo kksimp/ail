@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The native TLS primitives (ADR 0836) against the test vectors of the Rust
-# client (ADR 0366). The primitives have no public API, so this builds the
+# client (ADR 0366) and Project Wycheproof (ADR 1118). The primitives have no public API, so this builds the
 # checker in a temporary copy of compiler/ where `hash.hmac_sha256(op, args)`
 # calls tools/native-tls/tlsprim.ail (test-only, never part of the product).
 # Runs on the host (Linux x86-64, Linux ARM64 or macOS ARM64), and ARM64 Linux under qemu when it is installed.
@@ -24,7 +24,7 @@ PY
 # `./ail build` pins AIL_COMPILER to this checkout, so call the native CLI itself.
 ./ail check tools/native-tls/prim.ail > /dev/null
 nbuild() { AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$@"; }
-vectors="tests/data/net/crypto/crosscheck.txt tests/data/net/crypto/signatures.txt tests/data/net/x509/chain.txt tools/native-tls/vectors384.txt"
+vectors="tests/data/net/crypto/crosscheck.txt tests/data/net/crypto/signatures.txt tests/data/net/x509/chain.txt tools/native-tls/vectors384.txt tests/data/net/crypto/wycheproof-sigs.txt tests/data/net/crypto/wycheproof.txt"
 prog=tools/native-tls/prim.ail
 exe=
 case "$(uname -sm)" in
