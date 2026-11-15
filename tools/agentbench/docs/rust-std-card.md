@@ -774,4 +774,6 @@ bump(&mut items[i]);
 - Two `&mut` borrows of the same Vec at once fail to compile: use indices, `split_at_mut`, or `swap`.
 - `for x in v.iter_mut() { *x += 1; }` changes every element in place; `for x in v.iter()` reads.
 - Thousands separators are not in `format!`: insert the commas by hand from the digit string.
+- A missing key in a `HashMap<String, u128>` sum: `*m.entry(k).or_insert(0) += x`; with a big-number crate type use
+  `or_insert_with(Default::default)`. `m[&k] += x` panics on a missing key.
 
