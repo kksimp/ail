@@ -1,0 +1,6 @@
+use store
+use parse
+
+fn main()
+    print(parse("a,b"))
+    print(stored())

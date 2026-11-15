@@ -1,0 +1,70 @@
+## Private fields used from another module (mod.vis.1, mod.vis.3): one
+## diagnostic per struct per using module, naming every private field used
+## and the `pub` lines to write, instead of one per use.
+use ast
+
+## `x.f` on field `i` of struct `s`, where the field is private to another
+## module. The first use opens the diagnostic; later uses of the same struct
+## from the same module add their field to it.
+fn Checker.private_field_use(mut self, s int, i int, at ast.Pos)
+    decl := self.prog.structs[s]
+    f := decl.fields[i]
+    if not hidden(self.prog, f.pos, at)
+        return
+    user := module_at(self.prog, at)
+    for k in 0..self.diags.len()
+        d := self.diags[k]
+        if d.rule != "mod.vis.1" or d.notes.len() == 0
+            continue
+        if module_at(self.prog, d.pos) != user or field_at(decl, d.notes[0].pos) == none
+            continue
+        mut fields := List[int]()
+        for n in d.notes
+            if j := field_at(decl, n.pos)
+                fields.push(j)
+        if fields.contains(i)
+            return
+        fields.push(i)
+        self.diags[k] = self.private_fields_diag(s, fields, d.pos)
+        return
+    self.diags.push(self.private_fields_diag(s, [i], at))
+
+## The diagnostic for private fields `fields` of struct `s` used at `at`; each
+## field's declaration is a note, where the `pub` goes.
+fn Checker.private_fields_diag(self, s int, fields List[int], at ast.Pos) Diag
+    decl := self.prog.structs[s]
+    module := module_at(self.prog, decl.pos)
+    names := ["`{decl.fields[j].name}`" for j in fields].join(", ")
+    lines := ["`{pub_line(module, decl.fields[j])}`" for j in fields].join(", ")
+    file := file_path_at(self.prog, decl.pos)
+    message := if fields.len() == 1 then "field {names} of `{decl.name}` is private to its module" else "fields {names} of `{decl.name}` are private to module `{module}`"
+    help := if fields.len() == 1 then "mark the field `pub` in {file} to use it here: {lines}" else "mark the fields `pub` in {file} to use them here: {lines}"
+    mut d := new_diag("mod.vis.1", at, message).with_help(help)
+    for j in fields
+        f := decl.fields[j]
+        d = d.with_note(f.pos, "`{f.name}` is declared here without `pub`")
+    d
+
+## The field of `decl` declared at `p`.
+fn field_at(decl ast.StructDecl, p ast.Pos) int?
+    for j in 0..decl.fields.len()
+        if decl.fields[j].pos == p
+            return j
+    none
+
+## The field's line with `pub`, its type as written in its own module.
+fn pub_line(module str, f ast.Field) str
+    t := written_type(f.ty)
+    if t == ""
+        return "pub {f.name} ..."
+    prefix := "{module}."
+    shown := if module != "" then t.replace(prefix, "") else t
+    "pub {f.name} {shown}"
+
+## The path of the file a position is in, in backquotes; "its module" outside every file.
+fn file_path_at(p ast.Program, at ast.Pos) str
+    mut out := "its module"
+    for f in p.files
+        if f.base < at.line
+            out = "`{f.path}`"
+    out

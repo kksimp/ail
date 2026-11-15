@@ -193,10 +193,12 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
             target = Target.Module(reach.module)
         elif not packages.fetch_failed()
             # (After a failed fetch mod.pkg.7 already says why the dependency's modules are missing.)
-            help := if s := check.suggest(
+            general := if s := check.suggest(
                 dotted,
                 check.std_module_names(),
             ) then "did you mean `{s}`? The standard module `std.{s}` needs no `use` (std.use.4)" else "a module is a directory of `.ail` files; the standard modules need no `use` and are named `regex`, `fs`, `net`, `time` and so on (std.use.4)"
+            # A file where the module's directory should be, or a path from the wrong root, says so.
+            help := misplaced_module(packages, module, [p.name for p in u.path], reach.dir) else general
             found.push(diag("mod.use.4", head.pos, "there is no module `{dotted}`", help))
         if first := imports[fi].get(nm.name)
             both_std := match first
@@ -509,11 +511,13 @@ fn Resolver.type_name(mut self, name str, at ast.Pos) str
     # A standard module used without its import: std.use.2, reported by the checker.
     if check.std_module_names().contains(head)
         return name
+    # A standard module that needs its `use` is imported as `std.NAME` (std.use.1).
+    full := if std_module_known("std.{head}") then "std.{head}" else head
     self.diags.push(diag(
         "mod.use.2",
         at,
         "`{head}` is not an imported module",
-        "add `use {head}` at the top of this file",
+        "add `use {full}` at the top of this file",
     ))
     name
 
@@ -748,7 +752,7 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
                         "mod.use.2",
                         pos,
                         "`{n}` is a module, not a value",
-                        "use one of its items, e.g. `{n}.name`",
+                        self.module_value_help(t, n),
                     ))
                     return e
             if self.own(n) and self.module != ""
@@ -856,3 +860,46 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
             _,
             _,
         ) | Bytes(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) => e
+
+## The help for an import that can't be found (mod.use.4) when the mistake is
+## a known one: a file `NAME.ail` where the module directory `NAME/` should be,
+## or a path that repeats the package root (`use src.store` from `src/`).
+fn misplaced_module(packages pkg.Packages, importer str, parts List[str], dir str) str?
+    if fs.exists("{dir}.ail")
+        leaf := parts[parts.len() - 1]
+        return "`{dir}.ail` is a file, but a module is a directory (mod.unit.1): move it to `{path.join(dir, leaf)}.ail`"
+    if parts.len() < 2
+        return none
+    for k in 1..parts.len()
+        rest := parts[k..]
+        t := packages.target(importer, rest)
+        if module_dir(t.dir)
+            return "an import path is relative to the package root (mod.unit.2), the directory of the file built: write `use {rest.join(".")}`"
+    none
+
+## Whether `dir` holds a `.ail` file (mod.unit.1).
+fn module_dir(dir str) bool
+    names := fs.list_dir(dir) else return false
+    for n in names
+        if n.ends_with(".ail")
+            return true
+    false
+
+## The help for a bare import name used as a value (mod.use.2): the module's
+## `pub` functions, the one named like the module first.
+fn Resolver.module_value_help(self, t Target, n str) str
+    m := match t
+        Module(name) => name
+        Std => ""
+    names := self.mods.get(m) else Map[str, ast.Pos]()
+    mut fns := List[str]()
+    for k in names.keys().sorted()
+        first := k.chars()[0]
+        if self.public.contains(names[k].line) and first >= 'a' and first <= 'z'
+            fns.push(k)
+    if fns.contains(n)
+        return "did you mean `{n}.{n}(...)`? Items of a module are named `{n}.ITEM`"
+    if fns.len() == 0
+        return "use one of its `pub` items, as `{n}.ITEM`; module `{m}` has no `pub` functions"
+    shown := ["`{n}.{f}(...)`" for f in fns[..fns.len().min(8)]].join(", ")
+    "use one of its items, as `{n}.ITEM`: its functions are {shown}"

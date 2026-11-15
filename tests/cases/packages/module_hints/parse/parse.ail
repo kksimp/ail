@@ -1,0 +1,5 @@
+pub fn parse(line str) int
+    line.len()
+
+pub fn fields(line str) List[str]
+    line.split(",")
