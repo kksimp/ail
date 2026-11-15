@@ -479,7 +479,7 @@ fn Gate.cli_checks(mut self)
         )
     t := ail_run(["check", path]) else return
     self.want("text diagnostics fix line", t.err, [
-        "\nfix: replace `prnt` with `print`",
+        "\nfix: write `print(total)`",
         "\nnext: ail fix {path}",
     ])
     # check.out.1-3, check.exit.1: the ok line, the summary record, the next line of an unfixable error, exit statuses.

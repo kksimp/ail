@@ -1,0 +1,4 @@
+fn main()
+    n := 4
+    xs := [i for i in 0..n]
+    print(xs.len())

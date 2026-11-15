@@ -351,6 +351,19 @@ fn main()
     prnt("hi")
 ```
 
+**check.out.4** — In the text output, a diagnostic with a settled fix shows
+the line the fix writes, as `fix: write CODE` (indentation dropped), with
+`on line N` when that is not the diagnostic's line; a second fix, which
+`ail fix` does not apply, prints `fix: or write CODE`. A fix that adds or
+removes lines, or changes more than three, prints its title as `fix: TITLE`
+instead. So the corrected code is in front of the reader without running
+`ail fix` ([ADR 1113](../decisions/1113-check-output-for-agents.md)).
+
+```ail tool=check,FILE expect=`print("hi")` status=2 rules=check.out.4
+fn main()
+    prnt("hi")
+```
+
 **check.exit.1** — `ail check` exits 0 when the program has no error (warnings
 allowed) and 2 when it has one or the command line is wrong. `ail run` of a
 program that does not compile prints the diagnostics and exits 2 without

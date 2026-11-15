@@ -1,0 +1,61 @@
+## The lines a settled fix writes (check.out.4): the text output of `ail check` prints
+## each one as `fix: write ...`, so a reader sees the corrected code without
+## running `ail fix`.
+use ast
+
+## One line as it reads after a fix: its number and its text.
+pub struct Written
+    pub line int
+    pub text str
+
+## The lines that the settled fix `f` changes, as they read after it. `none` when
+## an edit falls outside `lines`, the fix adds or removes lines, or it changes
+## more than three; the caller then prints the fix's title.
+pub fn written_lines(f Fix, lines List[List[char]]) List[Written]?
+    if f.edits.len() == 0
+        return none
+    mut first := f.edits[0].pos.line
+    mut last := f.edits[0].end.line
+    for e in f.edits
+        first = first.min(e.pos.line)
+        last = last.max(e.end.line)
+    if first < 1 or last > lines.len()
+        return none
+    # The covered lines as one run of characters, `\n` between them.
+    mut starts := List[int]()
+    mut chars := List[char]()
+    mut n := first
+    while n <= last
+        if n > first
+            chars.push('\n')
+        starts.push(chars.len())
+        chars.extend(lines[n - 1])
+        n += 1
+    mut out := ""
+    mut k := 0
+    for e in f.edits
+        a := run_offset(starts, first, lines, e.pos) else return none
+        b := run_offset(starts, first, lines, e.end) else return none
+        if a < k or b < a
+            return none
+        out = "{out}{chars[k..a].join("")}{e.text}"
+        k = b
+    out = "{out}{chars[k..chars.len()].join("")}"
+    after := out.split("\n")
+    if after.len() != last - first + 1
+        return none
+    mut changed := List[Written]()
+    for j in 0..after.len()
+        if after[j] != lines[first + j - 1].join("")
+            changed.push(Written(line: first + j, text: after[j]))
+    if changed.len() == 0 or changed.len() > 3
+        return none
+    changed
+
+## The index of `p` in the run of lines from `first`, whose line starts are `starts`.
+fn run_offset(starts List[int], first int, lines List[List[char]], p ast.Pos) int?
+    if p.line < first or p.line - first >= starts.len() or p.col < 1
+        return none
+    if p.col - 1 > lines[p.line - 1].len()
+        return none
+    starts[p.line - first] + p.col - 1

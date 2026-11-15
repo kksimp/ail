@@ -104,7 +104,7 @@ x.ail:5:5: error[expr.name.1]: unknown name `prnt`
         prnt(x)
         ^
 help: did you mean `print`?
-fix: replace `prnt` with `print`
+fix: write `print(x)`
 ```
 
 ## Rule explanations: `ail explain RULE [--json]` (ADR 0146)

@@ -73,7 +73,10 @@ use fix
                 _ => return t
             t
         Call(callee, args, _) => call(callee, args, expect)
-        Method(recv, n, at, args) => method(recv, n, at, args, expect)
+        Method(recv, n, at, args) =>
+            if self.range_to_list(recv, n, at, args)
+                return Ty.ListOf(Ty.Int)
+            method(recv, n, at, args, expect)
         Member(recv, n, at) => field(recv, n, at, expect)
         Index(recv, index, _) => index_expr(recv, index)
         Unary(op, operand, at) => self.unary_expr(op, operand, at, expect)
@@ -100,6 +103,25 @@ use fix
         Match(scrutinee, arms, at) => self.match_expr(scrutinee, arms, at, expect, need)
         NewRef(value, at) => ref_expr(value, at, expect)
         Closure(params, body, at) => closure_expr(params, body, at, expect)
+
+## `(a..b).to_list()` (expr.loop.3): a range is no list, and the fix writes the
+## comprehension `[i for i in a..b]`. False for any other method call.
+@allow("expr.match.3")
+fn Checker.range_to_list(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]) bool
+    if n != "to_list" or args.len() > 0
+        return false
+    match recv
+        Range(lo, hi, _, dots) =>
+            if lo == none or hi == none
+                return false
+            range_bounds(lo, hi)
+            diags.push(
+                new_diag("expr.loop.3", dots, "a range `a..b` isn't a list")
+                    .with_help("write the values as a comprehension: `[i for i in a..b]`")
+                    .with_fix("write a comprehension", [fix.range_list(at)]),
+            )
+            true
+        _ => false
 
 @allow("expr.match.3") fn is_int_literal(e ast.Expr) bool
     match e
@@ -790,6 +812,15 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
             return Ty.Unknown
     if rt == Ty.Str and enum_text_compare(op, lt, rhs)
         return Ty.Bool
+    # trait.op.3: `c == "0"` compares a `char` with a string; the fix writes `'0'` for a one-character string.
+    if lt == Ty.Char and rt == Ty.Str
+        text := "`{op_symbol(op)}` needs operands of one type, found {show(lt)} and {show(rt)}"
+        diags.push(
+            new_diag("trait.op.3", at, text)
+                .with_help("a character is written in single quotes: 'a'")
+                .with_fix("write a character literal", [fix.char_literal(expr_pos(rhs))]),
+        )
+        return if is_arithmetic(op) then Ty.Unknown else Ty.Bool
     self.operator(op, lt, rt, at)
 
 ## A `std.tensor` value.

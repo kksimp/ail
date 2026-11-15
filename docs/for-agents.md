@@ -25,7 +25,7 @@ What `ail check` prints (check.out.1 to 3, check.exit.1, [ADR 1113](decisions/11
 | Situation | Output | Exit |
 |---|---|---|
 | No error | `ok PATH: N functions, M warnings` on stdout | 0 |
-| An error | `PATH:LINE:COL: error[RULE]: MESSAGE`, a `help:` line, a `fix:` line when there is one, and always a last `next:` line | 2 |
+| An error | `PATH:LINE:COL: error[RULE]: MESSAGE`, a `help:` line, a `fix: write CODE` line with the corrected line when there is a fix, and always a last `next:` line | 2 |
 | Warning only | on stderr, no `next:` line; the `ok` line still prints | 0 |
 | `--json` | one object per diagnostic on stderr, then `{"api":1,"summary":true,"errors":N,"warnings":M,"fixable":K}` on stdout | as above |
 

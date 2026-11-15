@@ -1,0 +1,94 @@
+## Two text-anchored rewrites of a literal (fix.edit.2): a one-character string
+## where a `char` is expected, and `(a..b).to_list()` as a comprehension
+## (expr.loop.3). Each is dropped, not guessed, when the source isn't the plain
+## case. Positions are 0-based character indexes into a line.
+use ast
+
+## `"c"` at `e.pos` as `'c'`: a plain character or one of the escapes `\n`, `\t`, `\\`.
+pub fn resolve_char_literal(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    src := lines[e.pos.line - 1]
+    i := e.pos.col - 1
+    if i < 0 or i + 2 >= src.len() or src[i] != '"'
+        return none
+    c := src[i + 1]
+    mut body := ""
+    mut closing := i + 2
+    if c == '\\'
+        if i + 3 >= src.len()
+            return none
+        x := src[i + 2]
+        if x != 'n' and x != 't' and x != '\\'
+            return none
+        body = "\\{x}"
+        closing = i + 3
+    elif c == '"' or c == '\'' or c == '\{' or c == '}'
+        return none
+    else
+        body = "{c}"
+    if src[closing] != '"'
+        return none
+    Edit(
+        pos: ast.Pos(line: e.pos.line, col: i + 1),
+        end: ast.Pos(line: e.pos.line, col: closing + 2),
+        old: none,
+        anchor: "exact",
+        text: "'{body}'",
+    )
+
+## `(a..b).to_list()` as `[i for i in a..b]`, from the method name at `e.pos`. The
+## variable is the first of `i`, `k`, `n`, `x` that the range doesn't use.
+pub fn resolve_range_list(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    src := lines[e.pos.line - 1]
+    i := e.pos.col - 1
+    if not starts_at(src, i, "to_list()".chars())
+        return none
+    if i < 3 or src[i - 1] != '.' or src[i - 2] != ')'
+        return none
+    mut depth := 0
+    mut k := i - 2
+    mut opening := -1
+    while k >= 0 and opening < 0
+        c := src[k]
+        if c == '"' or c == '\''
+            return none
+        if c == ')'
+            depth += 1
+        elif c == '('
+            depth -= 1
+            if depth == 0
+                opening = k
+        k -= 1
+    if opening < 0
+        return none
+    inner := text_of(src, opening + 1, i - 2).trim()
+    if not inner.contains("..")
+        return none
+    mut pick := ""
+    for v in ["i", "k", "n", "x"]
+        if pick == "" and not uses_word(inner, v)
+            pick = v
+    if pick == ""
+        return none
+    Edit(
+        pos: ast.Pos(line: e.pos.line, col: opening + 1),
+        end: ast.Pos(line: e.pos.line, col: i + 10),
+        old: none,
+        anchor: "exact",
+        text: "[{pick} for {pick} in {inner}]",
+    )
+
+## Whether the word `w` occurs in `s` as a whole word.
+fn uses_word(s str, w str) bool
+    cs := s.chars()
+    pat := w.chars()
+    for j in 0..cs.len()
+        if starts_at(cs, j, pat)
+            before := j > 0 and is_word(cs[j - 1])
+            after := j + pat.len() < cs.len() and is_word(cs[j + pat.len()])
+            if not before and not after
+                return true
+    false

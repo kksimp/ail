@@ -142,7 +142,7 @@ typo.ail:2:5: error[expr.name.1]: unknown name `prnt`
         prnt("hi")
         ^
 help: did you mean `print`?
-fix: replace `prnt` with `print`
+fix: write `print("hi")`
 next: ail fix typo.ail
 ```
 
