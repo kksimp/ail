@@ -803,13 +803,21 @@ fn main()
 
 **std.io.3** — `eprint(value)` writes the value's text form and a newline to
 standard error, as `print` does to standard output (`mod.main.3`). Output
-already printed reaches standard output first. *(ADR 0157)*
+already printed reaches standard output first. *(ADR 0157)* A bare `eprint(value)`
+means `io.eprint(value)`, as the bare `print`; `eprint` is a built-in name like
+`print` and can't be redeclared. *(ADR 1127)*
 
 ```ail rules=std.io.3
 use std.io
 
 fn main()
     io.eprint("note")
+    print("done")
+```
+
+```ail rules=std.io.3
+fn main()
+    eprint("note")
     print("done")
 ```
 

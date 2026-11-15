@@ -1,0 +1,9 @@
+## std.io.3: a bare `eprint(value)` is `io.eprint(value)`, as `print` is standard
+## output without a module name. Only standard output is compared.
+fn note(n int)
+    eprint("note {n}")
+
+fn main()
+    eprint("start")
+    note(1)
+    print("done")

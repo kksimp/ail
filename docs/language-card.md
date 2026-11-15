@@ -24,7 +24,7 @@ every program needs to what few do: read to "Modules" before writing a first pro
 
 ```ail norun
 fn usage(why str) never                  # `never`: every call ends the program (type.never.1)
-    io.eprint("usage: total FILE ({why})")   # to standard error; adds a newline
+    eprint("usage: total FILE ({why})")      # to standard error; adds a newline
     io.exit(2)                           # ends now with status 2 (0 to 255)
 
 fn main()
@@ -84,7 +84,7 @@ fn main()
 ```
 
 - No block `else if` (write `elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`, `x?`, or `if v := x`).
-- `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
+- `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprint(value)` (bare, like `print`; `eprintln`, `stderr.write` are spelled the same) writes to standard error; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
 - A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`
   (see Values and `mut`); every other argument, and `x := y`, is a copy.

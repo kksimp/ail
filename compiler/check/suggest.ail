@@ -21,7 +21,7 @@ pub fn std_guess(name str) StdGuess?
             why: "a program ends with an exit status through `io.exit(code)` (std.io.4)",
             fixable: true,
         )
-        "eprint" | "eprintln" | "io.eprintln" | "io.write_err" | "io.print_err" => StdGuess(
+        "eprintln" | "io.eprintln" | "io.write_err" | "io.print_err" => StdGuess(
             new: "io.eprint",
             why: "`io.eprint(value)` writes a value and a newline to standard error (std.io.3)",
             fixable: true,

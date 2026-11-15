@@ -87,6 +87,9 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             return call_value(n, l.ty, args, npos)
     if n == "print"
         return self.print_call(args, npos)
+    # std.io.3: a bare `eprint(x)` is `io.eprint(x)`.
+    if n == "eprint"
+        return self.eprint_call(args, npos)
     if n == ast.YIELD
         return yield_call(args, npos)
     # err.model.2: `unreachable(message)` traps; it never returns.

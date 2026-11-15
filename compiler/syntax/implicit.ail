@@ -7,7 +7,7 @@
 use ast
 
 ## The prelude's functions, which a bare call could also mean.
-PRELUDE_FNS := ["print", "unreachable", "assert", "assert_eq", "assert_err", "assert_near"]
+PRELUDE_FNS := ["print", "eprint", "unreachable", "assert", "assert_eq", "assert_err", "assert_near"]
 
 ## The members of one type: its field names and its method names.
 struct Members

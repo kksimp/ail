@@ -755,7 +755,10 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
         Call(callee, args, _) =>
             if n := callee_name(callee)
                 # eff.infer.4: `print` writes to standard output.
-                if n == "print"
+                if n == "eprint"
+                    self.add("io", "eprint")
+                    self.std_traits(fx)
+                elif n == "print"
                     self.add("io", "print")
                     self.std_traits(fx)
                 elif i := fx.free.get(n)

@@ -1864,6 +1864,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not self.is_rt
                 return lower_print(args, pos)
+            if name == "eprint" and not self.is_rt
+                return self.lower_eprint(args, pos)
             if name == ast.YIELD and not self.is_rt
                 return lower_yield(args, pos)
             if ASSERT_FNS.contains(name) and not self.is_rt and self.lookup(name) == none
