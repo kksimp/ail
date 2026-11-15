@@ -38,7 +38,8 @@ while n > 0
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
-- Collections: `xs := [1, 2]`, `xs.push(3)`, `xs.len()`, `m := {"a": 1}`, `m["a"]`.
+- Collections: `xs := [1, 2]`, `xs.push(3)`, `xs.len()`, `m := {"a": 1}`, `m["b"] = 2`.
+  Read a map with `m.get(k) else 0` (`V?`) or test `m.contains(k)`; `m[k]` traps when `k` is missing.
 
 ## Structs, enums, match
 
@@ -82,6 +83,25 @@ m := parse("x") else err
 
 A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plain `T`.
 `fn main() !` may fail. `if v := parse("7")` runs its block only on success; `none` is absence.
+
+## Command-line programs
+
+```ail skip=context
+fn main()
+    args := env.args()                   # the words after the program; the program name is not included
+    if args.len() != 1
+        io.eprint("usage: count FILE")   # to standard error; adds a newline like `print`
+        io.exit(2)                       # ends the program now with status 2
+        return                           # `exit` does not end a block for the checker yet
+    text := fs.read_text(args[0]) else
+        io.eprint("cannot read {args[0]}")
+        io.exit(1)
+        return
+    print(text.lines().len())            # status 0 when `main` returns
+```
+
+Standard input: `io.read_all()` gives all of it, `io.read_line()` one line as `str?` (`none` at the end).
+`env`, `io`, `fs` need no `use`. `int` overflow traps: sum big values with `use std.bigint` (`ail ask how overflow`).
 
 ## Ten mistakes that cost the most
 

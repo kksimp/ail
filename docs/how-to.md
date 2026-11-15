@@ -37,6 +37,68 @@ for i, x in xs.enumerate()
     print("{i}: {x}")
 ```
 
+## command-line program: arguments, stderr, exit code
+Words: cli command line argv args arguments parameters flags usage stderr exit status code tool
+
+`env.args()` is the words after the program; the program name is not included.
+`io.eprint` writes to standard error and adds a newline. `io.exit(code)` ends the
+program; the checker does not yet know it ends a block, so `return` after it.
+
+```ail
+fn main()
+    args := env.args()
+    if args.len() != 2
+        io.eprint("usage: add A B")
+        io.exit(2)
+        return
+    a := args[0].to_int() else
+        io.eprint("not a number: {args[0]}")
+        io.exit(1)
+        return
+    b := args[1].to_int() else 0
+    print(a + b)
+```
+
+## exit with a code
+Words: exit status code quit stop terminate end program fail process
+
+`main` returning gives status 0; `fn main() !` failing gives 1. `io.exit(code)`
+ends at once with `code` (0 to 255) after flushing standard output.
+
+```ail fragment
+ok := false
+if not ok
+    io.exit(3)
+```
+
+## print to stderr
+Words: stderr standard error eprint print error message warning log diagnostics
+
+`io.eprint(value)` is `print` for standard error: it adds a newline.
+
+```ail fragment
+io.eprint("warning: no input")
+print("result")
+```
+
+## sum that may overflow int (BigInt)
+Words: overflow big integer bigint large numbers 64-bit int128 i128 u128 huge sum factorial
+
+`int` is 64-bit and overflow traps. `x.checked_add(y)` gives `none` on overflow;
+`std.bigint` never overflows. Its type is `bigint.BigInt`, with methods
+`add`, `sub`, `mul`, `cmp`, `abs`, `negate`, `to_text`, `as_int` (no operators, std.bigint.4).
+
+```ail
+use std.bigint
+
+fn main()
+    mut total := bigint.from_int(0)
+    for n in [9000000000000000000, 9000000000000000000]
+        total = total.add(bigint.from_int(n))
+    print(total.to_text())
+    print(total.as_int() else 0)
+```
+
 ## read a file by lines
 Words: read open text file lines each line
 
