@@ -126,7 +126,11 @@ fn main() !
     for k in 0..4
         want += work(k * 1000000)
     bad += expect("tasks allocate concurrently", tasks_allocate_concurrently()?, want)
-    bad += expect("atomic and mutex counts are exact", atomic_and_mutex_counts()?, 40000 * 1000000 + 8000)
+    bad += expect(
+        "atomic and mutex counts are exact",
+        atomic_and_mutex_counts()?,
+        40000 * 1000000 + 8000,
+    )
     bad += expect("a channel pipeline loses nothing", channel_pipeline()?, 1874250)
     bad += expect("par comprehension that allocates matches the loop", par_total(), seq_total())
     bad += expect("par comprehension total", par_total(), 277800)

@@ -83,7 +83,14 @@ fn main()
     mut samples := 1500
     if args.len() > 0
         samples = args[0].to_int() else 1500
-    targets := [["ct_eq", "100"], ["x25519", "2"], ["chacha", "20"], ["aesgcm", "20"], ["poly1305", "50"], ["naive_eq", "100"]]
+    targets := [
+        ["ct_eq", "100"],
+        ["x25519", "2"],
+        ["chacha", "20"],
+        ["aesgcm", "20"],
+        ["poly1305", "50"],
+        ["naive_eq", "100"],
+    ]
     mut red := 0
     for tg in targets
         op := tg[0]
