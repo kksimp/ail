@@ -1,0 +1,50 @@
+## Purchase orders to suppliers: goods ordered, then received into stock.
+use journal
+
+pub enum PoStatus
+    Ordered
+    Received
+
+pub fn PoStatus.text(self) str
+    match self
+        Ordered => "ordered"
+        Received => "received"
+
+pub struct Purchase
+    pub po str
+    pub status PoStatus
+    pub buys List[journal.Buy]
+
+## The units of every SKU on the purchase order.
+pub fn Purchase.units(self) int
+    mut sum := 0
+    for b in self.buys
+        sum += b.qty
+    sum
+
+## What the goods cost: QTY × CENTS over every SKU.
+pub fn Purchase.cost(self) int
+    mut sum := 0
+    for b in self.buys
+        sum += b.qty * b.cents
+    sum
+
+pub struct Purchases
+    entered Map[str, Purchase]
+
+pub fn Purchases.new() Purchases
+    Purchases(entered: Map[str, Purchase]())
+
+pub fn Purchases.has(self, po str) bool
+    self.entered.contains(po)
+
+pub fn Purchases.find(self, po str) Purchase?
+    self.entered.get(po)
+
+## Adds a new purchase order after the others, or replaces the one with the same PO in place.
+pub fn Purchases.put(mut self, p Purchase)
+    self.entered[p.po] = p
+
+## Every purchase order, in the order they were entered.
+pub fn Purchases.all(self) List[Purchase]
+    self.entered.values()

@@ -1,0 +1,56 @@
+## till: a shop's back office. Reads the journal on stdin and prints one report (spec.md).
+use cli
+use journal
+use reports
+use shop
+
+## Prints `error: no WHAT` and ends the program with exit code 3.
+fn missing(what str)
+    io.eprint("error: no {what}")
+    io.exit(3)
+
+fn main()
+    cmd := cli.parse(env.args())
+    if cmd == cli.Command.Usage
+        io.eprint(cli.usage())
+        io.exit(1)
+    mut lines := io.read_all().split("\n")
+    if (lines.last() else "x") == ""
+        lines.pop()
+    mut s := shop.Shop.new()
+    mut bad := 0
+    for k in 0..lines.len()
+        line := lines[k]
+        if line.is_empty() or line.starts_with("#")
+            continue
+        e := journal.parse(line) else err
+            io.eprint("error: line {k + 1}: {err}")
+            bad += 1
+            continue
+        s.apply(e) else err
+            io.eprint("error: line {k + 1}: {err}")
+            bad += 1
+    mut out := List[str]()
+    match cmd
+        ShowOrders => out = reports.order_lines(s)
+        Invoice(id) =>
+            out = reports.invoice(s, id) else List[str]()
+            if not s.book.has(id)
+                missing("order {id}")
+        ShowStock => out = reports.stock_lines(s)
+        Low(n) => out = reports.low(s, n)
+        ShowAccounts => out = reports.account_lines(s)
+        History(account) =>
+            out = reports.history(s, account) else List[str]()
+            if not s.people.has(account)
+                missing("account {account}")
+        Sales => out = reports.sales(s)
+        Margin => out = reports.margin(s)
+        Purchases => out = reports.purchase_lines(s)
+        Gifts => out = reports.gift_lines(s)
+        ShowPromos => out = reports.promo_lines(s)
+        Usage => return
+    for l in out
+        print(l)
+    if bad > 0
+        io.exit(2)
