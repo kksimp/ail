@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-11-13_
+_Last updated: 2026-11-15_
 
 **Current stage:** 2 — native self-hosting. The Rust bootstrap and interpreter are
 deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the compiler, checker
@@ -113,6 +113,14 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native key functions and function values (ADRs 0571-0573): `sorted`/`sort` with `by: |x| e` compile inline with a stable runtime merge sort; function values are closure objects (code address, then a literal's copies) called with `icall` (ADR 1067).
 - Local names (ADR 1121): a local may hide a function, an imported module or, in a method, a field until its block ends, in every module; its initializer still sees the original (`qty := qty(s)`). Types, traits and constants stay `expr.bind.5`; `m.f` through a local that hides module `m` is an error that names the module.
 - Key-function errors agree (ADR 1122): `by: |x T| key` is accepted with `T` the element type, a literal in the arguments of a call on a failed receiver gets no `type.fn.4` error, and each `expr.key.1` error names what is wrong with the argument.
+- Functions that never return (ADR 1119, type.never.1-3): `fn usage() never` ends in `io.exit`, `unreachable` or another `never` call; a call fits where any value is expected (`n := s.to_int() else usage()`) and native code ends the block after it. `T ! str` is one `err.decl.2` error with an `error enum` example.
+- One-line `if` with `elif` arms (ADR 1120, expr.if.8): `if a then x elif b then y else z`; the final `else` is required and its absence is named.
+- `ail ask std` in one step (ADR 1123, api.find.1-8): a description line under each answer, an index of every `pub fn` in the std sources, a synonym table (`stderr`, `argv`, `exit code`, `stdin`), and `ail ask how` answers only on a real word match. `ail explain std.io` lists a family and `ail explain exit` the rules naming a word (explain.find.1).
+- Arithmetic operator traits (ADR 1124, trait.op.1): `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg` give the operators to any struct or enum; `std.bigint` implements them with `Ord` and `ToStr`, so `a + b`, `a < b` and `"{b}"` work on `BigInt` (std.bigint.3, 4, 10).
+- The methods agents guess (ADR 1125): `xs.slice(a, b)`, `xs.slice(a)`, `s.slice(a)`, `set.to_list()`; `unwrap`, `unwrap_or` and `expect` on an optional get a fix to `x else d`; `Set.keys()` and `Map.insert` get help.
+- Standard modules without `use` (ADR 1126, std.use.4): every module of the std index is in scope under its last name, those written in AIL included (`csv`, `bigint`, `args`, `date`); `use std.NAME` stays valid.
+- `ail check` text output prints `fix: write CODE`, the corrected line, under each diagnostic with a settled fix (check.out.4); new fixes for a one-character string where a `char` is expected and `(a..b).to_list()`.
+- Diagnostics from the E13 agent benchmark: guessed std names (`exit`, `sys.exit`, `eprintln`, `argv`, `BigInt`) suggest the real one; `mod.vis.1` is one error per struct with the `pub` lines to write; `mod.use.4` says to move `src/store.ail` to `src/store/store.ail`; operator, optional and if-binding errors name the rewrite.
 - Function literals (ADR 1067): `|x| e` copies the locals it names, failing function types `fn(A) R ! E`, failing named functions as values, and `any`/`all`/`find`/`filter`/`map`/`group_by` on lists (type.fn.4-8, type.coll.21-26), native on every target; a literal passed to a list method is inlined as a loop.
 - Keywords as names (ADR 1085): a keyword names a field, a member after `.`, a label before `:` and a method (`lex.kw.3`); `lex.kw.1` gains a renaming fix. Parser, formatter and derived `ToJson`; nothing to lower.
 - Named local functions (ADR 1094): `fn name(params) R` with a block inside a body, copying the outer locals it names, recursive, a function value (type.fn.9-10); native, lowered to `outer.name`.

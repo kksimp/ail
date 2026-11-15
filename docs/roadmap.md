@@ -139,6 +139,7 @@ v0.1.0 is the first public tag: the compiler builds itself from a published seed
 
 Planned for 0.2 (none of it is a promise; status.md says what exists):
 
+- **Done for 0.2 (2026-11-15, from the E13 agent benchmark):** functions that never return (`never`, ADR 1119), one-line `if` with `elif` (ADR 1120), locals that hide functions, modules and fields (ADR 1121), arithmetic operator traits and `BigInt` operators (ADR 1124), the methods agents guess (ADR 1125), every std module without `use` (ADR 1126), `ail ask std` in one step (ADR 1123), `fix: write CODE` in `ail check` output. The next agent benchmark (E14) measures them.
 - **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, variadic C and `export c` (#1117), `@tool` functions (#1098).
 - **Toolchain:** debug info (`ail build -g`, DWARF and PDB, ADR 0021); one native launcher, so routing leaves `ail` and `ail.ps1` and the scripts only fetch the seed and build; a prebuilt `ail` per release.
 - **Gate:** a gate suite for `ail merge`, and a Linux ARM64 and a Windows ARM64 machine in the gate.
