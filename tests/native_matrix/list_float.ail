@@ -98,26 +98,31 @@ fn s7()
     xs := [1.5, 2.5, 3.5]
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[float]
+## list.slice_method[float]
 fn s8()
+    xs := [1.5, 2.5, 3.5]
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[float]
+fn s9()
     mut xs := [1.5]
     xs.push(2.5)
     print(xs.len())
 
 ## list.pop[float]
-fn s9()
+fn s10()
     mut xs := [1.5, 2.5]
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[float]
-fn s10()
+fn s11()
     mut xs := [1.5, 2.5]
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[float]
-fn s11()
+fn s12()
     xs := [1.5, 2.5]
     if x := xs.first()
         print(1)
@@ -125,63 +130,63 @@ fn s11()
         print(2)
 
 ## list.insert[float]
-fn s12()
+fn s13()
     mut xs := [1.5]
     xs.insert(0, 2.5)
     print(xs.len())
 
 ## list.remove_at[float]
-fn s13()
+fn s14()
     mut xs := [1.5, 2.5]
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[float]
-fn s14()
+fn s15()
     mut xs := [1.5]
     xs.extend([2.5, 3.5])
     print(xs.len())
 
 ## list.clear[float]
-fn s15()
+fn s16()
     mut xs := [1.5]
     xs.clear()
     print(xs.len())
 
 ## list.reverse[float]
-fn s16()
+fn s17()
     mut xs := [1.5, 2.5]
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[float]
-fn s17()
+fn s18()
     xs := [1.5, 2.5]
     print(xs.reversed().len())
 
 ## list.contains[float]
-fn s18()
+fn s19()
     xs := [1.5, 2.5]
     print(xs.contains(2.5))
 
 ## list.index_of[float]
-fn s19()
+fn s20()
     xs := [1.5, 2.5]
     print(xs.index_of(2.5) else -1)
 
 ## list.join[float]
-fn s20()
+fn s21()
     xs := [1.5, 2.5]
     print(xs.join(",").len() > 0)
 
 ## list.sum[float]
-fn s21()
+fn s22()
     xs := [1.5, 2.5]
     s := xs.sum()
     print(1)
 
 ## list.min_max[float]
-fn s22()
+fn s23()
     xs := [2.5, 1.5, 3.5]
     if x := xs.min()
         print(1)
@@ -189,29 +194,29 @@ fn s22()
         print(2)
 
 ## list.sorted[float]
-fn s23()
+fn s24()
     xs := [3.5, 1.5, 2.5]
     print(xs.sorted().len())
 
 ## list.sort[float]
-fn s24()
+fn s25()
     mut xs := [3.5, 1.5, 2.5]
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[float]
-fn s25()
+fn s26()
     xs := [3.5, 1.5, 2.5]
     print(xs.sorted(by: |x| x).len())
 
 ## list.sort_by[float]
-fn s26()
+fn s27()
     mut xs := [3.5, 1.5, 2.5]
     xs.sort(by: |x| x)
     print(xs.len())
 
 ## list.min_by[float]
-fn s27()
+fn s28()
     xs := [3.5, 1.5, 2.5]
     if x := xs.min(by: |x| x)
         print(1)
@@ -219,87 +224,87 @@ fn s27()
         print(2)
 
 ## list.take_skip[float]
-fn s28()
+fn s29()
     xs := [1.5, 2.5, 3.5]
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.chunks_windows[float]
-fn s29()
+fn s30()
     xs := [1.5, 2.5, 3.5]
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.flatten[float]
-fn s30()
+fn s31()
     xs := [[1.5], [2.5, 3.5]]
     print(xs.flatten().len())
 
 ## list.enumerate[float]
-fn s31()
+fn s32()
     xs := [1.5, 2.5]
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[float]
-fn s32()
+fn s33()
     xs := [1.5, 2.5]
     print(xs.any(|x| x == 1.5))
     print(xs.all(|x| x == 1.5))
 
 ## list.find[float]
-fn s33()
+fn s34()
     xs := [1.5, 2.5]
     if x := xs.find(|x| x == 2.5)
         print(1)
 
 ## list.filter[float]
-fn s34()
+fn s35()
     xs := [1.5, 2.5]
     print(xs.filter(|x| x == 1.5).len())
 
 ## list.map[float]
-fn s35()
-    xs := [1.5, 2.5]
-    print(xs.map(|x| x).len())
-
-## list.map_to_self[float]
 fn s36()
     xs := [1.5, 2.5]
     print(xs.map(|x| x).len())
 
-## list.count[float]
+## list.map_to_self[float]
 fn s37()
+    xs := [1.5, 2.5]
+    print(xs.map(|x| x).len())
+
+## list.count[float]
+fn s38()
     xs := [1.5, 2.5, 1.5]
     print(xs.count(|x| x == 1.5))
 
 ## list.fold[float]
-fn s38()
+fn s39()
     xs := [1.5, 2.5]
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[float]
-fn s39()
+fn s40()
     xs := [1.5, 2.5]
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[float]
-fn s40()
+fn s41()
     xs := [1.5, 2.5]
     print(xs.take_while(|x| x == 1.5).len() + xs.skip_while(|x| x == 1.5).len())
 
 ## list.zip[float]
-fn s41()
+fn s42()
     xs := [1.5, 2.5]
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[float]
-fn s42()
+fn s43()
     xs := [1.5, 2.5]
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[float]
-fn s43()
+fn s44()
     xs := [1.5, 2.5]
     mut n := 0
     for x in xs
@@ -307,78 +312,78 @@ fn s43()
     print(n)
 
 ## list.for_mut[float]
-fn s44()
+fn s45()
     mut xs := [1.5, 2.5]
     for mut x in xs
         x = 3.5
     print(xs.len())
 
 ## list.comprehension[float]
-fn s45()
+fn s46()
     xs := [1.5, 2.5]
     ys := [x for x in xs if x == 1.5]
     print(ys.len())
 
 ## list.eq[float]
-fn s46()
+fn s47()
     xs := [1.5, 2.5]
     ys := [1.5, 2.5]
     print(xs == ys)
     print(xs != [3.5])
 
 ## list.lt[float]
-fn s47()
+fn s48()
     xs := [1.5]
     ys := [2.5]
     print(xs < ys)
 
 ## list.print[float]
-fn s48()
+fn s49()
     xs := [1.5, 2.5]
     print(xs)
 
 ## list.interp[float]
-fn s49()
+fn s50()
     xs := [1.5, 2.5]
     print("{xs}".len() > 0)
 
 ## list.nested_push[float]
-fn s50()
+fn s51()
     mut xs := [[1.5]]
     xs[0].push(2.5)
     print(xs[0].len())
 
 ## list.in_struct[float]
-fn s51()
+fn s52()
     mut b := Box_float(items: [1.5])
     b.items.push(2.5)
     print(b.items.len())
 
 ## list.pass_mut[float]
-fn s52()
+fn s53()
     mut xs := [1.5]
     add_float(mut xs, 2.5)
     print(xs.len())
 
 ## list.generic_first[float]
-fn s53()
+fn s54()
     xs := [1.5, 2.5]
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[float]
-fn s54()
+fn s55()
     xs := [1.5, 2.5]
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[float]
-fn s55()
+fn s56()
     xs := [[1.5], [2.5]]
     print(xs.contains([2.5]))
 
 ## list.sorted_nested[float]
-fn s56()
+fn s57()
     xs := [[2.5], [1.5]]
     print(xs.sorted().len())
 
@@ -399,101 +404,103 @@ fn main()
     s6()
     print("-- list.slice[float]")
     s7()
-    print("-- list.push[float]")
+    print("-- list.slice_method[float]")
     s8()
-    print("-- list.pop[float]")
+    print("-- list.push[float]")
     s9()
-    print("-- list.swap[float]")
+    print("-- list.pop[float]")
     s10()
-    print("-- list.first_last[float]")
+    print("-- list.swap[float]")
     s11()
-    print("-- list.insert[float]")
+    print("-- list.first_last[float]")
     s12()
-    print("-- list.remove_at[float]")
+    print("-- list.insert[float]")
     s13()
-    print("-- list.extend[float]")
+    print("-- list.remove_at[float]")
     s14()
-    print("-- list.clear[float]")
+    print("-- list.extend[float]")
     s15()
-    print("-- list.reverse[float]")
+    print("-- list.clear[float]")
     s16()
-    print("-- list.reversed[float]")
+    print("-- list.reverse[float]")
     s17()
-    print("-- list.contains[float]")
+    print("-- list.reversed[float]")
     s18()
-    print("-- list.index_of[float]")
+    print("-- list.contains[float]")
     s19()
-    print("-- list.join[float]")
+    print("-- list.index_of[float]")
     s20()
-    print("-- list.sum[float]")
+    print("-- list.join[float]")
     s21()
-    print("-- list.min_max[float]")
+    print("-- list.sum[float]")
     s22()
-    print("-- list.sorted[float]")
+    print("-- list.min_max[float]")
     s23()
-    print("-- list.sort[float]")
+    print("-- list.sorted[float]")
     s24()
-    print("-- list.sorted_by[float]")
+    print("-- list.sort[float]")
     s25()
-    print("-- list.sort_by[float]")
+    print("-- list.sorted_by[float]")
     s26()
-    print("-- list.min_by[float]")
+    print("-- list.sort_by[float]")
     s27()
-    print("-- list.take_skip[float]")
+    print("-- list.min_by[float]")
     s28()
-    print("-- list.chunks_windows[float]")
+    print("-- list.take_skip[float]")
     s29()
-    print("-- list.flatten[float]")
+    print("-- list.chunks_windows[float]")
     s30()
-    print("-- list.enumerate[float]")
+    print("-- list.flatten[float]")
     s31()
-    print("-- list.any_all[float]")
+    print("-- list.enumerate[float]")
     s32()
-    print("-- list.find[float]")
+    print("-- list.any_all[float]")
     s33()
-    print("-- list.filter[float]")
+    print("-- list.find[float]")
     s34()
-    print("-- list.map[float]")
+    print("-- list.filter[float]")
     s35()
-    print("-- list.map_to_self[float]")
+    print("-- list.map[float]")
     s36()
-    print("-- list.count[float]")
+    print("-- list.map_to_self[float]")
     s37()
-    print("-- list.fold[float]")
+    print("-- list.count[float]")
     s38()
-    print("-- list.flat_map[float]")
+    print("-- list.fold[float]")
     s39()
-    print("-- list.take_skip_while[float]")
+    print("-- list.flat_map[float]")
     s40()
-    print("-- list.zip[float]")
+    print("-- list.take_skip_while[float]")
     s41()
-    print("-- list.zip_into[float]")
+    print("-- list.zip[float]")
     s42()
-    print("-- list.for[float]")
+    print("-- list.zip_into[float]")
     s43()
-    print("-- list.for_mut[float]")
+    print("-- list.for[float]")
     s44()
-    print("-- list.comprehension[float]")
+    print("-- list.for_mut[float]")
     s45()
-    print("-- list.eq[float]")
+    print("-- list.comprehension[float]")
     s46()
-    print("-- list.lt[float]")
+    print("-- list.eq[float]")
     s47()
-    print("-- list.print[float]")
+    print("-- list.lt[float]")
     s48()
-    print("-- list.interp[float]")
+    print("-- list.print[float]")
     s49()
-    print("-- list.nested_push[float]")
+    print("-- list.interp[float]")
     s50()
-    print("-- list.in_struct[float]")
+    print("-- list.nested_push[float]")
     s51()
-    print("-- list.pass_mut[float]")
+    print("-- list.in_struct[float]")
     s52()
-    print("-- list.generic_first[float]")
+    print("-- list.pass_mut[float]")
     s53()
-    print("-- list.generic_ord[float]")
+    print("-- list.generic_first[float]")
     s54()
-    print("-- list.contains_list[float]")
+    print("-- list.generic_ord[float]")
     s55()
-    print("-- list.sorted_nested[float]")
+    print("-- list.contains_list[float]")
     s56()
+    print("-- list.sorted_nested[float]")
+    s57()

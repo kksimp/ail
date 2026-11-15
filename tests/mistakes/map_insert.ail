@@ -1,0 +1,5 @@
+fn main()
+    mut counts := Map[str, int]()
+    counts["b"] = 2
+    counts.insert("a", 1)
+    print(counts)

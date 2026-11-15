@@ -479,7 +479,7 @@ fn Gate.cli_checks(mut self)
         )
     t := ail_run(["check", path]) else return
     self.want("text diagnostics fix line", t.err, [
-        "\nfix: replace `prnt` with `print`",
+        "\nfix: write `print(total)`",
         "\nnext: ail fix {path}",
     ])
     # check.out.1-3, check.exit.1: the ok line, the summary record, the next line of an unfixable error, exit statuses.
@@ -1465,6 +1465,29 @@ fn Gate.checkbench(mut self)
     ]) else return
     if r.status != 0
         self.red("checkbench", "{r.out}{r.err}")
+
+## golden (D0, OQ-143): explain, fmt, fix, api and edit against tests/golden/*.tsv (tools/golden/golden.py).
+## A stale row (its input changed) is skipped, not a failure; refreeze on purpose with `golden.py freeze`.
+## Not on Windows: the rows hash output frozen on macOS.
+fn Gate.golden(mut self)
+    if proc.which("python3") == none
+        print("golden: python3 not found; skipping")
+        return
+    if (env.get("OS") else "") == "Windows_NT"
+        print("golden: frozen on macOS; skipped on Windows")
+        return
+    r := proc.run("python3", [
+        "-I",
+        "tools/golden/golden.py",
+        "check",
+        "explain",
+        "fmt",
+        "fix",
+        "api",
+        "edit",
+    ]) else return
+    if r.status != 0
+        self.red("golden", "{r.out}{r.err}")
 
 ## `ail fmt` end to end (fmt.rs, ported; ADR 0170).
 fn Gate.fmt(mut self, tmp str)
@@ -4806,6 +4829,7 @@ fn main() !
         "native_matrix",
         "checkfuzz",
         "checkbench",
+        "golden",
         "apicontract",
         "stress",
         "ffi_abi",
@@ -4876,6 +4900,7 @@ fn main() !
             "parity" => g.parity()
             "checkfuzz" => g.checkfuzz(tmp)
             "checkbench" => g.checkbench()
+            "golden" => g.golden()
             "apicontract" => g.apicontract(tmp)
             "stress" => g.stress(tmp)
             "ffi_abi" => g.ffi_abi()

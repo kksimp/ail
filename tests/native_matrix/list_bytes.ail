@@ -98,26 +98,31 @@ fn s7()
     xs := [b"a", b"b", b"c"]
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[bytes]
+## list.slice_method[bytes]
 fn s8()
+    xs := [b"a", b"b", b"c"]
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[bytes]
+fn s9()
     mut xs := [b"a"]
     xs.push(b"b")
     print(xs.len())
 
 ## list.pop[bytes]
-fn s9()
+fn s10()
     mut xs := [b"a", b"b"]
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[bytes]
-fn s10()
+fn s11()
     mut xs := [b"a", b"b"]
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[bytes]
-fn s11()
+fn s12()
     xs := [b"a", b"b"]
     if x := xs.first()
         print(1)
@@ -125,57 +130,57 @@ fn s11()
         print(2)
 
 ## list.insert[bytes]
-fn s12()
+fn s13()
     mut xs := [b"a"]
     xs.insert(0, b"b")
     print(xs.len())
 
 ## list.remove_at[bytes]
-fn s13()
+fn s14()
     mut xs := [b"a", b"b"]
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[bytes]
-fn s14()
+fn s15()
     mut xs := [b"a"]
     xs.extend([b"b", b"c"])
     print(xs.len())
 
 ## list.clear[bytes]
-fn s15()
+fn s16()
     mut xs := [b"a"]
     xs.clear()
     print(xs.len())
 
 ## list.reverse[bytes]
-fn s16()
+fn s17()
     mut xs := [b"a", b"b"]
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[bytes]
-fn s17()
+fn s18()
     xs := [b"a", b"b"]
     print(xs.reversed().len())
 
 ## list.contains[bytes]
-fn s18()
+fn s19()
     xs := [b"a", b"b"]
     print(xs.contains(b"b"))
 
 ## list.index_of[bytes]
-fn s19()
+fn s20()
     xs := [b"a", b"b"]
     print(xs.index_of(b"b") else -1)
 
 ## list.join[bytes]
-fn s20()
+fn s21()
     xs := [b"a", b"b"]
     print(xs.join(",").len() > 0)
 
 ## list.min_max[bytes]
-fn s21()
+fn s22()
     xs := [b"b", b"a", b"c"]
     if x := xs.min()
         print(1)
@@ -183,29 +188,29 @@ fn s21()
         print(2)
 
 ## list.sorted[bytes]
-fn s22()
+fn s23()
     xs := [b"c", b"a", b"b"]
     print(xs.sorted().len())
 
 ## list.sort[bytes]
-fn s23()
+fn s24()
     mut xs := [b"c", b"a", b"b"]
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[bytes]
-fn s24()
+fn s25()
     xs := [b"c", b"a", b"b"]
     print(xs.sorted(by: |x| x.len()).len())
 
 ## list.sort_by[bytes]
-fn s25()
+fn s26()
     mut xs := [b"c", b"a", b"b"]
     xs.sort(by: |x| x.len())
     print(xs.len())
 
 ## list.min_by[bytes]
-fn s26()
+fn s27()
     xs := [b"c", b"a", b"b"]
     if x := xs.min(by: |x| x.len())
         print(1)
@@ -213,105 +218,105 @@ fn s26()
         print(2)
 
 ## list.take_skip[bytes]
-fn s27()
+fn s28()
     xs := [b"a", b"b", b"c"]
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.set_ops[bytes]
-fn s28()
+fn s29()
     xs := [b"a", b"b"]
     ys := [b"b", b"c"]
     print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
 
 ## list.chunks_windows[bytes]
-fn s29()
+fn s30()
     xs := [b"a", b"b", b"c"]
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.counts[bytes]
-fn s30()
+fn s31()
     xs := [b"a", b"b", b"a"]
     c := xs.counts()
     print(c.len())
 
 ## list.flatten[bytes]
-fn s31()
+fn s32()
     xs := [[b"a"], [b"b", b"c"]]
     print(xs.flatten().len())
 
 ## list.enumerate[bytes]
-fn s32()
+fn s33()
     xs := [b"a", b"b"]
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[bytes]
-fn s33()
+fn s34()
     xs := [b"a", b"b"]
     print(xs.any(|x| x == b"a"))
     print(xs.all(|x| x == b"a"))
 
 ## list.find[bytes]
-fn s34()
+fn s35()
     xs := [b"a", b"b"]
     if x := xs.find(|x| x == b"b")
         print(1)
 
 ## list.filter[bytes]
-fn s35()
+fn s36()
     xs := [b"a", b"b"]
     print(xs.filter(|x| x == b"a").len())
 
 ## list.map[bytes]
-fn s36()
+fn s37()
     xs := [b"a", b"b"]
     print(xs.map(|x| x.len()).len())
 
 ## list.map_to_self[bytes]
-fn s37()
+fn s38()
     xs := [b"a", b"b"]
     print(xs.map(|x| x).len())
 
 ## list.group_by[bytes]
-fn s38()
+fn s39()
     xs := [b"a", b"b", b"a"]
     g := xs.group_by(|x| x.len())
     print(g.len())
 
 ## list.count[bytes]
-fn s39()
+fn s40()
     xs := [b"a", b"b", b"a"]
     print(xs.count(|x| x == b"a"))
 
 ## list.fold[bytes]
-fn s40()
+fn s41()
     xs := [b"a", b"b"]
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[bytes]
-fn s41()
+fn s42()
     xs := [b"a", b"b"]
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[bytes]
-fn s42()
+fn s43()
     xs := [b"a", b"b"]
     print(xs.take_while(|x| x == b"a").len() + xs.skip_while(|x| x == b"a").len())
 
 ## list.zip[bytes]
-fn s43()
+fn s44()
     xs := [b"a", b"b"]
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[bytes]
-fn s44()
+fn s45()
     xs := [b"a", b"b"]
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[bytes]
-fn s45()
+fn s46()
     xs := [b"a", b"b"]
     mut n := 0
     for x in xs
@@ -319,90 +324,90 @@ fn s45()
     print(n)
 
 ## list.for_mut[bytes]
-fn s46()
+fn s47()
     mut xs := [b"a", b"b"]
     for mut x in xs
         x = b"c"
     print(xs.len())
 
 ## list.comprehension[bytes]
-fn s47()
+fn s48()
     xs := [b"a", b"b"]
     ys := [x for x in xs if x == b"a"]
     print(ys.len())
 
 ## list.set_comprehension[bytes]
-fn s48()
+fn s49()
     xs := [b"a", b"b", b"a"]
     s := {x for x in xs}
     print(s.len())
 
 ## list.map_comprehension[bytes]
-fn s49()
+fn s50()
     xs := [b"a", b"b"]
     m := {x: 1 for x in xs}
     print(m.len())
 
 ## list.eq[bytes]
-fn s50()
+fn s51()
     xs := [b"a", b"b"]
     ys := [b"a", b"b"]
     print(xs == ys)
     print(xs != [b"c"])
 
 ## list.lt[bytes]
-fn s51()
+fn s52()
     xs := [b"a"]
     ys := [b"b"]
     print(xs < ys)
 
 ## list.print[bytes]
-fn s52()
+fn s53()
     xs := [b"a", b"b"]
     print(xs)
 
 ## list.interp[bytes]
-fn s53()
+fn s54()
     xs := [b"a", b"b"]
     print("{xs}".len() > 0)
 
 ## list.nested_push[bytes]
-fn s54()
+fn s55()
     mut xs := [[b"a"]]
     xs[0].push(b"b")
     print(xs[0].len())
 
 ## list.in_struct[bytes]
-fn s55()
+fn s56()
     mut b := Box_bytes(items: [b"a"])
     b.items.push(b"b")
     print(b.items.len())
 
 ## list.pass_mut[bytes]
-fn s56()
+fn s57()
     mut xs := [b"a"]
     add_bytes(mut xs, b"b")
     print(xs.len())
 
 ## list.generic_first[bytes]
-fn s57()
+fn s58()
     xs := [b"a", b"b"]
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[bytes]
-fn s58()
+fn s59()
     xs := [b"a", b"b"]
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[bytes]
-fn s59()
+fn s60()
     xs := [[b"a"], [b"b"]]
     print(xs.contains([b"b"]))
 
 ## list.sorted_nested[bytes]
-fn s60()
+fn s61()
     xs := [[b"b"], [b"a"]]
     print(xs.sorted().len())
 
@@ -423,109 +428,111 @@ fn main()
     s6()
     print("-- list.slice[bytes]")
     s7()
-    print("-- list.push[bytes]")
+    print("-- list.slice_method[bytes]")
     s8()
-    print("-- list.pop[bytes]")
+    print("-- list.push[bytes]")
     s9()
-    print("-- list.swap[bytes]")
+    print("-- list.pop[bytes]")
     s10()
-    print("-- list.first_last[bytes]")
+    print("-- list.swap[bytes]")
     s11()
-    print("-- list.insert[bytes]")
+    print("-- list.first_last[bytes]")
     s12()
-    print("-- list.remove_at[bytes]")
+    print("-- list.insert[bytes]")
     s13()
-    print("-- list.extend[bytes]")
+    print("-- list.remove_at[bytes]")
     s14()
-    print("-- list.clear[bytes]")
+    print("-- list.extend[bytes]")
     s15()
-    print("-- list.reverse[bytes]")
+    print("-- list.clear[bytes]")
     s16()
-    print("-- list.reversed[bytes]")
+    print("-- list.reverse[bytes]")
     s17()
-    print("-- list.contains[bytes]")
+    print("-- list.reversed[bytes]")
     s18()
-    print("-- list.index_of[bytes]")
+    print("-- list.contains[bytes]")
     s19()
-    print("-- list.join[bytes]")
+    print("-- list.index_of[bytes]")
     s20()
-    print("-- list.min_max[bytes]")
+    print("-- list.join[bytes]")
     s21()
-    print("-- list.sorted[bytes]")
+    print("-- list.min_max[bytes]")
     s22()
-    print("-- list.sort[bytes]")
+    print("-- list.sorted[bytes]")
     s23()
-    print("-- list.sorted_by[bytes]")
+    print("-- list.sort[bytes]")
     s24()
-    print("-- list.sort_by[bytes]")
+    print("-- list.sorted_by[bytes]")
     s25()
-    print("-- list.min_by[bytes]")
+    print("-- list.sort_by[bytes]")
     s26()
-    print("-- list.take_skip[bytes]")
+    print("-- list.min_by[bytes]")
     s27()
-    print("-- list.set_ops[bytes]")
+    print("-- list.take_skip[bytes]")
     s28()
-    print("-- list.chunks_windows[bytes]")
+    print("-- list.set_ops[bytes]")
     s29()
-    print("-- list.counts[bytes]")
+    print("-- list.chunks_windows[bytes]")
     s30()
-    print("-- list.flatten[bytes]")
+    print("-- list.counts[bytes]")
     s31()
-    print("-- list.enumerate[bytes]")
+    print("-- list.flatten[bytes]")
     s32()
-    print("-- list.any_all[bytes]")
+    print("-- list.enumerate[bytes]")
     s33()
-    print("-- list.find[bytes]")
+    print("-- list.any_all[bytes]")
     s34()
-    print("-- list.filter[bytes]")
+    print("-- list.find[bytes]")
     s35()
-    print("-- list.map[bytes]")
+    print("-- list.filter[bytes]")
     s36()
-    print("-- list.map_to_self[bytes]")
+    print("-- list.map[bytes]")
     s37()
-    print("-- list.group_by[bytes]")
+    print("-- list.map_to_self[bytes]")
     s38()
-    print("-- list.count[bytes]")
+    print("-- list.group_by[bytes]")
     s39()
-    print("-- list.fold[bytes]")
+    print("-- list.count[bytes]")
     s40()
-    print("-- list.flat_map[bytes]")
+    print("-- list.fold[bytes]")
     s41()
-    print("-- list.take_skip_while[bytes]")
+    print("-- list.flat_map[bytes]")
     s42()
-    print("-- list.zip[bytes]")
+    print("-- list.take_skip_while[bytes]")
     s43()
-    print("-- list.zip_into[bytes]")
+    print("-- list.zip[bytes]")
     s44()
-    print("-- list.for[bytes]")
+    print("-- list.zip_into[bytes]")
     s45()
-    print("-- list.for_mut[bytes]")
+    print("-- list.for[bytes]")
     s46()
-    print("-- list.comprehension[bytes]")
+    print("-- list.for_mut[bytes]")
     s47()
-    print("-- list.set_comprehension[bytes]")
+    print("-- list.comprehension[bytes]")
     s48()
-    print("-- list.map_comprehension[bytes]")
+    print("-- list.set_comprehension[bytes]")
     s49()
-    print("-- list.eq[bytes]")
+    print("-- list.map_comprehension[bytes]")
     s50()
-    print("-- list.lt[bytes]")
+    print("-- list.eq[bytes]")
     s51()
-    print("-- list.print[bytes]")
+    print("-- list.lt[bytes]")
     s52()
-    print("-- list.interp[bytes]")
+    print("-- list.print[bytes]")
     s53()
-    print("-- list.nested_push[bytes]")
+    print("-- list.interp[bytes]")
     s54()
-    print("-- list.in_struct[bytes]")
+    print("-- list.nested_push[bytes]")
     s55()
-    print("-- list.pass_mut[bytes]")
+    print("-- list.in_struct[bytes]")
     s56()
-    print("-- list.generic_first[bytes]")
+    print("-- list.pass_mut[bytes]")
     s57()
-    print("-- list.generic_ord[bytes]")
+    print("-- list.generic_first[bytes]")
     s58()
-    print("-- list.contains_list[bytes]")
+    print("-- list.generic_ord[bytes]")
     s59()
-    print("-- list.sorted_nested[bytes]")
+    print("-- list.contains_list[bytes]")
     s60()
+    print("-- list.sorted_nested[bytes]")
+    s61()

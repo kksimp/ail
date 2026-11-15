@@ -25,7 +25,7 @@ What `ail check` prints (check.out.1 to 3, check.exit.1, [ADR 1113](decisions/11
 | Situation | Output | Exit |
 |---|---|---|
 | No error | `ok PATH: N functions, M warnings` on stdout | 0 |
-| An error | `PATH:LINE:COL: error[RULE]: MESSAGE`, a `help:` line, a `fix:` line when there is one, and always a last `next:` line | 2 |
+| An error | `PATH:LINE:COL: error[RULE]: MESSAGE`, a `help:` line, a `fix: write CODE` line with the corrected line when there is a fix, and always a last `next:` line | 2 |
 | Warning only | on stderr, no `next:` line; the `ok` line still prints | 0 |
 | `--json` | one object per diagnostic on stderr, then `{"api":1,"summary":true,"errors":N,"warnings":M,"fixable":K}` on stdout | as above |
 
@@ -135,8 +135,9 @@ fn main() !
 - **Keywords as names.** Words such as `error`, `any`, `match`, `todo` may be field,
   label and method names (lex.kw.3, [ADR 1085](decisions/1085-keywords-as-member-names.md)) but not
   variables or functions: use `err`, `found`, `pending`.
-- **Shadowing.** A local that has the name of an item in scope is an error (expr.bind.5); a local
-  that has the name of a field of `self` inside a method is one too (trait.method.7). `Task` is a
+- **Shadowing.** A local can't have the name of a type or constant (expr.bind.5). It may take the
+  name of a function, an imported module or a field of `self`, and hides it to the end of its block;
+  its initializer still sees the original (`qty := qty(s)`, trait.method.7). `Task` is a
   built-in type: do not name a struct `Task`.
 
 ## 5. The mistakes that cost the most

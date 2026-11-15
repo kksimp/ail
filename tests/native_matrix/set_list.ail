@@ -91,20 +91,25 @@ fn s6()
     s := {[1, 2], [1]}
     print(s.sorted().len())
 
-## set.is_subset[list]
+## set.to_list[list]
 fn s7()
+    s := {[1], [1, 2]}
+    print(s.to_list().len())
+
+## set.is_subset[list]
+fn s8()
     s := {[1]}
     t := {[1], [1, 2]}
     print(s.is_subset(t))
 
 ## set.set_ops[list]
-fn s8()
+fn s9()
     s := {[1], [1, 2]}
     t := {[1, 2], [2]}
     print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
 
 ## set.any_all_find[list]
-fn s9()
+fn s10()
     s := {[1], [1, 2]}
     print(s.any(|x| x == [1]))
     print(s.all(|x| x == [1]))
@@ -112,38 +117,38 @@ fn s9()
         print(1)
 
 ## set.filter_map[list]
-fn s10()
+fn s11()
     s := {[1], [1, 2]}
     print(s.filter(|x| x == [1]).len() + s.map(|x| x.len()).len())
 
 ## set.group_by[list]
-fn s11()
+fn s12()
     s := {[1], [1, 2]}
     print(s.group_by(|x| x.len()).len())
 
 ## set.count_fold[list]
-fn s12()
+fn s13()
     s := {[1], [1, 2]}
     print(s.count(|x| x == [1]))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[list]
-fn s13()
+fn s14()
     s := {[1], [1, 2]}
     print(s.flat_map(|x| [x]).len())
 
 ## set.take_skip[list]
-fn s14()
+fn s15()
     s := {[1], [1, 2], [2]}
     print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == [1]).len() + s.skip_while(|x| x == [1]).len())
 
 ## set.zip_enumerate[list]
-fn s15()
+fn s16()
     s := {[1], [1, 2]}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.min_max[list]
-fn s16()
+fn s17()
     s := {[1], [1, 2]}
     if x := s.min()
         print(1)
@@ -151,7 +156,7 @@ fn s16()
         print(2)
 
 ## set.for[list]
-fn s17()
+fn s18()
     s := {[1], [1, 2]}
     mut n := 0
     for x in s
@@ -159,24 +164,24 @@ fn s17()
     print(n)
 
 ## set.eq[list]
-fn s18()
+fn s19()
     s := {[1], [1, 2]}
     print(s == {[1, 2], [1]})
 
 ## set.print[list]
-fn s19()
+fn s20()
     s := {[1]}
     print(s)
 
 ## set.in_map[list]
-fn s20()
+fn s21()
     mut m := Map[str, Set[List[int]]]()
     m["a"] = Set[List[int]]()
     m["a"].add([1])
     print(m["a"].len())
 
 ## set.in_list[list]
-fn s21()
+fn s22()
     mut xs := [Set[List[int]]()]
     xs[0].add([1])
     print(xs[0].len())
@@ -196,33 +201,35 @@ fn main()
     s5()
     print("-- set.sorted[list]")
     s6()
-    print("-- set.is_subset[list]")
+    print("-- set.to_list[list]")
     s7()
-    print("-- set.set_ops[list]")
+    print("-- set.is_subset[list]")
     s8()
-    print("-- set.any_all_find[list]")
+    print("-- set.set_ops[list]")
     s9()
-    print("-- set.filter_map[list]")
+    print("-- set.any_all_find[list]")
     s10()
-    print("-- set.group_by[list]")
+    print("-- set.filter_map[list]")
     s11()
-    print("-- set.count_fold[list]")
+    print("-- set.group_by[list]")
     s12()
-    print("-- set.flat_map[list]")
+    print("-- set.count_fold[list]")
     s13()
-    print("-- set.take_skip[list]")
+    print("-- set.flat_map[list]")
     s14()
-    print("-- set.zip_enumerate[list]")
+    print("-- set.take_skip[list]")
     s15()
-    print("-- set.min_max[list]")
+    print("-- set.zip_enumerate[list]")
     s16()
-    print("-- set.for[list]")
+    print("-- set.min_max[list]")
     s17()
-    print("-- set.eq[list]")
+    print("-- set.for[list]")
     s18()
-    print("-- set.print[list]")
+    print("-- set.eq[list]")
     s19()
-    print("-- set.in_map[list]")
+    print("-- set.print[list]")
     s20()
-    print("-- set.in_list[list]")
+    print("-- set.in_map[list]")
     s21()
+    print("-- set.in_list[list]")
+    s22()

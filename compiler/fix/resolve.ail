@@ -116,6 +116,8 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "operands" => resolve_operands(e, lines)
         "c_for" => resolve_c_for(e, lines)
         "empty_decl" => resolve_empty_decl(e, lines)
+        "char_literal" => resolve_char_literal(e, lines)
+        "range_list" => resolve_range_list(e, lines)
         _ => resolve_exact(e, lines)
 
 ## The fixes whose edits all settle, with the settled edits.

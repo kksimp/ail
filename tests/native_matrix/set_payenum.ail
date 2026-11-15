@@ -86,20 +86,25 @@ fn s5()
     s := {Shape.Circle(r: 1)}
     print(s.is_empty())
 
-## set.is_subset[payenum]
+## set.to_list[payenum]
 fn s6()
+    s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
+    print(s.to_list().len())
+
+## set.is_subset[payenum]
+fn s7()
     s := {Shape.Circle(r: 1)}
     t := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.is_subset(t))
 
 ## set.set_ops[payenum]
-fn s7()
+fn s8()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     t := {Shape.Square(s: 2), Shape.Circle(r: 3)}
     print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
 
 ## set.any_all_find[payenum]
-fn s8()
+fn s9()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.any(|x| x == Shape.Circle(r: 1)))
     print(s.all(|x| x == Shape.Circle(r: 1)))
@@ -107,38 +112,38 @@ fn s8()
         print(1)
 
 ## set.filter_map[payenum]
-fn s9()
+fn s10()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.filter(|x| x == Shape.Circle(r: 1)).len() + s.map(|x| 1).len())
 
 ## set.group_by[payenum]
-fn s10()
+fn s11()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.group_by(|x| 1).len())
 
 ## set.count_fold[payenum]
-fn s11()
+fn s12()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.count(|x| x == Shape.Circle(r: 1)))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[payenum]
-fn s12()
+fn s13()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.flat_map(|x| [x]).len())
 
 ## set.take_skip[payenum]
-fn s13()
+fn s14()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2), Shape.Circle(r: 3)}
     print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == Shape.Circle(r: 1)).len() + s.skip_while(|x| x == Shape.Circle(r: 1)).len())
 
 ## set.zip_enumerate[payenum]
-fn s14()
+fn s15()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.for[payenum]
-fn s15()
+fn s16()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     mut n := 0
     for x in s
@@ -146,24 +151,24 @@ fn s15()
     print(n)
 
 ## set.eq[payenum]
-fn s16()
+fn s17()
     s := {Shape.Circle(r: 1), Shape.Square(s: 2)}
     print(s == {Shape.Square(s: 2), Shape.Circle(r: 1)})
 
 ## set.print[payenum]
-fn s17()
+fn s18()
     s := {Shape.Circle(r: 1)}
     print(s)
 
 ## set.in_map[payenum]
-fn s18()
+fn s19()
     mut m := Map[str, Set[Shape]]()
     m["a"] = Set[Shape]()
     m["a"].add(Shape.Circle(r: 1))
     print(m["a"].len())
 
 ## set.in_list[payenum]
-fn s19()
+fn s20()
     mut xs := [Set[Shape]()]
     xs[0].add(Shape.Circle(r: 1))
     print(xs[0].len())
@@ -181,31 +186,33 @@ fn main()
     s4()
     print("-- set.is_empty[payenum]")
     s5()
-    print("-- set.is_subset[payenum]")
+    print("-- set.to_list[payenum]")
     s6()
-    print("-- set.set_ops[payenum]")
+    print("-- set.is_subset[payenum]")
     s7()
-    print("-- set.any_all_find[payenum]")
+    print("-- set.set_ops[payenum]")
     s8()
-    print("-- set.filter_map[payenum]")
+    print("-- set.any_all_find[payenum]")
     s9()
-    print("-- set.group_by[payenum]")
+    print("-- set.filter_map[payenum]")
     s10()
-    print("-- set.count_fold[payenum]")
+    print("-- set.group_by[payenum]")
     s11()
-    print("-- set.flat_map[payenum]")
+    print("-- set.count_fold[payenum]")
     s12()
-    print("-- set.take_skip[payenum]")
+    print("-- set.flat_map[payenum]")
     s13()
-    print("-- set.zip_enumerate[payenum]")
+    print("-- set.take_skip[payenum]")
     s14()
-    print("-- set.for[payenum]")
+    print("-- set.zip_enumerate[payenum]")
     s15()
-    print("-- set.eq[payenum]")
+    print("-- set.for[payenum]")
     s16()
-    print("-- set.print[payenum]")
+    print("-- set.eq[payenum]")
     s17()
-    print("-- set.in_map[payenum]")
+    print("-- set.print[payenum]")
     s18()
-    print("-- set.in_list[payenum]")
+    print("-- set.in_map[payenum]")
     s19()
+    print("-- set.in_list[payenum]")
+    s20()

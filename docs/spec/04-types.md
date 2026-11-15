@@ -1160,8 +1160,8 @@ fn main()
 
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
 `a` up to but excluding `b` (indexes count characters, as `len()` does:
-`type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
-clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
+`type.str.12`), and `s.slice(a)` those from `a` to the end. It traps unless
+`0 <= a <= b <= s.len()`; bounds are never clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
 `i` is out of range or negative. *(ADR 0215)*
 
 **type.str.14** — `s.find(sub)` returns the character index of the first
@@ -1435,8 +1435,8 @@ print(xs.index_of("b")) # 1
 - `xs.first()` returns the first element as a `T?`, or `none` if empty.
 
 `insert` traps unless `0 <= i <= xs.len()` and `remove_at` traps unless
-`0 <= i < xs.len()`, both under rule `type.coll.4`. There is no `xs[a..b]`
-method: slicing is `type.coll.4`.
+`0 <= i < xs.len()`, both under rule `type.coll.4`. Slicing is `xs[a..b]`
+(`type.coll.4`) or the method `xs.slice(a, b)` (`type.coll.33`).
 
 ```ail fragment
 mut xs := [1, 2, 3]
@@ -1686,6 +1686,27 @@ fn main()
     print(d.filter(|x| x % 2 == 0).to_list())     # [2, 4]
     print(d.fold(0, |acc, x| acc + x))            # 10
     print(Seq.of([1, 2, 3]).fold(0, |acc, x| acc + x))   # 6
+```
+
+**type.coll.33** — `xs.slice(a, b)` on a list is `xs[a..b]` and `xs.slice(a)` is
+`xs[a..]`, with the same bounds and trap (`type.coll.4`), so a list slices as a
+`str` does (`type.str.13`). `s.to_list()` on a set returns its elements as a new
+`List[T]` in insertion order. A set has no `keys()` or `values()`: the
+diagnostic (`expr.name.1`) says a set is its elements and its fix writes
+`to_list`. Another language's `unwrap_or`, `unwrap` and `expect` on an
+optional get the fixes `(x else d)` and `(x else unreachable(...))`
+(`type.opt.7`), and `set` or `insert` on a map gets help that writes
+`m[k] = v` (`type.map.3`).
+*(ADR 1099, ADR 1125)*
+
+```ail rules=type.coll.33,type.str.13
+fn main()
+    xs := [10, 20, 30, 40]
+    print(xs.slice(1, 3))       # [20, 30]
+    print(xs.slice(2))          # [30, 40]
+    print("Héllo".slice(1))     # éllo
+    s := {3, 1, 2}
+    print(s.to_list())          # [3, 1, 2]
 ```
 
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest

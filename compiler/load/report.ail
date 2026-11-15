@@ -222,7 +222,7 @@ fn report_in(
                     fix.expects_of(shown.edits, fix_lines),
                 ))
             else
-                out.push(to_text(shown, files[fi].path, src_lines, follow))
+                out.push(to_text(shown, files[fi].path, src_lines, fix_lines, follow))
     out.join("\n")
 
 fn severity(d Shown) str
@@ -237,8 +237,8 @@ fn next_step(d Shown, path str) str?
         return "ail fix {path}"
     "ail explain {d.rule}"
 
-## `src` is the file's text as `text.lines()` gives it.
-fn to_text(d Shown, path str, src List[str], follow bool) str
+## `src` is the file's text as `text.lines()` gives it, `fix_src` as `fix.split_lines` does.
+fn to_text(d Shown, path str, src List[str], fix_src List[List[char]], follow bool) str
     mut lines := ["{path}:{d.pos.line}:{d.pos.col}: {severity(d)}[{d.rule}]: {d.message}"]
     if d.pos.line >= 1 and d.pos.line <= src.len()
         lines.push("    {src[d.pos.line - 1]}")
@@ -248,13 +248,33 @@ fn to_text(d Shown, path str, src List[str], follow bool) str
         lines.push("help: {h}")
     for n in d.notes
         lines.push("note: {path}:{n.pos.line}:{n.pos.col}: {n.message}")
-    for f in d.fixes
-        if d.help != f
-            lines.push("fix: {f}")
+    # check.out.4: a settled fix shows the line it writes; one whose lines can't be shown keeps its title.
+    if d.edits.len() > 0
+        for k in 0..d.edits.len()
+            if written := fix.written_lines(d.edits[k], fix_src)
+                for w in written
+                    lines.push(fix_write_line(w, d.pos.line, k > 0))
+            elif d.help != d.edits[k].title
+                lines.push("fix: {d.edits[k].title}")
+    else
+        for f in d.fixes
+            if d.help != f
+                lines.push("fix: {f}")
     if follow
         if n := next_step(d, path)
             lines.push("next: {n}")
     lines.join("\n")
+
+## `fix: write `TEXT`` (check.out.4), with `on line N` when the fix changes another line than the
+## diagnostic's, and `or write` for a fix after the first, which `ail fix` doesn't apply.
+fn fix_write_line(w fix.Written, diag_line int, alternative bool) str
+    verb := if alternative then "fix: or write" else "fix: write"
+    code := w.text.trim()
+    if code == ""
+        return "fix: clear line {w.line}"
+    if w.line == diag_line
+        return "{verb} `{code}`"
+    "{verb} `{code}` on line {w.line}"
 
 ## One diagnostic as a schema v1 JSON object (ADR 0145), with fixes.
 fn to_json(d Shown, end ast.Pos, path str, follow bool, expects List[List[str]]) str

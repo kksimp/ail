@@ -17,3 +17,5 @@ packages/caps_denied
 # Rust fmt wrote `t(int, str)` for a tuple type after a parameter name (item 282, fixed natively in #773).
 fmt plain tools/ailtest/cases/types.ail
 fmt long tools/ailtest/cases/types.ail
+# `x.unwrap_or(d)` on an optional now carries the fix `(x else d)` (ADR 1099 vocabulary, S14).
+tests/mistakes/rs_unwrap_or.ail

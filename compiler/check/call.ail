@@ -1383,9 +1383,15 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         d = d.with_help("compare the value with `none`, e.g. `x != none`")
         d = d.with_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
     elif oh := opt_method_help(rt, n, recv)
-        # `x.unwrap_or(d)` and its kin on an optional: the `else` rewrite, as help only:
-        # `x else d` binds looser than `x.unwrap_or(d)`, so no text edit is certain (type.opt.7).
+        # `x.unwrap_or(d)` and its kin on an optional: the `else` rewrite, in parentheses
+        # since `else` binds looser than a call (type.opt.7).
         d = d.with_help(oh)
+        if f := opt_method_fix(rt, n, recv, at)
+            d = d.with_fix(f.title, f.edits)
+    elif wh := word_help(rt, n, recv, at)
+        d = d.with_help(wh.help)
+        if wh.edits.len() > 0
+            d = d.with_fix(wh.title, wh.edits)
     elif kind == "map" and (n == "items" or n == "entries")
         # type.tuple.5: a map iterates as its `(key, value)` pairs.
         d = d.with_help("a map iterates as its entries: `for k, v in m`")
@@ -1451,6 +1457,8 @@ fn iterator_word(rt Ty, n str) bool
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
 ## which has a function `f`. Reports it and returns true.
 fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
+    if self.hidden_module(recv, n, at)
+        return true
     x := name_of(recv) else return false
     if local(x) == none or not std_functions(x).contains(n)
         return false

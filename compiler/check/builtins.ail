@@ -209,6 +209,7 @@ pub LIST_METHODS := [
     "skip_while",
     "skip",
     "zip",
+    "slice",
 ]
 
 pub MAP_METHODS := [
@@ -260,6 +261,7 @@ pub SET_METHODS := [
     "sum",
     "min",
     "max",
+    "to_list",
 ]
 
 ## The sized type a conversion method names (type.num.15).
@@ -460,6 +462,9 @@ fn read(params List[Ty], result Ty) Builtin?
                 return vocab_builtin()
             if n == "skip"
                 return read([Ty.Int], Ty.ListOf(e))
+            # type.coll.33: `xs.slice(a, b)` is `xs[a..b]`; `xs.slice(a)` is checked in `builtin_call`.
+            if n == "slice"
+                return read([Ty.Int, Ty.Int], Ty.ListOf(e))
             if n == "is_empty"
                 return read([], Ty.Bool)
             if n == "len"
@@ -548,6 +553,9 @@ fn read(params List[Ty], result Ty) Builtin?
             # type.coll.32: the elements as a list, in insertion order.
             if n == "take" or n == "skip"
                 return read([Ty.Int], Ty.ListOf(e))
+            # type.coll.33: every element, in insertion order.
+            if n == "to_list"
+                return read([], Ty.ListOf(e))
             if n == "enumerate"
                 return read([], Ty.ListOf(Ty.Tuple([Ty.Int, e])))
             if n == "sum"
@@ -695,6 +703,24 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
                         "a radix is 2 to 36, found {v}",
                         "use 2 for binary, 8 for octal, 16 for hexadecimal",
                     )
+        return b.ret
+    # type.str.13, type.coll.33: `s.slice(a)` and `xs.slice(a)` run to the end.
+    if n == "slice" and args.len() == 1
+        a := args[0]
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "this parameter isn't `mut`",
+                "remove the `mut`",
+            )
+        t := expr(a.value, Ty.Int, true)
+        if t != Ty.Int and t != Ty.Unknown and t != Ty.Never and not reject_unhandled(
+            t,
+            expr_pos(a.value),
+        )
+            err("expr.call.2", expr_pos(a.value), "the start of `slice` is an `int`, not {show(t)}")
+        _ := unique_builtin(rt, n, at, 1)
         return b.ret
     # type.bytes.14: `b.hex(sep)` puts `sep` between the byte pairs.
     if rt == Ty.Bytes and n == "hex" and args.len() == 1

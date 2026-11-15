@@ -86,14 +86,19 @@ fn s5()
     s := {false}
     print(s.is_empty())
 
-## set.is_subset[bool]
+## set.to_list[bool]
 fn s6()
+    s := {false, true}
+    print(s.to_list().len())
+
+## set.is_subset[bool]
+fn s7()
     s := {false}
     t := {false, true}
     print(s.is_subset(t))
 
 ## set.any_all_find[bool]
-fn s7()
+fn s8()
     s := {false, true}
     print(s.any(|x| x == false))
     print(s.all(|x| x == false))
@@ -101,33 +106,33 @@ fn s7()
         print(1)
 
 ## set.filter_map[bool]
-fn s8()
+fn s9()
     s := {false, true}
     print(s.filter(|x| x == false).len() + s.map(|x| x).len())
 
 ## set.group_by[bool]
-fn s9()
+fn s10()
     s := {false, true}
     print(s.group_by(|x| x).len())
 
 ## set.count_fold[bool]
-fn s10()
+fn s11()
     s := {false, true}
     print(s.count(|x| x == false))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[bool]
-fn s11()
+fn s12()
     s := {false, true}
     print(s.flat_map(|x| [x]).len())
 
 ## set.zip_enumerate[bool]
-fn s12()
+fn s13()
     s := {false, true}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.for[bool]
-fn s13()
+fn s14()
     s := {false, true}
     mut n := 0
     for x in s
@@ -135,24 +140,24 @@ fn s13()
     print(n)
 
 ## set.eq[bool]
-fn s14()
+fn s15()
     s := {false, true}
     print(s == {true, false})
 
 ## set.print[bool]
-fn s15()
+fn s16()
     s := {false}
     print(s)
 
 ## set.in_map[bool]
-fn s16()
+fn s17()
     mut m := Map[str, Set[bool]]()
     m["a"] = Set[bool]()
     m["a"].add(false)
     print(m["a"].len())
 
 ## set.in_list[bool]
-fn s17()
+fn s18()
     mut xs := [Set[bool]()]
     xs[0].add(false)
     print(xs[0].len())
@@ -170,27 +175,29 @@ fn main()
     s4()
     print("-- set.is_empty[bool]")
     s5()
-    print("-- set.is_subset[bool]")
+    print("-- set.to_list[bool]")
     s6()
-    print("-- set.any_all_find[bool]")
+    print("-- set.is_subset[bool]")
     s7()
-    print("-- set.filter_map[bool]")
+    print("-- set.any_all_find[bool]")
     s8()
-    print("-- set.group_by[bool]")
+    print("-- set.filter_map[bool]")
     s9()
-    print("-- set.count_fold[bool]")
+    print("-- set.group_by[bool]")
     s10()
-    print("-- set.flat_map[bool]")
+    print("-- set.count_fold[bool]")
     s11()
-    print("-- set.zip_enumerate[bool]")
+    print("-- set.flat_map[bool]")
     s12()
-    print("-- set.for[bool]")
+    print("-- set.zip_enumerate[bool]")
     s13()
-    print("-- set.eq[bool]")
+    print("-- set.for[bool]")
     s14()
-    print("-- set.print[bool]")
+    print("-- set.eq[bool]")
     s15()
-    print("-- set.in_map[bool]")
+    print("-- set.print[bool]")
     s16()
-    print("-- set.in_list[bool]")
+    print("-- set.in_map[bool]")
     s17()
+    print("-- set.in_list[bool]")
+    s18()

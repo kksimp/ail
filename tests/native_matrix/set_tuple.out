@@ -13,6 +13,8 @@ true
 false
 -- set.sorted[tuple]
 2
+-- set.to_list[tuple]
+2
 -- set.is_subset[tuple]
 true
 -- set.set_ops[tuple]

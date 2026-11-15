@@ -1,6 +1,6 @@
 # 0277. Standard modules are in scope without `use`
 
-- **Status:** Accepted
+- **Status:** Accepted (extended by [ADR 1126](1126-std-modules-in-ail-without-use.md): the modules written in AIL follow it too)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** Modules; token efficiency

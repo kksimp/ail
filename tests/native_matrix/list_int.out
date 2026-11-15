@@ -14,6 +14,8 @@ true
 2
 -- list.slice[int]
 5
+-- list.slice_method[int]
+4
 -- list.push[int]
 2
 -- list.pop[int]

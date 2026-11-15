@@ -1,5 +1,0 @@
-use std.bigint
-
-fn main()
-    n := bigint.from_int(5)
-    print(n.to_text())

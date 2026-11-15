@@ -229,6 +229,15 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     ty: Ty.Int,
                 )
             "to_int" => return self.str_to_int_radix(r, vs[0], npos)
+            # type.str.13: `s.slice(a)` is `s.slice(a, s.len())`.
+            "slice" =>
+                a := self.int_arg(vs[0], name, npos)?
+                b := call("rt.str_len", [r.id], Ty.Int)
+                h := self.trap_head("type.str.13", npos)
+                return Val(
+                    id: call("rt.str_slice", [r.id, a, b, h, self.trap_tail(npos)], Ty.Str),
+                    ty: Ty.Str,
+                )
             "char_at" =>
                 i := self.int_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Char)

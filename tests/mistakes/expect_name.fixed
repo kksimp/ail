@@ -1,0 +1,4 @@
+fn main()
+    s := "42"
+    n := (s.to_int() else unreachable("a number"))
+    print(n + 1)

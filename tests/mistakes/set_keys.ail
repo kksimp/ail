@@ -1,0 +1,4 @@
+fn main()
+    seen := {3, 1, 2}
+    for x in seen.keys()
+        print(x)

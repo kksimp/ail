@@ -1,4 +1,4 @@
-## std.use.1-3, expr.bind.5: imports and names of the standard modules.
+## std.use.1-3: imports and names of the standard modules; a local may hide one (expr.bind.5).
 use std.fss
 use std
 use std.fs

@@ -4,9 +4,9 @@ edit --dry-run --diff tests/cases/packages/edit_impact edits.json	a2c25f214f28fe
 edit --dry-run tests/cases/packages/edit_impact_field edits.json	bb52bdd739063f8d	0	b9388804c1d2b272
 edit --dry-run --json tests/cases/packages/edit_impact_field edits.json	bb52bdd739063f8d	0	0e5270effbb89b76
 edit --dry-run --diff tests/cases/packages/edit_impact_field edits.json	bb52bdd739063f8d	0	b9388804c1d2b272
-edit --dry-run tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	5c89d0f1fd2bbb4e
-edit --dry-run --json tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	ae0b7682a1e6d48a
-edit --dry-run --diff tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	5c89d0f1fd2bbb4e
+edit --dry-run tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	c3a13865c69215d8
+edit --dry-run --json tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	49c08c9bcc091ad8
+edit --dry-run --diff tests/cases/packages/edit_impact_sig edits.json	84c1e3d43a06147d	2	c3a13865c69215d8
 edit --dry-run tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
 edit --dry-run --json tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
 edit --dry-run --diff tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
@@ -19,3 +19,18 @@ edit --dry-run --diff tests/cases/packages/edit_ops hunk.txt	95da342dc63fb2bd	0	
 edit --dry-run tests/cases/packages/edit_ops text.txt	95da342dc63fb2bd	2	c1178dcae77a3663
 edit --dry-run --json tests/cases/packages/edit_ops text.txt	95da342dc63fb2bd	2	c1178dcae77a3663
 edit --dry-run --diff tests/cases/packages/edit_ops text.txt	95da342dc63fb2bd	2	c1178dcae77a3663
+edit --dry-run tests/cases/packages/edit_refactor extract.json	ada4fc24e5c5bae5	0	53990004c2e66b32
+edit --dry-run --json tests/cases/packages/edit_refactor extract.json	ada4fc24e5c5bae5	0	ef39703833840d78
+edit --dry-run --diff tests/cases/packages/edit_refactor extract.json	ada4fc24e5c5bae5	0	53990004c2e66b32
+edit --dry-run tests/cases/packages/edit_refactor sig.json	ada4fc24e5c5bae5	0	8263b63389aaedcc
+edit --dry-run --json tests/cases/packages/edit_refactor sig.json	ada4fc24e5c5bae5	0	ac8d1652c0a13b07
+edit --dry-run --diff tests/cases/packages/edit_refactor sig.json	ada4fc24e5c5bae5	0	8263b63389aaedcc
+edit --dry-run tests/cases/packages/edit_refactor value.json	ada4fc24e5c5bae5	0	a7189186d90147df
+edit --dry-run --json tests/cases/packages/edit_refactor value.json	ada4fc24e5c5bae5	0	dfe6c34231821cf2
+edit --dry-run --diff tests/cases/packages/edit_refactor value.json	ada4fc24e5c5bae5	0	a7189186d90147df
+edit --dry-run tests/cases/packages/edit_span span.json	2ba936f2064bf863	0	b70511d364bc98dd
+edit --dry-run --json tests/cases/packages/edit_span span.json	2ba936f2064bf863	0	e6d22c0fe5393898
+edit --dry-run --diff tests/cases/packages/edit_span span.json	2ba936f2064bf863	0	b70511d364bc98dd
+edit --dry-run tests/cases/packages/edit_span stale.json	2ba936f2064bf863	2	a688719bf14092d7
+edit --dry-run --json tests/cases/packages/edit_span stale.json	2ba936f2064bf863	2	a688719bf14092d7
+edit --dry-run --diff tests/cases/packages/edit_span stale.json	2ba936f2064bf863	2	a688719bf14092d7

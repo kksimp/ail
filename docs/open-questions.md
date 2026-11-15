@@ -547,7 +547,8 @@ refreezes it.
 
 **Recommendation:** A, starting with B if A's dependencies are unclear. Neither option is
 needed before v0.1.0, because the per-batch refreeze plus a `golden.py compare` against
-main covers the gap.
+main covers the gap. Since 2026-11-15 the gate suite `golden` runs `check` on all five
+tools (not `--strict`; skipped on Windows), after the `fix` golden drifted to 91 failures unseen.
 **Decision needed from:** AI (delegated, ADR 0076).
 
 ## OQ-144 — Methods on distinct types (ADR 1103)

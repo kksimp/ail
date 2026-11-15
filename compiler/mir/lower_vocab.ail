@@ -7,10 +7,10 @@
 use ast
 
 ## The list methods this file lowers.
-VOCAB_LIST := ["count", "fold", "flat_map", "take_while", "skip_while", "skip", "zip"]
+VOCAB_LIST := ["count", "fold", "flat_map", "take_while", "skip_while", "skip", "zip", "slice"]
 
 ## The set methods this file lowers: those that take a function, `take`,
-## `skip`, `zip`, `enumerate`, `sum`, `min` and `max` (which read the set as a list).
+## `skip`, `zip`, `enumerate`, `sum`, `min`, `max` and `to_list` (which read the set as a list).
 VOCAB_SET := [
     "any",
     "all",
@@ -30,6 +30,7 @@ VOCAB_SET := [
     "sum",
     "min",
     "max",
+    "to_list",
 ]
 
 ## The map methods this file lowers.
@@ -146,6 +147,11 @@ fn vclause(over str, is_map bool, id int, items List[str], cond ast.Expr?, pos a
 fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
     if is_pending_table(r.ty)
         return unsupported(npos, "`.{name}()` on an empty `\{}` whose type isn't known")
+    # type.coll.33: `xs.slice(a, b)` is `xs[a..b]` and `xs.slice(a)` is `xs[a..]`, with their trap.
+    if name == "slice"
+        if args.len() == 2
+            return lower_slice(r, args[0].value, args[1].value, false, npos)
+        return lower_slice(r, args[0].value, none, false, npos)
     nvars += 1
     id := nvars
     me := "#vr{id}"
@@ -154,6 +160,9 @@ fn Lower.lower_vocab(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos
     match r.ty
         Set(et) =>
             declare(me, Ty.List(et), table_keys(r.id, et))
+            # type.coll.33: the elements as a new list, in insertion order.
+            if name == "to_list"
+                return lower_value(vname(me, pos), none)
             if name != "filter"
                 # Everything but `filter` reads the set as the list of its elements.
                 return lower_method(vname(me, pos), name, npos, args, none)

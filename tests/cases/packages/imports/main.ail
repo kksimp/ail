@@ -10,7 +10,6 @@ fn helper() int
 use late
 
 fn main()
-    lib := 3
     x := lib
     print(lib.missng())
     print(fmt.thing())

@@ -14,6 +14,8 @@ true
 2
 -- list.slice[struct]
 5
+-- list.slice_method[struct]
+4
 -- list.push[struct]
 2
 -- list.pop[struct]

@@ -98,26 +98,31 @@ fn s7()
     xs := [(1, "a"), (2, "b"), (3, "c")]
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[tuple]
+## list.slice_method[tuple]
 fn s8()
+    xs := [(1, "a"), (2, "b"), (3, "c")]
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[tuple]
+fn s9()
     mut xs := [(1, "a")]
     xs.push((2, "b"))
     print(xs.len())
 
 ## list.pop[tuple]
-fn s9()
+fn s10()
     mut xs := [(1, "a"), (2, "b")]
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[tuple]
-fn s10()
+fn s11()
     mut xs := [(1, "a"), (2, "b")]
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[tuple]
-fn s11()
+fn s12()
     xs := [(1, "a"), (2, "b")]
     if x := xs.first()
         print(1)
@@ -125,57 +130,57 @@ fn s11()
         print(2)
 
 ## list.insert[tuple]
-fn s12()
+fn s13()
     mut xs := [(1, "a")]
     xs.insert(0, (2, "b"))
     print(xs.len())
 
 ## list.remove_at[tuple]
-fn s13()
+fn s14()
     mut xs := [(1, "a"), (2, "b")]
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[tuple]
-fn s14()
+fn s15()
     mut xs := [(1, "a")]
     xs.extend([(2, "b"), (3, "c")])
     print(xs.len())
 
 ## list.clear[tuple]
-fn s15()
+fn s16()
     mut xs := [(1, "a")]
     xs.clear()
     print(xs.len())
 
 ## list.reverse[tuple]
-fn s16()
+fn s17()
     mut xs := [(1, "a"), (2, "b")]
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[tuple]
-fn s17()
+fn s18()
     xs := [(1, "a"), (2, "b")]
     print(xs.reversed().len())
 
 ## list.contains[tuple]
-fn s18()
+fn s19()
     xs := [(1, "a"), (2, "b")]
     print(xs.contains((2, "b")))
 
 ## list.index_of[tuple]
-fn s19()
+fn s20()
     xs := [(1, "a"), (2, "b")]
     print(xs.index_of((2, "b")) else -1)
 
 ## list.join[tuple]
-fn s20()
+fn s21()
     xs := [(1, "a"), (2, "b")]
     print(xs.join(",").len() > 0)
 
 ## list.min_max[tuple]
-fn s21()
+fn s22()
     xs := [(2, "b"), (1, "a"), (3, "c")]
     if x := xs.min()
         print(1)
@@ -183,29 +188,29 @@ fn s21()
         print(2)
 
 ## list.sorted[tuple]
-fn s22()
+fn s23()
     xs := [(3, "c"), (1, "a"), (2, "b")]
     print(xs.sorted().len())
 
 ## list.sort[tuple]
-fn s23()
+fn s24()
     mut xs := [(3, "c"), (1, "a"), (2, "b")]
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[tuple]
-fn s24()
+fn s25()
     xs := [(3, "c"), (1, "a"), (2, "b")]
     print(xs.sorted(by: |x| x.0).len())
 
 ## list.sort_by[tuple]
-fn s25()
+fn s26()
     mut xs := [(3, "c"), (1, "a"), (2, "b")]
     xs.sort(by: |x| x.0)
     print(xs.len())
 
 ## list.min_by[tuple]
-fn s26()
+fn s27()
     xs := [(3, "c"), (1, "a"), (2, "b")]
     if x := xs.min(by: |x| x.0)
         print(1)
@@ -213,105 +218,105 @@ fn s26()
         print(2)
 
 ## list.take_skip[tuple]
-fn s27()
+fn s28()
     xs := [(1, "a"), (2, "b"), (3, "c")]
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.set_ops[tuple]
-fn s28()
+fn s29()
     xs := [(1, "a"), (2, "b")]
     ys := [(2, "b"), (3, "c")]
     print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
 
 ## list.chunks_windows[tuple]
-fn s29()
+fn s30()
     xs := [(1, "a"), (2, "b"), (3, "c")]
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.counts[tuple]
-fn s30()
+fn s31()
     xs := [(1, "a"), (2, "b"), (1, "a")]
     c := xs.counts()
     print(c.len())
 
 ## list.flatten[tuple]
-fn s31()
+fn s32()
     xs := [[(1, "a")], [(2, "b"), (3, "c")]]
     print(xs.flatten().len())
 
 ## list.enumerate[tuple]
-fn s32()
+fn s33()
     xs := [(1, "a"), (2, "b")]
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[tuple]
-fn s33()
+fn s34()
     xs := [(1, "a"), (2, "b")]
     print(xs.any(|x| x == (1, "a")))
     print(xs.all(|x| x == (1, "a")))
 
 ## list.find[tuple]
-fn s34()
+fn s35()
     xs := [(1, "a"), (2, "b")]
     if x := xs.find(|x| x == (2, "b"))
         print(1)
 
 ## list.filter[tuple]
-fn s35()
+fn s36()
     xs := [(1, "a"), (2, "b")]
     print(xs.filter(|x| x == (1, "a")).len())
 
 ## list.map[tuple]
-fn s36()
+fn s37()
     xs := [(1, "a"), (2, "b")]
     print(xs.map(|x| x.0).len())
 
 ## list.map_to_self[tuple]
-fn s37()
+fn s38()
     xs := [(1, "a"), (2, "b")]
     print(xs.map(|x| x).len())
 
 ## list.group_by[tuple]
-fn s38()
+fn s39()
     xs := [(1, "a"), (2, "b"), (1, "a")]
     g := xs.group_by(|x| x.0)
     print(g.len())
 
 ## list.count[tuple]
-fn s39()
+fn s40()
     xs := [(1, "a"), (2, "b"), (1, "a")]
     print(xs.count(|x| x == (1, "a")))
 
 ## list.fold[tuple]
-fn s40()
+fn s41()
     xs := [(1, "a"), (2, "b")]
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[tuple]
-fn s41()
+fn s42()
     xs := [(1, "a"), (2, "b")]
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[tuple]
-fn s42()
+fn s43()
     xs := [(1, "a"), (2, "b")]
     print(xs.take_while(|x| x == (1, "a")).len() + xs.skip_while(|x| x == (1, "a")).len())
 
 ## list.zip[tuple]
-fn s43()
+fn s44()
     xs := [(1, "a"), (2, "b")]
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[tuple]
-fn s44()
+fn s45()
     xs := [(1, "a"), (2, "b")]
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[tuple]
-fn s45()
+fn s46()
     xs := [(1, "a"), (2, "b")]
     mut n := 0
     for x in xs
@@ -319,90 +324,90 @@ fn s45()
     print(n)
 
 ## list.for_mut[tuple]
-fn s46()
+fn s47()
     mut xs := [(1, "a"), (2, "b")]
     for mut x in xs
         x = (3, "c")
     print(xs.len())
 
 ## list.comprehension[tuple]
-fn s47()
+fn s48()
     xs := [(1, "a"), (2, "b")]
     ys := [x for x in xs if x == (1, "a")]
     print(ys.len())
 
 ## list.set_comprehension[tuple]
-fn s48()
+fn s49()
     xs := [(1, "a"), (2, "b"), (1, "a")]
     s := {x for x in xs}
     print(s.len())
 
 ## list.map_comprehension[tuple]
-fn s49()
+fn s50()
     xs := [(1, "a"), (2, "b")]
     m := {x: 1 for x in xs}
     print(m.len())
 
 ## list.eq[tuple]
-fn s50()
+fn s51()
     xs := [(1, "a"), (2, "b")]
     ys := [(1, "a"), (2, "b")]
     print(xs == ys)
     print(xs != [(3, "c")])
 
 ## list.lt[tuple]
-fn s51()
+fn s52()
     xs := [(1, "a")]
     ys := [(2, "b")]
     print(xs < ys)
 
 ## list.print[tuple]
-fn s52()
+fn s53()
     xs := [(1, "a"), (2, "b")]
     print(xs)
 
 ## list.interp[tuple]
-fn s53()
+fn s54()
     xs := [(1, "a"), (2, "b")]
     print("{xs}".len() > 0)
 
 ## list.nested_push[tuple]
-fn s54()
+fn s55()
     mut xs := [[(1, "a")]]
     xs[0].push((2, "b"))
     print(xs[0].len())
 
 ## list.in_struct[tuple]
-fn s55()
+fn s56()
     mut b := Box_tuple(items: [(1, "a")])
     b.items.push((2, "b"))
     print(b.items.len())
 
 ## list.pass_mut[tuple]
-fn s56()
+fn s57()
     mut xs := [(1, "a")]
     add_tuple(mut xs, (2, "b"))
     print(xs.len())
 
 ## list.generic_first[tuple]
-fn s57()
+fn s58()
     xs := [(1, "a"), (2, "b")]
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[tuple]
-fn s58()
+fn s59()
     xs := [(1, "a"), (2, "b")]
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[tuple]
-fn s59()
+fn s60()
     xs := [[(1, "a")], [(2, "b")]]
     print(xs.contains([(2, "b")]))
 
 ## list.sorted_nested[tuple]
-fn s60()
+fn s61()
     xs := [[(2, "b")], [(1, "a")]]
     print(xs.sorted().len())
 
@@ -423,109 +428,111 @@ fn main()
     s6()
     print("-- list.slice[tuple]")
     s7()
-    print("-- list.push[tuple]")
+    print("-- list.slice_method[tuple]")
     s8()
-    print("-- list.pop[tuple]")
+    print("-- list.push[tuple]")
     s9()
-    print("-- list.swap[tuple]")
+    print("-- list.pop[tuple]")
     s10()
-    print("-- list.first_last[tuple]")
+    print("-- list.swap[tuple]")
     s11()
-    print("-- list.insert[tuple]")
+    print("-- list.first_last[tuple]")
     s12()
-    print("-- list.remove_at[tuple]")
+    print("-- list.insert[tuple]")
     s13()
-    print("-- list.extend[tuple]")
+    print("-- list.remove_at[tuple]")
     s14()
-    print("-- list.clear[tuple]")
+    print("-- list.extend[tuple]")
     s15()
-    print("-- list.reverse[tuple]")
+    print("-- list.clear[tuple]")
     s16()
-    print("-- list.reversed[tuple]")
+    print("-- list.reverse[tuple]")
     s17()
-    print("-- list.contains[tuple]")
+    print("-- list.reversed[tuple]")
     s18()
-    print("-- list.index_of[tuple]")
+    print("-- list.contains[tuple]")
     s19()
-    print("-- list.join[tuple]")
+    print("-- list.index_of[tuple]")
     s20()
-    print("-- list.min_max[tuple]")
+    print("-- list.join[tuple]")
     s21()
-    print("-- list.sorted[tuple]")
+    print("-- list.min_max[tuple]")
     s22()
-    print("-- list.sort[tuple]")
+    print("-- list.sorted[tuple]")
     s23()
-    print("-- list.sorted_by[tuple]")
+    print("-- list.sort[tuple]")
     s24()
-    print("-- list.sort_by[tuple]")
+    print("-- list.sorted_by[tuple]")
     s25()
-    print("-- list.min_by[tuple]")
+    print("-- list.sort_by[tuple]")
     s26()
-    print("-- list.take_skip[tuple]")
+    print("-- list.min_by[tuple]")
     s27()
-    print("-- list.set_ops[tuple]")
+    print("-- list.take_skip[tuple]")
     s28()
-    print("-- list.chunks_windows[tuple]")
+    print("-- list.set_ops[tuple]")
     s29()
-    print("-- list.counts[tuple]")
+    print("-- list.chunks_windows[tuple]")
     s30()
-    print("-- list.flatten[tuple]")
+    print("-- list.counts[tuple]")
     s31()
-    print("-- list.enumerate[tuple]")
+    print("-- list.flatten[tuple]")
     s32()
-    print("-- list.any_all[tuple]")
+    print("-- list.enumerate[tuple]")
     s33()
-    print("-- list.find[tuple]")
+    print("-- list.any_all[tuple]")
     s34()
-    print("-- list.filter[tuple]")
+    print("-- list.find[tuple]")
     s35()
-    print("-- list.map[tuple]")
+    print("-- list.filter[tuple]")
     s36()
-    print("-- list.map_to_self[tuple]")
+    print("-- list.map[tuple]")
     s37()
-    print("-- list.group_by[tuple]")
+    print("-- list.map_to_self[tuple]")
     s38()
-    print("-- list.count[tuple]")
+    print("-- list.group_by[tuple]")
     s39()
-    print("-- list.fold[tuple]")
+    print("-- list.count[tuple]")
     s40()
-    print("-- list.flat_map[tuple]")
+    print("-- list.fold[tuple]")
     s41()
-    print("-- list.take_skip_while[tuple]")
+    print("-- list.flat_map[tuple]")
     s42()
-    print("-- list.zip[tuple]")
+    print("-- list.take_skip_while[tuple]")
     s43()
-    print("-- list.zip_into[tuple]")
+    print("-- list.zip[tuple]")
     s44()
-    print("-- list.for[tuple]")
+    print("-- list.zip_into[tuple]")
     s45()
-    print("-- list.for_mut[tuple]")
+    print("-- list.for[tuple]")
     s46()
-    print("-- list.comprehension[tuple]")
+    print("-- list.for_mut[tuple]")
     s47()
-    print("-- list.set_comprehension[tuple]")
+    print("-- list.comprehension[tuple]")
     s48()
-    print("-- list.map_comprehension[tuple]")
+    print("-- list.set_comprehension[tuple]")
     s49()
-    print("-- list.eq[tuple]")
+    print("-- list.map_comprehension[tuple]")
     s50()
-    print("-- list.lt[tuple]")
+    print("-- list.eq[tuple]")
     s51()
-    print("-- list.print[tuple]")
+    print("-- list.lt[tuple]")
     s52()
-    print("-- list.interp[tuple]")
+    print("-- list.print[tuple]")
     s53()
-    print("-- list.nested_push[tuple]")
+    print("-- list.interp[tuple]")
     s54()
-    print("-- list.in_struct[tuple]")
+    print("-- list.nested_push[tuple]")
     s55()
-    print("-- list.pass_mut[tuple]")
+    print("-- list.in_struct[tuple]")
     s56()
-    print("-- list.generic_first[tuple]")
+    print("-- list.pass_mut[tuple]")
     s57()
-    print("-- list.generic_ord[tuple]")
+    print("-- list.generic_first[tuple]")
     s58()
-    print("-- list.contains_list[tuple]")
+    print("-- list.generic_ord[tuple]")
     s59()
-    print("-- list.sorted_nested[tuple]")
+    print("-- list.contains_list[tuple]")
     s60()
+    print("-- list.sorted_nested[tuple]")
+    s61()

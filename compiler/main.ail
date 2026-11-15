@@ -672,6 +672,16 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     packages := pkg.read(root)
     mut k := 0
     while k < srcs.len()
+        # std.use.4: the standard modules in AIL the file names without `use`,
+        # as `ail check` loads them (load/stduse.ail).
+        if std != "" and not srcs[k].module.starts_with("std.") and load.may_name_std(srcs[k].text)
+            rows := load.std_mentions(syntax.lex(srcs[k].text).tokens, std)
+            wanted := load.keep_implicit(
+                load.implicit_uses(rows, 1),
+                srcs[k].prog.uses,
+                load.FILE_LINES,
+            )
+            srcs[k].prog.uses.extend(wanted)
         for ui in 0..srcs[k].prog.uses.len()
             u := srcs[k].prog.uses[ui]
             parts := [i.name for i in u.path]
@@ -718,7 +728,10 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             n
             for n in generics.sorted() if srcs[i].text.contains(".{n}[")
         ].len() > 0
+            # The implicit imports (std.use.4) are not in the text: keep them.
+            kept_uses := [u for u in srcs[i].prog.uses if load.is_implicit_use(u)]
             srcs[i] = parse_with(srcs[i].module, srcs[i].path, srcs[i].text, generics)
+            srcs[i].prog.uses.extend(kept_uses)
     # Imports name modules by their place in the program (`shapes` in package
     # `geo` is `geo.shapes`), keeping the name the file uses for them.
     for i in 0..srcs.len()

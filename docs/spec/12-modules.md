@@ -124,7 +124,8 @@ declarations. An import applies to the file that declares it.
 
 **mod.use.4** — `use a.b` requires a directory `a/b` under the package root
 that contains at least one `.ail` file; otherwise it is a compile-time
-error. `use std.NAME` names a standard module instead (`std.use.1`).
+error. `use std.NAME` names a standard module instead (`std.use.1`), and
+the standard modules need no `use` at all (`std.use.4`).
 *(ADR 0153)*
 
 A file `store.ail` where the directory `store/` should be is named in the

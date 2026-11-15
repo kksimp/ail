@@ -13,6 +13,8 @@ true
 false
 -- set.sorted[str]
 2
+-- set.to_list[str]
+2
 -- set.is_subset[str]
 true
 -- set.set_ops[str]
