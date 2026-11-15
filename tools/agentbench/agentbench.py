@@ -109,6 +109,20 @@ SHIM_AIL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)
             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
             "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
 
+# `sed -i` with no suffix is GNU's form; the Mac's BSD sed reads the next argument as the suffix, so in E13 the agents'
+# `sed -i` failed on the Mac in every arm (240 of 480 calls). Every arm gets this `sed` on PATH: GNU sed (gsed) when the
+# machine has it, else the system sed with a bare `-i` or `--in-place` given an empty suffix (E14 review, agent fluency).
+SHIM_SED = ("#!/bin/sh\nreal='{real}'\nn=$#; i=0\n"
+            "while [ $i -lt $n ]; do a=$1; shift; i=$((i+1)); case \"$a\" in -i|--in-place) set -- \"$@\" -i '' ;; *) set -- \"$@\" \"$a\" ;; esac; done\n"
+            "exec \"$real\" \"$@\"\n")
+def sed_shim():
+    """The body of the workspace's `sed`, or None where the system sed is GNU sed already."""
+    gnu = shutil.which("gsed")
+    if gnu: return f"#!/bin/sh\nexec '{gnu}' \"$@\"\n"
+    real = shutil.which("sed") or "/usr/bin/sed"
+    if subprocess.run([real, "--version"], capture_output=True).returncode == 0: return None
+    return SHIM_SED.format(real=real)
+
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
     p = os.path.join(arm_dir(arm), "AGENTS.md")
@@ -194,6 +208,7 @@ def prep(t, task, arm, ws):
     write_exec(os.path.join(ws, "test"), SHIM_TEST.format(k="test", name="./test", cmd=cmd))
     shutil.copy(os.path.join(HERE, "visible.py"), os.path.join(ws, ".bench", "visible.py"))
     if lang == "ail": write_exec(os.path.join(ws, ".bench", "bin", "ail"), SHIM_AIL.format(real=real_ail()))
+    if body := sed_shim(): write_exec(os.path.join(ws, ".bench", "bin", "sed"), body)  # every arm alike
     if arm in TOOL_ARMS:  # what `ail new` writes (ADR 1046, amended 2026-11-11), plus the MCP server through the logging proxy; agent files, never the prompt
         d = arm_dir(arm)
         for f in ("AGENTS.md", "CLAUDE.md"): shutil.copy(os.path.join(d, f), os.path.join(ws, f))

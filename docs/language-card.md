@@ -290,9 +290,9 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
 `Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
 
-Priority queue: `h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
+Priority queue: `mut h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
 for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
-`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (all elements in pop order). Double-ended queue: `d := Deque[int]()`,
+`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (all elements in pop order). Double-ended queue: `mut d := Deque[int]()`,
 `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
 `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
