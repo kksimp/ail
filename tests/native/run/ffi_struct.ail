@@ -1,7 +1,7 @@
 # C structs by value (ffi.struct.1-3, ADR 1074): `div` and `lldiv` return
 # structs of integers, and the complex functions of the C math library take
 # and return pairs of `float` and of `f32` (float-only aggregates).
-struct Div
+struct DivT
     quot i32
     rem i32
 
@@ -17,7 +17,7 @@ struct Complex32
     re f32
     im f32
 
-extern c fn div(n i32, d i32) Div
+extern c fn div(n i32, d i32) DivT
 extern c fn lldiv(n int, d int) LongDiv
 extern c "m" fn cabs(z Complex) float
 extern c "m" fn csqrt(z Complex) Complex

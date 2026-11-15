@@ -1,0 +1,6 @@
+## std.bigint.10: `/` by a zero BigInt traps, as `int` division does.
+use std.bigint
+
+fn main()
+    a := bigint.from_int(5)
+    print(a / bigint.from_int(0))

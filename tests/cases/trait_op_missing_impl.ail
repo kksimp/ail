@@ -1,0 +1,10 @@
+## trait.op.1: `*` on a struct without `impl Mul` is an error (ADR 1124).
+struct V
+    x int
+
+impl Add for V
+    fn add(self, o V) V
+        V(x: self.x + o.x)
+
+fn main()
+    print((V(x: 1) * V(x: 2)).x)

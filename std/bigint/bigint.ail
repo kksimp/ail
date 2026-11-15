@@ -1,4 +1,4 @@
-## std.bigint (spec std.bigint.1-9, ADR 0902): integers of any size. A value is
+## std.bigint (spec std.bigint.1-10, ADR 0902, ADR 1124): integers of any size. A value is
 ## a sign and a magnitude of base-10^9 limbs, least significant first, with
 ## no zero limb at the top; zero has no limbs and is never negative.
 
@@ -199,14 +199,32 @@ pub fn BigInt.is_zero(self) bool
 pub fn BigInt.is_negative(self) bool
     self.neg
 
-## -1, 0 or 1 as `self` is less than, equal to or greater than `o` (std.bigint.4).
-pub fn BigInt.cmp(self, o BigInt) int
-    if self.neg != o.neg
-        return if self.neg then -1 else 1
-    c := cmp_mag(self.limbs, o.limbs)
-    if self.neg
+## -1, 0 or 1 as `a` is less than, equal to or greater than `b`.
+fn cmp_signed(a BigInt, b BigInt) int
+    if a.neg != b.neg
+        return if a.neg then -1 else 1
+    c := cmp_mag(a.limbs, b.limbs)
+    if a.neg
         return -c
     c
+
+## Values compare by size, so `a < b` and `a.cmp(b)` work (std.bigint.4,
+## trait.std.2); `==` is the automatic equality, exact because the form is
+## normalized.
+impl Ord for BigInt
+    fn cmp(self, other BigInt) Ordering
+        c := cmp_signed(self, other)
+        if c < 0
+            return Less
+        if c > 0
+            return Greater
+        Equal
+
+## The text form is the decimal text, so `print(b)` and `"{b}"` show the
+## number (std.bigint.3, trait.std.3).
+impl ToStr for BigInt
+    fn to_str(self) str
+        self.to_text()
 
 pub fn BigInt.negate(self) BigInt
     make(not self.neg, self.limbs)
@@ -214,32 +232,57 @@ pub fn BigInt.negate(self) BigInt
 pub fn BigInt.abs(self) BigInt
     make(false, self.limbs)
 
-## `self + o` (std.bigint.4).
-pub fn BigInt.add(self, o BigInt) BigInt
-    if self.neg == o.neg
-        return make(self.neg, add_mag(self.limbs, o.limbs))
-    c := cmp_mag(self.limbs, o.limbs)
-    if c == 0
-        return make(false, List[int]())
-    if c > 0
-        return make(self.neg, sub_mag(self.limbs, o.limbs))
-    make(o.neg, sub_mag(o.limbs, self.limbs))
+## `a + b`, `a - b`, `a * b` and `-a` (std.bigint.4, std.bigint.10,
+## trait.op.1); `a.add(b)` and the other method forms work too.
+impl Add for BigInt
+    fn add(self, other BigInt) BigInt
+        if self.neg == other.neg
+            return make(self.neg, add_mag(self.limbs, other.limbs))
+        c := cmp_mag(self.limbs, other.limbs)
+        if c == 0
+            return make(false, List[int]())
+        if c > 0
+            return make(self.neg, sub_mag(self.limbs, other.limbs))
+        make(other.neg, sub_mag(other.limbs, self.limbs))
 
-## `self - o` (std.bigint.4).
-pub fn BigInt.sub(self, o BigInt) BigInt
-    self.add(o.negate())
+impl Sub for BigInt
+    fn sub(self, other BigInt) BigInt
+        self + other.negate()
 
-## `self * o` (std.bigint.4).
-pub fn BigInt.mul(self, o BigInt) BigInt
-    make(self.neg != o.neg, mul_mag(self.limbs, o.limbs))
+impl Mul for BigInt
+    fn mul(self, other BigInt) BigInt
+        make(self.neg != other.neg, mul_mag(self.limbs, other.limbs))
+
+impl Neg for BigInt
+    fn neg(self) BigInt
+        self.negate()
+
+## `a / b` and `a % b` (std.bigint.10): `divmod`'s quotient and remainder.
+## Dividing by zero traps, as it does for `int` (expr.arith.3); `divmod`
+## returns the error instead.
+impl Div for BigInt
+    fn div(self, other BigInt) BigInt
+        if other.is_zero()
+            unreachable("std.bigint.10: division by zero: test `b.is_zero()` first, or use `a.divmod(b)`, which returns an error")
+        divmod_signed(self, other).quo
+
+impl Rem for BigInt
+    fn rem(self, other BigInt) BigInt
+        if other.is_zero()
+            unreachable("std.bigint.10: remainder by zero: test `b.is_zero()` first, or use `a.divmod(b)`, which returns an error")
+        divmod_signed(self, other).rem
 
 ## `self / o` and `self % o`, truncated toward zero: the remainder has the
 ## sign of `self` (std.bigint.5). Dividing by zero is an error (std.bigint.9).
 pub fn BigInt.divmod(self, o BigInt) QuoRem ! BigIntError
     if o.limbs.len() == 0
         return BigIntError(why: "division by zero")
-    r := divmod_mag(self.limbs, o.limbs)
-    QuoRem(quo: make(self.neg != o.neg, r.quo.limbs), rem: make(self.neg, r.rem.limbs))
+    divmod_signed(self, o)
+
+## `divmod` for a divisor that is not zero.
+fn divmod_signed(a BigInt, b BigInt) QuoRem
+    r := divmod_mag(a.limbs, b.limbs)
+    QuoRem(quo: make(a.neg != b.neg, r.quo.limbs), rem: make(a.neg, r.rem.limbs))
 
 ## `self` to the power `n`, for `n >= 0` (std.bigint.6).
 pub fn BigInt.pow(self, n int) BigInt ! BigIntError
@@ -250,8 +293,8 @@ pub fn BigInt.pow(self, n int) BigInt ! BigIntError
     mut e := n
     while e > 0
         if e % 2 == 1
-            result = result.mul(base)
-        base = base.mul(base)
+            result = result * base
+        base = base * base
         e = e / 2
     result
 
@@ -261,5 +304,5 @@ pub fn factorial(n int) BigInt ! BigIntError
         return BigIntError(why: "negative factorial")
     mut r := from_int(1)
     for i in 2..(n + 1)
-        r = r.mul(from_int(i))
+        r = r * from_int(i)
     r

@@ -1,0 +1,6 @@
+## mod.unit.1: a type may not be named like a prelude operator trait (ADR 1124).
+struct Neg
+    tag str
+
+fn main()
+    print(Neg(tag: "a").tag)

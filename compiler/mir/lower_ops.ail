@@ -49,7 +49,11 @@ fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want T
                 Tensor(_) => tensor_neg(a, pos)
                 Sized(_) => sized_neg(a, pos)
                 F32 => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.F32)
-                _ => unsupported(pos, "`-` on `{a.ty.name()}`")
+                _ =>
+                    # trait.op.1: a type's own `Neg` (ADR 1124).
+                    if t := self.neg_trait_call(a)
+                        return t
+                    unsupported(pos, "`-` on `{a.ty.name()}`")
         Not =>
             a := lower_value(operand, Ty.Bool)?
             Val(id: op("not", [a.id], Ty.Bool), ty: Ty.Bool)
@@ -112,6 +116,9 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     if k := own_cmp(a.ty)
         if name == "lt" or name == "gt" or name == "le" or name == "ge"
             return cmp_order(name, k, a, b)
+    # trait.op.1: a type's own `Add` and the like (ADR 1124).
+    if t := self.op_trait_call(name, a, b)
+        return t
     if is_enum(a.ty)
         return enum_compare(o, a, b, pos)
     if a.ty == Ty.Bytes
