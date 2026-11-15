@@ -32,6 +32,28 @@ modules need no `use` (`fs.read_text(p)`); a local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
 
+## Command-line programs
+
+```ail norun
+fn main()
+    args := env.args()                   # the words after the program, not its name
+    if args.len() != 1
+        io.eprint("usage: total FILE")   # to standard error; adds a newline
+        io.exit(2)                       # ends now with status 2 (0 to 255)
+        return                           # the checker does not know `exit` ends the block
+    text := fs.read_text(args[0]) else
+        io.eprint("cannot read {args[0]}")
+        io.exit(1)
+        return
+    mut total := 0
+    for line in text.lines()
+        n := line.trim().to_int() else 0
+        total += n
+    print(total)                         # status 0 when `main` returns
+```
+
+Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). `env`, `io`, `fs` need no `use` (std.env.1, std.io.1 to std.io.4). `int` overflow traps; big sums: `use std.bigint` (std.bigint.4, `ail ask how overflow`).
+
 ## Layout
 
 - Blocks are indented by exactly 4 spaces. No tabs, braces or `;`.
@@ -89,8 +111,6 @@ and JSON work as the base's; no fields, methods or `impl`; free at run time.
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `t.matmul(u)`, `t + u`, `t * 2.0`, `t.dot(u)`, `t.sum(axis?)`, `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
-
-Standard input: `line := io.read_line() else break` gives a `str?` without its line ending (`\n` or `\r\n`; so `line.len()` does not count it), `none` at the end of input (std.io.1); `io.read_all()` gives all of it.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `use std.file`; `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
@@ -452,10 +472,12 @@ for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
 
 ```ail skip=context
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
+a := ages.get("zed") else 0            # read a key that may be missing: `get` gives `V?`
+if ages.contains("ann")                # test for a key
+    print(ages["ann"])                 # `m[k]` traps when `k` is missing
 ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
 mut counts := {}                       # typed by first use: counts[w] += 1
-b := ages.get("dan") else 0            # `ages["dan"]` traps if missing; same: `ages.get_or("dan", 0)`
 for name, age in ages                  # each entry; also keys(), values()
     print("{name}: {age}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
@@ -463,7 +485,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats.
+Also `get_or(k, d)`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats.
 
 ## Values and `mut`
 

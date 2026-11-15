@@ -1491,12 +1491,16 @@ fn main()
 **tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
 `NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 350 tokens: the
 core card (`ail card`) and the lookups beyond it (`ail card TOPIC`, `ail ask std
-WORDS`), the loop (`ail task start`, `ail context FN`, edit, `ail check --fix`,
-`ail task verify`, `ail task finish`, which writes the change certificate),
-`ail try` for two candidate fixes, `ail explain RULE` for any diagnostic, and
-`ail ask` instead of grep. It does not send the agent to the full card. `.mcp.json`
+WORDS`) and each tool with the situation it pays for: `ail check --fix` and
+`ail explain RULE` for a diagnostic, `ail context FN` before editing a function,
+`ail ask` instead of grep, `ail try` for two candidate fixes, and the task loop
+(`ail task start`, `ail task verify`, `ail task finish`, which writes the change
+certificate) for a multi-function change in a program with `@test` functions. It
+says that `ail task verify` runs only the check and the `@test` functions, and
+that the `.mcp.json` tools are the same commands. It does not send the agent to
+the full card. `.mcp.json`
 registers `ail mcp` on stdio under `mcpServers.ail`. The `agent_tools` suite
-checks both files. *(ADR 1046)*
+checks both files. *(ADR 1046, amended 2026-11-15)*
 
 **tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
 the flag may come before or after `NAME`. *(ADR 1046)*
