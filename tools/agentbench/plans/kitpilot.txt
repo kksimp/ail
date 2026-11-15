@@ -1,0 +1,6 @@
+# Agent-kit pilot (ADR 1046, amended 2026-11-15): do the kit arms reach for the tools on multi-file change tasks? At most $5.
+stock-bugfix ail-tools k1
+stock-refactor ail-tools k1
+stock-locations ail-tools k1
+stock-bugfix ail-core-card k1
+stock-refactor ail-core-card k1

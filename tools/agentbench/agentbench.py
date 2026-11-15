@@ -203,6 +203,8 @@ def count_tokens(paths):
     return [r["mean"] for r in json.loads(out)]
 
 CHECKS = ("ail check", "ail_check", "./build")
+AGENT_TOOLS = ("ail task", "ail context", "ail edit", "ail try", "ail fix", "ail impact")  # the kit's workflow tools, beyond lookups; any `mcp:` call counts too
+def used_agent_tools(m): return any(n in AGENT_TOOLS or n.startswith("mcp:") for n in m.get("tool_calls", {}))
 CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task")  # shimmed calls that compile or run the program
 
 def src_sum(d):
@@ -408,7 +410,7 @@ def cmd_report(a):
     if a.plan:  # only the trials a plan numbered, so pilots in the same results folder stay out of a counted table
         keep = {(t, arm_name(arm), trial) for t, arm, trial in plan(a.plan)}
         ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
-    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green | used agent tools |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
             g = [m for m in ms if m["task"] == t and m["arm"] == arm]
@@ -418,7 +420,7 @@ def cmd_report(a):
                       f"{statistics.median(m.get('charged_usd', m['cost_usd']) for m in g):.2f} | {statistics.median(m['output'] for m in g):.0f} | "
                       f"{med(m.get('fix_rounds') for m in g)} | {med(m.get('versions_to_green') for m in g)} | "
                       f"{statistics.median(m['debug_rounds'] for m in g):.1f} | {statistics.median(m['elapsed_s'] for m in g)/60:.1f} | {sum(m['interventions'] for m in g)} | "
-                      f"{sum(fc)}/{len(fc)} | {med(m.get('toolchain_tokens') for m in g)} | {med(m.get('turns_to_green') for m in g)} |")
+                      f"{sum(fc)}/{len(fc)} | {med(m.get('toolchain_tokens') for m in g)} | {med(m.get('turns_to_green') for m in g)} | {sum(used_agent_tools(m) for m in g)}/{len(g)} |")
 
 def main():
     p = argparse.ArgumentParser(); s = p.add_subparsers(dest="c", required=True)
