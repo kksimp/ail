@@ -1539,10 +1539,15 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
             "(",
             if f.params.len() > 0 then "(self, " else "(self",
         )])
+    elif sd := std_name_help(d, n, at, nargs)
+        d = sd
     elif s := suggest(n, candidates)
         d = d.did_you_mean(n, s)
     elif nargs != none and n.chars().len() > 0 and n.chars()[0].is_upper()
         d = d.with_help("no type or variant named `{n}` is in scope here; declare it with `struct`, `enum` or `error enum`, or import its module with `use`")
+    elif nargs != none
+        # A call is never told to declare a local (expr.name.1): name the two ways a function comes into scope.
+        d = d.with_help("no function `{n}` is declared; declare it with `fn {n}(...)`, or call a standard one through its module, e.g. `io.exit(1)` (`ail ask std WORDS` finds one)")
     else
         # Name what is in scope, so the next try needs no lookup (checkbench, ADR 1111).
         here := [l.name for l in locals if l.name != "_" and not l.name.starts_with("$")]

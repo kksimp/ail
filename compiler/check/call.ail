@@ -1519,6 +1519,9 @@ fn Checker.has_field(self, t Ty, n str) bool
                     "`{head}` is a type; fields are read from values",
                 )
             return Ty.Unknown
+    # `sys.argv`, `os.args`: a standard spelling, not "`sys` is unknown" (expr.name.1, std.use.2).
+    if head != "" and not has_targs and self.std_dotted(head, n, expr_pos(recv), at, none)
+        return Ty.Unknown
     rt0 := expr(recv, none, true)
     if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
         return Ty.Unknown

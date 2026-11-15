@@ -258,7 +258,15 @@ fn Checker.unknown_type(mut self, n str, at ast.Pos)
     mut candidates := BUILTIN_TYPES
     candidates.extend(types.keys())
     mut d := new_diag("expr.name.1", at, "unknown type `{n}`")
-    if t := foreign_type_word(n)
+    if h := std_type_home(n)
+        # `BigInt` is `bigint.BigInt` from `use std.bigint` (expr.name.1, suggest.ail).
+        mut edits := [fix.replace(at, n, h.new)]
+        mut why := "write `{h.new}`"
+        if not self.uses_std(h.home)
+            edits.push(fix.insert(ast.Pos(line: 1, col: 1), "use std.{h.home}\n"))
+            why = "add `use std.{h.home}` at the top of the file and write `{h.new}`"
+        d = d.with_help(why).with_fix(why, edits)
+    elif t := foreign_type_word(n)
         d = d.with_help("write `{t}`").with_fix("write `{t}`", [fix.replace(at, n, t)])
     elif n == "Result"
         d = d.with_help("a result type is written `T ! E`: `fn f(n int) int ! MyError`, where `MyError` is declared with `error enum`; the success value is returned as it is and the failure with `return Variant` (err.type.1)")
@@ -380,7 +388,7 @@ fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
         return Ty.Unknown
     if types.contains(n) and not STD_MODULES.contains(head)
         return none
-    if STD_MODULES.contains(head)
+    if STD_MODULES.contains(head) or ail_std_module(head)
         not_imported(head, at)
     else
         err_help(

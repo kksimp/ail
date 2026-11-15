@@ -1,0 +1,6 @@
+use std.bigint
+fn show(n bigint.BigInt)
+    print(n.to_text())
+
+fn main()
+    print("ok")

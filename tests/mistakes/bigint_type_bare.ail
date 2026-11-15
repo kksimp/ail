@@ -1,0 +1,5 @@
+fn show(n BigInt)
+    print(n.to_text())
+
+fn main()
+    print("ok")

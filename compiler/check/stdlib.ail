@@ -126,6 +126,10 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
             args_only(args)
             self.not_imported(head, at)
             return Ty.Unknown
+        # `sys.exit(1)`, `bigint.from_int(5)` without its `use` (expr.name.1, std.use.2).
+        if self.std_dotted(head, n, head_pos(head, at), at, args.len())
+            args_only(args)
+            return Ty.Unknown
         return none
     if module == "tensor" and n == "Tensor"
         args_only(args)
@@ -150,7 +154,12 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
                 fix.replace(at, n, renamed),
             ]))
             return Ty.Unknown
-        if s := suggest(n, fns_of)
+        if g := std_guess("{head}.{n}")
+            if g.fixable and args.len() > 0
+                d = d.with_fix("write `{g.new}`", [fix.replace(head_pos(head, at), "{head}.{n}", g.new)])
+        if h := std_missing_help(head, n)
+            d = d.with_help(h)
+        elif s := suggest(n, fns_of)
             d = d.with_help("did you mean `{head}.{s}`?")
         else
             d = d.with_help("`std.{module}` provides {list_names(fns_of)}")
