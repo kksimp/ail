@@ -917,7 +917,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,bigint,divmod expect=BigInt.divmod(o rules=api.find.2
+```ail tool=ask,std,bigint,divmod expect=bigint.divmod(o rules=api.find.2
 fn main()
     print(1)
 ```
