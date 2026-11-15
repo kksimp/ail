@@ -88,6 +88,9 @@ def cmd_docs(a):
     short = max((n["ail"] - n[l]) / n["ail"] for l in others)  # each other language may have more docs than AIL, never more than the tolerance fewer (ADR 0916)
     # ail-tools adds the arm's agent files on top of the same card; they are the treatment, so they do not count toward parity (ADR 0916, amended 2026-11-10).
     for arm in TOOL_ARMS: n[f"{arm} agent files"] = doc_tokens(arm_files(arm))
+    # The plain arm's DOCS is the card through Modules (card_front): it must fit one part, or the arm reads a split file.
+    front = len(card_front(os.path.join(ROOT, "docs", "language-card.md")).encode()) if "docs/language-card.md" in t["docs"]["ail"] else 0
+    if front > DOC_PART_BYTES: print(f"ail-plain DOCS (card through Modules) is {front} bytes, over {DOC_PART_BYTES}: move a section past Modules"); sys.exit(1)
     print(n, f"largest shortfall against AIL {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
 
 # --- one trial -----------------------------------------------------------
@@ -184,6 +187,21 @@ def put_doc(src, dst_dir):
         with open(os.path.join(dst_dir, out[-1]), "w", encoding="utf-8") as f: f.write(part)
     return out
 
+# The plain arm's DOCS (E14 review item 15): the card through "Modules", the part its own text says to read before a first
+# program, in one file under DOC_PART_BYTES, and a closing list of the other sections, which `ail card WORD` prints.
+def card_front(path):
+    import re
+    with open(path, encoding="utf-8") as f: text = f.read()
+    i = text.index("\n## Modules"); j = text.index("\n## ", i + 1)
+    rest = re.findall(r"^## (.+)$", text[j:], re.M)
+    note = ("## The rest of the card\n\nNot in this file; `ail card WORD` prints a section: "
+            + ", ".join(f"`{first_word(h)}` ({h.replace('`', '')})" for h in rest) + ".\n")
+    return text[:j + 1] + note
+def first_word(h):
+    """The first word of a heading that no earlier heading of the card holds, lower case, for `ail card` (tool.card.2)."""
+    import re
+    return re.findall(r"[a-z][a-z-]+", h.replace("`", "").lower())[0]
+
 def seed_sum(t, lang):
     """The checksum the shims log for the untouched seed: the same shell pipeline, run in the seed directory."""
     d = os.path.join(task_dir(t), "seed", lang)
@@ -200,6 +218,9 @@ def prep(t, task, arm, ws):
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
     for p in ([] if arm in NODOCS_ARMS else task["docs"][lang]):
         if arm == "ail-core-card" and p == "docs/language-card.md": p = "docs/language-card-core.md"  # the one doc this arm loads; the rest is `ail card TOPIC` and `ail ask std`
+        if arm == "ail-plain" and p == "docs/language-card.md":  # the card through Modules, one file (item 15)
+            with open(os.path.join(ws, "DOCS", "language-card.md"), "w", encoding="utf-8") as f: f.write(card_front(os.path.join(ROOT, p)))
+            continue
         put_doc(os.path.join(ROOT, p), os.path.join(ws, "DOCS"))
     with open(os.path.join(ws, ".bench", "seed"), "w") as f: f.write(seed_sum(t, lang))  # the untouched seed's src/ checksum
     shutil.copy(os.path.join(task_dir(t), "cases", "visible.jsonl"), os.path.join(ws, ".bench", "visible.jsonl"))
