@@ -1899,7 +1899,20 @@ fn Parser.statement_core(mut self) ast.Stmt?
     if tag == "kw" and text == "mut"
         self.bump()
         n := self.take_name("a binding name after `mut`", "expr.bind.2")?
-        self.expect_sym(":=", "`:=` after the name", "expr.bind.2")?
+        if self.sym_at(0) == "="
+            # expr.bind.2: `mut x = e` declares with `:=`.
+            eq := self.here()
+            self.error_text(
+                "expr.bind.2",
+                eq,
+                "expected `:=` after the name, found `=`",
+                "`mut NAME := value` declares a new mutable name; `=` changes one that exists",
+                "declare it with `:=`",
+            )
+            self.attach("declare it with `:=`", [fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")])
+            self.i += 1
+        else
+            self.expect_sym(":=", "`:=` after the name", "expr.bind.2")?
         value := self.expression_plain()?
         e := self.otherwise()?
         return ast.Stmt.Let(
@@ -2059,6 +2072,17 @@ fn Parser.statement_core(mut self) ast.Stmt?
     if s == "=" or assign_op(s) != none
         apos := self.bump().pos
         value := self.expression()?
+        if s == "=" and self.at_kw("else") and self.else_block_follows()
+            # lex.stmt.1, err.else.6: after `=`, `else` takes a value; a block `else` needs `:=`.
+            name := name_of(target) else "x"
+            self.error_text(
+                "lex.stmt.1",
+                self.here(),
+                "after `=`, `else` takes a value on the same line, not a block",
+                "give a value (`{name} = EXPR else 0`), or bind a new name: `v := EXPR else` with the block, then `{name} = v`",
+                "",
+            )
+            return none
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
         self.error_text(

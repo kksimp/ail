@@ -1,0 +1,4 @@
+use src.store
+
+fn main()
+    print(1)

@@ -5,6 +5,7 @@
 ## private items are checked here.
 use ast
 use cheader
+use fix
 use check
 use pkg
 use syntax
@@ -218,7 +219,15 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
                 [p.name for p in u.path],
                 reach.dir,
             ) else general
-            found.push(diag("mod.use.4", head.pos, "there is no module `{dotted}`", help))
+            mut d := diag("mod.use.4", head.pos, "there is no module `{dotted}`", help)
+            if not fs.exists("{reach.dir}.ail")
+                if rest := rooted_rest(packages, module, [p.name for p in u.path])
+                    # mod.unit.2: `use src.store` from the root's own directory is `use store` (E13).
+                    last := u.path[u.path.len() - 1]
+                    d.fixed = true
+                    d.fix = "write `use {rest.join(".")}`"
+                    d.edits = [fix.span(head.pos, ast.Pos(line: last.pos.line, col: last.pos.col + last.name.len()), rest.join("."))]
+            found.push(d)
         if first := imports[fi].get(nm.name)
             both_std := match first
                 Std => if t := target then std_target(t) else false
@@ -927,13 +936,18 @@ fn misplaced_module(packages pkg.Packages, importer str, parts List[str], dir st
     if fs.exists("{dir}.ail")
         leaf := parts[parts.len() - 1]
         return "`{dir}.ail` is a file, but a module is a directory (mod.unit.1): move it to `{path.join(dir, leaf)}.ail`"
+    rest := rooted_rest(packages, importer, parts) else return none
+    "an import path is relative to the package root (mod.unit.2), the directory of the file built: write `use {rest.join(".")}`"
+
+## The shortest tail of an import path that names a module directory, when the whole path does not (mod.unit.2).
+fn rooted_rest(packages pkg.Packages, importer str, parts List[str]) List[str]?
     if parts.len() < 2
         return none
     for k in 1..parts.len()
         rest := parts[k..]
         t := packages.target(importer, rest)
         if module_dir(t.dir)
-            return "an import path is relative to the package root (mod.unit.2), the directory of the file built: write `use {rest.join(".")}`"
+            return rest
     none
 
 ## Whether `dir` holds a `.ail` file (mod.unit.1).

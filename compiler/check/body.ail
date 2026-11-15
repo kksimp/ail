@@ -813,6 +813,16 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "this result has no value, so there's nothing to fall back to",
                     "write `else return`, or `else err` with a block that handles the error",
                 )
+            elif is_none_literal(d) and is_opt(vt)
+                # type.opt.4: `x := e else none` where `e` is already `T?` (E13): drop the `else`.
+                np := expr_pos(d)
+                err_help(
+                    "type.opt.4",
+                    np,
+                    "`else none` gives no fallback: the value is already {show(vt)}",
+                    "drop `else none` and `x := e` keeps the {show(vt)}; test it with `if v := x` or give a value: `else 0`",
+                )
+                fix_last("drop `else none`", [fix.replace(ast.Pos(line: np.line, col: (np.col - 6).max(1)), " else none", "")])
             else
                 dt := expr(d, ok, true)
                 if not accepts(ok, dt) and not self.unit_fallback(d, dt, ok)

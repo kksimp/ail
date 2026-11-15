@@ -1,0 +1,4 @@
+fn main()
+    mut q := 7 / 2
+    q += 1
+    print(q)
