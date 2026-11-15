@@ -393,8 +393,68 @@ pub fn apply(mut work Work, op J, path str)
         extract(mut work, op)
     elif kind == "move"
         move_decl(mut work, op)
+    elif kind == "span"
+        span_edit(mut work, op)
     else
-        work.fail("unknown op `{kind}`; the ops are replace_body, replace, insert, delete, rename, import, change_sig, extract and move (edit.in.1)")
+        work.fail("unknown op `{kind}`; the ops are replace_body, replace, insert, delete, rename, import, change_sig, extract, move and span (edit.in.1)")
+
+## The integer member of an object.
+fn int_of(op J, key str) int?
+    if v := op.get(key)
+        match v
+            Num(t) => return t.to_int()
+            _ => return none
+    none
+
+## `{"op":"span","line":L,"col":C,"end_line":L2,"end_col":C2,"expect":OLD,"text":NEW}` (edit.op.11): an edit as
+## `ail check --json` reports it. It replaces the span only when the span still holds `OLD`; otherwise the
+## edit fails and nothing is written. Positions are 1-based characters; the end is exclusive.
+fn span_edit(mut work Work, op J)
+    f := work.target(op)
+    if work.err != ""
+        return
+    mut at := List[int]()
+    for k in ["line", "col", "end_line", "end_col"]
+        n := int_of(op, k) else
+            work.fail("`span` needs an integer \"{k}\" (edit.op.11)")
+            return
+        at.push(n)
+    expect := op.str_of("expect") else
+        work.fail("`span` needs \"expect\", the text the span holds now (edit.op.11)")
+        return
+    text := op.str_of("text") else
+        work.fail("`span` needs \"text\" (edit.op.11)")
+        return
+    lines := work.texts[f].split("\n")
+    l1 := at[0]
+    c1 := at[1]
+    l2 := at[2]
+    c2 := at[3]
+    if l1 < 1 or l2 > lines.len() or l2 < l1 or c1 < 1 or c2 < 1 or (l1 == l2 and c2 < c1)
+        work.fail("the span {l1}:{c1}-{l2}:{c2} is outside the file (edit.op.11)")
+        return
+    mut held := List[str]()
+    for i in (l1 - 1)..l2
+        mut cs := lines[i].chars()
+        if cs.len() > 0 and cs[cs.len() - 1] == '\r'
+            cs.remove_at(cs.len() - 1)
+        from := if i == l1 - 1 then c1 - 1 else 0
+        to := if i == l2 - 1 then c2 - 1 else cs.len()
+        if from > cs.len() or to > cs.len() or from > to
+            work.fail("the span {l1}:{c1}-{l2}:{c2} is outside the file (edit.op.11)")
+            return
+        held.push(cs[from..to].join(""))
+    now := held.join("\n")
+    if now != expect
+        work.fail("stale edit at {l1}:{c1}: the span holds `{now}`, not `{expect}` (edit.op.11)")
+        return
+    first := lines[l1 - 1].chars()
+    last := lines[l2 - 1].chars()
+    merged := "{first[0..c1 - 1].join("")}{text}{last[c2 - 1..].join("")}"
+    mut out := lines[0..l1 - 1]
+    out.push(merged)
+    out.extend(lines[l2..])
+    work.texts[f] = out.join("\n")
 
 ## `src` with the `use` line `line` after its last `use` line (or at the
 ## top), unless it is there (edit.op.6).

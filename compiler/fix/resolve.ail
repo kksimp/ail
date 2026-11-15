@@ -15,6 +15,21 @@ pub fn split_lines(src str) List[List[char]]
             out.push(cs)
     out
 
+## The text of the span `pos..end` (fix.edit.7): the characters between the two positions, the lines joined
+## by `\n`; empty for an insertion. `lines` is as `split_lines` gives it.
+pub fn span_text(lines List[List[char]], pos ast.Pos, end ast.Pos) str
+    mut parts := List[str]()
+    mut n := pos.line
+    while n >= 1 and n <= end.line and n <= lines.len()
+        line := lines[n - 1]
+        from := if n == pos.line then pos.col - 1 else 0
+        to := if n == end.line then end.col - 1 else line.len()
+        a := if from < 0 then 0 else from.min(line.len())
+        b := if to < a then a else to.min(line.len())
+        parts.push(line[a..b].join(""))
+        n += 1
+    parts.join("\n")
+
 SYMBOLS := [
     "..=",
     "..",

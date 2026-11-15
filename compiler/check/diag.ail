@@ -70,7 +70,7 @@ pub fn Diag.to_json(self, files List[ast.SourceFile], sources Map[str, List[List
             ]
             settled := fix.settle_fixes(local, lines)
             if settled.len() > 0
-                out = "{out},\"fixes\":[{[fix_json(f) for f in settled].join(",")}]"
+                out = "{out},\"fixes\":[{[fix_json(f, lines) for f in settled].join(",")}]"
     "{out}}"
 
 ## `e` with its lines made local to its file.
@@ -83,9 +83,11 @@ pub fn shifted(e fix.Edit, base int) fix.Edit
         text: e.text,
     )
 
-pub fn fix_json(f fix.Fix) str
+## One fix as JSON. Each edit carries `expect`, the text its span holds in `lines` (fix.edit.7), so a client
+## can refuse an edit whose source has changed since the check.
+pub fn fix_json(f fix.Fix, lines List[List[char]]) str
     edits := [
-        "\{\"line\":{e.pos.line},\"col\":{e.pos.col},\"end_line\":{e.end.line},\"end_col\":{e.end.col},\"text\":{quote(e.text)}}"
+        "\{\"line\":{e.pos.line},\"col\":{e.pos.col},\"end_line\":{e.end.line},\"end_col\":{e.end.col},\"text\":{quote(e.text)},\"expect\":{quote(fix.span_text(lines, e.pos, e.end))}}"
         for e in f.edits
     ]
     "\{\"title\":{quote(f.title)},\"edits\":[{edits.join(",")}]}"
