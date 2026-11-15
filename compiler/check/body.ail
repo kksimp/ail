@@ -311,6 +311,10 @@ fn Checker.check_fn(mut self, idx int)
         fn_ret = Ty.Unit
     self.push_params(f, sig)
     self.check_contracts(f, sig.ret)
+    if sig.ret == Ty.Never and gen.elem == none
+        self.check_never_body(f, body)
+        self.end_fn(idx)
+        return
     need := not returns_nothing(sig.ret) and gen.elem == none
     mut want := none
     if need
@@ -608,6 +612,8 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         return
     if gen_return(value, at)
         return
+    if self.never_return(value, at)
+        return
     want := fn_ret
     v := value else
         if not returns_nothing(want)
@@ -809,7 +815,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 )
             else
                 dt := expr(d, ok, true)
-                if not accepts(ok, dt)
+                if not accepts(ok, dt) and not self.unit_fallback(d, dt, ok)
                     mismatch("err.else.1", expr_pos(d), ok, dt)
                     # A whole-number float literal where an `int` is expected is written `2`.
                     match d
@@ -864,7 +870,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
             unit := ok == Ty.Unit
             t := if unit then self.block(body, none, false) else self.block(body, ok, true)
             self.end_scope(mark)
-            if not unit and not accepts(ok, t)
+            if not unit and not accepts(ok, t) and not self.unit_else_block(body, t, ok, bpos)
                 err(
                     "err.else.2",
                     bpos,

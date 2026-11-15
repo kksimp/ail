@@ -93,7 +93,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Destructuring** | Binding each element of a tuple to its own name: `a, b := t`, `for k, v in m`, and the first statement the parser adds to the body of `for a, b in xs` (`type.tuple.4-5`, ADR 0792). |
 | **Deterministic mode** | `ail run --deterministic`: denies `clock`, `random`, `proc` and `net` so a program gives the same output for the same inputs (`eff.det.1–3`, ADR 0207). |
 | **Diagnostics schema** | The versioned JSON form of `ail check --json`: one object per line, tagged `"api":1`, with span, notes and fixes; see [semantic-api.md](design/semantic-api.md) (ADR 0145). |
-| **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
+| **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a call of a `never` function such as `io.exit`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139, ADR 1119). |
 | **Doc comment** | A run of `##` lines directly above a declaration, with no blank line between; it documents that declaration (lex.comment.2, ADR 0152). |
 | **Doc example** | A block fenced `ail` in a `##` doc comment, run by `ail test` as the test `doc:NAME` (ADR 0200). |
 | **`Drop`** | The prelude trait whose `fn drop(mut self)` is a unique type's cleanup; it runs once when the value's last owner goes out of scope and is never called directly (ADR 0191). |
@@ -177,6 +177,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
 | **Native subset** | The constructs the native backend compiles (native.subset.1): the whole language checked by `ail check`, with rare corner cases the lowering reports as native.subset.1 before any code is made (ADR 0384, ADR 0904). |
 | **Native test runner** | `ail test`: builds each `@test` function natively and runs it; the comparison with the interpreter was retired ([ADR 0679](decisions/0679-native-test-runner.md), [ADR 0900](decisions/0900-refuse-rust-only-routes.md)). |
+| **`never`** | The result type of a function that never returns: each call ends the program or traps, so it fits where any value is expected (`n := s.to_int() else usage()`). Written only after a declared function's parameters (`type.never.1–3`, ADR 1119). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **net.serve** | The capability to listen for connections, held in addition to `net` (`std.net.14`, ADR 0422). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
