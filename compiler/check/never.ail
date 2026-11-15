@@ -1,0 +1,91 @@
+## Functions that never return (type.never.1-3, ADR 1119): `fn usage() never`
+## declares a function whose every call ends the program or traps, like
+## `io.exit` and `unreachable`. A call of one is `Ty.Never`, so it fits where
+## any value is expected (`n := s.to_int() else usage()`, type.never.2) and leaves its block
+## (expr.block.3). Native code ends the block after the call (mir/lower_never.ail).
+use ast
+
+## Whether a written result type is `never` (type.never.1).
+@allow("expr.match.3") fn is_never_ref(t ast.TypeRef) bool
+    match t.shape
+        Named(n, args) => n == "never" and args.len() == 0
+        _ => false
+
+## A declared function's result: `never`, or what `resolve_ret` makes of it.
+fn Checker.declared_ret(mut self, t ast.TypeRef, fn_index int) Ty
+    if is_never_ref(t)
+        return Ty.Never
+    self.resolve_ret(t, fn_index)
+
+## type.never.3: a `never` function's body must not reach its end.
+fn Checker.check_never_body(mut self, f ast.FnDecl, body List[ast.Stmt])
+    got := self.block(body, none, false)
+    if got == Ty.Never or got == Ty.Unknown
+        return
+    mut at := f.pos
+    if s := body.last()
+        at = stmt_pos(s)
+    err_help(
+        "type.never.3",
+        at,
+        "`{full_name(f)}` is declared `never`, but its body can reach its end",
+        "end it with `io.exit(code)`, `unreachable(\"why\")` or a call of another `never` function, or declare a result type instead of `never`",
+    )
+
+## type.never.3: `return` in a `never` function. True when it was reported.
+fn Checker.never_return(mut self, value ast.Expr?, at ast.Pos) bool
+    if fn_ret != Ty.Never
+        return false
+    if v := value
+        expr(v, none, true)
+    err_help(
+        "type.never.3",
+        at,
+        "this function is declared `never`, so it can't `return`",
+        "end the program with `io.exit(code)` here, or declare a result type instead of `never`",
+    )
+    true
+
+## The name of the function `e` calls, or "" when it isn't a plain call.
+@allow("expr.match.3") fn called_name(e ast.Expr) str
+    match e
+        Call(callee, _, _) =>
+            match callee
+                Name(n, _) => n
+                _ => ""
+        Method(_, n, _, _) => n
+        _ => ""
+
+## err.else.1: `x := e else usage()` where `usage` returns no value. True
+## when it was reported.
+fn Checker.unit_fallback(mut self, d ast.Expr, dt Ty, ok Ty) bool
+    name := called_name(d)
+    if dt != Ty.Unit or name == ""
+        return false
+    err_help(
+        "err.else.1",
+        expr_pos(d),
+        "`{name}(...)` returns no value, so it can't stand in for {show(ok)}",
+        unit_call_help(name),
+    )
+    true
+
+## The help for a call that returns nothing where an `else` needs a value.
+fn unit_call_help(name str) str
+    "if `{name}` always ends the program, declare it `fn {name}(...) never` (type.never.1); otherwise make the `else` a block that calls it and then leaves:\n    else\n        {name}(...)\n        return"
+
+## err.else.2 after an `else` block ending in a call that returns nothing.
+fn Checker.unit_else_block(mut self, body List[ast.Stmt], t Ty, ok Ty, at ast.Pos) bool
+    if t != Ty.Unit
+        return false
+    e := last_value(body) else return false
+    name := called_name(e)
+    if name == ""
+        return false
+    err_help(
+        "err.else.2",
+        at,
+        "this `else` block ends with `{name}(...)`, which returns, so the block can end without {show(ok)}",
+        unit_call_help(name),
+    )
+    true

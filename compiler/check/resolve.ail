@@ -23,17 +23,24 @@ use fix
             if errors == none
                 return Ty.Res(ok_ty, Errs.Inferred(fn_index))
             mut set := List[Ty]()
+            mut not_errors := false
             for e in given
                 et := self.resolve_type(e)
                 if et != Ty.Unknown and not self.is_error_type(et)
+                    not_errors = true
+                    okt := if ok_ty == Ty.Unit then "" else "{self.ty_name(ok_ty)} "
                     err_help(
                         "err.decl.2",
                         e.pos,
                         "{self.show(et)} isn't an error type",
-                        "declare it with `error struct` or `error enum`",
+                        "declare an error type and fail with it:\n    error enum ParseError\n        BadNumber(text str)\nthen write `{okt}! ParseError` and `return ParseError.BadNumber(text: s)`",
                     )
                 elif et != Ty.Unknown and not set.contains(et)
                     set.push(et)
+            # One mistake, one error: the function's `return`s and calls aren't
+            # checked against a result that was never declared.
+            if not_errors
+                return Ty.Unknown
             Ty.Res(ok_ty, Errs.ErrSet(sort_errors(set)))
         _ => self.resolve_type(t)
 
@@ -101,6 +108,15 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         ty = Ty.Char
     elif n == "bool"
         ty = Ty.Bool
+    elif n == "never"
+        # type.never.1: `fn usage() never` is read before this (check/never.ail).
+        err_help(
+            "type.never.1",
+            at,
+            "`never` is only the result type of a declared function",
+            "write `fn name(...) never` for a function that always ends the program; nothing else can have the type `never`",
+        )
+        return Ty.Unknown
     elif n == "Self"
         if s := self_ty
             ty = s

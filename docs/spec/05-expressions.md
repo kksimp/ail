@@ -169,13 +169,15 @@ fn main()
 exits the function early with value `e`. *(ADR 0091)*
 
 **expr.block.3** — A statement **diverges** when it is `return`, `break` or
-`continue`; a call to `unreachable(message)` (`err.model.2`); a `while true`
+`continue`; a call to `unreachable(message)` (`err.model.2`) or to a function
+whose result type is `never`, such as `io.exit` (`type.never.2`); a `while true`
 (the literal `true`) whose body has no `break` for that loop (`expr.loop.7`);
 or an `if`/`else` or `match` all of whose branches diverge. A block whose last
 statement diverges produces no value and is accepted wherever a value of any
 type is expected, including as a one-line arm (`expr.match.9`) and as an
-`else` part. So a function can end with `while true`. There is no nameable
-`Never` type. *(ADR 0117, ADR 0139)*
+`else` part. So a function can end with `while true`. The type `never`
+(`type.never.1`) is written only as a function's result. *(ADR 0117, ADR 0139,
+ADR 1119)*
 
 ```ail rules=expr.block.3
 fn find(n int) int

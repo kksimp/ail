@@ -791,6 +791,44 @@ fn main()
     print("{add(5)}")                     # 15
 ```
 
+## Functions that never return
+
+**type.never.1** — `never` is a built-in type name written only as the result
+type of a declared function or method: `fn usage(why str) never` declares a
+function whose calls never return, because each one ends the program or traps.
+`never` has no values. Writing it anywhere else (a parameter, a local, a field,
+a type argument, a function type `fn() never`, or `never ! E`) is an error.
+*(ADR 1119)*
+
+**type.never.2** — A call of a function whose result type is `never`
+diverges (`expr.block.3`), as a call of `io.exit` (`std.io.4`) or
+`unreachable` (`err.model.2`) does: it is accepted wherever a value of any type
+is expected, so `n := s.to_int() else usage("...")` binds an `int`. *(ADR 1119)*
+
+**type.never.3** — The body of a function declared `never` MUST NOT complete
+normally: its last statement diverges (`expr.block.3`), for example a call of
+`io.exit`, of `unreachable` or of another `never` function. `return`, with or
+without a value, is an error in it. *(ADR 1119)*
+
+```ail rules=type.never.1,type.never.2
+use std.io
+
+fn usage(why str) never
+    io.eprint("usage: count N ({why})")
+    io.exit(2)
+
+fn main()
+    n := "41".to_int() else usage("N must be a whole number")
+    print(n + 1)                          # 42
+```
+
+```ail error=type.never.3 rules=type.never.3
+use std.io
+
+fn fail(why str) never
+    io.eprint(why)                        # reaches its end: add `io.exit(1)`
+```
+
 ## Tuples
 
 **type.tuple.1** — `(A, B, ...)` is the type of a tuple: an anonymous value
