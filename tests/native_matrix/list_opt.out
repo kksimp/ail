@@ -14,6 +14,8 @@ true
 2
 -- list.slice[opt]
 5
+-- list.slice_method[opt]
+4
 -- list.push[opt]
 2
 -- list.pop[opt]

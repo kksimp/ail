@@ -14,6 +14,8 @@ true
 2
 -- list.slice[tuple]
 5
+-- list.slice_method[tuple]
+4
 -- list.push[tuple]
 2
 -- list.pop[tuple]

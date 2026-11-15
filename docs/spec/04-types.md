@@ -1693,10 +1693,10 @@ fn main()
 `str` does (`type.str.13`). `s.to_list()` on a set returns its elements as a new
 `List[T]` in insertion order. A set has no `keys()` or `values()`: the
 diagnostic (`expr.name.1`) says a set is its elements and its fix writes
-`to_list`. Another language's `x.unwrap_or(d)`, `x.unwrap()` and
-`x.expect(m)` on an optional get the fixes `(x else d)` and
-`(x else unreachable(...))` (`type.opt.7`), and `m.set(k, v)` or
-`m.insert(k, v)` on a map gets help that writes `m[k] = v` (`type.map.3`).
+`to_list`. Another language's `unwrap_or`, `unwrap` and `expect` on an
+optional get the fixes `(x else d)` and `(x else unreachable(...))`
+(`type.opt.7`), and `set` or `insert` on a map gets help that writes
+`m[k] = v` (`type.map.3`).
 *(ADR 1099, ADR 1125)*
 
 ```ail rules=type.coll.33,type.str.13

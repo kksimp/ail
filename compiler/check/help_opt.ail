@@ -67,22 +67,17 @@ fn opt_method_fix(t Ty, n str, recv ast.Expr, at ast.Pos) OptFix?
     x := short_text(recv) else return none
     dot := ast.Pos(line: at.line, col: (at.col - 1).max(0))
     lp := fix.insert(expr_pos(recv), "(")
+    mut tail := ""
     if opt_fallback_method(n)
-        return OptFix(
-            title: "write `{x} else ...`",
-            edits: [lp, fix.call(dot, ".{n}", " else $p)")],
-        )
-    if n == "unwrap" or n == "unwrap_unchecked" or n == "force"
-        return OptFix(
-            title: "write `{x} else unreachable(...)`",
-            edits: [lp, fix.call(dot, ".{n}", " else unreachable(\"{x} is none\"))")],
-        )
-    if n == "expect"
-        return OptFix(
-            title: "write `{x} else unreachable(...)`",
-            edits: [lp, fix.call(dot, ".{n}", " else unreachable($p))")],
-        )
-    none
+        tail = " else $p)"
+    elif n == "unwrap" or n == "unwrap_unchecked" or n == "force"
+        tail = " else unreachable(\"{x} is none\"))"
+    elif n == "expect"
+        tail = " else unreachable($p))"
+    else
+        return none
+    what := if tail == " else $p)" then "..." else "unreachable(...)"
+    OptFix(title: "write `{x} else {what}`", edits: [lp, fix.call(dot, ".{n}", tail)])
 
 ## Help for a method agents guess on a collection, with its fix when the rewrite is certain.
 pub struct WordHelp
@@ -95,18 +90,12 @@ pub struct WordHelp
 ## `m.insert(k, v)` and `m.put(k, v)` on a map are `m[k] = v` (type.map.3), as help only,
 ## since that is a statement and the call may stand where a value is wanted (fix.edit.1).
 fn word_help(t Ty, n str, recv ast.Expr, at ast.Pos) WordHelp?
-    x := short_text(recv) else "s"
     if is_set_ty(t) and (n == "keys" or n == "values")
-        return WordHelp(
-            help: "a set is its elements: `for x in {x}` reads them, `{x}.to_list()` gives a list in insertion order, and `{x}.sorted()` a sorted one",
-            title: "write `to_list`",
-            edits: [fix.replace(at, n, "to_list")],
-        )
+        x := short_text(recv) else "s"
+        h := "a set is its elements: `for x in {x}` reads them, `{x}.to_list()` gives a list in insertion order, and `{x}.sorted()` a sorted one"
+        return WordHelp(help: h, title: "write `to_list`", edits: [fix.replace(at, n, "to_list")])
     if is_map_ty(t) and ["set", "insert", "put"].contains(n)
         m := short_text(recv) else "m"
-        return WordHelp(
-            help: "a map entry is set by assignment: write `{m}[k] = v` as a statement in place of `{m}.{n}(k, v)`",
-            title: "",
-            edits: [],
-        )
+        h := "a map entry is set by assignment: write `{m}[k] = v` as a statement in place of `{m}.{n}(k, v)`"
+        return WordHelp(help: h, title: "", edits: [])
     none

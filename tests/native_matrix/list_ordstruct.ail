@@ -98,26 +98,31 @@ fn s7()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")]
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[ordstruct]
+## list.slice_method[ordstruct]
 fn s8()
+    xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")]
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[ordstruct]
+fn s9()
     mut xs := [Q(n: 1, name: "a")]
     xs.push(Q(n: 2, name: "b"))
     print(xs.len())
 
 ## list.pop[ordstruct]
-fn s9()
+fn s10()
     mut xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[ordstruct]
-fn s10()
+fn s11()
     mut xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[ordstruct]
-fn s11()
+fn s12()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     if x := xs.first()
         print(1)
@@ -125,57 +130,57 @@ fn s11()
         print(2)
 
 ## list.insert[ordstruct]
-fn s12()
+fn s13()
     mut xs := [Q(n: 1, name: "a")]
     xs.insert(0, Q(n: 2, name: "b"))
     print(xs.len())
 
 ## list.remove_at[ordstruct]
-fn s13()
+fn s14()
     mut xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[ordstruct]
-fn s14()
+fn s15()
     mut xs := [Q(n: 1, name: "a")]
     xs.extend([Q(n: 2, name: "b"), Q(n: 3, name: "c")])
     print(xs.len())
 
 ## list.clear[ordstruct]
-fn s15()
+fn s16()
     mut xs := [Q(n: 1, name: "a")]
     xs.clear()
     print(xs.len())
 
 ## list.reverse[ordstruct]
-fn s16()
+fn s17()
     mut xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[ordstruct]
-fn s17()
+fn s18()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.reversed().len())
 
 ## list.contains[ordstruct]
-fn s18()
+fn s19()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.contains(Q(n: 2, name: "b")))
 
 ## list.index_of[ordstruct]
-fn s19()
+fn s20()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.index_of(Q(n: 2, name: "b")) else -1)
 
 ## list.join[ordstruct]
-fn s20()
+fn s21()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.join(",").len() > 0)
 
 ## list.min_max[ordstruct]
-fn s21()
+fn s22()
     xs := [Q(n: 2, name: "b"), Q(n: 1, name: "a"), Q(n: 3, name: "c")]
     if x := xs.min()
         print(1)
@@ -183,29 +188,29 @@ fn s21()
         print(2)
 
 ## list.sorted[ordstruct]
-fn s22()
+fn s23()
     xs := [Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.sorted().len())
 
 ## list.sort[ordstruct]
-fn s23()
+fn s24()
     mut xs := [Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[ordstruct]
-fn s24()
+fn s25()
     xs := [Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.sorted(by: |x| x.n).len())
 
 ## list.sort_by[ordstruct]
-fn s25()
+fn s26()
     mut xs := [Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     xs.sort(by: |x| x.n)
     print(xs.len())
 
 ## list.min_by[ordstruct]
-fn s26()
+fn s27()
     xs := [Q(n: 3, name: "c"), Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     if x := xs.min(by: |x| x.n)
         print(1)
@@ -213,105 +218,105 @@ fn s26()
         print(2)
 
 ## list.take_skip[ordstruct]
-fn s27()
+fn s28()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")]
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.set_ops[ordstruct]
-fn s28()
+fn s29()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     ys := [Q(n: 2, name: "b"), Q(n: 3, name: "c")]
     print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
 
 ## list.chunks_windows[ordstruct]
-fn s29()
+fn s30()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")]
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.counts[ordstruct]
-fn s30()
+fn s31()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 1, name: "a")]
     c := xs.counts()
     print(c.len())
 
 ## list.flatten[ordstruct]
-fn s31()
+fn s32()
     xs := [[Q(n: 1, name: "a")], [Q(n: 2, name: "b"), Q(n: 3, name: "c")]]
     print(xs.flatten().len())
 
 ## list.enumerate[ordstruct]
-fn s32()
+fn s33()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[ordstruct]
-fn s33()
+fn s34()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.any(|x| x == Q(n: 1, name: "a")))
     print(xs.all(|x| x == Q(n: 1, name: "a")))
 
 ## list.find[ordstruct]
-fn s34()
+fn s35()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     if x := xs.find(|x| x == Q(n: 2, name: "b"))
         print(1)
 
 ## list.filter[ordstruct]
-fn s35()
+fn s36()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.filter(|x| x == Q(n: 1, name: "a")).len())
 
 ## list.map[ordstruct]
-fn s36()
+fn s37()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.map(|x| x.n).len())
 
 ## list.map_to_self[ordstruct]
-fn s37()
+fn s38()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.map(|x| x).len())
 
 ## list.group_by[ordstruct]
-fn s38()
+fn s39()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 1, name: "a")]
     g := xs.group_by(|x| x.n)
     print(g.len())
 
 ## list.count[ordstruct]
-fn s39()
+fn s40()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 1, name: "a")]
     print(xs.count(|x| x == Q(n: 1, name: "a")))
 
 ## list.fold[ordstruct]
-fn s40()
+fn s41()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[ordstruct]
-fn s41()
+fn s42()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[ordstruct]
-fn s42()
+fn s43()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs.take_while(|x| x == Q(n: 1, name: "a")).len() + xs.skip_while(|x| x == Q(n: 1, name: "a")).len())
 
 ## list.zip[ordstruct]
-fn s43()
+fn s44()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[ordstruct]
-fn s44()
+fn s45()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[ordstruct]
-fn s45()
+fn s46()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     mut n := 0
     for x in xs
@@ -319,90 +324,90 @@ fn s45()
     print(n)
 
 ## list.for_mut[ordstruct]
-fn s46()
+fn s47()
     mut xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     for mut x in xs
         x = Q(n: 3, name: "c")
     print(xs.len())
 
 ## list.comprehension[ordstruct]
-fn s47()
+fn s48()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     ys := [x for x in xs if x == Q(n: 1, name: "a")]
     print(ys.len())
 
 ## list.set_comprehension[ordstruct]
-fn s48()
+fn s49()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 1, name: "a")]
     s := {x for x in xs}
     print(s.len())
 
 ## list.map_comprehension[ordstruct]
-fn s49()
+fn s50()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     m := {x: 1 for x in xs}
     print(m.len())
 
 ## list.eq[ordstruct]
-fn s50()
+fn s51()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     ys := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs == ys)
     print(xs != [Q(n: 3, name: "c")])
 
 ## list.lt[ordstruct]
-fn s51()
+fn s52()
     xs := [Q(n: 1, name: "a")]
     ys := [Q(n: 2, name: "b")]
     print(xs < ys)
 
 ## list.print[ordstruct]
-fn s52()
+fn s53()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print(xs)
 
 ## list.interp[ordstruct]
-fn s53()
+fn s54()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     print("{xs}".len() > 0)
 
 ## list.nested_push[ordstruct]
-fn s54()
+fn s55()
     mut xs := [[Q(n: 1, name: "a")]]
     xs[0].push(Q(n: 2, name: "b"))
     print(xs[0].len())
 
 ## list.in_struct[ordstruct]
-fn s55()
+fn s56()
     mut b := Box_ordstruct(items: [Q(n: 1, name: "a")])
     b.items.push(Q(n: 2, name: "b"))
     print(b.items.len())
 
 ## list.pass_mut[ordstruct]
-fn s56()
+fn s57()
     mut xs := [Q(n: 1, name: "a")]
     add_ordstruct(mut xs, Q(n: 2, name: "b"))
     print(xs.len())
 
 ## list.generic_first[ordstruct]
-fn s57()
+fn s58()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[ordstruct]
-fn s58()
+fn s59()
     xs := [Q(n: 1, name: "a"), Q(n: 2, name: "b")]
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[ordstruct]
-fn s59()
+fn s60()
     xs := [[Q(n: 1, name: "a")], [Q(n: 2, name: "b")]]
     print(xs.contains([Q(n: 2, name: "b")]))
 
 ## list.sorted_nested[ordstruct]
-fn s60()
+fn s61()
     xs := [[Q(n: 2, name: "b")], [Q(n: 1, name: "a")]]
     print(xs.sorted().len())
 
@@ -423,109 +428,111 @@ fn main()
     s6()
     print("-- list.slice[ordstruct]")
     s7()
-    print("-- list.push[ordstruct]")
+    print("-- list.slice_method[ordstruct]")
     s8()
-    print("-- list.pop[ordstruct]")
+    print("-- list.push[ordstruct]")
     s9()
-    print("-- list.swap[ordstruct]")
+    print("-- list.pop[ordstruct]")
     s10()
-    print("-- list.first_last[ordstruct]")
+    print("-- list.swap[ordstruct]")
     s11()
-    print("-- list.insert[ordstruct]")
+    print("-- list.first_last[ordstruct]")
     s12()
-    print("-- list.remove_at[ordstruct]")
+    print("-- list.insert[ordstruct]")
     s13()
-    print("-- list.extend[ordstruct]")
+    print("-- list.remove_at[ordstruct]")
     s14()
-    print("-- list.clear[ordstruct]")
+    print("-- list.extend[ordstruct]")
     s15()
-    print("-- list.reverse[ordstruct]")
+    print("-- list.clear[ordstruct]")
     s16()
-    print("-- list.reversed[ordstruct]")
+    print("-- list.reverse[ordstruct]")
     s17()
-    print("-- list.contains[ordstruct]")
+    print("-- list.reversed[ordstruct]")
     s18()
-    print("-- list.index_of[ordstruct]")
+    print("-- list.contains[ordstruct]")
     s19()
-    print("-- list.join[ordstruct]")
+    print("-- list.index_of[ordstruct]")
     s20()
-    print("-- list.min_max[ordstruct]")
+    print("-- list.join[ordstruct]")
     s21()
-    print("-- list.sorted[ordstruct]")
+    print("-- list.min_max[ordstruct]")
     s22()
-    print("-- list.sort[ordstruct]")
+    print("-- list.sorted[ordstruct]")
     s23()
-    print("-- list.sorted_by[ordstruct]")
+    print("-- list.sort[ordstruct]")
     s24()
-    print("-- list.sort_by[ordstruct]")
+    print("-- list.sorted_by[ordstruct]")
     s25()
-    print("-- list.min_by[ordstruct]")
+    print("-- list.sort_by[ordstruct]")
     s26()
-    print("-- list.take_skip[ordstruct]")
+    print("-- list.min_by[ordstruct]")
     s27()
-    print("-- list.set_ops[ordstruct]")
+    print("-- list.take_skip[ordstruct]")
     s28()
-    print("-- list.chunks_windows[ordstruct]")
+    print("-- list.set_ops[ordstruct]")
     s29()
-    print("-- list.counts[ordstruct]")
+    print("-- list.chunks_windows[ordstruct]")
     s30()
-    print("-- list.flatten[ordstruct]")
+    print("-- list.counts[ordstruct]")
     s31()
-    print("-- list.enumerate[ordstruct]")
+    print("-- list.flatten[ordstruct]")
     s32()
-    print("-- list.any_all[ordstruct]")
+    print("-- list.enumerate[ordstruct]")
     s33()
-    print("-- list.find[ordstruct]")
+    print("-- list.any_all[ordstruct]")
     s34()
-    print("-- list.filter[ordstruct]")
+    print("-- list.find[ordstruct]")
     s35()
-    print("-- list.map[ordstruct]")
+    print("-- list.filter[ordstruct]")
     s36()
-    print("-- list.map_to_self[ordstruct]")
+    print("-- list.map[ordstruct]")
     s37()
-    print("-- list.group_by[ordstruct]")
+    print("-- list.map_to_self[ordstruct]")
     s38()
-    print("-- list.count[ordstruct]")
+    print("-- list.group_by[ordstruct]")
     s39()
-    print("-- list.fold[ordstruct]")
+    print("-- list.count[ordstruct]")
     s40()
-    print("-- list.flat_map[ordstruct]")
+    print("-- list.fold[ordstruct]")
     s41()
-    print("-- list.take_skip_while[ordstruct]")
+    print("-- list.flat_map[ordstruct]")
     s42()
-    print("-- list.zip[ordstruct]")
+    print("-- list.take_skip_while[ordstruct]")
     s43()
-    print("-- list.zip_into[ordstruct]")
+    print("-- list.zip[ordstruct]")
     s44()
-    print("-- list.for[ordstruct]")
+    print("-- list.zip_into[ordstruct]")
     s45()
-    print("-- list.for_mut[ordstruct]")
+    print("-- list.for[ordstruct]")
     s46()
-    print("-- list.comprehension[ordstruct]")
+    print("-- list.for_mut[ordstruct]")
     s47()
-    print("-- list.set_comprehension[ordstruct]")
+    print("-- list.comprehension[ordstruct]")
     s48()
-    print("-- list.map_comprehension[ordstruct]")
+    print("-- list.set_comprehension[ordstruct]")
     s49()
-    print("-- list.eq[ordstruct]")
+    print("-- list.map_comprehension[ordstruct]")
     s50()
-    print("-- list.lt[ordstruct]")
+    print("-- list.eq[ordstruct]")
     s51()
-    print("-- list.print[ordstruct]")
+    print("-- list.lt[ordstruct]")
     s52()
-    print("-- list.interp[ordstruct]")
+    print("-- list.print[ordstruct]")
     s53()
-    print("-- list.nested_push[ordstruct]")
+    print("-- list.interp[ordstruct]")
     s54()
-    print("-- list.in_struct[ordstruct]")
+    print("-- list.nested_push[ordstruct]")
     s55()
-    print("-- list.pass_mut[ordstruct]")
+    print("-- list.in_struct[ordstruct]")
     s56()
-    print("-- list.generic_first[ordstruct]")
+    print("-- list.pass_mut[ordstruct]")
     s57()
-    print("-- list.generic_ord[ordstruct]")
+    print("-- list.generic_first[ordstruct]")
     s58()
-    print("-- list.contains_list[ordstruct]")
+    print("-- list.generic_ord[ordstruct]")
     s59()
-    print("-- list.sorted_nested[ordstruct]")
+    print("-- list.contains_list[ordstruct]")
     s60()
+    print("-- list.sorted_nested[ordstruct]")
+    s61()

@@ -98,26 +98,31 @@ fn s7()
     xs := [1, 2, 3]
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[int]
+## list.slice_method[int]
 fn s8()
+    xs := [1, 2, 3]
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[int]
+fn s9()
     mut xs := [1]
     xs.push(2)
     print(xs.len())
 
 ## list.pop[int]
-fn s9()
+fn s10()
     mut xs := [1, 2]
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[int]
-fn s10()
+fn s11()
     mut xs := [1, 2]
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[int]
-fn s11()
+fn s12()
     xs := [1, 2]
     if x := xs.first()
         print(1)
@@ -125,63 +130,63 @@ fn s11()
         print(2)
 
 ## list.insert[int]
-fn s12()
+fn s13()
     mut xs := [1]
     xs.insert(0, 2)
     print(xs.len())
 
 ## list.remove_at[int]
-fn s13()
+fn s14()
     mut xs := [1, 2]
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[int]
-fn s14()
+fn s15()
     mut xs := [1]
     xs.extend([2, 3])
     print(xs.len())
 
 ## list.clear[int]
-fn s15()
+fn s16()
     mut xs := [1]
     xs.clear()
     print(xs.len())
 
 ## list.reverse[int]
-fn s16()
+fn s17()
     mut xs := [1, 2]
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[int]
-fn s17()
+fn s18()
     xs := [1, 2]
     print(xs.reversed().len())
 
 ## list.contains[int]
-fn s18()
+fn s19()
     xs := [1, 2]
     print(xs.contains(2))
 
 ## list.index_of[int]
-fn s19()
+fn s20()
     xs := [1, 2]
     print(xs.index_of(2) else -1)
 
 ## list.join[int]
-fn s20()
+fn s21()
     xs := [1, 2]
     print(xs.join(",").len() > 0)
 
 ## list.sum[int]
-fn s21()
+fn s22()
     xs := [1, 2]
     s := xs.sum()
     print(1)
 
 ## list.min_max[int]
-fn s22()
+fn s23()
     xs := [2, 1, 3]
     if x := xs.min()
         print(1)
@@ -189,29 +194,29 @@ fn s22()
         print(2)
 
 ## list.sorted[int]
-fn s23()
+fn s24()
     xs := [3, 1, 2]
     print(xs.sorted().len())
 
 ## list.sort[int]
-fn s24()
+fn s25()
     mut xs := [3, 1, 2]
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[int]
-fn s25()
+fn s26()
     xs := [3, 1, 2]
     print(xs.sorted(by: |x| x).len())
 
 ## list.sort_by[int]
-fn s26()
+fn s27()
     mut xs := [3, 1, 2]
     xs.sort(by: |x| x)
     print(xs.len())
 
 ## list.min_by[int]
-fn s27()
+fn s28()
     xs := [3, 1, 2]
     if x := xs.min(by: |x| x)
         print(1)
@@ -219,105 +224,105 @@ fn s27()
         print(2)
 
 ## list.take_skip[int]
-fn s28()
+fn s29()
     xs := [1, 2, 3]
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.set_ops[int]
-fn s29()
+fn s30()
     xs := [1, 2]
     ys := [2, 3]
     print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
 
 ## list.chunks_windows[int]
-fn s30()
+fn s31()
     xs := [1, 2, 3]
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.counts[int]
-fn s31()
+fn s32()
     xs := [1, 2, 1]
     c := xs.counts()
     print(c.len())
 
 ## list.flatten[int]
-fn s32()
+fn s33()
     xs := [[1], [2, 3]]
     print(xs.flatten().len())
 
 ## list.enumerate[int]
-fn s33()
+fn s34()
     xs := [1, 2]
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[int]
-fn s34()
+fn s35()
     xs := [1, 2]
     print(xs.any(|x| x == 1))
     print(xs.all(|x| x == 1))
 
 ## list.find[int]
-fn s35()
+fn s36()
     xs := [1, 2]
     if x := xs.find(|x| x == 2)
         print(1)
 
 ## list.filter[int]
-fn s36()
+fn s37()
     xs := [1, 2]
     print(xs.filter(|x| x == 1).len())
 
 ## list.map[int]
-fn s37()
-    xs := [1, 2]
-    print(xs.map(|x| x).len())
-
-## list.map_to_self[int]
 fn s38()
     xs := [1, 2]
     print(xs.map(|x| x).len())
 
-## list.group_by[int]
+## list.map_to_self[int]
 fn s39()
+    xs := [1, 2]
+    print(xs.map(|x| x).len())
+
+## list.group_by[int]
+fn s40()
     xs := [1, 2, 1]
     g := xs.group_by(|x| x)
     print(g.len())
 
 ## list.count[int]
-fn s40()
+fn s41()
     xs := [1, 2, 1]
     print(xs.count(|x| x == 1))
 
 ## list.fold[int]
-fn s41()
+fn s42()
     xs := [1, 2]
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[int]
-fn s42()
+fn s43()
     xs := [1, 2]
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[int]
-fn s43()
+fn s44()
     xs := [1, 2]
     print(xs.take_while(|x| x == 1).len() + xs.skip_while(|x| x == 1).len())
 
 ## list.zip[int]
-fn s44()
+fn s45()
     xs := [1, 2]
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[int]
-fn s45()
+fn s46()
     xs := [1, 2]
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[int]
-fn s46()
+fn s47()
     xs := [1, 2]
     mut n := 0
     for x in xs
@@ -325,90 +330,90 @@ fn s46()
     print(n)
 
 ## list.for_mut[int]
-fn s47()
+fn s48()
     mut xs := [1, 2]
     for mut x in xs
         x = 3
     print(xs.len())
 
 ## list.comprehension[int]
-fn s48()
+fn s49()
     xs := [1, 2]
     ys := [x for x in xs if x == 1]
     print(ys.len())
 
 ## list.set_comprehension[int]
-fn s49()
+fn s50()
     xs := [1, 2, 1]
     s := {x for x in xs}
     print(s.len())
 
 ## list.map_comprehension[int]
-fn s50()
+fn s51()
     xs := [1, 2]
     m := {x: 1 for x in xs}
     print(m.len())
 
 ## list.eq[int]
-fn s51()
+fn s52()
     xs := [1, 2]
     ys := [1, 2]
     print(xs == ys)
     print(xs != [3])
 
 ## list.lt[int]
-fn s52()
+fn s53()
     xs := [1]
     ys := [2]
     print(xs < ys)
 
 ## list.print[int]
-fn s53()
+fn s54()
     xs := [1, 2]
     print(xs)
 
 ## list.interp[int]
-fn s54()
+fn s55()
     xs := [1, 2]
     print("{xs}".len() > 0)
 
 ## list.nested_push[int]
-fn s55()
+fn s56()
     mut xs := [[1]]
     xs[0].push(2)
     print(xs[0].len())
 
 ## list.in_struct[int]
-fn s56()
+fn s57()
     mut b := Box_int(items: [1])
     b.items.push(2)
     print(b.items.len())
 
 ## list.pass_mut[int]
-fn s57()
+fn s58()
     mut xs := [1]
     add_int(mut xs, 2)
     print(xs.len())
 
 ## list.generic_first[int]
-fn s58()
+fn s59()
     xs := [1, 2]
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[int]
-fn s59()
+fn s60()
     xs := [1, 2]
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[int]
-fn s60()
+fn s61()
     xs := [[1], [2]]
     print(xs.contains([2]))
 
 ## list.sorted_nested[int]
-fn s61()
+fn s62()
     xs := [[2], [1]]
     print(xs.sorted().len())
 
@@ -429,111 +434,113 @@ fn main()
     s6()
     print("-- list.slice[int]")
     s7()
-    print("-- list.push[int]")
+    print("-- list.slice_method[int]")
     s8()
-    print("-- list.pop[int]")
+    print("-- list.push[int]")
     s9()
-    print("-- list.swap[int]")
+    print("-- list.pop[int]")
     s10()
-    print("-- list.first_last[int]")
+    print("-- list.swap[int]")
     s11()
-    print("-- list.insert[int]")
+    print("-- list.first_last[int]")
     s12()
-    print("-- list.remove_at[int]")
+    print("-- list.insert[int]")
     s13()
-    print("-- list.extend[int]")
+    print("-- list.remove_at[int]")
     s14()
-    print("-- list.clear[int]")
+    print("-- list.extend[int]")
     s15()
-    print("-- list.reverse[int]")
+    print("-- list.clear[int]")
     s16()
-    print("-- list.reversed[int]")
+    print("-- list.reverse[int]")
     s17()
-    print("-- list.contains[int]")
+    print("-- list.reversed[int]")
     s18()
-    print("-- list.index_of[int]")
+    print("-- list.contains[int]")
     s19()
-    print("-- list.join[int]")
+    print("-- list.index_of[int]")
     s20()
-    print("-- list.sum[int]")
+    print("-- list.join[int]")
     s21()
-    print("-- list.min_max[int]")
+    print("-- list.sum[int]")
     s22()
-    print("-- list.sorted[int]")
+    print("-- list.min_max[int]")
     s23()
-    print("-- list.sort[int]")
+    print("-- list.sorted[int]")
     s24()
-    print("-- list.sorted_by[int]")
+    print("-- list.sort[int]")
     s25()
-    print("-- list.sort_by[int]")
+    print("-- list.sorted_by[int]")
     s26()
-    print("-- list.min_by[int]")
+    print("-- list.sort_by[int]")
     s27()
-    print("-- list.take_skip[int]")
+    print("-- list.min_by[int]")
     s28()
-    print("-- list.set_ops[int]")
+    print("-- list.take_skip[int]")
     s29()
-    print("-- list.chunks_windows[int]")
+    print("-- list.set_ops[int]")
     s30()
-    print("-- list.counts[int]")
+    print("-- list.chunks_windows[int]")
     s31()
-    print("-- list.flatten[int]")
+    print("-- list.counts[int]")
     s32()
-    print("-- list.enumerate[int]")
+    print("-- list.flatten[int]")
     s33()
-    print("-- list.any_all[int]")
+    print("-- list.enumerate[int]")
     s34()
-    print("-- list.find[int]")
+    print("-- list.any_all[int]")
     s35()
-    print("-- list.filter[int]")
+    print("-- list.find[int]")
     s36()
-    print("-- list.map[int]")
+    print("-- list.filter[int]")
     s37()
-    print("-- list.map_to_self[int]")
+    print("-- list.map[int]")
     s38()
-    print("-- list.group_by[int]")
+    print("-- list.map_to_self[int]")
     s39()
-    print("-- list.count[int]")
+    print("-- list.group_by[int]")
     s40()
-    print("-- list.fold[int]")
+    print("-- list.count[int]")
     s41()
-    print("-- list.flat_map[int]")
+    print("-- list.fold[int]")
     s42()
-    print("-- list.take_skip_while[int]")
+    print("-- list.flat_map[int]")
     s43()
-    print("-- list.zip[int]")
+    print("-- list.take_skip_while[int]")
     s44()
-    print("-- list.zip_into[int]")
+    print("-- list.zip[int]")
     s45()
-    print("-- list.for[int]")
+    print("-- list.zip_into[int]")
     s46()
-    print("-- list.for_mut[int]")
+    print("-- list.for[int]")
     s47()
-    print("-- list.comprehension[int]")
+    print("-- list.for_mut[int]")
     s48()
-    print("-- list.set_comprehension[int]")
+    print("-- list.comprehension[int]")
     s49()
-    print("-- list.map_comprehension[int]")
+    print("-- list.set_comprehension[int]")
     s50()
-    print("-- list.eq[int]")
+    print("-- list.map_comprehension[int]")
     s51()
-    print("-- list.lt[int]")
+    print("-- list.eq[int]")
     s52()
-    print("-- list.print[int]")
+    print("-- list.lt[int]")
     s53()
-    print("-- list.interp[int]")
+    print("-- list.print[int]")
     s54()
-    print("-- list.nested_push[int]")
+    print("-- list.interp[int]")
     s55()
-    print("-- list.in_struct[int]")
+    print("-- list.nested_push[int]")
     s56()
-    print("-- list.pass_mut[int]")
+    print("-- list.in_struct[int]")
     s57()
-    print("-- list.generic_first[int]")
+    print("-- list.pass_mut[int]")
     s58()
-    print("-- list.generic_ord[int]")
+    print("-- list.generic_first[int]")
     s59()
-    print("-- list.contains_list[int]")
+    print("-- list.generic_ord[int]")
     s60()
-    print("-- list.sorted_nested[int]")
+    print("-- list.contains_list[int]")
     s61()
+    print("-- list.sorted_nested[int]")
+    s62()

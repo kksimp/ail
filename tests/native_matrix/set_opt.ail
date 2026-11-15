@@ -83,20 +83,25 @@ fn s5()
     s := {oi(1)}
     print(s.is_empty())
 
-## set.is_subset[opt]
+## set.to_list[opt]
 fn s6()
+    s := {oi(1), oi(2)}
+    print(s.to_list().len())
+
+## set.is_subset[opt]
+fn s7()
     s := {oi(1)}
     t := {oi(1), oi(2)}
     print(s.is_subset(t))
 
 ## set.set_ops[opt]
-fn s7()
+fn s8()
     s := {oi(1), oi(2)}
     t := {oi(2), oi(-1)}
     print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
 
 ## set.any_all_find[opt]
-fn s8()
+fn s9()
     s := {oi(1), oi(2)}
     print(s.any(|x| x == oi(1)))
     print(s.all(|x| x == oi(1)))
@@ -104,38 +109,38 @@ fn s8()
         print(1)
 
 ## set.filter_map[opt]
-fn s9()
+fn s10()
     s := {oi(1), oi(2)}
     print(s.filter(|x| x == oi(1)).len() + s.map(|x| (x else 0)).len())
 
 ## set.group_by[opt]
-fn s10()
+fn s11()
     s := {oi(1), oi(2)}
     print(s.group_by(|x| (x else 0)).len())
 
 ## set.count_fold[opt]
-fn s11()
+fn s12()
     s := {oi(1), oi(2)}
     print(s.count(|x| x == oi(1)))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[opt]
-fn s12()
+fn s13()
     s := {oi(1), oi(2)}
     print(s.flat_map(|x| [x]).len())
 
 ## set.take_skip[opt]
-fn s13()
+fn s14()
     s := {oi(1), oi(2), oi(-1)}
     print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == oi(1)).len() + s.skip_while(|x| x == oi(1)).len())
 
 ## set.zip_enumerate[opt]
-fn s14()
+fn s15()
     s := {oi(1), oi(2)}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.for[opt]
-fn s15()
+fn s16()
     s := {oi(1), oi(2)}
     mut n := 0
     for x in s
@@ -143,24 +148,24 @@ fn s15()
     print(n)
 
 ## set.eq[opt]
-fn s16()
+fn s17()
     s := {oi(1), oi(2)}
     print(s == {oi(2), oi(1)})
 
 ## set.print[opt]
-fn s17()
+fn s18()
     s := {oi(1)}
     print(s)
 
 ## set.in_map[opt]
-fn s18()
+fn s19()
     mut m := Map[str, Set[int?]]()
     m["a"] = Set[int?]()
     m["a"].add(oi(1))
     print(m["a"].len())
 
 ## set.in_list[opt]
-fn s19()
+fn s20()
     mut xs := [Set[int?]()]
     xs[0].add(oi(1))
     print(xs[0].len())
@@ -178,31 +183,33 @@ fn main()
     s4()
     print("-- set.is_empty[opt]")
     s5()
-    print("-- set.is_subset[opt]")
+    print("-- set.to_list[opt]")
     s6()
-    print("-- set.set_ops[opt]")
+    print("-- set.is_subset[opt]")
     s7()
-    print("-- set.any_all_find[opt]")
+    print("-- set.set_ops[opt]")
     s8()
-    print("-- set.filter_map[opt]")
+    print("-- set.any_all_find[opt]")
     s9()
-    print("-- set.group_by[opt]")
+    print("-- set.filter_map[opt]")
     s10()
-    print("-- set.count_fold[opt]")
+    print("-- set.group_by[opt]")
     s11()
-    print("-- set.flat_map[opt]")
+    print("-- set.count_fold[opt]")
     s12()
-    print("-- set.take_skip[opt]")
+    print("-- set.flat_map[opt]")
     s13()
-    print("-- set.zip_enumerate[opt]")
+    print("-- set.take_skip[opt]")
     s14()
-    print("-- set.for[opt]")
+    print("-- set.zip_enumerate[opt]")
     s15()
-    print("-- set.eq[opt]")
+    print("-- set.for[opt]")
     s16()
-    print("-- set.print[opt]")
+    print("-- set.eq[opt]")
     s17()
-    print("-- set.in_map[opt]")
+    print("-- set.print[opt]")
     s18()
-    print("-- set.in_list[opt]")
+    print("-- set.in_map[opt]")
     s19()
+    print("-- set.in_list[opt]")
+    s20()

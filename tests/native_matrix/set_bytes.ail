@@ -91,20 +91,25 @@ fn s6()
     s := {b"b", b"a"}
     print(s.sorted().len())
 
-## set.is_subset[bytes]
+## set.to_list[bytes]
 fn s7()
+    s := {b"a", b"b"}
+    print(s.to_list().len())
+
+## set.is_subset[bytes]
+fn s8()
     s := {b"a"}
     t := {b"a", b"b"}
     print(s.is_subset(t))
 
 ## set.set_ops[bytes]
-fn s8()
+fn s9()
     s := {b"a", b"b"}
     t := {b"b", b"c"}
     print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
 
 ## set.any_all_find[bytes]
-fn s9()
+fn s10()
     s := {b"a", b"b"}
     print(s.any(|x| x == b"a"))
     print(s.all(|x| x == b"a"))
@@ -112,38 +117,38 @@ fn s9()
         print(1)
 
 ## set.filter_map[bytes]
-fn s10()
+fn s11()
     s := {b"a", b"b"}
     print(s.filter(|x| x == b"a").len() + s.map(|x| x.len()).len())
 
 ## set.group_by[bytes]
-fn s11()
+fn s12()
     s := {b"a", b"b"}
     print(s.group_by(|x| x.len()).len())
 
 ## set.count_fold[bytes]
-fn s12()
+fn s13()
     s := {b"a", b"b"}
     print(s.count(|x| x == b"a"))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[bytes]
-fn s13()
+fn s14()
     s := {b"a", b"b"}
     print(s.flat_map(|x| [x]).len())
 
 ## set.take_skip[bytes]
-fn s14()
+fn s15()
     s := {b"a", b"b", b"c"}
     print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == b"a").len() + s.skip_while(|x| x == b"a").len())
 
 ## set.zip_enumerate[bytes]
-fn s15()
+fn s16()
     s := {b"a", b"b"}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.min_max[bytes]
-fn s16()
+fn s17()
     s := {b"a", b"b"}
     if x := s.min()
         print(1)
@@ -151,7 +156,7 @@ fn s16()
         print(2)
 
 ## set.for[bytes]
-fn s17()
+fn s18()
     s := {b"a", b"b"}
     mut n := 0
     for x in s
@@ -159,24 +164,24 @@ fn s17()
     print(n)
 
 ## set.eq[bytes]
-fn s18()
+fn s19()
     s := {b"a", b"b"}
     print(s == {b"b", b"a"})
 
 ## set.print[bytes]
-fn s19()
+fn s20()
     s := {b"a"}
     print(s)
 
 ## set.in_map[bytes]
-fn s20()
+fn s21()
     mut m := Map[str, Set[bytes]]()
     m["a"] = Set[bytes]()
     m["a"].add(b"a")
     print(m["a"].len())
 
 ## set.in_list[bytes]
-fn s21()
+fn s22()
     mut xs := [Set[bytes]()]
     xs[0].add(b"a")
     print(xs[0].len())
@@ -196,33 +201,35 @@ fn main()
     s5()
     print("-- set.sorted[bytes]")
     s6()
-    print("-- set.is_subset[bytes]")
+    print("-- set.to_list[bytes]")
     s7()
-    print("-- set.set_ops[bytes]")
+    print("-- set.is_subset[bytes]")
     s8()
-    print("-- set.any_all_find[bytes]")
+    print("-- set.set_ops[bytes]")
     s9()
-    print("-- set.filter_map[bytes]")
+    print("-- set.any_all_find[bytes]")
     s10()
-    print("-- set.group_by[bytes]")
+    print("-- set.filter_map[bytes]")
     s11()
-    print("-- set.count_fold[bytes]")
+    print("-- set.group_by[bytes]")
     s12()
-    print("-- set.flat_map[bytes]")
+    print("-- set.count_fold[bytes]")
     s13()
-    print("-- set.take_skip[bytes]")
+    print("-- set.flat_map[bytes]")
     s14()
-    print("-- set.zip_enumerate[bytes]")
+    print("-- set.take_skip[bytes]")
     s15()
-    print("-- set.min_max[bytes]")
+    print("-- set.zip_enumerate[bytes]")
     s16()
-    print("-- set.for[bytes]")
+    print("-- set.min_max[bytes]")
     s17()
-    print("-- set.eq[bytes]")
+    print("-- set.for[bytes]")
     s18()
-    print("-- set.print[bytes]")
+    print("-- set.eq[bytes]")
     s19()
-    print("-- set.in_map[bytes]")
+    print("-- set.print[bytes]")
     s20()
-    print("-- set.in_list[bytes]")
+    print("-- set.in_map[bytes]")
     s21()
+    print("-- set.in_list[bytes]")
+    s22()

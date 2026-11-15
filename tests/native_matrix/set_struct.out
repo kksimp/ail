@@ -11,6 +11,8 @@ true
 true
 -- set.is_empty[struct]
 false
+-- set.to_list[struct]
+2
 -- set.is_subset[struct]
 true
 -- set.set_ops[struct]

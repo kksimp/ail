@@ -14,6 +14,8 @@ true
 2
 -- list.slice[u8]
 5
+-- list.slice_method[u8]
+4
 -- list.push[u8]
 2
 -- list.pop[u8]
