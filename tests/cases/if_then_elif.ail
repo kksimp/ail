@@ -1,0 +1,30 @@
+## expr.if.8: the one-line `if` with `elif` arms (ADR 1120).
+fn grade(n int) str
+    if n >= 90 then "A" elif n >= 80 then "B" elif n >= 70 then "C" else "F"
+
+fn sign(n int) str
+    if n < 0 then "negative" elif n == 0 then "zero" else "positive"
+
+fn main()
+    print(grade(95))
+    print(grade(85))
+    print(grade(72))
+    print(grade(10))
+    print(sign(-4))
+    print(sign(0))
+    print(sign(7))
+    # A binding condition in an `elif` arm (expr.if.5).
+    s := "12"
+    v := if s == "" then -1 elif x := s.to_int() then x * 2 else 0
+    print(v)
+    # As an operand, in parentheses (ADR 0470), and in interpolation.
+    n := 2
+    print(10 + (if n == 1 then 1 elif n == 2 then 2 else 3))
+    print("{if n > 5 then "big" elif n > 1 then "mid" else "small"}")
+    # `then` stays a name.
+    then := 3
+    print(if then == 1 then "one" elif then == 3 then "three" else "other")
+    # The statement form.
+    if n == 1 then print("one") elif n == 2 then print("two") else print("many")
+    # `else if` still nests a one-line `if`, with the same meaning.
+    print(if n == 1 then "a" else if n == 2 then "b" else "c")

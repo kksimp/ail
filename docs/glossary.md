@@ -181,7 +181,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **net.serve** | The capability to listen for connections, held in addition to `net` (`std.net.14`, ADR 0422). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
 | **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
-| **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
+| **One-line `if`** | `if c then a else b`, with any number of `elif d then e` arms before the `else`: the single-line form of an `if` with an `else`; `then` is a keyword only there (ADR 0280, ADR 1120, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
 | **Nested pattern** | A pattern inside a variant pattern's field, `Add(Num(a), Num(b))`; a `match` that nests names each missing case (ADR 1069). |
 | **Loop label** | `outer: for ...`: a name before a loop that `break outer` and `continue outer` in a nested loop leave or continue (ADR 1107). |
 | **Struct pattern** | `Point(x: 0, y)` in a `match`: the named fields are matched, a bare field name binds that field, the rest match anything (ADR 1106). |

@@ -3287,25 +3287,49 @@ fn Parser.if_expr(mut self) ast.Expr?
             break
     ast.Expr.If(branches: branches, els: els, else_err: else_err, pos: pos)
 
-## expr.if.8: the one-line form `if c then a else b`, after `c`.
+## expr.if.8: the one-line form `if c then a elif d then b else e`, after `c`.
+## Any number of `elif d then b` arms, then one `else` (ADR 1120).
 fn Parser.if_then(mut self, cond ast.Cond, pos ast.Pos) ast.Expr?
     self.bump()
     a := self.expression_plain()?
+    mut branches := [ast.Branch(cond: cond, body: [ast.Stmt.Eval(a)])]
+    while self.at_kw("elif")
+        self.bump()
+        c := self.condition()?
+        if not self.at_then()
+            self.error_text(
+                "expr.if.8",
+                self.here(),
+                "a one-line `elif` needs `then` after its condition",
+                "write `elif d then b`; for an `elif` with a block, write the whole `if` on separate lines",
+                "",
+            )
+            return none
+        self.bump()
+        v := self.expression_plain()?
+        branches.push(ast.Branch(cond: c, body: [ast.Stmt.Eval(v)]))
     if not self.eat_kw("else")
-        self.error_text(
-            "expr.if.8",
-            self.here(),
-            "`if c then a` needs `else b` on the same line",
-            "add `else` and the other value; for a statement with no `else`, put the body on its own line",
-            "",
-        )
+        self.missing_one_line_else(branches.len())
         return none
     b := self.expression_plain()?
-    ast.Expr.If(
-        branches: [ast.Branch(cond: cond, body: [ast.Stmt.Eval(a)])],
-        els: [ast.Stmt.Eval(b)],
-        else_err: none,
-        pos: pos,
+    ast.Expr.If(branches: branches, els: [ast.Stmt.Eval(b)], else_err: none, pos: pos)
+
+## At the contextual keyword `then` (expr.if.8).
+fn Parser.at_then(self) bool
+    if n := self.ident()
+        return n == "then"
+    false
+
+## expr.if.8: the one-line `if` ended before its `else`; the message names the
+## arms written so far and the missing part.
+fn Parser.missing_one_line_else(mut self, arms int)
+    shape := if arms == 1 then "if c then a" else "if c then a elif d then b"
+    self.error_text(
+        "expr.if.8",
+        self.here(),
+        "`{shape}` needs a final `else` and its value on the same line",
+        "end it with `else` and the value for when no condition holds: `{shape} else e`; for a statement with no `else`, put each body on its own line",
+        "",
     )
 
 ## A `bool` condition, or a binding `name := e` (expr.if.5).
