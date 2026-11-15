@@ -302,12 +302,16 @@ else err
     print("error: {err}")
 ```
 
-**expr.if.8** — `if c then a else b` is the one-line form of an `if` with one
-condition and an `else`: `a` and `b` are expressions on the same line, and its
-value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
-`then` is a keyword only right after the condition, so it stays usable as a
-name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
-without `else` is a compile-time error. *(ADR 0280)*
+**expr.if.8** — `if c then a else b` is the one-line form of an `if` with an
+`else`: `a` and `b` are expressions on the same line, and its value is `a`
+when `c` holds, else `b`. Any number of `elif d then e` arms may come between
+`a` and the `else`: `if c then a elif d then e else b` tries `c`, then `d`, as
+`expr.if.1` does. Each condition may be a binding (`expr.if.5`). `then` is a
+keyword only right after a condition, so it stays usable as a name. The `else`
+belongs to the `if`, not to `a` (`err.else.6`). A one-line `if` without its
+final `else`, or an `elif` without `then`, is a compile-time error that names
+the missing part. `else if c then ...` is a one-line `if` as the `else` value,
+and means the same as `elif`. *(ADR 0280, ADR 1120)*
 
 An `if` used as an operand is written in parentheses: `col + (if raw then 4 else 3)`.
 Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
@@ -316,8 +320,12 @@ Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
 fn sign(n int) str
     if n < 0 then "negative" else "non-negative"
 
+fn grade(n int) str
+    if n >= 90 then "A" elif n >= 80 then "B" else "C"
+
 fn main()
     print(sign(-2))
+    print(grade(85))
     print("{if 3 > 2 then "big" else "small"}")
 ```
 
