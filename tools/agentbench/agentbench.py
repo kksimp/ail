@@ -132,7 +132,9 @@ def prep(t, task, arm, ws):
     subprocess.run(["git", "-c", "user.name=b", "-c", "user.email=b@b", "commit", "-qm", "seed"], cwd=ws)
 
 def agent_env(ws):
-    e = dict(os.environ); e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
+    # The host's CLAUDE* variables (a desktop or CLI session's organisation, account and entrypoint) would make the agent act
+    # as part of that session and bill it; drop them all. agent_isolation() then sets only CLAUDE_CONFIG_DIR (ADR 0916, amended 2026-11-15).
+    e = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}; e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
     e["BENCH_DIR"] = os.path.join(os.path.abspath(ws), ".bench")
     return e
 
