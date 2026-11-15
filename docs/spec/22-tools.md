@@ -785,7 +785,7 @@ none. *(ADR 1123)*
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
 and `! Error` is ignored. A method's receiver is its first parameter,
 so `str.to_int() int?` has the shape `(str) int?` and the std method
-`BigInt.add(o BigInt) BigInt` the shape `(BigInt, BigInt) BigInt`. A function scores 6 when its
+`BigInt.divmod(o BigInt) QuoRem` the shape `(BigInt, BigInt) QuoRem`. A function scores 6 when its
 parameter types equal the asked ones in order, else 1 for each asked type among
 its parameters, and 4 when its result type equals the asked one. It is printed
 only when its parameters equal the asked ones (and its result does, when one was
@@ -917,7 +917,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,bigint,add expect=BigInt.add(o rules=api.find.2
+```ail tool=ask,std,bigint,divmod expect=BigInt.divmod(o rules=api.find.2
 fn main()
     print(1)
 ```

@@ -524,6 +524,8 @@ fn Checker.collect_types(mut self)
                     [fix.rename_all(at, n, alt)],
                 ),
             )
+            # Still the type, so its uses report nothing more.
+            self.types[n] = d
         elif self.types.contains(n) or self.traits.contains(n)
             mut dg := new_diag("mod.unit.1", at, "`{n}` is declared more than once in this module")
             if first := self.types.get(n)

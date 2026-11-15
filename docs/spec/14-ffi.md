@@ -225,11 +225,11 @@ div_t div(int n, int d);
 ```
 
 ```ail tool=run,FILE expect=3 rules=ffi.struct.1,ffi.struct.2,ffi.struct.3
-struct Div
+struct DivT
     quot i32
     rem i32
 
-extern c fn div(n i32, d i32) Div
+extern c fn div(n i32, d i32) DivT
 
 fn main()
     unsafe
