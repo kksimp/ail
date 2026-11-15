@@ -91,20 +91,25 @@ fn s6()
     s := {Q(n: 2, name: "b"), Q(n: 1, name: "a")}
     print(s.sorted().len())
 
-## set.is_subset[ordstruct]
+## set.to_list[ordstruct]
 fn s7()
+    s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
+    print(s.to_list().len())
+
+## set.is_subset[ordstruct]
+fn s8()
     s := {Q(n: 1, name: "a")}
     t := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.is_subset(t))
 
 ## set.set_ops[ordstruct]
-fn s8()
+fn s9()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     t := {Q(n: 2, name: "b"), Q(n: 3, name: "c")}
     print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
 
 ## set.any_all_find[ordstruct]
-fn s9()
+fn s10()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.any(|x| x == Q(n: 1, name: "a")))
     print(s.all(|x| x == Q(n: 1, name: "a")))
@@ -112,38 +117,38 @@ fn s9()
         print(1)
 
 ## set.filter_map[ordstruct]
-fn s10()
+fn s11()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.filter(|x| x == Q(n: 1, name: "a")).len() + s.map(|x| x.n).len())
 
 ## set.group_by[ordstruct]
-fn s11()
+fn s12()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.group_by(|x| x.n).len())
 
 ## set.count_fold[ordstruct]
-fn s12()
+fn s13()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.count(|x| x == Q(n: 1, name: "a")))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[ordstruct]
-fn s13()
+fn s14()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.flat_map(|x| [x]).len())
 
 ## set.take_skip[ordstruct]
-fn s14()
+fn s15()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b"), Q(n: 3, name: "c")}
     print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == Q(n: 1, name: "a")).len() + s.skip_while(|x| x == Q(n: 1, name: "a")).len())
 
 ## set.zip_enumerate[ordstruct]
-fn s15()
+fn s16()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.min_max[ordstruct]
-fn s16()
+fn s17()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     if x := s.min()
         print(1)
@@ -151,7 +156,7 @@ fn s16()
         print(2)
 
 ## set.for[ordstruct]
-fn s17()
+fn s18()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     mut n := 0
     for x in s
@@ -159,24 +164,24 @@ fn s17()
     print(n)
 
 ## set.eq[ordstruct]
-fn s18()
+fn s19()
     s := {Q(n: 1, name: "a"), Q(n: 2, name: "b")}
     print(s == {Q(n: 2, name: "b"), Q(n: 1, name: "a")})
 
 ## set.print[ordstruct]
-fn s19()
+fn s20()
     s := {Q(n: 1, name: "a")}
     print(s)
 
 ## set.in_map[ordstruct]
-fn s20()
+fn s21()
     mut m := Map[str, Set[Q]]()
     m["a"] = Set[Q]()
     m["a"].add(Q(n: 1, name: "a"))
     print(m["a"].len())
 
 ## set.in_list[ordstruct]
-fn s21()
+fn s22()
     mut xs := [Set[Q]()]
     xs[0].add(Q(n: 1, name: "a"))
     print(xs[0].len())
@@ -196,33 +201,35 @@ fn main()
     s5()
     print("-- set.sorted[ordstruct]")
     s6()
-    print("-- set.is_subset[ordstruct]")
+    print("-- set.to_list[ordstruct]")
     s7()
-    print("-- set.set_ops[ordstruct]")
+    print("-- set.is_subset[ordstruct]")
     s8()
-    print("-- set.any_all_find[ordstruct]")
+    print("-- set.set_ops[ordstruct]")
     s9()
-    print("-- set.filter_map[ordstruct]")
+    print("-- set.any_all_find[ordstruct]")
     s10()
-    print("-- set.group_by[ordstruct]")
+    print("-- set.filter_map[ordstruct]")
     s11()
-    print("-- set.count_fold[ordstruct]")
+    print("-- set.group_by[ordstruct]")
     s12()
-    print("-- set.flat_map[ordstruct]")
+    print("-- set.count_fold[ordstruct]")
     s13()
-    print("-- set.take_skip[ordstruct]")
+    print("-- set.flat_map[ordstruct]")
     s14()
-    print("-- set.zip_enumerate[ordstruct]")
+    print("-- set.take_skip[ordstruct]")
     s15()
-    print("-- set.min_max[ordstruct]")
+    print("-- set.zip_enumerate[ordstruct]")
     s16()
-    print("-- set.for[ordstruct]")
+    print("-- set.min_max[ordstruct]")
     s17()
-    print("-- set.eq[ordstruct]")
+    print("-- set.for[ordstruct]")
     s18()
-    print("-- set.print[ordstruct]")
+    print("-- set.eq[ordstruct]")
     s19()
-    print("-- set.in_map[ordstruct]")
+    print("-- set.print[ordstruct]")
     s20()
-    print("-- set.in_list[ordstruct]")
+    print("-- set.in_map[ordstruct]")
     s21()
+    print("-- set.in_list[ordstruct]")
+    s22()

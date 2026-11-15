@@ -13,6 +13,8 @@ true
 false
 -- set.sorted[u8]
 2
+-- set.to_list[u8]
+2
 -- set.is_subset[u8]
 true
 -- set.set_ops[u8]

@@ -11,6 +11,8 @@ true
 true
 -- set.is_empty[enum]
 false
+-- set.to_list[enum]
+2
 -- set.is_subset[enum]
 true
 -- set.set_ops[enum]

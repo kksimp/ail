@@ -14,6 +14,8 @@ true
 2
 -- list.slice[bytes]
 5
+-- list.slice_method[bytes]
+4
 -- list.push[bytes]
 2
 -- list.pop[bytes]

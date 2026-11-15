@@ -98,26 +98,31 @@ fn s7()
     xs := [1.to_u8(), 2.to_u8(), 3.to_u8()]
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[u8]
+## list.slice_method[u8]
 fn s8()
+    xs := [1.to_u8(), 2.to_u8(), 3.to_u8()]
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[u8]
+fn s9()
     mut xs := [1.to_u8()]
     xs.push(2.to_u8())
     print(xs.len())
 
 ## list.pop[u8]
-fn s9()
+fn s10()
     mut xs := [1.to_u8(), 2.to_u8()]
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[u8]
-fn s10()
+fn s11()
     mut xs := [1.to_u8(), 2.to_u8()]
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[u8]
-fn s11()
+fn s12()
     xs := [1.to_u8(), 2.to_u8()]
     if x := xs.first()
         print(1)
@@ -125,63 +130,63 @@ fn s11()
         print(2)
 
 ## list.insert[u8]
-fn s12()
+fn s13()
     mut xs := [1.to_u8()]
     xs.insert(0, 2.to_u8())
     print(xs.len())
 
 ## list.remove_at[u8]
-fn s13()
+fn s14()
     mut xs := [1.to_u8(), 2.to_u8()]
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[u8]
-fn s14()
+fn s15()
     mut xs := [1.to_u8()]
     xs.extend([2.to_u8(), 3.to_u8()])
     print(xs.len())
 
 ## list.clear[u8]
-fn s15()
+fn s16()
     mut xs := [1.to_u8()]
     xs.clear()
     print(xs.len())
 
 ## list.reverse[u8]
-fn s16()
+fn s17()
     mut xs := [1.to_u8(), 2.to_u8()]
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[u8]
-fn s17()
+fn s18()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.reversed().len())
 
 ## list.contains[u8]
-fn s18()
+fn s19()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.contains(2.to_u8()))
 
 ## list.index_of[u8]
-fn s19()
+fn s20()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.index_of(2.to_u8()) else -1)
 
 ## list.join[u8]
-fn s20()
+fn s21()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.join(",").len() > 0)
 
 ## list.sum[u8]
-fn s21()
+fn s22()
     xs := [1.to_u8(), 2.to_u8()]
     s := xs.sum()
     print(1)
 
 ## list.min_max[u8]
-fn s22()
+fn s23()
     xs := [2.to_u8(), 1.to_u8(), 3.to_u8()]
     if x := xs.min()
         print(1)
@@ -189,29 +194,29 @@ fn s22()
         print(2)
 
 ## list.sorted[u8]
-fn s23()
+fn s24()
     xs := [3.to_u8(), 1.to_u8(), 2.to_u8()]
     print(xs.sorted().len())
 
 ## list.sort[u8]
-fn s24()
+fn s25()
     mut xs := [3.to_u8(), 1.to_u8(), 2.to_u8()]
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[u8]
-fn s25()
+fn s26()
     xs := [3.to_u8(), 1.to_u8(), 2.to_u8()]
     print(xs.sorted(by: |x| x).len())
 
 ## list.sort_by[u8]
-fn s26()
+fn s27()
     mut xs := [3.to_u8(), 1.to_u8(), 2.to_u8()]
     xs.sort(by: |x| x)
     print(xs.len())
 
 ## list.min_by[u8]
-fn s27()
+fn s28()
     xs := [3.to_u8(), 1.to_u8(), 2.to_u8()]
     if x := xs.min(by: |x| x)
         print(1)
@@ -219,105 +224,105 @@ fn s27()
         print(2)
 
 ## list.take_skip[u8]
-fn s28()
+fn s29()
     xs := [1.to_u8(), 2.to_u8(), 3.to_u8()]
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.set_ops[u8]
-fn s29()
+fn s30()
     xs := [1.to_u8(), 2.to_u8()]
     ys := [2.to_u8(), 3.to_u8()]
     print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
 
 ## list.chunks_windows[u8]
-fn s30()
+fn s31()
     xs := [1.to_u8(), 2.to_u8(), 3.to_u8()]
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.counts[u8]
-fn s31()
+fn s32()
     xs := [1.to_u8(), 2.to_u8(), 1.to_u8()]
     c := xs.counts()
     print(c.len())
 
 ## list.flatten[u8]
-fn s32()
+fn s33()
     xs := [[1.to_u8()], [2.to_u8(), 3.to_u8()]]
     print(xs.flatten().len())
 
 ## list.enumerate[u8]
-fn s33()
+fn s34()
     xs := [1.to_u8(), 2.to_u8()]
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[u8]
-fn s34()
+fn s35()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.any(|x| x == 1.to_u8()))
     print(xs.all(|x| x == 1.to_u8()))
 
 ## list.find[u8]
-fn s35()
+fn s36()
     xs := [1.to_u8(), 2.to_u8()]
     if x := xs.find(|x| x == 2.to_u8())
         print(1)
 
 ## list.filter[u8]
-fn s36()
+fn s37()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.filter(|x| x == 1.to_u8()).len())
 
 ## list.map[u8]
-fn s37()
-    xs := [1.to_u8(), 2.to_u8()]
-    print(xs.map(|x| x).len())
-
-## list.map_to_self[u8]
 fn s38()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.map(|x| x).len())
 
-## list.group_by[u8]
+## list.map_to_self[u8]
 fn s39()
+    xs := [1.to_u8(), 2.to_u8()]
+    print(xs.map(|x| x).len())
+
+## list.group_by[u8]
+fn s40()
     xs := [1.to_u8(), 2.to_u8(), 1.to_u8()]
     g := xs.group_by(|x| x)
     print(g.len())
 
 ## list.count[u8]
-fn s40()
+fn s41()
     xs := [1.to_u8(), 2.to_u8(), 1.to_u8()]
     print(xs.count(|x| x == 1.to_u8()))
 
 ## list.fold[u8]
-fn s41()
+fn s42()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[u8]
-fn s42()
+fn s43()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[u8]
-fn s43()
+fn s44()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs.take_while(|x| x == 1.to_u8()).len() + xs.skip_while(|x| x == 1.to_u8()).len())
 
 ## list.zip[u8]
-fn s44()
+fn s45()
     xs := [1.to_u8(), 2.to_u8()]
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[u8]
-fn s45()
+fn s46()
     xs := [1.to_u8(), 2.to_u8()]
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[u8]
-fn s46()
+fn s47()
     xs := [1.to_u8(), 2.to_u8()]
     mut n := 0
     for x in xs
@@ -325,90 +330,90 @@ fn s46()
     print(n)
 
 ## list.for_mut[u8]
-fn s47()
+fn s48()
     mut xs := [1.to_u8(), 2.to_u8()]
     for mut x in xs
         x = 3.to_u8()
     print(xs.len())
 
 ## list.comprehension[u8]
-fn s48()
+fn s49()
     xs := [1.to_u8(), 2.to_u8()]
     ys := [x for x in xs if x == 1.to_u8()]
     print(ys.len())
 
 ## list.set_comprehension[u8]
-fn s49()
+fn s50()
     xs := [1.to_u8(), 2.to_u8(), 1.to_u8()]
     s := {x for x in xs}
     print(s.len())
 
 ## list.map_comprehension[u8]
-fn s50()
+fn s51()
     xs := [1.to_u8(), 2.to_u8()]
     m := {x: 1 for x in xs}
     print(m.len())
 
 ## list.eq[u8]
-fn s51()
+fn s52()
     xs := [1.to_u8(), 2.to_u8()]
     ys := [1.to_u8(), 2.to_u8()]
     print(xs == ys)
     print(xs != [3.to_u8()])
 
 ## list.lt[u8]
-fn s52()
+fn s53()
     xs := [1.to_u8()]
     ys := [2.to_u8()]
     print(xs < ys)
 
 ## list.print[u8]
-fn s53()
+fn s54()
     xs := [1.to_u8(), 2.to_u8()]
     print(xs)
 
 ## list.interp[u8]
-fn s54()
+fn s55()
     xs := [1.to_u8(), 2.to_u8()]
     print("{xs}".len() > 0)
 
 ## list.nested_push[u8]
-fn s55()
+fn s56()
     mut xs := [[1.to_u8()]]
     xs[0].push(2.to_u8())
     print(xs[0].len())
 
 ## list.in_struct[u8]
-fn s56()
+fn s57()
     mut b := Box_u8(items: [1.to_u8()])
     b.items.push(2.to_u8())
     print(b.items.len())
 
 ## list.pass_mut[u8]
-fn s57()
+fn s58()
     mut xs := [1.to_u8()]
     add_u8(mut xs, 2.to_u8())
     print(xs.len())
 
 ## list.generic_first[u8]
-fn s58()
+fn s59()
     xs := [1.to_u8(), 2.to_u8()]
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[u8]
-fn s59()
+fn s60()
     xs := [1.to_u8(), 2.to_u8()]
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[u8]
-fn s60()
+fn s61()
     xs := [[1.to_u8()], [2.to_u8()]]
     print(xs.contains([2.to_u8()]))
 
 ## list.sorted_nested[u8]
-fn s61()
+fn s62()
     xs := [[2.to_u8()], [1.to_u8()]]
     print(xs.sorted().len())
 
@@ -429,111 +434,113 @@ fn main()
     s6()
     print("-- list.slice[u8]")
     s7()
-    print("-- list.push[u8]")
+    print("-- list.slice_method[u8]")
     s8()
-    print("-- list.pop[u8]")
+    print("-- list.push[u8]")
     s9()
-    print("-- list.swap[u8]")
+    print("-- list.pop[u8]")
     s10()
-    print("-- list.first_last[u8]")
+    print("-- list.swap[u8]")
     s11()
-    print("-- list.insert[u8]")
+    print("-- list.first_last[u8]")
     s12()
-    print("-- list.remove_at[u8]")
+    print("-- list.insert[u8]")
     s13()
-    print("-- list.extend[u8]")
+    print("-- list.remove_at[u8]")
     s14()
-    print("-- list.clear[u8]")
+    print("-- list.extend[u8]")
     s15()
-    print("-- list.reverse[u8]")
+    print("-- list.clear[u8]")
     s16()
-    print("-- list.reversed[u8]")
+    print("-- list.reverse[u8]")
     s17()
-    print("-- list.contains[u8]")
+    print("-- list.reversed[u8]")
     s18()
-    print("-- list.index_of[u8]")
+    print("-- list.contains[u8]")
     s19()
-    print("-- list.join[u8]")
+    print("-- list.index_of[u8]")
     s20()
-    print("-- list.sum[u8]")
+    print("-- list.join[u8]")
     s21()
-    print("-- list.min_max[u8]")
+    print("-- list.sum[u8]")
     s22()
-    print("-- list.sorted[u8]")
+    print("-- list.min_max[u8]")
     s23()
-    print("-- list.sort[u8]")
+    print("-- list.sorted[u8]")
     s24()
-    print("-- list.sorted_by[u8]")
+    print("-- list.sort[u8]")
     s25()
-    print("-- list.sort_by[u8]")
+    print("-- list.sorted_by[u8]")
     s26()
-    print("-- list.min_by[u8]")
+    print("-- list.sort_by[u8]")
     s27()
-    print("-- list.take_skip[u8]")
+    print("-- list.min_by[u8]")
     s28()
-    print("-- list.set_ops[u8]")
+    print("-- list.take_skip[u8]")
     s29()
-    print("-- list.chunks_windows[u8]")
+    print("-- list.set_ops[u8]")
     s30()
-    print("-- list.counts[u8]")
+    print("-- list.chunks_windows[u8]")
     s31()
-    print("-- list.flatten[u8]")
+    print("-- list.counts[u8]")
     s32()
-    print("-- list.enumerate[u8]")
+    print("-- list.flatten[u8]")
     s33()
-    print("-- list.any_all[u8]")
+    print("-- list.enumerate[u8]")
     s34()
-    print("-- list.find[u8]")
+    print("-- list.any_all[u8]")
     s35()
-    print("-- list.filter[u8]")
+    print("-- list.find[u8]")
     s36()
-    print("-- list.map[u8]")
+    print("-- list.filter[u8]")
     s37()
-    print("-- list.map_to_self[u8]")
+    print("-- list.map[u8]")
     s38()
-    print("-- list.group_by[u8]")
+    print("-- list.map_to_self[u8]")
     s39()
-    print("-- list.count[u8]")
+    print("-- list.group_by[u8]")
     s40()
-    print("-- list.fold[u8]")
+    print("-- list.count[u8]")
     s41()
-    print("-- list.flat_map[u8]")
+    print("-- list.fold[u8]")
     s42()
-    print("-- list.take_skip_while[u8]")
+    print("-- list.flat_map[u8]")
     s43()
-    print("-- list.zip[u8]")
+    print("-- list.take_skip_while[u8]")
     s44()
-    print("-- list.zip_into[u8]")
+    print("-- list.zip[u8]")
     s45()
-    print("-- list.for[u8]")
+    print("-- list.zip_into[u8]")
     s46()
-    print("-- list.for_mut[u8]")
+    print("-- list.for[u8]")
     s47()
-    print("-- list.comprehension[u8]")
+    print("-- list.for_mut[u8]")
     s48()
-    print("-- list.set_comprehension[u8]")
+    print("-- list.comprehension[u8]")
     s49()
-    print("-- list.map_comprehension[u8]")
+    print("-- list.set_comprehension[u8]")
     s50()
-    print("-- list.eq[u8]")
+    print("-- list.map_comprehension[u8]")
     s51()
-    print("-- list.lt[u8]")
+    print("-- list.eq[u8]")
     s52()
-    print("-- list.print[u8]")
+    print("-- list.lt[u8]")
     s53()
-    print("-- list.interp[u8]")
+    print("-- list.print[u8]")
     s54()
-    print("-- list.nested_push[u8]")
+    print("-- list.interp[u8]")
     s55()
-    print("-- list.in_struct[u8]")
+    print("-- list.nested_push[u8]")
     s56()
-    print("-- list.pass_mut[u8]")
+    print("-- list.in_struct[u8]")
     s57()
-    print("-- list.generic_first[u8]")
+    print("-- list.pass_mut[u8]")
     s58()
-    print("-- list.generic_ord[u8]")
+    print("-- list.generic_first[u8]")
     s59()
-    print("-- list.contains_list[u8]")
+    print("-- list.generic_ord[u8]")
     s60()
-    print("-- list.sorted_nested[u8]")
+    print("-- list.contains_list[u8]")
     s61()
+    print("-- list.sorted_nested[u8]")
+    s62()

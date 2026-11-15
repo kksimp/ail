@@ -1,0 +1,4 @@
+fn main()
+    s := "42"
+    n := s.to_int().unwrap()
+    print(n + 1)

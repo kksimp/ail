@@ -98,26 +98,31 @@ fn s7()
     xs := ['a', 'b', 'c']
     print(xs[1..].len() + xs[..1].len() + xs[0..2].len())
 
-## list.push[char]
+## list.slice_method[char]
 fn s8()
+    xs := ['a', 'b', 'c']
+    print(xs.slice(1).len() + xs.slice(0, 2).len())
+
+## list.push[char]
+fn s9()
     mut xs := ['a']
     xs.push('b')
     print(xs.len())
 
 ## list.pop[char]
-fn s9()
+fn s10()
     mut xs := ['a', 'b']
     if x := xs.pop()
         print(xs.len())
 
 ## list.swap[char]
-fn s10()
+fn s11()
     mut xs := ['a', 'b']
     xs.swap(0, 1)
     print(xs.len())
 
 ## list.first_last[char]
-fn s11()
+fn s12()
     xs := ['a', 'b']
     if x := xs.first()
         print(1)
@@ -125,57 +130,57 @@ fn s11()
         print(2)
 
 ## list.insert[char]
-fn s12()
+fn s13()
     mut xs := ['a']
     xs.insert(0, 'b')
     print(xs.len())
 
 ## list.remove_at[char]
-fn s13()
+fn s14()
     mut xs := ['a', 'b']
     x := xs.remove_at(0)
     print(xs.len())
 
 ## list.extend[char]
-fn s14()
+fn s15()
     mut xs := ['a']
     xs.extend(['b', 'c'])
     print(xs.len())
 
 ## list.clear[char]
-fn s15()
+fn s16()
     mut xs := ['a']
     xs.clear()
     print(xs.len())
 
 ## list.reverse[char]
-fn s16()
+fn s17()
     mut xs := ['a', 'b']
     xs.reverse()
     print(xs.len())
 
 ## list.reversed[char]
-fn s17()
+fn s18()
     xs := ['a', 'b']
     print(xs.reversed().len())
 
 ## list.contains[char]
-fn s18()
+fn s19()
     xs := ['a', 'b']
     print(xs.contains('b'))
 
 ## list.index_of[char]
-fn s19()
+fn s20()
     xs := ['a', 'b']
     print(xs.index_of('b') else -1)
 
 ## list.join[char]
-fn s20()
+fn s21()
     xs := ['a', 'b']
     print(xs.join(",").len() > 0)
 
 ## list.min_max[char]
-fn s21()
+fn s22()
     xs := ['b', 'a', 'c']
     if x := xs.min()
         print(1)
@@ -183,29 +188,29 @@ fn s21()
         print(2)
 
 ## list.sorted[char]
-fn s22()
+fn s23()
     xs := ['c', 'a', 'b']
     print(xs.sorted().len())
 
 ## list.sort[char]
-fn s23()
+fn s24()
     mut xs := ['c', 'a', 'b']
     xs.sort()
     print(xs.len())
 
 ## list.sorted_by[char]
-fn s24()
+fn s25()
     xs := ['c', 'a', 'b']
     print(xs.sorted(by: |x| x).len())
 
 ## list.sort_by[char]
-fn s25()
+fn s26()
     mut xs := ['c', 'a', 'b']
     xs.sort(by: |x| x)
     print(xs.len())
 
 ## list.min_by[char]
-fn s26()
+fn s27()
     xs := ['c', 'a', 'b']
     if x := xs.min(by: |x| x)
         print(1)
@@ -213,105 +218,105 @@ fn s26()
         print(2)
 
 ## list.take_skip[char]
-fn s27()
+fn s28()
     xs := ['a', 'b', 'c']
     print(xs.take(2).len() + xs.skip(1).len())
 
 ## list.set_ops[char]
-fn s28()
+fn s29()
     xs := ['a', 'b']
     ys := ['b', 'c']
     print(xs.union(ys).len() + xs.intersect(ys).len() + xs.difference(ys).len())
 
 ## list.chunks_windows[char]
-fn s29()
+fn s30()
     xs := ['a', 'b', 'c']
     print(xs.chunks(2).len() + xs.windows(2).len())
 
 ## list.counts[char]
-fn s30()
+fn s31()
     xs := ['a', 'b', 'a']
     c := xs.counts()
     print(c.len())
 
 ## list.flatten[char]
-fn s31()
+fn s32()
     xs := [['a'], ['b', 'c']]
     print(xs.flatten().len())
 
 ## list.enumerate[char]
-fn s32()
+fn s33()
     xs := ['a', 'b']
     for i, x in xs.enumerate()
         print(i)
 
 ## list.any_all[char]
-fn s33()
+fn s34()
     xs := ['a', 'b']
     print(xs.any(|x| x == 'a'))
     print(xs.all(|x| x == 'a'))
 
 ## list.find[char]
-fn s34()
+fn s35()
     xs := ['a', 'b']
     if x := xs.find(|x| x == 'b')
         print(1)
 
 ## list.filter[char]
-fn s35()
+fn s36()
     xs := ['a', 'b']
     print(xs.filter(|x| x == 'a').len())
 
 ## list.map[char]
-fn s36()
-    xs := ['a', 'b']
-    print(xs.map(|x| x).len())
-
-## list.map_to_self[char]
 fn s37()
     xs := ['a', 'b']
     print(xs.map(|x| x).len())
 
-## list.group_by[char]
+## list.map_to_self[char]
 fn s38()
+    xs := ['a', 'b']
+    print(xs.map(|x| x).len())
+
+## list.group_by[char]
+fn s39()
     xs := ['a', 'b', 'a']
     g := xs.group_by(|x| x)
     print(g.len())
 
 ## list.count[char]
-fn s39()
+fn s40()
     xs := ['a', 'b', 'a']
     print(xs.count(|x| x == 'a'))
 
 ## list.fold[char]
-fn s40()
+fn s41()
     xs := ['a', 'b']
     print(xs.fold(0, |acc, x| acc + 1))
 
 ## list.flat_map[char]
-fn s41()
+fn s42()
     xs := ['a', 'b']
     print(xs.flat_map(|x| [x, x]).len())
 
 ## list.take_skip_while[char]
-fn s42()
+fn s43()
     xs := ['a', 'b']
     print(xs.take_while(|x| x == 'a').len() + xs.skip_while(|x| x == 'a').len())
 
 ## list.zip[char]
-fn s43()
+fn s44()
     xs := ['a', 'b']
     for x, y in xs.zip([1, 2])
         print(y)
 
 ## list.zip_into[char]
-fn s44()
+fn s45()
     xs := ['a', 'b']
     for y, x in [1, 2].zip(xs)
         print(y)
 
 ## list.for[char]
-fn s45()
+fn s46()
     xs := ['a', 'b']
     mut n := 0
     for x in xs
@@ -319,90 +324,90 @@ fn s45()
     print(n)
 
 ## list.for_mut[char]
-fn s46()
+fn s47()
     mut xs := ['a', 'b']
     for mut x in xs
         x = 'c'
     print(xs.len())
 
 ## list.comprehension[char]
-fn s47()
+fn s48()
     xs := ['a', 'b']
     ys := [x for x in xs if x == 'a']
     print(ys.len())
 
 ## list.set_comprehension[char]
-fn s48()
+fn s49()
     xs := ['a', 'b', 'a']
     s := {x for x in xs}
     print(s.len())
 
 ## list.map_comprehension[char]
-fn s49()
+fn s50()
     xs := ['a', 'b']
     m := {x: 1 for x in xs}
     print(m.len())
 
 ## list.eq[char]
-fn s50()
+fn s51()
     xs := ['a', 'b']
     ys := ['a', 'b']
     print(xs == ys)
     print(xs != ['c'])
 
 ## list.lt[char]
-fn s51()
+fn s52()
     xs := ['a']
     ys := ['b']
     print(xs < ys)
 
 ## list.print[char]
-fn s52()
+fn s53()
     xs := ['a', 'b']
     print(xs)
 
 ## list.interp[char]
-fn s53()
+fn s54()
     xs := ['a', 'b']
     print("{xs}".len() > 0)
 
 ## list.nested_push[char]
-fn s54()
+fn s55()
     mut xs := [['a']]
     xs[0].push('b')
     print(xs[0].len())
 
 ## list.in_struct[char]
-fn s55()
+fn s56()
     mut b := Box_char(items: ['a'])
     b.items.push('b')
     print(b.items.len())
 
 ## list.pass_mut[char]
-fn s56()
+fn s57()
     mut xs := ['a']
     add_char(mut xs, 'b')
     print(xs.len())
 
 ## list.generic_first[char]
-fn s57()
+fn s58()
     xs := ['a', 'b']
     if x := first_of(xs)
         print(1)
 
 ## list.generic_ord[char]
-fn s58()
+fn s59()
     xs := ['a', 'b']
     if x := biggest(xs)
         print(1)
 
 ## list.contains_list[char]
-fn s59()
+fn s60()
     xs := [['a'], ['b']]
     print(xs.contains(['b']))
 
 ## list.sorted_nested[char]
-fn s60()
+fn s61()
     xs := [['b'], ['a']]
     print(xs.sorted().len())
 
@@ -423,109 +428,111 @@ fn main()
     s6()
     print("-- list.slice[char]")
     s7()
-    print("-- list.push[char]")
+    print("-- list.slice_method[char]")
     s8()
-    print("-- list.pop[char]")
+    print("-- list.push[char]")
     s9()
-    print("-- list.swap[char]")
+    print("-- list.pop[char]")
     s10()
-    print("-- list.first_last[char]")
+    print("-- list.swap[char]")
     s11()
-    print("-- list.insert[char]")
+    print("-- list.first_last[char]")
     s12()
-    print("-- list.remove_at[char]")
+    print("-- list.insert[char]")
     s13()
-    print("-- list.extend[char]")
+    print("-- list.remove_at[char]")
     s14()
-    print("-- list.clear[char]")
+    print("-- list.extend[char]")
     s15()
-    print("-- list.reverse[char]")
+    print("-- list.clear[char]")
     s16()
-    print("-- list.reversed[char]")
+    print("-- list.reverse[char]")
     s17()
-    print("-- list.contains[char]")
+    print("-- list.reversed[char]")
     s18()
-    print("-- list.index_of[char]")
+    print("-- list.contains[char]")
     s19()
-    print("-- list.join[char]")
+    print("-- list.index_of[char]")
     s20()
-    print("-- list.min_max[char]")
+    print("-- list.join[char]")
     s21()
-    print("-- list.sorted[char]")
+    print("-- list.min_max[char]")
     s22()
-    print("-- list.sort[char]")
+    print("-- list.sorted[char]")
     s23()
-    print("-- list.sorted_by[char]")
+    print("-- list.sort[char]")
     s24()
-    print("-- list.sort_by[char]")
+    print("-- list.sorted_by[char]")
     s25()
-    print("-- list.min_by[char]")
+    print("-- list.sort_by[char]")
     s26()
-    print("-- list.take_skip[char]")
+    print("-- list.min_by[char]")
     s27()
-    print("-- list.set_ops[char]")
+    print("-- list.take_skip[char]")
     s28()
-    print("-- list.chunks_windows[char]")
+    print("-- list.set_ops[char]")
     s29()
-    print("-- list.counts[char]")
+    print("-- list.chunks_windows[char]")
     s30()
-    print("-- list.flatten[char]")
+    print("-- list.counts[char]")
     s31()
-    print("-- list.enumerate[char]")
+    print("-- list.flatten[char]")
     s32()
-    print("-- list.any_all[char]")
+    print("-- list.enumerate[char]")
     s33()
-    print("-- list.find[char]")
+    print("-- list.any_all[char]")
     s34()
-    print("-- list.filter[char]")
+    print("-- list.find[char]")
     s35()
-    print("-- list.map[char]")
+    print("-- list.filter[char]")
     s36()
-    print("-- list.map_to_self[char]")
+    print("-- list.map[char]")
     s37()
-    print("-- list.group_by[char]")
+    print("-- list.map_to_self[char]")
     s38()
-    print("-- list.count[char]")
+    print("-- list.group_by[char]")
     s39()
-    print("-- list.fold[char]")
+    print("-- list.count[char]")
     s40()
-    print("-- list.flat_map[char]")
+    print("-- list.fold[char]")
     s41()
-    print("-- list.take_skip_while[char]")
+    print("-- list.flat_map[char]")
     s42()
-    print("-- list.zip[char]")
+    print("-- list.take_skip_while[char]")
     s43()
-    print("-- list.zip_into[char]")
+    print("-- list.zip[char]")
     s44()
-    print("-- list.for[char]")
+    print("-- list.zip_into[char]")
     s45()
-    print("-- list.for_mut[char]")
+    print("-- list.for[char]")
     s46()
-    print("-- list.comprehension[char]")
+    print("-- list.for_mut[char]")
     s47()
-    print("-- list.set_comprehension[char]")
+    print("-- list.comprehension[char]")
     s48()
-    print("-- list.map_comprehension[char]")
+    print("-- list.set_comprehension[char]")
     s49()
-    print("-- list.eq[char]")
+    print("-- list.map_comprehension[char]")
     s50()
-    print("-- list.lt[char]")
+    print("-- list.eq[char]")
     s51()
-    print("-- list.print[char]")
+    print("-- list.lt[char]")
     s52()
-    print("-- list.interp[char]")
+    print("-- list.print[char]")
     s53()
-    print("-- list.nested_push[char]")
+    print("-- list.interp[char]")
     s54()
-    print("-- list.in_struct[char]")
+    print("-- list.nested_push[char]")
     s55()
-    print("-- list.pass_mut[char]")
+    print("-- list.in_struct[char]")
     s56()
-    print("-- list.generic_first[char]")
+    print("-- list.pass_mut[char]")
     s57()
-    print("-- list.generic_ord[char]")
+    print("-- list.generic_first[char]")
     s58()
-    print("-- list.contains_list[char]")
+    print("-- list.generic_ord[char]")
     s59()
-    print("-- list.sorted_nested[char]")
+    print("-- list.contains_list[char]")
     s60()
+    print("-- list.sorted_nested[char]")
+    s61()

@@ -91,20 +91,25 @@ fn s6()
     s := {(2, "b"), (1, "a")}
     print(s.sorted().len())
 
-## set.is_subset[tuple]
+## set.to_list[tuple]
 fn s7()
+    s := {(1, "a"), (2, "b")}
+    print(s.to_list().len())
+
+## set.is_subset[tuple]
+fn s8()
     s := {(1, "a")}
     t := {(1, "a"), (2, "b")}
     print(s.is_subset(t))
 
 ## set.set_ops[tuple]
-fn s8()
+fn s9()
     s := {(1, "a"), (2, "b")}
     t := {(2, "b"), (3, "c")}
     print(s.union(t).len() + s.intersect(t).len() + s.difference(t).len())
 
 ## set.any_all_find[tuple]
-fn s9()
+fn s10()
     s := {(1, "a"), (2, "b")}
     print(s.any(|x| x == (1, "a")))
     print(s.all(|x| x == (1, "a")))
@@ -112,38 +117,38 @@ fn s9()
         print(1)
 
 ## set.filter_map[tuple]
-fn s10()
+fn s11()
     s := {(1, "a"), (2, "b")}
     print(s.filter(|x| x == (1, "a")).len() + s.map(|x| x.0).len())
 
 ## set.group_by[tuple]
-fn s11()
+fn s12()
     s := {(1, "a"), (2, "b")}
     print(s.group_by(|x| x.0).len())
 
 ## set.count_fold[tuple]
-fn s12()
+fn s13()
     s := {(1, "a"), (2, "b")}
     print(s.count(|x| x == (1, "a")))
     print(s.fold(0, |acc, x| acc + 1))
 
 ## set.flat_map[tuple]
-fn s13()
+fn s14()
     s := {(1, "a"), (2, "b")}
     print(s.flat_map(|x| [x]).len())
 
 ## set.take_skip[tuple]
-fn s14()
+fn s15()
     s := {(1, "a"), (2, "b"), (3, "c")}
     print(s.take(1).len() + s.skip(1).len() + s.take_while(|x| x == (1, "a")).len() + s.skip_while(|x| x == (1, "a")).len())
 
 ## set.zip_enumerate[tuple]
-fn s15()
+fn s16()
     s := {(1, "a"), (2, "b")}
     print(s.zip([1, 2]).len() + s.enumerate().len())
 
 ## set.min_max[tuple]
-fn s16()
+fn s17()
     s := {(1, "a"), (2, "b")}
     if x := s.min()
         print(1)
@@ -151,7 +156,7 @@ fn s16()
         print(2)
 
 ## set.for[tuple]
-fn s17()
+fn s18()
     s := {(1, "a"), (2, "b")}
     mut n := 0
     for x in s
@@ -159,24 +164,24 @@ fn s17()
     print(n)
 
 ## set.eq[tuple]
-fn s18()
+fn s19()
     s := {(1, "a"), (2, "b")}
     print(s == {(2, "b"), (1, "a")})
 
 ## set.print[tuple]
-fn s19()
+fn s20()
     s := {(1, "a")}
     print(s)
 
 ## set.in_map[tuple]
-fn s20()
+fn s21()
     mut m := Map[str, Set[(int, str)]]()
     m["a"] = Set[(int, str)]()
     m["a"].add((1, "a"))
     print(m["a"].len())
 
 ## set.in_list[tuple]
-fn s21()
+fn s22()
     mut xs := [Set[(int, str)]()]
     xs[0].add((1, "a"))
     print(xs[0].len())
@@ -196,33 +201,35 @@ fn main()
     s5()
     print("-- set.sorted[tuple]")
     s6()
-    print("-- set.is_subset[tuple]")
+    print("-- set.to_list[tuple]")
     s7()
-    print("-- set.set_ops[tuple]")
+    print("-- set.is_subset[tuple]")
     s8()
-    print("-- set.any_all_find[tuple]")
+    print("-- set.set_ops[tuple]")
     s9()
-    print("-- set.filter_map[tuple]")
+    print("-- set.any_all_find[tuple]")
     s10()
-    print("-- set.group_by[tuple]")
+    print("-- set.filter_map[tuple]")
     s11()
-    print("-- set.count_fold[tuple]")
+    print("-- set.group_by[tuple]")
     s12()
-    print("-- set.flat_map[tuple]")
+    print("-- set.count_fold[tuple]")
     s13()
-    print("-- set.take_skip[tuple]")
+    print("-- set.flat_map[tuple]")
     s14()
-    print("-- set.zip_enumerate[tuple]")
+    print("-- set.take_skip[tuple]")
     s15()
-    print("-- set.min_max[tuple]")
+    print("-- set.zip_enumerate[tuple]")
     s16()
-    print("-- set.for[tuple]")
+    print("-- set.min_max[tuple]")
     s17()
-    print("-- set.eq[tuple]")
+    print("-- set.for[tuple]")
     s18()
-    print("-- set.print[tuple]")
+    print("-- set.eq[tuple]")
     s19()
-    print("-- set.in_map[tuple]")
+    print("-- set.print[tuple]")
     s20()
-    print("-- set.in_list[tuple]")
+    print("-- set.in_map[tuple]")
     s21()
+    print("-- set.in_list[tuple]")
+    s22()

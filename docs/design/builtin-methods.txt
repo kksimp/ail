@@ -23,6 +23,7 @@ str.replace(from, to) str ; type.str.14 ; replace substitute substring text all 
 str.to_lower() str ; type.str.14 ; lowercase lower case convert text
 str.to_upper() str ; type.str.14 ; uppercase upper case convert text
 str.slice(a, b) str ; type.str.13 ; substring slice part range characters from to
+str.slice(a) str ; type.str.13 ; substring rest from index to end suffix tail characters
 str.char_at(i) char? ; type.str.13 ; character at index nth letter position
 str.repeat(n) str ; type.str.10 ; repeat copies times multiply text
 str.pad_left(width, fill) str ; type.str.9 ; pad left align right zero pad width fill
@@ -138,6 +139,8 @@ List.flat_map(f) List[U] ; type.coll.30 ; flat map concat map then flatten lists
 List.take_while(f) List[T] ; type.coll.31 ; take while prefix leading elements until predicate fails
 List.skip_while(f) List[T] ; type.coll.31 ; skip while drop leading elements until predicate fails
 List.skip(n) List[T] ; type.coll.31 ; skip drop first n elements tail rest
+List.slice(a, b) List[T] ; type.coll.33 ; slice sublist range part from to subarray
+List.slice(a) List[T] ; type.coll.33 ; slice rest from index to end tail sublist
 List.zip(ys) List[(T, U)] ; type.coll.31 ; zip pair up two lists together parallel
 List.swap(i, j) [mut self] ; type.coll.7 ; swap exchange two elements
 List.contains(x) bool ; type.coll.9 ; contains includes has member
@@ -185,6 +188,7 @@ Set.add(x) bool [mut self] ; type.map.6 ; insert add element new
 Set.remove(x) bool [mut self] ; type.map.6 ; delete remove element
 Set.contains(x) bool ; type.map.6 ; has contains member
 Set.sorted() List[T] ; type.map.6 ; sort ascending order list
+Set.to_list() List[T] ; type.coll.33 ; list of elements convert set to list keys values insertion order
 Set.sorted(by: |x| key) List[T] ; type.coll.11 ; sort by key order list
 Set.is_subset(t) bool ; type.map.6 ; subset contained within
 Set.any(f) bool ; type.coll.32 ; any some exists predicate test true for one element
