@@ -148,7 +148,9 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 
 ## Amendment (2026-11-15c): the E14 readiness review, before any paid E14 trial
 
-**Decided by:** AI (delegated, ADR 0076), from the five-reviewer E14 readiness review. Item 6 is pending the designer.
+**Decided by:** AI (delegated, ADR 0076), from the five-reviewer E14 readiness review; items 6 and 10 by the designer
+(2026-11-15: "The definition of beating c isn't necessarily raw tokens. It's having the least iterations to fix an issue or
+make new code that runs").
 
 **Decision.**
 1. **A docs part never ends inside a code block.** `split_doc` cuts only between lines outside a ``` block, so a `#`
@@ -169,7 +171,7 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
    $2.50, cache read $0.10, output $10 per million), the tree commit and the agent CLI version. The report shows the
    median DOCS KB received and the cache-write, cache-read and output cost of each cell.
 6. **Docs policy is a switch** (`--docs-policy read|reference`), recorded per trial; `c-nodocs` and `rust-nodocs` arms
-   leave the language's DOCS out. The default stays `read` until the designer decides.
+   leave the language's DOCS out. The default is `reference` (item 10).
 7. **Fix rounds count only calls on the program.** The `ail` shim logs `onsrc: 0` for a call that names a `.ail` file and
    no path under `src/` (a scratch probe), and such calls are no longer fix rounds. Every arm's `./build` and `./test`
    count as before. `./test` prints the build's output when the build fails.
@@ -178,10 +180,16 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
    on the pilot's tasks. Above 1.15 is "still behind", below 0.87 "ahead", and between "too close to call". The pilot
    can show a harness fault, a regression, what the till tasks cost, whether C reads its card, and whether the `\r` and
    copy traps occur. It can't show a per-task result or a gap under about 30%. Pilot trials never join the full run.
-10. **The win rule** is the designer's (escalation 1): what "beat C" means, which AIL arm is the headline, and which
-    tasks count. Recommended: mean cost per correct trial on the from-scratch tasks, one AIL arm named in advance,
-    against C as it behaves under the chosen docs policy; change tasks, till and held-out tasks reported separately;
-    turns and success secondary. It is recorded here before the full run.
+10. **The win rule (decided by the designer, 2026-11-15).** Beating C means fewer iterations to working code, on new
+    code and on changes to existing code; tokens and cost are secondary. The primary measure, per arm and task class
+    (from scratch, change, held out, reported apart): the share of trials correct on the hidden cases, and among the
+    correct trials the mean versions to green (source versions checked up to the first passing `./test`, the seed
+    excluded) with the mean fix rounds (versions whose build, check or test failed). An AIL arm wins a class when its
+    mean versions to green is lower than C's and its success is no lower. The headline AIL arm is `ail-core-card` (what
+    `ail new` gives a user); every arm is reported. `report` prints this table first.
+    The docs policy is `reference` (option (a)): every arm's prompt says DOCS is a reference to consult as needed, and the
+    report shows what each trial read. This corrects E13, where no C trial from scratch received its card (0 of 39) and
+    every `ail-plain` trial did, so E13's C cells measured C without docs; E13's published figures stay as published.
 11. **Three held-out from-scratch tasks** (`invjson`: JSON output and escaping; `calc`: a small evaluator with 64-bit
     overflow; `maze`: a grid and shortest paths) live outside the repository, loaded from `AGENTBENCH_HELDOUT` (the Mac's
     `~/ail-heldout`), so no lane that tunes AIL sees their hidden cases. They are frozen before the pilot and reported
