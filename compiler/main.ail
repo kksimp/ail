@@ -1418,7 +1418,9 @@ fn check_cmd(rest List[str])
         ]
         found.extend(load.one_pass(loaded, more, found))
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
+    # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
     if not repair
+        and not json
         and fix_rounds < load.AUTO_ROUNDS
         and load.auto_fix_on(no_fix)
         and load.has_sure_fix(found)

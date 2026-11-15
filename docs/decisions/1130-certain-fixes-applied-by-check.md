@@ -60,9 +60,10 @@ E13 first drafts, all AIL arms, 1,336 error lines: `mod.vis.1` 631 (a separate 0
    tasks fail mostly there (the R2 review, 2026-11-15).
 4. **Off switch.** `ail check --no-fix` and `AIL_FIX=0`. The gates (`mac-gate.sh`, `win-gate.ps1`)
    and `ail selftest` set `AIL_FIX=0`, so suites that check wrong programs on purpose never rewrite
-   them; the `fix` suite turns it on for its own test. `ail lsp` checks with `--no-fix`: an editor shows
-   the problem in its buffer and leaves the repair to its code actions (fix.auto.3). `ail mcp` and
-   `ail task` keep the default, as agent tools.
+   them; the `fix` suite turns it on for its own test. `ail check --json` never writes: editors (`ail lsp`,
+   ail-edit) run it on a file that may be open, so it reports each certain fix as its edits with
+   `"certain":true`, and the client applies it (fix.auto.3; the R5 review, 2026-11-15). `ail lsp` also
+   passes `--no-fix`. `ail mcp` and `ail task` keep the default when they don't ask for JSON.
 
 ## Rationale
 

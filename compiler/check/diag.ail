@@ -98,7 +98,9 @@ pub fn fix_json(f fix.Fix, expects List[str]) str
         "\{\"line\":{f.edits[i].pos.line},\"col\":{f.edits[i].pos.col},\"end_line\":{f.edits[i].end.line},\"end_col\":{f.edits[i].end.col},\"text\":{quote(f.edits[i].text)},\"expect\":{quote(expects[i])}}"
         for i in 0..f.edits.len()
     ]
-    "\{\"title\":{quote(f.title)},\"edits\":[{edits.join(",")}]}"
+    # fix.auto.3: a certain fix says so, for a client that applies those itself (`ail check --json` writes nothing).
+    sure := if f.sure then ",\"certain\":true" else ""
+    "\{\"title\":{quote(f.title)}{sure},\"edits\":[{edits.join(",")}]}"
 
 ## `s` as a JSON string.
 fn quote(s str) str
