@@ -201,6 +201,11 @@ make new code that runs").
     keyword field names, nested patterns, generators, grids, heaps and deques) into a new section, More built-ins, after
     Modules; no text is dropped. `agentbench.py docs` fails when that part grows past 24 KB. The C and Rust cards keep
     their size: the parity rule lets them be larger, and under the `reference` policy reading them is optional.
+13. **How results are stated (the designer, 2026-11-15).** Plainly: models have seen far more C than AIL, so until they
+    have seen AIL an agent needs more iterations and more tokens in AIL than in C, and the results say so where they show
+    it. AIL's case is that adaptation (models that have seen AIL, and the card) and AIL's tooling (diagnostics that print
+    the corrected line, `ail ask`, `ail card`) can close that gap; each run measures how far it has closed. Reports make no
+    speed claims and no claim beyond the measured cells.
 
 **Rejected alternatives.**
 - **Leaving hidden cases where the workspace can reach them and trusting the agent:** E13 had four depgraph trials that
